@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.orchestrator.domain.SwarmHealth;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
+import io.pockethive.orchestrator.domain.Swarm;
+import io.pockethive.orchestrator.domain.SwarmStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -14,6 +16,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
+import java.util.Objects;
 
 /**
  * Consumes swarm-controller aggregate status events and updates the local registry.
@@ -27,10 +30,14 @@ public class ControllerStatusListener {
 
     private final SwarmRegistry registry;
     private final ObjectMapper mapper;
+    private final ControlPlaneStatusRequestPublisher statusRequests;
 
-    public ControllerStatusListener(SwarmRegistry registry, ObjectMapper mapper) {
-        this.registry = registry;
-        this.mapper = mapper.findAndRegisterModules();
+    public ControllerStatusListener(SwarmRegistry registry,
+                                    ObjectMapper mapper,
+                                    ControlPlaneStatusRequestPublisher statusRequests) {
+        this.registry = Objects.requireNonNull(registry, "registry");
+        this.mapper = Objects.requireNonNull(mapper, "mapper").findAndRegisterModules();
+        this.statusRequests = Objects.requireNonNull(statusRequests, "statusRequests");
     }
 
     @RabbitListener(queues = "#{controllerStatusQueue.name}")
@@ -51,12 +58,26 @@ public class ControllerStatusListener {
         }
         try {
             JsonNode node = mapper.readTree(body);
-            String swarmId = node.path("scope").path("swarmId").asText(null);
+            JsonNode scope = node.path("scope");
+            String swarmId = scope.path("swarmId").asText(null);
+            String controllerInstance = scope.path("instance").asText(null);
             JsonNode data = node.path("data");
-            String swarmStatusText = data.path("swarmStatus").asText(null);
+            JsonNode context = data.path("context");
+            String swarmStatusText = context.path("swarmStatus").asText(null);
+            String runId = context.path("journal").path("runId").asText(null);
+
+            boolean discovered = ensureSwarmRegistered(swarmId, controllerInstance, runId);
+
             if (swarmId != null && swarmStatusText != null) {
                 registry.refresh(swarmId, map(swarmStatusText));
             }
+
+            if (discovered && swarmId != null) {
+                String corr = java.util.UUID.randomUUID().toString();
+                String idem = "status-request:" + java.util.UUID.randomUUID();
+                statusRequests.requestStatusForSwarm(swarmId, corr, idem);
+            }
+
             if (swarmId != null) {
                 // Workloads enablement is reported as data.enabled on status metrics.
                 boolean workloadsKnown = true;
@@ -82,14 +103,11 @@ public class ControllerStatusListener {
                                 // Plan‑driven stop: make sure we walk through
                                 // STOPPING -> STOPPED so the local state
                                 // machine is satisfied.
-                                registry.updateStatus(
-                                    swarmId, io.pockethive.orchestrator.domain.SwarmStatus.STOPPING);
-                                registry.updateStatus(
-                                    swarmId, io.pockethive.orchestrator.domain.SwarmStatus.STOPPED);
+                                registry.updateStatus(swarmId, SwarmStatus.STOPPING);
+                                registry.updateStatus(swarmId, SwarmStatus.STOPPED);
                             }
                         }
-                        case "FAILED" -> registry.updateStatus(
-                            swarmId, io.pockethive.orchestrator.domain.SwarmStatus.FAILED);
+                        case "FAILED" -> registry.updateStatus(swarmId, SwarmStatus.FAILED);
                         default -> { /* leave registry status unchanged for other states */ }
                     }
                 }
@@ -97,6 +115,23 @@ public class ControllerStatusListener {
         } catch (Exception e) {
             log.warn("status parse", e);
         }
+    }
+
+    private boolean ensureSwarmRegistered(String swarmId, String controllerInstance, String runId) {
+        if (swarmId == null || swarmId.isBlank()) {
+            return false;
+        }
+        if (registry.find(swarmId).isPresent()) {
+            return false;
+        }
+        if (controllerInstance == null || controllerInstance.isBlank()) {
+            return false;
+        }
+        Swarm swarm = new Swarm(swarmId, controllerInstance, controllerInstance, runId);
+        registry.register(swarm);
+        registry.updateStatus(swarmId, SwarmStatus.CREATING);
+        registry.updateStatus(swarmId, SwarmStatus.READY);
+        return true;
     }
 
     private SwarmHealth map(String s) {

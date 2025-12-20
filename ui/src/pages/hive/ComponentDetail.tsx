@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Component } from '../../types/hive'
-import { sendConfigUpdate } from '../../lib/orchestratorApi'
+import { refreshControlPlane, sendConfigUpdate } from '../../lib/orchestratorApi'
 import QueuesPanel from './QueuesPanel'
 import { heartbeatHealth, colorForHealth } from '../../lib/health'
 import WiremockPanel from './WiremockPanel'
@@ -794,10 +794,11 @@ export default function ComponentDetail({ component, onClose }: Props) {
               className="rounded border border-white/20 px-2 py-0.5 text-xs text-white/80 hover:bg-white/10"
               onClick={async () => {
                 try {
+                  await refreshControlPlane()
                   await refreshSwarms()
-                  displayToast(setToast, 'Swarm metadata refreshed')
+                  displayToast(setToast, 'Control plane refresh requested')
                 } catch {
-                  displayToast(setToast, 'Failed to refresh swarm metadata')
+                  displayToast(setToast, 'Failed to refresh control plane')
                 } finally {
                   handleRefreshMouseLeave()
                 }
@@ -809,8 +810,7 @@ export default function ComponentDetail({ component, onClose }: Props) {
             </button>
             {showRefreshTooltip && (
               <div className="absolute right-0 mt-1 w-64 rounded border border-white/20 bg-black/80 p-2 text-[11px] text-white/90 z-10">
-                bringOutYourDead() — removes FAILED swarms from registry so you can recreate
-                deleted swarms.
+                Requests a fresh round of `status-full` snapshots from control-plane components.
               </div>
             )}
           </div>

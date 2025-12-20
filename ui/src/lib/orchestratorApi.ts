@@ -139,6 +139,20 @@ export async function removeSwarm(id: string) {
   await ensureOk(response, 'Failed to remove swarm')
 }
 
+export async function refreshControlPlane(): Promise<void> {
+  const response = await apiFetch('/orchestrator/control-plane/refresh', {
+    method: 'POST',
+  })
+  await ensureOk(response, 'Failed to refresh control-plane status')
+}
+
+export async function resetControlPlane(): Promise<void> {
+  const response = await apiFetch('/orchestrator/control-plane/reset', {
+    method: 'POST',
+  })
+  await ensureOk(response, 'Failed to reset control-plane status')
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }

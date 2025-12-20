@@ -19,6 +19,7 @@ import {
 } from '../../contexts/SwarmMetadataContext'
 
 vi.mock('../../lib/orchestratorApi', () => ({
+  refreshControlPlane: vi.fn(),
   sendConfigUpdate: vi.fn(),
 }))
 
