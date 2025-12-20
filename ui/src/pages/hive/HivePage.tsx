@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import ComponentList from './ComponentList'
 import ComponentDetail from './ComponentDetail'
 import TopologyView from './TopologyView'
@@ -12,6 +12,7 @@ import { mapStatusToVisualState, type HealthVisualState } from './visualState'
 import { useSwarmMetadata } from '../../contexts/SwarmMetadataContext'
 import SutDetailPanel from '../sut/SutDetailPanel'
 import SwarmJournalPanel from './SwarmJournalPanel'
+import { refreshControlPlane } from '../../lib/orchestratorApi'
 
 const UNASSIGNED_SWARM_ID = '__unassigned__'
 
@@ -31,7 +32,8 @@ export default function HivePage() {
 
   useEffect(() => {
     // We rely on the control-plane event stream (`event.metric.status-*`) to keep the
-    // component list current, so no manual `requestStatusFull` calls remain.
+    // component list current. If the UI connects after components have already sent their
+    // `status-full` snapshot, we request a fresh round of snapshots via the orchestrator.
     const unsub = subscribeComponents(setComponents)
     return () => unsub()
   }, [])
@@ -67,6 +69,22 @@ export default function HivePage() {
     comp.role.trim().toLowerCase() === 'orchestrator'
 
   const orchestrator = components.find((c) => isOrchestrator(c)) ?? null
+  const lastControlPlaneRefreshAttemptRef = useRef(0)
+
+  useEffect(() => {
+    if (!orchestrator) return
+    if (typeof orchestrator.startedAt === 'number') return
+
+    const now = Date.now()
+    const lastAttempt = lastControlPlaneRefreshAttemptRef.current
+    if (now - lastAttempt < 10_000) {
+      return
+    }
+    lastControlPlaneRefreshAttemptRef.current = now
+    void refreshControlPlane().catch((error) => {
+      console.warn('Failed to request control-plane status-full snapshot', error)
+    })
+  }, [orchestrator?.id, orchestrator?.startedAt])
 
   const normalizeSwarmId = (comp: Component): string | null => {
     const value = comp.swarmId?.trim()

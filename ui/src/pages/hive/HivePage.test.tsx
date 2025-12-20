@@ -22,6 +22,7 @@ vi.mock('./TopologyView', () => ({
 }))
 
 vi.mock('../../lib/orchestratorApi', () => ({
+  refreshControlPlane: vi.fn().mockResolvedValue(undefined),
   sendConfigUpdate: vi.fn(),
   startSwarm: vi.fn(),
   stopSwarm: vi.fn(),

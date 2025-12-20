@@ -62,6 +62,9 @@ class SwarmEventFlowIntegrationTest {
     @Mock
     private ControlPlanePublisher publisher;
 
+    @Mock
+    private ControlPlaneStatusRequestPublisher statusRequests;
+
     @Captor
     private ArgumentCaptor<SignalMessage> signalCaptor;
 
@@ -99,7 +102,7 @@ class SwarmEventFlowIntegrationTest {
         signalListener = new SwarmSignalListener(plans, timelines, tracker, registry, lifecycle, mapper,
             HiveJournal.noop(),
             controlPlane, controlEmitter, identity, descriptor, controlQueueName);
-        statusListener = new ControllerStatusListener(registry, mapper);
+        statusListener = new ControllerStatusListener(registry, mapper, statusRequests);
         clearInvocations(controlPlane, controlEmitter, publisher, lifecycle);
     }
 
@@ -151,7 +154,7 @@ class SwarmEventFlowIntegrationTest {
               "scope": {"swarmId":"sw1","role":"swarm-controller","instance":"%s"},
               "correlationId": null,
               "idempotencyKey": null,
-              "data": {"enabled": false, "tps": 0, "swarmStatus": "RUNNING"}
+              "data": {"enabled": false, "tps": 0, "context": {"swarmStatus": "RUNNING"}}
             }
             """.formatted(CONTROLLER_INSTANCE, CONTROLLER_INSTANCE),
             "event.metric.status-delta.sw1.swarm-controller." + CONTROLLER_INSTANCE);

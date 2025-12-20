@@ -23,9 +23,12 @@ class ControllerStatusListenerTest {
     @Mock
     SwarmRegistry registry;
 
+    @Mock
+    ControlPlaneStatusRequestPublisher statusRequests;
+
     @Test
     void updatesRegistry() {
-        ControllerStatusListener listener = new ControllerStatusListener(registry, new ObjectMapper());
+        ControllerStatusListener listener = new ControllerStatusListener(registry, new ObjectMapper(), statusRequests);
         String json = """
             {
               "timestamp": "2024-01-01T00:00:00Z",
@@ -36,7 +39,7 @@ class ControllerStatusListenerTest {
               "scope": {"swarmId":"sw1","role":"swarm-controller","instance":"inst1"},
               "correlationId": null,
               "idempotencyKey": null,
-              "data": {"enabled": true, "tps": 0, "swarmStatus": "RUNNING"}
+              "data": {"enabled": true, "tps": 0, "context": {"swarmStatus": "RUNNING"}}
             }
             """;
         listener.handle(json, "event.metric.status-delta.sw1.swarm-controller.inst1");
@@ -49,7 +52,7 @@ class ControllerStatusListenerTest {
 
     @Test
     void updatesRegistryFromTopLevelFlags() {
-        ControllerStatusListener listener = new ControllerStatusListener(registry, new ObjectMapper());
+        ControllerStatusListener listener = new ControllerStatusListener(registry, new ObjectMapper(), statusRequests);
         String json = """
             {
               "timestamp": "2024-01-01T00:00:00Z",
@@ -60,7 +63,7 @@ class ControllerStatusListenerTest {
               "scope": {"swarmId":"sw1","role":"swarm-controller","instance":"inst1"},
               "correlationId": null,
               "idempotencyKey": null,
-              "data": {"enabled": false, "tps": 0, "swarmStatus": "STOPPED"}
+              "data": {"enabled": false, "tps": 0, "context": {"swarmStatus": "STOPPED"}}
             }
             """;
         listener.handle(json, "event.metric.status-delta.sw1.swarm-controller.inst1");
@@ -73,7 +76,7 @@ class ControllerStatusListenerTest {
 
     @Test
     void statusLogsEmitAtDebug(CapturedOutput output) {
-        ControllerStatusListener listener = new ControllerStatusListener(registry, new ObjectMapper());
+        ControllerStatusListener listener = new ControllerStatusListener(registry, new ObjectMapper(), statusRequests);
         Logger logger = (Logger) LoggerFactory.getLogger(ControllerStatusListener.class);
         Level previous = logger.getLevel();
         logger.setLevel(Level.INFO);
@@ -87,7 +90,7 @@ class ControllerStatusListenerTest {
 
     @Test
     void handleRejectsBlankRoutingKey() {
-        ControllerStatusListener listener = new ControllerStatusListener(registry, new ObjectMapper());
+        ControllerStatusListener listener = new ControllerStatusListener(registry, new ObjectMapper(), statusRequests);
 
         assertThatThrownBy(() -> listener.handle("{}", "  "))
             .isInstanceOf(IllegalArgumentException.class)
@@ -96,7 +99,7 @@ class ControllerStatusListenerTest {
 
     @Test
     void handleRejectsNullRoutingKey() {
-        ControllerStatusListener listener = new ControllerStatusListener(registry, new ObjectMapper());
+        ControllerStatusListener listener = new ControllerStatusListener(registry, new ObjectMapper(), statusRequests);
 
         assertThatThrownBy(() -> listener.handle("{}", null))
             .isInstanceOf(IllegalArgumentException.class)
@@ -105,7 +108,7 @@ class ControllerStatusListenerTest {
 
     @Test
     void handleRejectsBlankPayload() {
-        ControllerStatusListener listener = new ControllerStatusListener(registry, new ObjectMapper());
+        ControllerStatusListener listener = new ControllerStatusListener(registry, new ObjectMapper(), statusRequests);
 
         assertThatThrownBy(() -> listener.handle(" ", "event.metric.status-delta.sw1.swarm-controller.inst1"))
             .isInstanceOf(IllegalArgumentException.class)

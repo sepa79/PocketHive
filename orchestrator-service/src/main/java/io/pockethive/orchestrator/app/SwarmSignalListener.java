@@ -605,6 +605,10 @@ public class SwarmSignalListener {
         log.debug("[CTRL] SEND status-full inst={} swarmCount={}", instanceId, registry.count());
     }
 
+    public void requestStatusFull() {
+        sendStatusFull();
+    }
+
     private void sendStatusDelta() {
         ControlPlaneEmitter.StatusContext context = ControlPlaneEmitter.StatusContext.of(builder -> {
             var b = builder

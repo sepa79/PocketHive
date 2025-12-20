@@ -39,6 +39,13 @@ References:
 
 ## Task tracking
 
+### 0) Rebuild handshake (UI v1 / Orchestrator)
+
+- [x] Add Orchestrator admin endpoints:
+  - [x] `POST /api/control-plane/refresh` (non-destructive): broadcast `signal.status-request` (no cache wipe)
+  - [x] `POST /api/control-plane/reset` (destructive): wipe Orchestrator projections/cache, then broadcast `signal.status-request`
+- [x] UI v1: if Orchestrator is “incomplete” (missing `status-full` snapshot fields), call `POST /api/control-plane/refresh` once (throttled)
+
 ### 1) Worker SDK (per-worker status)
 
 - [x] Remove any swarm-level fields (no `workers[]`) from worker `status-delta`

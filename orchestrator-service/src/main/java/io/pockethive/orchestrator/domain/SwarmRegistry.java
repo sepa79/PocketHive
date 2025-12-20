@@ -14,6 +14,11 @@ public class SwarmRegistry {
 
     private final Map<String, Swarm> swarms = new ConcurrentHashMap<>();
 
+    public void clear() {
+        swarms.clear();
+        log.info("SwarmRegistry: cleared");
+    }
+
     public Swarm register(Swarm swarm) {
         if (swarm == null) {
             return null;
