@@ -100,6 +100,12 @@ public class ControllerStatusListener {
                         }
                         case "STOPPED" -> {
                             if (workloadsKnown && !workloadsEnabled) {
+                                if (discovered) {
+                                    // When rebuilding from controller status events after an orchestrator restart,
+                                    // the newly registered swarm may still be in READY. Walk through the normal
+                                    // state machine to reach STOPPED without tripping illegal transitions.
+                                    registry.markStartConfirmed(swarmId);
+                                }
                                 // Plan‑driven stop: make sure we walk through
                                 // STOPPING -> STOPPED so the local state
                                 // machine is satisfied.
