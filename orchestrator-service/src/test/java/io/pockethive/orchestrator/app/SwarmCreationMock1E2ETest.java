@@ -127,6 +127,8 @@ class SwarmCreationMock1E2ETest {
 	    @Autowired
 	    ControlPlaneProperties controlPlaneProperties;
 
+    private final java.util.List<Message> bufferedMessages = new java.util.ArrayList<>();
+
 	    @Autowired
 	    JdbcTemplate jdbc;
 
@@ -282,10 +284,11 @@ class SwarmCreationMock1E2ETest {
                 new ConfirmationScope(swarmId, "swarm-controller", instanceId)),
             "{\"data\":{\"status\":\"Ready\"}}");
 
-        Message templateMessage = awaitMessage(captureName, Duration.ofSeconds(15));
+        String templateRoutingKey = ControlPlaneRouting.signal("swarm-template", swarmId, "swarm-controller", instanceId);
+        Message templateMessage = awaitMessage(captureName, Duration.ofSeconds(15), templateRoutingKey);
         assertThat(templateMessage).isNotNull();
         assertThat(templateMessage.getMessageProperties().getReceivedRoutingKey())
-            .isEqualTo(ControlPlaneRouting.signal("swarm-template", swarmId, "swarm-controller", instanceId));
+            .isEqualTo(templateRoutingKey);
         ControlSignal controlSignal = objectMapper.readValue(templateMessage.getBody(), ControlSignal.class);
         assertThat(controlSignal.type()).isEqualTo("swarm-template");
         assertThat(controlSignal.scope().swarmId()).isEqualTo(swarmId);
@@ -327,11 +330,12 @@ class SwarmCreationMock1E2ETest {
             new Bee("postprocessor", "postprocessor:latest", new Work("final", null), Map.of(), Map.of("docker", dockerConfig))
         );
 
-        Message readyMessage = awaitMessage(captureName, Duration.ofSeconds(15));
+        String outcomeRoutingKey = ControlPlaneRouting.event("outcome", "swarm-create",
+            new ConfirmationScope(swarmId, "orchestrator", managerIdentity.instanceId()));
+        Message readyMessage = awaitMessage(captureName, Duration.ofSeconds(15), outcomeRoutingKey);
         assertThat(readyMessage).isNotNull();
         assertThat(readyMessage.getMessageProperties().getReceivedRoutingKey())
-            .isEqualTo(ControlPlaneRouting.event("outcome", "swarm-create",
-                new ConfirmationScope(swarmId, "orchestrator", managerIdentity.instanceId())));
+            .isEqualTo(outcomeRoutingKey);
         CommandOutcome outcome =
             objectMapper.readValue(readyMessage.getBody(), CommandOutcome.class);
         assertThat(outcome.correlationId()).isEqualTo(correlationId);
@@ -468,16 +472,44 @@ class SwarmCreationMock1E2ETest {
         return new HttpEntity<>(body, headers);
     }
 
-    private Message awaitMessage(String queue, Duration timeout) throws InterruptedException {
+    private Message awaitMessage(String queue, Duration timeout, String routingKey) throws InterruptedException {
+        if (routingKey == null || routingKey.isBlank()) {
+            throw new IllegalArgumentException("routingKey must not be blank");
+        }
+
+        Message buffered = removeBuffered(routingKey);
+        if (buffered != null) {
+            return buffered;
+        }
+
         long deadline = System.nanoTime() + timeout.toNanos();
-        Message message;
         do {
-            message = rabbitTemplate.receive(queue);
+            Message message = rabbitTemplate.receive(queue);
             if (message != null) {
-                return message;
+                String received = message.getMessageProperties().getReceivedRoutingKey();
+                if (routingKey.equals(received)) {
+                    return message;
+                }
+                bufferedMessages.add(message);
             }
             Thread.sleep(50L);
+            buffered = removeBuffered(routingKey);
+            if (buffered != null) {
+                return buffered;
+            }
         } while (System.nanoTime() < deadline);
+        return null;
+    }
+
+    private Message removeBuffered(String routingKey) {
+        for (int i = 0; i < bufferedMessages.size(); i++) {
+            Message message = bufferedMessages.get(i);
+            String received = message.getMessageProperties().getReceivedRoutingKey();
+            if (routingKey.equals(received)) {
+                bufferedMessages.remove(i);
+                return message;
+            }
+        }
         return null;
     }
 

@@ -726,7 +726,9 @@ public final class WorkerControlPlaneRuntime {
             }
 
             builder.ioWorkState(ioStateForEnvelope.workInput(), ioStateForEnvelope.workOutput(), ioStateForEnvelope.workContext());
-            builder.ioControlState("ok", "ok", null);
+            if (snapshot) {
+                builder.filesystemEnabled(true);
+            }
 
             builder.tps(Math.round(tps));
             builder.data("intervalSeconds", intervalSeconds);

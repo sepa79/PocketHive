@@ -165,7 +165,7 @@
       "additionalProperties": false,
       "properties": {
         "work": { "$ref": "#/$defs/IoState" },
-        "control": { "$ref": "#/$defs/IoState" }
+        "filesystem": { "$ref": "#/$defs/IoState" }
       }
     },
     "StatusFullMetric": {
@@ -176,23 +176,23 @@
           "properties": {
             "kind": { "const": "metric" },
             "type": { "const": "status-full" },
-            "data": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": ["enabled", "config", "tps", "startedAt", "io", "ioState"],
-              "properties": {
-                "enabled": { "type": "boolean" },
-                "config": {
+                "data": {
                   "type": "object",
-                  "additionalProperties": true,
-                  "description": "Snapshot of the effective configuration for this scope (role/instance). Must not include secrets."
-                },
-                "tps": { "type": "integer", "minimum": 0 },
-                "startedAt": { "type": "string", "format": "date-time" },
-                "io": { "$ref": "#/$defs/MetricIo" },
-                "ioState": { "$ref": "#/$defs/MetricIoState" },
-                "context": { "type": "object", "additionalProperties": true }
-              }
+                  "additionalProperties": false,
+                  "required": ["enabled", "config", "startedAt", "io", "ioState"],
+                  "properties": {
+                    "enabled": { "type": "boolean" },
+                    "config": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "description": "Snapshot of the effective configuration for this scope (role/instance). Must not include secrets."
+                    },
+                    "tps": { "type": "integer", "minimum": 0 },
+                    "startedAt": { "type": "string", "format": "date-time" },
+                    "io": { "$ref": "#/$defs/MetricIo" },
+                    "ioState": { "$ref": "#/$defs/MetricIoState" },
+                    "context": { "type": "object", "additionalProperties": true }
+                  }
             }
           }
         }
@@ -206,18 +206,18 @@
           "properties": {
             "kind": { "const": "metric" },
             "type": { "const": "status-delta" },
-            "data": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": ["enabled", "tps", "ioState"],
-              "properties": {
-                "enabled": { "type": "boolean" },
-                "tps": { "type": "integer", "minimum": 0 },
-                "ioState": { "$ref": "#/$defs/MetricIoState" },
-                "context": { "type": "object", "additionalProperties": true }
+                "data": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["enabled", "ioState"],
+                  "properties": {
+                    "enabled": { "type": "boolean" },
+                    "tps": { "type": "integer", "minimum": 0 },
+                    "ioState": { "$ref": "#/$defs/MetricIoState" },
+                    "context": { "type": "object", "additionalProperties": true }
+                  }
+                }
               }
-            }
-          }
         }
       ]
     },

@@ -154,7 +154,7 @@ class SwarmEventFlowIntegrationTest {
               "scope": {"swarmId":"sw1","role":"swarm-controller","instance":"%s"},
               "correlationId": null,
               "idempotencyKey": null,
-              "data": {"enabled": false, "tps": 0, "context": {"swarmStatus": "RUNNING"}}
+              "data": {"enabled": false, "context": {"swarmStatus": "RUNNING"}}
             }
             """.formatted(CONTROLLER_INSTANCE, CONTROLLER_INSTANCE),
             "event.metric.status-delta.sw1.swarm-controller." + CONTROLLER_INSTANCE);

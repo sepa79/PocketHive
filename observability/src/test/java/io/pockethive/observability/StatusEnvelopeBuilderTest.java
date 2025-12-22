@@ -82,7 +82,8 @@ class StatusEnvelopeBuilderTest {
                 .tps(0)
                 .data("startedAt", Instant.parse("2024-01-01T00:00:00Z"))
                 .ioWorkState("out-of-data", "ok", Map.of("dataset", "redis:users"))
-                .ioControlState("ok", "ok", null)
+                .filesystemEnabled(true)
+                .ioFilesystemState("ok", "ok", null)
                 .toJson();
 
         JsonNode node = new ObjectMapper().readTree(json);
@@ -90,8 +91,8 @@ class StatusEnvelopeBuilderTest {
         assertEquals("out-of-data", ioState.path("work").path("input").asText());
         assertEquals("ok", ioState.path("work").path("output").asText());
         assertEquals("redis:users", ioState.path("work").path("context").path("dataset").asText());
-        assertEquals("ok", ioState.path("control").path("input").asText());
-        assertEquals("ok", ioState.path("control").path("output").asText());
+        assertEquals("ok", ioState.path("filesystem").path("input").asText());
+        assertEquals("ok", ioState.path("filesystem").path("output").asText());
     }
 
     @Test
@@ -105,6 +106,25 @@ class StatusEnvelopeBuilderTest {
                 .tps(0);
 
         assertThrows(IllegalArgumentException.class, () -> builder.ioWorkState("nope", "ok", null));
-        assertThrows(IllegalArgumentException.class, () -> builder.ioControlState("ok", "nope", null));
+        assertThrows(IllegalArgumentException.class, () -> builder.ioFilesystemState("ok", "nope", null));
+    }
+
+    @Test
+    void canDisableWorkPlaneIo() throws Exception {
+        String json = new StatusEnvelopeBuilder()
+            .workPlaneEnabled(false)
+            .type("status-delta")
+            .role("orchestrator")
+            .instance("orch-1")
+            .origin("orch-1")
+            .enabled(true)
+            .tps(0)
+            .toJson();
+
+        JsonNode node = new ObjectMapper().readTree(json);
+        JsonNode ioState = node.path("data").path("ioState");
+        assertTrue(ioState.path("work").isMissingNode());
+        assertTrue(ioState.path("filesystem").isMissingNode());
+        assertEquals(0, ioState.size());
     }
 }

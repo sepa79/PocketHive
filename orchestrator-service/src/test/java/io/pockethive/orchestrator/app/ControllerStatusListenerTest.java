@@ -39,7 +39,7 @@ class ControllerStatusListenerTest {
               "scope": {"swarmId":"sw1","role":"swarm-controller","instance":"inst1"},
               "correlationId": null,
               "idempotencyKey": null,
-              "data": {"enabled": true, "tps": 0, "context": {"swarmStatus": "RUNNING"}}
+              "data": {"enabled": true, "context": {"swarmStatus": "RUNNING"}}
             }
             """;
         listener.handle(json, "event.metric.status-delta.sw1.swarm-controller.inst1");
@@ -63,7 +63,7 @@ class ControllerStatusListenerTest {
               "scope": {"swarmId":"sw1","role":"swarm-controller","instance":"inst1"},
               "correlationId": null,
               "idempotencyKey": null,
-              "data": {"enabled": false, "tps": 0, "context": {"swarmStatus": "STOPPED"}}
+              "data": {"enabled": false, "context": {"swarmStatus": "STOPPED"}}
             }
             """;
         listener.handle(json, "event.metric.status-delta.sw1.swarm-controller.inst1");

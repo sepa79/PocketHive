@@ -48,7 +48,11 @@ public class StatusEnvelopeBuilder {
     private final Map<String, Object> totals = new LinkedHashMap<>();
     private final Map<String, Object> queueStats = new LinkedHashMap<>();
     private final Map<String, Object> workIoState = new LinkedHashMap<>();
-    private final Map<String, Object> controlIoState = new LinkedHashMap<>();
+    private final Map<String, Object> filesystemIoState = new LinkedHashMap<>();
+
+    private boolean workPlaneEnabled = true;
+    private boolean tpsEnabled = true;
+    private boolean filesystemEnabled = false;
 
     private static final Set<String> INPUT_STATES = Set.of(
         "ok",
@@ -162,6 +166,7 @@ public class StatusEnvelopeBuilder {
     }
 
     public StatusEnvelopeBuilder queueStats(Map<String, ?> queueStats) {
+        requireWorkPlaneEnabled("queueStats");
         this.queueStats.clear();
         if (queueStats != null && !queueStats.isEmpty()) {
             this.queueStats.putAll(queueStats);
@@ -179,16 +184,19 @@ public class StatusEnvelopeBuilder {
     }
 
     public StatusEnvelopeBuilder workIn(String... names) {
+        requireWorkPlaneEnabled("workIn");
         add(workQueues, "in", names);
         return this;
     }
 
     public StatusEnvelopeBuilder workRoutes(String... rks) {
+        requireWorkPlaneEnabled("workRoutes");
         add(workQueues, "routes", rks);
         return this;
     }
 
     public StatusEnvelopeBuilder workOut(String... rks) {
+        requireWorkPlaneEnabled("workOut");
         add(workQueues, "out", rks);
         return this;
     }
@@ -216,15 +224,16 @@ public class StatusEnvelopeBuilder {
      * {@code output=ok|blocked|throttled|downstream-error|unknown}.</p>
      */
     public StatusEnvelopeBuilder ioWorkState(String input, String output, Map<String, ?> context) {
+        requireWorkPlaneEnabled("ioWorkState");
         setIoState(workIoState, input, output, context);
         return this;
     }
 
     /**
-     * Aggregate IO state for the control plane.
+     * Aggregate IO state for filesystem-like resources (mounts, volumes).
      */
-    public StatusEnvelopeBuilder ioControlState(String input, String output, Map<String, ?> context) {
-        setIoState(controlIoState, input, output, context);
+    public StatusEnvelopeBuilder ioFilesystemState(String input, String output, Map<String, ?> context) {
+        setIoState(filesystemIoState, input, output, context);
         return this;
     }
 
@@ -233,10 +242,43 @@ public class StatusEnvelopeBuilder {
      * exchange.
      */
     public StatusEnvelopeBuilder publishes(String... topics) {
+        requireWorkPlaneEnabled("publishes");
         if (topics != null && topics.length > 0) {
             publishes.addAll(Arrays.asList(topics));
         }
         return this;
+    }
+
+    /**
+     * Controls whether this component should expose any work-plane (traffic) IO metadata.
+     *
+     * <p>Managers like the Orchestrator and Swarm Controller are control-plane only and should
+     * typically disable the work plane to avoid misleading {@code io.work} and {@code ioState.work}
+     * sections.</p>
+     */
+    public StatusEnvelopeBuilder workPlaneEnabled(boolean enabled) {
+        this.workPlaneEnabled = enabled;
+        if (!enabled) {
+            publishes.clear();
+            workQueues.clear();
+            queueStats.clear();
+            workIoState.clear();
+        }
+        return this;
+    }
+
+    public StatusEnvelopeBuilder filesystemEnabled(boolean enabled) {
+        this.filesystemEnabled = enabled;
+        if (!enabled) {
+            filesystemIoState.clear();
+        }
+        return this;
+    }
+
+    private void requireWorkPlaneEnabled(String method) {
+        if (!workPlaneEnabled) {
+            throw new IllegalStateException("Work plane is disabled; " + method + "() must not be used");
+        }
     }
 
     /**
@@ -295,6 +337,20 @@ public class StatusEnvelopeBuilder {
         return this;
     }
 
+    /**
+     * Controls whether {@code data.tps} is required/emitted.
+     *
+     * <p>For some manager components, TPS has no meaningful semantics. Those components should disable it
+     * to avoid emitting constant zeros.</p>
+     */
+    public StatusEnvelopeBuilder tpsEnabled(boolean enabled) {
+        this.tpsEnabled = enabled;
+        if (!enabled) {
+            data.remove("tps");
+        }
+        return this;
+    }
+
     private static void setIoState(Map<String, Object> target, String input, String output, Map<String, ?> context) {
         target.clear();
         String in = normaliseIo(input, INPUT_STATES, "input");
@@ -338,7 +394,7 @@ public class StatusEnvelopeBuilder {
         }
 
         Map<String, Object> io = new LinkedHashMap<>();
-        if (!workQueues.isEmpty() || !queueStats.isEmpty()) {
+        if (workPlaneEnabled && (!workQueues.isEmpty() || !queueStats.isEmpty())) {
             Map<String, Object> work = new LinkedHashMap<>();
             if (!workQueues.isEmpty()) {
                 work.put("queues", workQueues);
@@ -358,12 +414,16 @@ public class StatusEnvelopeBuilder {
         }
 
         Map<String, Object> ioState = new LinkedHashMap<>();
-        ioState.put("work", Map.copyOf(workIoState.isEmpty()
-            ? Map.of("input", "unknown", "output", "unknown")
-            : workIoState));
-        ioState.put("control", Map.copyOf(controlIoState.isEmpty()
-            ? Map.of("input", "unknown", "output", "unknown")
-            : controlIoState));
+        if (workPlaneEnabled) {
+            ioState.put("work", Map.copyOf(workIoState.isEmpty()
+                ? Map.of("input", "unknown", "output", "unknown")
+                : workIoState));
+        }
+        if (filesystemEnabled) {
+            ioState.put("filesystem", Map.copyOf(filesystemIoState.isEmpty()
+                ? Map.of("input", "unknown", "output", "unknown")
+                : filesystemIoState));
+        }
         data.put("ioState", Map.copyOf(ioState));
 
         if (!context.isEmpty()) {
@@ -373,7 +433,7 @@ public class StatusEnvelopeBuilder {
         if (!data.containsKey("enabled")) {
             throw new IllegalStateException("status metrics must include data.enabled");
         }
-        if (!data.containsKey("tps")) {
+        if (tpsEnabled && !data.containsKey("tps")) {
             throw new IllegalStateException("status metrics must include data.tps");
         }
         if (isFull && !data.containsKey("startedAt")) {
@@ -391,7 +451,9 @@ public class StatusEnvelopeBuilder {
 
         Map<String, Object> canonicalData = new LinkedHashMap<>();
         canonicalData.put("enabled", data.get("enabled"));
-        canonicalData.put("tps", data.get("tps"));
+        if (tpsEnabled && data.containsKey("tps")) {
+            canonicalData.put("tps", data.get("tps"));
+        }
         canonicalData.put("ioState", data.get("ioState"));
         Object ctx = data.get("context");
         if (ctx != null) {

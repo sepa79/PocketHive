@@ -1,0 +1,140 @@
+package io.pockethive.e2e.contracts;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.networknt.schema.JsonSchema;
+import com.networknt.schema.JsonSchemaFactory;
+import com.networknt.schema.SpecVersion;
+import com.networknt.schema.ValidationMessage;
+import io.pockethive.e2e.contracts.ControlPlaneMessageCapture.CapturedMessage;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
+import java.util.Set;
+import org.junit.jupiter.api.Assertions;
+
+public final class ControlEventsContractAudit {
+
+  private static final ObjectMapper MAPPER = new ObjectMapper().findAndRegisterModules();
+  private static final JsonSchema SCHEMA = loadSchema();
+
+  private ControlEventsContractAudit() {
+  }
+
+  public static void assertAllValid(List<CapturedMessage> messages) {
+    assertAllValid(messages, Duration.ZERO);
+  }
+
+  public static void assertAllValid(List<CapturedMessage> messages, Duration settleTime) {
+    List<CapturedMessage> payloads = messages == null ? List.of() : messages;
+    if (settleTime != null && !settleTime.isZero() && !settleTime.isNegative()) {
+      try {
+        Thread.sleep(settleTime.toMillis());
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+      }
+    }
+
+    List<String> failures = new ArrayList<>();
+    for (CapturedMessage message : payloads) {
+      if (message == null) {
+        continue;
+      }
+      String routingKey = message.routingKey();
+      String json = message.payloadUtf8();
+      try {
+        JsonNode node = MAPPER.readTree(json);
+        Set<ValidationMessage> errors = SCHEMA.validate(node);
+        if (!errors.isEmpty()) {
+          failures.add("schema invalid rk=" + routingKey + " errors=" + errors);
+          continue;
+        }
+        semanticChecks(node, routingKey, failures);
+      } catch (Exception ex) {
+        failures.add("parse failed rk=" + routingKey + " err=" + ex.getMessage() + " payload=" + snippet(json));
+      }
+    }
+
+    if (!failures.isEmpty()) {
+      Assertions.fail("Control-plane contract audit failed:\n- " + String.join("\n- ", failures));
+    }
+  }
+
+  private static void semanticChecks(JsonNode node, String routingKey, List<String> failures) {
+    if (node == null || failures == null) {
+      return;
+    }
+    String kind = node.path("kind").asText("");
+    String type = node.path("type").asText("");
+    String role = node.path("scope").path("role").asText("");
+    String normalizedRole = role.trim().toLowerCase(Locale.ROOT);
+
+    if ("metric".equalsIgnoreCase(kind)) {
+      JsonNode data = node.path("data");
+      if ("status-delta".equalsIgnoreCase(type)) {
+        if (data.has("startedAt") || data.has("config") || data.has("io")) {
+          failures.add("semantic invalid rk=" + routingKey
+              + " reason=status-delta contains heavy fields payload=" + snippet(node.toString()));
+        }
+        JsonNode workers = data.path("context").path("workers");
+        if (!workers.isMissingNode()) {
+          failures.add("semantic invalid rk=" + routingKey
+              + " reason=status-delta contains context.workers payload=" + snippet(node.toString()));
+        }
+      }
+
+      JsonNode workers = data.path("context").path("workers");
+      if (!"swarm-controller".equals(normalizedRole) && !workers.isMissingNode()) {
+        failures.add("semantic invalid rk=" + routingKey
+            + " reason=non-controller status contains context.workers role=" + role
+            + " payload=" + snippet(node.toString()));
+      }
+      if ("swarm-controller".equals(normalizedRole) && "status-full".equalsIgnoreCase(type) && !workers.isArray()) {
+        failures.add("semantic invalid rk=" + routingKey
+            + " reason=swarm-controller status-full missing context.workers payload=" + snippet(node.toString()));
+      }
+    }
+  }
+
+  private static JsonSchema loadSchema() {
+    Path schemaPath = locateRepoSchema();
+    try {
+      JsonNode schemaNode = MAPPER.readTree(schemaPath.toFile());
+      JsonSchemaFactory factory = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012);
+      return factory.getSchema(schemaNode);
+    } catch (Exception e) {
+      throw new IllegalStateException("Failed to load schema from " + schemaPath, e);
+    }
+  }
+
+  private static Path locateRepoSchema() {
+    String root = System.getProperty("maven.multiModuleProjectDirectory");
+    Path base = (root != null && !root.isBlank())
+        ? Path.of(root)
+        : Path.of("").toAbsolutePath();
+    for (int i = 0; i < 10 && base != null; i++) {
+      Path candidate = base.resolve("docs").resolve("spec").resolve("control-events.schema.json");
+      if (Files.exists(candidate)) {
+        return candidate;
+      }
+      base = base.getParent();
+    }
+    throw new IllegalStateException("Unable to locate docs/spec/control-events.schema.json from current directory");
+  }
+
+  private static String snippet(String payload) {
+    if (payload == null) {
+      return "";
+    }
+    String trimmed = payload.strip();
+    if (trimmed.length() > 400) {
+      return trimmed.substring(0, 400) + "…";
+    }
+    return trimmed;
+  }
+}
+

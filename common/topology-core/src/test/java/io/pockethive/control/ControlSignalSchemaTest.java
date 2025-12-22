@@ -2,9 +2,12 @@ package io.pockethive.control;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.asyncapi.AsyncApiSchemaValidator;
 import org.junit.jupiter.api.Test;
 
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.lang.reflect.RecordComponent;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
@@ -18,8 +21,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ControlSignalSchemaTest {
 
-    private static final AsyncApiSchemaValidator VALIDATOR = AsyncApiSchemaValidator.loadDefault();
     private static final ObjectMapper MAPPER = new ObjectMapper().findAndRegisterModules();
+    private static final JsonNode CONTROL_EVENTS_SCHEMA = loadControlEventsSchema();
 
     private static Set<String> collectProperties(JsonNode schema) {
         Set<String> properties = new LinkedHashSet<>();
@@ -27,7 +30,7 @@ class ControlSignalSchemaTest {
             return properties;
         }
         if (schema.has("$ref")) {
-            properties.addAll(collectProperties(VALIDATOR.schema(schema.get("$ref").asText())));
+            properties.addAll(collectProperties(resolveSchema(schema.get("$ref").asText())));
         }
         if (schema.has("properties") && schema.get("properties").isObject()) {
             schema.get("properties").fieldNames().forEachRemaining(properties::add);
@@ -47,7 +50,7 @@ class ControlSignalSchemaTest {
             return required;
         }
         if (schema.has("$ref")) {
-            required.addAll(collectRequired(VALIDATOR.schema(schema.get("$ref").asText())));
+            required.addAll(collectRequired(resolveSchema(schema.get("$ref").asText())));
         }
         if (schema.has("required") && schema.get("required").isArray()) {
             schema.get("required").forEach(node -> required.add(node.asText()));
@@ -63,7 +66,7 @@ class ControlSignalSchemaTest {
 
     @Test
     void schemaPropertiesMatchRecordComponents() throws Exception {
-        JsonNode schema = VALIDATOR.schema("#/components/schemas/ControlSignalPayload");
+        JsonNode schema = resolveSchema("#/$defs/ControlSignal");
 
         Set<String> schemaProperties = collectProperties(schema);
 
@@ -93,5 +96,57 @@ class ControlSignalSchemaTest {
 
         assertEquals(recordProperties, jsonProperties,
             "ControlSignal JSON properties must match record components");
+    }
+
+    @Test
+    void noArgsSignalsStillEmitEmptyDataObject() throws Exception {
+        ControlSignal signal = ControlSignal.forSwarm(
+            "swarm-start",
+            "sw-1",
+            "orchestrator-1",
+            UUID.randomUUID().toString(),
+            UUID.randomUUID().toString(),
+            null
+        );
+        JsonNode json = MAPPER.readTree(MAPPER.writeValueAsString(signal));
+        assertTrue(json.has("data"));
+        assertTrue(json.get("data").isObject());
+        assertEquals(0, json.get("data").size());
+    }
+
+    private static JsonNode loadControlEventsSchema() {
+        Path path = locateControlEventsSchema();
+        try (InputStream in = Files.newInputStream(path)) {
+            return MAPPER.readTree(in);
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to load control-events schema from " + path, e);
+        }
+    }
+
+    private static Path locateControlEventsSchema() {
+        Path current = Paths.get("").toAbsolutePath();
+        while (current != null) {
+            Path candidate = current.resolve("docs/spec/control-events.schema.json");
+            if (Files.exists(candidate)) {
+                return candidate.toAbsolutePath().normalize();
+            }
+            current = current.getParent();
+        }
+        throw new IllegalStateException("Could not locate docs/spec/control-events.schema.json starting from "
+            + Paths.get("").toAbsolutePath());
+    }
+
+    private static JsonNode resolveSchema(String ref) {
+        if (ref == null || ref.isBlank()) {
+            throw new IllegalArgumentException("Schema ref must not be blank");
+        }
+        if (!ref.startsWith("#/")) {
+            throw new IllegalArgumentException("Unsupported schema ref (expected local JSON pointer): " + ref);
+        }
+        JsonNode node = CONTROL_EVENTS_SCHEMA.at(ref.substring(1));
+        if (node == null || node.isMissingNode()) {
+            throw new IllegalArgumentException("No control-events schema found for reference: " + ref);
+        }
+        return node;
     }
 }

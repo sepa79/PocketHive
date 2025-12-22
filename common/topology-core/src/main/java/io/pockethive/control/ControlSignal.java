@@ -1,6 +1,5 @@
 package io.pockethive.control;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -13,7 +12,6 @@ import java.util.Objects;
  * Carries the standard envelope metadata plus a per-command {@code data}
  * section. The {@code type} field is the canonical command identifier.
  */
-@JsonInclude(JsonInclude.Include.NON_NULL)
 public record ControlSignal(
     Instant timestamp,
     String version,
@@ -41,7 +39,7 @@ public record ControlSignal(
         if (data != null && !data.isEmpty()) {
             data = Collections.unmodifiableMap(new LinkedHashMap<>(data));
         } else {
-            data = null;
+            data = Map.of();
         }
     }
 

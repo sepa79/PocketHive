@@ -60,14 +60,14 @@ Goal: introduce a single, consistent control‑plane envelope model used by sign
     |----------------|--------------------|----------|-------------------------------------------------------------------------------------------------|
     | `status-full`  | `enabled`          | Yes      | Boolean. Indicates whether this component is currently allowed to run workloads for its scope. |
     |                | `startedAt`        | Yes      | RFC‑3339 timestamp when this component started processing workloads for its scope (or when the current process was started). |
-    |                | `tps`              | Yes      | Integer ≥ 0. Global throughput sample for the reporting interval.                              |
+    |                | `tps`              | No       | Integer ≥ 0. Throughput sample for the reporting interval. **Workers should emit this**; managers (Orchestrator / Swarm Controller) may omit. |
     |                | `config`           | Yes      | Snapshot of the effective configuration for this scope (role/instance). Must not include secrets. |
-    |                | `io`               | Yes      | Object describing IO bindings and queue health for this component. Canonical shape: `{ work: { queues, queueStats }, control: { queues } }`, where `queues` mirrors the per-exchange IO bindings (`in` / `out` / `routes`) and `queueStats` is a map keyed by queue name (`depth`, `consumers`, `oldestAgeSec?`). Present only in `status-full`. |
-    |                | `ioState`          | Yes      | Coarse IO health summary for work/control inputs/outputs (see §6).                             |
-    |                | `context`          | No       | Freeform object carrying role‑specific status context. For swarm‑controller, `context` should carry worker/traffic details such as `swarmStatus`, `swarmDiagnostics`, `scenario`, and any aggregated counts (`desired`, `healthy`, `running`, `enabled`). For orchestrator, `context` should carry at least `swarmCount` and `computeAdapter`. |
+    |                | `io`               | Yes      | Object describing IO bindings and queue health. **Workers** should include both planes (`io.work` + `io.control`); **managers** are control‑plane‑only and should include only `io.control` (no `io.work`). `queueStats` is optional and applies only to the work plane. Present only in `status-full`. |
+    |                | `ioState`          | Yes      | Coarse IO health summary. **Workers** should include both planes (`ioState.work` + `ioState.control`); **managers** should include only `ioState.control`. |
+    |                | `context`          | No       | Freeform role‑specific context. For swarm‑controller, `context` carries swarm aggregates (e.g. `swarmStatus`, `totals`, `watermark`, `maxStalenessSec`, scenario progress) and includes `context.workers[]` **only in `status-full`**. For orchestrator, `context` carries at least `swarmCount`; `computeAdapter` is effectively static and belongs in `status-full` (not `status-delta`). |
     | `status-delta` | `enabled`          | Yes      | Boolean. Same semantics as in `status-full`; used to signal enablement changes without resending full status snapshots. |
-    |                | `tps`              | Yes      | Integer ≥ 0. Throughput sample for the interval since the last status event.                   |
-    |                | `ioState`          | Yes      | Coarse IO health summary for work/control inputs/outputs (see §6).                             |
+    |                | `tps`              | No       | Integer ≥ 0. Throughput sample for the interval since the last status event. **Workers should emit this**; managers may omit. |
+    |                | `ioState`          | Yes      | Coarse IO health summary (see §6). (Same plane rules as `status-full` above: managers omit `work`.) |
     |                | `context`          | No       | Same semantics as in `status-full`, but only for fields that change frequently (for example recent `swarmStatus`, rolling diagnostics). `data.config`, `data.io`, and `data.startedAt` must be omitted from deltas. |
 
     **Control events (`kind = event`)**
@@ -104,11 +104,11 @@ Goal: introduce a single, consistent control‑plane envelope model used by sign
     |------------------|---------------------|----------|------------------------------------------------------------------------------------------------------------------|
     | `swarm-template` | `data`             | Yes      | Entire swarm template/plan as a `SwarmPlan` object (id, bees, traffic policy, sutId, etc.), converted to a JSON object. Shape is defined by the swarm model (`SwarmPlan`); the control envelope does not add extra fields. |
     | `swarm-plan`     | `data`             | Yes      | Resolved scenario plan timeline as a JSON object. Shape is defined by scenario manager contracts; control‑plane treats it as opaque. |
-    | `swarm-start`    | —                  | No       | No command‑level `data` today; semantics come from `type`, `scope`/routing, `correlationId` and `idempotencyKey`. |
-    | `swarm-stop`     | —                  | No       | Same as `swarm-start`; no structured `data`.                                                                     |
-    | `swarm-remove`   | —                  | No       | Same as `swarm-start`; no structured `data`.                                                                     |
+    | `swarm-start`    | —                  | No       | No command‑level args; semantics come from `type`, `scope`/routing, `correlationId` and `idempotencyKey`. On-wire producers still send an empty `data: {}` to keep envelopes schema‑compliant. |
+    | `swarm-stop`     | —                  | No       | Same as `swarm-start` (no args); on-wire producers still send an empty `data: {}`.                               |
+    | `swarm-remove`   | —                  | No       | Same as `swarm-start` (no args); on-wire producers still send an empty `data: {}`.                               |
     | `config-update`  | `data`             | Yes      | Config payload for the target component(s). Targeting is carried exclusively by the envelope `scope` and routing key. The `data` object carries the config patch and enablement flags. Exact shape is defined in worker/manager config docs. |
-    | `status-request` | —                  | No       | No command‑level `data` today; the response is a `status-full` metric event instead of a confirmation outcome.   |
+    | `status-request` | —                  | No       | No command‑level args; the response is a `status-full` metric event instead of a confirmation outcome. On-wire producers still send an empty `data: {}`. |
 
     **Command outcomes (`kind = outcome`) — current payloads**
 
@@ -227,11 +227,121 @@ Goal: introduce a single, consistent control‑plane envelope model used by sign
 - [x] Document how IO state should be interpreted in debugging (e.g. journal, Hive UI tooltips, docs).
   - `data.io` is a **topology/metrics snapshot** (queues/routes + optional per-queue depth), required and present only in `status-full`.
   - `data.config` is a **configuration snapshot** (effective config for the scope), required and present only in `status-full`.
-  - `data.ioState` is a **coarse aggregate** intended for fast debugging and alerting, required in both `status-full` and `status-delta`.
+  - `data.ioState` is a **coarse aggregate** intended for fast debugging and alerting, required in both `status-full` and `status-delta`. It does not represent control-plane (AMQP) health; it represents workload/local IO such as `ioState.work` and `ioState.filesystem`.
   - For `role=swarm-controller`, `data.context` is the canonical place for **swarm aggregates**:
     - `status-delta`: small aggregate + progress (no worker list).
     - `status-full`: full aggregate snapshot including per-worker list (e.g. `data.context.workers`).
   - `out-of-data` is *not* inferred from queue depth; it is a logical “source exhausted” condition and should be emitted by inputs/generators via `ioState` + (optionally) an `event.alert.alert` with `code=io.out-of-data` and `data.context.dataset` when known.
+
+### 6.1 Topology‑First: Logical Topology vs IO Adapter Config vs Runtime Bindings
+
+Goal: give UI a stable “what to draw” graph that does **not** depend on transport details (Rabbit vs Redis vs CSV),
+while still exposing enough runtime detail to debug work-plane delivery and backpressure.
+
+**A) Logical Topology (scenario SSOT; UI drawing contract)**
+
+- Stored in scenario templates (see `docs/scenarios/SCENARIO_CONTRACT.md`), not in status messages.
+- Describes roles/ports/edges only; does **not** encode:
+  - queue names, routing keys, exchanges,
+  - IO adapter types (Redis/CSV/HTTP),
+  - concrete runtime instanceIds (there can be many instances per role).
+
+Because scenarios can already contain multiple bees with the same `role` (e.g. `local-rest-two-moderators`,
+`local-rest-with-multi-generators`), `role` is **not** a stable join key for UI. The stable join key must be a per-bee
+authoring-time identifier.
+
+Proposed split of responsibilities:
+- `template.bees[]` is the **SSOT for nodes** (identity + role + optional UI metadata + optional port declarations).
+- `topology` is the **SSOT for edges** (graph connections), referencing bees by `beeId` and ports by `port`.
+
+Minimal proposed shape (example YAML fragment embedded in a scenario template):
+
+```yaml
+template:
+  bees:
+    - id: genA
+      role: generator
+      ui:
+        label: "Generator A"
+      ports:
+        - id: out
+          direction: out
+      # image/config/work/env as today
+    - id: modA
+      role: moderator
+      ui:
+        label: "Moderator A"
+      ports:
+        - { id: in, direction: in }
+        - { id: out, direction: out }
+
+topology:
+  version: 1
+  edges:
+    - id: e1
+      from: { beeId: genA, port: out }
+      to:   { beeId: modA, port: in }
+```
+
+Constraints:
+- `template.bees[].id` and `topology.edges[].id` are stable identifiers within the template (UI uses them as keys).
+- `template.bees[].ports[]` is optional; if omitted, UI assumes a default port set or uses `work.in/work.out` conventions.
+- `topology.edges[].from.beeId` / `.to.beeId` must reference an existing `template.bees[].id`.
+
+**B) IO Adapter Config (runtime behaviour; per-module configuration)**
+
+- Lives in worker config (`status-full.data.config` for worker scope).
+- Can include adapter types and settings (CSV/Redis/HTTP/etc). This is **not** a graph and must not try to replace topology.
+
+**C) Runtime Bindings (materialisation; “what is actually wired on this swarm right now”)**
+
+- Emitted by Swarm Controller in `status-full` only, so UI can map logical edges/ports to work-plane routing:
+  - which exchange is used for work traffic,
+  - which routing keys are produced/consumed for each logical connection,
+  - optional queue names and queue stats where they exist.
+- This is intentionally separate from the logical topology because it is environment- and swarm-specific.
+
+Minimal proposed shape (inside SC `status-full.data.context`):
+
+```json
+{
+  "bindings": {
+    "work": {
+      "exchange": "ph.<swarm>.traffic",
+      "edges": [
+        {
+          "edgeId": "e1",
+          "from": { "role": "generator", "instance": "gen-1", "routingKey": "ph.<swarm>.gen" },
+          "to":   { "role": "moderator", "instance": "mod-1", "queue": "ph.<swarm>.mod" }
+        }
+      ]
+    }
+  }
+}
+```
+
+Notes:
+- `bindings` should be **best-effort** and may be partial (e.g. workers not ready yet).
+- This is the place where “Rabbit out is not a queue” is modelled correctly:
+  - producer side: `routingKey` (+ exchange),
+  - consumer side: `queue` (and optionally `queueStats` reported separately under `data.io.work.queueStats`).
+
+**D) UI join strategy**
+
+- UI obtains `template + topology` via Scenario Manager REST (SSOT).
+- UI uses SC `status-full` for:
+  - `workers[]` (per-instance status snapshots),
+  - a stable mapping from runtime instances to authoring nodes (`workers[].beeId` or equivalent),
+  - `bindings` (runtime materialisation),
+  - queue stats (from workers / SC snapshots where available).
+
+Tracking / tasks:
+- [ ] Extend `docs/scenarios/SCENARIO_CONTRACT.md` with `template.bees[].id`, `template.bees[].ports`, optional `template.bees[].ui`, and `topology.edges[]` + validation rules.
+- [ ] Extend `Bee` (swarm-model) with `id` (or parallel field) and propagate it into runtime worker identity mapping.
+- [ ] Add Scenario Manager REST to fetch topology (by template id/name + revision/hash).
+- [ ] Emit SC `status-full.data.context.bindings` (work-plane materialisation) and include a stable scenario identifier for UI join.
+- [ ] Update SC `workers[]` aggregate to include `beeId` for each runtime instance (so UI can join per-node when roles repeat).
+- [ ] Update UI to draw from `topology.edges[]` + node metadata from `template.bees[]`, join runtime by `beeId`.
 
 ---
 
