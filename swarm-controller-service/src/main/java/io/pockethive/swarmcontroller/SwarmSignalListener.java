@@ -817,11 +817,13 @@ public class SwarmSignalListener {
         .instance(instanceId)
         .origin(instanceId)
         .swarmId(swarmId)
+        .workPlaneEnabled(false)
+        .tpsEnabled(false)
+        .filesystemEnabled(true)
         .enabled(workloadsEnabled)
         .state(state)
         .watermark(m.watermark())
         .maxStalenessSec(MAX_STALENESS_MS / 1000)
-        .tps(0)
         .totals(m.desired(), m.healthy(), m.running(), m.enabled())
         .data("swarmStatus", status.name())
         .data("startedAt", startedAt)
@@ -832,15 +834,10 @@ public class SwarmSignalListener {
     if (journalRunId != null) {
       builder.data("journal", Map.of("runId", journalRunId));
     }
-    Map<String, QueueStats> queueSnapshot = lifecycle.snapshotQueueStats();
     String controlQueue = properties.controlQueueName(role, instanceId);
-    builder.queueStats(toQueueStatsPayload(queueSnapshot))
-        .controlIn(controlQueue)
+    builder.controlIn(controlQueue)
         .controlRoutes(SwarmControllerRoutes.controllerControlRoutes(swarmId, role, instanceId))
         .controlOut(rk);
-    SwarmIoStateAggregator.IoState ioState = ioStates.aggregateWork();
-    builder.ioWorkState(ioState.input(), ioState.output(), null);
-    builder.ioControlState("ok", "ok", null);
     appendTrafficDiagnostics(builder);
     String payload = builder.toJson();
     sendControl(rk, payload, "status");
@@ -860,17 +857,14 @@ public class SwarmSignalListener {
         .instance(instanceId)
         .origin(instanceId)
         .swarmId(swarmId)
+        .workPlaneEnabled(false)
+        .tpsEnabled(false)
         .enabled(workloadsEnabled)
         .state(state)
         .watermark(m.watermark())
-        .maxStalenessSec(MAX_STALENESS_MS / 1000)
-        .tps(0)
         .totals(m.desired(), m.healthy(), m.running(), m.enabled())
         .data("swarmStatus", status.name())
         .data("scenario", scenarioProgress());
-    SwarmIoStateAggregator.IoState ioState = ioStates.aggregateWork();
-    builder.ioWorkState(ioState.input(), ioState.output(), null);
-    builder.ioControlState("ok", "ok", null);
     appendTrafficDiagnostics(builder);
     String payload = builder.toJson();
     sendControl(rk, payload, "status");

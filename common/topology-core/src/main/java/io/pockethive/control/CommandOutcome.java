@@ -1,7 +1,5 @@
 package io.pockethive.control;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
-
 import java.time.Instant;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -15,7 +13,6 @@ import java.util.Objects;
  * section whose shape is defined per ({@code kind}, {@code type}) in the
  * control-plane specs.
  */
-@JsonInclude(JsonInclude.Include.NON_NULL)
 public record CommandOutcome(
     Instant timestamp,
     String version,

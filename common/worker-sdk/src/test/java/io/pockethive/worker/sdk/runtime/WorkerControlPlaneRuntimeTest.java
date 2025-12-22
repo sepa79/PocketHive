@@ -1,5 +1,6 @@
 package io.pockethive.worker.sdk.runtime;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import io.pockethive.control.ControlSignal;
@@ -276,6 +277,13 @@ class WorkerControlPlaneRuntimeTest {
         verify(emitter).emitStatusDelta(deltaCaptor.capture());
         String deltaJson = buildEnvelopeJson(deltaCaptor.getValue(), "status-delta");
         ControlEventsSchemaValidator.assertValid(deltaJson);
+
+        JsonNode delta = MAPPER.readTree(deltaJson);
+        JsonNode data = delta.path("data");
+        assertThat(data.has("startedAt")).isFalse();
+        assertThat(data.has("config")).isFalse();
+        assertThat(data.has("io")).isFalse();
+        assertThat(data.path("context").path("workers").isMissingNode()).isTrue();
     }
 
     @Test

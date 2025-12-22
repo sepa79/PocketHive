@@ -32,8 +32,7 @@ class ControllerStatusListenerRebuildTest {
               "idempotencyKey": "i1",
               "data": {
                 "enabled": false,
-                "tps": 0,
-                "ioState": {"work": {"input":"unknown","output":"unknown"}, "control": {"input":"unknown","output":"unknown"}},
+                "ioState": {"filesystem": {"input":"unknown","output":"unknown"}},
                 "config": {},
                 "startedAt": "2024-01-01T00:00:00Z",
                 "io": {},
@@ -65,7 +64,7 @@ class ControllerStatusListenerRebuildTest {
               "scope": {"swarmId":"sw1","role":"swarm-controller","instance":"controller-1"},
               "correlationId": "c1",
               "idempotencyKey": "i1",
-              "data": {"enabled": true, "tps": 0, "ioState": {"work": {"input":"unknown","output":"unknown"}, "control": {"input":"unknown","output":"unknown"}}, "context": {"swarmStatus": "RUNNING"}}
+              "data": {"enabled": true, "ioState": {}, "context": {"swarmStatus": "RUNNING"}}
             }
             """;
 

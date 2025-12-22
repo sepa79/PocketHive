@@ -590,8 +590,10 @@ public class SwarmSignalListener {
     private void sendStatusFull() {
         ControlPlaneEmitter.StatusContext context = ControlPlaneEmitter.StatusContext.of(builder -> {
             var b = builder
+                .workPlaneEnabled(false)
+                .filesystemEnabled(true)
+                .tpsEnabled(false)
                 .enabled(true)
-                .tps(0)
                 .controlIn(controlQueue)
                 .controlRoutes(controlRoutes.toArray(String[]::new))
                 .data("swarmCount", registry.count())
@@ -612,16 +614,12 @@ public class SwarmSignalListener {
     private void sendStatusDelta() {
         ControlPlaneEmitter.StatusContext context = ControlPlaneEmitter.StatusContext.of(builder -> {
             var b = builder
+                .workPlaneEnabled(false)
+                .tpsEnabled(false)
                 .enabled(true)
-                .tps(0)
                 .controlIn(controlQueue)
                 .controlRoutes(controlRoutes.toArray(String[]::new))
-                .data("swarmCount", registry.count())
-                .data("startedAt", startedAt);
-            var adapterType = lifecycle.currentComputeAdapterType();
-            if (adapterType != null) {
-                b.data("computeAdapter", adapterType.name());
-            }
+                .data("swarmCount", registry.count());
         });
         controlEmitter.emitStatusDelta(context);
         log.debug("[CTRL] SEND status-delta inst={} swarmCount={}", instanceId, registry.count());

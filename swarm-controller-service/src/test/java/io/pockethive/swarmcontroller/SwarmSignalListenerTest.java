@@ -621,7 +621,7 @@ class SwarmSignalListenerTest {
         eq(statusEvent("status-delta", "swarm-controller", "inst")), statusPayload.capture());
     JsonNode node = mapper.readTree(statusPayload.getValue());
     assertThat(node.path("data").path("enabled").asBoolean()).isFalse();
-    assertThat(node.path("data").path("tps").asInt()).isEqualTo(0);
+    assertThat(node.path("data").path("tps").isMissingNode()).isTrue();
     assertThat(node.path("data").path("context").path("swarmStatus").asText()).isEqualTo("STOPPED");
   }
 
@@ -757,11 +757,11 @@ class SwarmSignalListenerTest {
     JsonNode context = node.path("data").path("context");
     assertThat(context.path("totals").path("desired").asInt()).isEqualTo(2);
     assertThat(context.path("totals").path("healthy").asInt()).isEqualTo(2);
-    assertThat(context.path("totals").path("running").asInt()).isEqualTo(2);
-    assertThat(context.path("totals").path("enabled").asInt()).isEqualTo(2);
-    assertThat(context.path("watermark").asText()).isEqualTo("2025-09-12T12:34:55Z");
-    assertThat(context.path("maxStalenessSec").asInt()).isEqualTo(15);
-  }
+	    assertThat(context.path("totals").path("running").asInt()).isEqualTo(2);
+	    assertThat(context.path("totals").path("enabled").asInt()).isEqualTo(2);
+	    assertThat(context.path("watermark").asText()).isEqualTo("2025-09-12T12:34:55Z");
+	    assertThat(context.has("maxStalenessSec")).isFalse();
+	  }
 
   @Test
   void degradedAndUnknownStates() throws Exception {
@@ -802,7 +802,6 @@ class SwarmSignalListenerTest {
         eq(statusEvent("status-full", "swarm-controller", "inst")),
         fullPayload.capture());
     assertConcreteSwarmControlRoutes(fullPayload.getValue());
-    assertQueueStats(mapper.readTree(fullPayload.getValue()));
 
     reset(rabbit);
     listener.status();
@@ -840,15 +839,12 @@ class SwarmSignalListenerTest {
     try {
       JsonNode node = mapper.readTree(payload);
       JsonNode data = node.path("data");
-      JsonNode stats = data.path("io").path("work").path("queueStats").path(TRAFFIC_PREFIX + ".work.in");
       return "metric".equals(node.path("kind").asText())
           && "status-full".equals(node.path("type").asText())
           && data.path("enabled").asBoolean()
-          && data.path("tps").asInt() == 0
+          && data.path("tps").isMissingNode()
           && "RUNNING".equals(data.path("context").path("swarmStatus").asText())
-          && stats.path("depth").asLong() == 7L
-          && stats.path("consumers").asInt() == 3
-          && stats.path("oldestAgeSec").asLong() == 42L;
+          && data.path("io").path("work").isMissingNode();
     } catch (Exception ex) {
       return false;
     }
@@ -864,18 +860,11 @@ class SwarmSignalListenerTest {
       return "metric".equals(node.path("kind").asText())
           && "status-delta".equals(node.path("type").asText())
           && data.has("enabled")
-          && data.path("tps").asInt() == 0
+          && data.path("tps").isMissingNode()
           && !data.has("startedAt")
           && data.path("io").isMissingNode();
     } catch (Exception ex) {
       return false;
     }
-  }
-
-  private void assertQueueStats(JsonNode node) {
-    JsonNode stats = node.path("data").path("io").path("work").path("queueStats").path(TRAFFIC_PREFIX + ".work.in");
-    assertThat(stats.path("depth").asLong()).isEqualTo(7L);
-    assertThat(stats.path("consumers").asInt()).isEqualTo(3);
-    assertThat(stats.path("oldestAgeSec").asLong()).isEqualTo(42L);
   }
 }

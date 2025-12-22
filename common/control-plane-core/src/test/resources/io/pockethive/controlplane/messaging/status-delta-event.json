@@ -17,8 +17,7 @@
       "enabled": true,
       "tps": 7,
       "ioState": {
-        "work": { "input": "unknown", "output": "unknown" },
-        "control": { "input": "unknown", "output": "unknown" }
+        "work": { "input": "unknown", "output": "unknown" }
       },
       "context": {
         "location": "<<ANY>>",

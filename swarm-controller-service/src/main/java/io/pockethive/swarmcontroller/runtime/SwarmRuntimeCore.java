@@ -423,13 +423,12 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
         .instance(instanceId)
         .origin(instanceId)
         .swarmId(swarmId)
-        .ioControlState("ok", "ok", null)
-        .ioWorkState("unknown", "unknown", null)
+        .workPlaneEnabled(false)
+        .tpsEnabled(false)
         .controlIn(controlQueue)
         .controlRoutes(io.pockethive.swarmcontroller.SwarmControllerRoutes.controllerControlRoutes(swarmId, role, instanceId))
         .controlOut(rk)
         .enabled(false)
-        .tps(0)
         .data("swarmStatus", status.name())
         .toJson();
     log.debug("[CTRL] SEND rk={} inst={} payload={}", rk, instanceId, snippet(payload));

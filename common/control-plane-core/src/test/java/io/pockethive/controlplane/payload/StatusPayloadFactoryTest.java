@@ -2,6 +2,7 @@ package io.pockethive.controlplane.payload;
 
 import static io.pockethive.controlplane.payload.JsonFixtureAssertions.ANY_VALUE;
 import static io.pockethive.controlplane.payload.JsonFixtureAssertions.assertMatchesFixture;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -46,7 +47,12 @@ class StatusPayloadFactoryTest {
             .enabled(false)
             .tps(7));
 
-        assertEquals("instance-7", MAPPER.readTree(json).get("origin").asText());
+        JsonNode node = MAPPER.readTree(json);
+        assertEquals("instance-7", node.get("origin").asText());
+        JsonNode data = node.path("data");
+        assertThat(data.has("startedAt")).isFalse();
+        assertThat(data.has("config")).isFalse();
+        assertThat(data.has("io")).isFalse();
         assertMatchesFixture("/io/pockethive/controlplane/payload/status-delta.json", normalise(json));
     }
 

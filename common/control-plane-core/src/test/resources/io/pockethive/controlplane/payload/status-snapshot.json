@@ -15,8 +15,7 @@
     "enabled": true,
     "tps": 42,
     "ioState": {
-      "work": { "input": "unknown", "output": "unknown" },
-      "control": { "input": "unknown", "output": "unknown" }
+      "work": { "input": "unknown", "output": "unknown" }
     },
     "config": {},
     "startedAt": "2024-01-01T00:00:00Z",

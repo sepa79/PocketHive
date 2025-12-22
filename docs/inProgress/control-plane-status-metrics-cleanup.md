@@ -19,12 +19,20 @@ Make `event.metric.status-*` messages:
 
 ## Contract decisions (SSOT)
 
+- Control-plane payload SSOT is `docs/spec/control-events.schema.json`.
+- `docs/spec/asyncapi.yaml` documents channels/routing and references the JSON Schema for payload shapes (no duplicated payload schemas in AsyncAPI).
 - `status-full`:
-  - MUST include `data.config`, `data.io`, `data.ioState`, `data.startedAt`, `data.enabled`, `data.tps`
+  - MUST include `data.config`, `data.io`, `data.ioState`, `data.startedAt`, `data.enabled`
+  - `data.tps` is optional (workers only; managers may omit)
   - heavy snapshot; emitted on startup and on `signal.status-request` (and optionally periodically)
 - `status-delta`:
-  - MUST include `data.ioState`, `data.enabled`, `data.tps`
+  - MUST include `data.ioState`, `data.enabled`
+  - `data.tps` is optional (workers only; managers may omit)
   - MUST NOT resend full snapshots (`data.config`, `data.io`, `data.startedAt`)
+- `data.ioState` does not include control-plane health. It covers only workload-related IO sources/sinks (e.g. `work`) and local IO like `filesystem`.
+- `data.context.maxStalenessSec` is static config; SC emits it in `status-full` only.
+- Signals with no arguments MUST still include `data: {}` on-wire (do not omit the field).
+- Envelope fields required by schema MUST be present on-wire even when values are `null` (avoid `NON_NULL` serialization on envelope types).
 - Workers MUST NOT emit any `workers[]` swarm view.
 - Swarm Controller is the canonical source for “swarm aggregate” views:
   - `status-delta` carries a small aggregate in `data.context`
@@ -63,9 +71,9 @@ References:
 
 ### 3) Orchestrator projections / registry
 
-- [ ] Ensure Orchestrator registry/state projections rely on SC aggregates (not per-worker status)
-- [ ] Verify “refresh/rebuild from status-full” flows work with the new status shapes
-- [ ] Add tests covering rebuild behavior from SC `status-full` (happy-path + missing workers)
+- [x] Ensure Orchestrator registry/state projections rely on SC aggregates (not per-worker status)
+- [x] Verify “refresh/rebuild from status-full” flows work with the new status shapes
+- [x] Add tests covering rebuild behavior from SC `status-full` (happy-path + missing workers)
 
 ### 4) UI-v2 consumption (no per-worker fan-out)
 
@@ -79,13 +87,22 @@ References:
 ### 5) Contract enforcement
 
 - [x] Add schema-driven tests that validate generated status payloads against `docs/spec/control-events.schema.json`
-- [ ] Add E2E capture audit (blocking in CI): capture `ph.control` traffic during E2E and validate all payloads against schema
+- [x] Add E2E capture audit (blocking in CI): capture `ph.control` traffic during E2E and validate all payloads against schema
 - [ ] Add semantic guards in tests (schema cannot express these well):
-  - [ ] no heavy fields in `status-delta`
-  - [ ] no `workers[]` in worker status payloads
+  - [x] no heavy fields in `status-delta`
+  - [x] no `workers[]` in worker status payloads
 
 ### 6) Manual verification checklist
 
 - [ ] Start a swarm; verify SC emits `status-delta` watermark and `status-full` on request
 - [ ] Inject broken control message; verify it is rejected without requeue (no storm)
 - [ ] UI-v2 open with multiple instances; verify no per-worker subscription fan-out and stable behavior
+
+### 7) SSOT for control-plane wire format (serializer + publisher)
+
+- [ ] Introduce a canonical control-plane JSON serializer (single `ObjectMapper` config) shared by all managers and workers:
+  - [ ] RFC3339 timestamps (`WRITE_DATES_AS_TIMESTAMPS=false`)
+  - [ ] Ensure required envelope fields are always present on-wire (`data`, `correlationId`, `idempotencyKey`)
+- [ ] Remove ad-hoc `new ObjectMapper()` usage for control-plane envelopes (e.g. Swarm Controller `RabbitConfig`)
+- [ ] Remove direct `RabbitTemplate.convertAndSend(...)` publishing of control-plane envelopes (e.g. Swarm Controller `ReadyEmitter`) and route everything via `ControlPlanePublisher` + `ControlPlaneEmitter`
+- [ ] Add a schema + “wire-shape” test that exercises manager-side publishers (SC/orchestrator/manager-sdk) and catches timestamp/field-presence regressions

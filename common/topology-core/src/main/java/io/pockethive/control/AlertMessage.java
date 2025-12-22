@@ -11,7 +11,6 @@ import java.util.Objects;
 /**
  * Canonical control-plane alert envelope (kind=event, type=alert).
  */
-@JsonInclude(JsonInclude.Include.NON_NULL)
 public record AlertMessage(
     Instant timestamp,
     String version,
