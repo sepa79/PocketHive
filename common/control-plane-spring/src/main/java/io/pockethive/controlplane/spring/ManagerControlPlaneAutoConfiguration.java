@@ -69,7 +69,7 @@ public class ManagerControlPlaneAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     @ConditionalOnBean(ControlPlanePublisher.class)
-    ManagerControlPlane managerControlPlane(ObjectMapper objectMapper,
+    ManagerControlPlane managerControlPlane(@Qualifier("controlPlaneObjectMapper") ObjectMapper objectMapper,
         ControlPlanePublisher publisher,
         @Qualifier("managerControlPlaneIdentity") ObjectProvider<ControlPlaneIdentity> identityProvider) {
         ManagerControlPlane.Builder builder = ManagerControlPlane.builder(publisher, objectMapper);

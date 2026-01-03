@@ -37,7 +37,7 @@ Goal: introduce a single, consistent control‑plane envelope model used by sign
 
     - Control‑plane **events** (everything that is not a command signal) use the `event.*` prefix. The canonical pattern is:  
       `event.<category>.<name>.<swarmId>.<role>.<instance>` where:
-      - `<category>` differentiates major event families such as `outcome`, `metric`, `alert` (for example `event.outcome.*`, `event.metric.*`, `event.alert.alert.*`).
+      - `<category>` differentiates major event families such as `outcome`, `metric`, `alert` (for example `event.outcome.*`, `event.metric.*`, `event.alert.alert.*`). The double `alert` is intentional: `category=alert` and `name=alert` for the single alert event type.
       - `<name>` is normally the envelope `type` within that family (for example `status-full`, `status-delta` for metrics, or the command name such as `swarm-start` / `config-update` for outcomes).
       - `<swarmId>.<role>.<instance>` are the semantic subject and must match `scope.swarmId` / `scope.role` / `scope.instance`, normalised so that `ALL` or wildcard segments are represented as `null`.
 

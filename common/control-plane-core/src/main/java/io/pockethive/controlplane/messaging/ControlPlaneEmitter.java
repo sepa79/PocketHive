@@ -1,8 +1,5 @@
 package io.pockethive.controlplane.messaging;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
 import io.pockethive.control.AlertMessage;
 import io.pockethive.control.CommandOutcome;
 import io.pockethive.control.CommandState;
@@ -17,6 +14,7 @@ import io.pockethive.controlplane.topology.ControlPlaneTopologySettings;
 import io.pockethive.controlplane.topology.SwarmControllerControlPlaneTopologyDescriptor;
 import io.pockethive.controlplane.topology.WorkerControlPlaneTopologyDescriptor;
 import io.pockethive.observability.StatusEnvelopeBuilder;
+import io.pockethive.observability.ControlPlaneJson;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -32,10 +30,6 @@ public final class ControlPlaneEmitter {
     private final RoleContext role;
     private final ControlPlanePublisher publisher;
     private final StatusPayloadFactory statusFactory;
-    private static final ObjectMapper ENVELOPE_MAPPER = new ObjectMapper()
-        .findAndRegisterModules()
-        .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-
     private ControlPlaneEmitter(ControlPlaneTopologyDescriptor topology,
                                 RoleContext role,
                                 ControlPlanePublisher publisher,
@@ -442,11 +436,7 @@ public final class ControlPlaneEmitter {
     }
 
     private static String serializeEnvelope(Object value, String label) {
-        try {
-            return ENVELOPE_MAPPER.writeValueAsString(value);
-        } catch (JsonProcessingException e) {
-            throw new IllegalStateException("Failed to serialise " + label + " envelope", e);
-        }
+        return ControlPlaneJson.write(value, label + " envelope");
     }
 
     private static String requireNonBlank(String field, String value) {

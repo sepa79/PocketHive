@@ -109,7 +109,7 @@ class SwarmSignalListenerTest {
 
   private String configAllSignal(boolean enabled) {
     try {
-      Map<String, Object> args = Map.of("data", Map.of("enabled", enabled));
+      Map<String, Object> args = Map.of("enabled", enabled);
       ControlSignal cs = ControlSignal.forInstance(
           ControlPlaneSignals.CONFIG_UPDATE,
           TEST_SWARM_ID,
@@ -127,7 +127,7 @@ class SwarmSignalListenerTest {
 
   private String configUpdateSignal(String instance, String idempotencyKey, String correlationId, Map<String, Object> patch) {
     try {
-      Map<String, Object> args = patch != null ? Map.of("data", patch) : null;
+      Map<String, Object> args = patch != null ? patch : null;
       ControlSignal cs = ControlSignal.forInstance(
           ControlPlaneSignals.CONFIG_UPDATE,
           TEST_SWARM_ID,

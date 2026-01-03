@@ -72,17 +72,17 @@ import io.pockethive.controlplane.routing.ControlPlaneRouting;
 @Testcontainers
 class SwarmCreationMock1E2ETest {
 
-	    private static final RabbitMQContainer RABBIT =
-	        new RabbitMQContainer("rabbitmq:3.13.1-management");
-	    private static final PostgreSQLContainer<?> POSTGRES =
-	        new PostgreSQLContainer<>("postgres:16-alpine")
-	            .withDatabaseName("pockethive")
-	            .withUsername("pockethive")
-	            .withPassword("pockethive");
-	    private static ConfigurableApplicationContext scenarioManagerContext;
-	    private static int scenarioManagerPort;
-	    private static boolean dockerAvailable = true;
-	    private static Path scenarioRuntimeRoot;
+    private static final RabbitMQContainer RABBIT =
+        new RabbitMQContainer("rabbitmq:3.13.1-management");
+    private static final PostgreSQLContainer<?> POSTGRES =
+        new PostgreSQLContainer<>("postgres:16-alpine")
+            .withDatabaseName("pockethive")
+            .withUsername("pockethive")
+            .withPassword("pockethive");
+    private static ConfigurableApplicationContext scenarioManagerContext;
+    private static int scenarioManagerPort;
+    private static boolean dockerAvailable = true;
+    private static Path scenarioRuntimeRoot;
 
     @MockBean
     DockerContainerClient docker;
@@ -124,13 +124,13 @@ class SwarmCreationMock1E2ETest {
     @Qualifier("managerControlPlaneIdentity")
     ControlPlaneIdentity managerIdentity;
 
-	    @Autowired
-	    ControlPlaneProperties controlPlaneProperties;
+    @Autowired
+    ControlPlaneProperties controlPlaneProperties;
 
     private final java.util.List<Message> bufferedMessages = new java.util.ArrayList<>();
 
-	    @Autowired
-	    JdbcTemplate jdbc;
+    @Autowired
+    JdbcTemplate jdbc;
 
     @DynamicPropertySource
     static void registerProperties(DynamicPropertyRegistry registry) {
@@ -170,41 +170,41 @@ class SwarmCreationMock1E2ETest {
         registry.add(
             "POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_METRICS_PUSHGATEWAY_GROUPING_KEY_INSTANCE",
             () -> "controller-instance");
-	        if (!RABBIT.isRunning()) {
-	            try {
-	                RABBIT.start();
-	            } catch (IllegalStateException ex) {
+        if (!RABBIT.isRunning()) {
+            try {
+                RABBIT.start();
+            } catch (IllegalStateException ex) {
                 if (ex.getMessage() != null
                     && ex.getMessage().contains("Could not find a valid Docker environment")) {
                     dockerAvailable = false;
                     return;
                 }
-	                throw ex;
-	            }
-	        }
-	        if (!POSTGRES.isRunning()) {
-	            try {
-	                POSTGRES.start();
-	            } catch (IllegalStateException ex) {
-	                if (ex.getMessage() != null
-	                    && ex.getMessage().contains("Could not find a valid Docker environment")) {
-	                    dockerAvailable = false;
-	                    return;
-	                }
-	                throw ex;
-	            }
-	        }
-	        registry.add("spring.rabbitmq.host", RABBIT::getHost);
-	        registry.add("spring.rabbitmq.port", RABBIT::getAmqpPort);
-	        registry.add("spring.rabbitmq.listener.simple.missingQueuesFatal", () -> "false");
-	        registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
-	        registry.add("spring.datasource.username", POSTGRES::getUsername);
-	        registry.add("spring.datasource.password", POSTGRES::getPassword);
-	        registry.add("POCKETHIVE_JOURNAL_SINK", () -> "postgres");
-	        ensureScenarioManagerRunning();
-	        registry.add(
-	            "pockethive.control-plane.orchestrator.scenario-manager.url",
-	            () -> "http://127.0.0.1:" + scenarioManagerPort);
+                throw ex;
+            }
+        }
+        if (!POSTGRES.isRunning()) {
+            try {
+                POSTGRES.start();
+            } catch (IllegalStateException ex) {
+                if (ex.getMessage() != null
+                    && ex.getMessage().contains("Could not find a valid Docker environment")) {
+                    dockerAvailable = false;
+                    return;
+                }
+                throw ex;
+            }
+        }
+        registry.add("spring.rabbitmq.host", RABBIT::getHost);
+        registry.add("spring.rabbitmq.port", RABBIT::getAmqpPort);
+        registry.add("spring.rabbitmq.listener.simple.missingQueuesFatal", () -> "false");
+        registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
+        registry.add("spring.datasource.username", POSTGRES::getUsername);
+        registry.add("spring.datasource.password", POSTGRES::getPassword);
+        registry.add("POCKETHIVE_JOURNAL_SINK", () -> "postgres");
+        ensureScenarioManagerRunning();
+        registry.add(
+            "pockethive.control-plane.orchestrator.scenario-manager.url",
+            () -> "http://127.0.0.1:" + scenarioManagerPort);
         registry.add(
             "POCKETHIVE_SCENARIOS_RUNTIME_ROOT",
             () -> scenarioRuntimeRoot != null ? scenarioRuntimeRoot.toString() : "");
@@ -216,13 +216,13 @@ class SwarmCreationMock1E2ETest {
             scenarioManagerContext.close();
             scenarioManagerContext = null;
         }
-	        if (RABBIT.isRunning()) {
-	            RABBIT.stop();
-	        }
-	        if (POSTGRES.isRunning()) {
-	            POSTGRES.stop();
-	        }
-	    }
+        if (RABBIT.isRunning()) {
+            RABBIT.stop();
+        }
+        if (POSTGRES.isRunning()) {
+            POSTGRES.stop();
+        }
+    }
 
     @Test
     void orchestratorPublishesSwarmTemplateFromScenarioManager() throws Exception {
@@ -352,90 +352,90 @@ class SwarmCreationMock1E2ETest {
             ControlPlaneRouting.event("outcome", "swarm-template",
                 new ConfirmationScope(swarmId, "swarm-controller", instanceId)),
             "{\"data\":{\"status\":\"Ready\"}}");
-	        awaitStatus(swarmId, SwarmStatus.READY, Duration.ofSeconds(15));
+        awaitStatus(swarmId, SwarmStatus.READY, Duration.ofSeconds(15));
 
-	        admin.deleteQueue(captureName);
-	    }
+        admin.deleteQueue(captureName);
+    }
 
-	    @Test
-	    void journalEndpointReadsFromPostgres() {
-	        Assumptions.assumeTrue(dockerAvailable, "Docker is required to run this test");
+    @Test
+    void journalEndpointReadsFromPostgres() {
+        Assumptions.assumeTrue(dockerAvailable, "Docker is required to run this test");
 
-	        jdbc.update(
-	            """
-	            INSERT INTO journal_event (
-	              ts,
-	              scope,
-	              swarm_id,
-	              run_id,
-	              scope_role,
-	              scope_instance,
-	              severity,
-	              direction,
-	              kind,
-	              type,
-	              origin,
-	              correlation_id,
-	              idempotency_key,
-	              routing_key,
-	              data,
-	              raw,
-	              extra
-	            ) VALUES (
-	              ?,
-	              'SWARM',
-	              ?,
-	              ?,
-	              ?,
-	              ?,
-	              ?,
-	              ?,
-	              ?,
-	              ?,
-	              ?,
-	              ?,
-	              ?,
-	              ?,
-	              ?::jsonb,
-	              ?::jsonb,
-	              ?::jsonb
-	            )
-	            """,
-	            java.sql.Timestamp.from(Instant.now()),
-	            "journal-swarm",
-	            "run-1",
-	            "swarm-controller",
-	            "swarm-controller-1",
-	            "INFO",
-	            "IN",
-	            "signal",
-	            "swarm-start",
-	            "orchestrator-test",
-	            "c-1",
-	            "i-1",
-	            "signal.swarm-start.journal-swarm.swarm-controller.swarm-controller-1",
-	            "{\"hello\":\"world\"}",
-	            null,
-	            null);
+        jdbc.update(
+            """
+            INSERT INTO journal_event (
+              ts,
+              scope,
+              swarm_id,
+              run_id,
+              scope_role,
+              scope_instance,
+              severity,
+              direction,
+              kind,
+              type,
+              origin,
+              correlation_id,
+              idempotency_key,
+              routing_key,
+              data,
+              raw,
+              extra
+            ) VALUES (
+              ?,
+              'SWARM',
+              ?,
+              ?,
+              ?,
+              ?,
+              ?,
+              ?,
+              ?,
+              ?,
+              ?,
+              ?,
+              ?,
+              ?,
+              ?::jsonb,
+              ?::jsonb,
+              ?::jsonb
+            )
+            """,
+            java.sql.Timestamp.from(Instant.now()),
+            "journal-swarm",
+            "run-1",
+            "swarm-controller",
+            "swarm-controller-1",
+            "INFO",
+            "IN",
+            "signal",
+            "swarm-start",
+            "orchestrator-test",
+            "c-1",
+            "i-1",
+            "signal.swarm-start.journal-swarm.swarm-controller.swarm-controller-1",
+            "{\"hello\":\"world\"}",
+            null,
+            null);
 
-	        @SuppressWarnings("unchecked")
-	        ResponseEntity<java.util.List> response =
-	            rest.getForEntity("/api/swarms/{swarmId}/journal", java.util.List.class, "journal-swarm");
-	        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-	        assertThat(response.getBody()).isNotNull();
-	        assertThat(response.getBody()).hasSize(1);
-	        Map<String, Object> entry = (Map<String, Object>) response.getBody().getFirst();
-	        assertThat(entry.get("swarmId")).isEqualTo("journal-swarm");
-	        assertThat(entry.get("kind")).isEqualTo("signal");
-	        assertThat(entry.get("type")).isEqualTo("swarm-start");
-	        assertThat(entry.get("correlationId")).isEqualTo("c-1");
-	        assertThat(entry.get("idempotencyKey")).isEqualTo("i-1");
-	        assertThat(entry.get("scope")).isInstanceOf(Map.class);
-	    }
+        @SuppressWarnings("unchecked")
+        ResponseEntity<java.util.List> response =
+            rest.getForEntity("/api/swarms/{swarmId}/journal", java.util.List.class, "journal-swarm");
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody()).hasSize(1);
+        Map<String, Object> entry = (Map<String, Object>) response.getBody().getFirst();
+        assertThat(entry.get("swarmId")).isEqualTo("journal-swarm");
+        assertThat(entry.get("kind")).isEqualTo("signal");
+        assertThat(entry.get("type")).isEqualTo("swarm-start");
+        assertThat(entry.get("correlationId")).isEqualTo("c-1");
+        assertThat(entry.get("idempotencyKey")).isEqualTo("i-1");
+        assertThat(entry.get("scope")).isInstanceOf(Map.class);
+    }
 
-	    private void declareOrchestratorBindings(RabbitAdmin admin) {
-	        Queue controlQueue = QueueBuilder.durable(controlQueueName).build();
-	        Queue statusQueue = QueueBuilder.durable(controllerStatusQueueName).build();
+    private void declareOrchestratorBindings(RabbitAdmin admin) {
+        Queue controlQueue = QueueBuilder.durable(controlQueueName).build();
+        Queue statusQueue = QueueBuilder.durable(controllerStatusQueueName).build();
         Binding outcome = BindingBuilder.bind(controlQueue)
             .to(controlExchange)
             .with(outcomePattern());
@@ -541,17 +541,17 @@ class SwarmCreationMock1E2ETest {
         } catch (IOException e) {
             throw new IllegalStateException("Unable to create runtime root directory at " + runtimeRoot, e);
         }
-		        scenarioManagerContext = new SpringApplicationBuilder(ScenarioManagerTestApplication.class)
-		            .properties(Map.of(
-		                "spring.autoconfigure.exclude",
-		                "org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration,"
-		                    + "org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration",
-		                "server.port", port,
-		                "server.address", "127.0.0.1",
-		                "scenarios.dir", scenariosDir.toString(),
-		                "POCKETHIVE_SCENARIOS_RUNTIME_ROOT", runtimeRoot.toString(),
-	                "logging.level.root", "WARN"
-	            ))
+        scenarioManagerContext = new SpringApplicationBuilder(ScenarioManagerTestApplication.class)
+            .properties(Map.of(
+                "spring.autoconfigure.exclude",
+                "org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration,"
+                    + "org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration",
+                "server.port", port,
+                "server.address", "127.0.0.1",
+                "scenarios.dir", scenariosDir.toString(),
+                "POCKETHIVE_SCENARIOS_RUNTIME_ROOT", runtimeRoot.toString(),
+                "logging.level.root", "WARN"
+            ))
             .run();
         scenarioManagerPort = port;
         scenarioRuntimeRoot = runtimeRoot;

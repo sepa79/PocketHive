@@ -19,6 +19,7 @@ import io.pockethive.controlplane.messaging.SignalMessage;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.routing.ControlPlaneRouting.RoutingKey;
 import io.pockethive.manager.guard.BufferGuardSettings;
+import io.pockethive.observability.ControlPlaneJson;
 import io.pockethive.swarm.model.BufferGuardPolicy;
 import io.pockethive.swarm.model.TrafficPolicy;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
@@ -98,9 +99,10 @@ public class SwarmSignalListener {
     this.workers = new SwarmWorkersAggregator(MAX_STALENESS_MS);
     this.journal = journal != null ? journal : SwarmJournal.noop();
     this.journalRunId = journalRunId != null && !journalRunId.isBlank() ? journalRunId.trim() : null;
+    ObjectMapper controlPlaneMapper = ControlPlaneJson.mapper();
     ControlPlanePublisher basePublisher = new AmqpControlPlanePublisher(rabbit, controlExchange);
-    ControlPlanePublisher publisher = new JournalControlPlanePublisher(this.mapper, this.journal, basePublisher);
-    this.controlPlane = ManagerControlPlane.builder(publisher, this.mapper)
+    ControlPlanePublisher publisher = new JournalControlPlanePublisher(controlPlaneMapper, this.journal, basePublisher);
+    this.controlPlane = ManagerControlPlane.builder(publisher, controlPlaneMapper)
         .identity(new ControlPlaneIdentity(swarmId, role, instanceId))
         .duplicateCache(java.time.Duration.ofMinutes(1), 256)
         .build();
@@ -433,7 +435,7 @@ public class SwarmSignalListener {
     }
 
     try {
-      JsonNode dataNode = node.path("data");
+      JsonNode dataNode = node;
       Boolean enabledFlag = dataNode.has("enabled") ? dataNode.path("enabled").asBoolean() : null;
 
       Boolean stateEnabled = null;

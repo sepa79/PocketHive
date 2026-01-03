@@ -7,6 +7,7 @@ import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import io.pockethive.controlplane.messaging.SignalMessage;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
+import io.pockethive.observability.ControlPlaneJson;
 import io.pockethive.manager.guard.BufferGuardMetrics;
 import io.pockethive.manager.guard.BufferGuardSettings;
 import io.pockethive.manager.ports.QueueStatsPort;
@@ -161,7 +162,7 @@ public final class BufferGuardCoordinator {
           java.util.UUID.randomUUID().toString(),
           java.util.UUID.randomUUID().toString(),
           patchData);
-      String payload = mapper.writeValueAsString(signal);
+      String payload = ControlPlaneJson.write(signal, "buffer-guard config-update");
       String rk = ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, swarmId, targetRole, null);
       log.info("buffer-guard config-update rk={} payload {}", rk, payload);
       controlPublisher.publishSignal(new SignalMessage(rk, payload));

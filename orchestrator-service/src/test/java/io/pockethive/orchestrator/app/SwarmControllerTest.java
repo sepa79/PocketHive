@@ -16,6 +16,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.controlplane.ControlPlaneSignals;
+import io.pockethive.controlplane.messaging.ControlPlanePublisher;
+import io.pockethive.controlplane.messaging.SignalMessage;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.orchestrator.domain.IdempotencyStore;
@@ -53,7 +55,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.amqp.core.AmqpTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -67,7 +68,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 class SwarmControllerTest {
 
     @Mock
-    AmqpTemplate rabbit;
+    ControlPlanePublisher publisher;
 
     @Mock
     ContainerLifecycleManager lifecycle;
@@ -95,10 +96,13 @@ class SwarmControllerTest {
 
         ResponseEntity<ControlResponse> resp = ctrl.start("sw1", req);
 
-        ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
-        verify(rabbit).convertAndSend(eq("ph.control"),
-            eq(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, "sw1", "swarm-controller", "inst")), captor.capture());
-        ControlSignal sig = mapper.readValue(captor.getValue(), ControlSignal.class);
+        ArgumentCaptor<SignalMessage> captor = ArgumentCaptor.forClass(SignalMessage.class);
+        verify(publisher).publishSignal(captor.capture());
+        SignalMessage message = captor.getValue();
+        assertThat(message.routingKey())
+            .isEqualTo(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, "sw1", "swarm-controller", "inst"));
+        assertThat(message.payload()).isInstanceOf(String.class);
+        ControlSignal sig = mapper.readValue(message.payload().toString(), ControlSignal.class);
         assertThat(sig.type()).isEqualTo(ControlPlaneSignals.SWARM_START);
         assertThat(sig.scope().swarmId()).isEqualTo("sw1");
         assertThat(sig.idempotencyKey()).isEqualTo("idem");
@@ -153,9 +157,7 @@ class SwarmControllerTest {
         ResponseEntity<ControlResponse> r1 = ctrl.start("sw1", req);
         ResponseEntity<ControlResponse> r2 = ctrl.start("sw1", req);
 
-        ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
-        verify(rabbit, times(1)).convertAndSend(eq("ph.control"),
-            eq(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, "sw1", "swarm-controller", "controller-inst")), captor.capture());
+        verify(publisher, times(1)).publishSignal(any(SignalMessage.class));
         assertThat(r1.getBody().correlationId()).isEqualTo(r2.getBody().correlationId());
     }
 
@@ -500,7 +502,7 @@ class SwarmControllerTest {
         SwarmPlanRegistry plans,
         IdempotencyStore store) {
         SwarmController controller = new SwarmController(
-            rabbit,
+            publisher,
             lifecycle,
             tracker,
             store,

@@ -1,19 +1,17 @@
 package io.pockethive.swarmcontroller;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.CommandOutcome;
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.control.ControlScope;
 import io.pockethive.controlplane.messaging.CommandOutcomes;
+import io.pockethive.controlplane.messaging.ControlPlanePublisher;
+import io.pockethive.controlplane.messaging.EventMessage;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
+import io.pockethive.observability.ControlPlaneJson;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import java.time.Instant;
-import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.amqp.AmqpException;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
@@ -27,18 +25,15 @@ public class ReadyEmitter {
 
     private static final Logger log = LoggerFactory.getLogger(ReadyEmitter.class);
 
-    private final RabbitTemplate rabbit;
+    private final ControlPlanePublisher publisher;
     private final String instanceId;
-    private final ObjectMapper mapper;
     private final SwarmControllerProperties properties;
 
-    public ReadyEmitter(RabbitTemplate rabbit,
+    public ReadyEmitter(ControlPlanePublisher publisher,
                         @Qualifier("instanceId") String instanceId,
-                        ObjectMapper mapper,
                         SwarmControllerProperties properties) {
-        this.rabbit = rabbit;
+        this.publisher = publisher;
         this.instanceId = instanceId;
-        this.mapper = mapper.findAndRegisterModules();
         this.properties = properties;
     }
 
@@ -60,12 +55,10 @@ public class ReadyEmitter {
         );
         String routingKey = ControlPlaneRouting.event("outcome", role, scope);
         try {
-            String payload = mapper.writeValueAsString(outcome);
+            String payload = ControlPlaneJson.write(outcome, "swarm-controller-ready");
             log.info("[CTRL] SEND rk={} inst={} payload={}", routingKey, instanceId, snippet(payload));
-            rabbit.convertAndSend(properties.getControlExchange(), routingKey, payload);
-        } catch (JsonProcessingException e) {
-            log.warn("ready emit serialization", e);
-        } catch (AmqpException e) {
+            publisher.publishEvent(new EventMessage(routingKey, payload));
+        } catch (RuntimeException e) {
             log.warn("ready emit", e);
         }
     }

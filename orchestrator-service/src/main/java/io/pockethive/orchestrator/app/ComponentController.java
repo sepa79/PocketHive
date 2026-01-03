@@ -1,18 +1,18 @@
 package io.pockethive.orchestrator.app;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.control.ControlScope;
 import io.pockethive.controlplane.ControlPlaneSignals;
+import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import io.pockethive.controlplane.messaging.ControlSignals;
+import io.pockethive.controlplane.messaging.SignalMessage;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
+import io.pockethive.observability.ControlPlaneJson;
 import io.pockethive.orchestrator.domain.IdempotencyStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.amqp.core.AmqpTemplate;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -20,7 +20,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -34,21 +33,16 @@ public class ComponentController {
     private static final long CONFIG_UPDATE_TIMEOUT_MS = 60_000L;
     private static final Logger log = LoggerFactory.getLogger(ComponentController.class);
 
-    private final AmqpTemplate rabbit;
+    private final ControlPlanePublisher controlPublisher;
     private final IdempotencyStore idempotency;
-    private final ObjectMapper json;
-    private final String controlExchange;
     private final String originInstanceId;
 
     public ComponentController(
-        AmqpTemplate rabbit,
+        ControlPlanePublisher controlPublisher,
         IdempotencyStore idempotency,
-        ObjectMapper json,
         ControlPlaneProperties controlPlaneProperties) {
-        this.rabbit = rabbit;
+        this.controlPublisher = controlPublisher;
         this.idempotency = idempotency;
-        this.json = json;
-        this.controlExchange = requireExchange(controlPlaneProperties);
         this.originInstanceId = requireOrigin(controlPlaneProperties);
     }
 
@@ -70,9 +64,10 @@ public class ComponentController {
                 role, instance, correlation, request.idempotencyKey(), scope);
             response = accepted(correlation, request.idempotencyKey(), swarmSegment, role, instance);
         } else {
-            Map<String, Object> args = argsFrom(request);
-            @SuppressWarnings("unchecked")
-            Map<String, Object> patch = args == null ? null : (Map<String, Object>) args.get("data");
+            Map<String, Object> patch = request.patch();
+            if (patch != null && patch.isEmpty()) {
+                patch = null;
+            }
             ControlSignal payload = ControlSignals.configUpdate(
                 originInstanceId,
                 ControlScope.forInstance(swarmId, role, instance),
@@ -123,15 +118,6 @@ public class ComponentController {
         return (swarmId == null || swarmId.isBlank()) ? "ALL" : swarmId;
     }
 
-    private Map<String, Object> argsFrom(ConfigUpdateRequest request) {
-        Map<String, Object> patch = request.patch();
-        Map<String, Object> args = new LinkedHashMap<>();
-        if (patch != null && !patch.isEmpty()) {
-            args.put("data", patch);
-        }
-        return args.isEmpty() ? null : args;
-    }
-
     public record ConfigUpdateRequest(String idempotencyKey,
                                       Map<String, Object> patch,
                                       String notes,
@@ -139,26 +125,16 @@ public class ComponentController {
     }
 
     private String toJson(ControlSignal signal) {
-        try {
-            return json.writeValueAsString(signal);
-        } catch (JsonProcessingException e) {
-            throw new IllegalStateException("Failed to serialize control signal %s for role %s".formatted(
-                signal.type(), signal.scope() != null ? signal.scope().role() : "n/a"), e);
-        }
+        return ControlPlaneJson.write(
+            signal,
+            "control signal %s for role %s".formatted(
+                signal.type(), signal.scope() != null ? signal.scope().role() : "n/a"));
     }
 
     private void sendControl(String routingKey, String payload, String context) {
         String label = (context == null || context.isBlank()) ? "SEND" : "SEND " + context;
         log.info("[CTRL] {} rk={} payload={}", label, routingKey, snippet(payload));
-        rabbit.convertAndSend(controlExchange, routingKey, payload);
-    }
-
-    private static String requireExchange(ControlPlaneProperties properties) {
-        String exchange = properties.getExchange();
-        if (exchange == null || exchange.isBlank()) {
-            throw new IllegalStateException("pockethive.control-plane.exchange must not be null or blank");
-        }
-        return exchange;
+        controlPublisher.publishSignal(new SignalMessage(routingKey, payload));
     }
 
     private static String requireOrigin(ControlPlaneProperties properties) {

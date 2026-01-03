@@ -2,10 +2,12 @@ package io.pockethive.swarmcontroller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
+import io.pockethive.observability.ControlPlaneJson;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 
 @Configuration
 public class RabbitConfig {
@@ -16,8 +18,9 @@ public class RabbitConfig {
   }
 
   @Bean
+  @Primary
   ObjectMapper objectMapper() {
-    return new ObjectMapper();
+    return ControlPlaneJson.mapper();
   }
 
   @Bean

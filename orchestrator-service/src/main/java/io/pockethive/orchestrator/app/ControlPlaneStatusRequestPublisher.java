@@ -1,7 +1,5 @@
 package io.pockethive.orchestrator.app;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.ControlScope;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.ControlPlaneSignals;
@@ -9,6 +7,7 @@ import io.pockethive.controlplane.manager.ManagerControlPlane;
 import io.pockethive.controlplane.messaging.ControlSignals;
 import io.pockethive.controlplane.messaging.SignalMessage;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
+import io.pockethive.observability.ControlPlaneJson;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,14 +20,11 @@ public class ControlPlaneStatusRequestPublisher {
     private static final Logger log = LoggerFactory.getLogger(ControlPlaneStatusRequestPublisher.class);
 
     private final ManagerControlPlane controlPlane;
-    private final ObjectMapper mapper;
     private final ControlPlaneIdentity identity;
 
     public ControlPlaneStatusRequestPublisher(ManagerControlPlane controlPlane,
-                                              ObjectMapper mapper,
                                               @Qualifier("managerControlPlaneIdentity") ControlPlaneIdentity identity) {
         this.controlPlane = Objects.requireNonNull(controlPlane, "controlPlane");
-        this.mapper = Objects.requireNonNull(mapper, "mapper").findAndRegisterModules();
         this.identity = Objects.requireNonNull(identity, "identity");
     }
 
@@ -52,14 +48,9 @@ public class ControlPlaneStatusRequestPublisher {
     }
 
     private void publish(ControlScope target, String routingKey, String correlationId, String idempotencyKey) {
-        try {
-            var signal = ControlSignals.statusRequest(identity.instanceId(), target, correlationId, idempotencyKey);
-            String payload = mapper.writeValueAsString(signal);
-            controlPlane.publishSignal(new SignalMessage(routingKey, payload));
-            log.info("[CTRL] SEND status-request rk={} correlationId={}", routingKey, correlationId);
-        } catch (JsonProcessingException e) {
-            throw new IllegalStateException("Failed to serialise status-request signal", e);
-        }
+        var signal = ControlSignals.statusRequest(identity.instanceId(), target, correlationId, idempotencyKey);
+        String payload = ControlPlaneJson.write(signal, "status-request signal");
+        controlPlane.publishSignal(new SignalMessage(routingKey, payload));
+        log.info("[CTRL] SEND status-request rk={} correlationId={}", routingKey, correlationId);
     }
 }
-
