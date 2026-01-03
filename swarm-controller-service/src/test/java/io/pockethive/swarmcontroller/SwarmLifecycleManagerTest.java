@@ -154,7 +154,7 @@ class SwarmLifecycleManagerTest {
     assertThat(stopNode.path("type").asText()).isEqualTo(ControlPlaneSignals.CONFIG_UPDATE);
     assertThat(stopNode.path("correlationId").asText()).isNotBlank();
     assertThat(stopNode.path("idempotencyKey").asText()).isNotBlank();
-    assertThat(stopNode.path("data").path("data").path("enabled").asBoolean(true)).isFalse();
+    assertThat(stopNode.path("data").path("enabled").asBoolean(true)).isFalse();
     ArgumentCaptor<String> statusPayload = ArgumentCaptor.forClass(String.class);
     verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
         startsWith("event.metric.status-delta." + TEST_SWARM_ID + ".swarm-controller.inst"),
@@ -342,7 +342,7 @@ class SwarmLifecycleManagerTest {
     JsonNode enableNode = mapper.readTree(enablePayload.getValue());
     assertThat(enableNode.path("kind").asText()).isEqualTo("signal");
     assertThat(enableNode.path("type").asText()).isEqualTo(ControlPlaneSignals.CONFIG_UPDATE);
-    assertThat(enableNode.path("data").path("data").path("enabled").asBoolean(false)).isTrue();
+    assertThat(enableNode.path("data").path("enabled").asBoolean(false)).isTrue();
     verifyNoMoreInteractions(docker);
     assertEquals(SwarmStatus.RUNNING, manager.getStatus());
   }
@@ -388,7 +388,7 @@ class SwarmLifecycleManagerTest {
     JsonNode disableNode = mapper.readTree(disablePayload.getValue());
     assertThat(disableNode.path("kind").asText()).isEqualTo("signal");
     assertThat(disableNode.path("type").asText()).isEqualTo(ControlPlaneSignals.CONFIG_UPDATE);
-    assertThat(disableNode.path("data").path("data").path("enabled").asBoolean(true)).isFalse();
+    assertThat(disableNode.path("data").path("enabled").asBoolean(true)).isFalse();
     assertEquals(SwarmStatus.STOPPED, manager.getStatus());
   }
 
@@ -419,7 +419,7 @@ class SwarmLifecycleManagerTest {
     JsonNode fanoutEnableNode = mapper.readTree(fanoutEnable.getValue());
     assertThat(fanoutEnableNode.path("kind").asText()).isEqualTo("signal");
     assertThat(fanoutEnableNode.path("type").asText()).isEqualTo(ControlPlaneSignals.CONFIG_UPDATE);
-    assertThat(fanoutEnableNode.path("data").path("data").path("enabled").asBoolean(false)).isTrue();
+    assertThat(fanoutEnableNode.path("data").path("enabled").asBoolean(false)).isTrue();
 
     reset(rabbit);
     manager.stop();
@@ -432,7 +432,7 @@ class SwarmLifecycleManagerTest {
     JsonNode fanoutDisableNode = mapper.readTree(fanoutDisable.getValue());
     assertThat(fanoutDisableNode.path("kind").asText()).isEqualTo("signal");
     assertThat(fanoutDisableNode.path("type").asText()).isEqualTo(ControlPlaneSignals.CONFIG_UPDATE);
-    assertThat(fanoutDisableNode.path("data").path("data").path("enabled").asBoolean(true)).isFalse();
+    assertThat(fanoutDisableNode.path("data").path("enabled").asBoolean(true)).isFalse();
 
     reset(docker);
     manager.remove();
@@ -472,7 +472,7 @@ class SwarmLifecycleManagerTest {
     JsonNode broadcastEnableNode = mapper.readTree(broadcastEnable.getValue());
     assertThat(broadcastEnableNode.path("kind").asText()).isEqualTo("signal");
     assertThat(broadcastEnableNode.path("type").asText()).isEqualTo(ControlPlaneSignals.CONFIG_UPDATE);
-    assertThat(broadcastEnableNode.path("data").path("data").path("enabled").asBoolean(false)).isTrue();
+    assertThat(broadcastEnableNode.path("data").path("enabled").asBoolean(false)).isTrue();
 
     reset(rabbit);
     manager.stop();
@@ -485,7 +485,7 @@ class SwarmLifecycleManagerTest {
     JsonNode broadcastDisableNode = mapper.readTree(broadcastDisable.getValue());
     assertThat(broadcastDisableNode.path("kind").asText()).isEqualTo("signal");
     assertThat(broadcastDisableNode.path("type").asText()).isEqualTo(ControlPlaneSignals.CONFIG_UPDATE);
-    assertThat(broadcastDisableNode.path("data").path("data").path("enabled").asBoolean(true)).isFalse();
+    assertThat(broadcastDisableNode.path("data").path("enabled").asBoolean(true)).isFalse();
   }
 
   @Test
@@ -719,7 +719,7 @@ class SwarmLifecycleManagerTest {
         .findFirst()
         .orElseThrow(() -> new AssertionError("Bootstrap config update not published"));
     JsonNode signal = mapper.readTree(payloadCaptor.getAllValues().get(index));
-    JsonNode data = signal.path("data").path("data");
+    JsonNode data = signal.path("data");
     assertThat(signal.path("kind").asText()).isEqualTo("signal");
     assertThat(signal.path("type").asText()).isEqualTo(ControlPlaneSignals.CONFIG_UPDATE);
     assertThat(signal.path("scope").path("role").asText()).isEqualTo("generator");

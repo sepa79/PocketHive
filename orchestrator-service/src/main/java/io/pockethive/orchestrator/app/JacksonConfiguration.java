@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 
 /**
  * Provides a shared {@link ObjectMapper} bean for JSON serialization.
@@ -12,6 +13,7 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class JacksonConfiguration {
     @Bean
+    @Primary
     public ObjectMapper objectMapper() {
         return JsonMapper.builder()
             .findAndAddModules()

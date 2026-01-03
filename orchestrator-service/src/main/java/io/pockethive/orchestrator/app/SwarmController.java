@@ -5,9 +5,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.ControlScope;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.control.ConfirmationScope;
+import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import io.pockethive.controlplane.messaging.ControlSignals;
+import io.pockethive.controlplane.messaging.EventMessage;
+import io.pockethive.controlplane.messaging.SignalMessage;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
+import io.pockethive.observability.ControlPlaneJson;
 import io.pockethive.manager.runtime.ComputeAdapterType;
 import io.pockethive.orchestrator.domain.IdempotencyStore;
 import io.pockethive.orchestrator.domain.ScenarioPlan;
@@ -45,7 +49,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.amqp.core.AmqpTemplate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -68,7 +71,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/swarms")
 public class SwarmController {
     private static final Logger log = LoggerFactory.getLogger(SwarmController.class);
-    private final AmqpTemplate rabbit;
+    private final ControlPlanePublisher controlPublisher;
     private final ContainerLifecycleManager lifecycle;
     private final SwarmCreateTracker creates;
     private final IdempotencyStore idempotency;
@@ -78,7 +81,6 @@ public class SwarmController {
     private final ScenarioClient scenarios;
     private final HiveJournal hiveJournal;
     private final ObjectMapper json;
-    private final String controlExchange;
     private final String originInstanceId;
     @Value("${POCKETHIVE_SCENARIOS_RUNTIME_ROOT:}")
     private String scenariosRuntimeRootSource;
@@ -86,7 +88,7 @@ public class SwarmController {
     private static final Pattern BASE_URL_TEMPLATE =
         Pattern.compile("\\{\\{\\s*sut\\.endpoints\\['([^']+)'\\]\\.baseUrl\\s*}}(.*)");
 
-    public SwarmController(AmqpTemplate rabbit,
+    public SwarmController(ControlPlanePublisher controlPublisher,
                            ContainerLifecycleManager lifecycle,
                            SwarmCreateTracker creates,
                            IdempotencyStore idempotency,
@@ -97,7 +99,7 @@ public class SwarmController {
                            SwarmPlanRegistry plans,
                            ScenarioTimelineRegistry timelines,
                            ControlPlaneProperties controlPlaneProperties) {
-        this.rabbit = rabbit;
+        this.controlPublisher = controlPublisher;
         this.lifecycle = lifecycle;
         this.creates = creates;
         this.idempotency = idempotency;
@@ -107,7 +109,6 @@ public class SwarmController {
         this.hiveJournal = Objects.requireNonNull(hiveJournal, "hiveJournal");
         this.plans = plans;
         this.timelines = timelines;
-        this.controlExchange = requireExchange(controlPlaneProperties);
         this.originInstanceId = requireOrigin(controlPlaneProperties);
     }
 
@@ -657,12 +658,10 @@ public class SwarmController {
      * so REST handlers surface a 500 if serialization fails.
      */
     private String toJson(ControlSignal signal) {
-        try {
-            return json.writeValueAsString(signal);
-        } catch (JsonProcessingException e) {
-            throw new IllegalStateException("Failed to serialize control signal %s for swarm %s".formatted(
-                signal.type(), signal.scope() != null ? signal.scope().swarmId() : "n/a"), e);
-        }
+        return ControlPlaneJson.write(
+            signal,
+            "control signal %s for swarm %s".formatted(
+                signal.type(), signal.scope() != null ? signal.scope().swarmId() : "n/a"));
     }
 
     /**
@@ -674,16 +673,11 @@ public class SwarmController {
     private void sendControl(String routingKey, String payload, String context) {
         String label = (context == null || context.isBlank()) ? "SEND" : "SEND " + context;
         log.info("[CTRL] {} rk={} payload={}", label, routingKey, snippet(payload));
-        rabbit.convertAndSend(controlExchange, routingKey, payload);
-    }
-
-    private static String requireExchange(ControlPlaneProperties properties) {
-        Objects.requireNonNull(properties, "properties");
-        String exchange = properties.getExchange();
-        if (exchange == null || exchange.isBlank()) {
-            throw new IllegalStateException("pockethive.control-plane.exchange must not be null or blank");
+        if (routingKey != null && routingKey.startsWith("signal.")) {
+            controlPublisher.publishSignal(new SignalMessage(routingKey, payload));
+        } else {
+            controlPublisher.publishEvent(new EventMessage(routingKey, payload));
         }
-        return exchange;
     }
 
     private static String requireOrigin(ControlPlaneProperties properties) {

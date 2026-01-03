@@ -258,7 +258,7 @@ public final class TimelineScenario implements Scenario {
     String type = step.type.toLowerCase(Locale.ROOT);
     ObjectNode data = mapper.createObjectNode();
     boolean swarmLifecycleStep = isSwarmLifecycleStep(step);
-    // Shape the payload that ConfigFanout expects under args.data.
+    // Shape the payload that ConfigFanout forwards as the config-update data map.
     switch (type) {
       case "start" -> {
         if (swarmLifecycleStep) {

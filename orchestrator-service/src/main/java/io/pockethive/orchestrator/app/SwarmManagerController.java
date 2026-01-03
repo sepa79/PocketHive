@@ -1,20 +1,20 @@
 package io.pockethive.orchestrator.app;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.ControlScope;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.controlplane.ControlPlaneSignals;
+import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import io.pockethive.controlplane.messaging.ControlSignals;
+import io.pockethive.controlplane.messaging.SignalMessage;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
+import io.pockethive.observability.ControlPlaneJson;
 import io.pockethive.orchestrator.domain.IdempotencyStore;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.amqp.core.AmqpTemplate;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -43,22 +43,17 @@ public class SwarmManagerController {
     private static final long CONFIG_UPDATE_TIMEOUT_MS = 60_000L;
 
     private final SwarmRegistry registry;
-    private final AmqpTemplate rabbit;
+    private final ControlPlanePublisher controlPublisher;
     private final IdempotencyStore idempotency;
-    private final ObjectMapper json;
-    private final String controlExchange;
     private final String originInstanceId;
 
     public SwarmManagerController(SwarmRegistry registry,
-                                  AmqpTemplate rabbit,
+                                  ControlPlanePublisher controlPublisher,
                                   IdempotencyStore idempotency,
-                                  ObjectMapper json,
                                   ControlPlaneProperties controlPlaneProperties) {
         this.registry = registry;
-        this.rabbit = rabbit;
+        this.controlPublisher = controlPublisher;
         this.idempotency = idempotency;
-        this.json = json;
-        this.controlExchange = requireExchange(controlPlaneProperties);
         this.originInstanceId = requireOrigin(controlPlaneProperties);
     }
 
@@ -183,15 +178,7 @@ public class SwarmManagerController {
      */
     private void sendControl(String routingKey, String payload) {
         log.info("[CTRL] SEND rk={} payload={}", routingKey, snippet(payload));
-        rabbit.convertAndSend(controlExchange, routingKey, payload);
-    }
-
-    private static String requireExchange(ControlPlaneProperties properties) {
-        String exchange = properties.getExchange();
-        if (exchange == null || exchange.isBlank()) {
-            throw new IllegalStateException("pockethive.control-plane.exchange must not be null or blank");
-        }
-        return exchange;
+        controlPublisher.publishSignal(new SignalMessage(routingKey, payload));
     }
 
     /**
@@ -199,12 +186,10 @@ public class SwarmManagerController {
      * serialization fails so REST callers receive an actionable 500 response.
      */
     private String toJson(ControlSignal signal) {
-        try {
-            return json.writeValueAsString(signal);
-        } catch (JsonProcessingException e) {
-            throw new IllegalStateException("Failed to serialize control signal %s for swarm %s".formatted(
-                signal.type(), signal.scope() != null ? signal.scope().swarmId() : "n/a"), e);
-        }
+        return ControlPlaneJson.write(
+            signal,
+            "control signal %s for swarm %s".formatted(
+                signal.type(), signal.scope() != null ? signal.scope().swarmId() : "n/a"));
     }
 
     private static String requireOrigin(ControlPlaneProperties properties) {

@@ -43,6 +43,7 @@ import io.pockethive.controlplane.routing.ControlPlaneRouting.RoutingKey;
 import io.pockethive.controlplane.topology.ControlPlaneRouteCatalog;
 import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
 import io.pockethive.controlplane.payload.RoleContext;
+import io.pockethive.observability.ControlPlaneJson;
 import org.springframework.beans.factory.annotation.Qualifier;
 
 /**
@@ -255,7 +256,7 @@ public class SwarmSignalListener {
         if (plan != null) {
             try {
                 ControlSignal payload = templateSignal(plan, info, controllerInstance);
-                String jsonPayload = json.writeValueAsString(payload);
+                String jsonPayload = ControlPlaneJson.write(payload, "swarm-template signal");
                 String rk = ControlPlaneRouting.signal("swarm-template", plan.id(), "swarm-controller", controllerInstance);
                 log.info("sending swarm-template for {} via controller {}", plan.id(), controllerInstance);
                 sendControl(rk, jsonPayload, "signal.swarm-template");
@@ -305,7 +306,7 @@ public class SwarmSignalListener {
                     correlationId,
                     idempotencyKey,
                     args);
-                String jsonPayload = json.writeValueAsString(payload);
+                String jsonPayload = ControlPlaneJson.write(payload, "swarm-plan signal");
                 String rk = ControlPlaneRouting.signal(signal, swarmId, "swarm-controller", controllerInstance);
                 log.info("sending swarm-plan for {} via controller {} (corr={}, idem={})",
                     swarmId, controllerInstance, correlationId, idempotencyKey);

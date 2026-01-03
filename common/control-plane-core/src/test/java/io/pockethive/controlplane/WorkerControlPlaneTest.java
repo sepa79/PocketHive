@@ -28,7 +28,7 @@ class WorkerControlPlaneTest {
     void dispatchesConfigUpdatesWithParsedPayload() throws Exception {
         ControlSignal signal = ControlSignal.forInstance(
             "config-update", "sw1", "generator", "inst", "orchestrator-1", "corr", "idem",
-            Map.of("data", Map.of("enabled", true, "ratePerSec", 5)));
+            Map.of("enabled", true, "ratePerSec", 5));
         AtomicReference<WorkerConfigCommand> ref = new AtomicReference<>();
 
         WorkerSignalListener listener = new WorkerSignalListener() {
@@ -52,7 +52,7 @@ class WorkerControlPlaneTest {
     void parsesStringEnabledFlag() throws Exception {
         ControlSignal signal = ControlSignal.forInstance(
             "config-update", "sw1", "generator", "inst", "orchestrator-1", "corr", "idem",
-            Map.of("data", Map.of("enabled", "false")));
+            Map.of("enabled", "false"));
         AtomicReference<WorkerConfigCommand> ref = new AtomicReference<>();
 
         plane.consume(mapper.writeValueAsString(signal), "signal.config-update.sw1.generator.inst", new WorkerSignalListener() {

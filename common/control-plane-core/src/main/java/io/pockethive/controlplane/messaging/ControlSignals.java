@@ -84,9 +84,7 @@ public final class ControlSignals {
                                              Map<String, Object> patchData) {
         Map<String, Object> args = null;
         if (patchData != null && !patchData.isEmpty()) {
-            Map<String, Object> data = new LinkedHashMap<>();
-            data.put("data", patchData);
-            args = data;
+            args = new LinkedHashMap<>(patchData);
         }
         return signal(ControlPlaneSignals.CONFIG_UPDATE, origin, target, correlationId, idempotencyKey, args);
     }
@@ -108,4 +106,3 @@ public final class ControlSignals {
         );
     }
 }
-

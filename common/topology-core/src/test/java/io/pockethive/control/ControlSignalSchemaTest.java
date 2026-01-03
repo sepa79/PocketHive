@@ -88,7 +88,7 @@ class ControlSignalSchemaTest {
             "orchestrator-1",
             UUID.randomUUID().toString(),
             UUID.randomUUID().toString(),
-            Map.of("data", Map.of("enabled", true))
+            Map.of("enabled", true)
         );
         JsonNode json = MAPPER.readTree(MAPPER.writeValueAsString(sample));
         Set<String> jsonProperties = new LinkedHashSet<>();

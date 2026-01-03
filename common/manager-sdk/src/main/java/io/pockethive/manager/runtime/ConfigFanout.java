@@ -1,6 +1,5 @@
 package io.pockethive.manager.runtime;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -9,6 +8,7 @@ import io.pockethive.control.ControlScope;
 import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.manager.ports.ControlPlanePort;
+import io.pockethive.observability.ControlPlaneJson;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -145,16 +145,12 @@ public final class ConfigFanout {
         correlationId,
         idempotencyKey,
         dataMap);
-    try {
-      String payload = mapper.writeValueAsString(signal);
-      String routingKey = ControlPlaneRouting.signal(
-          ControlPlaneSignals.CONFIG_UPDATE, target.swarmId(), target.role(), target.instance());
-      log.info("{} config-update rk={} correlation={} payload {}",
-          context, routingKey, correlationId, payloadSnippet(payload));
-      controlPlane.publishSignal(routingKey, payload);
-    } catch (JsonProcessingException e) {
-      throw new IllegalStateException("Failed to serialize config-update signal", e);
-    }
+    String payload = ControlPlaneJson.write(signal, "config-update signal");
+    String routingKey = ControlPlaneRouting.signal(
+        ControlPlaneSignals.CONFIG_UPDATE, target.swarmId(), target.role(), target.instance());
+    log.info("{} config-update rk={} correlation={} payload {}",
+        context, routingKey, correlationId, payloadSnippet(payload));
+    controlPlane.publishSignal(routingKey, payload);
   }
 
   private static String payloadSnippet(String payload) {

@@ -100,9 +100,9 @@ References:
 
 ### 7) SSOT for control-plane wire format (serializer + publisher)
 
-- [ ] Introduce a canonical control-plane JSON serializer (single `ObjectMapper` config) shared by all managers and workers:
-  - [ ] RFC3339 timestamps (`WRITE_DATES_AS_TIMESTAMPS=false`)
-  - [ ] Ensure required envelope fields are always present on-wire (`data`, `correlationId`, `idempotencyKey`)
-- [ ] Remove ad-hoc `new ObjectMapper()` usage for control-plane envelopes (e.g. Swarm Controller `RabbitConfig`)
-- [ ] Remove direct `RabbitTemplate.convertAndSend(...)` publishing of control-plane envelopes (e.g. Swarm Controller `ReadyEmitter`) and route everything via `ControlPlanePublisher` + `ControlPlaneEmitter`
-- [ ] Add a schema + “wire-shape” test that exercises manager-side publishers (SC/orchestrator/manager-sdk) and catches timestamp/field-presence regressions
+- [x] Introduce a canonical control-plane JSON serializer (single `ObjectMapper` config) shared by all managers and workers:
+  - [x] RFC3339 timestamps
+  - [x] Ensure required envelope fields are always present on-wire (`data`, `correlationId`, `idempotencyKey`)
+- [x] Remove ad-hoc `new ObjectMapper()` usage for control-plane envelopes (e.g. Swarm Controller `RabbitConfig`)
+- [x] Remove direct `RabbitTemplate.convertAndSend(...)` publishing of control-plane envelopes (e.g. Swarm Controller `ReadyEmitter`) and route everything via `ControlPlanePublisher` + `ControlPlaneEmitter`
+- [x] Add a schema + “wire-shape” test that exercises manager-side publishers (SC/orchestrator/manager-sdk) and catches timestamp/field-presence regressions

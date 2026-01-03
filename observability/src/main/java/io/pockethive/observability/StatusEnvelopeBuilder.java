@@ -1,9 +1,5 @@
 package io.pockethive.observability;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -21,10 +17,6 @@ import java.util.Set;
  * and a structured {@code data} section as defined in {@code docs/spec}.
  */
 public class StatusEnvelopeBuilder {
-
-    private static final ObjectMapper MAPPER = new ObjectMapper()
-        .registerModule(new JavaTimeModule())
-        .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
     private static final String ENVELOPE_VERSION = "1";
     private static final Set<String> RESERVED_DATA_FIELDS = Set.of(
@@ -466,10 +458,6 @@ public class StatusEnvelopeBuilder {
         }
 
         root.put("data", canonicalData);
-        try {
-            return MAPPER.writeValueAsString(root);
-        } catch (JsonProcessingException e) {
-            throw new RuntimeException("Failed to serialise status envelope", e);
-        }
+        return ControlPlaneJson.write(root, "status envelope");
     }
 }

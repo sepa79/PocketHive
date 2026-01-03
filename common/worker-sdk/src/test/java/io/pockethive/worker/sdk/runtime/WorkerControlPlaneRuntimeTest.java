@@ -123,10 +123,8 @@ class WorkerControlPlaneRuntimeTest {
 	        String correlationId = UUID.randomUUID().toString();
 	        String idempotencyKey = UUID.randomUUID().toString();
 	        Map<String, Object> args = Map.of(
-	            "data", Map.of(
                 "enabled", true,
                 "ratePerSec", 12.5
-            )
 	        );
 	        ControlSignal signal = ControlSignal.forInstance(
 	            "config-update",
@@ -170,9 +168,7 @@ class WorkerControlPlaneRuntimeTest {
 	        String correlationId = UUID.randomUUID().toString();
 	        String idempotencyKey = UUID.randomUUID().toString();
 	        Map<String, Object> args = Map.of(
-	            "data", Map.of(
-	                "templating", Map.of("reseed", true)
-	            )
+	            "templating", Map.of("reseed", true)
 	        );
 	        ControlSignal signal = ControlSignal.forInstance(
 	            "config-update",
@@ -199,10 +195,8 @@ class WorkerControlPlaneRuntimeTest {
 	        String correlationId = UUID.randomUUID().toString();
 	        String idempotencyKey = UUID.randomUUID().toString();
         Map<String, Object> args = Map.of(
-            "data", Map.of(
-                "enabled", true,
-                "ratePerSec", "not-a-number"
-            )
+            "enabled", true,
+            "ratePerSec", "not-a-number"
         );
         ControlSignal signal = ControlSignal.forInstance(
             "config-update",
@@ -338,9 +332,7 @@ class WorkerControlPlaneRuntimeTest {
 
     @Test
 	    void configUpdateWithoutEnabledPreservesExistingState() throws Exception {
-	        Map<String, Object> initialArgs = Map.of(
-	            "data", Map.of("enabled", true)
-	        );
+	        Map<String, Object> initialArgs = Map.of("enabled", true);
 	        ControlSignal initialSignal = ControlSignal.forInstance(
             "config-update",
 	            IDENTITY.swarmId(),
@@ -358,9 +350,7 @@ class WorkerControlPlaneRuntimeTest {
 
         assertThat(runtime.workerEnabled(definition.beanName())).isTrue();
 
-	        Map<String, Object> updateArgs = Map.of(
-	            "data", Map.of("ratePerSec", 20.0)
-	        );
+	        Map<String, Object> updateArgs = Map.of("ratePerSec", 20.0);
 	        ControlSignal updateSignal = ControlSignal.forInstance(
             "config-update",
 	            IDENTITY.swarmId(),
@@ -383,10 +373,8 @@ class WorkerControlPlaneRuntimeTest {
     @Test
 	    void explicitEmptyPayloadResetsWorkerConfig() throws Exception {
 	        Map<String, Object> initialArgs = Map.of(
-	            "data", Map.of(
-	                "enabled", true,
+	            "enabled", true,
                 "ratePerSec", 15.0
-            )
 	        );
 	        ControlSignal initialSignal = ControlSignal.forInstance(
 	            "config-update",
@@ -402,9 +390,7 @@ class WorkerControlPlaneRuntimeTest {
 	        runtime.handle(MAPPER.writeValueAsString(initialSignal), routingKey);
 
         Map<String, Object> resetArgs = Map.of(
-            "data", Map.of(
-                "workers", Map.of(definition.beanName(), Map.of())
-            )
+            "workers", Map.of(definition.beanName(), Map.of())
 	        );
 	        ControlSignal resetSignal = ControlSignal.forInstance(
 	            "config-update",
@@ -443,7 +429,7 @@ class WorkerControlPlaneRuntimeTest {
 
         Map<String, Object> firstWorkerArgs = Map.of(
             "worker", definition.beanName(),
-            "data", Map.of("ratePerSec", 17.5)
+            "ratePerSec", 17.5
 	        );
 	        ControlSignal firstWorkerSignal = ControlSignal.forInstance(
 	            "config-update",
@@ -459,7 +445,7 @@ class WorkerControlPlaneRuntimeTest {
 
         Map<String, Object> secondWorkerArgs = Map.of(
             "worker", otherDefinition.beanName(),
-            "data", Map.of("ratePerSec", 42.0)
+            "ratePerSec", 42.0
 	        );
 	        ControlSignal secondWorkerSignal = ControlSignal.forInstance(
 	            "config-update",
@@ -474,10 +460,8 @@ class WorkerControlPlaneRuntimeTest {
 	        runtime.handle(MAPPER.writeValueAsString(secondWorkerSignal), routingKey);
 
         Map<String, Object> broadcastArgs = Map.of(
-            "data", Map.of(
-                "workers", Map.of(
-                    definition.beanName(), Map.of("ratePerSec", 99.0)
-                )
+            "workers", Map.of(
+                definition.beanName(), Map.of("ratePerSec", 99.0)
             )
 	        );
 	        ControlSignal broadcastSignal = ControlSignal.forInstance(
@@ -503,7 +487,7 @@ class WorkerControlPlaneRuntimeTest {
     @Test
 	    void configUpdateWithoutPayloadDoesNotClearExistingOverride() throws Exception {
         Map<String, Object> initialArgs = Map.of(
-            "data", Map.of("ratePerSec", 18.0)
+            "ratePerSec", 18.0
 	        );
 	        ControlSignal initialSignal = ControlSignal.forInstance(
 	            "config-update",
@@ -544,10 +528,8 @@ class WorkerControlPlaneRuntimeTest {
     @Test
 	    void enablementToggleWithoutConfigRetainsExistingOverrides() throws Exception {
         Map<String, Object> initialArgs = Map.of(
-            "data", Map.of(
-                "enabled", true,
-                "ratePerSec", 9.5
-            )
+            "enabled", true,
+            "ratePerSec", 9.5
 	        );
 	        ControlSignal initialSignal = ControlSignal.forInstance(
 	            "config-update",
@@ -594,7 +576,7 @@ class WorkerControlPlaneRuntimeTest {
         reset(emitter);
 
         Map<String, Object> args = Map.of(
-            "data", Map.of("ratePerSec", 20.0)
+            "ratePerSec", 20.0
 	        );
 	        ControlSignal signal = ControlSignal.forInstance(
 	            "config-update",
@@ -626,7 +608,7 @@ class WorkerControlPlaneRuntimeTest {
 
         Map<String, Object> data = new java.util.LinkedHashMap<>();
         data.put("ratePerSec", null);
-	        Map<String, Object> args = Map.of("data", data);
+	        Map<String, Object> args = data;
 	        ControlSignal signal = ControlSignal.forInstance(
 	            "config-update",
 	            IDENTITY.swarmId(),
@@ -664,9 +646,7 @@ class WorkerControlPlaneRuntimeTest {
         assertThat(initial.outboundQueue()).contains(definition.io().outboundQueue());
         assertThat(initial.exchange()).contains(definition.io().outboundExchange());
 
-	        Map<String, Object> args = Map.of(
-	            "data", Map.of("enabled", true)
-	        );
+	        Map<String, Object> args = Map.of("enabled", true);
 	        ControlSignal signal = ControlSignal.forInstance(
 	            "config-update",
 	            IDENTITY.swarmId(),
@@ -704,9 +684,7 @@ class WorkerControlPlaneRuntimeTest {
 
 	        reset(emitter);
 
-	        Map<String, Object> args = Map.of(
-	            "data", Map.of("enabled", true)
-	        );
+	        Map<String, Object> args = Map.of("enabled", true);
 	        ControlSignal signal = ControlSignal.forInstance(
 	            "config-update",
 	            IDENTITY.swarmId(),
@@ -780,10 +758,8 @@ class WorkerControlPlaneRuntimeTest {
         runtime.registerDefaultConfig(definition.beanName(), defaults);
 
         Map<String, Object> args = Map.of(
-            "data", Map.of(
-                "enabled", true,
-                "ratePerSec", 11.0
-            )
+            "enabled", true,
+            "ratePerSec", 11.0
 	        );
 	        ControlSignal signal = ControlSignal.forInstance(
 	            "config-update",

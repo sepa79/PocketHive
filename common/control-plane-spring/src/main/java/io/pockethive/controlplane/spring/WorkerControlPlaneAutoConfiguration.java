@@ -85,7 +85,7 @@ public class WorkerControlPlaneAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     @ConditionalOnProperty(prefix = "pockethive.control-plane.worker.listener", name = "enabled", havingValue = "true", matchIfMissing = true)
-    WorkerControlPlane workerControlPlane(ObjectMapper objectMapper,
+    WorkerControlPlane workerControlPlane(@Qualifier("controlPlaneObjectMapper") ObjectMapper objectMapper,
         @Qualifier("workerControlPlaneIdentity") ControlPlaneIdentity identity) {
         WorkerControlPlane.Builder builder = WorkerControlPlane.builder(objectMapper).identity(identity);
         WorkerControlPlaneProperties.Worker worker = properties.getWorker();

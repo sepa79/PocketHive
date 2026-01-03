@@ -1,5 +1,6 @@
 package io.pockethive.controlplane.messaging;
 
+import io.pockethive.observability.ControlPlaneJson;
 import org.springframework.amqp.core.AmqpTemplate;
 
 import java.util.Objects;
@@ -20,12 +21,19 @@ public final class AmqpControlPlanePublisher implements ControlPlanePublisher {
     @Override
     public void publishSignal(SignalMessage message) {
         Objects.requireNonNull(message, "message");
-        template.convertAndSend(exchange, message.routingKey(), message.payload());
+        template.convertAndSend(exchange, message.routingKey(), serializePayload(message.payload()));
     }
 
     @Override
     public void publishEvent(EventMessage message) {
         Objects.requireNonNull(message, "message");
-        template.convertAndSend(exchange, message.routingKey(), message.payload());
+        template.convertAndSend(exchange, message.routingKey(), serializePayload(message.payload()));
+    }
+
+    private Object serializePayload(Object payload) {
+        if (payload instanceof String || payload instanceof byte[]) {
+            return payload;
+        }
+        return ControlPlaneJson.write(payload);
     }
 }
