@@ -371,7 +371,7 @@ public final class WorkerControlPlaneRuntime {
                 if (hasCorrelation(signal)) {
                     notifier.emitConfigReady(signal, state, appliedConfig, enabled);
                 } else {
-                    log.debug(
+                    log.warn(
                         "Skipping ready confirmation for signal {} due to missing correlation/idempotency",
                         signal.type()
                     );
@@ -409,7 +409,7 @@ public final class WorkerControlPlaneRuntime {
                 if (hasCorrelation(signal)) {
                     notifier.emitConfigError(signal, state, ex);
                 } else {
-                    log.debug(
+                    log.warn(
                         "Skipping error confirmation for signal {} due to missing correlation/idempotency",
                         signal.type()
                     );

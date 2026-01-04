@@ -47,6 +47,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 @Component
@@ -72,6 +73,8 @@ public class SwarmSignalListener {
   private static final long MAX_STALENESS_MS = 15_000L;
   private final AtomicReference<PendingTemplate> pendingTemplate = new AtomicReference<>();
   private final AtomicReference<PendingStart> pendingStart = new AtomicReference<>();
+  private final AtomicBoolean templateApplied = new AtomicBoolean(false);
+  private final AtomicBoolean planApplied = new AtomicBoolean(false);
   private final java.time.Instant startedAt;
   private volatile String lastHealthState;
   private volatile Instant healthJournalSuppressUntil;
@@ -344,6 +347,7 @@ public class SwarmSignalListener {
     try {
       log.info("{} signal for swarm {}", label.substring(0, 1).toUpperCase() + label.substring(1), swarmId);
       action.apply(serializeArgs(cs));
+      recordLifecycleState(resolvedSignal);
       if (ControlPlaneSignals.SWARM_TEMPLATE.equals(resolvedSignal)) {
         onTemplateSuccess(cs, resolvedSignal, swarmId);
       } else if (ControlPlaneSignals.SWARM_START.equals(resolvedSignal)) {
@@ -428,6 +432,9 @@ public class SwarmSignalListener {
       log.debug("Ignoring config-update on routing key {}", envelope.routingKey());
       return;
     }
+    if (rejectIfNotReady(cs, resolvedSignal, swarmIdOrDefault(cs), true)) {
+      return;
+    }
 
     JsonNode node = mapper.createObjectNode();
     if (cs.data() != null) {
@@ -499,6 +506,52 @@ public class SwarmSignalListener {
     }
   }
 
+  private boolean rejectIfNotReady(ControlSignal cs,
+                                   String resolvedSignal,
+                                   String swarmIdFallback,
+                                   boolean requireRunning) {
+    boolean initialized = isInitialized();
+    boolean ready = lifecycle.isReadyForWork();
+    boolean pendingConfigUpdates = lifecycle.hasPendingConfigUpdates();
+    SwarmStatus status = lifecycle.getStatus();
+    boolean running = status == SwarmStatus.RUNNING;
+    if (initialized && ready && !pendingConfigUpdates && (!requireRunning || running)) {
+      return false;
+    }
+    Map<String, Object> details = new LinkedHashMap<>();
+    details.put("initialized", initialized);
+    details.put("ready", ready);
+    details.put("pendingConfigUpdates", pendingConfigUpdates);
+    if (status != null) {
+      details.put("status", status.name());
+    }
+    log.warn("Rejecting {} for swarm {} (initialized={}, ready={}, pendingConfigUpdates={}, status={})",
+        resolvedSignal, swarmIdFallback, initialized, ready, pendingConfigUpdates,
+        status != null ? status.name() : "unknown");
+    CommandState state = new CommandState("NotReady", null, details);
+    emitSuccess(cs, resolvedSignal, swarmIdFallback, state);
+    return true;
+  }
+
+  private void recordLifecycleState(String resolvedSignal) {
+    if (ControlPlaneSignals.SWARM_TEMPLATE.equals(resolvedSignal)) {
+      templateApplied.set(true);
+      return;
+    }
+    if (ControlPlaneSignals.SWARM_PLAN.equals(resolvedSignal)) {
+      planApplied.set(true);
+      return;
+    }
+    if (ControlPlaneSignals.SWARM_REMOVE.equals(resolvedSignal)) {
+      templateApplied.set(false);
+      planApplied.set(false);
+    }
+  }
+
+  private boolean isInitialized() {
+    return templateApplied.get() && planApplied.get();
+  }
+
   private void handleSignal(ControlSignalEnvelope envelope, String rawPayload) {
     ControlSignal cs = envelope.signal();
     if (cs == null) {
@@ -525,6 +578,9 @@ public class SwarmSignalListener {
       }
       case ControlPlaneSignals.SWARM_START -> {
         if (isForLocalSwarm(cs)) {
+          if (rejectIfNotReady(cs, signal, swarmIdOrDefault(cs), false)) {
+            return;
+          }
           processSwarmSignal(cs, signal, swarmIdOrDefault(cs), args -> {
             lifecycle.start(args);
             sendStatusFull();
@@ -533,6 +589,9 @@ public class SwarmSignalListener {
       }
       case ControlPlaneSignals.SWARM_STOP -> {
         if (isForLocalSwarm(cs)) {
+          if (rejectIfNotReady(cs, signal, swarmIdOrDefault(cs), true)) {
+            return;
+          }
           processSwarmSignal(cs, signal, swarmIdOrDefault(cs), args -> {
             lifecycle.stop();
           }, "stop");
@@ -618,7 +677,7 @@ public class SwarmSignalListener {
     String signal = requireSignal(confirmationSignal(cs, resolvedSignal), "Outcome");
     CommandState state = overrideState != null ? overrideState : stateForSuccess(signal);
     if (cs.idempotencyKey() == null || cs.idempotencyKey().isBlank()) {
-      log.debug("Skipping outcome for {} due to missing idempotencyKey", signal);
+      log.warn("Skipping outcome for {} due to missing idempotencyKey", signal);
       return;
     }
     io.pockethive.controlplane.messaging.ControlPlaneEmitter.ReadyContext context =
@@ -638,14 +697,10 @@ public class SwarmSignalListener {
                          String swarmIdFallback) {
     String signal = requireSignal(confirmationSignal(cs, resolvedSignal), "Outcome");
     if (cs.idempotencyKey() == null || cs.idempotencyKey().isBlank()) {
-      log.debug("Skipping error outcome for {} due to missing idempotencyKey", signal);
+      log.warn("Skipping error outcome for {} due to missing idempotencyKey", signal);
       return;
     }
-    CommandState baseState = stateForError(signal);
-    if (baseState == null) {
-      String status = stateFromLifecycle();
-      baseState = CommandState.status(status != null ? status : "error");
-    }
+    CommandState baseState = new CommandState(null, null, null);
     String code = e.getClass().getSimpleName();
     String message = e.getMessage() == null || e.getMessage().isBlank() ? code : e.getMessage();
     io.pockethive.controlplane.messaging.ControlPlaneEmitter.ErrorContext.Builder builder =
@@ -657,32 +712,20 @@ public class SwarmSignalListener {
             phaseForSignal(signal),
             code,
             message)
-            .retryable(Boolean.FALSE)
             .timestamp(Instant.now());
     emitter.emitError(builder.build());
   }
 
   private CommandState stateForSuccess(String signal) {
-    String effectiveSignal = signal == null ? "" : signal;
-    String status = switch (effectiveSignal) {
-      case ControlPlaneSignals.SWARM_TEMPLATE -> "Ready";
-      case ControlPlaneSignals.SWARM_START -> "Running";
-      case ControlPlaneSignals.SWARM_STOP -> "Stopped";
-      case ControlPlaneSignals.SWARM_REMOVE -> "Removed";
-      case ControlPlaneSignals.CONFIG_UPDATE -> stateFromLifecycle();
-      default -> stateFromLifecycle();
-    };
-    return new CommandState(status, null, null);
+    return new CommandState(null, null, null);
   }
 
   private CommandState configCommandState(ControlSignal cs,
                                           String resolvedSignal,
                                           Boolean enabled,
                                           Map<String, Object> details) {
-    String signal = requireSignal(confirmationSignal(cs, resolvedSignal), "Config confirmation state");
-    CommandState base = stateForSuccess(signal);
     Map<String, Object> detailCopy = (details == null || details.isEmpty()) ? null : new LinkedHashMap<>(details);
-    return new CommandState(base.status(), enabled, detailCopy);
+    return new CommandState(null, enabled, detailCopy);
   }
 
   private boolean isForLocalSwarm(ControlSignal cs) {
@@ -743,34 +786,6 @@ public class SwarmSignalListener {
   private record PendingTemplate(ControlSignal signal, String resolvedSignal, String swarmIdFallback) {}
 
   private record PendingStart(ControlSignal signal, String resolvedSignal, String swarmIdFallback) {}
-
-  private CommandState stateForError(String signal) {
-    String state = stateFromLifecycle();
-    if (state != null) {
-      return new CommandState(state, null, null);
-    }
-    String effectiveSignal = signal == null ? "" : signal;
-    return switch (effectiveSignal) {
-      case "swarm-start" -> new CommandState("Stopped", null, null);
-      case "swarm-stop" -> new CommandState("Running", null, null);
-      case "swarm-remove" -> new CommandState("Stopped", null, null);
-      case "swarm-template" -> new CommandState("Stopped", null, null);
-      default -> null;
-    };
-  }
-
-  private String stateFromLifecycle() {
-    SwarmStatus status = lifecycle.getStatus();
-    if (status == null) {
-      return null;
-    }
-    return switch (status) {
-      case READY -> "Ready";
-      case RUNNING, STARTING -> "Running";
-      case STOPPED, STOPPING, FAILED, NEW, CREATING -> "Stopped";
-      case REMOVED, REMOVING -> "Removed";
-    };
-  }
 
   private String phaseForSignal(String signal) {
     if (signal == null || signal.isBlank()) {

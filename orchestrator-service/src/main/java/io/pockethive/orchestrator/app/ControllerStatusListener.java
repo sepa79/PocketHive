@@ -31,13 +31,16 @@ public class ControllerStatusListener {
     private final SwarmRegistry registry;
     private final ObjectMapper mapper;
     private final ControlPlaneStatusRequestPublisher statusRequests;
+    private final SwarmSignalListener swarmSignals;
 
     public ControllerStatusListener(SwarmRegistry registry,
                                     ObjectMapper mapper,
-                                    ControlPlaneStatusRequestPublisher statusRequests) {
+                                    ControlPlaneStatusRequestPublisher statusRequests,
+                                    SwarmSignalListener swarmSignals) {
         this.registry = Objects.requireNonNull(registry, "registry");
         this.mapper = Objects.requireNonNull(mapper, "mapper").findAndRegisterModules();
         this.statusRequests = Objects.requireNonNull(statusRequests, "statusRequests");
+        this.swarmSignals = Objects.requireNonNull(swarmSignals, "swarmSignals");
     }
 
     @RabbitListener(queues = "#{controllerStatusQueue.name}")
@@ -58,6 +61,9 @@ public class ControllerStatusListener {
         }
         try {
             JsonNode node = mapper.readTree(body);
+            if (routingKey.startsWith("event.metric.status-full.")) {
+                swarmSignals.handleControllerStatusFull(routingKey);
+            }
             JsonNode scope = node.path("scope");
             String swarmId = scope.path("swarmId").asText(null);
             String controllerInstance = scope.path("instance").asText(null);

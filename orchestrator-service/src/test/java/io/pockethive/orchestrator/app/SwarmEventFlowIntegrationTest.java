@@ -102,7 +102,7 @@ class SwarmEventFlowIntegrationTest {
         signalListener = new SwarmSignalListener(plans, timelines, tracker, registry, lifecycle, mapper,
             HiveJournal.noop(),
             controlPlane, controlEmitter, identity, descriptor, controlQueueName);
-        statusListener = new ControllerStatusListener(registry, mapper, statusRequests);
+        statusListener = new ControllerStatusListener(registry, mapper, statusRequests, signalListener);
         clearInvocations(controlPlane, controlEmitter, publisher, lifecycle);
     }
 
@@ -116,7 +116,21 @@ class SwarmEventFlowIntegrationTest {
         registry.register(new Swarm(SWARM_ID, CONTROLLER_INSTANCE, "cid", "run-1"));
         registry.updateStatus(SWARM_ID, SwarmStatus.CREATING);
 
-        signalListener.handle("{\"data\":{\"status\":\"Ready\"}}", ControlPlaneRouting.event("outcome", "swarm-controller",
+        String statusPayload = """
+            {
+              "timestamp": "2024-01-01T00:00:00Z",
+              "version": "1",
+              "kind": "metric",
+              "type": "status-full",
+              "origin": "%s",
+              "scope": {"swarmId":"%s","role":"swarm-controller","instance":"%s"},
+              "correlationId": null,
+              "idempotencyKey": null,
+              "data": {"enabled": false, "context": {"swarmStatus": "READY"}}
+            }
+            """.formatted(CONTROLLER_INSTANCE, SWARM_ID, CONTROLLER_INSTANCE);
+
+        statusListener.handle(statusPayload, ControlPlaneRouting.event("metric", "status-full",
             new ConfirmationScope(SWARM_ID, "swarm-controller", CONTROLLER_INSTANCE)));
 
         verify(controlPlane).publishSignal(signalCaptor.capture());

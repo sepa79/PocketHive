@@ -15,7 +15,7 @@
     "idempotencyKey": "idem-2",
     "data": {
       "status": "Failed",
-      "retryable": false,
+      "retryable": true,
       "context": {
         "stack": "trace"
       }

@@ -45,7 +45,7 @@ class ControlPlaneEmitterTest {
 
     @Test
     void emitReadyPublishesLifecycleEvent() throws Exception {
-        CommandState state = new CommandState("Running", true, Map.of("tasks", 5));
+        CommandState state = new CommandState(null, true, Map.of("tasks", 5));
         ControlPlaneEmitter.ReadyContext context = ControlPlaneEmitter.ReadyContext.builder(
                 "swarm-start",
                 "corr-1",
@@ -72,7 +72,7 @@ class ControlPlaneEmitterTest {
 
     @Test
     void emitErrorPublishesLifecycleEvent() throws Exception {
-        CommandState state = CommandState.status("Failed");
+        CommandState state = new CommandState(null, null, null);
         ControlPlaneEmitter.ErrorContext context = ControlPlaneEmitter.ErrorContext.builder(
                 "swarm-stop",
                 "corr-2",
@@ -81,7 +81,6 @@ class ControlPlaneEmitterTest {
                 "shutdown",
                 "ERR-42",
                 "Failure")
-            .retryable(Boolean.FALSE)
             .result("error")
             .details(Map.of("stack", "trace"))
             .timestamp(Instant.parse("2024-01-02T00:00:00Z"))

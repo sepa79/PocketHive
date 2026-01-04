@@ -333,6 +333,13 @@ public final class ControlPlaneEmitter {
     }
 
     private void publishOutcomeFromReady(ReadyContext context) {
+        CommandOutcomePolicy.OutcomeRules rules = CommandOutcomePolicy.rulesFor(context.signal());
+        CommandState baseState = context.state();
+        String overrideStatus = CommandOutcomePolicy.isNotReadyStatus(baseState.status())
+            ? CommandOutcomePolicy.STATUS_NOT_READY
+            : null;
+        String status = CommandOutcomePolicy.resolveSuccessStatus(context.signal(), overrideStatus);
+        CommandState state = new CommandState(status, baseState.enabled(), baseState.details());
         publishOutcome(context.signal(),
             CommandOutcomes.fromState(
                 context.signal(),
@@ -340,7 +347,7 @@ public final class ControlPlaneEmitter {
                 toControlScope(role.toScope()),
                 context.correlationId(),
                 context.idempotencyKey(),
-                context.state(),
+                state,
                 null,
                 context.details(),
                 context.timestamp()
@@ -348,6 +355,10 @@ public final class ControlPlaneEmitter {
     }
 
     private void publishOutcomeFromError(ErrorContext context) {
+        CommandOutcomePolicy.OutcomeRules rules = CommandOutcomePolicy.rulesFor(context.signal());
+        CommandState baseState = context.state();
+        CommandState state = new CommandState(rules.errorStatus(), baseState.enabled(), baseState.details());
+        Boolean retryable = rules.errorRetryableDefault() == CommandOutcomePolicy.RetryablePolicy.TRUE;
         publishOutcome(context.signal(),
             CommandOutcomes.fromState(
                 context.signal(),
@@ -355,8 +366,8 @@ public final class ControlPlaneEmitter {
                 toControlScope(role.toScope()),
                 context.correlationId(),
                 context.idempotencyKey(),
-                context.state(),
-                context.retryable(),
+                state,
+                retryable,
                 context.details(),
                 context.timestamp()
             ));

@@ -77,7 +77,7 @@ final class ControlPlaneNotifier {
             commandDetails.put("config", rawConfig);
         }
         CommandState commandState = new CommandState(
-            "applied",
+            null,
             enabled,
             commandDetails.isEmpty() ? null : commandDetails
         );
@@ -105,7 +105,7 @@ final class ControlPlaneNotifier {
     void emitConfigError(ControlSignal signal, WorkerState state, Exception error) {
         String code = error.getClass().getSimpleName();
         String message = error.getMessage() == null || error.getMessage().isBlank() ? code : error.getMessage();
-        CommandState commandState = new CommandState("failed", state.enabled(), null);
+        CommandState commandState = new CommandState(null, state.enabled(), null);
         Map<String, Object> details = new LinkedHashMap<>();
         details.put("worker", state.definition().beanName());
         details.put("exception", code);
@@ -121,7 +121,7 @@ final class ControlPlaneNotifier {
             "apply",
             code,
             message
-        ).retryable(Boolean.FALSE);
+        );
         builder.details(details);
         emitter.emitError(builder.build());
     }
