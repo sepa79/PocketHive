@@ -5,10 +5,13 @@ import java.util.Objects;
 
 /**
  * Identifies the swarm/role/instance addressed by a confirmation.
+ * Use {@link #ALL} for fan-out; values are never {@code null}.
  */
 public record ConfirmationScope(String swarmId, String role, String instance) {
 
-    public static final ConfirmationScope EMPTY = new ConfirmationScope(null, null, null);
+    public static final String ALL = "ALL";
+
+    public static final ConfirmationScope EMPTY = new ConfirmationScope(ALL, ALL, ALL);
 
     public ConfirmationScope {
         swarmId = normalize(swarmId);
@@ -18,14 +21,20 @@ public record ConfirmationScope(String swarmId, String role, String instance) {
 
     private static String normalize(String value) {
         if (value == null) {
-            return null;
+            return ALL;
         }
         String trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
+        if (trimmed.isEmpty()) {
+            return ALL;
+        }
+        if (isAllSegment(trimmed)) {
+            return ALL;
+        }
+        return trimmed;
     }
 
     public static ConfirmationScope forSwarm(String swarmId) {
-        return new ConfirmationScope(swarmId, null, null);
+        return new ConfirmationScope(swarmId, ALL, ALL);
     }
 
     public static ConfirmationScope forInstance(String swarmId, String role, String instance) {
@@ -34,7 +43,10 @@ public record ConfirmationScope(String swarmId, String role, String instance) {
 
     @JsonIgnore
     public boolean isEmpty() {
-        return Objects.isNull(swarmId) && Objects.isNull(role) && Objects.isNull(instance);
+        return isAllSegment(swarmId) && isAllSegment(role) && isAllSegment(instance);
+    }
+
+    private static boolean isAllSegment(String value) {
+        return value != null && value.equalsIgnoreCase(ALL);
     }
 }
-

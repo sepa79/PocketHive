@@ -9,10 +9,13 @@ import java.util.Objects;
  * <p>
  * Describes the swarm, role and instance that a message is about (the subject),
  * independently of the component that emitted the message ({@code origin}).
+ * Use {@link #ALL} for fan-out; values are never {@code null}.
  */
 public record ControlScope(String swarmId, String role, String instance) {
 
-    public static final ControlScope EMPTY = new ControlScope(null, null, null);
+    public static final String ALL = "ALL";
+
+    public static final ControlScope EMPTY = new ControlScope(ALL, ALL, ALL);
 
     public ControlScope {
         swarmId = normalize(swarmId);
@@ -22,18 +25,24 @@ public record ControlScope(String swarmId, String role, String instance) {
 
     private static String normalize(String value) {
         if (value == null) {
-            return null;
+            return ALL;
         }
         String trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
+        if (trimmed.isEmpty()) {
+            return ALL;
+        }
+        if (isAllSegment(trimmed)) {
+            return ALL;
+        }
+        return trimmed;
     }
 
     public static ControlScope forSwarm(String swarmId) {
-        return new ControlScope(swarmId, null, null);
+        return new ControlScope(swarmId, ALL, ALL);
     }
 
     public static ControlScope forRole(String swarmId, String role) {
-        return new ControlScope(swarmId, role, null);
+        return new ControlScope(swarmId, role, ALL);
     }
 
     public static ControlScope forInstance(String swarmId, String role, String instance) {
@@ -42,6 +51,10 @@ public record ControlScope(String swarmId, String role, String instance) {
 
     @JsonIgnore
     public boolean isEmpty() {
-        return Objects.isNull(swarmId) && Objects.isNull(role) && Objects.isNull(instance);
+        return isAllSegment(swarmId) && isAllSegment(role) && isAllSegment(instance);
+    }
+
+    private static boolean isAllSegment(String value) {
+        return value != null && value.equalsIgnoreCase(ALL);
     }
 }

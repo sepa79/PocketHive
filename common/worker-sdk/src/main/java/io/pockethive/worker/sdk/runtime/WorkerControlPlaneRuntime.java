@@ -369,7 +369,7 @@ public final class WorkerControlPlaneRuntime {
                 RedisSequenceConfiguration.configureFromWorkerConfig(mergeResult.rawConfig());
                 Map<String, Object> appliedConfig = mergeResult.replaced() ? mergeResult.rawConfig() : Map.of();
                 if (hasCorrelation(signal)) {
-                    notifier.emitConfigReady(signal, state, appliedConfig, enabled);
+                    notifier.emitConfigReady(signal, state, appliedConfig);
                 } else {
                     log.warn(
                         "Skipping ready confirmation for signal {} due to missing correlation/idempotency",
@@ -651,7 +651,7 @@ public final class WorkerControlPlaneRuntime {
     }
 
     private boolean roleMatches(String signalRole, String workerRole) {
-        if (signalRole == null || signalRole.equals("all")) {
+        if (signalRole == null || ControlScope.ALL.equalsIgnoreCase(signalRole)) {
             return true;
         }
         return signalRole.equalsIgnoreCase(workerRole);
@@ -659,11 +659,14 @@ public final class WorkerControlPlaneRuntime {
 
     private String normaliseRole(String role) {
         if (role == null) {
-            return null;
+            return ControlScope.ALL;
         }
         String trimmed = role.trim();
         if (trimmed.isEmpty()) {
-            return null;
+            return ControlScope.ALL;
+        }
+        if (ControlScope.ALL.equalsIgnoreCase(trimmed)) {
+            return ControlScope.ALL;
         }
         return trimmed;
     }

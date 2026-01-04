@@ -9,6 +9,8 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Canonical factories for control-plane command outcomes (kind=outcome).
@@ -17,6 +19,8 @@ import java.util.Objects;
  * {@code docs/spec} rather than emitted ad-hoc by producers.</p>
  */
 public final class CommandOutcomes {
+
+    private static final Logger log = LoggerFactory.getLogger(CommandOutcomes.class);
 
     private CommandOutcomes() {
     }
@@ -77,6 +81,10 @@ public final class CommandOutcomes {
         Objects.requireNonNull(state, "state");
         String status = requireNonBlank("state.status", state.status());
         Boolean enabled = "config-update".equals(type) ? state.enabled() : null;
+        if ("config-update".equals(type) && enabled == null) {
+            log.warn("config-update outcome missing enabled (origin={}, scope={}, correlationId={}, idempotencyKey={})",
+                origin, scope, correlationId, idempotencyKey);
+        }
         Map<String, Object> merged = mergeContext(state.details(), extraContext);
         if (retryable == null) {
             return success(type, origin, scope, correlationId, idempotencyKey, status, enabled, merged, timestamp);
@@ -143,4 +151,3 @@ public final class CommandOutcomes {
         return trimmed.isEmpty() ? null : trimmed;
     }
 }
-
