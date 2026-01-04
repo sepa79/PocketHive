@@ -192,6 +192,7 @@ public class SwarmLifecycleSteps {
     awaitReady("swarm-template", createResponse);
     assertNoErrors(createResponse.correlationId(), "swarm-create");
     assertWatchMatched(createResponse);
+    awaitSwarmPlanReady();
 
     SwarmAssertions.await("swarm registered", () -> {
       Optional<SwarmView> view = orchestratorClient.findSwarm(swarmId);
@@ -240,7 +241,8 @@ public class SwarmLifecycleSteps {
   @Then("the swarm reports running")
   public void theSwarmReportsRunning() {
     ensureStartResponse();
-    awaitReady("swarm-start", startResponse);
+    io.pockethive.control.CommandOutcome outcome = awaitOutcome("swarm-start", startResponse);
+    assertOutcomeStatus("swarm-start", outcome, "Running");
     assertNoErrors(startResponse.correlationId(), "swarm-start");
     assertWatchMatched(startResponse);
 
@@ -297,6 +299,13 @@ public class SwarmLifecycleSteps {
       Map<String, Object> snapshot = workerSnapshot(delta, generatorKey != null ? generatorKey : GENERATOR_ROLE);
       assertFalse(snapshot.isEmpty(), "Generator snapshot should include worker details");
       assertTrue(isTruthy(snapshot.get("enabled")), "Generator snapshot should report enabled=true");
+    });
+
+    SwarmAssertions.await("generator status snapshot", () -> {
+      StatusEvent full = latestStatusFull(generatorRoleName, generatorInstance)
+          .orElseThrow(() -> new AssertionError("No status-full captured for generator"));
+      Map<String, Object> snapshot = workerSnapshot(full, generatorKey != null ? generatorKey : GENERATOR_ROLE);
+      assertFalse(snapshot.isEmpty(), "Generator snapshot should include worker details");
       Map<String, Object> config = snapshotConfig(snapshot);
       assertFalse(config.isEmpty(), "Generator snapshot should include applied config");
     });
@@ -571,9 +580,8 @@ public class SwarmLifecycleSteps {
   public void thePlanDemoScenarioPlanDrivesTheSwarmLifecycle() {
     ensureCreateResponse();
 
-    // 1) Swarm should reach RUNNING with workloads enabled without an explicit
-    // swarm-start request – the scenario plan's swarm-start step is responsible
-    // for issuing the enablement config-update.
+    // 1) Swarm should reach RUNNING with workloads enabled; the scenario plan's
+    // swarm-start step is responsible for issuing the enablement config-update.
     SwarmAssertions.await("swarm running via scenario plan", () -> {
       Optional<SwarmView> viewOpt = orchestratorClient.findSwarm(swarmId);
       assertTrue(viewOpt.isPresent(), "Swarm should be available while plan is running");
@@ -1094,7 +1102,22 @@ public class SwarmLifecycleSteps {
     }
     Object workers = status.data().context().get("workers");
     if (!(workers instanceof List<?> list)) {
-      return Map.of();
+      Map<String, Object> snapshot = new LinkedHashMap<>();
+      String resolvedRole = status.role() != null ? status.role() : role;
+      if (resolvedRole != null && !resolvedRole.isBlank()) {
+        snapshot.put("role", resolvedRole);
+      }
+      if (status.instance() != null && !status.instance().isBlank()) {
+        snapshot.put("instance", status.instance());
+      }
+      if (status.data().enabled() != null) {
+        snapshot.put("enabled", status.data().enabled());
+      }
+      Object config = status.data().extra().get("config");
+      if (config instanceof Map<?, ?> map) {
+        snapshot.put("config", copyMap(map));
+      }
+      return snapshot.isEmpty() ? Map.of() : Map.copyOf(snapshot);
     }
     for (Object candidate : list) {
       if (candidate instanceof Map<?, ?> map) {
@@ -1748,6 +1771,25 @@ public class SwarmLifecycleSteps {
     });
   }
 
+  private io.pockethive.control.CommandOutcome awaitOutcome(String signal, ControlResponse response) {
+    String correlationId = response.correlationId();
+    SwarmAssertions.await(signal + " outcome", () -> {
+      Optional<io.pockethive.control.CommandOutcome> outcome = controlPlaneEvents.outcome(signal, correlationId);
+      assertTrue(outcome.isPresent(), () -> "Missing outcome for " + signal + " correlation=" + correlationId);
+    });
+    return controlPlaneEvents.outcome(signal, correlationId)
+        .orElseThrow(() -> new AssertionError("Missing outcome for " + signal + " correlation=" + correlationId));
+  }
+
+  private void awaitSwarmPlanReady() {
+    SwarmAssertions.await("swarm-plan outcome", () -> {
+      Optional<ControlPlaneEvents.OutcomeEnvelope> envelope =
+          latestOutcomeForSwarm("swarm-plan", swarmId);
+      assertTrue(envelope.isPresent(), () -> "Missing outcome for swarm-plan swarm=" + swarmId);
+      assertOutcomeStatus("swarm-plan", envelope.get().outcome(), "Ready");
+    });
+  }
+
   private void assertNoErrors(String correlationId, String context) {
     List<io.pockethive.control.AlertMessage> alerts = controlPlaneEvents.alertsForCorrelation(correlationId);
     assertTrue(alerts.isEmpty(), () -> "Unexpected alerts for " + context + " correlation=" + correlationId + ": " + alerts);
@@ -1771,9 +1813,9 @@ public class SwarmLifecycleSteps {
     }
   }
 
-	  private String signalFromWatch(ControlResponse response) {
-	    // success topic format: event.outcome.<signal>.<swarm>... -> extract <signal>
-	    String topic = response.watch().successTopic();
+  private String signalFromWatch(ControlResponse response) {
+    // success topic format: event.outcome.<signal>.<swarm>... -> extract <signal>
+    String topic = response.watch().successTopic();
     if (topic == null || topic.isBlank()) {
       return "";
     }
@@ -1783,6 +1825,59 @@ public class SwarmLifecycleSteps {
     }
     String raw = parts[3];
     return raw.toLowerCase(Locale.ROOT);
+  }
+
+  private Optional<StatusEvent> latestStatusFull(String role, String instance) {
+    if (role == null || role.isBlank() || instance == null || instance.isBlank()) {
+      return Optional.empty();
+    }
+    return controlPlaneEvents.statusesForSwarm(swarmId).stream()
+        .filter(env -> env.status() != null
+            && "status-full".equalsIgnoreCase(env.status().type())
+            && roleMatches(role, env.status().role())
+            && instance.equalsIgnoreCase(env.status().instance()))
+        .max(Comparator.comparing(ControlPlaneEvents.StatusEnvelope::receivedAt))
+        .map(ControlPlaneEvents.StatusEnvelope::status);
+  }
+
+  private Optional<ControlPlaneEvents.OutcomeEnvelope> latestOutcomeForSwarm(String signal, String targetSwarmId) {
+    if (signal == null || signal.isBlank() || targetSwarmId == null || targetSwarmId.isBlank()) {
+      return Optional.empty();
+    }
+    String expectedType = signal.trim().toLowerCase(Locale.ROOT);
+    return controlPlaneEvents.outcomes().stream()
+        .filter(env -> env != null && env.outcome() != null)
+        .filter(env -> env.outcome().type() != null
+            && expectedType.equals(env.outcome().type().toLowerCase(Locale.ROOT)))
+        .filter(env -> env.outcome().scope() != null
+            && targetSwarmId.equalsIgnoreCase(env.outcome().scope().swarmId()))
+        .max(Comparator.comparing(ControlPlaneEvents.OutcomeEnvelope::receivedAt));
+  }
+
+  private void assertOutcomeStatus(String signal, io.pockethive.control.CommandOutcome outcome, String expected) {
+    String status = outcomeStatus(outcome);
+    assertNotNull(status, () -> signal + " outcome missing data.status: " + describeOutcome(outcome));
+    String normalized = status.trim().toLowerCase(Locale.ROOT);
+    assertEquals(expected.toLowerCase(Locale.ROOT), normalized,
+        () -> signal + " outcome status mismatch: " + describeOutcome(outcome));
+  }
+
+  private String outcomeStatus(io.pockethive.control.CommandOutcome outcome) {
+    if (outcome == null || outcome.data() == null) {
+      return null;
+    }
+    Object status = outcome.data().get("status");
+    return status == null ? null : status.toString();
+  }
+
+  private String describeOutcome(io.pockethive.control.CommandOutcome outcome) {
+    if (outcome == null) {
+      return "<null outcome>";
+    }
+    return "type=" + outcome.type()
+        + " scope=" + outcome.scope()
+        + " correlationId=" + outcome.correlationId()
+        + " data=" + (outcome.data() == null ? "<none>" : outcome.data());
   }
 
   private Set<String> expectedQueueSuffixes(SwarmTemplate template) {
