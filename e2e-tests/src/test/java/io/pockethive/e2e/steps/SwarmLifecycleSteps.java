@@ -313,6 +313,45 @@ public class SwarmLifecycleSteps {
     assertTemplatedGeneratorOutputIfApplicable();
   }
 
+  @Then("the swarm-start is rejected as NotReady")
+  public void theSwarmStartIsRejectedAsNotReady() {
+    ensureStartResponse();
+    assertNotReadyOutcome("swarm-start", startResponse);
+  }
+
+  @Then("the swarm-stop is rejected as NotReady")
+  public void theSwarmStopIsRejectedAsNotReady() {
+    ensureStopResponseWithoutStart();
+    assertNotReadyOutcome("swarm-stop", stopResponse);
+  }
+
+  @And("the worker status snapshots include config only in status-full")
+  public void theWorkerStatusSnapshotsIncludeConfigOnlyInStatusFull() {
+    ensureStartResponse();
+    captureWorkerStatuses(true);
+    for (String role : workerRoles()) {
+      String instance = workerInstances.get(role);
+      assertNotNull(instance, () -> "Missing instance for role " + actualRoleName(role));
+      StatusEvent full = latestStatusFull(actualRoleName(role), instance)
+          .orElseThrow(() -> new AssertionError("No status-full captured for role " + actualRoleName(role)));
+      Map<String, Object> fullSnapshot = workerSnapshot(full, role);
+      assertFalse(fullSnapshot.isEmpty(), () -> "No status-full snapshot for role " + actualRoleName(role));
+      Map<String, Object> fullConfig = snapshotConfig(fullSnapshot);
+      assertFalse(fullConfig.isEmpty(), () -> "status-full missing config for role " + actualRoleName(role));
+
+      SwarmAssertions.await("status-delta for role " + actualRoleName(role), () -> {
+        Optional<StatusEvent> deltaOpt = controlPlaneEvents.latestStatusDeltaEvent(
+            swarmId, actualRoleName(role), instance);
+        assertTrue(deltaOpt.isPresent(), () -> "No status-delta captured for role " + actualRoleName(role));
+        StatusEvent delta = deltaOpt.get();
+        assertNotNull(delta.data().enabled(),
+            () -> "status-delta missing data.enabled for role " + actualRoleName(role));
+        assertFalse(delta.data().extra().containsKey("config"),
+            () -> "status-delta should not include data.config for role " + actualRoleName(role));
+      });
+    }
+  }
+
   @And("the generator runtime config matches the service defaults")
   public void theGeneratorRuntimeConfigMatchesTheServiceDefaults() {
     ensureStartResponse();
@@ -887,6 +926,17 @@ public class SwarmLifecycleSteps {
     LOGGER.info("Stop request correlation={} watch={}", stopResponse.correlationId(), stopResponse.watch());
   }
 
+  @When("I request swarm stop without start")
+  public void iRequestSwarmStopWithoutStart() {
+    ensureCreateResponse();
+    String idempotencyKey = idKey("stop-without-start");
+    stopResponse = orchestratorClient.stopSwarm(
+        swarmId,
+        new ControlRequest(idempotencyKey, "e2e lifecycle stop without start"));
+    LOGGER.info("Stop without start request correlation={} watch={}",
+        stopResponse.correlationId(), stopResponse.watch());
+  }
+
   @Then("the swarm reports stopped")
   public void theSwarmReportsStopped() {
     ensureStopResponse();
@@ -936,6 +986,31 @@ public class SwarmLifecycleSteps {
     assertEquals(1, controlPlaneEvents.outcomeCount("swarm-template"), "Expected exactly one swarm-template outcome");
     assertEquals(1, controlPlaneEvents.outcomeCount("swarm-start"), "Expected exactly one swarm-start outcome");
     assertEquals(1, controlPlaneEvents.outcomeCount("swarm-stop"), "Expected exactly one swarm-stop outcome");
+    long removeOutcomeCount = controlPlaneEvents.outcomeCount("swarm-remove");
+    assertTrue(removeOutcomeCount >= 1,
+        () -> "Expected at least one swarm-remove outcome but saw " + removeOutcomeCount);
+    assertTrue(controlPlaneEvents.alerts().isEmpty(), "No alerts should be emitted during the golden path");
+  }
+
+  @Then("the swarm is removed after the early stop")
+  public void theSwarmIsRemovedAfterTheEarlyStop() {
+    ensureRemoveResponse();
+    awaitReady("swarm-remove", removeResponse);
+    assertNoErrors(removeResponse.correlationId(), "swarm-remove");
+    assertWatchMatched(removeResponse);
+    swarmRemoved = true;
+
+    SwarmAssertions.await("swarm removed", () -> {
+      Optional<SwarmView> view = orchestratorClient.findSwarm(swarmId);
+      assertTrue(view.isEmpty(), "Swarm should no longer be present after removal");
+    });
+
+    assertEquals(1, controlPlaneEvents.outcomeCount("swarm-create"), "Expected exactly one swarm-create outcome");
+    assertEquals(1, controlPlaneEvents.outcomeCount("swarm-template"), "Expected exactly one swarm-template outcome");
+    assertEquals(1, controlPlaneEvents.outcomeCount("swarm-start"), "Expected exactly one swarm-start outcome");
+    long stopOutcomeCount = controlPlaneEvents.outcomeCount("swarm-stop");
+    assertTrue(stopOutcomeCount >= 1,
+        () -> "Expected at least one swarm-stop outcome but saw " + stopOutcomeCount);
     long removeOutcomeCount = controlPlaneEvents.outcomeCount("swarm-remove");
     assertTrue(removeOutcomeCount >= 1,
         () -> "Expected at least one swarm-remove outcome but saw " + removeOutcomeCount);
@@ -1047,6 +1122,15 @@ public class SwarmLifecycleSteps {
     // snapshot-level enabled flag is true. We no longer rely on state/totals
     // semantics here because they may legitimately lag or be omitted.
     boolean consideredRunning = aggregateEnabled || (snapshotHasEnabled && workerEnabled);
+    if (!consideredRunning) {
+      Optional<StatusEvent> deltaOpt = controlPlaneEvents.latestStatusDeltaEvent(
+          swarmId, displayRole, instance);
+      if (deltaOpt.isPresent() && Boolean.TRUE.equals(deltaOpt.get().data().enabled())) {
+        consideredRunning = true;
+        LOGGER.info("Worker enabled=true via latest status-delta role={} instance={}",
+            displayRole, instance);
+      }
+    }
 
     assertTrue(consideredRunning,
         () -> "Worker not considered running for role " + displayRole + ": " + details);
@@ -1758,6 +1842,11 @@ public class SwarmLifecycleSteps {
     Assumptions.assumeTrue(stopResponse != null, "Stop request was not issued");
   }
 
+  private void ensureStopResponseWithoutStart() {
+    ensureCreateResponse();
+    Assumptions.assumeTrue(stopResponse != null, "Stop request was not issued");
+  }
+
   private void ensureRemoveResponse() {
     ensureStopResponse();
     Assumptions.assumeTrue(removeResponse != null, "Remove request was not issued");
@@ -1862,12 +1951,30 @@ public class SwarmLifecycleSteps {
         () -> signal + " outcome status mismatch: " + describeOutcome(outcome));
   }
 
+  private void assertNotReadyOutcome(String signal, ControlResponse response) {
+    io.pockethive.control.CommandOutcome outcome = awaitOutcome(signal, response);
+    assertOutcomeStatus(signal, outcome, "NotReady");
+    Map<String, Object> context = outcomeContext(outcome);
+    assertFalse(context.isEmpty(), () -> "Expected NotReady outcome to include data.context: " + describeOutcome(outcome));
+  }
+
   private String outcomeStatus(io.pockethive.control.CommandOutcome outcome) {
     if (outcome == null || outcome.data() == null) {
       return null;
     }
     Object status = outcome.data().get("status");
     return status == null ? null : status.toString();
+  }
+
+  private Map<String, Object> outcomeContext(io.pockethive.control.CommandOutcome outcome) {
+    if (outcome == null || outcome.data() == null) {
+      return Map.of();
+    }
+    Object context = outcome.data().get("context");
+    if (context instanceof Map<?, ?> map) {
+      return copyMap(map);
+    }
+    return Map.of();
   }
 
   private String describeOutcome(io.pockethive.control.CommandOutcome outcome) {

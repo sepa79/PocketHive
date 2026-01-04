@@ -18,6 +18,20 @@ Feature: Swarm lifecycle golden path
     When I remove the swarm
     Then the swarm is removed and lifecycle confirmations are recorded
 
+  @gating
+  Scenario: Swarm stop is rejected before running
+    And the "local-rest-defaults" scenario template is requested
+    When I create the swarm from that template
+    Then the swarm is registered and queues are declared
+    When I request swarm stop without start
+    Then the swarm-stop is rejected as NotReady
+    When I start the swarm
+    Then the swarm reports running
+    When I stop the swarm
+    Then the swarm reports stopped
+    When I remove the swarm
+    Then the swarm is removed after the early stop
+
   @templated-generator
   Scenario: Templated generator works end to end
     And the "templated-rest" scenario template is requested
@@ -34,6 +48,7 @@ Feature: Swarm lifecycle golden path
     Then the swarm is registered and queues are declared
     When I start the swarm
     Then the swarm reports running
+    And the worker status snapshots include config only in status-full
     And the generator runtime config matches the service defaults
     And the moderator runtime config matches the service defaults
     And the processor runtime config matches the service defaults
