@@ -145,8 +145,10 @@ class SwarmSignalListenerTest {
         registry.register(new Swarm(SWARM_ID, CONTROLLER_INSTANCE, "cid", "run-1"));
         registry.updateStatus(SWARM_ID, SwarmStatus.CREATING);
 
-        listener.handle("{\"data\":{\"status\":\"Ready\"}}", ControlPlaneRouting.event("outcome", "swarm-controller",
-            new ConfirmationScope(SWARM_ID, "swarm-controller", CONTROLLER_INSTANCE)));
+        String routingKey = ControlPlaneRouting.event("metric", "status-full",
+            new ConfirmationScope(SWARM_ID, "swarm-controller", CONTROLLER_INSTANCE));
+
+        listener.handleControllerStatusFull(routingKey);
 
         verify(controlPlane).publishSignal(signalCaptor.capture());
         SignalMessage signal = signalCaptor.getValue();

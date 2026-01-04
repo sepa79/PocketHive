@@ -49,6 +49,7 @@ function printUsage() {
       "  node tools/mcp-orchestrator-debug/client.mjs list-scenarios\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs get-scenario <scenarioId>\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs create-swarm <swarmId> <templateId> [notes]\n" +
+      "  node tools/mcp-orchestrator-debug/client.mjs swarm-plan <swarmId> <scenarioId> <instanceId>\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs start-swarm <swarmId> [notes]\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs stop-swarm <swarmId> [notes]\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs remove-swarm <swarmId> [notes]\n" +
@@ -62,13 +63,14 @@ function printUsage() {
       "  node tools/mcp-orchestrator-debug/client.mjs hive-journal [--swarmId <swarmId>] [--runId <runId>] [--correlationId <id>] [--limit <n>] [--pages <n>|--all]\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs commands\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs get-recorded\n" +
-      "  (append --record to create/start/stop/remove to capture control-plane messages)\n\n" +
+      "  (append --record to create/plan/start/stop/remove to capture control-plane messages)\n\n" +
       "Examples:\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs list-swarms\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs get-swarm foo\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs swarm-snapshot foo\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs worker-configs foo\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs create-swarm foo local-rest-defaults\n" +
+      "  node tools/mcp-orchestrator-debug/client.mjs swarm-plan foo local-rest-plan-demo swarm-controller-1 --record\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs start-swarm foo --record\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs remove-swarm foo --record\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs status-request foo processor foo-worker-bee-1234\n" +
@@ -133,6 +135,11 @@ const COMMANDS = [
     name: "create-swarm",
     description: "Create swarm via POST /api/swarms/{swarmId}/create",
     params: ["swarmId", "templateId", "[notes]", "[--record]"],
+  },
+  {
+    name: "swarm-plan",
+    description: "Send a swarm-plan signal via AMQP from a Scenario Manager plan",
+    params: ["swarmId", "scenarioId", "instanceId", "[--record]"],
   },
   {
     name: "start-swarm",
@@ -362,6 +369,36 @@ async function main() {
           { method: "POST", body }
         );
         console.log(JSON.stringify(resp ?? null, null, 2));
+      });
+      if (recordEnabled) {
+        await printRecorded();
+      }
+      return;
+    }
+
+    if (subcommand === "swarm-plan") {
+      await withOptionalRecording(async () => {
+        const swarmId = args[1];
+        const scenarioId = args[2];
+        const instanceId = args[3];
+        if (!swarmId || !scenarioId || !instanceId) {
+          console.error("swarm-plan requires <swarmId> <scenarioId> <instanceId>");
+          process.exit(1);
+        }
+        const plan = await fetchScenarioPlan(scenarioId);
+        await sendSwarmPlan(swarmId, instanceId, plan);
+        console.log(
+          JSON.stringify(
+            {
+              swarmId,
+              scenarioId,
+              instanceId,
+              routingKey: `signal.swarm-plan.${swarmId}.swarm-controller.${instanceId}`,
+            },
+            null,
+            2
+          )
+        );
       });
       if (recordEnabled) {
         await printRecorded();
@@ -612,6 +649,24 @@ async function httpJson(path, options = {}) {
   } catch {
     return text;
   }
+}
+
+async function fetchScenarioPlan(scenarioId) {
+  const trimmed = String(scenarioId ?? "").trim();
+  if (!trimmed) {
+    throw new Error("scenarioId must not be blank");
+  }
+  const base = SCENARIO_MANAGER_BASE_URL.replace(/\/+$/, "");
+  const url = `${base}/scenarios/${encodeURIComponent(trimmed)}`;
+  const scenario = await httpJson(url);
+  const plan = scenario?.plan;
+  if (!plan || typeof plan !== "object" || Array.isArray(plan)) {
+    throw new Error(`Scenario '${trimmed}' has no plan to send`);
+  }
+  if (Object.keys(plan).length === 0) {
+    throw new Error(`Scenario '${trimmed}' has an empty plan`);
+  }
+  return plan;
 }
 
 function randomIdempotencyKey() {
@@ -1035,6 +1090,44 @@ async function sendStatusRequest(swarmId, role, instanceId) {
       correlationId,
       idempotencyKey: null,
       data: null,
+    });
+    await ch.assertExchange(exchange, "topic", { durable: true });
+    ch.publish(exchange, rk, Buffer.from(payload, "utf8"), {
+      contentType: "application/json",
+    });
+  } finally {
+    try {
+      await ch.close();
+    } catch {
+      // ignore
+    }
+    try {
+      await conn.close();
+    } catch {
+      // ignore
+    }
+  }
+}
+
+async function sendSwarmPlan(swarmId, instanceId, plan) {
+  const url = rabbitUrl();
+  const conn = await amqplib.connect(url);
+  const ch = await conn.createChannel();
+  try {
+    const exchange = controlExchange();
+    const rk = `signal.swarm-plan.${swarmId}.swarm-controller.${instanceId}`;
+    const correlationId = randomCorrelationId();
+    const idempotencyKey = randomIdempotencyKey();
+    const payload = JSON.stringify({
+      timestamp: new Date().toISOString(),
+      version: "1",
+      kind: "signal",
+      type: "swarm-plan",
+      origin: "mcp-orchestrator-debug-client",
+      scope: { swarmId, role: "swarm-controller", instance: instanceId },
+      correlationId,
+      idempotencyKey,
+      data: plan,
     });
     await ch.assertExchange(exchange, "topic", { durable: true });
     ch.publish(exchange, rk, Buffer.from(payload, "utf8"), {

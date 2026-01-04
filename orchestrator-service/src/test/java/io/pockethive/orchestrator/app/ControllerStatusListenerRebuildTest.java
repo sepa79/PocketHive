@@ -18,7 +18,9 @@ class ControllerStatusListenerRebuildTest {
     void rebuildsSwarmFromControllerStatusAndRequestsFullSnapshot() {
         SwarmRegistry registry = new SwarmRegistry();
         ControlPlaneStatusRequestPublisher requests = Mockito.mock(ControlPlaneStatusRequestPublisher.class);
-        ControllerStatusListener listener = new ControllerStatusListener(registry, new ObjectMapper(), requests);
+        SwarmSignalListener swarmSignals = Mockito.mock(SwarmSignalListener.class);
+        ControllerStatusListener listener =
+            new ControllerStatusListener(registry, new ObjectMapper(), requests, swarmSignals);
 
         String json = """
             {
@@ -52,7 +54,9 @@ class ControllerStatusListenerRebuildTest {
     void rebuildDoesNotTriggerSecondDiscoveryRequestOnceRegistered() {
         SwarmRegistry registry = new SwarmRegistry();
         ControlPlaneStatusRequestPublisher requests = Mockito.mock(ControlPlaneStatusRequestPublisher.class);
-        ControllerStatusListener listener = new ControllerStatusListener(registry, new ObjectMapper(), requests);
+        SwarmSignalListener swarmSignals = Mockito.mock(SwarmSignalListener.class);
+        ControllerStatusListener listener =
+            new ControllerStatusListener(registry, new ObjectMapper(), requests, swarmSignals);
 
         String json = """
             {

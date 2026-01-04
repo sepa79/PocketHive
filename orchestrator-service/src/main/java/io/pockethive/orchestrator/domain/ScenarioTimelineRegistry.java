@@ -8,7 +8,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * Registry mapping swarm-controller instances to their scenario plans.
  * <p>
  * The orchestrator only needs to keep the plan long enough to hand it over to
- * the swarm-controller when its control plane reports {@code ready.swarm-controller}.
+ * the swarm-controller when its control plane reports {@code metric.status-full}.
  * After that the controller owns the plan and drives execution locally.
  */
 public final class ScenarioTimelineRegistry {

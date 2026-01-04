@@ -63,11 +63,11 @@ Goal: introduce a single, consistent control‑plane envelope model used by sign
     |                | `tps`              | No       | Integer ≥ 0. Throughput sample for the reporting interval. **Workers should emit this**; managers (Orchestrator / Swarm Controller) may omit. |
     |                | `config`           | Yes      | Snapshot of the effective configuration for this scope (role/instance). Must not include secrets. |
     |                | `io`               | Yes      | Object describing IO bindings and queue health. **Workers** should include both planes (`io.work` + `io.control`); **managers** are control‑plane‑only and should include only `io.control` (no `io.work`). `queueStats` is optional and applies only to the work plane. Present only in `status-full`. |
-    |                | `ioState`          | Yes      | Coarse IO health summary. **Workers** should include both planes (`ioState.work` + `ioState.control`); **managers** should include only `ioState.control`. |
+    |                | `ioState`          | Yes      | Coarse IO health summary for workload/local IO only (for example `ioState.work`, `ioState.filesystem`). **Workers** should include `ioState.work` plus any local IO; **managers** include only local IO if applicable. `ioState` does not represent control‑plane health. |
     |                | `context`          | No       | Freeform role‑specific context. For swarm‑controller, `context` carries swarm aggregates (e.g. `swarmStatus`, `totals`, `watermark`, `maxStalenessSec`, scenario progress) and includes `context.workers[]` **only in `status-full`**. For orchestrator, `context` carries at least `swarmCount`; `computeAdapter` is effectively static and belongs in `status-full` (not `status-delta`). |
     | `status-delta` | `enabled`          | Yes      | Boolean. Same semantics as in `status-full`; used to signal enablement changes without resending full status snapshots. |
     |                | `tps`              | No       | Integer ≥ 0. Throughput sample for the interval since the last status event. **Workers should emit this**; managers may omit. |
-    |                | `ioState`          | Yes      | Coarse IO health summary (see §6). (Same plane rules as `status-full` above: managers omit `work`.) |
+    |                | `ioState`          | Yes      | Coarse IO health summary (see §6). Same rules as `status-full`: workload/local IO only; managers omit `work`. |
     |                | `context`          | No       | Same semantics as in `status-full`, but only for fields that change frequently (for example recent `swarmStatus`, rolling diagnostics). `data.config`, `data.io`, and `data.startedAt` must be omitted from deltas. |
 
     **Control events (`kind = event`)**
@@ -116,14 +116,29 @@ Goal: introduce a single, consistent control‑plane envelope model used by sign
 
     | Field (today)   | Planned location                | Description                                                                                             |
     |-----------------|---------------------------------|---------------------------------------------------------------------------------------------------------|
-    | `state.status`  | `data.status`                  | High‑level status after processing the command (for example `Ready`, `Running`, `Stopped`, `Failed`).  |
+    | `state.status`  | `data.status`                  | High‑level status after processing the command (for example `Ready`, `Running`, `Stopped`, `Removed`, `Failed`, `Applied`, `NotReady`).  |
     | `state.enabled` | — (removed)                    | Removed in the new model. Enablement lives in a single place: `data.enabled` on config‑update outcomes and `data.enabled` in status metrics; there is no generic `state.enabled` field. |
     | `state.details` | `data.context`                 | Structured post‑command state details (for example `workloads.enabled`, scenario changes, worker info), to be defined per command type. No separate `controllerEnabled` field is kept. |
     | `phase`         | — (removed or mapped to alert) | Error phase will not be carried as a generic outcome field. If needed for debugging, producers include it in alert `data.context.phase` for the corresponding `event.alert.alert` message. |
     | `code`          | — (replaced by alert `data.code`)   | Command outcomes no longer carry their own error/result code; runtime and IO errors are expressed via `event.alert.alert` with `data.code`.                                              |
     | `message`       | — (replaced by alert `data.message`) | Human‑readable error/message text for failures is carried by `event.alert.alert.data.message` rather than command outcome envelopes.                                                      |
-    | `retryable`     | `data.retryable`               | Whether this command attempt is safe to retry. Only set (and documented) for commands where retry semantics are defined (for example swarm create/start/stop/remove).               |
+    | `retryable`     | `data.retryable`               | Whether this **failed** command attempt is safe to retry. Only set on error outcomes for commands where retry semantics are defined (for example swarm create/start/stop/remove).    |
     | `details`       | — (folded into `data.context`) | Catch‑all details on confirmations are removed. Any structured context that needs to survive goes into `data.context` on the outcome and/or the corresponding `event.alert.alert`.       |
+
+    **Initialization + readiness gates (`swarm-start`, `swarm-stop`, `config-update`)**
+
+    - Initialization is satisfied after the controller has successfully processed both
+      `swarm-template` and `swarm-plan` for the swarm.
+    - Readiness is defined as: `isReadyForWork == true` AND `hasPendingConfigUpdates == false`.
+    - Commands allowed before initialization: `swarm-template`, `swarm-plan`, `status-request`,
+      and `swarm-remove` (abort).
+    - `swarm-start` is rejected unless initialization + readiness are satisfied. A rejected
+      `swarm-start` emits an outcome with `data.status = "NotReady"` and a `data.context`
+      payload that captures the gating flags (for example `initialized=false`, `ready=false`,
+      `pendingConfigUpdates=true`).
+    - `swarm-stop` and controller-targeted `config-update` are rejected unless initialization
+      + readiness are satisfied and the swarm is already `RUNNING`. Rejections use the same
+      `NotReady` outcome pattern; no side effects occur when rejected.
 
   - Keep routing keys and channels in AsyncAPI as the single source of truth for where these envelopes flow, and update them to use the new `signal.*` / `event.*` patterns described above.
 - [x] Add a short overview under `docs/control-plane/README.md` that points to the JSON Schema / AsyncAPI specs as the canonical definition of envelopes, with concrete examples.

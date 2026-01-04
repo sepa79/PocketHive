@@ -278,11 +278,25 @@ class SwarmCreationMock1E2ETest {
                 new ConfirmationScope(swarmId, "orchestrator", managerIdentity.instanceId())));
         admin.declareBinding(createBinding);
 
+        String statusPayload = """
+            {
+              "timestamp": "2024-01-01T00:00:00Z",
+              "version": "1",
+              "kind": "metric",
+              "type": "status-full",
+              "origin": "%s",
+              "scope": {"swarmId":"%s","role":"swarm-controller","instance":"%s"},
+              "correlationId": null,
+              "idempotencyKey": null,
+              "data": {"enabled": false, "context": {"swarmStatus": "READY"}}
+            }
+            """.formatted(instanceId, swarmId, instanceId);
+
         rabbitTemplate.convertAndSend(
             controlPlaneProperties.getExchange(),
-            ControlPlaneRouting.event("outcome", "swarm-controller",
+            ControlPlaneRouting.event("metric", "status-full",
                 new ConfirmationScope(swarmId, "swarm-controller", instanceId)),
-            "{\"data\":{\"status\":\"Ready\"}}");
+            statusPayload);
 
         String templateRoutingKey = ControlPlaneRouting.signal("swarm-template", swarmId, "swarm-controller", instanceId);
         Message templateMessage = awaitMessage(captureName, Duration.ofSeconds(15), templateRoutingKey);

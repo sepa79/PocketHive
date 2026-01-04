@@ -129,20 +129,37 @@ public class SwarmSignalListener {
             throw new IllegalArgumentException("Control-plane routing key is malformed");
         }
 
-        boolean statusEvent = key.type().startsWith("status-");
-        if (statusEvent) {
-            log.debug("[CTRL] RECV rk={} inst={} payload={}", routingKey, instanceId, snippet);
-        } else {
-            log.info("[CTRL] RECV rk={} inst={} payload={}", routingKey, instanceId, snippet);
-        }
-
-        if (statusEvent) {
-            return;
-        }
+        log.info("[CTRL] RECV rk={} inst={} payload={}", routingKey, instanceId, snippet);
 
         if (key.type().startsWith("outcome.")) {
             handleOutcomeEvent(key, routingKey, body);
         }
+    }
+
+    void handleControllerStatusFull(String routingKey) {
+        RoutingKey key = ControlPlaneRouting.parseEvent(routingKey);
+        if (key == null || key.type() == null) {
+            log.warn("Unable to parse control status routing key {}", routingKey);
+            return;
+        }
+        if (!"metric.status-full".equalsIgnoreCase(key.type())) {
+            return;
+        }
+        if (!"swarm-controller".equalsIgnoreCase(key.role())) {
+            return;
+        }
+        String controllerInstance = key.instance();
+        if (controllerInstance == null || controllerInstance.isBlank()) {
+            log.warn("controller status-full event missing instance segment: {}", key);
+            return;
+        }
+        boolean hasPlan = plans.find(controllerInstance).isPresent();
+        boolean hasCreate = key.swarmId() != null && !key.swarmId().isBlank()
+            && creates.controllerPending(key.swarmId()).isPresent();
+        if (!hasPlan && !hasCreate) {
+            return;
+        }
+        onControllerReady(key);
     }
 
     private void handleOutcomeEvent(RoutingKey key, String routingKey, String body) {
@@ -201,7 +218,6 @@ public class SwarmSignalListener {
             // best-effort
         }
         switch (command) {
-            case "swarm-controller" -> onControllerReady(key);
             case "swarm-template" -> {
                 if (isStatus(status, "Ready")) onSwarmTemplateReady(key);
                 else onSwarmTemplateError(key);
@@ -225,7 +241,6 @@ public class SwarmSignalListener {
     private static Boolean classifyTrackedOutcome(String command, String status) {
         return switch (command) {
             case "swarm-create" -> isStatus(status, "Ready");
-            case "swarm-controller" -> true;
             case "swarm-template" -> isStatus(status, "Ready");
             case "swarm-start" -> isStatus(status, "Running");
             case "swarm-stop" -> isStatus(status, "Stopped");
@@ -450,7 +465,7 @@ public class SwarmSignalListener {
                     "swarm-create",
                     requireText(info.correlationId(), "swarm-create correlationId"),
                     requireText(info.idempotencyKey(), "swarm-create idempotencyKey"),
-                    CommandState.status("Ready"))
+                    new CommandState(null, null, null))
                 .timestamp(Instant.now())
                 .build();
             logReady(context);
@@ -470,12 +485,11 @@ public class SwarmSignalListener {
                     "swarm-create",
                     requireText(info.correlationId(), "swarm-create correlationId"),
                     requireText(info.idempotencyKey(), "swarm-create idempotencyKey"),
-                    CommandState.status("Removed"),
+                    new CommandState(null, null, null),
                     "controller-bootstrap",
                     "controller-error",
                     "controller failed")
                 .timestamp(Instant.now())
-                .retryable(Boolean.TRUE)
                 .build();
             logError(context);
             emitter.emitError(context);
@@ -494,12 +508,11 @@ public class SwarmSignalListener {
                     "swarm-create",
                     requireText(info.correlationId(), "swarm-create correlationId"),
                     requireText(info.idempotencyKey(), "swarm-create idempotencyKey"),
-                    CommandState.status("Failed"),
+                    new CommandState(null, null, null),
                     "controller-bootstrap",
                     "timeout",
                     "controller did not become ready in time")
                 .timestamp(Instant.now())
-                .retryable(Boolean.TRUE)
                 .build();
             logError(context);
             emitter.emitError(context);
@@ -518,12 +531,11 @@ public class SwarmSignalListener {
                     signal,
                     requireText(info.correlationId(), signal + " correlationId"),
                     requireText(info.idempotencyKey(), signal + " idempotencyKey"),
-                    CommandState.status("Failed"),
+                    new CommandState(null, null, null),
                     phase,
                     "timeout",
                     message)
                 .timestamp(Instant.now())
-                .retryable(Boolean.TRUE)
                 .build();
             logError(context);
             emitter.emitError(context);

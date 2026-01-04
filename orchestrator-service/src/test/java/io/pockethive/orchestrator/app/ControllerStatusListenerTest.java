@@ -26,9 +26,13 @@ class ControllerStatusListenerTest {
     @Mock
     ControlPlaneStatusRequestPublisher statusRequests;
 
+    @Mock
+    SwarmSignalListener swarmSignals;
+
     @Test
     void updatesRegistry() {
-        ControllerStatusListener listener = new ControllerStatusListener(registry, new ObjectMapper(), statusRequests);
+        ControllerStatusListener listener =
+            new ControllerStatusListener(registry, new ObjectMapper(), statusRequests, swarmSignals);
         String json = """
             {
               "timestamp": "2024-01-01T00:00:00Z",
@@ -52,7 +56,8 @@ class ControllerStatusListenerTest {
 
     @Test
     void updatesRegistryFromTopLevelFlags() {
-        ControllerStatusListener listener = new ControllerStatusListener(registry, new ObjectMapper(), statusRequests);
+        ControllerStatusListener listener =
+            new ControllerStatusListener(registry, new ObjectMapper(), statusRequests, swarmSignals);
         String json = """
             {
               "timestamp": "2024-01-01T00:00:00Z",
@@ -76,7 +81,8 @@ class ControllerStatusListenerTest {
 
     @Test
     void statusLogsEmitAtDebug(CapturedOutput output) {
-        ControllerStatusListener listener = new ControllerStatusListener(registry, new ObjectMapper(), statusRequests);
+        ControllerStatusListener listener =
+            new ControllerStatusListener(registry, new ObjectMapper(), statusRequests, swarmSignals);
         Logger logger = (Logger) LoggerFactory.getLogger(ControllerStatusListener.class);
         Level previous = logger.getLevel();
         logger.setLevel(Level.INFO);
@@ -90,7 +96,8 @@ class ControllerStatusListenerTest {
 
     @Test
     void handleRejectsBlankRoutingKey() {
-        ControllerStatusListener listener = new ControllerStatusListener(registry, new ObjectMapper(), statusRequests);
+        ControllerStatusListener listener =
+            new ControllerStatusListener(registry, new ObjectMapper(), statusRequests, swarmSignals);
 
         assertThatThrownBy(() -> listener.handle("{}", "  "))
             .isInstanceOf(IllegalArgumentException.class)
@@ -99,7 +106,8 @@ class ControllerStatusListenerTest {
 
     @Test
     void handleRejectsNullRoutingKey() {
-        ControllerStatusListener listener = new ControllerStatusListener(registry, new ObjectMapper(), statusRequests);
+        ControllerStatusListener listener =
+            new ControllerStatusListener(registry, new ObjectMapper(), statusRequests, swarmSignals);
 
         assertThatThrownBy(() -> listener.handle("{}", null))
             .isInstanceOf(IllegalArgumentException.class)
@@ -108,7 +116,8 @@ class ControllerStatusListenerTest {
 
     @Test
     void handleRejectsBlankPayload() {
-        ControllerStatusListener listener = new ControllerStatusListener(registry, new ObjectMapper(), statusRequests);
+        ControllerStatusListener listener =
+            new ControllerStatusListener(registry, new ObjectMapper(), statusRequests, swarmSignals);
 
         assertThatThrownBy(() -> listener.handle(" ", "event.metric.status-delta.sw1.swarm-controller.inst1"))
             .isInstanceOf(IllegalArgumentException.class)

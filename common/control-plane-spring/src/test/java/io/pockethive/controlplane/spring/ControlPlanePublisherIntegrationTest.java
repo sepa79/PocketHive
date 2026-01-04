@@ -55,7 +55,7 @@ class ControlPlanePublisherIntegrationTest {
                     "swarm-start",
                     "corr-1",
                     "idem-1",
-                    CommandState.status("Running"))
+                    new CommandState(null, null, null))
                 .timestamp(Instant.parse("2024-01-01T00:00:00Z"))
                 .build();
             emitter.emitReady(ready);
