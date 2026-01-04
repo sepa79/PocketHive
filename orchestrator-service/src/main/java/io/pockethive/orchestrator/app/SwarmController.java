@@ -185,6 +185,9 @@ public class SwarmController {
                 ScenarioPlan planDescriptor = fetchScenario(templateId);
                 SwarmTemplate template = planDescriptor.template();
                 ScenarioPlan.Plan timeline = planDescriptor.plan();
+                if (timeline == null) {
+                    timeline = new ScenarioPlan.Plan(List.of(), List.of());
+                }
                 String image = requireImage(template, templateId);
                 SwarmPlan originalPlan = planDescriptor.toSwarmPlan(swarmId);
                 prepareScenarioRuntime(templateId, swarmId);
@@ -243,13 +246,11 @@ public class SwarmController {
                     finalSutEnvironment);
                 String instanceId = BeeNameGenerator.generate("swarm-controller", swarmId);
                 plans.register(instanceId, plan);
-                if (timeline != null) {
-                    try {
-                        String planJson = json.writeValueAsString(timeline);
-                        timelines.register(instanceId, planJson);
-                    } catch (JsonProcessingException e) {
-                        throw new IllegalStateException("Failed to serialize scenario plan for swarm " + swarmId, e);
-                    }
+                try {
+                    String planJson = json.writeValueAsString(timeline);
+                    timelines.register(instanceId, planJson);
+                } catch (JsonProcessingException e) {
+                    throw new IllegalStateException("Failed to serialize scenario plan for swarm " + swarmId, e);
                 }
                 boolean autoPull = Boolean.TRUE.equals(req.autoPullImages());
                 Swarm swarm = lifecycle.startSwarm(
