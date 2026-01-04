@@ -69,13 +69,13 @@ final class ControlPlaneNotifier {
     void emitConfigReady(
         ControlSignal signal,
         WorkerState state,
-        Map<String, Object> rawConfig,
-        Boolean enabled
+        Map<String, Object> rawConfig
     ) {
         Map<String, Object> commandDetails = new LinkedHashMap<>();
         if (!rawConfig.isEmpty()) {
             commandDetails.put("config", rawConfig);
         }
+        Boolean enabled = state.enabled();
         CommandState commandState = new CommandState(
             null,
             enabled,

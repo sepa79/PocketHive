@@ -34,15 +34,15 @@ public class ControlPlaneStatusRequestPublisher {
         }
         ControlScope target = ControlScope.forSwarm(swarmId);
         publish(target,
-            ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, swarmId, "ALL", "ALL"),
+            ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, swarmId, ControlScope.ALL, ControlScope.ALL),
             correlationId,
             idempotencyKey);
     }
 
     public void requestStatusForAllControllers(String correlationId, String idempotencyKey) {
-        ControlScope target = new ControlScope(null, "swarm-controller", null);
+        ControlScope target = new ControlScope(ControlScope.ALL, "swarm-controller", ControlScope.ALL);
         publish(target,
-            ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, "ALL", "swarm-controller", "ALL"),
+            ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, ControlScope.ALL, "swarm-controller", ControlScope.ALL),
             correlationId,
             idempotencyKey);
     }

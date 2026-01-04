@@ -26,11 +26,11 @@
       "additionalProperties": false,
       "required": ["swarmId", "role", "instance"],
       "properties": {
-        "swarmId": { "type": ["string", "null"] },
-        "role": { "type": ["string", "null"] },
-        "instance": { "type": ["string", "null"] }
+        "swarmId": { "$ref": "#/$defs/NonEmptyString" },
+        "role": { "$ref": "#/$defs/NonEmptyString" },
+        "instance": { "$ref": "#/$defs/NonEmptyString" }
       },
-      "description": "Scope tuple (swarmId/role/instance) that mirrors the routing-key target segments. Values may be null when the routing key uses ALL wildcards."
+      "description": "Scope tuple (swarmId/role/instance) that mirrors the routing-key target segments. Use the literal ALL for fan-out; values must never be null."
     },
     "EnvelopeBase": {
       "type": "object",

@@ -445,7 +445,6 @@ public class SwarmSignalListener {
       JsonNode dataNode = node;
       Boolean enabledFlag = dataNode.has("enabled") ? dataNode.path("enabled").asBoolean() : null;
 
-      Boolean stateEnabled = null;
       Map<String, Object> details = new LinkedHashMap<>();
       boolean scenarioChanged = false;
 
@@ -484,7 +483,6 @@ public class SwarmSignalListener {
         if (enabledFlag != null) {
           lifecycle.setSwarmEnabled(enabledFlag);
           sendStatusDelta();
-          stateEnabled = enabledFlag;
         }
         ScenarioChange change = applyScenarioOverrides(dataNode);
         scenarioChanged = scenarioChanged || change.changed();
@@ -498,7 +496,7 @@ public class SwarmSignalListener {
       if (scenarioChanged) {
         sendStatusDelta();
       }
-      CommandState state = configCommandState(cs, resolvedSignal, stateEnabled, details);
+      CommandState state = configCommandState(details);
       emitSuccess(cs, resolvedSignal, null, state);
     } catch (Exception e) {
       log.warn("config update", e);
@@ -528,7 +526,11 @@ public class SwarmSignalListener {
     log.warn("Rejecting {} for swarm {} (initialized={}, ready={}, pendingConfigUpdates={}, status={})",
         resolvedSignal, swarmIdFallback, initialized, ready, pendingConfigUpdates,
         status != null ? status.name() : "unknown");
-    CommandState state = new CommandState("NotReady", null, details);
+    Boolean enabled = null;
+    if (ControlPlaneSignals.CONFIG_UPDATE.equals(resolvedSignal)) {
+      enabled = status != null && workloadsEnabled(status);
+    }
+    CommandState state = new CommandState("NotReady", enabled, details);
     emitSuccess(cs, resolvedSignal, swarmIdFallback, state);
     return true;
   }
@@ -700,7 +702,12 @@ public class SwarmSignalListener {
       log.warn("Skipping error outcome for {} due to missing idempotencyKey", signal);
       return;
     }
-    CommandState baseState = new CommandState(null, null, null);
+    Boolean enabled = null;
+    if (ControlPlaneSignals.CONFIG_UPDATE.equals(signal)) {
+      SwarmStatus status = lifecycle.getStatus();
+      enabled = status != null && workloadsEnabled(status);
+    }
+    CommandState baseState = new CommandState(null, enabled, null);
     String code = e.getClass().getSimpleName();
     String message = e.getMessage() == null || e.getMessage().isBlank() ? code : e.getMessage();
     io.pockethive.controlplane.messaging.ControlPlaneEmitter.ErrorContext.Builder builder =
@@ -720,11 +727,10 @@ public class SwarmSignalListener {
     return new CommandState(null, null, null);
   }
 
-  private CommandState configCommandState(ControlSignal cs,
-                                          String resolvedSignal,
-                                          Boolean enabled,
-                                          Map<String, Object> details) {
+  private CommandState configCommandState(Map<String, Object> details) {
     Map<String, Object> detailCopy = (details == null || details.isEmpty()) ? null : new LinkedHashMap<>(details);
+    SwarmStatus status = lifecycle.getStatus();
+    boolean enabled = status != null && workloadsEnabled(status);
     return new CommandState(null, enabled, detailCopy);
   }
 

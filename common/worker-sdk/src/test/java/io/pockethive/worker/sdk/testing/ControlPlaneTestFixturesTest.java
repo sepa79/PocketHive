@@ -47,7 +47,7 @@ class ControlPlaneTestFixturesTest {
 
         ControlPlaneEmitter emitter = ControlPlaneTestFixtures.workerEmitter(publisher, identity);
         ControlPlaneEmitter.ReadyContext context = ControlPlaneEmitter.ReadyContext
-            .builder("config-update", "corr-1", "cmd-1", new CommandState(null, null, null))
+            .builder("config-update", "corr-1", "cmd-1", new CommandState(null, false, null))
             .result("ok")
             .build();
 
