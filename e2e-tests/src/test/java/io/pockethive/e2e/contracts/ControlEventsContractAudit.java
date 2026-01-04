@@ -21,6 +21,13 @@ public final class ControlEventsContractAudit {
 
   private static final ObjectMapper MAPPER = new ObjectMapper().findAndRegisterModules();
   private static final JsonSchema SCHEMA = loadSchema();
+  private static final Set<String> LIFECYCLE_SIGNALS = Set.of(
+      "swarm-template",
+      "swarm-plan",
+      "swarm-start",
+      "swarm-stop",
+      "swarm-remove"
+  );
 
   private ControlEventsContractAudit() {
   }
@@ -70,8 +77,34 @@ public final class ControlEventsContractAudit {
     }
     String kind = node.path("kind").asText("");
     String type = node.path("type").asText("");
-    String role = node.path("scope").path("role").asText("");
+    JsonNode scope = node.path("scope");
+    String role = scope.path("role").asText("");
     String normalizedRole = role.trim().toLowerCase(Locale.ROOT);
+    String normalizedType = type.trim().toLowerCase(Locale.ROOT);
+
+    if ("outcome".equalsIgnoreCase(kind)) {
+      JsonNode data = node.path("data");
+      JsonNode status = data.path("status");
+      if (status.isMissingNode() || status.isNull() || status.asText("").isBlank()) {
+        failures.add("semantic invalid rk=" + routingKey
+            + " reason=outcome missing data.status payload=" + snippet(node.toString()));
+      }
+      if ("config-update".equals(normalizedType)) {
+        JsonNode enabled = data.path("enabled");
+        if (enabled.isMissingNode() || enabled.isNull()) {
+          failures.add("semantic invalid rk=" + routingKey
+              + " reason=config-update outcome missing data.enabled payload=" + snippet(node.toString()));
+        }
+      }
+    }
+
+    if ("signal".equalsIgnoreCase(kind) && LIFECYCLE_SIGNALS.contains(normalizedType)) {
+      String instance = scope.path("instance").asText("").trim();
+      if (instance.isEmpty() || "all".equalsIgnoreCase(instance)) {
+        failures.add("semantic invalid rk=" + routingKey
+            + " reason=lifecycle signal uses ALL/blank instance payload=" + snippet(node.toString()));
+      }
+    }
 
     if ("metric".equalsIgnoreCase(kind)) {
       JsonNode data = node.path("data");
@@ -137,4 +170,3 @@ public final class ControlEventsContractAudit {
     return trimmed;
   }
 }
-
