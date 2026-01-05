@@ -24,17 +24,6 @@ if [ ! -f "${DOCKER_LIST}" ] || ! grep -Fxq "${DOCKER_ENTRY}" "${DOCKER_LIST}"; 
   echo "${DOCKER_ENTRY}" | sudo tee "${DOCKER_LIST}" >/dev/null
 fi
 
-echo "==> Preparing VS Code APT repository"
-if [ ! -f /etc/apt/keyrings/microsoft.asc ]; then
-  curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor | sudo tee /etc/apt/keyrings/microsoft.asc >/dev/null
-  sudo chmod a+r /etc/apt/keyrings/microsoft.asc
-fi
-VSCODE_LIST="/etc/apt/sources.list.d/vscode.list"
-VSCODE_ENTRY="deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/microsoft.asc] https://packages.microsoft.com/repos/code stable main"
-if [ ! -f "${VSCODE_LIST}" ] || ! grep -Fxq "${VSCODE_ENTRY}" "${VSCODE_LIST}"; then
-  echo "${VSCODE_ENTRY}" | sudo tee "${VSCODE_LIST}" >/dev/null
-fi
-
 echo "==> Refreshing apt indexes after adding repositories"
 sudo apt-get update -y
 
@@ -69,8 +58,8 @@ else
   echo "   Portainer container already exists; skipping docker run."
 fi
 
-echo "==> Installing Node.js, npm, VS Code, and Midnight Commander"
-sudo apt-get install -y nodejs npm code mc
+echo "==> Installing Node.js, npm, and Midnight Commander"
+sudo apt-get install -y nodejs npm mc
 
 echo "==> Installing OpenJDK 21 and Maven"
 sudo apt-get install -y openjdk-21-jdk maven
