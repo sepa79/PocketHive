@@ -166,14 +166,33 @@ services:
       retries: 12
       start_period: 10s
 
-  tcp-mock:
-    image: node:18-alpine
-    working_dir: /app
-    command: ["node", "tcp-mock.js"]
+  tcp-mock-server:
+    image: ${DOCKER_REGISTRY:-}tcp-mock-server:${POCKETHIVE_VERSION:-latest}
     ports:
-      - "8082:8080"
+      - "8083:8080"  # Web UI port
+      - "9090:9090"  # TCP server port
+    environment:
+      SERVER_PORT: 8080
+      TCP_MOCK_PORT: 9090
+      TCP_MOCK_NODE_ID: "tcp-mock-1"
+      TCP_MOCK_DASHBOARD_ENABLED: "true"
+      TCP_MOCK_DASHBOARD_USERNAME: "admin"
+      TCP_MOCK_DASHBOARD_PASSWORD: "admin"
+      TCP_MOCK_SSL_ENABLED: "false"
+      TCP_MOCK_VALIDATION_ENABLED: "true"
+      TCP_MOCK_FILTERING_ENABLED: "true"
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "health,info,metrics,prometheus"
     volumes:
-      - ./wiremock/tcp-mock.js:/app/tcp-mock.js:ro
+      - ./tcp-mock-server/mappings:/app/mappings
+      - ./tcp-mock-server/__files:/app/__files
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8080/actuator/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      - prometheus
 
   # promtail:
   #   # disabled: logs are shipped via RabbitMQ and aggregated to Loki

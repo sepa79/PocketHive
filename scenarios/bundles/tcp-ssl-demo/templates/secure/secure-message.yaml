@@ -1,0 +1,17 @@
+serviceId: secure
+callId: secure-message
+protocol: TCP
+behavior: REQUEST_RESPONSE
+transport: socket
+bodyTemplate: |
+  -----BEGIN SECURE MESSAGE-----
+  Session-ID: {{ payloadAsJson.sessionId }}
+  Timestamp: {{ payloadAsJson.timestamp }}
+  Data: {{ payloadAsJson.encryptedData }}
+  Signature: {{ payloadAsJson.signature }}
+  -----END SECURE MESSAGE-----
+headersTemplate:
+  x-ph-ssl: "true"
+  x-ph-ssl-verify: "false"
+  x-ph-session-id: "{{ payloadAsJson.sessionId }}"
+  x-ph-security-level: "high"

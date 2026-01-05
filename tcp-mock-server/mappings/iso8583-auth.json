@@ -1,0 +1,11 @@
+{
+  "id": "iso8583-auth",
+  "requestPattern": "0200.*",
+  "responseTemplate": "{{response_mti}}{{auth_code}}{{rrn}}00",
+  "description": "ISO-8583 Authorization Request",
+  "priority": 10,
+  "enabled": true,
+  "scenarioName": "payment-flow",
+  "requiredScenarioState": "Started",
+  "newScenarioState": "Authorized"
+}

@@ -28,11 +28,11 @@ public class SocketTransport implements TcpTransport {
     @Override
     public TcpResponse execute(TcpRequest request, TcpBehavior behavior) throws TcpException {
         long start = System.currentTimeMillis();
-        
+
         boolean useSsl = Boolean.TRUE.equals(request.options().get("ssl"));
         boolean sslVerify = Boolean.TRUE.equals(request.options().getOrDefault("sslVerify", false));
         int timeout = (Integer) request.options().getOrDefault("timeout", 30000);
-        
+
         if (shouldPool()) {
             return executeWithPooledSocket(request, behavior, start, timeout, useSsl);
         }
@@ -107,19 +107,27 @@ public class SocketTransport implements TcpTransport {
         byte[] response = readResponse(in, request, behavior);
         return new TcpResponse(200, response, System.currentTimeMillis() - start);
     }
-    
+
     private byte[] readResponse(InputStream in, TcpRequest request, TcpBehavior behavior) throws IOException {
+        String endTag = (String) request.options().get("endTag");
+
+        if (behavior == TcpBehavior.ECHO && endTag != null) {
+            return readUntilDelimiter(in, endTag, true);
+        }
+
         if (behavior == TcpBehavior.ECHO) {
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            byte[] buffer = new byte[1024];
+            int expectedBytes = request.payload().length;
+            ByteArrayOutputStream baos = new ByteArrayOutputStream(expectedBytes);
+            byte[] buffer = new byte[Math.min(1024, expectedBytes)];
+            int totalRead = 0;
             int read;
-            while ((read = in.read(buffer)) != -1) {
+            while (totalRead < expectedBytes && (read = in.read(buffer, 0, Math.min(buffer.length, expectedBytes - totalRead))) != -1) {
                 baos.write(buffer, 0, read);
-                if (baos.size() >= request.payload().length) break;
+                totalRead += read;
             }
             return baos.toByteArray();
         }
-        
+
         if (behavior == TcpBehavior.STREAMING) {
             int maxBytes = (Integer) request.options().getOrDefault("maxBytes", 8192);
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -132,22 +140,32 @@ public class SocketTransport implements TcpTransport {
             }
             return baos.toByteArray();
         }
-        
-        // REQUEST_RESPONSE behavior - read byte-by-byte like the working example
-        String endTag = (String) request.options().getOrDefault("endTag", "</Document>");
-        StringBuilder response = new StringBuilder();
-        int readByte;
-        
-        while ((readByte = in.read()) != -1) {
-            response.append((char) readByte);
-            if (readByte == '>' && response.lastIndexOf(endTag) != -1) {
-                break;
+
+        // REQUEST_RESPONSE behavior
+        String delimiter = endTag != null ? endTag : "</Document>";
+        return readUntilDelimiter(in, delimiter, false);
+    }
+
+    private byte[] readUntilDelimiter(InputStream in, String delimiter, boolean stripDelimiter) throws IOException {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        byte[] delimBytes = delimiter.getBytes(StandardCharsets.UTF_8);
+        int matchPos = 0;
+        int b;
+        while ((b = in.read()) != -1) {
+            baos.write(b);
+            if (b == delimBytes[matchPos]) {
+                matchPos++;
+                if (matchPos == delimBytes.length) {
+                    byte[] result = baos.toByteArray();
+                    return stripDelimiter ? java.util.Arrays.copyOf(result, result.length - delimBytes.length) : result;
+                }
+            } else {
+                matchPos = (b == delimBytes[0]) ? 1 : 0;
             }
         }
-        
-        return response.toString().getBytes(StandardCharsets.UTF_8);
+        return baos.toByteArray();
     }
-    
+
     private Socket createSslSocket(String host, int port, boolean verify) throws Exception {
         javax.net.ssl.SSLContext sslContext = javax.net.ssl.SSLContext.getInstance("TLS");
         if (!verify) {
@@ -162,12 +180,12 @@ public class SocketTransport implements TcpTransport {
         } else {
             sslContext.init(null, null, null);
         }
-        
+
         javax.net.ssl.SSLSocket sslSocket = (javax.net.ssl.SSLSocket) sslContext.getSocketFactory().createSocket(host, port);
         sslSocket.startHandshake();
         return sslSocket;
     }
-    
+
     @Override
     public void close() {
         if (pool != null) {

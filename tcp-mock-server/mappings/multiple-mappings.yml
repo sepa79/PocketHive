@@ -1,0 +1,20 @@
+- id: echo-test
+  requestPattern: "ECHO.*"
+  responseTemplate: "{{message}}"
+  description: "Simple echo test"
+  priority: 5
+  enabled: true
+
+- id: json-response
+  requestPattern: "\\{.*\\}"
+  responseTemplate: '{"status": "success", "timestamp": "{{timestamp}}", "echo": "{{message}}"}'
+  description: "JSON message handler"
+  priority: 8
+  enabled: true
+
+- id: delayed-response
+  requestPattern: "DELAY_.*"
+  responseTemplate: "{{delay:2000}}DELAYED_RESPONSE"
+  description: "Response with 2 second delay"
+  priority: 12
+  enabled: true

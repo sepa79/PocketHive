@@ -1,0 +1,9 @@
+id: payment-settlement
+requestPattern: "0220.*"
+responseTemplate: "{{response_mti}}{{rrn}}00"
+description: "ISO-8583 Settlement Request"
+priority: 10
+enabled: true
+scenarioName: payment-flow
+requiredScenarioState: Authorized
+newScenarioState: Settled

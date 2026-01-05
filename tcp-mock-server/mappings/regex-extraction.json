@@ -1,0 +1,9 @@
+{
+  "id": "regex-extraction",
+  "requestPattern": "^CMD:(\\w+):(.*)$",
+  "responseTemplate": "RESPONSE:{{request.regex '^CMD:(\\w+):(.*)$' group 1}}:{{request.regex '^CMD:(\\w+):(.*)$' group 2}}:{{timestamp}}",
+  "responseDelimiter": "\n",
+  "description": "Regex-based field extraction",
+  "priority": 20,
+  "enabled": true
+}

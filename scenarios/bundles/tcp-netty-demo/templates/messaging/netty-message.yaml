@@ -1,0 +1,21 @@
+serviceId: messaging
+callId: netty-message
+protocol: TCP
+behavior: REQUEST_RESPONSE
+transport: netty
+bodyTemplate: |
+  {
+    "header": {
+      "messageId": "{{ payloadAsJson.messageId }}",
+      "timestamp": "{{ payloadAsJson.timestamp }}",
+      "priority": {{ payloadAsJson.priority }}
+    },
+    "body": {
+      "data": "{{ payloadAsJson.payload }}",
+      "checksum": "{{ eval('#md5_hex(payloadAsJson.payload)') }}"
+    }
+  }
+headersTemplate:
+  x-ph-transport: "netty"
+  x-ph-message-id: "{{ payloadAsJson.messageId }}"
+  x-ph-priority: "{{ payloadAsJson.priority }}"

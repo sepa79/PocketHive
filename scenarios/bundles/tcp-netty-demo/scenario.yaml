@@ -1,0 +1,58 @@
+id: tcp-netty-demo
+name: TCP Netty Transport Demo
+description: Demonstrates TCP using Netty async transport for high-throughput scenarios
+template:
+  image: swarm-controller:latest
+  bees:
+    - role: generator
+      image: generator:latest
+      config:
+        inputs:
+          type: SCHEDULER
+          scheduler:
+            ratePerSec: 10
+            maxMessages: 50
+        worker:
+          message:
+            bodyType: SIMPLE
+            body: |
+              {
+                "messageId": "MSG_{{ eval('#randInt(100000, 999999)') }}",
+                "payload": "{{ eval("#base64_encode('High throughput message ' + #randInt(1, 1000))") }}",
+                "priority": "{{ eval('#randInt(1, 5)') }}",
+                "timestamp": "{{ eval("#date_format(now, 'yyyy-MM-dd''T''HH:mm:ss.SSS')") }}"
+              }
+            headers:
+              x-ph-call-id: netty-message
+      work:
+        out: build
+    - role: request-builder
+      image: request-builder:latest
+      config:
+        worker:
+          templateRoot: /app/scenario/templates
+          serviceId: messaging
+      work:
+        in: build
+        out: proc
+    - role: processor
+      image: processor:latest
+      config:
+        baseUrl: "{{ sut.endpoints['tcp-server'].baseUrl }}"
+        worker:
+          tcpTransport:
+            type: netty
+            maxRetries: 2
+            connectTimeoutMs: 3000
+            readTimeoutMs: 8000
+      work:
+        in: proc
+        out: post
+    - role: postprocessor
+      image: postprocessor:latest
+      config:
+        worker:
+          postprocessor:
+            publish-all-metrics: true
+      work:
+        in: post

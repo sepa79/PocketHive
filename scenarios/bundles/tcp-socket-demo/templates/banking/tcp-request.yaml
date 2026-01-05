@@ -1,0 +1,11 @@
+serviceId: banking
+callId: tcp-request
+protocol: TCP
+behavior: REQUEST_RESPONSE
+transport: socket
+bodyTemplate: |
+  STX{{ payloadAsJson.requestId }}|{{ payloadAsJson.operation }}|{{ payloadAsJson.accountId }}|{{ payloadAsJson.timestamp }}ETX
+headersTemplate:
+  x-ph-protocol: "tcp"
+  x-ph-request-id: "{{ payloadAsJson.requestId }}"
+  x-ph-tcp-end-tag: "ETX"

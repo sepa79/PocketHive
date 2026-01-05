@@ -1,0 +1,59 @@
+id: tcp-ssl-enhanced-demo
+name: TCP SSL Enhanced Demo
+description: Demonstrates enhanced TCP features including SSL, metrics, validation, and filtering
+template:
+  image: swarm-controller:latest
+  bees:
+    - role: generator
+      image: generator:latest
+      config:
+        inputs:
+          type: SCHEDULER
+          scheduler:
+            ratePerSec: 2
+            maxMessages: 10
+        worker:
+          message:
+            bodyType: SIMPLE
+            body: |
+              {
+                "sessionId": "SSL_{{ eval('#uuid()') }}",
+                "encryptedData": "{{ eval("#base64_encode('Enhanced SSL data: ' + #randInt(1000, 9999))) }}",
+                "signature": "{{ eval("#hmac_sha256_hex('secretkey', payload.sessionId)") }}",
+                "timestamp": "{{ eval("#date_format(now, 'yyyy-MM-dd''T''HH:mm:ss.SSS''Z''')") }}"
+              }
+            headers:
+              x-ph-call-id: ssl-enhanced-message
+      work:
+        out: build
+    - role: request-builder
+      image: request-builder:latest
+      config:
+        worker:
+          templateRoot: /app/scenario/templates
+          serviceId: enhanced
+      work:
+        in: build
+        out: proc
+    - role: processor
+      image: processor:latest
+      config:
+        baseUrl: "{{ sut.endpoints['tcps-server'].baseUrl }}"
+        worker:
+          tcpTransport:
+            type: socket
+            connectionReuse: PER_THREAD
+            maxRetries: 3
+            connectTimeoutMs: 15000
+            readTimeoutMs: 20000
+      work:
+        in: proc
+        out: post
+    - role: postprocessor
+      image: postprocessor:latest
+      config:
+        worker:
+          postprocessor:
+            publish-all-metrics: true
+      work:
+        in: post

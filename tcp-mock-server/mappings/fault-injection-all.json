@@ -1,0 +1,26 @@
+[
+  {
+    "id": "fault-empty-response",
+    "requestPattern": "FAULT_EMPTY.*",
+    "responseTemplate": "{{fault:EMPTY_RESPONSE}}",
+    "description": "Empty response fault",
+    "priority": 15,
+    "enabled": true
+  },
+  {
+    "id": "fault-malformed",
+    "requestPattern": "FAULT_MALFORMED.*",
+    "responseTemplate": "{{fault:MALFORMED_RESPONSE}}",
+    "description": "Malformed data fault",
+    "priority": 15,
+    "enabled": true
+  },
+  {
+    "id": "fault-random-data",
+    "requestPattern": "FAULT_RANDOM.*",
+    "responseTemplate": "{{fault:RANDOM_DATA}}",
+    "description": "Random data fault",
+    "priority": 15,
+    "enabled": true
+  }
+]

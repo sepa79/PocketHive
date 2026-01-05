@@ -1,0 +1,10 @@
+{
+  "id": "slow-response-simulation",
+  "requestPattern": "SLOW_.*",
+  "responseTemplate": "SLOW_RESPONSE_COMPLETED",
+  "responseDelimiter": "\n",
+  "fixedDelayMs": 5000,
+  "description": "Simulate slow response (5 second delay)",
+  "priority": 20,
+  "enabled": true
+}

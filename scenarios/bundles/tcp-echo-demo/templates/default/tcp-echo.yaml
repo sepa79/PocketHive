@@ -1,0 +1,10 @@
+serviceId: default
+callId: tcp-echo
+protocol: TCP
+behavior: ECHO
+transport: socket
+endTag: "\n"
+bodyTemplate: "{{ payloadAsJson.message }}"
+headersTemplate:
+  x-ph-test-type: "echo"
+  x-ph-timestamp: "{{ payloadAsJson.timestamp }}"

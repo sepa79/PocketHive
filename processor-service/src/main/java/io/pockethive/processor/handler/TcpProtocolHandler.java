@@ -66,7 +66,7 @@ public class TcpProtocolHandler implements ProtocolHandler {
     }
 
     TcpBehavior behavior = TcpBehavior.valueOf(envelope.path("behavior").asText("REQUEST_RESPONSE"));
-    String endTag = envelope.path("endTag").asText("</Document>");
+    String endTag = envelope.path("endTag").asText(null);
 
     long start = clock.millis();
     long pacingMillis = 0L;
@@ -76,14 +76,15 @@ public class TcpProtocolHandler implements ProtocolHandler {
       pacingMillis = applyExecutionMode(processorConfig);
 
       TcpTransportConfig config = activeConfig;
-      TcpRequest request = new TcpRequest(host, port, body.get().getBytes(StandardCharsets.UTF_8),
-          Map.of(
-              "endTag", endTag,
-              "timeout", config.timeout(),
-              "maxBytes", config.maxBytes(),
-              "ssl", useSsl,
-              "sslVerify", config.sslVerify()
-          ));
+      var options = new java.util.HashMap<String, Object>();
+      if (endTag != null) {
+        options.put("endTag", endTag);
+      }
+      options.put("timeout", config.timeout());
+      options.put("maxBytes", config.maxBytes());
+      options.put("ssl", useSsl);
+      options.put("sslVerify", config.sslVerify());
+      TcpRequest request = new TcpRequest(host, port, body.get().getBytes(StandardCharsets.UTF_8), options);
 
       // Connection reuse strategy
       transport = switch (config.connectionReuse()) {

@@ -12,9 +12,15 @@
   name: TCP Mock (local)
   type: sandbox
   endpoints:
-    tcp-gateway:
+    default:
       kind: TCP
-      baseUrl: tcp://tcp-mock:8080
+      baseUrl: tcp://tcp-mock-server:8083
+    tcp-server:
+      kind: TCP
+      baseUrl: tcp://tcp-mock-server:9090
+    tcps-server:
+      kind: TCP
+      baseUrl: tcps://tcp-mock-server:9090
   ui:
     panelId: tcp-mock
 

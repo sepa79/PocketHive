@@ -1,0 +1,9 @@
+serviceId: demo
+callId: echo-test
+protocol: TCP
+behavior: ECHO
+transport: socket
+bodyTemplate: "ECHO: {{ payloadAsJson.message }} at {{ payloadAsJson.timestamp }}"
+headersTemplate:
+  x-ph-test-type: "{{ payloadAsJson.testType }}"
+  x-ph-behavior: "echo"

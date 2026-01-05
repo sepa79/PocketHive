@@ -1,0 +1,45 @@
+server:
+  port: 8080
+
+tcp-mock:
+  port: ${TCP_MOCK_PORT:9999}
+  nodeId: ${TCP_MOCK_NODE_ID:tcp-mock-default}
+  dashboard:
+    enabled: ${TCP_MOCK_DASHBOARD_ENABLED:true}
+    username: ${TCP_MOCK_DASHBOARD_USERNAME:admin}
+    password: ${TCP_MOCK_DASHBOARD_PASSWORD:admin}
+  validation:
+    enabled: ${TCP_MOCK_VALIDATION_ENABLED:true}
+    max-message-size: 8192
+  filtering:
+    enabled: ${TCP_MOCK_FILTERING_ENABLED:false}
+  ssl:
+    enabled: ${TCP_MOCK_SSL_ENABLED:false}
+    key-store: classpath:keystore.p12
+    key-store-password: changeit
+  connection:
+    backlog: 256
+    idle-timeout: 300
+    max-connections: 1000
+
+spring:
+  application:
+    name: tcp-mock-server
+  security:
+    user:
+      name: ${TCP_MOCK_DASHBOARD_USERNAME:admin}
+      password: ${TCP_MOCK_DASHBOARD_PASSWORD:admin}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    io.pockethive.tcpmock: DEBUG
+    org.springframework: INFO

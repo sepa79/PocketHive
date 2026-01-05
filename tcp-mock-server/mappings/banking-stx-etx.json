@@ -1,0 +1,9 @@
+{
+  "id": "banking-stx-etx",
+  "requestPattern": "^STX.*ETX$",
+  "responseTemplate": "STX{{request_id}}|APPROVED|{{timestamp}}ETX",
+  "responseDelimiter": "",
+  "description": "Banking STX/ETX format handler",
+  "priority": 25,
+  "enabled": true
+}

@@ -1,0 +1,16 @@
+{
+  "id": "json-advanced-matching",
+  "requestPattern": "^\\{.*\\}$",
+  "advancedMatching": {
+    "jsonPath": {
+      "expression": "$.action",
+      "equalTo": "payment"
+    }
+  },
+  "responseTemplate": "{\"status\":\"approved\",\"transactionId\":\"{{uuid}}\",\"amount\":\"{{request.jsonPath '$.amount'}}\",\"timestamp\":\"{{now format='yyyy-MM-dd HH:mm:ss'}}\"}",
+  "responseDelimiter": "\n",
+  "fixedDelayMs": 100,
+  "description": "Advanced JSON matching with field extraction",
+  "priority": 25,
+  "enabled": true
+}

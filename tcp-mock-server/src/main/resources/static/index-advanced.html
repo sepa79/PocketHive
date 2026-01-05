@@ -1,0 +1,1033 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TCP Mock Server Enterprise</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#f0f9ff',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                            900: '#1e3a8a'
+                        },
+                        enterprise: {
+                            50: '#fefdf8',
+                            500: '#d4af37',
+                            600: '#b8860b',
+                            700: '#9a7209'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .glass-effect {
+            backdrop-filter: blur(16px);
+            background: rgba(255, 255, 255, 0.9);
+        }
+        .dark .glass-effect {
+            background: rgba(17, 24, 39, 0.9);
+        }
+        .code-editor {
+            font-family: 'JetBrains Mono', 'Monaco', 'Menlo', monospace;
+        }
+        .animate-pulse-slow {
+            animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+    </style>
+</head>
+<body class="h-full bg-gradient-to-br from-slate-50 to-blue-50 dark:from-gray-900 dark:to-slate-900 transition-colors duration-300">
+    <!-- Header -->
+    <header class="glass-effect border-b border-gray-200 dark:border-gray-700 sticky top-0 z-50">
+        <div class="max-width-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center space-x-4">
+                    <div class="w-10 h-10 bg-gradient-to-r from-primary-500 to-enterprise-500 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-server text-white"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-xl font-bold text-gray-900 dark:text-white">TCP Mock Server</h1>
+                        <p class="text-sm text-gray-500 dark:text-gray-400">Enterprise Edition</p>
+                    </div>
+                </div>
+
+                <div class="flex items-center space-x-4">
+                    <div class="flex items-center space-x-3">
+                        <div class="flex items-center space-x-2">
+                            <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                            <span class="text-sm text-gray-600 dark:text-gray-300">Online</span>
+                        </div>
+                        <div id="recordingIndicator" class="hidden flex items-center space-x-2">
+                            <div class="w-2 h-2 bg-red-500 rounded-full animate-pulse-slow"></div>
+                            <span class="text-sm text-red-600 dark:text-red-400">Recording</span>
+                        </div>
+                        <div class="text-sm text-gray-500 dark:text-gray-400" id="requestCount">0 requests</div>
+                    </div>
+
+                    <button id="recordingToggle" class="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white text-sm rounded-lg transition-colors duration-200 flex items-center space-x-1">
+                        <i class="fas fa-record-vinyl text-xs"></i>
+                        <span>Record</span>
+                    </button>
+
+                    <button id="themeToggle" class="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors duration-200">
+                        <i class="fas fa-sun dark:hidden"></i>
+                        <i class="fas fa-moon hidden dark:block"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Navigation -->
+    <nav class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+        <div class="max-width-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex space-x-8">
+                <button class="nav-tab active px-4 py-4 text-sm font-medium border-b-2 border-primary-500 text-primary-600 dark:text-primary-400" data-tab="requests">
+                    <i class="fas fa-list mr-2"></i>Requests
+                </button>
+                <button class="nav-tab px-4 py-4 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:border-gray-300 transition-all duration-200" data-tab="mappings">
+                    <i class="fas fa-route mr-2"></i>Smart Mappings
+                </button>
+                <button class="nav-tab px-4 py-4 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:border-gray-300 transition-all duration-200" data-tab="scenarios">
+                    <i class="fas fa-sitemap mr-2"></i>Scenarios
+                </button>
+                <button class="nav-tab px-4 py-4 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:border-gray-300 transition-all duration-200" data-tab="test">
+                    <i class="fas fa-vial mr-2"></i>Test Console
+                </button>
+                <button class="nav-tab px-4 py-4 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:border-gray-300 transition-all duration-200" data-tab="verification">
+                    <i class="fas fa-check-double mr-2"></i>Verification
+                </button>
+                <button class="nav-tab px-4 py-4 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:border-gray-300 transition-all duration-200" data-tab="admin">
+                    <i class="fas fa-cog mr-2"></i>Admin
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="max-width-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- Requests Tab -->
+        <div id="requestsTab" class="tab-content">
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
+                <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                    <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Request Log</h2>
+                    <div class="flex space-x-3">
+                        <input type="text" id="requestSearch" placeholder="Search requests..." class="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent">
+                        <select id="requestFilter" class="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent">
+                            <option value="all">All Requests</option>
+                            <option value="matched">Matched</option>
+                            <option value="unmatched">Unmatched</option>
+                        </select>
+                        <button id="clearRequestsBtn" class="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors duration-200">
+                            <i class="fas fa-trash mr-2"></i>Clear
+                        </button>
+                    </div>
+                </div>
+                <div class="p-6">
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                            <thead class="bg-gray-50 dark:bg-gray-700">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Time</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Client</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Message</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Response</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Status</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Behavior</th>
+                                </tr>
+                            </thead>
+                            <tbody id="requestsTableBody" class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                                <!-- Requests will be loaded here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Smart Mappings Tab -->
+        <div id="mappingsTab" class="tab-content hidden">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Mapping List -->
+                <div class="lg:col-span-2">
+                    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
+                        <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Message Mappings</h2>
+                            <button id="addMappingBtn" class="px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white text-sm rounded-lg transition-colors duration-200 flex items-center space-x-2">
+                                <i class="fas fa-plus"></i>
+                                <span>Add Mapping</span>
+                            </button>
+                        </div>
+                        <div class="p-6">
+                            <div id="mappingsList" class="space-y-4">
+                                <!-- Mappings will be loaded here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Mapping Editor -->
+                <div class="lg:col-span-1">
+                    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 sticky top-24">
+                        <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Mapping Editor</h3>
+                        </div>
+                        <div class="p-6">
+                            <form id="mappingForm" class="space-y-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Pattern</label>
+                                    <input type="text" id="mappingPattern" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent" placeholder="^AUTH.*">
+                                </div>
+
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Response Template</label>
+                                    <textarea id="mappingResponse" rows="4" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent code-editor" placeholder="{{randomValue type='UUID'}}"></textarea>
+                                </div>
+
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Scenario</label>
+                                    <select id="mappingScenario" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent">
+                                        <option value="">No Scenario</option>
+                                        <option value="payment-flow">Payment Flow</option>
+                                        <option value="auth-sequence">Auth Sequence</option>
+                                    </select>
+                                </div>
+
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Required State</label>
+                                        <input type="text" id="mappingRequiredState" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent" placeholder="authenticated">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">New State</label>
+                                        <input type="text" id="mappingNewState" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent" placeholder="completed">
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Priority</label>
+                                    <input type="number" id="mappingPriority" value="1" min="1" max="10" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent">
+                                </div>
+
+                                <div class="flex space-x-3">
+                                    <button type="submit" class="flex-1 px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors duration-200">
+                                        Save Mapping
+                                    </button>
+                                    <button type="button" id="clearMappingBtn" class="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg transition-colors duration-200">
+                                        Clear
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Scenarios Tab -->
+        <div id="scenariosTab" class="tab-content hidden">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
+                    <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                        <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Active Scenarios</h2>
+                    </div>
+                    <div class="p-6">
+                        <div id="scenariosList" class="space-y-4">
+                            <!-- Scenarios will be loaded here -->
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
+                    <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                        <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Scenario Control</h3>
+                    </div>
+                    <div class="p-6 space-y-4">
+                        <button data-action="start-payment-flow" class="w-full px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors duration-200">
+                            <i class="fas fa-play mr-2"></i>Start Payment Flow
+                        </button>
+                        <button data-action="start-auth-sequence" class="w-full px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors duration-200">
+                            <i class="fas fa-key mr-2"></i>Start Auth Sequence
+                        </button>
+                        <button data-action="reset-all-scenarios" class="w-full px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors duration-200">
+                            <i class="fas fa-stop mr-2"></i>Reset All Scenarios
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Requests Tab -->
+        <div id="requestsTab" class="tab-content hidden">
+
+        <!-- Test Console Tab -->
+        <div id="testTab" class="tab-content hidden">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Test Form -->
+                <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
+                    <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                        <h2 class="text-lg font-semibold text-gray-900 dark:text-white">TCP Test Console</h2>
+                    </div>
+                    <div class="p-6">
+                        <form id="testForm" class="space-y-4">
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Transport</label>
+                                    <select id="testTransport" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent">
+                                        <option value="socket">Socket</option>
+                                        <option value="nio">NIO</option>
+                                        <option value="netty">Netty</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Protocol</label>
+                                    <select id="testProtocol" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent">
+                                        <option value="tcp">TCP</option>
+                                        <option value="tcps">TCP/TLS</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Host</label>
+                                    <input type="text" id="testHost" value="localhost" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Port</label>
+                                    <input type="number" id="testPort" value="8080" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent">
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Format</label>
+                                <select id="testFormat" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent">
+                                    <option value="text">Text</option>
+                                    <option value="binary">Binary (Hex)</option>
+                                    <option value="json">JSON</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Message</label>
+                                <textarea id="testMessage" rows="4" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent code-editor" placeholder="Enter your test message...">ECHO Hello World</textarea>
+                            </div>
+
+                            <div class="flex items-center space-x-4">
+                                <label class="flex items-center">
+                                    <input type="checkbox" id="testSsl" class="rounded border-gray-300 text-primary-600 focus:ring-primary-500">
+                                    <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">SSL/TLS</span>
+                                </label>
+                                <label class="flex items-center">
+                                    <input type="checkbox" id="testVerifySsl" class="rounded border-gray-300 text-primary-600 focus:ring-primary-500">
+                                    <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">Verify SSL</span>
+                                </label>
+                            </div>
+
+                            <button type="submit" class="w-full px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors duration-200 flex items-center justify-center space-x-2">
+                                <i class="fas fa-paper-plane"></i>
+                                <span>Send Test Message</span>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Test Results -->
+                <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
+                    <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                        <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Test Results</h3>
+                        <button id="clearTestResults" class="px-3 py-1 text-sm bg-gray-500 hover:bg-gray-600 text-white rounded transition-colors duration-200">
+                            Clear
+                        </button>
+                    </div>
+                    <div class="p-6">
+                        <div id="testResults" class="space-y-4 max-h-96 overflow-y-auto">
+                            <div class="text-gray-500 dark:text-gray-400 text-center py-8">
+                                <i class="fas fa-vial text-4xl mb-4"></i>
+                                <p>No test results yet. Send a test message to see results here.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="verificationTab" class="tab-content hidden">
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
+                <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                    <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Request Verification</h2>
+                </div>
+                <div class="p-6">
+                    <div class="space-y-4">
+                        <div class="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
+                            <div class="flex items-center">
+                                <i class="fas fa-check-circle text-green-500 mr-3"></i>
+                                <span class="text-green-800 dark:text-green-200">AUTH messages: 3 received (expected: exactly 3)</span>
+                            </div>
+                        </div>
+                        <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+                            <div class="flex items-center">
+                                <i class="fas fa-times-circle text-red-500 mr-3"></i>
+                                <span class="text-red-800 dark:text-red-200">TRANSFER messages: 0 received (expected: at least 1)</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Admin Tab -->
+        <div id="adminTab" class="tab-content hidden">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Server Configuration -->
+                <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
+                    <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                        <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Server Configuration</h2>
+                    </div>
+                    <div class="p-6 space-y-4">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
+                                <div class="text-sm text-gray-500 dark:text-gray-400">TCP Port</div>
+                                <div class="text-lg font-semibold text-gray-900 dark:text-white">8080</div>
+                            </div>
+                            <div class="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
+                                <div class="text-sm text-gray-500 dark:text-gray-400">HTTP Port</div>
+                                <div class="text-lg font-semibold text-gray-900 dark:text-white">9090</div>
+                            </div>
+                        </div>
+
+                        <div class="space-y-3">
+                            <label class="flex items-center justify-between">
+                                <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Recording Mode</span>
+                                <input type="checkbox" id="adminRecordingToggle" class="rounded border-gray-300 text-primary-600 focus:ring-primary-500">
+                            </label>
+                        </div>
+
+                        <button class="w-full px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors duration-200">
+                            <i class="fas fa-save mr-2"></i>Save Configuration
+                        </button>
+                    </div>
+                </div>
+
+                <!-- System Metrics -->
+                <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
+                    <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                        <h2 class="text-lg font-semibold text-gray-900 dark:text-white">System Metrics</h2>
+                    </div>
+                    <div class="p-6 space-y-4">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg border border-green-200 dark:border-green-800">
+                                <div class="text-sm text-green-600 dark:text-green-400">Total Requests</div>
+                                <div class="text-2xl font-bold text-green-700 dark:text-green-300" id="totalRequests">0</div>
+                            </div>
+                            <div class="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
+                                <div class="text-sm text-blue-600 dark:text-blue-400">Matched Requests</div>
+                                <div class="text-2xl font-bold text-blue-700 dark:text-blue-300" id="matchedRequests">0</div>
+                            </div>
+                            <div class="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg border border-yellow-200 dark:border-yellow-800">
+                                <div class="text-sm text-yellow-600 dark:text-yellow-400">Unmatched Requests</div>
+                                <div class="text-2xl font-bold text-yellow-700 dark:text-yellow-300" id="unmatchedRequests">0</div>
+                            </div>
+                            <div class="bg-purple-50 dark:bg-purple-900/20 p-4 rounded-lg border border-purple-200 dark:border-purple-800">
+                                <div class="text-sm text-purple-600 dark:text-purple-400">Active Connections</div>
+                                <div class="text-2xl font-bold text-purple-700 dark:text-purple-300" id="activeConnections">0</div>
+                            </div>
+                        </div>
+
+                        <div class="space-y-3">
+                            <button class="w-full px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors duration-200">
+                                <i class="fas fa-chart-line mr-2"></i>View Prometheus Metrics
+                            </button>
+                            <button class="w-full px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors duration-200">
+                                <i class="fas fa-download mr-2"></i>Export Request Log
+                            </button>
+                            <button class="w-full px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors duration-200">
+                                <i class="fas fa-power-off mr-2"></i>Restart Server
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Theme toggle
+        document.getElementById('themeToggle').addEventListener('click', () => {
+            document.documentElement.classList.toggle('dark');
+        });
+
+        // Tab navigation
+        document.querySelectorAll('.nav-tab').forEach(tab => {
+            tab.addEventListener('click', (e) => {
+                const tabName = e.target.closest('.nav-tab').dataset.tab;
+                switchTab(tabName);
+            });
+        });
+
+        function switchTab(tabName) {
+            // Update nav
+            document.querySelectorAll('.nav-tab').forEach(tab => {
+                tab.classList.remove('active', 'border-primary-500', 'text-primary-600', 'dark:text-primary-400');
+                tab.classList.add('border-transparent', 'text-gray-500', 'hover:text-gray-700', 'dark:text-gray-400', 'dark:hover:text-gray-200');
+            });
+            const activeTab = document.querySelector(`[data-tab="${tabName}"]`);
+            activeTab.classList.add('active', 'border-primary-500', 'text-primary-600', 'dark:text-primary-400');
+            activeTab.classList.remove('border-transparent', 'text-gray-500', 'hover:text-gray-700', 'dark:text-gray-400', 'dark:hover:text-gray-200');
+
+            // Update content
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.add('hidden');
+            });
+            document.getElementById(`${tabName}Tab`).classList.remove('hidden');
+        }
+
+        // Initialize
+        loadMappings();
+        loadScenarios();
+        loadRequests();
+        loadVerification();
+        loadAdminMetrics();
+
+        // Recording controls
+        document.getElementById('recordingToggle')?.addEventListener('click', toggleRecording);
+        document.getElementById('adminRecordingToggle')?.addEventListener('click', toggleRecording);
+
+        // Scenario controls
+        document.querySelector('[data-action="start-payment-flow"]')?.addEventListener('click', () => startScenario('payment-flow'));
+        document.querySelector('[data-action="start-auth-sequence"]')?.addEventListener('click', () => startScenario('auth-sequence'));
+        document.querySelector('[data-action="reset-all-scenarios"]')?.addEventListener('click', resetAllScenarios);
+
+        // Admin controls
+        document.getElementById('exportRequestsBtn')?.addEventListener('click', exportRequests);
+        document.getElementById('resetAllBtn')?.addEventListener('click', resetAllData);
+
+        async function toggleRecording() {
+            try {
+                const status = await fetch('/api/enterprise/recording/status').then(r => r.json());
+                const endpoint = status.recording ? '/api/enterprise/recording/stop' : '/api/enterprise/recording/start';
+                const result = await fetch(endpoint, { method: 'POST' }).then(r => r.json());
+                updateRecordingUI(result.recording);
+                showNotification(`Recording ${result.recording ? 'started' : 'stopped'}`, 'success');
+            } catch (error) {
+                showNotification('Failed to toggle recording', 'error');
+            }
+        }
+
+        function updateRecordingUI(recording) {
+            const headerBtn = document.getElementById('recordingToggle');
+            const adminBtn = document.getElementById('adminRecordingToggle');
+            const indicator = document.getElementById('recordingIndicator');
+
+            if (headerBtn) {
+                headerBtn.innerHTML = recording ? '<i class="fas fa-stop"></i><span>Stop</span>' : '<i class="fas fa-record-vinyl"></i><span>Record</span>';
+                headerBtn.className = recording ? 'px-3 py-1.5 bg-gray-500 hover:bg-gray-600 text-white text-sm rounded-lg transition-colors duration-200 flex items-center space-x-1' : 'px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white text-sm rounded-lg transition-colors duration-200 flex items-center space-x-1';
+            }
+            if (adminBtn) {
+                adminBtn.innerHTML = recording ? '<i class="fas fa-stop mr-2"></i>Stop' : '<i class="fas fa-record-vinyl mr-2"></i>Start';
+                adminBtn.className = recording ? 'px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white text-sm rounded-lg transition-colors duration-200' : 'px-4 py-2 bg-red-500 hover:bg-red-600 text-white text-sm rounded-lg transition-colors duration-200';
+            }
+            if (indicator) {
+                indicator.classList.toggle('hidden', !recording);
+            }
+        }
+
+        async function startScenario(scenarioName) {
+            try {
+                await fetch(`/api/enterprise/scenarios/${scenarioName}/start`, { method: 'POST' });
+                loadScenarios();
+                showNotification(`Scenario ${scenarioName} started`, 'success');
+            } catch (error) {
+                showNotification('Failed to start scenario', 'error');
+            }
+        }
+
+        async function resetAllScenarios() {
+            if (!confirm('Reset all scenarios?')) return;
+            try {
+                await fetch('/api/enterprise/scenarios/reset-all', { method: 'POST' });
+                loadScenarios();
+                showNotification('All scenarios reset', 'success');
+            } catch (error) {
+                showNotification('Failed to reset scenarios', 'error');
+            }
+        }
+
+        async function loadVerification() {
+            try {
+                const results = await fetch('/api/enterprise/verification/results').then(r => r.json());
+                displayVerificationResults(results);
+            } catch (error) {
+                console.error('Failed to load verification:', error);
+            }
+        }
+
+        function displayVerificationResults(results) {
+            const container = document.querySelector('#verificationTab .space-y-4');
+            if (!container || results.length === 0) return;
+
+            container.innerHTML = results.map(result => `
+                <div class="${result.passed ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800' : 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800'} rounded-lg p-4">
+                    <div class="flex items-center">
+                        <i class="fas ${result.passed ? 'fa-check-circle text-green-500' : 'fa-times-circle text-red-500'} mr-3"></i>
+                        <span class="${result.passed ? 'text-green-800 dark:text-green-200' : 'text-red-800 dark:text-red-200'}">${result.description}</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function loadAdminMetrics() {
+            try {
+                const requests = await fetch('/api/requests').then(r => r.json());
+                const matched = requests.filter(r => r.matched).length;
+                const unmatched = requests.length - matched;
+
+                document.getElementById('totalRequests').textContent = requests.length;
+                document.getElementById('matchedRequests').textContent = matched;
+                document.getElementById('unmatchedRequests').textContent = unmatched;
+                document.getElementById('activeConnections').textContent = '1'; // Placeholder
+            } catch (error) {
+                console.error('Failed to load admin metrics:', error);
+            }
+        }
+
+        async function exportRequests() {
+            try {
+                const requests = await fetch('/api/requests').then(r => r.json());
+                const dataStr = JSON.stringify(requests, null, 2);
+                const dataBlob = new Blob([dataStr], {type: 'application/json'});
+                const url = URL.createObjectURL(dataBlob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `tcp-requests-${new Date().toISOString().split('T')[0]}.json`;
+                link.click();
+                URL.revokeObjectURL(url);
+                showNotification('Requests exported', 'success');
+            } catch (error) {
+                showNotification('Failed to export requests', 'error');
+            }
+        }
+
+        async function resetAllData() {
+            if (!confirm('Reset all data? This will clear all requests and reset scenarios.')) return;
+            try {
+                await fetch('/api/requests', { method: 'DELETE' });
+                await fetch('/api/enterprise/scenarios/reset-all', { method: 'POST' });
+                loadRequests();
+                loadScenarios();
+                loadAdminMetrics();
+                showNotification('All data reset', 'success');
+            } catch (error) {
+                showNotification('Failed to reset data', 'error');
+            }
+        }
+
+        // Mapping form handler
+        document.getElementById('mappingForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await saveMappingForm();
+        });
+
+        document.getElementById('clearMappingBtn').addEventListener('click', () => {
+            clearMappingForm();
+        });
+
+        // Test form handler
+        document.getElementById('testForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await sendTestMessage();
+        });
+
+        // Request search and filter
+        document.getElementById('requestSearch').addEventListener('input', filterRequests);
+        document.getElementById('requestFilter').addEventListener('change', filterRequests);
+
+        // Clear buttons
+        document.getElementById('clearRequestsBtn').addEventListener('click', clearRequests);
+        document.getElementById('clearTestResults').addEventListener('click', () => {
+            document.getElementById('testResults').innerHTML = `
+                <div class="text-gray-500 dark:text-gray-400 text-center py-8">
+                    <i class="fas fa-vial text-4xl mb-4"></i>
+                    <p>No test results yet. Send a test message to see results here.</p>
+                </div>
+            `;
+        });
+
+        async function saveMappingForm() {
+            const formData = {
+                pattern: document.getElementById('mappingPattern').value,
+                response: document.getElementById('mappingResponse').value,
+                description: 'Custom mapping',
+                scenarioName: document.getElementById('mappingScenario').value,
+                requiredState: document.getElementById('mappingRequiredState').value,
+                newState: document.getElementById('mappingNewState').value,
+                priority: parseInt(document.getElementById('mappingPriority').value)
+            };
+
+            try {
+                const response = await fetch('/api/ui/mappings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(formData)
+                });
+
+                if (response.ok) {
+                    clearMappingForm();
+                    loadMappings();
+                    showNotification('Mapping saved successfully', 'success');
+                } else {
+                    const error = await response.json();
+                    showNotification(error.error || 'Failed to save mapping', 'error');
+                }
+            } catch (error) {
+                showNotification('Failed to save mapping: ' + error.message, 'error');
+            }
+        }
+
+        function clearMappingForm() {
+            document.getElementById('mappingPattern').value = '';
+            document.getElementById('mappingResponse').value = '';
+            document.getElementById('mappingScenario').value = '';
+            document.getElementById('mappingRequiredState').value = '';
+            document.getElementById('mappingNewState').value = '';
+            document.getElementById('mappingPriority').value = '1';
+        }
+
+        async function deleteMapping(id) {
+            if (!confirm('Are you sure you want to delete this mapping?')) return;
+
+            try {
+                const response = await fetch(`/api/ui/mappings/${id}`, { method: 'DELETE' });
+                if (response.ok) {
+                    loadMappings();
+                    showNotification('Mapping deleted successfully', 'success');
+                }
+            } catch (error) {
+                showNotification('Failed to delete mapping', 'error');
+            }
+        }
+
+        function showNotification(message, type) {
+            const notification = document.createElement('div');
+            notification.className = `fixed top-4 right-4 z-50 px-4 py-2 rounded-lg text-white ${
+                type === 'success' ? 'bg-green-500' : 'bg-red-500'
+            } transition-opacity duration-300`;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+
+            setTimeout(() => {
+                notification.style.opacity = '0';
+                setTimeout(() => document.body.removeChild(notification), 300);
+            }, 3000);
+        }
+
+        async function sendTestMessage() {
+            const transport = document.getElementById('testTransport').value;
+            const protocol = document.getElementById('testProtocol').value;
+            const host = document.getElementById('testHost').value;
+            const port = document.getElementById('testPort').value;
+            const format = document.getElementById('testFormat').value;
+            const message = document.getElementById('testMessage').value;
+            const ssl = document.getElementById('testSsl').checked;
+            const verifySsl = document.getElementById('testVerifySsl').checked;
+
+            const testResults = document.getElementById('testResults');
+            const timestamp = new Date().toLocaleTimeString();
+
+            // Add loading indicator
+            const loadingDiv = document.createElement('div');
+            loadingDiv.className = 'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4';
+            loadingDiv.innerHTML = `
+                <div class="flex items-center space-x-3">
+                    <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                    <span class="text-blue-800 dark:text-blue-200">Sending test message...</span>
+                </div>
+            `;
+            testResults.insertBefore(loadingDiv, testResults.firstChild);
+
+            try {
+                const response = await fetch('/api/test', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        transport, protocol, host, port: parseInt(port),
+                        format, message, ssl, verifySsl
+                    })
+                });
+
+                const result = await response.json();
+                testResults.removeChild(loadingDiv);
+
+                const resultDiv = document.createElement('div');
+                resultDiv.className = result.success ?
+                    'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4' :
+                    'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4';
+
+                resultDiv.innerHTML = `
+                    <div class="flex justify-between items-start mb-2">
+                        <span class="text-sm font-medium ${result.success ? 'text-green-800 dark:text-green-200' : 'text-red-800 dark:text-red-200'}">
+                            ${result.success ? 'Success' : 'Error'} - ${timestamp}
+                        </span>
+                        <span class="text-xs ${result.success ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">
+                            ${result.duration || 0}ms
+                        </span>
+                    </div>
+                    <div class="text-sm ${result.success ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'} mb-2">
+                        <strong>Sent:</strong> ${message}
+                    </div>
+                    <div class="text-sm ${result.success ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}">
+                        <strong>Response:</strong> ${result.response || result.error || 'No response'}
+                    </div>
+                `;
+
+                testResults.insertBefore(resultDiv, testResults.firstChild);
+
+                // Remove empty state if it exists
+                const emptyState = testResults.querySelector('.text-center');
+                if (emptyState) emptyState.remove();
+
+            } catch (error) {
+                testResults.removeChild(loadingDiv);
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4';
+                errorDiv.innerHTML = `
+                    <div class="text-sm font-medium text-red-800 dark:text-red-200 mb-2">
+                        Connection Error - ${timestamp}
+                    </div>
+                    <div class="text-sm text-red-700 dark:text-red-300">
+                        ${error.message}
+                    </div>
+                `;
+                testResults.insertBefore(errorDiv, testResults.firstChild);
+            }
+        }
+
+        async function loadRequests() {
+            try {
+                const response = await fetch('/api/requests');
+                const requests = await response.json();
+                displayRequests(requests);
+                updateRequestCount(requests.length);
+            } catch (error) {
+                console.error('Failed to load requests:', error);
+            }
+        }
+
+        function displayRequests(requests) {
+            const tbody = document.getElementById('requestsTableBody');
+            if (requests.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="px-6 py-4 text-center text-gray-500 dark:text-gray-400">
+                            No requests recorded yet
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = requests.map(req => `
+                <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                        ${new Date(req.timestamp).toLocaleTimeString()}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                        ${req.clientAddress || 'Unknown'}
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-900 dark:text-white">
+                        <div class="max-w-xs truncate" title="${req.message}">${req.message}</div>
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-900 dark:text-white">
+                        <div class="max-w-xs truncate" title="${req.response}">${req.response}</div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                            req.mappingId ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' :
+                            'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                        }">
+                            ${req.mappingId ? 'Matched' : 'Unmatched'}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                        ${req.behavior || 'Unknown'}
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function filterRequests() {
+            const searchTerm = document.getElementById('requestSearch').value.toLowerCase();
+            const filter = document.getElementById('requestFilter').value;
+            const rows = document.querySelectorAll('#requestsTableBody tr');
+
+            rows.forEach(row => {
+                const cells = row.querySelectorAll('td');
+                if (cells.length === 1) return; // Skip empty state row
+
+                const message = cells[2].textContent.toLowerCase();
+                const response = cells[3].textContent.toLowerCase();
+                const status = cells[4].textContent.toLowerCase();
+
+                const matchesSearch = message.includes(searchTerm) || response.includes(searchTerm);
+                const matchesFilter = filter === 'all' ||
+                    (filter === 'matched' && status.includes('matched')) ||
+                    (filter === 'unmatched' && status.includes('unmatched'));
+
+                row.style.display = matchesSearch && matchesFilter ? '' : 'none';
+            });
+        }
+
+        async function clearRequests() {
+            try {
+                await fetch('/api/requests', { method: 'DELETE' });
+                loadRequests();
+            } catch (error) {
+                console.error('Failed to clear requests:', error);
+            }
+        }
+
+        function updateRequestCount(count) {
+            document.getElementById('requestCount').textContent = `${count} requests`;
+        }
+
+        // Auto-refresh requests every 5 seconds
+        setInterval(loadRequests, 5000);
+
+        function loadMappings() {
+            fetch('/api/ui/mappings')
+                .then(response => response.json())
+                .then(mappings => {
+                    window.currentMappings = mappings; // Store for editing
+                    const mappingsList = document.getElementById('mappingsList');
+                    if (mappings.length === 0) {
+                        mappingsList.innerHTML = `
+                            <div class="text-center py-8 text-gray-500 dark:text-gray-400">
+                                <i class="fas fa-route text-4xl mb-4"></i>
+                                <p>No mappings configured yet</p>
+                                <p class="text-sm">Create your first mapping using the form</p>
+                            </div>
+                        `;
+                        return;
+                    }
+
+                    mappingsList.innerHTML = mappings.map(mapping => `
+                        <div class="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                            <div class="flex justify-between items-start">
+                                <div class="flex-1">
+                                    <div class="flex items-center space-x-2 mb-2">
+                                        <code class="text-sm bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">${mapping.pattern}</code>
+                                        <span class="text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-2 py-1 rounded-full">Priority: ${mapping.priority}</span>
+                                        ${mapping.scenarioName ? `<span class="text-xs bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 px-2 py-1 rounded-full">${mapping.scenarioName}</span>` : ''}
+                                    </div>
+                                    <p class="text-sm text-gray-600 dark:text-gray-400 mb-2">${mapping.description}</p>
+                                    <div class="text-xs text-gray-500 dark:text-gray-500">Matches: ${mapping.matchCount}</div>
+                                    <div class="text-xs text-gray-400 dark:text-gray-600 mt-1 font-mono">${mapping.response.substring(0, 50)}${mapping.response.length > 50 ? '...' : ''}</div>
+                                </div>
+                                <div class="flex space-x-2">
+                                    <button onclick="editMapping('${mapping.id}')" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button onclick="deleteMapping('${mapping.id}')" class="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('');
+                })
+                .catch(error => {
+                    console.error('Failed to load mappings:', error);
+                    document.getElementById('mappingsList').innerHTML = `
+                        <div class="text-center py-8 text-red-500">
+                            <i class="fas fa-exclamation-triangle text-4xl mb-4"></i>
+                            <p>Failed to load mappings</p>
+                        </div>
+                    `;
+                });
+        }
+
+        function loadScenarios() {
+            fetch('/api/enterprise/scenarios')
+                .then(response => response.json())
+                .then(scenarios => {
+                    const scenariosList = document.getElementById('scenariosList');
+                    const scenarioKeys = Object.keys(scenarios);
+
+                    if (scenarioKeys.length === 0) {
+                        scenariosList.innerHTML = `
+                            <div class="text-center py-8 text-gray-500 dark:text-gray-400">
+                                <i class="fas fa-sitemap text-4xl mb-4"></i>
+                                <p>No active scenarios</p>
+                                <p class="text-sm">Scenarios will appear here when created</p>
+                            </div>
+                        `;
+                        return;
+                    }
+
+                    scenariosList.innerHTML = scenarioKeys.map(scenarioName => {
+                        const scenario = scenarios[scenarioName];
+                        return `
+                            <div class="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                                <div class="flex justify-between items-center mb-2">
+                                    <h4 class="font-medium text-gray-900 dark:text-white">${scenarioName}</h4>
+                                    <span class="text-xs bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 px-2 py-1 rounded-full">Active</span>
+                                </div>
+                                <div class="text-sm text-gray-600 dark:text-gray-400 mb-2">Current State: ${scenario.currentState || 'initial'}</div>
+                                <div class="text-xs text-gray-500 dark:text-gray-500">Steps: ${scenario.stepCount || 0} | Variables: ${Object.keys(scenario.variables || {}).length}</div>
+                                <div class="mt-3 flex space-x-2">
+                                    <button onclick="resetScenario('${scenarioName}')" class="px-2 py-1 text-xs bg-orange-500 hover:bg-orange-600 text-white rounded">
+                                        Reset
+                                    </button>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                })
+                .catch(error => {
+                    console.error('Failed to load scenarios:', error);
+                });
+        }
+
+        async function resetScenario(scenarioName) {
+            try {
+                await fetch(`/api/enterprise/scenarios/${scenarioName}/reset`, { method: 'POST' });
+                loadScenarios();
+                showNotification(`Scenario ${scenarioName} reset`, 'success');
+            } catch (error) {
+                showNotification('Failed to reset scenario', 'error');
+            }
+        }
+
+        window.deleteMapping = deleteMapping;
+        window.resetScenario = resetScenario;
+        window.editMapping = editMapping;
+
+        function editMapping(id) {
+            const mappings = window.currentMappings || [];
+            const mapping = mappings.find(m => m.id === id);
+            if (!mapping) return;
+
+            document.getElementById('mappingPattern').value = mapping.pattern;
+            document.getElementById('mappingResponse').value = mapping.response;
+            document.getElementById('mappingScenario').value = mapping.scenarioName || '';
+            document.getElementById('mappingRequiredState').value = mapping.requiredState || '';
+            document.getElementById('mappingNewState').value = mapping.newState || '';
+            document.getElementById('mappingPriority').value = mapping.priority || 1;
+
+            // Store the ID for updating
+            document.getElementById('mappingForm').dataset.editingId = id;
+            showNotification('Mapping loaded for editing', 'success');
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+serviceId: payment-gateway
+callId: ProcessTransaction
+protocol: TCP
+behavior: REQUEST_RESPONSE
+transport: socket
+bodyTemplate: |
+  {
+    "mti": "{{ payloadAsJson.mti }}",
+    "transactionId": "{{ payloadAsJson.transactionId }}",
+    "amount": "{{ payloadAsJson.amount }}",
+    "pan": "{{ payloadAsJson.pan }}",
+    "timestamp": "{{ payloadAsJson.timestamp }}",
+    "merchantId": "{{ payloadAsJson.merchantId }}",
+    "processingCode": "000000"
+  }
+headersTemplate:
+  x-ph-message-type: "ISO8583_AUTH"
+  x-ph-transaction-id: "{{ payloadAsJson.transactionId }}"
