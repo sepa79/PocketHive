@@ -82,6 +82,13 @@
       <scope>test</scope>
     </dependency>
     <dependency>
+      <groupId>io.pockethive</groupId>
+      <artifactId>control-plane-core</artifactId>
+      <version>${project.version}</version>
+      <classifier>tests</classifier>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
       <groupId>io.cucumber</groupId>
       <artifactId>cucumber-java</artifactId>
       <version>7.14.0</version>

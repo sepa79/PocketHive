@@ -94,8 +94,8 @@ References:
 
 ### 6) Manual verification checklist
 
-- [ ] Start a swarm; verify SC emits `status-delta` watermark and `status-full` on request
-- [ ] Inject broken control message; verify it is rejected without requeue (no storm)
+- [x] Start a swarm; verify SC emits `status-delta` watermark and `status-full` on request
+- [x] Inject broken control message; verify it is rejected without requeue (no storm)
 - [ ] UI-v2 open with multiple instances; verify no per-worker subscription fan-out and stable behavior
 
 ### 7) SSOT for control-plane wire format (serializer + publisher)

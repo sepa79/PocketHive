@@ -2,13 +2,9 @@ package io.pockethive.e2e.contracts;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.networknt.schema.JsonSchema;
-import com.networknt.schema.JsonSchemaFactory;
-import com.networknt.schema.SpecVersion;
 import com.networknt.schema.ValidationMessage;
+import io.pockethive.controlplane.schema.ControlEventsSchemaValidator;
 import io.pockethive.e2e.contracts.ControlPlaneMessageCapture.CapturedMessage;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -20,7 +16,6 @@ import org.junit.jupiter.api.Assertions;
 public final class ControlEventsContractAudit {
 
   private static final ObjectMapper MAPPER = new ObjectMapper().findAndRegisterModules();
-  private static final JsonSchema SCHEMA = loadSchema();
   private static final Set<String> LIFECYCLE_SIGNALS = Set.of(
       "swarm-template",
       "swarm-plan",
@@ -55,7 +50,7 @@ public final class ControlEventsContractAudit {
       String json = message.payloadUtf8();
       try {
         JsonNode node = MAPPER.readTree(json);
-        Set<ValidationMessage> errors = SCHEMA.validate(node);
+        Set<ValidationMessage> errors = ControlEventsSchemaValidator.validate(node);
         if (!errors.isEmpty()) {
           failures.add("schema invalid rk=" + routingKey + " errors=" + errors);
           continue;
@@ -131,32 +126,6 @@ public final class ControlEventsContractAudit {
             + " reason=swarm-controller status-full missing context.workers payload=" + snippet(node.toString()));
       }
     }
-  }
-
-  private static JsonSchema loadSchema() {
-    Path schemaPath = locateRepoSchema();
-    try {
-      JsonNode schemaNode = MAPPER.readTree(schemaPath.toFile());
-      JsonSchemaFactory factory = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012);
-      return factory.getSchema(schemaNode);
-    } catch (Exception e) {
-      throw new IllegalStateException("Failed to load schema from " + schemaPath, e);
-    }
-  }
-
-  private static Path locateRepoSchema() {
-    String root = System.getProperty("maven.multiModuleProjectDirectory");
-    Path base = (root != null && !root.isBlank())
-        ? Path.of(root)
-        : Path.of("").toAbsolutePath();
-    for (int i = 0; i < 10 && base != null; i++) {
-      Path candidate = base.resolve("docs").resolve("spec").resolve("control-events.schema.json");
-      if (Files.exists(candidate)) {
-        return candidate;
-      }
-      base = base.getParent();
-    }
-    throw new IllegalStateException("Unable to locate docs/spec/control-events.schema.json from current directory");
   }
 
   private static String snippet(String payload) {

@@ -433,6 +433,38 @@ Pins a swarm journal run into an archive so it can be kept beyond time-based ret
 }
 ```
 
+## 5. Control-plane sync (debug-only)
+These endpoints are intended for local diagnostics and should be secured behind admin access or removed before exposing the orchestrator publicly.
+
+### 5.1 Refresh control-plane status
+`POST /api/control-plane/refresh`
+
+**Behavior**
+- Triggers a status-full broadcast from the orchestrator.
+- Publishes status-request signals for known swarms (or all controllers if none are registered).
+- Throttled if called more often than once every 2 seconds.
+
+**Response (202)**
+```json
+{
+  "mode": "REFRESH",
+  "correlationId": "…",
+  "idempotencyKey": "…",
+  "signalsPublished": 3,
+  "throttled": false,
+  "issuedAt": "2025-01-01T12:00:00Z"
+}
+```
+
+### 5.2 Reset control-plane state (debug-only)
+`POST /api/control-plane/reset`
+
+**Behavior**
+- Clears the orchestrator registry before issuing the same sync flow as refresh.
+- Intended for local recovery/testing only.
+
+**Response (202)** — same shape as refresh, with `mode: "RESET"`.
+
 **Success event payload (example)**
 ```json
 {
