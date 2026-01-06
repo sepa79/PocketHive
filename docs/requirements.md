@@ -7,8 +7,8 @@ PocketHive is a portable transaction swarm: a set of small, composable services 
 - Provide a Docker Compose environment orchestrating RabbitMQ, UI, and services.
 - Components communicate via swarm-scoped workload exchanges with queues named `ph.work.<swarmId>.<queueName>`.
 - Services read a `POCKETHIVE_CONTROL_PLANE_SWARM_ID` env (default `default`) to derive these names.
-- Control-plane messaging flows through the `ph.control` exchange using swarm-aware routing keys: `sig.<signal>.<swarm>.<role>.<instance>` for commands and `ev.<event>.<swarm>.<role>.<instance>` for confirmations, status, metrics, and alerts.
-- Each service exposes its presence and health through periodic `status-delta` events and responds to `status-request` signals.
+- Control-plane messaging flows through the `ph.control` exchange using the routing families defined in `docs/ARCHITECTURE.md` and `docs/spec/asyncapi.yaml` (signals `signal.*`, outcomes `event.outcome.*`, metrics `event.metric.*`, alerts `event.alert.alert.*`).
+- Each service exposes its presence and health through periodic `event.metric.status-delta` events and responds to `signal.status-request`.
 - The UI connects to RabbitMQ over same-origin Web-STOMP at `/ws`.
 - Services propagate an `x-ph-trace` header to carry trace IDs and hop timing between components.
 

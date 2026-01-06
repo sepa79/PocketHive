@@ -177,6 +177,11 @@ public class SwarmSignalListener {
             origin = root.path("origin").asText(null);
             correlationId = root.path("correlationId").asText(null);
             idempotencyKey = root.path("idempotencyKey").asText(null);
+            JsonNode scopeNode = root.path("scope");
+            String scopeSwarm = scopeNode.path("swarmId").asText(null);
+            String scopeRole = scopeNode.path("role").asText(null);
+            String scopeInstance = scopeNode.path("instance").asText(null);
+            warnMissingScopeFields("outcome", routingKey, body, scopeSwarm, scopeRole, scopeInstance);
         } catch (Exception e) {
             log.debug("Failed to parse outcome payload; rk={} payload snippet={}", routingKey, snippet(body), e);
         }
@@ -732,6 +737,28 @@ public class SwarmSignalListener {
 
     private void sendControl(String routingKey, String payload) {
         sendControl(routingKey, payload, null);
+    }
+
+    private void warnMissingScopeFields(String label,
+                                        String routingKey,
+                                        String body,
+                                        String swarmId,
+                                        String role,
+                                        String instance) {
+        java.util.List<String> missing = new java.util.ArrayList<>();
+        if (swarmId == null || swarmId.isBlank()) {
+            missing.add("swarmId");
+        }
+        if (role == null || role.isBlank()) {
+            missing.add("role");
+        }
+        if (instance == null || instance.isBlank()) {
+            missing.add("instance");
+        }
+        if (!missing.isEmpty()) {
+            log.warn("Received {} payload with missing scope fields {}; rk={} payload snippet={}",
+                label, missing, routingKey, snippet(body));
+        }
     }
 
     private static String snippet(String payload) {

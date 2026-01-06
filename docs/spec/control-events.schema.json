@@ -56,7 +56,7 @@
         "correlationId": { "$ref": "#/$defs/NullableNonEmptyString" },
         "idempotencyKey": { "$ref": "#/$defs/NullableNonEmptyString" },
         "data": {
-          "type": ["object", "null"],
+          "type": "object",
           "additionalProperties": true
         }
       }
