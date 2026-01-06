@@ -42,6 +42,14 @@ fi
 echo "==> Ensuring current user (${USER}) is in the docker group"
 sudo usermod -aG docker "${USER}"
 
+echo "==> Verifying Docker socket access for current user"
+if ! docker info >/dev/null 2>&1; then
+  echo "WARNING: Docker socket access is not active yet for ${USER}."
+  echo "To avoid permission errors like 'permission denied while trying to connect to the Docker daemon socket',"
+  echo "run: newgrp docker"
+  echo "If that does not work, log out and back in (or restart WSL)."
+fi
+
 echo "==> Installing Portainer CE (containerized UI)"
 if ! sudo docker volume inspect portainer_data >/dev/null 2>&1; then
   sudo docker volume create portainer_data >/dev/null
