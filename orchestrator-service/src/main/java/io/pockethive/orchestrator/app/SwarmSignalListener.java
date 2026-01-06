@@ -469,7 +469,15 @@ public class SwarmSignalListener {
         if (status == null) {
             return;
         }
-        registry.updateStatus(swarmId, status);
+        registry.find(swarmId).ifPresent(swarm -> {
+            SwarmStatus current = swarm.getStatus();
+            if (current == status || current.canTransitionTo(status)) {
+                registry.updateStatus(swarmId, status);
+            } else {
+                log.warn("illegal status transition from outcome context for swarm {}: {} -> {} (ignoring)",
+                    swarmId, current, status);
+            }
+        });
     }
 
     private SwarmStatus parseSwarmStatus(String status) {
