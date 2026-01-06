@@ -53,6 +53,7 @@ function outcomeEnvelope(input: {
   instance: string
   type: string
   correlationId?: string
+  idempotencyKey?: string
   data?: Record<string, unknown>
 }) {
   const now = new Date().toISOString()
@@ -64,8 +65,8 @@ function outcomeEnvelope(input: {
     origin: 'swarm-controller',
     scope: { swarmId: input.swarmId, role: input.role, instance: input.instance },
     correlationId: input.correlationId ?? 'corr-1',
-    idempotencyKey: null,
-    data: input.data ?? { status: 'success' },
+    idempotencyKey: input.idempotencyKey ?? 'idem-1',
+    data: input.data ?? { status: 'Ready' },
   }
 }
 
@@ -508,6 +509,7 @@ describe('swarm lifecycle', () => {
           instance: 'inst',
           type: 'swarm-remove',
           correlationId: 'e1',
+          data: { status: 'Removed' },
         }),
       ),
     })
@@ -529,6 +531,7 @@ describe('swarm lifecycle', () => {
           instance: 'inst',
           type: 'swarm-remove',
           correlationId: 'e2',
+          data: { status: 'Removed' },
         }),
       ),
     })

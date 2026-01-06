@@ -80,15 +80,16 @@ function applyComponentError(component: Component, error: { at: number; code?: s
 
 function recordAlertForComponent(parsed: unknown) {
   if (!isAlertEventEnvelope(parsed)) return
-  const instance = parsed.scope.instance?.trim()
+  const instance = parsed.scope.instance.trim()
   if (!instance) return
+  if (instance.toUpperCase() === 'ALL') return
   const at = Date.now()
   const error = {
     at,
     code: parsed.data.code,
     message: parsed.data.message,
-    swarmId: parsed.scope.swarmId?.trim(),
-    role: parsed.scope.role?.trim(),
+    swarmId: parsed.scope.swarmId.trim(),
+    role: parsed.scope.role.trim(),
   }
   componentErrors[instance] = error
   const component = components[instance]
@@ -136,14 +137,21 @@ function parseIsoTimestamp(value: unknown): number | undefined {
 function handleLifecycleOutcome(raw: unknown): boolean {
   if (!isCommandOutcomeEnvelope(raw)) return false
   if (raw.type !== 'swarm-remove' && raw.type !== 'swarm-create') return false
-  const swarmId = raw.scope.swarmId?.trim()
+  const swarmId = raw.scope.swarmId.trim()
   if (!swarmId) return false
+  if (swarmId.toUpperCase() === 'ALL') return false
+  const status = getString(raw.data.status)
+  if (!status) return false
+  const normalizedStatus = status.toUpperCase()
 
   if (raw.type === 'swarm-remove') {
+    if (normalizedStatus !== 'REMOVED') return false
     dropSwarmComponents(swarmId)
     notifyComponentListeners()
     emitTopology()
   }
+
+  if (raw.type === 'swarm-create' && normalizedStatus !== 'READY') return false
 
   if (swarmMetadataRefreshHandler) {
     swarmMetadataRefreshHandler(swarmId)
@@ -336,7 +344,7 @@ export function setClient(newClient: Client | null, destination = controlDestina
         const evt = raw
         const eventQueueStats = extractQueueStats(evt)
         const id = evt.scope.instance
-        const swarmId = evt.scope.swarmId?.trim() ?? ''
+        const swarmId = evt.scope.swarmId.trim()
         if (!swarmId) return
         if (!id) return
         const existing = components[id]
@@ -344,13 +352,13 @@ export function setClient(newClient: Client | null, destination = controlDestina
           existing || {
             id,
             name: id,
-            role: evt.scope.role ?? 'unknown',
+            role: evt.scope.role,
             swarmId,
             lastHeartbeat: 0,
             queues: [],
           }
         comp.name = id
-        comp.role = evt.scope.role ?? comp.role
+        comp.role = evt.scope.role
         comp.swarmId = swarmId
         comp.version = evt.version
         comp.lastHeartbeat = parseIsoTimestamp(evt.timestamp) ?? Date.now()
@@ -363,7 +371,7 @@ export function setClient(newClient: Client | null, destination = controlDestina
         const data = evt.data
         if (data && typeof data === 'object') {
           const dataRecord = data as Record<string, unknown>
-          const normalizedRole = (evt.scope.role ?? '').toLowerCase()
+          const normalizedRole = evt.scope.role.toLowerCase()
           const ctx = isRecord(dataRecord['context'])
             ? (dataRecord['context'] as Record<string, unknown>)
             : undefined

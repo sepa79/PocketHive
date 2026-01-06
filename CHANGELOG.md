@@ -3,9 +3,17 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
-Timestamp: 2026-01-14T11:17:56Z
+Timestamp: 2026-01-14T12:01:27Z
 
 - No unreleased changes yet.
+
+## [0.14.20] - 2026-01-14
+Timestamp: 2026-01-14T12:01:27Z
+
+- Control-plane: canonicalize envelope/schema validation, status-full handshake, alert routing, and NotReady outcome handling; add contract E2E coverage.
+- UI v2: introduce shell scaffold, control-plane tooling (gateway + schema registry), wire-log view/refresh, and toolbar/navigation polish.
+- Scenario editor: add custom YAML editor and keep edits synced with scenario files.
+- Docs/tooling: add template capabilities contract and align control-plane migration docs; archive legacy scenario builder artifacts.
 
 ## [0.14.19] - 2026-01-14
 Timestamp: 2026-01-14T11:17:56Z

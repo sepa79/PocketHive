@@ -198,7 +198,7 @@ Pins a swarm journal run into an archive so it can be kept beyond time-based ret
 
 **Behavior**
 - Launch Controller runtime for `{swarmId}` (no AMQP signal).
-- On controller handshake `event.outcome.swarm-controller.<swarmId>.swarm-controller.<controllerInstance>`, emit **`event.outcome.swarm-create.<swarmId>.orchestrator.<orchestratorInstance>`** (echo ids).
+- After the first controller `event.metric.status-full.<swarmId>.swarm-controller.<controllerInstance>`, emit **`event.outcome.swarm-create.<swarmId>.orchestrator.<orchestratorInstance>`** (echo ids).
 - On failure, emit **`event.outcome.swarm-create.<swarmId>.orchestrator.<orchestratorInstance>`** with `data.status=Failed` and an accompanying `event.alert.alert` if applicable.
 - Requires a `templateId` referencing the scenario template to instantiate.
 

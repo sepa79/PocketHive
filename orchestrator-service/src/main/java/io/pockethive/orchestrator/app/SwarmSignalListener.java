@@ -1,6 +1,7 @@
 package io.pockethive.orchestrator.app;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import io.pockethive.control.CommandState;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.control.ControlScope;
