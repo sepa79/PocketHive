@@ -10,10 +10,12 @@ Timestamp: 2026-01-14T12:01:27Z
 ## [0.14.20] - 2026-01-14
 Timestamp: 2026-01-14T12:01:27Z
 
-- Control-plane: canonicalize envelope/schema validation, status-full handshake, alert routing, and NotReady outcome handling; add contract E2E coverage.
+- Control-plane: align status metrics with canonical envelopes, treat NotReady outcomes as non-fatal, and expose explicit status-full on request.
+- Control-plane hardening: add schema validation, alert routing updates, and contract E2E coverage.
 - UI v2: introduce shell scaffold, control-plane tooling (gateway + schema registry), wire-log view/refresh, and toolbar/navigation polish.
 - Scenario editor: add custom YAML editor and keep edits synced with scenario files.
 - Docs/tooling: add template capabilities contract and align control-plane migration docs; archive legacy scenario builder artifacts.
+- Common cleanup: remove unused helpers (`AsyncApiSchemaValidator`, `ScopeContext`, `TemplatingConfig`, `WorkerSdkTestFixtures`).
 
 ## [0.14.19] - 2026-01-14
 Timestamp: 2026-01-14T11:17:56Z
