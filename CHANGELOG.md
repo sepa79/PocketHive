@@ -14,6 +14,7 @@ Timestamp: 2026-01-06T00:00:00Z
 - Orchestrator status metrics: align status emission with canonical envelope rules (no tps, control-plane-only IO) and expose explicit status-full on request.
 - Hive UI: tighten control-plane envelope parsing to the schema, update status parsing from context, and ignore ALL fan-out instances.
 - Docs/spec: align control-plane docs/AsyncAPI with the status-full handshake and remove legacy swarm-controller outcome references.
+- Common cleanup: removed unused helpers (`AsyncApiSchemaValidator`, `ScopeContext`, `TemplatingConfig`, `WorkerSdkTestFixtures`).
 
 ## [0.14.18] - 2025-12-19
 Timestamp: 2025-12-19T00:00:00Z
