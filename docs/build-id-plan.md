@@ -35,7 +35,7 @@ Goal: introduce a single `POCKETHIVE_BUILD_ID` that is generated once per `build
 
 - In `WorkerControlPlaneRuntime.emitStatus(...)`, add the build id to the status envelope data:
   - Read from env or Spring config (e.g. `pockethive.build-id` resolving to `POCKETHIVE_BUILD_ID`).
-  - Add `builder.data("buildId", buildId)` to `StatusEnvelopeBuilder` so `ev.status-*` events carry it for each worker role/instance.
+  - Add `builder.data("buildId", buildId)` to `StatusEnvelopeBuilder` so `event.metric.status-*` events carry it for each worker role/instance.
 - Optionally expose the same build id in orchestrator / scenario-manager status endpoints or logs:
   - Log on startup: `Starting <service> version X (build=<POCKETHIVE_BUILD_ID>)`.
   - Include it in any service‑level status envelope they emit.

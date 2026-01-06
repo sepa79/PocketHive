@@ -199,7 +199,11 @@ public class SwarmSignalListener {
     }
     try {
       JsonNode node = mapper.readTree(body);
-      String payloadSwarm = node.path("scope").path("swarmId").asText(null);
+      JsonNode scopeNode = node.path("scope");
+      String payloadSwarm = scopeNode.path("swarmId").asText(null);
+      String payloadRole = scopeNode.path("role").asText(null);
+      String payloadInstance = scopeNode.path("instance").asText(null);
+      warnMissingScopeFields("status", routingKey, body, payloadSwarm, payloadRole, payloadInstance);
       if (payloadSwarm != null && !payloadSwarm.isBlank() && !"ALL".equalsIgnoreCase(payloadSwarm)
           && !swarmId.equals(payloadSwarm)) {
         log.debug("Ignoring status payload for swarm {} on routing key {}", payloadSwarm, routingKey);
@@ -296,6 +300,10 @@ public class SwarmSignalListener {
     }
     try {
       AlertMessage alert = mapper.readValue(body, AlertMessage.class);
+      String payloadSwarm = alert != null && alert.scope() != null ? alert.scope().swarmId() : null;
+      String payloadRole = alert != null && alert.scope() != null ? alert.scope().role() : null;
+      String payloadInstance = alert != null && alert.scope() != null ? alert.scope().instance() : null;
+      warnMissingScopeFields("alert", routingKey, body, payloadSwarm, payloadRole, payloadInstance);
       if (alert != null && instanceId.equals(alert.origin())) {
         // Avoid duplicating alerts that the controller itself emitted (they are already journaled as OUT).
         return;
@@ -334,6 +342,28 @@ public class SwarmSignalListener {
     if (!failed) {
       lifecycle.fail(reason);
       log.warn("Config-update error received with no pending lifecycle command. reason={}", reason);
+    }
+  }
+
+  private void warnMissingScopeFields(String label,
+                                      String routingKey,
+                                      String body,
+                                      String swarmId,
+                                      String role,
+                                      String instance) {
+    java.util.List<String> missing = new java.util.ArrayList<>();
+    if (swarmId == null || swarmId.isBlank()) {
+      missing.add("swarmId");
+    }
+    if (role == null || role.isBlank()) {
+      missing.add("role");
+    }
+    if (instance == null || instance.isBlank()) {
+      missing.add("instance");
+    }
+    if (!missing.isEmpty()) {
+      log.warn("Received {} payload with missing scope fields {}; rk={} payload snippet={}",
+          label, missing, routingKey, snippet(body));
     }
   }
 

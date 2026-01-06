@@ -145,12 +145,13 @@ Manual checks:
   }
   ```
 
-  The Orchestrator fetches the requested template from `scenario-manager-service`, expands it into a `SwarmPlan`, boots a Swarm Controller runtime, and tracks progress internally—no `sig.swarm-create` message is published by clients.
-- Subscribe to the control-plane confirmations to follow the lifecycle:
-  - `ev.ready.swarm-create.<swarmId>.orchestrator.ALL` — emitted by the Orchestrator after the controller handshake completes.
-  - `ev.ready.swarm-template.<swarmId>.swarm-controller.<controllerInstance>` — emitted by the Swarm Controller once the plan is applied and bees are provisioned (idle by default).
-  - `ev.ready.swarm-start.<swarmId>.swarm-controller.<controllerInstance>` — emitted after issuing a start; indicates workloads are enabled and running.
-- Start execution with `POST /api/swarms/{swarmId}/start` (body: `{ "idempotencyKey": "start-rest-001" }`). The Orchestrator sends `sig.swarm-start.<swarmId>.swarm-controller.ALL` on your behalf and you can reuse the same event subscriptions above to detect readiness or handle the matching `ev.error.*` topics if something fails.
+  The Orchestrator fetches the requested template from `scenario-manager-service`, expands it into a `SwarmPlan`, boots a Swarm Controller runtime, and tracks progress internally—no `signal.swarm-create` message is published by clients.
+- Subscribe to control-plane outcomes and alerts to follow the lifecycle:
+  - `event.outcome.swarm-create.<swarmId>.orchestrator.<orchestratorInstance>` — emitted by the Orchestrator after the controller handshake completes.
+  - `event.outcome.swarm-template.<swarmId>.swarm-controller.<controllerInstance>` — emitted once the plan is applied and bees are provisioned (idle by default).
+  - `event.outcome.swarm-start.<swarmId>.swarm-controller.<controllerInstance>` — emitted after issuing a start; `data.status` indicates success/failure.
+  - `event.alert.alert.<swarmId>.*.*` — emitted for runtime/IO failures.
+- Start execution with `POST /api/swarms/{swarmId}/start` (body: `{ "idempotencyKey": "start-rest-001" }`). The Orchestrator sends `signal.swarm-start.<swarmId>.swarm-controller.<controllerInstance>` on your behalf and you can reuse the outcome/alert subscriptions above to track readiness.
 
 ### Worker configuration overrides
 - Scenario definitions provide per-role overrides by embedding a `pockethive.worker.config` payload inside each bee's `config` map. The Scenario Manager merges those maps into the `SwarmPlan.bees[*].config` payload and the Swarm Controller immediately broadcasts them as `config-update` signals during bootstrap—no environment variables are used for logical worker settings anymore.

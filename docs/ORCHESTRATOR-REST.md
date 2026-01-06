@@ -198,8 +198,8 @@ Pins a swarm journal run into an archive so it can be kept beyond time-based ret
 
 **Behavior**
 - Launch Controller runtime for `{swarmId}` (no AMQP signal).
-- On controller handshake `ev.ready.swarm-controller.<swarmId>.swarm-controller.<controllerInstance>`, emit **`ev.ready.swarm-create.<swarmId>.orchestrator.ALL`** (echo ids).
-- On failure, emit **`ev.error.swarm-create.<swarmId>.orchestrator.ALL`**.
+- On controller handshake `event.outcome.swarm-controller.<swarmId>.swarm-controller.<controllerInstance>`, emit **`event.outcome.swarm-create.<swarmId>.orchestrator.<orchestratorInstance>`** (echo ids).
+- On failure, emit **`event.outcome.swarm-create.<swarmId>.orchestrator.<orchestratorInstance>`** with `data.status=Failed` and an accompanying `event.alert.alert` if applicable.
 - Requires a `templateId` referencing the scenario template to instantiate.
 
 **Request**
@@ -217,8 +217,8 @@ Pins a swarm journal run into an archive so it can be kept beyond time-based ret
   "correlationId": "…",
   "idempotencyKey": "…",
   "watch": {
-    "successTopic": "ev.ready.swarm-create.<swarmId>.orchestrator.ALL",
-    "errorTopic":   "ev.error.swarm-create.<swarmId>.orchestrator.ALL"
+    "successTopic": "event.outcome.swarm-create.<swarmId>.orchestrator.<orchestratorInstance>",
+    "errorTopic":   "event.alert.alert.<swarmId>.orchestrator.<orchestratorInstance>"
   },
   "timeoutMs": 120000
 }
@@ -241,7 +241,7 @@ Pins a swarm journal run into an archive so it can be kept beyond time-based ret
 { "idempotencyKey": "uuid-v4", "notes": "optional" }
 ```
 
-**Signal:** `sig.swarm-start.<swarmId>.swarm-controller.ALL` → **Success:** `ev.ready.swarm-start.<swarmId>.swarm-controller.<controllerInstance>` → **Error:** `ev.error.swarm-start.<swarmId>.swarm-controller.<controllerInstance>`
+**Signal:** `signal.swarm-start.<swarmId>.swarm-controller.<controllerInstance>` → **Outcome:** `event.outcome.swarm-start.<swarmId>.swarm-controller.<controllerInstance>` (check `data.status`) → **Alerts:** `event.alert.alert.<swarmId>.swarm-controller.<controllerInstance>`
 
 **Response (202)**
 ```json
@@ -249,8 +249,8 @@ Pins a swarm journal run into an archive so it can be kept beyond time-based ret
   "correlationId": "…",
   "idempotencyKey": "…",
   "watch": {
-    "successTopic": "ev.ready.swarm-start.<swarmId>.swarm-controller.<controllerInstance>",
-    "errorTopic":   "ev.error.swarm-start.<swarmId>.swarm-controller.<controllerInstance>"
+    "successTopic": "event.outcome.swarm-start.<swarmId>.swarm-controller.<controllerInstance>",
+    "errorTopic":   "event.alert.alert.<swarmId>.swarm-controller.<controllerInstance>"
   },
   "timeoutMs": 180000
 }
@@ -264,7 +264,7 @@ Pins a swarm journal run into an archive so it can be kept beyond time-based ret
 { "idempotencyKey": "uuid-v4", "notes": "optional" }
 ```
 
-**Signal:** `sig.swarm-stop.<swarmId>.swarm-controller.ALL` → **Success:** `ev.ready.swarm-stop.<swarmId>.swarm-controller.<controllerInstance>` → **Error:** `ev.error.swarm-stop.<swarmId>.swarm-controller.<controllerInstance>`
+**Signal:** `signal.swarm-stop.<swarmId>.swarm-controller.<controllerInstance>` → **Outcome:** `event.outcome.swarm-stop.<swarmId>.swarm-controller.<controllerInstance>` (check `data.status`) → **Alerts:** `event.alert.alert.<swarmId>.swarm-controller.<controllerInstance>`
 
 **Response (202)**
 ```json
@@ -272,8 +272,8 @@ Pins a swarm journal run into an archive so it can be kept beyond time-based ret
   "correlationId": "…",
   "idempotencyKey": "…",
   "watch": {
-    "successTopic": "ev.ready.swarm-stop.<swarmId>.swarm-controller.<controllerInstance>",
-    "errorTopic":   "ev.error.swarm-stop.<swarmId>.swarm-controller.<controllerInstance>"
+    "successTopic": "event.outcome.swarm-stop.<swarmId>.swarm-controller.<controllerInstance>",
+    "errorTopic":   "event.alert.alert.<swarmId>.swarm-controller.<controllerInstance>"
   },
   "timeoutMs": 90000
 }
@@ -287,7 +287,7 @@ Pins a swarm journal run into an archive so it can be kept beyond time-based ret
 { "idempotencyKey": "uuid-v4", "notes": "optional" }
 ```
 
-**Signal:** `sig.swarm-remove.<swarmId>.swarm-controller.ALL` → **Success:** `ev.ready.swarm-remove.<swarmId>.swarm-controller.<controllerInstance>` → **Error:** `ev.error.swarm-remove.<swarmId>.swarm-controller.<controllerInstance>`  
+**Signal:** `signal.swarm-remove.<swarmId>.swarm-controller.<controllerInstance>` → **Outcome:** `event.outcome.swarm-remove.<swarmId>.swarm-controller.<controllerInstance>` (check `data.status`) → **Alerts:** `event.alert.alert.<swarmId>.swarm-controller.<controllerInstance>`  
 **Post‑success:** tear down the Controller runtime for this swarm.
 
 **Response (202)**
@@ -296,8 +296,8 @@ Pins a swarm journal run into an archive so it can be kept beyond time-based ret
   "correlationId": "…",
   "idempotencyKey": "…",
   "watch": {
-    "successTopic": "ev.ready.swarm-remove.<swarmId>.swarm-controller.<controllerInstance>",
-    "errorTopic":   "ev.error.swarm-remove.<swarmId>.swarm-controller.<controllerInstance>"
+    "successTopic": "event.outcome.swarm-remove.<swarmId>.swarm-controller.<controllerInstance>",
+    "errorTopic":   "event.alert.alert.<swarmId>.swarm-controller.<controllerInstance>"
   },
   "timeoutMs": 180000
 }
@@ -337,7 +337,7 @@ Pins a swarm journal run into an archive so it can be kept beyond time-based ret
 }
 ```
 
-**Signal:** `sig.swarm-template.<swarmId>.swarm-controller.ALL` → **Success:** `ev.ready.swarm-template.<swarmId>.swarm-controller.<controllerInstance>` → **Error:** `ev.error.swarm-template.<swarmId>.swarm-controller.<controllerInstance>`
+**Signal:** `signal.swarm-template.<swarmId>.swarm-controller.<controllerInstance>` → **Outcome:** `event.outcome.swarm-template.<swarmId>.swarm-controller.<controllerInstance>` (check `data.status`) → **Alerts:** `event.alert.alert.<swarmId>.swarm-controller.<controllerInstance>`
 
 **Response (202)** — same envelope.
 
@@ -350,15 +350,13 @@ Pins a swarm journal run into an archive so it can be kept beyond time-based ret
 ```json
 {
   "idempotencyKey": "uuid-v4",
-  "commandTarget": "instance",
   "patch": { "enabled": true },
+  "swarmId": "optional; omit to use ALL",
   "notes": "optional"
 }
 ```
 
-> The routing path already carries the role and instance; set `commandTarget` to describe the intended scope (`instance`, `role`, `swarm`, or `all`).
-
-**Signal:** `sig.config-update.<swarmId>.<role>.<instance>` → **Success:** `ev.ready.config-update.<swarmId>.<role>.<instance>` → **Error:** `ev.error.config-update.<swarmId>.<role>.<instance>`
+**Signal:** `signal.config-update.<swarmId>.<role>.<instance>` → **Outcome:** `event.outcome.config-update.<swarmId>.<role>.<instance>` (check `data.status`) → **Alerts:** `event.alert.alert.<swarmId>.<role>.<instance>`
 
 **Response (202)** — same envelope.
 
@@ -370,41 +368,31 @@ Pins a swarm journal run into an archive so it can be kept beyond time-based ret
 { "idempotencyKey": "uuid-v4" }
 ```
 
-**Signal:** `sig.status-request.<swarmId>.<role>.<instance>` → component emits `ev.status-full.<swarmId>.<role>.<instance>` (no `ev.ready.*`).
+**Signal:** `signal.status-request.<swarmId>.<role>.<instance>` → component emits `event.metric.status-full.<swarmId>.<role>.<instance>` (no outcome).
 
 **Response (202)**
 ```json
 {
   "correlationId": "…",
   "idempotencyKey": "…",
-  "watch": { "infoTopic": "ev.status-full.<swarmId>.<role>.<instance>" },
+  "watch": { "infoTopic": "event.metric.status-full.<swarmId>.<role>.<instance>" },
   "timeoutMs": 10000
 }
 ```
 
-### 4.3 Swarm controller enable/disable (bulk)
-`POST /api/controllers/config`
+### 4.3 Swarm manager enable/disable (fan-out)
+`POST /api/swarm-managers/enabled`
 
 **Behavior**
-- Publishes **`sig.config-update.<swarmId>.swarm-controller.{instance}`** per targeted controller with explicit `commandTarget` metadata and `patch: { "enabled": true|false }`.
-- Sets top-level **`commandTarget`** to `"swarm"` when fan-out should toggle workloads and `"instance"` when only the controller runtime should pause/resume.
-- If **`targets` omitted or empty**, apply to **all registered controllers** (fan-out driven by the Orchestrator's live registry).
-- Controllers always keep their control plane session alive to acknowledge config updates even when `enabled=false`.
-
-#### 4.3.1 Scope `swarm` — pause/resume workloads
-
-**Effect**
-- Controller **fans out** the `enabled` change to every managed bee in the targeted swarm via `sig.config-update.<swarmId>.ALL.ALL`.
-- Confirms with **`ev.ready.config-update.<swarmId>.swarm-controller.{instance}`** (mirrors `commandTarget="swarm"`, keeps the swarm identifier in the envelope `scope`, and reports `state.enabled=<bool>` plus `state.details.workloads.enabled=<bool>`).
-- Publishes **`ev.status-delta.<swarmId>.swarm-controller.{instance}`** reflecting `state.workloads.enabled=<bool>` for dashboards.
+- Publishes `signal.config-update.<swarmId>.swarm-controller.<instance>` per registered controller with `data.enabled`.
+- Controllers keep their control plane sessions alive even when workloads are disabled.
+- The response lists each dispatch with watch topics for outcomes and alerts.
 
 **Request**
 ```json
 {
   "idempotencyKey": "uuid-v4",
-  "commandTarget": "swarm",
   "enabled": false,
-  "targets": ["swarm-controller.alpha", "swarm-controller.bravo"],
   "notes": "optional"
 }
 ```
@@ -412,26 +400,42 @@ Pins a swarm journal run into an archive so it can be kept beyond time-based ret
 **Response (202)**
 ```json
 {
-  "correlationId": "…",
-  "idempotencyKey": "…",
-  "commandTarget": "swarm",
-  "targets": [
+  "dispatches": [
     {
-      "instance": "swarm-controller.alpha",
-      "successTopic": "ev.ready.config-update.<swarmId>.swarm-controller.alpha",
-      "errorTopic": "ev.error.config-update.<swarmId>.swarm-controller.alpha",
-      "statusTopic": "ev.status-delta.<swarmId>.swarm-controller.alpha"
-    },
-    {
-      "instance": "swarm-controller.bravo",
-      "successTopic": "ev.ready.config-update.<swarmId>.swarm-controller.bravo",
-      "errorTopic": "ev.error.config-update.<swarmId>.swarm-controller.bravo",
-      "statusTopic": "ev.status-delta.<swarmId>.swarm-controller.bravo"
+      "swarm": "demo",
+      "instanceId": "swarm-controller-demo-1",
+      "reused": false,
+      "response": {
+        "correlationId": "…",
+        "idempotencyKey": "…",
+        "watch": {
+          "successTopic": "event.outcome.config-update.<swarmId>.swarm-controller.<instance>",
+          "errorTopic": "event.alert.alert.<swarmId>.swarm-controller.<instance>"
+        },
+        "timeoutMs": 60000
+      }
     }
-  ],
-  "timeoutMs": 60000
+  ]
 }
 ```
+
+#### 4.3.1 Single swarm enable/disable
+`POST /api/swarm-managers/{swarmId}/enabled`
+
+**Behavior**
+- Same as the bulk endpoint, but targets a single swarm controller instance.
+- Returns `404` if the swarm has not registered a controller instance.
+
+**Request**
+```json
+{
+  "idempotencyKey": "uuid-v4",
+  "enabled": true,
+  "notes": "optional"
+}
+```
+
+**Response (202)** — same shape as the bulk fan-out response.
 
 ## 5. Control-plane sync (debug-only)
 These endpoints are intended for local diagnostics and should be secured behind admin access or removed before exposing the orchestrator publicly.
@@ -440,8 +444,8 @@ These endpoints are intended for local diagnostics and should be secured behind 
 `POST /api/control-plane/refresh`
 
 **Behavior**
-- Triggers a status-full broadcast from the orchestrator.
-- Publishes status-request signals for known swarms (or all controllers if none are registered).
+- Triggers `event.metric.status-full` broadcasts from the orchestrator.
+- Publishes `signal.status-request` for known swarms (or all controllers if none are registered).
 - Throttled if called more often than once every 2 seconds.
 
 **Response (202)**
@@ -465,74 +469,4 @@ These endpoints are intended for local diagnostics and should be secured behind 
 
 **Response (202)** — same shape as refresh, with `mode: "RESET"`.
 
-**Success event payload (example)**
-```json
-{
-  "result": "success",
-  "signal": "config-update",
-  "scope": { "swarmId": "swarm-42", "role": "swarm-controller", "instance": "swarm-controller.alpha" },
-  "commandTarget": "swarm",
-  "state": {
-    "enabled": false,
-    "details": { "workloads": { "enabled": false } }
-  },
-  "idempotencyKey": "uuid-v4",
-  "correlationId": "…"
-}
-```
-
-#### 4.3.2 Scope `controller` — pause/resume controller runtime
-
-**Effect**
-- Controller stops/starts its **reconciliation loops** only; existing bees keep their current `enabled` state (no `sig.config-update.<swarmId>.ALL.ALL` broadcast).
-- Confirms with **`ev.ready.config-update.<swarmId>.swarm-controller.{instance}`** (mirrors `commandTarget="instance"`, keeps the controller coordinates in the envelope `scope`, and reports `state.enabled=<bool>` plus `state.details.controller.enabled=<bool>`).
-- Publishes **`ev.status-delta.<swarmId>.swarm-controller.{instance}`** reflecting `state.controller.enabled=<bool>` so observers know the runtime is paused.
-
-**Request**
-```json
-{
-  "idempotencyKey": "uuid-v4",
-  "commandTarget": "instance",
-  "enabled": false,
-  "targets": ["swarm-controller.charlie"],
-  "notes": "optional"
-}
-```
-
-**Response (202)**
-```json
-{
-  "correlationId": "…",
-  "idempotencyKey": "…",
-  "commandTarget": "instance",
-  "targets": [
-    {
-      "instance": "swarm-controller.charlie",
-      "successTopic": "ev.ready.config-update.<swarmId>.swarm-controller.charlie",
-      "errorTopic": "ev.error.config-update.<swarmId>.swarm-controller.charlie",
-      "statusTopic": "ev.status-delta.<swarmId>.swarm-controller.charlie"
-    }
-  ],
-  "timeoutMs": 60000
-}
-```
-
-**Success event payload (example)**
-```json
-{
-  "result": "success",
-  "signal": "config-update",
-  "scope": { "swarmId": "swarm-42", "role": "swarm-controller", "instance": "swarm-controller.charlie" },
-  "commandTarget": "instance",
-  "state": {
-    "enabled": false,
-    "details": { "controller": { "enabled": false } }
-  },
-  "idempotencyKey": "uuid-v4",
-  "correlationId": "…"
-}
-```
-
-**Notes**
-- The Orchestrator reuses the same `correlationId` for every fan-out signal so confirmations map cleanly to the bulk action.
-- Controllers acknowledge even when already at the requested `enabled` state (idempotent success) and continue servicing control-plane requests while paused.
+Outcome and metric payloads follow the envelope rules in `docs/ARCHITECTURE.md`.

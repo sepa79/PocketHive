@@ -66,7 +66,9 @@ public class ControllerStatusListener {
             }
             JsonNode scope = node.path("scope");
             String swarmId = scope.path("swarmId").asText(null);
+            String role = scope.path("role").asText(null);
             String controllerInstance = scope.path("instance").asText(null);
+            warnMissingScopeFields(routingKey, body, swarmId, role, controllerInstance);
             JsonNode data = node.path("data");
             JsonNode context = data.path("context");
             String swarmStatusText = context.path("swarmStatus").asText(null);
@@ -168,5 +170,26 @@ public class ControllerStatusListener {
             return trimmed.substring(0, 300) + "…";
         }
         return trimmed;
+    }
+
+    private void warnMissingScopeFields(String routingKey,
+                                        String body,
+                                        String swarmId,
+                                        String role,
+                                        String instance) {
+        java.util.List<String> missing = new java.util.ArrayList<>();
+        if (swarmId == null || swarmId.isBlank()) {
+            missing.add("swarmId");
+        }
+        if (role == null || role.isBlank()) {
+            missing.add("role");
+        }
+        if (instance == null || instance.isBlank()) {
+            missing.add("instance");
+        }
+        if (!missing.isEmpty()) {
+            log.warn("Received controller status payload with missing scope fields {}; rk={} payload snippet={}",
+                missing, routingKey, snippet(body));
+        }
     }
 }
