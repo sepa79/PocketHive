@@ -9,7 +9,7 @@ ENV TCP_MOCK_DASHBOARD_PASSWORD=pockethive
 COPY .local-jars/tcp-mock-server.jar app.jar
 COPY *.md /app/
 COPY mappings/ /app/mappings/
-COPY __files/ /app/__files/
+# COPY __files/ /app/__files/
 
 EXPOSE 8080 9090
 

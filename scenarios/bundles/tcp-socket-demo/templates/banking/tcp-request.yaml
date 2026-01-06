@@ -3,6 +3,7 @@ callId: tcp-request
 protocol: TCP
 behavior: REQUEST_RESPONSE
 transport: socket
+endTag: ETX
 bodyTemplate: |
   STX{{ payloadAsJson.requestId }}|{{ payloadAsJson.operation }}|{{ payloadAsJson.accountId }}|{{ payloadAsJson.timestamp }}ETX
 headersTemplate:
