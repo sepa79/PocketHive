@@ -78,7 +78,6 @@ channels:
           - swarm-stop
           - swarm-remove
           - config-update
-          - swarm-controller
       swarm:
         description: Swarm context for the outcome (or ALL for wildcard fan-out)
         schema:

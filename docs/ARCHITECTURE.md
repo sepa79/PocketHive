@@ -35,7 +35,7 @@ PocketHive splits the control plane into **managers** (orchestrator + swarm cont
 
 #### Orchestrator (Queen)
 - Owns the **desired state** and lifecycle intents per swarm (`SwarmPlan`).
-- Launches a **Swarm Controller** for a new swarm (runtime) and, after the controller handshake, emits **`event.outcome.swarm-create.{swarmId}.orchestrator.<instance>`**.
+- Launches a **Swarm Controller** for a new swarm (runtime) and, after the first controller `event.metric.status-full.{swarmId}.swarm-controller.<instance>` arrives, emits **`event.outcome.swarm-create.{swarmId}.orchestrator.<instance>`**.
 - Publishes swarm-scoped lifecycle commands such as `signal.swarm-template.{swarmId}.swarm-controller.<instance>`, `signal.swarm-plan.{swarmId}.swarm-controller.<instance>`, `signal.swarm-start.{swarmId}.swarm-controller.<instance>`, `signal.swarm-stop.{swarmId}.swarm-controller.<instance>`, and `signal.swarm-remove.{swarmId}.swarm-controller.<instance>` (lifecycle commands always target a concrete controller instance).
 - Issues **controller config updates** by addressing each controller instance via `signal.config-update.{swarmId}.swarm-controller.<instance>` (and `signal.config-update.ALL.swarm-controller.ALL` when broadcasting fleet-wide toggles).
 - **Monitors** swarms to **Ready / Running**, marks **Failed** on timeout/error, and **never auto‑deletes** resources.
@@ -352,7 +352,7 @@ sequenceDiagram
 
   QN->>RT: Launch Controller for <swarmId>
   RT-->>QN: Controller container up
-  MSH-->>QN: event.outcome.swarm-controller.<swarmId>.swarm-controller.<instance>
+  MSH-->>QN: event.metric.status-full.<swarmId>.swarm-controller.<instance>
   QN-->>QN: event.outcome.swarm-create.<swarmId>.orchestrator.<instance>
 
   QN->>MSH: signal.swarm-template.<swarmId>.swarm-controller.<instance> (SwarmPlan, all enabled=false)
@@ -425,7 +425,7 @@ sequenceDiagram
   alt Launch fails
     QN-->>QN: event.outcome.swarm-create.<swarmId>.orchestrator.<instance> (data.status=Failed)
   else Controller up
-    MSH-->>QN: event.outcome.swarm-controller.<swarmId>.swarm-controller.<instance>
+    MSH-->>QN: event.metric.status-full.<swarmId>.swarm-controller.<instance>
     QN-->>QN: event.outcome.swarm-create.<swarmId>.orchestrator.<instance>
     QN->>MSH: signal.swarm-template.<swarmId>.swarm-controller.<instance>
     MSH->>RT: Provision components

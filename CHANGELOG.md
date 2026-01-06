@@ -7,6 +7,14 @@ Timestamp: 2025-12-19T00:00:00Z
 
 - No unreleased changes yet.
 
+## [0.14.19] - 2026-01-06
+Timestamp: 2026-01-06T00:00:00Z
+
+- Control-plane outcomes: treat NotReady swarm-start/stop as non-fatal and apply status transitions only when valid, using outcome context when available.
+- Orchestrator status metrics: align status emission with canonical envelope rules (no tps, control-plane-only IO) and expose explicit status-full on request.
+- Hive UI: tighten control-plane envelope parsing to the schema, update status parsing from context, and ignore ALL fan-out instances.
+- Docs/spec: align control-plane docs/AsyncAPI with the status-full handshake and remove legacy swarm-controller outcome references.
+
 ## [0.14.18] - 2025-12-19
 Timestamp: 2025-12-19T00:00:00Z
 

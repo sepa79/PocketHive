@@ -1,9 +1,9 @@
 export type ControlKind = 'signal' | 'outcome' | 'event' | 'metric'
 
 export interface ControlScope {
-  swarmId: string | null
-  role: string | null
-  instance: string | null
+  swarmId: string
+  role: string
+  instance: string
 }
 
 export interface ControlEnvelopeBase {
@@ -15,17 +15,19 @@ export interface ControlEnvelopeBase {
   scope: ControlScope
   correlationId: string | null
   idempotencyKey: string | null
+  data: Record<string, unknown>
 }
 
 export interface StatusMetricEnvelope extends ControlEnvelopeBase {
   kind: 'metric'
   type: 'status-full' | 'status-delta'
-  data: Record<string, unknown>
 }
 
 export interface CommandOutcomeEnvelope extends ControlEnvelopeBase {
   kind: 'outcome'
-  data?: Record<string, unknown> | null
+  correlationId: string
+  idempotencyKey: string
+  data: Record<string, unknown> & { status: string }
 }
 
 export interface AlertEventEnvelope extends ControlEnvelopeBase {
@@ -54,11 +56,10 @@ function getString(value: unknown): string | null {
 
 function isScope(value: unknown): value is ControlScope {
   if (!isRecord(value)) return false
-  const swarmId = value['swarmId']
-  const role = value['role']
-  const instance = value['instance']
-  const isNullableString = (v: unknown) => v === null || typeof v === 'string'
-  return isNullableString(swarmId) && isNullableString(role) && isNullableString(instance)
+  const swarmId = getString(value['swarmId'])
+  const role = getString(value['role'])
+  const instance = getString(value['instance'])
+  return Boolean(swarmId && role && instance)
 }
 
 function isEnvelopeBase(raw: unknown): raw is ControlEnvelopeBase {
@@ -70,10 +71,11 @@ function isEnvelopeBase(raw: unknown): raw is ControlEnvelopeBase {
   const version = getString(raw['version'])
   if (!kind || !type || !origin || !timestamp || !version) return false
   if (!isScope(raw['scope'])) return false
+  if (!isRecord(raw['data'])) return false
   const correlationId = raw['correlationId']
   const idempotencyKey = raw['idempotencyKey']
-  const isNullableString = (v: unknown) => v === null || typeof v === 'string'
-  if (!isNullableString(correlationId) || !isNullableString(idempotencyKey)) return false
+  const isNullableNonEmptyString = (v: unknown) => v === null || getString(v) !== null
+  if (!isNullableNonEmptyString(correlationId) || !isNullableNonEmptyString(idempotencyKey)) return false
   return true
 }
 
@@ -87,8 +89,13 @@ export function isStatusMetricEnvelope(raw: unknown): raw is StatusMetricEnvelop
 export function isCommandOutcomeEnvelope(raw: unknown): raw is CommandOutcomeEnvelope {
   if (!isEnvelopeBase(raw)) return false
   if (raw.kind !== 'outcome') return false
-  const data = (raw as unknown as Record<string, unknown>)['data']
-  return data === undefined || data === null || isRecord(data)
+  const record = raw as unknown as Record<string, unknown>
+  const data = record['data']
+  if (!isRecord(data)) return false
+  const status = getString(data['status'])
+  const correlationId = getString(record['correlationId'])
+  const idempotencyKey = getString(record['idempotencyKey'])
+  return Boolean(status && correlationId && idempotencyKey)
 }
 
 export function isAlertEventEnvelope(raw: unknown): raw is AlertEventEnvelope {
