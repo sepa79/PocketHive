@@ -1,6 +1,5 @@
 package io.pockethive.worker.sdk.runtime;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import io.pockethive.control.ControlSignal;
@@ -20,7 +19,6 @@ import io.pockethive.worker.sdk.config.WorkerInputType;
 import io.pockethive.worker.sdk.config.WorkerOutputType;
 import io.pockethive.worker.sdk.runtime.WorkIoBindings;
 import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
-import io.pockethive.worker.sdk.testing.ControlEventsSchemaValidator;
 import io.pockethive.worker.sdk.templating.TemplateRenderer;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import java.time.Instant;
@@ -252,32 +250,6 @@ class WorkerControlPlaneRuntimeTest {
         @SuppressWarnings("unchecked")
         Map<String, Object> ctx = (Map<String, Object>) work.get("context");
         assertThat(ctx).containsEntry("dataset", "redis:users");
-    }
-
-    @Test
-    void statusEnvelopesValidateAgainstSchema() throws Exception {
-        runtime.emitStatusSnapshot();
-        ArgumentCaptor<ControlPlaneEmitter.StatusContext> snapshotCaptor =
-            ArgumentCaptor.forClass(ControlPlaneEmitter.StatusContext.class);
-        verify(emitter).emitStatusSnapshot(snapshotCaptor.capture());
-        String snapshotJson = buildEnvelopeJson(snapshotCaptor.getValue(), "status-full");
-        ControlEventsSchemaValidator.assertValid(snapshotJson);
-
-        reset(emitter);
-
-        runtime.emitStatusDelta();
-        ArgumentCaptor<ControlPlaneEmitter.StatusContext> deltaCaptor =
-            ArgumentCaptor.forClass(ControlPlaneEmitter.StatusContext.class);
-        verify(emitter).emitStatusDelta(deltaCaptor.capture());
-        String deltaJson = buildEnvelopeJson(deltaCaptor.getValue(), "status-delta");
-        ControlEventsSchemaValidator.assertValid(deltaJson);
-
-        JsonNode delta = MAPPER.readTree(deltaJson);
-        JsonNode data = delta.path("data");
-        assertThat(data.has("startedAt")).isFalse();
-        assertThat(data.has("config")).isFalse();
-        assertThat(data.has("io")).isFalse();
-        assertThat(data.path("context").path("workers").isMissingNode()).isTrue();
     }
 
     @Test

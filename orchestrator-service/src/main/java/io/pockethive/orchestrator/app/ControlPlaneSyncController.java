@@ -12,6 +12,12 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/control-plane")
 public class ControlPlaneSyncController {
 
+    /**
+     * Debug-only control-plane sync endpoints.
+     * <p>
+     * These helpers are intended for local diagnostics and should be secured behind admin
+     * access or removed before exposing the orchestrator publicly.
+     */
     private static final Logger log = LoggerFactory.getLogger(ControlPlaneSyncController.class);
 
     private final ControlPlaneSyncService sync;
@@ -32,4 +38,3 @@ public class ControlPlaneSyncController {
         return ResponseEntity.accepted().body(sync.reset());
     }
 }
-

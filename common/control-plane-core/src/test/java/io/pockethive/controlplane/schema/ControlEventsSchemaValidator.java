@@ -22,12 +22,24 @@ public final class ControlEventsSchemaValidator {
   }
 
   public static void assertValid(String json) throws IOException {
-    JsonNode node = MAPPER.readTree(json);
-    assertValid(node);
+    assertValid(validate(json));
   }
 
   public static void assertValid(JsonNode node) {
+    assertValid(validate(node));
+  }
+
+  public static Set<ValidationMessage> validate(String json) throws IOException {
+    JsonNode node = MAPPER.readTree(json);
+    return validate(node);
+  }
+
+  public static Set<ValidationMessage> validate(JsonNode node) {
     Set<ValidationMessage> errors = SCHEMA.validate(node);
+    return errors;
+  }
+
+  private static void assertValid(Set<ValidationMessage> errors) {
     assertThat(errors).isEmpty();
   }
 
