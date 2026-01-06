@@ -48,7 +48,7 @@ Goal: introduce a single, consistent control‑plane envelope model used by sign
 
     | Section / Field      | Type          | Applies to       | Description                                                                                                      |
     |----------------------|---------------|------------------|------------------------------------------------------------------------------------------------------------------|
-    | `data`               | object\|null  | all kinds        | Structured payload for the message. For each (`kind`, `type`) combination, the AsyncAPI / JSON Schema specs in `docs/spec` MUST define the required shape of `data` (required fields + optional extension fields). Targeting is never carried inside `data`; targeting is described only by `scope` and the routing key. All additional, best‑effort metadata for that message also lives under `data`. |
+    | `data`               | object        | all kinds        | Structured payload for the message. On-wire producers always emit an object; commands without args send `{}` and outcomes must include at least `data.status`. For each (`kind`, `type`) combination, the AsyncAPI / JSON Schema specs in `docs/spec` MUST define the required shape of `data` (required fields + optional extension fields). Targeting is never carried inside `data`; targeting is described only by `scope` and the routing key. All additional, best‑effort metadata for that message also lives under `data`. |
 
   - **Known `data` schemas for existing messages (today)**
 
