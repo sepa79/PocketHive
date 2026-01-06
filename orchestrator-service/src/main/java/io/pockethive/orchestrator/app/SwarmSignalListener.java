@@ -36,6 +36,7 @@ import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.manager.ManagerControlPlane;
 import io.pockethive.controlplane.messaging.ControlSignals;
 import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
+import io.pockethive.controlplane.messaging.CommandOutcomePolicy;
 import io.pockethive.controlplane.messaging.EventMessage;
 import io.pockethive.controlplane.messaging.SignalMessage;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
@@ -165,12 +166,14 @@ public class SwarmSignalListener {
     private void handleOutcomeEvent(RoutingKey key, String routingKey, String body) {
         String command = key.type().substring("outcome.".length());
         String status = null;
+        String contextStatus = null;
         String origin = null;
         String correlationId = null;
         String idempotencyKey = null;
         try {
             var root = json.readTree(body);
             status = root.path("data").path("status").asText(null);
+            contextStatus = root.path("data").path("context").path("status").asText(null);
             origin = root.path("origin").asText(null);
             correlationId = root.path("correlationId").asText(null);
             idempotencyKey = root.path("idempotencyKey").asText(null);
@@ -223,11 +226,13 @@ public class SwarmSignalListener {
                 else onSwarmTemplateError(key);
             }
             case "swarm-start" -> {
-                if (isStatus(status, "Running")) onSwarmStartReady(key);
+                if (CommandOutcomePolicy.isNotReadyStatus(status)) onSwarmStartNotReady(key, contextStatus);
+                else if (isStatus(status, "Running")) onSwarmStartReady(key);
                 else onSwarmStartError(key);
             }
             case "swarm-stop" -> {
-                if (isStatus(status, "Stopped")) onSwarmStopReady(key);
+                if (CommandOutcomePolicy.isNotReadyStatus(status)) onSwarmStopNotReady(key, contextStatus);
+                else if (isStatus(status, "Stopped")) onSwarmStopReady(key);
                 else onSwarmStopError(key);
             }
             case "swarm-remove" -> {
@@ -242,8 +247,8 @@ public class SwarmSignalListener {
         return switch (command) {
             case "swarm-create" -> isStatus(status, "Ready");
             case "swarm-template" -> isStatus(status, "Ready");
-            case "swarm-start" -> isStatus(status, "Running");
-            case "swarm-stop" -> isStatus(status, "Stopped");
+            case "swarm-start" -> isStatus(status, "Running") || CommandOutcomePolicy.isNotReadyStatus(status);
+            case "swarm-stop" -> isStatus(status, "Stopped") || CommandOutcomePolicy.isNotReadyStatus(status);
             case "swarm-remove" -> isStatus(status, "Removed");
             default -> null;
         };
@@ -429,6 +434,16 @@ public class SwarmSignalListener {
         registry.updateStatus(swarmId, SwarmStatus.FAILED);
     }
 
+    private void onSwarmStartNotReady(RoutingKey key, String contextStatus) {
+        String swarmId = key.swarmId();
+        if (swarmId == null || swarmId.isBlank()) {
+            log.warn("swarm-start not-ready event missing swarm id: {}", key);
+            return;
+        }
+        creates.complete(swarmId, Phase.START);
+        updateStatusFromContext(swarmId, contextStatus);
+    }
+
     private void onSwarmStopError(RoutingKey key) {
         String swarmId = key.swarmId();
         if (swarmId == null || swarmId.isBlank()) {
@@ -437,6 +452,36 @@ public class SwarmSignalListener {
         }
         creates.complete(swarmId, Phase.STOP);
         registry.updateStatus(swarmId, SwarmStatus.FAILED);
+    }
+
+    private void onSwarmStopNotReady(RoutingKey key, String contextStatus) {
+        String swarmId = key.swarmId();
+        if (swarmId == null || swarmId.isBlank()) {
+            log.warn("swarm-stop not-ready event missing swarm id: {}", key);
+            return;
+        }
+        creates.complete(swarmId, Phase.STOP);
+        updateStatusFromContext(swarmId, contextStatus);
+    }
+
+    private void updateStatusFromContext(String swarmId, String contextStatus) {
+        SwarmStatus status = parseSwarmStatus(contextStatus);
+        if (status == null) {
+            return;
+        }
+        registry.updateStatus(swarmId, status);
+    }
+
+    private SwarmStatus parseSwarmStatus(String status) {
+        if (status == null || status.isBlank()) {
+            return null;
+        }
+        try {
+            return SwarmStatus.valueOf(status.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            log.warn("unknown swarm status '{}' in outcome context", status);
+            return null;
+        }
     }
 
     private ControlSignal templateSignal(SwarmPlan plan, Pending info, String controllerInstance) {
