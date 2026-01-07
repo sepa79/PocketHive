@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { subscribeControlPlaneHealth, type ControlPlaneHealth } from '../lib/controlPlane/healthStore'
 
 type HealthState = 'checking' | 'ok' | 'down'
 
@@ -21,6 +22,11 @@ export function HealthPage() {
     state: 'checking',
     orchestrator: 'checking…',
     scenarioManager: 'checking…',
+  })
+  const [controlPlane, setControlPlane] = useState<ControlPlaneHealth>({
+    schemaStatus: 'idle',
+    stompState: 'idle',
+    invalidCount: 0,
   })
 
   useEffect(() => {
@@ -55,6 +61,13 @@ export function HealthPage() {
     }
   }, [])
 
+  useEffect(() => {
+    const unsubscribe = subscribeControlPlaneHealth(setControlPlane)
+    return () => {
+      unsubscribe()
+    }
+  }, [])
+
   return (
     <div className="page">
       <h1 className="h1">Connectivity / Health</h1>
@@ -81,7 +94,31 @@ export function HealthPage() {
           </div>
         </div>
       </div>
+
+      <div className="card" style={{ marginTop: 12 }}>
+        <div className="row between">
+          <div className="h2">Control-plane</div>
+          <div className={controlPlane.schemaStatus === 'ready' ? 'pill pillOk' : 'pill pillWarn'}>
+            {controlPlane.schemaStatus.toUpperCase()}
+          </div>
+        </div>
+
+        <div className="kvGrid" style={{ marginTop: 10 }}>
+          <div className="kv">
+            <div className="k">Schema status</div>
+            <div className="v">{controlPlane.schemaStatus}</div>
+            {controlPlane.schemaError ? <div className="muted">{controlPlane.schemaError}</div> : null}
+          </div>
+          <div className="kv">
+            <div className="k">STOMP state</div>
+            <div className="v">{controlPlane.stompState}</div>
+          </div>
+          <div className="kv">
+            <div className="k">Invalid control frames</div>
+            <div className="v">{controlPlane.invalidCount}</div>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
-

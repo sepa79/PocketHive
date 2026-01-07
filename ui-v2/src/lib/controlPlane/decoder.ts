@@ -115,7 +115,8 @@ function validateRouting(routingKey: string | undefined, envelope: ControlPlaneE
   if (!expectedPrefix) {
     return null
   }
-  if (routingKey.startsWith(expectedPrefix)) {
+  const normalized = stripDestinationPrefix(routingKey)
+  if (normalized.startsWith(expectedPrefix)) {
     return null
   }
   return `Routing key does not match envelope kind/type (${expectedPrefix}*)`
@@ -135,6 +136,14 @@ function routingPrefix(envelope: ControlPlaneEnvelope) {
     return `event.alert.${envelope.type}.`
   }
   return null
+}
+
+function stripDestinationPrefix(routingKey: string) {
+  const prefix = '/exchange/ph.control/'
+  if (routingKey.startsWith(prefix)) {
+    return routingKey.slice(prefix.length)
+  }
+  return routingKey
 }
 
 function snippet(value: string) {
