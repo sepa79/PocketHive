@@ -79,24 +79,26 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
     try {
       ObjectNode envelope = MAPPER.createObjectNode();
       String protocol = definition.protocol() == null ? "HTTP" : definition.protocol().toUpperCase(Locale.ROOT);
-      
+
       if ("TCP".equals(protocol) && definition instanceof TcpTemplateDefinition tcpDef) {
         MessageTemplate template = MessageTemplate.builder()
             .bodyType(MessageBodyType.SIMPLE)
             .bodyTemplate(tcpDef.bodyTemplate())
             .headerTemplates(tcpDef.headersTemplate() == null ? Map.of() : tcpDef.headersTemplate())
             .build();
-        
+
         MessageTemplateRenderer.RenderedMessage rendered =
             messageTemplateRenderer.render(template, seed);
-        
+
         envelope.put("protocol", "TCP");
         envelope.put("method", "");
         envelope.put("behavior", tcpDef.behavior());
-        String endTag = seed.headers().getOrDefault("x-ph-tcp-end-tag", "</Document>").toString();
-        envelope.put("endTag", endTag);
-        String maxBytes = seed.headers().getOrDefault("x-ph-max-bytes", "8192").toString();
-        envelope.put("maxBytes", Integer.parseInt(maxBytes));
+        if (tcpDef.endTag() != null) {
+          envelope.put("endTag", tcpDef.endTag());
+        }
+        if (tcpDef.maxBytes() != null) {
+          envelope.put("maxBytes", tcpDef.maxBytes());
+        }
         envelope.put("body", rendered.body());
       } else if (definition instanceof HttpTemplateDefinition httpDef) {
         MessageTemplate template = MessageTemplate.builder()
@@ -106,10 +108,10 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
             .bodyTemplate(httpDef.bodyTemplate())
             .headerTemplates(httpDef.headersTemplate() == null ? Map.of() : httpDef.headersTemplate())
             .build();
-        
+
         MessageTemplateRenderer.RenderedMessage rendered =
             messageTemplateRenderer.render(template, seed);
-        
+
         String method = rendered.method() == null ? "GET" : rendered.method().toUpperCase(Locale.ROOT);
         envelope.put("protocol", "HTTP");
         envelope.put("path", rendered.path());
@@ -117,7 +119,7 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
         envelope.set("headers", MAPPER.valueToTree(rendered.headers()));
         String contentType = rendered.headers().getOrDefault("Content-Type", "").toLowerCase();
         // Detect JSON to embed as compact node instead of escaped string
-        boolean isJson = contentType.contains("application/json") || 
+        boolean isJson = contentType.contains("application/json") ||
                         (contentType.isEmpty() && looksLikeJson(rendered.body()));
         setBodyNode(envelope, rendered.body(), isJson);
       } else {

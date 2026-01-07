@@ -28,6 +28,7 @@ class SocketTransportTest {
       TcpTransportConfig config = new TcpTransportConfig(
           "socket",
           1_000,
+          1_000,
           8192,
           true,
           4,
@@ -69,6 +70,7 @@ class SocketTransportTest {
 
       TcpTransportConfig config = new TcpTransportConfig(
           "socket",
+          1_000,
           1_000,
           8192,
           true,

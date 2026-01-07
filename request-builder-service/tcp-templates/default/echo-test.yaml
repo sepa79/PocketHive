@@ -4,5 +4,5 @@ protocol: TCP
 behavior: ECHO
 transport: socket
 bodyTemplate: "TEST_ECHO_{{ payload.id | default('123') }}"
-headersTemplate:
-  Content-Type: "text/plain"
+endTag: "\n"
+maxBytes: 8192

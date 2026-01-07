@@ -4,5 +4,5 @@ protocol: TCP
 behavior: ECHO
 transport: netty
 bodyTemplate: "NETTY_ECHO_{{ payload.id | default('456') }}"
-headersTemplate:
-  Content-Type: "text/plain"
+endTag: "\n"
+maxBytes: 8192

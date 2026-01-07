@@ -4,6 +4,5 @@ protocol: TCP
 behavior: STREAMING
 transport: nio
 bodyTemplate: "STREAM_REQUEST_{{ payload.id | default('789') }}"
-headersTemplate:
-  Content-Type: "text/plain"
-  x-ph-max-bytes: "4096"
+endTag: "\n"
+maxBytes: 4096

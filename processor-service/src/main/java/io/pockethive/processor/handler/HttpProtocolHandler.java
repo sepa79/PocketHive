@@ -25,7 +25,7 @@ import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.slf4j.Logger;
 
 public class HttpProtocolHandler implements ProtocolHandler {
-  private static final ObjectMapper MAPPER = new ObjectMapper();
+  private final ObjectMapper mapper;
   private final Clock clock;
   private final CallMetricsRecorder metricsRecorder;
   private final HttpClient httpClient;
@@ -33,9 +33,10 @@ public class HttpProtocolHandler implements ProtocolHandler {
   private final ThreadLocal<HttpClient> perThreadClient;
   private final java.util.concurrent.atomic.AtomicLong nextAllowedTimeNanos;
 
-  public HttpProtocolHandler(Clock clock, CallMetricsRecorder metricsRecorder, HttpClient httpClient,
+  public HttpProtocolHandler(ObjectMapper mapper, Clock clock, CallMetricsRecorder metricsRecorder, HttpClient httpClient,
                              HttpClient noKeepAliveClient, ThreadLocal<HttpClient> perThreadClient,
                              java.util.concurrent.atomic.AtomicLong nextAllowedTimeNanos) {
+    this.mapper = mapper;
     this.clock = clock;
     this.metricsRecorder = metricsRecorder;
     this.httpClient = httpClient;
@@ -84,7 +85,9 @@ public class HttpProtocolHandler implements ProtocolHandler {
       long callDuration = Math.max(0L, totalDuration - pacingMillis);
       long connectionLatency = Math.max(0L, pacingMillis);
       int statusCode = response.getCode();
-      logger.debug("HTTP RESPONSE {} {} -> {}", method, target, statusCode);
+
+      String responseBody = response.getEntity() == null ? "" : EntityUtils.toString(response.getEntity(), StandardCharsets.UTF_8);
+      logger.debug("HTTP RESPONSE {} {} -> {} latency={}ms body={}", method, target, statusCode, callDuration, responseBody);
 
       boolean success = statusCode >= 200 && statusCode < 300;
       CallMetrics metrics = success
@@ -92,10 +95,9 @@ public class HttpProtocolHandler implements ProtocolHandler {
           : CallMetrics.failure(callDuration, connectionLatency, statusCode);
       metricsRecorder.record(metrics);
 
-      ObjectNode result = MAPPER.createObjectNode();
+      ObjectNode result = mapper.createObjectNode();
       result.put("status", statusCode);
-      result.set("headers", MAPPER.valueToTree(convertHeaders(response)));
-      String responseBody = response.getEntity() == null ? "" : EntityUtils.toString(response.getEntity(), StandardCharsets.UTF_8);
+      result.set("headers", mapper.valueToTree(convertHeaders(response)));
       result.put("body", responseBody);
 
       WorkItem responseItem = ResponseBuilder.build(result, context.info().role(), metrics);
@@ -118,21 +120,20 @@ public class HttpProtocolHandler implements ProtocolHandler {
       if (rate <= 0.0) return 0L;
       long intervalNanos = (long) (1_000_000_000L / rate);
       long now = System.nanoTime();
-      while (true) {
-        long prev = nextAllowedTimeNanos.get();
-        long base = Math.max(prev, now);
-        long scheduled = base + intervalNanos;
-        if (nextAllowedTimeNanos.compareAndSet(prev, scheduled)) {
-          long sleepNanos = scheduled - now;
-          if (sleepNanos > 0L) {
-            long millis = sleepNanos / 1_000_000L;
-            int nanos = (int) (sleepNanos % 1_000_000L);
-            Thread.sleep(millis, nanos);
-            return sleepNanos / 1_000_000L;
-          }
-          return 0L;
-        }
+      long prev = nextAllowedTimeNanos.getAndUpdate(current -> {
+        long base = Math.max(current, now);
+        return base + intervalNanos;
+      });
+      long base = Math.max(prev, now);
+      long scheduled = base + intervalNanos;
+      long sleepNanos = scheduled - now;
+      if (sleepNanos > 0L) {
+        long millis = sleepNanos / 1_000_000L;
+        int nanos = (int) (sleepNanos % 1_000_000L);
+        Thread.sleep(millis, nanos);
+        return sleepNanos / 1_000_000L;
       }
+      return 0L;
     }
     return 0L;
   }
@@ -170,6 +171,6 @@ public class HttpProtocolHandler implements ProtocolHandler {
   private Optional<String> extractBody(JsonNode bodyNode) throws Exception {
     return bodyNode == null || bodyNode.isMissingNode() || bodyNode.isNull() ? Optional.empty()
         : bodyNode.isTextual() ? Optional.of(bodyNode.asText())
-        : Optional.of(MAPPER.writeValueAsString(bodyNode));
+        : Optional.of(mapper.writeValueAsString(bodyNode));
   }
 }

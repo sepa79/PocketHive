@@ -7,6 +7,7 @@ import io.pockethive.tcpmock.util.PatternCache;
 import io.pockethive.tcpmock.util.AdvancedRequestMatcher;
 import io.pockethive.tcpmock.model.RequestVerification;
 import io.pockethive.tcpmock.handler.Iso8583Handler;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -23,6 +24,7 @@ public class MessageTypeRegistry {
     private final StateManager stateManager;
     private final EnhancedTemplateEngine templateEngine;
     private final RequestVerificationService verificationService;
+    private final FileBasedMappingLoader fileLoader;
 
     public MessageTypeRegistry(PatternCache patternCache,
                              AdvancedRequestMatcher advancedMatcher,
@@ -30,7 +32,8 @@ public class MessageTypeRegistry {
                              Iso8583Handler iso8583Handler,
                              StateManager stateManager,
                              EnhancedTemplateEngine templateEngine,
-                             RequestVerificationService verificationService) {
+                             RequestVerificationService verificationService,
+                             @Lazy FileBasedMappingLoader fileLoader) {
         this.patternCache = patternCache;
         this.advancedMatcher = advancedMatcher;
         this.paymentEngine = paymentEngine;
@@ -38,7 +41,25 @@ public class MessageTypeRegistry {
         this.stateManager = stateManager;
         this.templateEngine = templateEngine;
         this.verificationService = verificationService;
+        this.fileLoader = fileLoader;
         initializeDefaultMappings();
+    }
+
+    private void initializeDefaultMappings() {
+        MessageTypeMapping echoMapping = new MessageTypeMapping("echo", "^ECHO.*", "{{message}}", "Echo response");
+        echoMapping.setPriority(10);
+        addMapping(echoMapping);
+
+        MessageTypeMapping jsonMapping = new MessageTypeMapping("json", "^\\{.*\\}$",
+            "{\"status\":\"success\",\"timestamp\":\"{{timestamp}}\",\"echo\":{{message}}}", "JSON response");
+        jsonMapping.setPriority(10);
+        addMapping(jsonMapping);
+
+        MessageTypeMapping defaultMapping = new MessageTypeMapping("default", ".*", "OK", "Default response");
+        defaultMapping.setPriority(1);
+        addMapping(defaultMapping);
+
+        System.out.println("Initialized 3 default mappings (echo, json, default)");
     }
 
     public ProcessedResponse processMessage(String message) {
@@ -119,25 +140,17 @@ public class MessageTypeRegistry {
         return new ArrayList<>(mappings.values());
     }
 
-    private void initializeDefaultMappings() {
-        // Echo mapping (high priority)
-        MessageTypeMapping echoMapping = new MessageTypeMapping("echo", "^ECHO.*", "{{message}}", "Echo response");
-        echoMapping.setPriority(5);
-        addMapping(echoMapping);
 
-        // JSON mapping (medium priority)
-        MessageTypeMapping jsonMapping = new MessageTypeMapping("json", "^\\{.*\\}$",
-            "{\"status\":\"success\",\"timestamp\":\"{{timestamp}}\",\"echo\":{{message}}}", "JSON response");
-        jsonMapping.setPriority(5);
-        addMapping(jsonMapping);
-
-        // Default catch-all mapping (lowest priority)
-        MessageTypeMapping defaultMapping = new MessageTypeMapping("default", ".*", "OK", "Default response");
-        defaultMapping.setPriority(1);
-        addMapping(defaultMapping);
-    }
 
     public ScenarioManager getScenarioManager() {
         return stateManager.getScenarioManager();
+    }
+
+    public void saveMappingToFile(MessageTypeMapping mapping) {
+        fileLoader.saveMappingToFile(mapping);
+    }
+
+    public void deleteMappingFile(String id) {
+        fileLoader.deleteMappingFile(id);
     }
 }

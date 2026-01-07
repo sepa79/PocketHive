@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.util.Map;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocket;
@@ -12,22 +13,24 @@ import javax.net.ssl.X509TrustManager;
 import java.security.cert.X509Certificate;
 
 public class TcpConnectionPool {
-  private final Map<String, Socket> connections = new ConcurrentHashMap<>();
+  private static final int POOL_SIZE = 4;
+  private final Map<String, ArrayBlockingQueue<Socket>> pools = new ConcurrentHashMap<>();
   private final boolean sslVerify;
 
   public TcpConnectionPool(boolean sslVerify) {
     this.sslVerify = sslVerify;
   }
 
-  public synchronized Socket getOrCreate(String host,
-                                         int port,
-                                         boolean useSsl,
-                                         int timeout,
-                                         boolean keepAlive,
-                                         boolean tcpNoDelay) throws Exception {
+  public Socket getOrCreate(String host,
+                            int port,
+                            boolean useSsl,
+                            int timeout,
+                            boolean keepAlive,
+                            boolean tcpNoDelay) throws Exception {
     String key = (useSsl ? "tcps://" : "tcp://") + host + ":" + port;
-    Socket socket = connections.get(key);
+    ArrayBlockingQueue<Socket> pool = pools.computeIfAbsent(key, k -> new ArrayBlockingQueue<>(POOL_SIZE));
 
+    Socket socket = pool.poll();
     if (socket != null && !socket.isClosed() && socket.isConnected()) {
       configure(socket, timeout, keepAlive, tcpNoDelay);
       return socket;
@@ -35,27 +38,39 @@ public class TcpConnectionPool {
 
     socket = useSsl ? createSslSocket(host, port, timeout) : createSocket(host, port, timeout);
     configure(socket, timeout, keepAlive, tcpNoDelay);
-    connections.put(key, socket);
     return socket;
   }
 
-  public void remove(String host, int port, boolean useSsl) {
+  public void returnToPool(String host, int port, boolean useSsl, Socket socket) {
+    if (socket == null || socket.isClosed()) return;
     String key = (useSsl ? "tcps://" : "tcp://") + host + ":" + port;
-    Socket socket = connections.remove(key);
-    if (socket != null) {
+    ArrayBlockingQueue<Socket> pool = pools.get(key);
+    if (pool != null && !pool.offer(socket)) {
       try {
         socket.close();
       } catch (IOException ignored) {}
     }
   }
 
+  public void remove(String host, int port, boolean useSsl) {
+    String key = (useSsl ? "tcps://" : "tcp://") + host + ":" + port;
+    ArrayBlockingQueue<Socket> pool = pools.remove(key);
+    if (pool != null) {
+      pool.forEach(socket -> {
+        try {
+          socket.close();
+        } catch (IOException ignored) {}
+      });
+    }
+  }
+
   void closeAll() {
-    connections.values().forEach(socket -> {
+    pools.values().forEach(pool -> pool.forEach(socket -> {
       try {
         socket.close();
       } catch (IOException ignored) {}
-    });
-    connections.clear();
+    }));
+    pools.clear();
   }
 
   private Socket createSocket(String host, int port, int timeout) throws IOException {

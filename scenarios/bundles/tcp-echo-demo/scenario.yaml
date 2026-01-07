@@ -42,6 +42,8 @@ template:
             type: socket
             connectionReuse: PER_THREAD
             maxRetries: 2
+            connectTimeoutMs: 2000
+            readTimeoutMs: 3000
       work:
         in: proc
         out: post
@@ -53,3 +55,16 @@ template:
             publish-all-metrics: true
       work:
         in: post
+plan:
+  bees:
+    - role: generator
+      steps:
+        - stepId: gen-start
+          name: Start generator
+          time: PT1S
+          type: start
+  swarm:
+    - stepId: swarm-start
+      name: Start swarm
+      time: PT0S
+      type: start

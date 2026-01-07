@@ -1,8 +1,8 @@
 id: payment-settlement
 requestPattern: "0220.*"
-responseTemplate: "{{response_mti}}{{rrn}}00"
+responseTemplate: "0230{{request.regex '0220(.{12})' group 1}}{{random}}00"
 description: "ISO-8583 Settlement Request"
-priority: 10
+priority: 30
 enabled: true
 scenarioName: payment-flow
 requiredScenarioState: Authorized

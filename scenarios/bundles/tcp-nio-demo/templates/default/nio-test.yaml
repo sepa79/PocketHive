@@ -1,0 +1,11 @@
+serviceId: default
+callId: nio-test
+protocol: TCP
+behavior: REQUEST_RESPONSE
+transport: nio
+bodyTemplate: "NIO_TEST|{{ payloadAsJson.testId }}|{{ payloadAsJson.payload }}|{{ payloadAsJson.timestamp }}"
+headersTemplate:
+  x-ph-test-id: "{{ payloadAsJson.testId }}"
+  x-ph-transport: "nio"
+endTag: "\n"
+maxBytes: 8192

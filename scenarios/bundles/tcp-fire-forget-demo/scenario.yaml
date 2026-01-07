@@ -1,0 +1,61 @@
+id: tcp-fire-forget-demo
+name: TCP Fire-and-Forget Demo
+description: Demonstrates one-way TCP messaging with no response expected
+template:
+  image: swarm-controller:latest
+  bees:
+    - role: generator
+      image: generator:latest
+      config:
+        inputs:
+          type: SCHEDULER
+          scheduler:
+            ratePerSec: 50
+            maxMessages: 500
+        worker:
+          message:
+            bodyType: SIMPLE
+            body: |
+              {
+                "eventId": "EVT_{{ eval('#uuid()') }}",
+                "eventType": "FIRE_FORGET",
+                "payload": "{{ eval('#base64_encode(''event_'' + #randInt(1, 10000))') }}",
+                "timestamp": "{{ eval("#date_format(now, 'yyyy-MM-dd''T''HH:mm:ss.SSS')") }}"
+              }
+            headers:
+              x-ph-call-id: fire-forget-test
+      work:
+        out: build
+    - role: request-builder
+      image: request-builder:latest
+      config:
+        worker:
+          templateRoot: /app/scenario/templates
+          serviceId: default
+      work:
+        in: build
+        out: proc
+    - role: processor
+      image: processor:latest
+      config:
+        baseUrl: "{{ sut.endpoints['tcp-server'].baseUrl }}"
+        worker:
+          mode: THREAD_COUNT
+          threadCount: 20
+          tcpTransport:
+            type: socket
+            connectionReuse: PER_THREAD
+            maxRetries: 1
+            connectTimeoutMs: 2000
+            readTimeoutMs: 1000
+      work:
+        in: proc
+        out: post
+    - role: postprocessor
+      image: postprocessor:latest
+      config:
+        worker:
+          postprocessor:
+            publish-all-metrics: true
+      work:
+        in: post

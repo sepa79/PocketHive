@@ -32,10 +32,12 @@ pockethive:
       baseUrl: "tcp://system.example.com:8080"
       mode: RATE_PER_SEC
       ratePerSec: 100.0     # shared pacing across HTTP + TCP
-    tcpTransport:
-      type: socket
-      connectionReuse: PER_THREAD # honoured only by `socket`
-      maxRetries: 3
+      tcpTransport:
+        type: socket
+        connectionReuse: PER_THREAD # honoured only by `socket`
+        connectTimeoutMs: 5000
+        readTimeoutMs: 30000
+        maxRetries: 3
 ```
 
 ## Documentation
@@ -70,7 +72,7 @@ callId: api-call
 protocol: HTTP
 method: POST
 pathTemplate: "/api/users"
-bodyTemplate: '{"name": "{{ payload.name }}"}'
+bodyTemplate: '{"name": "{{ payloadAsJson.name }}"}'
 headersTemplate:
   Content-Type: "application/json"
 ```
@@ -82,18 +84,32 @@ callId: tcp-echo
 protocol: TCP
 behavior: ECHO
 transport: socket
-bodyTemplate: "ECHO_{{ payload.message }}"
+endTag: "\n"
+maxBytes: 8192
+bodyTemplate: "{{ payloadAsJson.message }}"
+headersTemplate:
+  Test-Type: "echo"
 ```
 
 ### Secure TCP Connection
 ```yaml
 serviceId: secure
-callId: tcps-call
+callId: ssl-secure-message
 protocol: TCP
 behavior: REQUEST_RESPONSE
 transport: socket
-bodyTemplate: "{{ payload.data }}"
+endTag: "-----END ENHANCED SECURE MESSAGE-----"
+maxBytes: 8192
+bodyTemplate: |
+  -----BEGIN ENHANCED SECURE MESSAGE-----
+  Session-ID: {{ payloadAsJson.sessionId }}
+  Timestamp: {{ payloadAsJson.timestamp }}
+  Data: {{ payloadAsJson.encryptedData }}
+  Signature: {{ payloadAsJson.signature }}
+  Validation: ENHANCED
+  Metrics: ENABLED
+  -----END ENHANCED SECURE MESSAGE-----
 headersTemplate:
-  x-ph-ssl: "true"
-  x-ph-ssl-verify: "false"
+  Session-ID: "{{ payloadAsJson.sessionId }}"
+  Security-Level: "enhanced"
 ```

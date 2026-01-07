@@ -36,7 +36,7 @@ public class TcpMockServer implements CommandLineRunner {
     private final TcpProxyHandler tcpProxyHandler;
     private SslContext sslContext;
 
-    public TcpMockServer(TcpMockConfig config, 
+    public TcpMockServer(TcpMockConfig config,
                         UnifiedTcpRequestHandler requestHandler,
                         MessageTypeRegistry messageTypeRegistry,
                         ValidationService validationService,
@@ -83,6 +83,9 @@ public class TcpMockServer implements CommandLineRunner {
                             pipeline.addLast(sslContext.newHandler(ch.alloc()));
                         }
 
+                        // TCP traffic logging
+                        pipeline.addLast(new io.netty.handler.logging.LoggingHandler(io.netty.handler.logging.LogLevel.DEBUG));
+
                         // Connection management
                         pipeline.addLast(new IdleStateHandler(config.getConnection().getIdleTimeout(), 0, 0));
 
@@ -92,7 +95,7 @@ public class TcpMockServer implements CommandLineRunner {
                         // Dual handler: String for text, ByteBuf for binary
                         pipeline.addLast("textHandler", requestHandler);
                         pipeline.addLast("binaryHandler", new BinaryMessageHandler(
-                            messageTypeRegistry, validationService, tcpMetrics, 
+                            messageTypeRegistry, validationService, tcpMetrics,
                             faultInjectionHandler, tcpProxyHandler));
                     }
                 })

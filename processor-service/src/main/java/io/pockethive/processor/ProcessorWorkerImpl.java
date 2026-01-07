@@ -63,27 +63,28 @@ import org.springframework.stereotype.Component;
 )
 class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
 
-  private static final ObjectMapper MAPPER = new ObjectMapper();
   private static final int GLOBAL_MAX_CONNECTIONS = 200;
   private static final int GLOBAL_MAX_PER_ROUTE = 200;
 
+  private final ObjectMapper mapper;
   private final ProcessorWorkerProperties properties;
   private final CallMetricsRecorder metricsRecorder = new CallMetricsRecorder();
   private final Map<String, ProtocolHandler> protocolHandlers;
 
   @Autowired
-  ProcessorWorkerImpl(ProcessorWorkerProperties properties) {
-    this(properties, newPooledClient(), newNoKeepAliveClient(), Clock.systemUTC());
+  ProcessorWorkerImpl(ObjectMapper mapper, ProcessorWorkerProperties properties) {
+    this(mapper, properties, newPooledClient(), newNoKeepAliveClient(), Clock.systemUTC());
   }
 
-  ProcessorWorkerImpl(ProcessorWorkerProperties properties, HttpClient httpClient, HttpClient noKeepAliveClient, Clock clock) {
+  ProcessorWorkerImpl(ObjectMapper mapper, ProcessorWorkerProperties properties, HttpClient httpClient, HttpClient noKeepAliveClient, Clock clock) {
+    this.mapper = Objects.requireNonNull(mapper, "mapper");
     this.properties = Objects.requireNonNull(properties, "properties");
     ThreadLocal<HttpClient> perThreadClient = ThreadLocal.withInitial(HttpClients::createDefault);
     java.util.concurrent.atomic.AtomicLong nextAllowedTimeNanos = new java.util.concurrent.atomic.AtomicLong(0L);
     boolean sslVerify = properties.defaultConfig().sslVerify();
     this.protocolHandlers = Map.of(
-        "HTTP", new HttpProtocolHandler(clock, metricsRecorder, httpClient, noKeepAliveClient, perThreadClient, nextAllowedTimeNanos),
-        "TCP", new TcpProtocolHandler(clock, metricsRecorder, properties.defaultConfig().tcpTransport(), nextAllowedTimeNanos)
+        "HTTP", new HttpProtocolHandler(mapper, clock, metricsRecorder, httpClient, noKeepAliveClient, perThreadClient, nextAllowedTimeNanos),
+        "TCP", new TcpProtocolHandler(mapper, clock, metricsRecorder, properties.defaultConfig().tcpTransport(), nextAllowedTimeNanos)
     );
   }
 
@@ -123,7 +124,7 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
   }
 
   private WorkItem buildError(WorkItem in, String message, CallMetrics metrics, String role) {
-    ObjectNode result = MAPPER.createObjectNode();
+    ObjectNode result = mapper.createObjectNode();
     result.put("error", message);
     WorkItem errorItem = ResponseBuilder.build(result, role, metrics);
     return in.addStep(errorItem.asString(), errorItem.headers());

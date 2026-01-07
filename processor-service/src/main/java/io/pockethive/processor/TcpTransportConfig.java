@@ -2,7 +2,8 @@ package io.pockethive.processor;
 
 public record TcpTransportConfig(
     String type,           // socket, nio, netty
-    int timeout,           // connection timeout ms
+    int connectTimeoutMs,  // connection timeout ms
+    int readTimeoutMs,     // read/SO_TIMEOUT ms
     int maxBytes,          // max bytes for streaming
     boolean keepAlive,     // socket keep alive
     int workerThreads,     // netty worker threads
@@ -19,6 +20,7 @@ public record TcpTransportConfig(
     public static TcpTransportConfig defaults() {
         return new TcpTransportConfig(
             "socket",
+            5000,
             30000,
             8192,
             true,

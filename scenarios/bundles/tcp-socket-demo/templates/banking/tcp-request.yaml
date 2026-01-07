@@ -1,12 +1,12 @@
+# TCP TEMPLATE for Request Builder
 serviceId: banking
 callId: tcp-request
 protocol: TCP
 behavior: REQUEST_RESPONSE
 transport: socket
 endTag: ETX
+maxBytes: 8192
 bodyTemplate: |
   STX{{ payloadAsJson.requestId }}|{{ payloadAsJson.operation }}|{{ payloadAsJson.accountId }}|{{ payloadAsJson.timestamp }}ETX
 headersTemplate:
-  x-ph-protocol: "tcp"
-  x-ph-request-id: "{{ payloadAsJson.requestId }}"
-  x-ph-tcp-end-tag: "ETX"
+  Request-ID: "{{ payloadAsJson.requestId }}"

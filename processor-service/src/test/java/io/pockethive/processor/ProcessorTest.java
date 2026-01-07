@@ -67,7 +67,7 @@ class ProcessorTest {
         properties.setConfig(Map.of("baseUrl", "http://sut"));
         HttpClient httpClient = mock(HttpClient.class);
         Clock clock = Clock.fixed(Instant.parse("2024-01-01T00:00:00Z"), ZoneOffset.UTC);
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(properties, httpClient, httpClient, clock);
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, clock);
         ProcessorWorkerConfig config = new ProcessorWorkerConfig("http://sut", null, 0, 0.0, null, null, null, null,null);
         TestWorkerContext context = new TestWorkerContext(config);
 
@@ -131,7 +131,7 @@ class ProcessorTest {
         properties.setConfig(Map.of("baseUrl", "http://sut/api"));
         HttpClient httpClient = mock(HttpClient.class);
         Clock clock = Clock.fixed(Instant.parse("2024-02-02T00:00:00Z"), ZoneOffset.UTC);
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(properties, httpClient, httpClient, clock);
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, clock);
         ProcessorWorkerConfig config = new ProcessorWorkerConfig("http://sut/api", null, 0, 0.0, null, null, null, null, null);
         TestWorkerContext context = new TestWorkerContext(config);
 
@@ -159,7 +159,7 @@ class ProcessorTest {
         properties.setConfig(Map.of("baseUrl", "http://sut"));
         HttpClient httpClient = mock(HttpClient.class);
         SequenceClock clock = new SequenceClock(0, 50, 100, 250);
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(properties, httpClient, httpClient, clock);
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, clock);
         ProcessorWorkerConfig config = new ProcessorWorkerConfig("http://sut", null, 0, 0.0, null, null, null, null, null);
         TestWorkerContext context = new TestWorkerContext(config);
 
@@ -205,7 +205,7 @@ class ProcessorTest {
         properties.setConfig(Map.of("baseUrl", "http://defaults"));
         HttpClient httpClient = mock(HttpClient.class);
         Clock clock = Clock.fixed(Instant.parse("2024-01-01T00:00:00Z"), ZoneOffset.UTC);
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(properties, httpClient, httpClient, clock);
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, clock);
         TestWorkerContext context = new TestWorkerContext(null);
 
         AtomicReference<ClassicHttpRequest> requestRef = new AtomicReference<>();
@@ -232,7 +232,7 @@ class ProcessorTest {
         properties.setConfig(Map.of("baseUrl", ""));
         HttpClient httpClient = mock(HttpClient.class);
         Clock clock = Clock.systemUTC();
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(properties, httpClient, httpClient, clock);
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, clock);
         ProcessorWorkerConfig config = new ProcessorWorkerConfig(" ", null, 0, 0.0, null, null, null, null, null);
         TestWorkerContext context = new TestWorkerContext(config);
 

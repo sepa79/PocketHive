@@ -1,0 +1,60 @@
+id: tcp-streaming-demo
+name: TCP Streaming Large Payload Demo
+description: Demonstrates TCP streaming behavior with large responses
+template:
+  image: swarm-controller:latest
+  bees:
+    - role: generator
+      image: generator:latest
+      config:
+        inputs:
+          type: SCHEDULER
+          scheduler:
+            ratePerSec: 5
+            maxMessages: 50
+        worker:
+          message:
+            bodyType: SIMPLE
+            body: |
+              {
+                "requestId": "STREAM_{{ eval('#uuid()') }}",
+                "size": "LARGE",
+                "timestamp": "{{ eval("#date_format(now, 'yyyy-MM-dd''T''HH:mm:ss.SSS')") }}"
+              }
+            headers:
+              x-ph-call-id: streaming-test
+      work:
+        out: build
+    - role: request-builder
+      image: request-builder:latest
+      config:
+        worker:
+          templateRoot: /app/scenario/templates
+          serviceId: default
+      work:
+        in: build
+        out: proc
+    - role: processor
+      image: processor:latest
+      config:
+        baseUrl: "{{ sut.endpoints['tcp-server'].baseUrl }}"
+        worker:
+          mode: THREAD_COUNT
+          threadCount: 5
+          tcpTransport:
+            type: socket
+            connectionReuse: PER_THREAD
+            maxRetries: 1
+            connectTimeoutMs: 3000
+            readTimeoutMs: 10000
+      work:
+        in: proc
+        out: post
+    - role: postprocessor
+      image: postprocessor:latest
+      config:
+        worker:
+          postprocessor:
+            publish-all-metrics: true
+      work:
+        in: post

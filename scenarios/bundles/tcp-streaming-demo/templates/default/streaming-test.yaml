@@ -1,0 +1,11 @@
+serviceId: default
+callId: streaming-test
+protocol: TCP
+behavior: STREAMING
+transport: socket
+bodyTemplate: "STREAM_REQUEST|{{ payloadAsJson.requestId }}|{{ payloadAsJson.size }}|{{ payloadAsJson.timestamp }}"
+headersTemplate:
+  x-ph-request-id: "{{ payloadAsJson.requestId }}"
+  x-ph-size: "{{ payloadAsJson.size }}"
+endTag: "\n"
+maxBytes: 65536

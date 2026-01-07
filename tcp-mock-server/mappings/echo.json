@@ -1,0 +1,9 @@
+{
+  "id": "echo",
+  "requestPattern": "^ECHO.*",
+  "responseTemplate": "{{message}}",
+  "responseDelimiter": "\n",
+  "description": "Echo response for any ECHO prefix",
+  "priority": 20,
+  "enabled": true
+}

@@ -43,9 +43,9 @@ template:
           tcpTransport:
             type: socket
             connectionReuse: PER_THREAD
-            maxRetries: 3
-            connectTimeoutMs: 5000
-            readTimeoutMs: 10000
+            maxRetries: 1
+            connectTimeoutMs: 2000
+            readTimeoutMs: 3000
       work:
         in: proc
         out: post
@@ -57,3 +57,4 @@ template:
             publish-all-metrics: true
       work:
         in: post
+

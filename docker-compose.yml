@@ -183,8 +183,9 @@ services:
       TCP_MOCK_FILTERING_ENABLED: "true"
       MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "health,info,metrics,prometheus"
     volumes:
-      - ./tcp-mock-server/mappings:/app/mappings
-      - ./tcp-mock-server/__files:/app/__files
+      - ./tcp-mock-server/mappings:/app/mappings:ro
+      - ./tcp-mock-server/__files:/app/__files:ro
+      - tcp-mock-data:/app/data
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8080/actuator/health" ]
       interval: 30s
@@ -325,6 +326,7 @@ volumes:
   loki-data:
   redis-data:
   postgres-data:
+  tcp-mock-data:
 
 networks:
   default:

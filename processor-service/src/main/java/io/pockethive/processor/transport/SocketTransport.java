@@ -6,9 +6,12 @@ import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class SocketTransport implements TcpTransport {
 
+    private static final Logger logger = LoggerFactory.getLogger(SocketTransport.class);
     private final TcpTransportConfig config;
     private final TcpConnectionPool pool;
     private final ConcurrentHashMap<String, Object> locks;
@@ -31,17 +34,21 @@ public class SocketTransport implements TcpTransport {
 
         boolean useSsl = Boolean.TRUE.equals(request.options().get("ssl"));
         boolean sslVerify = Boolean.TRUE.equals(request.options().getOrDefault("sslVerify", false));
-        int timeout = (Integer) request.options().getOrDefault("timeout", 30000);
+        int connectTimeout = (Integer) request.options().getOrDefault("connectTimeoutMs", config != null ? config.connectTimeoutMs() : 5000);
+        int readTimeout = (Integer) request.options().getOrDefault("readTimeoutMs", config != null ? config.readTimeoutMs() : 30000);
 
         if (shouldPool()) {
-            return executeWithPooledSocket(request, behavior, start, timeout, useSsl);
+            return executeWithPooledSocket(request, behavior, start, connectTimeout, readTimeout, useSsl);
         }
 
         boolean keepAlive = config == null || config.keepAlive();
         boolean tcpNoDelay = config == null || config.tcpNoDelay();
-        try (Socket socket = useSsl ? createSslSocket(request.host(), request.port(), sslVerify)
-                                    : new Socket(request.host(), request.port())) {
-            return executeWithSocket(socket, request, behavior, start, timeout, keepAlive, tcpNoDelay);
+        try (Socket socket = useSsl ? createSslSocket(request.host(), request.port(), sslVerify, connectTimeout)
+                                    : new Socket()) {
+            if (!useSsl) {
+                socket.connect(new java.net.InetSocketAddress(request.host(), request.port()), connectTimeout);
+            }
+            return executeWithSocket(socket, request, behavior, start, readTimeout, keepAlive, tcpNoDelay);
         } catch (Exception e) {
             throw new TcpException("TCP operation failed", e);
         }
@@ -60,26 +67,32 @@ public class SocketTransport implements TcpTransport {
     private TcpResponse executeWithPooledSocket(TcpRequest request,
                                                TcpBehavior behavior,
                                                long start,
-                                               int timeout,
+                                               int connectTimeout,
+                                               int readTimeout,
                                                boolean useSsl) throws TcpException {
         String key = (useSsl ? "tcps://" : "tcp://") + request.host() + ":" + request.port();
         Object lock = locks.computeIfAbsent(key, ignored -> new Object());
-        synchronized (lock) {
-            Socket socket = null;
-            try {
-                socket = pool.getOrCreate(
-                    request.host(),
-                    request.port(),
-                    useSsl,
-                    timeout,
-                    config.keepAlive(),
-                    config.tcpNoDelay()
-                );
-                return executeWithSocket(socket, request, behavior, start, timeout, config.keepAlive(), config.tcpNoDelay());
-            } catch (Exception ex) {
-                pool.remove(request.host(), request.port(), useSsl);
-                throw new TcpException("TCP operation failed", ex);
+        Socket socket = null;
+        try {
+            socket = pool.getOrCreate(
+                request.host(),
+                request.port(),
+                useSsl,
+                connectTimeout,
+                config.keepAlive(),
+                config.tcpNoDelay()
+            );
+            TcpResponse response = executeWithSocket(socket, request, behavior, start, readTimeout, config.keepAlive(), config.tcpNoDelay());
+            pool.returnToPool(request.host(), request.port(), useSsl, socket);
+            return response;
+        } catch (Exception ex) {
+            if (socket != null) {
+                try {
+                    socket.close();
+                } catch (Exception ignored) {}
             }
+            pool.remove(request.host(), request.port(), useSsl);
+            throw new TcpException("TCP operation failed", ex);
         }
     }
 
@@ -87,15 +100,21 @@ public class SocketTransport implements TcpTransport {
                                          TcpRequest request,
                                          TcpBehavior behavior,
                                          long start,
-                                         int timeout,
+                                         int readTimeout,
                                          boolean keepAlive,
                                          boolean tcpNoDelay) throws IOException {
-        socket.setSoTimeout(timeout);
+        socket.setSoTimeout(readTimeout);
         socket.setKeepAlive(keepAlive);
         socket.setTcpNoDelay(tcpNoDelay);
 
         OutputStream out = socket.getOutputStream();
         InputStream in = socket.getInputStream();
+
+        if (logger.isDebugEnabled()) {
+            logger.debug("TCP_SEND host={} port={} bytes={} payload={}",
+                request.host(), request.port(), request.payload().length,
+                new String(request.payload(), StandardCharsets.UTF_8));
+        }
 
         out.write(request.payload());
         out.flush();
@@ -105,68 +124,23 @@ public class SocketTransport implements TcpTransport {
         }
 
         byte[] response = readResponse(in, request, behavior);
-        return new TcpResponse(200, response, System.currentTimeMillis() - start);
+        long latency = System.currentTimeMillis() - start;
+
+        if (logger.isDebugEnabled()) {
+            logger.debug("TCP_RECV host={} port={} bytes={} latency={}ms payload={}",
+                request.host(), request.port(), response.length, latency,
+                new String(response, StandardCharsets.UTF_8));
+        }
+
+        return new TcpResponse(200, response, latency);
     }
 
     private byte[] readResponse(InputStream in, TcpRequest request, TcpBehavior behavior) throws IOException {
-        String endTag = (String) request.options().get("endTag");
-
-        if (behavior == TcpBehavior.ECHO && endTag != null) {
-            return readUntilDelimiter(in, endTag, true);
-        }
-
-        if (behavior == TcpBehavior.ECHO) {
-            int expectedBytes = request.payload().length;
-            ByteArrayOutputStream baos = new ByteArrayOutputStream(expectedBytes);
-            byte[] buffer = new byte[Math.min(1024, expectedBytes)];
-            int totalRead = 0;
-            int read;
-            while (totalRead < expectedBytes && (read = in.read(buffer, 0, Math.min(buffer.length, expectedBytes - totalRead))) != -1) {
-                baos.write(buffer, 0, read);
-                totalRead += read;
-            }
-            return baos.toByteArray();
-        }
-
-        if (behavior == TcpBehavior.STREAMING) {
-            int maxBytes = (Integer) request.options().getOrDefault("maxBytes", 8192);
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            byte[] buffer = new byte[1024];
-            int totalRead = 0;
-            int read;
-            while (totalRead < maxBytes && (read = in.read(buffer)) != -1) {
-                baos.write(buffer, 0, read);
-                totalRead += read;
-            }
-            return baos.toByteArray();
-        }
-
-        // REQUEST_RESPONSE behavior
-        String delimiter = endTag != null ? endTag : "</Document>";
-        return readUntilDelimiter(in, delimiter, false);
+        ResponseReader reader = ResponseReader.forBehavior(behavior);
+        return reader.read(in, request);
     }
 
-    private byte[] readUntilDelimiter(InputStream in, String delimiter, boolean stripDelimiter) throws IOException {
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        byte[] delimBytes = delimiter.getBytes(StandardCharsets.UTF_8);
-        int matchPos = 0;
-        int b;
-        while ((b = in.read()) != -1) {
-            baos.write(b);
-            if (b == delimBytes[matchPos]) {
-                matchPos++;
-                if (matchPos == delimBytes.length) {
-                    byte[] result = baos.toByteArray();
-                    return stripDelimiter ? java.util.Arrays.copyOf(result, result.length - delimBytes.length) : result;
-                }
-            } else {
-                matchPos = (b == delimBytes[0]) ? 1 : 0;
-            }
-        }
-        return baos.toByteArray();
-    }
-
-    private Socket createSslSocket(String host, int port, boolean verify) throws Exception {
+    private Socket createSslSocket(String host, int port, boolean verify, int connectTimeout) throws Exception {
         javax.net.ssl.SSLContext sslContext = javax.net.ssl.SSLContext.getInstance("TLS");
         if (!verify) {
             javax.net.ssl.TrustManager[] trustAllCerts = new javax.net.ssl.TrustManager[] {
@@ -181,7 +155,9 @@ public class SocketTransport implements TcpTransport {
             sslContext.init(null, null, null);
         }
 
-        javax.net.ssl.SSLSocket sslSocket = (javax.net.ssl.SSLSocket) sslContext.getSocketFactory().createSocket(host, port);
+        javax.net.ssl.SSLSocketFactory factory = sslContext.getSocketFactory();
+        javax.net.ssl.SSLSocket sslSocket = (javax.net.ssl.SSLSocket) factory.createSocket();
+        sslSocket.connect(new java.net.InetSocketAddress(host, port), connectTimeout);
         sslSocket.startHandshake();
         return sslSocket;
     }

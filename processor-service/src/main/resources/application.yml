@@ -28,7 +28,8 @@ pockethive:
       tcpTransport:
         type: socket
         connectionReuse: PER_THREAD
-        timeout: 30000
+        connectTimeoutMs: 5000
+        readTimeoutMs: 30000
         maxBytes: 8192
         keepAlive: true
         workerThreads: 4

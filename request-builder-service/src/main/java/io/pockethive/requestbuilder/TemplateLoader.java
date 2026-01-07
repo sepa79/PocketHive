@@ -68,15 +68,15 @@ public final class TemplateLoader {
   private TemplateDefinition parseTemplate(Path path, String defaultServiceId) {
     try {
       ObjectMapper mapper = selectMapper(path);
-      
+
       // Read as generic map first to detect protocol
       Map<String, Object> templateMap = mapper.readValue(path.toFile(), Map.class);
       String protocol = (String) templateMap.getOrDefault("protocol", "HTTP");
-      
+
       String serviceId = templateMap.get("serviceId") == null || templateMap.get("serviceId").toString().isBlank()
           ? defaultServiceId
           : templateMap.get("serviceId").toString().trim();
-      
+
       if ("TCP".equals(protocol)) {
         TcpTemplateDefinition def = mapper.readValue(path.toFile(), TcpTemplateDefinition.class);
         return new TcpTemplateDefinition(
@@ -86,7 +86,9 @@ public final class TemplateLoader {
             def.behavior(),
             def.transport(),
             def.bodyTemplate(),
-            def.headersTemplate()
+            def.headersTemplate(),
+            def.endTag(),
+            def.maxBytes()
         );
       } else {
         HttpTemplateDefinition def = mapper.readValue(path.toFile(), HttpTemplateDefinition.class);

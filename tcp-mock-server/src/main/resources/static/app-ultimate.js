@@ -19,20 +19,51 @@ class TcpMockUIUltimate {
         this.bulkOps = new BulkOperationsModule();
         this.mappingFilter = new MappingFilterModule();
         this.diffViewer = new DiffViewerModule();
+        this.testEditor = null;
+        this.core = null;
         this.init();
     }
 
-    init() {
+    async init() {
         this.initTheme();
-        this.bindEvents();
-        this.modules.init(this);
-        this.loadData();
-        setInterval(() => this.loadData(), 5000);
-        this.showOnboarding();
+        this.core = new CoreIntegration(this);
+        const authenticated = await this.core.init();
+        if (authenticated) {
+            this.http = new HttpClient(this.core.auth);
+            this.initTestEditor();
+            this.bindEvents();
+            this.modules.init(this);
+            this.loadData();
+            setInterval(() => {
+                if (this.currentTab === 'requests') this.loadRequests();
+                if (this.currentTab === 'mappings') this.loadMappings();
+                this.updateRecordingStatus();
+                this.updateMetrics();
+            }, 5000);
+        } else {
+            // Still bind events for login to work
+            this.bindEvents();
+        }
     }
 
     initTheme() {
         document.documentElement.classList.toggle('dark', this.theme === 'dark');
+    }
+
+    initTestEditor() {
+        const textarea = document.getElementById('testMessage');
+        this.testEditor = CodeMirror(document.getElementById('testMessageEditor'), {
+            value: textarea.value,
+            mode: 'text/plain',
+            theme: this.theme === 'dark' ? 'monokai' : 'eclipse',
+            lineNumbers: true,
+            lineWrapping: true,
+            autoCloseBrackets: true,
+            matchBrackets: true,
+            styleActiveLine: true,
+            indentUnit: 2,
+            tabSize: 2
+        });
     }
 
     bindEvents() {
@@ -67,6 +98,10 @@ class TcpMockUIUltimate {
         document.getElementById('addVerificationBtn').addEventListener('click', () => this.addVerification());
         document.getElementById('runVerificationBtn').addEventListener('click', () => this.runVerification());
         document.getElementById('sendTestBtn').addEventListener('click', () => this.sendTest());
+        document.getElementById('loadTemplateBtn')?.addEventListener('click', () => this.loadTestTemplate());
+        document.getElementById('testMessageType')?.addEventListener('change', (e) => this.updateTestTemplate(e.target.value));
+        document.getElementById('testTransport')?.addEventListener('change', (e) => this.toggleTcpFields(e.target.value));
+        document.getElementById('testSsl')?.addEventListener('change', (e) => this.toggleSslVerify(e.target.checked));
         document.getElementById('closeRequestModalBtn').addEventListener('click', () => this.closeRequestModal());
         document.getElementById('addHeaderBtn')?.addEventListener('click', () => this.addGlobalHeader());
         document.getElementById('saveSettingsBtn')?.addEventListener('click', () => this.saveSettings());
@@ -75,7 +110,7 @@ class TcpMockUIUltimate {
         document.getElementById('exportAllBtn')?.addEventListener('click', () => this.modules.exportAll(this.mappings));
         document.getElementById('exportSelectedBtn')?.addEventListener('click', () => this.modules.exportSelected(this.mappings));
         document.getElementById('importBtn')?.addEventListener('click', () => document.getElementById('importFile').click());
-        document.getElementById('importFile')?.addEventListener('change', (e) => this.handleImport(e.target.files[0]));
+        document.getElementById('importFile')?.addEventListener('change', (e) => this.handleImportMultiple(e.target.files));
         document.getElementById('mappingPattern')?.addEventListener('input', (e) => this.validatePattern(e.target.value));
         document.getElementById('mappingPriority')?.addEventListener('input', (e) => this.validatePriority(e.target.value));
         document.getElementById('mappingSearch')?.addEventListener('input', (e) => { this.mappingFilter.filters.search = e.target.value; this.renderMappings(); });
@@ -93,6 +128,7 @@ class TcpMockUIUltimate {
         document.getElementById('cancelScenarioBtn')?.addEventListener('click', () => this.closeScenarioModal());
         document.getElementById('saveScenarioBtn')?.addEventListener('click', () => this.saveScenario());
         document.getElementById('scenarioSearch')?.addEventListener('input', (e) => { this.scenarioSearchTerm = e.target.value; this.renderScenarios(); });
+        document.getElementById('recordingHistoryBtn')?.addEventListener('click', () => this.openRecordingHistory());
     }
 
     switchTab(tab) {
@@ -109,6 +145,7 @@ class TcpMockUIUltimate {
             console.error(`Tab element not found: ${tab}Tab`);
         }
         this.currentTab = tab;
+        if (tab === 'dashboard' && this.core?.dashboard) this.core.dashboard.load(this);
         if (tab === 'scenarios') this.loadScenarios();
         if (tab === 'verification') this.renderVerifications();
         if (tab === 'test') document.getElementById('testResponse').textContent = 'Ready...';
@@ -120,6 +157,9 @@ class TcpMockUIUltimate {
         this.theme = this.theme === 'light' ? 'dark' : 'light';
         localStorage.setItem('theme', this.theme);
         document.documentElement.classList.toggle('dark', this.theme === 'dark');
+        if (this.testEditor) {
+            this.testEditor.setOption('theme', this.theme === 'dark' ? 'monokai' : 'eclipse');
+        }
     }
 
     async loadData() {
@@ -133,7 +173,7 @@ class TcpMockUIUltimate {
 
     async loadRequests() {
         try {
-            const response = await fetch('/api/requests');
+            const response = await this.http.get('/api/requests');
             this.requests = await response.json();
             this.renderRequests();
             document.getElementById('requestCount').textContent = `${this.requests.length} requests`;
@@ -166,7 +206,7 @@ class TcpMockUIUltimate {
     }
 
     filterRequests(term) {
-        const filtered = this.requests.filter(r => 
+        const filtered = this.requests.filter(r =>
             r.message.toLowerCase().includes(term.toLowerCase()) || r.response.toLowerCase().includes(term.toLowerCase())
         );
         const tbody = document.getElementById('requestsTable');
@@ -196,7 +236,7 @@ class TcpMockUIUltimate {
     async clearRequests() {
         if (!confirm('Clear all requests?')) return;
         try {
-            await fetch('/api/requests', { method: 'DELETE' });
+            await this.http.delete('/api/requests');
             this.modules.undoRedo.record('clearRequests', this.requests);
             this.requests = [];
             this.renderRequests();
@@ -207,7 +247,7 @@ class TcpMockUIUltimate {
 
     async loadMappings() {
         try {
-            const response = await fetch('/api/ui/mappings');
+            const response = await this.http.get('/api/mappings');
             this.mappings = await response.json();
             this.renderMappings();
             this.checkPriorityConflicts();
@@ -230,7 +270,7 @@ class TcpMockUIUltimate {
                     </button>
                     <span class="text-sm font-mono text-gray-900 dark:text-gray-100">${m.id}</span>
                 </td>
-                <td class="px-6 py-4 text-sm font-mono text-gray-900 dark:text-gray-100">${this.truncate(m.pattern, 40)}</td>
+                <td class="px-6 py-4 text-sm font-mono text-gray-900 dark:text-gray-100">${this.truncate(m.requestPattern, 40)}</td>
                 <td class="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">${m.priority}</td>
                 <td class="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">${m.matchCount}</td>
                 <td class="px-6 py-4">
@@ -291,14 +331,14 @@ class TcpMockUIUltimate {
         document.getElementById('mappingModalTitle').textContent = mapping ? 'Edit Mapping' : 'Create Mapping';
         if (mapping) {
             document.getElementById('mappingId').value = mapping.id;
-            document.getElementById('mappingPattern').value = mapping.pattern;
+            document.getElementById('mappingPattern').value = mapping.requestPattern;
             document.getElementById('mappingPriority').value = mapping.priority;
-            document.getElementById('mappingResponse').value = mapping.response;
-            document.getElementById('responseDelimiter').value = mapping.delimiter || '\\n';
+            document.getElementById('mappingResponse').value = mapping.responseTemplate;
+            document.getElementById('responseDelimiter').value = mapping.responseDelimiter || '\\n';
             document.getElementById('fixedDelayMs').value = mapping.fixedDelayMs || 0;
             document.getElementById('scenarioName').value = mapping.scenarioName || '';
-            document.getElementById('requiredState').value = mapping.requiredState || '';
-            document.getElementById('newState').value = mapping.newState || '';
+            document.getElementById('requiredState').value = mapping.requiredScenarioState || '';
+            document.getElementById('newState').value = mapping.newScenarioState || '';
             document.getElementById('mappingDescription').value = mapping.description || '';
         } else {
             document.getElementById('mappingId').value = '';
@@ -343,14 +383,14 @@ class TcpMockUIUltimate {
 
         const mapping = {
             id: document.getElementById('mappingId').value || `mapping-${Date.now()}`,
-            pattern: document.getElementById('mappingPattern').value,
-            response: responseTemplate,
+            requestPattern: document.getElementById('mappingPattern').value,
+            responseTemplate: responseTemplate,
             priority: parseInt(document.getElementById('mappingPriority').value),
-            delimiter: document.getElementById('responseDelimiter').value,
+            responseDelimiter: document.getElementById('responseDelimiter').value,
             fixedDelayMs: parseInt(document.getElementById('fixedDelayMs').value) || null,
             scenarioName: document.getElementById('scenarioName').value || null,
-            requiredState: document.getElementById('requiredState').value || null,
-            newState: document.getElementById('newState').value || null,
+            requiredScenarioState: document.getElementById('requiredState').value || null,
+            newScenarioState: document.getElementById('newState').value || null,
             description: document.getElementById('mappingDescription').value || null
         };
 
@@ -371,7 +411,7 @@ class TcpMockUIUltimate {
         }
 
         try {
-            const response = await fetch('/api/ui/mappings', {
+            const response = await fetch('/api/mappings', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(mapping)
@@ -379,7 +419,7 @@ class TcpMockUIUltimate {
             if (response.ok) {
                 this.modules.undoRedo.record('saveMapping', mapping);
                 this.closeMappingModal();
-                this.loadMappings();
+                await this.loadMappings();
                 this.modules.showNotification('Mapping saved successfully', 'success');
             } else {
                 this.modules.showNotification('Failed to save mapping', 'error');
@@ -410,9 +450,9 @@ class TcpMockUIUltimate {
         if (!confirm('Delete this mapping?')) return;
         try {
             const mapping = this.mappings.find(m => m.id === id);
-            await fetch(`/api/ui/mappings/${id}`, { method: 'DELETE' });
+            await fetch(`/api/mappings/${id}`, { method: 'DELETE' });
             this.modules.undoRedo.record('deleteMapping', mapping);
-            this.loadMappings();
+            await this.loadMappings();
             this.modules.showNotification('Mapping deleted', 'success');
         } catch (error) {
             console.error('Failed to delete mapping:', error);
@@ -438,12 +478,12 @@ class TcpMockUIUltimate {
     }
 
     renderScenarios() {
-        const filtered = this.scenarios.filter(s => 
-            !this.scenarioSearchTerm || 
+        const filtered = this.scenarios.filter(s =>
+            !this.scenarioSearchTerm ||
             s.name.toLowerCase().includes(this.scenarioSearchTerm.toLowerCase()) ||
             s.state.toLowerCase().includes(this.scenarioSearchTerm.toLowerCase())
         );
-        
+
         const tbody = document.getElementById('scenariosTable');
         if (filtered.length === 0) {
             tbody.innerHTML = `
@@ -456,7 +496,7 @@ class TcpMockUIUltimate {
             `;
             return;
         }
-        
+
         tbody.innerHTML = filtered.map(s => {
             const relatedMappings = this.mappings.filter(m => m.scenarioName === s.name).length;
             return `
@@ -503,26 +543,31 @@ class TcpMockUIUltimate {
     async saveScenario() {
         const name = document.getElementById('scenarioNameInput').value.trim();
         const state = document.getElementById('scenarioStateInput').value.trim();
-        
+
         if (!name) {
             this.modules.showNotification('Scenario name is required', 'error');
             return;
         }
-        
+
         if (!state) {
             this.modules.showNotification('State is required', 'error');
             return;
         }
-        
+
         try {
-            await fetch(`/__admin/scenarios/${name}/state`, {
+            const response = await fetch(`/__admin/scenarios/${name}/state`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ state })
             });
+
+            if (!response.ok) {
+                throw new Error('Failed to save scenario');
+            }
+
             this.modules.showNotification('Scenario saved', 'success');
             this.closeScenarioModal();
-            this.loadScenarios();
+            await this.loadScenarios();
         } catch (error) {
             console.error('Failed to save scenario:', error);
             this.modules.showNotification('Failed to save scenario', 'error');
@@ -538,7 +583,7 @@ class TcpMockUIUltimate {
         try {
             await fetch(`/__admin/scenarios/${name}`, { method: 'DELETE' });
             this.modules.showNotification('Scenario deleted', 'success');
-            this.loadScenarios();
+            await this.loadScenarios();
         } catch (error) {
             console.error('Failed to delete scenario:', error);
             this.modules.showNotification('Failed to delete scenario', 'error');
@@ -548,7 +593,7 @@ class TcpMockUIUltimate {
     async resetScenario(name) {
         try {
             await fetch(`/__admin/scenarios/${name}/reset`, { method: 'POST' });
-            this.loadScenarios();
+            await this.loadScenarios();
         } catch (error) {
             console.error('Failed to reset scenario:', error);
         }
@@ -558,7 +603,7 @@ class TcpMockUIUltimate {
         if (!confirm('Reset all scenarios?')) return;
         try {
             await fetch('/__admin/reset', { method: 'POST' });
-            this.loadScenarios();
+            await this.loadScenarios();
         } catch (error) {
             console.error('Failed to reset scenarios:', error);
         }
@@ -609,61 +654,197 @@ class TcpMockUIUltimate {
     }
 
     async sendTest() {
-        const message = document.getElementById('testMessage').value;
+        const message = this.testEditor ? this.testEditor.getValue() : document.getElementById('testMessage').value;
+        const transport = document.getElementById('testTransport')?.value || 'mock';
+        const host = document.getElementById('testHost')?.value || 'localhost';
+        const port = parseInt(document.getElementById('testPort')?.value || '8080');
+        const delimiter = document.getElementById('testDelimiter')?.value || '\n';
+        const timeout = parseInt(document.getElementById('testTimeout')?.value || '5000');
+        const ssl = document.getElementById('testSsl')?.checked || false;
+        const sslVerify = document.getElementById('testSslVerify')?.checked || false;
+        const messageType = document.getElementById('testMessageType')?.value || 'text';
         const responseEl = document.getElementById('testResponse');
+        const metricsEl = document.getElementById('performanceMetrics');
+
         if (!message.trim()) {
             responseEl.textContent = 'Please enter a message';
             return;
         }
+
         responseEl.textContent = 'Sending...';
+        metricsEl.style.display = 'none';
+
         try {
+            const payload = {
+                message,
+                transport,
+                delimiter,
+                timeout,
+                encoding: messageType === 'hex' ? 'hex' : messageType === 'base64' ? 'base64' : 'utf-8'
+            };
+
+            if (transport !== 'mock') {
+                payload.host = host;
+                payload.port = port;
+                payload.ssl = ssl;
+                payload.sslVerify = sslVerify;
+            }
+
             const response = await fetch('/api/test', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message })
+                body: JSON.stringify(payload)
             });
+
             const result = await response.json();
-            responseEl.textContent = result.success === 'true' ? result.response : `Error: ${result.error}`;
+
+            if (result.success) {
+                // Show performance metrics
+                if (result.connectTime !== undefined) {
+                    metricsEl.style.display = 'grid';
+                    document.getElementById('metricConnect').textContent = result.connectTime + 'ms';
+                    document.getElementById('metricFirstByte').textContent = (result.firstByteTime || 0) + 'ms';
+                    document.getElementById('metricTotal').textContent = result.totalTime + 'ms';
+                    document.getElementById('metricBytes').textContent = result.bytesReceived;
+                }
+
+                // Format response
+                let responseText = `Transport: ${result.transport}\n`;
+                if (result.totalTime) {
+                    responseText += `Duration: ${result.totalTime}ms\n`;
+                }
+                responseText += `\nResponse:\n${result.response}`;
+                responseEl.textContent = responseText;
+
+                this.modules.showNotification('Test completed successfully', 'success');
+            } else {
+                responseEl.textContent = `Error (${result.errorType || 'UNKNOWN'}):\n${result.error}`;
+                this.modules.showNotification('Test failed: ' + result.error, 'error');
+            }
+
             setTimeout(() => this.loadRequests(), 500);
         } catch (error) {
-            responseEl.textContent = `Error: ${error.message}`;
+            responseEl.textContent = `Network Error:\n${error.message}`;
+            this.modules.showNotification('Network error: ' + error.message, 'error');
         }
+    }
+
+    toggleTcpFields(transport) {
+        const fields = document.getElementById('tcpConnectionFields');
+        if (fields) {
+            fields.style.display = transport !== 'mock' ? 'block' : 'none';
+        }
+    }
+
+    toggleSslVerify(sslEnabled) {
+        const verifyLabel = document.getElementById('sslVerifyLabel');
+        if (verifyLabel) {
+            verifyLabel.style.display = sslEnabled ? 'block' : 'none';
+        }
+    }
+
+    updateTestTemplate(type) {
+        const templates = {
+            text: 'ECHO Hello World',
+            json: '{\n  "type": "payment",\n  "amount": 1000,\n  "currency": "USD"\n}',
+            xml: '<soap:Envelope>\n  <soap:Body>\n    <GetBalance>\n      <AccountId>12345</AccountId>\n    </GetBalance>\n  </soap:Body>\n</soap:Envelope>',
+            iso8583: '0200B220000000000000000000000000000000001234567890123456000000010000',
+            hex: '48656c6c6f20576f726c64',
+            binary: 'SGVsbG8gV29ybGQ='
+        };
+        const modes = {
+            text: 'text/plain',
+            json: 'application/json',
+            xml: 'application/xml',
+            iso8583: 'text/plain',
+            hex: 'text/plain',
+            binary: 'text/plain'
+        };
+        const content = templates[type] || templates.text;
+        if (this.testEditor) {
+            this.testEditor.setValue(content);
+            this.testEditor.setOption('mode', modes[type] || 'text/plain');
+        } else {
+            document.getElementById('testMessage').value = content;
+        }
+    }
+
+    loadTestTemplate() {
+        const type = document.getElementById('testMessageType').value;
+        this.updateTestTemplate(type);
+        this.modules.showNotification(`Loaded ${type} template`, 'info');
+    }
+
+    handleImportMultiple(files) {
+        if (!files || files.length === 0) return;
+        let imported = 0;
+        let errors = 0;
+        Array.from(files).forEach(file => {
+            this.modules.importFile(file, async (err, mappings) => {
+                if (err) {
+                    errors++;
+                    console.error(`Failed to import ${file.name}:`, err);
+                } else {
+                    imported += mappings.length;
+                }
+                if (imported + errors === files.length || (imported > 0 && imported + errors >= files.length)) {
+                    if (errors > 0) {
+                        this.modules.showNotification(`Imported ${imported} mappings (${errors} files failed)`, 'warning');
+                    } else {
+                        this.modules.showNotification(`Imported ${imported} mappings from ${files.length} files`, 'success');
+                    }
+                    await this.loadMappings();
+                }
+            });
+        });
     }
 
     handleImport(file) {
         if (!file) return;
-        this.modules.importFile(file, (err, mappings) => {
+        this.modules.importFile(file, async (err, mappings) => {
             if (err) {
                 this.modules.showNotification('Import failed: ' + err.message, 'error');
             } else {
                 this.modules.showNotification(`Imported ${mappings.length} mappings`, 'success');
-                this.loadMappings();
+                await this.loadMappings();
             }
         });
     }
 
-    undo() {
+    async undo() {
         const action = this.modules.undoRedo.undo();
         if (action) {
             this.modules.showNotification(`Undo: ${action.action}`, 'info');
-            this.loadMappings();
+            await this.loadMappings();
         }
     }
 
-    redo() {
+    async redo() {
         const action = this.modules.undoRedo.redo();
         if (action) {
             this.modules.showNotification(`Redo: ${action.action}`, 'info');
-            this.loadMappings();
+            await this.loadMappings();
         }
     }
 
-    showOnboarding() {
-        if (localStorage.getItem('onboarding-shown')) return;
-        setTimeout(() => {
-            this.modules.showNotification('Welcome! Press Ctrl+K for commands, Ctrl+N for new mapping', 'info');
-            localStorage.setItem('onboarding-shown', 'true');
-        }, 1000);
+    logout() {
+        if (this.core) this.core.logout();
+    }
+
+    async switchWorkspace(id) {
+        if (this.core) await this.core.switchWorkspace(id);
+    }
+
+    async createWorkspace() {
+        if (this.core) this.core.createWorkspace();
+    }
+
+    async saveWorkspace() {
+        if (this.core) await this.core.saveWorkspace();
+    }
+
+    showAuditLog() {
+        if (this.core) this.core.showAuditLog();
     }
 
     truncate(text, len) {
@@ -674,9 +855,12 @@ class TcpMockUIUltimate {
         const status = await this.recording.getStatus();
         const btn = document.getElementById('recordingToggle');
         if (status.recording) {
-            btn.className = 'px-3 py-1 text-sm rounded-lg bg-red-500 text-white';
-            btn.title = `Recording: ON (${status.recordedCount} recorded)`;
-            btn.innerHTML = '<i class="fas fa-circle animate-pulse"></i> REC';
+            const state = status.paused ? 'PAUSED' : 'REC';
+            const color = status.paused ? 'bg-yellow-500' : 'bg-red-500';
+            btn.className = `px-3 py-1 text-sm rounded-lg ${color} text-white`;
+            const lastRec = status.lastRecordedTime ? ` (last: ${new Date(status.lastRecordedTime).toLocaleTimeString()})` : '';
+            btn.title = `Recording: ${status.paused ? 'PAUSED' : 'ON'} - ${status.recordedCount} recorded${lastRec}`;
+            btn.innerHTML = `<i class="fas fa-circle ${status.paused ? '' : 'animate-pulse'}"></i> ${state}`;
         } else {
             btn.className = 'px-3 py-1 text-sm rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300';
             btn.title = 'Recording: OFF';
@@ -686,12 +870,82 @@ class TcpMockUIUltimate {
 
     async toggleRecording() {
         if (this.recording.recording) {
-            await this.recording.stop();
-            this.modules.showNotification('Recording stopped', 'info');
+            this.openRecordingPanel();
         } else {
-            await this.recording.start();
-            this.modules.showNotification('Recording started', 'success');
+            this.openRecordingStartDialog();
         }
+    }
+
+    openRecordingStartDialog() {
+        const modal = document.getElementById('recordingStartModal');
+        if (modal) modal.classList.add('active');
+    }
+
+    closeRecordingStartDialog() {
+        const modal = document.getElementById('recordingStartModal');
+        if (modal) modal.classList.remove('active');
+    }
+
+    async startRecordingWithOptions() {
+        const name = document.getElementById('recordingSessionName').value || `Session ${new Date().toLocaleString()}`;
+        const pattern = document.getElementById('recordingFilterPattern').value;
+        const matchedOnly = document.getElementById('recordingMatchedOnly').checked;
+        const unmatchedOnly = document.getElementById('recordingUnmatchedOnly').checked;
+        const autoStop = parseInt(document.getElementById('recordingAutoStop').value) || 0;
+
+        await this.recording.start({ name, filter: { pattern, matchedOnly, unmatchedOnly }, autoStop });
+        this.closeRecordingStartDialog();
+        this.modules.showNotification(`Recording started: ${name}`, 'success');
+        await this.updateRecordingStatus();
+    }
+
+    openRecordingPanel() {
+        const modal = document.getElementById('recordingPanelModal');
+        if (modal) {
+            this.renderRecordingPanel();
+            modal.classList.add('active');
+        }
+    }
+
+    closeRecordingPanel() {
+        const modal = document.getElementById('recordingPanelModal');
+        if (modal) modal.classList.remove('active');
+    }
+
+    renderRecordingPanel() {
+        const status = this.recording;
+        const current = document.getElementById('currentRecordingList');
+        if (current) {
+            current.innerHTML = status.currentSession.map((req, i) => `
+                <div class="flex justify-between items-center p-2 bg-gray-50 dark:bg-gray-700 rounded mb-1">
+                    <div class="flex-1">
+                        <code class="text-xs text-gray-800 dark:text-gray-200">${this.truncate(req.message, 60)}</code>
+                        <span class="text-xs text-gray-500 ml-2">${new Date(req.timestamp).toLocaleTimeString()}</span>
+                    </div>
+                    <button class="text-blue-600 dark:text-blue-400 text-sm" onclick="tcpMockUI.createMappingFromRecording(${i})" title="Create Mapping">
+                        <i class="fas fa-plus-circle"></i>
+                    </button>
+                </div>
+            `).join('') || '<p class="text-gray-500 text-sm text-center py-4">No requests recorded yet</p>';
+        }
+    }
+
+    async pauseRecording() {
+        this.recording.pause();
+        await this.updateRecordingStatus();
+        this.modules.showNotification('Recording paused', 'info');
+    }
+
+    async resumeRecording() {
+        this.recording.resume();
+        await this.updateRecordingStatus();
+        this.modules.showNotification('Recording resumed', 'success');
+    }
+
+    async stopRecording() {
+        await this.recording.stop();
+        this.closeRecordingPanel();
+        this.modules.showNotification('Recording stopped and saved', 'success');
         await this.updateRecordingStatus();
     }
 
@@ -700,7 +954,154 @@ class TcpMockUIUltimate {
         if (!request) return;
         const mapping = await this.recording.createMappingFromRequest(request);
         this.openMappingModal(mapping);
-        this.modules.showNotification('Mapping created from request', 'success');
+        if (mapping._variables && mapping._variables.length > 0) {
+            this.modules.showNotification(`Mapping created with ${mapping._variables.length} detected variables`, 'success');
+        } else {
+            this.modules.showNotification('Mapping created from request', 'success');
+        }
+    }
+
+    async createMappingFromRecording(index) {
+        const request = this.recording.currentSession[index];
+        if (!request) return;
+        const mapping = await this.recording.createMappingFromRequest(request);
+        this.openMappingModal(mapping);
+        this.modules.showNotification('Mapping created with smart variables', 'success');
+    }
+
+    async createBatchMappings() {
+        const mappings = await this.recording.createBatchMappings(this.recording.currentSession);
+        if (mappings.length === 0) {
+            this.modules.showNotification('No requests to convert', 'warning');
+            return;
+        }
+
+        for (const mapping of mappings) {
+            try {
+                await fetch('/api/mappings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(mapping)
+                });
+            } catch (error) {
+                console.error('Failed to save mapping:', error);
+            }
+        }
+
+        this.modules.showNotification(`Created ${mappings.length} mappings from ${this.recording.currentSession.length} requests`, 'success');
+        await this.loadMappings();
+        this.closeRecordingPanel();
+    }
+
+    openRecordingHistory() {
+        const modal = document.getElementById('recordingHistoryModal');
+        if (modal) {
+            this.renderRecordingHistory();
+            modal.classList.add('active');
+        }
+    }
+
+    closeRecordingHistory() {
+        const modal = document.getElementById('recordingHistoryModal');
+        if (modal) modal.classList.remove('active');
+    }
+
+    renderRecordingHistory() {
+        const list = document.getElementById('recordingHistoryList');
+        if (list) {
+            list.innerHTML = this.recording.sessions.map((session, i) => `
+                <div class="border border-gray-200 dark:border-gray-700 rounded-lg p-4 mb-3">
+                    <div class="flex justify-between items-start mb-2">
+                        <div>
+                            <h4 class="font-semibold text-gray-900 dark:text-white">${session.name}</h4>
+                            <p class="text-sm text-gray-500 dark:text-gray-400">${new Date(session.date).toLocaleString()}</p>
+                        </div>
+                        <span class="badge badge-info">${session.count} requests</span>
+                    </div>
+                    <div class="flex space-x-2 mt-3">
+                        <button class="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white text-sm rounded" onclick="tcpMockUI.viewSession(${i})">
+                            <i class="fas fa-eye mr-1"></i>View
+                        </button>
+                        <button class="px-3 py-1 bg-green-500 hover:bg-green-600 text-white text-sm rounded" onclick="tcpMockUI.replaySession(${i})">
+                            <i class="fas fa-play mr-1"></i>Replay
+                        </button>
+                        <button class="px-3 py-1 bg-purple-500 hover:bg-purple-600 text-white text-sm rounded" onclick="tcpMockUI.exportSessionUI(${i})">
+                            <i class="fas fa-download mr-1"></i>Export
+                        </button>
+                        <button class="px-3 py-1 bg-red-500 hover:bg-red-600 text-white text-sm rounded" onclick="tcpMockUI.deleteSessionUI(${i})">
+                            <i class="fas fa-trash mr-1"></i>Delete
+                        </button>
+                    </div>
+                </div>
+            `).join('') || '<p class="text-gray-500 text-center py-8">No recording sessions yet</p>';
+        }
+    }
+
+    viewSession(index) {
+        const session = this.recording.loadSession(index);
+        if (!session) return;
+        this.closeRecordingHistory();
+        const modal = document.getElementById('sessionViewModal');
+        if (modal) {
+            document.getElementById('sessionViewTitle').textContent = session.name;
+            document.getElementById('sessionViewContent').innerHTML = session.requests.map(req => `
+                <div class="border-b border-gray-200 dark:border-gray-700 py-3">
+                    <div class="flex justify-between items-start mb-1">
+                        <span class="badge ${req.matched ? 'badge-success' : 'badge-error'}">${req.matched ? 'Matched' : 'Unmatched'}</span>
+                        <span class="text-xs text-gray-500">${new Date(req.timestamp).toLocaleString()}</span>
+                    </div>
+                    <div class="mt-2">
+                        <p class="text-xs text-gray-600 dark:text-gray-400 mb-1">Request:</p>
+                        <code class="text-xs bg-gray-100 dark:bg-gray-800 p-2 rounded block">${req.message}</code>
+                    </div>
+                    <div class="mt-2">
+                        <p class="text-xs text-gray-600 dark:text-gray-400 mb-1">Response:</p>
+                        <code class="text-xs bg-gray-100 dark:bg-gray-800 p-2 rounded block">${req.response}</code>
+                    </div>
+                </div>
+            `).join('');
+            modal.classList.add('active');
+        }
+    }
+
+    closeSessionView() {
+        const modal = document.getElementById('sessionViewModal');
+        if (modal) modal.classList.remove('active');
+    }
+
+    async replaySession(index) {
+        const session = this.recording.loadSession(index);
+        if (!session || !confirm(`Replay ${session.count} requests from "${session.name}"?`)) return;
+
+        let success = 0;
+        for (const req of session.requests) {
+            try {
+                await fetch('/api/test', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: req.message, transport: 'mock', delimiter: '\n' })
+                });
+                success++;
+                await new Promise(resolve => setTimeout(resolve, 100));
+            } catch (error) {
+                console.error('Replay failed:', error);
+            }
+        }
+
+        this.modules.showNotification(`Replayed ${success}/${session.count} requests`, success === session.count ? 'success' : 'warning');
+    }
+
+    exportSessionUI(index) {
+        this.recording.exportSession(index);
+        this.modules.showNotification('Session exported', 'success');
+    }
+
+    deleteSessionUI(index) {
+        const session = this.recording.sessions[index];
+        if (!confirm(`Delete recording session "${session.name}"?`)) return;
+        this.recording.deleteSession(index);
+        this.renderRecordingHistory();
+        this.modules.showNotification('Session deleted', 'info');
     }
 
     checkPriorityConflicts() {
@@ -711,7 +1112,7 @@ class TcpMockUIUltimate {
             container.classList.remove('hidden');
             list.innerHTML = conflicts.map(c => `
                 <div class="mb-1">
-                    <span class="font-mono">${c.mapping1}</span> (priority ${c.priority1}) conflicts with 
+                    <span class="font-mono">${c.mapping1}</span> (priority ${c.priority1}) conflicts with
                     <span class="font-mono">${c.mapping2}</span> (priority ${c.priority2})
                     <span class="badge ${c.severity === 'high' ? 'badge-error' : 'badge-warning'} ml-2">${c.severity}</span>
                 </div>
@@ -822,9 +1223,9 @@ class TcpMockUIUltimate {
 
     async bulkDelete() {
         await this.bulkOps.bulkDelete(this.mappings, async (id) => {
-            await fetch(`/api/ui/mappings/${id}`, { method: 'DELETE' });
+            await fetch(`/api/mappings/${id}`, { method: 'DELETE' });
         });
-        this.loadMappings();
+        await this.loadMappings();
         this.modules.showNotification('Mappings deleted', 'success');
     }
 
@@ -835,13 +1236,13 @@ class TcpMockUIUltimate {
             return;
         }
         await this.bulkOps.bulkUpdatePriority(this.mappings, priority, async (mapping) => {
-            await fetch('/api/ui/mappings', {
+            await fetch('/api/mappings', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(mapping)
             });
         });
-        this.loadMappings();
+        await this.loadMappings();
         this.modules.showNotification('Priority updated', 'success');
     }
 
@@ -883,7 +1284,7 @@ class TcpMockUIUltimate {
     showDiff(req1, req2) {
         const msgDiff = this.diffViewer.computeDiff(req1.message, req2.message);
         const resDiff = this.diffViewer.computeDiff(req1.response, req2.response);
-        
+
         const content = document.getElementById('diffContent');
         content.innerHTML = `
             <div class="mb-4">
@@ -919,7 +1320,9 @@ class TcpMockUIUltimate {
     async loadDocumentation() {
         const docs = [
             { name: 'START-HERE.md', title: '🚀 Start Here', category: 'Getting Started' },
+            { name: 'UI-USER-GUIDE.md', title: '📱 UI User Guide', category: 'Getting Started' },
             { name: 'README-PRODUCTION.md', title: 'Production README', category: 'Getting Started' },
+            { name: 'CAPABILITIES.md', title: '⚡ Capabilities & Features', category: 'Overview' },
             { name: 'EXECUTIVE-SUMMARY.md', title: 'Executive Summary', category: 'Overview' },
             { name: 'HANDOVER.md', title: 'Handover Document', category: 'Overview' },
             { name: 'WIREMOCK-PARITY.md', title: 'WireMock Parity', category: 'Features' },
@@ -933,7 +1336,7 @@ class TcpMockUIUltimate {
 
         const docsList = document.getElementById('docsList');
         const categories = {};
-        
+
         docs.forEach(doc => {
             if (!categories[doc.category]) categories[doc.category] = [];
             categories[doc.category].push(doc);
@@ -943,7 +1346,7 @@ class TcpMockUIUltimate {
             <div class="mb-4">
                 <h4 class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-2">${category}</h4>
                 ${items.map(doc => `
-                    <button onclick="tcpMockUI.loadDoc('${doc.name}')" 
+                    <button onclick="tcpMockUI.loadDoc('${doc.name}')"
                             class="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded mb-1">
                         ${doc.title}
                     </button>

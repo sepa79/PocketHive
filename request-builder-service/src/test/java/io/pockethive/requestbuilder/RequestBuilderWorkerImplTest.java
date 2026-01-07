@@ -134,7 +134,9 @@ class RequestBuilderWorkerImplTest {
           "protocol": "TCP",
           "behavior": "REQUEST_RESPONSE",
           "bodyTemplate": "{{ payload }}",
-          "headersTemplate": {}
+          "headersTemplate": {},
+          "endTag": "</Document>",
+          "maxBytes": 8192
         }
         """);
 
@@ -159,6 +161,49 @@ class RequestBuilderWorkerImplTest {
     assertThat(envelope.get("behavior").asText()).isEqualTo("REQUEST_RESPONSE");
     assertThat(envelope.get("body").asText()).isEqualTo("test-data");
     assertThat(envelope.get("endTag").asText()).isEqualTo("</Document>");
+    assertThat(envelope.get("maxBytes").asInt()).isEqualTo(8192);
+  }
+
+  @Test
+  void buildsTcpEnvelopeWithoutEndTag() throws Exception {
+    Path dir = Files.createTempDirectory("tcp-templates-no-endtag");
+    Files.createDirectories(dir.resolve("default"));
+    Path file = dir.resolve("default/tcp-streaming.json");
+    Files.writeString(file, """
+        {
+          "serviceId": "default",
+          "callId": "tcp-streaming",
+          "protocol": "TCP",
+          "behavior": "STREAMING",
+          "bodyTemplate": "{{ payload }}",
+          "headersTemplate": {},
+          "maxBytes": 1024
+        }
+        """);
+
+    properties.setConfig(Map.of(
+        "templateRoot", dir.toString(),
+        "serviceId", "default",
+        "passThroughOnMissingTemplate", true
+    ));
+    RequestBuilderWorkerImpl worker =
+        new RequestBuilderWorkerImpl(properties, templateRenderer, new TemplateLoader());
+
+    WorkItem seed = WorkItem.text("stream-data").header("x-ph-call-id", "tcp-streaming").build();
+    RequestBuilderWorkerConfig config = new RequestBuilderWorkerConfig(
+        dir.toString(), "default", true);
+    WorkerContext context = new TestWorkerContext(config);
+
+    WorkItem result = worker.onMessage(seed, context);
+
+    assertThat(result).isNotNull();
+    JsonNode envelope = new ObjectMapper().readTree(result.asString());
+    assertThat(envelope.get("protocol").asText()).isEqualTo("TCP");
+    assertThat(envelope.get("behavior").asText()).isEqualTo("STREAMING");
+    assertThat(envelope.get("body").asText()).isEqualTo("stream-data");
+    assertThat(envelope.get("maxBytes").asInt()).isEqualTo(1024);
+    // endTag should not be present in the envelope
+    assertThat(envelope.has("endTag")).isFalse();
   }
 
   @Test

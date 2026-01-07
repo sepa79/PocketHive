@@ -13,9 +13,7 @@ bodyTemplate: |
   Metrics: ENABLED
   -----END ENHANCED SECURE MESSAGE-----
 headersTemplate:
-  x-ph-ssl: "true"
-  x-ph-ssl-verify: "false"
-  x-ph-session-id: "{{ payloadAsJson.sessionId }}"
-  x-ph-security-level: "enhanced"
-  x-ph-metrics: "enabled"
-  x-ph-validation: "enabled"
+  Session-ID: "{{ payloadAsJson.sessionId }}"
+  Security-Level: "enhanced"
+endTag: "-----END ENHANCED SECURE MESSAGE-----"
+maxBytes: 8192

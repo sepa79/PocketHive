@@ -16,8 +16,11 @@ import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class NettyTransport implements TcpTransport {
+    private static final Logger logger = LoggerFactory.getLogger(NettyTransport.class);
     private static final EventLoopGroup SHARED_GROUP = new NioEventLoopGroup(4);
     private final EventLoopGroup group = SHARED_GROUP;
 
@@ -26,8 +29,15 @@ public class NettyTransport implements TcpTransport {
         long start = System.currentTimeMillis();
 
         try {
+            if (logger.isDebugEnabled()) {
+                logger.debug("TCP_SEND host={} port={} bytes={} payload={}",
+                    request.host(), request.port(), request.payload().length,
+                    new String(request.payload(), StandardCharsets.UTF_8));
+            }
+
             CompletableFuture<byte[]> responseFuture = new CompletableFuture<>();
-            int timeout = (Integer) request.options().getOrDefault("timeout", 30000);
+            int connectTimeout = (Integer) request.options().getOrDefault("connectTimeoutMs", 5000);
+            int readTimeout = (Integer) request.options().getOrDefault("readTimeoutMs", 30000);
             int maxBytes = (Integer) request.options().getOrDefault("maxBytes", 8192);
             String endTag = (String) request.options().getOrDefault("endTag", "</Document>");
             boolean useSsl = Boolean.TRUE.equals(request.options().get("ssl"));
@@ -37,7 +47,7 @@ public class NettyTransport implements TcpTransport {
             Bootstrap bootstrap = new Bootstrap()
                 .group(group)
                 .channel(NioSocketChannel.class)
-                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, timeout)
+                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, connectTimeout)
                 .handler(new ChannelInitializer<SocketChannel>() {
                     @Override
                     protected void initChannel(SocketChannel ch) {
@@ -46,11 +56,6 @@ public class NettyTransport implements TcpTransport {
                         if (sslContext != null) {
                             pipeline.addLast(sslContext.newHandler(ch.alloc(), request.host(), request.port()));
                         }
-                        if (behavior == TcpBehavior.REQUEST_RESPONSE) {
-                            ByteBuf delimiter = Unpooled.copiedBuffer(endTag.getBytes(StandardCharsets.UTF_8));
-                            pipeline.addLast(new DelimiterBasedFrameDecoder(maxBytes, delimiter));
-                        }
-
                         pipeline.addLast(new NettyClientHandler(behavior, request.payload(), endTag, maxBytes, responseFuture, useSsl));
                     }
                 });
@@ -58,9 +63,16 @@ public class NettyTransport implements TcpTransport {
             ChannelFuture connectFuture = bootstrap.connect(request.host(), request.port());
             connectFuture.sync();
 
-            byte[] response = responseFuture.get(timeout, TimeUnit.MILLISECONDS);
+            byte[] response = responseFuture.get(readTimeout, TimeUnit.MILLISECONDS);
+            long latency = System.currentTimeMillis() - start;
 
-            return new TcpResponse(200, response, System.currentTimeMillis() - start);
+            if (logger.isDebugEnabled()) {
+                logger.debug("TCP_RECV host={} port={} bytes={} latency={}ms payload={}",
+                    request.host(), request.port(), response.length, latency,
+                    new String(response, StandardCharsets.UTF_8));
+            }
+
+            return new TcpResponse(200, response, latency);
 
         } catch (Exception e) {
             throw new TcpException("Netty operation failed", e);
@@ -143,42 +155,55 @@ public class NettyTransport implements TcpTransport {
                 return;
             }
 
-            if (behavior == TcpBehavior.ECHO) {
-                appendToBuffer(msg);
-                if (responseBuffer.size() >= payload.length) {
-                    responseFuture.complete(responseBuffer.toByteArray());
-                    ctx.close();
-                }
-                return;
-            }
-
-            if (behavior == TcpBehavior.STREAMING) {
-                appendToBuffer(msg);
-                if (responseBuffer.size() >= maxBytes) {
-                    byte[] bytes = responseBuffer.toByteArray();
-                    if (bytes.length > maxBytes) {
-                        byte[] trimmed = new byte[maxBytes];
-                        System.arraycopy(bytes, 0, trimmed, 0, maxBytes);
-                        bytes = trimmed;
-                    }
-                    responseFuture.complete(bytes);
-                    ctx.close();
-                }
-                return;
-            }
-
-            // REQUEST_RESPONSE behavior
             appendToBuffer(msg);
-            byte[] bytes = responseBuffer.toByteArray();
-            // DelimiterBasedFrameDecoder typically strips the delimiter; ensure parity with Socket/NIO transports.
-            if (!endsWith(bytes, endTagBytes)) {
-                byte[] withDelimiter = new byte[bytes.length + endTagBytes.length];
-                System.arraycopy(bytes, 0, withDelimiter, 0, bytes.length);
-                System.arraycopy(endTagBytes, 0, withDelimiter, bytes.length, endTagBytes.length);
-                bytes = withDelimiter;
+            byte[] currentData = responseBuffer.toByteArray();
+
+            // Check completion conditions based on behavior
+            boolean complete = false;
+            if (behavior == TcpBehavior.ECHO && currentData.length >= payload.length) {
+                complete = true;
+            } else if (behavior == TcpBehavior.STREAMING && currentData.length >= maxBytes) {
+                complete = true;
+            } else if (behavior == TcpBehavior.REQUEST_RESPONSE && endsWithTag(currentData)) {
+                complete = true;
             }
-            responseFuture.complete(bytes);
-            ctx.close();
+
+            if (complete) {
+                completeResponse(ctx, currentData);
+            }
+        }
+
+        private boolean endsWithTag(byte[] data) {
+            if (data.length < endTagBytes.length) {
+                return false;
+            }
+            for (int i = 0; i < endTagBytes.length; i++) {
+                if (data[data.length - endTagBytes.length + i] != endTagBytes[i]) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private void completeResponse(ChannelHandlerContext ctx, byte[] data) {
+            try {
+                // Truncate to maxBytes for STREAMING
+                if (behavior == TcpBehavior.STREAMING && data.length > maxBytes) {
+                    byte[] truncated = new byte[maxBytes];
+                    System.arraycopy(data, 0, truncated, 0, maxBytes);
+                    data = truncated;
+                }
+                // Truncate to payload length for ECHO
+                else if (behavior == TcpBehavior.ECHO && data.length > payload.length) {
+                    byte[] truncated = new byte[payload.length];
+                    System.arraycopy(data, 0, truncated, 0, payload.length);
+                    data = truncated;
+                }
+                responseFuture.complete(data);
+                ctx.close();
+            } catch (Exception e) {
+                fail(ctx, e);
+            }
         }
 
         private void appendToBuffer(ByteBuf msg) throws Exception {
@@ -206,22 +231,6 @@ public class NettyTransport implements TcpTransport {
         private void fail(ChannelHandlerContext ctx, Throwable cause) {
             responseFuture.completeExceptionally(cause);
             ctx.close();
-        }
-
-        private static boolean endsWith(byte[] bytes, byte[] suffix) {
-            if (bytes == null || suffix == null) {
-                return false;
-            }
-            if (bytes.length < suffix.length) {
-                return false;
-            }
-            int offset = bytes.length - suffix.length;
-            for (int i = 0; i < suffix.length; i++) {
-                if (bytes[offset + i] != suffix[i]) {
-                    return false;
-                }
-            }
-            return true;
         }
     }
 }

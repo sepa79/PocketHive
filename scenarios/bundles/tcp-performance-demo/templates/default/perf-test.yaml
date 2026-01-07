@@ -1,0 +1,12 @@
+serviceId: performance
+callId: perf-test
+protocol: TCP
+behavior: REQUEST_RESPONSE
+transport: socket
+bodyTemplate: "PERF|{{ payloadAsJson.priority }}|{{ payloadAsJson.txnId }}|{{ payloadAsJson.payload }}|{{ payloadAsJson.timestamp }}"
+headersTemplate:
+  x-ph-txn-id: "{{ payloadAsJson.txnId }}"
+  x-ph-priority: "{{ payloadAsJson.priority }}"
+  x-ph-phase: "{{ headers['x-ph-phase'] }}"
+endTag: "\n"
+maxBytes: 8192

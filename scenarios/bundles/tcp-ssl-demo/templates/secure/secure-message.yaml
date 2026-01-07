@@ -11,7 +11,7 @@ bodyTemplate: |
   Signature: {{ payloadAsJson.signature }}
   -----END SECURE MESSAGE-----
 headersTemplate:
-  x-ph-ssl: "true"
-  x-ph-ssl-verify: "false"
-  x-ph-session-id: "{{ payloadAsJson.sessionId }}"
-  x-ph-security-level: "high"
+  Session-ID: "{{ payloadAsJson.sessionId }}"
+  Security-Level: "high"
+endTag: "-----END SECURE MESSAGE-----"
+maxBytes: 8192

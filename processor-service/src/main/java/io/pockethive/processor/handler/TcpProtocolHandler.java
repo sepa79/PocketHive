@@ -21,7 +21,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class TcpProtocolHandler implements ProtocolHandler {
-  private static final ObjectMapper MAPPER = new ObjectMapper();
+  private final ObjectMapper mapper;
   private final Clock clock;
   private final CallMetricsRecorder metricsRecorder;
   private final TcpTransportConfig defaultConfig;
@@ -32,10 +32,12 @@ public class TcpProtocolHandler implements ProtocolHandler {
   private volatile TcpTransport globalTransport;
   private volatile PerThreadTransportPool perThreadTransportPool;
 
-  public TcpProtocolHandler(Clock clock,
+  public TcpProtocolHandler(ObjectMapper mapper,
+                            Clock clock,
                             CallMetricsRecorder metricsRecorder,
                             TcpTransportConfig defaultConfig,
                             AtomicLong nextAllowedTimeNanos) {
+    this.mapper = mapper;
     this.clock = clock;
     this.metricsRecorder = metricsRecorder;
     this.defaultConfig = defaultConfig == null ? TcpTransportConfig.defaults() : defaultConfig;
@@ -67,6 +69,7 @@ public class TcpProtocolHandler implements ProtocolHandler {
 
     TcpBehavior behavior = TcpBehavior.valueOf(envelope.path("behavior").asText("REQUEST_RESPONSE"));
     String endTag = envelope.path("endTag").asText(null);
+    Integer maxBytes = envelope.path("maxBytes").isInt() ? envelope.path("maxBytes").asInt() : null;
 
     long start = clock.millis();
     long pacingMillis = 0L;
@@ -80,8 +83,9 @@ public class TcpProtocolHandler implements ProtocolHandler {
       if (endTag != null) {
         options.put("endTag", endTag);
       }
-      options.put("timeout", config.timeout());
-      options.put("maxBytes", config.maxBytes());
+      options.put("connectTimeoutMs", config.connectTimeoutMs());
+      options.put("readTimeoutMs", config.readTimeoutMs());
+      options.put("maxBytes", maxBytes != null ? maxBytes : config.maxBytes());
       options.put("ssl", useSsl);
       options.put("sslVerify", config.sslVerify());
       TcpRequest request = new TcpRequest(host, port, body.get().getBytes(StandardCharsets.UTF_8), options);
@@ -124,7 +128,7 @@ public class TcpProtocolHandler implements ProtocolHandler {
       CallMetrics metrics = CallMetrics.success(callDuration, connectionLatency, response.status());
       metricsRecorder.record(metrics);
 
-      ObjectNode result = MAPPER.createObjectNode();
+      ObjectNode result = mapper.createObjectNode();
       result.put("status", response.status());
       result.put("body", new String(response.body(), StandardCharsets.UTF_8));
 
@@ -158,7 +162,7 @@ public class TcpProtocolHandler implements ProtocolHandler {
   private Optional<String> extractBody(JsonNode bodyNode) throws Exception {
     return bodyNode == null || bodyNode.isMissingNode() || bodyNode.isNull() ? Optional.empty()
         : bodyNode.isTextual() ? Optional.of(bodyNode.asText())
-        : Optional.of(MAPPER.writeValueAsString(bodyNode));
+        : Optional.of(mapper.writeValueAsString(bodyNode));
   }
 
   private void ensureTransportConfig(TcpTransportConfig desired) {
@@ -204,21 +208,20 @@ public class TcpProtocolHandler implements ProtocolHandler {
       }
       long intervalNanos = (long) (1_000_000_000L / rate);
       long now = System.nanoTime();
-      while (true) {
-        long prev = nextAllowedTimeNanos.get();
-        long base = Math.max(prev, now);
-        long scheduled = base + intervalNanos;
-        if (nextAllowedTimeNanos.compareAndSet(prev, scheduled)) {
-          long sleepNanos = scheduled - now;
-          if (sleepNanos > 0L) {
-            long millis = sleepNanos / 1_000_000L;
-            int nanos = (int) (sleepNanos % 1_000_000L);
-            Thread.sleep(millis, nanos);
-            return sleepNanos / 1_000_000L;
-          }
-          return 0L;
-        }
+      long prev = nextAllowedTimeNanos.getAndUpdate(current -> {
+        long base = Math.max(current, now);
+        return base + intervalNanos;
+      });
+      long base = Math.max(prev, now);
+      long scheduled = base + intervalNanos;
+      long sleepNanos = scheduled - now;
+      if (sleepNanos > 0L) {
+        long millis = sleepNanos / 1_000_000L;
+        int nanos = (int) (sleepNanos % 1_000_000L);
+        Thread.sleep(millis, nanos);
+        return sleepNanos / 1_000_000L;
       }
+      return 0L;
     }
     return 0L;
   }

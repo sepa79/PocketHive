@@ -121,24 +121,45 @@ config:
       - "socket"
       - "nio"
       - "netty"
+    ui:
+      label: Transport type
+      group: TCP
   - name: tcpTransport.timeout
     type: int
     default: 30000
+    ui:
+      label: Timeout (ms)
+      group: TCP
   - name: tcpTransport.maxBytes
     type: int
     default: 8192
+    ui:
+      label: Max bytes
+      group: TCP
   - name: tcpTransport.keepAlive
     type: boolean
     default: true
+    ui:
+      label: Keep-alive
+      group: TCP
   - name: tcpTransport.workerThreads
     type: int
     default: 4
+    ui:
+      label: Worker threads
+      group: TCP
   - name: tcpTransport.tcpNoDelay
     type: boolean
     default: true
+    ui:
+      label: TCP no-delay
+      group: TCP
   - name: tcpTransport.sslVerify
     type: boolean
     default: false
+    ui:
+      label: SSL verify
+      group: TCP
   - name: tcpTransport.connectionReuse
     type: string
     default: "GLOBAL"
@@ -146,20 +167,38 @@ config:
       - "GLOBAL"
       - "PER_THREAD"
       - "NONE"
+    ui:
+      label: Connection reuse
+      group: TCP
   - name: tcpTransport.maxRetries
     type: int
     default: 3
+    ui:
+      label: Max retries
+      group: TCP
   - name: tcpTransport.connectTimeoutMs
     type: int
     default: 5000
+    ui:
+      label: Connect timeout (ms)
+      group: TCP
   - name: tcpTransport.readTimeoutMs
     type: int
     default: 30000
+    ui:
+      label: Read timeout (ms)
+      group: TCP
   - name: tcpTransport.ssl.enabled
     type: boolean
     default: false
+    ui:
+      label: SSL enabled
+      group: TCP
   - name: tcpTransport.ssl.verifyHostname
     type: boolean
     default: true
+    ui:
+      label: SSL verify hostname
+      group: TCP
 actions: []
 panels: []

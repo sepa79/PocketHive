@@ -1,0 +1,29 @@
+# Build artifacts
+target/
+.local-jars/
+*.jar
+!.local-jars/.gitkeep
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.settings/
+.project
+.classpath
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Maven
+.flattened-pom.xml
+
+# Temporary
+*.tmp
+*.bak
+*~

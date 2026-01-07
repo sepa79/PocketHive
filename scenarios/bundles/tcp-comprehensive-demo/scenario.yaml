@@ -72,10 +72,30 @@ template:
         scheduler:
           ratePerSec: 1
           maxMessages: 5
-  - role: "request-builder"
+  - role: "request-builder-iso"
     image: "request-builder:latest"
     work:
       in: "iso8583-build"
+      out: "proc"
+    env: {}
+    config:
+      worker:
+        templateRoot: "/app/scenario/templates"
+        serviceId: "demo"
+  - role: "request-builder-perf"
+    image: "request-builder:latest"
+    work:
+      in: "perf-build"
+      out: "proc"
+    env: {}
+    config:
+      worker:
+        templateRoot: "/app/scenario/templates"
+        serviceId: "demo"
+  - role: "request-builder-netty"
+    image: "request-builder:latest"
+    work:
+      in: "netty-build"
       out: "proc"
     env: {}
     config:
@@ -97,6 +117,8 @@ template:
           type: "socket"
           connectionReuse: "PER_THREAD"
           maxRetries: 3
+          connectTimeoutMs: 3000
+          readTimeoutMs: 5000
       baseUrl: "{{ sut.endpoints['tcp-server'].baseUrl }}"
   - role: "postprocessor"
     image: "postprocessor:latest"
@@ -108,5 +130,28 @@ template:
       worker:
         postprocessor:
           publish-all-metrics: true
-trafficPolicy: null
-plan: null
+plan:
+  bees:
+    - role: "generator-iso8583"
+      steps:
+        - stepId: gen-iso-start
+          name: Start ISO-8583 generator after setup
+          time: PT1S
+          type: start
+    - role: "generator-performance"
+      steps:
+        - stepId: gen-perf-start
+          name: Start performance generator after setup
+          time: PT1S
+          type: start
+    - role: "generator-netty"
+      steps:
+        - stepId: gen-netty-start
+          name: Start netty generator after setup
+          time: PT1S
+          type: start
+  swarm:
+    - stepId: swarm-start
+      name: Start swarm
+      time: PT0S
+      type: start
