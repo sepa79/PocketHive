@@ -150,7 +150,7 @@ Manual checks:
   - `event.outcome.swarm-create.<swarmId>.orchestrator.<orchestratorInstance>` — emitted by the Orchestrator after the controller handshake completes.
   - `event.outcome.swarm-template.<swarmId>.swarm-controller.<controllerInstance>` — emitted once the plan is applied and bees are provisioned (idle by default).
   - `event.outcome.swarm-start.<swarmId>.swarm-controller.<controllerInstance>` — emitted after issuing a start; `data.status` indicates success/failure.
-  - `event.alert.alert.<swarmId>.*.*` — emitted for runtime/IO failures.
+  - `event.alert.{type}.<swarmId>.*.*` — emitted for runtime/IO failures.
 - Start execution with `POST /api/swarms/{swarmId}/start` (body: `{ "idempotencyKey": "start-rest-001" }`). The Orchestrator sends `signal.swarm-start.<swarmId>.swarm-controller.<controllerInstance>` on your behalf and you can reuse the outcome/alert subscriptions above to track readiness.
 
 ### Worker configuration overrides

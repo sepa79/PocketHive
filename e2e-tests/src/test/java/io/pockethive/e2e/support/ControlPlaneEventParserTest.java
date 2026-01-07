@@ -17,6 +17,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.AlertMessage;
 import io.pockethive.control.CommandOutcome;
 import io.pockethive.control.ControlScope;
+import io.pockethive.controlplane.messaging.Alerts;
 
 class ControlPlaneEventParserTest {
 
@@ -77,7 +78,7 @@ class ControlPlaneEventParserTest {
 
     ControlPlaneEventParser parser = new ControlPlaneEventParser(mapper);
     ControlPlaneEventParser.ParsedEvent parsed = parser.parse(
-        "event.alert.alert.swarm-test.swarm-controller.alpha",
+        "event.alert." + Alerts.TYPE + ".swarm-test.swarm-controller.alpha",
         body
     );
 

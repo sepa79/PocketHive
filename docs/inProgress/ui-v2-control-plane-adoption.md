@@ -27,7 +27,7 @@ envelope refactor. This consolidates remaining UI items from:
 
 - [ ] Implement STOMP subscription filters in `ui-v2` to consume only:
   - [ ] `event.metric.status-delta.<swarmId>.swarm-controller.*`
-  - [ ] `event.alert.alert.#`
+  - [ ] `event.alert.{type}.#`
   - [ ] `event.outcome.#`
 - [ ] Render worker list from SC `status-full` snapshot (`data.context.workers[]`).
 - [ ] Implement on-demand detail behavior (optional): request SC `status-full` on entering swarm view.

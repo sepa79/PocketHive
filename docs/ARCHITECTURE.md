@@ -23,7 +23,7 @@ PocketHive orchestrates message-driven swarms of components (generators, process
 - **Deterministic ordering** derived from queue I/O topology, not hard‑coded by role.
 - **Command → Outcome pattern**: Every control signal results in **exactly one** outcome event
   (`event.outcome.*`) that is either success or error, correlated via `correlationId` and `idempotencyKey`.
-  Runtime/IO errors also emit `event.alert.alert` for operator visibility.
+  Runtime/IO errors also emit `event.alert.{type}` for operator visibility.
 
 ---
 
@@ -135,7 +135,7 @@ Control-plane payloads are defined by `docs/spec/control-events.schema.json` and
   - `scope` describes the concrete subject that processed the command.
 - **Metrics:** `event.metric.status-full.<swarmId>.<role>.<instance>` and
   `event.metric.status-delta.<swarmId>.<role>.<instance>`.
-- **Alerts:** `event.alert.alert.<swarmId>.<role>.<instance>`.
+- **Alerts:** `event.alert.{type}.<swarmId>.<role>.<instance>`.
 
 ### 3.4 Control-plane commands & outcomes
 
@@ -181,7 +181,7 @@ Additional rules:
 - Output states: `ok`, `blocked`, `throttled`, `downstream-error`, `unknown`.
 - `out-of-data` is a logical source-exhausted condition and should be emitted explicitly by inputs/generators (not inferred from queue depth).
 
-### 3.6 Alert events (`event.alert.alert`)
+### 3.6 Alert events (`event.alert.{type}`)
 
 | `data` field | Required | Description |
 |---|---|---|
@@ -214,7 +214,7 @@ Additional rules:
 
 - UI-v2 must subscribe to:
   - `event.metric.status-delta.<swarmId>.swarm-controller.*`
-  - `event.alert.alert.#`
+  - `event.alert.{type}.#`
   - `event.outcome.#`
 - Avoid per-worker status fan-out; worker lists come from swarm-controller `status-full`.
 

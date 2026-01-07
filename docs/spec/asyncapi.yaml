@@ -5,7 +5,7 @@ info:
   description: "AsyncAPI specification documenting PocketHive messaging contracts.\n\
     - ph.control \u2014 swarm-aware control plane covering signals (commands) and event streams (outcomes, metrics, alerts).\n\
     - Signals publish with routing keys `signal.<type>.<swarmId>.<role>.<instance>`.\n\
-    - All non-signal messages publish with routing keys `event.<category>.<name>.<swarmId>.<role>.<instance>` (for example `event.outcome.swarm-start.*`, `event.metric.status-full.*`, `event.alert.alert.*`).\n\
+    - All non-signal messages publish with routing keys `event.<category>.<name>.<swarmId>.<role>.<instance>` (for example `event.outcome.swarm-start.*`, `event.metric.status-full.*`, `event.alert.{type}.*`).\n\
     - ph.{swarmId}.hive \u2014 traffic exchange for workload messages (generator \u2192 moderator \u2192 processor).\n"
 servers:
   control-ws:
@@ -139,8 +139,14 @@ channels:
           durable: true
         routingKey: event.metric.{type}.{swarm}.{role}.{instance}
 
-  exchange/ph.control/event.alert.alert.{swarm}.{role}.{instance}:
+  exchange/ph.control/event.alert.{type}.{swarm}.{role}.{instance}:
     parameters:
+      type:
+        description: Alert type
+        schema:
+          type: string
+          enum:
+          - alert
       swarm:
         description: Swarm emitting the alert
         schema:
@@ -164,7 +170,7 @@ channels:
           name: ph.control
           type: topic
           durable: true
-        routingKey: event.alert.alert.{swarm}.{role}.{instance}
+        routingKey: event.alert.{type}.{swarm}.{role}.{instance}
 components:
   messages:
     ControlSignal:

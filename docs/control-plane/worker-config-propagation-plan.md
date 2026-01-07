@@ -23,7 +23,7 @@ Purpose: allow scenario definitions to provide full worker `config` sections tha
    - [x] When the controller brings up each worker container continue supplying required IO/env vars (`POCKETHIVE_INPUT_*`, etc.) as today.
    - [x] For each worker role, send a `config-update` control-plane signal with the merged config map and wait for the outcome **before** emitting lifecycle outcomes or status metrics so the SDK hydrates it immediately.
    - [x] Emit the `swarm-template` outcome only after every worker’s config update has succeeded; fail the swarm if any config payload is rejected.
-   - [x] Surface `event.outcome.config-update.*` failures during bootstrap (and accompanying `event.alert.alert` when applicable): fail `swarm-template`/`swarm-start`, mark the swarm `FAILED`, and return aggregated validation errors to the orchestrator/UI.
+   - [x] Surface `event.outcome.config-update.*` failures during bootstrap (and accompanying `event.alert.{type}` when applicable): fail `swarm-template`/`swarm-start`, mark the swarm `FAILED`, and return aggregated validation errors to the orchestrator/UI.
 
 5. **Worker SDK behavior**
    - [x] Workers already listen for `config-update` and expose `context.config(...)`; verify that startup updates hydrate before the first work message is dispatched.

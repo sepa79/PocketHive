@@ -249,12 +249,12 @@
         "signal.swarm-template.swarm-alpha.swarm-controller.inst"
       ],
       "eventBindings": [
-        "event.alert.alert.swarm-alpha.#",
+        "event.alert.*.swarm-alpha.#",
         "event.metric.status-delta.swarm-alpha.#",
         "event.metric.status-full.swarm-alpha.#"
       ],
       "allBindings": [
-        "event.alert.alert.swarm-alpha.#",
+        "event.alert.*.swarm-alpha.#",
         "event.metric.status-delta.swarm-alpha.#",
         "event.metric.status-full.swarm-alpha.#",
         "signal.config-update.ALL.swarm-controller.ALL",
@@ -281,7 +281,7 @@
         "signal.config-update.swarm-alpha.swarm-controller.{instance}"
       ],
       "otherEvents": [
-        "event.alert.alert.swarm-alpha.#"
+        "event.alert.*.swarm-alpha.#"
       ],
       "statusEvents": [
         "event.metric.status-delta.swarm-alpha.#",

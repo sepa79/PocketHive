@@ -63,7 +63,7 @@ public final class JournalControlPlanePublisher implements ControlPlanePublisher
       }
       return;
     }
-    if (routingKey.startsWith("event.alert.alert")) {
+    if (routingKey.startsWith("event.alert.")) {
       AlertMessage alert = tryParse(message.payload(), AlertMessage.class);
       if (alert != null) {
         journal.append(SwarmJournalEntries.outAlert(mapper, routingKey, alert));

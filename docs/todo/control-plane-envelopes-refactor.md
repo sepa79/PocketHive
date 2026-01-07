@@ -37,7 +37,7 @@ Goal: introduce a single, consistent control‑plane envelope model used by sign
 
     - Control‑plane **events** (everything that is not a command signal) use the `event.*` prefix. The canonical pattern is:  
       `event.<category>.<name>.<swarmId>.<role>.<instance>` where:
-      - `<category>` differentiates major event families such as `outcome`, `metric`, `alert` (for example `event.outcome.*`, `event.metric.*`, `event.alert.alert.*`). The double `alert` is intentional: `category=alert` and `name=alert` for the single alert event type.
+      - `<category>` differentiates major event families such as `outcome`, `metric`, `alert` (for example `event.outcome.*`, `event.metric.*`, `event.alert.{type}.*`). The alert family uses `<name>` as the alert type; today the only defined type is `alert`.
       - `<name>` is normally the envelope `type` within that family (for example `status-full`, `status-delta` for metrics, or the command name such as `swarm-start` / `config-update` for outcomes).
       - `<swarmId>.<role>.<instance>` are the semantic subject and must match `scope.swarmId` / `scope.role` / `scope.instance`, normalised so that fan‑out uses the literal `ALL` in both the routing key and `scope` (no `null` placeholders).
 
@@ -119,11 +119,11 @@ Goal: introduce a single, consistent control‑plane envelope model used by sign
     | `state.status`  | `data.status`                  | High‑level status after processing the command (for example `Ready`, `Running`, `Stopped`, `Removed`, `Failed`, `Applied`, `NotReady`).  |
     | `state.enabled` | — (removed)                    | Removed in the new model. Enablement lives in a single place: `data.enabled` on config‑update outcomes and `data.enabled` in status metrics; there is no generic `state.enabled` field. |
     | `state.details` | `data.context`                 | Structured post‑command state details (for example `workloads.enabled`, scenario changes, worker info), to be defined per command type. No separate `controllerEnabled` field is kept. |
-    | `phase`         | — (removed or mapped to alert) | Error phase will not be carried as a generic outcome field. If needed for debugging, producers include it in alert `data.context.phase` for the corresponding `event.alert.alert` message. |
-    | `code`          | — (replaced by alert `data.code`)   | Command outcomes no longer carry their own error/result code; runtime and IO errors are expressed via `event.alert.alert` with `data.code`.                                              |
-    | `message`       | — (replaced by alert `data.message`) | Human‑readable error/message text for failures is carried by `event.alert.alert.data.message` rather than command outcome envelopes.                                                      |
+    | `phase`         | — (removed or mapped to alert) | Error phase will not be carried as a generic outcome field. If needed for debugging, producers include it in alert `data.context.phase` for the corresponding `event.alert.{type}` message. |
+    | `code`          | — (replaced by alert `data.code`)   | Command outcomes no longer carry their own error/result code; runtime and IO errors are expressed via `event.alert.{type}` with `data.code`.                                              |
+    | `message`       | — (replaced by alert `data.message`) | Human‑readable error/message text for failures is carried by `event.alert.{type}.data.message` rather than command outcome envelopes.                                                      |
     | `retryable`     | `data.retryable`               | Whether this **failed** command attempt is safe to retry. Only set on error outcomes for commands where retry semantics are defined (for example swarm create/start/stop/remove).    |
-    | `details`       | — (folded into `data.context`) | Catch‑all details on confirmations are removed. Any structured context that needs to survive goes into `data.context` on the outcome and/or the corresponding `event.alert.alert`.       |
+    | `details`       | — (folded into `data.context`) | Catch‑all details on confirmations are removed. Any structured context that needs to survive goes into `data.context` on the outcome and/or the corresponding `event.alert.{type}`.       |
 
     **Initialization + readiness gates (`swarm-start`, `swarm-stop`, `config-update`)**
 
@@ -166,7 +166,7 @@ Goal: introduce a single, consistent control‑plane envelope model used by sign
   - Switch control‑plane routing to the new prefixes:
     - Signals published on `signal.<type>.<swarmId>.<role>.<instance>`.
     - Status metrics on `event.metric.status-full.<swarmId>.<role>.<instance>` / `event.metric.status-delta.<swarmId>.<role>.<instance>`.
-    - Alerts on `event.alert.alert.<swarmId>.<role>.<instance>`.
+    - Alerts on `event.alert.{type}.<swarmId>.<role>.<instance>`.
 
 ---
 
@@ -178,7 +178,7 @@ Goal: introduce a single, consistent control‑plane envelope model used by sign
     - Always set `data.status` on outcomes.
     - Set `data.retryable` explicitly for commands that define retry semantics (for example swarm create/start/stop/remove).
     - Use per‑command `data.context` for structured state (enablement, scenario changes, worker metadata).
-  - Emit `event.alert.alert` messages (with `data.code`, `data.message`, `data.context`) alongside error outcomes when a failure should surface as a runtime alert (for example worker runtime exceptions, bootstrap failures, IO/data exhaustion).
+  - Emit `event.alert.{type}` messages (with `data.code`, `data.message`, `data.context`) alongside error outcomes when a failure should surface as a runtime alert (for example worker runtime exceptions, bootstrap failures, IO/data exhaustion).
 - [x] Provide helper APIs:
   - Centralise exception → outcome + alert mapping in `ControlPlaneEmitter.emitException(…)` and `Alerts.fromException(…)` / `Alerts.error(…)`.
   - Provide IO/runtime alert factories in `Alerts` (for example `Alerts.ioOutOfData(…)`) with stable `code` and structured `context` (plus optional `logRef` for deep links to stack traces).
@@ -216,7 +216,7 @@ Goal: introduce a single, consistent control‑plane envelope model used by sign
     - `timestamp`, `kind`, `type`, `scope`, `origin`, `data`, plus direction (IN/OUT) from routing key.
   - For **outcomes**: derive from `CommandOutcome`:
     - Use the typed `data` fields for command status (for example `data.status`, `data.retryable`) as defined in the updated schemas.
-  - For **alerts**: project `event.alert.alert` alongside outcomes so the journal can surface error codes/messages (`data.code`, `data.message`, `data.context`, `logRef`).
+  - For **alerts**: project `event.alert.{type}` alongside outcomes so the journal can surface error codes/messages (`data.code`, `data.message`, `data.context`, `logRef`).
   - For **metrics/status**: do not log every `status-*` tick; derive and record only state transitions (e.g. healthy → degraded → recovered) as local journal entries.
   - Avoid storing nested stringified payloads inside `details.payload`; store structured `data` instead.
 - [x] Schema clean‑up:
@@ -238,7 +238,7 @@ Goal: introduce a single, consistent control‑plane envelope model used by sign
 - [x] Wire IO semantics into:
   - Worker status snapshots (per worker).
   - Swarm‑level status aggregates (derived from worker metrics).
-  - Relevant `event.alert.alert` instances when an error or readiness condition is directly tied to IO conditions (for example stop due to out‑of‑data).
+  - Relevant `event.alert.{type}` instances when an error or readiness condition is directly tied to IO conditions (for example stop due to out‑of‑data).
 - [x] Document how IO state should be interpreted in debugging (e.g. journal, Hive UI tooltips, docs).
   - `data.io` is a **topology/metrics snapshot** (queues/routes + optional per-queue depth), required and present only in `status-full`.
   - `data.config` is a **configuration snapshot** (effective config for the scope), required and present only in `status-full`.
@@ -246,7 +246,7 @@ Goal: introduce a single, consistent control‑plane envelope model used by sign
   - For `role=swarm-controller`, `data.context` is the canonical place for **swarm aggregates**:
     - `status-delta`: small aggregate + progress (no worker list).
     - `status-full`: full aggregate snapshot including per-worker list (e.g. `data.context.workers`).
-  - `out-of-data` is *not* inferred from queue depth; it is a logical “source exhausted” condition and should be emitted by inputs/generators via `ioState` + (optionally) an `event.alert.alert` with `code=io.out-of-data` and `data.context.dataset` when known.
+  - `out-of-data` is *not* inferred from queue depth; it is a logical “source exhausted” condition and should be emitted by inputs/generators via `ioState` + (optionally) an `event.alert.{type}` with `code=io.out-of-data` and `data.context.dataset` when known.
 
 ### 6.1 Topology‑First: Logical Topology vs IO Adapter Config vs Runtime Bindings
 
@@ -364,15 +364,15 @@ Moved to `docs/inProgress/ui-v2-control-plane-adoption.md`.
   - E2E helpers (`e2e-tests` control‑plane utilities) to parse and assert the new envelopes.
 - [x] Add targeted tests for:
   - A successful config‑update round‑trip (signal → outcome → journal).
-  - A worker config parse/validation error surfaced as `CommandOutcome` + `event.alert.alert`.
-  - A swarm lifecycle timeout / controller error surfaced as `CommandOutcome` + `event.alert.alert`.
+  - A worker config parse/validation error surfaced as `CommandOutcome` + `event.alert.{type}`.
+  - A swarm lifecycle timeout / controller error surfaced as `CommandOutcome` + `event.alert.{type}`.
 - [x] Verify that the journal JSON produced by SC and read by orchestrator matches the canonical envelope‑based projections and that Hive UI renders the simplified fields as expected (see `orchestrator-service/src/test/java/io/pockethive/orchestrator/app/SwarmControllerTest.java`).
 - [x] Maintain a short manual test plan (to be run before and after the refactor) that covers:
   - Swarm lifecycle happy path (create → template/plan → start → stop → remove) driven via Orchestrator REST, with confirmations and status events observed on the control exchange and in the swarm journal.
   - Idempotent retries for at least one lifecycle command (e.g. `swarm-start`) using the same `idempotencyKey`, verifying correlation and confirmation behaviour.
   - Controller and worker `config-update` success and failure, including how enablement changes and errors are surfaced in outcomes, status metrics and (after refactor) alerts.
   - Explicit `status-request` flows (`signal.status-request` → `event.metric.status-full`) exercised via REST, matching the documented topic patterns.
-  - At least one runtime error and one IO exhaustion scenario, ensuring that today’s error surface is understood and can be mapped to `event.alert.alert` in the new model.
+  - At least one runtime error and one IO exhaustion scenario, ensuring that today’s error surface is understood and can be mapped to `event.alert.{type}` in the new model.
 
 ### Manual test runbook (tight)
 
@@ -388,11 +388,11 @@ Moved to `docs/inProgress/ui-v2-control-plane-adoption.md`.
   - Apply a known-good `config-update` to at least one worker; confirm an `event.outcome.config-update` is emitted and the worker status reflects the change.
   - Apply a known-bad `config-update` (type mismatch / invalid schema) and confirm:
     - `event.outcome.config-update` reports failure, and
-    - `event.alert.alert` is emitted with stable `data.code` and structured `data.context` (plus `logRef` when available).
+    - `event.alert.{type}` is emitted with stable `data.code` and structured `data.context` (plus `logRef` when available).
 - Validate IO exhaustion surfacing:
   - Run a generator/input that can reach “out of data” and confirm:
     - worker emits `data.ioState.work.input=out-of-data` in status metrics, and
-    - a single `event.alert.alert` with `code=io.out-of-data` is emitted on transition (no repeated alerts per tick).
+    - a single `event.alert.{type}` with `code=io.out-of-data` is emitted on transition (no repeated alerts per tick).
 - Validate journal/UI:
   - Open the swarm’s Journal view and confirm entries show direction + origin + kind/type, and row details show the raw control message (no escaped JSON blobs).
   - Confirm status tick spam is not present (only transitions and non-status signals/outcomes/alerts).

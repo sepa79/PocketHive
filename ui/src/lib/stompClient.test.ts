@@ -88,6 +88,7 @@ describe('swarm lifecycle', () => {
     subscribeLogs((l) => {
       entries = l.filter((e) => e.type === 'error')
     })
+    const alertType = 'alert'
     cb({
       body: JSON.stringify({
         timestamp: new Date().toISOString(),
@@ -100,9 +101,9 @@ describe('swarm lifecycle', () => {
         idempotencyKey: null,
         data: { level: 'error', code: 'boom', message: 'boom' },
       }),
-      headers: { destination: '/exchange/ph.control/event.alert.alert.sw1.orchestrator.orchestrator-1', 'x-correlation-id': 'e1' },
+      headers: { destination: `/exchange/ph.control/event.alert.${alertType}.sw1.orchestrator.orchestrator-1`, 'x-correlation-id': 'e1' },
     })
-    expect(entries[0].destination).toContain('event.alert.alert.sw1')
+    expect(entries[0].destination).toContain(`event.alert.${alertType}.sw1`)
     expect(entries[0].body).toBe('boom')
     expect(useUIStore.getState().toast).toBe('Error: sw1 boom: boom')
     setClient(null)

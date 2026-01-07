@@ -14,7 +14,7 @@ Legend: `[done]/[verified]`
 → ARCHITECTURE.md: new section “Control-plane envelope model (SSOT)”  
 Reason: SSOT needs canonical envelope fields; architecture uses legacy fields.
 
-[x]/[x] 2. Routing key patterns (signal.*, event.outcome.*, event.metric.*, event.alert.alert.* + lifecycle instance rule)  
+[x]/[x] 2. Routing key patterns (signal.*, event.outcome.*, event.metric.*, event.alert.{type}.* + lifecycle instance rule)  
 → ARCHITECTURE.md: replace §3 “Exchanges & routing”  
 Reason: architecture still uses sig/ev and ready/error patterns.
 
@@ -27,7 +27,7 @@ Reason: core contract rule.
 Reason: current tables live outside SSOT.
 
 [x]/[x] 5. Alert payload table (level/code/message/errorType/logRef/context)  
-→ ARCHITECTURE.md: “Alert events (event.alert.alert)” subsection  
+→ ARCHITECTURE.md: “Alert events (event.alert.{type})” subsection  
 Reason: canonical alert shape.
 
 [x]/[x] 6. Command signal/outcome tables (purpose/target + data/args)  

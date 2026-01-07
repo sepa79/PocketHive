@@ -94,7 +94,7 @@ public final class SwarmControllerControlPlaneTopologyDescriptor implements Cont
     }
 
     private String alertEventPattern() {
-        String base = ControlPlaneRouting.event("alert", "alert", ConfirmationScope.forSwarm(swarmId));
+        String base = ControlPlaneRouting.event("alert", "*", ConfirmationScope.forSwarm(swarmId));
         return base.replace(".ALL.ALL", ".#");
     }
 

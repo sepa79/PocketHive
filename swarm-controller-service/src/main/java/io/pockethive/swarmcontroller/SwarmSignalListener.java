@@ -156,7 +156,7 @@ public class SwarmSignalListener {
         return;
       } else if (routingKey.startsWith("event.metric.status-")) {
         handleStatusEvent(routingKey, body);
-      } else if (routingKey.startsWith("event.alert.alert")) {
+      } else if (routingKey.startsWith("event.alert.")) {
         handleAlertEvent(routingKey, body);
       }
     } finally {

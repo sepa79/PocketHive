@@ -199,7 +199,7 @@ Pins a swarm journal run into an archive so it can be kept beyond time-based ret
 **Behavior**
 - Launch Controller runtime for `{swarmId}` (no AMQP signal).
 - After the first controller `event.metric.status-full.<swarmId>.swarm-controller.<controllerInstance>`, emit **`event.outcome.swarm-create.<swarmId>.orchestrator.<orchestratorInstance>`** (echo ids).
-- On failure, emit **`event.outcome.swarm-create.<swarmId>.orchestrator.<orchestratorInstance>`** with `data.status=Failed` and an accompanying `event.alert.alert` if applicable.
+- On failure, emit **`event.outcome.swarm-create.<swarmId>.orchestrator.<orchestratorInstance>`** with `data.status=Failed` and an accompanying `event.alert.{type}` if applicable.
 - Requires a `templateId` referencing the scenario template to instantiate.
 
 **Request**
@@ -218,7 +218,7 @@ Pins a swarm journal run into an archive so it can be kept beyond time-based ret
   "idempotencyKey": "…",
   "watch": {
     "successTopic": "event.outcome.swarm-create.<swarmId>.orchestrator.<orchestratorInstance>",
-    "errorTopic":   "event.alert.alert.<swarmId>.orchestrator.<orchestratorInstance>"
+    "errorTopic":   "event.alert.{type}.<swarmId>.orchestrator.<orchestratorInstance>"
   },
   "timeoutMs": 120000
 }
@@ -241,7 +241,7 @@ Pins a swarm journal run into an archive so it can be kept beyond time-based ret
 { "idempotencyKey": "uuid-v4", "notes": "optional" }
 ```
 
-**Signal:** `signal.swarm-start.<swarmId>.swarm-controller.<controllerInstance>` → **Outcome:** `event.outcome.swarm-start.<swarmId>.swarm-controller.<controllerInstance>` (check `data.status`) → **Alerts:** `event.alert.alert.<swarmId>.swarm-controller.<controllerInstance>`
+**Signal:** `signal.swarm-start.<swarmId>.swarm-controller.<controllerInstance>` → **Outcome:** `event.outcome.swarm-start.<swarmId>.swarm-controller.<controllerInstance>` (check `data.status`) → **Alerts:** `event.alert.{type}.<swarmId>.swarm-controller.<controllerInstance>`
 
 **Response (202)**
 ```json
@@ -250,7 +250,7 @@ Pins a swarm journal run into an archive so it can be kept beyond time-based ret
   "idempotencyKey": "…",
   "watch": {
     "successTopic": "event.outcome.swarm-start.<swarmId>.swarm-controller.<controllerInstance>",
-    "errorTopic":   "event.alert.alert.<swarmId>.swarm-controller.<controllerInstance>"
+    "errorTopic":   "event.alert.{type}.<swarmId>.swarm-controller.<controllerInstance>"
   },
   "timeoutMs": 180000
 }
@@ -264,7 +264,7 @@ Pins a swarm journal run into an archive so it can be kept beyond time-based ret
 { "idempotencyKey": "uuid-v4", "notes": "optional" }
 ```
 
-**Signal:** `signal.swarm-stop.<swarmId>.swarm-controller.<controllerInstance>` → **Outcome:** `event.outcome.swarm-stop.<swarmId>.swarm-controller.<controllerInstance>` (check `data.status`) → **Alerts:** `event.alert.alert.<swarmId>.swarm-controller.<controllerInstance>`
+**Signal:** `signal.swarm-stop.<swarmId>.swarm-controller.<controllerInstance>` → **Outcome:** `event.outcome.swarm-stop.<swarmId>.swarm-controller.<controllerInstance>` (check `data.status`) → **Alerts:** `event.alert.{type}.<swarmId>.swarm-controller.<controllerInstance>`
 
 **Response (202)**
 ```json
@@ -273,7 +273,7 @@ Pins a swarm journal run into an archive so it can be kept beyond time-based ret
   "idempotencyKey": "…",
   "watch": {
     "successTopic": "event.outcome.swarm-stop.<swarmId>.swarm-controller.<controllerInstance>",
-    "errorTopic":   "event.alert.alert.<swarmId>.swarm-controller.<controllerInstance>"
+    "errorTopic":   "event.alert.{type}.<swarmId>.swarm-controller.<controllerInstance>"
   },
   "timeoutMs": 90000
 }
@@ -287,7 +287,7 @@ Pins a swarm journal run into an archive so it can be kept beyond time-based ret
 { "idempotencyKey": "uuid-v4", "notes": "optional" }
 ```
 
-**Signal:** `signal.swarm-remove.<swarmId>.swarm-controller.<controllerInstance>` → **Outcome:** `event.outcome.swarm-remove.<swarmId>.swarm-controller.<controllerInstance>` (check `data.status`) → **Alerts:** `event.alert.alert.<swarmId>.swarm-controller.<controllerInstance>`  
+**Signal:** `signal.swarm-remove.<swarmId>.swarm-controller.<controllerInstance>` → **Outcome:** `event.outcome.swarm-remove.<swarmId>.swarm-controller.<controllerInstance>` (check `data.status`) → **Alerts:** `event.alert.{type}.<swarmId>.swarm-controller.<controllerInstance>`  
 **Post‑success:** tear down the Controller runtime for this swarm.
 
 **Response (202)**
@@ -297,7 +297,7 @@ Pins a swarm journal run into an archive so it can be kept beyond time-based ret
   "idempotencyKey": "…",
   "watch": {
     "successTopic": "event.outcome.swarm-remove.<swarmId>.swarm-controller.<controllerInstance>",
-    "errorTopic":   "event.alert.alert.<swarmId>.swarm-controller.<controllerInstance>"
+    "errorTopic":   "event.alert.{type}.<swarmId>.swarm-controller.<controllerInstance>"
   },
   "timeoutMs": 180000
 }
@@ -337,7 +337,7 @@ Pins a swarm journal run into an archive so it can be kept beyond time-based ret
 }
 ```
 
-**Signal:** `signal.swarm-template.<swarmId>.swarm-controller.<controllerInstance>` → **Outcome:** `event.outcome.swarm-template.<swarmId>.swarm-controller.<controllerInstance>` (check `data.status`) → **Alerts:** `event.alert.alert.<swarmId>.swarm-controller.<controllerInstance>`
+**Signal:** `signal.swarm-template.<swarmId>.swarm-controller.<controllerInstance>` → **Outcome:** `event.outcome.swarm-template.<swarmId>.swarm-controller.<controllerInstance>` (check `data.status`) → **Alerts:** `event.alert.{type}.<swarmId>.swarm-controller.<controllerInstance>`
 
 **Response (202)** — same envelope.
 
@@ -356,7 +356,7 @@ Pins a swarm journal run into an archive so it can be kept beyond time-based ret
 }
 ```
 
-**Signal:** `signal.config-update.<swarmId>.<role>.<instance>` → **Outcome:** `event.outcome.config-update.<swarmId>.<role>.<instance>` (check `data.status`) → **Alerts:** `event.alert.alert.<swarmId>.<role>.<instance>`
+**Signal:** `signal.config-update.<swarmId>.<role>.<instance>` → **Outcome:** `event.outcome.config-update.<swarmId>.<role>.<instance>` (check `data.status`) → **Alerts:** `event.alert.{type}.<swarmId>.<role>.<instance>`
 
 **Response (202)** — same envelope.
 
@@ -410,7 +410,7 @@ Pins a swarm journal run into an archive so it can be kept beyond time-based ret
         "idempotencyKey": "…",
         "watch": {
           "successTopic": "event.outcome.config-update.<swarmId>.swarm-controller.<instance>",
-          "errorTopic": "event.alert.alert.<swarmId>.swarm-controller.<instance>"
+          "errorTopic": "event.alert.{type}.<swarmId>.swarm-controller.<instance>"
         },
         "timeoutMs": 60000
       }
