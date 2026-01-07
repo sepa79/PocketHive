@@ -8,8 +8,8 @@ import java.util.HexFormat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.CacheControl;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
@@ -29,8 +29,7 @@ public class ControlPlaneSchemaController {
      */
     private static final Logger log = LoggerFactory.getLogger(ControlPlaneSchemaController.class);
     private static final String RESOURCE_NAME = "control-events.schema.json";
-    private static final MediaType SCHEMA_MEDIA_TYPE =
-        MediaType.parseMediaType("application/schema+json;version=draft/2020-12");
+    private static final String SCHEMA_CONTENT_TYPE = "application/schema+json;version=\"draft/2020-12\"";
     private static final CacheControl CACHE_CONTROL = CacheControl.maxAge(Duration.ofMinutes(5));
 
     private final byte[] schemaBytes;
@@ -47,16 +46,17 @@ public class ControlPlaneSchemaController {
 
     @GetMapping("/control-events")
     public ResponseEntity<byte[]> schema(@RequestHeader(value = "If-None-Match", required = false) String ifNoneMatch) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.set(HttpHeaders.CONTENT_TYPE, SCHEMA_CONTENT_TYPE);
+        headers.setCacheControl(CACHE_CONTROL.getHeaderValue());
+        headers.setETag(etag);
         if (etag.equals(ifNoneMatch)) {
             return ResponseEntity.status(HttpStatus.NOT_MODIFIED)
-                .cacheControl(CACHE_CONTROL)
-                .eTag(etag)
+                .headers(headers)
                 .build();
         }
         return ResponseEntity.ok()
-            .cacheControl(CACHE_CONTROL)
-            .eTag(etag)
-            .contentType(SCHEMA_MEDIA_TYPE)
+            .headers(headers)
             .body(schemaBytes);
     }
 

@@ -480,7 +480,7 @@ These endpoints are intended for local diagnostics and should be secured behind 
 
 **Response (200)**
 ```
-Content-Type: application/schema+json;version=draft/2020-12
+Content-Type: application/schema+json;version="draft/2020-12"
 ETag: "..."
 Cache-Control: max-age=300
 ```

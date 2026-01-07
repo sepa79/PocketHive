@@ -20,7 +20,7 @@ envelope refactor. This consolidates remaining UI items from:
 
 - Endpoint: `GET /api/control-plane/schema/control-events`
 - Response body: raw `control-events.schema.json` (exact file content).
-- Headers: `Content-Type: application/schema+json;version=draft/2020-12`, `ETag`, `Cache-Control: max-age=300`.
+- Headers: `Content-Type: application/schema+json;version="draft/2020-12"`, `ETag`, `Cache-Control: max-age=300`.
 - UI behavior:
   - On 200: store schema in memory and validate all control-plane frames.
   - On 304: keep in-memory schema (no re-parse).
