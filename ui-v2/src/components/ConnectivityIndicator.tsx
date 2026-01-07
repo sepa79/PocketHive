@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { subscribeControlPlaneHealth, type ControlPlaneHealth } from '../lib/controlPlane/healthStore'
 
 type HealthState = 'unknown' | 'checking' | 'ok' | 'down'
 
@@ -22,13 +23,24 @@ export function ConnectivityIndicator() {
   const navigate = useNavigate()
   const [result, setResult] = useState<HealthResult>({ state: 'unknown' })
   const timerRef = useRef<number | null>(null)
+  const [controlPlane, setControlPlane] = useState<ControlPlaneHealth>({
+    schemaStatus: 'idle',
+    stompState: 'idle',
+    invalidCount: 0,
+  })
 
   const title = useMemo(() => {
-    if (result.state === 'ok') return 'Connectivity: OK (click for details)'
+    const controlPlaneOk =
+      controlPlane.schemaStatus === 'ready' && controlPlane.stompState === 'connected'
+    const controlPlaneSummary = controlPlaneOk
+      ? 'control-plane ok'
+      : `control-plane ${controlPlane.schemaStatus}/${controlPlane.stompState}`
     if (result.state === 'down') return `Connectivity: problems (${result.lastError ?? 'unknown'})`
+    if (result.state === 'ok' && !controlPlaneOk) return `Connectivity: degraded (${controlPlaneSummary})`
+    if (result.state === 'ok') return 'Connectivity: OK (click for details)'
     if (result.state === 'checking') return 'Connectivity: checking…'
     return 'Connectivity: unknown'
-  }, [result])
+  }, [controlPlane, result])
 
   useEffect(() => {
     let stopped = false
@@ -80,8 +92,21 @@ export function ConnectivityIndicator() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const cls =
-    result.state === 'ok' ? 'ok' : result.state === 'checking' ? 'warn' : result.state === 'down' ? 'alert' : 'missing'
+  useEffect(() => {
+    const unsubscribe = subscribeControlPlaneHealth(setControlPlane)
+    return () => {
+      unsubscribe()
+    }
+  }, [])
+
+  const cls = useMemo(() => {
+    if (result.state === 'down') return 'alert'
+    if (result.state === 'checking') return 'warn'
+    if (result.state === 'ok') {
+      return controlPlane.schemaStatus === 'ready' && controlPlane.stompState === 'connected' ? 'ok' : 'warn'
+    }
+    return 'missing'
+  }, [controlPlane, result])
 
   return (
     <button type="button" className="iconButton iconButtonBare" title={title} onClick={() => navigate('/health')}>

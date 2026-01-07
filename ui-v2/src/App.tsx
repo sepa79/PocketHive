@@ -8,6 +8,7 @@ import { JournalPage } from './pages/JournalPage'
 import { LoginPage } from './pages/LoginPage'
 import { OtherPage } from './pages/OtherPage'
 import { ScenariosPage } from './pages/ScenariosPage'
+import { WireLogPage } from './pages/WireLogPage'
 
 export default function App() {
   return (
@@ -20,6 +21,7 @@ export default function App() {
         <Route path="/hive/*" element={<HivePage />} />
         <Route path="/journal/*" element={<JournalPage />} />
         <Route path="/other/*" element={<OtherPage />} />
+        <Route path="/wire-log" element={<WireLogPage />} />
 
         <Route path="/health" element={<HealthPage />} />
         <Route path="/help" element={<HelpPage />} />
@@ -30,4 +32,3 @@ export default function App() {
     </Routes>
   )
 }
-

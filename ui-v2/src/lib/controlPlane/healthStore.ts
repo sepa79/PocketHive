@@ -10,6 +10,7 @@ import {
 import { CONTROL_PLANE_STOMP_PASSCODE, CONTROL_PLANE_STOMP_USER } from './config'
 import { CONTROL_PLANE_TOPICS } from './subscriptions'
 import { applyStatusEnvelope, hasStatusSnapshot, requestEviction } from './stateStore'
+import { requestControlPlaneRefresh } from './restGateway'
 
 export type ControlPlaneHealth = {
   schemaStatus: SchemaState['status']
@@ -30,6 +31,10 @@ const listeners = new Set<HealthListener>()
 let schemaReady = false
 let started = false
 let evictionTimer: number | null = null
+let lastRefreshAt = 0
+let refreshInFlight: Promise<boolean> | null = null
+let lastStompState: StompConnectionState = 'idle'
+const REFRESH_MIN_INTERVAL_MS = 2_000
 
 export function startControlPlaneHealth(url: string) {
   if (started) {
@@ -60,6 +65,10 @@ export function startControlPlaneHealth(url: string) {
   subscribeStompState((state) => {
     health = { ...health, stompState: state }
     notify()
+    if (schemaReady && state === 'connected' && lastStompState !== 'connected') {
+      void queueRefresh()
+    }
+    lastStompState = state
   })
   subscribeStompMetrics((metrics) => {
     health = { ...health, invalidCount: metrics.invalidCount }
@@ -79,7 +88,7 @@ export function startControlPlaneHealth(url: string) {
           instance: scope.instance,
         })
       ) {
-        // TODO: trigger status-full refresh when REST integration is wired
+        void queueRefresh()
         return
       }
       applyStatusEnvelope(message.envelope)
@@ -100,4 +109,19 @@ export function subscribeControlPlaneHealth(listener: HealthListener) {
 
 function notify() {
   listeners.forEach((listener) => listener(health))
+}
+
+function queueRefresh() {
+  const now = Date.now()
+  if (now - lastRefreshAt < REFRESH_MIN_INTERVAL_MS) {
+    return refreshInFlight ?? Promise.resolve(false)
+  }
+  if (refreshInFlight) {
+    return refreshInFlight
+  }
+  lastRefreshAt = now
+  refreshInFlight = requestControlPlaneRefresh().finally(() => {
+    refreshInFlight = null
+  })
+  return refreshInFlight
 }

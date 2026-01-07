@@ -71,19 +71,19 @@ envelope refactor. This consolidates remaining UI items from:
 
 ## UI-v2 architecture (hybrid, strict contract)
 
-- `ControlPlaneSchemaRegistry` loads and caches the schema from the SSOT endpoint.
-- `ControlPlaneDecoder` parses and validates incoming STOMP frames (schema-only; no ad-hoc parsing).
-- `WireLogStore` (Buzz v2) retains raw frames + parsed envelopes + validation errors and exposes JSONL export.
-- `ControlPlaneStateStore` applies only valid envelopes and merges `status-delta` into the latest `status-full` snapshot.
-- `StompGateway` is the single STOMP connection and routes every frame through the decoder before state updates.
-- `RestGateway` fetches on-demand `status-full` snapshots + scenario topology for initial state/hydration.
+- [x] `ControlPlaneSchemaRegistry` loads and caches the schema from the SSOT endpoint.
+- [x] `ControlPlaneDecoder` parses and validates incoming STOMP frames (schema-only; no ad-hoc parsing).
+- [x] `WireLogStore` (Buzz v2) retains raw frames + parsed envelopes + validation errors and exposes JSONL export.
+- [x] `ControlPlaneStateStore` applies only valid envelopes and merges `status-delta` into the latest `status-full` snapshot.
+- [x] `StompGateway` is the single STOMP connection and routes every frame through the decoder before state updates.
+- [ ] `RestGateway` fetches on-demand `status-full` snapshots + scenario topology for initial state/hydration.
 
 ## 1) Control-plane subscriptions (no per-worker fan-out)
 
-- [ ] Implement STOMP subscription filters in `ui-v2` to consume only:
-  - [ ] `event.metric.status-delta.<swarmId>.swarm-controller.*`
-  - [ ] `event.alert.{type}.#`
-  - [ ] `event.outcome.#`
+- [x] Implement STOMP subscription filters in `ui-v2` to consume only:
+  - [x] `event.metric.status-delta.<swarmId>.swarm-controller.*`
+  - [x] `event.alert.{type}.#`
+  - [x] `event.outcome.#`
 - [ ] Render worker list from SC `status-full` snapshot (`data.context.workers[]`).
 - [ ] Implement on-demand detail behavior (optional): request SC `status-full` on entering swarm view.
 
@@ -102,10 +102,10 @@ envelope refactor. This consolidates remaining UI items from:
 
 ## 3) Wire log and debug tooling (Buzz v2)
 
-- [ ] Add special-menu entry for Wire Log (Buzz v2) as the only UI entry point.
-- [ ] Persist raw frames + parsed envelopes + validation errors in `WireLogStore`.
-- [ ] Show soft indicator when invalid messages are observed (do not block UI).
-- [ ] Add JSONL export of the wire log (raw + parsed + errors).
+- [x] Add special-menu entry for Wire Log (Buzz v2) as the only UI entry point.
+- [x] Persist raw frames + parsed envelopes + validation errors in `WireLogStore`.
+- [x] Show soft indicator when invalid messages are observed (do not block UI).
+- [x] Add JSONL export of the wire log (raw + parsed + errors).
 - [ ] Add raw-only work exchange subscription support (debug-only; no schema yet).
 
 ## 4) Manual verification

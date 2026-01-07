@@ -627,6 +627,25 @@ textarea,
   background: rgba(51, 225, 255, 0.12);
 }
 
+.actionButton {
+  border: 1px solid var(--border);
+  background: var(--panel2);
+  color: inherit;
+  padding: 6px 12px;
+  border-radius: 10px;
+  font-size: 12px;
+}
+
+.actionButton:hover {
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.actionButtonDanger {
+  border-color: rgba(255, 95, 95, 0.35);
+  background: rgba(255, 95, 95, 0.12);
+}
+
 /* HAL status eye (ported from legacy UI). */
 .hal-eye {
   --hal: #9aa0a6;

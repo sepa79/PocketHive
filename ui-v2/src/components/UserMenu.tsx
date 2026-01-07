@@ -61,6 +61,18 @@ export function UserMenu() {
             role="menuitem"
             onClick={() => {
               setOpen(false)
+              navigate('/wire-log')
+            }}
+          >
+            Wire Log (Buzz v2)
+          </button>
+          <div className="menuSep" role="separator" />
+          <button
+            type="button"
+            className="menuItem"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false)
               navigate('/login')
             }}
           >
@@ -71,4 +83,3 @@ export function UserMenu() {
     </div>
   )
 }
-
