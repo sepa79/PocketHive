@@ -4,8 +4,10 @@ import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import './styles.css'
 import { installTheme } from './lib/theme'
+import { bootstrapControlPlane } from './lib/controlPlane/bootstrap'
 
 installTheme()
+bootstrapControlPlane()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
