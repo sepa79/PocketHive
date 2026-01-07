@@ -115,3 +115,8 @@ Global help entry:
 
 - context help (short, per-screen)
 - link to general docs (initially via external links; optional Markdown viewer later)
+
+### User menu (special tools)
+
+Diagnostics and debug tools live under the user menu (not SideNav):
+- Wire Log (Buzz v2)

@@ -27,6 +27,7 @@ body {
   background: var(--bg);
   color: #fff;
   font-family: Inter, system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  cursor: default;
 }
 
 :root[data-theme='light'] body {
@@ -35,6 +36,18 @@ body {
 
 a {
   color: inherit;
+}
+
+button,
+a,
+[role='button'] {
+  cursor: pointer;
+}
+
+input,
+textarea,
+[contenteditable='true'] {
+  cursor: text;
 }
 
 /* Thin scrollbars. */

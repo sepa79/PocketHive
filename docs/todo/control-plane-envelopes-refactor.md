@@ -351,12 +351,7 @@ Notes:
   - queue stats (from workers / SC snapshots where available).
 
 Tracking / tasks:
-- [ ] Extend `docs/scenarios/SCENARIO_CONTRACT.md` with `template.bees[].id`, `template.bees[].ports`, optional `template.bees[].ui`, and `topology.edges[]` + validation rules.
-- [ ] Extend `Bee` (swarm-model) with `id` (or parallel field) and propagate it into runtime worker identity mapping.
-- [ ] Add Scenario Manager REST to fetch topology (by template id/name + revision/hash).
-- [ ] Emit SC `status-full.data.context.bindings` (work-plane materialisation) and include a stable scenario identifier for UI join.
-- [ ] Update SC `workers[]` aggregate to include `beeId` for each runtime instance (so UI can join per-node when roles repeat).
-- [ ] Update UI to draw from `topology.edges[]` + node metadata from `template.bees[]`, join runtime by `beeId`.
+Moved to `docs/inProgress/ui-v2-control-plane-adoption.md`.
 
 ---
 

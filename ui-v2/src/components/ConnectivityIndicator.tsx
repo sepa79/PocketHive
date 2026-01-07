@@ -52,13 +52,21 @@ export function ConnectivityIndicator() {
           setResult({ state: 'ok', lastOkAt: Date.now() })
           schedule(10_000)
         } else {
-          setResult({ state: 'down', lastError: 'backend health is not UP', lastOkAt: result.lastOkAt })
+          setResult((prev) => ({
+            state: 'down',
+            lastError: 'backend health is not UP',
+            lastOkAt: prev.lastOkAt,
+          }))
           schedule(5_000)
         }
       } catch (e) {
         if (stopped) return
         const message = e instanceof Error ? e.message : 'health check failed'
-        setResult({ state: 'down', lastError: message, lastOkAt: result.lastOkAt })
+        setResult((prev) => ({
+          state: 'down',
+          lastError: message,
+          lastOkAt: prev.lastOkAt,
+        }))
         schedule(5_000)
       }
     }

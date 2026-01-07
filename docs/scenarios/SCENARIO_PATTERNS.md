@@ -77,7 +77,7 @@ upstream producers in a safe operating window.
 
 Primary example: `scenarios/bundles/redis-dataset-demo/scenario.yaml`
 combined with the HTTP templates under
-`scenarios/bundles/redis-dataset-demo/http-templates/default`.
+`scenarios/bundles/redis-dataset-demo/templates/http/default`.
 
 Pattern:
 
@@ -85,7 +85,7 @@ Pattern:
   `x-ph-service-id` / `x-ph-call-id` headers.
 - HTTP Builder worker transforms these into HTTP envelopes using
   templates stored inside the scenario bundle under
-  `/app/scenario/http-templates`.
+  `/app/scenario/templates/http`.
 - Scenario Manager materialises the bundle into a per-swarm runtime
   directory and Swarm Controller mounts it into all bees, so you only
   need to point `templateRoot` at the scenario path:
@@ -94,7 +94,7 @@ Pattern:
   config:
     worker:
       serviceId: default
-      templateRoot: /app/scenario/http-templates
+      templateRoot: /app/scenario/templates/http
       passThroughOnMissingTemplate: false
   ```
 

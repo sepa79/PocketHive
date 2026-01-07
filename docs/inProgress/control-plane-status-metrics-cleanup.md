@@ -77,12 +77,7 @@ References:
 
 ### 4) UI-v2 consumption (no per-worker fan-out)
 
-- [ ] Implement STOMP subscription filters in `ui-v2` to consume only:
-  - [ ] `event.metric.status-delta.<swarmId>.swarm-controller.*`
-  - [ ] `event.alert.alert.#`
-  - [ ] `event.outcome.#`
-- [ ] Implement worker list rendering from SC `status-full` snapshot (`data.context.workers[]`)
-- [ ] Implement on-demand detail view behavior (optional): request SC `status-full` on entering swarm view
+Moved to `docs/inProgress/ui-v2-control-plane-adoption.md`.
 
 ### 5) Contract enforcement
 
@@ -96,7 +91,7 @@ References:
 
 - [x] Start a swarm; verify SC emits `status-delta` watermark and `status-full` on request
 - [x] Inject broken control message; verify it is rejected without requeue (no storm)
-- [ ] UI-v2 open with multiple instances; verify no per-worker subscription fan-out and stable behavior
+- UI-v2 verification moved to `docs/inProgress/ui-v2-control-plane-adoption.md`.
 
 ### 7) SSOT for control-plane wire format (serializer + publisher)
 

@@ -171,8 +171,7 @@ To mount host directories into bee containers from a scenario, use
 config:
   docker:
     volumes:
-      - /opt/pockethive/http-templates:/app/http-templates:ro
-      - /opt/pockethive/scenario-overrides:/app/scenarios:ro
+      - /opt/pockethive/scenarios-runtime/<swarmId>:/app/scenario:ro
   worker:
     # normal worker config...
 ```
@@ -181,6 +180,8 @@ config:
   - `hostPath:containerPath[:mode]` where `mode` is `ro` or `rw`.
 - Swarm Controller passes these to the underlying Docker client when
   provisioning containers.
+- The preferred model is to mount the per‑swarm runtime bundle at
+  `/app/scenario` so workers can resolve templates/datasets from a single root.
 
 ## Traffic policy (buffer guard)
 

@@ -84,15 +84,17 @@ scenarios/
   bundles/
     local-rest-plan-demo/
       scenario.yaml
-      http-templates/
+      templates/
+        http/
       sut/
       datasets/
       docs/
 ```
 
 - `scenario.yaml` contains the **template** and optional **plan**.  
-- `http-templates/` holds HTTP Builder templates used by generator/processor
-  workers.  
+- `templates/` holds protocol templates. Today HTTP templates live under
+  `templates/http/`; TCP/ISO/SOAP/etc can live under sibling folders as they
+  are introduced.  
 - `sut/` and `datasets/` are optional and may contain SUT configs or input
   data; exact conventions are described in the in‑progress
   `docs/inProgress/scenario-bundle-runtime-plan.md`.
