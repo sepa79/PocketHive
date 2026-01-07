@@ -13,6 +13,7 @@ import java.util.Objects;
 public final class MessageTemplateRenderer {
 
     private static final ObjectMapper MAPPER = new ObjectMapper().findAndRegisterModules();
+    private static final int TEMPLATE_SNIPPET_LIMIT = 160;
     private final TemplateRenderer renderer;
 
     public MessageTemplateRenderer(TemplateRenderer renderer) {
@@ -28,22 +29,22 @@ public final class MessageTemplateRenderer {
         ctx.put("headers", seed.headers());
         ctx.put("workItem", seed);
 
-        String body = render(template.bodyTemplate(), ctx);
-        String path = render(template.pathTemplate(), ctx);
-        String method = render(template.methodTemplate(), ctx);
+        String body = render("bodyTemplate", template.bodyTemplate(), ctx);
+        String path = render("pathTemplate", template.pathTemplate(), ctx);
+        String method = render("method", template.methodTemplate(), ctx);
         Map<String, String> headers = renderHeaders(template.headerTemplates(), ctx);
 
         return new RenderedMessage(template.bodyType(), path, method, body, headers);
     }
 
-    private String render(String template, Map<String, Object> ctx) {
+    private String render(String label, String template, Map<String, Object> ctx) {
         if (template == null || template.isBlank()) {
             return "";
         }
         try {
             return renderer.render(template, ctx);
         } catch (Exception ex) {
-            throw new TemplatingRenderException("Failed to render template", ex);
+            throw new TemplatingRenderException(errorMessage(label, template), ex);
         }
     }
 
@@ -52,7 +53,7 @@ public final class MessageTemplateRenderer {
             return Map.of();
         }
         Map<String, String> rendered = new LinkedHashMap<>(templates.size());
-        templates.forEach((name, value) -> rendered.put(name, render(value, ctx)));
+        templates.forEach((name, value) -> rendered.put(name, render("header:" + name, value, ctx)));
         return rendered;
     }
 
@@ -74,5 +75,33 @@ public final class MessageTemplateRenderer {
         String body,
         Map<String, String> headers
     ) {
+    }
+
+    private static String errorMessage(String label, String template) {
+        StringBuilder message = new StringBuilder("Failed to render ");
+        message.append(label == null ? "template" : label);
+        int length = template == null ? 0 : template.length();
+        if (length > 0) {
+            message.append(" (len=").append(length).append(", snippet=");
+            message.append(snippet(template, TEMPLATE_SNIPPET_LIMIT));
+            message.append(')');
+        }
+        return message.toString();
+    }
+
+    private static String snippet(String value, int limit) {
+        if (value == null || value.isEmpty() || limit <= 0) {
+            return "\"\"";
+        }
+        String trimmed = value.trim();
+        if (trimmed.isEmpty()) {
+            return "\"\"";
+        }
+        String sample = trimmed.length() <= limit ? trimmed : trimmed.substring(0, limit);
+        String sanitized = sample
+            .replace("\r", "\\r")
+            .replace("\n", "\\n")
+            .replace("\t", "\\t");
+        return '"' + sanitized + '"';
     }
 }

@@ -10,7 +10,7 @@
   <artifactId>docker-client</artifactId>
   <properties>
     <java.version>21</java.version>
-    <docker-java.version>3.3.0</docker-java.version>
+    <docker-java.version>3.7.0</docker-java.version>
     <spring.boot.version>3.3.2</spring.boot.version>
   </properties>
   <dependencies>

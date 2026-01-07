@@ -608,7 +608,7 @@ public class SwarmLifecycleSteps {
 
     LinkedHashSet<String> seenStepIds = new LinkedHashSet<>();
     for (ControlPlaneEvents.StatusEnvelope env : controllerEvents) {
-      Object scenarioObj = env.status().data().context().get("scenario");
+      Object scenarioObj = env.status().data().extra().get("scenario");
       if (!(scenarioObj instanceof Map<?, ?> scenarioMapRaw)) {
         continue;
       }
@@ -997,10 +997,9 @@ public class SwarmLifecycleSteps {
           .filter(env -> isStatusForRole(env.status(), role))
           .sorted(Comparator.comparing(ControlPlaneEvents.StatusEnvelope::receivedAt))
           .toList();
-      ControlPlaneEvents.StatusEnvelope envelope = roleStatuses.stream()
-          .filter(env -> "status-full".equalsIgnoreCase(env.status().type()))
-          .reduce((left, right) -> right)
-          .orElseGet(() -> roleStatuses.isEmpty() ? null : roleStatuses.get(roleStatuses.size() - 1));
+      ControlPlaneEvents.StatusEnvelope envelope = roleStatuses.isEmpty()
+          ? null
+          : roleStatuses.get(roleStatuses.size() - 1);
       if (envelope == null) {
         throw new AssertionError("No status event captured for role " + role);
       }
@@ -1092,7 +1091,7 @@ public class SwarmLifecycleSteps {
     if (status == null) {
       return Map.of();
     }
-    Object workers = status.data().context().get("workers");
+    Object workers = status.data().extra().get("workers");
     if (!(workers instanceof List<?> list)) {
       return Map.of();
     }
@@ -1380,7 +1379,7 @@ public class SwarmLifecycleSteps {
 
   private void assertWorkerTopology(String role) {
     String displayRole = actualRoleName(role);
-    StatusEvent status = workerStatusByRole.get(role);
+    StatusEvent status = statusFullForRole(role);
     assertNotNull(status, () -> "No status recorded for role " + displayRole);
     String instance = workerInstances.get(role);
     assertNotNull(instance, () -> "No instance recorded for role " + displayRole);
@@ -1405,6 +1404,26 @@ public class SwarmLifecycleSteps {
     assertControlRoutes(role, expectedRoutes, actualControlRoutes);
 
     assertRabbitBindings(role, controlQueueDescriptor, expectedControlQueue);
+  }
+
+  private StatusEvent statusFullForRole(String role) {
+    String displayRole = actualRoleName(role);
+    String instance = workerInstances.get(role);
+    SwarmAssertions.await("status-full event for role " + displayRole, () -> {
+      List<ControlPlaneEvents.StatusEnvelope> statuses = controlPlaneEvents.statusesForSwarm(swarmId);
+      boolean present = statuses.stream()
+          .filter(env -> isStatusForRole(env.status(), role))
+          .filter(env -> instance == null || instance.equals(env.status().instance()))
+          .anyMatch(env -> "status-full".equalsIgnoreCase(env.status().type()));
+      assertTrue(present, () -> "Missing status-full event for role " + displayRole);
+    });
+    return controlPlaneEvents.statusesForSwarm(swarmId).stream()
+        .filter(env -> isStatusForRole(env.status(), role))
+        .filter(env -> instance == null || instance.equals(env.status().instance()))
+        .filter(env -> "status-full".equalsIgnoreCase(env.status().type()))
+        .max(Comparator.comparing(ControlPlaneEvents.StatusEnvelope::receivedAt))
+        .map(ControlPlaneEvents.StatusEnvelope::status)
+        .orElseThrow(() -> new AssertionError("No status-full event captured for role " + displayRole));
   }
 
   private void assertRabbitBindings(String role, ControlQueueDescriptor controlQueueDescriptor, String queueName) {
