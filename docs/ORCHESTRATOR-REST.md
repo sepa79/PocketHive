@@ -469,4 +469,22 @@ These endpoints are intended for local diagnostics and should be secured behind 
 
 **Response (202)** — same shape as refresh, with `mode: "RESET"`.
 
+### 5.3 Control-plane schema (UI bootstrap)
+`GET /api/control-plane/schema/control-events`
+
+**Behavior**
+- Returns the raw `docs/spec/control-events.schema.json` payload.
+- Supports `ETag` and `If-None-Match` for caching (5 minute max-age).
+- Intended for UI bootstrap; no fallback source should be used if unavailable.
+- Should be secured behind admin access or removed before exposing the orchestrator publicly.
+
+**Response (200)**
+```
+Content-Type: application/schema+json;version=draft/2020-12
+ETag: "..."
+Cache-Control: max-age=300
+```
+
+**Response (304)** — when `If-None-Match` matches the current `ETag`.
+
 Outcome and metric payloads follow the envelope rules in `docs/ARCHITECTURE.md`.
