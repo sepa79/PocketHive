@@ -184,7 +184,7 @@ pockethive:
                   list: ph:dataset:main
                 - match: 'no money'
                   list: ph:dataset:topup
-          fallbackList: ph:dataset:other # if omitted, uses the x-ph-redis-list header from the WorkItem; otherwise skips
+              fallbackList: ph:dataset:other # if omitted, uses the x-ph-redis-list header from the WorkItem; otherwise skips
 ```
 
 If no route matches and `fallbackList` is blank, the interceptor falls back to the original list
