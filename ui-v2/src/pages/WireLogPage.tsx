@@ -6,6 +6,7 @@ import {
   type WireLogEntry,
 } from '../lib/controlPlane/wireLogStore'
 import type { ControlPlaneEnvelope } from '../lib/controlPlane/types'
+import { useTopBarToolbar } from '../components/TopBarContext'
 
 const MonacoEditor = lazy(() => import('@monaco-editor/react'))
 
@@ -123,6 +124,97 @@ export function WireLogPage() {
   )
   const payloadText = selectedEntry ? prettyPayload(selectedEntry.payload) : ''
   const [monacoTheme, setMonacoTheme] = useState(resolveMonacoTheme)
+  const topBarToolbar = useMemo(
+    () => (
+      <div className="topBarToolbar">
+        <div className="wireLogStats">
+          <span className="pill pillInfo">{entries.length} total</span>
+          <span className="pill pillInfo">{filtered.length} filtered</span>
+          <span className={invalidCount > 0 ? 'pill pillBad' : 'pill pillOk'}>
+            {invalidCount > 0 ? `${invalidCount} invalid` : 'valid'}
+          </span>
+          <span className="pill pillInfo">{errorCount} errors</span>
+          <span className="pill pillInfo">
+            {alertCount}/{outcomeCount} alerts/outcomes
+          </span>
+        </div>
+        <button type="button" className="actionButton" onClick={downloadJsonl}>
+          Export JSONL
+        </button>
+        <button type="button" className="actionButton actionButtonDanger" onClick={clearWireLog}>
+          Clear
+        </button>
+        <select
+          className="textInput textInputCompact"
+          value={sourceFilter}
+          onChange={(event) => setSourceFilter(event.target.value as 'all' | 'stomp' | 'rest')}
+        >
+          <option value="all">All sources</option>
+          <option value="stomp">STOMP</option>
+          <option value="rest">REST</option>
+        </select>
+        <select
+          className="textInput textInputCompact"
+          value={kindFilter}
+          onChange={(event) =>
+            setKindFilter(
+              event.target.value as 'all' | 'signal' | 'outcome' | 'metric' | 'event' | 'invalid',
+            )
+          }
+        >
+          <option value="all">All kinds</option>
+          <option value="signal">signal</option>
+          <option value="outcome">outcome</option>
+          <option value="metric">metric</option>
+          <option value="event">event</option>
+          <option value="invalid">invalid</option>
+        </select>
+        <input
+          className="textInput textInputCompact"
+          value={searchFilter}
+          onChange={(event) => setSearchFilter(event.target.value)}
+          placeholder="Search routing/type/origin"
+        />
+        <button
+          type="button"
+          className={errorsOnly ? 'actionButton' : 'actionButton actionButtonGhost'}
+          onClick={() => setErrorsOnly((prev) => !prev)}
+        >
+          Errors
+        </button>
+        <button
+          type="button"
+          className={tail ? 'actionButton' : 'actionButton actionButtonGhost'}
+          onClick={() => setTail((prev) => !prev)}
+        >
+          {tail ? 'Freeze' : 'Follow'}
+        </button>
+        <button
+          type="button"
+          className="actionButton actionButtonGhost"
+          onClick={() => setShowFilters((prev) => !prev)}
+        >
+          {showFilters ? 'Hide filters' : 'Filters'}
+        </button>
+      </div>
+    ),
+    [
+      alertCount,
+      entries.length,
+      errorCount,
+      errorsOnly,
+      filtered.length,
+      invalidCount,
+      kindFilter,
+      outcomeCount,
+      searchFilter,
+      showFilters,
+      sourceFilter,
+      tail,
+    ],
+  )
+
+  useTopBarToolbar(topBarToolbar)
 
   const handleCopyPayload = async () => {
     if (!selectedEntry) return
@@ -135,85 +227,6 @@ export function WireLogPage() {
 
   return (
     <div className="page">
-      <div className="row between">
-        <div>
-          <h1 className="h1">Wire Log</h1>
-          <div className="muted">Raw control-plane traffic. No masking in v1.</div>
-        </div>
-        <div className="row">
-          <button type="button" className="actionButton" onClick={downloadJsonl}>
-            Export JSONL
-          </button>
-          <button type="button" className="actionButton actionButtonDanger" onClick={clearWireLog}>
-            Clear
-          </button>
-        </div>
-      </div>
-
-      <div className="wireLogToolbar">
-        <div className="wireLogStats">
-          <span className="pill pillInfo">{entries.length} total</span>
-          <span className="pill pillInfo">{filtered.length} filtered</span>
-          <span className={invalidCount > 0 ? 'pill pillBad' : 'pill pillOk'}>
-            {invalidCount > 0 ? `${invalidCount} invalid` : 'valid'}
-          </span>
-          <span className="pill pillInfo">{errorCount} errors</span>
-          <span className="pill pillInfo">
-            {alertCount}/{outcomeCount} alerts/outcomes
-          </span>
-        </div>
-        <div className="wireLogQuick">
-          <select
-            className="textInput textInputCompact"
-            value={sourceFilter}
-            onChange={(event) => setSourceFilter(event.target.value as 'all' | 'stomp' | 'rest')}
-          >
-            <option value="all">All sources</option>
-            <option value="stomp">STOMP</option>
-            <option value="rest">REST</option>
-          </select>
-          <select
-            className="textInput textInputCompact"
-            value={kindFilter}
-            onChange={(event) =>
-              setKindFilter(
-                event.target.value as 'all' | 'signal' | 'outcome' | 'metric' | 'event' | 'invalid',
-              )
-            }
-          >
-            <option value="all">All kinds</option>
-            <option value="signal">signal</option>
-            <option value="outcome">outcome</option>
-            <option value="metric">metric</option>
-            <option value="event">event</option>
-            <option value="invalid">invalid</option>
-          </select>
-          <input
-            className="textInput textInputCompact"
-            value={searchFilter}
-            onChange={(event) => setSearchFilter(event.target.value)}
-            placeholder="Search routing/type/origin"
-          />
-          <button
-            type="button"
-            className={errorsOnly ? 'actionButton' : 'actionButton actionButtonGhost'}
-            onClick={() => setErrorsOnly((prev) => !prev)}
-          >
-            Errors
-          </button>
-          <button type="button" className="actionButton" onClick={() => setTail(true)}>
-            Tail
-          </button>
-          <button
-            type="button"
-            className="actionButton actionButtonGhost"
-            onClick={() => setShowFilters((prev) => !prev)}
-          >
-            {showFilters ? 'Hide filters' : 'Filters'}
-          </button>
-        </div>
-      </div>
-
       {showFilters ? (
         <div className="wireLogFiltersPanel">
           <label className="field">

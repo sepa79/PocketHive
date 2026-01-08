@@ -2,6 +2,7 @@ import { Outlet } from 'react-router-dom'
 import { useEffect, useMemo, useState } from 'react'
 import { SideNav } from './SideNav'
 import { TopBar } from './TopBar'
+import { TopBarProvider } from './TopBarContext'
 
 const NAV_STATE_KEY = 'PH_UI_NAV'
 
@@ -35,16 +36,18 @@ export function AppShell() {
   }, [nav])
 
   return (
-    <div className={shellClass}>
-      <header className="topBar">
-        <TopBar />
-      </header>
-      <aside className="sideNav">
-        <SideNav expanded={navExpanded} onToggle={() => setNav((v) => (v === 'expanded' ? 'collapsed' : 'expanded'))} />
-      </aside>
-      <main className="appContent">
-        <Outlet />
-      </main>
-    </div>
+    <TopBarProvider>
+      <div className={shellClass}>
+        <header className="topBar">
+          <TopBar />
+        </header>
+        <aside className="sideNav">
+          <SideNav expanded={navExpanded} onToggle={() => setNav((v) => (v === 'expanded' ? 'collapsed' : 'expanded'))} />
+        </aside>
+        <main className="appContent">
+          <Outlet />
+        </main>
+      </div>
+    </TopBarProvider>
   )
 }

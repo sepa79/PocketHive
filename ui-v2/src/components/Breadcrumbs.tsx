@@ -25,6 +25,7 @@ function buildCrumbs(pathname: string): Crumb[] {
   if (section === 'journal')
     return [{ label: 'Journal', to: '/journal' }, ...parts.slice(1).map((p) => ({ label: p }))]
   if (section === 'other') return [{ label: 'Other', to: '/other' }, ...parts.slice(1).map((p) => ({ label: p }))]
+  if (section === 'wire-log') return [{ label: 'Wire Log', to: '/wire-log' }]
   if (section === 'health') return [{ label: 'Home', to: '/' }, { label: 'Connectivity', to: '/health' }]
   if (section === 'help') return [{ label: 'Help', to: '/help' }]
   if (section === 'login') return [{ label: 'Login', to: '/login' }]
@@ -57,4 +58,3 @@ export function Breadcrumbs() {
     </nav>
   )
 }
-

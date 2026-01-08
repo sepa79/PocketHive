@@ -64,7 +64,7 @@ export function UserMenu() {
               navigate('/wire-log')
             }}
           >
-            Wire Log (Buzz v2)
+            Wire Log
           </button>
           <div className="menuSep" role="separator" />
           <button

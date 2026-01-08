@@ -139,6 +139,21 @@ textarea,
   border-color: rgba(255, 255, 255, 0.16);
 }
 
+:root[data-theme='light'] .navHeaderTitle {
+  color: rgba(10, 20, 30, 0.6);
+}
+
+:root[data-theme='light'] .navCollapseBtn {
+  border-color: rgba(10, 20, 30, 0.16);
+  background: rgba(10, 20, 30, 0.06);
+  color: rgba(10, 20, 30, 0.8);
+}
+
+:root[data-theme='light'] .navCollapseBtn:hover {
+  background: rgba(10, 20, 30, 0.1);
+  border-color: rgba(10, 20, 30, 0.2);
+}
+
 .navCollapseBtnExpanded {
   width: 44px;
 }
@@ -249,6 +264,14 @@ textarea,
   border-color: rgba(20, 120, 210, 0.22) !important;
 }
 
+:root[data-theme='light'] .topBar {
+  background: rgba(255, 255, 255, 0.9);
+}
+
+:root[data-theme='light'] .sideNav {
+  background: rgba(255, 255, 255, 0.92);
+}
+
 .topBar {
   grid-row: 1;
   grid-column: 1 / span 2;
@@ -263,6 +286,46 @@ textarea,
   align-items: center;
   gap: 10px;
   padding: 0 10px;
+}
+
+.topBarLeft {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.topBarCenter {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.topBarToolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: auto;
+  scrollbar-width: none;
+}
+
+.topBarToolbar::-webkit-scrollbar {
+  display: none;
+}
+
+.topBarToolbar .wireLogStats {
+  flex-wrap: nowrap;
+}
+
+.topBarRight {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
 }
 
 .logoLink {
@@ -301,6 +364,14 @@ textarea,
 
 .brandWordHive {
   color: #ffc107;
+}
+
+:root[data-theme='light'] .brandWordmark {
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.65), 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+:root[data-theme='light'] .brandWordPocket {
+  color: rgba(10, 20, 30, 0.92);
 }
 
 .logoLinkBare {
@@ -359,6 +430,21 @@ textarea,
 
 .iconButtonBare:focus-visible {
   outline-color: rgba(255, 255, 255, 0.18);
+}
+
+:root[data-theme='light'] .iconButton {
+  border-color: rgba(10, 20, 30, 0.12);
+  background: rgba(10, 20, 30, 0.04);
+  color: rgba(10, 20, 30, 0.86);
+}
+
+:root[data-theme='light'] .iconButton:hover {
+  background: rgba(10, 20, 30, 0.08);
+  border-color: rgba(10, 20, 30, 0.18);
+}
+
+:root[data-theme='light'] .iconButtonBare:focus-visible {
+  outline-color: rgba(10, 20, 30, 0.2);
 }
 
 .odysseyIcon {
@@ -671,6 +757,32 @@ textarea,
   background: rgba(255, 193, 7, 0.12);
 }
 
+:root[data-theme='light'] .pill {
+  border-color: rgba(10, 20, 30, 0.18);
+  background: rgba(10, 20, 30, 0.04);
+  color: rgba(10, 20, 30, 0.82);
+}
+
+:root[data-theme='light'] .pillOk {
+  border-color: rgba(0, 150, 110, 0.35);
+  background: rgba(0, 150, 110, 0.12);
+}
+
+:root[data-theme='light'] .pillBad {
+  border-color: rgba(210, 60, 60, 0.35);
+  background: rgba(210, 60, 60, 0.12);
+}
+
+:root[data-theme='light'] .pillInfo {
+  border-color: rgba(20, 120, 210, 0.35);
+  background: rgba(20, 120, 210, 0.12);
+}
+
+:root[data-theme='light'] .pillWarn {
+  border-color: rgba(210, 160, 20, 0.4);
+  background: rgba(210, 160, 20, 0.12);
+}
+
 .actionButton {
   border: 1px solid var(--border);
   background: var(--panel2);
@@ -693,6 +805,16 @@ textarea,
 .actionButtonGhost {
   border-color: rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.03);
+}
+
+:root[data-theme='light'] .actionButton:hover {
+  border-color: rgba(10, 20, 30, 0.18);
+  background: rgba(10, 20, 30, 0.05);
+}
+
+:root[data-theme='light'] .actionButtonGhost {
+  border-color: rgba(10, 20, 30, 0.12);
+  background: rgba(10, 20, 30, 0.04);
 }
 
 .formGrid {
@@ -1088,7 +1210,7 @@ textarea,
   right: 0;
   width: 220px;
   border: 1px solid var(--border);
-  background: var(--panel);
+  background: rgba(12, 16, 24, 0.98);
   border-radius: 14px;
   padding: 6px;
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
@@ -1129,4 +1251,9 @@ textarea,
 
 :root[data-theme='light'] .menuSep {
   background: rgba(10, 20, 30, 0.12);
+}
+
+:root[data-theme='light'] .menu {
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 18px 40px rgba(10, 20, 30, 0.12);
 }
