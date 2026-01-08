@@ -4,7 +4,7 @@ This document is the single place for **UI v2 navigation/layout decisions**.
 
 ## Goals
 
-- Predictable UX on **1920×1080** (Full HD).
+- Predictable UX on **1920×1080** (Full HD), but use extra space (4k, wide screens).
 - Stable layout (no “panel unmount flicker” when navigating).
 - Fully linkable screens (URL is the state; no query params for navigation).
 - A clean foundation for:

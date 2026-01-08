@@ -100,13 +100,54 @@ envelope refactor. This consolidates remaining UI items from:
 - [ ] Update SC `workers[]` aggregate to include `beeId` for each runtime instance (so UI can join per-node when roles repeat).
 - [ ] Update UI to draw from `topology.edges[]` + node metadata from `template.bees[]`, join runtime by `beeId`.
 
-## 3) Wire log and debug tooling (Buzz v2)
+## 3) Wire Log and debug tooling
 
-- [x] Add special-menu entry for Wire Log (Buzz v2) as the only UI entry point.
+- [x] Add special-menu entry for Wire Log as the only UI entry point.
 - [x] Persist raw frames + parsed envelopes + validation errors in `WireLogStore`.
 - [x] Show soft indicator when invalid messages are observed (do not block UI).
 - [x] Add JSONL export of the wire log (raw + parsed + errors).
 - [ ] Add raw-only work exchange subscription support (debug-only; no schema yet).
+
+### Wire Log UI spec (v2)
+
+**Primary view**
+- Dense list/table (single-line rows), not cards.
+- Columns: time, kind/type, routing key, scope (`swarmId/role/instance`), status/result, origin.
+- Row click opens a modal with:
+  - raw payload (Monaco JSON),
+  - validation errors (if any),
+  - copy-to-clipboard action.
+
+**Filters**
+- Source: `stomp` / `rest`.
+- Kind: `signal` / `outcome` / `metric` / `event`, plus `type` filter.
+- Routing key prefix filter.
+- Scope filters: `swarmId`, `role`, `instance`.
+- `Errors only` toggle (invalid + alert level=error + failed outcomes).
+- CorrelationId filter (exact match).
+
+**Status header**
+- Counts: total, invalid, error, alerts, outcomes.
+- Retention indicator (entries + MB).
+- Actions: clear, export JSONL (optionally export filtered set).
+
+**Visual language**
+- Color chips by `kind`.
+- Status badges for `data.status` (outcomes).
+- Invalid rows highlighted with `errorCode`.
+- CorrelationId color band for quick grouping.
+
+**Behavior**
+- Tail mode: auto-scroll when at bottom; pause on user scroll.
+- Keyboard navigation (up/down, enter to expand).
+- No masking in v1; show a warning banner that payloads may be sensitive.
+
+**Implementation status**
+- [x] Dense table layout with modal details (Monaco JSON).
+- [x] Filters + tail mode + search.
+- [x] Correlation color band + kind chips.
+- [x] Export JSONL + clear.
+- [ ] Keyboard navigation.
 
 ## 4) Manual verification
 

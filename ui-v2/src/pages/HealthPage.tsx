@@ -1,5 +1,11 @@
 import { useEffect, useState } from 'react'
 import { subscribeControlPlaneHealth, type ControlPlaneHealth } from '../lib/controlPlane/healthStore'
+import {
+  getControlPlaneSettings,
+  subscribeControlPlaneSettings,
+  updateControlPlaneSettings,
+  type ControlPlaneSettings,
+} from '../lib/controlPlane/settingsStore'
 
 type HealthState = 'checking' | 'ok' | 'down'
 
@@ -28,6 +34,7 @@ export function HealthPage() {
     stompState: 'idle',
     invalidCount: 0,
   })
+  const [settings, setSettings] = useState<ControlPlaneSettings>(() => getControlPlaneSettings())
 
   useEffect(() => {
     let cancelled = false
@@ -63,6 +70,13 @@ export function HealthPage() {
 
   useEffect(() => {
     const unsubscribe = subscribeControlPlaneHealth(setControlPlane)
+    return () => {
+      unsubscribe()
+    }
+  }, [])
+
+  useEffect(() => {
+    const unsubscribe = subscribeControlPlaneSettings(setSettings)
     return () => {
       unsubscribe()
     }
@@ -116,6 +130,55 @@ export function HealthPage() {
           <div className="kv">
             <div className="k">Invalid control frames</div>
             <div className="v">{controlPlane.invalidCount}</div>
+          </div>
+        </div>
+        <div className="formGrid" style={{ marginTop: 14 }}>
+          <label className="field">
+            <span className="fieldLabel">STOMP URL</span>
+            <input
+              className="textInput"
+              value={settings.url}
+              onChange={(event) => updateControlPlaneSettings({ url: event.target.value })}
+            />
+          </label>
+          <label className="field">
+            <span className="fieldLabel">STOMP user</span>
+            <input
+              className="textInput"
+              value={settings.user}
+              onChange={(event) => updateControlPlaneSettings({ user: event.target.value })}
+            />
+          </label>
+          <label className="field">
+            <span className="fieldLabel">STOMP passcode</span>
+            <input
+              className="textInput"
+              type="password"
+              value={settings.passcode}
+              onChange={(event) => updateControlPlaneSettings({ passcode: event.target.value })}
+            />
+          </label>
+          <div className="field">
+            <span className="fieldLabel">Connection</span>
+            <div className="row">
+              <button
+                type="button"
+                className="actionButton"
+                onClick={() => updateControlPlaneSettings({ enabled: true })}
+              >
+                Connect
+              </button>
+              <button
+                type="button"
+                className="actionButton actionButtonDanger"
+                onClick={() => updateControlPlaneSettings({ enabled: false })}
+              >
+                Disconnect
+              </button>
+            </div>
+            <div className="muted" style={{ marginTop: 6 }}>
+              {settings.enabled ? 'Auto-connect enabled' : 'Disconnected by user'}
+            </div>
           </div>
         </div>
       </div>
