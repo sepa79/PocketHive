@@ -12,8 +12,10 @@ import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
+import io.pockethive.processor.TcpTransportConfig;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
@@ -21,8 +23,17 @@ import org.slf4j.LoggerFactory;
 
 public class NettyTransport implements TcpTransport {
     private static final Logger logger = LoggerFactory.getLogger(NettyTransport.class);
-    private static final EventLoopGroup SHARED_GROUP = new NioEventLoopGroup(4);
-    private final EventLoopGroup group = SHARED_GROUP;
+    private static final ConcurrentHashMap<Integer, EventLoopGroup> SHARED_GROUPS = new ConcurrentHashMap<>();
+    private final EventLoopGroup group;
+
+    public NettyTransport() {
+        this(TcpTransportConfig.defaults());
+    }
+
+    public NettyTransport(TcpTransportConfig config) {
+        int workerThreads = config == null ? TcpTransportConfig.defaults().workerThreads() : config.workerThreads();
+        this.group = SHARED_GROUPS.computeIfAbsent(workerThreads, NioEventLoopGroup::new);
+    }
 
     @Override
     public TcpResponse execute(TcpRequest request, TcpBehavior behavior) throws TcpException {
@@ -81,12 +92,12 @@ public class NettyTransport implements TcpTransport {
 
     @Override
     public void close() {
-        // Don't shutdown shared group - managed by JVM shutdown hook
+        // Shared groups are managed by a JVM shutdown hook.
     }
 
     static {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            SHARED_GROUP.shutdownGracefully();
+            SHARED_GROUPS.values().forEach(EventLoopGroup::shutdownGracefully);
         }));
     }
 

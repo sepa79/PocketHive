@@ -20,7 +20,7 @@ public class TcpTransportFactory {
         return switch (config.type().toLowerCase()) {
             case "socket" -> new SocketTransport(config);
             case "nio" -> new NioTransport();
-            case "netty" -> new NettyTransport();
+            case "netty" -> new NettyTransport(config);
             default -> new SocketTransport(config);
         };
     }
