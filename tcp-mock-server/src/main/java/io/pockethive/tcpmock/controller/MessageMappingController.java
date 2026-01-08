@@ -56,9 +56,13 @@ public class MessageMappingController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Map<String, String>> removeMapping(@PathVariable String id) {
-        registry.removeMapping(id);
-        registry.deleteMappingFile(id);
-        return ResponseEntity.ok(Map.of("status", "deleted", "id", id));
+    public ResponseEntity<Map<String, String>> removeMapping(@PathVariable("id") String id) {
+        try {
+            registry.removeMapping(id);
+            registry.deleteMappingFile(id);
+        } catch (Exception ignored) {
+            // Deletion is idempotent; ignore missing files or registry entries.
+        }
+        return ResponseEntity.noContent().build();
     }
 }

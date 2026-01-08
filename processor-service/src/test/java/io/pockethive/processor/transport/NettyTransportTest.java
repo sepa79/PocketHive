@@ -11,12 +11,15 @@ import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.util.SelfSignedCertificate;
+import io.pockethive.processor.TcpTransportConfig;
+import java.lang.reflect.Field;
 import java.net.InetSocketAddress;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -161,6 +164,52 @@ class NettyTransportTest {
       assertThatThrownBy(() -> transport.execute(request, TcpBehavior.REQUEST_RESPONSE))
           .isInstanceOf(TcpException.class);
     }
+  }
+
+  @Test
+  void nettyTransportHonorsWorkerThreadConfig() throws Exception {
+    TcpTransportConfig defaults = TcpTransportConfig.defaults();
+    TcpTransportConfig configTwo = new TcpTransportConfig(
+        defaults.type(),
+        defaults.connectTimeoutMs(),
+        defaults.readTimeoutMs(),
+        defaults.maxBytes(),
+        defaults.keepAlive(),
+        2,
+        defaults.tcpNoDelay(),
+        defaults.sslVerify(),
+        defaults.connectionReuse(),
+        defaults.maxRetries()
+    );
+    TcpTransportConfig configThree = new TcpTransportConfig(
+        defaults.type(),
+        defaults.connectTimeoutMs(),
+        defaults.readTimeoutMs(),
+        defaults.maxBytes(),
+        defaults.keepAlive(),
+        3,
+        defaults.tcpNoDelay(),
+        defaults.sslVerify(),
+        defaults.connectionReuse(),
+        defaults.maxRetries()
+    );
+
+    NettyTransport transportA = new NettyTransport(configTwo);
+    NettyTransport transportB = new NettyTransport(configTwo);
+    NettyTransport transportC = new NettyTransport(configThree);
+
+    EventLoopGroup groupA = extractGroup(transportA);
+    EventLoopGroup groupB = extractGroup(transportB);
+    EventLoopGroup groupC = extractGroup(transportC);
+
+    assertThat(groupA).isSameAs(groupB);
+    assertThat(groupC).isNotSameAs(groupA);
+  }
+
+  private static EventLoopGroup extractGroup(NettyTransport transport) throws Exception {
+    Field groupField = NettyTransport.class.getDeclaredField("group");
+    groupField.setAccessible(true);
+    return (EventLoopGroup) groupField.get(transport);
   }
 
   private static final class TestServer implements AutoCloseable {

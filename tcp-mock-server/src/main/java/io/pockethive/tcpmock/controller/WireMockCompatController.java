@@ -94,20 +94,20 @@ public class WireMockCompatController {
     }
 
     @PostMapping("/scenarios/{name}/reset")
-    public Map<String, String> resetScenario(@PathVariable String name) {
+    public Map<String, String> resetScenario(@PathVariable("name") String name) {
         scenarioManager.setScenarioState(name, null);
         return Map.of("status", "Scenario reset", "scenario", name);
     }
 
     @PutMapping("/scenarios/{name}/state")
-    public Map<String, String> setScenarioState(@PathVariable String name, @RequestBody Map<String, String> body) {
+    public Map<String, String> setScenarioState(@PathVariable("name") String name, @RequestBody Map<String, String> body) {
         String state = body.get("state");
         scenarioManager.setScenarioState(name, state);
         return Map.of("status", "updated", "scenario", name, "state", state);
     }
 
     @DeleteMapping("/scenarios/{name}")
-    public Map<String, String> deleteScenario(@PathVariable String name) {
+    public Map<String, String> deleteScenario(@PathVariable("name") String name) {
         scenarioManager.removeScenario(name);
         return Map.of("status", "deleted", "scenario", name);
     }

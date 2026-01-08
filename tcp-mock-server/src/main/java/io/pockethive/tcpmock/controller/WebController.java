@@ -34,7 +34,7 @@ public class WebController {
 
   @GetMapping("/docs/{filename}")
   @ResponseBody
-  public ResponseEntity<String> getDocumentation(@PathVariable String filename) {
+  public ResponseEntity<String> getDocumentation(@PathVariable("filename") String filename) {
     try {
       if (!filename.endsWith(".md") || filename.contains("..") || filename.contains("/")) {
         return ResponseEntity.badRequest().body("Invalid filename");

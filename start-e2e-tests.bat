@@ -26,6 +26,9 @@ if not defined UI_BASE_URL set "UI_BASE_URL=http://localhost:8088"
 if not defined UI_WEBSOCKET_URI set "UI_WEBSOCKET_URI=ws://localhost:8088/ws"
 if not defined POCKETHIVE_CONTROL_PLANE_EXCHANGE set "POCKETHIVE_CONTROL_PLANE_EXCHANGE=ph.control"
 if not defined POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX set "POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX=ph.control"
+if not defined POCKETHIVE_TCP_MOCK_URL set "POCKETHIVE_TCP_MOCK_URL=http://localhost:8083"
+if not defined POCKETHIVE_TCP_MOCK_USERNAME set "POCKETHIVE_TCP_MOCK_USERNAME=admin"
+if not defined POCKETHIVE_TCP_MOCK_PASSWORD set "POCKETHIVE_TCP_MOCK_PASSWORD=admin"
 
 call mvnw.cmd verify -pl e2e-tests -am %*
 set "EXIT_CODE=%ERRORLEVEL%"

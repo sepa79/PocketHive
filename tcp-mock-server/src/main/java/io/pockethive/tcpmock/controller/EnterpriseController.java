@@ -26,13 +26,13 @@ public class EnterpriseController {
     }
 
     @PostMapping("/scenarios/{scenarioName}/start")
-    public ResponseEntity<Map<String, String>> startScenario(@PathVariable String scenarioName) {
+    public ResponseEntity<Map<String, String>> startScenario(@PathVariable("scenarioName") String scenarioName) {
         stateManager.getOrCreateScenarioState(scenarioName);
         return ResponseEntity.ok(Map.of("status", "started", "scenario", scenarioName));
     }
 
     @PostMapping("/scenarios/{scenarioName}/reset")
-    public ResponseEntity<Map<String, String>> resetScenario(@PathVariable String scenarioName) {
+    public ResponseEntity<Map<String, String>> resetScenario(@PathVariable("scenarioName") String scenarioName) {
         stateManager.resetScenario(scenarioName);
         return ResponseEntity.ok(Map.of("status", "reset", "scenario", scenarioName));
     }
@@ -45,7 +45,7 @@ public class EnterpriseController {
 
     @PutMapping("/scenarios/{scenarioName}/state")
     public ResponseEntity<Map<String, String>> updateScenarioState(
-            @PathVariable String scenarioName,
+            @PathVariable("scenarioName") String scenarioName,
             @RequestBody Map<String, String> request) {
         String newState = request.get("state");
         stateManager.updateScenarioState(scenarioName, newState);
@@ -54,7 +54,7 @@ public class EnterpriseController {
 
     @PutMapping("/scenarios/{scenarioName}/variables")
     public ResponseEntity<Map<String, String>> setScenarioVariable(
-            @PathVariable String scenarioName,
+            @PathVariable("scenarioName") String scenarioName,
             @RequestBody Map<String, Object> variables) {
         variables.forEach((key, value) ->
             stateManager.setScenarioVariable(scenarioName, key, value));

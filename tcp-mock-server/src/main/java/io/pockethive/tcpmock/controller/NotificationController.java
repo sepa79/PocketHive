@@ -42,7 +42,7 @@ public class NotificationController {
   }
 
   @PutMapping("/{id}/read")
-  public ResponseEntity<Void> markRead(@PathVariable long id) {
+  public ResponseEntity<Void> markRead(@PathVariable("id") long id) {
     notifications.stream()
       .filter(n -> n.id == id)
       .findFirst()

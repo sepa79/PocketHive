@@ -223,6 +223,7 @@ public class SwarmLifecycleSteps {
     }
     return switch (scenarioId) {
       case "templated-rest", "redis-dataset-demo" -> "wiremock-local";
+      case "tcp-socket-demo" -> "tcp-mock-local";
       default -> null;
     };
   }
@@ -1218,10 +1219,51 @@ public class SwarmLifecycleSteps {
         || "local-rest-with-multi-generators".equals(scenarioId)) {
       return "final";
     }
-    if ("redis-dataset-demo".equals(scenarioId)) {
+    if ("redis-dataset-demo".equals(scenarioId)
+        || "tcp-socket-demo".equals(scenarioId)) {
       return "post";
     }
     throw new AssertionError("Unsupported scenario for final queue resolution: " + scenarioId);
+  }
+
+  @Then("the final queue reports a processor error")
+  public void theFinalQueueReportsAProcessorError() throws Exception {
+    ensureStartResponse();
+    ensureFinalQueueTap();
+    String queue = tapQueueName != null ? tapQueueName : finalQueueName();
+
+    WorkQueueConsumer.Message message = workQueueConsumer.consumeNext(SwarmAssertions.defaultTimeout())
+        .orElseThrow(() -> new AssertionError("No message observed on tap queue " + queue));
+
+    try {
+      List<String> stepPayloads = workItemStepPayloads(message);
+      String error = findProcessorError(stepPayloads);
+      if (error == null || error.isBlank()) {
+        throw new AssertionError("Expected processor error in WorkItem steps but none found. payloads=" + stepPayloads);
+      }
+      LOGGER.info("Processor error captured from final queue: {}", error);
+    } finally {
+      message.ack();
+    }
+  }
+
+  private String findProcessorError(List<String> stepPayloads) {
+    for (String payload : stepPayloads) {
+      if (payload == null || payload.isBlank()) {
+        continue;
+      }
+      try {
+        JsonNode node = objectMapper.readTree(payload);
+        if (node.has("error")) {
+          String error = node.path("error").asText();
+          if (error != null && !error.isBlank()) {
+            return error;
+          }
+        }
+      } catch (IOException ignored) {
+      }
+    }
+    return null;
   }
 
   private String hiveExchangeName() {

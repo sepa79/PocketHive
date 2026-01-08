@@ -42,15 +42,23 @@ public class AdminController {
     }
 
     @DeleteMapping("/mappings/{id}")
-    public ResponseEntity<Void> deleteStubMapping(@PathVariable String id) {
-        registry.removeMapping(id);
-        return ResponseEntity.ok().build();
+    public ResponseEntity<Void> deleteStubMapping(@PathVariable("id") String id) {
+        try {
+            registry.removeMapping(id);
+        } catch (Exception ignored) {
+            // Idempotent deletion; ignore missing entries.
+        }
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/mappings/reset")
     public ResponseEntity<Void> resetAllStubMappings() {
-        registry.getAllMappings().forEach(m -> registry.removeMapping(m.getId()));
-        return ResponseEntity.ok().build();
+        try {
+            registry.getAllMappings().forEach(m -> registry.removeMapping(m.getId()));
+        } catch (Exception ignored) {
+            // Idempotent reset; ignore missing entries.
+        }
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/scenarios")
@@ -65,7 +73,7 @@ public class AdminController {
     }
 
     @PutMapping("/scenarios/{name}/state")
-    public ResponseEntity<Void> setScenarioState(@PathVariable String name, @RequestBody Map<String, String> body) {
+    public ResponseEntity<Void> setScenarioState(@PathVariable("name") String name, @RequestBody Map<String, String> body) {
         scenarioManager.setScenarioState(name, body.get("state"));
         return ResponseEntity.ok().build();
     }

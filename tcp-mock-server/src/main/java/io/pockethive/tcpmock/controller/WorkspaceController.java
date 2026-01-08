@@ -28,7 +28,7 @@ public class WorkspaceController {
   }
 
   @DeleteMapping("/{id}")
-  public ResponseEntity<Void> delete(@PathVariable String id) {
+  public ResponseEntity<Void> delete(@PathVariable("id") String id) {
     if ("default".equals(id)) {
       return ResponseEntity.badRequest().build();
     }
@@ -37,7 +37,7 @@ public class WorkspaceController {
   }
 
   @PutMapping("/{id}")
-  public ResponseEntity<Workspace> update(@PathVariable String id, @RequestBody Workspace workspace) {
+  public ResponseEntity<Workspace> update(@PathVariable("id") String id, @RequestBody Workspace workspace) {
     workspaces.put(id, workspace);
     return ResponseEntity.ok(workspace);
   }

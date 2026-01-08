@@ -18,13 +18,18 @@ import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class NettyTransport implements TcpTransport {
     private static final Logger logger = LoggerFactory.getLogger(NettyTransport.class);
-    private static final ConcurrentHashMap<Integer, EventLoopGroup> SHARED_GROUPS = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<Integer, SharedGroup> SHARED_GROUPS = new ConcurrentHashMap<>();
+    private final int workerThreads;
+    private final SharedGroup sharedGroup;
     private final EventLoopGroup group;
+    private final AtomicBoolean closed = new AtomicBoolean(false);
 
     public NettyTransport() {
         this(TcpTransportConfig.defaults());
@@ -32,7 +37,15 @@ public class NettyTransport implements TcpTransport {
 
     public NettyTransport(TcpTransportConfig config) {
         int workerThreads = config == null ? TcpTransportConfig.defaults().workerThreads() : config.workerThreads();
-        this.group = SHARED_GROUPS.computeIfAbsent(workerThreads, NioEventLoopGroup::new);
+        this.workerThreads = workerThreads;
+        this.sharedGroup = SHARED_GROUPS.compute(workerThreads, (key, existing) -> {
+            if (existing == null) {
+                existing = new SharedGroup(new NioEventLoopGroup(workerThreads));
+            }
+            existing.retain();
+            return existing;
+        });
+        this.group = sharedGroup.group();
     }
 
     @Override
@@ -92,12 +105,28 @@ public class NettyTransport implements TcpTransport {
 
     @Override
     public void close() {
-        // Shared groups are managed by a JVM shutdown hook.
+        if (!closed.compareAndSet(false, true)) {
+            return;
+        }
+        if (sharedGroup == null) {
+            return;
+        }
+        SHARED_GROUPS.computeIfPresent(workerThreads, (key, existing) -> {
+            if (existing != sharedGroup) {
+                return existing;
+            }
+            int remaining = existing.release();
+            if (remaining <= 0) {
+                existing.group().shutdownGracefully();
+                return null;
+            }
+            return existing;
+        });
     }
 
     static {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            SHARED_GROUPS.values().forEach(EventLoopGroup::shutdownGracefully);
+            SHARED_GROUPS.values().forEach(group -> group.group().shutdownGracefully());
         }));
     }
 
@@ -242,6 +271,27 @@ public class NettyTransport implements TcpTransport {
         private void fail(ChannelHandlerContext ctx, Throwable cause) {
             responseFuture.completeExceptionally(cause);
             ctx.close();
+        }
+    }
+
+    private static final class SharedGroup {
+        private final EventLoopGroup group;
+        private final AtomicInteger refs = new AtomicInteger(0);
+
+        private SharedGroup(EventLoopGroup group) {
+            this.group = group;
+        }
+
+        private void retain() {
+            refs.incrementAndGet();
+        }
+
+        private int release() {
+            return refs.decrementAndGet();
+        }
+
+        private EventLoopGroup group() {
+            return group;
         }
     }
 }
