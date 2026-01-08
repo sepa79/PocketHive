@@ -25,6 +25,7 @@ tcp-mock:
   dashboard:
     enabled: ${POCKETHIVE_TCP_MOCK_DASHBOARD_ENABLED:true}
     username: ${POCKETHIVE_TCP_MOCK_DASHBOARD_USERNAME:admin}
+    # Please change before deploying in prod.
     password: ${POCKETHIVE_TCP_MOCK_DASHBOARD_PASSWORD:admin}
   validation:
     enabled: ${POCKETHIVE_TCP_MOCK_VALIDATION_ENABLED:true}

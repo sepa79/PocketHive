@@ -177,6 +177,7 @@ services:
       POCKETHIVE_TCP_MOCK_NODE_ID: "tcp-mock-1"
       POCKETHIVE_TCP_MOCK_DASHBOARD_ENABLED: "true"
       POCKETHIVE_TCP_MOCK_DASHBOARD_USERNAME: "admin"
+      # Please change before deploying in prod.
       POCKETHIVE_TCP_MOCK_DASHBOARD_PASSWORD: "admin"
       POCKETHIVE_TCP_MOCK_SSL_ENABLED: "false"
       POCKETHIVE_TCP_MOCK_VALIDATION_ENABLED: "true"
