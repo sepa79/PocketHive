@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}"
 
-ALL_SERVICES=(rabbitmq log-aggregator scenario-manager orchestrator ui  ui-v2 prometheus grafana loki wiremock pushgateway redis redis-commander swarm-controller generator http-builder request-builder moderator processor postprocessor trigger)
+ALL_SERVICES=(rabbitmq log-aggregator scenario-manager orchestrator tcp-mock-server ui ui-v2 prometheus grafana loki wiremock pushgateway redis redis-commander swarm-controller generator http-builder request-builder moderator processor postprocessor trigger)
 declare -A DURATIONS=()
 TIMING_ORDER=(clean build_base maven_package stage_artifacts docker_build_workers docker_build compose_up restart)
 BUILD_START_TIME=0
@@ -12,6 +12,7 @@ JAR_MODULES=(
   log-aggregator-service
   scenario-manager-service
   orchestrator-service
+  tcp-mock-server
   swarm-controller-service
   generator-service
   http-builder-service
@@ -26,6 +27,7 @@ declare -A MODULE_TO_SERVICE=(
   ["log-aggregator-service"]="log-aggregator"
   ["scenario-manager-service"]="scenario-manager"
   ["orchestrator-service"]="orchestrator"
+  ["tcp-mock-server"]="tcp-mock-server"
   ["swarm-controller-service"]="swarm-controller"
   ["generator-service"]="generator"
   ["http-builder-service"]="http-builder"
@@ -40,6 +42,7 @@ declare -A SERVICE_TO_MODULE=(
   ["log-aggregator"]="log-aggregator-service"
   ["scenario-manager"]="scenario-manager-service"
   ["orchestrator"]="orchestrator-service"
+  ["tcp-mock-server"]="tcp-mock-server"
   ["swarm-controller"]="swarm-controller-service"
   ["generator"]="generator-service"
   ["http-builder"]="http-builder-service"
@@ -128,6 +131,14 @@ compose_build_services() {
           -t orchestrator:latest .
         built_any=true
         ;;
+      tcp-mock-server)
+        echo "Building tcp-mock-server image from tcp-mock-server/Dockerfile.runtime"
+        docker build \
+          -f tcp-mock-server/Dockerfile.runtime \
+          --build-arg RUNTIME_IMAGE="${RUNTIME_IMAGE}" \
+          -t tcp-mock-server:latest .
+        built_any=true
+        ;;
       ui)
         echo "Building ui image from ui/Dockerfile"
         docker build \
@@ -196,7 +207,7 @@ clean_stack() {
     echo "Pruning local PocketHive images..."
     # Target only images built by this repo: core services and bees.
     mapfile -t ph_images < <(docker images --format '{{.Repository}} {{.ID}}' | awk '
-      $1 ~ /^(orchestrator|scenario-manager|log-aggregator|ui|swarm-controller|generator|moderator|processor|postprocessor|trigger|pockethive-)/ { print $2 }')
+      $1 ~ /^(orchestrator|scenario-manager|log-aggregator|tcp-mock-server|ui|swarm-controller|generator|moderator|processor|postprocessor|trigger|pockethive-)/ { print $2 }')
     for img in "${ph_images[@]}"; do
       if [[ -n "$img" ]]; then
         echo " - Removing image ${img}"

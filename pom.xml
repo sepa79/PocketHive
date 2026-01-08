@@ -29,6 +29,7 @@
     <module>swarm-controller-service</module>
     <module>trigger-service</module>
     <module>scenario-manager-service</module>
+    <module>tcp-mock-server</module>
     <module>http-builder-service</module>
     <module>request-builder-service</module>
     <module>e2e-tests</module>

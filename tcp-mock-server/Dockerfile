@@ -5,7 +5,6 @@ WORKDIR /app
 COPY target/tcp-mock-server-*.jar app.jar
 COPY docs/*.md /app/docs/
 COPY mappings/ /app/mappings/
-COPY __files/ /app/__files/
 COPY scenarios-state.json /app/scenarios-state-default.json
 
 EXPOSE 8080 9090
