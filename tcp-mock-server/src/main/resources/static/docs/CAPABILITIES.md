@@ -263,7 +263,7 @@ services:
     volumes:
       - ./mappings:/app/mappings
     environment:
-      - TCP_MOCK_DEFAULT_DELAY=10
+      - POCKETHIVE_TCP_MOCK_DEFAULT_DELAY=10
 ```
 
 ### 4. Demo Environments

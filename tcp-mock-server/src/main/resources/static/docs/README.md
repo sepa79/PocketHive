@@ -73,10 +73,10 @@ Go to **Requests** tab to see your request!
 
 ### Environment Variables
 ```bash
-TCP_MOCK_PORT=8080              # TCP server port
+POCKETHIVE_TCP_MOCK_PORT=8080              # TCP server port
 SERVER_PORT=8080                # HTTP/UI port
-TCP_MOCK_DASHBOARD_USERNAME=admin
-TCP_MOCK_DASHBOARD_PASSWORD=pockethive
+POCKETHIVE_TCP_MOCK_DASHBOARD_USERNAME=admin
+POCKETHIVE_TCP_MOCK_DASHBOARD_PASSWORD=pockethive
 ```
 
 ### Docker Compose
@@ -89,8 +89,8 @@ services:
     volumes:
       - ./mappings:/app/mappings
     environment:
-      - TCP_MOCK_DASHBOARD_USERNAME=admin
-      - TCP_MOCK_DASHBOARD_PASSWORD=secret
+      - POCKETHIVE_TCP_MOCK_DASHBOARD_USERNAME=admin
+      - POCKETHIVE_TCP_MOCK_DASHBOARD_PASSWORD=secret
 ```
 
 ## 📊 API Endpoints

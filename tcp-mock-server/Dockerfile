@@ -2,10 +2,6 @@ FROM eclipse-temurin:21-jre-alpine
 
 WORKDIR /app
 
-# Set configurable dashboard credentials
-ENV TCP_MOCK_DASHBOARD_USERNAME=admin
-ENV TCP_MOCK_DASHBOARD_PASSWORD=admin
-
 COPY target/tcp-mock-server-*.jar app.jar
 COPY docs/*.md /app/docs/
 COPY mappings/ /app/mappings/

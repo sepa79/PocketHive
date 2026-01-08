@@ -173,14 +173,16 @@ services:
       - "9090:9090"  # TCP server port
     environment:
       SERVER_PORT: 8080
-      TCP_MOCK_PORT: 9090
-      TCP_MOCK_NODE_ID: "tcp-mock-1"
-      TCP_MOCK_DASHBOARD_ENABLED: "true"
-      TCP_MOCK_DASHBOARD_USERNAME: "admin"
-      TCP_MOCK_DASHBOARD_PASSWORD: "admin"
-      TCP_MOCK_SSL_ENABLED: "false"
-      TCP_MOCK_VALIDATION_ENABLED: "true"
-      TCP_MOCK_FILTERING_ENABLED: "true"
+      POCKETHIVE_TCP_MOCK_PORT: 9090
+      POCKETHIVE_TCP_MOCK_NODE_ID: "tcp-mock-1"
+      POCKETHIVE_TCP_MOCK_DASHBOARD_ENABLED: "true"
+      POCKETHIVE_TCP_MOCK_DASHBOARD_USERNAME: "admin"
+      POCKETHIVE_TCP_MOCK_DASHBOARD_PASSWORD: "admin"
+      POCKETHIVE_TCP_MOCK_SSL_ENABLED: "false"
+      POCKETHIVE_TCP_MOCK_VALIDATION_ENABLED: "true"
+      POCKETHIVE_TCP_MOCK_FILTERING_ENABLED: "true"
+      POCKETHIVE_LOGS_RABBIT_ENABLED: "true"
+      POCKETHIVE_LOGS_EXCHANGE: ph.logs
       MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "health,info,metrics,prometheus"
     volumes:
       - ./tcp-mock-server/mappings:/app/mappings:ro

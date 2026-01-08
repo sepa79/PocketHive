@@ -1,17 +1,17 @@
 #!/bin/bash
 # Sync all local mapping files to TCP mock server
 
-TCP_MOCK_URL="${TCP_MOCK_URL:-http://localhost:8083}"
+POCKETHIVE_TCP_MOCK_URL="${POCKETHIVE_TCP_MOCK_URL:-http://localhost:8083}"
 MAPPINGS_DIR="${MAPPINGS_DIR:-./mappings}"
-USERNAME="${TCP_MOCK_USERNAME:-admin}"
-PASSWORD="${TCP_MOCK_PASSWORD:-admin}"
+USERNAME="${POCKETHIVE_TCP_MOCK_USERNAME:-admin}"
+PASSWORD="${POCKETHIVE_TCP_MOCK_PASSWORD:-admin}"
 
 if [ ! -d "$MAPPINGS_DIR" ]; then
     echo "Error: Mappings directory not found: $MAPPINGS_DIR"
     exit 1
 fi
 
-echo "Syncing mappings from $MAPPINGS_DIR to $TCP_MOCK_URL..."
+echo "Syncing mappings from $MAPPINGS_DIR to $POCKETHIVE_TCP_MOCK_URL..."
 
 success=0
 failed=0
@@ -29,7 +29,7 @@ for file in "$MAPPINGS_DIR"/*.{json,yaml,yml}; do
         content_type="application/json"
     fi
 
-    response=$(curl -s -w "\n%{http_code}" -X POST "$TCP_MOCK_URL/api/mappings" \
+    response=$(curl -s -w "\n%{http_code}" -X POST "$POCKETHIVE_TCP_MOCK_URL/api/mappings" \
         -u "$USERNAME:$PASSWORD" \
         -H "Content-Type: $content_type" \
         --data-binary @"$file")

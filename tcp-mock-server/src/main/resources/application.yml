@@ -1,20 +1,38 @@
 server:
   port: 8080
 
+spring:
+  application:
+    name: tcp-mock-server
+  rabbitmq:
+    host: ${SPRING_RABBITMQ_HOST:rabbitmq}
+    port: ${SPRING_RABBITMQ_PORT:5672}
+    username: ${SPRING_RABBITMQ_USERNAME:guest}
+    password: ${SPRING_RABBITMQ_PASSWORD:guest}
+    virtual-host: ${SPRING_RABBITMQ_VIRTUAL_HOST:/}
+  security:
+    user:
+      name: ${POCKETHIVE_TCP_MOCK_DASHBOARD_USERNAME:admin}
+      password: ${POCKETHIVE_TCP_MOCK_DASHBOARD_PASSWORD:admin}
+
+rabbitmq:
+  logging:
+    enabled: ${POCKETHIVE_LOGS_RABBIT_ENABLED:false}
+
 tcp-mock:
-  port: ${TCP_MOCK_PORT:9999}
-  nodeId: ${TCP_MOCK_NODE_ID:tcp-mock-default}
+  port: ${POCKETHIVE_TCP_MOCK_PORT:9999}
+  nodeId: ${POCKETHIVE_TCP_MOCK_NODE_ID:tcp-mock-default}
   dashboard:
-    enabled: ${TCP_MOCK_DASHBOARD_ENABLED:true}
-    username: ${TCP_MOCK_DASHBOARD_USERNAME:admin}
-    password: ${TCP_MOCK_DASHBOARD_PASSWORD:admin}
+    enabled: ${POCKETHIVE_TCP_MOCK_DASHBOARD_ENABLED:true}
+    username: ${POCKETHIVE_TCP_MOCK_DASHBOARD_USERNAME:admin}
+    password: ${POCKETHIVE_TCP_MOCK_DASHBOARD_PASSWORD:admin}
   validation:
-    enabled: ${TCP_MOCK_VALIDATION_ENABLED:true}
+    enabled: ${POCKETHIVE_TCP_MOCK_VALIDATION_ENABLED:true}
     max-message-size: 8192
   filtering:
-    enabled: ${TCP_MOCK_FILTERING_ENABLED:false}
+    enabled: ${POCKETHIVE_TCP_MOCK_FILTERING_ENABLED:false}
   ssl:
-    enabled: ${TCP_MOCK_SSL_ENABLED:false}
+    enabled: ${POCKETHIVE_TCP_MOCK_SSL_ENABLED:false}
     key-store: classpath:keystore.p12
     key-store-password: changeit
   connection:
@@ -22,13 +40,9 @@ tcp-mock:
     idle-timeout: 300
     max-connections: 1000
 
-spring:
-  application:
-    name: tcp-mock-server
-  security:
-    user:
-      name: ${TCP_MOCK_DASHBOARD_USERNAME:admin}
-      password: ${TCP_MOCK_DASHBOARD_PASSWORD:admin}
+pockethive:
+  logs:
+    exchange: ${POCKETHIVE_LOGS_EXCHANGE:ph.logs}
 
 management:
   endpoints:
@@ -40,6 +54,9 @@ management:
       show-details: always
 
 logging:
+  config: classpath:logback-spring.xml
+  pattern:
+    level: "%5p [%X{traceId}]"
   level:
     io.pockethive.tcpmock: DEBUG
     org.springframework: INFO
