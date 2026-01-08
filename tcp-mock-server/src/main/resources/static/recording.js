@@ -1,6 +1,7 @@
 // Recording & Playback Module
 class RecordingModule {
-    constructor() {
+    constructor(http) {
+        this.http = http || null;
         this.recording = false;
         this.paused = false;
         this.recordedCount = 0;
@@ -10,6 +11,14 @@ class RecordingModule {
         this.sessions = this.loadSessions();
         this.currentSession = [];
         this.lastRecordedTime = null;
+    }
+
+    setHttpClient(http) {
+        this.http = http;
+    }
+
+    getHttpClient() {
+        return this.http;
     }
 
     loadSessions() {
@@ -22,7 +31,17 @@ class RecordingModule {
     }
 
     async getStatus() {
-        const res = await fetch('/api/enterprise/recording/status');
+        const http = this.getHttpClient();
+        if (!http) {
+            return {
+                recording: false,
+                recordedCount: this.recordedCount,
+                paused: this.paused,
+                sessionName: this.sessionName,
+                lastRecordedTime: this.lastRecordedTime
+            };
+        }
+        const res = await http.get('/api/enterprise/recording/status');
         const data = await res.json();
         this.recording = data.recording;
         this.recordedCount = data.recordedCount;
@@ -30,18 +49,22 @@ class RecordingModule {
     }
 
     async start(options = {}) {
+        const http = this.getHttpClient();
+        if (!http) throw new Error('Login required');
         this.sessionName = options.name || `Session ${new Date().toLocaleString()}`;
         this.filter = options.filter || { pattern: '', matchedOnly: false, unmatchedOnly: false };
         this.autoStop = options.autoStop || 0;
         this.currentSession = [];
         this.paused = false;
-        await fetch('/api/enterprise/recording/start', { method: 'POST' });
+        await http.fetch('/api/enterprise/recording/start', { method: 'POST' });
         this.recording = true;
         return this.getStatus();
     }
 
     async stop() {
-        await fetch('/api/enterprise/recording/stop', { method: 'POST' });
+        const http = this.getHttpClient();
+        if (!http) throw new Error('Login required');
+        await http.fetch('/api/enterprise/recording/stop', { method: 'POST' });
         if (this.currentSession.length > 0) {
             this.sessions.unshift({ name: this.sessionName, date: new Date().toISOString(), requests: this.currentSession, count: this.currentSession.length });
             if (this.sessions.length > 20) this.sessions = this.sessions.slice(0, 20);

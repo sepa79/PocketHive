@@ -30,6 +30,7 @@ class TcpMockUIUltimate {
         const authenticated = await this.core.init();
         if (authenticated) {
             this.http = new HttpClient(this.core.auth);
+            this.recording.setHttpClient(this.http);
             this.initTestEditor();
             this.bindEvents();
             this.modules.init(this);
@@ -411,11 +412,7 @@ class TcpMockUIUltimate {
         }
 
         try {
-            const response = await fetch('/api/mappings', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(mapping)
-            });
+            const response = await this.http.post('/api/mappings', mapping);
             if (response.ok) {
                 this.modules.undoRedo.record('saveMapping', mapping);
                 this.closeMappingModal();
@@ -450,7 +447,7 @@ class TcpMockUIUltimate {
         if (!confirm('Delete this mapping?')) return;
         try {
             const mapping = this.mappings.find(m => m.id === id);
-            await fetch(`/api/mappings/${id}`, { method: 'DELETE' });
+            await this.http.delete(`/api/mappings/${id}`);
             this.modules.undoRedo.record('deleteMapping', mapping);
             await this.loadMappings();
             this.modules.showNotification('Mapping deleted', 'success');
@@ -466,7 +463,7 @@ class TcpMockUIUltimate {
 
     async loadScenarios() {
         try {
-            const response = await fetch('/__admin/scenarios');
+            const response = await this.http.get('/__admin/scenarios');
             const data = await response.json();
             this.scenarios = data.scenarios || [];
             this.renderScenarios();
@@ -555,11 +552,7 @@ class TcpMockUIUltimate {
         }
 
         try {
-            const response = await fetch(`/__admin/scenarios/${name}/state`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ state })
-            });
+            const response = await this.http.put(`/__admin/scenarios/${name}/state`, { state });
 
             if (!response.ok) {
                 throw new Error('Failed to save scenario');
@@ -581,7 +574,7 @@ class TcpMockUIUltimate {
     async deleteScenario(name) {
         if (!confirm(`Delete scenario "${name}"? This will not delete related mappings.`)) return;
         try {
-            await fetch(`/__admin/scenarios/${name}`, { method: 'DELETE' });
+            await this.http.delete(`/__admin/scenarios/${name}`);
             this.modules.showNotification('Scenario deleted', 'success');
             await this.loadScenarios();
         } catch (error) {
@@ -592,7 +585,7 @@ class TcpMockUIUltimate {
 
     async resetScenario(name) {
         try {
-            await fetch(`/__admin/scenarios/${name}/reset`, { method: 'POST' });
+            await this.http.fetch(`/__admin/scenarios/${name}/reset`, { method: 'POST' });
             await this.loadScenarios();
         } catch (error) {
             console.error('Failed to reset scenario:', error);
@@ -602,7 +595,7 @@ class TcpMockUIUltimate {
     async resetAllScenarios() {
         if (!confirm('Reset all scenarios?')) return;
         try {
-            await fetch('/__admin/reset', { method: 'POST' });
+            await this.http.fetch('/__admin/reset', { method: 'POST' });
             await this.loadScenarios();
         } catch (error) {
             console.error('Failed to reset scenarios:', error);
@@ -690,11 +683,7 @@ class TcpMockUIUltimate {
                 payload.sslVerify = sslVerify;
             }
 
-            const response = await fetch('/api/test', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
+            const response = await this.http.post('/api/test', payload);
 
             const result = await response.json();
 
@@ -978,11 +967,7 @@ class TcpMockUIUltimate {
 
         for (const mapping of mappings) {
             try {
-                await fetch('/api/mappings', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(mapping)
-                });
+                await this.http.post('/api/mappings', mapping);
             } catch (error) {
                 console.error('Failed to save mapping:', error);
             }
@@ -1076,11 +1061,7 @@ class TcpMockUIUltimate {
         let success = 0;
         for (const req of session.requests) {
             try {
-                await fetch('/api/test', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: req.message, transport: 'mock', delimiter: '\n' })
-                });
+                await this.http.post('/api/test', { message: req.message, transport: 'mock', delimiter: '\n' });
                 success++;
                 await new Promise(resolve => setTimeout(resolve, 100));
             } catch (error) {
@@ -1223,7 +1204,7 @@ class TcpMockUIUltimate {
 
     async bulkDelete() {
         await this.bulkOps.bulkDelete(this.mappings, async (id) => {
-            await fetch(`/api/mappings/${id}`, { method: 'DELETE' });
+            await this.http.delete(`/api/mappings/${id}`);
         });
         await this.loadMappings();
         this.modules.showNotification('Mappings deleted', 'success');
@@ -1236,11 +1217,7 @@ class TcpMockUIUltimate {
             return;
         }
         await this.bulkOps.bulkUpdatePriority(this.mappings, priority, async (mapping) => {
-            await fetch('/api/mappings', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(mapping)
-            });
+            await this.http.post('/api/mappings', mapping);
         });
         await this.loadMappings();
         this.modules.showNotification('Priority updated', 'success');
@@ -1305,7 +1282,7 @@ class TcpMockUIUltimate {
 
     async updateMetrics() {
         try {
-            const response = await fetch('/api/metrics');
+            const response = await this.http.get('/api/metrics');
             const metrics = await response.json();
             const display = document.getElementById('metricsDisplay');
             if (display) {
@@ -1360,7 +1337,7 @@ class TcpMockUIUltimate {
 
     async loadDoc(filename) {
         try {
-            const response = await fetch(`/docs/${filename}`);
+            const response = await this.http.fetch(`/docs/${filename}`);
             if (!response.ok) throw new Error('Document not found');
             const markdown = await response.text();
             const html = marked.parse(markdown);

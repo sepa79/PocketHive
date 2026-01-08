@@ -80,13 +80,14 @@ class CoreIntegration {
             this.commandPalette = new CommandPaletteModule();
             this.dashboard = new DashboardModule();
             this.tour = new TourModule();
-            
+
             await this.workspace.init();
             await this.notificationCenter.init();
             this.commandPalette.init(this.app);
             
             // Initialize app components
             this.app.http = http;
+            this.app.recording.setHttpClient(http);
             this.app.initTestEditor();
             this.app.modules.init(this.app);
             
