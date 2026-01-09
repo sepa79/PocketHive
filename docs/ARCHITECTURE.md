@@ -103,17 +103,17 @@ Control-plane payloads are defined by `docs/spec/control-events.schema.json` and
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `timestamp` | string | Yes | RFC-3339 time when the message was emitted by its origin. |
-| `version` | string | Yes | Schema version of the envelope and its structured `data` section. Bump only for incompatible changes. |
-| `kind` | string | Yes | Message category: `signal`, `outcome`, `event`, `metric`. |
-| `type` | string | Yes | Concrete name within the `kind` category. For `signal`/`outcome` this is the command name. For `event` the current spec uses `alert`. For `metric` the current spec uses `status-full` and `status-delta`. |
-| `origin` | string | Yes | Logical emitter identity (for example `orchestrator-1`, `swarm-controller:abc`, `processor:bee-1`). Never blank. |
-| `scope` | object | Yes | `{ swarmId, role, instance }` describing the subject of the message. |
-| `scope.swarmId` | string | Yes | Swarm the message relates to. Use `ALL` for fan-out; never `null`. |
-| `scope.role` | string | Yes | Role of the subject. This is intentionally not an enum. Use `ALL` for fan-out; never `null`. |
-| `scope.instance` | string | Yes | Instance identifier of the subject. Use `ALL` for fan-out; never `null`. |
-| `correlationId` | string\|null | Yes | Join related messages. For `signal`/`outcome` this must be non-empty and identical across the command and its outcomes. For `event`/`metric` it is `null` unless explicitly documented. |
-| `idempotencyKey` | string\|null | Yes | Stable identifier reused across retries of the same logical operation. For external commands it should be non-empty; for internal, non-retriable messages it may be `null`. |
+| `timestamp` | string | Yes | RFC‑3339 time when the message was emitted by its origin. |
+| `version` | string | Yes | Schema version of the envelope and its structured `data` section for this control‑plane message. Bump only for incompatible changes. |
+| `kind` | string | Yes | Coarse category of the message: one of `signal`, `outcome`, `event`, `metric`. All routing/consumers should branch on this field first. |
+| `type` | string | Yes | Concrete name within the `kind` category. For `kind=signal`/`kind=outcome` this is the command name (`swarm-start`, `config-update`, …); for `kind=event` the current spec covers `alert`; for `kind=metric` the current spec covers `status-full` and `status-delta`. |
+| `origin` | string | Yes | Logical emitter identity (e.g. `orchestrator-1`, `swarm-controller:aaa-marshal-…`, `processor:bee-1`, `hive-ui`). Never blank. |
+| `scope` | object | Yes | `{ swarmId, role, instance }` describing the entity the message is about. |
+| `scope.swarmId` | string | Yes | Swarm the message relates to. Use the literal `ALL` for cross‑swarm or global fan‑out; never `null`. |
+| `scope.role` | string | Yes | Role of the **subject** of the message; free‑form logical role id. Core roles include `orchestrator`, `swarm-controller`, `generator`, `moderator`, `processor`, `postprocessor`, `trigger`, but plugins may introduce additional roles. Use the literal `ALL` for cross‑role or fan‑out scopes; never `null`. The envelope schema must **not** hardcode an enum for this field. |
+| `scope.instance` | string | Yes | Logical instance identifier of the **subject** of the message (the controller/worker/orchestrator instance the message is about). Use the literal `ALL` for fan‑out across instances; never `null`. This may or may not be the same as the `origin` instance that emitted it. |
+| `correlationId` | string\|null | Yes | Correlation token used to join related messages. For `kind=signal` / `kind=outcome`, this field **must** be non‑empty and identical across the command signal and its outcomes. For other kinds (`event`, `metric`) it is either `null` or used only for explicitly documented higher‑level correlations. |
+| `idempotencyKey` | string\|null | Yes | Stable identifier reused across retries of the same logical operation. For externally initiated `kind=signal` / `kind=outcome` messages this field **should** be non‑empty; for purely internal, non‑retriable messages it may be `null`. For non‑command kinds (`event`, `metric`) this field is typically `null`. |
 
 ### 3.2 Structured `data` rules
 
@@ -122,57 +122,134 @@ Control-plane payloads are defined by `docs/spec/control-events.schema.json` and
 - Targeting never lives in `data`; it is described only by `scope` and the routing key.
 - The required shape of `data` is defined per (`kind`, `type`) in `docs/spec/control-events.schema.json`.
 
+**Structured sections**
+
+| Section / Field | Type | Applies to | Description |
+|---|---|---|---|
+| `data` | object | all kinds | Structured payload for the message. On-wire producers always emit an object; commands without args send `{}` and outcomes must include at least `data.status`. For each (`kind`, `type`) combination, the AsyncAPI / JSON Schema specs in `docs/spec` MUST define the required shape of `data` (required fields + optional extension fields). Targeting is never carried inside `data`; targeting is described only by `scope` and the routing key. All additional, best‑effort metadata for that message also lives under `data`. |
+
+- [x] Extend existing specs in `docs/spec`:
+  - Update `docs/spec/asyncapi.yaml` channels and schemas, and `docs/spec/control-events.schema.json`, so they describe the canonical routing families and envelope shapes below.
+
 ### 3.3 Routing key families
 
-- **Signals:** `signal.<type>.<swarmId>.<role>.<instance>`.
-  - `<type>` is the command name (`swarm-start`, `config-update`, `status-request`, ...).
-  - `<swarmId>.<role>.<instance>` must match `scope`.
-  - Use `ALL` only for intentional fan-out. Lifecycle commands addressed at the swarm controller
-    (`swarm-template`, `swarm-plan`, `swarm-start`, `swarm-stop`, `swarm-remove`) must target a
-    concrete controller instance once a controller exists (no `ALL`).
-- **Outcomes:** `event.outcome.<type>.<swarmId>.<role>.<instance>`.
-  - `<type>` matches the originating command name.
-  - `scope` describes the concrete subject that processed the command.
-- **Metrics:** `event.metric.status-full.<swarmId>.<role>.<instance>` and
-  `event.metric.status-delta.<swarmId>.<role>.<instance>`.
-- **Alerts:** `event.alert.{type}.<swarmId>.<role>.<instance>`.
+Relationship to routing keys (new prefixes):
+
+- Control‑plane **signals** use the `signal.*` prefix. The canonical pattern after the refactor is:  
+  `signal.<commandType>.<swarmId>.<role>.<instance>` where:
+  - `<commandType>` is the envelope `type` for `kind = signal` (for example `swarm-start`, `swarm-stop`, `swarm-remove`, `config-update`, `status-request`).
+  - `<swarmId>.<role>.<instance>` are the semantic target and must match `scope.swarmId` / `scope.role` / `scope.instance` on the signal. For fan‑out signals the routing key may still use wildcards (for example `ALL`), while `scope` on outcomes will carry concrete values. **Lifecycle commands addressed at the swarm‑controller (`swarm-template`, `swarm-plan`, `swarm-start`, `swarm-stop`, `swarm-remove`) MUST use a concrete controller instance in the `<instance>` segment once a controller exists; using `ALL` for these commands is forbidden in the new model.**
+
+- Control‑plane **events** (everything that is not a command signal) use the `event.*` prefix. The canonical pattern is:  
+  `event.<category>.<name>.<swarmId>.<role>.<instance>` where:
+  - `<category>` differentiates major event families such as `outcome`, `metric`, `alert` (for example `event.outcome.*`, `event.metric.*`, `event.alert.{type}.*`). The alert family uses `<name>` as the alert type; today the only defined type is `alert`.
+  - `<name>` is normally the envelope `type` within that family (for example `status-full`, `status-delta` for metrics, or the command name such as `swarm-start` / `config-update` for outcomes).
+  - `<swarmId>.<role>.<instance>` are the semantic subject and must match `scope.swarmId` / `scope.role` / `scope.instance`, normalised so that fan‑out uses the literal `ALL` in both the routing key and `scope` (no `null` placeholders).
+
+- For **command outcomes** (`kind = outcome`), the routing key uses the `event.outcome.*` family:  
+  `event.outcome.<commandType>.<swarmId>.<role>.<instance>`. Here `<commandType>` matches the originating signal’s `type` (command name), `scope` describes the concrete subject that actually processed the command, and `correlationId` / `idempotencyKey` join the outcome back to the original `signal.*` message.
 
 ### 3.4 Control-plane commands & outcomes
 
-**Command signals (`kind=signal`)**
+**Known `data` schemas for existing messages (today)**
 
-| `type` | Purpose / effect | Required `data` |
-|---|---|---|
-| `swarm-template` | Apply swarm template (`SwarmPlan`). | `data` contains the full `SwarmPlan` object. |
-| `swarm-plan` | Push resolved scenario plan timeline. | `data` contains the resolved plan object. |
-| `swarm-start` | Start workloads inside a running controller. | No args; send `data: {}`. |
-| `swarm-stop` | Stop workloads (non-destructive). | No args; send `data: {}`. |
-| `swarm-remove` | Tear down queues and controller runtime. | No args; send `data: {}`. |
-| `config-update` | Apply config patch / enablement to a scope. | `data` contains the config patch (including `enabled`). |
-| `status-request` | Ask a component to emit `status-full`. | No args; send `data: {}`. Response is `event.metric.status-full` (no outcome). |
+The tables below describe the canonical `data` shapes for the message kinds/types covered by the current specs in `docs/spec/asyncapi.yaml` / `docs/spec/control-events.schema.json`.
 
-**Command outcomes (`kind=outcome`)**
+*Commands in the new model always use `kind = signal`, `type = <commandName>` and the `signal.<type>.<swarmId>.<role>.<instance>` routing family. Outcomes always use `kind = outcome`, `type = <commandName>` and the `event.outcome.<type>.<swarmId>.<role>.<instance>` family. The tables below summarise current commands and their `data`/args usage so we can standardise them in the refactor.*
+
+**Command signals (`kind = signal`) — purpose and targeting (today)**
+
+| `type` | Purpose / effect | Typical routing key (refactored) | Target subject (conceptual `scope`) |
+|---|---|---|---|
+| `swarm-template` | Apply swarm template (bees, images, wiring, config, SUT). | `signal.swarm-template.<swarmId>.swarm-controller.<instance>` | Swarm controller instance for `<swarmId>`. |
+| `swarm-plan` | Push resolved scenario plan timeline to controller. | `signal.swarm-plan.<swarmId>.swarm-controller.<instance>` | Swarm controller instance for `<swarmId>`. |
+| `swarm-start` | Start workloads inside a running controller. | `signal.swarm-start.<swarmId>.swarm-controller.<instance>` | Swarm controller instance for `<swarmId>`. |
+| `swarm-stop` | Stop workloads (non‑destructive). | `signal.swarm-stop.<swarmId>.swarm-controller.<instance>` | Swarm controller instance for `<swarmId>`. |
+| `swarm-remove` | Tear down queues and controller runtime. | `signal.swarm-remove.<swarmId>.swarm-controller.<instance>` | Swarm controller instance for `<swarmId>`. |
+| `config-update` | Apply config patch / enablement to one or more components. | `signal.config-update.<swarmId>.<role>.<instance>` | Target component(s) addressed by routing key segments (supports ALL wildcards where fan-out is intentional). |
+| `status-request` | Ask a component to emit an explicit status snapshot. | `signal.status-request.<swarmId>.<role>.<instance>` | Target component(s) addressed by routing key segments (supports ALL wildcards where fan-out is intentional). |
+
+**Command signals (`kind = signal`) — current `data` / args**
+
+| `type` | `data` / args field | Required | Description |
+|---|---|---|---|
+| `swarm-template` | `data` | Yes | Entire swarm template/plan as a `SwarmPlan` object (id, bees, traffic policy, sutId, etc.), converted to a JSON object. Shape is defined by the swarm model (`SwarmPlan`); the control envelope does not add extra fields. |
+| `swarm-plan` | `data` | Yes | Resolved scenario plan timeline as a JSON object. Shape is defined by scenario manager contracts; control‑plane treats it as opaque. |
+| `swarm-start` | — | No | No command‑level args; semantics come from `type`, `scope`/routing, `correlationId` and `idempotencyKey`. On‑wire producers still send an empty `data: {}` to keep envelopes schema‑compliant. |
+| `swarm-stop` | — | No | Same as `swarm-start` (no args); on‑wire producers still send an empty `data: {}`. |
+| `swarm-remove` | — | No | Same as `swarm-start` (no args); on‑wire producers still send an empty `data: {}`. |
+| `config-update` | `data` | Yes | Config payload for the target component(s). Targeting is carried exclusively by the envelope `scope` and routing key. The `data` object carries the config patch and enablement flags. Exact shape is defined in worker/manager config docs. |
+| `status-request` | — | No | No command‑level args; the response is a `status-full` metric event instead of a confirmation outcome. On‑wire producers still send an empty `data: {}`. |
+
+**Command outcomes (`kind = outcome`) — current payloads**
+
+For **outcome** messages (`kind = outcome`, `type = <command>`), outcomes use a single `CommandOutcomePayload` envelope shape; the table below captures the field-level mapping from the legacy confirmation shape.
 
 - Outcomes are published on `event.outcome.<type>.<swarmId>.<role>.<instance>` (except `status-request`, which responds with `event.metric.status-full`).
 - `data.status` is always required.
 - `data.retryable` is set only for commands with defined retry semantics.
 - Structured post-command detail belongs in `data.context` (no generic `state.*` fields).
+- Legacy confirmation fields are removed: `state.enabled` is gone, and any
+  human-readable `message`/`code` belongs in `event.alert.{type}` payloads.
+
+**Current payload mapping (legacy -> envelope)**
+
+| Field (today) | Planned location | Description |
+|---|---|---|
+| `state.status` | `data.status` | High‑level status after processing the command (for example `Ready`, `Running`, `Stopped`, `Removed`, `Failed`, `Applied`, `NotReady`). |
+| `state.enabled` | — (removed) | Removed in the new model. Enablement lives in a single place: `data.enabled` on config‑update outcomes and `data.enabled` in status metrics; there is no generic `state.enabled` field. |
+| `state.details` | `data.context` | Structured post‑command state details (for example `workloads.enabled`, scenario changes, worker info), to be defined per command type. No separate `controllerEnabled` field is kept. |
+| `phase` | — (removed or mapped to alert) | Error phase will not be carried as a generic outcome field. If needed for debugging, producers include it in alert `data.context.phase` for the corresponding `event.alert.{type}` message. |
+| `code` | — (replaced by alert `data.code`) | Command outcomes no longer carry their own error/result code; runtime and IO errors are expressed via `event.alert.{type}` with `data.code`. |
+| `message` | — (replaced by alert `data.message`) | Human‑readable error/message text for failures is carried by `event.alert.{type}.data.message` rather than command outcome envelopes. |
+| `retryable` | `data.retryable` | Whether this **failed** command attempt is safe to retry. Only set on error outcomes for commands where retry semantics are defined (for example swarm create/start/stop/remove). |
+| `details` | — (folded into `data.context`) | Catch‑all details on confirmations are removed. Any structured context that needs to survive goes into `data.context` on the outcome and/or the corresponding `event.alert.{type}`. |
+
+**Initialization + readiness gates (`swarm-start`, `swarm-stop`, `config-update`)**
+
+- Initialization is satisfied after the controller has successfully processed both
+  `swarm-template` and `swarm-plan` for the swarm.
+- Readiness is defined as: `isReadyForWork == true` AND `hasPendingConfigUpdates == false`.
+- Commands allowed before initialization: `swarm-template`, `swarm-plan`, `status-request`,
+  and `swarm-remove` (abort).
+- `swarm-start` is rejected unless initialization + readiness are satisfied. A rejected
+  `swarm-start` emits an outcome with `data.status = "NotReady"` and a `data.context`
+  payload that captures the gating flags (for example `initialized=false`, `ready=false`,
+  `pendingConfigUpdates=true`).
+- `swarm-stop` and controller-targeted `config-update` are rejected unless initialization
+  + readiness are satisfied and the swarm is already `RUNNING`. Rejections use the same
+  `NotReady` outcome pattern; no side effects occur when rejected.
 
 ### 3.5 Status metrics semantics
 
-**Required fields**
+**Control metrics (`kind=metric`)**
 
-| `type` | Required fields in `data` | Notes |
-|---|---|---|
-| `status-full` | `config`, `io`, `ioState`, `startedAt`, `enabled` | Heavy snapshot. Emit on startup and on `signal.status-request`. |
-| `status-delta` | `ioState`, `enabled` | Delta only. Must omit `config`, `io`, `startedAt`. |
+| `type` | `data` field | Required | Description |
+|---|---|---|---|
+| `status-full` | `enabled` | Yes | Boolean. Indicates whether this component is currently allowed to run workloads for its scope. |
+|  | `startedAt` | Yes | RFC‑3339 timestamp when this component started processing workloads for its scope (or when the current process was started). |
+|  | `tps` | No | Integer ≥ 0. Throughput sample for the reporting interval. **Workers should emit this**; managers (Orchestrator / Swarm Controller) may omit. |
+|  | `config` | Yes | Snapshot of the effective configuration for this scope (role/instance). Must not include secrets. |
+|  | `io` | Yes | Object describing IO bindings and queue health. **Workers** should include both planes (`io.work` + `io.control`); **managers** are control‑plane‑only and should include only `io.control` (no `io.work`). `queueStats` is optional and applies only to the work plane. Present only in `status-full`. |
+|  | `ioState` | Yes | Coarse IO health summary for workload/local IO only (for example `ioState.work`, `ioState.filesystem`). **Workers** should include `ioState.work` plus any local IO; **managers** include only local IO if applicable. `ioState` does not represent control‑plane health. |
+|  | `context` | No | Freeform role‑specific context. For swarm‑controller, `context` carries swarm aggregates (e.g. `swarmStatus`, `totals`, `watermark`, `maxStalenessSec`, scenario progress) and includes `context.workers[]` **only in `status-full`**. For orchestrator, `context` carries at least `swarmCount`; `computeAdapter` is effectively static and belongs in `status-full` (not `status-delta`). |
+| `status-delta` | `enabled` | Yes | Boolean. Same semantics as in `status-full`; used to signal enablement changes without resending full status snapshots. |
+|  | `tps` | No | Integer ≥ 0. Throughput sample for the interval since the last status event. **Workers should emit this**; managers may omit. |
+|  | `ioState` | Yes | Coarse IO health summary (see §6). Same rules as `status-full`: workload/local IO only; managers omit `work`. |
+|  | `context` | No | Same semantics as in `status-full`, but only for fields that change frequently (for example recent `swarmStatus`, rolling diagnostics). `data.config`, `data.io`, and `data.startedAt` must be omitted from deltas. |
 
 Additional rules:
-- `data.tps` is optional (workers only; managers may omit).
 - `data.ioState` represents workload/local IO only (for example `ioState.work`, `ioState.filesystem`). It does not represent control-plane health.
 - `data.context` carries role-specific context. For swarm-controller:
   - `status-delta` carries a small aggregate only (no worker list).
   - `status-full` carries the full aggregate snapshot, including `data.context.workers[]`.
+- For orchestrator, `data.context` carries at least `swarmCount`. The
+  `computeAdapter` selection is effectively static and belongs in `status-full`
+  only (never in deltas).
+- `data.io` describes bindings and queue health:
+  - Workers include both planes (`io.work` + `io.control`).
+  - Managers are control-plane-only and include just `io.control`.
+  - `queueStats` is optional and applies only to the work plane.
 - Workers must never emit `workers[]`.
 
 **IO state conventions**
@@ -183,6 +260,8 @@ Additional rules:
 
 ### 3.6 Alert events (`event.alert.{type}`)
 
+**Control events (`kind = event`)**
+
 | `data` field | Required | Description |
 |---|---|---|
 | `level` | Yes | `info`, `warn`, `error`. |
@@ -191,7 +270,10 @@ Additional rules:
 | `errorType` | No | Exception class name (for runtime errors). |
 | `errorDetail` | No | Best-effort detail string (root cause, truncated stack trace). |
 | `logRef` | No | Opaque pointer to logs or traces (do not embed full stack traces). |
-| `context` | No | Type-specific structured context (for example IO backend or dataset identifiers). |
+| `context` | No | Object carrying type‑specific structured context. For IO / “out of data” alerts, recommended keys include: `backend` (for example `redis`, `csv`, `kafka`), `resourceId` (dataset id, file path, key prefix, etc.), `loopMode` (`loop`/`no-loop`), and optional limit info such as `limitKind` (`maxMessages`, `maxTime`, `none`) and `limitValue` (numeric/string). For other alert codes, `context` can carry whatever structured fields a producer and UI agree on. |
+
+Recommended `data.code` values include: `worker.runtime-error`, `controller.runtime-error`,
+`io.out-of-data`, `io.backpressure`, `io.downstream-error`, `generator.limit-reached`.
 
 ### 3.7 Journal and UI projections
 

@@ -11,6 +11,11 @@
 
 When the stack starts only the Orchestrator (Queen) is running. New swarms are created and started from the Hive view as needed.
 
+## Docker Swarm mode (manager-only)
+- Swarm mode requires a **Docker Swarm manager**. Workers cannot create services, so the Orchestrator must connect to a manager node.
+- If you deploy the Orchestrator inside Swarm, schedule it on a manager node and mount the manager’s Docker socket.
+- If you target a remote engine, point `DOCKER_HOST` at a manager endpoint that has Swarm control available.
+
 ## Journal (Swarm vs Hive)
 
 PocketHive exposes two related timelines:

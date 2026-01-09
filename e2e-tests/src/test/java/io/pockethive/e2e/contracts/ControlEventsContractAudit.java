@@ -125,6 +125,19 @@ public final class ControlEventsContractAudit {
         failures.add("semantic invalid rk=" + routingKey
             + " reason=swarm-controller status-full missing context.workers payload=" + snippet(node.toString()));
       }
+      if ("swarm-controller".equals(normalizedRole) && "status-full".equalsIgnoreCase(type)) {
+        JsonNode bindings = data.path("context").path("bindings").path("work");
+        JsonNode exchange = bindings.path("exchange");
+        JsonNode edges = bindings.path("edges");
+        if (!exchange.isTextual() || exchange.asText("").isBlank()) {
+          failures.add("semantic invalid rk=" + routingKey
+              + " reason=swarm-controller status-full missing context.bindings.work.exchange payload=" + snippet(node.toString()));
+        }
+        if (!edges.isArray()) {
+          failures.add("semantic invalid rk=" + routingKey
+              + " reason=swarm-controller status-full missing context.bindings.work.edges payload=" + snippet(node.toString()));
+        }
+      }
     }
   }
 

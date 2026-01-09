@@ -1,6 +1,8 @@
 # Control‑Plane Envelopes Refactor Plan (Signals / Confirmations / Status / Journal)
 
-> Status: **design / NFF big‑bang**  
+> Status: **archived / historical**.  
+> Superseded by `docs/ARCHITECTURE.md` (SSOT for control‑plane envelopes and routing).  
+> Original status: **design / NFF big‑bang**.  
 > Scope: unify signal, confirmation and status envelopes and simplify journal projections. No backwards compatibility required.
 
 Goal: introduce a single, consistent control‑plane envelope model used by signals (commands), outcomes (ready/error) and status messages, so that Journal and Hive UI can project timelines directly from message fields without ad‑hoc copying or payload parsing. This refactor is allowed to be a one‑off “big bang” (no compatibility shims), but must keep routing utilities and high‑level contracts conceptually aligned with `ARCHITECTURE.md`.
