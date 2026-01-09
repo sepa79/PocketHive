@@ -73,10 +73,10 @@ export function WireLogPage() {
     return () => observer.disconnect()
   }, [])
 
-  const newest = useMemo(() => [...entries].reverse(), [entries])
+  const ordered = useMemo(() => [...entries], [entries])
   const filtered = useMemo(
     () =>
-      newest.filter((entry) => {
+      ordered.filter((entry) => {
         if (sourceFilter !== 'all' && entry.source !== sourceFilter) return false
         const kind = entry.envelope?.kind ?? 'invalid'
         if (kindFilter !== 'all' && kind !== kindFilter) return false
@@ -91,7 +91,7 @@ export function WireLogPage() {
         return true
       }),
     [
-      newest,
+      ordered,
       sourceFilter,
       kindFilter,
       typeFilter,

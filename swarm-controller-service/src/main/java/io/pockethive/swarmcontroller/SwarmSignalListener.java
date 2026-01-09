@@ -462,6 +462,17 @@ public class SwarmSignalListener {
       log.debug("Ignoring config-update on routing key {}", envelope.routingKey());
       return;
     }
+    io.pockethive.control.ControlScope scope = cs.scope();
+    String targetRole = scope != null ? scope.role() : null;
+    String targetInstance = scope != null ? scope.instance() : null;
+    boolean roleAll = targetRole == null || isAllSegment(targetRole);
+    boolean instanceAll = targetInstance == null || isAllSegment(targetInstance);
+    boolean fromSelf = cs.origin() != null && instanceId.equalsIgnoreCase(cs.origin());
+    if (fromSelf && roleAll && instanceAll) {
+      log.debug("Ignoring self-issued broadcast config-update; rk={} corr={}",
+          envelope.routingKey(), cs.correlationId());
+      return;
+    }
     if (rejectIfNotReady(cs, resolvedSignal, swarmIdOrDefault(cs), true)) {
       return;
     }
@@ -500,14 +511,7 @@ public class SwarmSignalListener {
       }
 
       List<Runnable> fanouts = new ArrayList<>();
-      boolean fromSelf = cs.origin() != null && instanceId.equalsIgnoreCase(cs.origin());
-
-      io.pockethive.control.ControlScope scope = cs.scope();
-      String targetRole = scope != null ? scope.role() : null;
-      String targetInstance = scope != null ? scope.instance() : null;
       boolean controllerTarget = targetRole != null && this.role.equalsIgnoreCase(targetRole);
-      boolean roleAll = targetRole == null || isAllSegment(targetRole);
-      boolean instanceAll = targetInstance == null || isAllSegment(targetInstance);
 
       if (controllerTarget) {
         if (enabledFlag != null) {
