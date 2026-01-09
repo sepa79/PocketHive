@@ -226,7 +226,7 @@ export function WireLogPage() {
   }
 
   return (
-    <div className="page">
+    <div className="page wireLogPage">
       {showFilters ? (
         <div className="wireLogFiltersPanel">
           <label className="field">
@@ -396,31 +396,33 @@ export function WireLogPage() {
                 </ul>
               </div>
             ) : null}
-            <div className="modalSection">
+            <div className="modalSection modalSectionGrow">
               <div className="h2">Payload</div>
-              <Suspense
-                fallback={
-                  <div className="monacoFallback">
-                    <div className="muted">Loading editor…</div>
-                  </div>
-                }
-              >
-                <MonacoEditor
-                  height="min(60vh, 520px)"
-                  language="json"
-                  value={payloadText}
-                  theme={monacoTheme}
-                  options={{
-                    readOnly: true,
-                    minimap: { enabled: false },
-                    fontSize: 12,
-                    lineNumbers: 'off',
-                    scrollBeyondLastLine: false,
-                    wordWrap: 'on',
-                  }}
-                  className="monacoSurface"
-                />
-              </Suspense>
+              <div className="modalEditor">
+                <Suspense
+                  fallback={
+                    <div className="monacoFallback">
+                      <div className="muted">Loading editor…</div>
+                    </div>
+                  }
+                >
+                  <MonacoEditor
+                    height="100%"
+                    language="json"
+                    value={payloadText}
+                    theme={monacoTheme}
+                    options={{
+                      readOnly: true,
+                      minimap: { enabled: false },
+                      fontSize: 12,
+                      lineNumbers: 'off',
+                      scrollBeyondLastLine: false,
+                      wordWrap: 'on',
+                    }}
+                    className="monacoSurface"
+                  />
+                </Suspense>
+              </div>
             </div>
           </div>
         </div>

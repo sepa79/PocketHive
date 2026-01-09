@@ -76,7 +76,7 @@ envelope refactor. This consolidates remaining UI items from:
 - [x] `WireLogStore` (Buzz v2) retains raw frames + parsed envelopes + validation errors and exposes JSONL export.
 - [x] `ControlPlaneStateStore` applies only valid envelopes and merges `status-delta` into the latest `status-full` snapshot.
 - [x] `StompGateway` is the single STOMP connection and routes every frame through the decoder before state updates.
-- [ ] `RestGateway` fetches on-demand `status-full` snapshots + scenario topology for initial state/hydration.
+- [ ] `RestGateway` fetches on-demand `status-full` snapshots for initial state/hydration.
 
 ## 1) Control-plane subscriptions (no per-worker fan-out)
 
@@ -87,15 +87,16 @@ envelope refactor. This consolidates remaining UI items from:
 - [ ] Render worker list from SC `status-full` snapshot (`data.context.workers[]`).
 - [ ] Implement on-demand detail behavior (optional): request SC `status-full` on entering swarm view.
 
-## 2) Topology-first join (scenario SSOT)
+## 2) Topology-first join (runtime SSOT in `status-full`)
 
+- Scenario Manager remains template-only; UI reads current topology from `status-full` snapshots.
 - [ ] Extend `docs/scenarios/SCENARIO_CONTRACT.md` with:
   - `template.bees[].id`
   - `template.bees[].ports`
   - optional `template.bees[].ui`
   - `topology.edges[]` + validation rules
 - [ ] Extend `Bee` (swarm-model) with `id` (or parallel field) and propagate it into runtime worker identity mapping.
-- [ ] Add Scenario Manager REST to fetch topology (by template id/name + revision/hash).
+- [ ] Embed the current template snapshot + `topology.edges[]` in `status-full.data.context` for UI join.
 - [ ] Emit SC `status-full.data.context.bindings` (work-plane materialisation) and include a stable scenario identifier for UI join.
 - [ ] Update SC `workers[]` aggregate to include `beeId` for each runtime instance (so UI can join per-node when roles repeat).
 - [ ] Update UI to draw from `topology.edges[]` + node metadata from `template.bees[]`, join runtime by `beeId`.

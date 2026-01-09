@@ -278,6 +278,8 @@ textarea,
   border-bottom: 1px solid var(--border2);
   background: rgba(8, 10, 14, 0.78);
   backdrop-filter: blur(6px);
+  position: relative;
+  z-index: 300;
 }
 
 .topBarInner {
@@ -496,6 +498,9 @@ textarea,
   grid-column: 2;
   overflow: auto;
   padding: 14px 14px 22px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .page {
@@ -862,8 +867,18 @@ textarea,
 .wireLogTable {
   margin-top: 8px;
   border-top: 1px solid var(--border2);
-  max-height: 520px;
+  max-height: none;
   overflow: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.wireLogPage {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  flex: 1;
 }
 
 .wireLogToolbar {
@@ -1051,13 +1066,17 @@ textarea,
 
 .modal {
   width: min(1600px, 96vw);
-  max-height: 92vh;
+  height: calc(92vh - 8px);
+  max-height: calc(92vh - 8px);
   min-height: min(700px, 80vh);
   overflow: auto;
   border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(11, 15, 22, 0.98);
   padding: 16px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
 }
 
 .modalHeader {
@@ -1070,6 +1089,23 @@ textarea,
 
 .modalSection {
   margin-top: 12px;
+}
+
+.modalSectionGrow {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.modalEditor {
+  flex: 1;
+  min-height: 240px;
+}
+
+.modalEditor .monacoSurface,
+.modalEditor .monacoFallback {
+  height: 100%;
 }
 
 :root[data-theme='light'] .modal {
@@ -1214,6 +1250,7 @@ textarea,
   border-radius: 14px;
   padding: 6px;
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+  z-index: 400;
 }
 
 .menuItem {
