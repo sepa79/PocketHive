@@ -2,7 +2,8 @@ import { Outlet } from 'react-router-dom'
 import { useEffect, useMemo, useState } from 'react'
 import { SideNav } from './SideNav'
 import { TopBar } from './TopBar'
-import { TopBarProvider } from './TopBarContext'
+import { ToolsBarProvider } from './ToolsBarContext'
+import { PageToolsBar } from './PageToolsBar'
 
 const NAV_STATE_KEY = 'PH_UI_NAV'
 
@@ -36,7 +37,7 @@ export function AppShell() {
   }, [nav])
 
   return (
-    <TopBarProvider>
+    <ToolsBarProvider>
       <div className={shellClass}>
         <header className="topBar">
           <TopBar />
@@ -45,9 +46,12 @@ export function AppShell() {
           <SideNav expanded={navExpanded} onToggle={() => setNav((v) => (v === 'expanded' ? 'collapsed' : 'expanded'))} />
         </aside>
         <main className="appContent">
-          <Outlet />
+          <PageToolsBar />
+          <div className="pageContent">
+            <Outlet />
+          </div>
         </main>
       </div>
-    </TopBarProvider>
+    </ToolsBarProvider>
   )
 }

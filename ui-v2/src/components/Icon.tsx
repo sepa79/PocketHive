@@ -1,4 +1,4 @@
-export function Icon({ name }: { name: 'home' | 'hive' | 'journal' | 'scenarios' | 'other' | 'user' }) {
+export function Icon({ name }: { name: 'home' | 'hive' | 'journal' | 'scenarios' | 'other' | 'user' | 'buzz' }) {
   const common = { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', xmlns: 'http://www.w3.org/2000/svg' }
   switch (name) {
     case 'home':
@@ -33,6 +33,16 @@ export function Icon({ name }: { name: 'home' | 'hive' | 'journal' | 'scenarios'
       return (
         <svg {...common}>
           <path d="M6 12h.01M12 12h.01M18 12h.01" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" />
+        </svg>
+      )
+    case 'buzz':
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="2.2" stroke="currentColor" strokeWidth="1.6" />
+          <path d="M7.2 9.4a6 6 0 0 1 0 5.2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          <path d="M16.8 9.4a6 6 0 0 0 0 5.2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          <path d="M5.2 7.2a9 9 0 0 1 0 9.6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+          <path d="M18.8 7.2a9 9 0 0 0 0 9.6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
         </svg>
       )
     case 'user':

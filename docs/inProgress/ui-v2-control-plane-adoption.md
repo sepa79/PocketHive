@@ -13,6 +13,9 @@ envelope refactor. This consolidates remaining UI items from:
 - Work exchange logging: raw-only for now, with optional schema extensions later via scenario bundle debug schemas.
 - Wire log export: JSONL (raw + parsed + validation errors per line).
 - Work exchange sniffing: opt-in debug flow (component action to capture a message), raw-only for now.
+- VS Code plugin + Web UI: build a shared TypeScript SDK for control-plane REST + schema validation + routing helpers so both UIs consume the same contract logic.
+  - VS Code extension hosts power-user workflows (scenario editing, swarm actions, journals, Buzz).
+  - Web UI maximises reuse from the plugin’s core modules and embeds Monaco for editors; where reuse is not viable, the web UI provides a simpler surface rather than duplicating advanced workflows.
 
 ## Implementation-ready details (to lock down)
 

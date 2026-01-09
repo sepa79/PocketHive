@@ -38,6 +38,7 @@ export function SideNav({ expanded, onToggle }: { expanded: boolean; onToggle: (
 
       <NavItem to="/hive" title="Hive" icon="hive" expanded={expanded} />
       <NavItem to="/journal" title="Journal" icon="journal" expanded={expanded} />
+      <NavItem to="/buzz" title="Buzz" icon="buzz" expanded={expanded} />
       <NavItem to="/scenarios" title="Scenarios" icon="scenarios" expanded={expanded} />
       <NavItem to="/other" title="Other" icon="other" expanded={expanded} />
     </div>

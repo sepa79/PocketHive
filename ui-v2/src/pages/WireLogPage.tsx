@@ -6,7 +6,7 @@ import {
   type WireLogEntry,
 } from '../lib/controlPlane/wireLogStore'
 import type { ControlPlaneEnvelope } from '../lib/controlPlane/types'
-import { useTopBarToolbar } from '../components/TopBarContext'
+import { useToolsBar } from '../components/ToolsBarContext'
 
 const MonacoEditor = lazy(() => import('@monaco-editor/react'))
 
@@ -20,7 +20,7 @@ function formatFileName() {
   const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(
     now.getHours(),
   )}${pad(now.getMinutes())}${pad(now.getSeconds())}`
-  return `wire-log-${stamp}.jsonl`
+  return `buzz-${stamp}.jsonl`
 }
 
 function downloadJsonl() {
@@ -124,9 +124,9 @@ export function WireLogPage() {
   )
   const payloadText = selectedEntry ? prettyPayload(selectedEntry.payload) : ''
   const [monacoTheme, setMonacoTheme] = useState(resolveMonacoTheme)
-  const topBarToolbar = useMemo(
+  const toolsBar = useMemo(
     () => (
-      <div className="topBarToolbar">
+      <div className="pageToolsBarContent">
         <div className="wireLogStats">
           <span className="pill pillInfo">{entries.length} total</span>
           <span className="pill pillInfo">{filtered.length} filtered</span>
@@ -214,7 +214,7 @@ export function WireLogPage() {
     ],
   )
 
-  useTopBarToolbar(topBarToolbar)
+  useToolsBar(toolsBar)
 
   const handleCopyPayload = async () => {
     if (!selectedEntry) return
@@ -361,7 +361,7 @@ export function WireLogPage() {
           >
             <div className="modalHeader">
               <div>
-                <div className="h2">Wire Log entry</div>
+                <div className="h2">Buzz entry</div>
                 <div className="muted">
                   {selectedEntry.receivedAt} · {selectedEntry.routingKey ?? 'n/a'}
                 </div>

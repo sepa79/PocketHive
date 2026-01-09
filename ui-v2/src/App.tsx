@@ -21,7 +21,7 @@ export default function App() {
         <Route path="/hive/*" element={<HivePage />} />
         <Route path="/journal/*" element={<JournalPage />} />
         <Route path="/other/*" element={<OtherPage />} />
-        <Route path="/wire-log" element={<WireLogPage />} />
+        <Route path="/buzz" element={<WireLogPage />} />
 
         <Route path="/health" element={<HealthPage />} />
         <Route path="/help" element={<HelpPage />} />

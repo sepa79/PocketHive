@@ -61,18 +61,6 @@ export function UserMenu() {
             role="menuitem"
             onClick={() => {
               setOpen(false)
-              navigate('/wire-log')
-            }}
-          >
-            Wire Log
-          </button>
-          <div className="menuSep" role="separator" />
-          <button
-            type="button"
-            className="menuItem"
-            role="menuitem"
-            onClick={() => {
-              setOpen(false)
               navigate('/login')
             }}
           >
