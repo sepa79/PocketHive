@@ -1,0 +1,210 @@
+{
+  "name": "pockethive-vscode",
+  "displayName": "PocketHive",
+  "description": "Basic PocketHive commands for the Orchestrator API.",
+  "version": "0.0.7",
+  "publisher": "pockethive",
+  "license": "GPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sepa79/PocketHive.git"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:pockethive.configureOrchestratorUrl",
+    "onCommand:pockethive.configureScenarioManagerUrl",
+    "onCommand:pockethive.listSwarms",
+    "onCommand:pockethive.startSwarm",
+    "onCommand:pockethive.stopSwarm",
+    "onCommand:pockethive.removeSwarm",
+    "onCommand:pockethive.openOrchestrator",
+    "onView:pockethive.actions",
+    "onView:pockethive.hive",
+    "onView:pockethive.buzz",
+    "onView:pockethive.journal",
+    "onView:pockethive.scenario"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "pockethive",
+          "title": "PocketHive",
+          "icon": "resources/hive.svg"
+        }
+      ]
+    },
+    "views": {
+      "pockethive": [
+        {
+          "id": "pockethive.actions",
+          "name": "Actions"
+        },
+        {
+          "id": "pockethive.hive",
+          "name": "Hive"
+        },
+        {
+          "id": "pockethive.buzz",
+          "name": "Buzz"
+        },
+        {
+          "id": "pockethive.journal",
+          "name": "Journal"
+        },
+        {
+          "id": "pockethive.scenario",
+          "name": "Scenario"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "pockethive.configureOrchestratorUrl",
+        "title": "Configure Orchestrator URL",
+        "category": "PocketHive"
+      },
+      {
+        "command": "pockethive.configureScenarioManagerUrl",
+        "title": "Configure Scenario Manager URL",
+        "category": "PocketHive"
+      },
+      {
+        "command": "pockethive.listSwarms",
+        "title": "List swarms",
+        "category": "PocketHive"
+      },
+      {
+        "command": "pockethive.openSwarmDetails",
+        "title": "Open swarm details",
+        "category": "PocketHive"
+      },
+      {
+        "command": "pockethive.startSwarm",
+        "title": "Start swarm",
+        "category": "PocketHive"
+      },
+      {
+        "command": "pockethive.stopSwarm",
+        "title": "Stop swarm",
+        "category": "PocketHive"
+      },
+      {
+        "command": "pockethive.removeSwarm",
+        "title": "Remove swarm",
+        "category": "PocketHive"
+      },
+      {
+        "command": "pockethive.openOrchestrator",
+        "title": "Open Orchestrator",
+        "category": "PocketHive"
+      },
+      {
+        "command": "pockethive.openScenarioRaw",
+        "title": "Open scenario",
+        "category": "PocketHive"
+      },
+      {
+        "command": "pockethive.previewScenario",
+        "title": "Preview scenario",
+        "category": "PocketHive"
+      },
+      {
+        "command": "pockethive.showEntry",
+        "title": "Show entry",
+        "category": "PocketHive"
+      },
+      {
+        "command": "pockethive.refreshHive",
+        "title": "Refresh Hive",
+        "category": "PocketHive"
+      },
+      {
+        "command": "pockethive.refreshBuzz",
+        "title": "Refresh Buzz",
+        "category": "PocketHive"
+      },
+      {
+        "command": "pockethive.refreshJournal",
+        "title": "Refresh Journal",
+        "category": "PocketHive"
+      },
+      {
+        "command": "pockethive.refreshScenario",
+        "title": "Refresh Scenario",
+        "category": "PocketHive"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "pockethive.refreshHive",
+          "when": "view == pockethive.hive",
+          "group": "navigation"
+        },
+        {
+          "command": "pockethive.refreshBuzz",
+          "when": "view == pockethive.buzz",
+          "group": "navigation"
+        },
+        {
+          "command": "pockethive.refreshJournal",
+          "when": "view == pockethive.journal",
+          "group": "navigation"
+        },
+        {
+          "command": "pockethive.refreshScenario",
+          "when": "view == pockethive.scenario",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "pockethive.previewScenario",
+          "when": "view == pockethive.scenario && viewItem == scenarioItem",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "PocketHive",
+      "properties": {
+        "pockethive.orchestratorUrl": {
+          "type": "string",
+          "default": "http://localhost:8088/orchestrator",
+          "description": "Orchestrator base URL, e.g. http://localhost:8088/orchestrator"
+        },
+        "pockethive.scenarioManagerUrl": {
+          "type": "string",
+          "default": "http://localhost:8088/scenario-manager",
+          "description": "Scenario Manager base URL, e.g. http://localhost:8088/scenario-manager"
+        },
+        "pockethive.authToken": {
+          "type": "string",
+          "description": "Bearer token for Orchestrator API (optional)."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package",
+    "vscode:prepublish": "npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.7",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "2.24.0",
+    "typescript": "^5.4.5"
+  },
+  "overrides": {
+    "cheerio": "1.0.0-rc.12"
+  }
+}
