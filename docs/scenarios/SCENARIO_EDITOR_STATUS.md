@@ -168,7 +168,7 @@ treated as **inputs**, not as “current behaviour”:
 - `docs/inProgress/scenario-sut-editor-plan.md`
   - Contains a React Flow + side-panel editor plan. Some ideas exist in the
     current editor, but the plan is not implemented as written.
-- `docs/pockethive_scenario_builder_mvp/*`
+- `docs/archive/pockethive_scenario_builder_mvp/*`
   - A consolidated MVP archive (contract + plans). It is useful for historical
     context, but is not aligned with the current Scenarios editor (the old
     micro-frontend UI plan subfolder was removed to avoid confusion).

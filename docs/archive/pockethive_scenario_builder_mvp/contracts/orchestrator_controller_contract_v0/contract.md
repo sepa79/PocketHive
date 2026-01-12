@@ -6,7 +6,7 @@
 - Start: `sig.swarm-start.{swarmId}`
 - Stop: `sig.swarm-stop.{swarmId}`
 
-`{swarmId}` is allocated by Orchestrator (e.g. `{runPrefix}.{trackSlug}.{index}`).
+`{swarmId}` is provided by the caller to the Orchestrator REST API (no enforced format).
 
 ## 1) Plan (staged)
 Message body — exact fields only:

@@ -23,7 +23,7 @@ Basic commands for the Orchestrator REST API.
 ## Develop
 
 ```bash
-cd tools/vscode-pockethive
+cd vscode-pockethive
 npm install
 npm run build
 ```
