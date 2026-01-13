@@ -40,9 +40,13 @@ type ParsedBeeData = {
 type ScenarioStateMessage =
   | { type: 'state'; ok: true; data: ScenarioFormData; raw: string }
   | { type: 'state'; ok: false; error: string; raw: string }
-  | { type: 'validation'; errors: string[] };
+  | { type: 'validation'; errors: string[] }
+  | { type: 'raw'; raw: string };
 
-type ScenarioCommandMessage = { type: 'save'; data: ScenarioFormData };
+type ScenarioCommandMessage =
+  | { type: 'save'; data: ScenarioFormData }
+  | { type: 'change'; data: ScenarioFormData }
+  | { type: 'openRaw' };
 
 export class ScenarioEditorProvider implements vscode.CustomTextEditorProvider {
   static readonly viewType = 'pockethive.scenarioEditor';
@@ -77,10 +81,16 @@ export class ScenarioEditorProvider implements vscode.CustomTextEditorProvider {
 
     updateWebview();
 
+    let ignoreNextDocumentChange = false;
     const changeDocumentSubscription = vscode.workspace.onDidChangeTextDocument((event) => {
-      if (event.document.uri.toString() === document.uri.toString()) {
-        updateWebview();
+      if (event.document.uri.toString() !== document.uri.toString()) {
+        return;
       }
+      if (ignoreNextDocumentChange) {
+        ignoreNextDocumentChange = false;
+        return;
+      }
+      updateWebview();
     });
 
     webviewPanel.onDidDispose(() => {
@@ -88,10 +98,46 @@ export class ScenarioEditorProvider implements vscode.CustomTextEditorProvider {
     });
 
     webview.onDidReceiveMessage(async (message: ScenarioCommandMessage) => {
-      if (!message || message.type !== 'save') {
+      if (!message) {
         return;
       }
-      const result = parseScenarioFormInput(message.data);
+      if (message.type === 'openRaw') {
+        const textDoc = await vscode.workspace.openTextDocument(document.uri);
+        if (textDoc.languageId === 'plaintext') {
+          await vscode.languages.setTextDocumentLanguage(textDoc, 'yaml');
+        }
+        await vscode.window.showTextDocument(textDoc, {
+          viewColumn: vscode.ViewColumn.Beside,
+          preview: true
+        });
+        return;
+      }
+      if (message.type === 'change') {
+        const result = parseScenarioFormInput(message.data, { requireFields: false });
+        if (result.errors.length > 0 || !result.data) {
+          return;
+        }
+        const currentText = document.getText();
+        const updated = applyScenarioEdits(currentText, result.data);
+        if ('error' in updated) {
+          return;
+        }
+        if (updated.text === currentText) {
+          return;
+        }
+        try {
+          ignoreNextDocumentChange = true;
+          await replaceDocument(document, updated.text);
+          webview.postMessage({ type: 'raw', raw: updated.text } satisfies ScenarioStateMessage);
+        } catch (error) {
+          ignoreNextDocumentChange = false;
+        }
+        return;
+      }
+      if (message.type !== 'save') {
+        return;
+      }
+      const result = parseScenarioFormInput(message.data, { requireFields: true });
       if (result.errors.length > 0 || !result.data) {
         webview.postMessage({ type: 'validation', errors: result.errors } satisfies ScenarioStateMessage);
         return;
@@ -105,7 +151,10 @@ export class ScenarioEditorProvider implements vscode.CustomTextEditorProvider {
 
       try {
         await replaceDocument(document, updated.text);
-        await document.save();
+        const saved = await document.save();
+        if (!saved) {
+          throw new Error('Scenario save did not complete.');
+        }
       } catch (error) {
         webview.postMessage({
           type: 'validation',
@@ -166,16 +215,19 @@ function buildScenarioFormData(text: string): { data: ScenarioFormData } | { err
   };
 }
 
-function parseScenarioFormInput(form: ScenarioFormData): { data?: ParsedScenarioData; errors: string[] } {
+function parseScenarioFormInput(
+  form: ScenarioFormData,
+  options: { requireFields: boolean }
+): { data?: ParsedScenarioData; errors: string[] } {
   const errors: string[] = [];
   const id = form.id.trim();
   const name = form.name.trim();
   const description = form.description.trim();
 
-  if (!id) {
+  if (options.requireFields && !id) {
     errors.push('Scenario id is required.');
   }
-  if (!name) {
+  if (options.requireFields && !name) {
     errors.push('Scenario name is required.');
   }
 
@@ -317,7 +369,7 @@ function applyScenarioEdits(text: string, data: ParsedScenarioData): { text: str
     }
   });
 
-  return { text: doc.toString() };
+  return { text: doc.toString({ lineWidth: 0 }) };
 }
 
 async function replaceDocument(document: vscode.TextDocument, text: string): Promise<void> {
@@ -325,7 +377,10 @@ async function replaceDocument(document: vscode.TextDocument, text: string): Pro
   const fullRange = new vscode.Range(0, 0, document.lineCount - 1, lastLine.text.length);
   const edit = new vscode.WorkspaceEdit();
   edit.replace(document.uri, fullRange, text);
-  await vscode.workspace.applyEdit(edit);
+  const applied = await vscode.workspace.applyEdit(edit);
+  if (!applied) {
+    throw new Error('Failed to apply edits to scenario document.');
+  }
 }
 
 function ensureRootMap(doc: ReturnType<typeof parseDocument>): YAMLMap {
@@ -372,7 +427,7 @@ function formatYamlForEditor(value: unknown): string {
   if (isRecord(value) && Object.keys(value).length === 0) {
     return '';
   }
-  return stringify(value).trimEnd();
+  return stringify(value, { lineWidth: 0 }).trimEnd();
 }
 
 function asString(value: unknown): string {
@@ -419,10 +474,29 @@ function getScenarioEditorHtml(webview: vscode.Webview): string {
       font-size: 1.1em;
     }
     .toolbar {
+      position: sticky;
+      top: 0;
+      z-index: 2;
       display: flex;
       gap: 8px;
       align-items: center;
       margin-bottom: 12px;
+      padding: 10px 0;
+      background: var(--vscode-editor-background);
+      border-bottom: 1px solid var(--vscode-panel-border);
+    }
+    .page-header {
+      margin-bottom: 16px;
+    }
+    .page-title {
+      font-size: 1.9em;
+      font-weight: 600;
+      margin: 0 0 4px 0;
+    }
+    .page-subtitle {
+      color: var(--vscode-descriptionForeground);
+      font-size: 1.1em;
+      margin: 0;
     }
     button {
       background: var(--vscode-button-background);
@@ -462,6 +536,7 @@ function getScenarioEditorHtml(webview: vscode.Webview): string {
     textarea {
       min-height: 120px;
       resize: vertical;
+      white-space: pre;
     }
     .mono {
       font-family: var(--vscode-editor-font-family);
@@ -469,15 +544,37 @@ function getScenarioEditorHtml(webview: vscode.Webview): string {
     }
     .bee {
       border: 1px solid var(--vscode-panel-border);
+      background: var(--vscode-editorWidget-background);
       border-radius: 6px;
       padding: 10px;
       margin-bottom: 12px;
     }
     .bee-header {
+      padding-bottom: 6px;
+      border-bottom: 1px dashed var(--vscode-panel-border);
       display: flex;
       justify-content: space-between;
       align-items: center;
       margin-bottom: 8px;
+    }
+    .bee-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 1.1em;
+      color: var(--vscode-descriptionForeground);
+    }
+    .bee-index {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      border: 1px solid var(--vscode-panel-border);
+      font-size: 0.95em;
+      color: var(--vscode-foreground);
+      background: var(--vscode-editor-background);
     }
     .errors {
       background: var(--vscode-inputValidation-errorBackground);
@@ -501,6 +598,7 @@ function getScenarioEditorHtml(webview: vscode.Webview): string {
     const vscode = acquireVsCodeApi();
     const app = document.getElementById('app');
     let state = { data: null, errors: [], parseError: null, raw: '' };
+    let changeTimer = null;
 
     window.addEventListener('message', (event) => {
       const message = event.data;
@@ -520,10 +618,18 @@ function getScenarioEditorHtml(webview: vscode.Webview): string {
         state = { data: current, errors: message.errors || [], parseError: null, raw: state.raw };
         render();
       }
+      if (message.type === 'raw') {
+        state = { ...state, raw: message.raw };
+        const rawAreas = app.querySelectorAll('textarea.raw');
+        rawAreas.forEach((area) => {
+          area.value = message.raw;
+        });
+      }
     });
 
     document.addEventListener('keydown', (event) => {
-      const isSave = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's';
+      const key = event.key.toLowerCase();
+      const isSave = (event.ctrlKey || event.metaKey) && key === 's';
       if (!isSave || !state.data) {
         return;
       }
@@ -541,7 +647,7 @@ function getScenarioEditorHtml(webview: vscode.Webview): string {
           </div>
           <div class="section">
             <h2>Raw YAML (read-only)</h2>
-            <textarea class="mono raw" readonly>\${escapeHtml(state.raw)}</textarea>
+            <textarea class="mono raw" wrap="off" readonly>\${escapeHtml(state.raw)}</textarea>
           </div>
         \`;
         return;
@@ -554,8 +660,13 @@ function getScenarioEditorHtml(webview: vscode.Webview): string {
 
       app.innerHTML = \`
         \${renderErrors(state.errors)}
+        <div class="page-header">
+          <div class="page-title">\${escapeHtml(state.data.name || 'Untitled scenario')}</div>
+          <div class="page-subtitle">\${escapeHtml(state.data.id)}</div>
+        </div>
         <div class="toolbar">
           <button data-action="add-bee">Add bee</button>
+          <button class="secondary" data-action="open-raw">Open raw YAML</button>
           <button data-action="save">Save</button>
         </div>
         <div class="section">
@@ -572,7 +683,7 @@ function getScenarioEditorHtml(webview: vscode.Webview): string {
           </div>
           <label style="margin-top: 12px;">
             Description
-            <textarea data-field="description">\${escapeHtml(state.data.description)}</textarea>
+            <textarea data-field="description" wrap="off">\${escapeHtml(state.data.description)}</textarea>
           </label>
         </div>
         <div class="section">
@@ -581,7 +692,7 @@ function getScenarioEditorHtml(webview: vscode.Webview): string {
         </div>
         <details class="section">
           <summary>Raw YAML (read-only)</summary>
-          <textarea class="mono raw" readonly>\${escapeHtml(state.raw)}</textarea>
+          <textarea class="mono raw" wrap="off" readonly>\${escapeHtml(state.raw)}</textarea>
         </details>
       \`;
 
@@ -604,6 +715,7 @@ function getScenarioEditorHtml(webview: vscode.Webview): string {
           });
           state = { ...state, data: current };
           render();
+          queueChange(current);
           return;
         }
         if (target.dataset.action === 'remove-bee') {
@@ -612,12 +724,30 @@ function getScenarioEditorHtml(webview: vscode.Webview): string {
           current.bees.splice(index, 1);
           state = { ...state, data: current };
           render();
+          queueChange(current);
           return;
         }
         if (target.dataset.action === 'save') {
           const payload = readForm();
           vscode.postMessage({ type: 'save', data: payload });
         }
+        if (target.dataset.action === 'open-raw') {
+          vscode.postMessage({ type: 'openRaw' });
+        }
+      };
+
+      app.oninput = () => {
+        if (!state.data) {
+          return;
+        }
+        if (changeTimer) {
+          clearTimeout(changeTimer);
+        }
+        changeTimer = setTimeout(() => {
+          const payload = readForm();
+          state = { ...state, data: payload };
+          queueChange(payload);
+        }, 200);
       };
     }
 
@@ -626,7 +756,10 @@ function getScenarioEditorHtml(webview: vscode.Webview): string {
       return \`
         <div class="bee" data-index="\${index}">
           <div class="bee-header">
-            <strong>\${escapeHtml(title)}</strong>
+            <div class="bee-badge">
+              <span class="bee-index">\${index + 1}</span>
+              <strong>\${escapeHtml(title)}</strong>
+            </div>
             <button class="secondary" data-action="remove-bee" data-index="\${index}">Remove</button>
           </div>
           <div class="grid">
@@ -649,19 +782,19 @@ function getScenarioEditorHtml(webview: vscode.Webview): string {
           </div>
           <label style="margin-top: 12px;">
             Config (YAML/JSON)
-            <textarea class="mono" data-field="config">\${escapeHtml(bee.config)}</textarea>
+            <textarea class="mono" wrap="off" data-field="config">\${escapeHtml(bee.config)}</textarea>
           </label>
           <label style="margin-top: 12px;">
             Inputs (YAML/JSON)
-            <textarea class="mono" data-field="inputs">\${escapeHtml(bee.inputs)}</textarea>
+            <textarea class="mono" wrap="off" data-field="inputs">\${escapeHtml(bee.inputs)}</textarea>
           </label>
           <label style="margin-top: 12px;">
             Outputs (YAML/JSON)
-            <textarea class="mono" data-field="outputs">\${escapeHtml(bee.outputs)}</textarea>
+            <textarea class="mono" wrap="off" data-field="outputs">\${escapeHtml(bee.outputs)}</textarea>
           </label>
           <label style="margin-top: 12px;">
             Interceptors (YAML/JSON)
-            <textarea class="mono" data-field="interceptors">\${escapeHtml(bee.interceptors)}</textarea>
+            <textarea class="mono" wrap="off" data-field="interceptors">\${escapeHtml(bee.interceptors)}</textarea>
           </label>
         </div>
       \`;
@@ -704,6 +837,13 @@ function getScenarioEditorHtml(webview: vscode.Webview): string {
         interceptors: getField(bee, 'interceptors')
       }));
       return scenario;
+    }
+
+    function queueChange(payload) {
+      if (!payload) {
+        return;
+      }
+      vscode.postMessage({ type: 'change', data: payload });
     }
 
     function getField(container, field) {
