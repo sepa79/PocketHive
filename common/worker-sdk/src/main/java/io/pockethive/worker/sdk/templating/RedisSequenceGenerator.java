@@ -5,7 +5,9 @@ import io.lettuce.core.RedisURI;
 import io.lettuce.core.api.sync.RedisCommands;
 import io.pockethive.worker.sdk.config.RedisSequenceProperties;
 
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 
 /**
@@ -25,35 +27,68 @@ public final class RedisSequenceGenerator {
         10000000000000000L,100000000000000000L,1000000000000000000L};
     private static final long[] POW26 = precompute(26, 13);
     private static final long[] POW36 = precompute(36, 12);
-    private static volatile String configuredHost;
-    private static volatile int configuredPort;
+    private static final AtomicReference<ConnectionConfig> CONFIG = new AtomicReference<>();
 
     static {
         RedisSequenceProperties defaults = new RedisSequenceProperties();
-        configuredHost = defaults.getHost();
-        configuredPort = defaults.getPort();
+        CONFIG.set(new ConnectionConfig(
+            defaults.getHost(),
+            defaults.getPort(),
+            defaults.getUsername(),
+            defaults.getPassword(),
+            defaults.isSsl()
+        ));
+    }
+
+    public record ConnectionConfig(String host, int port, String username, String password, boolean ssl) {
+        String cacheKey() {
+            String hostValue = host == null ? "" : host;
+            int authHash = Objects.hash(username, password);
+            return hostValue + ":" + port + "|ssl=" + ssl + "|auth=" + Integer.toHexString(authHash);
+        }
     }
 
     private final RedisClient client;
     private final ThreadLocal<RedisCommands<String, String>> commandsThreadLocal;
 
-    private RedisSequenceGenerator(String host, int port) {
-        RedisURI uri = RedisURI.builder().withHost(host).withPort(port).build();
+    private RedisSequenceGenerator(ConnectionConfig config) {
+        RedisURI.Builder builder = RedisURI.builder()
+            .withHost(config.host())
+            .withPort(config.port())
+            .withSsl(config.ssl());
+        if (config.username() != null && config.password() != null) {
+            builder.withAuthentication(config.username(), config.password().toCharArray());
+        } else if (config.password() != null) {
+            builder.withPassword(config.password().toCharArray());
+        }
+        RedisURI uri = builder.build();
         this.client = RedisClient.create(uri);
         this.commandsThreadLocal = ThreadLocal.withInitial(() -> client.connect().sync());
     }
 
     public static RedisSequenceGenerator getInstance(String host, int port) {
-        return INSTANCES.computeIfAbsent(host + ":" + port, k -> new RedisSequenceGenerator(host, port));
+        return getInstance(new ConnectionConfig(host, port, null, null, false));
+    }
+
+    public static RedisSequenceGenerator getInstance(ConnectionConfig config) {
+        return INSTANCES.computeIfAbsent(config.cacheKey(), k -> new RedisSequenceGenerator(config));
     }
 
     public static RedisSequenceGenerator getDefaultInstance() {
-        return getInstance(configuredHost, configuredPort);
+        return getInstance(CONFIG.get());
+    }
+
+    public static ConnectionConfig currentConfig() {
+        return CONFIG.get();
     }
 
     public static void configure(String host, int port) {
-        configuredHost = host;
-        configuredPort = port;
+        ConnectionConfig current = CONFIG.get();
+        configure(host, port, current.username(), current.password(), current.ssl());
+    }
+
+    public static void configure(String host, int port, String username, String password, boolean ssl) {
+        CONFIG.set(new ConnectionConfig(host, port, username, password, ssl));
     }
 
     public String next(String key, String mode, String format, long startOffset, long maxSequence) {
@@ -89,16 +124,26 @@ public final class RedisSequenceGenerator {
     private static String formatSequence(long value, SequenceMode mode, ParsedFormat parsed) {
         StringBuilder result = new StringBuilder(parsed.capacity);
         long seq = value - 1;
+        long[] segments = new long[parsed.tokens.length];
+        // Assign sequence segments from rightmost token to leftmost (odometer behavior).
+        for (int i = parsed.tokens.length - 1; i >= 0; i--) {
+            ParsedFormat.Token token = parsed.tokens[i];
+            if (token.literal != null) {
+                continue;
+            }
+            long mod = token.mod(mode);
+            long segment = seq % mod;
+            seq /= mod;
+            segments[i] = segment;
+        }
 
-        for (ParsedFormat.Token token : parsed.tokens) {
+        for (int i = 0; i < parsed.tokens.length; i++) {
+            ParsedFormat.Token token = parsed.tokens[i];
             if (token.literal != null) {
                 result.append(token.literal);
                 continue;
             }
-
-            long segment = seq % token.mod;
-            seq /= token.mod;
-
+            long segment = segments[i];
             switch (token.type) {
                 case 'S' -> result.append(encode(segment, mode.upperChars, token.width));
                 case 's' -> result.append(encode(segment, mode.lowerChars, token.width));
@@ -169,13 +214,21 @@ public final class RedisSequenceGenerator {
     }
 
     private record ParsedFormat(int capacity, Token[] tokens) {
-        record Token(char type, int width, boolean zeroPad, String literal, long mod) {}
+        record Token(char type, int width, boolean zeroPad, String literal) {
+            long mod(SequenceMode mode) {
+                if (literal != null) {
+                    return 1L;
+                }
+                int base = type == 'd' ? 10 : mode.base;
+                return fastPow(base, width);
+            }
+        }
 
         long calculateMax(SequenceMode mode) {
             long total = 1;
             for (Token token : tokens) {
                 if (token.literal == null) {
-                    total *= token.mod;
+                    total *= token.mod(mode);
                 }
             }
             return total;
@@ -192,7 +245,7 @@ public final class RedisSequenceGenerator {
                     int next = format.indexOf('%', i);
                     int end = next == -1 ? format.length() : next;
                     String literal = format.substring(i, end);
-                    tokenList.add(new Token('\0', 0, false, literal, 0));
+                    tokenList.add(new Token('\0', 0, false, literal));
                     cap += literal.length();
                     i = end;
                     continue;
@@ -210,8 +263,7 @@ public final class RedisSequenceGenerator {
 
                 char type = format.charAt(i++);
                 int count = width > 0 ? width : 1;
-                long mod = type == 'd' ? fastPow(10, count) : fastPow(26, count);
-                tokenList.add(new Token(type, count, zeroPad, null, mod));
+                tokenList.add(new Token(type, count, zeroPad, null));
                 cap += count;
                 hasToken = true;
             }

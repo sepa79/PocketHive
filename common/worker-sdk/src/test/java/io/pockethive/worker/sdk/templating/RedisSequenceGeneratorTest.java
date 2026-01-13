@@ -4,7 +4,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Tests for Redis sequence generation functionality.
@@ -31,6 +30,19 @@ class RedisSequenceGeneratorTest {
         assertThat("0000").matches("[0-9A-F]{4}");
         assertThat("00000000").matches("[01]{8}");
         assertThat("TXN-0000000001").matches("TXN-\\d{10}");
+    }
+
+    @Test
+    void testOdometerOrderingUsesRightmostToken() throws Exception {
+        assertThat(formatSequence(1, "ALPHA", "%2S%02d")).isEqualTo("AA00");
+        assertThat(formatSequence(2, "ALPHA", "%2S%02d")).isEqualTo("AA01");
+        assertThat(formatSequence(101, "ALPHA", "%2S%02d")).isEqualTo("AB00");
+    }
+
+    @Test
+    void testHexModeUsesBase16() throws Exception {
+        assertThat(formatSequence(16, "HEX", "%2S")).isEqualTo("0F");
+        assertThat(formatSequence(17, "HEX", "%2S")).isEqualTo("10");
     }
 
     @Test
@@ -69,5 +81,25 @@ class RedisSequenceGeneratorTest {
         // Placeholder for actual Redis integration tests
         // Would require Redis dependencies and Testcontainers
         assertThat("Integration tests require Redis setup").isNotEmpty();
+    }
+
+    private static String formatSequence(long value, String modeName, String format) throws Exception {
+        Class<?> parsedClass = Class.forName("io.pockethive.worker.sdk.templating.RedisSequenceGenerator$ParsedFormat");
+        java.lang.reflect.Method parse = parsedClass.getDeclaredMethod("parse", String.class);
+        parse.setAccessible(true);
+        Object parsed = parse.invoke(null, format);
+
+        Class<?> modeClass = Class.forName("io.pockethive.worker.sdk.templating.RedisSequenceGenerator$SequenceMode");
+        @SuppressWarnings("unchecked")
+        Object mode = Enum.valueOf((Class<Enum>) modeClass, modeName);
+
+        java.lang.reflect.Method formatMethod = RedisSequenceGenerator.class.getDeclaredMethod(
+            "formatSequence",
+            long.class,
+            modeClass,
+            parsedClass
+        );
+        formatMethod.setAccessible(true);
+        return (String) formatMethod.invoke(null, value, mode, parsed);
     }
 }

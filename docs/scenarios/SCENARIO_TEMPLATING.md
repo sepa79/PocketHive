@@ -55,6 +55,7 @@ variables is available.
 The following SpEL functions are available (via `#name(...)`):
 
 - `#randInt(min, max)` – random integer, inclusive.
+- `#randLong(min, max)` – random long, inclusive (pass numbers as strings to avoid parser limits).
 - `#uuid()` – random UUID string.
 - `#md5_hex(value)` – MD5 hash in hex.
 - `#sha256_hex(value)` – SHA‑256 hash in hex.
@@ -64,6 +65,9 @@ The following SpEL functions are available (via `#name(...)`):
 - `#regex_extract(input, pattern, group)` – string (empty if no match).
 - `#json_path(payload, path)` – JSONPath extractor; returns a string.
 - `#date_format(instant, pattern)` – format `now` or provided Instant.
+- `#sequence(key, mode, format)` – Redis-backed sequence generator.
+- `#sequenceWith(key, mode, format, startOffset, maxSequence)` – sequence with explicit start/max.
+- `#resetSequence(key)` – deletes the Redis counter; returns `true` when removed.
 
 Example – weighted call selection:
 
@@ -71,6 +75,130 @@ Example – weighted call selection:
 headers:
   x-ph-call-id: |
     {{ eval("#randInt(0,99) < 40 ? 'redis-balance' : (#randInt(0,99) < 80 ? 'redis-topup' : 'redis-auth')") }}
+```
+
+## Redis-backed sequences
+
+Use Redis to generate deterministic, shared sequences across workers and swarms:
+
+```yaml
+body: |
+  {
+    "txnId": "{{ eval(\"#sequence('my-key', 'numeric', '%010d')\") }}"
+  }
+```
+
+### Parameters
+
+1. **key** – Redis key for the counter.
+2. **mode** – character set (case-insensitive):
+   - `alpha`, `alpha_lower`
+   - `numeric`
+   - `alphanum`, `alphanum_lower`
+   - `binary`
+   - `hex`, `hex_lower`
+3. **format** – printf-style format string with tokens:
+   - `%S` uppercase alphabet (or mode-specific uppercase set)
+   - `%s` lowercase alphabet (or mode-specific lowercase set)
+   - `%d` digits
+   - prefix width with `0` for zero-padding (e.g., `%06d`)
+
+Sequences advance like an odometer: the **rightmost** token changes fastest.
+When the maximum is reached, values wrap within the computed range.
+
+### Sequence behavior
+
+- **Wrapping**: `(value - 1) % max + 1` keeps values in range `1..max`.
+- **Thread safety**: Redis `INCR` is atomic across threads and processes.
+- **Persistence**: sequences persist across swarm restarts; delete `ph:seq:<key>` to reset.
+
+### Format strings
+
+Format strings use printf-style tokens:
+
+- `%S` – uppercase alphabetic/alphanumeric characters
+- `%s` – lowercase alphabetic/alphanumeric characters
+- `%d` – numeric digits
+- `%0Nd` – zero-padded numeric (N = width)
+- `%NS` / `%Ns` – fixed-width alphabetic (N = width)
+
+Examples:
+
+| Format | Mode | Output Examples |
+| --- | --- | --- |
+| `%010d` | numeric | `0000000001`, `0000000002`, `0000000123` |
+| `%6S` | alpha | `AAAAAA`, `AAAAAB`, `AAAAAC` |
+| `%4s%2d` | alpha | `aaaa01`, `aaaa02`, `aaab01` |
+| `%8S` | alphanum | `AAAAAAAA`, `AAAAAAAB`, `0000000A` |
+| `%4S` | hex | `0000`, `0001`, `FFFF` |
+| `TXN-%06d` | numeric | `TXN-000001`, `TXN-000002` |
+
+Modes:
+
+| Mode | Characters | Use Case |
+| --- | --- | --- |
+| `alpha` | A-Z | Uppercase reference codes |
+| `alpha_lower` | a-z | Lowercase reference codes |
+| `numeric` | 0-9 | Transaction IDs, counters |
+| `alphanum` | A-Z, 0-9 | Mixed identifiers |
+| `alphanum_lower` | a-z, 0-9 | Lowercase mixed identifiers |
+| `binary` | 0-1 | Binary flags |
+| `hex` | 0-9, A-F | Hexadecimal identifiers |
+| `hex_lower` | 0-9, a-f | Lowercase hex identifiers |
+
+### Custom start/max
+
+```yaml
+body: |
+  {
+    "id": "{{ eval(\"#sequenceWith('my-key', 'numeric', '%06d', 1000, 999999)\") }}"
+  }
+```
+
+### Reset
+
+```yaml
+headers:
+  x-reset: "{{ eval(\"#resetSequence('my-key')\") }}"
+```
+
+### Redis configuration
+
+Configure Redis in the scenario `config` block:
+
+```yaml
+config:
+  redis:
+    enabled: true
+    host: redis
+    port: 6379
+    username: myuser
+    password: mypass
+    ssl: false
+```
+
+In `application.yml`, use `pockethive.worker.config.redis.*`.
+
+### Examples
+
+HTTP transaction payload:
+
+```yaml
+body: |
+  {% set now = eval('now') %}
+  {
+    "transactionId": "{{ eval("#sequence('payment-txn-seq', 'numeric', '%012d')") }}",
+    "referenceId": "{{ eval("#sequence('payment-ref-seq', 'alphanum', '%8S')") }}",
+    "amount": 100.00,
+    "timestamp": "{{ eval("#date_format(now, 'yyyy-MM-dd''T''HH:mm:ssZ')") }}"
+  }
+```
+
+TCP message payload:
+
+```yaml
+body: |
+  MSG{{ eval("#sequence('tcp-msg-seq', 'numeric', '%08d')") }}|DATA|END
 ```
 
 ## Proposed: weighted selection helpers (Pebble)
