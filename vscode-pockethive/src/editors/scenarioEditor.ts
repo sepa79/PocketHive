@@ -1,6 +1,9 @@
 import * as vscode from 'vscode';
 import { isMap, isSeq, parseDocument, stringify, YAMLMap, YAMLSeq } from 'yaml';
 
+import { requestJson } from '../api';
+import { resolveServiceConfig } from '../config';
+
 type ScenarioFormData = {
   id: string;
   name: string;
@@ -17,6 +20,7 @@ type BeeFormData = {
   inputs: string;
   outputs: string;
   interceptors: string;
+  configData?: Record<string, unknown>;
 };
 
 type ParsedScenarioData = {
@@ -38,13 +42,16 @@ type ParsedBeeData = {
 };
 
 type ScenarioStateMessage =
-  | { type: 'state'; ok: true; data: ScenarioFormData; raw: string }
-  | { type: 'state'; ok: false; error: string; raw: string }
+  | { type: 'state'; ok: true; data: ScenarioFormData; raw: string; dirty: boolean }
+  | { type: 'state'; ok: false; error: string; raw: string; dirty: boolean }
   | { type: 'validation'; errors: string[] }
-  | { type: 'raw'; raw: string };
+  | { type: 'raw'; raw: string; dirty: boolean }
+  | { type: 'capabilities'; ok: true; manifests: unknown[] }
+  | { type: 'capabilities'; ok: false; error: string };
 
 type ScenarioCommandMessage =
   | { type: 'save'; data: ScenarioFormData }
+  | { type: 'capabilityChange'; beeIndex: number; path: string; value: unknown }
   | { type: 'change'; data: ScenarioFormData }
   | { type: 'openRaw' };
 
@@ -71,15 +78,29 @@ export class ScenarioEditorProvider implements vscode.CustomTextEditorProvider {
 
     const updateWebview = () => {
       const raw = document.getText();
+      const dirty = document.isDirty;
       const parsed = buildScenarioFormData(raw);
       if ('error' in parsed) {
-        webview.postMessage({ type: 'state', ok: false, error: parsed.error, raw } satisfies ScenarioStateMessage);
+        webview.postMessage({
+          type: 'state',
+          ok: false,
+          error: parsed.error,
+          raw,
+          dirty
+        } satisfies ScenarioStateMessage);
         return;
       }
-      webview.postMessage({ type: 'state', ok: true, data: parsed.data, raw } satisfies ScenarioStateMessage);
+      webview.postMessage({
+        type: 'state',
+        ok: true,
+        data: parsed.data,
+        raw,
+        dirty
+      } satisfies ScenarioStateMessage);
     };
 
     updateWebview();
+    void sendCapabilities(webview);
 
     let ignoreNextDocumentChange = false;
     const changeDocumentSubscription = vscode.workspace.onDidChangeTextDocument((event) => {
@@ -128,9 +149,36 @@ export class ScenarioEditorProvider implements vscode.CustomTextEditorProvider {
         try {
           ignoreNextDocumentChange = true;
           await replaceDocument(document, updated.text);
-          webview.postMessage({ type: 'raw', raw: updated.text } satisfies ScenarioStateMessage);
+          webview.postMessage({
+            type: 'raw',
+            raw: updated.text,
+            dirty: document.isDirty
+          } satisfies ScenarioStateMessage);
         } catch (error) {
           ignoreNextDocumentChange = false;
+        }
+        return;
+      }
+      if (message.type === 'capabilityChange') {
+        const currentText = document.getText();
+        const updated = applyCapabilityChange(currentText, message.beeIndex, message.path, message.value);
+        if ('error' in updated) {
+          webview.postMessage({
+            type: 'validation',
+            errors: [updated.error]
+          } satisfies ScenarioStateMessage);
+          return;
+        }
+        if (updated.text === currentText) {
+          return;
+        }
+        try {
+          await replaceDocument(document, updated.text);
+        } catch (error) {
+          webview.postMessage({
+            type: 'validation',
+            errors: [`Update failed: ${formatError(error)}`]
+          } satisfies ScenarioStateMessage);
         }
         return;
       }
@@ -201,7 +249,8 @@ function buildScenarioFormData(text: string): { data: ScenarioFormData } | { err
       config: configText,
       inputs: inputsText,
       outputs: outputsText,
-      interceptors: interceptorsText
+      interceptors: interceptorsText,
+      configData: isRecord(configValue) ? (configValue as Record<string, unknown>) : undefined
     };
   });
 
@@ -236,10 +285,10 @@ function parseScenarioFormInput(
     const role = bee.role.trim();
     const image = bee.image.trim();
 
-    if (!role) {
+    if (options.requireFields && !role) {
       errors.push(`${label}: role is required.`);
     }
-    if (!image) {
+    if (options.requireFields && !image) {
       errors.push(`${label}: image is required.`);
     }
 
@@ -372,6 +421,32 @@ function applyScenarioEdits(text: string, data: ParsedScenarioData): { text: str
   return { text: doc.toString({ lineWidth: 0 }) };
 }
 
+function applyCapabilityChange(
+  text: string,
+  beeIndex: number,
+  path: string,
+  value: unknown
+): { text: string } | { error: string } {
+  const doc = parseDocument(text, { prettyErrors: true });
+  if (doc.errors.length > 0) {
+    return { error: doc.errors.map((err) => err.message).join('\n') };
+  }
+  const root = ensureRootMap(doc);
+  const templateNode = ensureMap(root, 'template');
+  const beesNode = ensureSeq(templateNode, 'bees');
+  if (beeIndex < 0 || beeIndex >= beesNode.items.length) {
+    return { error: `Bee index ${beeIndex + 1} is out of range.` };
+  }
+  const beeNode = beesNode.items[beeIndex];
+  const beeMap = isMap(beeNode) ? beeNode : new YAMLMap();
+  if (!isMap(beeNode)) {
+    beesNode.items[beeIndex] = beeMap;
+  }
+  const configNode = ensureMap(beeMap, 'config');
+  setYamlPathValue(configNode, path, value);
+  return { text: doc.toString({ lineWidth: 0 }) };
+}
+
 async function replaceDocument(document: vscode.TextDocument, text: string): Promise<void> {
   const lastLine = document.lineAt(document.lineCount - 1);
   const fullRange = new vscode.Range(0, 0, document.lineCount - 1, lastLine.text.length);
@@ -420,6 +495,31 @@ function setOptionalString(map: YAMLMap, key: string, value?: string): void {
   map.set(key, value);
 }
 
+function setYamlPathValue(map: YAMLMap, path: string, value: unknown): void {
+  const segments = path.split('.').filter(Boolean);
+  if (segments.length === 0) {
+    return;
+  }
+  let current = map;
+  for (let i = 0; i < segments.length - 1; i += 1) {
+    const segment = segments[i];
+    const existing = current.get(segment, true);
+    if (existing && isMap(existing)) {
+      current = existing;
+      continue;
+    }
+    const next = new YAMLMap();
+    current.set(segment, next);
+    current = next;
+  }
+  const last = segments[segments.length - 1];
+  if (value === undefined) {
+    current.delete(last);
+  } else {
+    current.set(last, value);
+  }
+}
+
 function formatYamlForEditor(value: unknown): string {
   if (value === undefined) {
     return '';
@@ -448,6 +548,37 @@ function formatError(error: unknown): string {
     return error.message;
   }
   return String(error);
+}
+
+async function sendCapabilities(webview: vscode.Webview): Promise<void> {
+  const config = resolveServiceConfig('scenarioManagerUrl');
+  if ('error' in config) {
+    webview.postMessage({
+      type: 'capabilities',
+      ok: false,
+      error: config.error
+    } satisfies ScenarioStateMessage);
+    return;
+  }
+  try {
+    const manifests = await requestJson<unknown[]>(
+      config.baseUrl,
+      config.authToken,
+      'GET',
+      '/api/capabilities?all=true'
+    );
+    webview.postMessage({
+      type: 'capabilities',
+      ok: true,
+      manifests
+    } satisfies ScenarioStateMessage);
+  } catch (error) {
+    webview.postMessage({
+      type: 'capabilities',
+      ok: false,
+      error: formatError(error)
+    } satisfies ScenarioStateMessage);
+  }
 }
 
 function getScenarioEditorHtml(webview: vscode.Webview): string {
@@ -484,6 +615,29 @@ function getScenarioEditorHtml(webview: vscode.Webview): string {
       padding: 10px 0;
       background: var(--vscode-editor-background);
       border-bottom: 1px solid var(--vscode-panel-border);
+    }
+    .toolbar-status {
+      margin-left: auto;
+      display: inline-flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--vscode-panel-border);
+      font-size: 0.85em;
+    }
+    .status.parsing {
+      color: var(--vscode-inputValidation-infoForeground);
+      background: var(--vscode-inputValidation-infoBackground);
+    }
+    .status.dirty {
+      color: var(--vscode-inputValidation-warningForeground);
+      background: var(--vscode-inputValidation-warningBackground);
     }
     .page-header {
       margin-bottom: 16px;
@@ -590,6 +744,55 @@ function getScenarioEditorHtml(webview: vscode.Webview): string {
       width: 100%;
       min-height: 180px;
     }
+    .capabilities {
+      margin-top: 12px;
+      border-top: 1px solid var(--vscode-panel-border);
+      padding-top: 12px;
+    }
+    .capabilities-header {
+      font-size: 1em;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .cap-group {
+      margin-top: 8px;
+    }
+    .cap-group-title {
+      font-size: 0.9em;
+      color: var(--vscode-descriptionForeground);
+      margin-bottom: 6px;
+    }
+    .cap-entry {
+      display: grid;
+      grid-template-columns: minmax(160px, 220px) 1fr;
+      gap: 8px;
+      align-items: start;
+      margin-bottom: 8px;
+    }
+    .cap-label {
+      font-size: 0.9em;
+      color: var(--vscode-descriptionForeground);
+    }
+    .cap-path {
+      font-family: var(--vscode-editor-font-family);
+      font-size: 0.8em;
+      color: var(--vscode-descriptionForeground);
+      opacity: 0.8;
+    }
+    .cap-help {
+      font-size: 0.8em;
+      color: var(--vscode-descriptionForeground);
+    }
+    .cap-control input,
+    .cap-control select,
+    .cap-control textarea {
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .cap-empty {
+      font-size: 0.85em;
+      color: var(--vscode-descriptionForeground);
+    }
   </style>
 </head>
 <body>
@@ -597,8 +800,10 @@ function getScenarioEditorHtml(webview: vscode.Webview): string {
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
     const app = document.getElementById('app');
-    let state = { data: null, errors: [], parseError: null, raw: '' };
+    let state = { data: null, errors: [], parseError: null, raw: '', dirty: false, status: 'idle' };
     let changeTimer = null;
+    let capabilities = { status: 'loading', error: null, manifests: [], index: null };
+    const capabilityTimers = new Map();
 
     window.addEventListener('message', (event) => {
       const message = event.data;
@@ -607,23 +812,52 @@ function getScenarioEditorHtml(webview: vscode.Webview): string {
       }
       if (message.type === 'state') {
         if (message.ok) {
-          state = { data: message.data, errors: [], parseError: null, raw: message.raw };
+          state = {
+            data: message.data,
+            errors: [],
+            parseError: null,
+            raw: message.raw,
+            dirty: message.dirty,
+            status: 'idle'
+          };
         } else {
-          state = { data: null, errors: [], parseError: message.error, raw: message.raw };
+          state = {
+            data: null,
+            errors: [],
+            parseError: message.error,
+            raw: message.raw,
+            dirty: message.dirty,
+            status: 'idle'
+          };
         }
         render();
       }
       if (message.type === 'validation') {
         const current = state.data ? readForm() : null;
-        state = { data: current, errors: message.errors || [], parseError: null, raw: state.raw };
+        state = { ...state, data: current, errors: message.errors || [], parseError: null };
+        render();
+      }
+      if (message.type === 'capabilities') {
+        if (message.ok) {
+          const normalized = normalizeManifests(message.manifests);
+          capabilities = {
+            status: 'ready',
+            error: null,
+            manifests: normalized,
+            index: buildManifestIndex(normalized)
+          };
+        } else {
+          capabilities = { status: 'error', error: message.error, manifests: [], index: null };
+        }
         render();
       }
       if (message.type === 'raw') {
-        state = { ...state, raw: message.raw };
+        state = { ...state, raw: message.raw, dirty: message.dirty, status: 'idle' };
         const rawAreas = app.querySelectorAll('textarea.raw');
         rawAreas.forEach((area) => {
           area.value = message.raw;
         });
+        updateIndicators();
       }
     });
 
@@ -668,6 +902,10 @@ function getScenarioEditorHtml(webview: vscode.Webview): string {
           <button data-action="add-bee">Add bee</button>
           <button class="secondary" data-action="open-raw">Open raw YAML</button>
           <button data-action="save">Save</button>
+          <div class="toolbar-status">
+            <span id="parsing-indicator" class="status parsing" style="display: none;">Parsing…</span>
+            <span id="dirty-indicator" class="status dirty" style="display: none;">Dirty</span>
+          </div>
         </div>
         <div class="section">
           <h2>Scenario</h2>
@@ -713,7 +951,7 @@ function getScenarioEditorHtml(webview: vscode.Webview): string {
             outputs: '',
             interceptors: ''
           });
-          state = { ...state, data: current };
+          state = { ...state, data: current, status: 'parsing' };
           render();
           queueChange(current);
           return;
@@ -722,7 +960,7 @@ function getScenarioEditorHtml(webview: vscode.Webview): string {
           const index = Number(target.dataset.index || '0');
           const current = readForm();
           current.bees.splice(index, 1);
-          state = { ...state, data: current };
+          state = { ...state, data: current, status: 'parsing' };
           render();
           queueChange(current);
           return;
@@ -736,7 +974,10 @@ function getScenarioEditorHtml(webview: vscode.Webview): string {
         }
       };
 
-      app.oninput = () => {
+      app.oninput = (event) => {
+        if (handleCapabilityInput(event)) {
+          return;
+        }
         if (!state.data) {
           return;
         }
@@ -745,10 +986,19 @@ function getScenarioEditorHtml(webview: vscode.Webview): string {
         }
         changeTimer = setTimeout(() => {
           const payload = readForm();
-          state = { ...state, data: payload };
+          state = { ...state, data: payload, status: 'parsing' };
+          updateIndicators();
           queueChange(payload);
         }, 200);
       };
+
+      app.onchange = (event) => {
+        if (handleCapabilityInput(event)) {
+          return;
+        }
+      };
+
+      updateIndicators();
     }
 
     function renderBee(bee, index) {
@@ -796,6 +1046,95 @@ function getScenarioEditorHtml(webview: vscode.Webview): string {
             Interceptors (YAML/JSON)
             <textarea class="mono" wrap="off" data-field="interceptors">\${escapeHtml(bee.interceptors)}</textarea>
           </label>
+          \${renderCapabilities(bee, index)}
+        </div>
+      \`;
+    }
+
+    function renderCapabilities(bee, index) {
+      const header = '<div class="capabilities-header">Capabilities</div>';
+      if (capabilities.status === 'loading') {
+        return \`<div class="capabilities">\${header}<div class="cap-empty">Loading capabilities...</div></div>\`;
+      }
+      if (capabilities.status === 'error') {
+        return \`<div class="capabilities">\${header}<div class="cap-empty">\${escapeHtml(capabilities.error || 'Failed to load capabilities.')}</div></div>\`;
+      }
+      if (!capabilities.index) {
+        return \`<div class="capabilities">\${header}<div class="cap-empty">Capabilities unavailable.</div></div>\`;
+      }
+      const manifest = findManifestForImage(bee.image, capabilities.index);
+      if (!manifest) {
+        return \`<div class="capabilities">\${header}<div class="cap-empty">No capabilities for image: \${escapeHtml(bee.image || 'unknown')}</div></div>\`;
+      }
+      const configData = bee.configData || {};
+      const entries = buildConfigEntriesForComponent(manifest, configData, capabilities.manifests);
+      const visible = entries.filter((entry) => matchesCapabilityWhen(entry.when, (path) => getValueForPath(configData, path)));
+      const groups = groupCapabilityConfigEntries(visible);
+      if (groups.length === 0) {
+        return \`<div class="capabilities">\${header}<div class="cap-empty">No fields available.</div></div>\`;
+      }
+      const groupHtml = groups
+        .map((group) => {
+          const entriesHtml = group.entries
+            .map((entry) => renderCapabilityEntry(entry, configData, index))
+            .join('');
+          return \`<div class="cap-group"><div class="cap-group-title">\${escapeHtml(group.label)}</div>\${entriesHtml}</div>\`;
+        })
+        .join('');
+      return \`<div class="capabilities">\${header}\${groupHtml}</div>\`;
+    }
+
+    function renderCapabilityEntry(entry, configData, beeIndex) {
+      const label = capabilityEntryUiString(entry, 'label') || entry.name;
+      const help = capabilityEntryUiString(entry, 'help');
+      const normalizedType = (entry.type || '').toLowerCase();
+      const options = Array.isArray(entry.options) ? entry.options : undefined;
+      const currentValue = getValueForPath(configData, entry.name);
+      const effectiveValue = currentValue !== undefined ? currentValue : entry.default;
+      let control = '';
+      if (options && options.length > 0) {
+        const value = typeof effectiveValue === 'string' ? effectiveValue : formatCapabilityValue(effectiveValue);
+        control = \`
+          <select data-capability="true" data-bee-index="\${beeIndex}" data-capability-path="\${escapeHtml(entry.name)}" data-capability-type="\${escapeHtml(normalizedType)}">
+            \${options
+              .map((option) => {
+                const optionLabel =
+                  option === null || option === undefined
+                    ? ''
+                    : typeof option === 'string'
+                      ? option
+                      : JSON.stringify(option);
+                const selected = optionLabel === value ? 'selected' : '';
+                return \`<option value="\${escapeHtml(optionLabel)}" \${selected}>\${escapeHtml(optionLabel)}</option>\`;
+              })
+              .join('')}
+          </select>\`;
+      } else if (normalizedType === 'boolean' || normalizedType === 'bool') {
+        const checked = effectiveValue === true ? 'checked' : '';
+        control = \`
+          <label class="cap-label">
+            <input type="checkbox" data-capability="true" data-bee-index="\${beeIndex}" data-capability-path="\${escapeHtml(entry.name)}" data-capability-type="boolean" \${checked} />
+            Enabled
+          </label>\`;
+      } else if (normalizedType === 'json' || entry.multiline || normalizedType === 'text') {
+        const value = formatCapabilityValue(effectiveValue);
+        control = \`
+          <textarea class="mono" rows="3" wrap="off" data-capability="true" data-bee-index="\${beeIndex}" data-capability-path="\${escapeHtml(entry.name)}" data-capability-type="\${escapeHtml(normalizedType)}">\${escapeHtml(value)}</textarea>\`;
+      } else {
+        const inputType = inferCapabilityInputType(normalizedType);
+        const value = formatCapabilityValue(effectiveValue);
+        control = \`
+          <input type="\${inputType}" value="\${escapeHtml(value)}" data-capability="true" data-bee-index="\${beeIndex}" data-capability-path="\${escapeHtml(entry.name)}" data-capability-type="\${escapeHtml(normalizedType)}" />\`;
+      }
+
+      return \`
+        <div class="cap-entry">
+          <div>
+            <div class="cap-label">\${escapeHtml(label)}</div>
+            <div class="cap-path">\${escapeHtml(entry.name)}</div>
+            \${help ? \`<div class="cap-help">\${escapeHtml(help)}</div>\` : ''}
+          </div>
+          <div class="cap-control">\${control}</div>
         </div>
       \`;
     }
@@ -846,9 +1185,357 @@ function getScenarioEditorHtml(webview: vscode.Webview): string {
       vscode.postMessage({ type: 'change', data: payload });
     }
 
+    function queueCapabilityChange(beeIndex, path, value) {
+      const key = beeIndex + ':' + path;
+      const existing = capabilityTimers.get(key);
+      if (existing) {
+        clearTimeout(existing);
+      }
+      const timer = setTimeout(() => {
+        capabilityTimers.delete(key);
+        vscode.postMessage({ type: 'capabilityChange', beeIndex, path, value });
+      }, 250);
+      capabilityTimers.set(key, timer);
+    }
+
+    function handleCapabilityInput(event) {
+      const target = event.target;
+      if (!target || !target.dataset || target.dataset.capability !== 'true') {
+        return false;
+      }
+      const beeIndex = Number(target.dataset.beeIndex || '0');
+      const path = target.dataset.capabilityPath;
+      const type = (target.dataset.capabilityType || '').toLowerCase();
+      if (!path) {
+        return true;
+      }
+
+      let value;
+      if (type === 'boolean' || type === 'bool') {
+        value = Boolean(target.checked);
+      } else if (
+        type === 'int' ||
+        type === 'integer' ||
+        type === 'number' ||
+        type === 'double' ||
+        type === 'float'
+      ) {
+        const raw = String(target.value || '').trim();
+        if (!raw) {
+          value = undefined;
+        } else {
+          const parsed = Number(raw);
+          if (!Number.isFinite(parsed)) {
+            state = { ...state, status: 'parsing' };
+            updateIndicators();
+            return true;
+          }
+          value = parsed;
+        }
+      } else if (type === 'json') {
+        const raw = String(target.value || '').trim();
+        if (!raw) {
+          value = undefined;
+        } else {
+          try {
+            value = JSON.parse(raw);
+          } catch {
+            state = { ...state, status: 'parsing' };
+            updateIndicators();
+            return true;
+          }
+        }
+      } else {
+        value = String(target.value ?? '');
+      }
+
+      state = { ...state, status: 'parsing' };
+      updateIndicators();
+      queueCapabilityChange(beeIndex, path, value);
+      return true;
+    }
+
+    function updateIndicators() {
+      const parsing = app.querySelector('#parsing-indicator');
+      if (parsing) {
+        parsing.style.display = state.status === 'parsing' ? 'inline-flex' : 'none';
+      }
+      const dirty = app.querySelector('#dirty-indicator');
+      if (dirty) {
+        dirty.style.display = state.dirty ? 'inline-flex' : 'none';
+      }
+    }
+
     function getField(container, field) {
       const element = container.querySelector('[data-field="' + field + '"]');
       return element ? element.value : '';
+    }
+
+    function normalizeManifests(data) {
+      if (!Array.isArray(data)) return [];
+      return data.map(normalizeManifest).filter((entry) => entry);
+    }
+
+    function normalizeManifest(entry) {
+      if (!entry || typeof entry !== 'object') return null;
+      const value = entry;
+      if (typeof value.schemaVersion !== 'string' || typeof value.capabilitiesVersion !== 'string') {
+        return null;
+      }
+      const imageValue = value.image && typeof value.image === 'object' ? value.image : {};
+      const image = {
+        name: typeof imageValue.name === 'string' ? imageValue.name : null,
+        tag: typeof imageValue.tag === 'string' ? imageValue.tag : null,
+        digest: typeof imageValue.digest === 'string' ? imageValue.digest : null
+      };
+      const config = Array.isArray(value.config) ? value.config.map(normalizeConfigEntry).filter((item) => item) : [];
+      const role = typeof value.role === 'string' ? value.role : '';
+      const ui = normalizeUi(value.ui);
+      return {
+        schemaVersion: value.schemaVersion,
+        capabilitiesVersion: value.capabilitiesVersion,
+        image,
+        role,
+        config,
+        ui
+      };
+    }
+
+    function normalizeConfigEntry(entry) {
+      if (!entry || typeof entry !== 'object') return null;
+      const value = entry;
+      if (typeof value.name !== 'string' || typeof value.type !== 'string') return null;
+      const options = Array.isArray(value.options) && value.options.length > 0 ? [...value.options] : undefined;
+      return {
+        name: value.name,
+        type: value.type,
+        default: value.default,
+        min: typeof value.min === 'number' ? value.min : undefined,
+        max: typeof value.max === 'number' ? value.max : undefined,
+        multiline: typeof value.multiline === 'boolean' ? value.multiline : undefined,
+        ui: value.ui,
+        when: typeof value.when === 'object' && value.when !== null ? value.when : undefined,
+        options
+      };
+    }
+
+    function normalizeUi(entry) {
+      if (!entry || typeof entry !== 'object') return undefined;
+      return { ...entry };
+    }
+
+    function buildManifestIndex(list) {
+      const byDigest = new Map();
+      const byNameAndTag = new Map();
+      list.forEach((manifest) => {
+        const digest = manifest.image && typeof manifest.image.digest === 'string' ? manifest.image.digest.trim().toLowerCase() : '';
+        if (digest) {
+          byDigest.set(digest, manifest);
+        }
+        const name = manifest.image && typeof manifest.image.name === 'string' ? manifest.image.name.trim().toLowerCase() : '';
+        const tag = manifest.image && typeof manifest.image.tag === 'string' ? manifest.image.tag.trim() : '';
+        if (name && tag) {
+          byNameAndTag.set(name + ':::' + tag, manifest);
+        }
+      });
+      return { byDigest, byNameAndTag };
+    }
+
+    function findManifestForImage(image, index) {
+      const reference = parseImageReference(image);
+      if (!reference) return null;
+      if (reference.digest) {
+        const manifest = index.byDigest.get(reference.digest);
+        if (manifest) return manifest;
+      }
+      if (reference.name && reference.tag) {
+        const directKey = reference.name + ':::' + reference.tag;
+        const direct = index.byNameAndTag.get(directKey);
+        if (direct) return direct;
+        const lastSlash = reference.name.lastIndexOf('/');
+        if (lastSlash >= 0 && lastSlash < reference.name.length - 1) {
+          const simpleName = reference.name.slice(lastSlash + 1);
+          const simpleKey = simpleName + ':::' + reference.tag;
+          const simple = index.byNameAndTag.get(simpleKey);
+          if (simple) return simple;
+        }
+      }
+      return null;
+    }
+
+    function parseImageReference(image) {
+      if (!image || typeof image !== 'string') return null;
+      const trimmed = image.trim();
+      if (!trimmed) return null;
+      let digest = null;
+      let remainder = trimmed;
+      const digestIndex = trimmed.indexOf('@');
+      if (digestIndex >= 0) {
+        digest = trimmed.slice(digestIndex + 1).trim().toLowerCase();
+        remainder = trimmed.slice(0, digestIndex);
+      }
+      remainder = remainder.trim();
+      let namePart = remainder;
+      let tag = null;
+      if (remainder) {
+        const lastColon = remainder.lastIndexOf(':');
+        const lastSlash = remainder.lastIndexOf('/');
+        if (lastColon > lastSlash) {
+          tag = remainder.slice(lastColon + 1).trim() || null;
+          namePart = remainder.slice(0, lastColon);
+        }
+      }
+      const name = namePart ? namePart.trim().toLowerCase() : null;
+      return { name, tag, digest };
+    }
+
+    function formatCapabilityValue(value) {
+      if (value === null || value === undefined) return '';
+      if (typeof value === 'string') return value;
+      if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+      try {
+        return JSON.stringify(value, null, 2);
+      } catch {
+        return '';
+      }
+    }
+
+    function inferCapabilityInputType(type) {
+      const normalized = (type || '').trim().toLowerCase();
+      if (normalized === 'int' || normalized === 'integer' || normalized === 'number' || normalized === 'double' || normalized === 'float') {
+        return 'number';
+      }
+      return 'text';
+    }
+
+    function capabilityEntryUiString(entry, key) {
+      const ui = entry.ui;
+      if (!ui || typeof ui !== 'object') return undefined;
+      const value = ui[key];
+      if (typeof value !== 'string') return undefined;
+      const trimmed = value.trim();
+      return trimmed ? trimmed : undefined;
+    }
+
+    function groupCapabilityConfigEntries(entries) {
+      const groups = new Map();
+      entries.forEach((entry) => {
+        const group = capabilityEntryUiString(entry, 'group') || 'General';
+        const id = group.trim() || 'General';
+        const existing = groups.get(id);
+        if (existing) {
+          existing.entries.push(entry);
+        } else {
+          groups.set(id, { id, label: id, entries: [entry] });
+        }
+      });
+      return Array.from(groups.values());
+    }
+
+    function matchesCapabilityWhen(when, resolveValue) {
+      if (!when || typeof when !== 'object') {
+        return true;
+      }
+      for (const [path, expected] of Object.entries(when)) {
+        const actual = resolveValue(path);
+        if (!matchesExpected(actual, expected)) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    function matchesExpected(actual, expected) {
+      if (Array.isArray(expected)) {
+        return expected.some((value) => matchesExpected(actual, value));
+      }
+      if (actual === undefined || actual === null) {
+        return false;
+      }
+      if (typeof expected === 'string') {
+        const expectedText = expected.trim();
+        if (!expectedText) {
+          return false;
+        }
+        if (typeof actual === 'string') {
+          return actual.trim().toLowerCase() === expectedText.toLowerCase();
+        }
+        return String(actual).trim().toLowerCase() === expectedText.toLowerCase();
+      }
+      if (typeof expected === 'boolean') {
+        if (typeof actual === 'boolean') return actual === expected;
+        if (typeof actual === 'string') {
+          const normalized = actual.trim().toLowerCase();
+          if (normalized === 'true') return expected === true;
+          if (normalized === 'false') return expected === false;
+        }
+        return false;
+      }
+      if (typeof expected === 'number') {
+        if (typeof actual === 'number') return actual === expected;
+        if (typeof actual === 'string') {
+          const parsed = Number(actual);
+          return Number.isFinite(parsed) && parsed === expected;
+        }
+        return false;
+      }
+      return Object.is(actual, expected);
+    }
+
+    function getValueForPath(obj, path) {
+      if (!obj || typeof obj !== 'object') return undefined;
+      const parts = String(path || '').split('.').filter(Boolean);
+      let current = obj;
+      for (const part of parts) {
+        if (!current || typeof current !== 'object' || Array.isArray(current)) {
+          return undefined;
+        }
+        current = current[part];
+      }
+      return current;
+    }
+
+    function inferIoTypeFromConfig(config) {
+      if (!config || typeof config !== 'object' || Array.isArray(config)) {
+        return undefined;
+      }
+      const inputs = config.inputs && typeof config.inputs === 'object' && !Array.isArray(config.inputs) ? config.inputs : undefined;
+      if (!inputs) {
+        return undefined;
+      }
+      const inputType = typeof inputs.type === 'string' ? inputs.type.trim().toUpperCase() : undefined;
+      if (inputType === 'SCHEDULER' || inputType === 'REDIS_DATASET') {
+        return inputType;
+      }
+      const hasScheduler = inputs.scheduler && typeof inputs.scheduler === 'object' && !Array.isArray(inputs.scheduler);
+      const hasRedis = inputs.redis && typeof inputs.redis === 'object' && !Array.isArray(inputs.redis);
+      if (hasScheduler) return 'SCHEDULER';
+      if (hasRedis) return 'REDIS_DATASET';
+      return undefined;
+    }
+
+    function buildConfigEntriesForComponent(manifest, componentConfig, manifests) {
+      const baseEntries = Array.isArray(manifest.config) ? manifest.config : [];
+      const ioType = inferIoTypeFromConfig(componentConfig);
+      if (!ioType) {
+        return baseEntries;
+      }
+      const allEntries = [...baseEntries];
+      manifests.forEach((m) => {
+        const ui = m.ui && typeof m.ui === 'object' ? m.ui : undefined;
+        const ioTypeRaw = ui && typeof ui.ioType === 'string' ? ui.ioType : undefined;
+        const manifestIoType = ioTypeRaw ? ioTypeRaw.trim().toUpperCase() : undefined;
+        if (manifestIoType && manifestIoType === ioType && Array.isArray(m.config)) {
+          allEntries.push(...m.config);
+        }
+      });
+      const byName = new Map();
+      allEntries.forEach((entry) => {
+        if (!byName.has(entry.name)) {
+          byName.set(entry.name, entry);
+        }
+      });
+      return Array.from(byName.values());
     }
 
     function escapeHtml(value) {
