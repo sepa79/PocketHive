@@ -204,6 +204,13 @@ export async function openScenarioRaw(scenarioId?: string | ScenarioSummary | { 
     const outputChannel = getOutputChannel();
     outputChannel.appendLine(`[${new Date().toISOString()}] OPEN scenario ${target} via ${baseUrl}/scenarios/{id}/raw`);
     const uri = scenarioUri(target);
+    try {
+      await vscode.commands.executeCommand('vscode.openWith', uri, 'pockethive.scenarioEditor');
+      return;
+    } catch (error) {
+      outputChannel.appendLine(`[${new Date().toISOString()}] WARN scenario editor failed: ${formatError(error)}`);
+    }
+
     const document = await vscode.workspace.openTextDocument(uri);
     if (document.languageId === 'plaintext') {
       await vscode.languages.setTextDocumentLanguage(document, 'yaml');

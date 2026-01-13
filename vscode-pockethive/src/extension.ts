@@ -15,6 +15,7 @@ import {
   showEntry
 } from './commands';
 import { PREVIEW_SCHEME, SCENARIO_SCHEME } from './constants';
+import { ScenarioEditorProvider } from './editors/scenarioEditor';
 import { configureTimeWindow, loadTimeWindow } from './filterState';
 import { ScenarioFileSystemProvider } from './fs/scenarioFileSystemProvider';
 import { openHelp } from './help';
@@ -39,6 +40,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const settingsProvider = new SettingsProvider();
 
   context.subscriptions.push(
+    ScenarioEditorProvider.register(context),
     vscode.commands.registerCommand('pockethive.addHiveUrl', addHiveUrl),
     vscode.commands.registerCommand('pockethive.setActiveHiveUrl', setActiveHiveUrl),
     vscode.commands.registerCommand('pockethive.removeHiveUrl', removeHiveUrl),

@@ -38,7 +38,8 @@
     "onView:pockethive.hive",
     "onView:pockethive.buzz",
     "onView:pockethive.journal",
-    "onView:pockethive.scenario"
+    "onView:pockethive.scenario",
+    "onCustomEditor:pockethive.scenarioEditor"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -75,6 +76,23 @@
         }
       ]
     },
+    "customEditors": [
+      {
+        "viewType": "pockethive.scenarioEditor",
+        "displayName": "PocketHive Scenario",
+        "selector": [
+          {
+            "scheme": "pockethive-scenario",
+            "filenamePattern": "**/scenario.yaml"
+          },
+          {
+            "scheme": "pockethive-scenario",
+            "filenamePattern": "**/scenario.yml"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
     "commands": [
       {
         "command": "pockethive.addHiveUrl",
@@ -356,5 +374,8 @@
   },
   "overrides": {
     "cheerio": "1.0.0-rc.12"
+  },
+  "dependencies": {
+    "yaml": "^2.4.5"
   }
 }

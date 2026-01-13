@@ -9,7 +9,8 @@ Goal: give junior users a form-first editor for `scenario.yaml` inside VS Code a
 ## MVP scope
 - Scenario info: `id`, `name`, `description`.
 - Bees list (repeatable rows): `role`, `image`, `work.in`, `work.out`.
-- Plan timeline (simple blocks): `hold`, `ramp`, `pause` with `atSec`, `durationSec`, `rate`/`ratio` fields.
+- Per-bee config editing: `config`, `inputs`, `outputs`, `interceptors`.
+- Plan timeline (v1): `plan.bees[].steps` and `plan.swarm[]` with `stepId`, `time` (ISO-8601 duration), `type` (`config-update`/`start`/`stop`), and `config` payload.
 - Read-only raw YAML tab (for visibility only).
 
 ## UX flow (simple)
@@ -17,7 +18,7 @@ Goal: give junior users a form-first editor for `scenario.yaml` inside VS Code a
 2) Top section: Scenario info fields.
 3) Bees section:
    - list with Add / Remove.
-   - each row is a compact form.
+   - each row is a compact form with tabs: Info, Config, Inputs, Outputs, Interceptors.
 4) Plan section:
    - list of blocks with Add / Remove.
    - inline validation (required fields, ranges).
@@ -34,7 +35,7 @@ Goal: give junior users a form-first editor for `scenario.yaml` inside VS Code a
 
 ## Non-goals (for MVP)
 - Full parity with Hive UI.
-- Editing advanced templating blocks, interceptors, or exotic config sections.
+- Editing advanced templating blocks or exotic config sections not covered above.
 - Full visual topology editor.
 
 ## Implementation approach (technical)
