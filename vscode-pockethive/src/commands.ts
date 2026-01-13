@@ -7,9 +7,9 @@ import { formatError } from './format';
 import { scenarioUri } from './fs/scenarioFileSystemProvider';
 import { getOutputChannel } from './output';
 import { pickScenarioId, pickSwarmId } from './pickers';
+import { openJsonPreview } from './preview';
 import { renderScenarioPreviewHtml } from './scenarioPreview';
 import { ScenarioDetail, ScenarioSummary, SwarmSummary } from './types';
-import { openJsonDocument } from './ui';
 
 export async function configureOrchestratorUrl(): Promise<void> {
   const current = getConfigValue('orchestratorUrl');
@@ -100,7 +100,7 @@ export async function openSwarmDetails(swarmId?: string): Promise<void> {
       `/api/swarms/${encodeURIComponent(target)}`
     );
 
-    await openJsonDocument(`Swarm ${target}`, swarm);
+    await openJsonPreview(`Swarm ${target}`, swarm);
   });
 }
 
@@ -149,7 +149,7 @@ export async function previewScenario(scenarioId?: string | ScenarioSummary | { 
 }
 
 export async function showEntry(entry: unknown, title?: string): Promise<void> {
-  await openJsonDocument(title ?? 'Entry', entry);
+  await openJsonPreview(title ?? 'Entry', entry);
 }
 
 async function withService<T>(

@@ -23,6 +23,13 @@
     "onCommand:pockethive.stopSwarm",
     "onCommand:pockethive.removeSwarm",
     "onCommand:pockethive.openOrchestrator",
+    "onCommand:pockethive.filterBuzz",
+    "onCommand:pockethive.filterJournal",
+    "onCommand:pockethive.helpActions",
+    "onCommand:pockethive.helpHive",
+    "onCommand:pockethive.helpBuzz",
+    "onCommand:pockethive.helpJournal",
+    "onCommand:pockethive.helpScenario",
     "onView:pockethive.actions",
     "onView:pockethive.hive",
     "onView:pockethive.buzz",
@@ -139,10 +146,77 @@
         "command": "pockethive.refreshScenario",
         "title": "Refresh Scenario",
         "category": "PocketHive"
+      },
+      {
+        "command": "pockethive.filterBuzz",
+        "title": "Filter Buzz",
+        "category": "PocketHive",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "pockethive.filterJournal",
+        "title": "Filter Journal",
+        "category": "PocketHive",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "pockethive.helpActions",
+        "title": "Help: Actions",
+        "category": "PocketHive",
+        "icon": "$(question)"
+      },
+      {
+        "command": "pockethive.helpHive",
+        "title": "Help: Hive",
+        "category": "PocketHive",
+        "icon": "$(question)"
+      },
+      {
+        "command": "pockethive.helpBuzz",
+        "title": "Help: Buzz",
+        "category": "PocketHive",
+        "icon": "$(question)"
+      },
+      {
+        "command": "pockethive.helpJournal",
+        "title": "Help: Journal",
+        "category": "PocketHive",
+        "icon": "$(question)"
+      },
+      {
+        "command": "pockethive.helpScenario",
+        "title": "Help: Scenario",
+        "category": "PocketHive",
+        "icon": "$(question)"
       }
     ],
     "menus": {
       "view/title": [
+        {
+          "command": "pockethive.helpActions",
+          "when": "view == pockethive.actions",
+          "group": "navigation"
+        },
+        {
+          "command": "pockethive.helpHive",
+          "when": "view == pockethive.hive",
+          "group": "navigation"
+        },
+        {
+          "command": "pockethive.helpBuzz",
+          "when": "view == pockethive.buzz",
+          "group": "navigation"
+        },
+        {
+          "command": "pockethive.helpJournal",
+          "when": "view == pockethive.journal",
+          "group": "navigation"
+        },
+        {
+          "command": "pockethive.helpScenario",
+          "when": "view == pockethive.scenario",
+          "group": "navigation"
+        },
         {
           "command": "pockethive.refreshHive",
           "when": "view == pockethive.hive",

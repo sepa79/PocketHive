@@ -11,9 +11,12 @@ import {
   runSwarmCommand,
   showEntry
 } from './commands';
-import { SCENARIO_SCHEME } from './constants';
+import { PREVIEW_SCHEME, SCENARIO_SCHEME } from './constants';
+import { configureTimeWindow, loadTimeWindow } from './filterState';
 import { ScenarioFileSystemProvider } from './fs/scenarioFileSystemProvider';
+import { openHelp } from './help';
 import { disposeOutputChannel, initOutputChannel } from './output';
+import { initPreviewProvider } from './preview';
 import { ActionsProvider } from './providers/actionsProvider';
 import { BuzzProvider } from './providers/buzzProvider';
 import { HiveProvider } from './providers/hiveProvider';
@@ -24,10 +27,11 @@ export function activate(context: vscode.ExtensionContext): void {
   const outputChannel = initOutputChannel();
   context.subscriptions.push(outputChannel);
 
+  const previewProvider = initPreviewProvider();
   const actionsProvider = new ActionsProvider();
   const hiveProvider = new HiveProvider();
-  const buzzProvider = new BuzzProvider();
-  const journalProvider = new JournalProvider();
+  const buzzProvider = new BuzzProvider(loadTimeWindow(context.workspaceState, 'buzzTimeWindowMs'));
+  const journalProvider = new JournalProvider(loadTimeWindow(context.workspaceState, 'journalTimeWindowMs'));
   const scenarioProvider = new ScenarioProvider();
   const scenarioFsProvider = new ScenarioFileSystemProvider();
 
@@ -47,11 +51,23 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('pockethive.refreshBuzz', () => buzzProvider.refresh()),
     vscode.commands.registerCommand('pockethive.refreshJournal', () => journalProvider.refresh()),
     vscode.commands.registerCommand('pockethive.refreshScenario', () => scenarioProvider.refresh()),
+    vscode.commands.registerCommand('pockethive.filterBuzz', (option) =>
+      configureTimeWindow('Buzz', buzzProvider, context.workspaceState, 'buzzTimeWindowMs', option)
+    ),
+    vscode.commands.registerCommand('pockethive.filterJournal', (option) =>
+      configureTimeWindow('Journal', journalProvider, context.workspaceState, 'journalTimeWindowMs', option)
+    ),
+    vscode.commands.registerCommand('pockethive.helpActions', () => openHelp('actions')),
+    vscode.commands.registerCommand('pockethive.helpHive', () => openHelp('hive')),
+    vscode.commands.registerCommand('pockethive.helpBuzz', () => openHelp('buzz')),
+    vscode.commands.registerCommand('pockethive.helpJournal', () => openHelp('journal')),
+    vscode.commands.registerCommand('pockethive.helpScenario', () => openHelp('scenario')),
     vscode.window.registerTreeDataProvider('pockethive.actions', actionsProvider),
     vscode.window.registerTreeDataProvider('pockethive.hive', hiveProvider),
     vscode.window.registerTreeDataProvider('pockethive.buzz', buzzProvider),
     vscode.window.registerTreeDataProvider('pockethive.journal', journalProvider),
     vscode.window.registerTreeDataProvider('pockethive.scenario', scenarioProvider),
+    vscode.workspace.registerTextDocumentContentProvider(PREVIEW_SCHEME, previewProvider),
     vscode.workspace.registerFileSystemProvider(SCENARIO_SCHEME, scenarioFsProvider, { isCaseSensitive: true })
   );
 }
