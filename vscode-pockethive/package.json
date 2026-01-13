@@ -16,21 +16,25 @@
     "Other"
   ],
   "activationEvents": [
-    "onCommand:pockethive.configureOrchestratorUrl",
-    "onCommand:pockethive.configureScenarioManagerUrl",
+    "onCommand:pockethive.addHiveUrl",
+    "onCommand:pockethive.setActiveHiveUrl",
+    "onCommand:pockethive.removeHiveUrl",
     "onCommand:pockethive.listSwarms",
     "onCommand:pockethive.startSwarm",
     "onCommand:pockethive.stopSwarm",
     "onCommand:pockethive.removeSwarm",
-    "onCommand:pockethive.openOrchestrator",
+    "onCommand:pockethive.startAllSwarms",
+    "onCommand:pockethive.stopAllSwarms",
+    "onCommand:pockethive.openUi",
+    "onCommand:pockethive.openScenarioFile",
     "onCommand:pockethive.filterBuzz",
     "onCommand:pockethive.filterJournal",
-    "onCommand:pockethive.helpActions",
+    "onCommand:pockethive.helpSettings",
     "onCommand:pockethive.helpHive",
     "onCommand:pockethive.helpBuzz",
     "onCommand:pockethive.helpJournal",
     "onCommand:pockethive.helpScenario",
-    "onView:pockethive.actions",
+    "onView:pockethive.settings",
     "onView:pockethive.hive",
     "onView:pockethive.buzz",
     "onView:pockethive.journal",
@@ -50,10 +54,6 @@
     "views": {
       "pockethive": [
         {
-          "id": "pockethive.actions",
-          "name": "Actions"
-        },
-        {
           "id": "pockethive.hive",
           "name": "Hive"
         },
@@ -68,24 +68,47 @@
         {
           "id": "pockethive.scenario",
           "name": "Scenario"
+        },
+        {
+          "id": "pockethive.settings",
+          "name": "Settings"
         }
       ]
     },
     "commands": [
       {
-        "command": "pockethive.configureOrchestratorUrl",
-        "title": "Configure Orchestrator URL",
+        "command": "pockethive.addHiveUrl",
+        "title": "Add Hive URL",
+        "category": "PocketHive",
+        "icon": "$(add)"
+      },
+      {
+        "command": "pockethive.setActiveHiveUrl",
+        "title": "Use Hive URL",
         "category": "PocketHive"
       },
       {
-        "command": "pockethive.configureScenarioManagerUrl",
-        "title": "Configure Scenario Manager URL",
-        "category": "PocketHive"
+        "command": "pockethive.removeHiveUrl",
+        "title": "Delete Hive URL",
+        "category": "PocketHive",
+        "icon": "$(trash)"
       },
       {
         "command": "pockethive.listSwarms",
         "title": "List swarms",
         "category": "PocketHive"
+      },
+      {
+        "command": "pockethive.startAllSwarms",
+        "title": "Start all swarms",
+        "category": "PocketHive",
+        "icon": "$(play)"
+      },
+      {
+        "command": "pockethive.stopAllSwarms",
+        "title": "Stop all swarms",
+        "category": "PocketHive",
+        "icon": "$(debug-stop)"
       },
       {
         "command": "pockethive.openSwarmDetails",
@@ -108,13 +131,18 @@
         "category": "PocketHive"
       },
       {
-        "command": "pockethive.openOrchestrator",
-        "title": "Open Orchestrator",
+        "command": "pockethive.openUi",
+        "title": "Open UI",
         "category": "PocketHive"
       },
       {
         "command": "pockethive.openScenarioRaw",
         "title": "Open scenario",
+        "category": "PocketHive"
+      },
+      {
+        "command": "pockethive.openScenarioFile",
+        "title": "Open scenario file",
         "category": "PocketHive"
       },
       {
@@ -160,12 +188,6 @@
         "icon": "$(filter)"
       },
       {
-        "command": "pockethive.helpActions",
-        "title": "Help: Actions",
-        "category": "PocketHive",
-        "icon": "$(question)"
-      },
-      {
         "command": "pockethive.helpHive",
         "title": "Help: Hive",
         "category": "PocketHive",
@@ -188,17 +210,33 @@
         "title": "Help: Scenario",
         "category": "PocketHive",
         "icon": "$(question)"
+      },
+      {
+        "command": "pockethive.helpSettings",
+        "title": "Help: Settings",
+        "category": "PocketHive",
+        "icon": "$(question)"
       }
     ],
     "menus": {
       "view/title": [
         {
-          "command": "pockethive.helpActions",
-          "when": "view == pockethive.actions",
+          "command": "pockethive.helpHive",
+          "when": "view == pockethive.hive",
           "group": "navigation"
         },
         {
-          "command": "pockethive.helpHive",
+          "command": "pockethive.startAllSwarms",
+          "when": "view == pockethive.hive",
+          "group": "navigation"
+        },
+        {
+          "command": "pockethive.stopAllSwarms",
+          "when": "view == pockethive.hive",
+          "group": "navigation"
+        },
+        {
+          "command": "pockethive.openUi",
           "when": "view == pockethive.hive",
           "group": "navigation"
         },
@@ -215,6 +253,11 @@
         {
           "command": "pockethive.helpScenario",
           "when": "view == pockethive.scenario",
+          "group": "navigation"
+        },
+        {
+          "command": "pockethive.helpSettings",
+          "when": "view == pockethive.settings",
           "group": "navigation"
         },
         {
@@ -243,21 +286,54 @@
           "command": "pockethive.previewScenario",
           "when": "view == pockethive.scenario && viewItem == scenarioItem",
           "group": "navigation"
+        },
+        {
+          "command": "pockethive.setActiveHiveUrl",
+          "when": "view == pockethive.settings && viewItem == hiveInstance",
+          "group": "inline"
+        },
+        {
+          "command": "pockethive.removeHiveUrl",
+          "when": "view == pockethive.settings && viewItem == hiveInstance",
+          "group": "inline"
+        },
+        {
+          "command": "pockethive.removeHiveUrl",
+          "when": "view == pockethive.settings && viewItem == hiveInstanceActive",
+          "group": "inline"
+        },
+        {
+          "command": "pockethive.startSwarm",
+          "when": "view == pockethive.hive && viewItem == swarmItem",
+          "group": "inline"
+        },
+        {
+          "command": "pockethive.stopSwarm",
+          "when": "view == pockethive.hive && viewItem == swarmItem",
+          "group": "inline"
+        },
+        {
+          "command": "pockethive.removeSwarm",
+          "when": "view == pockethive.hive && viewItem == swarmItem",
+          "group": "inline"
         }
       ]
     },
     "configuration": {
       "title": "PocketHive",
       "properties": {
-        "pockethive.orchestratorUrl": {
-          "type": "string",
-          "default": "http://localhost:8088/orchestrator",
-          "description": "Orchestrator base URL, e.g. http://localhost:8088/orchestrator"
+        "pockethive.hiveUrls": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "List of Hive base URLs (reverse proxy root), e.g. http://localhost:8088"
         },
-        "pockethive.scenarioManagerUrl": {
+        "pockethive.activeHiveUrl": {
           "type": "string",
-          "default": "http://localhost:8088/scenario-manager",
-          "description": "Scenario Manager base URL, e.g. http://localhost:8088/scenario-manager"
+          "default": "",
+          "description": "Active Hive base URL from the list."
         },
         "pockethive.authToken": {
           "type": "string",

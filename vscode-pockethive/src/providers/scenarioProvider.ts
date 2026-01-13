@@ -5,7 +5,11 @@ import { resolveServiceConfig } from '../config';
 import { formatError } from '../format';
 import { ScenarioSummary } from '../types';
 
-type ScenarioNode = { kind: 'scenario'; scenario: ScenarioSummary } | { kind: 'message'; message: string };
+type ScenarioNode =
+  | { kind: 'scenario'; scenario: ScenarioSummary }
+  | { kind: 'folder'; scenarioId: string; label: string; folder: 'schemas' | 'http-templates' }
+  | { kind: 'file'; scenarioId: string; label: string; fileType: 'scenario' | 'schema' | 'http-template'; path?: string }
+  | { kind: 'message'; message: string };
 
 export class ScenarioProvider implements vscode.TreeDataProvider<ScenarioNode> {
   private readonly emitter = new vscode.EventEmitter<ScenarioNode | undefined>();
@@ -20,24 +24,90 @@ export class ScenarioProvider implements vscode.TreeDataProvider<ScenarioNode> {
       return new vscode.TreeItem(element.message, vscode.TreeItemCollapsibleState.None);
     }
 
-    const label = element.scenario.name || element.scenario.id;
-    const item = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.None);
-    if (element.scenario.name && element.scenario.name !== element.scenario.id) {
-      item.description = element.scenario.id;
+    if (element.kind === 'scenario') {
+      const label = element.scenario.name || element.scenario.id;
+      const item = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.Collapsed);
+      if (element.scenario.name && element.scenario.name !== element.scenario.id) {
+        item.description = element.scenario.id;
+      }
+      item.contextValue = 'scenarioItem';
+      return item;
     }
-    item.contextValue = 'scenarioItem';
+
+    if (element.kind === 'folder') {
+      const item = new vscode.TreeItem(element.label, vscode.TreeItemCollapsibleState.Collapsed);
+      item.iconPath = new vscode.ThemeIcon('folder');
+      return item;
+    }
+
+    const item = new vscode.TreeItem(element.label, vscode.TreeItemCollapsibleState.None);
+    item.iconPath = new vscode.ThemeIcon('file');
     item.command = {
-      command: 'pockethive.openScenarioRaw',
-      title: 'Open scenario',
-      arguments: [element.scenario.id]
+      command: 'pockethive.openScenarioFile',
+      title: 'Open scenario file',
+      arguments: [{ scenarioId: element.scenarioId, kind: element.fileType, path: element.path }]
     };
     return item;
   }
 
-  async getChildren(): Promise<ScenarioNode[]> {
+  async getChildren(element?: ScenarioNode): Promise<ScenarioNode[]> {
     const config = resolveServiceConfig('scenarioManagerUrl');
     if ('error' in config) {
       return [{ kind: 'message', message: config.error }];
+    }
+
+    if (element?.kind === 'scenario') {
+      return [
+        { kind: 'file', scenarioId: element.scenario.id, label: 'scenario.yaml', fileType: 'scenario' },
+        { kind: 'folder', scenarioId: element.scenario.id, label: 'schemas', folder: 'schemas' },
+        { kind: 'folder', scenarioId: element.scenario.id, label: 'http-templates', folder: 'http-templates' }
+      ];
+    }
+
+    if (element?.kind === 'folder') {
+      try {
+        if (element.folder === 'schemas') {
+          const files = await requestJson<string[]>(
+            config.baseUrl,
+            config.authToken,
+            'GET',
+            `/scenarios/${encodeURIComponent(element.scenarioId)}/schemas`
+          );
+          if (!files.length) {
+            return [{ kind: 'message', message: 'No schema files.' }];
+          }
+          return files.map((path) => ({
+            kind: 'file',
+            scenarioId: element.scenarioId,
+            label: path,
+            fileType: 'schema',
+            path
+          }));
+        }
+
+        const files = await requestJson<string[]>(
+          config.baseUrl,
+          config.authToken,
+          'GET',
+          `/scenarios/${encodeURIComponent(element.scenarioId)}/http-templates`
+        );
+        if (!files.length) {
+          return [{ kind: 'message', message: 'No HTTP templates.' }];
+        }
+        return files.map((path) => ({
+          kind: 'file',
+          scenarioId: element.scenarioId,
+          label: path,
+          fileType: 'http-template',
+          path
+        }));
+      } catch (error) {
+        return [{ kind: 'message', message: `Failed to load files: ${formatError(error)}` }];
+      }
+    }
+
+    if (element) {
+      return [];
     }
 
     try {

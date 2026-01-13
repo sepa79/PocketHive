@@ -33,7 +33,12 @@ export function initPreviewProvider(): PreviewProvider {
   return provider;
 }
 
-export async function openPreviewDocument(title: string, content: string, language?: string): Promise<void> {
+export async function openPreviewDocument(
+  title: string,
+  content: string,
+  language?: string,
+  preview = true
+): Promise<void> {
   if (!provider) {
     throw new Error('Preview provider not initialized.');
   }
@@ -42,13 +47,13 @@ export async function openPreviewDocument(title: string, content: string, langua
   if (language) {
     await vscode.languages.setTextDocumentLanguage(document, language);
   }
-  await vscode.window.showTextDocument(document, { preview: false });
+  await vscode.window.showTextDocument(document, { preview });
   const outputChannel = getOutputChannel();
   outputChannel.appendLine(`[${new Date().toISOString()}] OPEN ${title}`);
   outputChannel.show(true);
 }
 
-export async function openJsonPreview(title: string, data: unknown): Promise<void> {
+export async function openJsonPreview(title: string, data: unknown, preview = true): Promise<void> {
   const content = JSON.stringify(data, null, 2);
-  await openPreviewDocument(title, content, 'json');
+  await openPreviewDocument(title, content, 'json', preview);
 }

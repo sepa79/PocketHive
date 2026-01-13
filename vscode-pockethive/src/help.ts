@@ -1,6 +1,6 @@
 import { openPreviewDocument } from './preview';
 
-type HelpTopic = 'actions' | 'hive' | 'buzz' | 'journal' | 'scenario';
+type HelpTopic = 'settings' | 'hive' | 'buzz' | 'journal' | 'scenario';
 
 type HelpContent = {
   title: string;
@@ -8,13 +8,13 @@ type HelpContent = {
 };
 
 const HELP_CONTENT: Record<HelpTopic, HelpContent> = {
-  actions: {
-    title: 'PocketHive: Actions panel',
-    body: `# Actions panel\n\nQuick commands for the PocketHive stack.\n\n- Configure Orchestrator URL\n- Configure Scenario Manager URL\n- List swarms\n- Start/Stop/Remove swarm\n- Open Orchestrator\n\nUse this panel to confirm connectivity and perform quick lifecycle tasks without leaving VS Code.\n`
+  settings: {
+    title: 'PocketHive: Settings panel',
+    body: `# Settings panel\n\nManage Hive base URLs for PocketHive.\n\n- Add Hive URL\n- Click an entry to set it active\n- Delete unused instances from the context menu\n\nThe extension derives Orchestrator and Scenario Manager endpoints from the active Hive URL.\n`
   },
   hive: {
     title: 'PocketHive: Hive panel',
-    body: `# Hive panel\n\nShows the current swarms known to the Orchestrator.\n\n- Each swarm node shows status/health.\n- Expand a swarm to start/stop/remove it.\n- Click a swarm to open details (raw JSON).\n\nUse this panel to manage swarm lifecycle at a glance.\n`
+    body: `# Hive panel\n\nShows the current swarms known to the Orchestrator.\n\n- Toolbar actions start/stop all swarms and open the UI.\n- Each swarm row has inline start/stop/remove actions (remove asks for confirmation).\n- Click a swarm to open details (raw JSON).\n\nUse this panel to manage swarm lifecycle at a glance.\n`
   },
   buzz: {
     title: 'PocketHive: Buzz panel',
@@ -26,7 +26,7 @@ const HELP_CONTENT: Record<HelpTopic, HelpContent> = {
   },
   scenario: {
     title: 'PocketHive: Scenario panel',
-    body: `# Scenario panel\n\nLists scenarios from Scenario Manager.\n\n- Click a scenario to open the raw YAML editor.\n- Use Preview to see a quick summary of bees and images.\n\nUse this panel to browse and edit scenarios directly from VS Code.\n`
+    body: `# Scenario panel\n\nLists scenarios from Scenario Manager.\n\n- Expand a scenario to browse its files (scenario.yaml, schemas, http-templates).\n- Click a file to open it (raw YAML for scenario, read-only preview for others).\n- Use Preview to see a quick summary of bees and images.\n\nUse this panel to browse and edit scenarios directly from VS Code.\n`
   }
 };
 

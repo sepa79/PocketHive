@@ -13,6 +13,8 @@ Thumbs.db
 .idea/
 *.iml
 .vscode/
+!vscode-pockethive/.vscode/
+!vscode-pockethive/.vscode/launch.json
 .project
 .classpath
 .settings/

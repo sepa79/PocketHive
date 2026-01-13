@@ -1,48 +1,90 @@
 import * as vscode from 'vscode';
 import { randomUUID } from 'crypto';
 
-import { requestJson } from './api';
-import { getConfigValue, resolveServiceConfig } from './config';
+import { requestJson, requestText } from './api';
+import {
+  getActiveHiveUrl,
+  getHiveUrls,
+  normalizeHiveUrl,
+  resolveHiveBaseUrl,
+  resolveServiceConfig,
+  updateActiveHiveUrl,
+  updateHiveUrls
+} from './config';
 import { formatError } from './format';
 import { scenarioUri } from './fs/scenarioFileSystemProvider';
 import { getOutputChannel } from './output';
 import { pickScenarioId, pickSwarmId } from './pickers';
-import { openJsonPreview } from './preview';
+import { openJsonPreview, openPreviewDocument } from './preview';
 import { renderScenarioPreviewHtml } from './scenarioPreview';
 import { ScenarioDetail, ScenarioSummary, SwarmSummary } from './types';
 
-export async function configureOrchestratorUrl(): Promise<void> {
-  const current = getConfigValue('orchestratorUrl');
+type ScenarioFileTarget = {
+  scenarioId: string;
+  kind: 'scenario' | 'schema' | 'http-template';
+  path?: string;
+};
+
+export async function addHiveUrl(): Promise<void> {
   const next = await vscode.window.showInputBox({
-    prompt: 'Orchestrator base URL (example: http://localhost:8088/orchestrator)',
-    value: current,
+    prompt: 'Hive base URL (example: http://localhost:8088)',
+    value: getActiveHiveUrl() ?? undefined,
     ignoreFocusOut: true,
-    validateInput: (value) => (value.trim().length === 0 ? 'Orchestrator URL is required.' : null)
+    validateInput: (value) => (value.trim().length === 0 ? 'Hive URL is required.' : null)
   });
 
   if (!next) {
     return;
   }
 
-  await vscode.workspace.getConfiguration('pockethive').update('orchestratorUrl', next.trim(), true);
-  vscode.window.showInformationMessage('PocketHive: Orchestrator URL updated.');
+  const normalized = normalizeHiveUrl(next);
+  if (!normalized) {
+    vscode.window.showErrorMessage('PocketHive: Hive URL is invalid.');
+    return;
+  }
+
+  const existing = getHiveUrls();
+  const updated = [normalized, ...existing.filter((url) => url !== normalized)];
+  await updateHiveUrls(updated);
+  await updateActiveHiveUrl(normalized);
+  vscode.window.showInformationMessage(`PocketHive: Hive URL added (${normalized}).`);
 }
 
-export async function configureScenarioManagerUrl(): Promise<void> {
-  const current = getConfigValue('scenarioManagerUrl');
-  const next = await vscode.window.showInputBox({
-    prompt: 'Scenario Manager base URL (example: http://localhost:8088/scenario-manager)',
-    value: current,
-    ignoreFocusOut: true,
-    validateInput: (value) => (value.trim().length === 0 ? 'Scenario Manager URL is required.' : null)
-  });
-
-  if (!next) {
+export async function setActiveHiveUrl(target: unknown): Promise<void> {
+  const url = resolveHiveUrl(target);
+  if (!url) {
+    vscode.window.showErrorMessage('PocketHive: Hive URL is required.');
     return;
   }
+  await updateActiveHiveUrl(url);
+  vscode.window.showInformationMessage(`PocketHive: active Hive URL set to ${url}.`);
+}
 
-  await vscode.workspace.getConfiguration('pockethive').update('scenarioManagerUrl', next.trim(), true);
-  vscode.window.showInformationMessage('PocketHive: Scenario Manager URL updated.');
+export async function removeHiveUrl(target: unknown): Promise<void> {
+  const url = resolveHiveUrl(target);
+  if (!url) {
+    vscode.window.showErrorMessage('PocketHive: Hive URL is required.');
+    return;
+  }
+  const choice = await vscode.window.showWarningMessage(
+    `Remove Hive URL '${url}'?`,
+    { modal: true },
+    'Remove'
+  );
+  if (choice !== 'Remove') {
+    return;
+  }
+  const existing = getHiveUrls();
+  const updated = existing.filter((entry) => entry !== url);
+  await updateHiveUrls(updated);
+  const active = getActiveHiveUrl();
+  if (active === url) {
+    const next = updated[0] ?? null;
+    await updateActiveHiveUrl(next);
+    if (next) {
+      vscode.window.showInformationMessage(`PocketHive: active Hive URL set to ${next}.`);
+    }
+  }
 }
 
 export async function listSwarms(): Promise<void> {
@@ -56,11 +98,22 @@ export async function listSwarms(): Promise<void> {
   });
 }
 
-export async function runSwarmCommand(action: 'start' | 'stop' | 'remove', swarmId?: string): Promise<void> {
+export async function runSwarmCommand(action: 'start' | 'stop' | 'remove', swarmTarget?: unknown): Promise<void> {
   await withService('orchestratorUrl', async (baseUrl, authToken) => {
-    const target = swarmId ?? (await pickSwarmId(baseUrl, authToken));
+    const target = resolveSwarmId(swarmTarget) ?? (await pickSwarmId(baseUrl, authToken));
     if (!target) {
       return;
+    }
+
+    if (action === 'remove') {
+      const choice = await vscode.window.showWarningMessage(
+        `Remove swarm '${target}'? This will delete queues and stop the controller.`,
+        { modal: true },
+        'Remove'
+      );
+      if (choice !== 'Remove') {
+        return;
+      }
     }
 
     const body = { idempotencyKey: randomUUID() };
@@ -80,10 +133,47 @@ export async function runSwarmCommand(action: 'start' | 'stop' | 'remove', swarm
   });
 }
 
-export async function openOrchestrator(): Promise<void> {
-  await withService('orchestratorUrl', async (baseUrl) => {
-    await vscode.env.openExternal(vscode.Uri.parse(baseUrl));
+export async function runAllSwarms(action: 'start' | 'stop'): Promise<void> {
+  await withService('orchestratorUrl', async (baseUrl, authToken) => {
+    const swarms = await requestJson<SwarmSummary[]>(baseUrl, authToken, 'GET', '/api/swarms');
+    if (!swarms.length) {
+      vscode.window.showInformationMessage('PocketHive: No swarms found.');
+      return;
+    }
+    const outputChannel = getOutputChannel();
+    outputChannel.appendLine(`[${new Date().toISOString()}] ${action.toUpperCase()} all swarms (${swarms.length})`);
+    const failures: string[] = [];
+    for (const swarm of swarms) {
+      try {
+        await requestJson<Record<string, unknown>>(
+          baseUrl,
+          authToken,
+          'POST',
+          `/api/swarms/${encodeURIComponent(swarm.id)}/${action}`,
+          { idempotencyKey: randomUUID() }
+        );
+      } catch (error) {
+        failures.push(`${swarm.id}: ${formatError(error)}`);
+      }
+    }
+    if (failures.length > 0) {
+      outputChannel.appendLine(`[${new Date().toISOString()}] WARN failures:`);
+      failures.forEach((line) => outputChannel.appendLine(line));
+      outputChannel.show(true);
+      vscode.window.showWarningMessage(`PocketHive: ${failures.length} swarms failed to ${action}.`);
+    } else {
+      vscode.window.showInformationMessage(`PocketHive: ${action} sent to ${swarms.length} swarms.`);
+    }
   });
+}
+
+export async function openUi(): Promise<void> {
+  const base = resolveHiveBaseUrl();
+  if ('error' in base) {
+    vscode.window.showErrorMessage(base.error);
+    return;
+  }
+  await vscode.env.openExternal(vscode.Uri.parse(base.baseUrl));
 }
 
 export async function openSwarmDetails(swarmId?: string): Promise<void> {
@@ -118,7 +208,7 @@ export async function openScenarioRaw(scenarioId?: string | ScenarioSummary | { 
     if (document.languageId === 'plaintext') {
       await vscode.languages.setTextDocumentLanguage(document, 'yaml');
     }
-    await vscode.window.showTextDocument(document, { preview: false });
+    await vscode.window.showTextDocument(document, { preview: true });
   });
 }
 
@@ -145,6 +235,37 @@ export async function previewScenario(scenarioId?: string | ScenarioSummary | { 
       { enableFindWidget: true }
     );
     panel.webview.html = renderScenarioPreviewHtml(scenario);
+  });
+}
+
+export async function openScenarioFile(target: ScenarioFileTarget): Promise<void> {
+  if (!target?.scenarioId) {
+    vscode.window.showErrorMessage('PocketHive: scenario id is required.');
+    return;
+  }
+
+  if (target.kind === 'scenario') {
+    await openScenarioRaw(target.scenarioId);
+    return;
+  }
+
+  if (!target.path) {
+    vscode.window.showErrorMessage('PocketHive: file path is required.');
+    return;
+  }
+  const filePath = target.path;
+
+  await withService('scenarioManagerUrl', async (baseUrl, authToken) => {
+    const outputChannel = getOutputChannel();
+    const endpoint =
+      target.kind === 'schema'
+        ? `/scenarios/${encodeURIComponent(target.scenarioId)}/schema?path=${encodeURIComponent(filePath)}`
+        : `/scenarios/${encodeURIComponent(target.scenarioId)}/http-template?path=${encodeURIComponent(filePath)}`;
+    outputChannel.appendLine(`[${new Date().toISOString()}] OPEN scenario file ${endpoint}`);
+    const text = await requestText(baseUrl, authToken, 'GET', endpoint);
+    const title = `${target.scenarioId}/${filePath}`;
+    const language = target.kind === 'schema' ? 'json' : 'yaml';
+    await openPreviewDocument(title, text, language);
   });
 }
 
@@ -192,6 +313,43 @@ function resolveScenarioId(arg: unknown): string | undefined {
         const id = (scenario as { id?: unknown }).id;
         return typeof id === 'string' ? id : undefined;
       }
+    }
+  }
+  return undefined;
+}
+
+function resolveSwarmId(arg: unknown): string | undefined {
+  if (!arg) {
+    return undefined;
+  }
+  if (typeof arg === 'string') {
+    return arg;
+  }
+  if (typeof arg === 'object') {
+    if ('id' in arg && typeof (arg as { id?: unknown }).id === 'string') {
+      return (arg as { id: string }).id;
+    }
+    if ('swarm' in arg) {
+      const swarm = (arg as { swarm?: unknown }).swarm;
+      if (swarm && typeof swarm === 'object' && 'id' in swarm) {
+        const id = (swarm as { id?: unknown }).id;
+        return typeof id === 'string' ? id : undefined;
+      }
+    }
+  }
+  return undefined;
+}
+
+function resolveHiveUrl(arg: unknown): string | undefined {
+  if (!arg) {
+    return undefined;
+  }
+  if (typeof arg === 'string') {
+    return arg;
+  }
+  if (typeof arg === 'object') {
+    if ('url' in arg && typeof (arg as { url?: unknown }).url === 'string') {
+      return (arg as { url: string }).url;
     }
   }
   return undefined;
