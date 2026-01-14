@@ -268,6 +268,7 @@ class RequestBuilderWorkerImplTest {
     private final WorkerInfo info = new WorkerInfo(
         "request-builder",
         WORKER_PROPERTIES.getSwarmId(),
+      "swarm-inst-1",
         WORKER_PROPERTIES.getInstanceId(),
         ControlPlaneTestFixtures.workerQueue(WORKER_PROPERTIES.getSwarmId(), "request-builder"),
         null
