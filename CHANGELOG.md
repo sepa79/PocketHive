@@ -13,7 +13,7 @@ Timestamp: 2026-01-14T12:01:27Z
 - Control-plane: align status metrics with canonical envelopes, treat NotReady outcomes as non-fatal, and expose explicit status-full on request.
 - Control-plane hardening: add schema validation, alert routing updates, and contract E2E coverage.
 - UI v2: introduce shell scaffold, control-plane tooling (gateway + schema registry), wire-log view/refresh, and toolbar/navigation polish.
-- Scenario editor: add custom YAML editor and keep edits synced with scenario files.
+- Scenario editor: add custom YAML editor, keep edits synced with scenario files, and introduce the VS Code plugin scaffold for authoring.
 - Docs/tooling: add template capabilities contract and align control-plane migration docs; archive legacy scenario builder artifacts.
 - Common cleanup: remove unused helpers (`AsyncApiSchemaValidator`, `ScopeContext`, `TemplatingConfig`, `WorkerSdkTestFixtures`).
 
