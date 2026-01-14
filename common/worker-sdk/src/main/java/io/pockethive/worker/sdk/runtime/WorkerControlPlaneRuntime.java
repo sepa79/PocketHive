@@ -16,6 +16,7 @@ import io.pockethive.controlplane.worker.WorkerStatusRequest;
 import io.pockethive.worker.sdk.api.StatusPublisher;
 import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
+import io.pockethive.worker.sdk.config.RedisSequenceConfiguration;
 import io.pockethive.worker.sdk.config.WorkerCapability;
 import io.pockethive.worker.sdk.config.WorkerInputType;
 import io.pockethive.worker.sdk.config.WorkerOutputType;
@@ -262,6 +263,7 @@ public final class WorkerControlPlaneRuntime {
         Object typedConfig = ensureTypedDefault(state.definition(), defaultConfig, rawConfig);
         if (state.seedConfig(typedConfig, enabled)) {
             state.updateRawConfig(rawConfig);
+            RedisSequenceConfiguration.configureFromWorkerConfig(rawConfig);
             ensureStatusPublisher(state);
             notifier.logInitialConfig(state, rawConfig, enabled);
             notifyStateListeners(state);
@@ -364,6 +366,7 @@ public final class WorkerControlPlaneRuntime {
                 }
                 state.updateConfig(mergeResult.typedConfig(), mergeResult.replaced(), enabled);
                 state.updateRawConfig(mergeResult.rawConfig());
+                RedisSequenceConfiguration.configureFromWorkerConfig(mergeResult.rawConfig());
                 Map<String, Object> appliedConfig = mergeResult.replaced() ? mergeResult.rawConfig() : Map.of();
                 if (hasCorrelation(signal)) {
                     notifier.emitConfigReady(signal, state, appliedConfig, enabled);
