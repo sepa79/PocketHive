@@ -87,12 +87,12 @@ public final class ControlPlaneTestFixtures {
     }
 
     public static ControlPlaneIdentity workerIdentity(String swarmId, String role, String instanceId) {
-        return new ControlPlaneIdentity(requireText("swarmId", swarmId), null, requireText("role", role),
+        return new ControlPlaneIdentity(requireText("swarmId", swarmId), requireText("role", role),
             requireText("instanceId", instanceId));
     }
 
     public static ControlPlaneIdentity managerIdentity(String swarmId, String role, String instanceId) {
-        return new ControlPlaneIdentity(requireText("swarmId", swarmId), null, requireText("role", role),
+        return new ControlPlaneIdentity(requireText("swarmId", swarmId), requireText("role", role),
             requireText("instanceId", instanceId));
     }
 

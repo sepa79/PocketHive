@@ -21,7 +21,7 @@ class ManagerControlPlaneTest {
     void defaultsProcessSignals() throws Exception {
         RecordingPublisher publisher = new RecordingPublisher();
         ManagerControlPlane plane = ManagerControlPlane.builder(publisher, mapper)
-            .identity(new io.pockethive.controlplane.ControlPlaneIdentity("swarm", null, "role", "inst"))
+            .identity(new io.pockethive.controlplane.ControlPlaneIdentity("swarm", "role", "inst"))
             .build();
 
         ControlSignal signal = ControlSignal.forInstance(
@@ -39,7 +39,7 @@ class ManagerControlPlaneTest {
     void canSkipSelfSignalsWhenConfigured() throws Exception {
         RecordingPublisher publisher = new RecordingPublisher();
         ManagerControlPlane plane = ManagerControlPlane.builder(publisher, mapper)
-            .identity(new io.pockethive.controlplane.ControlPlaneIdentity("swarm", null, "role", "inst"))
+            .identity(new io.pockethive.controlplane.ControlPlaneIdentity("swarm", "role", "inst"))
             .selfFilter(SelfFilter.skipSelfInstance())
             .build();
 
@@ -58,7 +58,7 @@ class ManagerControlPlaneTest {
     void processesSignalsFromOtherOriginsWhenSkippingSelf() throws Exception {
         RecordingPublisher publisher = new RecordingPublisher();
         ManagerControlPlane plane = ManagerControlPlane.builder(publisher, mapper)
-            .identity(new io.pockethive.controlplane.ControlPlaneIdentity("swarm", null, "role", "inst"))
+            .identity(new io.pockethive.controlplane.ControlPlaneIdentity("swarm", "role", "inst"))
             .selfFilter(SelfFilter.skipSelfInstance())
             .build();
 
@@ -77,7 +77,7 @@ class ManagerControlPlaneTest {
     void duplicateCacheConfiguredWhenRequested() {
         RecordingPublisher publisher = new RecordingPublisher();
         ManagerControlPlane plane = ManagerControlPlane.builder(publisher, mapper)
-            .identity(new io.pockethive.controlplane.ControlPlaneIdentity("swarm", null, "role", "inst"))
+            .identity(new io.pockethive.controlplane.ControlPlaneIdentity("swarm", "role", "inst"))
             .duplicateCache(Duration.ofSeconds(30), 16)
             .build();
 

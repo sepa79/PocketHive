@@ -101,9 +101,6 @@ public final class DefaultWorkerContextFactory implements WorkerContextFactory {
         String swarmId = resolveIdentifier(message, "swarmId",
             configuredIdentity != null ? configuredIdentity.swarmId() : null,
             "swarmId");
-        String swarmInstanceId = resolveIdentifier(message, "swarmInstanceId",
-            configuredIdentity != null ? configuredIdentity.swarmInstanceId() : null,
-            "swarmInstanceId");
         String instanceId = resolveIdentifier(message, "instanceId",
             configuredIdentity != null ? configuredIdentity.instanceId() : null,
             "instanceId");
@@ -111,7 +108,6 @@ public final class DefaultWorkerContextFactory implements WorkerContextFactory {
         WorkerInfo info = new WorkerInfo(
             definition.role(),
             swarmId,
-            swarmInstanceId,
             instanceId,
             io.inboundQueue(),
             io.outboundQueue()

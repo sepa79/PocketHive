@@ -49,7 +49,7 @@ class WorkerControlPlaneRuntimeTest {
 	        .findAndRegisterModules()
 	        .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 	    private static final String SWARM_ID = "default";
-	    private static final ControlPlaneIdentity IDENTITY = new ControlPlaneIdentity(SWARM_ID, null, "generator", "inst-1");
+	    private static final ControlPlaneIdentity IDENTITY = new ControlPlaneIdentity(SWARM_ID, "generator", "inst-1");
 	    private static final String ORIGIN = "orchestrator-1";
 	    private static final WorkerControlPlaneProperties PROPERTIES =
 	        ControlPlaneTestFixtures.workerProperties(SWARM_ID, "generator", "inst-1");

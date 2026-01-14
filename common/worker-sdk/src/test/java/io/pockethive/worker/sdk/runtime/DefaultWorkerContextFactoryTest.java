@@ -40,14 +40,13 @@ class DefaultWorkerContextFactoryTest {
         },
         new SimpleMeterRegistry(),
         ObservationRegistry.create(),
-        new ControlPlaneIdentity("swarm-config", "swarm-inst-config", DEFINITION.role(), "instance-config")
+        new ControlPlaneIdentity("swarm-config", DEFINITION.role(), "instance-config")
     );
 
     @Test
     void generatesObservabilityContextWhenMissing() {
         WorkItem message = WorkItem.text("payload")
             .header("swarmId", "swarm-1")
-            .header("swarmInstanceId", "swarm-inst-1")
             .header("instanceId", "instance-1")
             .build();
 
@@ -69,7 +68,6 @@ class DefaultWorkerContextFactoryTest {
 
         WorkItem message = WorkItem.text("payload")
             .header("swarmId", "swarm-2")
-            .header("swarmInstanceId", "swarm-inst-2")
             .header("instanceId", "instance-2")
             .observabilityContext(inbound)
             .build();

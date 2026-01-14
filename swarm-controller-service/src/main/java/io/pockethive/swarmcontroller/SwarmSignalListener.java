@@ -94,13 +94,12 @@ public class SwarmSignalListener {
     this.journal = journal != null ? journal : SwarmJournal.noop();
     ControlPlanePublisher basePublisher = new AmqpControlPlanePublisher(rabbit, controlExchange);
     ControlPlanePublisher publisher = new JournalControlPlanePublisher(this.mapper, this.journal, basePublisher);
-    // swarmInstanceId is null because the controller manages the swarm rather than participating as a worker within a specific instance.
     this.controlPlane = ManagerControlPlane.builder(publisher, this.mapper)
-        .identity(new ControlPlaneIdentity(swarmId, null, role, instanceId))
+        .identity(new ControlPlaneIdentity(swarmId, role, instanceId))
         .duplicateCache(java.time.Duration.ofMinutes(1), 256)
         .build();
     this.emitter = io.pockethive.controlplane.messaging.ControlPlaneEmitter.swarmController(
-        new ControlPlaneIdentity(swarmId, null, role, instanceId),
+        new ControlPlaneIdentity(swarmId, role, instanceId),
         publisher,
         new io.pockethive.controlplane.topology.ControlPlaneTopologySettings(
             swarmId,

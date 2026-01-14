@@ -41,7 +41,7 @@ class RabbitConfigTest {
                     new OrchestratorProperties.Http(Duration.ofSeconds(5), Duration.ofSeconds(30)))));
 
         OrchestratorControlPlaneConfig config = new OrchestratorControlPlaneConfig(controlPlane, properties);
-        ControlPlaneIdentity identity = new ControlPlaneIdentity("swarm-alpha", null, "orchestrator", "orch-1");
+        ControlPlaneIdentity identity = new ControlPlaneIdentity("swarm-alpha", "orchestrator", "orch-1");
 
         assertThat(config.managerControlQueueName(identity))
             .isEqualTo("ph.control.orchestrator.orch-1");

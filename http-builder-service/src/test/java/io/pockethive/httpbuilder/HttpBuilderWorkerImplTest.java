@@ -183,7 +183,6 @@ class HttpBuilderWorkerImplTest {
     private final WorkerInfo info = new WorkerInfo(
         "http-builder",
         WORKER_PROPERTIES.getSwarmId(),
-        "swarm-inst-1",
         WORKER_PROPERTIES.getInstanceId(),
         ControlPlaneTestFixtures.workerQueue(WORKER_PROPERTIES.getSwarmId(), "http-builder"),
         null

@@ -306,7 +306,6 @@ class ProcessorTest {
         private final WorkerInfo info = new WorkerInfo(
                 "processor",
                 WORKER_PROPERTIES.getSwarmId(),
-                "swarm-inst-1",
                 WORKER_PROPERTIES.getInstanceId(),
                 MODERATOR_QUEUE,
                 FINAL_QUEUE);

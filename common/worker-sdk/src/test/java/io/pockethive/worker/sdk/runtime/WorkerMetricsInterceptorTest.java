@@ -109,7 +109,7 @@ class WorkerMetricsInterceptorTest {
     }
 
     private WorkerContext workerContext(WorkerState state, SimpleMeterRegistry registry) {
-        WorkerInfo info = new WorkerInfo("metrics-role", "swarm", "swarm-inst-1", "metrics-instance", "in.metrics", "out.metrics");
+        WorkerInfo info = new WorkerInfo("metrics-role", "swarm", "metrics-instance", "in.metrics", "out.metrics");
         ObservabilityContext observabilityContext = new ObservabilityContext();
         observabilityContext.setHops(new java.util.ArrayList<>());
         return new WorkerContext() {

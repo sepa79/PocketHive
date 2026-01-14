@@ -92,7 +92,6 @@ class GeneratorTest {
     private final WorkerInfo info = new WorkerInfo(
         "generator",
         WORKER_PROPERTIES.getSwarmId(),
-        "swarm-inst-1",
         WORKER_PROPERTIES.getInstanceId(),
         IN_QUEUE,
         OUT_QUEUE

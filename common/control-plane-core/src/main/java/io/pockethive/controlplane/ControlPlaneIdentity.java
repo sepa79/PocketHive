@@ -5,11 +5,10 @@ import java.util.Objects;
 /**
  * Identifies the current participant on the control plane for self-filtering decisions.
  */
-public record ControlPlaneIdentity(String swarmId, String swarmInstanceId, String role, String instanceId) {
+public record ControlPlaneIdentity(String swarmId, String role, String instanceId) {
 
     public ControlPlaneIdentity {
         swarmId = normalise(swarmId);
-        swarmInstanceId = normalise(swarmInstanceId);
         role = normalise(role);
         instanceId = normalise(instanceId);
     }

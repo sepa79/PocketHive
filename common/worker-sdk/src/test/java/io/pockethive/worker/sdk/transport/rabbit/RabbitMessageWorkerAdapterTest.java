@@ -88,7 +88,7 @@ class RabbitMessageWorkerAdapterTest {
             "Processor worker",
             Set.of(WorkerCapability.MESSAGE_DRIVEN)
         );
-        identity = new ControlPlaneIdentity("swarm-1", null, "processor", "instance-1");
+        identity = new ControlPlaneIdentity("swarm-1", "processor", "instance-1");
         defaults = new DummyConfig();
     }
 

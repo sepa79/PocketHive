@@ -256,7 +256,6 @@ class PostProcessorTest {
         private final WorkerInfo info = new WorkerInfo(
             "postprocessor",
             WORKER_PROPERTIES.getSwarmId(),
-            "swarm-inst-1",
             WORKER_PROPERTIES.getInstanceId(),
             FINAL_QUEUE,
             null);

@@ -80,7 +80,7 @@ class SwarmSignalListenerTest {
     private final ControlPlaneTopologyDescriptor descriptor =
         ControlPlaneTopologyDescriptorFactory.forManagerRole("orchestrator", settings);
     private final ControlPlaneIdentity identity =
-        new ControlPlaneIdentity(SWARM_ID, null, descriptor.role(), ORCHESTRATOR_INSTANCE);
+        new ControlPlaneIdentity(SWARM_ID, descriptor.role(), ORCHESTRATOR_INSTANCE);
 
     private String controlQueueName;
     private SwarmPlanRegistry plans;

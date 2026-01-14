@@ -24,7 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class DetailedTransactionMetricsTest {
 
   private static final WorkerInfo WORKER_INFO =
-      new WorkerInfo("postprocessor", "swarm", "swarm-inst-1", "instance", "final", null);
+      new WorkerInfo("postprocessor", "swarm", "instance", "final", null);
 
   @Test
   void recordKeepsLatestTransactionsUpToHistorySize() {

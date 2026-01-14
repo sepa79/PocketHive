@@ -65,7 +65,7 @@ class DefaultWorkerRuntimeTest {
 
     private static WorkerContext workerContext(WorkerDefinition definition, WorkerState state) {
         WorkIoBindings io = definition.io();
-        WorkerInfo info = new WorkerInfo(definition.role(), "swarm", "swarm-inst-1", "instance", io.inboundQueue(), io.outboundQueue());
+        WorkerInfo info = new WorkerInfo(definition.role(), "swarm", "instance", io.inboundQueue(), io.outboundQueue());
         ObservabilityContext observabilityContext = new ObservabilityContext();
         observabilityContext.setTraceId("trace");
         observabilityContext.setSwarmId(info.swarmId());
