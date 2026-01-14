@@ -41,7 +41,7 @@ public final class SutEndpoint {
     }
 
     /**
-     * Base URL for HTTP-style endpoints.
+     * Base URL for HTTP endpoints (e.g. http://host:port) or TCP endpoints (e.g. host:port).
      */
     public String getBaseUrl() {
         return baseUrl;

@@ -1,0 +1,12 @@
+serviceId: demo
+callId: socket-test
+protocol: TCP
+behavior: REQUEST_RESPONSE
+transport: socket
+bodyTemplate: |
+  REQ|{{ payloadAsJson.requestId }}|{{ payloadAsJson.data }}|{{ payloadAsJson.timestamp }}|END
+headersTemplate:
+  x-ph-test-type: "{{ payloadAsJson.testType }}"
+  x-ph-transport: "socket"
+  x-ph-request-id: "{{ payloadAsJson.requestId }}"
+  x-ph-tcp-end-tag: "|END"

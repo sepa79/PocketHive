@@ -1,0 +1,16 @@
+serviceId: demo
+callId: netty-test
+protocol: TCP
+behavior: REQUEST_RESPONSE
+transport: netty
+bodyTemplate: |
+  {
+    "messageId": "{{ payloadAsJson.messageId }}",
+    "payload": "{{ payloadAsJson.payload }}",
+    "timestamp": "{{ payloadAsJson.timestamp }}",
+    "hash": "{{ eval('#md5_hex(payloadAsJson.payload)') }}"
+  }
+headersTemplate:
+  x-ph-test-type: "{{ payloadAsJson.testType }}"
+  x-ph-transport: "netty"
+  x-ph-message-id: "{{ payloadAsJson.messageId }}"

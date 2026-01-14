@@ -1,0 +1,8 @@
+{
+  "id": "default",
+  "requestPattern": ".*",
+  "responseTemplate": "OK",
+  "description": "Default catch-all response",
+  "priority": 1,
+  "enabled": true
+}

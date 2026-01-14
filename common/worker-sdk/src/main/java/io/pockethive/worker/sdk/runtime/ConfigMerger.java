@@ -89,8 +89,25 @@ final class ConfigMerger {
         if (existing != null && !existing.isEmpty()) {
             merged.putAll(existing);
         }
-        merged.putAll(updates);
+        deepMerge(merged, updates);
         return Map.copyOf(merged);
+    }
+
+    @SuppressWarnings("unchecked")
+    private void deepMerge(Map<String, Object> target, Map<String, Object> source) {
+        for (Map.Entry<String, Object> entry : source.entrySet()) {
+            String key = entry.getKey();
+            Object sourceValue = entry.getValue();
+            Object targetValue = target.get(key);
+            if (sourceValue instanceof Map<?, ?> sourceMap && targetValue instanceof Map<?, ?> targetMap) {
+                Map<String, Object> mergedNested = new LinkedHashMap<>();
+                ((Map<String, Object>) targetMap).forEach(mergedNested::put);
+                deepMerge(mergedNested, (Map<String, Object>) sourceMap);
+                target.put(key, mergedNested);
+            } else {
+                target.put(key, sourceValue);
+            }
+        }
     }
 
     private Map<String, Object> describeConfigChanges(

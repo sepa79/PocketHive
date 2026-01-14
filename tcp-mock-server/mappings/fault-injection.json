@@ -1,0 +1,8 @@
+{
+  "id": "connection-reset-test",
+  "requestPattern": "FAULT_TEST.*",
+  "responseTemplate": "{{fault:CONNECTION_RESET}}",
+  "description": "Test connection reset fault injection",
+  "priority": 15,
+  "enabled": true
+}

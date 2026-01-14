@@ -1,0 +1,8 @@
+serviceId: default
+callId: streaming-test
+protocol: TCP
+behavior: STREAMING
+transport: nio
+bodyTemplate: "STREAM_REQUEST_{{ payload.id | default('789') }}"
+endTag: "\n"
+maxBytes: 4096

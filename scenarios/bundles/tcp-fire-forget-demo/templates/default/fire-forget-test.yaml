@@ -1,0 +1,9 @@
+serviceId: default
+callId: fire-forget-test
+protocol: TCP
+behavior: FIRE_FORGET
+transport: socket
+bodyTemplate: "EVENT|{{ payloadAsJson.eventId }}|{{ payloadAsJson.eventType }}|{{ payloadAsJson.payload }}|{{ payloadAsJson.timestamp }}\n"
+headersTemplate:
+  x-ph-event-id: "{{ payloadAsJson.eventId }}"
+  x-ph-event-type: "{{ payloadAsJson.eventType }}"

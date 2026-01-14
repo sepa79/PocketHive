@@ -25,6 +25,9 @@ public final class EnvironmentConfig {
   public static final String IDEMPOTENCY_KEY_PREFIX = "IDEMPOTENCY_KEY_PREFIX";
   public static final String CONTROL_PLANE_EXCHANGE = "POCKETHIVE_CONTROL_PLANE_EXCHANGE";
   public static final String CONTROL_QUEUE_PREFIX = "POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX";
+  public static final String TCP_MOCK_BASE_URL = "POCKETHIVE_TCP_MOCK_URL";
+  public static final String TCP_MOCK_USERNAME = "POCKETHIVE_TCP_MOCK_USERNAME";
+  public static final String TCP_MOCK_PASSWORD = "POCKETHIVE_TCP_MOCK_PASSWORD";
 
   private EnvironmentConfig() {
   }
@@ -78,6 +81,18 @@ public final class EnvironmentConfig {
         env(IDEMPOTENCY_KEY_PREFIX).orElse("ph-e2e"),
         new ControlPlaneSettings(controlExchange, controlQueuePrefix)
     );
+  }
+
+  public static String getTcpMockUrl() {
+    return env(TCP_MOCK_BASE_URL).orElse("http://localhost:8083");
+  }
+
+  public static String getTcpMockUsername() {
+    return env(TCP_MOCK_USERNAME).orElse("admin");
+  }
+
+  public static String getTcpMockPassword() {
+    return env(TCP_MOCK_PASSWORD).orElse("admin");
   }
 
   private static RabbitMqSettings loadRabbitMqSettings() {

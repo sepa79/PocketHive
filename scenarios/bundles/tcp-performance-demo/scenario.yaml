@@ -1,0 +1,188 @@
+id: tcp-performance-demo
+name: TCP Performance Stress Test
+description: Demonstrates high-throughput TCP capabilities with ramping load, traffic shaping, and performance analytics
+template:
+  image: swarm-controller:latest
+  bees:
+    - role: generator-warmup
+      image: generator:latest
+      config:
+        inputs:
+          type: SCHEDULER
+          scheduler:
+            ratePerSec: 10
+            maxMessages: 100
+        worker:
+          message:
+            bodyType: SIMPLE
+            body: |
+              {
+                "txnId": "TXN_{{ eval('#randInt(100000, 999999)') }}",
+                "priority": "FAST",
+                "payload": "warmup_{{ eval('#randInt(1, 1000)') }}",
+                "timestamp": "{{ eval("#date_format(now, 'yyyy-MM-dd''T''HH:mm:ss.SSS')") }}"
+              }
+            headers:
+              x-ph-call-id: perf-test
+              x-ph-phase: warmup
+      work:
+        out: mod-warmup
+    - role: generator-ramp
+      image: generator:latest
+      config:
+        inputs:
+          type: SCHEDULER
+          scheduler:
+            ratePerSec: 50
+            maxMessages: 1000
+        worker:
+          message:
+            bodyType: SIMPLE
+            body: |
+              {
+                "txnId": "TXN_{{ eval('#randInt(100000, 999999)') }}",
+                "priority": "{{ eval('#randInt(1, 10) <= 6 ? \"FAST\" : (#randInt(1, 10) <= 9 ? \"NORMAL\" : \"SLOW\")') }}",
+                "payload": "ramp_{{ eval('#base64_encode(\"data\" + #randInt(1, 10000))') }}",
+                "timestamp": "{{ eval("#date_format(now, 'yyyy-MM-dd''T''HH:mm:ss.SSS')") }}"
+              }
+            headers:
+              x-ph-call-id: perf-test
+              x-ph-phase: ramp
+      work:
+        out: mod-ramp
+    - role: generator-peak
+      image: generator:latest
+      config:
+        inputs:
+          type: SCHEDULER
+          scheduler:
+            ratePerSec: 100
+            maxMessages: 2000
+        worker:
+          message:
+            bodyType: SIMPLE
+            body: |
+              {
+                "txnId": "TXN_{{ eval('#randInt(100000, 999999)') }}",
+                "priority": "{{ eval('#randInt(1, 10) <= 5 ? \"FAST\" : (#randInt(1, 10) <= 8 ? \"NORMAL\" : \"SLOW\")') }}",
+                "payload": "peak_{{ eval('#base64_encode(\"stress\" + #randInt(1, 10000))') }}",
+                "timestamp": "{{ eval("#date_format(now, 'yyyy-MM-dd''T''HH:mm:ss.SSS')") }}"
+              }
+            headers:
+              x-ph-call-id: perf-test
+              x-ph-phase: peak
+      work:
+        out: mod-peak
+    - role: moderator-warmup
+      image: moderator:latest
+      config:
+        worker:
+          mode: THREAD_COUNT
+          threadCount: 5
+      work:
+        in: mod-warmup
+        out: build
+    - role: moderator-ramp
+      image: moderator:latest
+      config:
+        worker:
+          mode: THREAD_COUNT
+          threadCount: 10
+      work:
+        in: mod-ramp
+        out: build
+    - role: moderator-peak
+      image: moderator:latest
+      config:
+        worker:
+          mode: THREAD_COUNT
+          threadCount: 20
+      work:
+        in: mod-peak
+        out: build
+    - role: request-builder
+      image: request-builder:latest
+      config:
+        worker:
+          templateRoot: /app/scenario/templates
+          serviceId: default
+      work:
+        in: build
+        out: proc
+    - role: processor
+      image: processor:latest
+      config:
+        baseUrl: "{{ sut.endpoints['tcp-server'].baseUrl }}"
+        worker:
+          mode: THREAD_COUNT
+          threadCount: 50
+          tcpTransport:
+            type: socket
+            connectionReuse: PER_THREAD
+            maxRetries: 2
+            connectTimeoutMs: 3000
+            readTimeoutMs: 5000
+      work:
+        in: proc
+        out: post
+    - role: postprocessor
+      image: postprocessor:latest
+      config:
+        worker:
+          postprocessor:
+            publish-all-metrics: true
+      work:
+        in: post
+plan:
+  bees:
+    - role: generator-warmup
+      steps:
+        - stepId: warmup-start
+          name: Start warmup phase
+          time: PT1S
+          type: start
+        - stepId: warmup-stop
+          name: Stop warmup
+          time: PT15S
+          type: stop
+    - role: generator-ramp
+      steps:
+        - stepId: ramp-start
+          name: Start ramp phase
+          time: PT15S
+          type: start
+        - stepId: ramp-increase
+          name: Increase to 75 TPS
+          time: PT25S
+          type: config-update
+          config:
+            inputs:
+              scheduler:
+                ratePerSec: 75
+        - stepId: ramp-stop
+          name: Stop ramp
+          time: PT40S
+          type: stop
+    - role: generator-peak
+      steps:
+        - stepId: peak-start
+          name: Start peak load
+          time: PT40S
+          type: start
+        - stepId: peak-increase
+          name: Increase to 150 TPS
+          time: PT50S
+          type: config-update
+          config:
+            inputs:
+              scheduler:
+                ratePerSec: 150
+        - stepId: peak-stop
+          name: Stop peak
+          time: PT70S
+          type: stop
+  swarm:
+    - stepId: swarm-start
+      name: Start swarm
+      time: PT0S
+      type: start

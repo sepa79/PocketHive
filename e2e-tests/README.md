@@ -74,6 +74,9 @@ Environment variables will be referenced by the harness once the step implementa
 | `RABBITMQ_VHOST` | RabbitMQ virtual host (defaults to `/`). |
 | `UI_WEBSOCKET_URI` | WebSocket endpoint exposed by the nginx proxy for UI-equivalent subscriptions. |
 | `UI_BASE_URL` | Base HTTP URL for the nginx UI proxy. When omitted the harness derives it from `UI_WEBSOCKET_URI`. |
+| `POCKETHIVE_TCP_MOCK_URL` | Base URL for the TCP mock server (e.g. `http://localhost:8083`). |
+| `POCKETHIVE_TCP_MOCK_USERNAME` | Username for TCP mock UI/API basic auth. |
+| `POCKETHIVE_TCP_MOCK_PASSWORD` | Password for TCP mock UI/API basic auth. |
 | `SWARM_ID` | Default swarm identifier used by shared steps (override per scenario when required). |
 | `IDEMPOTENCY_KEY_PREFIX` | Prefix applied to generated idempotency keys to simplify log correlation. |
 

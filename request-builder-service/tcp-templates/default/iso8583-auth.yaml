@@ -1,0 +1,9 @@
+serviceId: default
+callId: iso8583-auth
+protocol: TCP
+behavior: REQUEST_RESPONSE
+transport: socket
+bodyTemplate: |
+  0200{{ payload.bitmap | default('F220000000000000') }}{{ payload.pan | default('4111111111111111') }}{{ payload.amount | default('000000001000') }}{{ payload.stan | default('000001') }}{{ payload.rrn | default('123456789012') }}
+endTag: "\n"
+maxBytes: 8192

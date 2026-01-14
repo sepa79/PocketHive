@@ -8,7 +8,10 @@ public record ProcessorWorkerConfig(
     int threadCount,
     double ratePerSec,
     ConnectionReuse connectionReuse,
-    Boolean keepAlive
+    Boolean keepAlive,
+    Integer timeoutMs,
+    Boolean sslVerify,
+    TcpTransportConfig tcpTransport
 ) implements MaxInFlightConfig {
 
   public enum Mode {
@@ -29,6 +32,9 @@ public record ProcessorWorkerConfig(
     ratePerSec = ratePerSec <= 0.0 ? 1.0 : ratePerSec;
     connectionReuse = connectionReuse == null ? ConnectionReuse.GLOBAL : connectionReuse;
     keepAlive = keepAlive == null ? Boolean.TRUE : keepAlive;
+    timeoutMs = timeoutMs == null || timeoutMs <= 0 ? 30000 : timeoutMs;
+    sslVerify = sslVerify == null ? Boolean.FALSE : sslVerify;
+    tcpTransport = tcpTransport == null ? TcpTransportConfig.defaults() : tcpTransport;
   }
 
   @Override

@@ -1,0 +1,178 @@
+id: tcp-connection-pooling-demo
+name: TCP Connection Pooling Comparison
+description: Compares GLOBAL, PER_THREAD, and NONE connection pooling strategies
+template:
+  image: swarm-controller:latest
+  bees:
+    - role: trigger
+      image: trigger:latest
+      config:
+        inputs:
+          type: SCHEDULER
+          scheduler:
+            ratePerSec: 0
+            maxMessages: 1
+        worker:
+          config:
+            actionType: rest
+            url: "http://tcp-mock-server:8083/api/mappings"
+            method: POST
+            headers:
+              Content-Type: application/json
+            body: |
+              {
+                "id": "tcp-pool-test",
+                "requestPattern": ".*",
+                "responseTemplate": "STX{{timestamp}}|POOL_OK|{{randomValue type='INT'}}ETX",
+                "responseDelimiter": "\n",
+                "priority": 10,
+                "description": "Pool test response"
+              }
+      work:
+        out: setup
+    - role: generator-global
+      image: generator:latest
+      config:
+        inputs:
+          type: SCHEDULER
+          scheduler:
+            ratePerSec: 10
+            maxMessages: 100
+        worker:
+          message:
+            bodyType: SIMPLE
+            body: |
+              {
+                "testId": "GLOBAL_{{ eval('#randInt(1000, 9999)') }}",
+                "poolType": "GLOBAL",
+                "timestamp": "{{ eval("#date_format(now, 'yyyy-MM-dd''T''HH:mm:ss.SSS')") }}"
+              }
+            headers:
+              x-ph-call-id: pool-test
+      work:
+        out: build-global
+    - role: generator-per-thread
+      image: generator:latest
+      config:
+        inputs:
+          type: SCHEDULER
+          scheduler:
+            ratePerSec: 10
+            maxMessages: 100
+        worker:
+          message:
+            bodyType: SIMPLE
+            body: |
+              {
+                "testId": "PER_THREAD_{{ eval('#randInt(1000, 9999)') }}",
+                "poolType": "PER_THREAD",
+                "timestamp": "{{ eval("#date_format(now, 'yyyy-MM-dd''T''HH:mm:ss.SSS')") }}"
+              }
+            headers:
+              x-ph-call-id: pool-test
+      work:
+        out: build-per-thread
+    - role: generator-none
+      image: generator:latest
+      config:
+        inputs:
+          type: SCHEDULER
+          scheduler:
+            ratePerSec: 10
+            maxMessages: 100
+        worker:
+          message:
+            bodyType: SIMPLE
+            body: |
+              {
+                "testId": "NONE_{{ eval('#randInt(1000, 9999)') }}",
+                "poolType": "NONE",
+                "timestamp": "{{ eval("#date_format(now, 'yyyy-MM-dd''T''HH:mm:ss.SSS')") }}"
+              }
+            headers:
+              x-ph-call-id: pool-test
+      work:
+        out: build-none
+    - role: request-builder-global
+      image: request-builder:latest
+      config:
+        worker:
+          templateRoot: /app/scenario/templates
+          serviceId: default
+      work:
+        in: build-global
+        out: proc-global
+    - role: request-builder-per-thread
+      image: request-builder:latest
+      config:
+        worker:
+          templateRoot: /app/scenario/templates
+          serviceId: default
+      work:
+        in: build-per-thread
+        out: proc-per-thread
+    - role: request-builder-none
+      image: request-builder:latest
+      config:
+        worker:
+          templateRoot: /app/scenario/templates
+          serviceId: default
+      work:
+        in: build-none
+        out: proc-none
+    - role: processor-global
+      image: processor:latest
+      config:
+        baseUrl: "{{ sut.endpoints['tcp-server'].baseUrl }}"
+        worker:
+          mode: THREAD_COUNT
+          threadCount: 10
+          tcpTransport:
+            type: socket
+            connectionReuse: GLOBAL
+            maxRetries: 1
+            connectTimeoutMs: 2000
+            readTimeoutMs: 3000
+      work:
+        in: proc-global
+        out: post
+    - role: processor-per-thread
+      image: processor:latest
+      config:
+        baseUrl: "{{ sut.endpoints['tcp-server'].baseUrl }}"
+        worker:
+          mode: THREAD_COUNT
+          threadCount: 10
+          tcpTransport:
+            type: socket
+            connectionReuse: PER_THREAD
+            maxRetries: 1
+            connectTimeoutMs: 2000
+            readTimeoutMs: 3000
+      work:
+        in: proc-per-thread
+        out: post
+    - role: processor-none
+      image: processor:latest
+      config:
+        baseUrl: "{{ sut.endpoints['tcp-server'].baseUrl }}"
+        worker:
+          mode: THREAD_COUNT
+          threadCount: 10
+          tcpTransport:
+            type: socket
+            connectionReuse: NONE
+            maxRetries: 1
+            connectTimeoutMs: 2000
+            readTimeoutMs: 3000
+      work:
+        in: proc-none
+        out: post
+    - role: postprocessor
+      image: postprocessor:latest
+      config:
+        worker:
+          postprocessor:
+            publish-all-metrics: true
+      work:
+        in: post

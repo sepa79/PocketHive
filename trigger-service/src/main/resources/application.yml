@@ -1,5 +1,6 @@
 spring:
-  application.name: trigger-service
+  application:
+    name: trigger-service
   rabbitmq:
     host: ${SPRING_RABBITMQ_HOST}
     port: ${SPRING_RABBITMQ_PORT}
@@ -7,9 +8,11 @@ spring:
     password: ${SPRING_RABBITMQ_PASSWORD}
     virtual-host: ${SPRING_RABBITMQ_VIRTUAL_HOST}
 
+# Include traceId from MDC in log output
 logging:
   config: classpath:logback-spring.xml
-  pattern.level: "%5p [%X{traceId}]"
+  pattern:
+    level: "%5p [%X{traceId}]"
 
 pockethive:
   inputs:

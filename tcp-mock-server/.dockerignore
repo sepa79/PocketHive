@@ -1,0 +1,16 @@
+target/
+!target/tcp-mock-server-*.jar
+.git/
+.gitignore
+*.md
+!docs/*.md
+.idea/
+*.iml
+.vscode/
+node_modules/
+*.log
+.DS_Store
+cleanup-*.sh
+cleanup-*.bat
+move-*.sh
+move-*.bat

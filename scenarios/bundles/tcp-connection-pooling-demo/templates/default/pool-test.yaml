@@ -1,0 +1,11 @@
+serviceId: default
+callId: pool-test
+protocol: TCP
+behavior: REQUEST_RESPONSE
+transport: socket
+bodyTemplate: "POOL_TEST|{{ payloadAsJson.testId }}|{{ payloadAsJson.poolType }}|{{ payloadAsJson.timestamp }}"
+headersTemplate:
+  x-ph-test-id: "{{ payloadAsJson.testId }}"
+  x-ph-pool-type: "{{ payloadAsJson.poolType }}"
+endTag: "\n"
+maxBytes: 8192

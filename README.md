@@ -253,6 +253,7 @@ When accessing PocketHive from another machine, keep using the UI origin and the
 - [Docs index](docs/README.md)
 - [Architecture reference](docs/ARCHITECTURE.md)
 - [Usage guide](docs/USAGE.md)
+- [Scenario templating (Pebble + SpEL)](docs/scenarios/SCENARIO_TEMPLATING.md)
 - [Contributor guide](CONTRIBUTING.md)
 
 ---

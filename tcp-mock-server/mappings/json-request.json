@@ -1,0 +1,8 @@
+{
+  "id": "json-request",
+  "requestPattern": "^\\{.*\\}$",
+  "responseTemplate": "{\"status\":\"success\",\"timestamp\":\"{{timestamp}}\",\"echo\":{{message}}}",
+  "description": "JSON message handler",
+  "priority": 10,
+  "enabled": true
+}

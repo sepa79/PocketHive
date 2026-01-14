@@ -1,0 +1,8 @@
+{
+  "id": "proxy-to-real-system",
+  "requestPattern": "PROXY_.*",
+  "responseTemplate": "{{proxy:real-system.example.com:8080}}",
+  "description": "Proxy requests to real system",
+  "priority": 1,
+  "enabled": false
+}

@@ -1,0 +1,10 @@
+serviceId: default
+callId: simple-perf-test
+protocol: TCP
+behavior: REQUEST_RESPONSE
+transport: socket
+bodyTemplate: "PERF|{{ payloadAsJson.txnId }}|{{ payloadAsJson.payload }}|{{ payloadAsJson.timestamp }}"
+headersTemplate:
+  x-ph-txn-id: "{{ payloadAsJson.txnId }}"
+endTag: "\n"
+maxBytes: 8192

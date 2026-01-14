@@ -1,0 +1,7 @@
+ARG RUNTIME_IMAGE=pockethive-jvm-base:latest
+
+FROM ${RUNTIME_IMAGE}
+COPY .local-jars/tcp-mock-server.jar /app/app.jar
+COPY tcp-mock-server/docs /app/docs
+COPY tcp-mock-server/mappings /app/mappings
+COPY tcp-mock-server/scenarios-state.json /app/scenarios-state-default.json

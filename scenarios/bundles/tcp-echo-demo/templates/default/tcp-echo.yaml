@@ -1,0 +1,10 @@
+serviceId: default
+callId: tcp-echo
+protocol: TCP
+behavior: ECHO
+transport: socket
+endTag: "\n"
+maxBytes: 8192
+bodyTemplate: "{{ payloadAsJson.message }}"
+headersTemplate:
+  Test-Type: "echo"

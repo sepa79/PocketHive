@@ -6,6 +6,8 @@ import com.mitchellbosecke.pebble.template.PebbleTemplate;
 import java.io.IOException;
 import java.io.StringWriter;
 import java.io.Writer;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 
@@ -14,11 +16,21 @@ import java.util.Objects;
  * <p>
  * This implementation uses {@link PebbleEngine#getLiteralTemplate(String)} so templates are provided
  * inline rather than loaded from files.
+ * <p>
+ * Template compilation results are cached for performance.
  */
 public final class PebbleTemplateRenderer implements TemplateRenderer {
 
     private final PebbleEngine engine;
     private final PebbleWeightedSelectionExtension.SeededSelector seededSelector;
+    private static final int TEMPLATE_CACHE_SIZE = 10;
+    private final Map<String, PebbleTemplate> templateCache = Collections.synchronizedMap(
+        new LinkedHashMap<String, PebbleTemplate>(TEMPLATE_CACHE_SIZE, 0.75f, true) {
+            @Override
+            protected boolean removeEldestEntry(Map.Entry<String, PebbleTemplate> eldest) {
+                return size() > TEMPLATE_CACHE_SIZE;
+            }
+        });
 
     public PebbleTemplateRenderer() {
         this(new PebbleWeightedSelectionExtension.SeededSelector());
@@ -42,7 +54,11 @@ public final class PebbleTemplateRenderer implements TemplateRenderer {
         Objects.requireNonNull(templateSource, "templateSource");
         Map<String, Object> safeContext = context == null ? Map.of() : context;
         try {
-            PebbleTemplate template = engine.getLiteralTemplate(templateSource);
+            PebbleTemplate template = templateCache.get(templateSource);
+            if (template == null) {
+                template = engine.getLiteralTemplate(templateSource);
+                templateCache.put(templateSource, template);
+            }
             try (Writer writer = new StringWriter()) {
                 template.evaluate(writer, safeContext);
                 return writer.toString();

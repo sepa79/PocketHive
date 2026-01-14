@@ -1,0 +1,134 @@
+package io.pockethive.tcpmock.util;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.stereotype.Component;
+import java.util.Map;
+import java.util.regex.Pattern;
+
+@Component
+public class AdvancedRequestMatcher {
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    
+    public boolean matches(String message, Map<String, Object> matchCriteria) {
+        if (matchCriteria == null || matchCriteria.isEmpty()) {
+            return true;
+        }
+        
+        for (Map.Entry<String, Object> entry : matchCriteria.entrySet()) {
+            String key = entry.getKey();
+            Object value = entry.getValue();
+            
+            switch (key) {
+                case "bodyPattern":
+                    if (!matchBodyPattern(message, (String) value)) return false;
+                    break;
+                case "jsonPath":
+                    if (!matchJsonPath(message, (Map<String, Object>) value)) return false;
+                    break;
+                case "xmlPath":
+                    if (!matchXmlPath(message, (Map<String, Object>) value)) return false;
+                    break;
+                case "equalTo":
+                    if (!message.equals(value)) return false;
+                    break;
+                case "contains":
+                    if (!message.contains((String) value)) return false;
+                    break;
+                case "matches":
+                    if (!Pattern.matches((String) value, message)) return false;
+                    break;
+                case "startsWith":
+                    if (!message.startsWith((String) value)) return false;
+                    break;
+                case "endsWith":
+                    if (!message.endsWith((String) value)) return false;
+                    break;
+                case "length":
+                    if (!matchLength(message, (Map<String, Object>) value)) return false;
+                    break;
+            }
+        }
+        
+        return true;
+    }
+    
+    private boolean matchBodyPattern(String message, String pattern) {
+        return Pattern.matches(pattern, message);
+    }
+    
+    private boolean matchJsonPath(String message, Map<String, Object> criteria) {
+        try {
+            JsonNode root = objectMapper.readTree(message);
+            String path = (String) criteria.get("expression");
+            Object expectedValue = criteria.get("equalTo");
+            
+            JsonNode node = evaluateJsonPath(root, path);
+            if (node == null) return false;
+            
+            if (expectedValue != null) {
+                return node.asText().equals(expectedValue.toString());
+            }
+            
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+    
+    private JsonNode evaluateJsonPath(JsonNode root, String path) {
+        if (path.startsWith("$.")) {
+            path = path.substring(2);
+        }
+        
+        String[] parts = path.split("\\.");
+        JsonNode current = root;
+        
+        for (String part : parts) {
+            if (part.contains("[")) {
+                String field = part.substring(0, part.indexOf('['));
+                int index = Integer.parseInt(part.substring(part.indexOf('[') + 1, part.indexOf(']')));
+                current = current.get(field).get(index);
+            } else {
+                current = current.get(part);
+            }
+            
+            if (current == null) return null;
+        }
+        
+        return current;
+    }
+    
+    private boolean matchXmlPath(String message, Map<String, Object> criteria) {
+        // Basic XML matching - can be enhanced with XPath library
+        String path = (String) criteria.get("expression");
+        Object expectedValue = criteria.get("equalTo");
+        
+        // Simple tag extraction
+        String tagPattern = "<" + path + ">(.*?)</" + path + ">";
+        java.util.regex.Matcher matcher = Pattern.compile(tagPattern).matcher(message);
+        
+        if (matcher.find()) {
+            String value = matcher.group(1);
+            return expectedValue == null || value.equals(expectedValue.toString());
+        }
+        
+        return false;
+    }
+    
+    private boolean matchLength(String message, Map<String, Object> criteria) {
+        int length = message.length();
+        
+        if (criteria.containsKey("equalTo")) {
+            return length == (Integer) criteria.get("equalTo");
+        }
+        if (criteria.containsKey("greaterThan")) {
+            return length > (Integer) criteria.get("greaterThan");
+        }
+        if (criteria.containsKey("lessThan")) {
+            return length < (Integer) criteria.get("lessThan");
+        }
+        
+        return true;
+    }
+}

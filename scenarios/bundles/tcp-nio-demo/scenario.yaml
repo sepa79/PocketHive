@@ -1,0 +1,59 @@
+id: tcp-nio-demo
+name: TCP NIO Transport Demo
+description: Demonstrates TCP using Java NIO non-blocking transport
+template:
+  image: swarm-controller:latest
+  bees:
+    - role: generator
+      image: generator:latest
+      config:
+        inputs:
+          type: SCHEDULER
+          scheduler:
+            ratePerSec: 20
+            maxMessages: 200
+        worker:
+          message:
+            bodyType: SIMPLE
+            body: |
+              {
+                "testId": "NIO_{{ eval('#randInt(10000, 99999)') }}",
+                "payload": "{{ eval('#base64_encode(''nio_data_'' + #randInt(1, 1000))') }}",
+                "timestamp": "{{ eval("#date_format(now, 'yyyy-MM-dd''T''HH:mm:ss.SSS')") }}"
+              }
+            headers:
+              x-ph-call-id: nio-test
+      work:
+        out: build
+    - role: request-builder
+      image: request-builder:latest
+      config:
+        worker:
+          templateRoot: /app/scenario/templates
+          serviceId: default
+      work:
+        in: build
+        out: proc
+    - role: processor
+      image: processor:latest
+      config:
+        baseUrl: "{{ sut.endpoints['tcp-server'].baseUrl }}"
+        worker:
+          mode: THREAD_COUNT
+          threadCount: 10
+          tcpTransport:
+            type: nio
+            maxRetries: 2
+            connectTimeoutMs: 3000
+            readTimeoutMs: 5000
+      work:
+        in: proc
+        out: post
+    - role: postprocessor
+      image: postprocessor:latest
+      config:
+        worker:
+          postprocessor:
+            publish-all-metrics: true
+      work:
+        in: post

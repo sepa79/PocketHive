@@ -1,0 +1,5 @@
+{
+  "payment-flow": "started",
+  "auth-scenario": "idle",
+  "error-injection": "disabled"
+}

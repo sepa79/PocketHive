@@ -1,0 +1,157 @@
+---
+id: "tcp-comprehensive-demo"
+name: "TCP Capabilities Demo"
+description: "Demonstrates TCP Mock Server capabilities including ISO-8583, performance\
+  \ analytics, and enterprise features"
+template:
+  image: "swarm-controller:latest"
+  bees:
+  - role: "generator-iso8583"
+    image: "generator:latest"
+    work:
+      in: null
+      out: "iso8583-build"
+    env: {}
+    config:
+      worker:
+        message:
+          bodyType: "SIMPLE"
+          body: "{\n  \"messageType\": \"ISO8583_AUTH\",\n  \"mti\": \"0100\",\n \
+            \ \"transactionId\": \"{{ eval('#uuid()') }}\",\n  \"amount\": \"{{ eval('#randInt(100,50000)')\
+            \ }}\",\n  \"pan\": \"4111111111111{{ eval('#randInt(100,999)') }}\",\n\
+            \  \"timestamp\": \"{{ eval('#nowIso()') }}\",\n  \"merchantId\": \"MERCH{{\
+            \ eval('#randInt(1000,9999)') }}\"\n}\n"
+          headers:
+            x-ph-call-id: "ProcessTransaction"
+            x-ph-service-id: "payment-gateway"
+      inputs:
+        type: "SCHEDULER"
+        scheduler:
+          ratePerSec: 10
+          maxMessages: 100
+  - role: "generator-performance"
+    image: "generator:latest"
+    work:
+      in: null
+      out: "perf-build"
+    env: {}
+    config:
+      worker:
+        message:
+          bodyType: "SIMPLE"
+          body: "{\n  \"messageType\": \"PERFORMANCE_TEST\",\n  \"batchId\": \"BATCH_{{\
+            \ eval('#randInt(1000,9999)') }}\",\n  \"transactionId\": \"{{ eval('#uuid()')\
+            \ }}\",\n  \"amount\": \"{{ eval('#randInt(100,100000)') }}\",\n  \"timestamp\"\
+            : \"{{ eval('#nowIso()') }}\"\n}\n"
+          headers:
+            x-ph-call-id: "PerformanceTest"
+            x-ph-service-id: "performance"
+      inputs:
+        type: "SCHEDULER"
+        scheduler:
+          ratePerSec: 50
+          maxMessages: 500
+  - role: "generator-netty"
+    image: "generator:latest"
+    work:
+      in: null
+      out: "netty-build"
+    env: {}
+    config:
+      worker:
+        message:
+          bodyType: "SIMPLE"
+          body: "{\n  \"testType\": \"netty\",\n  \"messageId\": \"NETTY_{{ eval('#randInt(1000,\
+            \ 9999)') }}\",\n  \"payload\": \"Netty async test\",\n  \"timestamp\"\
+            : \"{{ eval('#date_format(now, \"HH:mm:ss\")') }}\"\n}\n"
+          headers:
+            x-ph-call-id: "netty-test"
+            x-ph-service-id: "demo"
+      inputs:
+        type: "SCHEDULER"
+        scheduler:
+          ratePerSec: 1
+          maxMessages: 5
+  - role: "request-builder-iso"
+    image: "request-builder:latest"
+    work:
+      in: "iso8583-build"
+      out: "proc"
+    env: {}
+    config:
+      worker:
+        templateRoot: "/app/scenario/templates"
+        serviceId: "demo"
+  - role: "request-builder-perf"
+    image: "request-builder:latest"
+    work:
+      in: "perf-build"
+      out: "proc"
+    env: {}
+    config:
+      worker:
+        templateRoot: "/app/scenario/templates"
+        serviceId: "demo"
+  - role: "request-builder-netty"
+    image: "request-builder:latest"
+    work:
+      in: "netty-build"
+      out: "proc"
+    env: {}
+    config:
+      worker:
+        templateRoot: "/app/scenario/templates"
+        serviceId: "demo"
+  - role: "processor"
+    image: "processor:latest"
+    work:
+      in: "proc"
+      out: "post"
+    env: {}
+    config:
+      worker:
+        mode: "THREAD_COUNT"
+        threadCount: 10
+        keepAlive: true
+        tcpTransport:
+          type: "socket"
+          connectionReuse: "PER_THREAD"
+          maxRetries: 3
+          connectTimeoutMs: 3000
+          readTimeoutMs: 5000
+      baseUrl: "{{ sut.endpoints['tcp-server'].baseUrl }}"
+  - role: "postprocessor"
+    image: "postprocessor:latest"
+    work:
+      in: "post"
+      out: null
+    env: {}
+    config:
+      worker:
+        postprocessor:
+          publish-all-metrics: true
+plan:
+  bees:
+    - role: "generator-iso8583"
+      steps:
+        - stepId: gen-iso-start
+          name: Start ISO-8583 generator after setup
+          time: PT1S
+          type: start
+    - role: "generator-performance"
+      steps:
+        - stepId: gen-perf-start
+          name: Start performance generator after setup
+          time: PT1S
+          type: start
+    - role: "generator-netty"
+      steps:
+        - stepId: gen-netty-start
+          name: Start netty generator after setup
+          time: PT1S
+          type: start
+  swarm:
+    - stepId: swarm-start
+      name: Start swarm
+      time: PT0S
+      type: start

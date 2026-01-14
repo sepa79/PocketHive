@@ -1,0 +1,11 @@
+serviceId: timeout
+callId: timeout-test
+protocol: TCP
+behavior: REQUEST_RESPONSE
+transport: socket
+bodyTemplate: "REQUEST|{{ payloadAsJson.testType }}|{{ payloadAsJson.testId }}|{{ payloadAsJson.timestamp }}"
+headersTemplate:
+  x-ph-test-type: "{{ payloadAsJson.testType }}"
+  x-ph-test-id: "{{ payloadAsJson.testId }}"
+endTag: "\n"
+maxBytes: 8192

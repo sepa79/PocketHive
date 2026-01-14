@@ -1,0 +1,9 @@
+{
+  "id": "echo-colon-format",
+  "requestPattern": "^ECHO:.*",
+  "responseTemplate": "{{message}}",
+  "responseDelimiter": "\n",
+  "description": "Echo handler for ECHO: prefix format",
+  "priority": 10,
+  "enabled": true
+}
