@@ -166,6 +166,38 @@ services:
       retries: 12
       start_period: 10s
 
+  tcp-mock-server:
+    image: ${DOCKER_REGISTRY:-}tcp-mock-server:${POCKETHIVE_VERSION:-latest}
+    ports:
+      - "8083:8080"  # Web UI port
+      - "9090:9090"  # TCP server port
+    environment:
+      SERVER_PORT: 8080
+      POCKETHIVE_TCP_MOCK_PORT: 9090
+      POCKETHIVE_TCP_MOCK_NODE_ID: "tcp-mock-1"
+      POCKETHIVE_TCP_MOCK_DASHBOARD_ENABLED: "true"
+      POCKETHIVE_TCP_MOCK_DASHBOARD_USERNAME: "admin"
+      # Please change before deploying in prod.
+      POCKETHIVE_TCP_MOCK_DASHBOARD_PASSWORD: "admin"
+      POCKETHIVE_TCP_MOCK_SSL_ENABLED: "false"
+      POCKETHIVE_TCP_MOCK_VALIDATION_ENABLED: "true"
+      POCKETHIVE_TCP_MOCK_FILTERING_ENABLED: "true"
+      POCKETHIVE_LOGS_RABBIT_ENABLED: "true"
+      POCKETHIVE_LOGS_EXCHANGE: ph.logs
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "health,info,metrics,prometheus"
+    volumes:
+      - ./tcp-mock-server/mappings:/app/mappings:ro
+      - ./tcp-mock-server/__files:/app/__files:ro
+      - tcp-mock-data:/app/data
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8080/actuator/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      - prometheus
+
   # promtail:
   #   # disabled: logs are shipped via RabbitMQ and aggregated to Loki
   #   image: grafana/promtail:2.9.1
@@ -297,6 +329,7 @@ volumes:
   loki-data:
   redis-data:
   postgres-data:
+  tcp-mock-data:
 
 networks:
   default:

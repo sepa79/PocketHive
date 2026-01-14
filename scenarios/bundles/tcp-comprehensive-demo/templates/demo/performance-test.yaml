@@ -1,0 +1,10 @@
+serviceId: performance
+callId: PerformanceTest
+protocol: TCP
+behavior: REQUEST_RESPONSE
+transport: socket
+bodyTemplate: |
+  PERF_TEST:{{ payloadAsJson.batchId }}:{{ payloadAsJson.transactionId }}:{{ payloadAsJson.amount }}:{{ payloadAsJson.timestamp }}
+headersTemplate:
+  x-ph-message-type: "PERFORMANCE_TEST"
+  x-ph-batch-id: "{{ payloadAsJson.batchId }}"

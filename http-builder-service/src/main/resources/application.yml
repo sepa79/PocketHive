@@ -1,5 +1,6 @@
 spring:
-  application.name: http-builder-service
+  application:
+    name: http-builder-service
   rabbitmq:
     host: ${SPRING_RABBITMQ_HOST}
     port: ${SPRING_RABBITMQ_PORT}
@@ -7,9 +8,11 @@ spring:
     password: ${SPRING_RABBITMQ_PASSWORD}
     virtual-host: ${SPRING_RABBITMQ_VIRTUAL_HOST}
 
+# Include traceId from MDC in log output
 logging:
   config: classpath:logback-spring.xml
-  pattern.level: "%5p [%X{traceId}]"
+  pattern:
+    level: "%5p [%X{traceId}]"
 
 pockethive:
   inputs:
@@ -35,5 +38,11 @@ pockethive:
       role: ${POCKETHIVE_CONTROL_PLANE_WORKER_ROLE}
       skip-self-signals: false
 
-management.prometheus.metrics.export.pushgateway.job: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID}
-management.prometheus.metrics.export.pushgateway.grouping-key.instance: ${POCKETHIVE_CONTROL_PLANE_INSTANCE_ID}
+management:
+  prometheus:
+    metrics:
+      export:
+        pushgateway:
+          job: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID}
+          grouping-key:
+            instance: ${POCKETHIVE_CONTROL_PLANE_INSTANCE_ID}

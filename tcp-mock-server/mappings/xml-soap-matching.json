@@ -1,0 +1,16 @@
+{
+  "id": "xml-soap-matching",
+  "requestPattern": "^<.*>.*</.*>$",
+  "advancedMatching": {
+    "xmlPath": {
+      "expression": "operation",
+      "equalTo": "GetBalance"
+    }
+  },
+  "responseTemplate": "<response><status>success</status><balance>{{randomValue type='INT'}}</balance><accountId>{{request.xmlPath 'accountId'}}</accountId></response>",
+  "responseDelimiter": "\n",
+  "fixedDelayMs": 50,
+  "description": "SOAP XML matching with field extraction",
+  "priority": 25,
+  "enabled": true
+}

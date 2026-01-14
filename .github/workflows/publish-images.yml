@@ -93,6 +93,9 @@ jobs:
           - name: orchestrator
             dockerfile: orchestrator-service/Dockerfile.runtime
             target: ""
+          - name: tcp-mock-server
+            dockerfile: tcp-mock-server/Dockerfile.runtime
+            target: ""
           - name: swarm-controller
             dockerfile: Dockerfile.bees.local
             target: swarm-controller
@@ -102,6 +105,9 @@ jobs:
           - name: http-builder
             dockerfile: Dockerfile.bees.local
             target: http-builder
+          - name: request-builder
+            dockerfile: Dockerfile.bees.local
+            target: request-builder
           - name: moderator
             dockerfile: Dockerfile.bees.local
             target: moderator
@@ -137,9 +143,11 @@ jobs:
             log-aggregator-service \
             scenario-manager-service \
             orchestrator-service \
+            tcp-mock-server \
             swarm-controller-service \
             generator-service \
             http-builder-service \
+            request-builder-service \
             moderator-service \
             processor-service \
             postprocessor-service \

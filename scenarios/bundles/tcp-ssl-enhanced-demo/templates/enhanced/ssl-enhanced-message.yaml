@@ -1,0 +1,19 @@
+serviceId: enhanced
+callId: ssl-enhanced-message
+protocol: TCP
+behavior: REQUEST_RESPONSE
+transport: socket
+bodyTemplate: |
+  -----BEGIN ENHANCED SECURE MESSAGE-----
+  Session-ID: {{ payloadAsJson.sessionId }}
+  Timestamp: {{ payloadAsJson.timestamp }}
+  Data: {{ payloadAsJson.encryptedData }}
+  Signature: {{ payloadAsJson.signature }}
+  Validation: ENHANCED
+  Metrics: ENABLED
+  -----END ENHANCED SECURE MESSAGE-----
+headersTemplate:
+  Session-ID: "{{ payloadAsJson.sessionId }}"
+  Security-Level: "enhanced"
+endTag: "-----END ENHANCED SECURE MESSAGE-----"
+maxBytes: 8192

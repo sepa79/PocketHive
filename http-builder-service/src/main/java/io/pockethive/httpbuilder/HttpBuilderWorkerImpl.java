@@ -106,6 +106,7 @@ class HttpBuilderWorkerImpl implements PocketHiveWorkerFunction {
           messageTemplateRenderer.render(template, seed);
 
       ObjectNode envelope = MAPPER.createObjectNode();
+      envelope.put("protocol", "HTTP");
       envelope.put("path", rendered.path());
       envelope.put("method", rendered.method() == null ? "GET" : rendered.method().toUpperCase(Locale.ROOT));
       envelope.set("headers", MAPPER.valueToTree(rendered.headers()));

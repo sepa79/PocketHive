@@ -3,9 +3,19 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
-Timestamp: 2025-12-19T00:00:00Z
+Timestamp: 2026-01-14T11:17:56Z
 
 - No unreleased changes yet.
+
+## [0.14.19] - 2026-01-14
+Timestamp: 2026-01-14T11:17:56Z
+
+- TCP processor: added protocol handlers with Netty/NIO/socket transports, connection pooling, timeout enforcement, metrics, and expanded tests.
+- Request Builder service: new worker for HTTP/TCP template loading and definitions, default templates + protocol mappings, and worker tests.
+- TCP Mock: introduced `tcp-mock-server` module + docker-compose service, mappings/UI/docs, and wired SUT environments + scenarios to it.
+- Scenarios & E2E: added TCP demo bundles (echo/netty/nio/ssl/pooling/perf/streaming/timeout) and updated lifecycle tests for tcp-mock timeouts.
+- Templating & performance: improved Pebble template error visibility and capped template cache (with tests); added TCP logging/performance docs and a dashboard password warning.
+- Main baseline: Redis-backed sequencer functions (`#sequence`, `#sequenceWith`, `#resetSequence`) merged to `main` (docs: `docs/scenarios/SCENARIO_TEMPLATING.md`).
 
 ## [0.14.18] - 2025-12-19
 Timestamp: 2025-12-19T00:00:00Z

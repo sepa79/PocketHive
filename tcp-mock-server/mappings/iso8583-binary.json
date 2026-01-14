@@ -1,0 +1,9 @@
+{
+  "id": "iso8583-binary",
+  "requestPattern": "^(0100|0110|0200|0210|0400|0410|0800|0810)[0-9A-Fa-f]+$",
+  "responseTemplate": "0110{{transaction_data}}00",
+  "responseDelimiter": "",
+  "description": "ISO-8583 binary message handler (hex format)",
+  "priority": 20,
+  "enabled": true
+}

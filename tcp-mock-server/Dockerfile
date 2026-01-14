@@ -1,0 +1,12 @@
+FROM eclipse-temurin:21-jre-alpine
+
+WORKDIR /app
+
+COPY target/tcp-mock-server-*.jar app.jar
+COPY docs/*.md /app/docs/
+COPY mappings/ /app/mappings/
+COPY scenarios-state.json /app/scenarios-state-default.json
+
+EXPOSE 8080 9090
+
+ENTRYPOINT ["java", "-jar", "app.jar"]

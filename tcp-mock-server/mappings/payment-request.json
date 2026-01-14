@@ -1,0 +1,8 @@
+{
+  "id": "payment-request",
+  "requestPattern": ".*(MTI=|PAN=).*",
+  "responseTemplate": "RESP|00|{{auth_code}}|Approved",
+  "description": "Payment transaction handler",
+  "priority": 15,
+  "enabled": true
+}

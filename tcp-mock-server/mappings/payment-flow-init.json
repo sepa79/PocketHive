@@ -1,0 +1,10 @@
+{
+  "id": "payment-flow-init",
+  "requestPattern": "INIT_PAYMENT_FLOW",
+  "responseTemplate": "PAYMENT_FLOW_INITIALIZED",
+  "description": "Initialize payment-flow scenario to Started state",
+  "priority": 50,
+  "enabled": true,
+  "scenarioName": "payment-flow",
+  "newScenarioState": "Started"
+}

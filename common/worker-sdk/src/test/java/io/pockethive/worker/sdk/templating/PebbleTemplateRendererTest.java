@@ -3,6 +3,7 @@ package io.pockethive.worker.sdk.templating;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.pockethive.worker.sdk.api.WorkItem;
+import java.lang.reflect.Field;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
@@ -102,5 +103,31 @@ class PebbleTemplateRendererTest {
             seq2.add(renderer.render(template, Map.of()));
         }
         assertThat(seq2).isEqualTo(seq1);
+    }
+
+    @Test
+    void evictsOldEntriesBeyondCacheSize() throws Exception {
+        PebbleTemplateRenderer renderer = new PebbleTemplateRenderer();
+        for (int i = 0; i < 11; i++) {
+            renderer.render("template-" + i, Map.of());
+        }
+
+        Map<String, ?> cache = readTemplateCache(renderer);
+        assertThat(cache).hasSize(10);
+        assertThat(cache).doesNotContainKey("template-0");
+        assertThat(cache).containsKey("template-10");
+
+        renderer.render("template-0", Map.of());
+        Map<String, ?> refreshed = readTemplateCache(renderer);
+        assertThat(refreshed).hasSize(10);
+        assertThat(refreshed).containsKey("template-0");
+        assertThat(refreshed).doesNotContainKey("template-1");
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, ?> readTemplateCache(PebbleTemplateRenderer renderer) throws Exception {
+        Field field = PebbleTemplateRenderer.class.getDeclaredField("templateCache");
+        field.setAccessible(true);
+        return (Map<String, ?>) field.get(renderer);
     }
 }

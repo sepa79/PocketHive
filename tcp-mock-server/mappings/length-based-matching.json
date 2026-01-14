@@ -1,0 +1,16 @@
+{
+  "id": "length-based-matching",
+  "requestPattern": ".*",
+  "advancedMatching": {
+    "length": {
+      "greaterThan": 100,
+      "lessThan": 1000
+    },
+    "contains": "LARGE_PAYLOAD"
+  },
+  "responseTemplate": "LARGE_PAYLOAD_RECEIVED:{{request.length}}",
+  "responseDelimiter": "\n",
+  "description": "Match messages by length and content",
+  "priority": 15,
+  "enabled": true
+}

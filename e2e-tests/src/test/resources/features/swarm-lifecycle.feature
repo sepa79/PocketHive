@@ -28,6 +28,34 @@ Feature: Swarm lifecycle golden path
     And I start generator traffic
     Then the final queue receives the default generator response
 
+  @tcp-timeout
+  Scenario: TCP processor reports timeout when tcp-mock delays response
+    And the TCP mock server has the following mappings:
+      """
+      {
+        "id": "tcp-timeout-delay",
+        "requestPattern": "^STX.*ETX$",
+        "responseTemplate": "STXTIMEOUT|{{timestamp}}ETX",
+        "responseDelimiter": "",
+        "fixedDelayMs": 6000,
+        "description": "Delay response beyond processor timeout for e2e",
+        "priority": 40,
+        "enabled": true
+      }
+      """
+    And the "tcp-socket-demo" scenario template is requested
+    When I create the swarm from that template
+    Then the swarm is registered and queues are declared
+    When I start the swarm
+    Then the swarm reports running
+    And I start generator traffic
+    Then the final queue reports a processor error
+    And the TCP mock mapping "tcp-timeout-delay" is removed
+    When I stop the swarm
+    Then the swarm reports stopped
+    When I remove the swarm
+    Then the swarm is removed and lifecycle confirmations are recorded
+
   Scenario: Worker runtime config matches service defaults when scenario provides none
     And the "local-rest-defaults" scenario template is requested
     When I create the swarm from that template

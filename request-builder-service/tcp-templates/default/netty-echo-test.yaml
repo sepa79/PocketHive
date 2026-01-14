@@ -1,0 +1,8 @@
+serviceId: default
+callId: netty-echo-test
+protocol: TCP
+behavior: ECHO
+transport: netty
+bodyTemplate: "NETTY_ECHO_{{ payload.id | default('456') }}"
+endTag: "\n"
+maxBytes: 8192

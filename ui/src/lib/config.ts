@@ -5,6 +5,7 @@ export type UIConfig = {
   prometheus: string
   grafana: string
   wiremock: string
+  tcpMock: string
   redis: string
   stompUrl: string
   stompUser: string
@@ -26,6 +27,7 @@ const config: UIConfig = {
   redis: `/redis`,
   // grafana: `http://${host}:3333`,
   wiremock: `http://${host}:8080/__admin`,
+  tcpMock: `http://${host}:8083`,
   stompUrl: `/ws`,
   stompUser: readOnlyUser,
   stompPasscode: readOnlyPasscode,

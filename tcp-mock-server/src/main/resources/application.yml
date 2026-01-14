@@ -1,0 +1,63 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: tcp-mock-server
+  rabbitmq:
+    host: ${SPRING_RABBITMQ_HOST:rabbitmq}
+    port: ${SPRING_RABBITMQ_PORT:5672}
+    username: ${SPRING_RABBITMQ_USERNAME:guest}
+    password: ${SPRING_RABBITMQ_PASSWORD:guest}
+    virtual-host: ${SPRING_RABBITMQ_VIRTUAL_HOST:/}
+  security:
+    user:
+      name: ${POCKETHIVE_TCP_MOCK_DASHBOARD_USERNAME:admin}
+      password: ${POCKETHIVE_TCP_MOCK_DASHBOARD_PASSWORD:admin}
+
+rabbitmq:
+  logging:
+    enabled: ${POCKETHIVE_LOGS_RABBIT_ENABLED:false}
+
+tcp-mock:
+  port: ${POCKETHIVE_TCP_MOCK_PORT:9999}
+  nodeId: ${POCKETHIVE_TCP_MOCK_NODE_ID:tcp-mock-default}
+  dashboard:
+    enabled: ${POCKETHIVE_TCP_MOCK_DASHBOARD_ENABLED:true}
+    username: ${POCKETHIVE_TCP_MOCK_DASHBOARD_USERNAME:admin}
+    # Please change before deploying in prod.
+    password: ${POCKETHIVE_TCP_MOCK_DASHBOARD_PASSWORD:admin}
+  validation:
+    enabled: ${POCKETHIVE_TCP_MOCK_VALIDATION_ENABLED:true}
+    max-message-size: 8192
+  filtering:
+    enabled: ${POCKETHIVE_TCP_MOCK_FILTERING_ENABLED:false}
+  ssl:
+    enabled: ${POCKETHIVE_TCP_MOCK_SSL_ENABLED:false}
+    key-store: classpath:keystore.p12
+    key-store-password: changeit
+  connection:
+    backlog: 256
+    idle-timeout: 300
+    max-connections: 1000
+
+pockethive:
+  logs:
+    exchange: ${POCKETHIVE_LOGS_EXCHANGE:ph.logs}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  config: classpath:logback-spring.xml
+  pattern:
+    level: "%5p [%X{traceId}]"
+  level:
+    io.pockethive.tcpmock: DEBUG
+    org.springframework: INFO

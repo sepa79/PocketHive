@@ -1,0 +1,9 @@
+{
+  "id": "socket-test-request",
+  "requestPattern": "^REQ\\|.*\\|END$",
+  "responseTemplate": "RESP|{{request_id}}|SUCCESS|{{timestamp}}|END",
+  "responseDelimiter": "\n",
+  "description": "Socket test request handler",
+  "priority": 15,
+  "enabled": true
+}

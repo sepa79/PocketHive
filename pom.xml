@@ -7,7 +7,7 @@
   <packaging>pom</packaging>
   <properties>
     <!-- Flatten plugin resolves this CI-friendly revision into published POMs; see build plugins below. -->
-    <revision>0.14.18</revision>
+    <revision>0.14.19</revision>
     <logstash.logback.version>8.1</logstash.logback.version>
   </properties>
   <modules>
@@ -29,7 +29,9 @@
     <module>swarm-controller-service</module>
     <module>trigger-service</module>
     <module>scenario-manager-service</module>
+    <module>tcp-mock-server</module>
     <module>http-builder-service</module>
+    <module>request-builder-service</module>
     <module>e2e-tests</module>
     <module>tools/scenario-templating-check</module>
   </modules>

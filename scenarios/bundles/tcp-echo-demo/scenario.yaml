@@ -1,0 +1,70 @@
+id: tcp-echo-demo
+name: TCP Echo Server Demo
+description: Demonstrates TCP echo behavior using socket transport with connection reuse
+template:
+  image: swarm-controller:latest
+  bees:
+    - role: generator
+      image: generator:latest
+      config:
+        inputs:
+          type: SCHEDULER
+          scheduler:
+            ratePerSec: 5
+            maxMessages: 20
+        worker:
+          message:
+            bodyType: SIMPLE
+            body: |
+              {
+                "message": "ECHO_TEST_{{ eval('#randInt(1000, 9999)') }}",
+                "timestamp": "{{ eval("#date_format(now, 'yyyy-MM-dd HH:mm:ss')") }}"
+              }
+            headers:
+              x-ph-call-id: tcp-echo
+      work:
+        out: build
+    - role: request-builder
+      image: request-builder:latest
+      config:
+        worker:
+          templateRoot: /app/scenario/templates
+          serviceId: default
+      work:
+        in: build
+        out: proc
+    - role: processor
+      image: processor:latest
+      config:
+        baseUrl: "{{ sut.endpoints['tcp-server'].baseUrl }}"
+        worker:
+          tcpTransport:
+            type: socket
+            connectionReuse: PER_THREAD
+            maxRetries: 2
+            connectTimeoutMs: 2000
+            readTimeoutMs: 3000
+      work:
+        in: proc
+        out: post
+    - role: postprocessor
+      image: postprocessor:latest
+      config:
+        worker:
+          postprocessor:
+            publish-all-metrics: true
+      work:
+        in: post
+plan:
+  bees:
+    - role: generator
+      steps:
+        - stepId: gen-start
+          name: Start generator
+          time: PT1S
+          type: start
+  swarm:
+    - stepId: swarm-start
+      name: Start swarm
+      time: PT0S
+      type: start
