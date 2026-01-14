@@ -38,7 +38,7 @@ class ControlPlaneEmitterTest {
     @BeforeEach
     void setUp() {
         publisher = new CapturingPublisher();
-        identity = new ControlPlaneIdentity("swarm-A", "generator", "gen-1");
+        identity = new ControlPlaneIdentity("swarm-A", null, "generator", "gen-1");
         settings = new ControlPlaneTopologySettings("swarm-A", "ph.control", Map.of());
         emitter = ControlPlaneEmitter.worker(identity, publisher, settings);
     }
@@ -143,7 +143,7 @@ class ControlPlaneEmitterTest {
 
     @Test
     void workerFactoryAcceptsArbitraryRoles() {
-        ControlPlaneIdentity custom = new ControlPlaneIdentity("swarm-A", "custom-role", "worker-1");
+        ControlPlaneIdentity custom = new ControlPlaneIdentity("swarm-A", null, "custom-role", "worker-1");
         ControlPlaneEmitter customEmitter = ControlPlaneEmitter.worker(custom, publisher, settings);
 
         ControlPlaneEmitter.StatusContext context = ControlPlaneEmitter.StatusContext.of(builder -> builder

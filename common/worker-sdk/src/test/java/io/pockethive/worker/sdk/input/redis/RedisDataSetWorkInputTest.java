@@ -133,7 +133,7 @@ class RedisDataSetWorkInputTest {
     }
 
     private static ControlPlaneIdentity identity() {
-        return new ControlPlaneIdentity("swarm-1", "role", "instance-1");
+        return new ControlPlaneIdentity("swarm-1", null, "role", "instance-1");
     }
 
     private static WorkerControlPlaneRuntime mockControlPlane() {

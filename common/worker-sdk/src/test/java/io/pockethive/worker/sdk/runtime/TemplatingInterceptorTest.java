@@ -115,7 +115,7 @@ class TemplatingInterceptorTest {
     }
 
     private WorkerContext workerContext(WorkerState state) {
-        WorkerInfo info = new WorkerInfo("role", "swarm", "instance", "in.queue", "out.queue");
+        WorkerInfo info = new WorkerInfo("role", "swarm", "swarm-inst-1", "instance", "in.queue", "out.queue");
         ObservabilityContext observabilityContext = new ObservabilityContext();
         observabilityContext.setTraceId("trace-id");
         observabilityContext.setSwarmId(info.swarmId());

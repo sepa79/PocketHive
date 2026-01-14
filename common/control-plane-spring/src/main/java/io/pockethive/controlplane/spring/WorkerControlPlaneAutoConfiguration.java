@@ -62,7 +62,7 @@ public class WorkerControlPlaneAutoConfiguration {
         @Qualifier("workerControlPlaneTopologyDescriptor") ControlPlaneTopologyDescriptor descriptor) {
         String swarmId = requireText(properties.getSwarmId(), "pockethive.control-plane.swarm-id");
         String instanceId = requireText(properties.getInstanceId(), "pockethive.control-plane.instance-id");
-        return new ControlPlaneIdentity(swarmId, descriptor.role(), instanceId);
+        return new ControlPlaneIdentity(swarmId, null, descriptor.role(), instanceId);
     }
 
     @Bean(name = "workerControlPlaneDeclarables")

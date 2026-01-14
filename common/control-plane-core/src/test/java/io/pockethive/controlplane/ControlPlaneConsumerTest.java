@@ -25,7 +25,7 @@ class ControlPlaneConsumerTest {
     void appliesDuplicateSuppression() throws Exception {
         MutableClock clock = new MutableClock(Instant.parse("2024-01-01T00:00:00Z"));
         ControlPlaneConsumer consumer = ControlPlaneConsumer.builder(mapper)
-            .identity(new ControlPlaneIdentity("swarm", "generator", "gen-1"))
+            .identity(new ControlPlaneIdentity("swarm", null, "generator", "gen-1"))
             .duplicateGuard(DuplicateSignalGuard.create(Duration.ofMinutes(1), 32, clock))
             .clock(clock)
             .build();
@@ -48,7 +48,7 @@ class ControlPlaneConsumerTest {
     @Test
     void selfFilterSkipsInstance() throws Exception {
         ControlPlaneConsumer consumer = ControlPlaneConsumer.builder(mapper)
-            .identity(new ControlPlaneIdentity("swarm", "generator", "gen-1"))
+            .identity(new ControlPlaneIdentity("swarm", null, "generator", "gen-1"))
             .selfFilter(SelfFilter.skipSelfInstance())
             .build();
 
@@ -66,7 +66,7 @@ class ControlPlaneConsumerTest {
     @Test
     void selfFilterProcessesWhenOriginDiffers() throws Exception {
         ControlPlaneConsumer consumer = ControlPlaneConsumer.builder(mapper)
-            .identity(new ControlPlaneIdentity("swarm", "generator", "gen-1"))
+            .identity(new ControlPlaneIdentity("swarm", null, "generator", "gen-1"))
             .selfFilter(SelfFilter.skipSelfInstance())
             .build();
 
@@ -84,7 +84,7 @@ class ControlPlaneConsumerTest {
     @Test
     void rejectsNullPayload() {
         ControlPlaneConsumer consumer = ControlPlaneConsumer.builder(mapper)
-            .identity(new ControlPlaneIdentity("swarm", "generator", "gen-1"))
+            .identity(new ControlPlaneIdentity("swarm", null, "generator", "gen-1"))
             .build();
 
         assertThatThrownBy(() -> consumer.consume(null, "signal.config-update.swarm.generator.gen-1", env -> { }))
@@ -95,7 +95,7 @@ class ControlPlaneConsumerTest {
     @Test
     void rejectsBlankRoutingKey() throws Exception {
         ControlPlaneConsumer consumer = ControlPlaneConsumer.builder(mapper)
-            .identity(new ControlPlaneIdentity("swarm", "generator", "gen-1"))
+            .identity(new ControlPlaneIdentity("swarm", null, "generator", "gen-1"))
             .build();
 
         ControlSignal signal = ControlSignal.forInstance(
@@ -108,7 +108,7 @@ class ControlPlaneConsumerTest {
     @Test
     void processesValidPayload() throws Exception {
         ControlPlaneConsumer consumer = ControlPlaneConsumer.builder(mapper)
-            .identity(new ControlPlaneIdentity("swarm", "generator", "gen-2"))
+            .identity(new ControlPlaneIdentity("swarm", null, "generator", "gen-2"))
             .build();
 
         ControlSignal signal = ControlSignal.forInstance(

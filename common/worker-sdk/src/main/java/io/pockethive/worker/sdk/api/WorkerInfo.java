@@ -9,6 +9,7 @@ import java.util.Objects;
 public record WorkerInfo(
     String role,
     String swarmId,
+    String swarmInstanceId,
     String instanceId,
     String inQueue,
     String outQueue
@@ -17,15 +18,17 @@ public record WorkerInfo(
     /**
      * Creates a new worker description.
      *
-     * @param role       logical role name (e.g. {@code processor})
-     * @param swarmId    swarm identifier assigned by the control plane
-     * @param instanceId unique instance identifier
-     * @param inQueue    optional inbound queue name
-     * @param outQueue   optional outbound queue name
+     * @param role             logical role name (e.g. {@code processor})
+     * @param swarmId          swarm identifier assigned by the control plane
+     * @param swarmInstanceId  unique swarm instance UUID (for isolation across recreates)
+     * @param instanceId       unique worker instance identifier
+     * @param inQueue          optional inbound queue name
+     * @param outQueue         optional outbound queue name
      */
     public WorkerInfo {
         role = requireText(role, "role");
         swarmId = requireText(swarmId, "swarmId");
+        swarmInstanceId = requireText(swarmInstanceId, "swarmInstanceId");
         instanceId = requireText(instanceId, "instanceId");
         inQueue = normalize(inQueue);
         outQueue = normalize(outQueue);

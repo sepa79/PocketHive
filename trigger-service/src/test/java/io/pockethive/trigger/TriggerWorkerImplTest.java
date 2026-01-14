@@ -108,7 +108,7 @@ class TriggerWorkerImplTest {
 
     @Override
     public WorkerInfo info() {
-      return new WorkerInfo("trigger", "swarm", "instance", null, null);
+      return new WorkerInfo("trigger", "swarm", "swarm-inst-1", "instance", null, null);
     }
 
     @Override

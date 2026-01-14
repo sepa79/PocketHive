@@ -50,7 +50,7 @@ public class ManagerControlPlaneAutoConfiguration {
         ControlPlaneProperties.IdentityProperties identity = properties.getIdentity();
         String swarmId = requireText(identity.getSwarmId(), "pockethive.control-plane.swarm-id");
         String instanceId = requireText(identity.getInstanceId(), "pockethive.control-plane.instance-id");
-        return new ControlPlaneIdentity(swarmId, descriptor.role(), instanceId);
+        return new ControlPlaneIdentity(swarmId, null, descriptor.role(), instanceId);
     }
 
     @Bean(name = "managerControlPlaneDeclarables")

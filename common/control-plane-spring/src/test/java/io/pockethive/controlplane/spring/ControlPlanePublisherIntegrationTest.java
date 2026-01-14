@@ -44,7 +44,7 @@ class ControlPlanePublisherIntegrationTest {
             RabbitTemplate template = context.getBean(RabbitTemplate.class);
             TopicExchange exchange = context.getBean("controlPlaneExchange", TopicExchange.class);
 
-            ControlPlaneIdentity identity = new ControlPlaneIdentity("swarm-A", "generator", "gen-1");
+            ControlPlaneIdentity identity = new ControlPlaneIdentity("swarm-A", null, "generator", "gen-1");
             ControlPlaneProperties properties = context.getBean(ControlPlaneProperties.class);
             ControlPlaneTopologySettings settings = new ControlPlaneTopologySettings(
                 properties.getSwarmId(), properties.getControlQueuePrefix(), Map.of());
