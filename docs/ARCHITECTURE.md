@@ -358,8 +358,58 @@ Example (inside swarm-controller `status-full.data.context`):
       "edges": [
         {
           "edgeId": "e1",
-          "from": { "role": "generator", "instance": "gen-1", "routingKey": "ph.<swarm>.gen" },
-          "to": { "role": "moderator", "instance": "mod-1", "queue": "ph.<swarm>.mod" }
+          "from": { "role": "generator", "instance": "gen-1", "port": "out", "routingKey": "ph.<swarm>.gen" },
+          "to": { "role": "moderator", "instance": "mod-1", "port": "in", "queue": "ph.<swarm>.mod" }
+        }
+      ]
+    }
+  }
+}
+```
+
+**Multi-input / multi-output notes**
+
+- Multi-IO is expressed as multiple ports per bee and multiple edges in `topology`.
+- Runtime bindings should include `from.port` / `to.port` so UI can map edges to the right ports.
+- If a worker chooses among outputs (or inputs) via a policy, treat it as optional metadata on the edge; the topology still lists the possible paths.
+
+Example (scenario fragment with multi-IO ports + edges):
+
+```yaml
+template:
+  bees:
+    - id: modA
+      role: moderator
+      ports:
+        - { id: in.http, direction: in }
+        - { id: in.audit, direction: in }
+        - { id: out.fast, direction: out }
+        - { id: out.slow, direction: out }
+
+topology:
+  version: 1
+  edges:
+    - id: e-fast
+      from: { beeId: modA, port: out.fast }
+      to:   { beeId: procA, port: in.fast }
+    - id: e-slow
+      from: { beeId: modA, port: out.slow }
+      to:   { beeId: procA, port: in.slow }
+```
+
+Example (bindings with ports + optional selector hint):
+
+```json
+{
+  "bindings": {
+    "work": {
+      "exchange": "ph.<swarm>.traffic",
+      "edges": [
+        {
+          "edgeId": "e-fast",
+          "from": { "role": "moderator", "instance": "mod-1", "port": "out.fast", "routingKey": "ph.<swarm>.mod.fast" },
+          "to": { "role": "processor", "instance": "proc-1", "port": "in.fast", "queue": "ph.<swarm>.proc.fast" },
+          "selector": { "policy": "predicate", "expr": "payload.priority >= 50" }
         }
       ]
     }
