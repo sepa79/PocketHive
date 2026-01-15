@@ -3,9 +3,9 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
-Timestamp: 2026-01-14T12:01:27Z
+Timestamp: 2026-01-15T01:24:49Z
 
-- No unreleased changes yet.
+- E2E: revert a swarm lifecycle test regression so scenario progress and worker snapshots read from `data.context`, while status-full snapshots are preferred when available.
 
 ## [0.14.20] - 2026-01-14
 Timestamp: 2026-01-14T12:01:27Z
