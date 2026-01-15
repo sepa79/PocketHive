@@ -1,9 +1,7 @@
 package io.pockethive.controlplane.spring;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.controlplane.messaging.AmqpControlPlanePublisher;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
-import io.pockethive.observability.ControlPlaneJson;
 import org.springframework.amqp.core.ExchangeBuilder;
 import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -36,12 +34,6 @@ public class ControlPlaneCommonAutoConfiguration {
                                        ObjectProvider<WorkerControlPlaneProperties> workerProperties) {
         String exchange = resolveExchange(managerProperties, workerProperties);
         return ExchangeBuilder.topicExchange(exchange).durable(true).build();
-    }
-
-    @Bean(name = "controlPlaneObjectMapper")
-    @ConditionalOnMissingBean(name = "controlPlaneObjectMapper")
-    ObjectMapper controlPlaneObjectMapper() {
-        return ControlPlaneJson.mapper();
     }
 
     @Bean
