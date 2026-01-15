@@ -2,7 +2,9 @@ name: Publish Docker Images
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - release/**
     tags: ['v*']
   workflow_dispatch:
 
@@ -18,8 +20,12 @@ jobs:
       packages: write
 
     outputs:
-      tag: ${{ steps.version.outputs.tag }}
       version: ${{ steps.version.outputs.version }}
+      minor: ${{ steps.version.outputs.minor }}
+      channel: ${{ steps.version.outputs.channel }}
+      stable: ${{ steps.version.outputs.stable }}
+      runtime_tag: ${{ steps.version.outputs.runtime_tag }}
+      sha: ${{ steps.version.outputs.sha }}
 
     steps:
       - name: Checkout
@@ -42,25 +48,57 @@ jobs:
           java-version: '21'
           cache: maven
 
-      - name: Extract version
+      - name: Compute version + tags
         id: version
         run: |
-          VERSION=$(mvn help:evaluate -Dexpression=revision -q -DforceStdout)
-          if [[ -z "$VERSION" ]]; then
+          VERSION_RAW=$(mvn help:evaluate -Dexpression=revision -q -DforceStdout)
+          if [[ -z "$VERSION_RAW" ]]; then
             echo "Failed to extract revision from pom.xml" >&2
             exit 1
           fi
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          VERSION=$(echo "$VERSION_RAW" | tr '[:upper:]' '[:lower:]')
+          VERSION_CORE="${VERSION%%-*}"
+          MAJOR="${VERSION_CORE%%.*}"
+          MINOR_PART="${VERSION_CORE#*.}"
+          MINOR="${MINOR_PART%%.*}"
+          if [[ -z "$MAJOR" || -z "$MINOR" ]]; then
+            echo "Unable to parse version components from $VERSION_RAW" >&2
+            exit 1
+          fi
+          MINOR_TAG="${MAJOR}.${MINOR}"
+          STABLE=false
+          if (( MINOR % 2 == 0 )); then
+            STABLE=true
+          fi
+          CHANNEL="experimental"
+          if [[ "$STABLE" == "true" ]]; then
+            CHANNEL="stable"
+          fi
+          SHORT_SHA="${GITHUB_SHA::7}"
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             TAG="${GITHUB_REF#refs/tags/v}"
+            TAG=$(echo "$TAG" | tr '[:upper:]' '[:lower:]')
             if [[ "$TAG" != "$VERSION" ]]; then
-              echo "Git tag v$TAG does not match pom.xml revision $VERSION" >&2
+              echo "Git tag v$TAG does not match pom.xml revision $VERSION_RAW" >&2
               exit 1
             fi
-            echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          else
-            echo "tag=latest" >> "$GITHUB_OUTPUT"
           fi
+          BASE="${REGISTRY}/${IMAGE_PREFIX}/jvm-base"
+          TAGS=()
+          TAGS+=("${BASE}:${VERSION}")
+          TAGS+=("${BASE}:${VERSION}-${SHORT_SHA}")
+          TAGS+=("${BASE}:${MINOR_TAG}")
+          TAGS+=("${BASE}:${CHANNEL}")
+          if [[ "$STABLE" == "true" ]]; then
+            TAGS+=("${BASE}:latest")
+          fi
+          printf "version=%s\n" "$VERSION" >> "$GITHUB_OUTPUT"
+          printf "minor=%s\n" "$MINOR_TAG" >> "$GITHUB_OUTPUT"
+          printf "channel=%s\n" "$CHANNEL" >> "$GITHUB_OUTPUT"
+          printf "stable=%s\n" "$STABLE" >> "$GITHUB_OUTPUT"
+          printf "runtime_tag=%s\n" "$VERSION" >> "$GITHUB_OUTPUT"
+          printf "sha=%s\n" "$SHORT_SHA" >> "$GITHUB_OUTPUT"
+          printf "tags<<'EOF'\n%s\nEOF\n" "$(printf '%s\n' "${TAGS[@]}")" >> "$GITHUB_OUTPUT"
 
       - name: Build and push base image
         uses: docker/build-push-action@v5
@@ -68,9 +106,10 @@ jobs:
           context: .
           file: docker/base/Dockerfile
           push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/jvm-base:${{ steps.version.outputs.tag }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/jvm-base:${{ steps.version.outputs.version }}
+          tags: ${{ steps.version.outputs.tags }}
+          labels: |
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -175,6 +214,25 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Compute image tags
+        id: tags
+        run: |
+          VERSION="${{ needs.build-base.outputs.version }}"
+          MINOR_TAG="${{ needs.build-base.outputs.minor }}"
+          CHANNEL="${{ needs.build-base.outputs.channel }}"
+          STABLE="${{ needs.build-base.outputs.stable }}"
+          SHORT_SHA="${{ needs.build-base.outputs.sha }}"
+          IMAGE="${REGISTRY}/${IMAGE_PREFIX}/${{ matrix.service.name }}"
+          TAGS=()
+          TAGS+=("${IMAGE}:${VERSION}")
+          TAGS+=("${IMAGE}:${VERSION}-${SHORT_SHA}")
+          TAGS+=("${IMAGE}:${MINOR_TAG}")
+          TAGS+=("${IMAGE}:${CHANNEL}")
+          if [[ "$STABLE" == "true" ]]; then
+            TAGS+=("${IMAGE}:latest")
+          fi
+          printf "tags<<'EOF'\n%s\nEOF\n" "$(printf '%s\n' "${TAGS[@]}")" >> "$GITHUB_OUTPUT"
+
       - name: Build and push ${{ matrix.service.name }}
         uses: docker/build-push-action@v5
         with:
@@ -183,9 +241,10 @@ jobs:
           target: ${{ matrix.service.target }}
           push: true
           build-args: |
-            RUNTIME_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/jvm-base:${{ needs.build-base.outputs.tag }}
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.service.name }}:${{ needs.build-base.outputs.tag }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.service.name }}:${{ needs.build-base.outputs.version }}
+            RUNTIME_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/jvm-base:${{ needs.build-base.outputs.runtime_tag }}
+          tags: ${{ steps.tags.outputs.tags }}
+          labels: |
+            org.opencontainers.image.version=${{ needs.build-base.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
