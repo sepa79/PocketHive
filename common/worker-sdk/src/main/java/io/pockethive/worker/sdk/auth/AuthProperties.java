@@ -8,7 +8,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "pockethive.auth")
 public class AuthProperties {
     
-    private boolean enabled = false;
+    private boolean enabled = true;
     private SchedulerProperties scheduler = new SchedulerProperties();
     private RefreshProperties refresh = new RefreshProperties();
     private HttpProperties http = new HttpProperties();
