@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
 import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerContext;
+import io.pockethive.worker.sdk.auth.AuthConfig;
+import io.pockethive.worker.sdk.auth.AuthHeaderGenerator;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
 import io.pockethive.worker.sdk.config.WorkerCapability;
 import io.pockethive.worker.sdk.config.WorkerInputType;
@@ -13,6 +15,7 @@ import io.pockethive.worker.sdk.templating.MessageBodyType;
 import io.pockethive.worker.sdk.templating.MessageTemplate;
 import io.pockethive.worker.sdk.templating.MessageTemplateRenderer;
 import io.pockethive.worker.sdk.templating.TemplateRenderer;
+import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -33,6 +36,7 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
   private final TemplateRenderer templateRenderer;
   private final MessageTemplateRenderer messageTemplateRenderer;
   private final TemplateLoader templateLoader;
+  private final AuthHeaderGenerator authHeaderGenerator;
   private volatile Map<String, TemplateDefinition> templates;
   private volatile String lastTemplateConfigKey;
   private final LongAdder errorCount = new LongAdder();
@@ -41,16 +45,20 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
   private volatile long lastErrorCountSnapshot = 0L;
 
   @Autowired
-  RequestBuilderWorkerImpl(RequestBuilderWorkerProperties properties, TemplateRenderer templateRenderer) {
-    this(properties, templateRenderer, new TemplateLoader());
+  RequestBuilderWorkerImpl(RequestBuilderWorkerProperties properties, 
+                          TemplateRenderer templateRenderer,
+                          AuthHeaderGenerator authHeaderGenerator) {
+    this(properties, templateRenderer, new TemplateLoader(), authHeaderGenerator);
   }
 
   RequestBuilderWorkerImpl(RequestBuilderWorkerProperties properties,
                         TemplateRenderer templateRenderer,
-                        TemplateLoader templateLoader) {
+                        TemplateLoader templateLoader,
+                        AuthHeaderGenerator authHeaderGenerator) {
     this.properties = Objects.requireNonNull(properties, "properties");
     this.templateRenderer = Objects.requireNonNull(templateRenderer, "templateRenderer");
     this.templateLoader = Objects.requireNonNull(templateLoader, "templateLoader");
+    this.authHeaderGenerator = authHeaderGenerator;
     this.messageTemplateRenderer = new MessageTemplateRenderer(templateRenderer);
     reloadTemplates();
   }
@@ -90,6 +98,19 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
         MessageTemplateRenderer.RenderedMessage rendered =
             messageTemplateRenderer.render(template, seed);
 
+        Map<String, String> headers = new HashMap<>(rendered.headers());
+        
+        // Add auth headers if configured in template
+        if (tcpDef.auth() != null && authHeaderGenerator != null) {
+          try {
+            AuthConfig authConfig = AuthConfig.fromTemplate(tcpDef.auth(), serviceId, callId);
+            Map<String, String> authHeaders = authHeaderGenerator.generate(context, authConfig, seed);
+            headers.putAll(authHeaders);
+          } catch (Exception ex) {
+            context.logger().warn("Failed to generate auth headers for serviceId={} callId={}", serviceId, callId, ex);
+          }
+        }
+
         envelope.put("protocol", "TCP");
         envelope.put("method", "");
         envelope.put("behavior", tcpDef.behavior());
@@ -100,6 +121,7 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
           envelope.put("maxBytes", tcpDef.maxBytes());
         }
         envelope.put("body", rendered.body());
+        envelope.set("headers", MAPPER.valueToTree(headers));
       } else if (definition instanceof HttpTemplateDefinition httpDef) {
         MessageTemplate template = MessageTemplate.builder()
             .bodyType(MessageBodyType.HTTP)
@@ -112,12 +134,25 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
         MessageTemplateRenderer.RenderedMessage rendered =
             messageTemplateRenderer.render(template, seed);
 
+        Map<String, String> headers = new HashMap<>(rendered.headers());
+        
+        // Add auth headers if configured in template
+        if (httpDef.auth() != null && authHeaderGenerator != null) {
+          try {
+            AuthConfig authConfig = AuthConfig.fromTemplate(httpDef.auth(), serviceId, callId);
+            Map<String, String> authHeaders = authHeaderGenerator.generate(context, authConfig, seed);
+            headers.putAll(authHeaders);
+          } catch (Exception ex) {
+            context.logger().warn("Failed to generate auth headers for serviceId={} callId={}", serviceId, callId, ex);
+          }
+        }
+
         String method = rendered.method() == null ? "GET" : rendered.method().toUpperCase(Locale.ROOT);
         envelope.put("protocol", "HTTP");
         envelope.put("path", rendered.path());
         envelope.put("method", method);
-        envelope.set("headers", MAPPER.valueToTree(rendered.headers()));
-        String contentType = rendered.headers().getOrDefault("Content-Type", "").toLowerCase();
+        envelope.set("headers", MAPPER.valueToTree(headers));
+        String contentType = headers.getOrDefault("Content-Type", "").toLowerCase();
         // Detect JSON to embed as compact node instead of escaped string
         boolean isJson = contentType.contains("application/json") ||
                         (contentType.isEmpty() && looksLikeJson(rendered.body()));

@@ -12,7 +12,8 @@ class TemplateLoaderTest {
   @Test
   void loadsHttpTemplate() throws Exception {
     Path dir = Files.createTempDirectory("http-templates");
-    Path file = dir.resolve("default-call.json");
+    Path file
+      = dir.resolve("default-call.json");
     Files.writeString(file, """
         {
           "serviceId": "svc",
@@ -35,7 +36,7 @@ class TemplateLoaderTest {
     assertThat(def.callId()).isEqualTo("CallA");
     assertThat(def.bodyTemplate()).isEqualTo("{}");
     assertThat(def.headersTemplate()).containsEntry("X-Test", "true");
-    
+
     assertThat(def).isInstanceOf(HttpTemplateDefinition.class);
     HttpTemplateDefinition httpDef = (HttpTemplateDefinition) def;
     assertThat(httpDef.method()).isEqualTo("POST");
@@ -66,7 +67,7 @@ class TemplateLoaderTest {
     assertThat(def.callId()).isEqualTo("TcpCall");
     assertThat(def.protocol()).isEqualTo("TCP");
     assertThat(def.bodyTemplate()).isEqualTo("{{ payload }}");
-    
+
     assertThat(def).isInstanceOf(TcpTemplateDefinition.class);
     TcpTemplateDefinition tcpDef = (TcpTemplateDefinition) def;
     assertThat(tcpDef.behavior()).isEqualTo("ECHO");
