@@ -98,7 +98,7 @@ jobs:
           printf "stable=%s\n" "$STABLE" >> "$GITHUB_OUTPUT"
           printf "runtime_tag=%s\n" "$VERSION" >> "$GITHUB_OUTPUT"
           printf "sha=%s\n" "$SHORT_SHA" >> "$GITHUB_OUTPUT"
-          printf "tags<<'EOF'\n%s\nEOF\n" "$(printf '%s\n' "${TAGS[@]}")" >> "$GITHUB_OUTPUT"
+          printf "tags<<EOF\n%s\nEOF\n" "$(printf '%s\n' "${TAGS[@]}")" >> "$GITHUB_OUTPUT"
 
       - name: Build and push base image
         uses: docker/build-push-action@v5
@@ -231,7 +231,7 @@ jobs:
           if [[ "$STABLE" == "true" ]]; then
             TAGS+=("${IMAGE}:latest")
           fi
-          printf "tags<<'EOF'\n%s\nEOF\n" "$(printf '%s\n' "${TAGS[@]}")" >> "$GITHUB_OUTPUT"
+          printf "tags<<EOF\n%s\nEOF\n" "$(printf '%s\n' "${TAGS[@]}")" >> "$GITHUB_OUTPUT"
 
       - name: Build and push ${{ matrix.service.name }}
         uses: docker/build-push-action@v5
