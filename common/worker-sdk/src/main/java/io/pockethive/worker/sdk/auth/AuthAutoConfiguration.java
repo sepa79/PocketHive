@@ -28,7 +28,7 @@ import java.util.Map;
  */
 @Configuration
 @EnableConfigurationProperties(AuthProperties.class)
-@ConditionalOnProperty(prefix = "pockethive.auth", name = "enabled", havingValue = "true")
+@ConditionalOnProperty(prefix = "pockethive.auth", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class AuthAutoConfiguration {
     
     @Bean
@@ -76,7 +76,7 @@ public class AuthAutoConfiguration {
     }
     
     @Bean
-    @ConditionalOnProperty(prefix = "pockethive.auth.scheduler", name = "enabled", havingValue = "true")
+    @ConditionalOnProperty(prefix = "pockethive.auth.scheduler", name = "enabled", havingValue = "true", matchIfMissing = true)
     public TokenRefreshScheduler tokenRefreshScheduler(
         InMemoryTokenStore tokenStore,
         Map<String, AuthStrategy> strategies,
@@ -87,7 +87,7 @@ public class AuthAutoConfiguration {
     
     @Configuration
     @EnableScheduling
-    @ConditionalOnProperty(prefix = "pockethive.auth.scheduler", name = "enabled", havingValue = "true")
+    @ConditionalOnProperty(prefix = "pockethive.auth.scheduler", name = "enabled", havingValue = "true", matchIfMissing = true)
     static class SchedulingConfiguration {
     }
 }

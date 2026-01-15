@@ -29,16 +29,15 @@ PocketHive provides enterprise-grade authentication with:
 
 ## Quick Start
 
-### 1. Enable Auth
+### 1. Auth is Auto-Enabled
 
-```yaml
-# application.yml
-pockethive:
-  auth:
-    enabled: true
-    scheduler:
-      enabled: true
-```
+Auth is automatically enabled **globally** when the worker-sdk is present. It remains dormant (no overhead) until you use it in templates or worker config.
+
+**Key Points:**
+- ✅ Auth beans are always available
+- ✅ Zero overhead when not used (no tokens = no work)
+- ✅ No per-worker enable/disable needed
+- ✅ Just add `auth:` blocks to templates OR worker config
 
 ### 2. Create Template with Auth
 
@@ -63,10 +62,13 @@ headersTemplate:
 ### 3. Run Scenario
 
 The request builder automatically:
-1. Fetches OAuth2 token
-2. Caches it in memory
-3. Adds `Authorization: Bearer <token>` header
-4. Refreshes token before expiry
+1. Detects auth config in template
+2. Enables auth system (no manual config needed)
+3. Starts token refresh scheduler
+4. Fetches OAuth2 token
+5. Caches it in memory
+6. Adds `Authorization: Bearer <token>` header
+7. Refreshes token before expiry
 
 ---
 
@@ -402,6 +404,50 @@ Generator routes to different auth:
 
 ## Advanced Features
 
+### Configuration (Optional)
+
+Auth is enabled globally by default. It's dormant (zero overhead) until you use it.
+
+**Default behavior:**
+- Auth beans are always available
+- Token refresh scheduler runs but does nothing if no tokens exist
+- No performance impact on workers without auth
+
+**Override defaults if needed:**
+
+```yaml
+pockethive:
+  auth:
+    enabled: true              # default: true (globally enabled)
+    scheduler:
+      enabled: true            # default: true (auto-enabled)
+      scanIntervalSeconds: 10  # default: 10
+      threadPoolSize: 5        # default: 5
+    refresh:
+      defaultBuffer: 60        # seconds before expiry to refresh
+      emergencyBuffer: 10      # emergency threshold
+    http:
+      connectTimeoutSeconds: 5
+      readTimeoutSeconds: 10
+      maxConnections: 50
+      sslVerification: true
+    cleanup:
+      enabled: true
+      inactiveThresholdHours: 24
+```
+
+### Disable Auth Globally (if needed)
+
+To completely disable auth across all workers:
+
+```yaml
+pockethive:
+  auth:
+    enabled: false           # disables auth system globally
+```
+
+**Note:** You cannot disable auth per-worker. It's either globally enabled (default) or globally disabled.
+
 ### Token in Message Body
 
 Use `#authToken()` SpEL function:
@@ -434,7 +480,9 @@ Supported sources:
 
 ### Token Not Refreshing
 
-**Check scheduler is enabled:**
+**Auth is auto-enabled by default.** If tokens aren't refreshing:
+
+**Check logs for errors:**
 ```yaml
 pockethive:
   auth:
