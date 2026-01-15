@@ -13,5 +13,6 @@ public record TcpTemplateDefinition(
     String bodyTemplate,
     Map<String, String> headersTemplate,
     String endTag,          // End delimiter for response reading
-    Integer maxBytes        // Max bytes to read
+    Integer maxBytes,       // Max bytes to read
+    Map<String, Object> auth
 ) implements TemplateDefinition {}
