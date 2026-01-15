@@ -19,6 +19,7 @@ PocketHive is a RabbitMQ‑centric load & behavior simulator that orchestrates s
 - [Core Components](#core-components)
 - [Configuration](#configuration)
 - [Observability](#observability)
+- [Branching Strategy](#branching-strategy)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -255,6 +256,15 @@ When accessing PocketHive from another machine, keep using the UI origin and the
 - [Usage guide](docs/USAGE.md)
 - [Scenario templating (Pebble + SpEL)](docs/scenarios/SCENARIO_TEMPLATING.md)
 - [Contributor guide](CONTRIBUTING.md)
+
+---
+
+## Branching Strategy
+
+- **main** is the integration branch and carries the **experimental** line (odd minor versions, e.g. `0.15.x`).
+- **release/<major>.<minor>** branches carry **stable** lines (even minor versions, e.g. `release/0.14`).
+- Feature branches merge into `main`; when the experimental line is ready, bump `main` to the next even minor and cut a `release/<major>.<minor>` branch.
+- CI tags images based on version parity (odd = experimental, even = stable), so the branch name does not override the channel.
 
 ---
 
