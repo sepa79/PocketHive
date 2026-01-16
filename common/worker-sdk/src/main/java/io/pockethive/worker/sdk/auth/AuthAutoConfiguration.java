@@ -80,9 +80,10 @@ public class AuthAutoConfiguration {
     public TokenRefreshScheduler tokenRefreshScheduler(
         InMemoryTokenStore tokenStore,
         Map<String, AuthStrategy> strategies,
-        MeterRegistry meterRegistry
+        MeterRegistry meterRegistry,
+        AuthProperties properties
     ) {
-        return new TokenRefreshScheduler(tokenStore, strategies, meterRegistry);
+        return new TokenRefreshScheduler(tokenStore, strategies, meterRegistry, properties);
     }
     
     @Configuration

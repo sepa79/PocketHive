@@ -6,7 +6,6 @@ import io.pockethive.worker.sdk.templating.AuthTokenHolder;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -47,18 +46,21 @@ public class AuthHeaderGenerator {
             throw new IllegalArgumentException("Unknown auth type: " + resolved.type());
         }
         
-        // Get or refresh token
-        Optional<TokenInfo> token = tokenStore.getToken(tokenKey);
-        
-        if (token.isEmpty() || token.get().isExpired()) {
-            // Synchronous refresh (blocks first request only)
-            token = Optional.of(refreshTokenSync(resolved, strategy));
-            context.statusPublisher().update(status -> status.data("auth.cacheHit", false));
-        } else if (token.get().needsRefresh()) {
-            // Emergency refresh
-            token = Optional.of(refreshTokenSync(resolved, strategy));
-            context.statusPublisher().update(status -> status.data("auth.emergencyRefresh", true));
-        } else {
+        // Get or refresh token when strategy requires it
+        TokenInfo token = tokenStore.getToken(tokenKey).orElse(null);
+        if (strategy.requiresRefresh(token, resolved)) {
+            if (token == null || token.isExpired()) {
+                // Synchronous refresh (blocks first request only)
+                token = refreshTokenSync(resolved, strategy);
+                context.statusPublisher().update(status -> status.data("auth.cacheHit", false));
+            } else if (token.needsRefresh()) {
+                // Emergency refresh
+                token = refreshTokenSync(resolved, strategy);
+                context.statusPublisher().update(status -> status.data("auth.emergencyRefresh", true));
+            } else {
+                context.statusPublisher().update(status -> status.data("auth.cacheHit", true));
+            }
+        } else if (token != null) {
             context.statusPublisher().update(status -> status.data("auth.cacheHit", true));
         }
         
@@ -68,7 +70,11 @@ public class AuthHeaderGenerator {
             .data("auth.strategy", resolved.type())
         );
         
-        return strategy.generateHeaders(resolved, token.orElse(null), item);
+        if (token != null && token.accessToken() != null) {
+            AuthTokenHolder.setToken(tokenKey, token.accessToken());
+        }
+
+        return strategy.generateHeaders(resolved, token, item);
     }
     
     /**
@@ -101,10 +107,10 @@ public class AuthHeaderGenerator {
         lock.lock();
         try {
             // Double-check: another thread may have refreshed while we waited
-            Optional<TokenInfo> existing = tokenStore.getToken(tokenKey);
-            if (existing.isPresent() && !existing.get().isExpired() && !existing.get().needsRefresh()) {
-                AuthTokenHolder.setToken(tokenKey, existing.get().accessToken());
-                return existing.get();
+            TokenInfo existing = tokenStore.getToken(tokenKey).orElse(null);
+            if (existing != null && !existing.isExpired() && !existing.needsRefresh()) {
+                AuthTokenHolder.setToken(tokenKey, existing.accessToken());
+                return existing;
             }
             
             TokenInfo token = strategy.refresh(config);

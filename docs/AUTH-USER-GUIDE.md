@@ -422,18 +422,12 @@ pockethive:
     scheduler:
       enabled: true            # default: true (auto-enabled)
       scanIntervalSeconds: 10  # default: 10
-      threadPoolSize: 5        # default: 5
     refresh:
-      defaultBuffer: 60        # seconds before expiry to refresh
-      emergencyBuffer: 10      # emergency threshold
+      refreshAheadSeconds: 60          # seconds before expiry to refresh
+      emergencyRefreshAheadSeconds: 10 # emergency threshold
     http:
       connectTimeoutSeconds: 5
       readTimeoutSeconds: 10
-      maxConnections: 50
-      sslVerification: true
-    cleanup:
-      enabled: true
-      inactiveThresholdHours: 24
 ```
 
 ### Disable Auth Globally (if needed)

@@ -21,6 +21,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.LongAdder;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Component;
 
 @Component("requestBuilderWorker")
@@ -47,14 +48,14 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
   @Autowired
   RequestBuilderWorkerImpl(RequestBuilderWorkerProperties properties, 
                           TemplateRenderer templateRenderer,
-                          AuthHeaderGenerator authHeaderGenerator) {
+                          @Nullable AuthHeaderGenerator authHeaderGenerator) {
     this(properties, templateRenderer, new TemplateLoader(), authHeaderGenerator);
   }
 
   RequestBuilderWorkerImpl(RequestBuilderWorkerProperties properties,
                         TemplateRenderer templateRenderer,
                         TemplateLoader templateLoader,
-                        AuthHeaderGenerator authHeaderGenerator) {
+                        @Nullable AuthHeaderGenerator authHeaderGenerator) {
     this.properties = Objects.requireNonNull(properties, "properties");
     this.templateRenderer = Objects.requireNonNull(templateRenderer, "templateRenderer");
     this.templateLoader = Objects.requireNonNull(templateLoader, "templateLoader");

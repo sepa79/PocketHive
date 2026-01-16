@@ -12,7 +12,6 @@ public class AuthProperties {
     private SchedulerProperties scheduler = new SchedulerProperties();
     private RefreshProperties refresh = new RefreshProperties();
     private HttpProperties http = new HttpProperties();
-    private CleanupProperties cleanup = new CleanupProperties();
     
     public boolean isEnabled() {
         return enabled;
@@ -46,18 +45,9 @@ public class AuthProperties {
         this.http = http;
     }
     
-    public CleanupProperties getCleanup() {
-        return cleanup;
-    }
-    
-    public void setCleanup(CleanupProperties cleanup) {
-        this.cleanup = cleanup;
-    }
-    
     public static class SchedulerProperties {
         private boolean enabled = true;
         private int scanIntervalSeconds = 10;
-        private int threadPoolSize = 5;
         
         public boolean isEnabled() {
             return enabled;
@@ -75,41 +65,32 @@ public class AuthProperties {
             this.scanIntervalSeconds = scanIntervalSeconds;
         }
         
-        public int getThreadPoolSize() {
-            return threadPoolSize;
-        }
-        
-        public void setThreadPoolSize(int threadPoolSize) {
-            this.threadPoolSize = threadPoolSize;
-        }
     }
     
     public static class RefreshProperties {
-        private int defaultBuffer = 60;
-        private int emergencyBuffer = 10;
+        private int refreshAheadSeconds = 60;
+        private int emergencyRefreshAheadSeconds = 10;
         
-        public int getDefaultBuffer() {
-            return defaultBuffer;
+        public int getRefreshAheadSeconds() {
+            return refreshAheadSeconds;
         }
         
-        public void setDefaultBuffer(int defaultBuffer) {
-            this.defaultBuffer = defaultBuffer;
+        public void setRefreshAheadSeconds(int refreshAheadSeconds) {
+            this.refreshAheadSeconds = refreshAheadSeconds;
         }
         
-        public int getEmergencyBuffer() {
-            return emergencyBuffer;
+        public int getEmergencyRefreshAheadSeconds() {
+            return emergencyRefreshAheadSeconds;
         }
         
-        public void setEmergencyBuffer(int emergencyBuffer) {
-            this.emergencyBuffer = emergencyBuffer;
+        public void setEmergencyRefreshAheadSeconds(int emergencyRefreshAheadSeconds) {
+            this.emergencyRefreshAheadSeconds = emergencyRefreshAheadSeconds;
         }
     }
     
     public static class HttpProperties {
         private int connectTimeoutSeconds = 5;
         private int readTimeoutSeconds = 10;
-        private int maxConnections = 50;
-        private boolean sslVerification = true;
         
         public int getConnectTimeoutSeconds() {
             return connectTimeoutSeconds;
@@ -127,50 +108,5 @@ public class AuthProperties {
             this.readTimeoutSeconds = readTimeoutSeconds;
         }
         
-        public int getMaxConnections() {
-            return maxConnections;
-        }
-        
-        public void setMaxConnections(int maxConnections) {
-            this.maxConnections = maxConnections;
-        }
-        
-        public boolean isSslVerification() {
-            return sslVerification;
-        }
-        
-        public void setSslVerification(boolean sslVerification) {
-            this.sslVerification = sslVerification;
-        }
-    }
-    
-    public static class CleanupProperties {
-        private boolean enabled = true;
-        private boolean dryRun = false;
-        private int inactiveThresholdHours = 24;
-        
-        public boolean isEnabled() {
-            return enabled;
-        }
-        
-        public void setEnabled(boolean enabled) {
-            this.enabled = enabled;
-        }
-        
-        public boolean isDryRun() {
-            return dryRun;
-        }
-        
-        public void setDryRun(boolean dryRun) {
-            this.dryRun = dryRun;
-        }
-        
-        public int getInactiveThresholdHours() {
-            return inactiveThresholdHours;
-        }
-        
-        public void setInactiveThresholdHours(int inactiveThresholdHours) {
-            this.inactiveThresholdHours = inactiveThresholdHours;
-        }
     }
 }

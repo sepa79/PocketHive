@@ -38,4 +38,9 @@ public class TlsClientCertStrategy implements AuthStrategy {
         
         return headers;
     }
+
+    @Override
+    public boolean requiresRefresh(TokenInfo token, AuthConfig config) {
+        return false;
+    }
 }

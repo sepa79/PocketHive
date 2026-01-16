@@ -24,14 +24,25 @@ public class AwsSignatureV4Strategy implements AuthStrategy {
     private static final DateTimeFormatter TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'").withZone(ZoneOffset.UTC);
     
     @Override
+    public String getType() {
+        return "aws-signature-v4";
+    }
+
+    @Override
     public TokenInfo refresh(AuthConfig config) {
         // AWS credentials don't expire in the traditional sense
+        long now = Instant.now().getEpochSecond();
         return new TokenInfo(
             config.properties().get("accessKeyId"),
-            Instant.now().getEpochSecond() + 86400,
-            Instant.now().getEpochSecond() + 86400,
-            config.type(),
-            config.properties()
+            ALGORITHM,
+            now + 86400,
+            now + 86400,
+            getType(),
+            config.properties(),
+            Map.of(
+                "lastRefreshed", now,
+                "refreshCount", 1
+            )
         );
     }
     
@@ -65,6 +76,11 @@ public class AwsSignatureV4Strategy implements AuthStrategy {
             "X-Amz-Date", timestamp,
             "X-Amz-Content-Sha256", payloadHash
         );
+    }
+
+    @Override
+    public boolean requiresRefresh(TokenInfo token, AuthConfig config) {
+        return false;
     }
     
     private String buildCanonicalRequest(String method, String uri, String queryString, String headers, String payloadHash) {

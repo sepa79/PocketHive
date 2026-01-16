@@ -77,7 +77,9 @@ public class OAuth2ClientCredentialsStrategy implements AuthStrategy {
                 Map<String, String> refreshConfig = new HashMap<>(config.properties());
                 Map<String, Object> metadata = Map.of(
                     "lastRefreshed", now,
-                    "refreshCount", 1
+                    "refreshCount", 1,
+                    "refreshBuffer", config.refreshBuffer(),
+                    "emergencyRefreshBuffer", config.emergencyRefreshBuffer()
                 );
                 
                 return new TokenInfo(

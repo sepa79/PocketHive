@@ -33,4 +33,9 @@ public class BasicAuthStrategy implements AuthStrategy {
         
         return Map.of("Authorization", "Basic " + encoded);
     }
+
+    @Override
+    public boolean requiresRefresh(TokenInfo token, AuthConfig config) {
+        return false;
+    }
 }

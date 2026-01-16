@@ -20,14 +20,25 @@ import java.util.Map;
 public class Iso8583MacStrategy implements AuthStrategy {
     
     @Override
+    public String getType() {
+        return "iso8583-mac";
+    }
+
+    @Override
     public TokenInfo refresh(AuthConfig config) {
         // MAC keys don't expire
+        long now = Instant.now().getEpochSecond();
         return new TokenInfo(
             config.properties().get("macKey"),
-            Instant.now().getEpochSecond() + 86400,
-            Instant.now().getEpochSecond() + 86400,
-            config.type(),
-            config.properties()
+            "MAC",
+            now + 86400,
+            now + 86400,
+            getType(),
+            config.properties(),
+            Map.of(
+                "lastRefreshed", now,
+                "refreshCount", 1
+            )
         );
     }
     
@@ -43,6 +54,11 @@ public class Iso8583MacStrategy implements AuthStrategy {
             "X-ISO8583-MAC", mac,
             "X-MAC-Algorithm", algorithm
         );
+    }
+
+    @Override
+    public boolean requiresRefresh(TokenInfo token, AuthConfig config) {
+        return false;
     }
     
     private String calculateMac(String data, String keyHex, String algorithm) {

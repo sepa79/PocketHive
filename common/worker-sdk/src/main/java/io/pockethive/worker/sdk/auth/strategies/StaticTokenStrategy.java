@@ -28,4 +28,9 @@ public class StaticTokenStrategy implements AuthStrategy {
         
         return Map.of(headerName, tokenValue);
     }
+
+    @Override
+    public boolean requiresRefresh(TokenInfo token, AuthConfig config) {
+        return false;
+    }
 }
