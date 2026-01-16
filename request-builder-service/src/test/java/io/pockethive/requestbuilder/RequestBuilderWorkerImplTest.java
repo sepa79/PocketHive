@@ -59,7 +59,7 @@ class RequestBuilderWorkerImplTest {
         "passThroughOnMissingTemplate", true
     ));
     RequestBuilderWorkerImpl worker =
-        new RequestBuilderWorkerImpl(properties, templateRenderer, new TemplateLoader());
+        new RequestBuilderWorkerImpl(properties, templateRenderer, new TemplateLoader(), null);
 
     WorkItem seed = WorkItem.text("body").header("x-ph-call-id", "simple").build();
     RequestBuilderWorkerConfig config = new RequestBuilderWorkerConfig(
@@ -88,7 +88,7 @@ class RequestBuilderWorkerImplTest {
         "passThroughOnMissingTemplate", false
     ));
     RequestBuilderWorkerImpl worker =
-        new RequestBuilderWorkerImpl(properties, templateRenderer, new TemplateLoader());
+        new RequestBuilderWorkerImpl(properties, templateRenderer, new TemplateLoader(), null);
 
     WorkItem seed = WorkItem.text("body").build();
     RequestBuilderWorkerConfig config = new RequestBuilderWorkerConfig(
@@ -110,7 +110,7 @@ class RequestBuilderWorkerImplTest {
         "passThroughOnMissingTemplate", true
     ));
     RequestBuilderWorkerImpl worker =
-        new RequestBuilderWorkerImpl(properties, templateRenderer, new TemplateLoader());
+        new RequestBuilderWorkerImpl(properties, templateRenderer, new TemplateLoader(), null);
 
     WorkItem seed = WorkItem.text("body").header("x-ph-call-id", "unknown").build();
     RequestBuilderWorkerConfig config = new RequestBuilderWorkerConfig(
@@ -146,7 +146,7 @@ class RequestBuilderWorkerImplTest {
         "passThroughOnMissingTemplate", true
     ));
     RequestBuilderWorkerImpl worker =
-        new RequestBuilderWorkerImpl(properties, templateRenderer, new TemplateLoader());
+        new RequestBuilderWorkerImpl(properties, templateRenderer, new TemplateLoader(), null);
 
     WorkItem seed = WorkItem.text("test-data").header("x-ph-call-id", "tcp-test").build();
     RequestBuilderWorkerConfig config = new RequestBuilderWorkerConfig(
@@ -187,7 +187,7 @@ class RequestBuilderWorkerImplTest {
         "passThroughOnMissingTemplate", true
     ));
     RequestBuilderWorkerImpl worker =
-        new RequestBuilderWorkerImpl(properties, templateRenderer, new TemplateLoader());
+        new RequestBuilderWorkerImpl(properties, templateRenderer, new TemplateLoader(), null);
 
     WorkItem seed = WorkItem.text("stream-data").header("x-ph-call-id", "tcp-streaming").build();
     RequestBuilderWorkerConfig config = new RequestBuilderWorkerConfig(
@@ -241,7 +241,7 @@ class RequestBuilderWorkerImplTest {
         "passThroughOnMissingTemplate", true
     ));
     RequestBuilderWorkerImpl worker =
-        new RequestBuilderWorkerImpl(properties, templateRenderer, new TemplateLoader());
+        new RequestBuilderWorkerImpl(properties, templateRenderer, new TemplateLoader(), null);
 
     WorkItem seed = WorkItem.text("body").header("x-ph-call-id", "simple").build();
 
