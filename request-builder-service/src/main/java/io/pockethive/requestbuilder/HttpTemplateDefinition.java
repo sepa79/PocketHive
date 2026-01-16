@@ -16,7 +16,8 @@ public record HttpTemplateDefinition(
     String method,
     String pathTemplate,
     String bodyTemplate,
-    Map<String, String> headersTemplate
+    Map<String, String> headersTemplate,
+    Map<String, Object> auth
 ) implements TemplateDefinition {
 }
 
