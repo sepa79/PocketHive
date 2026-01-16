@@ -29,7 +29,8 @@ template:
                 "description": "Pool test response"
               }
       work:
-        out: setup
+        out:
+          out: setup
     - role: generator-global
       image: generator:latest
       config:
@@ -50,7 +51,8 @@ template:
             headers:
               x-ph-call-id: pool-test
       work:
-        out: build-global
+        out:
+          out: build-global
     - role: generator-per-thread
       image: generator:latest
       config:
@@ -71,7 +73,8 @@ template:
             headers:
               x-ph-call-id: pool-test
       work:
-        out: build-per-thread
+        out:
+          out: build-per-thread
     - role: generator-none
       image: generator:latest
       config:
@@ -92,7 +95,8 @@ template:
             headers:
               x-ph-call-id: pool-test
       work:
-        out: build-none
+        out:
+          out: build-none
     - role: request-builder-global
       image: request-builder:latest
       config:
@@ -100,8 +104,10 @@ template:
           templateRoot: /app/scenario/templates
           serviceId: default
       work:
-        in: build-global
-        out: proc-global
+        in:
+          in: build-global
+        out:
+          out: proc-global
     - role: request-builder-per-thread
       image: request-builder:latest
       config:
@@ -109,8 +115,10 @@ template:
           templateRoot: /app/scenario/templates
           serviceId: default
       work:
-        in: build-per-thread
-        out: proc-per-thread
+        in:
+          in: build-per-thread
+        out:
+          out: proc-per-thread
     - role: request-builder-none
       image: request-builder:latest
       config:
@@ -118,8 +126,10 @@ template:
           templateRoot: /app/scenario/templates
           serviceId: default
       work:
-        in: build-none
-        out: proc-none
+        in:
+          in: build-none
+        out:
+          out: proc-none
     - role: processor-global
       image: processor:latest
       config:
@@ -134,8 +144,10 @@ template:
             connectTimeoutMs: 2000
             readTimeoutMs: 3000
       work:
-        in: proc-global
-        out: post
+        in:
+          in: proc-global
+        out:
+          out: post
     - role: processor-per-thread
       image: processor:latest
       config:
@@ -150,8 +162,10 @@ template:
             connectTimeoutMs: 2000
             readTimeoutMs: 3000
       work:
-        in: proc-per-thread
-        out: post
+        in:
+          in: proc-per-thread
+        out:
+          out: post
     - role: processor-none
       image: processor:latest
       config:
@@ -166,8 +180,10 @@ template:
             connectTimeoutMs: 2000
             readTimeoutMs: 3000
       work:
-        in: proc-none
-        out: post
+        in:
+          in: proc-none
+        out:
+          out: post
     - role: postprocessor
       image: postprocessor:latest
       config:
@@ -175,4 +191,5 @@ template:
           postprocessor:
             publish-all-metrics: true
       work:
-        in: post
+        in:
+          in: post

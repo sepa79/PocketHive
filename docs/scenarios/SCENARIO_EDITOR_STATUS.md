@@ -38,7 +38,7 @@ Important implementation detail:
   the YAML used `PT…` ISO-8601 durations.
 
 ### 1.4 Swarm template editor (basic)
-- Visualises bees and queue wiring (`work.in`/`work.out`).
+- Visualises bees and queue wiring (`work.in`/`work.out` port maps).
 - Edits:
   - `template.image` (controller image)
   - `template.bees[].instanceId`, `role`, `image`, `work.in`, `work.out`

@@ -2,6 +2,7 @@ package io.pockethive.scenarios;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import io.pockethive.swarm.model.SwarmTemplate;
+import io.pockethive.swarm.model.Topology;
 import io.pockethive.swarm.model.TrafficPolicy;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -16,6 +17,8 @@ public class Scenario {
     private String description;
     @Valid
     private SwarmTemplate template;
+    @Valid
+    private Topology topology;
     @Valid
     private TrafficPolicy trafficPolicy;
     /**
@@ -34,12 +37,14 @@ public class Scenario {
                     String name,
                     String description,
                     SwarmTemplate template,
+                    Topology topology,
                     TrafficPolicy trafficPolicy,
                     Map<String, Object> plan) {
         this.id = id;
         this.name = name;
         this.description = description;
         this.template = template;
+        this.topology = topology;
         this.trafficPolicy = trafficPolicy;
         this.plan = plan;
     }
@@ -48,7 +53,7 @@ public class Scenario {
                     String name,
                     String description,
                     SwarmTemplate template) {
-        this(id, name, description, template, null, null);
+        this(id, name, description, template, null, null, null);
     }
 
     public String getId() {
@@ -81,6 +86,14 @@ public class Scenario {
 
     public void setTemplate(SwarmTemplate template) {
         this.template = template;
+    }
+
+    public Topology getTopology() {
+        return topology;
+    }
+
+    public void setTopology(Topology topology) {
+        this.topology = topology;
     }
 
     public TrafficPolicy getTrafficPolicy() {

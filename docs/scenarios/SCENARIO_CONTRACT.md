@@ -51,13 +51,16 @@ template:
     - role: generator
       image: generator:latest
       work:
-        out: genQ
+        out:
+          out: genQ
       config: { ... }
     - role: processor
       image: processor:latest
       work:
-        in: genQ
-        out: finalQ
+        in:
+          in: genQ
+        out:
+          out: finalQ
       config: { ... }
 ```
 
@@ -74,10 +77,10 @@ Bee fields (see `common/swarm-model/src/main/java/io/pockethive/swarm/model/Bee.
     configured repository, e.g. `generator:latest` →
     `ghcr.io/ORG/pockethive/generator:latest`.
 - `work` (object, required)
-  - `in` (string, optional) – inbound queue suffix.
-  - `out` (string, optional) – outbound queue suffix.
-  - These suffixes are resolved to full queue names by the Swarm
-    Controller using the swarm id and shared naming rules.
+  - `in` (map<string,string>, optional) – inbound queue suffixes keyed by input port id.
+  - `out` (map<string,string>, optional) – outbound queue suffixes keyed by output port id.
+  - These suffixes are resolved to full queue names by the Swarm Controller
+    using the swarm id and shared naming rules.
 - `env` (map<string,string>, optional)
   - Raw environment variables to pass into the container.
 - `config` (map<string,object>, optional)
@@ -105,13 +108,19 @@ template:
     - id: genA
       role: generator
       image: generator:latest
-      work: { in: null, out: genQ }
+      work:
+        out:
+          out: genQ
       ports:
         - { id: out, direction: out }
     - id: modA
       role: moderator
       image: moderator:latest
-      work: { in: genQ, out: procQ }
+      work:
+        in:
+          in: genQ
+        out:
+          out: procQ
       ports:
         - { id: in, direction: in }
         - { id: out, direction: out }
@@ -123,6 +132,9 @@ topology:
       from: { beeId: genA, port: out }
       to:   { beeId: modA, port: in }
 ```
+
+`work` port keys must match the `ports` ids when `topology` is present. For
+single-input/output bees, use the standard `in` and `out` port ids.
 
 Edge fields:
 - `id` (string, required) – stable edge id within the template.

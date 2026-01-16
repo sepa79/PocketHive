@@ -231,9 +231,11 @@ public class SwarmController {
                                 config = applySutConfigTemplates(config, finalSutEnvironment);
                             }
                             return new io.pockethive.swarm.model.Bee(
+                                bee.id(),
                                 bee.role(),
                                 resolvedImage,
                                 bee.work(),
+                                bee.ports(),
                                 bee.env(),
                                 config);
                         })
@@ -241,6 +243,7 @@ public class SwarmController {
                 SwarmPlan plan = new SwarmPlan(
                     originalPlan.id(),
                     rewrittenBees,
+                    originalPlan.topology(),
                     originalPlan.trafficPolicy(),
                     sutId,
                     finalSutEnvironment);

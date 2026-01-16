@@ -41,7 +41,7 @@ class CapabilityCatalogueControllerTest {
     void templatesEndpointReturnsAvailableScenariosWithImages() throws Exception {
         Scenario scenario = new Scenario("alpha", "Alpha", "A test scenario",
                 new SwarmTemplate("controller:v1", List.of(
-                        new Bee("worker", "worker:v2", new Work("in", "out"), Map.of()))));
+                        new Bee("worker", "worker:v2", Work.ofDefaults("in", "out"), Map.of()))));
         given(scenarios.list()).willReturn(List.of(new ScenarioSummary("alpha", "Alpha")));
         given(scenarios.find("alpha")).willReturn(Optional.of(scenario));
 

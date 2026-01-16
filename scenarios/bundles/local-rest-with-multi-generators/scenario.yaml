@@ -17,7 +17,8 @@ template:
             method: POST
             body: hello-from-generator-a
       work:
-        out: gen
+        out:
+          out: gen
     - role: generator
       image: generator:latest
       config:
@@ -31,19 +32,25 @@ template:
             method: POST
             body: hello-from-generator-b
       work:
-        out: gen
+        out:
+          out: gen
     - role: moderator
       image: moderator:latest
       work:
-        in: gen
-        out: mod
+        in:
+          in: gen
+        out:
+          out: mod
     - role: processor
       image: processor:latest
       work:
-        in: mod
-        out: final
+        in:
+          in: mod
+        out:
+          out: final
     - role: postprocessor
       image: postprocessor:latest
       work:
-        in: final
+        in:
+          in: final
 

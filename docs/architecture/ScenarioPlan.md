@@ -140,22 +140,33 @@ bees:
     config:
       ratePerSec: 5
     work:
-      out: gen
+      out:
+        out: gen
 
   - role: moderator
     instanceId: guardian-bee
     image: pockethive-moderator:latest
-    work: { in: gen, out: mod }
+    work:
+      in:
+        in: gen
+      out:
+        out: mod
 
   - role: processor
     instanceId: worker-bee
     image: pockethive-processor:latest
-    work: { in: mod, out: final }
+    work:
+      in:
+        in: mod
+      out:
+        out: final
 
   - role: postprocessor
     instanceId: forager-bee
     image: pockethive-postprocessor:latest
-    work: { in: final }
+    work:
+      in:
+        in: final
 
 plan:
   bees:

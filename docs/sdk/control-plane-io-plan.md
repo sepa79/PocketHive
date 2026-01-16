@@ -178,7 +178,7 @@ all worker IO, while keeping the Worker SDK simple and predictable.
 
 - Maintain:
   - Existing IO semantics for current scenarios (Rabbit queues derived from
-    `work.in/out`, scheduler defaults, etc.).
+    `work.in/out` port maps, scheduler defaults, etc.).
   - Backwards-compatible behaviour for workers that don’t yet supply IO in
     control-plane config.
 - New behaviour:

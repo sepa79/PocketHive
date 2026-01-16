@@ -57,7 +57,8 @@ template:
               content-type: application/json
               x-ph-call-id: "{{ pickWeighted('redis-auth', 50, 'redis-balance', 30, 'redis-topup', 20) }}"
       work:
-        out: http-build
+        out:
+          out: http-build
 
     - role: dataProviderB
       image: generator:latest
@@ -77,7 +78,8 @@ template:
               content-type: application/json
               x-ph-call-id: "{{ pickWeighted('redis-balance', 40, 'redis-topup', 40, 'redis-auth', 20) }}"
       work:
-        out: http-build
+        out:
+          out: http-build
 
     - role: http-builder
       image: http-builder:latest
@@ -86,18 +88,23 @@ template:
           templateRoot: /app/scenario/http-templates
           serviceId: default
       work:
-        in: http-build
-        out: proc
+        in:
+          in: http-build
+        out:
+          out: proc
 
     - role: processor
       image: processor:latest
       config:
         baseUrl: "{{ sut.endpoints['default'].baseUrl }}"
       work:
-        in: proc
-        out: post
+        in:
+          in: proc
+        out:
+          out: post
 
     - role: postprocessor
       image: postprocessor:latest
       work:
-        in: post
+        in:
+          in: post

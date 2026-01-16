@@ -8,6 +8,7 @@ Timestamp: 2026-01-16T14:20:44Z
 - E2E: revert a swarm lifecycle test regression so scenario progress and worker snapshots read from `data.context`, while status-full snapshots are preferred when available.
 - Docs: define scenario `topology` and logical ports in the scenario contract to support UI graph authoring.
 - Build: remove duplicate Spring Boot plugin declaration in `tcp-mock-server` and pin the plugin version.
+- **BREAKING**: scenario `work.in`/`work.out` are now port maps (default ports `in`/`out`), and swarm-controller `status-full` publishes topology-driven work bindings for multi-IO.
 
 ## [0.14.20] - 2026-01-14
 Timestamp: 2026-01-14T12:01:27Z

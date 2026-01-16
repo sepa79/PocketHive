@@ -102,7 +102,7 @@ intended to be edited by humans and AI directly when needed.
   - Optional “SUT lane” showing the chosen `SutEnvironment` and its endpoints for this swarm.
 
 - **Edges**
-  - `work.out` → `work.in` wiring rendered as edges, just like the runtime topology.
+  - `work.out` → `work.in` port map wiring rendered as edges, just like the runtime topology.
   - Optional extra edge from endpoint node → worker node to indicate a SUT binding.
 
 ### 3.3 Plan — Scenario editor
@@ -117,7 +117,7 @@ intended to be edited by humans and AI directly when needed.
 - [ ] **Visual wiring (React Flow)**
   - [ ] Build a graph from YAML:
     - nodes from `template.bees`.  
-    - edges from matching `work.out` and `work.in` suffixes.
+    - edges from matching `work.out` and `work.in` port map suffixes.
   - [ ] Show SUT lane when a `sutId` is selected for the swarm:
     - env card + endpoints from SUT registry.
 

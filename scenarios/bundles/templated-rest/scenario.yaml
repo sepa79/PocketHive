@@ -25,22 +25,28 @@ template:
               sequence number is {{ headers["x-ph-seq"] }}
               and was generated at {{ headers.generatedAt }}
       work:
-        out: gen
+        out:
+          out: gen
     - role: moderator
       image: moderator:latest
       work:
-        in: gen
-        out: mod
+        in:
+          in: gen
+        out:
+          out: mod
     - role: processor
       image: processor:latest
       config:
         baseUrl: "{{ sut.endpoints['default'].baseUrl }}"
       work:
-        in: mod
-        out: final
+        in:
+          in: mod
+        out:
+          out: final
     - role: postprocessor
       image: postprocessor:latest
       config:
         publishAllMetrics: true
       work:
-        in: final
+        in:
+          in: final

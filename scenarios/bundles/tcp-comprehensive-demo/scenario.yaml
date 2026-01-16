@@ -9,8 +9,10 @@ template:
   - role: "generator-iso8583"
     image: "generator:latest"
     work:
-      in: null
-      out: "iso8583-build"
+      in:
+        in: null
+      out:
+        out: "iso8583-build"
     env: {}
     config:
       worker:
@@ -32,8 +34,10 @@ template:
   - role: "generator-performance"
     image: "generator:latest"
     work:
-      in: null
-      out: "perf-build"
+      in:
+        in: null
+      out:
+        out: "perf-build"
     env: {}
     config:
       worker:
@@ -54,8 +58,10 @@ template:
   - role: "generator-netty"
     image: "generator:latest"
     work:
-      in: null
-      out: "netty-build"
+      in:
+        in: null
+      out:
+        out: "netty-build"
     env: {}
     config:
       worker:
@@ -75,8 +81,10 @@ template:
   - role: "request-builder-iso"
     image: "request-builder:latest"
     work:
-      in: "iso8583-build"
-      out: "proc"
+      in:
+        in: "iso8583-build"
+      out:
+        out: "proc"
     env: {}
     config:
       worker:
@@ -85,8 +93,10 @@ template:
   - role: "request-builder-perf"
     image: "request-builder:latest"
     work:
-      in: "perf-build"
-      out: "proc"
+      in:
+        in: "perf-build"
+      out:
+        out: "proc"
     env: {}
     config:
       worker:
@@ -95,8 +105,10 @@ template:
   - role: "request-builder-netty"
     image: "request-builder:latest"
     work:
-      in: "netty-build"
-      out: "proc"
+      in:
+        in: "netty-build"
+      out:
+        out: "proc"
     env: {}
     config:
       worker:
@@ -105,8 +117,10 @@ template:
   - role: "processor"
     image: "processor:latest"
     work:
-      in: "proc"
-      out: "post"
+      in:
+        in: "proc"
+      out:
+        out: "post"
     env: {}
     config:
       worker:
@@ -123,8 +137,10 @@ template:
   - role: "postprocessor"
     image: "postprocessor:latest"
     work:
-      in: "post"
-      out: null
+      in:
+        in: "post"
+      out:
+        out: null
     env: {}
     config:
       worker:

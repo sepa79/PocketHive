@@ -105,7 +105,7 @@ Hive exposes these bundles on the **Scenarios** page:
 - The right pane has three views of the same YAML:
   - **Plan** – visual, timeline‑based editor for the `plan` section.  
   - **Swarm template** – editor for `template.image`, `template.bees[]`,
-    `work.in/out`, and basic IO type selection (`config.inputs.type`).  
+    `work.in/out` port maps, and basic IO type selection (`config.inputs.type`).  
   - **Scenario YAML** – full text editor backed by Monaco.
 
 YAML remains the **single source of truth**:

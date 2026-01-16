@@ -68,8 +68,12 @@ class ScenarioControllerTest {
                         "role": "worker",
                         "image": "worker-image:latest",
                         "work": {
-                          "in": "a",
-                          "out": "b"
+                          "in": {
+                            "in": "a"
+                          },
+                          "out": {
+                            "out": "b"
+                          }
                         }
                       }
                     ]
@@ -113,8 +117,10 @@ class ScenarioControllerTest {
                     - role: worker
                       image: worker-image:latest
                       work:
-                        in: a
-                        out: b
+                        in:
+                          in: a
+                        out:
+                          out: b
                 """;
         mvc.perform(post("/scenarios").contentType("application/x-yaml").content(yaml))
                 .andExpect(status().isCreated())

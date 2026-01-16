@@ -4,6 +4,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.orchestrator.app.JacksonConfiguration;
+import io.pockethive.swarm.model.Bee;
+import io.pockethive.swarm.model.BeePort;
+import io.pockethive.swarm.model.SwarmPlan;
+import io.pockethive.swarm.model.SwarmTemplate;
+import io.pockethive.swarm.model.Topology;
+import io.pockethive.swarm.model.TopologyEdge;
+import io.pockethive.swarm.model.TopologyEndpoint;
+import io.pockethive.swarm.model.Work;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
@@ -79,5 +88,25 @@ class ScenarioPlanTest {
     assertThat(swarmStep.stepId()).isEqualTo("sw1");
     assertThat(swarmStep.type()).isEqualTo("swarm-stop");
     assertThat(swarmStep.config()).isEmpty();
+  }
+
+  @Test
+  void toSwarmPlanPreservesTopology() {
+    SwarmTemplate template = new SwarmTemplate("controller", List.of(
+        new Bee("genA", "generator", "img", Work.ofDefaults(null, "gen"),
+            List.of(new BeePort("out", "out")), Map.of(), Map.of()),
+        new Bee("modA", "moderator", "img2", Work.ofDefaults("gen", "mod"),
+            List.of(new BeePort("in", "in"), new BeePort("out", "out")), Map.of(), Map.of())
+    ));
+    Topology topology = new Topology(1, List.of(
+        new TopologyEdge("e1", new TopologyEndpoint("genA", "out"), new TopologyEndpoint("modA", "in"), null)
+    ));
+    ScenarioPlan scenarioPlan = new ScenarioPlan(template, topology, null, null);
+
+    SwarmPlan swarmPlan = scenarioPlan.toSwarmPlan("swarm-1");
+
+    assertThat(swarmPlan.topology()).isNotNull();
+    assertThat(swarmPlan.topology().edges()).hasSize(1);
+    assertThat(swarmPlan.bees().getFirst().id()).isEqualTo("genA");
   }
 }

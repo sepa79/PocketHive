@@ -215,7 +215,7 @@ class ContainerLifecycleManagerTest {
         swarm.attachTemplate(new SwarmTemplateMetadata(
             "tpl-1",
             "ctrl-image",
-            List.of(new Bee("generator", "gen-image", new Work(null, "out"), Map.of()))));
+            List.of(new Bee("generator", "gen-image", Work.ofDefaults(null, "out"), Map.of()))));
         registry.register(swarm);
         OrchestratorProperties properties = defaultProperties();
         ControlPlaneProperties controlPlane = controlPlaneProperties();
@@ -262,8 +262,8 @@ class ContainerLifecycleManagerTest {
             "tpl-1",
             "swarm-controller:latest",
             List.of(
-                new Bee("generator", "generator:latest", new Work(null, "out"), Map.of()),
-                new Bee("processor", "processor:latest", new Work("in", "out"), Map.of()))));
+                new Bee("generator", "generator:latest", Work.ofDefaults(null, "out"), Map.of()),
+                new Bee("processor", "processor:latest", Work.ofDefaults("in", "out"), Map.of()))));
         registry.register(swarm);
         OrchestratorProperties properties = withRepositoryPrefix("ghcr.io/acme/pockethive");
         ControlPlaneProperties controlPlane = controlPlaneProperties();

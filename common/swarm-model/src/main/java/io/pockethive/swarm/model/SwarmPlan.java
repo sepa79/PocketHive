@@ -7,6 +7,7 @@ import java.util.List;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record SwarmPlan(String id,
                         @Valid List<Bee> bees,
+                        @Valid Topology topology,
                         @Valid TrafficPolicy trafficPolicy,
                         String sutId,
                         @Valid SutEnvironment sutEnvironment) {
@@ -15,14 +16,14 @@ public record SwarmPlan(String id,
     }
 
     public SwarmPlan(String id, List<Bee> bees) {
-        this(id, bees, null, null, null);
+        this(id, bees, null, null, null, null);
     }
 
     public SwarmPlan(String id, List<Bee> bees, TrafficPolicy trafficPolicy) {
-        this(id, bees, trafficPolicy, null, null);
+        this(id, bees, null, trafficPolicy, null, null);
     }
 
     public SwarmPlan(String id, List<Bee> bees, TrafficPolicy trafficPolicy, String sutId) {
-        this(id, bees, trafficPolicy, sutId, null);
+        this(id, bees, null, trafficPolicy, sutId, null);
     }
 }

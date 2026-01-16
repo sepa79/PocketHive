@@ -50,8 +50,10 @@ class ScenarioServiceTest {
                     - role: worker
                       image: worker-image:latest
                       work:
-                        in: a
-                        out: b
+                        in:
+                          in: a
+                        out:
+                          out: b
                 """);
 
         service.reload();
@@ -77,8 +79,10 @@ class ScenarioServiceTest {
                     - role: worker
                       image: worker-image:latest
                       work:
-                        in: a
-                        out: b
+                        in:
+                          in: a
+                        out:
+                          out: b
                 """);
 
         Logger logger = (Logger) LoggerFactory.getLogger(ScenarioService.class);
@@ -117,8 +121,10 @@ class ScenarioServiceTest {
                     - role: worker
                       image: worker-image:latest
                       work:
-                        in: a
-                        out: b
+                        in:
+                          in: a
+                        out:
+                          out: b
                 """);
 
         writeScenario("broken.yaml", """
@@ -130,8 +136,10 @@ class ScenarioServiceTest {
                     - role: worker
                       image: missing-image:latest
                       work:
-                        in: x
-                        out: y
+                        in:
+                          in: x
+                        out:
+                          out: y
                 """);
 
         service.reload();
@@ -175,8 +183,10 @@ class ScenarioServiceTest {
                     - role: worker
                       image: worker-image:latest
                       work:
-                        in: a
-                        out: b
+                        in:
+                          in: a
+                        out:
+                          out: b
                 """);
 
         service.reload();

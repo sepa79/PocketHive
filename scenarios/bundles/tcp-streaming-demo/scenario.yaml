@@ -24,7 +24,8 @@ template:
             headers:
               x-ph-call-id: streaming-test
       work:
-        out: build
+        out:
+          out: build
     - role: request-builder
       image: request-builder:latest
       config:
@@ -32,8 +33,10 @@ template:
           templateRoot: /app/scenario/templates
           serviceId: default
       work:
-        in: build
-        out: proc
+        in:
+          in: build
+        out:
+          out: proc
     - role: processor
       image: processor:latest
       config:
@@ -48,8 +51,10 @@ template:
             connectTimeoutMs: 3000
             readTimeoutMs: 10000
       work:
-        in: proc
-        out: post
+        in:
+          in: proc
+        out:
+          out: post
     - role: postprocessor
       image: postprocessor:latest
       config:
@@ -57,4 +62,5 @@ template:
           postprocessor:
             publish-all-metrics: true
       work:
-        in: post
+        in:
+          in: post

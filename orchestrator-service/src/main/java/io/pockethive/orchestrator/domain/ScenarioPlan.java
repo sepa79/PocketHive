@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.SwarmTemplate;
+import io.pockethive.swarm.model.Topology;
 import io.pockethive.swarm.model.TrafficPolicy;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -14,6 +15,7 @@ import java.util.Map;
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record ScenarioPlan(SwarmTemplate template,
+                           Topology topology,
                            TrafficPolicy trafficPolicy,
                            Plan plan) {
 
@@ -23,7 +25,7 @@ public record ScenarioPlan(SwarmTemplate template,
         : template.bees().stream()
             .map(ScenarioPlan::mergeWorkerConfig)
             .toList();
-    return new SwarmPlan(id, bees, trafficPolicy);
+    return new SwarmPlan(id, bees, topology, trafficPolicy, null, null);
   }
 
     /**
@@ -75,7 +77,7 @@ public record ScenarioPlan(SwarmTemplate template,
       if (!flattened.isEmpty()) {
         merged.remove("worker");
         merged.putAll(flattened);
-        return new Bee(bee.role(), bee.image(), bee.work(), bee.env(), merged);
+        return new Bee(bee.id(), bee.role(), bee.image(), bee.work(), bee.ports(), bee.env(), merged);
       }
     }
 
@@ -97,7 +99,7 @@ public record ScenarioPlan(SwarmTemplate template,
     merged.remove("pockethive");
     merged.putAll(flattened);
 
-    return new Bee(bee.role(), bee.image(), bee.work(), bee.env(), merged);
+    return new Bee(bee.id(), bee.role(), bee.image(), bee.work(), bee.ports(), bee.env(), merged);
   }
 
   private static Map<String, Object> copyToStringKeyMap(Map<?, ?> source) {

@@ -118,9 +118,9 @@ class SwarmControllerTest {
         SwarmCreateTracker tracker = new SwarmCreateTracker();
         SwarmPlanRegistry plans = new SwarmPlanRegistry();
         SwarmTemplate template = new SwarmTemplate("ctrl-image", List.of(
-            new Bee("generator", "img", new Work(null, "out"), java.util.Map.of())
+            new Bee("generator", "img", Work.ofDefaults(null, "out"), java.util.Map.of())
         ));
-        when(scenarioClient.fetchScenario("tpl-1")).thenReturn(new ScenarioPlan(template, null, null));
+        when(scenarioClient.fetchScenario("tpl-1")).thenReturn(new ScenarioPlan(template, null, null, null));
         when(scenarioClient.prepareScenarioRuntime("tpl-1", "sw1")).thenReturn("/tmp/runtime/sw1");
         AtomicReference<String> capturedInstance = new AtomicReference<>();
         when(lifecycle.startSwarm(
@@ -167,9 +167,9 @@ class SwarmControllerTest {
         SwarmPlanRegistry plans = new SwarmPlanRegistry();
         SwarmRegistry registry = new SwarmRegistry();
         SwarmTemplate template = new SwarmTemplate("ctrl-image", List.of(
-            new Bee("generator", "img", new Work(null, "out"), java.util.Map.of())
+            new Bee("generator", "img", Work.ofDefaults(null, "out"), java.util.Map.of())
         ));
-        when(scenarioClient.fetchScenario("tpl-1")).thenReturn(new ScenarioPlan(template, null, null));
+        when(scenarioClient.fetchScenario("tpl-1")).thenReturn(new ScenarioPlan(template, null, null, null));
         when(scenarioClient.prepareScenarioRuntime("tpl-1", "sw1")).thenReturn("/tmp/runtime/sw1");
         when(lifecycle.startSwarm(
             eq("sw1"),
@@ -218,9 +218,9 @@ class SwarmControllerTest {
         SwarmPlanRegistry plans = new SwarmPlanRegistry();
         SwarmRegistry registry = new SwarmRegistry();
         SwarmTemplate template = new SwarmTemplate("ctrl-image", List.of(
-            new Bee("generator", "img", new Work(null, "out"), java.util.Map.of())
+            new Bee("generator", "img", Work.ofDefaults(null, "out"), java.util.Map.of())
         ));
-        when(scenarioClient.fetchScenario("tpl-1")).thenReturn(new ScenarioPlan(template, null, null));
+        when(scenarioClient.fetchScenario("tpl-1")).thenReturn(new ScenarioPlan(template, null, null, null));
         when(scenarioClient.prepareScenarioRuntime("tpl-1", "sw1")).thenReturn("/tmp/runtime/sw1");
         when(lifecycle.startSwarm(
             eq("sw1"),
@@ -305,7 +305,7 @@ class SwarmControllerTest {
         swarm.attachTemplate(new SwarmTemplateMetadata(
             "tpl-1",
             "ctrl-image",
-            List.of(new Bee("generator", "gen-image", new Work(null, "out"), java.util.Map.of()))));
+            List.of(new Bee("generator", "gen-image", Work.ofDefaults(null, "out"), java.util.Map.of()))));
         registry.register(swarm);
         SwarmController ctrl = controller(new SwarmCreateTracker(), registry, new SwarmPlanRegistry());
 
@@ -325,12 +325,12 @@ class SwarmControllerTest {
         alpha.attachTemplate(new SwarmTemplateMetadata(
             "tpl-alpha",
             "ctrl-alpha",
-            List.of(new Bee("generator", "gen-alpha", new Work(null, "out"), java.util.Map.of()))));
+            List.of(new Bee("generator", "gen-alpha", Work.ofDefaults(null, "out"), java.util.Map.of()))));
         Swarm bravo = new Swarm("bravo", "inst-b", "c2", "run-b");
         bravo.attachTemplate(new SwarmTemplateMetadata(
             "tpl-bravo",
             "ctrl-bravo",
-            List.of(new Bee("moderator", "mod-bravo", new Work("in", "out"), java.util.Map.of()))));
+            List.of(new Bee("moderator", "mod-bravo", Work.ofDefaults("in", "out"), java.util.Map.of()))));
         registry.register(bravo);
         registry.register(alpha);
         SwarmController ctrl = controller(new SwarmCreateTracker(), registry, new SwarmPlanRegistry());

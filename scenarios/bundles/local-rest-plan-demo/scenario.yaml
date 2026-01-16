@@ -10,8 +10,10 @@ template:
   - role: "generator"
     image: "generator:latest"
     work:
-      in: null
-      out: "genQ"
+      in:
+        in: null
+      out:
+        out: "genQ"
     env: {}
     config:
       inputs:
@@ -28,8 +30,10 @@ template:
   - role: "processor"
     image: "processor:latest"
     work:
-      in: "genQ"
-      out: "finalQ"
+      in:
+        in: "genQ"
+      out:
+        out: "finalQ"
     env: {}
     config:
       worker:
@@ -37,8 +41,10 @@ template:
   - role: "postprocessor"
     image: "postprocessor:latest"
     work:
-      in: "finalQ"
-      out: null
+      in:
+        in: "finalQ"
+      out:
+        out: null
     env: {}
     config:
       worker:

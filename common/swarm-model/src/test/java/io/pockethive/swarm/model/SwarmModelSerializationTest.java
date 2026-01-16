@@ -24,20 +24,39 @@ class SwarmModelSerializationTest {
             new BufferGuardPolicy.Adjustment(10, 15, 5, 5000),
             new BufferGuardPolicy.Prefill(true, "2m", 20),
             new BufferGuardPolicy.Backpressure("modToProc", 500, 300, 15));
+        Topology topology = new Topology(1, List.of(
+            new TopologyEdge(
+                "e1",
+                new TopologyEndpoint("genA", "out"),
+                new TopologyEndpoint("modA", "in"),
+                new TopologySelector("predicate", "payload.priority >= 50"))
+        ));
         SwarmPlan plan = new SwarmPlan("swarm-1", List.of(
-            new Bee("generator", "img", new Work("in", "out"), Map.of("K", "V"))
-        ), new TrafficPolicy(guard));
+            new Bee("genA", "generator", "img", Work.ofDefaults("in", "out"),
+                List.of(new BeePort("out", "out")), Map.of("K", "V"), Map.of()),
+            new Bee("modA", "moderator", "img2", Work.ofDefaults("in", "out"),
+                List.of(new BeePort("in", "in")), Map.of(), Map.of())
+        ), topology, new TrafficPolicy(guard), null, null);
 
         String json = mapper.writeValueAsString(plan);
         SwarmPlan restored = mapper.readValue(json, SwarmPlan.class);
 
         assertEquals("swarm-1", restored.id());
-        assertEquals(1, restored.bees().size());
-        Bee bee = restored.bees().getFirst();
-        assertEquals("generator", bee.role());
-        assertEquals("img", bee.image());
-        assertNotNull(bee.env());
-        assertEquals("V", bee.env().get("K"));
+        assertEquals(2, restored.bees().size());
+        Map<String, Bee> beesById = restored.bees().stream()
+            .collect(java.util.stream.Collectors.toMap(Bee::id, bee -> bee));
+        Bee generator = beesById.get("genA");
+        Bee moderator = beesById.get("modA");
+        assertNotNull(generator);
+        assertNotNull(moderator);
+        assertEquals("generator", generator.role());
+        assertEquals("img", generator.image());
+        assertNotNull(generator.env());
+        assertEquals("V", generator.env().get("K"));
+        assertEquals("moderator", moderator.role());
+        assertEquals("img2", moderator.image());
+        assertNotNull(restored.topology());
+        assertEquals(1, restored.topology().edges().size());
         assertNotNull(restored.trafficPolicy());
         assertNotNull(restored.trafficPolicy().bufferGuard());
         assertEquals("genToMod", restored.trafficPolicy().bufferGuard().queueAlias());

@@ -25,7 +25,8 @@ template:
             headers:
               x-ph-call-id: ssl-enhanced-message
       work:
-        out: build
+        out:
+          out: build
     - role: request-builder
       image: request-builder:latest
       config:
@@ -33,8 +34,10 @@ template:
           templateRoot: /app/scenario/templates
           serviceId: enhanced
       work:
-        in: build
-        out: proc
+        in:
+          in: build
+        out:
+          out: proc
     - role: processor
       image: processor:latest
       config:
@@ -47,8 +50,10 @@ template:
             connectTimeoutMs: 5000
             readTimeoutMs: 8000
       work:
-        in: proc
-        out: post
+        in:
+          in: proc
+        out:
+          out: post
     - role: postprocessor
       image: postprocessor:latest
       config:
@@ -56,7 +61,8 @@ template:
           postprocessor:
             publish-all-metrics: true
       work:
-        in: post
+        in:
+          in: post
 plan:
   bees:
     - role: generator

@@ -210,6 +210,11 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   }
 
   @Override
+  public Map<String, Object> workBindingsSnapshot() {
+    return core.workBindingsSnapshot();
+  }
+
+  @Override
   public void enableAll() {
     core.enableAll();
   }

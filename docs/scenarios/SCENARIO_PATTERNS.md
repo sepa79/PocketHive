@@ -12,7 +12,7 @@ Highlights:
 - Minimal HTTP pipeline: **generator → moderator → processor → postprocessor**.
 - Scheduler‑driven generator with `inputs.scheduler.ratePerSec: 50`.
 - Processor pointing at WireMock (`worker.baseUrl`), postprocessor publishing metrics.
-- Custom queue suffixes via `work.in` / `work.out` (see the scenario file for exact values).
+- Custom queue suffixes via `work.in` / `work.out` port maps (see the scenario file for exact values).
 
 ## 2. Redis dataset demo
 

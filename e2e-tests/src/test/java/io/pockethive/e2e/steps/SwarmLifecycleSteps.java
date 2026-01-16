@@ -1400,7 +1400,7 @@ public class SwarmLifecycleSteps {
     Bee generator = findBee(GENERATOR_ROLE);
     Work work = generator.work();
     assertNotNull(work, "Generator work configuration was not returned");
-    String outSuffix = trimmed(work.out());
+    String outSuffix = trimmed(work.defaultOut());
     assertNotNull(outSuffix, "Generator work.out must be configured for templated-rest scenario");
 
     String exchange = hiveExchangeName();
@@ -1655,10 +1655,10 @@ public class SwarmLifecycleSteps {
   private List<String> expectedWorkOut(String role) {
     Bee bee = findBee(role);
     Work work = bee.work();
-    if (work == null || work.out() == null || work.out().isBlank()) {
+    if (work == null || work.defaultOut() == null || work.defaultOut().isBlank()) {
       return List.of();
     }
-    return queueList(queueNameForSuffix(work.out()));
+    return queueList(queueNameForSuffix(work.defaultOut()));
   }
 
   private List<String> expectedControlRoutes(ControlPlaneTopologyDescriptor descriptor,
@@ -2035,12 +2035,8 @@ public class SwarmLifecycleSteps {
       for (Bee bee : template.bees()) {
         Work work = bee.work();
         if (work != null) {
-          if (work.in() != null && !work.in().isBlank()) {
-            suffixes.add(work.in());
-          }
-          if (work.out() != null && !work.out().isBlank()) {
-            suffixes.add(work.out());
-          }
+          suffixes.addAll(work.in().values());
+          suffixes.addAll(work.out().values());
         }
       }
     }

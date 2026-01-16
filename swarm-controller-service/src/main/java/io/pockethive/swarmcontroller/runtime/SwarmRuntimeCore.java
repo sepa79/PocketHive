@@ -21,6 +21,10 @@ import io.pockethive.manager.scenario.ScenarioEngine;
 import io.pockethive.observability.StatusEnvelopeBuilder;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.SwarmPlan;
+import io.pockethive.swarm.model.Topology;
+import io.pockethive.swarm.model.TopologyEdge;
+import io.pockethive.swarm.model.TopologyEndpoint;
+import io.pockethive.swarm.model.TopologySelector;
 import io.pockethive.swarm.model.TrafficPolicy;
 import io.pockethive.swarm.model.Work;
 import io.pockethive.swarm.model.SutEnvironment;
@@ -306,12 +310,8 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
         readinessTracker.registerExpected(bee.role());
         Work work = bee.work();
         if (work != null) {
-          if (hasText(work.in())) {
-            suffixes.add(work.in());
-          }
-          if (hasText(work.out())) {
-            suffixes.add(work.out());
-          }
+          addQueueSuffixes(suffixes, work.in());
+          addQueueSuffixes(suffixes, work.out());
         }
         if (bee.image() != null) {
           runnableBees.add(bee);
@@ -534,6 +534,61 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
   }
 
   @Override
+  public Map<String, Object> workBindingsSnapshot() {
+    Map<String, Object> work = new LinkedHashMap<>();
+    work.put("exchange", properties.hiveExchange());
+    List<Map<String, Object>> edgesPayload = new ArrayList<>();
+    work.put("edges", edgesPayload);
+
+    SwarmRuntimeContext ctx = runtimeContext;
+    SwarmPlan plan = ctx != null ? ctx.plan() : null;
+    if (plan == null) {
+      return Map.copyOf(work);
+    }
+
+    Topology topologyPlan = plan.topology();
+    if (topologyPlan == null || topologyPlan.edges().isEmpty()) {
+      return Map.copyOf(work);
+    }
+
+    List<Bee> bees = plan.bees() == null ? List.of() : plan.bees();
+    Map<String, Bee> beesById = new HashMap<>();
+    for (Bee bee : bees) {
+      if (bee != null && hasText(bee.id())) {
+        beesById.put(bee.id(), bee);
+      }
+    }
+    Map<String, String> instanceByBeeId = mapInstancesByBeeId(bees, runtimeState);
+
+    for (TopologyEdge edge : topologyPlan.edges()) {
+      if (edge == null) {
+        continue;
+      }
+      Bee fromBee = beesById.get(edge.from().beeId());
+      Bee toBee = beesById.get(edge.to().beeId());
+      if (fromBee == null || toBee == null) {
+        continue;
+      }
+      Map<String, Object> edgePayload = new LinkedHashMap<>();
+      edgePayload.put("edgeId", edge.id());
+      edgePayload.put("from", bindingEndpointPayload(edge.from(), fromBee, instanceByBeeId, true));
+      edgePayload.put("to", bindingEndpointPayload(edge.to(), toBee, instanceByBeeId, false));
+      TopologySelector selector = edge.selector();
+      if (selector != null) {
+        Map<String, Object> selectorPayload = new LinkedHashMap<>();
+        maybePut(selectorPayload, "policy", selector.policy());
+        maybePut(selectorPayload, "expr", selector.expr());
+        if (!selectorPayload.isEmpty()) {
+          edgePayload.put("selector", selectorPayload);
+        }
+      }
+      edgesPayload.add(edgePayload);
+    }
+
+    return Map.copyOf(work);
+  }
+
+  @Override
   public synchronized boolean markReady(String role, String instance) {
     configFanout.acknowledgeBootstrap(instance);
     return readinessTracker.markReady(role, instance);
@@ -615,16 +670,82 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
     controlPublisher.publishSignal(new io.pockethive.controlplane.messaging.SignalMessage(rk, "{}"));
   }
 
+  private Map<String, String> mapInstancesByBeeId(List<Bee> bees, SwarmRuntimeState state) {
+    if (bees == null || bees.isEmpty() || state == null) {
+      return Map.of();
+    }
+    Map<String, List<String>> instancesByRole = state.instancesByRole();
+    if (instancesByRole.isEmpty()) {
+      return Map.of();
+    }
+    Map<String, Integer> roleOffsets = new HashMap<>();
+    Map<String, String> mapping = new HashMap<>();
+    for (Bee bee : bees) {
+      if (bee == null) {
+        continue;
+      }
+      String role = bee.role();
+      int index = roleOffsets.getOrDefault(role, 0);
+      List<String> instances = instancesByRole.get(role);
+      if (instances != null && index < instances.size() && hasText(bee.id())) {
+        mapping.put(bee.id(), instances.get(index));
+      }
+      roleOffsets.put(role, index + 1);
+    }
+    return mapping.isEmpty() ? Map.of() : Map.copyOf(mapping);
+  }
+
+  private Map<String, Object> bindingEndpointPayload(TopologyEndpoint endpoint,
+                                                     Bee bee,
+                                                     Map<String, String> instanceByBeeId,
+                                                     boolean isFrom) {
+    Map<String, Object> payload = new LinkedHashMap<>();
+    if (endpoint == null || bee == null) {
+      return payload;
+    }
+    maybePut(payload, "role", bee.role());
+    if (instanceByBeeId != null && hasText(endpoint.beeId())) {
+      maybePut(payload, "instance", instanceByBeeId.get(endpoint.beeId()));
+    }
+    maybePut(payload, "port", endpoint.port());
+    Work work = bee.work();
+    if (work != null) {
+      Map<String, String> ports = isFrom ? work.out() : work.in();
+      if (ports != null && !ports.isEmpty()) {
+        String suffix = ports.get(endpoint.port());
+        if (hasText(suffix)) {
+          payload.put(isFrom ? "routingKey" : "queue", properties.queueName(suffix));
+        }
+      }
+    }
+    return payload;
+  }
+
+  private void maybePut(Map<String, Object> target, String key, String value) {
+    if (target == null || key == null) {
+      return;
+    }
+    if (hasText(value)) {
+      target.put(key, value);
+    }
+  }
+
   private void applyWorkIoEnvironment(Bee bee, Map<String, String> env) {
     Work work = bee.work();
     if (work != null) {
-      boolean hasInput = hasText(work.in());
-      boolean hasOutput = hasText(work.out());
+      String inputQueue = work.defaultIn();
+      String outputQueue = work.defaultOut();
+      boolean hasInput = hasText(inputQueue);
+      boolean hasOutput = hasText(outputQueue);
       if (hasInput) {
-        env.put("POCKETHIVE_INPUT_RABBIT_QUEUE", properties.queueName(work.in()));
+        env.put("POCKETHIVE_INPUT_RABBIT_QUEUE", properties.queueName(inputQueue));
+      } else if (!work.in().isEmpty()) {
+        log.warn("Bee {} declares input ports without a default; skipping input queue wiring", bee.role());
       }
       if (hasOutput) {
-        env.put("POCKETHIVE_OUTPUT_RABBIT_ROUTING_KEY", properties.queueName(work.out()));
+        env.put("POCKETHIVE_OUTPUT_RABBIT_ROUTING_KEY", properties.queueName(outputQueue));
+      } else if (!work.out().isEmpty()) {
+        log.warn("Bee {} declares output ports without a default; skipping output queue wiring", bee.role());
       }
       if (hasInput || hasOutput) {
         env.put("POCKETHIVE_OUTPUT_RABBIT_EXCHANGE", properties.hiveExchange());
@@ -684,6 +805,17 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
 
   private boolean hasText(String value) {
     return value != null && !value.isBlank();
+  }
+
+  private void addQueueSuffixes(Set<String> target, Map<String, String> ports) {
+    if (target == null || ports == null || ports.isEmpty()) {
+      return;
+    }
+    for (String suffix : ports.values()) {
+      if (hasText(suffix)) {
+        target.add(suffix);
+      }
+    }
   }
 
   @SuppressWarnings("unchecked")
@@ -970,7 +1102,11 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
         roles.add(bee.role());
       }
       if (bee.work() != null && bee.work().out() != null) {
-        producersByQueue.computeIfAbsent(bee.work().out(), q -> new HashSet<>()).add(bee.role());
+        for (String suffix : bee.work().out().values()) {
+          if (hasText(suffix)) {
+            producersByQueue.computeIfAbsent(suffix, q -> new HashSet<>()).add(bee.role());
+          }
+        }
       }
     }
 
@@ -982,11 +1118,16 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
 
     for (Bee bee : plan.bees()) {
       if (bee.work() != null && bee.work().in() != null) {
-        Set<String> producers = producersByQueue.getOrDefault(bee.work().in(), Set.of());
-        if (!producers.isEmpty()) {
-          deps.get(bee.role()).addAll(producers);
-          for (String p : producers) {
-            adj.computeIfAbsent(p, k -> new HashSet<>()).add(bee.role());
+        for (String suffix : bee.work().in().values()) {
+          if (!hasText(suffix)) {
+            continue;
+          }
+          Set<String> producers = producersByQueue.getOrDefault(suffix, Set.of());
+          if (!producers.isEmpty()) {
+            deps.get(bee.role()).addAll(producers);
+            for (String p : producers) {
+              adj.computeIfAbsent(p, k -> new HashSet<>()).add(bee.role());
+            }
           }
         }
       }

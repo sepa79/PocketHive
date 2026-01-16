@@ -26,7 +26,8 @@ template:
               x-ph-call-id: perf-test
               x-ph-phase: warmup
       work:
-        out: mod-warmup
+        out:
+          out: mod-warmup
     - role: generator-ramp
       image: generator:latest
       config:
@@ -49,7 +50,8 @@ template:
               x-ph-call-id: perf-test
               x-ph-phase: ramp
       work:
-        out: mod-ramp
+        out:
+          out: mod-ramp
     - role: generator-peak
       image: generator:latest
       config:
@@ -72,7 +74,8 @@ template:
               x-ph-call-id: perf-test
               x-ph-phase: peak
       work:
-        out: mod-peak
+        out:
+          out: mod-peak
     - role: moderator-warmup
       image: moderator:latest
       config:
@@ -80,8 +83,10 @@ template:
           mode: THREAD_COUNT
           threadCount: 5
       work:
-        in: mod-warmup
-        out: build
+        in:
+          in: mod-warmup
+        out:
+          out: build
     - role: moderator-ramp
       image: moderator:latest
       config:
@@ -89,8 +94,10 @@ template:
           mode: THREAD_COUNT
           threadCount: 10
       work:
-        in: mod-ramp
-        out: build
+        in:
+          in: mod-ramp
+        out:
+          out: build
     - role: moderator-peak
       image: moderator:latest
       config:
@@ -98,8 +105,10 @@ template:
           mode: THREAD_COUNT
           threadCount: 20
       work:
-        in: mod-peak
-        out: build
+        in:
+          in: mod-peak
+        out:
+          out: build
     - role: request-builder
       image: request-builder:latest
       config:
@@ -107,8 +116,10 @@ template:
           templateRoot: /app/scenario/templates
           serviceId: default
       work:
-        in: build
-        out: proc
+        in:
+          in: build
+        out:
+          out: proc
     - role: processor
       image: processor:latest
       config:
@@ -123,8 +134,10 @@ template:
             connectTimeoutMs: 3000
             readTimeoutMs: 5000
       work:
-        in: proc
-        out: post
+        in:
+          in: proc
+        out:
+          out: post
     - role: postprocessor
       image: postprocessor:latest
       config:
@@ -132,7 +145,8 @@ template:
           postprocessor:
             publish-all-metrics: true
       work:
-        in: post
+        in:
+          in: post
 plan:
   bees:
     - role: generator-warmup

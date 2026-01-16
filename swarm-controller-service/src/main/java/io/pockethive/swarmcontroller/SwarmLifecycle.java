@@ -148,6 +148,15 @@ public interface SwarmLifecycle {
   Map<String, QueueStats> snapshotQueueStats();
 
   /**
+   * Snapshot of work-plane bindings for status-full payloads.
+   * <p>
+   * Implementations should return a structure matching {@code data.context.bindings.work}
+   * as defined in {@code docs/ARCHITECTURE.md}, including at least the work exchange and
+   * a (possibly empty) list of edges.
+   */
+  Map<String, Object> workBindingsSnapshot();
+
+  /**
    * Enable all workloads.
    * <p>
    * Implementations should publish a {@code config-update} command with {@code enabled=true} so

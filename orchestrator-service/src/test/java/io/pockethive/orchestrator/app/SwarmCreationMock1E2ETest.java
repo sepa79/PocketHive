@@ -326,7 +326,7 @@ class SwarmCreationMock1E2ETest {
             new Bee(
                 "generator",
                 "generator:latest",
-                new Work(null, "gen"),
+                Work.ofDefaults(null, "gen"),
                 Map.of(),
                 Map.of(
                     "docker", dockerConfig,
@@ -334,14 +334,14 @@ class SwarmCreationMock1E2ETest {
                     "message", Map.of("path", "/api/guarded", "body", "guarded-request")
                 )
             ),
-            new Bee("moderator", "moderator:latest", new Work("gen", "mod"), Map.of(), Map.of("docker", dockerConfig)),
+            new Bee("moderator", "moderator:latest", Work.ofDefaults("gen", "mod"), Map.of(), Map.of("docker", dockerConfig)),
             new Bee(
                 "processor",
                 "processor:latest",
-                new Work("mod", "final"),
+                Work.ofDefaults("mod", "final"),
                 Map.of(),
                 Map.of("docker", dockerConfig, "baseUrl", "http://sut:8080")),
-            new Bee("postprocessor", "postprocessor:latest", new Work("final", null), Map.of(), Map.of("docker", dockerConfig))
+            new Bee("postprocessor", "postprocessor:latest", Work.ofDefaults("final", null), Map.of(), Map.of("docker", dockerConfig))
         );
 
         String outcomeRoutingKey = ControlPlaneRouting.event("outcome", "swarm-create",

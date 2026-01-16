@@ -223,7 +223,7 @@ public final class BufferGuardCoordinator {
       return Optional.empty();
     }
     Bee targetBee = plan.bees().stream()
-        .filter(bee -> bee.work() != null && queueAlias.equalsIgnoreCase(bee.work().out()))
+        .filter(bee -> bee.work() != null && hasQueueAlias(bee.work().out(), queueAlias))
         .findFirst()
         .orElse(null);
     String targetRole = targetBee != null ? targetBee.role() : null;
@@ -369,6 +369,18 @@ public final class BufferGuardCoordinator {
 
   private static boolean hasText(String value) {
     return value != null && !value.isBlank();
+  }
+
+  private static boolean hasQueueAlias(Map<String, String> ports, String queueAlias) {
+    if (ports == null || ports.isEmpty() || queueAlias == null || queueAlias.isBlank()) {
+      return false;
+    }
+    for (String value : ports.values()) {
+      if (value != null && queueAlias.equalsIgnoreCase(value.trim())) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private static String normalizeRole(String value) {

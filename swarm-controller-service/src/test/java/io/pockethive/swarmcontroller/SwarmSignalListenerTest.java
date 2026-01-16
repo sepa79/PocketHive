@@ -1,6 +1,7 @@
 package io.pockethive.swarmcontroller;
 
 import static io.pockethive.swarmcontroller.SwarmControllerTestProperties.CONTROL_EXCHANGE;
+import static io.pockethive.swarmcontroller.SwarmControllerTestProperties.HIVE_EXCHANGE;
 import static io.pockethive.swarmcontroller.SwarmControllerTestProperties.TEST_SWARM_ID;
 import static io.pockethive.swarmcontroller.SwarmControllerTestProperties.TRAFFIC_PREFIX;
 
@@ -82,6 +83,9 @@ class SwarmSignalListenerTest {
     lenient().when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     lenient().when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
     lenient().when(lifecycle.snapshotQueueStats()).thenReturn(DEFAULT_QUEUE_STATS);
+    lenient().when(lifecycle.workBindingsSnapshot()).thenReturn(Map.of(
+        "exchange", HIVE_EXCHANGE,
+        "edges", List.of()));
     lenient().when(lifecycle.isReadyForWork()).thenReturn(true);
     lenient().when(lifecycle.trafficPolicy()).thenReturn(null);
   }
@@ -929,6 +933,7 @@ class SwarmSignalListenerTest {
           && data.path("enabled").asBoolean()
           && data.path("tps").isMissingNode()
           && "RUNNING".equals(data.path("context").path("swarmStatus").asText())
+          && data.path("context").path("bindings").path("work").path("exchange").isTextual()
           && data.path("io").path("work").isMissingNode();
     } catch (Exception ex) {
       return false;

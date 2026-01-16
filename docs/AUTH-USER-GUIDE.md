@@ -278,7 +278,8 @@ template:
             headers:
               x-ph-call-id: "GetUser"
       work:
-        out: build
+        out:
+          out: build
 
     - role: request-builder
       image: request-builder:latest
@@ -287,21 +288,26 @@ template:
           templateRoot: /app/scenario/http-templates
           serviceId: api
       work:
-        in: build
-        out: proc
+        in:
+          in: build
+        out:
+          out: proc
 
     - role: processor
       image: processor:latest
       config:
         baseUrl: "https://api.example.com"
       work:
-        in: proc
-        out: post
+        in:
+          in: proc
+        out:
+          out: post
 
     - role: postprocessor
       image: postprocessor:latest
       work:
-        in: post
+        in:
+          in: post
 ```
 
 ```yaml

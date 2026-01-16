@@ -887,7 +887,8 @@ public class SwarmSignalListener {
         .config(statusConfigSnapshot())
         .data("workers", workers.snapshot())
         .data("swarmDiagnostics", diagnostics.snapshot())
-        .data("scenario", scenarioProgress());
+        .data("scenario", scenarioProgress())
+        .data("bindings", Map.of("work", lifecycle.workBindingsSnapshot()));
     if (journalRunId != null) {
       builder.data("journal", Map.of("runId", journalRunId));
     }
