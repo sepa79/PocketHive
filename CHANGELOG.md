@@ -7,6 +7,14 @@ Timestamp: 2026-01-14T11:17:56Z
 
 - No unreleased changes yet.
 
+## [0.14.20] - 2026-01-16
+Timestamp: 2026-01-16T10:47:13Z
+
+- Auth system: added worker-sdk auth module with OAuth2 + static auth strategies, token caching, and background refresh.
+- Request Builder: template-level auth blocks now inject headers for HTTP/TCP envelopes.
+- Templating: added `#authToken()` helper for pulling cached tokens into templates.
+- Tests/docs: added auth unit tests plus user/behavior docs for configuration and usage.
+
 ## [0.14.19] - 2026-01-14
 Timestamp: 2026-01-14T11:17:56Z
 
