@@ -18,6 +18,9 @@ description: Uses local images with a 50 msg/s generator.
 template:
   image: swarm-controller:latest
   bees: [ ... ]
+topology:
+  version: 1
+  edges: [ ... ]
 trafficPolicy:
   # optional, see traffic-shaping docs
 ```
@@ -28,6 +31,9 @@ trafficPolicy:
 - `template` (object, required) – maps directly to `SwarmTemplate`:
   - `image` (string, required) – swarm‑controller image name.
   - `bees` (array, required) – list of Bee definitions.
+- `topology` (object, optional) – logical graph for UI and scenario tooling.
+  - `version` (number, required) – topology schema version (currently `1`).
+  - `edges` (array, required) – list of logical edges.
 - `trafficPolicy` (object, optional) – controls guards and traffic
   shaping; see `docs/traffic-shaping.md`.
 
@@ -60,6 +66,9 @@ Bee fields (see `common/swarm-model/src/main/java/io/pockethive/swarm/model/Bee.
 - `role` (string, required)
   - Logical role name, e.g. `generator`, `processor`, `moderator`,
     `postprocessor`, `http-builder`.
+- `id` (string, optional)
+  - Stable identifier used by `topology.edges[].from|to.beeId`. Required if
+    the scenario declares `topology`.
 - `image` (string, required)
   - Container image name (logical); Orchestrator will prefix it with the
     configured repository, e.g. `generator:latest` →
@@ -75,9 +84,56 @@ Bee fields (see `common/swarm-model/src/main/java/io/pockethive/swarm/model/Bee.
   - Structured config for this role; becomes `SwarmPlan.bees[*].config`
     and is fanned out to the worker as a `config-update` signal during
     bootstrap.
+- `ports` (array, optional)
+  - Logical IO ports for `topology` (not used for runtime wiring).
+  - Each port: `id` (string, required), `direction` (`in` or `out`, required).
 
 > **Rule:** every bee must have a `work` section, even if both `in` and
 > `out` are null. The Swarm model treats `work` as non‑null.
+
+## Topology (logical graph)
+
+`topology` is the SSOT for the logical graph that UI and scenario tooling use
+to draw edges. It does not replace `work` queue suffixes and is not a runtime
+binding list. Runtime bindings are emitted by swarm-controller in
+`status-full.data.context.bindings`.
+
+```yaml
+template:
+  image: swarm-controller:latest
+  bees:
+    - id: genA
+      role: generator
+      image: generator:latest
+      work: { in: null, out: genQ }
+      ports:
+        - { id: out, direction: out }
+    - id: modA
+      role: moderator
+      image: moderator:latest
+      work: { in: genQ, out: procQ }
+      ports:
+        - { id: in, direction: in }
+        - { id: out, direction: out }
+
+topology:
+  version: 1
+  edges:
+    - id: e1
+      from: { beeId: genA, port: out }
+      to:   { beeId: modA, port: in }
+```
+
+Edge fields:
+- `id` (string, required) – stable edge id within the template.
+- `from` (object, required) – `{ beeId, port }`.
+- `to` (object, required) – `{ beeId, port }`.
+- `selector` (object, optional) – edge selection hint for multi‑IO policies,
+  e.g. `{ policy: predicate, expr: "payload.priority >= 50" }`.
+
+Multi‑IO:
+- Model multiple inputs/outputs as multiple `ports` and multiple `edges`.
+- Do not infer edges from `work`; the topology is the only graph.
 
 ## Worker configuration shape
 
