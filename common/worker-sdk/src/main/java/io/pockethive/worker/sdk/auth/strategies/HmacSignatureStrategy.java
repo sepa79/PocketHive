@@ -49,4 +49,9 @@ public class HmacSignatureStrategy implements AuthStrategy {
             throw new RuntimeException("Failed to generate HMAC signature", e);
         }
     }
+
+    @Override
+    public boolean requiresRefresh(TokenInfo token, AuthConfig config) {
+        return false;
+    }
 }

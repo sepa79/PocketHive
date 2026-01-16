@@ -21,19 +21,22 @@ public class TokenRefreshScheduler {
     private final InMemoryTokenStore tokenStore;
     private final Map<String, AuthStrategy> strategies;
     private final MeterRegistry meterRegistry;
+    private final AuthProperties properties;
     private final Map<String, Lock> tokenLocks = new ConcurrentHashMap<>();
     
     public TokenRefreshScheduler(
         InMemoryTokenStore tokenStore,
         Map<String, AuthStrategy> strategies,
-        MeterRegistry meterRegistry
+        MeterRegistry meterRegistry,
+        AuthProperties properties
     ) {
         this.tokenStore = tokenStore;
         this.strategies = strategies;
         this.meterRegistry = meterRegistry;
+        this.properties = properties;
     }
     
-    @Scheduled(fixedDelay = 10000) // Every 10 seconds
+    @Scheduled(fixedDelayString = "#{${pockethive.auth.scheduler.scanIntervalSeconds:10} * 1000}")
     public void scanAndRefresh() {
         try {
             long now = Instant.now().getEpochSecond();
@@ -65,11 +68,22 @@ public class TokenRefreshScheduler {
                 return;
             }
             
+            int refreshBuffer = resolveBuffer(
+                oldToken,
+                "refreshBuffer",
+                properties.getRefresh().getRefreshAheadSeconds()
+            );
+            int emergencyBuffer = resolveBuffer(
+                oldToken,
+                "emergencyRefreshBuffer",
+                properties.getRefresh().getEmergencyRefreshAheadSeconds()
+            );
+
             AuthConfig config = new AuthConfig(
                 oldToken.strategy(),
                 tokenKey,
-                60,
-                10,
+                refreshBuffer,
+                emergencyBuffer,
                 oldToken.refreshConfig()
             );
             
@@ -91,5 +105,22 @@ public class TokenRefreshScheduler {
         } finally {
             lock.unlock();
         }
+    }
+
+    private int resolveBuffer(TokenInfo token, String key, int fallback) {
+        if (token.metadata() == null) {
+            return fallback;
+        }
+        Object value = token.metadata().get(key);
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        if (value instanceof String text) {
+            try {
+                return Integer.parseInt(text);
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return fallback;
     }
 }

@@ -1,5 +1,7 @@
 package io.pockethive.worker.sdk.auth;
 
+import java.util.Locale;
+
 /**
  * Supported authorization types for HTTP and TCP protocols.
  */
@@ -28,5 +30,19 @@ public enum AuthType {
             return NONE;
         }
         return valueOf(value.toUpperCase().replace('-', '_'));
+    }
+
+    /**
+     * Returns the canonical kebab-case key for lookups.
+     */
+    public String key() {
+        return name().toLowerCase(Locale.ROOT).replace('_', '-');
+    }
+
+    /**
+     * Normalizes an auth type string to its canonical kebab-case key.
+     */
+    public static String normalize(String value) {
+        return parse(value).key();
     }
 }

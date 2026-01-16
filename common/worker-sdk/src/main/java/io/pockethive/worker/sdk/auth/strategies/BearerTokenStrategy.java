@@ -25,4 +25,9 @@ public class BearerTokenStrategy implements AuthStrategy {
         }
         return Map.of("Authorization", "Bearer " + tokenValue);
     }
+
+    @Override
+    public boolean requiresRefresh(TokenInfo token, AuthConfig config) {
+        return false;
+    }
 }

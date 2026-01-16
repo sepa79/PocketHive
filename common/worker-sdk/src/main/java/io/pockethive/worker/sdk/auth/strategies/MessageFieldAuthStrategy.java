@@ -36,4 +36,9 @@ public class MessageFieldAuthStrategy implements AuthStrategy {
         
         return fields;
     }
+
+    @Override
+    public boolean requiresRefresh(TokenInfo token, AuthConfig config) {
+        return false;
+    }
 }

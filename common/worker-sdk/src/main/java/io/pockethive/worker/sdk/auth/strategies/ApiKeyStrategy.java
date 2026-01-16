@@ -34,4 +34,9 @@ public class ApiKeyStrategy implements AuthStrategy {
         // Query parameter handling would be done by caller
         return Map.of("X-API-Key-Query", keyName + "=" + key);
     }
+
+    @Override
+    public boolean requiresRefresh(TokenInfo token, AuthConfig config) {
+        return false;
+    }
 }

@@ -31,8 +31,9 @@ public record AuthConfig(
         if (type == null) {
             throw new IllegalArgumentException("auth.type is required");
         }
-        
+
         AuthType authType = AuthType.parse(type);
+        String normalizedType = authType.key();
         
         String tokenKey = (String) authSection.getOrDefault("tokenKey", serviceId + ":" + callId);
         int refreshBuffer = ((Number) authSection.getOrDefault("refreshBuffer", 60)).intValue();
@@ -48,7 +49,7 @@ public record AuthConfig(
         
         validateAuthType(authType, properties);
         
-        return new AuthConfig(type, tokenKey, refreshBuffer, emergencyBuffer, properties);
+        return new AuthConfig(normalizedType, tokenKey, refreshBuffer, emergencyBuffer, properties);
     }
     
     /**
