@@ -3,9 +3,9 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
-Timestamp: 2026-01-14T11:17:56Z
+Timestamp: 2026-01-16T10:51:49Z
 
-- No unreleased changes yet.
+- CI: disabled GitHub Pages workflow to avoid accidental doc builds on repo content.
 
 ## [0.14.20] - 2026-01-16
 Timestamp: 2026-01-16T10:47:13Z
