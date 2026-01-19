@@ -54,11 +54,42 @@ interface PlanTimelineLanesProps {
 }
 
 type TemplateNode = Record<string, unknown> | null
+type TopologyNode = Record<string, unknown> | null
 
 const TIMELINE_DIVISION_PX = 80
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function readPortMapEntry(value: unknown, portId: string): string | null {
+  if (!isPlainObject(value)) return null
+  const raw = value[portId]
+  if (typeof raw !== 'string') return null
+  const trimmed = raw.trim()
+  return trimmed.length > 0 ? trimmed : null
+}
+
+function updatePortMapEntry(
+  work: Record<string, unknown>,
+  direction: 'in' | 'out',
+  portId: string,
+  rawValue: string,
+) {
+  const section = isPlainObject(work[direction])
+    ? { ...(work[direction] as Record<string, unknown>) }
+    : {}
+  const trimmed = rawValue.trim()
+  if (trimmed) {
+    section[portId] = trimmed
+  } else {
+    delete section[portId]
+  }
+  if (Object.keys(section).length > 0) {
+    work[direction] = section
+  } else {
+    delete work[direction]
+  }
 }
 
 function mergeConfig(
@@ -470,6 +501,7 @@ function SwarmTemplateEditor({
           return null
         }
         const bee = entry as Record<string, unknown>
+        const beeId = typeof bee['id'] === 'string' ? (bee['id'] as string) : ''
         const role = typeof bee['role'] === 'string' ? (bee['role'] as string) : ''
         const instanceId =
           typeof bee['instanceId'] === 'string' ? (bee['instanceId'] as string) : ''
@@ -477,12 +509,22 @@ function SwarmTemplateEditor({
         let workIn: string | null = null
         let workOut: string | null = null
         const work = bee['work']
-        if (work && typeof work === 'object' && !Array.isArray(work)) {
+        if (isPlainObject(work)) {
           const workRec = work as Record<string, unknown>
-          workIn =
-            typeof workRec['in'] === 'string' ? (workRec['in'] as string) : null
-          workOut =
-            typeof workRec['out'] === 'string' ? (workRec['out'] as string) : null
+          workIn = readPortMapEntry(workRec['in'], 'in')
+          workOut = readPortMapEntry(workRec['out'], 'out')
+        }
+        const portsRaw = Array.isArray(bee['ports']) ? (bee['ports'] as unknown[]) : []
+        const ports: { id: string; direction: string }[] = []
+        for (const port of portsRaw) {
+          if (!isPlainObject(port)) continue
+          const portRec = port as Record<string, unknown>
+          const id = typeof portRec['id'] === 'string' ? (portRec['id'] as string) : ''
+          const direction =
+            typeof portRec['direction'] === 'string' ? (portRec['direction'] as string) : ''
+          if (id || direction) {
+            ports.push({ id, direction })
+          }
         }
         let inputType: string | null = null
         let hasSchedulerConfig = false
@@ -532,11 +574,13 @@ function SwarmTemplateEditor({
         }
         return {
           index,
+          beeId,
           role,
           instanceId,
           image,
           workIn,
           workOut,
+          ports,
           inputType,
           hasSchedulerConfig,
           hasRedisConfig,
@@ -545,11 +589,13 @@ function SwarmTemplateEditor({
       })
       .filter((entry) => entry !== null) as {
       index: number
+      beeId: string
       role: string
       instanceId: string
       image: string
       workIn: string | null
       workOut: string | null
+      ports: { id: string; direction: string }[]
       inputType: string | null
       hasSchedulerConfig: boolean
       hasRedisConfig: boolean
@@ -741,7 +787,7 @@ function SwarmTemplateEditor({
 
   const updateBeeField = (
     beeIndex: number,
-    field: 'role' | 'instanceId' | 'image' | 'workIn' | 'workOut',
+    field: 'id' | 'role' | 'instanceId' | 'image' | 'workIn' | 'workOut',
     value: string,
   ) => {
     onChange((current) => {
@@ -757,20 +803,129 @@ function SwarmTemplateEditor({
         beesRaw[beeIndex] && typeof beesRaw[beeIndex] === 'object' && !Array.isArray(beesRaw[beeIndex])
           ? { ...(beesRaw[beeIndex] as Record<string, unknown>) }
           : {}
-      if (field === 'role' || field === 'instanceId' || field === 'image') {
+      if (field === 'id' || field === 'role' || field === 'instanceId' || field === 'image') {
         existing[field] = value.trim() || undefined
       } else {
-        const work =
-          existing.work && typeof existing.work === 'object' && !Array.isArray(existing.work)
-            ? { ...(existing.work as Record<string, unknown>) }
-            : {}
+        const work = isPlainObject(existing.work)
+          ? { ...(existing.work as Record<string, unknown>) }
+          : {}
         if (field === 'workIn') {
-          work.in = value.trim() || undefined
+          updatePortMapEntry(work, 'in', 'in', value)
         }
         if (field === 'workOut') {
-          work.out = value.trim() || undefined
+          updatePortMapEntry(work, 'out', 'out', value)
         }
-        existing.work = work
+        if (Object.keys(work).length > 0) {
+          existing.work = work
+        } else {
+          delete existing.work
+        }
+      }
+      beesRaw[beeIndex] = existing
+      ;(base as Record<string, unknown>).bees = beesRaw
+      return base
+    })
+  }
+
+  const updateBeePort = (
+    beeIndex: number,
+    portIndex: number,
+    field: 'id' | 'direction',
+    rawValue: string,
+  ) => {
+    onChange((current) => {
+      const base =
+        current && typeof current === 'object' && !Array.isArray(current)
+          ? { ...(current as Record<string, unknown>) }
+          : {}
+      const beesRaw = Array.isArray(base.bees) ? [...(base.bees as unknown[])] : []
+      if (beeIndex < 0 || beeIndex >= beesRaw.length) {
+        return base
+      }
+      const existing =
+        beesRaw[beeIndex] && typeof beesRaw[beeIndex] === 'object' && !Array.isArray(beesRaw[beeIndex])
+          ? { ...(beesRaw[beeIndex] as Record<string, unknown>) }
+          : {}
+      const portsRaw = Array.isArray(existing.ports)
+        ? ([...(existing.ports as unknown[])] as unknown[])
+        : ([] as unknown[])
+      const port =
+        portsRaw[portIndex] && isPlainObject(portsRaw[portIndex])
+          ? { ...(portsRaw[portIndex] as Record<string, unknown>) }
+          : {}
+      const value = rawValue.trim()
+      if (field === 'id') {
+        if (value) {
+          port.id = value
+        } else {
+          delete port.id
+        }
+      }
+      if (field === 'direction') {
+        if (value) {
+          port.direction = value
+        } else {
+          delete port.direction
+        }
+      }
+      portsRaw[portIndex] = port
+      existing.ports = portsRaw
+      beesRaw[beeIndex] = existing
+      ;(base as Record<string, unknown>).bees = beesRaw
+      return base
+    })
+  }
+
+  const addBeePort = (beeIndex: number) => {
+    onChange((current) => {
+      const base =
+        current && typeof current === 'object' && !Array.isArray(current)
+          ? { ...(current as Record<string, unknown>) }
+          : {}
+      const beesRaw = Array.isArray(base.bees) ? [...(base.bees as unknown[])] : []
+      if (beeIndex < 0 || beeIndex >= beesRaw.length) {
+        return base
+      }
+      const existing =
+        beesRaw[beeIndex] && typeof beesRaw[beeIndex] === 'object' && !Array.isArray(beesRaw[beeIndex])
+          ? { ...(beesRaw[beeIndex] as Record<string, unknown>) }
+          : {}
+      const portsRaw = Array.isArray(existing.ports)
+        ? ([...(existing.ports as unknown[])] as unknown[])
+        : ([] as unknown[])
+      portsRaw.push({ id: '', direction: 'in' })
+      existing.ports = portsRaw
+      beesRaw[beeIndex] = existing
+      ;(base as Record<string, unknown>).bees = beesRaw
+      return base
+    })
+  }
+
+  const removeBeePort = (beeIndex: number, portIndex: number) => {
+    onChange((current) => {
+      const base =
+        current && typeof current === 'object' && !Array.isArray(current)
+          ? { ...(current as Record<string, unknown>) }
+          : {}
+      const beesRaw = Array.isArray(base.bees) ? [...(base.bees as unknown[])] : []
+      if (beeIndex < 0 || beeIndex >= beesRaw.length) {
+        return base
+      }
+      const existing =
+        beesRaw[beeIndex] && typeof beesRaw[beeIndex] === 'object' && !Array.isArray(beesRaw[beeIndex])
+          ? { ...(beesRaw[beeIndex] as Record<string, unknown>) }
+          : {}
+      const portsRaw = Array.isArray(existing.ports)
+        ? ([...(existing.ports as unknown[])] as unknown[])
+        : ([] as unknown[])
+      if (portIndex < 0 || portIndex >= portsRaw.length) {
+        return base
+      }
+      portsRaw.splice(portIndex, 1)
+      if (portsRaw.length > 0) {
+        existing.ports = portsRaw
+      } else {
+        delete existing.ports
       }
       beesRaw[beeIndex] = existing
       ;(base as Record<string, unknown>).bees = beesRaw
@@ -935,8 +1090,9 @@ function SwarmTemplateEditor({
               <ul className="text-[11px]">
                 {bees.map((bee) => {
                   const isSelected = bee.index === selectedBeeIndex
-                  const label =
-                    bee.instanceId || bee.role
+                  const label = bee.beeId
+                    ? `${bee.beeId}${bee.role ? ` (${bee.role})` : ''}`
+                    : bee.instanceId || bee.role
                       ? `${bee.instanceId || ''}${bee.role ? ` (${bee.role})` : ''}`
                       : `bee-${bee.index + 1}`
                   return (
@@ -1004,6 +1160,15 @@ function SwarmTemplateEditor({
                   onChange={(e) =>
                     updateBeeField(selectedBee.index, 'instanceId', e.target.value)
                   }
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-28 text-white/70">Bee ID</span>
+                <input
+                  className="flex-1 rounded border border-white/20 bg-black/40 px-2 py-1 text-[11px] text-white/90"
+                  value={selectedBee.beeId}
+                  placeholder="genA"
+                  onChange={(e) => updateBeeField(selectedBee.index, 'id', e.target.value)}
                 />
               </div>
               <div className="flex items-center gap-2">
@@ -1117,12 +1282,61 @@ function SwarmTemplateEditor({
                         {name}
                       </option>
                     ))}
-	                  </select>
-	                )}
-	              </div>
-	              <div className="flex items-start gap-2">
-	                <span className="w-28 text-white/70 pt-1">Interceptors</span>
-	                <div className="flex-1 min-w-0">
+                  </select>
+                )}
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="w-28 text-white/70 pt-1">Ports</span>
+                <div className="flex-1 min-w-0 space-y-1">
+                  {selectedBee.ports.length === 0 && (
+                    <div className="text-[10px] text-white/50">(none)</div>
+                  )}
+                  {selectedBee.ports.map((port, portIndex) => (
+                    <div key={portIndex} className="flex items-center gap-2">
+                      <input
+                        className="flex-1 rounded border border-white/20 bg-black/40 px-2 py-1 text-[11px] text-white/90"
+                        value={port.id}
+                        placeholder="port-id"
+                        onChange={(e) =>
+                          updateBeePort(selectedBee.index, portIndex, 'id', e.target.value)
+                        }
+                      />
+                      <select
+                        className="w-24 rounded border border-white/20 bg-black/60 px-2 py-1 text-[11px] text-white/90"
+                        value={port.direction || 'in'}
+                        onChange={(e) =>
+                          updateBeePort(selectedBee.index, portIndex, 'direction', e.target.value)
+                        }
+                      >
+                        <option value="in">in</option>
+                        <option value="out">out</option>
+                      </select>
+                      <button
+                        type="button"
+                        className="px-1.5 py-0.5 rounded bg-red-500/40 text-red-50 hover:bg-red-500/60"
+                        onClick={() => removeBeePort(selectedBee.index, portIndex)}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="rounded bg-white/10 px-2 py-1 text-[11px] text-white/80 hover:bg-white/20"
+                      onClick={() => addBeePort(selectedBee.index)}
+                    >
+                      + Add port
+                    </button>
+                    <span className="text-[10px] text-white/50">
+                      Used only for topology edges.
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="w-28 text-white/70 pt-1">Interceptors</span>
+                <div className="flex-1 min-w-0">
 	                  {interceptorsMeta.count === 0 ? (
 	                    <div className="text-[11px] text-white/50">(none)</div>
 	                  ) : (
@@ -1327,7 +1541,359 @@ function SwarmTemplateEditor({
 	        </div>
 	      )}
 	    </div>
-	  )
+  )
+}
+
+interface TopologyEditorProps {
+  topology: TopologyNode
+  template: TemplateNode
+  onChange: (updater: (current: TopologyNode) => TopologyNode) => void
+}
+
+function TopologyEditor({ topology, template, onChange }: TopologyEditorProps) {
+  const edges = useMemo(() => {
+    if (!isPlainObject(topology)) return [] as {
+      index: number
+      id: string
+      fromBeeId: string
+      fromPort: string
+      toBeeId: string
+      toPort: string
+      selectorPolicy: string
+      selectorExpr: string
+    }[]
+    const record = topology as Record<string, unknown>
+    const edgesRaw = Array.isArray(record.edges) ? (record.edges as unknown[]) : []
+    return edgesRaw.map((entry, index) => {
+      const edgeRec = isPlainObject(entry) ? (entry as Record<string, unknown>) : {}
+      const id = typeof edgeRec.id === 'string' ? (edgeRec.id as string) : ''
+      const fromRec = isPlainObject(edgeRec.from) ? (edgeRec.from as Record<string, unknown>) : {}
+      const toRec = isPlainObject(edgeRec.to) ? (edgeRec.to as Record<string, unknown>) : {}
+      const selectorRec = isPlainObject(edgeRec.selector)
+        ? (edgeRec.selector as Record<string, unknown>)
+        : {}
+      return {
+        index,
+        id,
+        fromBeeId: typeof fromRec.beeId === 'string' ? (fromRec.beeId as string) : '',
+        fromPort: typeof fromRec.port === 'string' ? (fromRec.port as string) : '',
+        toBeeId: typeof toRec.beeId === 'string' ? (toRec.beeId as string) : '',
+        toPort: typeof toRec.port === 'string' ? (toRec.port as string) : '',
+        selectorPolicy:
+          typeof selectorRec.policy === 'string' ? (selectorRec.policy as string) : '',
+        selectorExpr: typeof selectorRec.expr === 'string' ? (selectorRec.expr as string) : '',
+      }
+    })
+  }, [topology])
+
+  const versionValue =
+    isPlainObject(topology) && typeof (topology as Record<string, unknown>).version === 'number'
+      ? String((topology as Record<string, unknown>).version)
+      : ''
+
+  const { beeIds, portIds } = useMemo(() => {
+    const beeSet = new Set<string>()
+    const portSet = new Set<string>(['in', 'out'])
+    if (isPlainObject(template)) {
+      const beesRaw = Array.isArray((template as Record<string, unknown>)['bees'])
+        ? ((template as Record<string, unknown>)['bees'] as unknown[])
+        : []
+      for (const entry of beesRaw) {
+        if (!isPlainObject(entry)) continue
+        const bee = entry as Record<string, unknown>
+        if (typeof bee.id === 'string' && bee.id.trim()) {
+          beeSet.add(bee.id.trim())
+        }
+        const portsRaw = Array.isArray(bee.ports) ? (bee.ports as unknown[]) : []
+        for (const port of portsRaw) {
+          if (!isPlainObject(port)) continue
+          const portRec = port as Record<string, unknown>
+          if (typeof portRec.id === 'string' && portRec.id.trim()) {
+            portSet.add(portRec.id.trim())
+          }
+        }
+      }
+    }
+    return {
+      beeIds: Array.from(beeSet).sort((a, b) => a.localeCompare(b)),
+      portIds: Array.from(portSet).sort((a, b) => a.localeCompare(b)),
+    }
+  }, [template])
+
+  const updateTopologyVersion = (rawValue: string) => {
+    onChange((current) => {
+      const base = isPlainObject(current) ? { ...(current as Record<string, unknown>) } : {}
+      const value = rawValue.trim()
+      const edgesRaw = Array.isArray(base.edges) ? (base.edges as unknown[]) : []
+      if (value) {
+        const parsed = Number(value)
+        if (Number.isFinite(parsed)) {
+          base.version = parsed
+        }
+      } else {
+        delete base.version
+      }
+      if (edgesRaw.length > 0 && typeof base.version !== 'number') {
+        base.version = 1
+      }
+      if (edgesRaw.length === 0 && !('version' in base)) {
+        return null
+      }
+      return base
+    })
+  }
+
+  const updateEdgeField = (
+    edgeIndex: number,
+    field: 'id' | 'fromBeeId' | 'fromPort' | 'toBeeId' | 'toPort' | 'selectorPolicy' | 'selectorExpr',
+    rawValue: string,
+  ) => {
+    onChange((current) => {
+      const base = isPlainObject(current) ? { ...(current as Record<string, unknown>) } : {}
+      const edgesRaw = Array.isArray(base.edges) ? [...(base.edges as unknown[])] : []
+      while (edgesRaw.length <= edgeIndex) {
+        edgesRaw.push({})
+      }
+      const edge = isPlainObject(edgesRaw[edgeIndex])
+        ? { ...(edgesRaw[edgeIndex] as Record<string, unknown>) }
+        : {}
+      const value = rawValue.trim()
+      if (field === 'id') {
+        if (value) {
+          edge.id = value
+        } else {
+          delete edge.id
+        }
+      }
+      if (field === 'fromBeeId' || field === 'fromPort') {
+        const from = isPlainObject(edge.from) ? { ...(edge.from as Record<string, unknown>) } : {}
+        if (field === 'fromBeeId') {
+          if (value) {
+            from.beeId = value
+          } else {
+            delete from.beeId
+          }
+        }
+        if (field === 'fromPort') {
+          if (value) {
+            from.port = value
+          } else {
+            delete from.port
+          }
+        }
+        if (Object.keys(from).length > 0) {
+          edge.from = from
+        } else {
+          delete edge.from
+        }
+      }
+      if (field === 'toBeeId' || field === 'toPort') {
+        const to = isPlainObject(edge.to) ? { ...(edge.to as Record<string, unknown>) } : {}
+        if (field === 'toBeeId') {
+          if (value) {
+            to.beeId = value
+          } else {
+            delete to.beeId
+          }
+        }
+        if (field === 'toPort') {
+          if (value) {
+            to.port = value
+          } else {
+            delete to.port
+          }
+        }
+        if (Object.keys(to).length > 0) {
+          edge.to = to
+        } else {
+          delete edge.to
+        }
+      }
+      if (field === 'selectorPolicy' || field === 'selectorExpr') {
+        const selector = isPlainObject(edge.selector)
+          ? { ...(edge.selector as Record<string, unknown>) }
+          : {}
+        if (field === 'selectorPolicy') {
+          if (value) {
+            selector.policy = value
+          } else {
+            delete selector.policy
+          }
+        }
+        if (field === 'selectorExpr') {
+          if (value) {
+            selector.expr = value
+          } else {
+            delete selector.expr
+          }
+        }
+        if (Object.keys(selector).length > 0) {
+          edge.selector = selector
+        } else {
+          delete edge.selector
+        }
+      }
+      edgesRaw[edgeIndex] = edge
+      base.edges = edgesRaw
+      if (typeof base.version !== 'number') {
+        base.version = 1
+      }
+      return base
+    })
+  }
+
+  const addEdge = () => {
+    onChange((current) => {
+      const base = isPlainObject(current) ? { ...(current as Record<string, unknown>) } : {}
+      const edgesRaw = Array.isArray(base.edges) ? [...(base.edges as unknown[])] : []
+      edgesRaw.push({ id: `edge-${edgesRaw.length + 1}`, from: {}, to: {} })
+      base.edges = edgesRaw
+      if (typeof base.version !== 'number') {
+        base.version = 1
+      }
+      return base
+    })
+  }
+
+  const removeEdge = (edgeIndex: number) => {
+    onChange((current) => {
+      const base = isPlainObject(current) ? { ...(current as Record<string, unknown>) } : {}
+      const edgesRaw = Array.isArray(base.edges) ? [...(base.edges as unknown[])] : []
+      if (edgeIndex < 0 || edgeIndex >= edgesRaw.length) {
+        return base
+      }
+      edgesRaw.splice(edgeIndex, 1)
+      if (edgesRaw.length > 0) {
+        base.edges = edgesRaw
+        if (typeof base.version !== 'number') {
+          base.version = 1
+        }
+        return base
+      }
+      return null
+    })
+  }
+
+  return (
+    <div className="border border-white/15 rounded bg-black/30 p-3 text-[11px] text-white/80 space-y-2">
+      <div className="flex items-center justify-between">
+        <div className="font-semibold text-white/90">Topology</div>
+        <button
+          type="button"
+          className="rounded bg-white/10 px-2 py-1 text-[11px] text-white/80 hover:bg-white/20"
+          onClick={addEdge}
+        >
+          + Add edge
+        </button>
+      </div>
+      {edges.length === 0 && (
+        <div className="text-[10px] text-white/60">
+          No topology edges defined. Add an edge to enable the logical graph.
+        </div>
+      )}
+      {edges.length > 0 && (
+        <div className="flex items-center gap-2">
+          <span className="w-20 text-white/70">Version</span>
+          <input
+            className="w-20 rounded border border-white/20 bg-black/40 px-2 py-1 text-[11px] text-white/90"
+            value={versionValue || '1'}
+            onChange={(e) => updateTopologyVersion(e.target.value)}
+          />
+        </div>
+      )}
+      {edges.length > 0 && (
+        <div className="space-y-2">
+          {edges.map((edge) => (
+            <div
+              key={edge.index}
+              className="border border-white/10 rounded bg-black/40 p-2 space-y-1"
+            >
+              <div className="flex items-center gap-2">
+                <span className="w-16 text-white/70">Edge ID</span>
+                <input
+                  className="flex-1 rounded border border-white/20 bg-black/40 px-2 py-1 text-[11px] text-white/90"
+                  value={edge.id}
+                  placeholder="edge-1"
+                  onChange={(e) => updateEdgeField(edge.index, 'id', e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="px-1.5 py-0.5 rounded bg-red-500/40 text-red-50 hover:bg-red-500/60"
+                  onClick={() => removeEdge(edge.index)}
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2">
+                <div className="space-y-1">
+                  <div className="text-[10px] text-white/60">From</div>
+                  <input
+                    className="w-full rounded border border-white/20 bg-black/40 px-2 py-1 text-[11px] text-white/90"
+                    value={edge.fromBeeId}
+                    placeholder="beeId"
+                    list="topology-bee-ids"
+                    onChange={(e) => updateEdgeField(edge.index, 'fromBeeId', e.target.value)}
+                  />
+                  <input
+                    className="w-full rounded border border-white/20 bg-black/40 px-2 py-1 text-[11px] text-white/90"
+                    value={edge.fromPort}
+                    placeholder="port"
+                    list="topology-port-ids"
+                    onChange={(e) => updateEdgeField(edge.index, 'fromPort', e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <div className="text-[10px] text-white/60">To</div>
+                  <input
+                    className="w-full rounded border border-white/20 bg-black/40 px-2 py-1 text-[11px] text-white/90"
+                    value={edge.toBeeId}
+                    placeholder="beeId"
+                    list="topology-bee-ids"
+                    onChange={(e) => updateEdgeField(edge.index, 'toBeeId', e.target.value)}
+                  />
+                  <input
+                    className="w-full rounded border border-white/20 bg-black/40 px-2 py-1 text-[11px] text-white/90"
+                    value={edge.toPort}
+                    placeholder="port"
+                    list="topology-port-ids"
+                    onChange={(e) => updateEdgeField(edge.index, 'toPort', e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-[minmax(0,120px)_minmax(0,1fr)] gap-2">
+                <input
+                  className="rounded border border-white/20 bg-black/40 px-2 py-1 text-[11px] text-white/90"
+                  value={edge.selectorPolicy}
+                  placeholder="selector policy"
+                  onChange={(e) => updateEdgeField(edge.index, 'selectorPolicy', e.target.value)}
+                />
+                <input
+                  className="rounded border border-white/20 bg-black/40 px-2 py-1 text-[11px] text-white/90"
+                  value={edge.selectorExpr}
+                  placeholder="selector expr"
+                  onChange={(e) => updateEdgeField(edge.index, 'selectorExpr', e.target.value)}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {beeIds.length > 0 && (
+        <datalist id="topology-bee-ids">
+          {beeIds.map((beeId) => (
+            <option key={beeId} value={beeId} />
+          ))}
+        </datalist>
+      )}
+      {portIds.length > 0 && (
+        <datalist id="topology-port-ids">
+          {portIds.map((portId) => (
+            <option key={portId} value={portId} />
+          ))}
+        </datalist>
+      )}
+    </div>
+  )
 }
 
 export default function ScenariosPage() {
@@ -1340,6 +1906,7 @@ export default function ScenariosPage() {
   const [planExpanded, setPlanExpanded] = useState(false)
   const [planDraft, setPlanDraft] = useState<ScenarioPlanView | null>(null)
   const [templateDraft, setTemplateDraft] = useState<TemplateNode>(null)
+  const [topologyDraft, setTopologyDraft] = useState<TopologyNode>(null)
   const [planHistoryState, setPlanHistoryState] = useState<{
     stack: ScenarioPlanView[]
     index: number
@@ -1482,6 +2049,30 @@ export default function ScenariosPage() {
     })
   }, [])
 
+  const syncTopologyToYaml = useCallback((next: TopologyNode) => {
+    setRawYaml((current) => {
+      if (!current) return current
+      try {
+        const doc = YAML.parse(current) || {}
+        const root =
+          doc && typeof doc === 'object' && !Array.isArray(doc)
+            ? (doc as Record<string, unknown>)
+            : {}
+        if (next == null) {
+          if ('topology' in root) {
+            // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+            delete (root as Record<string, unknown>).topology
+          }
+        } else {
+          ;(root as Record<string, unknown>).topology = next
+        }
+        return YAML.stringify(root)
+      } catch {
+        return current
+      }
+    })
+  }, [])
+
   const applyPlanUpdate = useCallback(
     (updater: (current: ScenarioPlanView | null) => ScenarioPlanView | null) => {
       setPlanHistoryState((state) => {
@@ -1563,6 +2154,17 @@ export default function ScenariosPage() {
     [syncTemplateToYaml],
   )
 
+  const applyTopologyUpdate = useCallback(
+    (updater: (current: TopologyNode) => TopologyNode) => {
+      setTopologyDraft((current) => {
+        const next = updater(current)
+        syncTopologyToYaml(next)
+        return next
+      })
+    },
+    [syncTopologyToYaml],
+  )
+
   const handleGlobalUndo = useCallback(() => {
     if (!selectedId) return
     if (viewMode === 'yaml') {
@@ -1639,12 +2241,19 @@ export default function ScenariosPage() {
           } else {
             setTemplateDraft(null)
           }
+          const topologyNode = root['topology']
+          if (topologyNode && typeof topologyNode === 'object' && !Array.isArray(topologyNode)) {
+            setTopologyDraft(topologyNode as Record<string, unknown>)
+          } else {
+            setTopologyDraft(null)
+          }
         } else {
           resetPlanHistory({
             swarm: [],
             bees: [],
           })
           setTemplateDraft(null)
+          setTopologyDraft(null)
         }
       } catch {
         // Leave existing plan/template when YAML is invalid.
@@ -1662,6 +2271,7 @@ export default function ScenariosPage() {
       setRawError(null)
       resetPlanHistory(null)
       setTemplateDraft(null)
+      setTopologyDraft(null)
       setViewMode('plan')
       return
     }
@@ -1688,6 +2298,7 @@ export default function ScenariosPage() {
             setSavedYaml('')
             resetPlanHistory(null)
             setTemplateDraft(null)
+            setTopologyDraft(null)
           }
         } finally {
           if (!cancelled) {
@@ -3775,11 +4386,17 @@ export default function ScenariosPage() {
                           '    - role: generator',
                           '      instanceId: gen-1',
                           '      image: pockethive-generator:latest',
-                          '      work: { out: gen }',
+                          '      work:',
+                          '        out:',
+                          '          out: gen',
                           '    - role: processor',
                           '      instanceId: proc-1',
                           '      image: pockethive-processor:latest',
-                          '      work: { in: gen, out: final }',
+                          '      work:',
+                          '        in:',
+                          '          in: gen',
+                          '        out:',
+                          '          out: final',
                           'plan:',
                           '  swarm:',
                           '    - stepId: swarm-start',
@@ -3850,6 +4467,11 @@ export default function ScenariosPage() {
                     openConfigModal({ kind: 'template-bee', beeIndex, stepIndex: 0 })
                   }
                   onOpenSchemaEditor={(beeIndex) => void openSchemaEditor(beeIndex)}
+                />
+                <TopologyEditor
+                  topology={topologyDraft}
+                  template={templateDraft}
+                  onChange={applyTopologyUpdate}
                 />
               </div>
             )}

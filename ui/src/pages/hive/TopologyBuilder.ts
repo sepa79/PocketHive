@@ -1,4 +1,5 @@
 import type { Topology } from '../../lib/stompClient'
+import { normalizeSwarmId } from './TopologyUtils'
 
 export interface GraphNode {
   id: string
@@ -71,7 +72,10 @@ export function buildGraph(
 
   let nodes: GraphNode[] = [...connectedNodes, ...unconnectedNodes]
   if (swarmId) {
-    nodes = nodes.filter((n) => n.swarmId === swarmId)
+    const normalizedTarget = normalizeSwarmId(swarmId)
+    nodes = normalizedTarget
+      ? nodes.filter((n) => normalizeSwarmId(n.swarmId) === normalizedTarget)
+      : []
   }
 
   const nodeSet = new Set(nodes.map((n) => n.id))

@@ -22,6 +22,14 @@ export interface TopologyEdge { from: string; to: string; queue: string }
 export interface Topology { nodes: TopologyNode[]; edges: TopologyEdge[] }
 export type TopologyListener = (topology: Topology) => void
 
+interface WorkBindingEdge {
+  edgeId?: string
+  fromInstance?: string
+  toInstance?: string
+  queue?: string
+  routingKey?: string
+}
+
 interface WrappedClient extends Client {
   _phWrapped?: boolean
 }
@@ -33,6 +41,7 @@ let topoListeners: TopologyListener[] = []
 let controlDestination = '/exchange/ph.control/#'
 const components: Record<string, Component> = {}
 const syntheticComponents: Record<string, Component> = {}
+const workBindingsBySwarm: Record<string, WorkBindingEdge[]> = {}
 const componentErrors: Record<
   string,
   { at: number; code?: string; message?: string; swarmId?: string; role?: string }
@@ -66,6 +75,8 @@ function dropSwarmComponents(swarmId: string) {
       delete componentErrors[key]
     }
   })
+
+  delete workBindingsBySwarm[normalized]
 }
 
 function applyComponentError(component: Component, error: { at: number; code?: string; message?: string }) {
@@ -231,6 +242,29 @@ function extractQueues(evt: StatusMetricEnvelope): {
   return { workIn: work.in, workOut: work.out, controlIn: control.in, controlOut: control.out }
 }
 
+function extractWorkBindings(ctx: Record<string, unknown>): WorkBindingEdge[] | null {
+  const bindings = ctx['bindings']
+  if (!isRecord(bindings)) return null
+  const work = bindings['work']
+  if (!isRecord(work)) return null
+  const edgesRaw = Array.isArray(work['edges']) ? (work['edges'] as unknown[]) : []
+  const edges: WorkBindingEdge[] = []
+  edgesRaw.forEach((entry) => {
+    if (!isRecord(entry)) return
+    const edgeRec = entry as Record<string, unknown>
+    const from = isRecord(edgeRec['from']) ? (edgeRec['from'] as Record<string, unknown>) : undefined
+    const to = isRecord(edgeRec['to']) ? (edgeRec['to'] as Record<string, unknown>) : undefined
+    const fromInstance = from ? getString(from['instance']) : undefined
+    const toInstance = to ? getString(to['instance']) : undefined
+    const queue = to ? getString(to['queue']) : undefined
+    const routingKey = from ? getString(from['routingKey']) : undefined
+    const edgeId = getString(edgeRec['edgeId'])
+    if (!fromInstance && !toInstance && !queue && !routingKey) return
+    edges.push({ edgeId, fromInstance, toInstance, queue, routingKey })
+  })
+  return edges
+}
+
 function buildTopology(allComponents: Record<string, Component> = getMergedComponents()): Topology {
   const queues: Record<string, { prod: Set<string>; cons: Set<string> }> = {}
   Object.values(allComponents).forEach((comp) => {
@@ -241,13 +275,50 @@ function buildTopology(allComponents: Record<string, Component> = getMergedCompo
       queues[q.name] = entry
     })
   })
+  const componentSwarm = new Map<string, string>()
+  Object.values(allComponents).forEach((comp) => {
+    if (comp.swarmId) {
+      componentSwarm.set(comp.id, comp.swarmId.trim())
+    }
+  })
+  const resolvedBindingsBySwarm = new Map<string, TopologyEdge[]>()
+  Object.entries(workBindingsBySwarm).forEach(([swarmId, bindings]) => {
+    const resolved: TopologyEdge[] = []
+    bindings.forEach((binding) => {
+      const from = binding.fromInstance
+      const to = binding.toInstance
+      if (!from || !to) return
+      if (!allComponents[from] || !allComponents[to]) return
+      const queue = binding.queue || binding.routingKey || binding.edgeId
+      if (!queue) return
+      resolved.push({ from, to, queue })
+    })
+    if (resolved.length > 0) {
+      resolvedBindingsBySwarm.set(swarmId, resolved)
+    }
+  })
+  const swarmsWithResolvedBindings = new Set(resolvedBindingsBySwarm.keys())
   const edges: TopologyEdge[] = []
   Object.entries(queues).forEach(([name, { prod, cons }]) => {
     prod.forEach((p) => {
       cons.forEach((c) => {
-        if (p !== c) edges.push({ from: p, to: c, queue: name })
+        if (p === c) return
+        const fromSwarm = componentSwarm.get(p)
+        const toSwarm = componentSwarm.get(c)
+        if (
+          fromSwarm &&
+          toSwarm &&
+          fromSwarm === toSwarm &&
+          swarmsWithResolvedBindings.has(fromSwarm)
+        ) {
+          return
+        }
+        edges.push({ from: p, to: c, queue: name })
       })
     })
+  })
+  resolvedBindingsBySwarm.forEach((bindings) => {
+    edges.push(...bindings)
   })
   const orchestrators = Object.values(allComponents).filter((component) => {
     const role = component.role?.trim().toLowerCase()
@@ -403,15 +474,24 @@ export function setClient(newClient: Client | null, destination = controlDestina
             })
           }
 
-          if (ctx) {
-            Object.entries(ctx).forEach(([key, value]) => {
-              const existing = cfg[key]
-              if (isRecord(existing) && !isRecord(value)) {
-                return
-              }
-              cfg[key] = value
-            })
+        if (ctx) {
+          Object.entries(ctx).forEach(([key, value]) => {
+            const existing = cfg[key]
+            if (isRecord(existing) && !isRecord(value)) {
+              return
+            }
+            cfg[key] = value
+          })
+
+          if (evt.type === 'status-full' && normalizedRole === 'swarm-controller') {
+            const bindings = extractWorkBindings(ctx)
+            if (bindings) {
+              workBindingsBySwarm[swarmId] = bindings
+            } else {
+              delete workBindingsBySwarm[swarmId]
+            }
           }
+        }
 
           Object.entries(dataRecord).forEach(([key, value]) => {
             if (

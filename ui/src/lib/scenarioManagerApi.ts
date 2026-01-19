@@ -38,6 +38,72 @@ function asString(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null
 }
 
+function readPortMap(value: unknown): Record<string, string> | null {
+  if (!isRecord(value)) return null
+  const result: Record<string, string> = {}
+  Object.entries(value).forEach(([key, raw]) => {
+    const portId = key.trim()
+    const entry = asString(raw)
+    if (portId.length > 0 && entry) {
+      result[portId] = entry
+    }
+  })
+  return Object.keys(result).length > 0 ? result : null
+}
+
+function readPortList(value: unknown): ScenarioTemplateBeePortRef[] | null {
+  if (!Array.isArray(value)) return null
+  const ports: ScenarioTemplateBeePortRef[] = []
+  for (const entry of value) {
+    if (!isRecord(entry)) continue
+    const record = entry as Record<string, unknown>
+    const id = asString(record['id'])
+    const direction = asString(record['direction'])
+    if (!id && !direction) continue
+    ports.push({ id, direction })
+  }
+  return ports.length > 0 ? ports : null
+}
+
+function readTopology(value: unknown): ScenarioTemplateTopologyRef | null {
+  if (!isRecord(value)) return null
+  const record = value as Record<string, unknown>
+  const versionRaw = record['version']
+  const version = typeof versionRaw === 'number' ? versionRaw : null
+  const edgesRaw = Array.isArray(record['edges']) ? (record['edges'] as unknown[]) : []
+  const edges: ScenarioTemplateTopologyEdge[] = []
+  for (const entry of edgesRaw) {
+    if (!isRecord(entry)) continue
+    const edgeRec = entry as Record<string, unknown>
+    const id = asString(edgeRec['id'])
+    const from = readTopologyEndpoint(edgeRec['from'])
+    const to = readTopologyEndpoint(edgeRec['to'])
+    const selector = readTopologySelector(edgeRec['selector'])
+    if (!id && !from && !to) continue
+    edges.push({ id, from, to, selector })
+  }
+  if (version == null && edges.length === 0) return null
+  return { version, edges }
+}
+
+function readTopologyEndpoint(value: unknown): ScenarioTemplateTopologyEndpoint | null {
+  if (!isRecord(value)) return null
+  const record = value as Record<string, unknown>
+  const beeId = asString(record['beeId'])
+  const port = asString(record['port'])
+  if (!beeId && !port) return null
+  return { beeId, port }
+}
+
+function readTopologySelector(value: unknown): ScenarioTemplateTopologySelector | null {
+  if (!isRecord(value)) return null
+  const record = value as Record<string, unknown>
+  const policy = asString(record['policy'])
+  const expr = asString(record['expr'])
+  if (!policy && !expr) return null
+  return { policy, expr }
+}
+
 function normalizeSummary(input: unknown): ScenarioSummary | null {
   if (!isRecord(input)) return null
   const record = input as Record<string, unknown>
@@ -286,15 +352,50 @@ export interface ScenarioPlanView {
 }
 
 export interface ScenarioTemplateBeeRef {
+  id?: string | null
   instanceId: string | null
   role: string | null
   image: string | null
+  work?: ScenarioTemplateBeeWorkRef | null
+  ports?: ScenarioTemplateBeePortRef[] | null
   config?: Record<string, unknown> | null
 }
 
 export interface ScenarioTemplateRef {
   image: string | null
   bees: ScenarioTemplateBeeRef[]
+}
+
+export interface ScenarioTemplateBeeWorkRef {
+  in?: Record<string, string>
+  out?: Record<string, string>
+}
+
+export interface ScenarioTemplateBeePortRef {
+  id: string | null
+  direction: string | null
+}
+
+export interface ScenarioTemplateTopologyEndpoint {
+  beeId: string | null
+  port: string | null
+}
+
+export interface ScenarioTemplateTopologySelector {
+  policy: string | null
+  expr: string | null
+}
+
+export interface ScenarioTemplateTopologyEdge {
+  id: string | null
+  from?: ScenarioTemplateTopologyEndpoint | null
+  to?: ScenarioTemplateTopologyEndpoint | null
+  selector?: ScenarioTemplateTopologySelector | null
+}
+
+export interface ScenarioTemplateTopologyRef {
+  version: number | null
+  edges: ScenarioTemplateTopologyEdge[]
 }
 
 export interface ScenarioPayload {
@@ -304,6 +405,7 @@ export interface ScenarioPayload {
   plan?: unknown
   templateRoles?: string[]
   template?: ScenarioTemplateRef | null
+  topology?: ScenarioTemplateTopologyRef | null
 }
 
 export async function getScenario(id: string): Promise<ScenarioPayload | null> {
@@ -336,16 +438,46 @@ export async function getScenario(id: string): Promise<ScenarioPayload | null> {
       for (const entry of beesRaw) {
         if (!isRecord(entry)) continue
         const beeRec = entry as Record<string, unknown>
+        const id = asString(beeRec['id'])
         const instanceId = asString(beeRec['instanceId'])
         const role = asString(beeRec['role'])
         const beeImage = asString(beeRec['image'])
+        let work: ScenarioTemplateBeeWorkRef | null = null
+        const workValue = beeRec['work']
+        if (isRecord(workValue)) {
+          const workRec = workValue as Record<string, unknown>
+          const inMap = readPortMap(workRec['in'])
+          const outMap = readPortMap(workRec['out'])
+          if (inMap || outMap) {
+            work = {
+              in: inMap ?? undefined,
+              out: outMap ?? undefined,
+            }
+          }
+        }
+        const ports = readPortList(beeRec['ports'])
         const configValue = beeRec['config']
         const config =
           isRecord(configValue) &&
           Object.keys(configValue as Record<string, unknown>).length > 0
             ? (configValue as Record<string, unknown>)
             : null
-        bees.push({ instanceId, role, image: beeImage, config })
+        const bee: ScenarioTemplateBeeRef = {
+          instanceId,
+          role,
+          image: beeImage,
+          config,
+        }
+        if (id) {
+          bee.id = id
+        }
+        if (work) {
+          bee.work = work
+        }
+        if (ports) {
+          bee.ports = ports
+        }
+        bees.push(bee)
         if (role) {
           roles.push(role)
         }
@@ -362,6 +494,7 @@ export async function getScenario(id: string): Promise<ScenarioPayload | null> {
       plan: record['plan'],
       templateRoles,
       template,
+      topology: readTopology(record['topology']),
     }
   } catch {
     return null

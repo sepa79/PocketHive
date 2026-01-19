@@ -444,6 +444,181 @@ describe('swarm lifecycle', () => {
     setClient(null)
   })
 
+  it('prefers runtime work bindings over queue-derived edges for a swarm', () => {
+    const publish = vi.fn()
+    let cb: (msg: { body: string; headers: Record<string, string> }) => void = () => {}
+    const subscribe = vi
+      .fn()
+      .mockImplementation((_dest: string, fn: (msg: { body: string; headers: Record<string, string> }) => void) => {
+        cb = fn
+        return { unsubscribe() {} }
+      })
+    setClient({ active: true, publish, subscribe } as unknown as Client)
+
+    const topologies: { edges: { from: string; to: string; queue: string }[] }[] = []
+    const unsubscribeTopology = subscribeTopology((topology) => {
+      topologies.push({ edges: topology.edges.map((edge) => ({ ...edge })) })
+    })
+
+    cb({
+      headers: { destination: '/exchange/ph.control/event.metric.status-full.sw1.generator.gen-1' },
+      body: JSON.stringify(
+        statusMetricEnvelope({
+          swarmId: 'sw1',
+          role: 'generator',
+          instance: 'gen-1',
+          data: {
+            io: {
+              work: { queues: { out: ['queue-from'] } },
+              control: { queues: { in: [], out: [] } },
+            },
+          },
+        }),
+      ),
+    })
+
+    cb({
+      headers: { destination: '/exchange/ph.control/event.metric.status-full.sw1.processor.proc-1' },
+      body: JSON.stringify(
+        statusMetricEnvelope({
+          swarmId: 'sw1',
+          role: 'processor',
+          instance: 'proc-1',
+          data: {
+            io: {
+              work: { queues: { in: ['queue-from'] } },
+              control: { queues: { in: [], out: [] } },
+            },
+          },
+        }),
+      ),
+    })
+
+    cb({
+      headers: { destination: '/exchange/ph.control/event.metric.status-full.sw1.swarm-controller.sw1-controller' },
+      body: JSON.stringify(
+        statusMetricEnvelope({
+          swarmId: 'sw1',
+          role: 'swarm-controller',
+          instance: 'sw1-controller',
+          data: {
+            context: {
+              bindings: {
+                work: {
+                  edges: [
+                    {
+                      edgeId: 'edge-1',
+                      from: { instance: 'gen-1', port: 'out', routingKey: 'rk-gen' },
+                      to: { instance: 'proc-1', port: 'in', queue: 'queue-bound' },
+                    },
+                  ],
+                },
+              },
+            },
+          },
+        }),
+      ),
+    })
+
+    const latest = topologies.at(-1)
+    expect(latest?.edges).toContainEqual({
+      from: 'gen-1',
+      to: 'proc-1',
+      queue: 'queue-bound',
+    })
+    expect(latest?.edges.some((edge) => edge.queue === 'queue-from')).toBe(false)
+
+    unsubscribeTopology()
+    setClient(null)
+  })
+
+  it('falls back to queue edges when bindings do not resolve to instances', () => {
+    const publish = vi.fn()
+    let cb: (msg: { body: string; headers: Record<string, string> }) => void = () => {}
+    const subscribe = vi
+      .fn()
+      .mockImplementation((_dest: string, fn: (msg: { body: string; headers: Record<string, string> }) => void) => {
+        cb = fn
+        return { unsubscribe() {} }
+      })
+    setClient({ active: true, publish, subscribe } as unknown as Client)
+
+    const topologies: { edges: { from: string; to: string; queue: string }[] }[] = []
+    const unsubscribeTopology = subscribeTopology((topology) => {
+      topologies.push({ edges: topology.edges.map((edge) => ({ ...edge })) })
+    })
+
+    cb({
+      headers: { destination: '/exchange/ph.control/event.metric.status-full.sw1.generator.gen-1' },
+      body: JSON.stringify(
+        statusMetricEnvelope({
+          swarmId: 'sw1',
+          role: 'generator',
+          instance: 'gen-1',
+          data: {
+            io: {
+              work: { queues: { out: ['queue-fallback'] } },
+              control: { queues: { in: [], out: [] } },
+            },
+          },
+        }),
+      ),
+    })
+
+    cb({
+      headers: { destination: '/exchange/ph.control/event.metric.status-full.sw1.processor.proc-1' },
+      body: JSON.stringify(
+        statusMetricEnvelope({
+          swarmId: 'sw1',
+          role: 'processor',
+          instance: 'proc-1',
+          data: {
+            io: {
+              work: { queues: { in: ['queue-fallback'] } },
+              control: { queues: { in: [], out: [] } },
+            },
+          },
+        }),
+      ),
+    })
+
+    cb({
+      headers: { destination: '/exchange/ph.control/event.metric.status-full.sw1.swarm-controller.sw1-controller' },
+      body: JSON.stringify(
+        statusMetricEnvelope({
+          swarmId: 'sw1',
+          role: 'swarm-controller',
+          instance: 'sw1-controller',
+          data: {
+            context: {
+              bindings: {
+                work: {
+                  edges: [
+                    {
+                      edgeId: 'edge-2',
+                      from: { role: 'generator', port: 'out' },
+                      to: { role: 'processor', port: 'in', queue: 'queue-bound' },
+                    },
+                  ],
+                },
+              },
+            },
+          },
+        }),
+      ),
+    })
+
+    const latest = topologies.at(-1)
+    expect(latest?.edges).toContainEqual({
+      from: 'gen-1',
+      to: 'proc-1',
+      queue: 'queue-fallback',
+    })
+
+    unsubscribeTopology()
+    setClient(null)
+  })
+
   it('drops swarm components when a swarm-remove outcome arrives', () => {
     const publish = vi.fn()
     let cb: (msg: { body: string; headers: Record<string, string> }) => void = () => {}
