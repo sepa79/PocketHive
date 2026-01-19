@@ -37,28 +37,46 @@ public class ScenarioService {
     private final ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
     private final CapabilityCatalogueService capabilities;
     private final Map<String, ScenarioRecord> scenarios = new ConcurrentHashMap<>();
+    private final String defaultImageTag;
 
     @Autowired
     public ScenarioService(@Value("${scenarios.dir:scenarios}") String dir,
                            @Value("${scenarios.show-test:true}") boolean showTestScenarios,
+                           @Value("${pockethive.images.default-tag:}") String defaultImageTag,
                            CapabilityCatalogueService capabilities) throws IOException {
-        this(Paths.get(dir), Paths.get(SCENARIOS_RUNTIME_ROOT), showTestScenarios, capabilities);
+        this(Paths.get(dir),
+             Paths.get(SCENARIOS_RUNTIME_ROOT),
+             showTestScenarios,
+             normalizeTag(defaultImageTag),
+             capabilities);
     }
 
     ScenarioService(String dir,
                     CapabilityCatalogueService capabilities) throws IOException {
-        this(Paths.get(dir), Paths.get(SCENARIOS_RUNTIME_ROOT), true, capabilities);
+        this(Paths.get(dir), Paths.get(SCENARIOS_RUNTIME_ROOT), true, null, capabilities);
+    }
+
+    ScenarioService(String dir,
+                    String defaultImageTag,
+                    CapabilityCatalogueService capabilities) throws IOException {
+        this(Paths.get(dir),
+             Paths.get(SCENARIOS_RUNTIME_ROOT),
+             true,
+             normalizeTag(defaultImageTag),
+             capabilities);
     }
 
     private ScenarioService(Path dir,
                             Path runtimeRoot,
                             boolean showTestScenarios,
+                            String defaultImageTag,
                             CapabilityCatalogueService capabilities) throws IOException {
         this.storageDir = dir;
         this.testStorageDir = dir.resolve("e2e");
         this.bundleRootDir = dir.resolve("bundles");
         this.runtimeRootDir = runtimeRoot.toAbsolutePath().normalize();
         this.showTestScenarios = showTestScenarios;
+        this.defaultImageTag = defaultImageTag;
         Files.createDirectories(this.storageDir);
         if (this.showTestScenarios) {
             Files.createDirectories(this.testStorageDir);
@@ -151,7 +169,7 @@ public class ScenarioService {
             throw e;
         }
 
-        return scenario;
+        return record.scenario();
     }
 
     public Scenario update(String id, Scenario scenario, Format format) throws IOException {
@@ -170,7 +188,7 @@ public class ScenarioService {
             throw e;
         }
 
-        return scenario;
+        return record.scenario();
     }
 
     public void delete(String id) throws IOException {
@@ -187,8 +205,9 @@ public class ScenarioService {
     }
 
     private ScenarioRecord recordFor(Scenario scenario, Format format) {
-        boolean defunct = determineDefunct(scenario);
-        return new ScenarioRecord(scenario, format, defunct);
+        Scenario resolved = applyDefaultImageTag(scenario);
+        boolean defunct = determineDefunct(resolved);
+        return new ScenarioRecord(resolved, format, defunct);
     }
 
     private boolean determineDefunct(Scenario scenario) {
@@ -219,6 +238,92 @@ public class ScenarioService {
         }
 
         return false;
+    }
+
+    private Scenario applyDefaultImageTag(Scenario scenario) {
+        if (defaultImageTag == null || scenario == null) {
+            return scenario;
+        }
+        SwarmTemplate template = scenario.getTemplate();
+        if (template == null) {
+            return scenario;
+        }
+
+        String controllerImage = appendDefaultTag(template.image());
+        boolean changed = !Objects.equals(controllerImage, template.image());
+
+        List<Bee> bees = template.bees();
+        List<Bee> updatedBees = bees;
+        if (bees != null && !bees.isEmpty()) {
+            updatedBees = new ArrayList<>(bees.size());
+            for (Bee bee : bees) {
+                String updatedImage = appendDefaultTag(bee.image());
+                if (!Objects.equals(updatedImage, bee.image())) {
+                    changed = true;
+                    updatedBees.add(new Bee(
+                            bee.id(),
+                            bee.role(),
+                            updatedImage,
+                            bee.work(),
+                            bee.ports(),
+                            bee.env(),
+                            bee.config()
+                    ));
+                } else {
+                    updatedBees.add(bee);
+                }
+            }
+        }
+
+        if (!changed) {
+            return scenario;
+        }
+
+        SwarmTemplate updatedTemplate = new SwarmTemplate(controllerImage, updatedBees);
+        return new Scenario(
+                scenario.getId(),
+                scenario.getName(),
+                scenario.getDescription(),
+                updatedTemplate,
+                scenario.getTopology(),
+                scenario.getTrafficPolicy(),
+                scenario.getPlan()
+        );
+    }
+
+    private String appendDefaultTag(String imageReference) {
+        if (defaultImageTag == null || imageReference == null) {
+            return imageReference;
+        }
+        String trimmed = imageReference.trim();
+        if (trimmed.isEmpty()) {
+            return imageReference;
+        }
+        if (hasTagOrDigest(trimmed)) {
+            return trimmed;
+        }
+        return trimmed + ":" + defaultImageTag;
+    }
+
+    private static boolean hasTagOrDigest(String imageReference) {
+        if (imageReference == null || imageReference.isBlank()) {
+            return false;
+        }
+        int digestSep = imageReference.indexOf('@');
+        if (digestSep >= 0) {
+            return true;
+        }
+        int lastColon = imageReference.lastIndexOf(':');
+        int lastSlash = imageReference.lastIndexOf('/');
+        return lastColon > lastSlash;
+    }
+
+    private static String normalizeTag(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private void checkImageReference(String scenarioId,

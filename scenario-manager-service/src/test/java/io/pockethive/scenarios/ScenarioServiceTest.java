@@ -5,6 +5,7 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import io.pockethive.capabilities.CapabilityCatalogueService;
+import io.pockethive.swarm.model.Bee;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -198,7 +199,42 @@ class ScenarioServiceTest {
         assertThat(scenario.getTrafficPolicy().bufferGuard().adjust().maxIncreasePct()).isEqualTo(10);
     }
 
+    @Test
+    void defaultsImageTagsWhenMissing() throws IOException {
+        writeManifest("ctrl", "ctrl-image", "experimental");
+        writeManifest("worker", "worker-image", "experimental");
+        capabilities.reload();
+        service = new ScenarioService(scenariosDir.toString(), "experimental", capabilities);
+
+        writeScenario("defaulted.yaml", """
+                id: defaulted
+                name: Defaulted Scenario
+                template:
+                  image: ctrl-image
+                  bees:
+                    - role: worker
+                      image: worker-image
+                      work:
+                        in:
+                          in: a
+                        out:
+                          out: b
+                """);
+
+        service.reload();
+
+        Scenario scenario = service.findAvailable("defaulted").orElseThrow();
+        assertThat(scenario.getTemplate().image()).isEqualTo("ctrl-image:experimental");
+        assertThat(scenario.getTemplate().bees())
+                .extracting(Bee::image)
+                .containsExactly("worker-image:experimental");
+    }
+
     private void writeManifest(String prefix, String imageName) throws IOException {
+        writeManifest(prefix, imageName, "latest");
+    }
+
+    private void writeManifest(String prefix, String imageName, String tag) throws IOException {
         String manifest = """
                 {
                   "schemaVersion": "1.0",
@@ -206,10 +242,10 @@ class ScenarioServiceTest {
                   "role": "%s",
                   "image": {
                     "name": "%s",
-                    "tag": "latest"
+                    "tag": "%s"
                   }
                 }
-                """.formatted(prefix, imageName);
+                """.formatted(prefix, imageName, tag);
         Files.writeString(capabilitiesDir.resolve(prefix + "-manifest.json"), manifest);
     }
 
