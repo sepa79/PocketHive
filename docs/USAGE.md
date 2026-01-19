@@ -74,6 +74,10 @@ Then restart the stack via `./build-hive.sh` (or `docker compose down && docker 
 - The service also exposes port `1081` on the host for direct API access.
 - Ensure the `scenario-manager` container is running and healthy before calling it.
 
+### Scenario image tags
+- Scenario images must include a tag or digest. If a tag is omitted, scenario-manager can apply a default tag via `POCKETHIVE_IMAGES_DEFAULT_TAG` (see `docker-compose.yml`).
+- This default is only used when a scenario image has no tag; manually specified tags are respected.
+
 Example listings:
 
 ```bash
