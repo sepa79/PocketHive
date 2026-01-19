@@ -515,41 +515,70 @@ export function mergePlan(
     return base
   }
 
-  base.bees = view.bees.map((bee) => {
-    const result: Record<string, unknown> = {}
-    if (bee.instanceId) result.instanceId = bee.instanceId
-    if (bee.role) result.role = bee.role
-    result.steps = bee.steps.map((step) => {
-      const entry: Record<string, unknown> = {}
-      if (step.stepId) entry.stepId = step.stepId
-      if (step.name) entry.name = step.name
-      if (step.time) entry.time = step.time
-      if (step.type) entry.type = step.type
-      if (step.config && typeof step.config === 'object') {
-        const cfg = step.config as Record<string, unknown>
-        if (Object.keys(cfg).length > 0) {
-          entry.config = cfg
-        }
-      }
-      return entry
-    })
-    return result
-  })
-
-  base.swarm = view.swarm.map((step) => {
-    const entry: Record<string, unknown> = {}
-    if (step.stepId) entry.stepId = step.stepId
-    if (step.name) entry.name = step.name
-    if (step.time) entry.time = step.time
-    if (step.type) entry.type = step.type
+  const mergeStep = (
+    originalStep: unknown,
+    step: ScenarioPlanStep,
+  ): Record<string, unknown> => {
+    const entry: Record<string, unknown> = isRecord(originalStep)
+      ? { ...(originalStep as Record<string, unknown>) }
+      : {}
+    if (step.stepId) {
+      entry.stepId = step.stepId
+    } else {
+      delete entry.stepId
+    }
+    if (step.name) {
+      entry.name = step.name
+    } else {
+      delete entry.name
+    }
+    if (step.time) {
+      entry.time = step.time
+    } else {
+      delete entry.time
+    }
+    if (step.type) {
+      entry.type = step.type
+    } else {
+      delete entry.type
+    }
     if (step.config && typeof step.config === 'object') {
       const cfg = step.config as Record<string, unknown>
       if (Object.keys(cfg).length > 0) {
         entry.config = cfg
+      } else {
+        delete entry.config
       }
+    } else {
+      delete entry.config
     }
     return entry
+  }
+
+  const originalBees = Array.isArray(base.bees) ? (base.bees as unknown[]) : []
+  base.bees = view.bees.map((bee, index) => {
+    const baseBee = isRecord(originalBees[index])
+      ? { ...(originalBees[index] as Record<string, unknown>) }
+      : {}
+    if (bee.instanceId) {
+      baseBee.instanceId = bee.instanceId
+    } else {
+      delete baseBee.instanceId
+    }
+    if (bee.role) {
+      baseBee.role = bee.role
+    } else {
+      delete baseBee.role
+    }
+    const originalSteps = Array.isArray(baseBee.steps) ? (baseBee.steps as unknown[]) : []
+    baseBee.steps = bee.steps.map((step, stepIndex) =>
+      mergeStep(originalSteps[stepIndex], step),
+    )
+    return baseBee
   })
+
+  const originalSwarm = Array.isArray(base.swarm) ? (base.swarm as unknown[]) : []
+  base.swarm = view.swarm.map((step, index) => mergeStep(originalSwarm[index], step))
 
   return base
 }

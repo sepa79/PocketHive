@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest'
-import { getScenario } from './scenarioManagerApi'
+import { getScenario, mergePlan, type ScenarioPlanView } from './scenarioManagerApi'
 
 vi.mock('./api', () => ({
   apiFetch: vi.fn(),
@@ -88,5 +88,80 @@ describe('scenarioManagerApi', () => {
         selector: { policy: 'predicate', expr: 'payload.priority > 10' },
       },
     ])
+  })
+
+  it('preserves unknown plan fields when merging view edits', () => {
+    const original = {
+      meta: { keep: true },
+      bees: [
+        {
+          instanceId: 'bee-1',
+          role: 'generator',
+          extraBee: 'keep',
+          steps: [
+            {
+              stepId: 'step-1',
+              name: 'original',
+              time: '1s',
+              type: 'config-update',
+              config: { ratePerSec: 1 },
+              extra: 'keep',
+            },
+          ],
+        },
+      ],
+      swarm: [
+        {
+          stepId: 'swarm-1',
+          name: 'boot',
+          time: '1s',
+          type: 'start',
+          custom: { keep: true },
+          config: { mode: 'fast' },
+        },
+      ],
+    }
+
+    const view: ScenarioPlanView = {
+      bees: [
+        {
+          instanceId: 'bee-1',
+          role: 'generator',
+          steps: [
+            {
+              stepId: 'step-1',
+              name: 'updated',
+              time: null,
+              type: null,
+              config: null,
+            },
+          ],
+        },
+      ],
+      swarm: [
+        {
+          stepId: 'swarm-1',
+          name: 'updated boot',
+          time: null,
+          type: null,
+          config: null,
+        },
+      ],
+    }
+
+    const merged = mergePlan(original, view)
+    expect(merged.meta).toEqual({ keep: true })
+
+    const bee = (merged.bees as Record<string, unknown>[])[0]
+    expect(bee.extraBee).toBe('keep')
+    const beeStep = (bee.steps as Record<string, unknown>[])[0]
+    expect(beeStep.extra).toBe('keep')
+    expect(beeStep.name).toBe('updated')
+    expect(beeStep.config).toBeUndefined()
+
+    const swarmStep = (merged.swarm as Record<string, unknown>[])[0]
+    expect(swarmStep.custom).toEqual({ keep: true })
+    expect(swarmStep.name).toBe('updated boot')
+    expect(swarmStep.config).toBeUndefined()
   })
 })

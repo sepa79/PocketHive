@@ -12,6 +12,7 @@ Timestamp: 2026-01-16T14:20:44Z
 - UI (Scenarios): parse and edit multi-IO templates (`bee.id`, `work` port maps, `ports`, `topology`), and add coverage for scenario parsing and topology bindings.
 - UI (Hive): prefer runtime work bindings for graph edges, with queue-derived fallback when bindings are missing or not mappable to instances.
 - UI (Swarms): add expandable rows with per-worker enable/disable controls plus inline in/out connection hints and selection-based highlighting; ensure the details drawer can load capability manifests.
+- UI (Scenarios): preserve unknown plan fields when merging edits to prevent losing custom sections (e.g., interceptors).
 
 ## [0.14.20] - 2026-01-14
 Timestamp: 2026-01-14T12:01:27Z
