@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { subscribeComponents } from '../lib/stompClient'
 import type { Component } from '../types/hive'
@@ -6,7 +6,8 @@ import { useSwarmMetadata } from '../contexts/SwarmMetadataContext'
 import { startSwarm, stopSwarm } from '../lib/orchestratorApi'
 import ComponentDetail from './hive/ComponentDetail'
 import { sendConfigUpdate } from '../lib/orchestratorApi'
-import { Play, Square } from 'lucide-react'
+import { ChevronDown, ChevronRight, Play, Square } from 'lucide-react'
+import ComponentList from './hive/ComponentList'
 
 interface RoleCount {
   role: string
@@ -162,6 +163,7 @@ export default function SwarmListPage() {
   const [now, setNow] = useState(() => Date.now())
   const [selectedComponent, setSelectedComponent] = useState<Component | null>(null)
   const [selection, setSelection] = useState<Set<string>>(new Set())
+  const [expandedSwarms, setExpandedSwarms] = useState<Set<string>>(new Set())
   const [statusFilter, setStatusFilter] = useState<'all' | 'running' | 'stopped' | 'failed'>('all')
   const [enabledFilter, setEnabledFilter] = useState<'all' | 'true' | 'false'>('all')
   const [busyAction, setBusyAction] = useState<string | null>(null)
@@ -186,6 +188,25 @@ export default function SwarmListPage() {
   }, [])
 
   const rows = useMemo(() => aggregate(components, now, meta), [components, now, meta])
+  const componentsBySwarm = useMemo(() => {
+    const map = new Map<string, Component[]>()
+    components.forEach((comp) => {
+      const swarmId = comp.swarmId?.trim()
+      if (!swarmId) return
+      const list = map.get(swarmId) ?? []
+      list.push(comp)
+      map.set(swarmId, list)
+    })
+    map.forEach((list, key) => {
+      list.sort((a, b) => {
+        const roleCompare = (a.role ?? '').localeCompare(b.role ?? '')
+        if (roleCompare !== 0) return roleCompare
+        return a.id.localeCompare(b.id)
+      })
+      map.set(key, list)
+    })
+    return map
+  }, [components])
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase()
     return rows
@@ -224,6 +245,18 @@ export default function SwarmListPage() {
 
   const toggleSelect = (swarmId: string) => {
     setSelection((prev) => {
+      const next = new Set(prev)
+      if (next.has(swarmId)) {
+        next.delete(swarmId)
+      } else {
+        next.add(swarmId)
+      }
+      return next
+    })
+  }
+
+  const toggleExpand = (swarmId: string) => {
+    setExpandedSwarms((prev) => {
       const next = new Set(prev)
       if (next.has(swarmId)) {
         next.delete(swarmId)
@@ -366,117 +399,152 @@ export default function SwarmListPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((row) => (
-              <tr
-                key={row.id}
-                className="border-t border-white/10 hover:bg-white/5 cursor-pointer"
-                onClick={() => {
-                  setSelectedComponent(row.controller ?? null)
-                }}
-              >
-                <td className="px-3 py-2">
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={selection.has(row.id)}
-                      onChange={(e) => {
-                        e.stopPropagation()
-                        toggleSelect(row.id)
-                      }}
-                    />
-                    <div className="flex gap-2">
-                      <button
-                        className="p-1 rounded bg-white/10 hover:bg-white/20"
-                        title="Start swarm"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          void startSwarm(row.id)
-                        }}
-                      >
-                        <Play className="h-4 w-4" />
-                      </button>
-                      <button
-                        className="p-1 rounded bg-white/10 hover:bg-white/20"
-                        title="Stop swarm"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          void stopSwarm(row.id)
-                        }}
-                      >
-                        <Square className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-                </td>
-                <td className="px-3 py-2 text-white">{row.id}</td>
-                <td className="px-3 py-2 text-white/80">{row.controllerStatus}</td>
-                <td className="px-3 py-2 text-white/80">{row.heartbeat}</td>
-                <td className="px-3 py-2 text-white/80">{row.enabled}</td>
-                <td className="px-3 py-2 text-white/80">{row.templateId || '—'}</td>
-                <td className="px-3 py-2 text-white/80">{row.sutId || '—'}</td>
-                <td className="px-3 py-2 text-white/80">
-                  {row.roles.length === 0
-                    ? '—'
-                    : row.roles
-                        .map((r) => `${r.role} ${r.enabled}/${r.total}`)
-                        .join(', ')}
-                </td>
-                <td className="px-3 py-2 text-white/80">
-                  depth {row.queues.depth} · consumers {row.queues.consumers}
-                </td>
-                <td className="px-3 py-2 text-white/80">
-                  {row.scenario ? (
-                    <div className="space-y-0.5">
-                      <div>Last: {row.scenario.last}</div>
-                      <div>
-                        Next: {row.scenario.next}
-                        {row.scenario.countdown ? ` (${row.scenario.countdown})` : ''}
+            {filtered.map((row) => {
+              const isExpanded = expandedSwarms.has(row.id)
+              const swarmComponents = componentsBySwarm.get(row.id) ?? []
+              return (
+                <Fragment key={row.id}>
+                  <tr
+                    className="border-t border-white/10 hover:bg-white/5 cursor-pointer"
+                    onClick={() => {
+                      setSelectedComponent(row.controller ?? null)
+                    }}
+                  >
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <button
+                          className="p-1 rounded bg-white/10 hover:bg-white/20"
+                          title={isExpanded ? 'Collapse' : 'Expand'}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            toggleExpand(row.id)
+                          }}
+                        >
+                          {isExpanded ? (
+                            <ChevronDown className="h-4 w-4" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4" />
+                          )}
+                        </button>
+                        <input
+                          type="checkbox"
+                          checked={selection.has(row.id)}
+                          onChange={(e) => {
+                            e.stopPropagation()
+                            toggleSelect(row.id)
+                          }}
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            className="p-1 rounded bg-white/10 hover:bg-white/20"
+                            title="Start swarm"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              void startSwarm(row.id)
+                            }}
+                          >
+                            <Play className="h-4 w-4" />
+                          </button>
+                          <button
+                            className="p-1 rounded bg-white/10 hover:bg-white/20"
+                            title="Stop swarm"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              void stopSwarm(row.id)
+                            }}
+                          >
+                            <Square className="h-4 w-4" />
+                          </button>
+                        </div>
                       </div>
-                      {row.scenario.runs ? <div>Runs: {row.scenario.runs}</div> : null}
-                    </div>
-                  ) : (
-                    '—'
+                    </td>
+                    <td className="px-3 py-2 text-white">{row.id}</td>
+                    <td className="px-3 py-2 text-white/80">{row.controllerStatus}</td>
+                    <td className="px-3 py-2 text-white/80">{row.heartbeat}</td>
+                    <td className="px-3 py-2 text-white/80">{row.enabled}</td>
+                    <td className="px-3 py-2 text-white/80">{row.templateId || '—'}</td>
+                    <td className="px-3 py-2 text-white/80">{row.sutId || '—'}</td>
+                    <td className="px-3 py-2 text-white/80">
+                      {row.roles.length === 0
+                        ? '—'
+                        : row.roles
+                            .map((r) => `${r.role} ${r.enabled}/${r.total}`)
+                            .join(', ')}
+                    </td>
+                    <td className="px-3 py-2 text-white/80">
+                      depth {row.queues.depth} · consumers {row.queues.consumers}
+                    </td>
+                    <td className="px-3 py-2 text-white/80">
+                      {row.scenario ? (
+                        <div className="space-y-0.5">
+                          <div>Last: {row.scenario.last}</div>
+                          <div>
+                            Next: {row.scenario.next}
+                            {row.scenario.countdown ? ` (${row.scenario.countdown})` : ''}
+                          </div>
+                          {row.scenario.runs ? <div>Runs: {row.scenario.runs}</div> : null}
+                        </div>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-white/80">
+                      {row.guard ? (
+                        <>
+                          {row.guard.active !== undefined ? (row.guard.active ? 'active' : 'inactive') : '—'}
+                          {row.guard.problem ? ` • ${row.guard.problem}` : ''}
+                        </>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-white/80">
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          className="rounded bg-slate-700 px-2 py-1 text-xs hover:bg-slate-600"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            if (row.id === 'hive') {
+                              navigate('/journal/hive')
+                              return
+                            }
+                            navigate(`/journal/swarms/${encodeURIComponent(row.id)}`)
+                          }}
+                        >
+                          Journal
+                        </button>
+                        <button
+                          className="rounded bg-blue-600 px-2 py-1 text-xs disabled:opacity-50"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleScenarioReset(row.controller)
+                          }}
+                          disabled={!row.controller}
+                        >
+                          Reset plan
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  {isExpanded && (
+                    <tr className="border-t border-white/5 bg-white/5">
+                      <td className="px-3 py-3" colSpan={12}>
+                        {swarmComponents.length === 0 ? (
+                          <div className="text-xs text-white/60">No components reporting.</div>
+                        ) : (
+                          <ComponentList
+                            components={swarmComponents}
+                            selectedId={selectedComponent?.id}
+                            onSelect={(component) => setSelectedComponent(component)}
+                            showConnections
+                          />
+                        )}
+                      </td>
+                    </tr>
                   )}
-                </td>
-                <td className="px-3 py-2 text-white/80">
-                  {row.guard ? (
-                    <>
-                      {row.guard.active !== undefined ? (row.guard.active ? 'active' : 'inactive') : '—'}
-                      {row.guard.problem ? ` • ${row.guard.problem}` : ''}
-                    </>
-                  ) : (
-                    '—'
-                  )}
-                </td>
-                <td className="px-3 py-2 text-white/80">
-                  <div className="flex flex-wrap gap-2">
-	                    <button
-	                      className="rounded bg-slate-700 px-2 py-1 text-xs hover:bg-slate-600"
-	                      onClick={(e) => {
-	                        e.stopPropagation()
-	                        if (row.id === 'hive') {
-	                          navigate('/journal/hive')
-	                          return
-	                        }
-	                        navigate(`/journal/swarms/${encodeURIComponent(row.id)}`)
-	                      }}
-	                    >
-	                      Journal
-	                    </button>
-                    <button
-                      className="rounded bg-blue-600 px-2 py-1 text-xs disabled:opacity-50"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleScenarioReset(row.controller)
-                      }}
-                      disabled={!row.controller}
-                    >
-                      Reset plan
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+                </Fragment>
+              )
+            })}
             {filtered.length === 0 && (
               <tr>
                 <td className="px-3 py-4 text-center text-white/60" colSpan={12}>

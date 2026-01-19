@@ -9,6 +9,9 @@ Timestamp: 2026-01-16T14:20:44Z
 - Docs: define scenario `topology` and logical ports in the scenario contract to support UI graph authoring.
 - Build: remove duplicate Spring Boot plugin declaration in `tcp-mock-server` and pin the plugin version.
 - **BREAKING**: scenario `work.in`/`work.out` are now port maps (default ports `in`/`out`), and swarm-controller `status-full` publishes topology-driven work bindings for multi-IO.
+- UI (Scenarios): parse and edit multi-IO templates (`bee.id`, `work` port maps, `ports`, `topology`), and add coverage for scenario parsing and topology bindings.
+- UI (Hive): prefer runtime work bindings for graph edges, with queue-derived fallback when bindings are missing or not mappable to instances.
+- UI (Swarms): add expandable rows with per-worker enable/disable controls plus inline in/out connection hints and selection-based highlighting; ensure the details drawer can load capability manifests.
 
 ## [0.14.20] - 2026-01-14
 Timestamp: 2026-01-14T12:01:27Z

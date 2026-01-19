@@ -51,7 +51,9 @@ export default function App() {
           path="swarms"
           element={
             <SwarmMetadataProvider>
-              <SwarmListPage />
+              <CapabilitiesProvider>
+                <SwarmListPage />
+              </CapabilitiesProvider>
             </SwarmMetadataProvider>
           }
         />
