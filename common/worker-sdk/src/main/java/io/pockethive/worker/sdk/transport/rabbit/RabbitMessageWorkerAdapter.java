@@ -3,6 +3,7 @@ package io.pockethive.worker.sdk.transport.rabbit;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.observability.ObservabilityContextUtil;
 import io.pockethive.worker.sdk.api.WorkItem;
+import io.pockethive.worker.sdk.api.WorkerInfo;
 import io.pockethive.worker.sdk.config.MaxInFlightConfig;
 import io.pockethive.worker.sdk.runtime.WorkIoBindings;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
@@ -223,26 +224,21 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
      *       a {@code messageId} field to emitted alert context.</li>
      * </ul>
      */
-    private static WorkItem messageConverterFallback(Message message) {
-        if (message == null) {
-            return WorkItem.text("").build();
-        }
-        byte[] body = message.getBody() != null ? message.getBody() : new byte[0];
+    private WorkItem messageConverterFallback(Message message) {
+        byte[] body = message != null && message.getBody() != null ? message.getBody() : new byte[0];
         String payload;
         try {
             payload = new String(body, java.nio.charset.StandardCharsets.UTF_8);
         } catch (Exception ignored) {
             payload = "";
         }
-        WorkItem.Builder builder = WorkItem.text(payload);
-        if (message.getMessageProperties() != null && message.getMessageProperties().getHeaders() != null) {
-            builder.headers(message.getMessageProperties().getHeaders());
-        }
-        if (message.getMessageProperties() != null && message.getMessageProperties().getMessageId() != null) {
-            // Mirror the AMQP "messageId" property into PocketHive's canonical WorkItem header key.
-            builder.header("message-id", message.getMessageProperties().getMessageId());
-        }
-        return builder.build();
+        WorkerInfo info = new WorkerInfo(
+            workerDefinition.role(),
+            identity.swarmId(),
+            identity.instanceId(),
+            null,
+            null);
+        return WorkItem.text(info, payload).build();
     }
 
     private void dispatchSynchronously(WorkItem workItem) {

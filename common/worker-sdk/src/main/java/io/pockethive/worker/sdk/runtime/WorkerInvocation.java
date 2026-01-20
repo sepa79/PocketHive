@@ -46,6 +46,9 @@ final class WorkerInvocation {
             .data("phase", "STARTED"));
         try {
             WorkItem result = proceed(0, invocationContext);
+            if (result != null) {
+                result = stampNewSteps(message, result, context);
+            }
             HistoryPolicy policy = context.historyPolicy();
             if (result != null && policy != null && policy != HistoryPolicy.FULL) {
                 result = result.applyHistoryPolicy(policy);
@@ -85,5 +88,35 @@ final class WorkerInvocation {
 
     WorkerDefinition definition() {
         return workerDefinition;
+    }
+
+    private WorkItem stampNewSteps(WorkItem input, WorkItem output, WorkerContext context) {
+        List<io.pockethive.worker.sdk.api.WorkStep> inSteps = toList(input.steps());
+        List<io.pockethive.worker.sdk.api.WorkStep> outSteps = toList(output.steps());
+        if (outSteps.size() <= inSteps.size()) {
+            return output;
+        }
+        List<io.pockethive.worker.sdk.api.WorkStep> updated = new java.util.ArrayList<>(outSteps);
+        for (int i = inSteps.size(); i < outSteps.size(); i++) {
+            io.pockethive.worker.sdk.api.WorkStep step = outSteps.get(i);
+            java.util.Map<String, Object> headers = new java.util.LinkedHashMap<>(step.headers());
+            headers.put(WorkItem.STEP_SERVICE_HEADER, context.info().role());
+            headers.put(WorkItem.STEP_INSTANCE_HEADER, context.info().instanceId());
+            updated.set(i, step.withHeaders(java.util.Map.copyOf(headers)));
+        }
+        return output.toBuilder().steps(updated).build();
+    }
+
+    private static List<io.pockethive.worker.sdk.api.WorkStep> toList(Iterable<io.pockethive.worker.sdk.api.WorkStep> steps) {
+        if (steps instanceof List<?> list) {
+            @SuppressWarnings("unchecked")
+            List<io.pockethive.worker.sdk.api.WorkStep> cast = (List<io.pockethive.worker.sdk.api.WorkStep>) list;
+            return cast;
+        }
+        List<io.pockethive.worker.sdk.api.WorkStep> result = new java.util.ArrayList<>();
+        for (io.pockethive.worker.sdk.api.WorkStep step : steps) {
+            result.add(step);
+        }
+        return result;
     }
 }
