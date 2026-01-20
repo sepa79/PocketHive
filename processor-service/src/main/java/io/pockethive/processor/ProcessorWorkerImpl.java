@@ -127,7 +127,8 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
     ObjectNode result = mapper.createObjectNode();
     result.put("error", message);
     WorkItem errorItem = ResponseBuilder.build(result, context.info(), metrics);
-    return in.addStep(context.info(), errorItem.asString(), errorItem.stepHeaders());
+    WorkItem updated = in.addStep(context.info(), errorItem.asString(), errorItem.stepHeaders());
+    return updated.toBuilder().contentType(errorItem.contentType()).build();
   }
 
   private void publishStatus(WorkerContext context, ProcessorWorkerConfig config) {
