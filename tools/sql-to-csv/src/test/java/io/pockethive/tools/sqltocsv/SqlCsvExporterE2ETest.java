@@ -35,7 +35,7 @@ class SqlCsvExporterE2ETest {
         try (Connection conn = DriverManager.getConnection(
                 postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
              Statement stmt = conn.createStatement()) {
-            
+
             // Create test tables
             stmt.execute("CREATE TABLE accounts (" +
                         "acc_no VARCHAR(20) PRIMARY KEY, " +
@@ -44,20 +44,20 @@ class SqlCsvExporterE2ETest {
                         "max_balance DECIMAL(15,2), " +
                         "product_class_code VARCHAR(10), " +
                         "customer_code VARCHAR(20))");
-            
+
             stmt.execute("CREATE TABLE transactions (" +
                         "txn_id SERIAL PRIMARY KEY, " +
                         "acc_no VARCHAR(20), " +
                         "amount DECIMAL(15,2), " +
                         "txn_date TIMESTAMP, " +
                         "description TEXT)");
-            
+
             // Insert test data
             stmt.execute("INSERT INTO accounts VALUES " +
                         "('9999993001', 'BAL001', 'USD', 10000.00, 'SAVINGS', 'CUST001'), " +
                         "('9999993002', 'BAL002', 'EUR', 5000.00, 'CHECKING', 'CUST002'), " +
                         "('9999993003', 'BAL001', 'GBP', 15000.00, 'SAVINGS', 'CUST003')");
-            
+
             stmt.execute("INSERT INTO transactions (acc_no, amount, txn_date, description) VALUES " +
                         "('9999993001', 100.50, NOW(), 'Deposit'), " +
                         "('9999993001', -50.25, NOW(), 'Withdrawal'), " +
@@ -70,7 +70,7 @@ class SqlCsvExporterE2ETest {
     @DisplayName("E2E: Export accounts from PostgreSQL")
     void shouldExportAccountsFromPostgreSQL() throws Exception {
         File outputFile = tempDir.resolve("accounts.csv").toFile();
-        
+
         SqlExportConfig config = SqlExportConfig.builder()
             .jdbcUrl(postgres.getJdbcUrl())
             .username(postgres.getUsername())
@@ -99,7 +99,7 @@ class SqlCsvExporterE2ETest {
     @DisplayName("E2E: Export with JOIN query")
     void shouldExportWithJoinQuery() throws Exception {
         File outputFile = tempDir.resolve("account-transactions.csv").toFile();
-        
+
         SqlExportConfig config = SqlExportConfig.builder()
             .jdbcUrl(postgres.getJdbcUrl())
             .username(postgres.getUsername())
@@ -117,6 +117,7 @@ class SqlCsvExporterE2ETest {
 
         assertThat(result.rowCount()).isEqualTo(3);
         assertThat(result.columnCount()).isEqualTo(4);
+// amazonq-ignore-next-line
 
         List<String> lines = Files.readAllLines(outputFile.toPath());
         assertThat(lines.get(1)).contains("9999993001");
@@ -129,7 +130,7 @@ class SqlCsvExporterE2ETest {
     @DisplayName("E2E: Export with aggregation")
     void shouldExportWithAggregation() throws Exception {
         File outputFile = tempDir.resolve("account-summary.csv").toFile();
-        
+
         SqlExportConfig config = SqlExportConfig.builder()
             .jdbcUrl(postgres.getJdbcUrl())
             .username(postgres.getUsername())
@@ -146,7 +147,7 @@ class SqlCsvExporterE2ETest {
         ExportResult result = exporter.export();
 
         assertThat(result.rowCount()).isEqualTo(2); // 2 accounts with transactions
-        
+
         List<String> lines = Files.readAllLines(outputFile.toPath());
         assertThat(lines.get(0)).containsIgnoringCase("txn_count");
         assertThat(lines.get(0)).containsIgnoringCase("total_amount");
@@ -160,7 +161,7 @@ class SqlCsvExporterE2ETest {
         try (Connection conn = DriverManager.getConnection(
                 postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
              Statement stmt = conn.createStatement()) {
-            
+
             for (int i = 0; i < 1000; i++) {
                 stmt.execute(String.format(
                     "INSERT INTO transactions (acc_no, amount, txn_date, description) " +
@@ -169,7 +170,7 @@ class SqlCsvExporterE2ETest {
         }
 
         File outputFile = tempDir.resolve("large-export.csv").toFile();
-        
+
         SqlExportConfig config = SqlExportConfig.builder()
             .jdbcUrl(postgres.getJdbcUrl())
             .username(postgres.getUsername())
@@ -193,7 +194,7 @@ class SqlCsvExporterE2ETest {
     @DisplayName("E2E: Verify read-only mode prevents writes")
     void shouldEnforceReadOnlyMode() throws Exception {
         File outputFile = tempDir.resolve("readonly-test.csv").toFile();
-        
+
         // This should fail because connection is read-only
         SqlExportConfig config = SqlExportConfig.builder()
             .jdbcUrl(postgres.getJdbcUrl())
@@ -204,10 +205,10 @@ class SqlCsvExporterE2ETest {
             .build();
 
         SqlCsvExporter exporter = new SqlCsvExporter(config);
-        
+
         // Export should succeed (SELECT is allowed)
         assertThatNoException().isThrownBy(() -> exporter.export());
-        
+
         // But if we try to modify data through the same connection manager,
         // it should fail (this is verified by the read-only flag being set)
         assertThat(outputFile).exists();
@@ -218,7 +219,7 @@ class SqlCsvExporterE2ETest {
     @DisplayName("E2E: Handle connection errors gracefully")
     void shouldHandleConnectionErrorsGracefully() {
         File outputFile = tempDir.resolve("error-test.csv").toFile();
-        
+
         SqlExportConfig config = SqlExportConfig.builder()
             .jdbcUrl("jdbc:postgresql://invalid-host:5432/testdb")
             .username("invalid")
@@ -228,7 +229,7 @@ class SqlCsvExporterE2ETest {
             .build();
 
         SqlCsvExporter exporter = new SqlCsvExporter(config);
-        
+
         assertThatThrownBy(() -> exporter.export())
             .isInstanceOf(Exception.class);
     }
@@ -238,7 +239,7 @@ class SqlCsvExporterE2ETest {
     @DisplayName("E2E: Handle invalid SQL gracefully")
     void shouldHandleInvalidSqlGracefully() {
         File outputFile = tempDir.resolve("invalid-sql.csv").toFile();
-        
+
         SqlExportConfig config = SqlExportConfig.builder()
             .jdbcUrl(postgres.getJdbcUrl())
             .username(postgres.getUsername())
@@ -248,7 +249,7 @@ class SqlCsvExporterE2ETest {
             .build();
 
         SqlCsvExporter exporter = new SqlCsvExporter(config);
-        
+
         assertThatThrownBy(() -> exporter.export())
             .isInstanceOf(ExportException.class)
             .hasMessageContaining("Database error");

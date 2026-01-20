@@ -68,7 +68,7 @@ class QueryValidatorTest {
     void shouldRejectDropStatements(String query) {
         assertThatThrownBy(() -> validator.validate(query))
             .isInstanceOf(SecurityException.class)
-            .hasMessageContaining("forbidden keywords");
+            .hasMessageContaining("Only SELECT queries are allowed");
     }
 
     @ParameterizedTest
@@ -77,7 +77,7 @@ class QueryValidatorTest {
     void shouldRejectDeleteStatements(String query) {
         assertThatThrownBy(() -> validator.validate(query))
             .isInstanceOf(SecurityException.class)
-            .hasMessageContaining("forbidden keywords");
+            .hasMessageContaining("Only SELECT queries are allowed");
     }
 
     @ParameterizedTest
@@ -86,7 +86,7 @@ class QueryValidatorTest {
     void shouldRejectUpdateStatements(String query) {
         assertThatThrownBy(() -> validator.validate(query))
             .isInstanceOf(SecurityException.class)
-            .hasMessageContaining("forbidden keywords");
+            .hasMessageContaining("Only SELECT queries are allowed");
     }
 
     @ParameterizedTest
@@ -95,7 +95,7 @@ class QueryValidatorTest {
     void shouldRejectInsertStatements(String query) {
         assertThatThrownBy(() -> validator.validate(query))
             .isInstanceOf(SecurityException.class)
-            .hasMessageContaining("forbidden keywords");
+            .hasMessageContaining("Only SELECT queries are allowed");
     }
 
     @ParameterizedTest
@@ -104,7 +104,7 @@ class QueryValidatorTest {
     void shouldRejectAlterStatements(String query) {
         assertThatThrownBy(() -> validator.validate(query))
             .isInstanceOf(SecurityException.class)
-            .hasMessageContaining("forbidden keywords");
+            .hasMessageContaining("Only SELECT queries are allowed");
     }
 
     @ParameterizedTest
@@ -113,7 +113,7 @@ class QueryValidatorTest {
     void shouldRejectCreateStatements(String query) {
         assertThatThrownBy(() -> validator.validate(query))
             .isInstanceOf(SecurityException.class)
-            .hasMessageContaining("forbidden keywords");
+            .hasMessageContaining("Only SELECT queries are allowed");
     }
 
     @ParameterizedTest
@@ -122,34 +122,29 @@ class QueryValidatorTest {
     void shouldRejectTruncateStatements(String query) {
         assertThatThrownBy(() -> validator.validate(query))
             .isInstanceOf(SecurityException.class)
-            .hasMessageContaining("forbidden keywords");
+            .hasMessageContaining("Only SELECT queries are allowed");
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"EXEC sp_executesql", "EXECUTE procedure_name", "exec('DROP TABLE users')"})
-    @DisplayName("Should reject EXEC/EXECUTE statements")
-    void shouldRejectExecStatements(String query) {
+    @ValueSource(strings = {"CALL my_procedure()", "call sp_test"})
+    @DisplayName("Should reject CALL statements")
+    void shouldRejectCallStatements(String query) {
         assertThatThrownBy(() -> validator.validate(query))
-            .isInstanceOf(SecurityException.class)
-            .hasMessageContaining("forbidden keywords");
+            .isInstanceOf(SecurityException.class);
     }
-
+    
     @ParameterizedTest
-    @ValueSource(strings = {"GRANT ALL ON users TO admin", "grant select on users to readonly"})
-    @DisplayName("Should reject GRANT statements")
-    void shouldRejectGrantStatements(String query) {
+    @ValueSource(strings = {
+        "SELECT * FROM users WHERE id = SLEEP(5)",
+        "SELECT BENCHMARK(1000000, MD5('test'))",
+        "SELECT LOAD_FILE('/etc/passwd')",
+        "SELECT * FROM users INTO OUTFILE '/tmp/users.txt'"
+    })
+    @DisplayName("Should reject dangerous functions")
+    void shouldRejectDangerousFunctions(String query) {
         assertThatThrownBy(() -> validator.validate(query))
             .isInstanceOf(SecurityException.class)
-            .hasMessageContaining("forbidden keywords");
-    }
-
-    @ParameterizedTest
-    @ValueSource(strings = {"REVOKE ALL ON users FROM admin", "revoke select on users from readonly"})
-    @DisplayName("Should reject REVOKE statements")
-    void shouldRejectRevokeStatements(String query) {
-        assertThatThrownBy(() -> validator.validate(query))
-            .isInstanceOf(SecurityException.class)
-            .hasMessageContaining("forbidden keywords");
+            .hasMessageContaining("dangerous operations");
     }
 
     @Test

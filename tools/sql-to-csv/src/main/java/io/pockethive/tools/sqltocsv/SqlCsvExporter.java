@@ -1,93 +1,84 @@
 package io.pockethive.tools.sqltocsv;
 
-import java.io.BufferedWriter;
-import java.io.FileWriter;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.sql.Connection;
-import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.Objects;
+import java.util.logging.Logger;
 
 /**
- * Exports SQL query results to CSV format.
- * Follows Single Responsibility Principle - only handles export logic.
+ * Exports SQL query results to CSV.
+ * Follows Single Responsibility Principle - orchestrates export workflow.
  */
 public class SqlCsvExporter {
     
+    private static final Logger LOGGER = Logger.getLogger(SqlCsvExporter.class.getName());
+    private static final int PROGRESS_INTERVAL = 1000;
+    
     private final SqlExportConfig config;
+    private final ExportLogger exportLogger;
     private final CsvWriter csvWriter;
     
     public SqlCsvExporter(SqlExportConfig config) {
-        this.config = config;
-        this.csvWriter = new CsvWriter(config.delimiter(), config.nullValue());
+        this(config, new ConsoleExportLogger(config.verbose()));
     }
     
-    public ExportResult export() throws Exception {
-        var startTime = System.currentTimeMillis();
+    SqlCsvExporter(SqlExportConfig config, ExportLogger logger) {
+        this.config = Objects.requireNonNull(config, "Config cannot be null");
+        this.exportLogger = Objects.requireNonNull(logger, "Logger cannot be null");
+        this.csvWriter = new CsvWriter(config);
+    }
+    
+    public ExportResult export() throws ExportException {
+        long startTime = System.currentTimeMillis();
         
-        try (var connectionManager = ConnectionManager.getInstance(config.jdbcUrl(), config.username(), config.password())) {
+        try (ConnectionManager connectionManager = ConnectionManager.getInstance(
+                config.jdbcUrl(), config.username(), config.password())) {
+            
             ensureOutputDirectoryExists();
             
-            info("Connecting to database...");
-            var connectStart = System.currentTimeMillis();
+            exportLogger.info("Connecting to database...");
+            long connectStart = System.currentTimeMillis();
             
-            try (var connection = connectionManager.getConnection()) {
-                // Security: Force read-only mode
-                connection.setReadOnly(true);
-                connection.setTransactionIsolation(Connection.TRANSACTION_READ_UNCOMMITTED);
+            try (Connection connection = connectionManager.getConnection()) {
+                configureConnection(connection);
+                long connectTime = System.currentTimeMillis() - connectStart;
+                exportLogger.verbose("  Connected in " + connectTime + "ms (read-only mode)");
                 
-                var connectTime = System.currentTimeMillis() - connectStart;
-                verbose("  Connected in " + connectTime + "ms (read-only mode)");
+                exportLogger.info("Executing query...");
+                long queryStart = System.currentTimeMillis();
                 
-                info("Executing query...");
-                var queryStart = System.currentTimeMillis();
-                
-                try (var statement = connection.prepareStatement(
-                        config.query(),
-                        ResultSet.TYPE_FORWARD_ONLY,
-                        ResultSet.CONCUR_READ_ONLY)) {
-                    
-                    // Enable streaming for large result sets
-                    statement.setFetchSize(config.fetchSize());
-                    verbose("  Fetch size: " + config.fetchSize());
-                    
-                    try (var resultSet = statement.executeQuery()) {
-                    
-                    var queryTime = System.currentTimeMillis() - queryStart;
-                    verbose("  Query executed in " + queryTime + "ms");
-                    
-                    info("Writing rows...");
-                    var writeStart = System.currentTimeMillis();
-                    
-                    try (var writer = new BufferedWriter(
-                            new FileWriter(config.outputFile()),
-                            config.bufferSizeKb() * 1024)) {
-                        var rowCount = 0;
-                        var metadata = resultSet.getMetaData();
-                        var columnCount = metadata.getColumnCount();
+                try (PreparedStatement statement = prepareStatement(connection)) {
+                    try (ResultSet resultSet = statement.executeQuery()) {
+                        long queryTime = System.currentTimeMillis() - queryStart;
+                        exportLogger.verbose("  Query executed in " + queryTime + "ms");
                         
-                        if (config.includeHeader()) {
-                            writer.write(csvWriter.writeHeader(metadata));
-                            writer.newLine();
-                        }
+                        exportLogger.info("Writing rows...");
+                        long writeStart = System.currentTimeMillis();
                         
-                        while (resultSet.next()) {
-                            writer.write(csvWriter.writeRow(resultSet, columnCount));
-                            writer.newLine();
-                            rowCount++;
-                            
-                            if (rowCount % 1000 == 0) {
-                                verbose("  " + rowCount + " rows exported...");
-                            }
-                        }
+                        int rowCount = csvWriter.write(resultSet, this::logProgress);
                         
-                        var writeTime = System.currentTimeMillis() - writeStart;
-                        var totalTime = System.currentTimeMillis() - startTime;
+                        long writeTime = System.currentTimeMillis() - writeStart;
+                        long totalTime = System.currentTimeMillis() - startTime;
                         
-                        return new ExportResult(rowCount, columnCount, connectTime, queryTime, writeTime, totalTime);
+                        return new ExportResult(
+                            rowCount,
+                            resultSet.getMetaData().getColumnCount(),
+                            connectTime,
+                            queryTime,
+                            writeTime,
+                            totalTime
+                        );
                     }
                 }
-            } catch (java.sql.SQLException e) {
+            } catch (SQLException e) {
                 throw new ExportException("Database error: " + e.getMessage(), e);
-            } catch (java.io.IOException e) {
+            } catch (IOException e) {
                 throw new ExportException("File write error: " + e.getMessage(), e);
             }
         } catch (ExportException e) {
@@ -97,23 +88,69 @@ public class SqlCsvExporter {
         }
     }
     
-    private void ensureOutputDirectoryExists() {
-        var parentDir = config.outputFile().getParentFile();
-        if (parentDir != null && !parentDir.exists()) {
-            if (!parentDir.mkdirs()) {
-                throw new ValidationException("Failed to create output directory: " + parentDir);
-            }
-            verbose("Created output directory: " + parentDir);
+    private void configureConnection(Connection connection) throws SQLException {
+        connection.setReadOnly(true);
+        connection.setTransactionIsolation(Connection.TRANSACTION_READ_UNCOMMITTED);
+    }
+    
+    private PreparedStatement prepareStatement(Connection connection) throws SQLException {
+        PreparedStatement statement = connection.prepareStatement(
+            config.query(),
+            ResultSet.TYPE_FORWARD_ONLY,
+            ResultSet.CONCUR_READ_ONLY
+        );
+        statement.setFetchSize(config.fetchSize());
+        exportLogger.verbose("  Fetch size: " + config.fetchSize());
+        return statement;
+    }
+    
+    private void logProgress(int rowCount) {
+        if (rowCount % PROGRESS_INTERVAL == 0) {
+            exportLogger.verbose("  " + rowCount + " rows exported...");
         }
     }
     
-    private void info(String message) {
-        System.out.println(message);
+    private void ensureOutputDirectoryExists() {
+        Path parentDir = config.outputFile().toPath().getParent();
+        if (parentDir != null && !Files.exists(parentDir)) {
+            try {
+                Files.createDirectories(parentDir);
+                exportLogger.verbose("Created output directory: " + parentDir);
+            } catch (IOException e) {
+                throw new UncheckedIOException("Failed to create output directory: " + parentDir, e);
+            }
+        }
     }
     
-    private void verbose(String message) {
-        if (config.verbose()) {
+    /**
+     * Logger abstraction for export progress messages.
+     * Allows testing without console output.
+     */
+    interface ExportLogger {
+        void info(String message);
+        void verbose(String message);
+    }
+    
+    /**
+     * Console-based logger implementation.
+     */
+    static class ConsoleExportLogger implements ExportLogger {
+        private final boolean verbose;
+        
+        ConsoleExportLogger(boolean verbose) {
+            this.verbose = verbose;
+        }
+        
+        @Override
+        public void info(String message) {
             System.out.println(message);
+        }
+        
+        @Override
+        public void verbose(String message) {
+            if (verbose) {
+                System.out.println(message);
+            }
         }
     }
 }

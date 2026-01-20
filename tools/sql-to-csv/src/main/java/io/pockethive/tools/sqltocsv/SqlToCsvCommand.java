@@ -4,9 +4,10 @@ import io.pockethive.tools.sqltocsv.security.*;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
-import picocli.CommandLine.Parameters;
 
 import java.io.File;
+import java.io.IOException;
+import java.io.PrintWriter;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.concurrent.Callable;
@@ -167,24 +168,33 @@ public class SqlToCsvCommand implements Callable<Integer> {
     )
     private boolean verbose;
 
+    @CommandLine.Spec
+    private CommandLine.Model.CommandSpec spec;
+    
+    private PrintWriter out;
+    private PrintWriter err;
+    
     @Override
     public Integer call() {
+        out = spec.commandLine().getOut();
+        err = spec.commandLine().getErr();
+        
         try {
             validateInputs();
             
-            // Security: Validate query
             String resolvedQuery = resolveQuery();
             new QueryValidator().validate(resolvedQuery);
             
-            // Security: Resolve password securely
-            CredentialProvider credProvider = new CredentialProvider();
-            String resolvedPassword = credProvider.resolvePassword(password, passwordEnv, passwordFile, passwordStdin);
+            // Validate JDBC URL
+            new JdbcUrlValidator().validateJdbcUrl(jdbcUrl);
             
-            // Security: Validate output path
+            CredentialProvider credProvider = new CredentialProvider(password, passwordEnv, passwordFile, passwordStdin);
+            String resolvedPassword = credProvider.resolvePassword();
+            
             PathValidator pathValidator = new PathValidator();
             Path validatedOutputPath = pathValidator.validateOutputPath(outputFile.toPath(), allowAbsolutePaths);
             
-            var config = SqlExportConfig.builder()
+            SqlExportConfig config = SqlExportConfig.builder()
                 .jdbcUrl(jdbcUrl)
                 .username(username)
                 .password(resolvedPassword)
@@ -198,56 +208,67 @@ public class SqlToCsvCommand implements Callable<Integer> {
                 .bufferSizeKb(bufferSizeKb)
                 .build();
 
-            var exporter = new SqlCsvExporter(config);
-            var result = exporter.export();
+            SqlCsvExporter exporter = new SqlCsvExporter(config);
+            ExportResult result = exporter.export();
             
-            // Security: Audit log
-            if (!noAudit) {
-                try {
-                    AuditLogger auditLogger = new AuditLogger(Paths.get(auditLogPath));
-                    auditLogger.logExport(jdbcUrl, resolvedQuery, result.rowCount(), validatedOutputPath.toString());
-                } catch (Exception e) {
-                    System.err.println("WARNING: Audit logging failed: " + e.getMessage());
-                }
-            }
-
-            System.out.println("✓ Export completed successfully");
-            System.out.println("  Rows exported: " + result.rowCount());
-            System.out.println("  Columns: " + result.columnCount());
-            System.out.println("  Output file: " + validatedOutputPath.toAbsolutePath());
-            System.out.println("  Total time: " + formatTime(result.totalTimeMs()));
-            System.out.println("  Throughput: " + String.format("%.1f", result.throughputRowsPerSec()) + " rows/sec");
-            
-            if (verbose) {
-                System.out.println("\nTiming breakdown:");
-                System.out.println("  Connection: " + formatTime(result.connectTimeMs()));
-                System.out.println("  Query execution: " + formatTime(result.queryTimeMs()));
-                System.out.println("  File writing: " + formatTime(result.writeTimeMs()));
-            }
+            auditExport(resolvedQuery, result, validatedOutputPath);
+            printSuccess(result, validatedOutputPath);
             
             return 0;
             
         } catch (ValidationException e) {
-            System.err.println("✗ Validation error: " + e.getMessage());
+            err.println("✗ Validation error: " + e.getMessage());
             return 1;
         } catch (SecurityException e) {
-            System.err.println("✗ Security error: " + e.getMessage());
+            err.println("✗ Security error: " + e.getMessage());
             return 1;
         } catch (ExportException e) {
-            System.err.println("✗ Export failed: " + e.getMessage());
+            err.println("✗ Export failed: " + e.getMessage());
             if (verbose) {
-                System.err.println("\nDetails:");
-                e.printStackTrace();
+                err.println("\nDetails:");
+                e.printStackTrace(err);
             } else {
-                System.err.println("(Use -v for detailed error information)");
+                err.println("(Use -v for detailed error information)");
             }
             return 2;
         } catch (Exception e) {
-            System.err.println("✗ Unexpected error: " + e.getMessage());
+            err.println("✗ Unexpected error: " + e.getMessage());
             if (verbose) {
-                e.printStackTrace();
+                e.printStackTrace(err);
             }
             return 3;
+        }
+    }
+    
+    private void auditExport(String query, ExportResult result, Path outputPath) {
+        if (noAudit) {
+            return;
+        }
+        
+        try {
+            AuditLogger auditLogger = new AuditLogger(Paths.get(auditLogPath));
+            auditLogger.logExport(jdbcUrl, query, result.rowCount(), outputPath.toString());
+        } catch (Exception e) {
+            err.println("WARNING: Audit logging failed: " + e.getMessage());
+            if (verbose) {
+                e.printStackTrace(err);
+            }
+        }
+    }
+    
+    private void printSuccess(ExportResult result, Path outputPath) {
+        out.println("✓ Export completed successfully");
+        out.println("  Rows exported: " + result.rowCount());
+        out.println("  Columns: " + result.columnCount());
+        out.println("  Output file: " + outputPath.toAbsolutePath());
+        out.println("  Total time: " + formatTime(result.totalTimeMs()));
+        out.println("  Throughput: " + String.format("%.1f", result.throughputRowsPerSec()) + " rows/sec");
+        
+        if (verbose) {
+            out.println("\nTiming breakdown:");
+            out.println("  Connection: " + formatTime(result.connectTimeMs()));
+            out.println("  Query execution: " + formatTime(result.queryTimeMs()));
+            out.println("  File writing: " + formatTime(result.writeTimeMs()));
         }
     }
 
@@ -302,11 +323,11 @@ public class SqlToCsvCommand implements Callable<Integer> {
         return jdbcUrl;
     }
 
-    private String resolveQuery() throws Exception {
+    private String resolveQuery() throws IOException {
         if (query != null) {
             return query;
         }
-        return java.nio.file.Files.readString(queryFile.toPath());
+        return java.nio.file.Files.readString(queryFile.toPath(), java.nio.charset.StandardCharsets.UTF_8);
     }
     
     private String formatTime(long ms) {

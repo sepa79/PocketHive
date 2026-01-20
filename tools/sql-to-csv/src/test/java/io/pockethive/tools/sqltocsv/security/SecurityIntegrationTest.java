@@ -19,7 +19,7 @@ import static org.assertj.core.api.Assertions.*;
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class SecurityIntegrationTest {
 
-    private static final String JDBC_URL = "jdbc:h2:mem:securitydb;DB_CLOSE_DELAY=-1";
+    private static final String JDBC_URL = "jdbc:h2:mem:securitydb" + System.nanoTime() + ";DB_CLOSE_DELAY=-1";
     private static final String USERNAME = "sa";
     private static final String PASSWORD = "";
 
@@ -40,7 +40,7 @@ class SecurityIntegrationTest {
     @DisplayName("Security: Should block DROP TABLE query")
     void shouldBlockDropTableQuery() {
         QueryValidator validator = new QueryValidator();
-        
+
         assertThatThrownBy(() -> validator.validate("DROP TABLE sensitive_data"))
             .isInstanceOf(SecurityException.class)
             .hasMessageContaining("forbidden keywords");
@@ -51,7 +51,7 @@ class SecurityIntegrationTest {
     @DisplayName("Security: Should block DELETE query")
     void shouldBlockDeleteQuery() {
         QueryValidator validator = new QueryValidator();
-        
+
         assertThatThrownBy(() -> validator.validate("DELETE FROM sensitive_data WHERE id = 1"))
             .isInstanceOf(SecurityException.class)
             .hasMessageContaining("forbidden keywords");
@@ -62,7 +62,7 @@ class SecurityIntegrationTest {
     @DisplayName("Security: Should block UPDATE query")
     void shouldBlockUpdateQuery() {
         QueryValidator validator = new QueryValidator();
-        
+
         assertThatThrownBy(() -> validator.validate("UPDATE sensitive_data SET data = 'modified'"))
             .isInstanceOf(SecurityException.class)
             .hasMessageContaining("forbidden keywords");
@@ -73,7 +73,7 @@ class SecurityIntegrationTest {
     @DisplayName("Security: Should block INSERT query")
     void shouldBlockInsertQuery() {
         QueryValidator validator = new QueryValidator();
-        
+
         assertThatThrownBy(() -> validator.validate("INSERT INTO sensitive_data VALUES (2, 'new')"))
             .isInstanceOf(SecurityException.class)
             .hasMessageContaining("forbidden keywords");
@@ -84,8 +84,8 @@ class SecurityIntegrationTest {
     @DisplayName("Security: Should allow SELECT query")
     void shouldAllowSelectQuery() {
         QueryValidator validator = new QueryValidator();
-        
-        assertThatNoException().isThrownBy(() -> 
+
+        assertThatNoException().isThrownBy(() ->
             validator.validate("SELECT * FROM sensitive_data"));
     }
 
@@ -95,8 +95,13 @@ class SecurityIntegrationTest {
     void shouldBlockPathTraversalToSystemDirectory() {
         PathValidator validator = new PathValidator();
         
-        assertThatThrownBy(() -> 
-            validator.validateOutputPath(Paths.get("/etc/passwd"), true))
+        // Use OS-specific system path
+        String systemPath = System.getProperty("os.name").toLowerCase().contains("win") 
+            ? "C:\\Windows\\System32\\test.csv"
+            : "/etc/passwd";
+
+        assertThatThrownBy(() ->
+            validator.validateOutputPath(Path.of(systemPath), true))
             .isInstanceOf(SecurityException.class)
             .hasMessageContaining("system directory");
     }
@@ -106,8 +111,8 @@ class SecurityIntegrationTest {
     @DisplayName("Security: Should block absolute path without flag")
     void shouldBlockAbsolutePathWithoutFlag() {
         PathValidator validator = new PathValidator();
-        
-        assertThatThrownBy(() -> 
+
+        assertThatThrownBy(() ->
             validator.validateOutputPath(Paths.get("/tmp/output.csv"), false))
             .isInstanceOf(SecurityException.class)
             .hasMessageContaining("require --allow-absolute-paths");
@@ -118,10 +123,10 @@ class SecurityIntegrationTest {
     @DisplayName("Security: Should allow relative path with parent navigation")
     void shouldAllowRelativePathWithParentNavigation() {
         PathValidator validator = new PathValidator();
-        
+
         Path result = validator.validateOutputPath(
             Paths.get("../../scenarios/datasets/test.csv"), false);
-        
+
         assertThat(result).isNotNull();
     }
 
@@ -131,9 +136,9 @@ class SecurityIntegrationTest {
     void shouldCreateAuditLogEntry() throws Exception {
         Path auditLog = tempDir.resolve("audit.log");
         AuditLogger logger = new AuditLogger(auditLog);
-        
+
         logger.logExport(JDBC_URL, "SELECT * FROM sensitive_data", 1, "/tmp/output.csv");
-        
+
         assertThat(auditLog).exists();
         List<String> lines = Files.readAllLines(auditLog);
         assertThat(lines).hasSize(1);
@@ -146,13 +151,13 @@ class SecurityIntegrationTest {
     void shouldSanitizePasswordInAuditLog() throws Exception {
         Path auditLog = tempDir.resolve("audit-sanitized.log");
         AuditLogger logger = new AuditLogger(auditLog);
-        
+
         logger.logExport(
-            "jdbc:postgresql://localhost/db?user=admin&password=secret123", 
-            "SELECT * FROM users", 
-            100, 
+            "jdbc:postgresql://localhost/db?user=admin&password=secret123",
+            "SELECT * FROM users",
+            100,
             "/tmp/output.csv");
-        
+
         String content = Files.readString(auditLog);
         assertThat(content).contains("password=***");
         assertThat(content).doesNotContain("secret123");
@@ -164,16 +169,16 @@ class SecurityIntegrationTest {
     void shouldExportWithAllSecurityFeatures() throws Exception {
         File outputFile = tempDir.resolve("secure-export.csv").toFile();
         Path auditLog = tempDir.resolve("secure-audit.log");
-        
+
         // Validate query
         QueryValidator queryValidator = new QueryValidator();
         String query = "SELECT * FROM sensitive_data";
         queryValidator.validate(query);
-        
-        // Validate path
+
+        // Validate path (allow absolute since tempDir is absolute)
         PathValidator pathValidator = new PathValidator();
-        Path validatedPath = pathValidator.validateOutputPath(outputFile.toPath(), false);
-        
+        Path validatedPath = pathValidator.validateOutputPath(outputFile.toPath(), true);
+
         // Export
         SqlExportConfig config = SqlExportConfig.builder()
             .jdbcUrl(JDBC_URL)
@@ -186,19 +191,19 @@ class SecurityIntegrationTest {
 
         SqlCsvExporter exporter = new SqlCsvExporter(config);
         ExportResult result = exporter.export();
-        
+
         // Audit
         AuditLogger auditLogger = new AuditLogger(auditLog);
         auditLogger.logExport(JDBC_URL, query, result.rowCount(), validatedPath.toString());
-        
+
         // Verify
         assertThat(outputFile).exists();
         assertThat(auditLog).exists();
         assertThat(result.rowCount()).isEqualTo(1);
-        
+
         List<String> csvLines = Files.readAllLines(outputFile.toPath());
         assertThat(csvLines).hasSize(2); // Header + 1 row
-        
+
         List<String> auditLines = Files.readAllLines(auditLog);
         assertThat(auditLines).hasSize(1);
     }
@@ -208,7 +213,7 @@ class SecurityIntegrationTest {
     @DisplayName("Security: Should enforce read-only connection")
     void shouldEnforceReadOnlyConnection() throws Exception {
         File outputFile = tempDir.resolve("readonly.csv").toFile();
-        
+
         SqlExportConfig config = SqlExportConfig.builder()
             .jdbcUrl(JDBC_URL)
             .username(USERNAME)
@@ -219,7 +224,7 @@ class SecurityIntegrationTest {
 
         SqlCsvExporter exporter = new SqlCsvExporter(config);
         ExportResult result = exporter.export();
-        
+
         // Verify export succeeded (read-only allows SELECT)
         assertThat(result.rowCount()).isEqualTo(1);
         assertThat(outputFile).exists();
@@ -231,12 +236,12 @@ class SecurityIntegrationTest {
     void shouldRejectEmptyCredentialFile() throws Exception {
         Path credFile = tempDir.resolve("empty-creds.txt");
         Files.writeString(credFile, "");
-        
-        CredentialProvider provider = new CredentialProvider();
-        
-        assertThatThrownBy(() -> 
-            provider.resolvePassword(null, "NON_EXISTENT", credFile, false))
-            .isInstanceOf(SecurityException.class)
+        setUnixPermissions(credFile);
+
+        CredentialProvider provider = new CredentialProvider(null, "NON_EXISTENT", credFile, false);
+
+        assertThatThrownBy(() -> provider.resolvePassword())
+            .isInstanceOf(ValidationException.class)
             .hasMessageContaining("empty");
     }
 
@@ -246,10 +251,11 @@ class SecurityIntegrationTest {
     void shouldReadPasswordFromCredentialFile() throws Exception {
         Path credFile = tempDir.resolve("valid-creds.txt");
         Files.writeString(credFile, "secure-password");
-        
-        CredentialProvider provider = new CredentialProvider();
-        String password = provider.resolvePassword(null, "NON_EXISTENT", credFile, false);
-        
+        setUnixPermissions(credFile);
+
+        CredentialProvider provider = new CredentialProvider(null, "NON_EXISTENT", credFile, false);
+        String password = provider.resolvePassword();
+
         assertThat(password).isEqualTo("secure-password");
     }
 
@@ -259,11 +265,22 @@ class SecurityIntegrationTest {
     void shouldPrioritizeEnvironmentVariableOverFile() throws Exception {
         Path credFile = tempDir.resolve("creds.txt");
         Files.writeString(credFile, "file-password");
-        
-        CredentialProvider provider = new CredentialProvider();
-        String password = provider.resolvePassword(null, "PATH", credFile, false); // PATH exists
-        
+        setUnixPermissions(credFile);
+
+        CredentialProvider provider = new CredentialProvider(null, "PATH", credFile, false); // PATH exists
+        String password = provider.resolvePassword();
+
         assertThat(password).isNotEqualTo("file-password");
         assertThat(password).isNotNull();
+    }
+
+    private void setUnixPermissions(Path file) throws Exception {
+        if (!System.getProperty("os.name").toLowerCase().contains("win")) {
+            Files.setPosixFilePermissions(file,
+                java.util.Set.of(
+                    java.nio.file.attribute.PosixFilePermission.OWNER_READ,
+                    java.nio.file.attribute.PosixFilePermission.OWNER_WRITE
+                ));
+        }
     }
 }

@@ -37,13 +37,14 @@ class AuditLoggerTest {
         
         String entry = lines.get(0);
         String[] parts = entry.split("\\|");
-        assertThat(parts).hasSize(6);
+        assertThat(parts).hasSize(7);
         assertThat(parts[0]).matches("\\d{4}-\\d{2}-\\d{2}T.*"); // Timestamp
         assertThat(parts[1]).isNotEmpty(); // Username
         assertThat(parts[2]).contains("jdbc:postgresql://localhost/db"); // JDBC URL
-        assertThat(parts[3]).hasSize(16); // Query hash (truncated to 16 chars)
-        assertThat(parts[4]).isEqualTo("100"); // Row count
-        assertThat(parts[5]).isEqualTo("/tmp/output.csv"); // Output file
+        assertThat(parts[3]).contains("SELECT * FROM users"); // Query
+        assertThat(parts[4]).hasSize(16); // Query hash (truncated to 16 chars)
+        assertThat(parts[5]).isEqualTo("100"); // Row count
+        assertThat(parts[6]).isEqualTo("/tmp/output.csv"); // Output file
     }
 
     @Test
@@ -95,8 +96,8 @@ class AuditLoggerTest {
         logger.logExport("jdbc:postgresql://localhost/db", "SELECT * FROM orders", 200, "/tmp/orders.csv");
         
         List<String> lines = Files.readAllLines(auditLog);
-        String hash1 = lines.get(0).split("\\|")[3];
-        String hash2 = lines.get(1).split("\\|")[3];
+        String hash1 = lines.get(0).split("\\|")[4];
+        String hash2 = lines.get(1).split("\\|")[4];
         
         assertThat(hash1).isNotEqualTo(hash2);
     }
@@ -112,8 +113,8 @@ class AuditLoggerTest {
         logger.logExport("jdbc:postgresql://localhost/db", query, 100, "/tmp/output2.csv");
         
         List<String> lines = Files.readAllLines(auditLog);
-        String hash1 = lines.get(0).split("\\|")[3];
-        String hash2 = lines.get(1).split("\\|")[3];
+        String hash1 = lines.get(0).split("\\|")[4];
+        String hash2 = lines.get(1).split("\\|")[4];
         
         assertThat(hash1).isEqualTo(hash2);
     }

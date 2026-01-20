@@ -1,67 +1,76 @@
 package io.pockethive.tools.sqltocsv;
 
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVPrinter;
+
+import java.io.BufferedWriter;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
 
 /**
- * Handles CSV formatting logic.
+ * Writes ResultSet data to CSV files.
  * Follows Single Responsibility Principle - only handles CSV writing.
  */
-public class CsvWriter {
+class CsvWriter {
     
-    private final String delimiter;
-    private final String nullValue;
+    private final SqlExportConfig config;
     
-    public CsvWriter(String delimiter, String nullValue) {
-        this.delimiter = delimiter;
-        this.nullValue = nullValue;
+    CsvWriter(SqlExportConfig config) {
+        this.config = config;
     }
     
-    public String writeHeader(ResultSetMetaData metadata) throws Exception {
-        var builder = new StringBuilder();
-        var columnCount = metadata.getColumnCount();
+    int write(ResultSet resultSet, ProgressCallback callback) throws SQLException, IOException {
+        CSVFormat csvFormat = CSVFormat.DEFAULT
+            .builder()
+            .setDelimiter(config.delimiter())
+            .setNullString(config.nullValue())
+            .build();
         
+        Path outputPath = config.outputFile().toPath();
+        try (BufferedWriter writer = Files.newBufferedWriter(outputPath, StandardCharsets.UTF_8);
+             CSVPrinter csvPrinter = new CSVPrinter(writer, csvFormat)) {
+            
+            int columnCount = resultSet.getMetaData().getColumnCount();
+            
+            if (config.includeHeader()) {
+                writeHeader(csvPrinter, resultSet, columnCount);
+            }
+            
+            return writeRows(csvPrinter, resultSet, columnCount, callback);
+        }
+    }
+    
+    private void writeHeader(CSVPrinter csvPrinter, ResultSet resultSet, int columnCount) 
+            throws SQLException, IOException {
         for (int i = 1; i <= columnCount; i++) {
-            builder.append(escapeValue(metadata.getColumnName(i)));
-            if (i < columnCount) {
-                builder.append(delimiter);
+            csvPrinter.print(resultSet.getMetaData().getColumnName(i));
+        }
+        csvPrinter.println();
+    }
+    
+    private int writeRows(CSVPrinter csvPrinter, ResultSet resultSet, int columnCount, ProgressCallback callback) 
+            throws SQLException, IOException {
+        int rowCount = 0;
+        while (resultSet.next()) {
+            for (int i = 1; i <= columnCount; i++) {
+                csvPrinter.print(resultSet.getObject(i));
+            }
+            csvPrinter.println();
+            rowCount++;
+            
+            if (callback != null) {
+                callback.onProgress(rowCount);
             }
         }
-        
-        return builder.toString();
+        return rowCount;
     }
     
-    public String writeRow(ResultSet resultSet, int columnCount) throws Exception {
-        var builder = new StringBuilder();
-        
-        for (int i = 1; i <= columnCount; i++) {
-            var value = resultSet.getObject(i);
-            builder.append(formatValue(value));
-            if (i < columnCount) {
-                builder.append(delimiter);
-            }
-        }
-        
-        return builder.toString();
-    }
-    
-    private String formatValue(Object value) {
-        if (value == null) {
-            return nullValue;
-        }
-        return escapeValue(value.toString());
-    }
-    
-    private String escapeValue(String value) {
-        if (value == null) {
-            return nullValue;
-        }
-        
-        // Escape if contains delimiter, quotes, or newlines
-        if (value.contains(delimiter) || value.contains("\"") || value.contains("\n") || value.contains("\r")) {
-            return "\"" + value.replace("\"", "\"\"") + "\"";
-        }
-        
-        return value;
+    @FunctionalInterface
+    interface ProgressCallback {
+        void onProgress(int rowCount);
     }
 }

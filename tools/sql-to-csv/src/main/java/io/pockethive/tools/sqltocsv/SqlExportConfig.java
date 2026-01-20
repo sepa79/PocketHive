@@ -1,10 +1,11 @@
 package io.pockethive.tools.sqltocsv;
 
 import java.io.File;
+import java.util.Objects;
 
 /**
- * Immutable configuration for SQL export operations.
- * Uses builder pattern for flexible construction.
+ * Immutable configuration for SQL export operations with validation.
+ * Thread-safe: All fields are final and immutable.
  */
 public record SqlExportConfig(
     String jdbcUrl,
@@ -20,6 +21,43 @@ public record SqlExportConfig(
     int bufferSizeKb
 ) {
     
+    public static final String DEFAULT_DELIMITER = ",";
+    public static final String DEFAULT_NULL_VALUE = "";
+    public static final int DEFAULT_FETCH_SIZE = 1000;
+    public static final int DEFAULT_BUFFER_SIZE_KB = 64;
+    public static final int MIN_FETCH_SIZE = 1;
+    public static final int MAX_FETCH_SIZE = 100000;
+    public static final int MIN_BUFFER_SIZE_KB = 1;
+    public static final int MAX_BUFFER_SIZE_KB = 1024;
+    
+    public SqlExportConfig {
+        Objects.requireNonNull(jdbcUrl, "JDBC URL cannot be null");
+        Objects.requireNonNull(query, "Query cannot be null");
+        Objects.requireNonNull(outputFile, "Output file cannot be null");
+        Objects.requireNonNull(delimiter, "Delimiter cannot be null");
+        Objects.requireNonNull(nullValue, "Null value cannot be null");
+        
+        if (jdbcUrl.isBlank()) {
+            throw new IllegalArgumentException("JDBC URL cannot be blank");
+        }
+        if (query.isBlank()) {
+            throw new IllegalArgumentException("Query cannot be blank");
+        }
+        if (delimiter.isEmpty()) {
+            throw new IllegalArgumentException("Delimiter cannot be empty");
+        }
+        if (fetchSize < MIN_FETCH_SIZE || fetchSize > MAX_FETCH_SIZE) {
+            throw new IllegalArgumentException(
+                "Fetch size must be between " + MIN_FETCH_SIZE + " and " + MAX_FETCH_SIZE + ", got: " + fetchSize
+            );
+        }
+        if (bufferSizeKb < MIN_BUFFER_SIZE_KB || bufferSizeKb > MAX_BUFFER_SIZE_KB) {
+            throw new IllegalArgumentException(
+                "Buffer size must be between " + MIN_BUFFER_SIZE_KB + " and " + MAX_BUFFER_SIZE_KB + " KB, got: " + bufferSizeKb
+            );
+        }
+    }
+    
     public static Builder builder() {
         return new Builder();
     }
@@ -30,12 +68,12 @@ public record SqlExportConfig(
         private String password;
         private String query;
         private File outputFile;
-        private String delimiter = ",";
+        private String delimiter = DEFAULT_DELIMITER;
         private boolean includeHeader = true;
-        private String nullValue = "";
+        private String nullValue = DEFAULT_NULL_VALUE;
         private boolean verbose = false;
-        private int fetchSize = 1000;
-        private int bufferSizeKb = 64;
+        private int fetchSize = DEFAULT_FETCH_SIZE;
+        private int bufferSizeKb = DEFAULT_BUFFER_SIZE_KB;
         
         public Builder jdbcUrl(String jdbcUrl) {
             this.jdbcUrl = jdbcUrl;

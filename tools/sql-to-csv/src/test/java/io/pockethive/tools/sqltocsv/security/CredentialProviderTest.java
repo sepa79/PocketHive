@@ -1,116 +1,86 @@
 package io.pockethive.tools.sqltocsv.security;
 
-import org.junit.jupiter.api.BeforeEach;
+import io.pockethive.tools.sqltocsv.ValidationException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.attribute.PosixFilePermission;
-import java.util.Set;
+import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.*;
 
-@DisplayName("CredentialProvider Unit Tests")
+@DisplayName("CredentialProvider Tests")
 class CredentialProviderTest {
 
-    private CredentialProvider provider;
-
-    @BeforeEach
-    void setUp() {
-        provider = new CredentialProvider();
-    }
-
     @Test
-    @DisplayName("Should return CLI password with warning")
-    void shouldReturnCliPassword() {
-        String password = provider.resolvePassword("cli-secret", "ENV_VAR", null, false);
-        assertThat(password).isEqualTo("cli-secret");
-    }
-
-    @Test
-    @DisplayName("Should prioritize environment variable over CLI")
-    void shouldPrioritizeEnvironmentVariable() {
-        String envVar = "PATH"; // Use existing env var for test
-        String password = provider.resolvePassword(null, envVar, null, false);
-        assertThat(password).isNotNull();
-    }
-
-    @Test
-    @DisplayName("Should read password from file")
-    void shouldReadPasswordFromFile(@TempDir Path tempDir) throws IOException {
-        Path credFile = tempDir.resolve("creds.txt");
-        Files.writeString(credFile, "file-secret");
+    @DisplayName("Should resolve from first available source")
+    void shouldResolveFromFirstAvailableSource() {
+        CredentialSource source1 = mockSource("source1", Optional.empty());
+        CredentialSource source2 = mockSource("source2", Optional.of("password123"));
+        CredentialSource source3 = mockSource("source3", Optional.of("password456"));
         
-        String password = provider.resolvePassword(null, "NON_EXISTENT_VAR", credFile, false);
-        assertThat(password).isEqualTo("file-secret");
+        CredentialProvider provider = new CredentialProvider(List.of(source1, source2, source3));
+        
+        assertThat(provider.resolvePassword()).isEqualTo("password123");
     }
 
     @Test
-    @DisplayName("Should trim password from file")
-    void shouldTrimPasswordFromFile(@TempDir Path tempDir) throws IOException {
-        Path credFile = tempDir.resolve("creds.txt");
-        Files.writeString(credFile, "  file-secret  \n");
+    @DisplayName("Should throw ValidationException when no source provides password")
+    void shouldThrowWhenNoSourceProvidesPassword() {
+        CredentialSource source1 = mockSource("source1", Optional.empty());
+        CredentialSource source2 = mockSource("source2", Optional.empty());
         
-        String password = provider.resolvePassword(null, "NON_EXISTENT_VAR", credFile, false);
-        assertThat(password).isEqualTo("file-secret");
-    }
-
-    @Test
-    @DisplayName("Should reject empty credential file")
-    void shouldRejectEmptyCredentialFile(@TempDir Path tempDir) throws IOException {
-        Path credFile = tempDir.resolve("creds.txt");
-        Files.writeString(credFile, "");
+        CredentialProvider provider = new CredentialProvider(List.of(source1, source2));
         
-        assertThatThrownBy(() -> 
-            provider.resolvePassword(null, "NON_EXISTENT_VAR", credFile, false))
-            .isInstanceOf(SecurityException.class)
-            .hasMessageContaining("empty");
-    }
-
-    @Test
-    @DisplayName("Should reject non-existent credential file")
-    void shouldRejectNonExistentFile(@TempDir Path tempDir) {
-        Path credFile = tempDir.resolve("non-existent.txt");
-        
-        assertThatThrownBy(() -> 
-            provider.resolvePassword(null, "NON_EXISTENT_VAR", credFile, false))
-            .isInstanceOf(IllegalStateException.class);
-    }
-
-    @Test
-    @DisplayName("Should read password from stdin")
-    void shouldReadPasswordFromStdin() {
-        System.setIn(new ByteArrayInputStream("stdin-secret\n".getBytes()));
-        
-        String password = provider.resolvePassword(null, "NON_EXISTENT_VAR", null, true);
-        assertThat(password).isEqualTo("stdin-secret");
-        
-        System.setIn(System.in); // Reset
-    }
-
-    @Test
-    @DisplayName("Should reject empty stdin password")
-    void shouldRejectEmptyStdinPassword() {
-        System.setIn(new ByteArrayInputStream("\n".getBytes()));
-        
-        assertThatThrownBy(() -> 
-            provider.resolvePassword(null, "NON_EXISTENT_VAR", null, true))
-            .isInstanceOf(SecurityException.class)
+        assertThatThrownBy(() -> provider.resolvePassword())
+            .isInstanceOf(ValidationException.class)
             .hasMessageContaining("No password provided");
-        
-        System.setIn(System.in); // Reset
     }
 
     @Test
-    @DisplayName("Should throw when no password source available")
-    void shouldThrowWhenNoPasswordSource() {
-        assertThatThrownBy(() -> 
-            provider.resolvePassword(null, "NON_EXISTENT_VAR", null, false))
-            .isInstanceOf(IllegalStateException.class)
-            .hasMessageContaining("No password provided");
+    @DisplayName("Should respect source priority order")
+    void shouldRespectSourcePriorityOrder() {
+        CredentialSource highPriority = mockSource("high", Optional.of("high-password"));
+        CredentialSource lowPriority = mockSource("low", Optional.of("low-password"));
+        
+        CredentialProvider provider = new CredentialProvider(List.of(highPriority, lowPriority));
+        
+        assertThat(provider.resolvePassword()).isEqualTo("high-password");
+    }
+
+    @Test
+    @DisplayName("Should handle empty source list")
+    void shouldHandleEmptySourceList() {
+        CredentialProvider provider = new CredentialProvider(List.of());
+        
+        assertThatThrownBy(() -> provider.resolvePassword())
+            .isInstanceOf(ValidationException.class);
+    }
+
+    @Test
+    @DisplayName("Should create immutable copy of sources")
+    void shouldCreateImmutableCopyOfSources() {
+        CredentialSource source = mockSource("test", Optional.of("password"));
+        List<CredentialSource> mutableList = new java.util.ArrayList<>();
+        mutableList.add(source);
+        
+        CredentialProvider provider = new CredentialProvider(mutableList);
+        mutableList.clear(); // Modify original list
+        
+        assertThat(provider.resolvePassword()).isEqualTo("password");
+    }
+
+    private CredentialSource mockSource(String name, Optional<String> password) {
+        return new CredentialSource() {
+            @Override
+            public Optional<String> resolve() {
+                return password;
+            }
+
+            @Override
+            public String name() {
+                return name;
+            }
+        };
     }
 }

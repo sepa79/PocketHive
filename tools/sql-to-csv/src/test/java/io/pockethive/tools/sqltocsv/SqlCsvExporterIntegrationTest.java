@@ -17,7 +17,7 @@ import static org.assertj.core.api.Assertions.*;
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class SqlCsvExporterIntegrationTest {
 
-    private static final String JDBC_URL = "jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1";
+    private static final String JDBC_URL = "jdbc:h2:mem:testdb" + System.nanoTime() + ";DB_CLOSE_DELAY=-1";
     private static final String USERNAME = "sa";
     private static final String PASSWORD = "";
 
@@ -28,7 +28,7 @@ class SqlCsvExporterIntegrationTest {
     static void setupDatabase() throws Exception {
         try (Connection conn = DriverManager.getConnection(JDBC_URL, USERNAME, PASSWORD);
              Statement stmt = conn.createStatement()) {
-            
+
             // Create test table
             stmt.execute("CREATE TABLE users (" +
                         "id INT PRIMARY KEY, " +
@@ -36,7 +36,7 @@ class SqlCsvExporterIntegrationTest {
                         "email VARCHAR(255), " +
                         "age INT, " +
                         "active BOOLEAN)");
-            
+
             // Insert test data
             stmt.execute("INSERT INTO users VALUES (1, 'John Doe', 'john@example.com', 30, true)");
             stmt.execute("INSERT INTO users VALUES (2, 'Jane Smith', 'jane@example.com', 25, true)");
@@ -51,7 +51,7 @@ class SqlCsvExporterIntegrationTest {
     @DisplayName("Should export all rows with header")
     void shouldExportAllRowsWithHeader() throws Exception {
         File outputFile = tempDir.resolve("users.csv").toFile();
-        
+
         SqlExportConfig config = SqlExportConfig.builder()
             .jdbcUrl(JDBC_URL)
             .username(USERNAME)
@@ -86,7 +86,7 @@ class SqlCsvExporterIntegrationTest {
     @DisplayName("Should export without header")
     void shouldExportWithoutHeader() throws Exception {
         File outputFile = tempDir.resolve("users-no-header.csv").toFile();
-        
+
         SqlExportConfig config = SqlExportConfig.builder()
             .jdbcUrl(JDBC_URL)
             .username(USERNAME)
@@ -100,7 +100,7 @@ class SqlCsvExporterIntegrationTest {
         ExportResult result = exporter.export();
 
         assertThat(result.rowCount()).isEqualTo(5);
-        
+
         List<String> lines = Files.readAllLines(outputFile.toPath());
         assertThat(lines).hasSize(5); // No header
         assertThat(lines.get(0)).doesNotContain("ID,NAME");
@@ -111,7 +111,7 @@ class SqlCsvExporterIntegrationTest {
     @DisplayName("Should export with WHERE clause")
     void shouldExportWithWhereClause() throws Exception {
         File outputFile = tempDir.resolve("active-users.csv").toFile();
-        
+
         SqlExportConfig config = SqlExportConfig.builder()
             .jdbcUrl(JDBC_URL)
             .username(USERNAME)
@@ -125,7 +125,7 @@ class SqlCsvExporterIntegrationTest {
         ExportResult result = exporter.export();
 
         assertThat(result.rowCount()).isEqualTo(4); // Only active users
-        
+
         List<String> lines = Files.readAllLines(outputFile.toPath());
         assertThat(lines).hasSize(5); // Header + 4 rows
     }
@@ -135,7 +135,7 @@ class SqlCsvExporterIntegrationTest {
     @DisplayName("Should export specific columns")
     void shouldExportSpecificColumns() throws Exception {
         File outputFile = tempDir.resolve("users-names.csv").toFile();
-        
+
         SqlExportConfig config = SqlExportConfig.builder()
             .jdbcUrl(JDBC_URL)
             .username(USERNAME)
@@ -150,7 +150,7 @@ class SqlCsvExporterIntegrationTest {
 
         assertThat(result.rowCount()).isEqualTo(5);
         assertThat(result.columnCount()).isEqualTo(2);
-        
+
         List<String> lines = Files.readAllLines(outputFile.toPath());
         assertThat(lines.get(0)).isEqualTo("ID,NAME");
         assertThat(lines.get(1)).doesNotContain("@example.com");
@@ -161,7 +161,7 @@ class SqlCsvExporterIntegrationTest {
     @DisplayName("Should use custom delimiter")
     void shouldUseCustomDelimiter() throws Exception {
         File outputFile = tempDir.resolve("users-tab.csv").toFile();
-        
+
         SqlExportConfig config = SqlExportConfig.builder()
             .jdbcUrl(JDBC_URL)
             .username(USERNAME)
@@ -174,7 +174,7 @@ class SqlCsvExporterIntegrationTest {
 
         SqlCsvExporter exporter = new SqlCsvExporter(config);
         exporter.export();
-        
+
         List<String> lines = Files.readAllLines(outputFile.toPath());
         assertThat(lines.get(0)).contains("\t");
         assertThat(lines.get(0)).doesNotContain(",");
@@ -185,7 +185,7 @@ class SqlCsvExporterIntegrationTest {
     @DisplayName("Should use custom NULL value")
     void shouldUseCustomNullValue() throws Exception {
         File outputFile = tempDir.resolve("users-custom-null.csv").toFile();
-        
+
         SqlExportConfig config = SqlExportConfig.builder()
             .jdbcUrl(JDBC_URL)
             .username(USERNAME)
@@ -198,7 +198,7 @@ class SqlCsvExporterIntegrationTest {
 
         SqlCsvExporter exporter = new SqlCsvExporter(config);
         exporter.export();
-        
+
         List<String> lines = Files.readAllLines(outputFile.toPath());
         assertThat(lines.get(1)).contains("N/A");
         assertThat(lines.get(1)).doesNotContain("NULL");
@@ -209,7 +209,7 @@ class SqlCsvExporterIntegrationTest {
     @DisplayName("Should handle empty result set")
     void shouldHandleEmptyResultSet() throws Exception {
         File outputFile = tempDir.resolve("empty.csv").toFile();
-        
+
         SqlExportConfig config = SqlExportConfig.builder()
             .jdbcUrl(JDBC_URL)
             .username(USERNAME)
@@ -223,7 +223,7 @@ class SqlCsvExporterIntegrationTest {
         ExportResult result = exporter.export();
 
         assertThat(result.rowCount()).isEqualTo(0);
-        
+
         List<String> lines = Files.readAllLines(outputFile.toPath());
         assertThat(lines).hasSize(1); // Only header
     }
@@ -233,7 +233,7 @@ class SqlCsvExporterIntegrationTest {
     @DisplayName("Should create output directory if not exists")
     void shouldCreateOutputDirectory() throws Exception {
         File outputFile = tempDir.resolve("subdir/nested/users.csv").toFile();
-        
+
         SqlExportConfig config = SqlExportConfig.builder()
             .jdbcUrl(JDBC_URL)
             .username(USERNAME)
@@ -254,7 +254,7 @@ class SqlCsvExporterIntegrationTest {
     @DisplayName("Should report timing metrics")
     void shouldReportTimingMetrics() throws Exception {
         File outputFile = tempDir.resolve("metrics.csv").toFile();
-        
+
         SqlExportConfig config = SqlExportConfig.builder()
             .jdbcUrl(JDBC_URL)
             .username(USERNAME)
