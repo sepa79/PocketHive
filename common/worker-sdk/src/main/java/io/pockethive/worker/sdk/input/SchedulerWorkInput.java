@@ -1,9 +1,12 @@
 package io.pockethive.worker.sdk.input;
 
 import io.pockethive.controlplane.ControlPlaneIdentity;
+import io.pockethive.observability.ObservabilityContextUtil;
 import io.pockethive.worker.sdk.api.StatusPublisher;
 import io.pockethive.worker.sdk.api.WorkItem;
+import io.pockethive.worker.sdk.api.WorkerInfo;
 import io.pockethive.worker.sdk.config.SchedulerInputProperties;
+import io.pockethive.worker.sdk.runtime.WorkIoBindings;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.runtime.WorkerRuntime;
@@ -268,11 +271,20 @@ public final class SchedulerWorkInput<C> implements WorkInput {
     private static WorkItem defaultSeed(WorkerDefinition definition, ControlPlaneIdentity identity) {
         long sequence = SEQUENCE.incrementAndGet();
         String generatedAt = Instant.now().toString();
-        return WorkItem.builder()
+        WorkIoBindings io = definition.io();
+        WorkerInfo info = new WorkerInfo(
+            definition.role(),
+            identity.swarmId(),
+            identity.instanceId(),
+            io.inboundQueue(),
+            io.outboundQueue()
+        );
+        return WorkItem.text(info, "")
             .header("swarmId", identity.swarmId())
             .header("instanceId", identity.instanceId())
             .header("x-ph-seq", sequence)
             .header("generatedAt", generatedAt)
+            .observabilityContext(ObservabilityContextUtil.init(info.role(), info.instanceId(), info.swarmId()))
             .build();
     }
 

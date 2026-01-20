@@ -55,7 +55,7 @@ public final class TemplatingInterceptor implements WorkerInvocationInterceptor 
         templateContext.put("workItem", current);
 
         String rendered = renderer.render(template, templateContext);
-        WorkItem updated = current.addStepPayload(rendered);
+        WorkItem updated = current.addStepPayload(context.workerContext().info(), rendered);
         context.message(updated);
         return chain.proceed(context);
     }

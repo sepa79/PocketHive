@@ -13,8 +13,8 @@ TemplateInterceptor, HTTP Builder, and other components.
 When a template is rendered, the context contains at least:
 
 - `payload` – current step payload. Parsed as Map when valid JSON, otherwise string.
-- `headers` – map of current step headers.
-- `workItem` – full `WorkItem` object (steps, headers, payloads).
+- `headers` – map of global WorkItem headers (top-level).
+- `workItem` – full `WorkItem` object (steps, step headers, payloads).
 
 Generators and interceptors may add more fields, but these three are
 always available.
@@ -25,7 +25,7 @@ Example:
 body: |
   {
     "raw": "{{ payload }}",
-    "messageId": "{{ headers['message-id'] }}"
+    "messageId": "{{ workItem.messageId }}"
   }
 ```
 
@@ -47,8 +47,8 @@ variables is available.
 ### Root variables
 
 - `payload` – raw payload string.
-- `headers` – map of headers.
-- `workItem` – full `WorkItem` instance (steps, payloads, headers).
+- `headers` – map of global WorkItem headers (top-level).
+- `workItem` – full `WorkItem` instance (steps, step headers, payloads).
 
 ### Functions
 

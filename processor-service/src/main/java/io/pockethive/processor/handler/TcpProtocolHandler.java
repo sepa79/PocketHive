@@ -132,8 +132,8 @@ public class TcpProtocolHandler implements ProtocolHandler {
       result.put("status", response.status());
       result.put("body", new String(response.body(), StandardCharsets.UTF_8));
 
-      WorkItem responseItem = ResponseBuilder.build(result, context.info().role(), metrics);
-      return message.addStep(responseItem.asString(), responseItem.headers());
+      WorkItem responseItem = ResponseBuilder.build(result, context.info(), metrics);
+      return message.addStep(context.info(), responseItem.asString(), responseItem.stepHeaders());
     } catch (Exception ex) {
       long now = clock.millis();
       long totalDuration = Math.max(0L, now - start);

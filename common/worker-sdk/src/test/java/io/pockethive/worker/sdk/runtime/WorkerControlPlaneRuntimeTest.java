@@ -12,6 +12,7 @@ import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.observability.ObservabilityContextUtil;
 import io.pockethive.observability.StatusEnvelopeBuilder;
 import io.pockethive.worker.sdk.api.WorkItem;
+import io.pockethive.worker.sdk.api.WorkerInfo;
 import io.pockethive.worker.sdk.config.WorkInputConfig;
 import io.pockethive.worker.sdk.config.WorkOutputConfig;
 import io.pockethive.worker.sdk.config.WorkerCapability;
@@ -282,8 +283,9 @@ class WorkerControlPlaneRuntimeTest {
     @Test
     void publishWorkErrorEmitsRuntimeExceptionAlertWithContext() {
         ObservabilityContext trace = ObservabilityContextUtil.init("worker", IDENTITY.instanceId(), IDENTITY.swarmId());
-        WorkItem item = WorkItem.text("payload")
-            .header("message-id", "mid-1")
+        WorkerInfo info = new WorkerInfo("worker", IDENTITY.swarmId(), IDENTITY.instanceId(), null, null);
+        WorkItem item = WorkItem.text(info, "payload")
+            .messageId("mid-1")
             .header("x-ph-call-id", "redis-auth")
             .observabilityContext(trace)
             .build();

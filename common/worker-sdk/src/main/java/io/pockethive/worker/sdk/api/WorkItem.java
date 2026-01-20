@@ -160,8 +160,8 @@ public final class WorkItem {
     /**
      * Adds a new step with the given payload and per-step headers.
      * <p>
-     * The caller sees the updated payload and merged headers via {@link #asString()} and {@link #headers()},
-     * while {@link #steps()} exposes the full history (initial step plus appended steps).
+     * The caller sees the updated payload via {@link #asString()} while {@link #steps()} exposes the full
+     * history (initial step plus appended steps). Per-step headers are available via {@link #stepHeaders()}.
      */
     public WorkItem addStep(String payload, Map<String, Object> stepHeaders) {
         return addStep(payload, WorkPayloadEncoding.UTF_8, stepHeaders);
@@ -194,7 +194,7 @@ public final class WorkItem {
     }
 
     /**
-     * Adds or removes a header on the current step and message.
+     * Adds or removes a header on the current step.
      * <p>
      * Passing {@code null} as the value clears the header.
      */
@@ -245,7 +245,7 @@ public final class WorkItem {
      * <ul>
      *   <li>{@link HistoryPolicy#FULL} – returns this instance unchanged.</li>
      *   <li>{@link HistoryPolicy#LATEST_ONLY} – equivalent to {@link #clearHistory()}.</li>
-     *   <li>{@link HistoryPolicy#DISABLED} – returns a view with the same body/headers but no recorded steps.</li>
+     *   <li>{@link HistoryPolicy#DISABLED} – returns a view with the same body/headers but no prior history.</li>
      * </ul>
      */
     public WorkItem applyHistoryPolicy(HistoryPolicy policy) {
@@ -430,7 +430,7 @@ public final class WorkItem {
         }
 
         /**
-         * Associates an {@link ObservabilityContext} with the item and synchronises the corresponding header.
+         * Associates an {@link ObservabilityContext} with the item.
          */
         public Builder observabilityContext(ObservabilityContext context) {
             this.observabilityContext = context;

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
 import io.pockethive.worker.sdk.api.WorkItem;
+import io.pockethive.worker.sdk.api.WorkStep;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
 import io.pockethive.worker.sdk.config.WorkerCapability;
@@ -112,12 +113,15 @@ class HttpBuilderWorkerImpl implements PocketHiveWorkerFunction {
       envelope.set("headers", MAPPER.valueToTree(rendered.headers()));
       envelope.put("body", rendered.body());
 
-      WorkItem httpItem = WorkItem.json(envelope)
-          .header("content-type", "application/json")
-          .header("x-ph-service", context.info().role())
+      WorkItem httpItem = WorkItem.json(context.info(), envelope)
+          .contentType("application/json")
           .build();
 
-      WorkItem result = seed.addStep(httpItem.asString(), httpItem.headers());
+      WorkStep step = lastStep(httpItem);
+      WorkItem result = seed.toBuilder()
+          .contentType(httpItem.contentType())
+          .step(context.info(), step.payload(), step.payloadEncoding(), step.headers())
+          .build();
       publishStatus(context, config);
       return result;
     } catch (Exception ex) {
@@ -260,5 +264,16 @@ class HttpBuilderWorkerImpl implements PocketHiveWorkerFunction {
         .replace("\n", "\\n")
         .replace("\t", "\\t");
     return '"' + sanitized + '"';
+  }
+
+  private WorkStep lastStep(WorkItem item) {
+    WorkStep last = null;
+    for (WorkStep step : item.steps()) {
+      last = step;
+    }
+    if (last == null) {
+      throw new IllegalStateException("HTTP Builder produced a WorkItem without steps");
+    }
+    return last;
   }
 }

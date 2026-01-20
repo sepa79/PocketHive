@@ -108,7 +108,7 @@ class PostProcessorWorkerImpl implements PocketHiveWorkerFunction {
         Objects.requireNonNull(context.observabilityContext(), "observabilityContext");
     appendTerminalHop(context, observability);
     LatencyMeasurements measurements = measureLatency(observability);
-    ProcessorCallStats processorStats = extractProcessorStats(in.headers());
+    ProcessorCallStats processorStats = extractProcessorStats(in.stepHeaders());
     boolean error = isError(in.headers().get(ERROR_HEADER));
 
     PostProcessorMetrics metrics = metrics(context);

@@ -1,7 +1,10 @@
 package io.pockethive.worker.sdk.transport.rabbit;
 
 import io.pockethive.controlplane.ControlPlaneIdentity;
+import io.pockethive.observability.ObservabilityContext;
+import io.pockethive.observability.ObservabilityContextUtil;
 import io.pockethive.worker.sdk.api.WorkItem;
+import io.pockethive.worker.sdk.api.WorkerInfo;
 import io.pockethive.worker.sdk.config.WorkInputConfig;
 import io.pockethive.worker.sdk.config.WorkOutputConfig;
 import io.pockethive.worker.sdk.config.WorkerCapability;
@@ -131,10 +134,10 @@ class RabbitMessageWorkerAdapterTest {
     void onWorkDispatchesAndPublishesMessageResults() throws Exception {
         RabbitMessageWorkerAdapter adapter = builder().build();
         RabbitWorkItemConverter converter = new RabbitWorkItemConverter();
-        Message inbound = converter.toMessage(WorkItem.text("payload").build());
+        Message inbound = converter.toMessage(workItem("payload"));
 
         when(dispatcher.dispatch(any(WorkItem.class)))
-            .thenReturn(WorkItem.text("processed").build());
+            .thenReturn(workItem("processed"));
 
         adapter.onWork(inbound);
 
@@ -153,7 +156,7 @@ class RabbitMessageWorkerAdapterTest {
     void onWorkErrorsDelegateToErrorHandler() throws Exception {
         RabbitMessageWorkerAdapter adapter = builder().build();
         RabbitWorkItemConverter converter = new RabbitWorkItemConverter();
-        Message inbound = converter.toMessage(WorkItem.text("payload").build());
+        Message inbound = converter.toMessage(workItem("payload"));
         RuntimeException failure = new RuntimeException("boom");
         doThrow(failure).when(dispatcher).dispatch(any(WorkItem.class));
 
@@ -180,7 +183,7 @@ class RabbitMessageWorkerAdapterTest {
     void onWorkPublishesAlertWhenDispatcherThrowsAndNoCustomHandlerConfigured() throws Exception {
         RabbitMessageWorkerAdapter adapter = baseBuilderWithoutErrorHandler().rabbitTemplate(rabbitTemplate).build();
         RabbitWorkItemConverter converter = new RabbitWorkItemConverter();
-        Message inbound = converter.toMessage(WorkItem.text("payload").header("message-id", "mid-1").build());
+        Message inbound = converter.toMessage(workItem("payload").toBuilder().messageId("mid-1").build());
         RuntimeException failure = new RuntimeException("boom");
         doThrow(failure).when(dispatcher).dispatch(any(WorkItem.class));
 
@@ -196,10 +199,10 @@ class RabbitMessageWorkerAdapterTest {
             .messageResultPublisher(resultPublisher)
             .build();
         RabbitWorkItemConverter converter = new RabbitWorkItemConverter();
-        Message inbound = converter.toMessage(WorkItem.text("payload").build());
+        Message inbound = converter.toMessage(workItem("payload"));
 
         when(dispatcher.dispatch(any(WorkItem.class)))
-            .thenReturn(WorkItem.text("processed").build());
+            .thenReturn(workItem("processed"));
 
         adapter.onWork(inbound);
 
@@ -319,10 +322,10 @@ class RabbitMessageWorkerAdapterTest {
 
         RabbitMessageWorkerAdapter adapter = builderWithoutTemplate().build();
         RabbitWorkItemConverter converter = new RabbitWorkItemConverter();
-        Message inbound = converter.toMessage(WorkItem.text("payload").build());
+        Message inbound = converter.toMessage(workItem("payload"));
 
         when(dispatcher.dispatch(any(WorkItem.class)))
-            .thenReturn(WorkItem.text("processed").build());
+            .thenReturn(workItem("processed"));
 
         adapter.onWork(inbound);
 
@@ -348,10 +351,10 @@ class RabbitMessageWorkerAdapterTest {
 
         RabbitMessageWorkerAdapter adapter = builderWithoutTemplate().build();
         RabbitWorkItemConverter converter = new RabbitWorkItemConverter();
-        Message inbound = converter.toMessage(WorkItem.text("payload").build());
+        Message inbound = converter.toMessage(workItem("payload"));
 
         when(dispatcher.dispatch(any(WorkItem.class)))
-            .thenReturn(WorkItem.text("processed").build());
+            .thenReturn(workItem("processed"));
 
         adapter.onWork(inbound);
 
@@ -388,6 +391,20 @@ class RabbitMessageWorkerAdapterTest {
             .defaultConfigSupplier(() -> defaults)
             .desiredStateResolver(WorkerControlPlaneRuntime.WorkerStateSnapshot::enabled)
             .dispatcher(dispatcher);
+    }
+
+    private WorkItem workItem(String payload) {
+        WorkerInfo info = new WorkerInfo(
+            workerDefinition.role(),
+            identity.swarmId(),
+            identity.instanceId(),
+            null,
+            null
+        );
+        ObservabilityContext observability = ObservabilityContextUtil.init(info.role(), info.instanceId(), info.swarmId());
+        return WorkItem.text(info, payload)
+            .observabilityContext(observability)
+            .build();
     }
 
     private RabbitMessageWorkerAdapter.Builder builder() {

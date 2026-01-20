@@ -56,10 +56,11 @@ class AuthTokenHolderTest {
         );
 
         AuthConfig config = new AuthConfig("test-strategy", "token-key", 60, 10, Map.of());
-        WorkItem item = WorkItem.text("payload").build();
+        TestWorkerContext context = new TestWorkerContext();
+        WorkItem item = WorkItem.text(context.info(), "payload").build();
 
         try {
-            generator.generate(new TestWorkerContext(), config, item);
+            generator.generate(context, config, item);
             assertThat(AuthTokenHolder.getToken("token-key")).isEqualTo("cached-token");
         } finally {
             AuthTokenHolder.clear();

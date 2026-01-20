@@ -11,7 +11,8 @@ class WorkItemTest {
 
     @Test
     void singleStepViewForLegacyItems() {
-        WorkItem item = WorkItem.text("payload")
+        WorkerInfo info = testInfo();
+        WorkItem item = WorkItem.text(info, "payload")
             .header("h", "v")
             .build();
 
@@ -20,17 +21,22 @@ class WorkItemTest {
         WorkStep step = steps.get(0);
         assertThat(step.index()).isEqualTo(0);
         assertThat(step.payload()).isEqualTo("payload");
-        assertThat(step.headers()).containsEntry("h", "v");
+        assertThat(step.headers())
+            .containsEntry(WorkItem.STEP_SERVICE_HEADER, info.role())
+            .containsEntry(WorkItem.STEP_INSTANCE_HEADER, info.instanceId());
+        assertThat(step.headers()).doesNotContainKey("h");
+        assertThat(item.headers()).containsEntry("h", "v");
         assertThat(item.previousPayload()).isEmpty();
     }
 
     @Test
     void addStepPayloadAppendsAndPreservesPrevious() {
-        WorkItem base = WorkItem.text("first")
+        WorkerInfo info = testInfo();
+        WorkItem base = WorkItem.text(info, "first")
             .header("h", "v")
             .build();
 
-        WorkItem updated = base.addStepPayload("second");
+        WorkItem updated = base.addStepPayload(info, "second");
 
         assertThat(updated.asString()).isEqualTo("second");
         assertThat(updated.previousPayload()).contains("first");
@@ -39,10 +45,10 @@ class WorkItemTest {
         assertThat(steps).hasSize(2);
         assertThat(steps.get(0).payload()).isEqualTo("first");
         assertThat(steps.get(0).index()).isEqualTo(0);
-        assertThat(steps.get(0).headers()).containsEntry("h", "v");
+        assertThat(steps.get(0).headers()).containsEntry(WorkItem.STEP_SERVICE_HEADER, info.role());
         assertThat(steps.get(1).payload()).isEqualTo("second");
         assertThat(steps.get(1).index()).isEqualTo(1);
-        assertThat(steps.get(1).headers()).containsEntry("h", "v");
+        assertThat(steps.get(1).headers()).containsEntry(WorkItem.STEP_SERVICE_HEADER, info.role());
 
         // original item remains unchanged
         assertThat(base.asString()).isEqualTo("first");
@@ -51,31 +57,33 @@ class WorkItemTest {
 
     @Test
     void addStepMergesHeadersIntoNewStep() {
-        WorkItem base = WorkItem.text("one")
+        WorkerInfo info = testInfo();
+        WorkItem base = WorkItem.text(info, "one")
             .header("a", "1")
             .build();
 
-        WorkItem updated = base.addStep("two", Map.of("b", "2"));
+        WorkItem updated = base.addStep(info, "two", Map.of("b", "2"));
 
         assertThat(updated.asString()).isEqualTo("two");
         assertThat(updated.headers())
             .containsEntry("a", "1")
-            .containsEntry("b", "2");
+            .doesNotContainKey("b");
 
         List<WorkStep> steps = steps(updated);
         assertThat(steps).hasSize(2);
         assertThat(steps.get(0).payload()).isEqualTo("one");
-        assertThat(steps.get(0).headers()).containsEntry("a", "1");
+        assertThat(steps.get(0).headers()).containsEntry(WorkItem.STEP_SERVICE_HEADER, info.role());
         assertThat(steps.get(1).payload()).isEqualTo("two");
         assertThat(steps.get(1).headers())
-            .containsEntry("a", "1")
+            .containsEntry(WorkItem.STEP_SERVICE_HEADER, info.role())
             .containsEntry("b", "2");
     }
 
     @Test
     void addStepHeaderUpdatesCurrentStepOnly() {
-        WorkItem base = WorkItem.text("one").build();
-        WorkItem withSecond = base.addStepPayload("two");
+        WorkerInfo info = testInfo();
+        WorkItem base = WorkItem.text(info, "one").build();
+        WorkItem withSecond = base.addStepPayload(info, "two");
 
         WorkItem updated = withSecond.addStepHeader("x", "1");
 
@@ -87,10 +95,11 @@ class WorkItemTest {
 
     @Test
     void clearHistoryKeepsLatestStepOnly() {
-        WorkItem item = WorkItem.text("first")
+        WorkerInfo info = testInfo();
+        WorkItem item = WorkItem.text(info, "first")
             .build()
-            .addStepPayload("second")
-            .addStepPayload("third");
+            .addStepPayload(info, "second")
+            .addStepPayload(info, "third");
 
         WorkItem cleared = item.clearHistory();
 
@@ -106,9 +115,10 @@ class WorkItemTest {
 
     @Test
     void applyHistoryPolicyControlsRecordedSteps() {
-        WorkItem item = WorkItem.text("first")
+        WorkerInfo info = testInfo();
+        WorkItem item = WorkItem.text(info, "first")
             .build()
-            .addStepPayload("second");
+            .addStepPayload(info, "second");
 
         WorkItem full = item.applyHistoryPolicy(HistoryPolicy.FULL);
         assertThat(steps(full)).hasSize(2);
@@ -126,5 +136,9 @@ class WorkItemTest {
 
     private static List<WorkStep> steps(WorkItem item) {
         return StreamSupport.stream(item.steps().spliterator(), false).toList();
+    }
+
+    private static WorkerInfo testInfo() {
+        return new WorkerInfo("test", "swarm", "instance", null, null);
     }
 }

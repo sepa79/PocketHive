@@ -42,7 +42,7 @@ class TemplatingInterceptorTest {
         WorkerState state = new WorkerState(DEFINITION);
         state.setStatusPublisher(new WorkerStatusPublisher(state, () -> { }, () -> { }));
         WorkerContext context = workerContext(state);
-        WorkItem original = WorkItem.text("payload").build();
+        WorkItem original = WorkItem.text(context.info(), "payload").build();
         WorkerInvocationContext invocationContext = new WorkerInvocationContext(
             DEFINITION,
             state,
@@ -65,7 +65,7 @@ class TemplatingInterceptorTest {
         WorkerState state = new WorkerState(DEFINITION);
         state.setStatusPublisher(new WorkerStatusPublisher(state, () -> { }, () -> { }));
         WorkerContext context = workerContext(state);
-        WorkItem original = WorkItem.text("hello").build();
+        WorkItem original = WorkItem.text(context.info(), "hello").build();
         WorkerInvocationContext invocationContext = new WorkerInvocationContext(
             DEFINITION,
             state,
@@ -91,7 +91,7 @@ class TemplatingInterceptorTest {
         WorkerState state = new WorkerState(DEFINITION);
         state.setStatusPublisher(new WorkerStatusPublisher(state, () -> { }, () -> { }));
         WorkerContext context = workerContext(state);
-        WorkItem original = WorkItem.text("{\"col0\":\"value0\",\"col1\":\"value1\"}").build();
+        WorkItem original = WorkItem.text(context.info(), "{\"col0\":\"value0\",\"col1\":\"value1\"}").build();
         WorkerInvocationContext invocationContext = new WorkerInvocationContext(
             DEFINITION,
             state,
@@ -163,4 +163,3 @@ class TemplatingInterceptorTest {
         };
     }
 }
-

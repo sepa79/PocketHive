@@ -58,11 +58,11 @@ Notes:
    - Audit for any ad-hoc envelope builders/parsers; remove or route through the codec.
 
 ## Tracking checklist
-- [ ] Runtime adds `ph.step.service` + `ph.step.instance` to every step header.
-- [ ] WorkItem builder no longer auto-seeds step 0; first step must be explicit.
-- [ ] Worker implementations stop writing `x-ph-service` into WorkItem headers.
-- [ ] E2E verifies tracking headers per step + no `x-ph-service` in steps.
-- [ ] E2E verifies `x-ph-service` is absent from message headers.
+- [x] Runtime adds `ph.step.service` + `ph.step.instance` to every step header.
+- [x] WorkItem builder no longer auto-seeds step 0; first step must be explicit.
+- [x] Worker implementations stop writing `x-ph-service` into WorkItem headers.
+- [x] E2E verifies tracking headers per step + no `x-ph-service` in steps.
+- [x] E2E verifies `x-ph-service` is absent from message headers.
 
 ## Decisions locked
 - Binary payloads supported via `payloadEncoding=base64`.

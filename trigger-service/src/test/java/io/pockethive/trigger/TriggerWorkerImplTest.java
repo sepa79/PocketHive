@@ -79,7 +79,7 @@ class TriggerWorkerImplTest {
     );
     WorkerContext context = new TestWorkerContext(config, logger);
 
-    WorkItem result = worker.onMessage(WorkItem.builder().build(), context);
+    WorkItem result = worker.onMessage(WorkItem.text(context.info(), "").build(), context);
 
     assertThat(result).isNull();
     ArgumentCaptor<HttpRequest> requestCaptor = ArgumentCaptor.forClass(HttpRequest.class);
@@ -92,7 +92,7 @@ class TriggerWorkerImplTest {
   @Test
   void fallsBackToDefaultsWhenConfigMissing() {
     WorkerContext context = new TestWorkerContext(null, logger);
-    WorkItem result = worker.onMessage(WorkItem.builder().build(), context);
+    WorkItem result = worker.onMessage(WorkItem.text(context.info(), "").build(), context);
     assertThat(result).isNull();
   }
 

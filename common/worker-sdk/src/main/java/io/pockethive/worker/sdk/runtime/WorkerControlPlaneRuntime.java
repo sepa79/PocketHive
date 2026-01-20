@@ -203,9 +203,8 @@ public final class WorkerControlPlaneRuntime {
         Map<String, Object> context = new LinkedHashMap<>();
         context.put("worker", workerBeanName);
 
-        Object messageId = workItem.headers().get("message-id");
-        if (messageId != null) {
-            context.put("messageId", String.valueOf(messageId));
+        if (workItem.messageId() != null) {
+            context.put("messageId", workItem.messageId());
         }
         Object callId = workItem.headers().get("x-ph-call-id");
         if (callId != null) {

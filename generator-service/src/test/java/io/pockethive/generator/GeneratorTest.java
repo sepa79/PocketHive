@@ -70,9 +70,7 @@ class GeneratorTest {
     assertThat(payload.path("method").asText()).isEqualTo("PUT");
     assertThat(payload.path("body").asText()).isEqualTo("{\"value\":42}");
     assertThat(payload.path("headers").path("X-Custom").asText()).isEqualTo("yes");
-    assertThat(result.headers())
-        .containsEntry("content-type", MessageProperties.CONTENT_TYPE_JSON)
-        .containsEntry("x-ph-service", "generator");
+    assertThat(result.contentType()).isEqualTo(MessageProperties.CONTENT_TYPE_JSON);
   }
 
   @Test
@@ -146,6 +144,7 @@ class GeneratorTest {
   }
 
   private static WorkItem seedMessage() {
-    return WorkItem.builder().build();
+    WorkerInfo info = new WorkerInfo("ingress", "swarm", "instance", null, null);
+    return WorkItem.text(info, "").build();
   }
 }

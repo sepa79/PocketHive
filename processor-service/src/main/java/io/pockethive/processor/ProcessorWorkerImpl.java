@@ -101,12 +101,12 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
     } catch (ProcessorCallException ex) {
       String message = ex.getCause() != null ? ex.getCause().getMessage() : ex.getMessage();
       logger.warn("Processor request failed: {}", ex.getCause() != null ? ex.getCause().toString() : ex.toString(), ex);
-      WorkItem error = buildError(in, message, ex.metrics(), context.info().role());
+      WorkItem error = buildError(in, message, ex.metrics(), context);
       publishStatus(context, config);
       return error;
     } catch (Exception ex) {
       logger.warn("Processor request failed: {}", ex.toString(), ex);
-      WorkItem error = buildError(in, ex.toString(), CallMetrics.failure(0L, 0L, -1), context.info().role());
+      WorkItem error = buildError(in, ex.toString(), CallMetrics.failure(0L, 0L, -1), context);
       publishStatus(context, config);
       return error;
     }
@@ -123,11 +123,11 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
     return handler.invoke(message, envelope, config, context);
   }
 
-  private WorkItem buildError(WorkItem in, String message, CallMetrics metrics, String role) {
+  private WorkItem buildError(WorkItem in, String message, CallMetrics metrics, WorkerContext context) {
     ObjectNode result = mapper.createObjectNode();
     result.put("error", message);
-    WorkItem errorItem = ResponseBuilder.build(result, role, metrics);
-    return in.addStep(errorItem.asString(), errorItem.headers());
+    WorkItem errorItem = ResponseBuilder.build(result, context.info(), metrics);
+    return in.addStep(context.info(), errorItem.asString(), errorItem.stepHeaders());
   }
 
   private void publishStatus(WorkerContext context, ProcessorWorkerConfig config) {

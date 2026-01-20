@@ -25,6 +25,7 @@ class HttpBuilderWorkerImplTest {
 
   private static final WorkerControlPlaneProperties WORKER_PROPERTIES =
       ControlPlaneTestFixtures.workerProperties("swarm", "http-builder", "instance");
+  private static final WorkerInfo SEED_INFO = new WorkerInfo("ingress", "swarm", "instance", null, null);
 
   private HttpBuilderWorkerProperties properties;
   private TemplateRenderer templateRenderer;
@@ -61,7 +62,7 @@ class HttpBuilderWorkerImplTest {
     HttpBuilderWorkerImpl worker =
         new HttpBuilderWorkerImpl(properties, templateRenderer, new HttpTemplateLoader());
 
-    WorkItem seed = WorkItem.text("body").header("x-ph-call-id", "simple").build();
+    WorkItem seed = WorkItem.text(SEED_INFO, "body").header("x-ph-call-id", "simple").build();
     HttpBuilderWorkerConfig config = new HttpBuilderWorkerConfig(
         dir.toString(), "default", true);
     WorkerContext context = new TestWorkerContext(config);
@@ -69,7 +70,7 @@ class HttpBuilderWorkerImplTest {
     WorkItem result = worker.onMessage(seed, context);
 
     assertThat(result).isNotNull();
-    assertThat(result.headers()).containsEntry("x-ph-service", "http-builder");
+    assertThat(result.contentType()).isEqualTo("application/json");
 
     JsonNode envelope = new ObjectMapper().readTree(result.asString());
     assertThat(envelope.get("path").asText()).isEqualTo("/test");
@@ -89,7 +90,7 @@ class HttpBuilderWorkerImplTest {
     HttpBuilderWorkerImpl worker =
         new HttpBuilderWorkerImpl(properties, templateRenderer, new HttpTemplateLoader());
 
-    WorkItem seed = WorkItem.text("body").build();
+    WorkItem seed = WorkItem.text(SEED_INFO, "body").build();
     HttpBuilderWorkerConfig config = new HttpBuilderWorkerConfig(
         dir.toString(), "default", false);
     WorkerContext context = new TestWorkerContext(config);
@@ -111,7 +112,7 @@ class HttpBuilderWorkerImplTest {
     HttpBuilderWorkerImpl worker =
         new HttpBuilderWorkerImpl(properties, templateRenderer, new HttpTemplateLoader());
 
-    WorkItem seed = WorkItem.text("body").header("x-ph-call-id", "unknown").build();
+    WorkItem seed = WorkItem.text(SEED_INFO, "body").header("x-ph-call-id", "unknown").build();
     HttpBuilderWorkerConfig config = new HttpBuilderWorkerConfig(
         dir.toString(), "default", true);
     WorkerContext context = new TestWorkerContext(config);
@@ -158,7 +159,7 @@ class HttpBuilderWorkerImplTest {
     HttpBuilderWorkerImpl worker =
         new HttpBuilderWorkerImpl(properties, templateRenderer, new HttpTemplateLoader());
 
-    WorkItem seed = WorkItem.text("body").header("x-ph-call-id", "simple").build();
+    WorkItem seed = WorkItem.text(SEED_INFO, "body").header("x-ph-call-id", "simple").build();
 
     // First call uses dir1 config.
     HttpBuilderWorkerConfig config1 = new HttpBuilderWorkerConfig(

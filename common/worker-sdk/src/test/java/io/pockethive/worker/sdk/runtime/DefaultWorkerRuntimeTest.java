@@ -57,7 +57,9 @@ class DefaultWorkerRuntimeTest {
         state.setStatusPublisher(new WorkerStatusPublisher(state, () -> { }, () -> { }));
         state.updateConfig(null, false, Boolean.TRUE);
 
-        WorkItem result = runtime.dispatch("testWorker", WorkItem.text("payload").build());
+        WorkIoBindings io = definition.io();
+        WorkerInfo info = new WorkerInfo(definition.role(), "swarm", "instance", io.inboundQueue(), io.outboundQueue());
+        WorkItem result = runtime.dispatch("testWorker", WorkItem.text(info, "payload").build());
 
         assertThat(result).isNotNull();
         verify(outputRegistry).publish(eq(result), eq(definition));

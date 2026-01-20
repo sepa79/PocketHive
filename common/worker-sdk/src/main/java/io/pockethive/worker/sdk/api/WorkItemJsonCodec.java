@@ -26,6 +26,7 @@ public final class WorkItemJsonCodec {
             .orElseThrow(() -> new IllegalStateException("WorkItem must include observability context"));
         List<WorkItemStepEnvelope> steps = new ArrayList<>();
         for (WorkStep step : item.steps()) {
+            validateStepHeaders(step.headers());
             steps.add(new WorkItemStepEnvelope(
                 step.index(),
                 step.payload(),
@@ -69,6 +70,7 @@ public final class WorkItemJsonCodec {
         }
         List<WorkStep> decodedSteps = new ArrayList<>();
         for (WorkItemStepEnvelope step : steps) {
+            validateStepHeaders(step.headers());
             decodedSteps.add(new WorkStep(
                 step.index(),
                 step.payload(),
@@ -83,5 +85,16 @@ public final class WorkItemJsonCodec {
             .observabilityContext(envelope.observability())
             .steps(decodedSteps)
             .build();
+    }
+
+    private static void validateStepHeaders(Map<String, Object> headers) {
+        if (headers == null) {
+            throw new IllegalStateException("WorkItem step headers must be present");
+        }
+        if (!headers.containsKey(WorkItem.STEP_SERVICE_HEADER) || !headers.containsKey(WorkItem.STEP_INSTANCE_HEADER)) {
+            throw new IllegalStateException(
+                "WorkItem step headers must include " + WorkItem.STEP_SERVICE_HEADER + " and "
+                    + WorkItem.STEP_INSTANCE_HEADER + ": " + headers);
+        }
     }
 }

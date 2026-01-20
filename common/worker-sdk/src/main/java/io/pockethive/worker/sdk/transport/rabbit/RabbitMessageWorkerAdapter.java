@@ -217,11 +217,7 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
      * The fallback:
      * <ul>
      *   <li>Uses the raw message body interpreted as UTF-8 text (empty string on failure).</li>
-     *   <li>Copies AMQP headers from {@link org.springframework.amqp.core.MessageProperties#getHeaders()}.</li>
-     *   <li>Normalises the AMQP {@code messageId} property into a {@code "message-id"} header, because the
-     *       PocketHive work envelope uses {@code "message-id"} as the canonical header key. In particular,
-     *       {@link WorkerControlPlaneRuntime#publishWorkError(String, WorkItem, Throwable)} reads it to attach
-     *       a {@code messageId} field to emitted alert context.</li>
+     *   <li>Does not copy AMQP headers into the WorkItem, keeping the envelope transport-agnostic.</li>
      * </ul>
      */
     private WorkItem messageConverterFallback(Message message) {

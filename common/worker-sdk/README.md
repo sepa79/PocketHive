@@ -50,7 +50,7 @@ class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
     context.statusPublisher()
         .workOut(outQueue)
         .update(status -> status.data("path", config.path()));
-    return WorkItem.json(buildPayload(config)).build();
+    return WorkItem.json(context.info(), buildPayload(config)).build();
   }
 }
 ```
@@ -91,7 +91,7 @@ The full implementations live in the `generator-service` and `processor-service`
 
 ### `WorkItem`
 
-`WorkItem` is the immutable representation of a worker payload (body, headers, charset, and optional `ObservabilityContext`). Builders support text, JSON, and binary bodies, plus accessors like `asJsonNode()` for consumers. Every `WorkInput`/`WorkOutput` implementation uses `WorkItem` as the canonical format when bridging transports.
+`WorkItem` is the immutable representation of a worker payload, global headers, step history, and `ObservabilityContext`. Each step records its own payload and per-step headers (including `ph.step.service`/`ph.step.instance` tracking), while `messageId` and `contentType` live at the top level. Builders support text, JSON, and binary payloads plus accessors like `asJsonNode()` for consumers. Every `WorkInput`/`WorkOutput` implementation uses `WorkItem` as the canonical format when bridging transports.
 
 ### `WorkerContext`
 

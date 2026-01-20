@@ -43,8 +43,7 @@ class ModeratorTest {
 
     @Test
     void onMessageReturnsForwardedPayload() {
-        WorkItem message = WorkItem.builder()
-                .body("test".getBytes(StandardCharsets.UTF_8))
+        WorkItem message = WorkItem.text(new WorkerInfo("ingress", "swarm", "instance", null, null), "test")
                 .header("original", "true")
                 .build();
 
@@ -54,18 +53,15 @@ class ModeratorTest {
         assertThat(result).isNotNull();
         assertThat(new String(result.body(), StandardCharsets.UTF_8)).isEqualTo("test");
         assertThat(result.headers()).containsEntry("original", "true");
-        assertThat(result.headers()).containsEntry("x-ph-service", "moderator");
     }
 
     @Test
     void usesDefaultsWhenConfigMissing() {
-        WorkItem message = WorkItem.builder()
-                .textBody("payload")
+        WorkItem message = WorkItem.text(new WorkerInfo("ingress", "swarm", "instance", null, null), "payload")
                 .build();
 
         WorkItem result = worker.onMessage(message, new TestWorkerContext(null));
         assertThat(result).isNotNull();
-        assertThat(result.headers()).containsEntry("x-ph-service", "moderator");
     }
 
     private static final class TestWorkerContext implements WorkerContext {

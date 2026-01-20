@@ -3,6 +3,7 @@ package io.pockethive.worker.sdk.templating;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.pockethive.worker.sdk.api.WorkItem;
+import io.pockethive.worker.sdk.api.WorkerInfo;
 import org.junit.jupiter.api.Test;
 
 class MessageTemplateRendererTest {
@@ -12,7 +13,7 @@ class MessageTemplateRendererTest {
 
     @Test
     void keepsPayloadAsRawStringAndExposesParsedJsonUnderPayloadAsJson() {
-        WorkItem seed = WorkItem.text("{\"col0\":\"value0\"}").build();
+        WorkItem seed = WorkItem.text(new WorkerInfo("templating", "swarm", "instance", null, null), "{\"col0\":\"value0\"}").build();
         MessageTemplate template = MessageTemplate.builder()
             .pathTemplate("/api/{{ payloadAsJson.col0 }}")
             .methodTemplate("POST")
@@ -27,7 +28,7 @@ class MessageTemplateRendererTest {
 
     @Test
     void payloadAsJsonIsNullWhenPayloadIsNotJson() {
-        WorkItem seed = WorkItem.text("not-json").build();
+        WorkItem seed = WorkItem.text(new WorkerInfo("templating", "swarm", "instance", null, null), "not-json").build();
         MessageTemplate template = MessageTemplate.builder()
             .pathTemplate("{% if payloadAsJson %}/ok{% else %}/missing{% endif %}")
             .methodTemplate("POST")
@@ -40,4 +41,3 @@ class MessageTemplateRendererTest {
         assertThat(rendered.body()).isEqualTo("null|not-json");
     }
 }
-

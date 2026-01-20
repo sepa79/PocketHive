@@ -47,15 +47,15 @@ public final class WorkStep {
         return headers;
     }
 
-    WorkStep withIndex(int newIndex) {
+    public WorkStep withIndex(int newIndex) {
         return new WorkStep(newIndex, payload, payloadEncoding, headers);
     }
 
-    WorkStep withHeaders(Map<String, Object> newHeaders) {
+    public WorkStep withHeaders(Map<String, Object> newHeaders) {
         return new WorkStep(index, payload, payloadEncoding, newHeaders);
     }
 
-    WorkStep withPayload(String newPayload, WorkPayloadEncoding newEncoding) {
+    public WorkStep withPayload(String newPayload, WorkPayloadEncoding newEncoding) {
         return new WorkStep(index, newPayload, newEncoding, headers);
     }
 }
