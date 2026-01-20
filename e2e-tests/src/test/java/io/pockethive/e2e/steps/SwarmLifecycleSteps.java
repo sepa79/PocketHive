@@ -70,6 +70,14 @@ public class SwarmLifecycleSteps {
   private static final String MODERATOR_ROLE = "moderator";
   private static final String PROCESSOR_ROLE = "processor";
   private static final String POSTPROCESSOR_ROLE = "postprocessor";
+  private static final String LEGACY_SERVICE_HEADER = "x-ph-service";
+  private static final String STEP_SERVICE_HEADER = "ph.step.service";
+  private static final String STEP_INSTANCE_HEADER = "ph.step.instance";
+  private static final List<String> PROCESSOR_STEP_HEADERS = List.of(
+      "x-ph-processor-duration-ms",
+      "x-ph-processor-connection-latency-ms",
+      "x-ph-processor-success",
+      "x-ph-processor-status");
 
   private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
   private ServiceEndpoints endpoints;
@@ -850,6 +858,74 @@ public class SwarmLifecycleSteps {
     }
   }
 
+  @Then("the final queue keeps processor headers in step history only")
+  public void theFinalQueueKeepsProcessorHeadersInStepHistoryOnly() throws Exception {
+    ensureStartResponse();
+    ensureFinalQueueTap();
+    String queue = tapQueueName != null ? tapQueueName : finalQueueName();
+
+    WorkQueueConsumer.Message message = workQueueConsumer.consumeNext(SwarmAssertions.defaultTimeout())
+        .orElseThrow(() -> new AssertionError("No message observed on tap queue " + queue));
+
+    try {
+      JsonNode envelope = objectMapper.readTree(message.body());
+      JsonNode stepsNode = envelope.path("steps");
+      if (!stepsNode.isArray() || stepsNode.isEmpty()) {
+        throw new AssertionError("Final queue WorkItem did not carry any steps");
+      }
+      List<String> stepServices = new ArrayList<>();
+      boolean sawProcessorStep = false;
+      Map<String, Object> messageHeaders = message.headers();
+      if (messageHeaders.containsKey(LEGACY_SERVICE_HEADER)) {
+        throw new AssertionError("WorkItem message headers should not include " + LEGACY_SERVICE_HEADER
+            + ": " + messageHeaders);
+      }
+      int stepIndex = 0;
+      for (JsonNode stepNode : stepsNode) {
+        JsonNode stepHeaders = stepNode.path("headers");
+        if (!stepHeaders.isObject()) {
+          throw new AssertionError("WorkItem step " + stepIndex + " did not include headers");
+        }
+        if (stepHeaders.has(LEGACY_SERVICE_HEADER)) {
+          throw new AssertionError("WorkItem step " + stepIndex + " should not include " + LEGACY_SERVICE_HEADER
+              + ": " + stepHeaders);
+        }
+        if (!stepHeaders.has(STEP_SERVICE_HEADER) || !stepHeaders.has(STEP_INSTANCE_HEADER)) {
+          throw new AssertionError("WorkItem step " + stepIndex + " missing tracking headers: " + stepHeaders);
+        }
+        String service = stepHeaders.path(STEP_SERVICE_HEADER).asText("");
+        String instance = stepHeaders.path(STEP_INSTANCE_HEADER).asText("");
+        if (service == null || service.isBlank()) {
+          throw new AssertionError("WorkItem step " + stepIndex + " header " + STEP_SERVICE_HEADER + " must not be blank");
+        }
+        if (instance == null || instance.isBlank()) {
+          throw new AssertionError("WorkItem step " + stepIndex + " header " + STEP_INSTANCE_HEADER + " must not be blank");
+        }
+        stepServices.add(service.toLowerCase(Locale.ROOT));
+
+        if (hasAnyProcessorHeader(stepHeaders)) {
+          sawProcessorStep = true;
+          if (!roleMatches(PROCESSOR_ROLE, service)) {
+            throw new AssertionError("Processor step did not include " + STEP_SERVICE_HEADER + "=processor: "
+                + stepHeaders);
+          }
+          for (String header : PROCESSOR_STEP_HEADERS) {
+            if (messageHeaders.containsKey(header)) {
+              throw new AssertionError("Processor header " + header + " leaked into message headers: " + messageHeaders);
+            }
+          }
+        }
+        stepIndex += 1;
+      }
+
+      assertTrue(sawProcessorStep, "No WorkItem step carried processor headers");
+      assertTrue(containsChain(stepServices, List.of(GENERATOR_ROLE, PROCESSOR_ROLE)),
+          () -> "Step tracking headers missing generator→processor chain: " + stepServices);
+    } finally {
+      message.ack();
+    }
+  }
+
   @Then("the redis dataset demo pipeline processes traffic end to end")
   public void redisDatasetDemoPipelineProcessesTrafficEndToEnd() throws Exception {
     ensureStartResponse();
@@ -1520,6 +1596,15 @@ public class SwarmLifecycleSteps {
       }
     }
     return -1;
+  }
+
+  private boolean hasAnyProcessorHeader(JsonNode headers) {
+    for (String header : PROCESSOR_STEP_HEADERS) {
+      if (headers.has(header)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private List<String> workerRoles() {
