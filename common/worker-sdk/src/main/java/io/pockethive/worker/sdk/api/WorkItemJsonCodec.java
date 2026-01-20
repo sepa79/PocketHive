@@ -36,8 +36,6 @@ public final class WorkItemJsonCodec {
         }
         return new WorkItemEnvelope(
             VERSION,
-            item.payload(),
-            item.payloadEncoding().wireValue(),
             item.headers(),
             item.messageId(),
             item.contentType(),
@@ -63,11 +61,6 @@ public final class WorkItemJsonCodec {
             throw new IllegalArgumentException("Unsupported WorkItem envelope version: " + envelope.version());
         }
         List<WorkItemStepEnvelope> steps = envelope.steps();
-        WorkItemStepEnvelope last = steps.get(steps.size() - 1);
-        if (!Objects.equals(envelope.payload(), last.payload())
-            || !Objects.equals(envelope.payloadEncoding(), last.payloadEncoding())) {
-            throw new IllegalArgumentException("WorkItem envelope payload does not match last step");
-        }
         List<WorkStep> decodedSteps = new ArrayList<>();
         for (WorkItemStepEnvelope step : steps) {
             validateStepHeaders(step.headers());

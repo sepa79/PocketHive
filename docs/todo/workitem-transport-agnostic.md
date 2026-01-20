@@ -16,8 +16,6 @@ NinjaBee multi-worker.
 ## Proposed envelope (v1)
 Top-level, no nesting:
 - `version`: `"1"`
-- `payload`: string (text or base64 when binary)
-- `payloadEncoding`: `utf-8 | base64`
 - `headers`: work item headers (global)
 - `messageId`: message identifier (top-level, not duplicated in headers)
 - `contentType`: content type (top-level, not duplicated in headers)
@@ -30,6 +28,7 @@ Top-level, no nesting:
 
 Notes:
 - `steps.length` is the total step count; no `step.total`.
+- The current payload is defined by the last step (`steps[-1]`); the on-wire envelope does not duplicate it.
 - Step headers must include tracking keys: `ph.step.service`, `ph.step.instance` (for every step).
 - Step 0 must be an explicit, meaningful step; do not auto-seed steps from builder defaults.
 - Runtime always sets `ph.step.service` / `ph.step.instance` for each new step (overwrites any existing values).
@@ -65,7 +64,8 @@ Notes:
 - [x] E2E verifies `x-ph-service` is absent from message headers.
 
 ## Decisions locked
-- Binary payloads supported via `payloadEncoding=base64`.
+- Step payloads support binary data via `payloadEncoding=base64`.
+- No top-level `payload` / `payloadEncoding` fields in the on-wire envelope.
 - Observability always embedded as its own object (no copies in step headers).
 - Steps always present (min 1).
 - Envelope version is `"1"`.

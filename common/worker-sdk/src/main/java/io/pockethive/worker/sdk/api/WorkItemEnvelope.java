@@ -7,8 +7,6 @@ import java.util.Objects;
 
 public record WorkItemEnvelope(
     String version,
-    String payload,
-    String payloadEncoding,
     Map<String, Object> headers,
     String messageId,
     String contentType,
@@ -17,8 +15,6 @@ public record WorkItemEnvelope(
 ) {
     public WorkItemEnvelope {
         Objects.requireNonNull(version, "version");
-        Objects.requireNonNull(payload, "payload");
-        Objects.requireNonNull(payloadEncoding, "payloadEncoding");
         Objects.requireNonNull(headers, "headers");
         Objects.requireNonNull(steps, "steps");
         Objects.requireNonNull(observability, "observability");

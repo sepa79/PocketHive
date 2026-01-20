@@ -103,11 +103,11 @@ Key rules:
 
 - `steps[]` is always present (min 1). Step headers **must** include `ph.step.service` and
   `ph.step.instance` for every step.
-- Top-level `payload` / `payloadEncoding` must mirror the last step values.
+- The current payload is always the last step (`steps[-1]`). The `WorkItem` API exposes it via
+  `payload()` / `payloadEncoding()`; the on-wire envelope does not duplicate it at the top level.
 - Step 0 is explicit (no auto-seeding in builders). Empty payloads are allowed.
 - `messageId` and `contentType` are top-level only (do not duplicate in headers).
 - `x-ph-service` is deprecated for WorkItem tracking; tests enforce its absence in WorkItem headers.
-
 ---
 
 ## 3. Control-plane envelope & routing (SSOT)
