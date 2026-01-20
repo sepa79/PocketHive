@@ -93,6 +93,20 @@ pockethive:
 The Swarm Controller injects the same values into each container via `POCKETHIVE_INPUT_RABBIT_QUEUE` /
 `POCKETHIVE_OUTPUT_RABBIT_*`, and the Worker SDK fails fast when any required field is missing.
 
+### 2.4 WorkItem envelope (data plane, SSOT)
+
+The WorkItem on-wire format is a **single JSON envelope** defined in
+`docs/spec/workitem-envelope.schema.json`. Transport headers (AMQP/SQS/Kafka) **must not**
+carry WorkItem data — the full payload, headers, steps, and observability live inside the JSON body.
+
+Key rules:
+
+- `steps[]` is always present (min 1). Step headers **must** include `ph.step.service` and
+  `ph.step.instance` for every step.
+- Step 0 is explicit (no auto-seeding in builders). Empty payloads are allowed.
+- `messageId` and `contentType` are top-level only (do not duplicate in headers).
+- `x-ph-service` is deprecated for WorkItem tracking; tests enforce its absence in WorkItem headers.
+
 ---
 
 ## 3. Control-plane envelope & routing (SSOT)

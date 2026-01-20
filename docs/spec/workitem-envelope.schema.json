@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pockethive.dev/docs/spec/workitem-envelope.schema.json",
+  "title": "PocketHive WorkItem Envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "payload",
+    "payloadEncoding",
+    "headers",
+    "steps",
+    "observability"
+  ],
+  "properties": {
+    "version": { "const": "1" },
+    "payload": { "type": "string" },
+    "payloadEncoding": { "$ref": "#/$defs/PayloadEncoding" },
+    "headers": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "messageId": { "$ref": "#/$defs/NullableNonEmptyString" },
+    "contentType": { "$ref": "#/$defs/NullableNonEmptyString" },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/WorkItemStep" }
+    },
+    "observability": { "$ref": "#/$defs/ObservabilityContext" }
+  },
+  "$defs": {
+    "NonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "NullableNonEmptyString": {
+      "oneOf": [
+        { "$ref": "#/$defs/NonEmptyString" },
+        { "type": "null" }
+      ]
+    },
+    "PayloadEncoding": {
+      "type": "string",
+      "enum": ["utf-8", "base64"]
+    },
+    "StepHeaders": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "ph.step.service",
+        "ph.step.instance"
+      ],
+      "properties": {
+        "ph.step.service": { "$ref": "#/$defs/NonEmptyString" },
+        "ph.step.instance": { "$ref": "#/$defs/NonEmptyString" }
+      }
+    },
+    "WorkItemStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "index",
+        "payload",
+        "payloadEncoding",
+        "headers"
+      ],
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "payload": { "type": "string" },
+        "payloadEncoding": { "$ref": "#/$defs/PayloadEncoding" },
+        "headers": { "$ref": "#/$defs/StepHeaders" }
+      }
+    },
+    "ObservabilityContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "traceId",
+        "hops"
+      ],
+      "properties": {
+        "traceId": { "$ref": "#/$defs/NonEmptyString" },
+        "hops": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ObservabilityHop" }
+        },
+        "swarmId": { "$ref": "#/$defs/NullableNonEmptyString" }
+      }
+    },
+    "ObservabilityHop": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "service",
+        "instance",
+        "receivedAt",
+        "processedAt"
+      ],
+      "properties": {
+        "service": { "$ref": "#/$defs/NonEmptyString" },
+        "instance": { "$ref": "#/$defs/NonEmptyString" },
+        "receivedAt": { "type": "string", "format": "date-time" },
+        "processedAt": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

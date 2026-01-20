@@ -37,22 +37,24 @@ Notes:
 - Step payload may be empty; runtime still stamps minimal tracking headers.
 
 ## Plan
-1) Define and approve the WorkItem JSON contract (protected area).
+1) Update/approve all relevant contracts first (protected area).
+   - WorkItem envelope spec + any downstream contract references.
+2) Define and approve the WorkItem JSON contract (protected area).
    - Add spec and document it in docs/ARCHITECTURE.md / docs/spec.
-2) Implement a shared WorkItem JSON codec in worker-sdk.
+3) Implement a shared WorkItem JSON codec in worker-sdk.
    - Serialize/deserialize WorkItem only via the codec.
-3) Update transport adapters (Rabbit first) to use the codec exclusively.
+4) Update transport adapters (Rabbit first) to use the codec exclusively.
    - Ignore transport headers for WorkItem data.
-4) Update runtime/services/tests to rely on WorkItem JSON only.
+5) Update runtime/services/tests to rely on WorkItem JSON only.
    - Remove any header fallbacks or transport-specific assumptions.
-5) Update docs, e2e tests, and scenario tooling to reflect the new envelope.
-6) SDK refactor to align WorkItem semantics with the envelope.
+6) Update docs, e2e tests, and scenario tooling to reflect the new envelope.
+7) SDK refactor to align WorkItem semantics with the envelope.
    - Introduce canonical DTO/envelope classes in `common/worker-sdk` for on-wire format.
    - `WorkItem.Builder.build()` no longer auto-seeds step 0; first step must be explicit.
    - Separate global headers from step headers; do not merge step headers into WorkItem headers.
    - Runtime always stamps `ph.step.service` / `ph.step.instance` when adding a new step.
    - Remove `x-ph-service` from workers and stop using it in SDK/runtime.
-7) Verify all serialization flows use the shared DTO/codec.
+8) Verify all serialization flows use the shared DTO/codec.
    - Audit for any ad-hoc envelope builders/parsers; remove or route through the codec.
 
 ## Tracking checklist
