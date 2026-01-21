@@ -12,6 +12,7 @@ Notable “todo” plans:
 - `docs/sdk/worker-plugin-plan.md` – plugin-based workers.
 - `docs/sdk/workitem-refactor-plan.md` – WorkItem + interceptor pipeline follow-ups.
 - `docs/build-id-plan.md` – build id / runtime version propagation.
+- `docs/todo/debug-tap-ui-v2.md` – UI V2 debug tap flow via Orchestrator-managed queues.
 
 Each plan file has a `Status: future / design` header to distinguish it
 from implemented work.

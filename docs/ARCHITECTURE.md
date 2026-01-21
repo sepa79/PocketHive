@@ -108,6 +108,12 @@ Key rules:
 - Step 0 is explicit (no auto-seeding in builders). Empty payloads are allowed.
 - `messageId` and `contentType` are top-level only (do not duplicate in headers).
 - `x-ph-service` is deprecated for WorkItem tracking; tests enforce its absence in WorkItem headers.
+
+### 2.5 Debug taps (UI V2)
+Operators can inspect data-plane traffic via **debug taps**. A tap is a temporary AMQP queue
+bound to the swarm's hive exchange (e.g. `ph.<swarmId>.hive`) using the same routing key as the
+target work queue (e.g. `ph.work.<swarmId>.<queueName>`). The Orchestrator owns tap lifecycle
+and exposes REST endpoints for UI V2; workers remain AMQP-only and untouched.
 ---
 
 ## 3. Control-plane envelope & routing (SSOT)

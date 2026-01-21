@@ -193,6 +193,57 @@ Pins a swarm journal run into an archive so it can be kept beyond time-based ret
 }
 ```
 
+### 2.8 Debug taps (UI V2)
+Debug taps mirror data-plane messages without touching worker code. The orchestrator creates a
+temporary queue bound to the swarm's hive exchange and buffers samples for UI inspection.
+
+#### 2.8.1 Create tap
+`POST /api/debug/taps`
+
+**Request**
+```json
+{
+  "swarmId": "demo",
+  "role": "postprocessor",
+  "direction": "OUT",
+  "ioName": "out",
+  "maxItems": 1,
+  "ttlSeconds": 60
+}
+```
+
+**Response (200)**
+```json
+{
+  "tapId": "uuid",
+  "swarmId": "demo",
+  "role": "postprocessor",
+  "direction": "OUT",
+  "ioName": "out",
+  "exchange": "ph.demo.hive",
+  "routingKey": "ph.work.demo.post",
+  "queue": "ph.debug.demo.postprocessor.ab12cd34",
+  "maxItems": 1,
+  "ttlSeconds": 60,
+  "createdAt": "2025-01-01T12:34:56Z",
+  "lastReadAt": "2025-01-01T12:34:56Z",
+  "samples": []
+}
+```
+
+#### 2.8.2 Read tap
+`GET /api/debug/taps/{tapId}`
+
+Query params:
+- `drain` (optional) — max messages to drain from the tap queue before returning (defaults to `maxItems`).
+
+**Response (200)** — same shape as create response, with `samples` populated.
+
+#### 2.8.3 Close tap
+`DELETE /api/debug/taps/{tapId}`
+
+Deletes the tap queue and returns the last known tap state.
+
 ## 3.0 Create swarm
 `POST /api/swarms/{swarmId}/create`
 
