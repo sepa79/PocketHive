@@ -108,6 +108,20 @@ Feature: Swarm lifecycle golden path
     When I remove the swarm
     Then the swarm is removed and lifecycle confirmations are recorded
 
+  @redis-dataset-payloads
+  Scenario: Redis dataset demo renders payloads and templates end to end
+    And the "redis-dataset-demo" scenario template is requested
+    When I create the swarm from that template
+    Then the swarm is registered and queues are declared
+    When I start the swarm
+    Then the swarm reports running
+    And I start generator traffic
+    Then the redis dataset demo payloads are fully rendered
+    When I stop the swarm
+    Then the swarm reports stopped
+    When I remove the swarm
+    Then the swarm is removed and lifecycle confirmations are recorded
+
   @plan-demo
   Scenario: Scenario plan drives swarm lifecycle
     And the "local-rest-plan-demo" scenario template is requested

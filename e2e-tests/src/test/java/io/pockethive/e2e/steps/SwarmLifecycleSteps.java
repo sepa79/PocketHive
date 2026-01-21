@@ -12,6 +12,7 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -974,6 +975,103 @@ public class SwarmLifecycleSteps {
     }
   }
 
+  @Then("the redis dataset demo payloads are fully rendered")
+  public void redisDatasetDemoPayloadsAreFullyRendered() throws Exception {
+    ensureStartResponse();
+    ensureFinalQueueTap();
+    String queue = tapQueueName != null ? tapQueueName : finalQueueName();
+
+    WorkQueueConsumer.Message message = workQueueConsumer.consumeNext(SwarmAssertions.defaultTimeout())
+        .orElseThrow(() -> new AssertionError("No message observed on tap queue " + queue));
+
+    try {
+      JsonNode root = objectMapper.readTree(message.bodyAsString());
+      JsonNode stepsNode = root.path("steps");
+      assertTrue(stepsNode.isArray() && stepsNode.size() > 0,
+          () -> "Redis dataset demo WorkItem carried no steps: " + root);
+
+      JsonNode datasetPayload = null;
+      String datasetRaw = null;
+      JsonNode requestEnvelope = null;
+      JsonNode responseEnvelope = null;
+
+      for (JsonNode stepNode : stepsNode) {
+        String payload = stepNode.path("payload").asText("");
+        if (payload.isBlank()) {
+          continue;
+        }
+        JsonNode payloadNode = parseJsonNode(payload);
+        if (payloadNode == null || !payloadNode.isObject()) {
+          continue;
+        }
+        if (looksLikeHttpRequestEnvelope(payloadNode)) {
+          requestEnvelope = payloadNode;
+          continue;
+        }
+        if (looksLikeHttpResponseEnvelope(payloadNode)) {
+          responseEnvelope = payloadNode;
+          continue;
+        }
+        if (looksLikeDatasetPayload(payloadNode)) {
+          datasetPayload = payloadNode;
+          datasetRaw = payload;
+        }
+      }
+
+      assertNotNull(requestEnvelope, "HTTP request envelope not found in WorkItem steps");
+      assertNotNull(responseEnvelope, "HTTP response envelope not found in WorkItem steps");
+
+      JsonNode headersNode = requestEnvelope.path("headers");
+      String demoCall = headerValue(headersNode, "x-demo-call");
+      assertNotNull(demoCall, "HTTP request headers missing x-demo-call: " + requestEnvelope);
+      assertTrue(Set.of("auth", "balance", "topup").contains(demoCall),
+          () -> "Unexpected x-demo-call value: " + demoCall);
+
+      assertEquals("/api/redis-demo", requestEnvelope.path("path").asText(),
+          "HTTP request path should match redis demo");
+      assertEquals("POST", requestEnvelope.path("method").asText(),
+          "HTTP request method should be POST");
+      assertEquals("application/json", headerValue(headersNode, "content-type"),
+          "HTTP request should advertise JSON content type");
+
+      String requestBody = requestEnvelope.path("body").asText(null);
+      assertNotNull(requestBody, "HTTP request body was empty");
+      assertFalse(requestBody.contains("{{"),
+          () -> "HTTP request body appears to contain unrendered templates: " + requestBody);
+
+      JsonNode requestBodyNode = parseJsonNode(requestBody);
+      assertNotNull(requestBodyNode, "HTTP request body was not valid JSON: " + requestBody);
+
+      if (datasetPayload == null) {
+        datasetPayload = requestBodyNode;
+      }
+      if (datasetRaw != null) {
+        assertFalse(datasetRaw.contains("{{"),
+            "Dataset payload appears to contain unrendered templates: " + datasetRaw);
+      }
+      assertDatasetPayload(datasetPayload);
+
+      String customerCode = requestBodyNode.path("customerCode").asText(null);
+      assertNotNull(customerCode, "HTTP request body missing customerCode");
+      assertTrue(Set.of("custA", "custB").contains(customerCode),
+          () -> "Unexpected customerCode: " + customerCode);
+
+      int status = responseEnvelope.path("status").asInt(-1);
+      assertEquals(200, status, "HTTP response status should be 200");
+
+      String responseBody = responseEnvelope.path("body").asText(null);
+      assertNotNull(responseBody, "HTTP response body was empty");
+      JsonNode responseNode = parseJsonNode(responseBody);
+      assertNotNull(responseNode, "HTTP response body was not valid JSON: " + responseBody);
+
+      String expectedMessage = "processed " + customerCode + " (" + demoCall + ")";
+      assertEquals(expectedMessage, responseNode.path("message").asText(),
+          "Unexpected response message for customer=" + customerCode + " call=" + demoCall);
+    } finally {
+      message.ack();
+    }
+  }
+
   /**
    * Determine which WireMock stub message we expect for a given scenario.
    * <p>
@@ -1573,6 +1671,76 @@ public class SwarmLifecycleSteps {
     List<String> payloads = new ArrayList<>();
     stepsNode.forEach(element -> payloads.add(element.path("payload").asText("")));
     return payloads;
+  }
+
+  private JsonNode parseJsonNode(String payload) {
+    if (!looksLikeJson(payload)) {
+      return null;
+    }
+    try {
+      return objectMapper.readTree(payload);
+    } catch (IOException ex) {
+      return null;
+    }
+  }
+
+  private boolean looksLikeHttpRequestEnvelope(JsonNode payloadNode) {
+    return payloadNode.has("path")
+        && payloadNode.has("method")
+        && payloadNode.has("headers")
+        && payloadNode.has("body");
+  }
+
+  private boolean looksLikeHttpResponseEnvelope(JsonNode payloadNode) {
+    return payloadNode.has("status")
+        && payloadNode.has("body");
+  }
+
+  private boolean looksLikeDatasetPayload(JsonNode payloadNode) {
+    return payloadNode.has("customerCode")
+        && payloadNode.has("accountNumber")
+        && payloadNode.has("cardNumber")
+        && payloadNode.has("nonce");
+  }
+
+  private void assertDatasetPayload(JsonNode payloadNode) {
+    assertNotNull(payloadNode, "Dataset payload missing from WorkItem steps");
+
+    String customerCode = payloadNode.path("customerCode").asText(null);
+    String accountNumber = payloadNode.path("accountNumber").asText(null);
+    String cardNumber = payloadNode.path("cardNumber").asText(null);
+    String nonce = payloadNode.path("nonce").asText(null);
+
+    assertNotNull(customerCode, "Dataset payload missing customerCode");
+    assertNotNull(accountNumber, "Dataset payload missing accountNumber");
+    assertNotNull(cardNumber, "Dataset payload missing cardNumber");
+    assertNotNull(nonce, "Dataset payload missing nonce");
+
+    assertTrue(accountNumber.matches("\\d{8}"),
+        () -> "Unexpected accountNumber format: " + accountNumber);
+    assertTrue(cardNumber.matches("\\d{16}"),
+        () -> "Unexpected cardNumber format: " + cardNumber);
+    try {
+      UUID.fromString(nonce);
+    } catch (IllegalArgumentException ex) {
+      throw new AssertionError("Unexpected nonce format: " + nonce, ex);
+    }
+  }
+
+  private String headerValue(JsonNode headersNode, String name) {
+    if (headersNode == null || !headersNode.isObject()) {
+      return null;
+    }
+    String target = name.toLowerCase(Locale.ROOT);
+    Iterator<Map.Entry<String, JsonNode>> fields = headersNode.fields();
+    while (fields.hasNext()) {
+      Map.Entry<String, JsonNode> entry = fields.next();
+      if (entry.getKey().toLowerCase(Locale.ROOT).equals(target)) {
+        JsonNode value = entry.getValue();
+        return value == null ? null : value.asText(null);
+      }
+    }
+    return null;
   }
 
   private boolean containsChain(List<String> services, List<String> expected) {
