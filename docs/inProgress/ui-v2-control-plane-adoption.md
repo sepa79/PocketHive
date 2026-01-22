@@ -64,8 +64,9 @@ envelope refactor. This consolidates remaining UI items from:
 
 ### Orchestrator snapshot source (UI-first)
 
-- Add an Orchestrator endpoint that returns the **cached SC `status-full`** (after delta aggregation):
-  - Proposed: `GET /api/swarms/{swarmId}/status-full`
+- Orchestrator returns the **cached SC `status-full`** (after delta aggregation):
+  - Primary: `GET /api/swarms/{swarmId}` now returns **status‑full**, not summary.
+  - Optional alias: `GET /api/swarms/{swarmId}/status-full` if we want a clearer name.
   - Response: raw `status-full` envelope (1:1 with SC) + `receivedAt` + `staleAfterSec`.
   - **Must track the SSOT schema exactly**: `docs/spec/control-events.schema.json` (status‑full) and `docs/ARCHITECTURE.md` must remain authoritative.
   - Example response:
@@ -137,6 +138,31 @@ envelope refactor. This consolidates remaining UI items from:
   - [x] `event.outcome.#`
 - [ ] Render worker list from Orchestrator-provided SC `status-full` snapshot (`data.context.workers[]`).
 - [ ] Implement on-demand detail behavior (optional): request SC `status-full` snapshot from Orchestrator on entering swarm view.
+
+## 1.1) Swarm summary derivation (list-swarms)
+
+`GET /api/swarms` returns **summary only**, derived exclusively from the cached SC `status-full` snapshot.
+
+**Rule:** if no `status-full` is cached for a swarm, return **what we know** (new swarm still booting):
+- `status`: `UNKNOWN`
+- `health`: `UNKNOWN`
+- `heartbeat`: `null`
+- `bees`: `[]`
+- `templateId`, `controllerImage`, `sutId`, `stackName`: use only if already known to Orchestrator.
+
+**Mapping from `status-full` (SC) → `SwarmSummary`:**
+- `id` → `scope.swarmId`
+- `status` → `data.context.swarmStatus` (always present per contract)
+- `health` → `data.context.swarmHealth` (always present per contract)
+- `heartbeat` → `timestamp` (SC status-full timestamp)
+- `workEnabled` → `data.enabled` (boolean, default `true` when missing)
+- `templateId` → `data.context.template.id` (if present)
+- `controllerImage` → `data.context.template.image` (if present)
+- `sutId` → `data.context.sutId` (if present)
+- `stackName` → unchanged (Orchestrator‑local, if available)
+- `bees[]` → `data.context.template.bees[]` (map `role`, `image`)
+
+**Note:** Summary must remain a projection of cached `status-full` only; do not merge Scenario Manager data.
 
 ## 2) Topology-first join (runtime SSOT in `status-full`)
 
