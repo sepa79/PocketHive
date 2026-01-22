@@ -1116,6 +1116,16 @@ textarea,
   gap: 10px;
 }
 
+.swarmCard {
+  border: 1px solid var(--border2);
+  border-radius: 14px;
+  background: var(--panel2);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .swarmRow {
   display: grid;
   grid-template-columns:
@@ -1126,10 +1136,9 @@ textarea,
     minmax(220px, 1fr);
   gap: 12px;
   align-items: center;
-  border: 1px solid var(--border2);
-  border-radius: 12px;
-  padding: 10px 12px;
-  background: var(--panel2);
+  border: 0;
+  padding: 0;
+  background: transparent;
 }
 
 .swarmHeader {
@@ -1180,6 +1189,101 @@ textarea,
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.swarmDetail {
+  border-top: 1px solid var(--border2);
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.swarmDetailHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.swarmDetailMeta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.swarmDetailGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.swarmDetailSection {
+  border: 1px solid var(--border2);
+  border-radius: 12px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.swarmBeeList,
+.swarmEdgeList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.swarmBeeItem,
+.swarmEdgeItem {
+  border: 1px solid var(--border2);
+  border-radius: 10px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.02);
+  text-align: left;
+}
+
+.swarmBeeItem {
+  cursor: pointer;
+}
+
+.swarmBeeItemSelected {
+  border-color: var(--accent);
+  background: rgba(59, 130, 246, 0.12);
+}
+
+.swarmBeeHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.swarmBeeImage {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.swarmBeeMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.swarmWorkerDetail {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.swarmDetailSectionWide {
+  grid-column: 1 / -1;
 }
 
 .swarmTemplatePicker {
@@ -1284,6 +1388,10 @@ textarea,
   }
 
   .swarmTemplatePicker {
+    grid-template-columns: 1fr;
+  }
+
+  .swarmDetailGrid {
     grid-template-columns: 1fr;
   }
 }

@@ -7,6 +7,10 @@ talk directly to:
 - the RabbitMQ control‑plane exchange (control messages `signal.*` / `event.*` on `ph.control`).
 
 It is designed for **debugging** and **inspection**, not for production use.
+The tooling is **pass‑through**: it should return raw outputs from Orchestrator,
+Scenario Manager, RabbitMQ, or local recordings without custom aggregation.
+
+See `tools/mcp-orchestrator-debug/RULES.md` for the exact guardrails.
 
 ## 1. Prerequisites
 

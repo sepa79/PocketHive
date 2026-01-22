@@ -26,10 +26,48 @@ type ScenarioTemplate = {
   bees: BeeSummary[]
 }
 
+type SutEnvironment = {
+  id: string
+  name: string
+  type: string | null
+}
+
+type ScenarioBee = {
+  id: string | null
+  role: string | null
+  image: string | null
+  work: {
+    in: Record<string, string> | undefined
+    out: Record<string, string> | undefined
+  } | null
+  ports: { id: string; direction: 'in' | 'out' }[] | null
+}
+
+type ScenarioTopologyEdge = {
+  id: string | null
+  from: { beeId: string | null; port: string | null } | null
+  to: { beeId: string | null; port: string | null } | null
+}
+
+type ScenarioDefinition = {
+  id: string | null
+  name: string | null
+  description: string | null
+  template?: {
+    image: string | null
+    bees?: ScenarioBee[]
+  } | null
+  topology?: {
+    version: number | null
+    edges?: ScenarioTopologyEdge[]
+  } | null
+}
+
 type SwarmAction = 'start' | 'stop' | 'remove'
 
 const ORCHESTRATOR_BASE = '/orchestrator/api'
 const TEMPLATES_ENDPOINT = '/scenario-manager/api/templates'
+const SUT_ENDPOINT = '/scenario-manager/sut-environments'
 
 function createIdempotencyKey() {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -75,6 +113,107 @@ function normalizeTemplates(data: unknown): ScenarioTemplate[] {
     .filter((entry): entry is ScenarioTemplate => entry !== null)
 }
 
+function normalizeSutEnvironments(data: unknown): SutEnvironment[] {
+  if (!Array.isArray(data)) return []
+  const result: SutEnvironment[] = []
+  for (const entry of data) {
+    if (!entry || typeof entry !== 'object') continue
+    const value = entry as Record<string, unknown>
+    const id = typeof value.id === 'string' ? value.id.trim() : ''
+    const name = typeof value.name === 'string' ? value.name.trim() : ''
+    if (!id || !name) continue
+    const type =
+      typeof value.type === 'string' && value.type.trim().length > 0
+        ? value.type.trim()
+        : null
+    result.push({ id, name, type })
+  }
+  return result
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function toStringOrNull(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
+}
+
+function formatWorkMap(value?: Record<string, string>) {
+  if (!value) return '—'
+  const entries = Object.entries(value)
+  if (entries.length === 0) return '—'
+  return entries.map(([key, item]) => `${key}: ${item}`).join(', ')
+}
+
+function asScenarioDefinition(data: unknown): ScenarioDefinition | null {
+  if (!isRecord(data)) return null
+  const template = isRecord(data.template) ? data.template : null
+  const bees = Array.isArray(template?.bees)
+    ? (template?.bees as unknown[])
+        .map((bee) => {
+          if (!isRecord(bee)) return null
+          const work = isRecord(bee.work) ? bee.work : null
+          const workIn = isRecord(work?.in) ? (work?.in as Record<string, string>) : undefined
+          const workOut = isRecord(work?.out) ? (work?.out as Record<string, string>) : undefined
+          const ports = Array.isArray(bee.ports)
+            ? (bee.ports as unknown[])
+                .map((port) => {
+                  if (!isRecord(port)) return null
+                  const id = toStringOrNull(port.id)
+                  const direction = toStringOrNull(port.direction)
+                  if (!id || (direction !== 'in' && direction !== 'out')) return null
+                  return { id, direction }
+                })
+                .filter((port): port is { id: string; direction: 'in' | 'out' } => port !== null)
+            : null
+          return {
+            id: toStringOrNull(bee.id),
+            role: toStringOrNull(bee.role),
+            image: toStringOrNull(bee.image),
+            work: workIn || workOut ? { in: workIn, out: workOut } : null,
+            ports,
+          }
+        })
+        .filter((bee): bee is ScenarioBee => bee !== null)
+    : undefined
+  const topology = isRecord(data.topology) ? data.topology : null
+  const edges = Array.isArray(topology?.edges)
+    ? (topology?.edges as unknown[])
+        .map((edge) => {
+          if (!isRecord(edge)) return null
+          const from = isRecord(edge.from) ? edge.from : null
+          const to = isRecord(edge.to) ? edge.to : null
+          return {
+            id: toStringOrNull(edge.id),
+            from: from
+              ? { beeId: toStringOrNull(from.beeId), port: toStringOrNull(from.port) }
+              : null,
+            to: to ? { beeId: toStringOrNull(to.beeId), port: toStringOrNull(to.port) } : null,
+          }
+        })
+        .filter((edge): edge is ScenarioTopologyEdge => edge !== null)
+    : undefined
+
+  return {
+    id: toStringOrNull(data.id),
+    name: toStringOrNull(data.name),
+    description: toStringOrNull(data.description),
+    template: template
+      ? {
+          image: toStringOrNull(template.image),
+          bees,
+        }
+      : null,
+    topology: topology
+      ? {
+          version: typeof topology.version === 'number' ? topology.version : null,
+          edges,
+        }
+      : null,
+  }
+}
+
 async function readErrorMessage(response: Response): Promise<string> {
   try {
     const text = await response.text()
@@ -112,8 +251,15 @@ export function HivePage() {
   const [templateFilter, setTemplateFilter] = useState('')
   const [swarmId, setSwarmId] = useState('')
   const [templateId, setTemplateId] = useState('')
+  const [sutEnvironments, setSutEnvironments] = useState<SutEnvironment[]>([])
+  const [sutId, setSutId] = useState('')
   const [busySwarm, setBusySwarm] = useState<string | null>(null)
   const [busyAction, setBusyAction] = useState<SwarmAction | null>(null)
+  const [selectedSwarmId, setSelectedSwarmId] = useState<string | null>(null)
+  const [selectedScenario, setSelectedScenario] = useState<ScenarioDefinition | null>(null)
+  const [scenarioError, setScenarioError] = useState<string | null>(null)
+  const [scenarioLoading, setScenarioLoading] = useState(false)
+  const [selectedBeeKey, setSelectedBeeKey] = useState<string | null>(null)
 
   const loadSwarms = useCallback(async () => {
     setLoading(true)
@@ -149,6 +295,20 @@ export function HivePage() {
     }
   }, [])
 
+  const loadSutEnvironments = useCallback(async () => {
+    try {
+      const response = await fetch(SUT_ENDPOINT, { headers: { Accept: 'application/json' } })
+      if (!response.ok) {
+        setSutEnvironments([])
+        return
+      }
+      const payload = await response.json()
+      setSutEnvironments(normalizeSutEnvironments(payload))
+    } catch {
+      setSutEnvironments([])
+    }
+  }, [])
+
   useEffect(() => {
     void loadSwarms()
   }, [loadSwarms])
@@ -157,7 +317,10 @@ export function HivePage() {
     if (showCreate && templates.length === 0) {
       void loadTemplates()
     }
-  }, [loadTemplates, showCreate, templates.length])
+    if (showCreate && sutEnvironments.length === 0) {
+      void loadSutEnvironments()
+    }
+  }, [loadSutEnvironments, loadTemplates, showCreate, sutEnvironments.length, templates.length])
 
   const handleCreate = useCallback(
     async (event: React.FormEvent) => {
@@ -179,6 +342,7 @@ export function HivePage() {
             body: JSON.stringify({
               templateId: trimmedTemplateId,
               idempotencyKey: createIdempotencyKey(),
+              sutId: sutId.trim() ? sutId.trim() : null,
             }),
           },
         )
@@ -188,6 +352,8 @@ export function HivePage() {
         setMessage(`Create request accepted for ${trimmedSwarmId}.`)
         setSwarmId('')
         setTemplateId('')
+        setSutId('')
+        setTemplateFilter('')
         void loadSwarms()
       } catch (err) {
         setMessage(err instanceof Error ? err.message : 'Failed to create swarm.')
@@ -238,6 +404,45 @@ export function HivePage() {
       }
     },
     [loadSwarms],
+  )
+
+  useEffect(() => {
+    const handle = window.setInterval(() => {
+      void loadSwarms()
+    }, 5000)
+    return () => window.clearInterval(handle)
+  }, [loadSwarms])
+
+  const loadScenarioDetail = useCallback(
+    async (scenarioId: string | null) => {
+      if (!scenarioId) {
+        setSelectedScenario(null)
+        setScenarioError(null)
+        setScenarioLoading(false)
+        return
+      }
+      setScenarioLoading(true)
+      setScenarioError(null)
+      try {
+        const response = await fetch(
+          `/scenario-manager/scenarios/${encodeURIComponent(scenarioId)}`,
+          {
+            headers: { Accept: 'application/json' },
+          },
+        )
+        if (!response.ok) {
+          throw new Error(await readErrorMessage(response))
+        }
+        const payload = await response.json()
+        setSelectedScenario(asScenarioDefinition(payload))
+      } catch (err) {
+        setSelectedScenario(null)
+        setScenarioError(err instanceof Error ? err.message : 'Failed to load scenario')
+      } finally {
+        setScenarioLoading(false)
+      }
+    },
+    [],
   )
 
   const toolsBar = useMemo(
@@ -291,15 +496,32 @@ export function HivePage() {
               Close
             </button>
           </div>
-          <label className="field">
-            <span className="fieldLabel">Swarm ID</span>
-            <input
-              className="textInput"
-              value={swarmId}
-              onChange={(event) => setSwarmId(event.target.value)}
-              placeholder="demo"
-            />
-          </label>
+          <div className="formGrid">
+            <label className="field">
+              <span className="fieldLabel">Swarm ID</span>
+              <input
+                className="textInput"
+                value={swarmId}
+                onChange={(event) => setSwarmId(event.target.value)}
+                placeholder="demo"
+              />
+            </label>
+            <label className="field">
+              <span className="fieldLabel">System under test</span>
+              <select
+                className="textInput"
+                value={sutId}
+                onChange={(event) => setSutId(event.target.value)}
+              >
+                <option value="">(none)</option>
+                {sutEnvironments.map((env) => (
+                  <option key={env.id} value={env.id}>
+                    {env.name} {env.type ? `(${env.type})` : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
           <div className="swarmTemplatePicker">
             <div className="swarmTemplateList">
               <div className="swarmTemplateListHeader">
@@ -398,45 +620,193 @@ export function HivePage() {
                 : '—'
             const isBusy = busySwarm === swarm.id
             return (
-              <div key={swarm.id} className="swarmRow">
-                <div className="swarmCell">
-                  <div className="swarmName">{swarm.id}</div>
-                  <div className="muted">{swarm.controllerImage ?? 'controller: unknown'}</div>
+              <div key={swarm.id} className="swarmCard">
+                <div className="swarmRow">
+                  <div className="swarmCell">
+                    <div className="swarmName">{swarm.id}</div>
+                    <div className="muted">{swarm.controllerImage ?? 'controller: unknown'}</div>
+                  </div>
+                  <div className="swarmCell swarmMeta">
+                    <span className="pill pillInfo">{swarm.status ?? 'UNKNOWN'}</span>
+                    <span className={healthClass(swarm.health)}>{swarm.health ?? 'UNKNOWN'}</span>
+                  </div>
+                  <div className="swarmCell">
+                    <div className="swarmTemplate">{swarm.templateId ?? '—'}</div>
+                  </div>
+                  <div className="swarmCell swarmBees">{beeRoles}</div>
+                  <div className="swarmCell swarmActions">
+                    <button
+                      type="button"
+                      className="actionButton actionButtonGhost"
+                      onClick={() => {
+                        const next = selectedSwarmId === swarm.id ? null : swarm.id
+                        setSelectedSwarmId(next)
+                        setSelectedBeeKey(null)
+                        void loadScenarioDetail(next ? swarm.templateId ?? null : null)
+                      }}
+                    >
+                      {selectedSwarmId === swarm.id ? 'Hide' : 'Details'}
+                    </button>
+                    <button
+                      type="button"
+                      className="actionButton"
+                      disabled={isBusy}
+                      onClick={() => runSwarmAction(swarm, 'start')}
+                    >
+                      {isBusy && busyAction === 'start' ? 'Starting...' : 'Start'}
+                    </button>
+                    <button
+                      type="button"
+                      className="actionButton actionButtonGhost"
+                      disabled={isBusy}
+                      onClick={() => runSwarmAction(swarm, 'stop')}
+                    >
+                      {isBusy && busyAction === 'stop' ? 'Stopping...' : 'Stop'}
+                    </button>
+                    <button
+                      type="button"
+                      className="actionButton actionButtonDanger"
+                      disabled={isBusy}
+                      onClick={() => runSwarmAction(swarm, 'remove')}
+                    >
+                      {isBusy && busyAction === 'remove' ? 'Removing...' : 'Remove'}
+                    </button>
+                  </div>
                 </div>
-                <div className="swarmCell swarmMeta">
-                  <span className="pill pillInfo">{swarm.status ?? 'UNKNOWN'}</span>
-                  <span className={healthClass(swarm.health)}>{swarm.health ?? 'UNKNOWN'}</span>
-                </div>
-                <div className="swarmCell">
-                  <div className="swarmTemplate">{swarm.templateId ?? '—'}</div>
-                </div>
-                <div className="swarmCell swarmBees">{beeRoles}</div>
-                <div className="swarmCell swarmActions">
-                  <button
-                    type="button"
-                    className="actionButton"
-                    disabled={isBusy}
-                    onClick={() => runSwarmAction(swarm, 'start')}
-                  >
-                    {isBusy && busyAction === 'start' ? 'Starting...' : 'Start'}
-                  </button>
-                  <button
-                    type="button"
-                    className="actionButton actionButtonGhost"
-                    disabled={isBusy}
-                    onClick={() => runSwarmAction(swarm, 'stop')}
-                  >
-                    {isBusy && busyAction === 'stop' ? 'Stopping...' : 'Stop'}
-                  </button>
-                  <button
-                    type="button"
-                    className="actionButton actionButtonDanger"
-                    disabled={isBusy}
-                    onClick={() => runSwarmAction(swarm, 'remove')}
-                  >
-                    {isBusy && busyAction === 'remove' ? 'Removing...' : 'Remove'}
-                  </button>
-                </div>
+                {selectedSwarmId === swarm.id && (
+                  <div className="swarmDetail">
+                    {scenarioLoading && <div className="muted">Loading scenario details...</div>}
+                    {scenarioError && <div className="muted">{scenarioError}</div>}
+                    {!scenarioLoading && !scenarioError && selectedScenario && (
+                      <>
+                        <div className="swarmDetailHeader">
+                          <div>
+                            <div className="swarmTemplateTitle">
+                              {selectedScenario.name ?? swarm.templateId ?? 'Scenario'}
+                            </div>
+                            <div className="swarmTemplateId">{swarm.templateId ?? '—'}</div>
+                          </div>
+                          <div className="swarmDetailMeta">
+                            <span className="pill pillInfo">
+                              Bees {selectedScenario.template?.bees?.length ?? 0}
+                            </span>
+                            <span className="pill pillInfo">
+                              Edges {selectedScenario.topology?.edges?.length ?? 0}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="swarmDetailGrid">
+                          <div className="swarmDetailSection">
+                            <div className="fieldLabel">Bees</div>
+                            {selectedScenario.template?.bees?.length ? (
+                              <div className="swarmBeeList">
+                                {selectedScenario.template.bees.map((bee, idx) => {
+                                  const label = bee.role ?? bee.id ?? `bee-${idx + 1}`
+                                  const key = bee.id ?? bee.role ?? `bee-${idx + 1}`
+                                  const isActive = (selectedBeeKey ?? (selectedScenario.template?.bees?.[0]
+                                    ? selectedScenario.template.bees[0].id ??
+                                      selectedScenario.template.bees[0].role ??
+                                      'bee-1'
+                                    : null)) === key
+                                  return (
+                                    <button
+                                      key={`${label}-${idx}`}
+                                      type="button"
+                                      className={
+                                        isActive
+                                          ? 'swarmBeeItem swarmBeeItemSelected'
+                                          : 'swarmBeeItem'
+                                      }
+                                      onClick={() => setSelectedBeeKey(key)}
+                                    >
+                                      <div className="swarmBeeHeader">
+                                        <span className="swarmBeeRole">{label}</span>
+                                        <span className="swarmBeeImage">{bee.image ?? '—'}</span>
+                                      </div>
+                                      <div className="swarmBeeMeta">
+                                        <span>in: {formatWorkMap(bee.work?.in)}</span>
+                                        <span>out: {formatWorkMap(bee.work?.out)}</span>
+                                      </div>
+                                    </button>
+                                  )
+                                })}
+                              </div>
+                            ) : (
+                              <div className="muted">No bees listed.</div>
+                            )}
+                          </div>
+                          <div className="swarmDetailSection">
+                            <div className="fieldLabel">Selected worker</div>
+                            {selectedScenario.template?.bees?.length ? (() => {
+                              const bees = selectedScenario.template?.bees ?? []
+                              const fallback = bees[0]
+                              const activeKey =
+                                selectedBeeKey ??
+                                (fallback ? fallback.id ?? fallback.role ?? 'bee-1' : null)
+                              const activeBee =
+                                bees.find(
+                                  (bee, idx) =>
+                                    (bee.id ?? bee.role ?? `bee-${idx + 1}`) === activeKey,
+                                ) ?? fallback
+                              if (!activeBee) return <div className="muted">No bee selected.</div>
+                              const ports = activeBee.ports
+                                ? activeBee.ports
+                                    .map((port) => `${port.id}:${port.direction}`)
+                                    .join(', ')
+                                : '—'
+                              return (
+                                <div className="swarmWorkerDetail">
+                                  <div className="swarmBeeHeader">
+                                    <span className="swarmBeeRole">
+                                      {activeBee.role ?? activeBee.id ?? 'worker'}
+                                    </span>
+                                    <span className="swarmBeeImage">{activeBee.image ?? '—'}</span>
+                                  </div>
+                                  <div className="swarmBeeMeta">
+                                    <span>id: {activeBee.id ?? '—'}</span>
+                                    <span>ports: {ports}</span>
+                                    <span>in: {formatWorkMap(activeBee.work?.in)}</span>
+                                    <span>out: {formatWorkMap(activeBee.work?.out)}</span>
+                                  </div>
+                                </div>
+                              )
+                            })() : (
+                              <div className="muted">No bees listed.</div>
+                            )}
+                          </div>
+                          <div className="swarmDetailSection swarmDetailSectionWide">
+                            <div className="fieldLabel">Topology</div>
+                            {selectedScenario.topology?.edges?.length ? (
+                              <div className="swarmEdgeList">
+                                {selectedScenario.topology.edges.map((edge, idx) => {
+                                  const from = edge.from
+                                    ? `${edge.from.beeId ?? 'bee'}:${edge.from.port ?? 'port'}`
+                                    : '—'
+                                  const to = edge.to
+                                    ? `${edge.to.beeId ?? 'bee'}:${edge.to.port ?? 'port'}`
+                                    : '—'
+                                  return (
+                                    <div key={`${edge.id ?? idx}`} className="swarmEdgeItem">
+                                      <span>{edge.id ?? `edge-${idx + 1}`}</span>
+                                      <span className="muted">
+                                        {from} → {to}
+                                      </span>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            ) : (
+                              <div className="muted">No topology edges defined.</div>
+                            )}
+                          </div>
+                        </div>
+                      </>
+                    )}
+                    {!scenarioLoading && !scenarioError && !selectedScenario && (
+                      <div className="muted">Scenario details unavailable.</div>
+                    )}
+                  </div>
+                )}
               </div>
             )
           })}

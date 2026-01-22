@@ -354,44 +354,6 @@ Deletes the tap queue and returns the last known tap state.
 }
 ```
 
-## 3.4 Apply swarm template
-`POST /api/swarms/{swarmId}/template`
-
-**Request**
-```json
-{
-  "idempotencyKey": "uuid-v4",
-  "swarmPlan": {
-    "id": "demo",
-    "bees": [
-      {
-        "role": "generator",
-        "image": "ghcr.io/pockethive/generator:latest",
-        "work": { "out": "gen-out" },
-        "config": {
-          "ratePerSec": 10,
-          "message": { "path": "/api/guarded", "body": "warmup" }
-        }
-      },
-      {
-        "role": "processor",
-        "image": "ghcr.io/pockethive/processor:latest",
-        "work": { "in": "gen-out", "out": "final" },
-        "config": {
-          "baseUrl": "{{ sut.endpoints['default'].baseUrl }}",
-          "timeoutMillis": 2500
-        }
-      }
-    ]
-  },
-  "notes": "optional"
-}
-```
-
-**Signal:** `signal.swarm-template.<swarmId>.swarm-controller.<controllerInstance>` → **Outcome:** `event.outcome.swarm-template.<swarmId>.swarm-controller.<controllerInstance>` (check `data.status`) → **Alerts:** `event.alert.{type}.<swarmId>.swarm-controller.<controllerInstance>`
-
-**Response (202)** — same envelope.
-
 ## 4. Components
 
 ### 4.1 Update config

@@ -41,10 +41,9 @@ const RABBIT_MGMT_BASE_URL =
 
 function printUsage() {
   console.error(
-    "Usage:\n" +
+      "Usage:\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs list-swarms\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs get-swarm <swarmId>\n" +
-      "  node tools/mcp-orchestrator-debug/client.mjs swarm-snapshot <swarmId>\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs worker-configs <swarmId>\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs list-scenarios\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs get-scenario <scenarioId>\n" +
@@ -67,7 +66,6 @@ function printUsage() {
       "Examples:\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs list-swarms\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs get-swarm foo\n" +
-      "  node tools/mcp-orchestrator-debug/client.mjs swarm-snapshot foo\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs worker-configs foo\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs create-swarm foo local-rest-defaults\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs swarm-plan foo local-rest-plan-demo swarm-controller-1 --record\n" +
@@ -108,12 +106,6 @@ const COMMANDS = [
   {
     name: "get-swarm",
     description: "Fetch swarm by id via GET /api/swarms/{swarmId}",
-    params: ["swarmId"],
-  },
-  {
-    name: "swarm-snapshot",
-    description:
-      "Aggregate view for a swarm: REST status, work/control queues, recent control-plane messages",
     params: ["swarmId"],
   },
   {
@@ -248,17 +240,6 @@ async function main() {
       const url = `${base}/scenarios/${encodeURIComponent(id)}`;
       const scenario = await httpJson(url);
       console.log(JSON.stringify(scenario ?? null, null, 2));
-      return;
-    }
-
-    if (subcommand === "swarm-snapshot") {
-      const swarmId = args[1];
-      if (!swarmId) {
-        console.error("swarm-snapshot requires a swarm id");
-        process.exit(1);
-      }
-      const snapshot = await buildSwarmSnapshot(swarmId);
-      console.log(JSON.stringify(snapshot, null, 2));
       return;
     }
 
@@ -752,85 +733,6 @@ function readRecordedEntries() {
   return entries;
 }
 
-async function buildSwarmSnapshot(swarmId) {
-  const trimmed = String(swarmId).trim();
-
-  // Swarm status from orchestrator
-  let swarm = null;
-  try {
-    swarm = await httpJson(`/api/swarms/${encodeURIComponent(trimmed)}`);
-  } catch (err) {
-    swarm = { error: String(err) };
-  }
-
-  // Queues from Rabbit management API
-  let queues = [];
-  try {
-    queues = await listQueues();
-  } catch (err) {
-    queues = { error: String(err) };
-  }
-
-  const workQueues = Array.isArray(queues)
-    ? queues
-        .filter(
-          (q) =>
-            typeof q?.name === "string" &&
-            q.name.startsWith(`ph.${trimmed}.`)
-        )
-        .map((q) => q.name)
-        .sort()
-    : [];
-
-  const controlQueues = Array.isArray(queues)
-    ? queues
-        .filter(
-          (q) =>
-            typeof q?.name === "string" &&
-            q.name.startsWith(`ph.control.${trimmed}.`)
-        )
-        .map((q) => q.name)
-        .sort()
-    : [];
-
-  // Control-plane messages from recording (if present)
-  const recorded = readRecordedEntries();
-  const controlMessages = recorded.filter((entry) => {
-    if (!entry || typeof entry !== "object") {
-      return false;
-    }
-    const rk = entry.routingKey || "";
-    if (typeof rk === "string" && rk.includes(`.${trimmed}.`)) {
-      return true;
-    }
-    // Try to inspect JSON body for swarmId hints
-    if (typeof entry.body === "string") {
-      try {
-        const parsed = JSON.parse(entry.body);
-        if (
-          parsed &&
-          typeof parsed === "object" &&
-          parsed.swarmId === trimmed
-        ) {
-          return true;
-        }
-      } catch {
-        // ignore parse errors
-      }
-    }
-    return false;
-  });
-
-  return {
-    swarmId: trimmed,
-    orchestrator: swarm,
-    queues: {
-      work: workQueues,
-      control: controlQueues,
-    },
-    controlMessages,
-  };
-}
 
 /**
  * Collects the latest worker config snapshot for a given swarm by listening to

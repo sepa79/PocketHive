@@ -32,17 +32,18 @@ envelope refactor. This consolidates remaining UI items from:
 ### State merge rules (status-full + status-delta)
 
 - `status-full` is the authoritative snapshot per `(swarmId, role, instance)`.
+- **Aggregation lives in Orchestrator**:
+  - Orchestrator stores the latest SC `status-full` (swarm-controller only).
+  - Orchestrator applies subsequent `status-delta` updates to that cached snapshot.
+  - UI should prefer the Orchestrator snapshot over client-side merge.
 - `status-delta` applies only if a prior `status-full` exists for the same scope.
-  - If a delta arrives for an unknown scope, trigger a `status-full` refresh (same flow as reconnect) and ignore the delta until the snapshot lands.
-- Merge rules (schema-driven):
+  - If a delta arrives for an unknown scope, trigger a `status-full` refresh and ignore the delta until the snapshot lands.
+- Merge rules (schema-driven, enforced in Orchestrator):
   - Apply only the fields present in the delta payload.
   - Per `docs/ARCHITECTURE.md` and the control-events schema, deltas must omit `data.config`, `data.io`, and `data.startedAt`.
   - If a delta includes any full-only fields, treat it as a schema violation (log + ignore; no state mutation).
   - Full-only fields from the last `status-full` remain unchanged by definition.
-- Gaps/reconnect:
-  - On reconnect, ignore deltas until a fresh `status-full` is obtained (via REST or status-request).
-  - Trigger a `status-full` refresh on reconnect for the active swarm.
-- Retention: keep the last `status-full` per scope for 30 minutes after the last update, then evict (UI is ephemeral; no disk cache).
+- Retention in Orchestrator: keep the last SC `status-full` per swarm for 30 minutes after the last update, then evict.
 
 ### Decoder error format (Wire Log + UI badge)
 
@@ -60,6 +61,52 @@ envelope refactor. This consolidates remaining UI items from:
 
 - Exponential backoff with jitter: 1s → 2s → 4s → 8s → 16s → 30s (cap), reset after successful connect.
 - UI connectivity indicator reflects `connected`, `reconnecting`, `offline` states based on STOMP + schema readiness.
+
+### Orchestrator snapshot source (UI-first)
+
+- Add an Orchestrator endpoint that returns the **cached SC `status-full`** (after delta aggregation):
+  - Proposed: `GET /api/swarms/{swarmId}/status-full`
+  - Response: raw `status-full` envelope (1:1 with SC) + `receivedAt` + `staleAfterSec`.
+  - **Must track the SSOT schema exactly**: `docs/spec/control-events.schema.json` (status‑full) and `docs/ARCHITECTURE.md` must remain authoritative.
+  - Example response:
+    ```json
+    {
+      "receivedAt": "2026-01-22T12:34:56Z",
+      "staleAfterSec": 30,
+      "envelope": {
+        "timestamp": "2026-01-22T12:34:55Z",
+        "version": "1",
+        "kind": "metric",
+        "type": "status-full",
+        "origin": "swarm-controller-instance",
+        "scope": {
+          "swarmId": "demo",
+          "role": "swarm-controller",
+          "instance": "demo-marshal-bee-1234"
+        },
+        "correlationId": null,
+        "idempotencyKey": null,
+        "data": {
+          "enabled": true,
+          "io": { "...": "..." },
+          "ioState": { "...": "..." },
+          "config": { "...": "..." },
+          "context": {
+            "template": { "...": "..." },
+            "topology": { "...": "..." },
+            "bindings": { "...": "..." },
+            "workers": [ { "...": "..." } ]
+          }
+        }
+      }
+    }
+    ```
+- Optional: `POST /api/swarms/{swarmId}/status-full/refresh` to request a new snapshot.
+- UI behavior:
+  - On startup, **do not force status-full via STOMP**.
+  - First load: call Orchestrator snapshot endpoint and render from it.
+  - If snapshot missing/stale, call refresh (or user action) and show “loading snapshot”.
+  - STOMP becomes **optional live update** (applied as UI-only deltas, or ignored if REST polling is enough).
 
 ### Work exchange sniffing guardrails
 
@@ -79,16 +126,17 @@ envelope refactor. This consolidates remaining UI items from:
 - [x] `WireLogStore` (Buzz v2) retains raw frames + parsed envelopes + validation errors and exposes JSONL export.
 - [x] `ControlPlaneStateStore` applies only valid envelopes and merges `status-delta` into the latest `status-full` snapshot.
 - [x] `StompGateway` is the single STOMP connection and routes every frame through the decoder before state updates.
-- [ ] `RestGateway` fetches on-demand `status-full` snapshots for initial state/hydration.
+- [ ] `RestGateway` fetches Orchestrator **SC status-full snapshots** for initial state/hydration.
+- [ ] UI treats Orchestrator snapshot as baseline; STOMP is optional live update only.
 
 ## 1) Control-plane subscriptions (no per-worker fan-out)
 
-- [x] Implement STOMP subscription filters in `ui-v2` to consume only:
+- [x] Implement STOMP subscription filters in `ui-v2` (if live updates are enabled):
   - [x] `event.metric.status-delta.<swarmId>.swarm-controller.*`
   - [x] `event.alert.{type}.#`
   - [x] `event.outcome.#`
-- [ ] Render worker list from SC `status-full` snapshot (`data.context.workers[]`).
-- [ ] Implement on-demand detail behavior (optional): request SC `status-full` on entering swarm view.
+- [ ] Render worker list from Orchestrator-provided SC `status-full` snapshot (`data.context.workers[]`).
+- [ ] Implement on-demand detail behavior (optional): request SC `status-full` snapshot from Orchestrator on entering swarm view.
 
 ## 2) Topology-first join (runtime SSOT in `status-full`)
 

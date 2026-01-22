@@ -13,6 +13,7 @@ Notable “todo” plans:
 - `docs/sdk/workitem-refactor-plan.md` – WorkItem + interceptor pipeline follow-ups.
 - `docs/build-id-plan.md` – build id / runtime version propagation.
 - `docs/todo/debug-tap-ui-v2.md` – UI V2 debug tap flow via Orchestrator-managed queues.
+- `docs/todo/hive-graph-view.md` – stable single‑swarm graph view (anti‑flicker).
 
 Each plan file has a `Status: future / design` header to distinguish it
 from implemented work.

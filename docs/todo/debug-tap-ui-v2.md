@@ -74,5 +74,5 @@ This is the chosen approach (Option C) because it:
 - [x] Document debug tap API in `docs/ORCHESTRATOR-REST.md`.
 - [x] Add architecture note for debug taps in `docs/ARCHITECTURE.md`.
 - [x] Implement Orchestrator debug tap service + endpoints.
-- [x] Add UI V2 debug tap panel (Hive page).
+- [ ] Add UI V2 debug tap panel (Hive page).
 - [ ] Add minimal tests (optional).
