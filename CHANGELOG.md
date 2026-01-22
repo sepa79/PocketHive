@@ -3,9 +3,15 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
-Timestamp: 2026-01-16T10:51:49Z
+Timestamp: 2026-01-22T14:23:07Z
+
+## [0.14.21] - 2026-01-22
+Timestamp: 2026-01-22T14:23:07Z
 
 - CI: disabled GitHub Pages workflow to avoid accidental doc builds on repo content.
+- Swarm Controller: stop bind-mounting `scenarios-runtime` into workers; rely on the scenario bundle mount instead.
+- Worker SDK (CSV): resolve relative CSV paths against `/app/scenario` and surface resolved paths in diagnostics.
+- Docs: update CSV dataset guidance to use scenario bundle-relative paths.
 
 ## [0.14.20] - 2026-01-16
 Timestamp: 2026-01-16T10:47:13Z

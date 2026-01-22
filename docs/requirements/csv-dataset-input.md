@@ -10,11 +10,14 @@ pockethive:
   inputs:
     type: CSV_DATASET
     csv:
-      filePath: /app/csv-data/test-data.csv
+      filePath: data/test-data.csv
       ratePerSec: 10.0
       rotate: true
       skipHeader: true
 ```
+
+CSV files are expected to live inside the scenario bundle. Relative paths are resolved
+against `/app/scenario`, which is mounted automatically for workers.
 
 ## CSV to JSON
 

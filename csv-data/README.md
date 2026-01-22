@@ -23,20 +23,19 @@ Converts to JSON:
 
 ## Usage in Scenarios
 
-Mount this directory into worker containers:
+Place CSV files inside the scenario bundle (for example `scenarios/bundles/<scenario-id>/data/users.csv`).
+Workers automatically mount the scenario directory at `/app/scenario`, so relative paths resolve there.
 
 ```yaml
 - role: dataProvider
   image: generator:latest
-  volumes:
-    - ./csv-data:/app/csv-data:ro
   config:
     inputs:
       type: CSV_DATASET
       csv:
-        filePath: /app/csv-data/users.csv
+        filePath: data/users.csv
         ratePerSec: 5
-        rotate: true  # loop again if exausted
+        rotate: true  # loop again if exhausted
         skipHeaders: false # don't treat headers as a row (set true when no headers for col0,col1,col2,etc as automatic headers)
 ```
 
@@ -45,4 +44,4 @@ Mount this directory into worker containers:
 1. Create CSV file in this directory
 2. Ensure first row contains column headers
 3. Add data rows (one per line)
-4. Reference in scenario using `/app/csv-data/<filename>.csv`
+4. Reference in scenario using a path relative to the scenario bundle (e.g. `data/<filename>.csv`)

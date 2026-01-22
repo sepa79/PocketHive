@@ -32,6 +32,7 @@ public final class CsvDataSetWorkInput implements WorkInput {
 
     private static final Logger defaultLog = LoggerFactory.getLogger(CsvDataSetWorkInput.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final Path SCENARIO_ROOT = Path.of("/app/scenario");
 
     private final WorkerDefinition workerDefinition;
     private final WorkerControlPlaneRuntime controlPlaneRuntime;
@@ -48,6 +49,7 @@ public final class CsvDataSetWorkInput implements WorkInput {
     private volatile StatusPublisher statusPublisher;
     private final AtomicLong dispatchedCount = new AtomicLong();
     private volatile long lastDispatchAtMillis;
+    private volatile String resolvedFilePath;
 
     private String[] csvHeaders = null;
     private List<String[]> csvRows = null;
@@ -152,7 +154,7 @@ public final class CsvDataSetWorkInput implements WorkInput {
         WorkItem.Builder builder = WorkItem.text(json)
             .header("swarmId", identity.swarmId())
             .header("instanceId", identity.instanceId())
-            .header("x-ph-csv-file", properties.getFilePath())
+            .header("x-ph-csv-file", resolvedFilePath == null ? properties.getFilePath() : resolvedFilePath)
             .header("x-ph-csv-row", String.valueOf(rowIdx + 1));
 
         if (!properties.isRotate()) {
@@ -182,13 +184,29 @@ public final class CsvDataSetWorkInput implements WorkInput {
         return quota;
     }
 
+    private String resolveCsvPath(String filePath) {
+        if (filePath == null) {
+            return null;
+        }
+        String trimmed = filePath.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        Path path = Paths.get(trimmed);
+        if (path.isAbsolute()) {
+            return path.normalize().toString();
+        }
+        return SCENARIO_ROOT.resolve(trimmed).normalize().toString();
+    }
+
     private void loadCsvFile() {
-        Path path = Paths.get(properties.getFilePath());
+        String filePath = resolvedFilePath == null ? properties.getFilePath() : resolvedFilePath;
+        Path path = Paths.get(filePath);
         if (!Files.exists(path)) {
-            throw new IllegalStateException("CSV file not found: " + properties.getFilePath());
+            throw new IllegalStateException("CSV file not found: " + filePath);
         }
         log.info("{} loading CSV (skipHeader={}, rotate={}): {}", workerDefinition.beanName(),
-            properties.isSkipHeader(), properties.isRotate(), properties.getFilePath());
+            properties.isSkipHeader(), properties.isRotate(), filePath);
 
         try (BufferedReader reader = Files.newBufferedReader(path, Charset.forName(properties.getCharset()))) {
             List<String[]> allRows = reader.lines()
@@ -218,7 +236,7 @@ public final class CsvDataSetWorkInput implements WorkInput {
                 throw new IllegalStateException("CSV has no data rows after header processing");
             }
         } catch (IOException ex) {
-            throw new IllegalStateException("Failed to read CSV: " + properties.getFilePath(), ex);
+            throw new IllegalStateException("Failed to read CSV: " + filePath, ex);
         }
     }
 
@@ -276,7 +294,8 @@ public final class CsvDataSetWorkInput implements WorkInput {
         Object filePathObj = csvMap.get("filePath");
         if (filePathObj instanceof String filePath && !filePath.isBlank()) {
             properties.setFilePath(filePath);
-            log.info("{} csv filePath: {}", workerDefinition.beanName(), filePath);
+            resolvedFilePath = resolveCsvPath(filePath);
+            log.info("{} csv filePath: {}", workerDefinition.beanName(), resolvedFilePath);
         }
 
         Object skipHeaderObj = csvMap.get("skipHeader");
@@ -310,6 +329,9 @@ public final class CsvDataSetWorkInput implements WorkInput {
         }
         try {
             validateConfiguration();
+            if (resolvedFilePath == null) {
+                resolvedFilePath = resolveCsvPath(properties.getFilePath());
+            }
             loadCsvFile();
             tickIntervalMs = Math.max(100L, properties.getTickIntervalMs());
             try {
@@ -328,7 +350,7 @@ public final class CsvDataSetWorkInput implements WorkInput {
             schedulerExecutor.scheduleAtFixedRate(this::safeTick, initialDelay, tickIntervalMs, TimeUnit.MILLISECONDS);
             enabled = true;
             log.info("{} csv dataset input initialized (file={}, rows={}, rate={}/sec)",
-                workerDefinition.beanName(), properties.getFilePath(), csvRows.size(), properties.getRatePerSec());
+                workerDefinition.beanName(), resolvedFilePath, csvRows.size(), properties.getRatePerSec());
         } catch (Exception ex) {
             log.error("{} csv dataset initialization failed", workerDefinition.beanName(), ex);
             enabled = false;
@@ -345,7 +367,7 @@ public final class CsvDataSetWorkInput implements WorkInput {
         int currentRow = currentRowIndex.get();
         publisher.update(status -> {
             Map<String, Object> data = new java.util.LinkedHashMap<>();
-            data.put("filePath", properties.getFilePath());
+            data.put("filePath", resolvedFilePath == null ? properties.getFilePath() : resolvedFilePath);
             data.put("ratePerSec", properties.getRatePerSec());
             data.put("rotate", properties.isRotate());
             data.put("totalRows", csvRows.size());

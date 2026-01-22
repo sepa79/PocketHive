@@ -77,7 +77,6 @@ import org.springframework.boot.autoconfigure.amqp.RabbitProperties;
 public final class SwarmRuntimeCore implements SwarmLifecycle {
 
   private static final Logger log = LoggerFactory.getLogger(SwarmLifecycleManager.class);
-  private static final String SCENARIOS_RUNTIME_DESTINATION = "/app/scenarios-runtime";
 
   private final AmqpAdmin amqp;
   private final ObjectMapper mapper;
@@ -97,7 +96,6 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
   private final String instanceId;
   private final String role;
   private final String swarmId;
-  private final String scenariosRuntimeRootSource;
   private final ManagerRuntimeCore managerCore;
   private final io.pockethive.swarmcontroller.scenario.TimelineScenario timelineScenario;
   private final ScenarioEngine scenarioEngine;
@@ -142,7 +140,6 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
     this.instanceId = Objects.requireNonNull(instanceId, "instanceId");
     this.role = properties.getRole();
     this.swarmId = properties.getSwarmId();
-    this.scenariosRuntimeRootSource = System.getenv("POCKETHIVE_SCENARIOS_RUNTIME_ROOT");
     this.workerSettings = deriveWorkerSettings(properties);
     this.readinessTracker = new SwarmReadinessTracker(this::requestStatus);
     this.managerCore = new ManagerRuntimeCore(
@@ -340,12 +337,6 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
         }
         Map<String, Object> effectiveConfig = enrichConfigWithSut(bee.config(), sutEnv);
         List<String> volumes = resolveVolumes(effectiveConfig);
-        if (hasText(scenariosRuntimeRootSource)) {
-          java.util.List<String> merged = new java.util.ArrayList<>(volumes.size() + 1);
-          merged.add(scenariosRuntimeRootSource + ":" + SCENARIOS_RUNTIME_DESTINATION);
-          merged.addAll(volumes);
-          volumes = java.util.List.copyOf(merged);
-        }
         workerSpecs.add(new io.pockethive.manager.runtime.WorkerSpec(
             beeName,
             bee.role(),
