@@ -387,19 +387,20 @@ public class SwarmSignalListener {
     MDC.put("correlation_id", cs.correlationId());
     MDC.put("idempotency_key", cs.idempotencyKey());
     try {
+      long freshnessCutoffMillis = System.currentTimeMillis();
       log.info("{} signal for swarm {}", label.substring(0, 1).toUpperCase() + label.substring(1), swarmId);
       action.apply(serializeArgs(cs));
       recordLifecycleState(resolvedSignal);
       if (ControlPlaneSignals.SWARM_TEMPLATE.equals(resolvedSignal)) {
         onTemplateSuccess(cs, resolvedSignal, swarmId);
       } else if (ControlPlaneSignals.SWARM_START.equals(resolvedSignal)) {
-        onStartSuccess(cs, resolvedSignal, swarmId);
+        onStartSuccess(cs, resolvedSignal, swarmId, freshnessCutoffMillis);
       } else {
         emitSuccess(cs, resolvedSignal, swarmId);
         if (ControlPlaneSignals.SWARM_PLAN.equals(resolvedSignal)) {
           queueStatusFull(StatusFullTrigger.PLAN);
         } else if (ControlPlaneSignals.SWARM_STOP.equals(resolvedSignal)) {
-          queueStatusFull(StatusFullTrigger.STOP);
+          queueStatusFull(StatusFullTrigger.STOP, freshnessCutoffMillis);
         }
       }
     } catch (Exception e) {
@@ -441,14 +442,14 @@ public class SwarmSignalListener {
     }
   }
 
-  private void onStartSuccess(ControlSignal cs, String resolvedSignal, String swarmId) {
+  private void onStartSuccess(ControlSignal cs, String resolvedSignal, String swarmId, long freshnessCutoffMillis) {
     if (!lifecycle.hasPendingConfigUpdates() && lifecycle.isReadyForWork()) {
       pendingStart.set(null);
       emitSuccess(cs, resolvedSignal, swarmId);
-      queueStatusFull(StatusFullTrigger.START);
+      queueStatusFull(StatusFullTrigger.START, freshnessCutoffMillis);
       return;
     }
-    PendingStart newPending = new PendingStart(cs, resolvedSignal, swarmId);
+    PendingStart newPending = new PendingStart(cs, resolvedSignal, swarmId, freshnessCutoffMillis);
     PendingStart previous = pendingStart.getAndSet(newPending);
     if (previous != null) {
       log.debug("Replacing pending swarm-start confirmation for correlation {} with {}",
@@ -468,7 +469,7 @@ public class SwarmSignalListener {
       }
       if (pendingStart.compareAndSet(pending, null)) {
         emitSuccess(pending.signal(), pending.resolvedSignal(), pending.swarmIdFallback());
-        queueStatusFull(StatusFullTrigger.START);
+        queueStatusFull(StatusFullTrigger.START, pending.freshnessCutoffMillis());
         return;
       }
     }
@@ -847,9 +848,9 @@ public class SwarmSignalListener {
 
   private record PendingTemplate(ControlSignal signal, String resolvedSignal, String swarmIdFallback) {}
 
-  private record PendingStart(ControlSignal signal, String resolvedSignal, String swarmIdFallback) {}
+  private record PendingStart(ControlSignal signal, String resolvedSignal, String swarmIdFallback, long freshnessCutoffMillis) {}
 
-  private record PendingStatusFull(StatusFullTrigger trigger, long requestedAt) {}
+  private record PendingStatusFull(StatusFullTrigger trigger, long freshnessCutoffMillis, long queuedAtMillis) {}
 
   private enum StatusFullTrigger {
     TEMPLATE,
@@ -859,7 +860,11 @@ public class SwarmSignalListener {
   }
 
   private void queueStatusFull(StatusFullTrigger trigger) {
-    PendingStatusFull next = new PendingStatusFull(trigger, System.currentTimeMillis());
+    queueStatusFull(trigger, System.currentTimeMillis());
+  }
+
+  private void queueStatusFull(StatusFullTrigger trigger, long freshnessCutoffMillis) {
+    PendingStatusFull next = new PendingStatusFull(trigger, freshnessCutoffMillis, System.currentTimeMillis());
     PendingStatusFull previous = pendingStatusFull.getAndSet(next);
     if (previous != null) {
       log.debug("Replacing pending status-full trigger {} with {}", previous.trigger(), trigger);
@@ -876,10 +881,10 @@ public class SwarmSignalListener {
     boolean ready = switch (pending.trigger()) {
       case TEMPLATE -> !lifecycle.hasPendingConfigUpdates();
       case PLAN -> true;
-      case START, STOP -> lifecycle.hasFreshWorkerStatusSnapshotsSince(pending.requestedAt());
+      case START, STOP -> lifecycle.hasFreshWorkerStatusSnapshotsSince(pending.freshnessCutoffMillis());
     };
     boolean timedOut = switch (pending.trigger()) {
-      case START, STOP -> now - pending.requestedAt() >= STATUS_FULL_TIMEOUT_MS;
+      case START, STOP -> now - pending.queuedAtMillis() >= STATUS_FULL_TIMEOUT_MS;
       default -> false;
     };
     if (!ready && !timedOut) {

@@ -12,14 +12,15 @@ import java.util.concurrent.ConcurrentMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * Tracks swarm-level readiness and basic worker metrics.
- * <p>
- * This component owns the bookkeeping for expected vs. ready workers, heartbeats,
- * and enabled flags, and can request fresh status snapshots via a callback when
- * it detects missing or stale heartbeats.
- */
-public final class SwarmReadinessTracker {
+  /**
+   * Tracks swarm-level readiness and basic worker metrics.
+   * <p>
+   * This component owns the bookkeeping for expected vs. ready workers, heartbeats,
+   * status-full snapshots, and enabled flags. It can request status on missing/stale
+   * heartbeats via a callback; snapshot freshness checks must remain side-effect free
+   * to avoid status-request storms.
+   */
+  public final class SwarmReadinessTracker {
 
   public interface StatusRequestCallback {
     void requestStatus(String role, String instance, String reason);
@@ -105,19 +106,17 @@ public final class SwarmReadinessTracker {
     if (snapshot.isEmpty()) {
       return true;
     }
-    boolean ready = true;
     for (Map.Entry<String, List<String>> entry : snapshot.entrySet()) {
       String role = entry.getKey();
       for (String instance : entry.getValue()) {
         String key = key(role, instance);
         Long ts = lastSnapshotSeen.get(key);
         if (ts == null || ts < cutoffMillis) {
-          ready = false;
-          statusRequestCallback.requestStatus(role, instance, "snapshot-stale");
+          return false;
         }
       }
     }
-    return ready;
+    return true;
   }
 
   public SwarmMetrics metrics() {
