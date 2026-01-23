@@ -89,14 +89,15 @@ public class ControllerStatusListener {
                     swarm.updateControllerStatusFull(node, Instant.now());
                 } else if (statusDelta) {
                     if (swarm.getControllerStatusFull() == null) {
+                        swarm.updateControllerStatusFull(node, Instant.now());
                         requestStatusFull(swarmId);
-                        return;
-                    }
+                    } else {
                     if (deltaContainsFullOnlyFields(data)) {
                         log.warn("Ignoring status-delta with full-only fields for swarm {} rk={}", swarmId, routingKey);
                         return;
                     }
                     mergeControllerDelta(swarm, node);
+                    }
                 }
             } else if (statusDelta && controllerScope && swarmId != null) {
                 requestStatusFull(swarmId);
@@ -194,7 +195,7 @@ public class ControllerStatusListener {
         if (data == null || data.isMissingNode()) {
             return false;
         }
-        return data.has("config") || data.has("io") || data.has("startedAt");
+        return data.has("config") || data.has("io") || data.has("startedAt") || data.has("runtime");
     }
 
     private void mergeControllerDelta(Swarm swarm, JsonNode delta) {

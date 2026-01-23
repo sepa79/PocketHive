@@ -17,6 +17,12 @@
     "ioState": {
       "work": { "input": "unknown", "output": "unknown" }
     },
+    "runtime": {
+      "runId": "run-1",
+      "containerId": "container-1",
+      "image": "worker:latest",
+      "stackName": "ph-swarm-1"
+    },
     "config": {},
     "startedAt": "2024-01-01T00:00:00Z",
     "io": {

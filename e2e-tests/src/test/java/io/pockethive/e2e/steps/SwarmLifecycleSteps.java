@@ -362,6 +362,29 @@ public class SwarmLifecycleSteps {
     }
   }
 
+  @And("the status-full snapshots include runtime metadata")
+  public void theStatusFullSnapshotsIncludeRuntimeMetadata() {
+    ensureStartResponse();
+    captureWorkerStatuses(true);
+
+    Optional<ControlPlaneEvents.StatusEnvelope> controllerEnv = controlPlaneEvents.statusesForSwarm(swarmId).stream()
+        .filter(env -> env != null
+            && env.status() != null
+            && "status-full".equalsIgnoreCase(env.status().type())
+            && roleMatches("swarm-controller", env.status().role()))
+        .max(Comparator.comparing(ControlPlaneEvents.StatusEnvelope::receivedAt));
+    assertTrue(controllerEnv.isPresent(), "Expected status-full snapshot for swarm-controller");
+    assertRuntimeMeta(controllerEnv.get().status().data().runtime(), "swarm-controller");
+
+    for (String role : workerRoles()) {
+      String instance = workerInstances.get(role);
+      assertNotNull(instance, () -> "Missing instance for role " + actualRoleName(role));
+      StatusEvent full = latestStatusFull(actualRoleName(role), instance)
+          .orElseThrow(() -> new AssertionError("No status-full captured for role " + actualRoleName(role)));
+      assertRuntimeMeta(full.data().runtime(), actualRoleName(role));
+    }
+  }
+
   @And("the generator runtime config matches the service defaults")
   public void theGeneratorRuntimeConfigMatchesTheServiceDefaults() {
     ensureStartResponse();
@@ -1398,6 +1421,15 @@ public class SwarmLifecycleSteps {
       return copyMap(map);
     }
     return Map.of();
+  }
+
+  private void assertRuntimeMeta(Map<String, Object> runtime, String label) {
+    assertNotNull(runtime, () -> "Missing runtime metadata for " + label);
+    assertFalse(runtime.isEmpty(), () -> "Runtime metadata should not be empty for " + label);
+    assertTrue(runtime.containsKey("runId"), () -> "Runtime metadata missing runId for " + label);
+    assertTrue(runtime.containsKey("containerId"), () -> "Runtime metadata missing containerId for " + label);
+    assertTrue(runtime.containsKey("image"), () -> "Runtime metadata missing image for " + label);
+    assertTrue(runtime.containsKey("stackName"), () -> "Runtime metadata missing stackName for " + label);
   }
 
   private Map<String, Object> snapshotProcessed(Map<String, Object> snapshot) {

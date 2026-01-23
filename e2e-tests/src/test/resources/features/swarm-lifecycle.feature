@@ -77,6 +77,7 @@ Feature: Swarm lifecycle golden path
     When I start the swarm
     Then the swarm reports running
     And the worker status snapshots include config only in status-full
+    And the status-full snapshots include runtime metadata
     And the generator runtime config matches the service defaults
     And the moderator runtime config matches the service defaults
     And the processor runtime config matches the service defaults

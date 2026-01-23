@@ -148,7 +148,12 @@ class ControlPlaneEmitterTest {
         ControlPlaneEmitter.StatusContext context = ControlPlaneEmitter.StatusContext.of(builder -> builder
             .enabled(true)
             .tps(0)
-            .data("startedAt", Instant.parse("2024-01-01T00:00:00Z").toString()));
+            .data("startedAt", Instant.parse("2024-01-01T00:00:00Z").toString())
+            .data("runtime", Map.of(
+                "runId", "run-1",
+                "containerId", "container-1",
+                "image", "worker:latest",
+                "stackName", "ph-swarm-A")));
         customEmitter.emitStatusSnapshot(context);
 
         EventMessage message = publisher.lastEvent;

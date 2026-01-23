@@ -288,9 +288,22 @@ class SwarmCreationMock1E2ETest {
               "scope": {"swarmId":"%s","role":"swarm-controller","instance":"%s"},
               "correlationId": null,
               "idempotencyKey": null,
-              "data": {"enabled": false, "context": {"swarmStatus": "READY"}}
+              "data": {
+                "enabled": false,
+                "config": {},
+                "startedAt": "2024-01-01T00:00:00Z",
+                "runtime": {
+                  "runId": "run-1",
+                  "containerId": "%s",
+                  "image": "swarm-controller:latest",
+                  "stackName": "ph-%s"
+                },
+                "io": {},
+                "ioState": {},
+                "context": {"swarmStatus": "READY"}
+              }
             }
-            """.formatted(instanceId, swarmId, instanceId);
+            """.formatted(instanceId, swarmId, instanceId, instanceId, swarmId);
 
         rabbitTemplate.convertAndSend(
             controlPlaneProperties.getExchange(),

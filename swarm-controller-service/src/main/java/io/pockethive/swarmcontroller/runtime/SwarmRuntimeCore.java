@@ -12,6 +12,7 @@ import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.docker.DockerContainerClient;
 import io.pockethive.manager.ports.Clock;
 import io.pockethive.manager.ports.ComputeAdapter;
+import io.pockethive.manager.runtime.ComputeAdapterType;
 import io.pockethive.manager.runtime.ManagerLifecycle;
 import io.pockethive.manager.runtime.ManagerRuntimeCore;
 import io.pockethive.manager.runtime.ManagerStatus;
@@ -330,6 +331,17 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
         roles.add(bee.role());
         Map<String, String> env = new LinkedHashMap<>(
             ControlPlaneContainerEnvironmentFactory.workerEnvironment(beeName, bee.role(), workerSettings, rabbitProperties));
+        String runId = envValue("POCKETHIVE_JOURNAL_RUN_ID");
+        if (hasText(runId)) {
+          env.put("POCKETHIVE_JOURNAL_RUN_ID", runId);
+        }
+        if (bee.image() != null && !bee.image().isBlank()) {
+          env.put("POCKETHIVE_RUNTIME_IMAGE", bee.image());
+        }
+        String stackName = runtimeStackName();
+        if (hasText(stackName)) {
+          env.put("POCKETHIVE_RUNTIME_STACK_NAME", stackName);
+        }
         applyWorkIoEnvironment(bee, env);
         String net = docker.resolveControlNetwork();
         if (hasText(net)) {
@@ -372,6 +384,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
           Map.of("workers", workerSpecs.size()),
           mdcCorrelationId(),
           mdcIdempotencyKey()));
+      status = SwarmStatus.READY;
     } catch (JsonProcessingException e) {
       log.warn("Invalid template payload", e);
       journal.append(localEntry(
@@ -676,8 +689,24 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
 
   private void requestStatus(String role, String instance, String reason) {
     String rk = ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, swarmId, role, instance);
-    log.info("[CTRL] SEND rk={} inst={} payload={} (reason={})", rk, instanceId, "{}", reason);
-    controlPublisher.publishSignal(new io.pockethive.controlplane.messaging.SignalMessage(rk, "{}"));
+    String correlationId = mdcCorrelationId();
+    if (!hasText(correlationId)) {
+      correlationId = "status-request:" + java.util.UUID.randomUUID();
+    }
+    String idempotencyKey = mdcIdempotencyKey();
+    if (!hasText(idempotencyKey)) {
+      idempotencyKey = "status-request:" + java.util.UUID.randomUUID();
+    }
+    io.pockethive.control.ControlScope target =
+        io.pockethive.control.ControlScope.forInstance(swarmId, role, instance);
+    io.pockethive.control.ControlSignal signal = io.pockethive.controlplane.messaging.ControlSignals.statusRequest(
+        instanceId,
+        target,
+        correlationId,
+        idempotencyKey);
+    String payload = io.pockethive.observability.ControlPlaneJson.write(signal, "status-request signal");
+    log.info("[CTRL] SEND rk={} inst={} payload={} (reason={})", rk, instanceId, snippet(payload), reason);
+    controlPublisher.publishSignal(new io.pockethive.controlplane.messaging.SignalMessage(rk, payload));
   }
 
   private Map<String, String> mapInstancesByBeeId(List<Bee> bees, SwarmRuntimeState state) {
@@ -801,6 +830,29 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
         }
       }
     }
+  }
+
+  private String runtimeStackName() {
+    SwarmControllerProperties.Docker docker = properties.getDocker();
+    ComputeAdapterType adapterType = docker == null
+        ? ComputeAdapterType.DOCKER_SINGLE
+        : ComputeAdapterType.defaulted(docker.computeAdapter());
+    if (adapterType == ComputeAdapterType.SWARM_STACK) {
+      return "ph-" + swarmId.toLowerCase(Locale.ROOT);
+    }
+    return null;
+  }
+
+  private static String envValue(String key) {
+    if (key == null || key.isBlank()) {
+      return null;
+    }
+    String value = System.getenv(key);
+    if (value == null) {
+      return null;
+    }
+    String trimmed = value.trim();
+    return trimmed.isBlank() ? null : trimmed;
   }
 
   private static void putEnvIfPresent(Map<String, String> env, String key, Object value) {

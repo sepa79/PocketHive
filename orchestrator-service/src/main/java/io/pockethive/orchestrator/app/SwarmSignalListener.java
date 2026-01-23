@@ -28,8 +28,10 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Map;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -75,6 +77,7 @@ public class SwarmSignalListener {
     private final String controlQueue;
     private final List<String> controlRoutes;
     private final java.time.Instant startedAt;
+    private final Map<String, Object> runtimeMeta;
 
     public SwarmSignalListener(SwarmPlanRegistry plans,
                                ScenarioTimelineRegistry timelines,
@@ -103,6 +106,7 @@ public class SwarmSignalListener {
         this.controlQueue = Objects.requireNonNull(controlQueue, "controlQueue");
         this.controlRoutes = List.copyOf(resolveControlRoutes(descriptor.routes()));
         this.startedAt = java.time.Instant.now();
+        this.runtimeMeta = buildRuntimeMeta();
         try {
             sendStatusFull();
         } catch (Exception e) {
@@ -669,6 +673,7 @@ public class SwarmSignalListener {
                 .controlIn(controlQueue)
                 .controlRoutes(controlRoutes.toArray(String[]::new))
                 .data("swarmCount", registry.count())
+                .data("runtime", runtimeMeta)
                 .data("startedAt", startedAt);
             var adapterType = lifecycle.currentComputeAdapterType();
             if (adapterType != null) {
@@ -717,6 +722,27 @@ public class SwarmSignalListener {
             }
             target.add(template.replace(ControlPlaneRouteCatalog.INSTANCE_TOKEN, instanceId));
         }
+    }
+
+    private Map<String, Object> buildRuntimeMeta() {
+        Map<String, Object> meta = new LinkedHashMap<>();
+        meta.put("runId", envValue("POCKETHIVE_JOURNAL_RUN_ID"));
+        meta.put("containerId", envValue("HOSTNAME"));
+        meta.put("image", envValue("POCKETHIVE_RUNTIME_IMAGE"));
+        meta.put("stackName", envValue("POCKETHIVE_RUNTIME_STACK_NAME"));
+        return Collections.unmodifiableMap(meta);
+    }
+
+    private static String envValue(String key) {
+        if (key == null || key.isBlank()) {
+            return null;
+        }
+        String value = System.getenv(key);
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isBlank() ? null : trimmed;
     }
 
     private void sendControl(String routingKey, String payload, String context) {

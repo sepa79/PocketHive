@@ -19,6 +19,7 @@ import io.pockethive.controlplane.messaging.SignalMessage;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.routing.ControlPlaneRouting.RoutingKey;
 import io.pockethive.manager.guard.BufferGuardSettings;
+import io.pockethive.manager.runtime.ComputeAdapterType;
 import io.pockethive.observability.ControlPlaneJson;
 import io.pockethive.swarm.model.BufferGuardPolicy;
 import io.pockethive.swarm.model.TrafficPolicy;
@@ -42,9 +43,11 @@ import org.springframework.stereotype.Component;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Locale;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -69,6 +72,7 @@ public class SwarmSignalListener {
   private final SwarmWorkersAggregator workers;
   private final SwarmJournal journal;
   private final String journalRunId;
+  private final Map<String, Object> runtimeMeta;
   private static final long STATUS_INTERVAL_MS = 5000L;
   private static final long STATUS_FULL_TIMEOUT_MS = 5000L;
   private static final long MAX_STALENESS_MS = 15_000L;
@@ -104,6 +108,7 @@ public class SwarmSignalListener {
     this.workers = new SwarmWorkersAggregator(MAX_STALENESS_MS);
     this.journal = journal != null ? journal : SwarmJournal.noop();
     this.journalRunId = journalRunId != null && !journalRunId.isBlank() ? journalRunId.trim() : null;
+    this.runtimeMeta = buildRuntimeMeta();
     ObjectMapper controlPlaneMapper = ControlPlaneJson.mapper();
     ControlPlanePublisher basePublisher = new AmqpControlPlanePublisher(rabbit, controlExchange);
     ControlPlanePublisher publisher = new JournalControlPlanePublisher(controlPlaneMapper, this.journal, basePublisher);
@@ -954,6 +959,7 @@ public class SwarmSignalListener {
         .data("swarmDiagnostics", diagnostics.snapshot())
         .data("scenario", scenarioProgress())
         .data("bindings", Map.of("work", lifecycle.workBindingsSnapshot()));
+    builder.data("runtime", runtimeMeta);
     if (journalRunId != null) {
       builder.data("journal", Map.of("runId", journalRunId));
     }
@@ -1018,6 +1024,38 @@ public class SwarmSignalListener {
   private Map<String, Object> scenarioProgress() {
     Map<String, Object> snapshot = lifecycle.scenarioProgress();
     return snapshot != null ? snapshot : Map.of();
+  }
+
+  private Map<String, Object> buildRuntimeMeta() {
+    Map<String, Object> meta = new LinkedHashMap<>();
+    meta.put("runId", journalRunId);
+    meta.put("containerId", envValue("HOSTNAME"));
+    meta.put("image", envValue("POCKETHIVE_RUNTIME_IMAGE"));
+    meta.put("stackName", runtimeStackName());
+    return Collections.unmodifiableMap(meta);
+  }
+
+  private String runtimeStackName() {
+    SwarmControllerProperties.Docker docker = properties.getDocker();
+    ComputeAdapterType adapterType = docker == null
+        ? ComputeAdapterType.DOCKER_SINGLE
+        : ComputeAdapterType.defaulted(docker.computeAdapter());
+    if (adapterType == ComputeAdapterType.SWARM_STACK) {
+      return "ph-" + swarmId.toLowerCase(Locale.ROOT);
+    }
+    return null;
+  }
+
+  private static String envValue(String key) {
+    if (key == null || key.isBlank()) {
+      return null;
+    }
+    String value = System.getenv(key);
+    if (value == null) {
+      return null;
+    }
+    String trimmed = value.trim();
+    return trimmed.isBlank() ? null : trimmed;
   }
 
   private ScenarioChange applyScenarioOverrides(JsonNode dataNode) {

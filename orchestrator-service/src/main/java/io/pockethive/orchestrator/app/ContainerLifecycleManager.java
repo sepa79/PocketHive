@@ -154,6 +154,10 @@ public class ContainerLifecycleManager {
             resolvedAdapterType = ComputeAdapterType.DOCKER_SINGLE;
         }
         env.put("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_DOCKER_COMPUTE_ADAPTER", resolvedAdapterType.name());
+        env.put("POCKETHIVE_RUNTIME_IMAGE", resolvedImage);
+        if (resolvedAdapterType == ComputeAdapterType.SWARM_STACK) {
+            env.put("POCKETHIVE_RUNTIME_STACK_NAME", "ph-" + resolvedSwarmId.toLowerCase(java.util.Locale.ROOT));
+        }
         if (autoPullImages) {
             log.info("autoPullImages=true, pulling controller image {} before start", resolvedImage);
             docker.pullImage(resolvedImage);

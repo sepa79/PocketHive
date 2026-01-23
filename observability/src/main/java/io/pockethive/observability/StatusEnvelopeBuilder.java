@@ -23,6 +23,7 @@ public class StatusEnvelopeBuilder {
         "enabled",
         "tps",
         "startedAt",
+        "runtime",
         "config",
         "io",
         "ioState",
@@ -431,12 +432,16 @@ public class StatusEnvelopeBuilder {
         if (isFull && !data.containsKey("startedAt")) {
             throw new IllegalStateException("status-full metrics must include data.startedAt");
         }
+        if (isFull && !data.containsKey("runtime")) {
+            throw new IllegalStateException("status-full metrics must include data.runtime");
+        }
         if (isFull && !data.containsKey("config")) {
             data.put("config", Collections.emptyMap());
         }
 
         if (!isFull) {
             data.remove("startedAt");
+            data.remove("runtime");
             data.remove("config");
             data.remove("io");
         }
@@ -454,6 +459,7 @@ public class StatusEnvelopeBuilder {
         if (isFull) {
             canonicalData.put("config", Objects.requireNonNullElse(data.get("config"), Collections.emptyMap()));
             canonicalData.put("startedAt", data.get("startedAt"));
+            canonicalData.put("runtime", data.get("runtime"));
             canonicalData.put("io", Objects.requireNonNullElse(data.get("io"), Collections.emptyMap()));
         }
 

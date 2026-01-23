@@ -53,6 +53,7 @@ public record StatusEvent(
     public Boolean enabled;
     public Long tps;
     public Instant startedAt;
+    public Map<String, Object> runtime;
     public Io io;
     public Map<String, Object> context;
 
@@ -73,6 +74,10 @@ public record StatusEvent(
       return startedAt;
     }
 
+    public Map<String, Object> runtime() {
+      return normaliseMap(runtime);
+    }
+
     public Io io() {
       return io == null ? new Io(null, null) : io;
     }
@@ -88,7 +93,12 @@ public record StatusEvent(
 
     @JsonAnySetter
     public void captureExtra(String key, Object value) {
-      if ("enabled".equals(key) || "tps".equals(key) || "startedAt".equals(key) || "io".equals(key) || "context".equals(key)) {
+      if ("enabled".equals(key)
+          || "tps".equals(key)
+          || "startedAt".equals(key)
+          || "runtime".equals(key)
+          || "io".equals(key)
+          || "context".equals(key)) {
         return;
       }
       extra.put(key, value);

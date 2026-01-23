@@ -13,7 +13,6 @@ import io.pockethive.controlplane.messaging.SignalMessage;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.observability.ControlPlaneJson;
-import io.pockethive.manager.runtime.ComputeAdapterType;
 import io.pockethive.orchestrator.domain.IdempotencyStore;
 import io.pockethive.orchestrator.domain.ScenarioPlan;
 import io.pockethive.orchestrator.domain.ScenarioTimelineRegistry;
@@ -643,24 +642,17 @@ public class SwarmController {
                 return summary;
             }
         }
-        return toSummaryFromRegistry(swarm);
-    }
-
-    private SwarmSummary toSummaryFromRegistry(Swarm swarm) {
-        List<BeeSummary> bees = swarm.bees().stream()
-            .map(b -> new BeeSummary(b.role(), b.image()))
-            .toList();
         return new SwarmSummary(
             swarm.getId(),
-            swarm.getStatus(),
-            swarm.getHealth(),
-            swarm.getHeartbeat(),
-            swarm.isWorkEnabled(),
-            swarm.templateId().orElse(null),
-            swarm.controllerImage().orElse(null),
-            swarm.getSutId(),
-            stackNameFor(swarm),
-            bees);
+            null,
+            null,
+            null,
+            true,
+            null,
+            null,
+            null,
+            null,
+            List.of());
     }
 
     private SwarmSummary toSummaryFromStatusFull(Swarm swarm, JsonNode statusFull) {
@@ -677,22 +669,20 @@ public class SwarmController {
             id = swarm.getId();
         }
 
-        SwarmStatus status = parseSwarmStatus(textOrNull(context, "swarmStatus"), swarm.getStatus());
-        SwarmHealth health = parseSwarmHealth(textOrNull(context, "swarmHealth"), swarm.getHealth());
+        SwarmStatus status = parseSwarmStatus(textOrNull(context, "swarmStatus"), null);
+        SwarmHealth health = parseSwarmHealth(textOrNull(context, "swarmHealth"), null);
         Instant heartbeat = parseInstant(textOrNull(statusFull, "timestamp"));
-        if (heartbeat == null) {
-            heartbeat = swarm.getHeartbeat();
-        }
 
         boolean workEnabled = data.has("enabled")
-            ? data.path("enabled").asBoolean(false)
-            : false;
+            ? data.path("enabled").asBoolean(true)
+            : true;
 
         String templateId = null;
         String controllerImage = null;
         String sutId = textOrNull(context, "sutId");
         List<BeeSummary> bees = beesFromWorkers(workers);
 
+        String stackName = textOrNull(data.path("runtime"), "stackName");
         return new SwarmSummary(
             id,
             status,
@@ -702,15 +692,8 @@ public class SwarmController {
             templateId,
             controllerImage,
             sutId,
-            stackNameFor(swarm),
+            stackName,
             bees);
-    }
-
-    private String stackNameFor(Swarm swarm) {
-        ComputeAdapterType adapterType = lifecycle.currentComputeAdapterType();
-        return adapterType == ComputeAdapterType.SWARM_STACK
-            ? ("ph-" + swarm.getId().toLowerCase())
-            : null;
     }
 
     private static String textOrNull(JsonNode node, String field) {

@@ -72,6 +72,7 @@ public final class WorkerControlPlaneRuntime {
     private volatile double lastComputedTps = 0.0;
     private volatile double lastIntervalSeconds = 0.0;
     private final Instant startedAt;
+    private final Map<String, Object> runtimeMeta;
 
     private static final List<String> IO_INPUT_PRECEDENCE = List.of(
         "upstream-error",
@@ -118,6 +119,7 @@ public final class WorkerControlPlaneRuntime {
         this.identity = Objects.requireNonNull(identity, "identity");
         this.configMerger = new ConfigMerger(this.objectMapper);
         this.templateRenderer = templateRenderer;
+        this.runtimeMeta = buildRuntimeMeta();
         WorkerControlPlaneProperties.ControlPlane resolvedControlPlane =
             Objects.requireNonNull(controlPlane, "controlPlane");
         this.controlQueueName = resolvedControlPlane.getControlQueueName();
@@ -736,6 +738,7 @@ public final class WorkerControlPlaneRuntime {
             builder.data("intervalSeconds", intervalSeconds);
             if (snapshot) {
                 builder.data("startedAt", startedAt);
+                builder.data("runtime", runtimeMeta);
                 builder.config(configSnapshot);
             }
         };
@@ -823,6 +826,27 @@ public final class WorkerControlPlaneRuntime {
             context,
             Instant.now()
         ));
+    }
+
+    private Map<String, Object> buildRuntimeMeta() {
+        Map<String, Object> meta = new LinkedHashMap<>();
+        meta.put("runId", envValue("POCKETHIVE_JOURNAL_RUN_ID"));
+        meta.put("containerId", envValue("HOSTNAME"));
+        meta.put("image", envValue("POCKETHIVE_RUNTIME_IMAGE"));
+        meta.put("stackName", envValue("POCKETHIVE_RUNTIME_STACK_NAME"));
+        return Collections.unmodifiableMap(meta);
+    }
+
+    private static String envValue(String key) {
+        if (key == null || key.isBlank()) {
+            return null;
+        }
+        String value = System.getenv(key);
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isBlank() ? null : trimmed;
     }
 
     private static String asIoState(Object value, List<String> allowed) {

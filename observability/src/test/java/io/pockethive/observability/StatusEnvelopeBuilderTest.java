@@ -21,6 +21,11 @@ class StatusEnvelopeBuilderTest {
                 .enabled(true)
                 .tps(0)
                 .data("startedAt", Instant.parse("2024-01-01T00:00:00Z"))
+                .data("runtime", Map.of(
+                    "runId", "run-1",
+                    "containerId", "container-1",
+                    "image", "worker:latest",
+                    "stackName", "ph-sw1"))
                 .toJson();
         JsonNode node = new ObjectMapper().readTree(json);
         assertEquals("sw1", node.path("scope").path("swarmId").asText());
@@ -60,6 +65,11 @@ class StatusEnvelopeBuilderTest {
                 .enabled(true)
                 .tps(0)
                 .data("startedAt", Instant.parse("2024-01-01T00:00:00Z"))
+                .data("runtime", Map.of(
+                    "runId", "run-1",
+                    "containerId", "container-1",
+                    "image", "worker:latest",
+                    "stackName", "ph-sw1"))
                 .queueStats(stats)
                 .toJson();
 
@@ -81,6 +91,11 @@ class StatusEnvelopeBuilderTest {
                 .enabled(true)
                 .tps(0)
                 .data("startedAt", Instant.parse("2024-01-01T00:00:00Z"))
+                .data("runtime", Map.of(
+                    "runId", "run-1",
+                    "containerId", "container-1",
+                    "image", "worker:latest",
+                    "stackName", "ph-sw1"))
                 .ioWorkState("out-of-data", "ok", Map.of("dataset", "redis:users"))
                 .filesystemEnabled(true)
                 .ioFilesystemState("ok", "ok", null)

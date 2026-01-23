@@ -316,6 +316,12 @@ class SwarmControllerTest {
                 "enabled": true,
                 "config": {},
                 "startedAt": "2026-01-22T12:00:00Z",
+                "runtime": {
+                  "runId": "run-1",
+                  "containerId": "container-1",
+                  "image": "ctrl-image",
+                  "stackName": "ph-sw1"
+                },
                 "io": {},
                 "ioState": {},
                 "context": {
@@ -364,11 +370,18 @@ class SwarmControllerTest {
                 "enabled": true,
                 "config": {},
                 "startedAt": "2026-01-22T12:00:01Z",
+                "runtime": {
+                  "runId": "run-alpha",
+                  "containerId": "container-alpha",
+                  "image": "ctrl-alpha",
+                  "stackName": "ph-alpha"
+                },
                 "io": {},
                 "ioState": {},
                 "context": {
                   "swarmStatus": "READY",
                   "swarmHealth": "RUNNING",
+                  "workers": [ { "role": "generator", "instance": "gen-1" } ],
                   "template": {
                     "id": "tpl-alpha",
                     "image": "ctrl-alpha",
@@ -394,11 +407,18 @@ class SwarmControllerTest {
                 "enabled": true,
                 "config": {},
                 "startedAt": "2026-01-22T12:00:02Z",
+                "runtime": {
+                  "runId": "run-bravo",
+                  "containerId": "container-bravo",
+                  "image": "ctrl-bravo",
+                  "stackName": "ph-bravo"
+                },
                 "io": {},
                 "ioState": {},
                 "context": {
                   "swarmStatus": "READY",
                   "swarmHealth": "RUNNING",
+                  "workers": [ { "role": "moderator", "instance": "mod-1" } ],
                   "template": {
                     "id": "tpl-bravo",
                     "image": "ctrl-bravo",
@@ -417,10 +437,10 @@ class SwarmControllerTest {
         List<SwarmController.SwarmSummary> body = resp.getBody();
 
         assertThat(body).extracting(SwarmController.SwarmSummary::id).containsExactly("alpha", "bravo");
-        assertThat(body.get(0).templateId()).isEqualTo("tpl-alpha");
-        assertThat(body.get(0).bees()).containsExactly(new SwarmController.BeeSummary("generator", "gen-alpha"));
-        assertThat(body.get(1).templateId()).isEqualTo("tpl-bravo");
-        assertThat(body.get(1).bees()).containsExactly(new SwarmController.BeeSummary("moderator", "mod-bravo"));
+        assertThat(body.get(0).templateId()).isNull();
+        assertThat(body.get(0).bees()).containsExactly(new SwarmController.BeeSummary("generator", null));
+        assertThat(body.get(1).templateId()).isNull();
+        assertThat(body.get(1).bees()).containsExactly(new SwarmController.BeeSummary("moderator", null));
     }
 
     @Test

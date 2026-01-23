@@ -15,6 +15,13 @@
     "enabled": true,
     "tps": 123,
     "startedAt": "2024-07-01T12:00:00Z",
+    "runtime": {
+      "runId": "run-1",
+      "containerId": "container-1",
+      "image": "worker:latest",
+      "stackName": "ph-swarm-alpha"
+    },
+    "config": {},
     "io": {
       "work": {
         "queues": {
@@ -36,6 +43,12 @@
         }
       }
     },
+    "ioState": {
+      "work": {
+        "input": "ok",
+        "output": "ok"
+      }
+    },
     "context": {
       "location": "local",
       "traffic": "traffic.exchange",
@@ -49,7 +62,6 @@
         "enabled": 3
       },
       "publishes": ["traffic.results"]
-    },
-    "extra": "value"
+    }
   }
 }

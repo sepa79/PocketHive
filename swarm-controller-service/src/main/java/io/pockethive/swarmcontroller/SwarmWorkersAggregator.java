@@ -33,12 +33,18 @@ final class SwarmWorkersAggregator {
       return;
     }
 
+    String key = key(role, instance);
+    WorkerSnapshot previous = byKey.get(key);
     boolean enabled = dataNode.path("enabled").asBoolean(true);
     long tps = dataNode.path("tps").asLong(0L);
 
     JsonNode ioStateNode = dataNode.path("ioState").path("work");
     String input = ioStateNode.path("input").asText("unknown");
     String output = ioStateNode.path("output").asText("unknown");
+    Map<String, Object> runtime = runtimeFrom(dataNode.path("runtime"));
+    if (runtime == null && previous != null) {
+      runtime = previous.runtime();
+    }
 
     long now = System.currentTimeMillis();
     WorkerSnapshot snapshot = new WorkerSnapshot(
@@ -48,9 +54,10 @@ final class SwarmWorkersAggregator {
         tps,
         input,
         output,
+        runtime,
         Instant.ofEpochMilli(now).toString(),
         now);
-    byKey.put(key(role, instance), snapshot);
+    byKey.put(key, snapshot);
   }
 
   List<Map<String, Object>> snapshot() {
@@ -76,6 +83,9 @@ final class SwarmWorkersAggregator {
               "output", snapshot.workOutput()
           )
       ));
+      if (snapshot.runtime() != null && !snapshot.runtime().isEmpty()) {
+        entry.put("runtime", snapshot.runtime());
+      }
       out.add(entry);
     }
     return List.copyOf(out);
@@ -89,6 +99,33 @@ final class SwarmWorkersAggregator {
     return Objects.requireNonNull(role).trim() + ":" + Objects.requireNonNull(instance).trim();
   }
 
+  private static Map<String, Object> runtimeFrom(JsonNode node) {
+    if (node == null || !node.isObject()) {
+      return null;
+    }
+    Map<String, Object> runtime = new LinkedHashMap<>();
+    runtime.put("runId", textOrNull(node, "runId"));
+    runtime.put("containerId", textOrNull(node, "containerId"));
+    runtime.put("image", textOrNull(node, "image"));
+    runtime.put("stackName", textOrNull(node, "stackName"));
+    if (runtime.values().stream().allMatch(Objects::isNull)) {
+      return null;
+    }
+    return runtime;
+  }
+
+  private static String textOrNull(JsonNode node, String field) {
+    if (node == null || field == null) {
+      return null;
+    }
+    JsonNode value = node.get(field);
+    if (value == null || value.isNull()) {
+      return null;
+    }
+    String text = value.asText(null);
+    return text == null || text.isBlank() ? null : text;
+  }
+
   private record WorkerSnapshot(
       String role,
       String instance,
@@ -96,8 +133,8 @@ final class SwarmWorkersAggregator {
       long tps,
       String workInput,
       String workOutput,
+      Map<String, Object> runtime,
       String lastSeenAt,
       long lastSeenMillis) {
   }
 }
-

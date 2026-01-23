@@ -37,6 +37,12 @@ class ControllerStatusListenerRebuildTest {
                 "ioState": {"filesystem": {"input":"unknown","output":"unknown"}},
                 "config": {},
                 "startedAt": "2024-01-01T00:00:00Z",
+                "runtime": {
+                  "runId": "run-1",
+                  "containerId": "container-1",
+                  "image": "swarm-controller:latest",
+                  "stackName": "ph-sw1"
+                },
                 "io": {},
                 "context": {"swarmStatus": "STOPPED", "journal": {"runId":"run-1"}}
               }
