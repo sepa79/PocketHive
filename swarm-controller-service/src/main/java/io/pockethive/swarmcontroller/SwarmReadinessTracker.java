@@ -34,6 +34,7 @@ public final class SwarmReadinessTracker {
   private final Map<String, Integer> expectedReady = new HashMap<>();
   private final Map<String, List<String>> instancesByRole = new HashMap<>();
   private final ConcurrentMap<String, Long> lastSeen = new ConcurrentHashMap<>();
+  private final ConcurrentMap<String, Long> lastSnapshotSeen = new ConcurrentHashMap<>();
   private final ConcurrentMap<String, Boolean> enabled = new ConcurrentHashMap<>();
 
   public SwarmReadinessTracker(StatusRequestCallback statusRequestCallback) {
@@ -44,6 +45,7 @@ public final class SwarmReadinessTracker {
     expectedReady.clear();
     instancesByRole.clear();
     lastSeen.clear();
+    lastSnapshotSeen.clear();
     enabled.clear();
   }
 
@@ -59,6 +61,13 @@ public final class SwarmReadinessTracker {
       return;
     }
     lastSeen.put(key(role, instance), timestamp);
+  }
+
+  public void recordStatusSnapshot(String role, String instance, long timestamp) {
+    if (!hasText(role) || !hasText(instance)) {
+      return;
+    }
+    lastSnapshotSeen.put(key(role, instance), timestamp);
   }
 
   public void recordEnabled(String role, String instance, boolean flag) {
@@ -86,6 +95,29 @@ public final class SwarmReadinessTracker {
       return true;
     }
     return isFullyReady();
+  }
+
+  public boolean hasFreshSnapshotsSince(long cutoffMillis) {
+    Map<String, List<String>> snapshot;
+    synchronized (this) {
+      snapshot = new HashMap<>(instancesByRole);
+    }
+    if (snapshot.isEmpty()) {
+      return true;
+    }
+    boolean ready = true;
+    for (Map.Entry<String, List<String>> entry : snapshot.entrySet()) {
+      String role = entry.getKey();
+      for (String instance : entry.getValue()) {
+        String key = key(role, instance);
+        Long ts = lastSnapshotSeen.get(key);
+        if (ts == null || ts < cutoffMillis) {
+          ready = false;
+          statusRequestCallback.requestStatus(role, instance, "snapshot-stale");
+        }
+      }
+    }
+    return ready;
   }
 
   public SwarmMetrics metrics() {

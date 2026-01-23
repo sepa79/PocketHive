@@ -39,6 +39,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
@@ -87,6 +88,7 @@ class SwarmSignalListenerTest {
         "exchange", HIVE_EXCHANGE,
         "edges", List.of()));
     lenient().when(lifecycle.isReadyForWork()).thenReturn(true);
+    lenient().when(lifecycle.hasFreshWorkerStatusSnapshotsSince(anyLong())).thenReturn(true);
     lenient().when(lifecycle.trafficPolicy()).thenReturn(null);
   }
 

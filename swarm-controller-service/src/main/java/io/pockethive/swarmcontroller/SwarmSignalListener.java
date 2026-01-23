@@ -70,9 +70,11 @@ public class SwarmSignalListener {
   private final SwarmJournal journal;
   private final String journalRunId;
   private static final long STATUS_INTERVAL_MS = 5000L;
+  private static final long STATUS_FULL_TIMEOUT_MS = 5000L;
   private static final long MAX_STALENESS_MS = 15_000L;
   private final AtomicReference<PendingTemplate> pendingTemplate = new AtomicReference<>();
   private final AtomicReference<PendingStart> pendingStart = new AtomicReference<>();
+  private final AtomicReference<PendingStatusFull> pendingStatusFull = new AtomicReference<>();
   private final AtomicBoolean templateApplied = new AtomicBoolean(false);
   private final AtomicBoolean planApplied = new AtomicBoolean(false);
   private final java.time.Instant startedAt;
@@ -209,7 +211,11 @@ public class SwarmSignalListener {
         log.debug("Ignoring status payload for swarm {} on routing key {}", payloadSwarm, routingKey);
         return;
       }
+      boolean isStatusFull = isStatusFullEvent(eventKey);
       lifecycle.updateHeartbeat(role, instance);
+      if (isStatusFull) {
+        lifecycle.recordStatusSnapshot(role, instance, System.currentTimeMillis());
+      }
       diagnostics.updateFromWorkerStatus(role, instance, node.path("data"));
       ioStates.updateFromWorkerStatus(role, instance, node.path("data"));
       workers.updateFromWorkerStatus(role, instance, node.path("data"));
@@ -224,6 +230,7 @@ public class SwarmSignalListener {
           tryEmitPendingStartReady();
         }
       }
+      maybeEmitPendingStatusFull();
     } catch (Exception e) {
       log.warn("status parse", e);
     }
@@ -384,6 +391,11 @@ public class SwarmSignalListener {
         onStartSuccess(cs, resolvedSignal, swarmId);
       } else {
         emitSuccess(cs, resolvedSignal, swarmId);
+        if (ControlPlaneSignals.SWARM_PLAN.equals(resolvedSignal)) {
+          queueStatusFull(StatusFullTrigger.PLAN);
+        } else if (ControlPlaneSignals.SWARM_STOP.equals(resolvedSignal)) {
+          queueStatusFull(StatusFullTrigger.STOP);
+        }
       }
     } catch (Exception e) {
       log.warn(label, e);
@@ -392,9 +404,10 @@ public class SwarmSignalListener {
   }
 
   private void onTemplateSuccess(ControlSignal cs, String resolvedSignal, String swarmId) {
-    if (lifecycle.isReadyForWork()) {
+    if (lifecycle.isReadyForWork() && !lifecycle.hasPendingConfigUpdates()) {
       pendingTemplate.set(null);
       emitSuccess(cs, resolvedSignal, swarmId);
+      queueStatusFull(StatusFullTrigger.TEMPLATE);
       return;
     }
 
@@ -412,11 +425,12 @@ public class SwarmSignalListener {
       if (pending == null) {
         return;
       }
-      if (!lifecycle.isReadyForWork()) {
+      if (!lifecycle.isReadyForWork() || lifecycle.hasPendingConfigUpdates()) {
         return;
       }
       if (pendingTemplate.compareAndSet(pending, null)) {
         emitSuccess(pending.signal(), pending.resolvedSignal(), pending.swarmIdFallback());
+        queueStatusFull(StatusFullTrigger.TEMPLATE);
         return;
       }
     }
@@ -426,6 +440,7 @@ public class SwarmSignalListener {
     if (!lifecycle.hasPendingConfigUpdates() && lifecycle.isReadyForWork()) {
       pendingStart.set(null);
       emitSuccess(cs, resolvedSignal, swarmId);
+      queueStatusFull(StatusFullTrigger.START);
       return;
     }
     PendingStart newPending = new PendingStart(cs, resolvedSignal, swarmId);
@@ -448,6 +463,7 @@ public class SwarmSignalListener {
       }
       if (pendingStart.compareAndSet(pending, null)) {
         emitSuccess(pending.signal(), pending.resolvedSignal(), pending.swarmIdFallback());
+        queueStatusFull(StatusFullTrigger.START);
         return;
       }
     }
@@ -619,7 +635,6 @@ public class SwarmSignalListener {
           }
           processSwarmSignal(cs, signal, swarmIdOrDefault(cs), args -> {
             lifecycle.start(args);
-            sendStatusFull();
           }, "start");
         }
       }
@@ -699,7 +714,9 @@ public class SwarmSignalListener {
   @Scheduled(fixedRate = STATUS_INTERVAL_MS)
   public void status() {
     sendStatusDelta();
+    tryEmitPendingTemplateReady();
     tryEmitPendingStartReady();
+    maybeEmitPendingStatusFull();
   }
 
   private void emitSuccess(ControlSignal cs, String resolvedSignal, String swarmIdFallback) {
@@ -826,6 +843,54 @@ public class SwarmSignalListener {
   private record PendingTemplate(ControlSignal signal, String resolvedSignal, String swarmIdFallback) {}
 
   private record PendingStart(ControlSignal signal, String resolvedSignal, String swarmIdFallback) {}
+
+  private record PendingStatusFull(StatusFullTrigger trigger, long requestedAt) {}
+
+  private enum StatusFullTrigger {
+    TEMPLATE,
+    PLAN,
+    START,
+    STOP
+  }
+
+  private void queueStatusFull(StatusFullTrigger trigger) {
+    PendingStatusFull next = new PendingStatusFull(trigger, System.currentTimeMillis());
+    PendingStatusFull previous = pendingStatusFull.getAndSet(next);
+    if (previous != null) {
+      log.debug("Replacing pending status-full trigger {} with {}", previous.trigger(), trigger);
+    }
+    maybeEmitPendingStatusFull();
+  }
+
+  private void maybeEmitPendingStatusFull() {
+    PendingStatusFull pending = pendingStatusFull.get();
+    if (pending == null) {
+      return;
+    }
+    long now = System.currentTimeMillis();
+    boolean ready = switch (pending.trigger()) {
+      case TEMPLATE -> !lifecycle.hasPendingConfigUpdates();
+      case PLAN -> true;
+      case START, STOP -> lifecycle.hasFreshWorkerStatusSnapshotsSince(pending.requestedAt());
+    };
+    boolean timedOut = switch (pending.trigger()) {
+      case START, STOP -> now - pending.requestedAt() >= STATUS_FULL_TIMEOUT_MS;
+      default -> false;
+    };
+    if (!ready && !timedOut) {
+      return;
+    }
+    if (pendingStatusFull.compareAndSet(pending, null)) {
+      sendStatusFull();
+    }
+  }
+
+  private boolean isStatusFullEvent(RoutingKey key) {
+    if (key == null || key.type() == null) {
+      return false;
+    }
+    return key.type().endsWith("status-full");
+  }
 
   private String phaseForSignal(String signal) {
     if (signal == null || signal.isBlank()) {

@@ -5,7 +5,10 @@ import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import io.pockethive.orchestrator.domain.SwarmHealth;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
+import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmStatus;
+import java.time.Instant;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -16,6 +19,7 @@ import org.springframework.boot.test.system.OutputCaptureExtension;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import org.slf4j.LoggerFactory;
 
 @ExtendWith({MockitoExtension.class, OutputCaptureExtension.class})
@@ -30,7 +34,10 @@ class ControllerStatusListenerTest {
     SwarmSignalListener swarmSignals;
 
     @Test
-    void updatesRegistry() {
+    void updatesRegistry() throws Exception {
+        Swarm swarm = new Swarm("sw1", "inst1", "c1", "run-1");
+        swarm.updateControllerStatusFull(new ObjectMapper().readTree("{\"data\":{}}"), Instant.now());
+        when(registry.find("sw1")).thenReturn(Optional.of(swarm));
         ControllerStatusListener listener =
             new ControllerStatusListener(registry, new ObjectMapper(), statusRequests, swarmSignals);
         String json = """
@@ -55,7 +62,10 @@ class ControllerStatusListenerTest {
     }
 
     @Test
-    void updatesRegistryFromTopLevelFlags() {
+    void updatesRegistryFromTopLevelFlags() throws Exception {
+        Swarm swarm = new Swarm("sw1", "inst1", "c1", "run-1");
+        swarm.updateControllerStatusFull(new ObjectMapper().readTree("{\"data\":{}}"), Instant.now());
+        when(registry.find("sw1")).thenReturn(Optional.of(swarm));
         ControllerStatusListener listener =
             new ControllerStatusListener(registry, new ObjectMapper(), statusRequests, swarmSignals);
         String json = """

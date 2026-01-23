@@ -36,8 +36,9 @@ envelope refactor. This consolidates remaining UI items from:
   - Orchestrator stores the latest SC `status-full` (swarm-controller only).
   - Orchestrator applies subsequent `status-delta` updates to that cached snapshot.
   - UI should prefer the Orchestrator snapshot over client-side merge.
-- `status-delta` applies only if a prior `status-full` exists for the same scope.
-  - If a delta arrives for an unknown scope, trigger a `status-full` refresh and ignore the delta until the snapshot lands.
+- `status-delta` merges into the current cache for the same scope.
+  - If no `status-full` exists yet, **the delta seeds a partial cache**; return whatever fields are present (no fallback chain).
+  - A later `status-full` overwrites the cache with the full snapshot and continues merging subsequent deltas.
 - Merge rules (schema-driven, enforced in Orchestrator):
   - Apply only the fields present in the delta payload.
   - Per `docs/ARCHITECTURE.md` and the control-events schema, deltas must omit `data.config`, `data.io`, and `data.startedAt`.
@@ -127,8 +128,13 @@ envelope refactor. This consolidates remaining UI items from:
 - [x] `WireLogStore` (Buzz v2) retains raw frames + parsed envelopes + validation errors and exposes JSONL export.
 - [x] `ControlPlaneStateStore` applies only valid envelopes and merges `status-delta` into the latest `status-full` snapshot.
 - [x] `StompGateway` is the single STOMP connection and routes every frame through the decoder before state updates.
-- [ ] `RestGateway` fetches Orchestrator **SC status-full snapshots** for initial state/hydration.
+- [ ] `RestGateway` fetches Orchestrator REST **SC status-full snapshots** for initial state/hydration.
 - [ ] UI treats Orchestrator snapshot as baseline; STOMP is optional live update only.
+
+**Orchestrator data source (single cache)**
+- Orchestrator REST reads from **one cache only**: the latest SC `status-full` snapshot per swarm.
+- `status-delta` updates are merged into that cache; no separate registry or fallback chain.
+- The cache payload is **`status-full` compatible** (same schema as SC).
 
 ## 1) Control-plane subscriptions (no per-worker fan-out)
 
@@ -143,12 +149,7 @@ envelope refactor. This consolidates remaining UI items from:
 
 `GET /api/swarms` returns **summary only**, derived exclusively from the cached SC `status-full` snapshot.
 
-**Rule:** if no `status-full` is cached for a swarm, return **what we know** (new swarm still booting):
-- `status`: `UNKNOWN`
-- `health`: `UNKNOWN`
-- `heartbeat`: `null`
-- `bees`: `[]`
-- `templateId`, `controllerImage`, `sutId`, `stackName`: use only if already known to Orchestrator.
+**Rule:** if no `status-full` is cached for a swarm, return **unknown / null fields** (no fallback chaining).
 
 **Mapping from `status-full` (SC) → `SwarmSummary`:**
 - `id` → `scope.swarmId`
@@ -156,13 +157,26 @@ envelope refactor. This consolidates remaining UI items from:
 - `health` → `data.context.swarmHealth` (always present per contract)
 - `heartbeat` → `timestamp` (SC status-full timestamp)
 - `workEnabled` → `data.enabled` (boolean, default `true` when missing)
-- `templateId` → `data.context.template.id` (if present)
-- `controllerImage` → `data.context.template.image` (if present)
+- `stackName` → `data.runtime.stackName` (if present)
 - `sutId` → `data.context.sutId` (if present)
-- `stackName` → unchanged (Orchestrator‑local, if available)
-- `bees[]` → `data.context.template.bees[]` (map `role`, `image`)
+- `bees[]` → `data.context.workers[]` (map `role`, `image = null`, de‑dupe by role)
 
 **Note:** Summary must remain a projection of cached `status-full` only; do not merge Scenario Manager data.
+
+**Runtime metadata (status-full)**
+- `data.runtime` is required for `status-full` and is full-only (never in deltas).
+- `data.context.workers[].runtime` mirrors the same shape for per‑worker infra data.
+
+### Status-full emission timing (Swarm Controller)
+
+| Command | Outcome emitted when | Status-full emitted when | Timeout |
+| --- | --- | --- | --- |
+| `swarm-template` | `isReadyForWork && !pendingConfigUpdates` | immediately after outcome | — |
+| `swarm-plan` | immediately after outcome | immediately after outcome | — |
+| `swarm-start` | `isReadyForWork && !pendingConfigUpdates` | after fresh worker `status-full` snapshots | 5s |
+| `swarm-stop` | immediately after outcome | after fresh worker `status-full` snapshots | 5s |
+
+**Rule:** worker runtimes emit `status-full` after `config-update`, so start/stop can wait on those snapshots.
 
 ## 2) Topology-first join (runtime SSOT in `status-full`)
 

@@ -195,6 +195,16 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   }
 
   @Override
+  public void recordStatusSnapshot(String role, String instance, long timestamp) {
+    core.recordStatusSnapshot(role, instance, timestamp);
+  }
+
+  @Override
+  public boolean hasFreshWorkerStatusSnapshotsSince(long cutoffMillis) {
+    return core.hasFreshWorkerStatusSnapshotsSince(cutoffMillis);
+  }
+
+  @Override
   public void updateEnabled(String role, String instance, boolean enabled) {
     core.updateEnabled(role, instance, enabled);
   }

@@ -168,6 +168,17 @@
         "filesystem": { "$ref": "#/$defs/IoState" }
       }
     },
+    "RuntimeMeta": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Runtime/infra metadata for this scope (full-only).",
+      "properties": {
+        "runId": { "$ref": "#/$defs/NullableNonEmptyString" },
+        "containerId": { "$ref": "#/$defs/NullableNonEmptyString" },
+        "image": { "$ref": "#/$defs/NullableNonEmptyString" },
+        "stackName": { "$ref": "#/$defs/NullableNonEmptyString" }
+      }
+    },
     "StatusFullMetric": {
       "allOf": [
         { "$ref": "#/$defs/EnvelopeBase" },
@@ -179,7 +190,7 @@
                 "data": {
                   "type": "object",
                   "additionalProperties": false,
-                  "required": ["enabled", "config", "startedAt", "io", "ioState"],
+                  "required": ["enabled", "config", "startedAt", "runtime", "io", "ioState"],
                   "properties": {
                     "enabled": { "type": "boolean" },
                     "config": {
@@ -187,6 +198,7 @@
                       "additionalProperties": true,
                       "description": "Snapshot of the effective configuration for this scope (role/instance). Must not include secrets."
                     },
+                    "runtime": { "$ref": "#/$defs/RuntimeMeta" },
                     "tps": { "type": "integer", "minimum": 0 },
                     "startedAt": { "type": "string", "format": "date-time" },
                     "io": { "$ref": "#/$defs/MetricIo" },

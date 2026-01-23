@@ -11,6 +11,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 
+import com.fasterxml.jackson.databind.JsonNode;
+
 /**
  * Thin wrapper around {@link WebClient} to access the Orchestrator REST API.
  */
@@ -68,17 +70,51 @@ public final class OrchestratorClient {
   public Optional<SwarmView> findSwarm(String swarmId) {
     Objects.requireNonNull(swarmId, "swarmId");
     try {
-      ResponseEntity<SwarmView> entity = webClient.get()
+      ResponseEntity<JsonNode> entity = webClient.get()
           .uri(path("/api/swarms/{swarmId}", swarmId))
           .accept(MediaType.APPLICATION_JSON)
           .retrieve()
-          .toEntity(SwarmView.class)
+          .toEntity(JsonNode.class)
           .timeout(HTTP_TIMEOUT)
           .block(HTTP_TIMEOUT);
-      return Optional.ofNullable(entity.getBody());
+      if (entity == null || entity.getBody() == null) {
+        return Optional.empty();
+      }
+      return Optional.ofNullable(toSwarmView(entity.getBody()));
     } catch (WebClientResponseException.NotFound notFound) {
       return Optional.empty();
     }
+  }
+
+  private static SwarmView toSwarmView(JsonNode snapshot) {
+    if (snapshot == null || snapshot.isMissingNode()) {
+      return null;
+    }
+    JsonNode envelope = snapshot.path("envelope");
+    if (envelope.isMissingNode() || envelope.isNull()) {
+      return null;
+    }
+    JsonNode scope = envelope.path("scope");
+    JsonNode data = envelope.path("data");
+    JsonNode context = data.path("context");
+    String id = textOrNull(scope, "swarmId");
+    String status = textOrNull(context, "swarmStatus");
+    String health = textOrNull(context, "swarmHealth");
+    String heartbeat = textOrNull(envelope, "timestamp");
+    boolean enabled = data.has("enabled") ? data.path("enabled").asBoolean(false) : false;
+    return new SwarmView(id, status, health, heartbeat, enabled, enabled);
+  }
+
+  private static String textOrNull(JsonNode node, String field) {
+    if (node == null || field == null) {
+      return null;
+    }
+    JsonNode value = node.get(field);
+    if (value == null || value.isNull()) {
+      return null;
+    }
+    String text = value.asText(null);
+    return text == null || text.isBlank() ? null : text;
   }
 
   private <T> T postControlRequest(String path, Object body, Class<T> responseType) {

@@ -1,6 +1,7 @@
 package io.pockethive.orchestrator.app;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.ControlScope;
 import io.pockethive.control.ControlSignal;
@@ -40,10 +41,12 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -71,6 +74,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/swarms")
 public class SwarmController {
     private static final Logger log = LoggerFactory.getLogger(SwarmController.class);
+    private static final Duration STATUS_FULL_STALE_AFTER = Duration.ofSeconds(30);
     private final ControlPlanePublisher controlPublisher;
     private final ContainerLifecycleManager lifecycle;
     private final SwarmCreateTracker creates;
@@ -604,27 +608,48 @@ public class SwarmController {
     }
 
     /**
-     * GET {@code /api/swarms/{swarmId}} — fetch a snapshot of swarm state and launch metadata.
+     * GET {@code /api/swarms/{swarmId}} — fetch the latest cached swarm-controller status-full snapshot.
      */
     @GetMapping("/{swarmId}")
-    public ResponseEntity<SwarmSummary> view(@PathVariable String swarmId) {
+    public ResponseEntity<StatusFullSnapshot> view(@PathVariable String swarmId) {
         String path = "/api/swarms/" + swarmId;
         logRestRequest("GET", path, null);
-        ResponseEntity<SwarmSummary> response = registry.find(swarmId)
-            .map(s -> ResponseEntity.ok(toSummary(s)))
-            .orElse(ResponseEntity.notFound().build());
+        ResponseEntity<StatusFullSnapshot> response;
+        Optional<Swarm> swarmOpt = registry.find(swarmId);
+        if (swarmOpt.isEmpty()) {
+            response = ResponseEntity.notFound().build();
+        } else {
+            Swarm swarm = swarmOpt.get();
+            JsonNode statusFull = swarm.getControllerStatusFull();
+            if (statusFull == null) {
+                response = ResponseEntity.notFound().build();
+            } else {
+                StatusFullSnapshot snapshot = new StatusFullSnapshot(
+                    swarm.getControllerStatusReceivedAt(),
+                    STATUS_FULL_STALE_AFTER.getSeconds(),
+                    statusFull);
+                response = ResponseEntity.ok(snapshot);
+            }
+        }
         logRestResponse("GET", path, response);
         return response;
     }
 
     private SwarmSummary toSummary(Swarm swarm) {
+        JsonNode statusFull = swarm.getControllerStatusFull();
+        if (statusFull != null) {
+            SwarmSummary summary = toSummaryFromStatusFull(swarm, statusFull);
+            if (summary != null) {
+                return summary;
+            }
+        }
+        return toSummaryFromRegistry(swarm);
+    }
+
+    private SwarmSummary toSummaryFromRegistry(Swarm swarm) {
         List<BeeSummary> bees = swarm.bees().stream()
             .map(b -> new BeeSummary(b.role(), b.image()))
             .toList();
-        ComputeAdapterType adapterType = lifecycle.currentComputeAdapterType();
-        String stackName = adapterType == ComputeAdapterType.SWARM_STACK
-            ? ("ph-" + swarm.getId().toLowerCase())
-            : null;
         return new SwarmSummary(
             swarm.getId(),
             swarm.getStatus(),
@@ -634,8 +659,126 @@ public class SwarmController {
             swarm.templateId().orElse(null),
             swarm.controllerImage().orElse(null),
             swarm.getSutId(),
-            stackName,
+            stackNameFor(swarm),
             bees);
+    }
+
+    private SwarmSummary toSummaryFromStatusFull(Swarm swarm, JsonNode statusFull) {
+        if (statusFull == null || statusFull.isMissingNode()) {
+            return null;
+        }
+        JsonNode scope = statusFull.path("scope");
+        JsonNode data = statusFull.path("data");
+        JsonNode context = data.path("context");
+        JsonNode workers = context.path("workers");
+
+        String id = textOrNull(scope, "swarmId");
+        if (id == null) {
+            id = swarm.getId();
+        }
+
+        SwarmStatus status = parseSwarmStatus(textOrNull(context, "swarmStatus"), swarm.getStatus());
+        SwarmHealth health = parseSwarmHealth(textOrNull(context, "swarmHealth"), swarm.getHealth());
+        Instant heartbeat = parseInstant(textOrNull(statusFull, "timestamp"));
+        if (heartbeat == null) {
+            heartbeat = swarm.getHeartbeat();
+        }
+
+        boolean workEnabled = data.has("enabled")
+            ? data.path("enabled").asBoolean(false)
+            : false;
+
+        String templateId = null;
+        String controllerImage = null;
+        String sutId = textOrNull(context, "sutId");
+        List<BeeSummary> bees = beesFromWorkers(workers);
+
+        return new SwarmSummary(
+            id,
+            status,
+            health,
+            heartbeat,
+            workEnabled,
+            templateId,
+            controllerImage,
+            sutId,
+            stackNameFor(swarm),
+            bees);
+    }
+
+    private String stackNameFor(Swarm swarm) {
+        ComputeAdapterType adapterType = lifecycle.currentComputeAdapterType();
+        return adapterType == ComputeAdapterType.SWARM_STACK
+            ? ("ph-" + swarm.getId().toLowerCase())
+            : null;
+    }
+
+    private static String textOrNull(JsonNode node, String field) {
+        if (node == null || field == null) {
+            return null;
+        }
+        JsonNode value = node.get(field);
+        if (value == null || value.isNull()) {
+            return null;
+        }
+        String text = value.asText(null);
+        return text == null || text.isBlank() ? null : text;
+    }
+
+    private static Instant parseInstant(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return Instant.parse(value);
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    private static SwarmStatus parseSwarmStatus(String value, SwarmStatus fallback) {
+        if (value == null || value.isBlank()) {
+            return fallback;
+        }
+        try {
+            return SwarmStatus.valueOf(value.trim().toUpperCase());
+        } catch (Exception ex) {
+            return fallback;
+        }
+    }
+
+    private static SwarmHealth parseSwarmHealth(String value, SwarmHealth fallback) {
+        if (value == null || value.isBlank()) {
+            return fallback;
+        }
+        String normalized = value.trim().toUpperCase();
+        return switch (normalized) {
+            case "RUNNING" -> SwarmHealth.RUNNING;
+            case "FAILED" -> SwarmHealth.FAILED;
+            case "DEGRADED" -> SwarmHealth.DEGRADED;
+            default -> fallback;
+        };
+    }
+
+    private static List<BeeSummary> beesFromWorkers(JsonNode workersNode) {
+        if (workersNode == null || workersNode.isMissingNode() || !workersNode.isArray()) {
+            return List.of();
+        }
+        Set<String> roles = new LinkedHashSet<>();
+        for (JsonNode workerNode : workersNode) {
+            String role = textOrNull(workerNode, "role");
+            if (role != null) {
+                roles.add(role);
+            }
+        }
+        if (roles.isEmpty()) {
+            return List.of();
+        }
+        List<BeeSummary> bees = new ArrayList<>(roles.size());
+        for (String role : roles) {
+            bees.add(new BeeSummary(role, null));
+        }
+        return bees;
     }
 
     public record SwarmSummary(String id,
@@ -654,6 +797,11 @@ public class SwarmController {
     }
 
     public record BeeSummary(String role, String image) {}
+
+    public record StatusFullSnapshot(java.time.Instant receivedAt,
+                                     long staleAfterSec,
+                                     JsonNode envelope) {
+    }
 
     /**
      * Serialize control signals for RabbitMQ publishing.

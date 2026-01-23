@@ -121,6 +121,27 @@ public interface SwarmLifecycle {
   void updateHeartbeat(String role, String instance);
 
   /**
+   * Record a freshly received {@code status-full} snapshot for a worker instance.
+   * <p>
+   * Implementations can use this to gate swarm-level status-full emission after
+   * config fan-out (for example start/stop) until each worker has reported a
+   * new snapshot.
+   */
+  default void recordStatusSnapshot(String role, String instance, long timestamp) {
+  }
+
+  /**
+   * Determine whether all known worker instances have published a {@code status-full}
+   * snapshot since the supplied timestamp.
+   *
+   * @param cutoffMillis the epoch millis after which snapshots must have been observed
+   * @return {@code true} if every known worker reported a snapshot after the cutoff
+   */
+  default boolean hasFreshWorkerStatusSnapshotsSince(long cutoffMillis) {
+    return true;
+  }
+
+  /**
    * Track whether a worker instance has acknowledged its enabled/disabled state.
    * <p>
    * <strong>When it runs:</strong> after a {@code config-update} command succeeds, each worker echoes

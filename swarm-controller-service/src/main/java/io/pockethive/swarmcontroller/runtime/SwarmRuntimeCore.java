@@ -498,6 +498,16 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
   }
 
   @Override
+  public void recordStatusSnapshot(String role, String instance, long timestamp) {
+    readinessTracker.recordStatusSnapshot(role, instance, timestamp);
+  }
+
+  @Override
+  public boolean hasFreshWorkerStatusSnapshotsSince(long cutoffMillis) {
+    return readinessTracker.hasFreshSnapshotsSince(cutoffMillis);
+  }
+
+  @Override
   public void updateEnabled(String role, String instance, boolean flag) {
     readinessTracker.recordEnabled(role, instance, flag);
     managerCore.updateEnabled(role, instance, flag);

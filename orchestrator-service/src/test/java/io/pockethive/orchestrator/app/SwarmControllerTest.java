@@ -299,38 +299,116 @@ class SwarmControllerTest {
     }
 
     @Test
-    void exposesSwarmSummaryWithTemplateMetadata() {
+    void exposesSwarmSummaryWithTemplateMetadata() throws Exception {
         SwarmRegistry registry = new SwarmRegistry();
         Swarm swarm = new Swarm("sw1", "inst", "c", "run-1");
-        swarm.attachTemplate(new SwarmTemplateMetadata(
-            "tpl-1",
-            "ctrl-image",
-            List.of(new Bee("generator", "gen-image", Work.ofDefaults(null, "out"), java.util.Map.of()))));
+        String statusFull = """
+            {
+              "timestamp": "2026-01-22T12:00:00Z",
+              "version": "1",
+              "kind": "metric",
+              "type": "status-full",
+              "origin": "inst",
+              "scope": { "swarmId": "sw1", "role": "swarm-controller", "instance": "inst" },
+              "correlationId": null,
+              "idempotencyKey": null,
+              "data": {
+                "enabled": true,
+                "config": {},
+                "startedAt": "2026-01-22T12:00:00Z",
+                "io": {},
+                "ioState": {},
+                "context": {
+                  "swarmStatus": "READY",
+                  "swarmHealth": "RUNNING",
+                  "template": {
+                    "id": "tpl-1",
+                    "image": "ctrl-image",
+                    "bees": [ { "role": "generator", "image": "gen-image" } ]
+                  }
+                }
+              }
+            }
+            """;
+        swarm.updateControllerStatusFull(mapper.readTree(statusFull), Instant.now());
         registry.register(swarm);
         SwarmController ctrl = controller(new SwarmCreateTracker(), registry, new SwarmPlanRegistry());
 
-        ResponseEntity<SwarmController.SwarmSummary> resp = ctrl.view("sw1");
-        SwarmController.SwarmSummary body = resp.getBody();
-        assertThat(body.id()).isEqualTo("sw1");
-        assertThat(body.workEnabled()).isTrue();
-        assertThat(body.templateId()).isEqualTo("tpl-1");
-        assertThat(body.controllerImage()).isEqualTo("ctrl-image");
-        assertThat(body.bees()).containsExactly(new SwarmController.BeeSummary("generator", "gen-image"));
+        ResponseEntity<SwarmController.StatusFullSnapshot> resp = ctrl.view("sw1");
+        SwarmController.StatusFullSnapshot body = resp.getBody();
+        assertThat(body.envelope().path("scope").path("swarmId").asText()).isEqualTo("sw1");
+        assertThat(body.envelope().path("data").path("enabled").asBoolean()).isTrue();
+        assertThat(body.envelope().path("data").path("context").path("template").path("id").asText())
+            .isEqualTo("tpl-1");
+        assertThat(body.envelope().path("data").path("context").path("template").path("image").asText())
+            .isEqualTo("ctrl-image");
+        assertThat(body.envelope().path("data").path("context").path("template").path("bees").get(0).path("role").asText())
+            .isEqualTo("generator");
     }
 
     @Test
-    void listReturnsSortedSwarmsWithMetadata() {
+    void listReturnsSortedSwarmsWithMetadata() throws Exception {
         SwarmRegistry registry = new SwarmRegistry();
         Swarm alpha = new Swarm("alpha", "inst-a", "c1", "run-a");
-        alpha.attachTemplate(new SwarmTemplateMetadata(
-            "tpl-alpha",
-            "ctrl-alpha",
-            List.of(new Bee("generator", "gen-alpha", Work.ofDefaults(null, "out"), java.util.Map.of()))));
+        String alphaStatusFull = """
+            {
+              "timestamp": "2026-01-22T12:00:01Z",
+              "version": "1",
+              "kind": "metric",
+              "type": "status-full",
+              "origin": "inst-a",
+              "scope": { "swarmId": "alpha", "role": "swarm-controller", "instance": "inst-a" },
+              "correlationId": null,
+              "idempotencyKey": null,
+              "data": {
+                "enabled": true,
+                "config": {},
+                "startedAt": "2026-01-22T12:00:01Z",
+                "io": {},
+                "ioState": {},
+                "context": {
+                  "swarmStatus": "READY",
+                  "swarmHealth": "RUNNING",
+                  "template": {
+                    "id": "tpl-alpha",
+                    "image": "ctrl-alpha",
+                    "bees": [ { "role": "generator", "image": "gen-alpha" } ]
+                  }
+                }
+              }
+            }
+            """;
+        alpha.updateControllerStatusFull(mapper.readTree(alphaStatusFull), Instant.now());
         Swarm bravo = new Swarm("bravo", "inst-b", "c2", "run-b");
-        bravo.attachTemplate(new SwarmTemplateMetadata(
-            "tpl-bravo",
-            "ctrl-bravo",
-            List.of(new Bee("moderator", "mod-bravo", Work.ofDefaults("in", "out"), java.util.Map.of()))));
+        String bravoStatusFull = """
+            {
+              "timestamp": "2026-01-22T12:00:02Z",
+              "version": "1",
+              "kind": "metric",
+              "type": "status-full",
+              "origin": "inst-b",
+              "scope": { "swarmId": "bravo", "role": "swarm-controller", "instance": "inst-b" },
+              "correlationId": null,
+              "idempotencyKey": null,
+              "data": {
+                "enabled": true,
+                "config": {},
+                "startedAt": "2026-01-22T12:00:02Z",
+                "io": {},
+                "ioState": {},
+                "context": {
+                  "swarmStatus": "READY",
+                  "swarmHealth": "RUNNING",
+                  "template": {
+                    "id": "tpl-bravo",
+                    "image": "ctrl-bravo",
+                    "bees": [ { "role": "moderator", "image": "mod-bravo" } ]
+                  }
+                }
+              }
+            }
+            """;
+        bravo.updateControllerStatusFull(mapper.readTree(bravoStatusFull), Instant.now());
         registry.register(bravo);
         registry.register(alpha);
         SwarmController ctrl = controller(new SwarmCreateTracker(), registry, new SwarmPlanRegistry());

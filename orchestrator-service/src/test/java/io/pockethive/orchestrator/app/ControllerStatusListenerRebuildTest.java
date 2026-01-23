@@ -51,7 +51,7 @@ class ControllerStatusListenerRebuildTest {
     }
 
     @Test
-    void rebuildDoesNotTriggerSecondDiscoveryRequestOnceRegistered() {
+    void rebuildRequestsSnapshotForEachDeltaUntilFullArrives() {
         SwarmRegistry registry = new SwarmRegistry();
         ControlPlaneStatusRequestPublisher requests = Mockito.mock(ControlPlaneStatusRequestPublisher.class);
         SwarmSignalListener swarmSignals = Mockito.mock(SwarmSignalListener.class);
@@ -75,6 +75,6 @@ class ControllerStatusListenerRebuildTest {
         listener.handle(json, "event.metric.status-delta.sw1.swarm-controller.controller-1");
         listener.handle(json, "event.metric.status-delta.sw1.swarm-controller.controller-1");
 
-        verify(requests, Mockito.times(1)).requestStatusForSwarm(eq("sw1"), anyString(), anyString());
+        verify(requests, Mockito.times(2)).requestStatusForSwarm(eq("sw1"), anyString(), anyString());
     }
 }

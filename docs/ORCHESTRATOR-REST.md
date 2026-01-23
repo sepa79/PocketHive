@@ -24,10 +24,9 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
   {
     "id": "demo",
     "status": "RUNNING",
-    "health": "HEALTHY",
+    "health": "RUNNING",
     "heartbeat": "2024-03-15T12:00:00Z",
     "workEnabled": true,
-    "controllerEnabled": true,
     "templateId": "baseline-demo",
     "controllerImage": "ghcr.io/pockethive/swarm-controller:1.2.3",
     "bees": [
@@ -43,7 +42,41 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
 ### 2.2 Fetch swarm
 `GET /api/swarms/{swarmId}`
 
-**Response (200)** — same shape as the list entry above. Returns `404` when the swarm id is unknown.
+**Response (200)** — cached swarm-controller `status-full` snapshot (after delta aggregation).
+```json
+{
+  "receivedAt": "2026-01-22T12:34:56Z",
+  "staleAfterSec": 30,
+  "envelope": {
+    "timestamp": "2026-01-22T12:34:55Z",
+    "version": "1",
+    "kind": "metric",
+    "type": "status-full",
+    "origin": "swarm-controller-instance",
+    "scope": {
+      "swarmId": "demo",
+      "role": "swarm-controller",
+      "instance": "demo-marshal-bee-1234"
+    },
+    "correlationId": null,
+    "idempotencyKey": null,
+    "data": {
+      "enabled": true,
+      "config": {},
+      "startedAt": "2026-01-22T12:00:00Z",
+      "io": {},
+      "ioState": {},
+      "context": {
+        "swarmStatus": "RUNNING",
+        "swarmHealth": "RUNNING",
+        "template": { "id": "baseline-demo", "image": "ghcr.io/pockethive/swarm-controller:1.2.3" }
+      }
+    }
+  }
+}
+```
+
+Returns `404` when the swarm id is unknown or no `status-full` has been cached yet.
 
 ### 2.3 Swarm journal (timeline)
 `GET /api/swarms/{swarmId}/journal`

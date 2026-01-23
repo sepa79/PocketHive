@@ -2,6 +2,7 @@ package io.pockethive.orchestrator.app;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.pockethive.orchestrator.domain.SwarmHealth;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
 import io.pockethive.orchestrator.domain.Swarm;
@@ -16,6 +17,8 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
+import java.time.Instant;
+import java.util.Iterator;
 import java.util.Objects;
 
 /**
@@ -27,6 +30,7 @@ public class ControllerStatusListener {
     private static final Logger log = LoggerFactory.getLogger(ControllerStatusListener.class);
     private static final Duration DEGRADED_AFTER = Duration.ofSeconds(20);
     private static final Duration FAILED_AFTER = Duration.ofSeconds(40);
+    private static final String SWARM_CONTROLLER_ROLE = "swarm-controller";
 
     private final SwarmRegistry registry;
     private final ObjectMapper mapper;
@@ -60,8 +64,10 @@ public class ControllerStatusListener {
             log.info("[CTRL] RECV rk={} payload={}", routingKey, payloadSnippet);
         }
         try {
+            boolean statusFull = routingKey.startsWith("event.metric.status-full.");
+            boolean statusDelta = routingKey.startsWith("event.metric.status-delta.");
             JsonNode node = mapper.readTree(body);
-            if (routingKey.startsWith("event.metric.status-full.")) {
+            if (statusFull) {
                 swarmSignals.handleControllerStatusFull(routingKey);
             }
             JsonNode scope = node.path("scope");
@@ -75,15 +81,34 @@ public class ControllerStatusListener {
             String runId = context.path("journal").path("runId").asText(null);
 
             boolean discovered = ensureSwarmRegistered(swarmId, controllerInstance, runId);
+            Swarm swarm = swarmId == null ? null : registry.find(swarmId).orElse(null);
+            boolean controllerScope = SWARM_CONTROLLER_ROLE.equals(role);
+
+            if (controllerScope && swarm != null) {
+                if (statusFull) {
+                    swarm.updateControllerStatusFull(node, Instant.now());
+                } else if (statusDelta) {
+                    if (swarm.getControllerStatusFull() == null) {
+                        requestStatusFull(swarmId);
+                        return;
+                    }
+                    if (deltaContainsFullOnlyFields(data)) {
+                        log.warn("Ignoring status-delta with full-only fields for swarm {} rk={}", swarmId, routingKey);
+                        return;
+                    }
+                    mergeControllerDelta(swarm, node);
+                }
+            } else if (statusDelta && controllerScope && swarmId != null) {
+                requestStatusFull(swarmId);
+                return;
+            }
 
             if (swarmId != null && swarmStatusText != null) {
                 registry.refresh(swarmId, map(swarmStatusText));
             }
 
             if (discovered && swarmId != null) {
-                String corr = java.util.UUID.randomUUID().toString();
-                String idem = "status-request:" + java.util.UUID.randomUUID();
-                statusRequests.requestStatusForSwarm(swarmId, corr, idem);
+                requestStatusFull(swarmId);
             }
 
             if (swarmId != null) {
@@ -154,6 +179,68 @@ public class ControllerStatusListener {
         if ("FAILED".equalsIgnoreCase(s)) return SwarmHealth.FAILED;
         if ("DEGRADED".equalsIgnoreCase(s)) return SwarmHealth.DEGRADED;
         return SwarmHealth.DEGRADED;
+    }
+
+    private void requestStatusFull(String swarmId) {
+        if (swarmId == null || swarmId.isBlank()) {
+            return;
+        }
+        String corr = java.util.UUID.randomUUID().toString();
+        String idem = "status-request:" + java.util.UUID.randomUUID();
+        statusRequests.requestStatusForSwarm(swarmId, corr, idem);
+    }
+
+    private boolean deltaContainsFullOnlyFields(JsonNode data) {
+        if (data == null || data.isMissingNode()) {
+            return false;
+        }
+        return data.has("config") || data.has("io") || data.has("startedAt");
+    }
+
+    private void mergeControllerDelta(Swarm swarm, JsonNode delta) {
+        JsonNode current = swarm.getControllerStatusFull();
+        if (!(current instanceof ObjectNode currentObject)) {
+            return;
+        }
+        if (!(delta instanceof ObjectNode deltaObject)) {
+            return;
+        }
+        ObjectNode merged = currentObject.deepCopy();
+        mergeStatusDeltaPayload(merged, deltaObject);
+        swarm.updateControllerStatusFull(merged, Instant.now());
+    }
+
+    private void mergeStatusDeltaPayload(ObjectNode target, ObjectNode delta) {
+        JsonNode timestamp = delta.get("timestamp");
+        if (timestamp != null && timestamp.isTextual()) {
+            target.put("timestamp", timestamp.asText());
+        }
+        JsonNode deltaData = delta.get("data");
+        if (deltaData instanceof ObjectNode deltaObject) {
+            ObjectNode targetData = target.path("data") instanceof ObjectNode existing
+                ? existing
+                : target.putObject("data");
+            mergeObjectNodes(targetData, deltaObject);
+        }
+    }
+
+    private void mergeObjectNodes(ObjectNode target, ObjectNode source) {
+        Iterator<String> fields = source.fieldNames();
+        while (fields.hasNext()) {
+            String field = fields.next();
+            JsonNode sourceValue = source.get(field);
+            JsonNode targetValue = target.get(field);
+            if (sourceValue instanceof ObjectNode sourceObject
+                && targetValue instanceof ObjectNode targetObject) {
+                mergeObjectNodes(targetObject, sourceObject);
+            } else {
+                if (sourceValue == null) {
+                    target.putNull(field);
+                } else {
+                    target.set(field, sourceValue.deepCopy());
+                }
+            }
+        }
     }
 
     @Scheduled(fixedRate = 5000L)

@@ -1,6 +1,7 @@
 package io.pockethive.orchestrator.domain;
 
 import io.pockethive.swarm.model.Bee;
+import com.fasterxml.jackson.databind.JsonNode;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -17,6 +18,8 @@ public class Swarm {
     private boolean workEnabled;
     private SwarmTemplateMetadata templateMetadata;
     private String sutId;
+    private volatile JsonNode controllerStatusFull;
+    private volatile Instant controllerStatusReceivedAt;
 
     public Swarm(String id, String instanceId, String containerId, String runId) {
         this.id = id;
@@ -108,6 +111,19 @@ public class Swarm {
 
     public void setSutId(String sutId) {
         this.sutId = sutId;
+    }
+
+    public synchronized void updateControllerStatusFull(JsonNode envelope, Instant receivedAt) {
+        this.controllerStatusFull = envelope == null ? null : envelope.deepCopy();
+        this.controllerStatusReceivedAt = receivedAt;
+    }
+
+    public JsonNode getControllerStatusFull() {
+        return controllerStatusFull;
+    }
+
+    public Instant getControllerStatusReceivedAt() {
+        return controllerStatusReceivedAt;
     }
 
     void expire(Instant now, java.time.Duration degradedAfter, java.time.Duration failedAfter) {
