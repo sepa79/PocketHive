@@ -33,6 +33,7 @@ class StatusPayloadFactoryTest {
             .tps(42)
             .data("startedAt", Instant.parse("2024-01-01T00:00:00Z"))
             .data("runtime", Map.of(
+                "templateId", "template-1",
                 "runId", "run-1",
                 "containerId", "container-1",
                 "image", "worker:latest",

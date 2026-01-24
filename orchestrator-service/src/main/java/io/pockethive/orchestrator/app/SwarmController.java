@@ -677,8 +677,8 @@ public class SwarmController {
             ? data.path("enabled").asBoolean(true)
             : true;
 
-        String templateId = null;
-        String controllerImage = null;
+        String templateId = textOrNull(data.path("runtime"), "templateId");
+        String controllerImage = textOrNull(data.path("runtime"), "image");
         String sutId = textOrNull(context, "sutId");
         List<BeeSummary> bees = beesFromWorkers(workers);
 

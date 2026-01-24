@@ -830,6 +830,7 @@ public final class WorkerControlPlaneRuntime {
 
     private Map<String, Object> buildRuntimeMeta() {
         Map<String, Object> meta = new LinkedHashMap<>();
+        meta.put("templateId", envValue("POCKETHIVE_TEMPLATE_ID"));
         meta.put("runId", envValue("POCKETHIVE_JOURNAL_RUN_ID"));
         meta.put("containerId", envValue("HOSTNAME"));
         meta.put("image", envValue("POCKETHIVE_RUNTIME_IMAGE"));

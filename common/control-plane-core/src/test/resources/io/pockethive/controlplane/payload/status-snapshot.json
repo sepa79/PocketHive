@@ -18,6 +18,7 @@
       "work": { "input": "unknown", "output": "unknown" }
     },
     "runtime": {
+      "templateId": "template-1",
       "runId": "run-1",
       "containerId": "container-1",
       "image": "worker:latest",

@@ -64,12 +64,18 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
       "enabled": true,
       "config": {},
       "startedAt": "2026-01-22T12:00:00Z",
+      "runtime": {
+        "templateId": "baseline-demo",
+        "runId": null,
+        "containerId": null,
+        "image": "ghcr.io/pockethive/swarm-controller:1.2.3",
+        "stackName": null
+      },
       "io": {},
       "ioState": {},
       "context": {
         "swarmStatus": "RUNNING",
-        "swarmHealth": "RUNNING",
-        "template": { "id": "baseline-demo", "image": "ghcr.io/pockethive/swarm-controller:1.2.3" }
+        "swarmHealth": "RUNNING"
       }
     }
   }
