@@ -72,12 +72,6 @@ public class JournalController {
     if (resolvedRunId != null && resolvedRunId.isBlank()) {
       resolvedRunId = null;
     }
-    if (resolvedRunId == null && cleanedSwarmId != null) {
-      resolvedRunId = registry.find(cleanedSwarmId)
-          .map(io.pockethive.orchestrator.domain.Swarm::getRunId)
-          .filter(id -> id != null && !id.isBlank())
-          .orElse(null);
-    }
     String corr = correlationId == null ? null : correlationId.trim();
     if (corr != null && corr.isBlank()) {
       corr = null;

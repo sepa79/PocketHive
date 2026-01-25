@@ -771,7 +771,7 @@ public final class WorkerControlPlaneRuntime {
             }
             @SuppressWarnings("unchecked")
             Map<String, Object> ioMap = (Map<String, Object>) ioMapRaw;
-            Object workObj = ioMap.getOrDefault("work", ioMap);
+            Object workObj = ioMap.get("work");
             if (!(workObj instanceof Map<?, ?> workRaw)) {
                 continue;
             }
