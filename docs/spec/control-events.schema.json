@@ -174,7 +174,7 @@
       "description": "Runtime/infra metadata for this scope (full-only).",
       "required": ["templateId"],
       "properties": {
-        "templateId": { "$ref": "#/$defs/NullableNonEmptyString" },
+        "templateId": { "$ref": "#/$defs/NonEmptyString" },
         "runId": { "$ref": "#/$defs/NullableNonEmptyString" },
         "containerId": { "$ref": "#/$defs/NullableNonEmptyString" },
         "image": { "$ref": "#/$defs/NullableNonEmptyString" },

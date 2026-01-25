@@ -830,7 +830,7 @@ public final class WorkerControlPlaneRuntime {
 
     private Map<String, Object> buildRuntimeMeta() {
         Map<String, Object> meta = new LinkedHashMap<>();
-        meta.put("templateId", envValue("POCKETHIVE_TEMPLATE_ID"));
+        meta.put("templateId", requireEnvValue("POCKETHIVE_TEMPLATE_ID"));
         meta.put("runId", envValue("POCKETHIVE_JOURNAL_RUN_ID"));
         meta.put("containerId", envValue("HOSTNAME"));
         meta.put("image", envValue("POCKETHIVE_RUNTIME_IMAGE"));
@@ -848,6 +848,14 @@ public final class WorkerControlPlaneRuntime {
         }
         String trimmed = value.trim();
         return trimmed.isBlank() ? null : trimmed;
+    }
+
+    private static String requireEnvValue(String key) {
+        String value = envValue(key);
+        if (value == null) {
+            throw new IllegalStateException("Missing required environment variable: " + key);
+        }
+        return value;
     }
 
     private static String asIoState(Object value, List<String> allowed) {

@@ -110,7 +110,7 @@ public class SwarmSignalListener {
     this.journal = journal != null ? journal : SwarmJournal.noop();
     this.journalRunId = journalRunId != null && !journalRunId.isBlank() ? journalRunId.trim() : null;
     this.baseRuntimeMeta = buildBaseRuntimeMeta();
-    this.templateId = envValue("POCKETHIVE_TEMPLATE_ID");
+    this.templateId = requireEnvValue("POCKETHIVE_TEMPLATE_ID");
     ObjectMapper controlPlaneMapper = ControlPlaneJson.mapper();
     ControlPlanePublisher basePublisher = new AmqpControlPlanePublisher(rabbit, controlExchange);
     ControlPlanePublisher publisher = new JournalControlPlanePublisher(controlPlaneMapper, this.journal, basePublisher);
@@ -1069,6 +1069,14 @@ public class SwarmSignalListener {
     }
     String trimmed = value.trim();
     return trimmed.isBlank() ? null : trimmed;
+  }
+
+  private static String requireEnvValue(String key) {
+    String value = envValue(key);
+    if (value == null) {
+      throw new IllegalStateException("Missing required environment variable: " + key);
+    }
+    return value;
   }
 
   private ScenarioChange applyScenarioOverrides(JsonNode dataNode) {

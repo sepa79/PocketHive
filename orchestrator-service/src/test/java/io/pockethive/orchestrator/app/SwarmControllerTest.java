@@ -371,6 +371,7 @@ class SwarmControllerTest {
                 "config": {},
                 "startedAt": "2026-01-22T12:00:01Z",
                 "runtime": {
+                  "templateId": "tpl-alpha",
                   "runId": "run-alpha",
                   "containerId": "container-alpha",
                   "image": "ctrl-alpha",
@@ -408,6 +409,7 @@ class SwarmControllerTest {
                 "config": {},
                 "startedAt": "2026-01-22T12:00:02Z",
                 "runtime": {
+                  "templateId": "tpl-bravo",
                   "runId": "run-bravo",
                   "containerId": "container-bravo",
                   "image": "ctrl-bravo",
@@ -443,7 +445,7 @@ class SwarmControllerTest {
               "data": {
                 "config": {},
                 "startedAt": "2026-01-22T12:00:03Z",
-                "runtime": {},
+                "runtime": { "templateId": "tpl-bad" },
                 "io": {},
                 "ioState": {},
                 "context": {}
@@ -462,9 +464,9 @@ class SwarmControllerTest {
         List<SwarmController.SwarmSummary> body = resp.getBody();
 
         assertThat(body).extracting(SwarmController.SwarmSummary::id).containsExactly("alpha", "bravo");
-        assertThat(body.get(0).templateId()).isNull();
+        assertThat(body.get(0).templateId()).isEqualTo("tpl-alpha");
         assertThat(body.get(0).bees()).containsExactly(new SwarmController.BeeSummary("generator", null));
-        assertThat(body.get(1).templateId()).isNull();
+        assertThat(body.get(1).templateId()).isEqualTo("tpl-bravo");
         assertThat(body.get(1).bees()).containsExactly(new SwarmController.BeeSummary("moderator", null));
     }
 

@@ -56,7 +56,12 @@ class ContainerLifecycleManagerTest {
         ContainerLifecycleManager manager = new ContainerLifecycleManager(
             docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitProperties(), runMetadataWriter);
 
-        Swarm swarm = manager.startSwarm("sw1", "img", "inst1");
+        Swarm swarm = manager.startSwarm(
+            "sw1",
+            "img",
+            "inst1",
+            new SwarmTemplateMetadata("tpl-1", "img", List.of()),
+            false);
 
         assertEquals("sw1", swarm.getId());
         assertEquals("inst1", swarm.getInstanceId());
@@ -72,6 +77,7 @@ class ContainerLifecycleManagerTest {
         assertEquals("inst1", env.get("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID"));
         assertEquals("ph.control", env.get("POCKETHIVE_CONTROL_PLANE_EXCHANGE"));
         assertEquals("sw1", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_ID"));
+        assertEquals("tpl-1", env.get("POCKETHIVE_TEMPLATE_ID"));
         assertFalse(env.containsKey("RABBITMQ_HOST"));
         assertFalse(env.containsKey("RABBITMQ_PORT"));
         assertFalse(env.containsKey("RABBITMQ_DEFAULT_USER"));
@@ -114,7 +120,12 @@ class ContainerLifecycleManagerTest {
         ContainerLifecycleManager manager = new ContainerLifecycleManager(
             docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitProperties(), runMetadataWriter);
 
-        Swarm swarm = manager.startSwarm("sw1", "swarm-controller:latest", "inst1");
+        Swarm swarm = manager.startSwarm(
+            "sw1",
+            "swarm-controller:latest",
+            "inst1",
+            new SwarmTemplateMetadata("tpl-1", "swarm-controller:latest", List.of()),
+            false);
 
         assertEquals("sw1", swarm.getId());
         ArgumentCaptor<ManagerSpec> specCaptor = ArgumentCaptor.forClass(ManagerSpec.class);
@@ -133,7 +144,12 @@ class ContainerLifecycleManagerTest {
         ContainerLifecycleManager manager = new ContainerLifecycleManager(
             docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitProperties(), runMetadataWriter);
 
-        manager.startSwarm("sw1", "img", "inst1");
+        manager.startSwarm(
+            "sw1",
+            "img",
+            "inst1",
+            new SwarmTemplateMetadata("tpl-1", "img", List.of()),
+            false);
 
         ArgumentCaptor<ManagerSpec> specCaptor = ArgumentCaptor.forClass(ManagerSpec.class);
         verify(computeAdapter).startManager(specCaptor.capture());

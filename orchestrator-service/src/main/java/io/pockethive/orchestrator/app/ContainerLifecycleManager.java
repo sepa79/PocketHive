@@ -155,9 +155,10 @@ public class ContainerLifecycleManager {
         }
         env.put("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_DOCKER_COMPUTE_ADAPTER", resolvedAdapterType.name());
         env.put("POCKETHIVE_RUNTIME_IMAGE", resolvedImage);
-        if (templateMetadata != null && templateMetadata.templateId() != null && !templateMetadata.templateId().isBlank()) {
-            env.put("POCKETHIVE_TEMPLATE_ID", templateMetadata.templateId().trim());
+        if (templateMetadata == null) {
+            throw new IllegalStateException("templateMetadata must not be null");
         }
+        env.put("POCKETHIVE_TEMPLATE_ID", requireText(templateMetadata.templateId(), "templateId"));
         if (resolvedAdapterType == ComputeAdapterType.SWARM_STACK) {
             env.put("POCKETHIVE_RUNTIME_STACK_NAME", "ph-" + resolvedSwarmId.toLowerCase(java.util.Locale.ROOT));
         }
@@ -198,6 +199,13 @@ public class ContainerLifecycleManager {
         }
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private static String requireText(String value, String label) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(label + " must not be null or blank");
+        }
+        return value.trim();
     }
 
     /**

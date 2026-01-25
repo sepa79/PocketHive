@@ -335,10 +335,8 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
         if (hasText(runId)) {
           env.put("POCKETHIVE_JOURNAL_RUN_ID", runId);
         }
-        String templateId = envValue("POCKETHIVE_TEMPLATE_ID");
-        if (hasText(templateId)) {
-          env.put("POCKETHIVE_TEMPLATE_ID", templateId);
-        }
+        String templateId = requireEnvValue("POCKETHIVE_TEMPLATE_ID");
+        env.put("POCKETHIVE_TEMPLATE_ID", templateId);
         if (bee.image() != null && !bee.image().isBlank()) {
           env.put("POCKETHIVE_RUNTIME_IMAGE", bee.image());
         }
@@ -857,6 +855,14 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
     }
     String trimmed = value.trim();
     return trimmed.isBlank() ? null : trimmed;
+  }
+
+  private static String requireEnvValue(String key) {
+    String value = envValue(key);
+    if (value == null) {
+      throw new IllegalStateException("Missing required environment variable: " + key);
+    }
+    return value;
   }
 
   private static void putEnvIfPresent(Map<String, String> env, String key, Object value) {
