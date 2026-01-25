@@ -14,7 +14,7 @@ class SwarmPlanRegistryTest {
     @Test
     void suppliesPlanForControllerReadyWhileSwarmMetadataPersists() {
         SwarmPlanRegistry plans = new SwarmPlanRegistry();
-        SwarmRegistry swarms = new SwarmRegistry();
+        SwarmStore swarms = new SwarmStore();
         List<Bee> bees = List.of(new Bee("generator", "bee-image", Work.ofDefaults("in", "out"), Map.of()));
         SwarmTemplateMetadata metadata = new SwarmTemplateMetadata("template-1", "controller-image", bees);
         Swarm swarm = new Swarm("swarm-1", "controller-1", "container-1", "run-1");
@@ -30,9 +30,9 @@ class SwarmPlanRegistryTest {
         assertEquals(plan, removed);
 
         Swarm remaining = swarms.find("swarm-1").orElseThrow();
-        assertTrue(remaining.templateMetadata().isPresent());
-        assertEquals("template-1", remaining.templateId().orElseThrow());
-        assertEquals("controller-image", remaining.controllerImage().orElseThrow());
+        assertNotNull(remaining.templateMetadata());
+        assertEquals("template-1", remaining.templateId());
+        assertEquals("controller-image", remaining.controllerImage());
         assertEquals(bees, remaining.bees());
 
         swarms.remove("swarm-1");

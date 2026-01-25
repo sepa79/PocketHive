@@ -21,8 +21,8 @@ import io.pockethive.orchestrator.domain.SwarmCreateTracker.Pending;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker.Phase;
 import io.pockethive.orchestrator.domain.HiveJournal;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
-import io.pockethive.orchestrator.domain.SwarmRegistry;
-import io.pockethive.orchestrator.domain.SwarmStatus;
+import io.pockethive.orchestrator.domain.SwarmStore;
+import io.pockethive.orchestrator.domain.SwarmLifecycleStatus;
 import io.pockethive.swarm.model.SwarmPlan;
 import java.time.Instant;
 import java.util.List;
@@ -80,7 +80,7 @@ class SwarmEventFlowIntegrationTest {
     private String controlQueueName;
     private SwarmPlanRegistry plans;
     private SwarmCreateTracker tracker;
-    private SwarmRegistry registry;
+    private SwarmStore registry;
     private SwarmSignalListener signalListener;
     private ControllerStatusListener statusListener;
 
@@ -96,7 +96,7 @@ class SwarmEventFlowIntegrationTest {
         io.pockethive.orchestrator.domain.ScenarioTimelineRegistry timelines =
             new io.pockethive.orchestrator.domain.ScenarioTimelineRegistry();
         tracker = new SwarmCreateTracker();
-        registry = new SwarmRegistry();
+        registry = new SwarmStore();
         signalListener = new SwarmSignalListener(plans, timelines, tracker, registry, lifecycle, mapper,
             HiveJournal.noop(),
             controlPlane, controlEmitter, identity, descriptor, controlQueueName);
@@ -112,7 +112,7 @@ class SwarmEventFlowIntegrationTest {
             Phase.CONTROLLER, Instant.now().plusSeconds(60));
         tracker.register(CONTROLLER_INSTANCE, pending);
         registry.register(new Swarm(SWARM_ID, CONTROLLER_INSTANCE, "cid", "run-1"));
-        registry.updateStatus(SWARM_ID, SwarmStatus.CREATING);
+        registry.updateStatus(SWARM_ID, SwarmLifecycleStatus.CREATING);
 
         String statusPayload = """
             {
@@ -162,12 +162,12 @@ class SwarmEventFlowIntegrationTest {
 
         signalListener.handle("{\"data\":{\"status\":\"Ready\"}}", ControlPlaneRouting.event("outcome", "swarm-template",
             new ConfirmationScope(SWARM_ID, "swarm-controller", CONTROLLER_INSTANCE)));
-        assertThat(registry.find(SWARM_ID)).map(Swarm::getStatus).contains(SwarmStatus.READY);
+        assertThat(registry.find(SWARM_ID)).map(Swarm::getStatus).contains(SwarmLifecycleStatus.READY);
 
         tracker.expectStart(SWARM_ID, "start-corr", "start-idem", java.time.Duration.ofSeconds(30));
         signalListener.handle("{\"data\":{\"status\":\"Running\"}}", ControlPlaneRouting.event("outcome", "swarm-start",
             new ConfirmationScope(SWARM_ID, "swarm-controller", CONTROLLER_INSTANCE)));
-        assertThat(registry.find(SWARM_ID)).map(Swarm::getStatus).contains(SwarmStatus.RUNNING);
+        assertThat(registry.find(SWARM_ID)).map(Swarm::getStatus).contains(SwarmLifecycleStatus.RUNNING);
 
         statusListener.handle("""
             {

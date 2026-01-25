@@ -25,8 +25,7 @@ import io.pockethive.orchestrator.domain.HiveJournal;
 import io.pockethive.orchestrator.domain.HiveJournal.HiveJournalEntry;
 import io.pockethive.orchestrator.domain.SwarmHealth;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
-import io.pockethive.orchestrator.domain.SwarmRegistry;
-import io.pockethive.orchestrator.domain.SwarmStatus;
+import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.SwarmPlan;
@@ -78,7 +77,7 @@ public class SwarmController {
     private final ContainerLifecycleManager lifecycle;
     private final SwarmCreateTracker creates;
     private final IdempotencyStore idempotency;
-    private final SwarmRegistry registry;
+    private final SwarmStore store;
     private final SwarmPlanRegistry plans;
     private final ScenarioTimelineRegistry timelines;
     private final ScenarioClient scenarios;
@@ -95,7 +94,7 @@ public class SwarmController {
                            ContainerLifecycleManager lifecycle,
                            SwarmCreateTracker creates,
                            IdempotencyStore idempotency,
-                           SwarmRegistry registry,
+                           SwarmStore store,
                            ObjectMapper json,
                            ScenarioClient scenarios,
                            HiveJournal hiveJournal,
@@ -106,7 +105,7 @@ public class SwarmController {
         this.lifecycle = lifecycle;
         this.creates = creates;
         this.idempotency = idempotency;
-        this.registry = registry;
+        this.store = store;
         this.json = json;
         this.scenarios = scenarios;
         this.hiveJournal = Objects.requireNonNull(hiveJournal, "hiveJournal");
@@ -149,7 +148,7 @@ public class SwarmController {
             return response;
         }
 
-        if (registry.find(swarmId).isPresent()) {
+        if (store.find(swarmId).isPresent()) {
             response = ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(new ErrorResponse("Swarm '%s' already exists".formatted(swarmId)));
             logRestResponse("POST", path, response);
@@ -363,28 +362,28 @@ public class SwarmController {
      * <p>
      * We build a {@link ControlSignal} scoped to the swarm controller instance, resolve the routing key via
      * {@link ControlPlaneRouting#signal(String, String, String, String)}, and update the
-     * {@link SwarmRegistry}/{@link SwarmCreateTracker} so downstream watchers know which confirmations to
+     * {@link SwarmStore}/{@link SwarmCreateTracker} so downstream watchers know which confirmations to
      * expect. The timeout is expressed in milliseconds for convenient alignment with API docs.
      */
-	    private ResponseEntity<ControlResponse> sendSignal(String signal, String swarmId, String idempotencyKey, long timeoutMs) {
-	        Duration timeout = Duration.ofMillis(timeoutMs);
-	        return idempotentSend(signal, swarmId, idempotencyKey, timeoutMs, corr -> {
-	            String controllerInstance = registry.find(swarmId)
-	                .map(Swarm::getInstanceId)
-	                .orElse(null);
-	            if (controllerInstance == null || controllerInstance.isBlank()) {
-	                throw new IllegalStateException("Swarm " + swarmId + " is not registered with a controller instance");
-	            }
-	            ControlScope target = ControlScope.forInstance(swarmId, "swarm-controller", controllerInstance);
-	            ControlSignal payload = switch (signal) {
-	                case "swarm-start" -> ControlSignals.swarmStart(originInstanceId, target, corr, idempotencyKey);
-	                case "swarm-stop" -> ControlSignals.swarmStop(originInstanceId, target, corr, idempotencyKey);
-	                case "swarm-remove" -> ControlSignals.swarmRemove(originInstanceId, target, corr, idempotencyKey);
-	                default -> throw new IllegalArgumentException("Unsupported lifecycle signal: " + signal);
-	            };
-	            String jsonPayload = toJson(payload);
-	            String routingKey = ControlPlaneRouting.signal(signal, swarmId, "swarm-controller", controllerInstance);
-	            sendControl(routingKey, jsonPayload, signal);
+    private ResponseEntity<ControlResponse> sendSignal(String signal, String swarmId, String idempotencyKey, long timeoutMs) {
+        Duration timeout = Duration.ofMillis(timeoutMs);
+        return idempotentSend(signal, swarmId, idempotencyKey, timeoutMs, corr -> {
+            String controllerInstance = store.find(swarmId)
+                .map(Swarm::getInstanceId)
+                .orElse(null);
+            if (controllerInstance == null || controllerInstance.isBlank()) {
+                throw new IllegalStateException("Swarm " + swarmId + " is not registered with a controller instance");
+            }
+            ControlScope target = ControlScope.forInstance(swarmId, "swarm-controller", controllerInstance);
+            ControlSignal payload = switch (signal) {
+                case "swarm-start" -> ControlSignals.swarmStart(originInstanceId, target, corr, idempotencyKey);
+                case "swarm-stop" -> ControlSignals.swarmStop(originInstanceId, target, corr, idempotencyKey);
+                case "swarm-remove" -> ControlSignals.swarmRemove(originInstanceId, target, corr, idempotencyKey);
+                default -> throw new IllegalArgumentException("Unsupported lifecycle signal: " + signal);
+            };
+            String jsonPayload = toJson(payload);
+            String routingKey = ControlPlaneRouting.signal(signal, swarmId, "swarm-controller", controllerInstance);
+            sendControl(routingKey, jsonPayload, signal);
                 try {
                     var data = new LinkedHashMap<String, Object>();
                     data.put("controllerInstance", controllerInstance);
@@ -406,7 +405,7 @@ public class SwarmController {
                     // best-effort
                 }
 	            if ("swarm-start".equals(signal)) {
-	                registry.markStartIssued(swarmId);
+	                store.markStartIssued(swarmId);
                 creates.expectStart(swarmId, corr, idempotencyKey, timeout);
             } else if ("swarm-stop".equals(signal)) {
                 creates.expectStop(swarmId, corr, idempotencyKey, timeout);
@@ -467,7 +466,7 @@ public class SwarmController {
                 ControlPlaneRouting.event("outcome", "swarm-create", scope),
                 ControlPlaneRouting.event("alert", "alert", scope));
         }
-        String controllerInstance = registry.find(swarmId)
+        String controllerInstance = store.find(swarmId)
             .map(Swarm::getInstanceId)
             .orElse(null);
         if (controllerInstance == null || controllerInstance.isBlank()) {
@@ -593,7 +592,7 @@ public class SwarmController {
     public ResponseEntity<List<SwarmSummary>> list() {
         String path = "/api/swarms";
         logRestRequest("GET", path, null);
-        List<SwarmSummary> payload = registry.all().stream()
+        List<SwarmSummary> payload = store.all().stream()
             .sorted(Comparator.comparing(Swarm::getId))
             .map(swarm -> toSummaryFromStatusFull(swarm, swarm.getControllerStatusFull()))
             .filter(Objects::nonNull)
@@ -611,7 +610,7 @@ public class SwarmController {
         String path = "/api/swarms/" + swarmId;
         logRestRequest("GET", path, null);
         ResponseEntity<StatusFullSnapshot> response;
-        Optional<Swarm> swarmOpt = registry.find(swarmId);
+        Optional<Swarm> swarmOpt = store.find(swarmId);
         if (swarmOpt.isEmpty()) {
             response = ResponseEntity.notFound().build();
         } else {
@@ -642,7 +641,7 @@ public class SwarmController {
 
         String id = swarm.getId();
 
-        SwarmStatus status = parseSwarmStatus(textOrNull(context, "swarmStatus"), null);
+        SwarmRuntimeStatus status = parseSwarmStatus(textOrNull(context, "swarmStatus"), null);
         SwarmHealth health = parseSwarmHealth(textOrNull(context, "swarmHealth"), null);
         Instant heartbeat = parseInstant(textOrNull(statusFull, "timestamp"));
 
@@ -694,12 +693,12 @@ public class SwarmController {
         }
     }
 
-    private static SwarmStatus parseSwarmStatus(String value, SwarmStatus fallback) {
+    private static SwarmRuntimeStatus parseSwarmStatus(String value, SwarmRuntimeStatus fallback) {
         if (value == null || value.isBlank()) {
             return fallback;
         }
         try {
-            return SwarmStatus.valueOf(value.trim().toUpperCase());
+            return SwarmRuntimeStatus.valueOf(value.trim().toUpperCase());
         } catch (Exception ex) {
             return fallback;
         }
@@ -740,7 +739,7 @@ public class SwarmController {
     }
 
     public record SwarmSummary(String id,
-                               SwarmStatus status,
+                               SwarmRuntimeStatus status,
                                SwarmHealth health,
                                java.time.Instant heartbeat,
                                boolean workEnabled,

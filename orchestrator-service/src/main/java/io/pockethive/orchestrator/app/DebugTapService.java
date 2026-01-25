@@ -4,7 +4,7 @@ import io.pockethive.orchestrator.app.DebugTapController.DebugTapRequest;
 import io.pockethive.orchestrator.app.DebugTapController.DebugTapResponse;
 import io.pockethive.orchestrator.app.DebugTapController.DebugTapSample;
 import io.pockethive.orchestrator.domain.Swarm;
-import io.pockethive.orchestrator.domain.SwarmRegistry;
+import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.Work;
 import java.nio.charset.StandardCharsets;
@@ -35,13 +35,13 @@ public class DebugTapService {
     private static final int DEFAULT_MAX_ITEMS = 1;
     private static final int DEFAULT_TTL_SECONDS = 60;
 
-    private final SwarmRegistry swarmRegistry;
+    private final SwarmStore swarmStore;
     private final AmqpAdmin amqp;
     private final RabbitTemplate rabbitTemplate;
     private final ConcurrentMap<String, DebugTap> taps = new ConcurrentHashMap<>();
 
-    public DebugTapService(SwarmRegistry swarmRegistry, AmqpAdmin amqp, RabbitTemplate rabbitTemplate) {
-        this.swarmRegistry = Objects.requireNonNull(swarmRegistry, "swarmRegistry");
+    public DebugTapService(SwarmStore swarmStore, AmqpAdmin amqp, RabbitTemplate rabbitTemplate) {
+        this.swarmStore = Objects.requireNonNull(swarmStore, "swarmStore");
         this.amqp = Objects.requireNonNull(amqp, "amqp");
         this.rabbitTemplate = Objects.requireNonNull(rabbitTemplate, "rabbitTemplate");
     }
@@ -113,7 +113,7 @@ public class DebugTapService {
     private TapBinding resolveBinding(DebugTapRequest request, TapDirection direction) {
         String swarmId = normalize(request.swarmId(), "swarmId");
         String role = normalize(request.role(), "role");
-        Swarm swarm = swarmRegistry.find(swarmId)
+        Swarm swarm = swarmStore.find(swarmId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "unknown swarmId"));
         Bee bee = findBee(swarm, role);
         Work work = bee.work();

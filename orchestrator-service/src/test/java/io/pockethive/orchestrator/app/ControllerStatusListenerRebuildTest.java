@@ -1,8 +1,8 @@
 package io.pockethive.orchestrator.app;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.orchestrator.domain.SwarmRegistry;
-import io.pockethive.orchestrator.domain.SwarmStatus;
+import io.pockethive.orchestrator.domain.SwarmStore;
+import io.pockethive.orchestrator.domain.SwarmLifecycleStatus;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
@@ -16,11 +16,11 @@ class ControllerStatusListenerRebuildTest {
 
     @Test
     void rebuildsSwarmFromControllerStatusAndRequestsFullSnapshot() {
-        SwarmRegistry registry = new SwarmRegistry();
+        SwarmStore store = new SwarmStore();
         ControlPlaneStatusRequestPublisher requests = Mockito.mock(ControlPlaneStatusRequestPublisher.class);
         SwarmSignalListener swarmSignals = Mockito.mock(SwarmSignalListener.class);
         ControllerStatusListener listener =
-            new ControllerStatusListener(registry, new ObjectMapper(), requests, swarmSignals);
+            new ControllerStatusListener(store, new ObjectMapper(), requests, swarmSignals);
 
         String json = """
             {
@@ -51,18 +51,18 @@ class ControllerStatusListenerRebuildTest {
 
         listener.handle(json, "event.metric.status-full.sw1.swarm-controller.controller-1");
 
-        assertThat(registry.find("sw1")).isPresent();
-        assertThat(registry.find("sw1").orElseThrow().getStatus()).isEqualTo(SwarmStatus.STOPPED);
+        assertThat(store.find("sw1")).isPresent();
+        assertThat(store.find("sw1").orElseThrow().getStatus()).isEqualTo(SwarmLifecycleStatus.STOPPED);
         verify(requests).requestStatusForSwarm(eq("sw1"), anyString(), anyString());
     }
 
     @Test
     void rebuildRequestsSnapshotForEachDeltaUntilFullArrives() {
-        SwarmRegistry registry = new SwarmRegistry();
+        SwarmStore store = new SwarmStore();
         ControlPlaneStatusRequestPublisher requests = Mockito.mock(ControlPlaneStatusRequestPublisher.class);
         SwarmSignalListener swarmSignals = Mockito.mock(SwarmSignalListener.class);
         ControllerStatusListener listener =
-            new ControllerStatusListener(registry, new ObjectMapper(), requests, swarmSignals);
+            new ControllerStatusListener(store, new ObjectMapper(), requests, swarmSignals);
 
         String json = """
             {

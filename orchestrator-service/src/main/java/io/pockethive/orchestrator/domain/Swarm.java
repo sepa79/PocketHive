@@ -4,14 +4,13 @@ import io.pockethive.swarm.model.Bee;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.time.Instant;
 import java.util.List;
-import java.util.Optional;
 
 public class Swarm {
     private final String id;
     private final String instanceId;
     private final String containerId;
     private final String runId;
-    private SwarmStatus status;
+    private SwarmLifecycleStatus status;
     private final Instant createdAt;
     private SwarmTemplateMetadata templateMetadata;
     private String sutId;
@@ -23,7 +22,7 @@ public class Swarm {
         this.instanceId = instanceId;
         this.containerId = containerId;
         this.runId = runId;
-        this.status = SwarmStatus.NEW;
+        this.status = SwarmLifecycleStatus.NEW;
         this.createdAt = Instant.now();
     }
 
@@ -43,11 +42,11 @@ public class Swarm {
         return runId;
     }
 
-    public SwarmStatus getStatus() {
+    public SwarmLifecycleStatus getStatus() {
         return status;
     }
 
-    public void transitionTo(SwarmStatus next) {
+    public void transitionTo(SwarmLifecycleStatus next) {
         if (!status.canTransitionTo(next)) {
             throw new IllegalStateException("Cannot transition from " + status + " to " + next);
         }
@@ -62,16 +61,16 @@ public class Swarm {
         this.templateMetadata = null;
     }
 
-    public Optional<SwarmTemplateMetadata> templateMetadata() {
-        return Optional.ofNullable(templateMetadata);
+    public SwarmTemplateMetadata templateMetadata() {
+        return templateMetadata;
     }
 
-    public Optional<String> templateId() {
-        return templateMetadata().map(SwarmTemplateMetadata::templateId);
+    public String templateId() {
+        return templateMetadata == null ? null : templateMetadata.templateId();
     }
 
-    public Optional<String> controllerImage() {
-        return templateMetadata().map(SwarmTemplateMetadata::controllerImage);
+    public String controllerImage() {
+        return templateMetadata == null ? null : templateMetadata.controllerImage();
     }
 
     public List<Bee> bees() {

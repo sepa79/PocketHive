@@ -8,7 +8,7 @@ import io.pockethive.orchestrator.app.JournalController;
 import io.pockethive.orchestrator.app.JournalPageResponse;
 import io.pockethive.orchestrator.app.SwarmJournalController;
 import io.pockethive.orchestrator.domain.HiveJournal;
-import io.pockethive.orchestrator.domain.SwarmRegistry;
+import io.pockethive.orchestrator.domain.SwarmStore;
 import java.time.Instant;
 import java.util.Map;
 import javax.sql.DataSource;
@@ -34,7 +34,7 @@ class PostgresJournalStorageTest {
 
   static JdbcTemplate jdbc;
   static ObjectMapper mapper;
-  static SwarmRegistry registry;
+  static SwarmStore store;
 
   @BeforeAll
   static void setup() {
@@ -49,7 +49,7 @@ class PostgresJournalStorageTest {
         .migrate();
     jdbc = new JdbcTemplate(ds);
     mapper = new ObjectMapper().findAndRegisterModules();
-    registry = new SwarmRegistry();
+    store = new SwarmStore();
   }
 
   @Test
@@ -104,7 +104,7 @@ class PostgresJournalStorageTest {
           "c-" + i);
     }
 
-    JournalController ctrl = new JournalController(jdbc, mapper, registry);
+    JournalController ctrl = new JournalController(jdbc, mapper);
     ReflectionTestUtils.setField(ctrl, "journalSink", "postgres");
 
     JournalPageResponse first = ctrl.hiveJournalPage("s1", "run-1", null, null, null, 2).getBody();
@@ -201,7 +201,7 @@ class PostgresJournalStorageTest {
         "run-1",
         "t-2");
 
-    SwarmJournalController ctrl = new SwarmJournalController(mapper, jdbc, registry);
+    SwarmJournalController ctrl = new SwarmJournalController(mapper, jdbc, store);
     ReflectionTestUtils.setField(ctrl, "journalSink", "postgres");
 
     JournalPageResponse page = ctrl.journalPage("sw1", null, null, 10, "run-1", null).getBody();
@@ -214,7 +214,7 @@ class PostgresJournalStorageTest {
   @Test
   void hiveJournalOverloadEvictsInfoToKeepError() throws Exception {
     jdbc.update("DELETE FROM journal_event");
-    PostgresHiveJournal journal = new PostgresHiveJournal(mapper, jdbc, registry, 3, 50, 30_000L, 1_000L);
+    PostgresHiveJournal journal = new PostgresHiveJournal(mapper, jdbc, store, 3, 50, 30_000L, 1_000L);
     ControlScope scope = new ControlScope("s1", "orchestrator", "inst");
 
     for (int i = 0; i < 3; i++) {
@@ -262,7 +262,7 @@ class PostgresJournalStorageTest {
   @Test
   void hiveJournalDropEmitsSingleStartStopEvents() throws Exception {
     jdbc.update("DELETE FROM journal_event");
-    PostgresHiveJournal journal = new PostgresHiveJournal(mapper, jdbc, registry, 2, 50, 30_000L, 1_000L);
+    PostgresHiveJournal journal = new PostgresHiveJournal(mapper, jdbc, store, 2, 50, 30_000L, 1_000L);
     ControlScope scope = new ControlScope("s1", "orchestrator", "inst");
 
     journal.append(new HiveJournal.HiveJournalEntry(
@@ -372,7 +372,7 @@ class PostgresJournalStorageTest {
           "{\"x\":" + i + "}");
     }
 
-    SwarmJournalController ctrl = new SwarmJournalController(mapper, jdbc, registry);
+    SwarmJournalController ctrl = new SwarmJournalController(mapper, jdbc, store);
     ReflectionTestUtils.setField(ctrl, "journalSink", "postgres");
 
     ResponseEntity<SwarmJournalController.PinRunResponse> pinned =
@@ -433,7 +433,7 @@ class PostgresJournalStorageTest {
         "sw1",
         "run-1");
 
-    SwarmJournalController ctrl = new SwarmJournalController(mapper, jdbc, registry);
+    SwarmJournalController ctrl = new SwarmJournalController(mapper, jdbc, store);
     ReflectionTestUtils.setField(ctrl, "journalSink", "postgres");
 
     ctrl.pinSwarmJournalRun("sw1", new SwarmJournalController.PinRunRequest("run-1", "FULL", null));

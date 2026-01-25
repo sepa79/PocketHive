@@ -24,8 +24,8 @@ import io.pockethive.orchestrator.domain.SwarmCreateTracker.Pending;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker.Phase;
 import io.pockethive.orchestrator.domain.HiveJournal;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
-import io.pockethive.orchestrator.domain.SwarmRegistry;
-import io.pockethive.orchestrator.domain.SwarmStatus;
+import io.pockethive.orchestrator.domain.SwarmStore;
+import io.pockethive.orchestrator.domain.SwarmLifecycleStatus;
 import io.pockethive.swarm.model.SwarmPlan;
 import java.time.Instant;
 import java.util.List;
@@ -86,7 +86,7 @@ class SwarmSignalListenerTest {
     private SwarmPlanRegistry plans;
     private io.pockethive.orchestrator.domain.ScenarioTimelineRegistry timelines;
     private SwarmCreateTracker tracker;
-    private SwarmRegistry registry;
+    private SwarmStore registry;
     private SwarmSignalListener listener;
 
     @BeforeEach
@@ -97,7 +97,7 @@ class SwarmSignalListenerTest {
         plans = new SwarmPlanRegistry();
         timelines = new io.pockethive.orchestrator.domain.ScenarioTimelineRegistry();
         tracker = new SwarmCreateTracker();
-        registry = new SwarmRegistry();
+        registry = new SwarmStore();
         lenient().when(controlPlane.publisher()).thenReturn(publisher);
         lenient().doNothing().when(controlEmitter).emitStatusSnapshot(any());
         lenient().doNothing().when(controlEmitter).emitStatusDelta(any());
@@ -143,7 +143,7 @@ class SwarmSignalListenerTest {
             Phase.CONTROLLER, Instant.now().plusSeconds(60));
         tracker.register(CONTROLLER_INSTANCE, pending);
         registry.register(new Swarm(SWARM_ID, CONTROLLER_INSTANCE, "cid", "run-1"));
-        registry.updateStatus(SWARM_ID, SwarmStatus.CREATING);
+        registry.updateStatus(SWARM_ID, SwarmLifecycleStatus.CREATING);
 
         String routingKey = ControlPlaneRouting.event("metric", "status-full",
             new ConfirmationScope(SWARM_ID, "swarm-controller", CONTROLLER_INSTANCE));
@@ -199,7 +199,7 @@ class SwarmSignalListenerTest {
         assertThat(alert.data().message()).contains("did not become ready");
         assertThat(tracker.remove(CONTROLLER_INSTANCE)).isEmpty();
         assertThat(registry.find(SWARM_ID)).map(Swarm::getStatus)
-            .contains(SwarmStatus.FAILED);
+            .contains(SwarmLifecycleStatus.FAILED);
     }
 
     @Test

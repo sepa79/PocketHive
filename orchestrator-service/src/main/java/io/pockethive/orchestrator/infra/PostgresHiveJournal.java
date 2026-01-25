@@ -6,7 +6,7 @@ import io.pockethive.journal.postgres.BufferedPostgresJournalWriter;
 import io.pockethive.journal.postgres.PostgresJournalBackpressureEvents;
 import io.pockethive.journal.postgres.PostgresJournalRecord;
 import io.pockethive.orchestrator.domain.HiveJournal;
-import io.pockethive.orchestrator.domain.SwarmRegistry;
+import io.pockethive.orchestrator.domain.SwarmStore;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
@@ -32,12 +32,12 @@ public class PostgresHiveJournal implements HiveJournal {
   private static final long DEFAULT_DROP_QUIET_PERIOD_MILLIS = 1_000;
 
   private final ObjectMapper mapper;
-  private final SwarmRegistry registry;
+  private final SwarmStore store;
   private final BufferedPostgresJournalWriter<HiveJournalEntry> writer;
 
   public PostgresHiveJournal(ObjectMapper mapper,
                              JdbcTemplate jdbc,
-                             SwarmRegistry registry,
+                             SwarmStore store,
                              @Value("${pockethive.journal.postgres.buffer-capacity:" + DEFAULT_CAPACITY + "}")
                              int capacity,
                              @Value("${pockethive.journal.postgres.batch-size:" + DEFAULT_BATCH_SIZE + "}")
@@ -48,7 +48,7 @@ public class PostgresHiveJournal implements HiveJournal {
                              long dropQuietPeriodMillis) {
     this.mapper = Objects.requireNonNull(mapper, "mapper").findAndRegisterModules();
     Objects.requireNonNull(jdbc, "jdbc");
-    this.registry = Objects.requireNonNull(registry, "registry");
+    this.store = Objects.requireNonNull(store, "store");
     this.writer = new BufferedPostgresJournalWriter<>(
         "Hive journal",
         Objects.requireNonNull(jdbc.getDataSource(), "dataSource"),
@@ -76,7 +76,7 @@ public class PostgresHiveJournal implements HiveJournal {
     if (swarmId == null || swarmId.isBlank()) {
       return "legacy";
     }
-    return registry.find(swarmId)
+    return store.find(swarmId)
         .map(io.pockethive.orchestrator.domain.Swarm::getRunId)
         .filter(id -> id != null && !id.isBlank())
         .orElse("legacy");

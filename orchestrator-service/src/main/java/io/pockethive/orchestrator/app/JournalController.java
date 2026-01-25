@@ -2,7 +2,6 @@ package io.pockethive.orchestrator.app;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.ControlScope;
-import io.pockethive.orchestrator.domain.SwarmRegistry;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -33,15 +32,13 @@ public class JournalController {
 
   private final JdbcTemplate jdbc;
   private final ObjectMapper json;
-  private final SwarmRegistry registry;
 
   @Value("${pockethive.journal.sink:postgres}")
   private String journalSink;
 
-  public JournalController(JdbcTemplate jdbc, ObjectMapper json, SwarmRegistry registry) {
+  public JournalController(JdbcTemplate jdbc, ObjectMapper json) {
     this.jdbc = Objects.requireNonNull(jdbc, "jdbc");
     this.json = Objects.requireNonNull(json, "json").findAndRegisterModules();
-    this.registry = Objects.requireNonNull(registry, "registry");
   }
 
   /**

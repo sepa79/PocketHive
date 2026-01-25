@@ -1,6 +1,6 @@
 package io.pockethive.orchestrator.domain;
 
-public enum SwarmStatus {
+public enum SwarmLifecycleStatus {
     NEW,
     CREATING,
     READY,
@@ -12,7 +12,7 @@ public enum SwarmStatus {
     REMOVED,
     FAILED;
 
-    public boolean canTransitionTo(SwarmStatus next) {
+    public boolean canTransitionTo(SwarmLifecycleStatus next) {
         if (next == FAILED) {
             return true;
         }

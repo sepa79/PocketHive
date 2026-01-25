@@ -18,8 +18,8 @@ import io.pockethive.docker.DockerContainerClient;
 import io.pockethive.orchestrator.OrchestratorApplication;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
-import io.pockethive.orchestrator.domain.SwarmRegistry;
-import io.pockethive.orchestrator.domain.SwarmStatus;
+import io.pockethive.orchestrator.domain.SwarmStore;
+import io.pockethive.orchestrator.domain.SwarmLifecycleStatus;
 import io.pockethive.scenarios.test.ScenarioManagerTestApplication;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.SwarmPlan;
@@ -94,7 +94,7 @@ class SwarmCreationMock1E2ETest {
     TestRestTemplate rest;
 
     @Autowired
-    SwarmRegistry swarmRegistry;
+    SwarmStore swarmStore;
 
     @Autowired
     SwarmPlanRegistry swarmPlanRegistry;
@@ -256,9 +256,9 @@ class SwarmCreationMock1E2ETest {
         assertThat(managerIdentity.instanceId()).isNotBlank();
         assertThat(controlPlaneProperties.getInstanceId()).isEqualTo(managerIdentity.instanceId());
 
-        Swarm swarm = swarmRegistry.find(swarmId).orElseThrow();
+        Swarm swarm = swarmStore.find(swarmId).orElseThrow();
         assertThat(swarm.getContainerId()).isEqualTo("container-123");
-        assertThat(swarm.getStatus()).isEqualTo(SwarmStatus.CREATING);
+        assertThat(swarm.getStatus()).isEqualTo(SwarmLifecycleStatus.CREATING);
         String instanceId = swarm.getInstanceId();
         assertThat(instanceId).isNotBlank();
 
@@ -379,7 +379,7 @@ class SwarmCreationMock1E2ETest {
             ControlPlaneRouting.event("outcome", "swarm-template",
                 new ConfirmationScope(swarmId, "swarm-controller", instanceId)),
             "{\"data\":{\"status\":\"Ready\"}}");
-        awaitStatus(swarmId, SwarmStatus.READY, Duration.ofSeconds(15));
+        awaitStatus(swarmId, SwarmLifecycleStatus.READY, Duration.ofSeconds(15));
 
         admin.deleteQueue(captureName);
     }
@@ -540,11 +540,11 @@ class SwarmCreationMock1E2ETest {
         return null;
     }
 
-    private void awaitStatus(String swarmId, SwarmStatus expected, Duration timeout)
+    private void awaitStatus(String swarmId, SwarmLifecycleStatus expected, Duration timeout)
         throws InterruptedException {
         Instant deadline = Instant.now().plus(timeout);
         while (Instant.now().isBefore(deadline)) {
-            SwarmStatus current = swarmRegistry.find(swarmId)
+            SwarmLifecycleStatus current = swarmStore.find(swarmId)
                 .map(Swarm::getStatus)
                 .orElse(null);
             if (expected.equals(current)) {
@@ -552,7 +552,7 @@ class SwarmCreationMock1E2ETest {
             }
             Thread.sleep(50L);
         }
-        assertThat(swarmRegistry.find(swarmId)
+        assertThat(swarmStore.find(swarmId)
             .map(Swarm::getStatus)).contains(expected);
     }
 

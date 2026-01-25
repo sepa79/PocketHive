@@ -16,7 +16,7 @@ import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.orchestrator.domain.IdempotencyStore;
 import io.pockethive.orchestrator.domain.Swarm;
-import io.pockethive.orchestrator.domain.SwarmRegistry;
+import io.pockethive.orchestrator.domain.SwarmStore;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -39,7 +39,7 @@ class SwarmManagerControllerTest {
 
     @Test
     void fanOutToggleToAllControllers() throws Exception {
-        SwarmRegistry registry = new SwarmRegistry();
+        SwarmStore registry = new SwarmStore();
         registry.register(new Swarm("sw1", "ctrl-a", "c1", "run-1"));
         registry.register(new Swarm("sw2", "ctrl-b", "c2", "run-2"));
         when(idempotency.reserve(eq("sw1"), eq(ControlPlaneSignals.CONFIG_UPDATE), eq("idem-1"), anyString()))
@@ -77,7 +77,7 @@ class SwarmManagerControllerTest {
 
     @Test
     void toggleSingleControllerScope() throws Exception {
-        SwarmRegistry registry = new SwarmRegistry();
+        SwarmStore registry = new SwarmStore();
         registry.register(new Swarm("sw9", "ctrl-z", "c9", "run-9"));
         when(idempotency.reserve(eq("sw9"), eq(ControlPlaneSignals.CONFIG_UPDATE), eq("idem-2"), anyString()))
             .thenReturn(Optional.empty());

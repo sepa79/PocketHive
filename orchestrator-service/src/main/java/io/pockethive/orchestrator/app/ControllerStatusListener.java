@@ -2,10 +2,9 @@ package io.pockethive.orchestrator.app;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
-import io.pockethive.orchestrator.domain.SwarmRegistry;
+import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.orchestrator.domain.Swarm;
-import io.pockethive.orchestrator.domain.SwarmStatus;
+import io.pockethive.orchestrator.domain.SwarmLifecycleStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -17,11 +16,10 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Iterator;
 import java.util.Objects;
 
 /**
- * Consumes swarm-controller aggregate status events and updates the local registry.
+ * Consumes swarm-controller aggregate status events and updates the local store.
  */
 @Component
 @EnableScheduling
@@ -31,16 +29,16 @@ public class ControllerStatusListener {
     private static final Duration FAILED_AFTER = Duration.ofSeconds(40);
     private static final String SWARM_CONTROLLER_ROLE = "swarm-controller";
 
-    private final SwarmRegistry registry;
+    private final SwarmStore store;
     private final ObjectMapper mapper;
     private final ControlPlaneStatusRequestPublisher statusRequests;
     private final SwarmSignalListener swarmSignals;
 
-    public ControllerStatusListener(SwarmRegistry registry,
+    public ControllerStatusListener(SwarmStore store,
                                     ObjectMapper mapper,
                                     ControlPlaneStatusRequestPublisher statusRequests,
                                     SwarmSignalListener swarmSignals) {
-        this.registry = Objects.requireNonNull(registry, "registry");
+        this.store = Objects.requireNonNull(store, "store");
         this.mapper = Objects.requireNonNull(mapper, "mapper").findAndRegisterModules();
         this.statusRequests = Objects.requireNonNull(statusRequests, "statusRequests");
         this.swarmSignals = Objects.requireNonNull(swarmSignals, "swarmSignals");
@@ -79,32 +77,28 @@ public class ControllerStatusListener {
             String swarmStatusText = context.path("swarmStatus").asText(null);
             String runId = context.path("journal").path("runId").asText(null);
 
-            boolean discovered = ensureSwarmRegistered(swarmId, controllerInstance, runId);
-            Swarm swarm = swarmId == null ? null : registry.find(swarmId).orElse(null);
+            boolean discovered = store.ensureDiscoveredSwarm(swarmId, controllerInstance, runId);
+            Swarm swarm = swarmId == null ? null : store.find(swarmId).orElse(null);
             boolean controllerScope = SWARM_CONTROLLER_ROLE.equals(role);
 
             if (controllerScope && swarm != null) {
                 if (statusFull) {
-                    swarm.updateControllerStatusFull(node, Instant.now());
-                } else if (statusDelta) {
-                    if (swarm.getControllerStatusFull() == null) {
-                        swarm.updateControllerStatusFull(node, Instant.now());
+                    store.cacheControllerStatusFull(swarmId, node, Instant.now());
+                    if (discovered) {
                         requestStatusFull(swarmId);
-                    } else {
-                    if (deltaContainsFullOnlyFields(data)) {
+                    }
+                } else if (statusDelta) {
+                    SwarmStore.DeltaApplyResult result = store.applyControllerStatusDelta(swarmId, node, Instant.now());
+                    if (result == SwarmStore.DeltaApplyResult.MISSING_BASELINE) {
+                        requestStatusFull(swarmId);
+                    } else if (result == SwarmStore.DeltaApplyResult.REJECTED_FULL_ONLY_FIELDS) {
                         log.warn("Ignoring status-delta with full-only fields for swarm {} rk={}", swarmId, routingKey);
                         return;
-                    }
-                    mergeControllerDelta(swarm, node);
                     }
                 }
             } else if (statusDelta && controllerScope && swarmId != null) {
                 requestStatusFull(swarmId);
                 return;
-            }
-
-            if (discovered && swarmId != null) {
-                requestStatusFull(swarmId);
             }
 
             if (swarmId != null) {
@@ -114,8 +108,8 @@ public class ControllerStatusListener {
                     ? enabledNode.asBoolean()
                     : null;
 
-                // Derive SwarmStatus from controller view so plan‑driven start/stop
-                // keeps the Orchestrator registry in sync even when no explicit
+                // Derive lifecycle status from controller view so plan‑driven start/stop
+                // keeps the Orchestrator store in sync even when no explicit
                 // /start or /stop REST call was issued.
                 if (swarmStatusText != null && !swarmStatusText.isBlank()) {
                     String normalized = swarmStatusText.trim().toUpperCase();
@@ -125,7 +119,7 @@ public class ControllerStatusListener {
                             if (Boolean.TRUE.equals(workloadsEnabled)) {
                                 // Use the existing lifecycle helper so that
                                 // status transitions obey the state machine.
-                                registry.markStartConfirmed(swarmId);
+                                store.markStartConfirmed(swarmId);
                             }
                         }
                         case "STOPPED" -> {
@@ -134,40 +128,23 @@ public class ControllerStatusListener {
                                     // When rebuilding from controller status events after an orchestrator restart,
                                     // the newly registered swarm may still be in READY. Walk through the normal
                                     // state machine to reach STOPPED without tripping illegal transitions.
-                                    registry.markStartConfirmed(swarmId);
+                                    store.markStartConfirmed(swarmId);
                                 }
                                 // Plan‑driven stop: make sure we walk through
                                 // STOPPING -> STOPPED so the local state
                                 // machine is satisfied.
-                                registry.updateStatus(swarmId, SwarmStatus.STOPPING);
-                                registry.updateStatus(swarmId, SwarmStatus.STOPPED);
+                                store.updateStatus(swarmId, SwarmLifecycleStatus.STOPPING);
+                                store.updateStatus(swarmId, SwarmLifecycleStatus.STOPPED);
                             }
                         }
-                        case "FAILED" -> registry.updateStatus(swarmId, SwarmStatus.FAILED);
-                        default -> { /* leave registry status unchanged for other states */ }
+                        case "FAILED" -> store.updateStatus(swarmId, SwarmLifecycleStatus.FAILED);
+                        default -> { /* leave store status unchanged for other states */ }
                     }
                 }
             }
         } catch (Exception e) {
             log.warn("status parse", e);
         }
-    }
-
-    private boolean ensureSwarmRegistered(String swarmId, String controllerInstance, String runId) {
-        if (swarmId == null || swarmId.isBlank()) {
-            return false;
-        }
-        if (registry.find(swarmId).isPresent()) {
-            return false;
-        }
-        if (controllerInstance == null || controllerInstance.isBlank()) {
-            return false;
-        }
-        Swarm swarm = new Swarm(swarmId, controllerInstance, controllerInstance, runId);
-        registry.register(swarm);
-        registry.updateStatus(swarmId, SwarmStatus.CREATING);
-        registry.updateStatus(swarmId, SwarmStatus.READY);
-        return true;
     }
 
     private void requestStatusFull(String swarmId) {
@@ -179,62 +156,9 @@ public class ControllerStatusListener {
         statusRequests.requestStatusForSwarm(swarmId, corr, idem);
     }
 
-    private boolean deltaContainsFullOnlyFields(JsonNode data) {
-        if (data == null || data.isMissingNode()) {
-            return false;
-        }
-        return data.has("config") || data.has("io") || data.has("startedAt") || data.has("runtime");
-    }
-
-    private void mergeControllerDelta(Swarm swarm, JsonNode delta) {
-        JsonNode current = swarm.getControllerStatusFull();
-        if (!(current instanceof ObjectNode currentObject)) {
-            return;
-        }
-        if (!(delta instanceof ObjectNode deltaObject)) {
-            return;
-        }
-        ObjectNode merged = currentObject.deepCopy();
-        mergeStatusDeltaPayload(merged, deltaObject);
-        swarm.updateControllerStatusFull(merged, Instant.now());
-    }
-
-    private void mergeStatusDeltaPayload(ObjectNode target, ObjectNode delta) {
-        JsonNode timestamp = delta.get("timestamp");
-        if (timestamp != null && timestamp.isTextual()) {
-            target.put("timestamp", timestamp.asText());
-        }
-        JsonNode deltaData = delta.get("data");
-        if (deltaData instanceof ObjectNode deltaObject) {
-            ObjectNode targetData = target.path("data") instanceof ObjectNode existing
-                ? existing
-                : target.putObject("data");
-            mergeObjectNodes(targetData, deltaObject);
-        }
-    }
-
-    private void mergeObjectNodes(ObjectNode target, ObjectNode source) {
-        Iterator<String> fields = source.fieldNames();
-        while (fields.hasNext()) {
-            String field = fields.next();
-            JsonNode sourceValue = source.get(field);
-            JsonNode targetValue = target.get(field);
-            if (sourceValue instanceof ObjectNode sourceObject
-                && targetValue instanceof ObjectNode targetObject) {
-                mergeObjectNodes(targetObject, sourceObject);
-            } else {
-                if (sourceValue == null) {
-                    target.putNull(field);
-                } else {
-                    target.set(field, sourceValue.deepCopy());
-                }
-            }
-        }
-    }
-
     @Scheduled(fixedRate = 5000L)
     public void expire() {
-        registry.pruneStaleControllers(FAILED_AFTER);
+        store.pruneStaleControllers(FAILED_AFTER);
     }
 
     private static String snippet(String payload) {

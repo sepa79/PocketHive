@@ -12,7 +12,7 @@ import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.observability.ControlPlaneJson;
 import io.pockethive.orchestrator.domain.IdempotencyStore;
 import io.pockethive.orchestrator.domain.Swarm;
-import io.pockethive.orchestrator.domain.SwarmRegistry;
+import io.pockethive.orchestrator.domain.SwarmStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -42,16 +42,16 @@ public class SwarmManagerController {
     private static final Logger log = LoggerFactory.getLogger(SwarmManagerController.class);
     private static final long CONFIG_UPDATE_TIMEOUT_MS = 60_000L;
 
-    private final SwarmRegistry registry;
+    private final SwarmStore store;
     private final ControlPlanePublisher controlPublisher;
     private final IdempotencyStore idempotency;
     private final String originInstanceId;
 
-    public SwarmManagerController(SwarmRegistry registry,
+    public SwarmManagerController(SwarmStore store,
                                   ControlPlanePublisher controlPublisher,
                                   IdempotencyStore idempotency,
                                   ControlPlaneProperties controlPlaneProperties) {
-        this.registry = registry;
+        this.store = store;
         this.controlPublisher = controlPublisher;
         this.idempotency = idempotency;
         this.originInstanceId = requireOrigin(controlPlaneProperties);
@@ -75,7 +75,7 @@ public class SwarmManagerController {
     public ResponseEntity<FanoutControlResponse> updateAll(@RequestBody ToggleRequest request) {
         String path = "/api/swarm-managers/enabled";
         logRestRequest("POST", path, request);
-        FanoutControlResponse body = dispatch(registry.all(), request);
+        FanoutControlResponse body = dispatch(store.all(), request);
         ResponseEntity<FanoutControlResponse> response = ResponseEntity.accepted().body(body);
         logRestResponse("POST", path, response);
         return response;
@@ -93,7 +93,7 @@ public class SwarmManagerController {
                                                            @RequestBody ToggleRequest request) {
         String path = "/api/swarm-managers/" + swarmId + "/enabled";
         logRestRequest("POST", path, request);
-        ResponseEntity<FanoutControlResponse> response = registry.find(swarmId)
+        ResponseEntity<FanoutControlResponse> response = store.find(swarmId)
             .map(swarm -> ResponseEntity.accepted().body(dispatch(List.of(swarm), request)))
             .orElseGet(() -> ResponseEntity.notFound().build());
         logRestResponse("POST", path, response);
