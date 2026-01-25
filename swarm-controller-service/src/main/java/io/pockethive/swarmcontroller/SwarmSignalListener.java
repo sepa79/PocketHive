@@ -22,7 +22,6 @@ import io.pockethive.manager.guard.BufferGuardSettings;
 import io.pockethive.manager.runtime.ComputeAdapterType;
 import io.pockethive.observability.ControlPlaneJson;
 import io.pockethive.swarm.model.BufferGuardPolicy;
-import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.TrafficPolicy;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import io.pockethive.swarmcontroller.runtime.JournalControlPlanePublisher;
@@ -74,7 +73,7 @@ public class SwarmSignalListener {
   private final SwarmJournal journal;
   private final String journalRunId;
   private final Map<String, Object> baseRuntimeMeta;
-  private volatile String templateId;
+  private final String templateId;
   private static final long STATUS_INTERVAL_MS = 5000L;
   private static final long STATUS_FULL_TIMEOUT_MS = 5000L;
   private static final long MAX_STALENESS_MS = 15_000L;
@@ -392,7 +391,6 @@ public class SwarmSignalListener {
     try {
       long freshnessCutoffMillis = System.currentTimeMillis();
       log.info("{} signal for swarm {}", label.substring(0, 1).toUpperCase() + label.substring(1), swarmId);
-      maybeCaptureTemplateId(resolvedSignal, cs);
       action.apply(serializeArgs(cs));
       recordLifecycleState(resolvedSignal);
       if (ControlPlaneSignals.SWARM_TEMPLATE.equals(resolvedSignal)) {
@@ -607,7 +605,6 @@ public class SwarmSignalListener {
     if (ControlPlaneSignals.SWARM_REMOVE.equals(resolvedSignal)) {
       templateApplied.set(false);
       planApplied.set(false);
-      templateId = null;
     }
   }
 
@@ -1072,32 +1069,6 @@ public class SwarmSignalListener {
     }
     String trimmed = value.trim();
     return trimmed.isBlank() ? null : trimmed;
-  }
-
-  private void maybeCaptureTemplateId(String resolvedSignal, ControlSignal cs) {
-    if (cs == null || resolvedSignal == null) {
-      return;
-    }
-    if (!ControlPlaneSignals.SWARM_TEMPLATE.equals(resolvedSignal)
-        && !ControlPlaneSignals.SWARM_START.equals(resolvedSignal)) {
-      return;
-    }
-    Map<String, Object> args = cs.data();
-    if (args == null || args.isEmpty()) {
-      return;
-    }
-    try {
-      SwarmPlan plan = mapper.convertValue(args, SwarmPlan.class);
-      if (plan != null && hasText(plan.id())) {
-        templateId = plan.id().trim();
-      }
-    } catch (Exception ex) {
-      log.debug("Unable to resolve template id from {}", resolvedSignal, ex);
-    }
-  }
-
-  private static boolean hasText(String value) {
-    return value != null && !value.isBlank();
   }
 
   private ScenarioChange applyScenarioOverrides(JsonNode dataNode) {

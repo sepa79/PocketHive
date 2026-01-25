@@ -155,6 +155,9 @@ public class ContainerLifecycleManager {
         }
         env.put("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_DOCKER_COMPUTE_ADAPTER", resolvedAdapterType.name());
         env.put("POCKETHIVE_RUNTIME_IMAGE", resolvedImage);
+        if (templateMetadata != null && templateMetadata.templateId() != null && !templateMetadata.templateId().isBlank()) {
+            env.put("POCKETHIVE_TEMPLATE_ID", templateMetadata.templateId().trim());
+        }
         if (resolvedAdapterType == ComputeAdapterType.SWARM_STACK) {
             env.put("POCKETHIVE_RUNTIME_STACK_NAME", "ph-" + resolvedSwarmId.toLowerCase(java.util.Locale.ROOT));
         }

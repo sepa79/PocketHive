@@ -335,6 +335,10 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
         if (hasText(runId)) {
           env.put("POCKETHIVE_JOURNAL_RUN_ID", runId);
         }
+        String templateId = envValue("POCKETHIVE_TEMPLATE_ID");
+        if (hasText(templateId)) {
+          env.put("POCKETHIVE_TEMPLATE_ID", templateId);
+        }
         if (bee.image() != null && !bee.image().isBlank()) {
           env.put("POCKETHIVE_RUNTIME_IMAGE", bee.image());
         }
