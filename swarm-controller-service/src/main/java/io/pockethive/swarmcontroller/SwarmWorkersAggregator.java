@@ -104,6 +104,7 @@ final class SwarmWorkersAggregator {
       return null;
     }
     Map<String, Object> runtime = new LinkedHashMap<>();
+    runtime.put("templateId", textOrNull(node, "templateId"));
     runtime.put("runId", textOrNull(node, "runId"));
     runtime.put("containerId", textOrNull(node, "containerId"));
     runtime.put("image", textOrNull(node, "image"));
