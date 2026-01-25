@@ -573,10 +573,10 @@ public class SwarmController {
     private record ErrorResponse(String message) {}
 
     /**
-     * GET {@code /api/swarms} — list all known swarms with their launch metadata.
+     * GET {@code /api/swarms} — list swarms from cached swarm-controller status-full snapshots.
      * <p>
-     * Returns {@link SwarmSummary} for each registered swarm so dashboards can reconnect after a UI
-     * refresh. Example payload:
+     * This endpoint intentionally reflects the orchestrator cache only: swarms without a cached
+     * swarm-controller status-full snapshot are omitted.
      * <pre>{@code
      * [
      *   {
@@ -593,13 +593,10 @@ public class SwarmController {
     public ResponseEntity<List<SwarmSummary>> list() {
         String path = "/api/swarms";
         logRestRequest("GET", path, null);
-        // Drop swarms that have already been marked FAILED by expiry logic so operators can
-        // recreate swarms after controllers disappear (for example, when containers are killed
-        // manually outside PocketHive).
-        registry.bringOutYourDead();
         List<SwarmSummary> payload = registry.all().stream()
             .sorted(Comparator.comparing(Swarm::getId))
-            .map(this::toSummary)
+            .map(swarm -> toSummaryFromStatusFull(swarm, swarm.getControllerStatusFull()))
+            .filter(Objects::nonNull)
             .toList();
         ResponseEntity<List<SwarmSummary>> response = ResponseEntity.ok(payload);
         logRestResponse("GET", path, response);
@@ -634,27 +631,6 @@ public class SwarmController {
         return response;
     }
 
-    private SwarmSummary toSummary(Swarm swarm) {
-        JsonNode statusFull = swarm.getControllerStatusFull();
-        if (statusFull != null) {
-            SwarmSummary summary = toSummaryFromStatusFull(swarm, statusFull);
-            if (summary != null) {
-                return summary;
-            }
-        }
-        return new SwarmSummary(
-            swarm.getId(),
-            null,
-            null,
-            null,
-            true,
-            null,
-            null,
-            null,
-            null,
-            List.of());
-    }
-
     private SwarmSummary toSummaryFromStatusFull(Swarm swarm, JsonNode statusFull) {
         if (statusFull == null || statusFull.isMissingNode()) {
             return null;
@@ -664,18 +640,17 @@ public class SwarmController {
         JsonNode context = data.path("context");
         JsonNode workers = context.path("workers");
 
-        String id = textOrNull(scope, "swarmId");
-        if (id == null) {
-            id = swarm.getId();
-        }
+        String id = swarm.getId();
 
         SwarmStatus status = parseSwarmStatus(textOrNull(context, "swarmStatus"), null);
         SwarmHealth health = parseSwarmHealth(textOrNull(context, "swarmHealth"), null);
         Instant heartbeat = parseInstant(textOrNull(statusFull, "timestamp"));
 
-        boolean workEnabled = data.has("enabled")
-            ? data.path("enabled").asBoolean(true)
-            : true;
+        JsonNode enabledNode = data.get("enabled");
+        if (enabledNode == null || !enabledNode.isBoolean()) {
+            return null;
+        }
+        boolean workEnabled = enabledNode.asBoolean();
 
         String templateId = textOrNull(data.path("runtime"), "templateId");
         String controllerImage = textOrNull(data.path("runtime"), "image");

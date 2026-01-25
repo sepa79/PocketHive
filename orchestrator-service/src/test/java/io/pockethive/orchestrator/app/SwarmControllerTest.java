@@ -429,8 +429,33 @@ class SwarmControllerTest {
             }
             """;
         bravo.updateControllerStatusFull(mapper.readTree(bravoStatusFull), Instant.now());
+        Swarm badEnabled = new Swarm("bad-enabled", "inst-x", "cx", "run-x");
+        String badEnabledStatusFull = """
+            {
+              "timestamp": "2026-01-22T12:00:03Z",
+              "version": "1",
+              "kind": "metric",
+              "type": "status-full",
+              "origin": "inst-x",
+              "scope": { "swarmId": "bad-enabled", "role": "swarm-controller", "instance": "inst-x" },
+              "correlationId": null,
+              "idempotencyKey": null,
+              "data": {
+                "config": {},
+                "startedAt": "2026-01-22T12:00:03Z",
+                "runtime": {},
+                "io": {},
+                "ioState": {},
+                "context": {}
+              }
+            }
+            """;
+        badEnabled.updateControllerStatusFull(mapper.readTree(badEnabledStatusFull), Instant.now());
+        Swarm noCache = new Swarm("no-cache", "inst-c", "c3", "run-c");
         registry.register(bravo);
         registry.register(alpha);
+        registry.register(badEnabled);
+        registry.register(noCache);
         SwarmController ctrl = controller(new SwarmCreateTracker(), registry, new SwarmPlanRegistry());
 
         ResponseEntity<List<SwarmController.SwarmSummary>> resp = ctrl.list();

@@ -2,6 +2,9 @@ package io.pockethive.orchestrator.domain;
 
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
+import java.time.Instant;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class SwarmRegistryTest {
@@ -16,17 +19,6 @@ class SwarmRegistryTest {
     }
 
     @Test
-    void updatesEnableFlags() {
-        SwarmRegistry registry = new SwarmRegistry();
-        Swarm swarm = new Swarm("s1", "inst1", "container", "run-1");
-        registry.register(swarm);
-
-        registry.updateWorkEnabled("s1", false);
-
-        assertFalse(swarm.isWorkEnabled());
-    }
-
-    @Test
     void updateStatus() {
         SwarmRegistry registry = new SwarmRegistry();
         Swarm swarm = new Swarm("s1", "inst1", "container", "run-1");
@@ -37,9 +29,7 @@ class SwarmRegistryTest {
         registry.markTemplateApplied(swarm.getId());
         registry.markStartIssued(swarm.getId());
         registry.markStartConfirmed(swarm.getId());
-        registry.refresh(swarm.getId(), SwarmHealth.RUNNING);
         assertEquals(SwarmStatus.RUNNING, swarm.getStatus());
-        assertEquals(SwarmHealth.RUNNING, swarm.getHealth());
     }
 
     @Test
@@ -86,33 +76,17 @@ class SwarmRegistryTest {
     }
 
     @Test
-    void marksStaleSwarms() {
-        SwarmRegistry registry = new SwarmRegistry();
-        Swarm swarm = new Swarm("s1", "inst1", "container", "run-1");
-        registry.register(swarm);
-        registry.refresh("s1", SwarmHealth.RUNNING);
-
-        java.time.Instant future = swarm.getHeartbeat().plusSeconds(15);
-        registry.expire(java.time.Duration.ofSeconds(10), java.time.Duration.ofSeconds(20), future);
-        assertEquals(SwarmHealth.DEGRADED, swarm.getHealth());
-
-        future = swarm.getHeartbeat().plusSeconds(25);
-        registry.expire(java.time.Duration.ofSeconds(10), java.time.Duration.ofSeconds(20), future);
-        assertEquals(SwarmHealth.FAILED, swarm.getHealth());
-    }
-
-    @Test
-    void bringOutYourDeadRemovesFailedSwarms() {
+    void pruneStaleControllersRemovesStaleSwarms() {
         SwarmRegistry registry = new SwarmRegistry();
         Swarm healthy = new Swarm("s1", "inst1", "container1", "run-1");
-        Swarm failed = new Swarm("s2", "inst2", "container2", "run-2");
+        Swarm stale = new Swarm("s2", "inst2", "container2", "run-2");
         registry.register(healthy);
-        registry.register(failed);
+        registry.register(stale);
 
-        healthy.refresh(SwarmHealth.RUNNING);
-        failed.refresh(SwarmHealth.FAILED);
-
-        registry.bringOutYourDead();
+        Instant now = Instant.parse("2026-01-25T12:00:00Z");
+        healthy.updateControllerStatusFull(null, now.minusSeconds(5));
+        stale.updateControllerStatusFull(null, now.minusSeconds(60));
+        registry.pruneStaleControllers(Duration.ofSeconds(40), now);
 
         assertTrue(registry.find("s1").isPresent());
         assertTrue(registry.find("s2").isEmpty());

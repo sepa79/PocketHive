@@ -12,10 +12,7 @@ public class Swarm {
     private final String containerId;
     private final String runId;
     private SwarmStatus status;
-    private SwarmHealth health;
-    private Instant heartbeat;
     private final Instant createdAt;
-    private boolean workEnabled;
     private SwarmTemplateMetadata templateMetadata;
     private String sutId;
     private volatile JsonNode controllerStatusFull;
@@ -27,10 +24,7 @@ public class Swarm {
         this.containerId = containerId;
         this.runId = runId;
         this.status = SwarmStatus.NEW;
-        this.health = SwarmHealth.UNKNOWN;
-        this.heartbeat = Instant.now();
         this.createdAt = Instant.now();
-        this.workEnabled = true;
     }
 
     public String getId() {
@@ -58,27 +52,6 @@ public class Swarm {
             throw new IllegalStateException("Cannot transition from " + status + " to " + next);
         }
         this.status = next;
-    }
-
-    public SwarmHealth getHealth() {
-        return health;
-    }
-
-    public Instant getHeartbeat() {
-        return heartbeat;
-    }
-
-    public void refresh(SwarmHealth health) {
-        this.health = health;
-        this.heartbeat = Instant.now();
-    }
-
-    public boolean isWorkEnabled() {
-        return workEnabled;
-    }
-
-    public void setWorkEnabled(boolean workEnabled) {
-        this.workEnabled = workEnabled;
     }
 
     public void attachTemplate(SwarmTemplateMetadata metadata) {
@@ -124,17 +97,6 @@ public class Swarm {
 
     public Instant getControllerStatusReceivedAt() {
         return controllerStatusReceivedAt;
-    }
-
-    void expire(Instant now, java.time.Duration degradedAfter, java.time.Duration failedAfter) {
-        if (heartbeat == null) return;
-        if (now.isAfter(heartbeat.plus(failedAfter))) {
-            health = SwarmHealth.FAILED;
-        } else if (now.isAfter(heartbeat.plus(degradedAfter))) {
-            if (health != SwarmHealth.FAILED) {
-                health = SwarmHealth.DEGRADED;
-            }
-        }
     }
 
     public Instant getCreatedAt() {

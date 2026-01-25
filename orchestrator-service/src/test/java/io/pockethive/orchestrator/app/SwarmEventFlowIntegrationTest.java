@@ -23,7 +23,6 @@ import io.pockethive.orchestrator.domain.HiveJournal;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
 import io.pockethive.orchestrator.domain.SwarmStatus;
-import io.pockethive.orchestrator.domain.SwarmHealth;
 import io.pockethive.swarm.model.SwarmPlan;
 import java.time.Instant;
 import java.util.List;
@@ -37,7 +36,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.lenient;
@@ -186,8 +184,8 @@ class SwarmEventFlowIntegrationTest {
             """.formatted(CONTROLLER_INSTANCE, CONTROLLER_INSTANCE),
             "event.metric.status-delta.sw1.swarm-controller." + CONTROLLER_INSTANCE);
         Swarm swarm = registry.find(SWARM_ID).orElseThrow();
-        assertEquals(SwarmHealth.RUNNING, swarm.getHealth());
-        assertThat(swarm.isWorkEnabled()).isFalse();
+        JsonNode cachedStatus = swarm.getControllerStatusFull();
+        assertThat(cachedStatus.path("data").path("enabled").asBoolean()).isFalse();
 
         tracker.expectStop(SWARM_ID, "stop-corr", "stop-idem", java.time.Duration.ofSeconds(30));
         signalListener.handle("{\"data\":{\"status\":\"Stopped\"}}", ControlPlaneRouting.event("outcome", "swarm-stop",

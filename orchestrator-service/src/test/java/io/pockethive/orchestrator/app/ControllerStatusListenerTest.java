@@ -3,7 +3,6 @@ package io.pockethive.orchestrator.app;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
-import io.pockethive.orchestrator.domain.SwarmHealth;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmStatus;
@@ -52,10 +51,8 @@ class ControllerStatusListenerTest {
               "idempotencyKey": null,
               "data": {"enabled": true, "context": {"swarmStatus": "RUNNING"}}
             }
-            """;
+	            """;
         listener.handle(json, "event.metric.status-delta.sw1.swarm-controller.inst1");
-        verify(registry).refresh("sw1", SwarmHealth.RUNNING);
-        verify(registry).updateWorkEnabled("sw1", true);
         // RUNNING + workloadsEnabled=true should drive the registry into RUNNING
         // using the normal lifecycle helper.
         verify(registry).markStartConfirmed("sw1");
@@ -80,10 +77,8 @@ class ControllerStatusListenerTest {
               "idempotencyKey": null,
               "data": {"enabled": false, "context": {"swarmStatus": "STOPPED"}}
             }
-            """;
+	            """;
         listener.handle(json, "event.metric.status-delta.sw1.swarm-controller.inst1");
-        verify(registry).refresh("sw1", SwarmHealth.DEGRADED);
-        verify(registry).updateWorkEnabled("sw1", false);
         // STOPPED + workloadsEnabled=false should map to STOPPING -> STOPPED
         verify(registry).updateStatus("sw1", SwarmStatus.STOPPING);
         verify(registry).updateStatus("sw1", SwarmStatus.STOPPED);

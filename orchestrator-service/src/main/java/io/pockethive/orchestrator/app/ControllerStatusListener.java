@@ -3,7 +3,6 @@ package io.pockethive.orchestrator.app;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import io.pockethive.orchestrator.domain.SwarmHealth;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmStatus;
@@ -104,19 +103,16 @@ public class ControllerStatusListener {
                 return;
             }
 
-            if (swarmId != null && swarmStatusText != null) {
-                registry.refresh(swarmId, map(swarmStatusText));
-            }
-
             if (discovered && swarmId != null) {
                 requestStatusFull(swarmId);
             }
 
             if (swarmId != null) {
                 // Workloads enablement is reported as data.enabled on status metrics.
-                boolean workloadsKnown = true;
-                boolean workloadsEnabled = data.path("enabled").asBoolean(false);
-                registry.updateWorkEnabled(swarmId, workloadsEnabled);
+                JsonNode enabledNode = data.get("enabled");
+                Boolean workloadsEnabled = enabledNode != null && enabledNode.isBoolean()
+                    ? enabledNode.asBoolean()
+                    : null;
 
                 // Derive SwarmStatus from controller view so plan‑driven start/stop
                 // keeps the Orchestrator registry in sync even when no explicit
@@ -126,14 +122,14 @@ public class ControllerStatusListener {
 
                     switch (normalized) {
                         case "RUNNING" -> {
-                            if (workloadsKnown && workloadsEnabled) {
+                            if (Boolean.TRUE.equals(workloadsEnabled)) {
                                 // Use the existing lifecycle helper so that
                                 // status transitions obey the state machine.
                                 registry.markStartConfirmed(swarmId);
                             }
                         }
                         case "STOPPED" -> {
-                            if (workloadsKnown && !workloadsEnabled) {
+                            if (Boolean.FALSE.equals(workloadsEnabled)) {
                                 if (discovered) {
                                     // When rebuilding from controller status events after an orchestrator restart,
                                     // the newly registered swarm may still be in READY. Walk through the normal
@@ -172,14 +168,6 @@ public class ControllerStatusListener {
         registry.updateStatus(swarmId, SwarmStatus.CREATING);
         registry.updateStatus(swarmId, SwarmStatus.READY);
         return true;
-    }
-
-    private SwarmHealth map(String s) {
-        if (s == null) return SwarmHealth.UNKNOWN;
-        if ("RUNNING".equalsIgnoreCase(s)) return SwarmHealth.RUNNING;
-        if ("FAILED".equalsIgnoreCase(s)) return SwarmHealth.FAILED;
-        if ("DEGRADED".equalsIgnoreCase(s)) return SwarmHealth.DEGRADED;
-        return SwarmHealth.DEGRADED;
     }
 
     private void requestStatusFull(String swarmId) {
@@ -246,7 +234,7 @@ public class ControllerStatusListener {
 
     @Scheduled(fixedRate = 5000L)
     public void expire() {
-        registry.expire(DEGRADED_AFTER, FAILED_AFTER);
+        registry.pruneStaleControllers(FAILED_AFTER);
     }
 
     private static String snippet(String payload) {

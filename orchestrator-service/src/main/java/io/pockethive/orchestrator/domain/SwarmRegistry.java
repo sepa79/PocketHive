@@ -5,6 +5,8 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.time.Duration;
+import java.time.Instant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -58,20 +60,6 @@ public class SwarmRegistry {
         }
     }
 
-    public void updateWorkEnabled(String id, boolean enabled) {
-        Swarm swarm = swarms.get(id);
-        if (swarm != null) {
-            swarm.setWorkEnabled(enabled);
-        }
-    }
-
-    public void refresh(String id, SwarmHealth health) {
-        Swarm swarm = swarms.get(id);
-        if (swarm != null) {
-            swarm.refresh(health);
-        }
-    }
-
     public void markTemplateApplied(String id) {
         Swarm swarm = swarms.get(id);
         if (swarm == null) {
@@ -113,28 +101,34 @@ public class SwarmRegistry {
         }
     }
 
-    public void expire(java.time.Duration degradedAfter, java.time.Duration failedAfter) {
-        expire(degradedAfter, failedAfter, java.time.Instant.now());
-    }
-
-    void expire(java.time.Duration degradedAfter, java.time.Duration failedAfter, java.time.Instant now) {
-        swarms.values().forEach(s -> s.expire(now, degradedAfter, failedAfter));
-    }
-
     /**
-     * Remove swarms that are no longer alive.
+     * Remove swarms whose swarm-controller stopped reporting status metrics.
      * <p>
-     * This is intentionally strict: only swarms that have already been marked {@link SwarmHealth#FAILED}
-     * by the expiry logic are pruned. Anything still reporting (RUNNING/DEGRADED) stays registered.
+     * This is intentionally strict: only swarms that have a recorded controller status timestamp and
+     * have not been seen for at least {@code failedAfter} are pruned.
      */
-    public void bringOutYourDead() {
+    public void pruneStaleControllers(Duration failedAfter) {
+        pruneStaleControllers(failedAfter, Instant.now());
+    }
+
+    void pruneStaleControllers(Duration failedAfter, Instant now) {
+        if (failedAfter == null || failedAfter.isNegative() || failedAfter.isZero()) {
+            return;
+        }
+        if (now == null) {
+            return;
+        }
         swarms.values().removeIf(s -> {
-            if (s.getHealth() == SwarmHealth.FAILED) {
-                log.info("SwarmRegistry: pruning FAILED swarm id={} instance={} container={} health={}",
-                    s.getId(), s.getInstanceId(), s.getContainerId(), s.getHealth());
-                return true;
+            Instant lastSeenAt = s.getControllerStatusReceivedAt();
+            if (lastSeenAt == null) {
+                return false;
             }
-            return false;
+            if (!now.isAfter(lastSeenAt.plus(failedAfter))) {
+                return false;
+            }
+            log.info("SwarmRegistry: pruning stale swarm id={} instance={} container={} lastSeenAt={}",
+                s.getId(), s.getInstanceId(), s.getContainerId(), lastSeenAt);
+            return true;
         });
     }
 
