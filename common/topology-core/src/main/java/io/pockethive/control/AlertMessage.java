@@ -20,6 +20,8 @@ public record AlertMessage(
     ControlScope scope,
     String correlationId,
     String idempotencyKey,
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    Map<String, Object> runtime,
     AlertData data
 ) {
 
@@ -38,6 +40,7 @@ public record AlertMessage(
         scope = Objects.requireNonNull(scope, "scope");
         correlationId = trimToNull(correlationId);
         idempotencyKey = trimToNull(idempotencyKey);
+        runtime = normaliseRuntime(scope, runtime);
         data = Objects.requireNonNull(data, "data");
     }
 
@@ -77,5 +80,19 @@ public record AlertMessage(
                 context = null;
             }
         }
+    }
+
+    private static Map<String, Object> normaliseRuntime(ControlScope scope, Map<String, Object> runtime) {
+        Objects.requireNonNull(scope, "scope");
+        if (ControlScope.ALL.equals(scope.swarmId())) {
+            if (runtime != null && !runtime.isEmpty()) {
+                throw new IllegalArgumentException("runtime must be omitted for broadcast scope (swarmId=ALL)");
+            }
+            return null;
+        }
+        if (runtime == null || runtime.isEmpty()) {
+            throw new IllegalArgumentException("runtime is required for non-broadcast scope");
+        }
+        return Collections.unmodifiableMap(new LinkedHashMap<>(runtime));
     }
 }

@@ -161,6 +161,7 @@ public final class BufferGuardCoordinator {
           targetScope,
           java.util.UUID.randomUUID().toString(),
           java.util.UUID.randomUUID().toString(),
+          runtimeMeta(),
           patchData);
       String payload = ControlPlaneJson.write(signal, "buffer-guard config-update");
       String rk = ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, swarmId, targetRole, null);
@@ -169,6 +170,20 @@ public final class BufferGuardCoordinator {
     } catch (Exception ex) {
       log.warn("Failed to publish buffer-guard rate update for role {}", targetRole, ex);
     }
+  }
+
+  private Map<String, Object> runtimeMeta() {
+    String templateId = requireEnvValue("POCKETHIVE_TEMPLATE_ID");
+    String runId = requireEnvValue("POCKETHIVE_JOURNAL_RUN_ID");
+    return Map.of("templateId", templateId, "runId", runId);
+  }
+
+  private static String requireEnvValue(String key) {
+    String value = System.getenv(key);
+    if (value == null || value.isBlank()) {
+      throw new IllegalStateException("Missing required environment variable: " + key);
+    }
+    return value.trim();
   }
 
   private List<BufferGuardSettings> resolveSettings(SwarmPlan plan) {

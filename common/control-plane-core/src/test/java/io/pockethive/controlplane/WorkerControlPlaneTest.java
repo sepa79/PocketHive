@@ -17,6 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class WorkerControlPlaneTest {
 
     private final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+    private static final Map<String, Object> RUNTIME_META = Map.of("templateId", "tpl-1", "runId", "run-1");
     private WorkerControlPlane plane;
 
     @BeforeEach
@@ -28,6 +29,7 @@ class WorkerControlPlaneTest {
     void dispatchesConfigUpdatesWithParsedPayload() throws Exception {
         ControlSignal signal = ControlSignal.forInstance(
             "config-update", "sw1", "generator", "inst", "orchestrator-1", "corr", "idem",
+            RUNTIME_META,
             Map.of("enabled", true, "ratePerSec", 5));
         AtomicReference<WorkerConfigCommand> ref = new AtomicReference<>();
 
@@ -52,6 +54,7 @@ class WorkerControlPlaneTest {
     void parsesStringEnabledFlag() throws Exception {
         ControlSignal signal = ControlSignal.forInstance(
             "config-update", "sw1", "generator", "inst", "orchestrator-1", "corr", "idem",
+            RUNTIME_META,
             Map.of("enabled", "false"));
         AtomicReference<WorkerConfigCommand> ref = new AtomicReference<>();
 
@@ -69,7 +72,9 @@ class WorkerControlPlaneTest {
     @Test
     void dispatchesStatusRequest() throws Exception {
         ControlSignal signal = ControlSignal.forInstance(
-            "status-request", "sw1", "generator", "inst", "orchestrator-1", "corr", "idem", null);
+            "status-request", "sw1", "generator", "inst", "orchestrator-1", "corr", "idem",
+            RUNTIME_META,
+            null);
         AtomicReference<WorkerStatusRequest> ref = new AtomicReference<>();
 
         WorkerSignalListener listener = new WorkerSignalListener() {
@@ -89,7 +94,9 @@ class WorkerControlPlaneTest {
     @Test
     void forwardsUnsupportedSignals() throws Exception {
         ControlSignal signal = ControlSignal.forInstance(
-            "unknown", "sw1", "generator", "inst", "orchestrator-1", "corr", "idem", null);
+            "unknown", "sw1", "generator", "inst", "orchestrator-1", "corr", "idem",
+            RUNTIME_META,
+            null);
         AtomicReference<WorkerSignalListener.WorkerSignalContext> ref = new AtomicReference<>();
 
         WorkerSignalListener listener = new WorkerSignalListener() {

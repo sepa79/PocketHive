@@ -11,6 +11,8 @@ import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.observability.ControlPlaneJson;
 import io.pockethive.orchestrator.domain.IdempotencyStore;
+import io.pockethive.orchestrator.domain.Swarm;
+import io.pockethive.orchestrator.domain.SwarmStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -36,13 +38,16 @@ public class ComponentController {
     private final ControlPlanePublisher controlPublisher;
     private final IdempotencyStore idempotency;
     private final String originInstanceId;
+    private final SwarmStore store;
 
     public ComponentController(
         ControlPlanePublisher controlPublisher,
         IdempotencyStore idempotency,
+        SwarmStore store,
         ControlPlaneProperties controlPlaneProperties) {
         this.controlPublisher = controlPublisher;
         this.idempotency = idempotency;
+        this.store = store;
         this.originInstanceId = requireOrigin(controlPlaneProperties);
     }
 
@@ -73,6 +78,7 @@ public class ComponentController {
                 ControlScope.forInstance(swarmId, role, instance),
                 newCorrelation,
                 request.idempotencyKey(),
+                runtimeMetaForSwarmOrNull(swarmId),
                 patch);
             String jsonPayload = toJson(payload);
             try {
@@ -98,6 +104,28 @@ public class ComponentController {
             return swarmId;
         }
         return role + ":" + instance;
+    }
+
+    private Map<String, Object> runtimeMetaForSwarmOrNull(String swarmId) {
+        if (swarmId == null || swarmId.isBlank()) {
+            return null;
+        }
+        String resolvedSwarmId = swarmId.trim();
+        if (ControlScope.ALL.equalsIgnoreCase(resolvedSwarmId)) {
+            return null;
+        }
+        Swarm swarm = store.find(resolvedSwarmId)
+            .orElseThrow(() -> new IllegalStateException("Swarm " + resolvedSwarmId + " is not registered"));
+        String templateId = requireText(swarm.templateId(), "swarm.templateId");
+        String runId = requireText(swarm.getRunId(), "swarm.runId");
+        return Map.of("templateId", templateId, "runId", runId);
+    }
+
+    private static String requireText(String value, String field) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(field + " must not be blank");
+        }
+        return value.trim();
     }
 
     private ResponseEntity<ControlResponse> accepted(String correlationId,

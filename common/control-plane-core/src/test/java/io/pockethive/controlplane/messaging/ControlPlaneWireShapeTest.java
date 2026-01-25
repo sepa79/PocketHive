@@ -6,6 +6,7 @@ import io.pockethive.control.ControlScope;
 import io.pockethive.controlplane.schema.ControlEventsSchemaValidator;
 import io.pockethive.observability.ControlPlaneJson;
 import java.time.Instant;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.amqp.core.AmqpTemplate;
@@ -26,7 +27,8 @@ class ControlPlaneWireShapeTest {
         "origin",
         ControlScope.forInstance("sw1", "role", "inst"),
         "corr-1",
-        null);
+        null,
+        Map.of("templateId", "tpl-1", "runId", "run-1"));
     publisher.publishSignal(new SignalMessage("signal.status-request.sw1.role.inst", signal));
 
     ArgumentCaptor<Object> payload = ArgumentCaptor.forClass(Object.class);

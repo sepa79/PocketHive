@@ -97,11 +97,12 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     SwarmQueueMetrics queueMetrics = new SwarmQueueMetrics(properties.getSwarmId(), meterRegistry);
     io.pockethive.manager.ports.QueueStatsPort queueStatsPort =
         new io.pockethive.swarmcontroller.runtime.SwarmQueueStatsPortAdapter(amqp);
-    ConfigFanout configFanout =
-        new ConfigFanout(mapper,
-            new io.pockethive.swarmcontroller.runtime.SwarmControlPlanePortAdapter(controlPublisher),
-            properties.getSwarmId(),
-            instanceId);
+	    ConfigFanout configFanout =
+	        new ConfigFanout(mapper,
+	            new io.pockethive.swarmcontroller.runtime.SwarmControlPlanePortAdapter(controlPublisher),
+	            properties.getSwarmId(),
+	            instanceId,
+	            runtimeMeta());
 
     this.core = new SwarmRuntimeCore(
         amqp,
@@ -127,7 +128,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         instanceId);
   }
 
-  private static WorkerSettings deriveWorkerSettings(SwarmControllerProperties properties) {
+	  private static WorkerSettings deriveWorkerSettings(SwarmControllerProperties properties) {
     Objects.requireNonNull(properties, "properties");
     SwarmControllerProperties.Traffic traffic = properties.getTraffic();
     SwarmControllerProperties.Pushgateway pushgateway = properties.getMetrics().pushgateway();
@@ -144,7 +145,21 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         properties.getRabbit().logsExchange(),
         properties.getRabbit().logging().enabled(),
         metrics);
-  }
+	  }
+
+	  private static Map<String, Object> runtimeMeta() {
+	    String templateId = requireEnvValue("POCKETHIVE_TEMPLATE_ID");
+	    String runId = requireEnvValue("POCKETHIVE_JOURNAL_RUN_ID");
+	    return Map.of("templateId", templateId, "runId", runId);
+	  }
+
+	  private static String requireEnvValue(String key) {
+	    String value = System.getenv(key);
+	    if (value == null || value.isBlank()) {
+	      throw new IllegalStateException("Missing required environment variable: " + key);
+	    }
+	    return value.trim();
+	  }
 
   @Override
   public void prepare(String templateJson) {

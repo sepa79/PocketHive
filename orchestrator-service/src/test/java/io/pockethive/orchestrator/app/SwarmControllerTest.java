@@ -88,7 +88,9 @@ class SwarmControllerTest {
     void startPublishesControlSignal() throws Exception {
         SwarmCreateTracker tracker = new SwarmCreateTracker();
         SwarmStore registry = new SwarmStore();
-        registry.register(new Swarm("sw1", "inst", "c", "run-1"));
+        Swarm swarm = new Swarm("sw1", "inst", "c", "run-1");
+        swarm.attachTemplate(new SwarmTemplateMetadata("tpl-1", "swarm-controller:latest", List.of()));
+        registry.register(swarm);
         registry.updateStatus("sw1", SwarmLifecycleStatus.CREATING);
         registry.updateStatus("sw1", SwarmLifecycleStatus.READY);
         SwarmController ctrl = controller(tracker, registry, new SwarmPlanRegistry());
@@ -150,7 +152,9 @@ class SwarmControllerTest {
     @Test
     void startIsIdempotent() {
         SwarmStore registry = new SwarmStore();
-        registry.register(new Swarm("sw1", "controller-inst", "ctrl", "run-1"));
+        Swarm swarm = new Swarm("sw1", "controller-inst", "ctrl", "run-1");
+        swarm.attachTemplate(new SwarmTemplateMetadata("tpl-1", "swarm-controller:latest", List.of()));
+        registry.register(swarm);
         SwarmController ctrl = controller(new SwarmCreateTracker(), registry, new SwarmPlanRegistry());
         SwarmController.ControlRequest req = new SwarmController.ControlRequest("idem", null);
 
@@ -309,24 +313,25 @@ class SwarmControllerTest {
               "kind": "metric",
               "type": "status-full",
               "origin": "inst",
-              "scope": { "swarmId": "sw1", "role": "swarm-controller", "instance": "inst" },
-              "correlationId": null,
-              "idempotencyKey": null,
-              "data": {
-                "enabled": true,
-                "config": {},
-                "startedAt": "2026-01-22T12:00:00Z",
-                "runtime": {
-                  "runId": "run-1",
-                  "containerId": "container-1",
-                  "image": "ctrl-image",
-                  "stackName": "ph-sw1"
-                },
-                "io": {},
-                "ioState": {},
-                "context": {
-                  "swarmStatus": "READY",
-                  "swarmHealth": "RUNNING",
+	              "scope": { "swarmId": "sw1", "role": "swarm-controller", "instance": "inst" },
+	              "correlationId": null,
+	              "idempotencyKey": null,
+	              "runtime": {
+	                "templateId": "tpl-1",
+	                "runId": "run-1",
+	                "containerId": "container-1",
+	                "image": "ctrl-image",
+	                "stackName": "ph-sw1"
+	              },
+	              "data": {
+	                "enabled": true,
+	                "config": {},
+	                "startedAt": "2026-01-22T12:00:00Z",
+	                "io": {},
+	                "ioState": {},
+	                "context": {
+	                  "swarmStatus": "READY",
+	                  "swarmHealth": "RUNNING",
                   "template": {
                     "id": "tpl-1",
                     "image": "ctrl-image",
@@ -363,23 +368,23 @@ class SwarmControllerTest {
               "kind": "metric",
               "type": "status-full",
               "origin": "inst-a",
-              "scope": { "swarmId": "alpha", "role": "swarm-controller", "instance": "inst-a" },
-              "correlationId": null,
-              "idempotencyKey": null,
-              "data": {
-                "enabled": true,
-                "config": {},
-                "startedAt": "2026-01-22T12:00:01Z",
-                "runtime": {
-                  "templateId": "tpl-alpha",
-                  "runId": "run-alpha",
-                  "containerId": "container-alpha",
-                  "image": "ctrl-alpha",
-                  "stackName": "ph-alpha"
-                },
-                "io": {},
-                "ioState": {},
-                "context": {
+	              "scope": { "swarmId": "alpha", "role": "swarm-controller", "instance": "inst-a" },
+	              "correlationId": null,
+	              "idempotencyKey": null,
+	              "runtime": {
+	                "templateId": "tpl-alpha",
+	                "runId": "run-alpha",
+	                "containerId": "container-alpha",
+	                "image": "ctrl-alpha",
+	                "stackName": "ph-alpha"
+	              },
+	              "data": {
+	                "enabled": true,
+	                "config": {},
+	                "startedAt": "2026-01-22T12:00:01Z",
+	                "io": {},
+	                "ioState": {},
+	                "context": {
                   "swarmStatus": "READY",
                   "swarmHealth": "RUNNING",
                   "workers": [ { "role": "generator", "instance": "gen-1" } ],
@@ -401,23 +406,23 @@ class SwarmControllerTest {
               "kind": "metric",
               "type": "status-full",
               "origin": "inst-b",
-              "scope": { "swarmId": "bravo", "role": "swarm-controller", "instance": "inst-b" },
-              "correlationId": null,
-              "idempotencyKey": null,
-              "data": {
-                "enabled": true,
-                "config": {},
-                "startedAt": "2026-01-22T12:00:02Z",
-                "runtime": {
-                  "templateId": "tpl-bravo",
-                  "runId": "run-bravo",
-                  "containerId": "container-bravo",
-                  "image": "ctrl-bravo",
-                  "stackName": "ph-bravo"
-                },
-                "io": {},
-                "ioState": {},
-                "context": {
+	              "scope": { "swarmId": "bravo", "role": "swarm-controller", "instance": "inst-b" },
+	              "correlationId": null,
+	              "idempotencyKey": null,
+	              "runtime": {
+	                "templateId": "tpl-bravo",
+	                "runId": "run-bravo",
+	                "containerId": "container-bravo",
+	                "image": "ctrl-bravo",
+	                "stackName": "ph-bravo"
+	              },
+	              "data": {
+	                "enabled": true,
+	                "config": {},
+	                "startedAt": "2026-01-22T12:00:02Z",
+	                "io": {},
+	                "ioState": {},
+	                "context": {
                   "swarmStatus": "READY",
                   "swarmHealth": "RUNNING",
                   "workers": [ { "role": "moderator", "instance": "mod-1" } ],
@@ -439,17 +444,17 @@ class SwarmControllerTest {
               "kind": "metric",
               "type": "status-full",
               "origin": "inst-x",
-              "scope": { "swarmId": "bad-enabled", "role": "swarm-controller", "instance": "inst-x" },
-              "correlationId": null,
-              "idempotencyKey": null,
-              "data": {
-                "config": {},
-                "startedAt": "2026-01-22T12:00:03Z",
-                "runtime": { "templateId": "tpl-bad" },
-                "io": {},
-                "ioState": {},
-                "context": {}
-              }
+	              "scope": { "swarmId": "bad-enabled", "role": "swarm-controller", "instance": "inst-x" },
+	              "correlationId": null,
+	              "idempotencyKey": null,
+	              "runtime": { "templateId": "tpl-bad" },
+	              "data": {
+	                "config": {},
+	                "startedAt": "2026-01-22T12:00:03Z",
+	                "io": {},
+	                "ioState": {},
+	                "context": {}
+	              }
             }
             """;
         badEnabled.updateControllerStatusFull(mapper.readTree(badEnabledStatusFull), Instant.now());
@@ -525,7 +530,9 @@ class SwarmControllerTest {
     @Test
     void createRejectsDuplicateSwarm() throws Exception {
         SwarmStore registry = new SwarmStore();
-        registry.register(new Swarm("sw1", "inst", "c", "run-1"));
+        Swarm swarm = new Swarm("sw1", "inst", "c", "run-1");
+        swarm.attachTemplate(new SwarmTemplateMetadata("tpl-1", "swarm-controller:latest", List.of()));
+        registry.register(swarm);
         SwarmController ctrl = controller(new SwarmCreateTracker(), registry, new SwarmPlanRegistry());
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(ctrl)
@@ -546,7 +553,9 @@ class SwarmControllerTest {
     @Test
     void createReturnsExistingCorrelationWhenSwarmAlreadyExists() {
         SwarmStore registry = new SwarmStore();
-        registry.register(new Swarm("sw1", "inst", "c", "run-1"));
+        Swarm swarm = new Swarm("sw1", "inst", "c", "run-1");
+        swarm.attachTemplate(new SwarmTemplateMetadata("tpl-1", "swarm-controller:latest", List.of()));
+        registry.register(swarm);
         InMemoryIdempotencyStore store = new InMemoryIdempotencyStore();
         store.record("sw1", "swarm-create", "idem", "corr-123");
         SwarmController ctrl = controller(new SwarmCreateTracker(), registry, new SwarmPlanRegistry(), store);

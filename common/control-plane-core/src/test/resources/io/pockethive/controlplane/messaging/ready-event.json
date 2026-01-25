@@ -13,6 +13,10 @@
     },
     "correlationId": "corr-1",
     "idempotencyKey": "idem-1",
+    "runtime": {
+      "templateId": "tpl-1",
+      "runId": "run-1"
+    },
     "data": {
       "status": "Running",
       "context": {

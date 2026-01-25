@@ -38,10 +38,12 @@ fan-out/status queues your service requires.
 
 ```java
 ControlPlaneIdentity identity = new ControlPlaneIdentity("swarm-1", workerDescriptor.role(), "processor-1");
+Map<String, Object> runtime = Map.of("templateId", "template-1", "runId", "run-1");
 ControlPlaneEmitter emitter = ControlPlaneEmitter.using(
     workerDescriptor,
     RoleContext.fromIdentity(identity),
-    publisher
+    publisher,
+    runtime
 );
 emitter.emitReady(ControlPlaneEmitter.ReadyContext.builder(
     "config-sync", correlationId, commandId, CommandState.status("Ready"))

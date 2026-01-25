@@ -108,11 +108,13 @@ class SwarmEventFlowIntegrationTest {
     void processesStatusAndConfirmations() throws Exception {
         SwarmPlan plan = new SwarmPlan(SWARM_ID, List.of());
         plans.register(CONTROLLER_INSTANCE, plan);
-        Pending pending = new Pending(SWARM_ID, CONTROLLER_INSTANCE, "corr", "idem",
-            Phase.CONTROLLER, Instant.now().plusSeconds(60));
-        tracker.register(CONTROLLER_INSTANCE, pending);
-        registry.register(new Swarm(SWARM_ID, CONTROLLER_INSTANCE, "cid", "run-1"));
-        registry.updateStatus(SWARM_ID, SwarmLifecycleStatus.CREATING);
+	        Pending pending = new Pending(SWARM_ID, CONTROLLER_INSTANCE, "corr", "idem",
+	            Phase.CONTROLLER, Instant.now().plusSeconds(60));
+	        tracker.register(CONTROLLER_INSTANCE, pending);
+	        Swarm swarm = new Swarm(SWARM_ID, CONTROLLER_INSTANCE, "cid", "run-1");
+	        swarm.attachTemplate(new io.pockethive.orchestrator.domain.SwarmTemplateMetadata("tpl-1", "swarm-controller:latest", java.util.List.of()));
+	        registry.register(swarm);
+	        registry.updateStatus(SWARM_ID, SwarmLifecycleStatus.CREATING);
 
         String statusPayload = """
             {
@@ -121,23 +123,24 @@ class SwarmEventFlowIntegrationTest {
               "kind": "metric",
               "type": "status-full",
               "origin": "%s",
-              "scope": {"swarmId":"%s","role":"swarm-controller","instance":"%s"},
-              "correlationId": null,
-              "idempotencyKey": null,
-              "data": {
-                "enabled": false,
-                "config": {},
-                "startedAt": "2024-01-01T00:00:00Z",
-                "runtime": {
-                  "runId": "run-1",
-                  "containerId": "%s",
-                  "image": "swarm-controller:latest",
-                  "stackName": "ph-%s"
-                },
-                "io": {},
-                "ioState": {},
-                "context": {"swarmStatus": "READY"}
-              }
+	              "scope": {"swarmId":"%s","role":"swarm-controller","instance":"%s"},
+	              "correlationId": null,
+	              "idempotencyKey": null,
+	              "runtime": {
+	                "templateId": "tpl-1",
+	                "runId": "run-1",
+	                "containerId": "%s",
+	                "image": "swarm-controller:latest",
+	                "stackName": "ph-%s"
+	              },
+	              "data": {
+	                "enabled": false,
+	                "config": {},
+	                "startedAt": "2024-01-01T00:00:00Z",
+	                "io": {},
+	                "ioState": {},
+	                "context": {"swarmStatus": "READY"}
+	              }
             }
             """.formatted(CONTROLLER_INSTANCE, SWARM_ID, CONTROLLER_INSTANCE, CONTROLLER_INSTANCE, SWARM_ID);
 
@@ -179,12 +182,19 @@ class SwarmEventFlowIntegrationTest {
               "scope": {"swarmId":"sw1","role":"swarm-controller","instance":"%s"},
               "correlationId": null,
               "idempotencyKey": null,
+              "runtime": {
+                "templateId": "tpl-1",
+                "runId": "run-1",
+                "containerId": "%s",
+                "image": "swarm-controller:latest",
+                "stackName": "ph-%s"
+              },
               "data": {"enabled": false, "context": {"swarmStatus": "RUNNING"}}
             }
-            """.formatted(CONTROLLER_INSTANCE, CONTROLLER_INSTANCE),
+            """.formatted(CONTROLLER_INSTANCE, CONTROLLER_INSTANCE, CONTROLLER_INSTANCE, SWARM_ID),
             "event.metric.status-delta.sw1.swarm-controller." + CONTROLLER_INSTANCE);
-        Swarm swarm = registry.find(SWARM_ID).orElseThrow();
-        JsonNode cachedStatus = swarm.getControllerStatusFull();
+        Swarm storedSwarm = registry.find(SWARM_ID).orElseThrow();
+        JsonNode cachedStatus = storedSwarm.getControllerStatusFull();
         assertThat(cachedStatus.path("data").path("enabled").asBoolean()).isFalse();
 
         tracker.expectStop(SWARM_ID, "stop-corr", "stop-idem", java.time.Duration.ofSeconds(30));

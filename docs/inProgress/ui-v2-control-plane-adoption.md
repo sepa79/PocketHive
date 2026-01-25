@@ -157,14 +157,14 @@ envelope refactor. This consolidates remaining UI items from:
 - `health` → `data.context.swarmHealth` (always present per contract)
 - `heartbeat` → `timestamp` (SC status-full timestamp)
 - `workEnabled` → `data.enabled` (boolean, default `true` when missing)
-- `stackName` → `data.runtime.stackName` (if present)
+- `stackName` → `runtime.stackName` (if present)
 - `sutId` → `data.context.sutId` (if present)
 - `bees[]` → `data.context.workers[]` (map `role`, `image = null`, de‑dupe by role)
 
 **Note:** Summary must remain a projection of cached `status-full` only; do not merge Scenario Manager data.
 
 **Runtime metadata (status-full)**
-- `data.runtime` is required for `status-full` and is full-only (never in deltas).
+- `runtime` is an envelope field (not in `data`) and is required for all swarm-scoped messages.
 - `data.context.workers[].runtime` mirrors the same shape for per‑worker infra data.
 
 ### Status-full emission timing (Swarm Controller)

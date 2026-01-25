@@ -285,23 +285,24 @@ class SwarmCreationMock1E2ETest {
               "kind": "metric",
               "type": "status-full",
               "origin": "%s",
-              "scope": {"swarmId":"%s","role":"swarm-controller","instance":"%s"},
-              "correlationId": null,
-              "idempotencyKey": null,
-              "data": {
-                "enabled": false,
-                "config": {},
-                "startedAt": "2024-01-01T00:00:00Z",
-                "runtime": {
-                  "runId": "run-1",
-                  "containerId": "%s",
-                  "image": "swarm-controller:latest",
-                  "stackName": "ph-%s"
-                },
-                "io": {},
-                "ioState": {},
-                "context": {"swarmStatus": "READY"}
-              }
+	              "scope": {"swarmId":"%s","role":"swarm-controller","instance":"%s"},
+	              "correlationId": null,
+	              "idempotencyKey": null,
+	              "runtime": {
+	                "templateId": "local-rest",
+	                "runId": "run-1",
+	                "containerId": "%s",
+	                "image": "swarm-controller:latest",
+	                "stackName": "ph-%s"
+	              },
+	              "data": {
+	                "enabled": false,
+	                "config": {},
+	                "startedAt": "2024-01-01T00:00:00Z",
+	                "io": {},
+	                "ioState": {},
+	                "context": {"swarmStatus": "READY"}
+	              }
             }
             """.formatted(instanceId, swarmId, instanceId, instanceId, swarmId);
 

@@ -74,11 +74,12 @@ class SwarmSignalListenerTest {
         mapper,
         SwarmControllerTestProperties.defaults(),
         io.pockethive.swarmcontroller.runtime.SwarmJournal.noop(),
-        "");
+        "run-1");
   }
 
   private static final Map<String, QueueStats> DEFAULT_QUEUE_STATS =
       Map.of(TRAFFIC_PREFIX + ".work.in", new QueueStats(7L, 3, OptionalLong.of(42L)));
+  private static final Map<String, Object> RUNTIME_META = Map.of("templateId", "tpl-1", "runId", "run-1");
 
   private void stubLifecycleDefaults() {
     lenient().when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
@@ -114,6 +115,7 @@ class SwarmSignalListenerTest {
           ORIGIN,
           corr,
           id,
+          RUNTIME_META,
           null);
       return mapper.writeValueAsString(cs);
     } catch (Exception e) {
@@ -132,6 +134,7 @@ class SwarmSignalListenerTest {
           ORIGIN,
           "c-all",
           "i-all",
+          RUNTIME_META,
           args);
       return mapper.writeValueAsString(cs);
     } catch (Exception e) {
@@ -150,6 +153,7 @@ class SwarmSignalListenerTest {
           ORIGIN,
           correlationId,
           idempotencyKey,
+          RUNTIME_META,
           args);
       return mapper.writeValueAsString(cs);
     } catch (Exception e) {
@@ -159,7 +163,7 @@ class SwarmSignalListenerTest {
 
   private String status(String swarmId, String role, String instance, boolean enabled) {
     return """
-        {"timestamp":"2024-01-01T00:00:00Z","version":"1","kind":"metric","type":"status-delta","origin":"worker-1","scope":{"swarmId":"%s","role":"%s","instance":"%s"},"correlationId":null,"idempotencyKey":null,"data":{"enabled":%s,"tps":0}}
+        {"timestamp":"2024-01-01T00:00:00Z","version":"1","kind":"metric","type":"status-delta","origin":"worker-1","scope":{"swarmId":"%s","role":"%s","instance":"%s"},"correlationId":null,"idempotencyKey":null,"runtime":{"templateId":"tpl-1","runId":"run-1"},"data":{"enabled":%s,"tps":0}}
         """.formatted(swarmId, role, instance, enabled);
   }
 
@@ -203,6 +207,7 @@ class SwarmSignalListenerTest {
         ControlScope.forInstance(TEST_SWARM_ID, role, instance),
         "cfg-corr",
         "cfg-id",
+        RUNTIME_META,
         new AlertMessage.AlertData(
             "error",
             "ValidationError",
@@ -658,7 +663,7 @@ class SwarmSignalListenerTest {
 	        mapper,
 	        SwarmControllerTestProperties.defaults(),
 	        journal,
-          "");
+          "run-1");
         markInitialized(listener);
 	    String body = configUpdateSignal("inst", "i4", "c4", Map.of("enabled", true));
 	

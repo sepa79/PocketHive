@@ -126,11 +126,13 @@ public class SwarmManagerController {
                 continue;
             }
             ControlScope target = ControlScope.forInstance(swarmId, "swarm-controller", swarm.getInstanceId());
+            Map<String, Object> runtime = runtimeMetaForSwarm(swarm);
             ControlSignal payload = ControlSignals.configUpdate(
                 originInstanceId,
                 target,
                 newCorrelation,
                 request.idempotencyKey(),
+                runtime,
                 Map.of("enabled", request.enabled()));
             try {
                 sendControl(routingKey(swarmSegment, swarm.getInstanceId()), toJson(payload));
@@ -142,6 +144,22 @@ public class SwarmManagerController {
                 accepted(newCorrelation, request.idempotencyKey(), swarmSegment, swarm.getInstanceId()), false));
         }
         return new FanoutControlResponse(dispatches);
+    }
+
+    private static Map<String, Object> runtimeMetaForSwarm(Swarm swarm) {
+        if (swarm == null) {
+            throw new IllegalArgumentException("swarm must not be null");
+        }
+        String templateId = requireText(swarm.templateId(), "swarm.templateId");
+        String runId = requireText(swarm.getRunId(), "swarm.runId");
+        return Map.of("templateId", templateId, "runId", runId);
+    }
+
+    private static String requireText(String value, String field) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(field + " must not be blank");
+        }
+        return value.trim();
     }
 
     /**

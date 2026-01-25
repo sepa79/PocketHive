@@ -88,6 +88,7 @@ class ControlSignalSchemaTest {
             "orchestrator-1",
             UUID.randomUUID().toString(),
             UUID.randomUUID().toString(),
+            Map.of("templateId", "tpl-1", "runId", "run-1"),
             Map.of("enabled", true)
         );
         JsonNode json = MAPPER.readTree(MAPPER.writeValueAsString(sample));
@@ -106,6 +107,7 @@ class ControlSignalSchemaTest {
             "orchestrator-1",
             UUID.randomUUID().toString(),
             UUID.randomUUID().toString(),
+            Map.of("templateId", "tpl-1", "runId", "run-1"),
             null
         );
         JsonNode json = MAPPER.readTree(MAPPER.writeValueAsString(signal));

@@ -432,16 +432,17 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
         "metric",
         "status-delta",
         ConfirmationScope.forInstance(swarmId, role, instanceId));
-    String payload = new StatusEnvelopeBuilder()
-        .type("status-delta")
-        .role(role)
-        .instance(instanceId)
-        .origin(instanceId)
-        .swarmId(swarmId)
-        .workPlaneEnabled(false)
-        .tpsEnabled(false)
-        .controlIn(controlQueue)
-        .controlRoutes(io.pockethive.swarmcontroller.SwarmControllerRoutes.controllerControlRoutes(swarmId, role, instanceId))
+	    String payload = new StatusEnvelopeBuilder()
+	        .type("status-delta")
+	        .role(role)
+	        .instance(instanceId)
+	        .origin(instanceId)
+	        .swarmId(swarmId)
+	        .runtime(runtimeMeta())
+	        .workPlaneEnabled(false)
+	        .tpsEnabled(false)
+	        .controlIn(controlQueue)
+	        .controlRoutes(io.pockethive.swarmcontroller.SwarmControllerRoutes.controllerControlRoutes(swarmId, role, instanceId))
         .controlOut(rk)
         .enabled(false)
         .data("swarmStatus", status.name())
@@ -699,17 +700,24 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
     if (!hasText(idempotencyKey)) {
       idempotencyKey = "status-request:" + java.util.UUID.randomUUID();
     }
-    io.pockethive.control.ControlScope target =
-        io.pockethive.control.ControlScope.forInstance(swarmId, role, instance);
-    io.pockethive.control.ControlSignal signal = io.pockethive.controlplane.messaging.ControlSignals.statusRequest(
-        instanceId,
-        target,
-        correlationId,
-        idempotencyKey);
-    String payload = io.pockethive.observability.ControlPlaneJson.write(signal, "status-request signal");
-    log.info("[CTRL] SEND rk={} inst={} payload={} (reason={})", rk, instanceId, snippet(payload), reason);
-    controlPublisher.publishSignal(new io.pockethive.controlplane.messaging.SignalMessage(rk, payload));
-  }
+	    io.pockethive.control.ControlScope target =
+	        io.pockethive.control.ControlScope.forInstance(swarmId, role, instance);
+	    io.pockethive.control.ControlSignal signal = io.pockethive.controlplane.messaging.ControlSignals.statusRequest(
+	        instanceId,
+	        target,
+	        correlationId,
+	        idempotencyKey,
+	        runtimeMeta());
+	    String payload = io.pockethive.observability.ControlPlaneJson.write(signal, "status-request signal");
+	    log.info("[CTRL] SEND rk={} inst={} payload={} (reason={})", rk, instanceId, snippet(payload), reason);
+	    controlPublisher.publishSignal(new io.pockethive.controlplane.messaging.SignalMessage(rk, payload));
+	  }
+
+	  private Map<String, Object> runtimeMeta() {
+	    String templateId = requireEnvValue("POCKETHIVE_TEMPLATE_ID");
+	    String runId = requireEnvValue("POCKETHIVE_JOURNAL_RUN_ID");
+	    return Map.of("templateId", templateId, "runId", runId);
+	  }
 
   private Map<String, String> mapInstancesByBeeId(List<Bee> bees, SwarmRuntimeState state) {
     if (bees == null || bees.isEmpty() || state == null) {

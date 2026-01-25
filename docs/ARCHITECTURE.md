@@ -257,7 +257,7 @@ For **outcome** messages (`kind = outcome`, `type = <command>`), outcomes use a 
 |  | `startedAt` | Yes | RFC‑3339 timestamp when this component started processing workloads for its scope (or when the current process was started). |
 |  | `tps` | No | Integer ≥ 0. Throughput sample for the reporting interval. **Workers should emit this**; managers (Orchestrator / Swarm Controller) may omit. |
 |  | `config` | Yes | Snapshot of the effective configuration for this scope (role/instance). Must not include secrets. |
-|  | `runtime` | Yes | Runtime/infra metadata for this scope: `runId`, `containerId`, `image`, `stackName`. **Full‑only** (never in `status-delta`). |
+|  | *(none)* | — | Runtime/infra metadata lives in the envelope as `runtime` (see below). |
 |  | `io` | Yes | Object describing IO bindings and queue health. **Workers** should include both planes (`io.work` + `io.control`); **managers** are control‑plane‑only and should include only `io.control` (no `io.work`). `queueStats` is optional and applies only to the work plane. Present only in `status-full`. |
 |  | `ioState` | Yes | Coarse IO health summary for workload/local IO only (for example `ioState.work`, `ioState.filesystem`). **Workers** should include `ioState.work` plus any local IO; **managers** include only local IO if applicable. `ioState` does not represent control‑plane health. |
 |  | `context` | No | Freeform role‑specific context. For swarm‑controller, `context` carries swarm aggregates (e.g. `swarmStatus`, `totals`, `watermark`, `maxStalenessSec`, scenario progress) and includes `context.workers[]` **only in `status-full`**. For orchestrator, `context` carries at least `swarmCount`; `computeAdapter` is effectively static and belongs in `status-full` (not `status-delta`). |
@@ -267,12 +267,12 @@ For **outcome** messages (`kind = outcome`, `type = <command>`), outcomes use a 
 |  | `context` | No | Same semantics as in `status-full`, but only for fields that change frequently (for example recent `swarmStatus`, rolling diagnostics). `data.config`, `data.io`, and `data.startedAt` must be omitted from deltas. |
 
 Additional rules:
+- `runtime` is an envelope field, not a `data` field. It is required for all swarm-scoped messages (that is, `scope.swarmId != ALL`) and must be omitted for global broadcasts (`scope.swarmId = ALL`).
 - `data.ioState` represents workload/local IO only (for example `ioState.work`, `ioState.filesystem`). It does not represent control-plane health.
 - `data.context` carries role-specific context. For swarm-controller:
   - `status-delta` carries a small aggregate only (no worker list).
   - `status-full` carries the full aggregate snapshot, including `data.context.workers[]`.
-  - `data.context.workers[]` entries may include a `runtime` object with the same shape as `data.runtime`
-    (for example `runId`, `containerId`, `image`, `stackName`).
+  - `data.context.workers[]` entries may include a `runtime` object with the same shape as the envelope `runtime`.
 - For orchestrator, `data.context` carries at least `swarmCount`. The
   `computeAdapter` selection is effectively static and belongs in `status-full`
   only (never in deltas).

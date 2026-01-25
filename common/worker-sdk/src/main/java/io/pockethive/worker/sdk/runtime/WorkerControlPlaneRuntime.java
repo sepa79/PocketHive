@@ -219,15 +219,16 @@ public final class WorkerControlPlaneRuntime {
         });
 
         ControlScope scope = ControlScope.forInstance(identity.swarmId(), identity.role(), identity.instanceId());
-        emitter.publishAlert(Alerts.fromException(
-            identity.instanceId(),
-            scope,
-            null,
-            null,
-            "work",
-            exception,
-            null,
-            context,
+	        emitter.publishAlert(Alerts.fromException(
+	            identity.instanceId(),
+	            scope,
+	            null,
+	            null,
+	            runtimeMeta,
+	            "work",
+	            exception,
+	            null,
+	            context,
             Instant.now()
         ));
     }
@@ -738,7 +739,6 @@ public final class WorkerControlPlaneRuntime {
             builder.data("intervalSeconds", intervalSeconds);
             if (snapshot) {
                 builder.data("startedAt", startedAt);
-                builder.data("runtime", runtimeMeta);
                 builder.config(configSnapshot);
             }
         };
@@ -815,28 +815,29 @@ public final class WorkerControlPlaneRuntime {
                 logRef = s.trim();
             }
         }
-        emitter.publishAlert(Alerts.ioOutOfData(
-            identity.instanceId(),
-            io.pockethive.control.ControlScope.forInstance(identity.swarmId(), identity.role(), identity.instanceId()),
-            null,
-            null,
-            dataset,
-            null,
-            logRef,
-            context,
+	        emitter.publishAlert(Alerts.ioOutOfData(
+	            identity.instanceId(),
+	            io.pockethive.control.ControlScope.forInstance(identity.swarmId(), identity.role(), identity.instanceId()),
+	            null,
+	            null,
+	            runtimeMeta,
+	            dataset,
+	            null,
+	            logRef,
+	            context,
             Instant.now()
         ));
     }
 
-    private Map<String, Object> buildRuntimeMeta() {
-        Map<String, Object> meta = new LinkedHashMap<>();
-        meta.put("templateId", requireEnvValue("POCKETHIVE_TEMPLATE_ID"));
-        meta.put("runId", envValue("POCKETHIVE_JOURNAL_RUN_ID"));
-        meta.put("containerId", envValue("HOSTNAME"));
-        meta.put("image", envValue("POCKETHIVE_RUNTIME_IMAGE"));
-        meta.put("stackName", envValue("POCKETHIVE_RUNTIME_STACK_NAME"));
-        return Collections.unmodifiableMap(meta);
-    }
+	    private Map<String, Object> buildRuntimeMeta() {
+	        Map<String, Object> meta = new LinkedHashMap<>();
+	        meta.put("templateId", requireEnvValue("POCKETHIVE_TEMPLATE_ID"));
+	        meta.put("runId", requireEnvValue("POCKETHIVE_JOURNAL_RUN_ID"));
+	        meta.put("containerId", envValue("HOSTNAME"));
+	        meta.put("image", envValue("POCKETHIVE_RUNTIME_IMAGE"));
+	        meta.put("stackName", envValue("POCKETHIVE_RUNTIME_STACK_NAME"));
+	        return Collections.unmodifiableMap(meta);
+	    }
 
     private static String envValue(String key) {
         if (key == null || key.isBlank()) {

@@ -25,7 +25,7 @@ final class SwarmWorkersAggregator {
     this.staleAfterMillis = staleAfterMillis;
   }
 
-  void updateFromWorkerStatus(String role, String instance, JsonNode dataNode) {
+  void updateFromWorkerStatus(String role, String instance, JsonNode dataNode, JsonNode runtimeNode) {
     if (role == null || role.isBlank() || instance == null || instance.isBlank()) {
       return;
     }
@@ -41,7 +41,7 @@ final class SwarmWorkersAggregator {
     JsonNode ioStateNode = dataNode.path("ioState").path("work");
     String input = ioStateNode.path("input").asText("unknown");
     String output = ioStateNode.path("output").asText("unknown");
-    Map<String, Object> runtime = runtimeFrom(dataNode.path("runtime"));
+    Map<String, Object> runtime = runtimeFrom(runtimeNode);
     if (runtime == null && previous != null) {
       runtime = previous.runtime();
     }

@@ -12,6 +12,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -20,6 +21,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class ControlPlaneConsumerTest {
 
     private final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+    private static final Map<String, Object> RUNTIME_META = Map.of("templateId", "tpl-1", "runId", "run-1");
 
     @Test
     void appliesDuplicateSuppression() throws Exception {
@@ -31,7 +33,9 @@ class ControlPlaneConsumerTest {
             .build();
 
         ControlSignal signal = ControlSignal.forInstance(
-            "config-update", "swarm", "generator", "gen-1", "orchestrator-1", "corr", "idemp", null);
+            "config-update", "swarm", "generator", "gen-1", "orchestrator-1", "corr", "idemp",
+            RUNTIME_META,
+            null);
         String payload = mapper.writeValueAsString(signal);
 
         AtomicInteger processed = new AtomicInteger();
@@ -53,7 +57,9 @@ class ControlPlaneConsumerTest {
             .build();
 
         ControlSignal signal = ControlSignal.forInstance(
-            "config-update", "swarm", "generator", "gen-1", "gen-1", "corr", "id", null);
+            "config-update", "swarm", "generator", "gen-1", "gen-1", "corr", "id",
+            RUNTIME_META,
+            null);
         String payload = mapper.writeValueAsString(signal);
 
         AtomicInteger processed = new AtomicInteger();
@@ -71,7 +77,9 @@ class ControlPlaneConsumerTest {
             .build();
 
         ControlSignal signal = ControlSignal.forInstance(
-            "config-update", "swarm", "generator", "gen-1", "gen-2", "corr", "id", null);
+            "config-update", "swarm", "generator", "gen-1", "gen-2", "corr", "id",
+            RUNTIME_META,
+            null);
         String payload = mapper.writeValueAsString(signal);
 
         AtomicInteger processed = new AtomicInteger();
@@ -99,7 +107,9 @@ class ControlPlaneConsumerTest {
             .build();
 
         ControlSignal signal = ControlSignal.forInstance(
-            "config-update", "swarm", "generator", "gen-1", "orchestrator-1", "corr", "id", null);
+            "config-update", "swarm", "generator", "gen-1", "orchestrator-1", "corr", "id",
+            RUNTIME_META,
+            null);
         assertThatThrownBy(() -> consumer.consume(mapper.writeValueAsString(signal), "  ", env -> { }))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessage("routingKey must not be null or blank");
@@ -112,7 +122,9 @@ class ControlPlaneConsumerTest {
             .build();
 
         ControlSignal signal = ControlSignal.forInstance(
-            "config-update", "swarm", "generator", "gen-2", "orchestrator-1", "corr", "id", null);
+            "config-update", "swarm", "generator", "gen-2", "orchestrator-1", "corr", "id",
+            RUNTIME_META,
+            null);
         String payload = mapper.writeValueAsString(signal);
 
         AtomicInteger processed = new AtomicInteger();

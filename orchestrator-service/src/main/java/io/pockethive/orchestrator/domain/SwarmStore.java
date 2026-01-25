@@ -203,7 +203,7 @@ public class SwarmStore {
         if (data == null || data.isMissingNode()) {
             return false;
         }
-        return data.has("config") || data.has("io") || data.has("startedAt") || data.has("runtime");
+        return data.has("config") || data.has("io") || data.has("startedAt");
     }
 
     private void mergeStatusDeltaPayload(ObjectNode target, ObjectNode delta) {

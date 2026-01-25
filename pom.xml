@@ -57,6 +57,7 @@
 	        <configuration>
 	          <environmentVariables>
 	            <POCKETHIVE_TEMPLATE_ID>test-template</POCKETHIVE_TEMPLATE_ID>
+	            <POCKETHIVE_JOURNAL_RUN_ID>test-run</POCKETHIVE_JOURNAL_RUN_ID>
 	          </environmentVariables>
 	        </configuration>
 	      </plugin>
@@ -66,6 +67,7 @@
 	        <configuration>
 	          <environmentVariables>
 	            <POCKETHIVE_TEMPLATE_ID>test-template</POCKETHIVE_TEMPLATE_ID>
+	            <POCKETHIVE_JOURNAL_RUN_ID>test-run</POCKETHIVE_JOURNAL_RUN_ID>
 	          </environmentVariables>
 	        </configuration>
 	      </plugin>

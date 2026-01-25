@@ -21,7 +21,8 @@ class StatusEnvelopeBuilderTest {
                 .enabled(true)
                 .tps(0)
                 .data("startedAt", Instant.parse("2024-01-01T00:00:00Z"))
-                .data("runtime", Map.of(
+                .runtime(Map.of(
+                    "templateId", "tpl-1",
                     "runId", "run-1",
                     "containerId", "container-1",
                     "image", "worker:latest",
@@ -38,8 +39,10 @@ class StatusEnvelopeBuilderTest {
                 .role("processor")
                 .instance("proc-1")
                 .origin("proc-1")
+                .swarmId("sw1")
                 .enabled(true)
                 .tps(0)
+                .runtime(Map.of("templateId", "tpl-1", "runId", "run-1"))
                 .toJson();
         JsonNode node = new ObjectMapper().readTree(json);
         assertEquals("proc-1", node.get("origin").asText());
@@ -62,10 +65,12 @@ class StatusEnvelopeBuilderTest {
                 .role("generator")
                 .instance("gen-1")
                 .origin("gen-1")
+                .swarmId("sw1")
                 .enabled(true)
                 .tps(0)
                 .data("startedAt", Instant.parse("2024-01-01T00:00:00Z"))
-                .data("runtime", Map.of(
+                .runtime(Map.of(
+                    "templateId", "tpl-1",
                     "runId", "run-1",
                     "containerId", "container-1",
                     "image", "worker:latest",
@@ -88,10 +93,12 @@ class StatusEnvelopeBuilderTest {
                 .role("generator")
                 .instance("gen-1")
                 .origin("gen-1")
+                .swarmId("sw1")
                 .enabled(true)
                 .tps(0)
                 .data("startedAt", Instant.parse("2024-01-01T00:00:00Z"))
-                .data("runtime", Map.of(
+                .runtime(Map.of(
+                    "templateId", "tpl-1",
                     "runId", "run-1",
                     "containerId", "container-1",
                     "image", "worker:latest",
@@ -117,8 +124,10 @@ class StatusEnvelopeBuilderTest {
                 .role("generator")
                 .instance("gen-1")
                 .origin("gen-1")
+                .swarmId("sw1")
                 .enabled(true)
-                .tps(0);
+                .tps(0)
+                .runtime(Map.of("templateId", "tpl-1", "runId", "run-1"));
 
         assertThrows(IllegalArgumentException.class, () -> builder.ioWorkState("nope", "ok", null));
         assertThrows(IllegalArgumentException.class, () -> builder.ioFilesystemState("ok", "nope", null));
@@ -132,6 +141,7 @@ class StatusEnvelopeBuilderTest {
             .role("orchestrator")
             .instance("orch-1")
             .origin("orch-1")
+            .swarmId("ALL")
             .enabled(true)
             .tps(0)
             .toJson();

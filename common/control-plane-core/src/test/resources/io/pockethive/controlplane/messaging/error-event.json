@@ -13,6 +13,10 @@
     },
     "correlationId": "corr-2",
     "idempotencyKey": "idem-2",
+    "runtime": {
+      "templateId": "tpl-1",
+      "runId": "run-1"
+    },
     "data": {
       "status": "Failed",
       "retryable": true,

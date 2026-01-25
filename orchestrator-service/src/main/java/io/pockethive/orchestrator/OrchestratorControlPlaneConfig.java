@@ -33,7 +33,7 @@ class OrchestratorControlPlaneConfig {
         Objects.requireNonNull(identity, "identity");
         Objects.requireNonNull(publisher, "publisher");
         RoleContext role = RoleContext.fromIdentity(identity);
-        return ControlPlaneEmitter.using(descriptor, role, publisher);
+        return ControlPlaneEmitter.using(descriptor, role, publisher, null);
     }
 
     @Bean(name = "managerControlQueueName")

@@ -14,6 +14,9 @@ import io.pockethive.controlplane.messaging.SignalMessage;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.orchestrator.infra.InMemoryIdempotencyStore;
+import io.pockethive.orchestrator.domain.Swarm;
+import io.pockethive.orchestrator.domain.SwarmStore;
+import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -33,16 +36,22 @@ class ComponentControllerTest {
     @Mock
     ControlPlanePublisher publisher;
 
+    private static final String SWARM_ID = "sw1";
+    private static final String TEMPLATE_ID = "tpl-1";
+    private static final String RUN_ID = "run-1";
+
     private final ObjectMapper mapper = new JacksonConfiguration().objectMapper();
 
     @Test
     void updateConfigPublishesControlSignal() throws Exception {
+        SwarmStore store = storeWithSwarm(SWARM_ID, TEMPLATE_ID, RUN_ID);
         ComponentController controller = new ComponentController(
             publisher,
             new InMemoryIdempotencyStore(),
+            store,
             controlPlaneProperties());
         ComponentController.ConfigUpdateRequest request =
-            new ComponentController.ConfigUpdateRequest("idem", Map.of("enabled", true), null, "sw1");
+            new ComponentController.ConfigUpdateRequest("idem", Map.of("enabled", true), null, SWARM_ID);
 
         ResponseEntity<ControlResponse> response = controller.updateConfig("generator", "c1", request);
 
@@ -56,21 +65,25 @@ class ComponentControllerTest {
         assertThat(signal.type()).isEqualTo(ControlPlaneSignals.CONFIG_UPDATE);
         assertThat(signal.scope().role()).isEqualTo("generator");
         assertThat(signal.scope().instance()).isEqualTo("c1");
-        assertThat(signal.scope().swarmId()).isEqualTo("sw1");
+        assertThat(signal.scope().swarmId()).isEqualTo(SWARM_ID);
         assertThat(signal.idempotencyKey()).isEqualTo("idem");
         assertThat(signal.data()).isNotNull();
         assertThat(signal.data()).containsEntry("enabled", true);
+        assertThat(signal.runtime()).containsEntry("templateId", TEMPLATE_ID);
+        assertThat(signal.runtime()).containsEntry("runId", RUN_ID);
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().watch().successTopic())
             .isEqualTo(ControlPlaneRouting.event("outcome", ControlPlaneSignals.CONFIG_UPDATE,
-                new ConfirmationScope("sw1", "generator", "c1")));
+                new ConfirmationScope(SWARM_ID, "generator", "c1")));
     }
 
     @Test
     void configUpdateIsIdempotent() {
+        SwarmStore store = new SwarmStore();
         ComponentController controller = new ComponentController(
             publisher,
             new InMemoryIdempotencyStore(),
+            store,
             controlPlaneProperties());
         ComponentController.ConfigUpdateRequest request =
             new ComponentController.ConfigUpdateRequest("idem", Map.of(), null, null);
@@ -86,12 +99,14 @@ class ComponentControllerTest {
 
     @Test
     void concurrentConfigUpdatesReuseCorrelation() throws Exception {
+        SwarmStore store = storeWithSwarm(SWARM_ID, TEMPLATE_ID, RUN_ID);
         ComponentController controller = new ComponentController(
             publisher,
             new InMemoryIdempotencyStore(),
+            store,
             controlPlaneProperties());
         ComponentController.ConfigUpdateRequest request =
-            new ComponentController.ConfigUpdateRequest("idem", Map.of(), null, "sw1");
+            new ComponentController.ConfigUpdateRequest("idem", Map.of(), null, SWARM_ID);
 
         CountDownLatch start = new CountDownLatch(1);
         ExecutorService executor = Executors.newFixedThreadPool(2);
@@ -113,6 +128,14 @@ class ComponentControllerTest {
         assertThat(response1.getBody()).isNotNull();
         assertThat(response2.getBody()).isNotNull();
         assertThat(response1.getBody().correlationId()).isEqualTo(response2.getBody().correlationId());
+    }
+
+    private static SwarmStore storeWithSwarm(String swarmId, String templateId, String runId) {
+        SwarmStore store = new SwarmStore();
+        Swarm swarm = new Swarm(swarmId, "controller-1", "container-1", runId);
+        swarm.attachTemplate(new SwarmTemplateMetadata(templateId, "swarm-controller:latest", java.util.List.of()));
+        store.register(swarm);
+        return store;
     }
 
     private static ControlPlaneProperties controlPlaneProperties() {

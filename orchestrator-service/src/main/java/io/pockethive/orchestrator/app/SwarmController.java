@@ -375,10 +375,11 @@ public class SwarmController {
                 throw new IllegalStateException("Swarm " + swarmId + " is not registered with a controller instance");
             }
             ControlScope target = ControlScope.forInstance(swarmId, "swarm-controller", controllerInstance);
+            Map<String, Object> runtime = runtimeMetaForSwarm(swarmId);
             ControlSignal payload = switch (signal) {
-                case "swarm-start" -> ControlSignals.swarmStart(originInstanceId, target, corr, idempotencyKey);
-                case "swarm-stop" -> ControlSignals.swarmStop(originInstanceId, target, corr, idempotencyKey);
-                case "swarm-remove" -> ControlSignals.swarmRemove(originInstanceId, target, corr, idempotencyKey);
+                case "swarm-start" -> ControlSignals.swarmStart(originInstanceId, target, corr, idempotencyKey, runtime);
+                case "swarm-stop" -> ControlSignals.swarmStop(originInstanceId, target, corr, idempotencyKey, runtime);
+                case "swarm-remove" -> ControlSignals.swarmRemove(originInstanceId, target, corr, idempotencyKey, runtime);
                 default -> throw new IllegalArgumentException("Unsupported lifecycle signal: " + signal);
             };
             String jsonPayload = toJson(payload);
@@ -411,6 +412,22 @@ public class SwarmController {
                 creates.expectStop(swarmId, corr, idempotencyKey, timeout);
             }
         });
+    }
+
+    private Map<String, Object> runtimeMetaForSwarm(String swarmId) {
+        String resolvedSwarmId = requireText(swarmId, "swarmId");
+        Swarm swarm = store.find(resolvedSwarmId)
+            .orElseThrow(() -> new IllegalStateException("Swarm " + resolvedSwarmId + " is not registered"));
+        String templateId = requireText(swarm.templateId(), "swarm.templateId");
+        String runId = requireText(swarm.getRunId(), "swarm.runId");
+        return Map.of("templateId", templateId, "runId", runId);
+    }
+
+    private static String requireText(String value, String field) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(field + " must not be blank");
+        }
+        return value.trim();
     }
 
     /**
@@ -634,10 +651,11 @@ public class SwarmController {
         if (statusFull == null || statusFull.isMissingNode()) {
             return null;
         }
-        JsonNode scope = statusFull.path("scope");
-        JsonNode data = statusFull.path("data");
-        JsonNode context = data.path("context");
-        JsonNode workers = context.path("workers");
+	        JsonNode scope = statusFull.path("scope");
+	        JsonNode data = statusFull.path("data");
+	        JsonNode runtime = statusFull.path("runtime");
+	        JsonNode context = data.path("context");
+	        JsonNode workers = context.path("workers");
 
         String id = swarm.getId();
 
@@ -651,15 +669,15 @@ public class SwarmController {
         }
         boolean workEnabled = enabledNode.asBoolean();
 
-        String templateId = textOrNull(data.path("runtime"), "templateId");
-        String controllerImage = textOrNull(data.path("runtime"), "image");
-        String sutId = textOrNull(context, "sutId");
-        List<BeeSummary> bees = beesFromWorkers(workers);
+	        String templateId = textOrNull(runtime, "templateId");
+	        String controllerImage = textOrNull(runtime, "image");
+	        String sutId = textOrNull(context, "sutId");
+	        List<BeeSummary> bees = beesFromWorkers(workers);
 
-        String stackName = textOrNull(data.path("runtime"), "stackName");
-        return new SwarmSummary(
-            id,
-            status,
+	        String stackName = textOrNull(runtime, "stackName");
+	        return new SwarmSummary(
+	            id,
+	            status,
             health,
             heartbeat,
             workEnabled,

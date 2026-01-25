@@ -125,7 +125,7 @@ public class SwarmSignalListener {
             swarmId,
             properties.getControlQueuePrefixBase(),
             Map.of())
-    );
+    , runtimeMetaSnapshot());
     this.startedAt = java.time.Instant.now();
     this.lastHealthState = null;
     this.healthJournalSuppressUntil = null;
@@ -225,7 +225,7 @@ public class SwarmSignalListener {
       }
       diagnostics.updateFromWorkerStatus(role, instance, node.path("data"));
       ioStates.updateFromWorkerStatus(role, instance, node.path("data"));
-      workers.updateFromWorkerStatus(role, instance, node.path("data"));
+      workers.updateFromWorkerStatus(role, instance, node.path("data"), node.path("runtime"));
       maybeJournalWorkerErrorIndicators(role, instance, node);
 
       boolean enabled = node.path("data").path("enabled").asBoolean(true);
@@ -966,7 +966,7 @@ public class SwarmSignalListener {
         .data("swarmDiagnostics", diagnostics.snapshot())
         .data("scenario", scenarioProgress())
         .data("bindings", Map.of("work", lifecycle.workBindingsSnapshot()));
-    builder.data("runtime", runtimeMetaSnapshot());
+    builder.runtime(runtimeMetaSnapshot());
     if (journalRunId != null) {
       builder.data("journal", Map.of("runId", journalRunId));
     }
@@ -1001,6 +1001,7 @@ public class SwarmSignalListener {
         .totals(m.desired(), m.healthy(), m.running(), m.enabled())
         .data("swarmStatus", status.name())
         .data("scenario", scenarioProgress());
+    builder.runtime(runtimeMetaSnapshot());
     appendTrafficDiagnostics(builder);
     String payload = builder.toJson();
     sendControl(rk, payload, "status");
@@ -1044,8 +1045,15 @@ public class SwarmSignalListener {
   private Map<String, Object> runtimeMetaSnapshot() {
     Map<String, Object> meta = new LinkedHashMap<>(baseRuntimeMeta);
     meta.put("templateId", templateId);
-    meta.put("runId", journalRunId);
+    meta.put("runId", requireNonBlank(journalRunId, "pockethive.journal.run-id"));
     return Collections.unmodifiableMap(meta);
+  }
+
+  private static String requireNonBlank(String value, String context) {
+    if (value == null || value.isBlank()) {
+      throw new IllegalStateException(context + " must not be blank");
+    }
+    return value.trim();
   }
 
   private String runtimeStackName() {

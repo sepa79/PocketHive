@@ -55,11 +55,31 @@
         "scope": { "$ref": "#/$defs/Scope" },
         "correlationId": { "$ref": "#/$defs/NullableNonEmptyString" },
         "idempotencyKey": { "$ref": "#/$defs/NullableNonEmptyString" },
+        "runtime": { "$ref": "#/$defs/RuntimeMeta" },
         "data": {
           "type": "object",
           "additionalProperties": true
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "scope": {
+                "properties": {
+                  "swarmId": { "const": "ALL" }
+                }
+              }
+            }
+          },
+          "then": {
+            "not": { "required": ["runtime"] }
+          },
+          "else": {
+            "required": ["runtime"]
+          }
+        }
+      ]
     },
     "ControlSignal": {
       "allOf": [
@@ -171,47 +191,46 @@
     "RuntimeMeta": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Runtime/infra metadata for this scope (full-only).",
-      "required": ["templateId"],
+      "description": "Runtime/infra metadata for this message scope.",
+      "required": ["templateId", "runId"],
       "properties": {
         "templateId": { "$ref": "#/$defs/NonEmptyString" },
-        "runId": { "$ref": "#/$defs/NullableNonEmptyString" },
+        "runId": { "$ref": "#/$defs/NonEmptyString" },
         "containerId": { "$ref": "#/$defs/NullableNonEmptyString" },
         "image": { "$ref": "#/$defs/NullableNonEmptyString" },
         "stackName": { "$ref": "#/$defs/NullableNonEmptyString" }
       }
     },
-    "StatusFullMetric": {
-      "allOf": [
-        { "$ref": "#/$defs/EnvelopeBase" },
-        {
-          "type": "object",
-          "properties": {
-            "kind": { "const": "metric" },
-            "type": { "const": "status-full" },
-                "data": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": ["enabled", "config", "startedAt", "runtime", "io", "ioState"],
-                  "properties": {
-                    "enabled": { "type": "boolean" },
-                    "config": {
-                      "type": "object",
-                      "additionalProperties": true,
-                      "description": "Snapshot of the effective configuration for this scope (role/instance). Must not include secrets."
-                    },
-                    "runtime": { "$ref": "#/$defs/RuntimeMeta" },
-                    "tps": { "type": "integer", "minimum": 0 },
-                    "startedAt": { "type": "string", "format": "date-time" },
-                    "io": { "$ref": "#/$defs/MetricIo" },
-                    "ioState": { "$ref": "#/$defs/MetricIoState" },
-                    "context": { "type": "object", "additionalProperties": true }
-                  }
-            }
-          }
-        }
-      ]
-    },
+	    "StatusFullMetric": {
+	      "allOf": [
+	        { "$ref": "#/$defs/EnvelopeBase" },
+	        {
+	          "type": "object",
+	          "properties": {
+	            "kind": { "const": "metric" },
+	            "type": { "const": "status-full" },
+	                "data": {
+	                  "type": "object",
+	                  "additionalProperties": false,
+	                  "required": ["enabled", "config", "startedAt", "io", "ioState"],
+	                  "properties": {
+	                    "enabled": { "type": "boolean" },
+	                    "config": {
+	                      "type": "object",
+	                      "additionalProperties": true,
+	                      "description": "Snapshot of the effective configuration for this scope (role/instance). Must not include secrets."
+	                    },
+	                    "tps": { "type": "integer", "minimum": 0 },
+	                    "startedAt": { "type": "string", "format": "date-time" },
+	                    "io": { "$ref": "#/$defs/MetricIo" },
+	                    "ioState": { "$ref": "#/$defs/MetricIoState" },
+	                    "context": { "type": "object", "additionalProperties": true }
+	                  }
+	            }
+	          }
+	        }
+	      ]
+	    },
     "StatusDeltaMetric": {
       "allOf": [
         { "$ref": "#/$defs/EnvelopeBase" },

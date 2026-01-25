@@ -17,6 +17,7 @@ import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.orchestrator.domain.IdempotencyStore;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmStore;
+import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -40,8 +41,12 @@ class SwarmManagerControllerTest {
     @Test
     void fanOutToggleToAllControllers() throws Exception {
         SwarmStore registry = new SwarmStore();
-        registry.register(new Swarm("sw1", "ctrl-a", "c1", "run-1"));
-        registry.register(new Swarm("sw2", "ctrl-b", "c2", "run-2"));
+        Swarm swarm1 = new Swarm("sw1", "ctrl-a", "c1", "run-1");
+        swarm1.attachTemplate(new SwarmTemplateMetadata("tpl-1", "swarm-controller:latest", List.of()));
+        registry.register(swarm1);
+        Swarm swarm2 = new Swarm("sw2", "ctrl-b", "c2", "run-2");
+        swarm2.attachTemplate(new SwarmTemplateMetadata("tpl-2", "swarm-controller:latest", List.of()));
+        registry.register(swarm2);
         when(idempotency.reserve(eq("sw1"), eq(ControlPlaneSignals.CONFIG_UPDATE), eq("idem-1"), anyString()))
             .thenReturn(Optional.empty());
         when(idempotency.reserve(eq("sw2"), eq(ControlPlaneSignals.CONFIG_UPDATE), eq("idem-1"), anyString()))
@@ -78,7 +83,9 @@ class SwarmManagerControllerTest {
     @Test
     void toggleSingleControllerScope() throws Exception {
         SwarmStore registry = new SwarmStore();
-        registry.register(new Swarm("sw9", "ctrl-z", "c9", "run-9"));
+        Swarm swarm = new Swarm("sw9", "ctrl-z", "c9", "run-9");
+        swarm.attachTemplate(new SwarmTemplateMetadata("tpl-9", "swarm-controller:latest", List.of()));
+        registry.register(swarm);
         when(idempotency.reserve(eq("sw9"), eq(ControlPlaneSignals.CONFIG_UPDATE), eq("idem-2"), anyString()))
             .thenReturn(Optional.empty());
         SwarmManagerController controller = new SwarmManagerController(

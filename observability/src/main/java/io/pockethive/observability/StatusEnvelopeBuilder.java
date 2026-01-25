@@ -23,7 +23,6 @@ public class StatusEnvelopeBuilder {
         "enabled",
         "tps",
         "startedAt",
-        "runtime",
         "config",
         "io",
         "ioState",
@@ -112,6 +111,37 @@ public class StatusEnvelopeBuilder {
 
     public StatusEnvelopeBuilder swarmId(String swarmId) {
         scope.put("swarmId", swarmId);
+        return this;
+    }
+
+    /**
+     * Attach canonical runtime metadata to the envelope.
+     *
+     * <p>Runtime is required for non-broadcast messages (scope.swarmId != ALL) and must be omitted for
+     * broadcast messages (scope.swarmId == ALL).</p>
+     */
+    public StatusEnvelopeBuilder runtime(Map<String, ?> runtime) {
+        if (runtime == null || runtime.isEmpty()) {
+            root.remove("runtime");
+            return this;
+        }
+        Map<String, Object> cleaned = new LinkedHashMap<>();
+        for (Map.Entry<String, ?> entry : runtime.entrySet()) {
+            String key = entry.getKey();
+            if (key == null) {
+                throw new IllegalArgumentException("runtime must not contain null keys");
+            }
+            Object value = entry.getValue();
+            if (value == null) {
+                continue;
+            }
+            cleaned.put(key, value);
+        }
+        if (cleaned.isEmpty()) {
+            root.remove("runtime");
+            return this;
+        }
+        root.put("runtime", Map.copyOf(cleaned));
         return this;
     }
 
@@ -293,6 +323,9 @@ public class StatusEnvelopeBuilder {
         if (trimmed.isEmpty()) {
             return this;
         }
+        if ("runtime".equals(trimmed)) {
+            throw new IllegalStateException("status runtime is an envelope field; use runtime(...) instead of data(\"runtime\", ...)");
+        }
         if ("startedAt".equals(trimmed)) {
             data.put("startedAt", value);
             return this;
@@ -432,16 +465,26 @@ public class StatusEnvelopeBuilder {
         if (isFull && !data.containsKey("startedAt")) {
             throw new IllegalStateException("status-full metrics must include data.startedAt");
         }
-        if (isFull && !data.containsKey("runtime")) {
-            throw new IllegalStateException("status-full metrics must include data.runtime");
-        }
         if (isFull && !data.containsKey("config")) {
             data.put("config", Collections.emptyMap());
         }
 
+        String swarmId = scope.get("swarmId") instanceof String value ? value : null;
+        if (swarmId == null || swarmId.isBlank()) {
+            throw new IllegalStateException("status metrics must include scope.swarmId");
+        }
+        boolean isBroadcast = "ALL".equalsIgnoreCase(swarmId.trim());
+        boolean hasRuntime = root.get("runtime") instanceof Map<?, ?> map && !map.isEmpty();
+        if (isBroadcast) {
+            if (root.get("runtime") != null) {
+                throw new IllegalStateException("broadcast status metrics must omit runtime");
+            }
+        } else if (!hasRuntime) {
+            throw new IllegalStateException("non-broadcast status metrics must include runtime");
+        }
+
         if (!isFull) {
             data.remove("startedAt");
-            data.remove("runtime");
             data.remove("config");
             data.remove("io");
         }
@@ -459,7 +502,6 @@ public class StatusEnvelopeBuilder {
         if (isFull) {
             canonicalData.put("config", Objects.requireNonNullElse(data.get("config"), Collections.emptyMap()));
             canonicalData.put("startedAt", data.get("startedAt"));
-            canonicalData.put("runtime", data.get("runtime"));
             canonicalData.put("io", Objects.requireNonNullElse(data.get("io"), Collections.emptyMap()));
         }
 

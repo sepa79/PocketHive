@@ -29,23 +29,24 @@ class ControllerStatusListenerRebuildTest {
               "kind": "metric",
               "type": "status-full",
               "origin": "controller-1",
-              "scope": {"swarmId":"sw1","role":"swarm-controller","instance":"controller-1"},
-              "correlationId": "c1",
-              "idempotencyKey": "i1",
-              "data": {
-                "enabled": false,
-                "ioState": {"filesystem": {"input":"unknown","output":"unknown"}},
-                "config": {},
-                "startedAt": "2024-01-01T00:00:00Z",
-                "runtime": {
-                  "runId": "run-1",
-                  "containerId": "container-1",
-                  "image": "swarm-controller:latest",
-                  "stackName": "ph-sw1"
-                },
-                "io": {},
-                "context": {"swarmStatus": "STOPPED", "journal": {"runId":"run-1"}}
-              }
+	              "scope": {"swarmId":"sw1","role":"swarm-controller","instance":"controller-1"},
+	              "correlationId": "c1",
+	              "idempotencyKey": "i1",
+	              "runtime": {
+	                "templateId": "tpl-1",
+	                "runId": "run-1",
+	                "containerId": "container-1",
+	                "image": "swarm-controller:latest",
+	                "stackName": "ph-sw1"
+	              },
+	              "data": {
+	                "enabled": false,
+	                "ioState": {"filesystem": {"input":"unknown","output":"unknown"}},
+	                "config": {},
+	                "startedAt": "2024-01-01T00:00:00Z",
+	                "io": {},
+	                "context": {"swarmStatus": "STOPPED", "journal": {"runId":"run-1"}}
+	              }
             }
             """;
 
@@ -71,11 +72,12 @@ class ControllerStatusListenerRebuildTest {
               "kind": "metric",
               "type": "status-delta",
               "origin": "controller-1",
-              "scope": {"swarmId":"sw1","role":"swarm-controller","instance":"controller-1"},
-              "correlationId": "c1",
-              "idempotencyKey": "i1",
-              "data": {"enabled": true, "ioState": {}, "context": {"swarmStatus": "RUNNING"}}
-            }
+	              "scope": {"swarmId":"sw1","role":"swarm-controller","instance":"controller-1"},
+	              "correlationId": "c1",
+	              "idempotencyKey": "i1",
+	              "runtime": { "templateId": "tpl-1", "runId": "run-1" },
+	              "data": {"enabled": true, "ioState": {}, "context": {"swarmStatus": "RUNNING"}}
+	            }
             """;
 
         listener.handle(json, "event.metric.status-delta.sw1.swarm-controller.controller-1");
