@@ -8,6 +8,7 @@ import io.pockethive.orchestrator.app.JournalController;
 import io.pockethive.orchestrator.app.JournalPageResponse;
 import io.pockethive.orchestrator.app.SwarmJournalController;
 import io.pockethive.orchestrator.domain.HiveJournal;
+import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import java.time.Instant;
 import java.util.Map;
@@ -214,6 +215,7 @@ class PostgresJournalStorageTest {
   @Test
   void hiveJournalOverloadEvictsInfoToKeepError() throws Exception {
     jdbc.update("DELETE FROM journal_event");
+    store.register(new Swarm("s1", "inst", "container", "run-1"));
     PostgresHiveJournal journal = new PostgresHiveJournal(mapper, jdbc, store, 3, 50, 30_000L, 1_000L);
     ControlScope scope = new ControlScope("s1", "orchestrator", "inst");
 
@@ -262,6 +264,7 @@ class PostgresJournalStorageTest {
   @Test
   void hiveJournalDropEmitsSingleStartStopEvents() throws Exception {
     jdbc.update("DELETE FROM journal_event");
+    store.register(new Swarm("s1", "inst", "container", "run-1"));
     PostgresHiveJournal journal = new PostgresHiveJournal(mapper, jdbc, store, 2, 50, 30_000L, 1_000L);
     ControlScope scope = new ControlScope("s1", "orchestrator", "inst");
 
