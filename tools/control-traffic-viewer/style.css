@@ -107,7 +107,7 @@ code, pre { font-family: var(--mono); }
 
 .filters {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 10px;
   margin-top: 10px;
 }
@@ -258,6 +258,5 @@ code, pre { font-family: var(--mono); }
       "right";
     grid-template-columns: 1fr;
   }
-  .filters { grid-template-columns: 1fr; }
   .colRk { width: 260px; }
 }
