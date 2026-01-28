@@ -3,7 +3,6 @@ const state = {
   messages: [],
   filtered: [],
   selectedIndex: null,
-  detailsMode: "tree", // tree | pretty | raw
   indexes: {
     swarms: new Set(),
     kinds: new Set(),
@@ -39,145 +38,20 @@ const els = {
   details: document.getElementById("details"),
   selectedSummary: document.getElementById("selectedSummary"),
   copyBodyBtn: document.getElementById("copyBodyBtn"),
-  detailsTreeBtn: document.getElementById("detailsTreeBtn"),
-  detailsPrettyBtn: document.getElementById("detailsPrettyBtn"),
-  detailsRawBtn: document.getElementById("detailsRawBtn"),
 };
 
 function syntaxHighlightJson(json) {
-  const escaped = escapeHtml(json);
-  return escaped.replace(
+  return String(json).replace(
     /(\"(?:\\u[a-fA-F0-9]{4}|\\[^u]|[^\\\"])*\"\\s*:)|(\"(?:\\u[a-fA-F0-9]{4}|\\[^u]|[^\\\"])*\")|\\b(true|false)\\b|\\bnull\\b|-?\\d+(?:\\.\\d+)?(?:[eE][+\\-]?\\d+)?|[{}\\[\\],]/g,
     (m, key, str, bool) => {
-      if (key) return `<span class="jsonKey">${key}</span>`;
-      if (str) return `<span class="jsonString">${str}</span>`;
-      if (bool) return `<span class="jsonBoolean">${m}</span>`;
+      if (key) return `<span class="jsonKey">${escapeHtml(m)}</span>`;
+      if (str) return `<span class="jsonString">${escapeHtml(m)}</span>`;
+      if (bool) return `<span class="jsonBoolean">${escapeHtml(m)}</span>`;
       if (m === "null") return `<span class="jsonNull">null</span>`;
-      if (/^-?\\d/.test(m)) return `<span class="jsonNumber">${m}</span>`;
-      return `<span class="jsonPunc">${m}</span>`;
+      if (/^-?\d/.test(m)) return `<span class="jsonNumber">${escapeHtml(m)}</span>`;
+      return `<span class="jsonPunc">${escapeHtml(m)}</span>`;
     }
   );
-}
-
-function buildJsonTree(value, { maxNodes, maxString }) {
-  let nodes = 0;
-
-  function makeValueNode(v) {
-    nodes += 1;
-    if (nodes > maxNodes) {
-      const span = document.createElement("span");
-      span.className = "v";
-      span.textContent = "[…truncated…]";
-      return span;
-    }
-
-    if (v === null) {
-      const span = document.createElement("span");
-      span.className = "v jsonNull";
-      span.textContent = "null";
-      return span;
-    }
-    if (typeof v === "string") {
-      const span = document.createElement("span");
-      span.className = "v jsonString";
-      span.textContent =
-        v.length > maxString ? `${v.slice(0, maxString)}…(len=${v.length})` : v;
-      return span;
-    }
-    if (typeof v === "number") {
-      const span = document.createElement("span");
-      span.className = "v jsonNumber";
-      span.textContent = String(v);
-      return span;
-    }
-    if (typeof v === "boolean") {
-      const span = document.createElement("span");
-      span.className = "v jsonBoolean";
-      span.textContent = String(v);
-      return span;
-    }
-    if (Array.isArray(v)) {
-      const d = document.createElement("details");
-      d.open = true;
-      const s = document.createElement("summary");
-      s.textContent = `array(${v.length})`;
-      d.appendChild(s);
-      for (let i = 0; i < v.length; i += 1) {
-        const row = document.createElement("div");
-        row.className = "kv";
-        const k = document.createElement("span");
-        k.className = "k";
-        k.textContent = `[${i}]`;
-        row.appendChild(k);
-        row.appendChild(makeValueNode(v[i]));
-        d.appendChild(row);
-      }
-      return d;
-    }
-    if (typeof v === "object") {
-      const keys = Object.keys(v);
-      const d = document.createElement("details");
-      d.open = true;
-      const s = document.createElement("summary");
-      s.textContent = `object(${keys.length})`;
-      d.appendChild(s);
-      for (const key of keys) {
-        const row = document.createElement("div");
-        row.className = "kv";
-        const k = document.createElement("span");
-        k.className = "k";
-        k.textContent = key;
-        row.appendChild(k);
-        row.appendChild(makeValueNode(v[key]));
-        d.appendChild(row);
-      }
-      return d;
-    }
-    const span = document.createElement("span");
-    span.className = "v";
-    span.textContent = String(v);
-    return span;
-  }
-
-  const rootWrap = document.createElement("div");
-  rootWrap.appendChild(makeValueNode(value));
-  return rootWrap;
-}
-
-function setDetailsMode(mode) {
-  state.detailsMode = mode;
-  if (els.copyBodyBtn.disabled) return;
-  renderSelectedDetails();
-}
-
-function renderSelectedDetails() {
-  const items = state.filtered.length ? state.filtered : state.messages;
-  const m = items[state.selectedIndex];
-  if (!m) return;
-
-  const wrapper = {
-    recordedAt: m.recordedAt,
-    routingKey: m.routingKey,
-    headers: m.headers,
-    body: m.body,
-  };
-
-  if (state.detailsMode === "raw") {
-    els.details.classList.remove("jsonTree");
-    els.details.textContent = JSON.stringify(wrapper, null, 2);
-    return;
-  }
-
-  if (state.detailsMode === "pretty") {
-    els.details.classList.remove("jsonTree");
-    const text = JSON.stringify(wrapper, null, 2);
-    els.details.innerHTML = syntaxHighlightJson(text);
-    return;
-  }
-
-  els.details.classList.add("jsonTree");
-  els.details.innerHTML = "";
-  els.details.appendChild(buildJsonTree(wrapper, { maxNodes: 6000, maxString: 5000 }));
 }
 
 function ensureCustomSelect(select) {
@@ -429,12 +303,8 @@ function resetAll() {
   els.resetBtn.disabled = true;
   els.clearFiltersBtn.disabled = true;
   els.copyBodyBtn.disabled = true;
-  els.detailsTreeBtn.disabled = true;
-  els.detailsPrettyBtn.disabled = true;
-  els.detailsRawBtn.disabled = true;
   els.selectedSummary.textContent = "—";
   els.details.textContent = "Select a timeline row…";
-  els.details.classList.remove("jsonTree");
   els.details.classList.add("empty");
 
   setSelectOptions(els.filterSwarm, ["(all)"]);
@@ -570,11 +440,7 @@ function clearSelection() {
   state.selectedIndex = null;
   els.selectedSummary.textContent = "—";
   els.copyBodyBtn.disabled = true;
-  els.detailsTreeBtn.disabled = true;
-  els.detailsPrettyBtn.disabled = true;
-  els.detailsRawBtn.disabled = true;
   els.details.textContent = "Select a timeline row…";
-  els.details.classList.remove("jsonTree");
   els.details.classList.add("empty");
   document.querySelectorAll("#timeline tr.active").forEach((tr) => tr.classList.remove("active"));
 }
@@ -698,13 +564,17 @@ function selectMessage(filteredIndex) {
   clearSelection();
   state.selectedIndex = filteredIndex;
   els.copyBodyBtn.disabled = false;
-  els.detailsTreeBtn.disabled = false;
-  els.detailsPrettyBtn.disabled = false;
-  els.detailsRawBtn.disabled = false;
   const sum = `${fmtTime(m.tsMs)} • ${m.kind}.${m.type} • ${m.scope.swarmId ?? "—"} / ${m.scope.role ?? "—"} / ${m.scope.instance ?? "—"}`;
   els.selectedSummary.textContent = sum;
 
-  renderSelectedDetails();
+  const wrapper = {
+    recordedAt: m.recordedAt,
+    routingKey: m.routingKey,
+    headers: m.headers,
+    body: m.body,
+  };
+  const pretty = JSON.stringify(wrapper, null, 2);
+  els.details.innerHTML = syntaxHighlightJson(pretty);
   els.details.classList.remove("empty");
 
   // highlight row
@@ -845,10 +715,6 @@ function wireEvents() {
     };
     await navigator.clipboard.writeText(JSON.stringify(wrapper, null, 2));
   });
-
-  els.detailsTreeBtn.addEventListener("click", () => setDetailsMode("tree"));
-  els.detailsPrettyBtn.addEventListener("click", () => setDetailsMode("pretty"));
-  els.detailsRawBtn.addEventListener("click", () => setDetailsMode("raw"));
 
   // Drag & drop
   const dz = els.dropZone;
