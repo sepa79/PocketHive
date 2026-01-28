@@ -96,7 +96,7 @@
       </section>
 
       <section class="panel center">
-        <div class="card">
+        <div class="card timelineCard">
           <div class="cardTitle">Timeline</div>
           <div class="cardSub">Click a row to inspect the message.</div>
           <div class="tableWrap">
@@ -108,19 +108,15 @@
                   <th class="colScope">swarm / role / instance</th>
                   <th class="colOrigin">Origin</th>
                   <th class="colCorr">Correlation</th>
-                  <th class="colRk">RoutingKey</th>
                 </tr>
               </thead>
               <tbody id="timeline" class="empty">
-                <tr><td colspan="6" class="emptyCell">Load a recording to start.</td></tr>
+                <tr><td colspan="5" class="emptyCell">Load a recording to start.</td></tr>
               </tbody>
             </table>
           </div>
         </div>
-      </section>
-
-      <section class="panel right">
-        <div class="card">
+        <div class="card detailsCard">
           <div class="cardTitle">Details</div>
           <div class="cardSub">
             Selected: <span id="selectedSummary" class="muted">—</span>

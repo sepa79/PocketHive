@@ -340,13 +340,13 @@ function renderTimeline() {
 
   if (state.messages.length === 0) {
     els.timeline.classList.add("empty");
-    els.timeline.innerHTML = `<tr><td colspan="6" class="emptyCell">Load a recording to start.</td></tr>`;
+    els.timeline.innerHTML = `<tr><td colspan="5" class="emptyCell">Load a recording to start.</td></tr>`;
     return;
   }
 
   if (items.length === 0) {
     els.timeline.classList.add("empty");
-    els.timeline.innerHTML = `<tr><td colspan="6" class="emptyCell">No messages match current filters.</td></tr>`;
+    els.timeline.innerHTML = `<tr><td colspan="5" class="emptyCell">No messages match current filters.</td></tr>`;
     return;
   }
 
@@ -366,7 +366,6 @@ function renderTimeline() {
       <td class="colScope">${escapeHtml(scopeText)}</td>
       <td class="colOrigin">${escapeHtml(m.origin ?? "—")}</td>
       <td class="colCorr">${escapeHtml(m.correlationId ?? "—")}</td>
-      <td class="colRk"><code>${escapeHtml(m.routingKey ?? "—")}</code></td>
     `;
     tr.addEventListener("click", () => selectMessage(i));
     els.timeline.appendChild(tr);
@@ -374,7 +373,7 @@ function renderTimeline() {
 
   if (items.length > MAX) {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td colspan="6" class="emptyCell">Showing first ${MAX} of ${items.length} (MVP). Narrow filters to inspect more.</td>`;
+    tr.innerHTML = `<td colspan="5" class="emptyCell">Showing first ${MAX} of ${items.length} (MVP). Narrow filters to inspect more.</td>`;
     els.timeline.appendChild(tr);
   }
 }

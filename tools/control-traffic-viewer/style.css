@@ -61,14 +61,15 @@ code, pre { font-family: var(--mono); }
 .layout {
   display: grid;
   grid-template-areas: "left center right";
-  grid-template-columns: minmax(320px, 360px) minmax(0, 1fr) minmax(360px, 460px);
+  grid-template-columns: minmax(320px, 380px) minmax(0, 1fr);
   gap: 14px;
   padding: 14px;
+  min-height: calc(100vh - 76px);
 }
 .panel { min-width: 0; }
 .panel.left { grid-area: left; }
 .panel.center { grid-area: center; }
-.panel.right { grid-area: right; }
+.panel.center { display: flex; flex-direction: column; gap: 12px; height: 100%; min-height: 0; }
 .panel.left { display: flex; flex-direction: column; gap: 12px; }
 
 .dropzone {
@@ -172,6 +173,8 @@ code, pre { font-family: var(--mono); }
   overflow: auto;
   background: rgba(0,0,0,0.14);
 }
+.timelineCard { display: flex; flex-direction: column; min-height: 260px; }
+.timelineCard .tableWrap { flex: 1 1 auto; min-height: 0; }
 .table {
   width: 100%;
   border-collapse: collapse;
@@ -204,7 +207,6 @@ code, pre { font-family: var(--mono); }
 .colKind { width: 150px; }
 .colOrigin { width: 180px; }
 .colCorr { width: 160px; }
-.colRk { width: 360px; }
 
 .pill {
   display: inline-block;
@@ -222,8 +224,8 @@ code, pre { font-family: var(--mono); }
 
 .details {
   margin-top: 10px;
-  max-height: calc(100vh - 260px);
-  min-height: 240px;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
   padding: 12px;
   border-radius: 12px;
@@ -233,6 +235,8 @@ code, pre { font-family: var(--mono); }
   line-height: 1.45;
 }
 .details.empty { color: var(--muted); }
+
+.detailsCard { display: flex; flex-direction: column; min-height: 320px; }
 
 .detailActions {
   display: flex;
@@ -244,7 +248,7 @@ code, pre { font-family: var(--mono); }
   .layout {
     grid-template-areas:
       "left center"
-      "right right";
+      "left center";
     grid-template-columns: minmax(320px, 360px) minmax(0, 1fr);
   }
   .details { max-height: 520px; }
@@ -255,8 +259,16 @@ code, pre { font-family: var(--mono); }
     grid-template-areas:
       "left"
       "center"
-      "right";
+      "center";
     grid-template-columns: 1fr;
   }
-  .colRk { width: 260px; }
 }
+
+/* Scrollbars (WebKit) */
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: rgba(255,255,255,0.06); border-radius: 999px; }
+*::-webkit-scrollbar-thumb { background: rgba(110,168,254,0.28); border-radius: 999px; border: 2px solid rgba(0,0,0,0.18); }
+*::-webkit-scrollbar-thumb:hover { background: rgba(110,168,254,0.40); }
+
+/* Scrollbar colors (Firefox) */
+* { scrollbar-color: rgba(110,168,254,0.35) rgba(255,255,255,0.08); scrollbar-width: thin; }
