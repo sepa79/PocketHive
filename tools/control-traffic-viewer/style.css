@@ -131,6 +131,78 @@ code, pre { font-family: var(--mono); }
   width: 100%;
   min-width: 0;
 }
+.filters select.nativeHidden {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+
+.cselectBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(0,0,0,0.22);
+  color: var(--text);
+  padding: 8px 10px;
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+}
+.cselectBtn:hover { background: rgba(255,255,255,0.06); }
+.cselectBtn:focus-visible { outline: 2px solid rgba(110,168,254,0.45); outline-offset: 2px; }
+.cselectBtn .value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cselectBtn .chev {
+  opacity: 0.7;
+  font-family: var(--mono);
+}
+
+.cselectMenu {
+  position: fixed;
+  z-index: 9999;
+  border: 1px solid rgba(231,236,255,0.14);
+  background: rgba(10, 16, 36, 0.98);
+  backdrop-filter: blur(10px);
+  border-radius: 12px;
+  box-shadow: 0 18px 60px rgba(0,0,0,0.55);
+  overflow: hidden;
+}
+.cselectMenu .items {
+  max-height: 280px;
+  overflow: auto;
+}
+.cselectItem {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+}
+.cselectItem:hover { background: rgba(255,255,255,0.08); }
+.cselectItem.active {
+  background: rgba(110,168,254,0.16);
+  outline: 1px solid rgba(110,168,254,0.22);
+}
+.cselectItem .check { opacity: 0.8; color: var(--accent2); font-family: var(--mono); }
 .filters input::placeholder { color: rgba(159,176,218,0.6); }
 .filterButtons { grid-column: 1 / -1; display: flex; justify-content: flex-end; }
 .filterButtons { min-width: 0; }

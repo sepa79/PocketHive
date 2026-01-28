@@ -14,6 +14,8 @@ const state = {
   },
 };
 
+const customSelects = new Map();
+
 const els = {
   fileInput: document.getElementById("fileInput"),
   resetBtn: document.getElementById("resetBtn"),
@@ -37,6 +39,157 @@ const els = {
   selectedSummary: document.getElementById("selectedSummary"),
   copyBodyBtn: document.getElementById("copyBodyBtn"),
 };
+
+function ensureCustomSelect(select) {
+  if (customSelects.has(select)) {
+    return customSelects.get(select);
+  }
+
+  select.classList.add("nativeHidden");
+
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "cselectBtn";
+  btn.setAttribute("aria-haspopup", "listbox");
+  btn.setAttribute("aria-expanded", "false");
+
+  const valueSpan = document.createElement("span");
+  valueSpan.className = "value";
+  const chevSpan = document.createElement("span");
+  chevSpan.className = "chev";
+  chevSpan.textContent = "▾";
+
+  btn.appendChild(valueSpan);
+  btn.appendChild(chevSpan);
+
+  // Insert button right after the native select (within label)
+  select.insertAdjacentElement("afterend", btn);
+
+  const api = {
+    select,
+    btn,
+    valueSpan,
+    open: false,
+    menuEl: null,
+    cleanup: () => {},
+  };
+
+  function syncLabel() {
+    const selected = select.selectedOptions?.[0]?.textContent ?? select.value ?? "(all)";
+    valueSpan.textContent = selected;
+  }
+
+  function closeMenu() {
+    if (!api.open) return;
+    api.open = false;
+    btn.setAttribute("aria-expanded", "false");
+    if (api.menuEl) {
+      api.menuEl.remove();
+      api.menuEl = null;
+    }
+    api.cleanup?.();
+    api.cleanup = () => {};
+  }
+
+  function openMenu() {
+    if (api.open) return;
+    api.open = true;
+    btn.setAttribute("aria-expanded", "true");
+
+    const rect = btn.getBoundingClientRect();
+    const menu = document.createElement("div");
+    menu.className = "cselectMenu";
+    menu.style.left = `${Math.round(rect.left)}px`;
+    menu.style.top = `${Math.round(rect.bottom + 6)}px`;
+    menu.style.width = `${Math.round(rect.width)}px`;
+
+    const itemsWrap = document.createElement("div");
+    itemsWrap.className = "items";
+
+    const currentValue = select.value;
+    for (const opt of Array.from(select.options)) {
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = "cselectItem";
+      item.setAttribute("role", "option");
+      const isActive = opt.value === currentValue;
+      if (isActive) item.classList.add("active");
+
+      const t = document.createElement("span");
+      t.textContent = opt.textContent ?? opt.value;
+      const check = document.createElement("span");
+      check.className = "check";
+      check.textContent = isActive ? "✓" : "";
+
+      item.appendChild(t);
+      item.appendChild(check);
+      item.addEventListener("click", () => {
+        select.value = opt.value;
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+        syncLabel();
+        closeMenu();
+      });
+      itemsWrap.appendChild(item);
+    }
+
+    menu.appendChild(itemsWrap);
+    document.body.appendChild(menu);
+    api.menuEl = menu;
+
+    const onDocDown = (e) => {
+      if (e.target === btn || btn.contains(e.target)) return;
+      if (api.menuEl && (e.target === api.menuEl || api.menuEl.contains(e.target))) return;
+      closeMenu();
+    };
+    const onKey = (e) => {
+      if (e.key === "Escape") closeMenu();
+    };
+    const onReposition = () => {
+      if (!api.open || !api.menuEl) return;
+      const r = btn.getBoundingClientRect();
+      api.menuEl.style.left = `${Math.round(r.left)}px`;
+      api.menuEl.style.top = `${Math.round(r.bottom + 6)}px`;
+      api.menuEl.style.width = `${Math.round(r.width)}px`;
+    };
+
+    document.addEventListener("mousedown", onDocDown, true);
+    document.addEventListener("keydown", onKey, true);
+    window.addEventListener("resize", onReposition);
+    window.addEventListener("scroll", onReposition, true);
+    api.cleanup = () => {
+      document.removeEventListener("mousedown", onDocDown, true);
+      document.removeEventListener("keydown", onKey, true);
+      window.removeEventListener("resize", onReposition);
+      window.removeEventListener("scroll", onReposition, true);
+    };
+
+    // Initial focus behaviour
+    itemsWrap.querySelector(".cselectItem.active")?.focus?.();
+  }
+
+  btn.addEventListener("click", () => {
+    if (api.open) closeMenu();
+    else openMenu();
+  });
+
+  select.addEventListener("change", () => {
+    syncLabel();
+  });
+
+  syncLabel();
+
+  api.syncLabel = syncLabel;
+  api.closeMenu = closeMenu;
+
+  customSelects.set(select, api);
+  return api;
+}
+
+function ensureAllCustomSelects() {
+  for (const el of [els.filterSwarm, els.filterKind, els.filterType, els.filterRole, els.filterInstance]) {
+    ensureCustomSelect(el);
+  }
+}
 
 function trimIsoToMillis(iso) {
   if (!iso || typeof iso !== "string") return null;
@@ -145,6 +298,11 @@ function resetAll() {
   setSelectOptions(els.filterType, ["(all)"]);
   setSelectOptions(els.filterRole, ["(all)"]);
   setSelectOptions(els.filterInstance, ["(all)"]);
+  ensureAllCustomSelects();
+  for (const el of [els.filterSwarm, els.filterKind, els.filterType, els.filterRole, els.filterInstance]) {
+    customSelects.get(el)?.syncLabel?.();
+    customSelects.get(el)?.closeMenu?.();
+  }
   els.filterOrigin.value = "";
   els.filterCorrelation.value = "";
   els.filterRoutingKey.value = "";
@@ -214,6 +372,12 @@ function hydrateFilterOptions() {
     els.filterInstance,
     ["(all)", ...Array.from(idx.instances).sort(sortStr)]
   );
+
+  ensureAllCustomSelects();
+  for (const el of [els.filterSwarm, els.filterKind, els.filterType, els.filterRole, els.filterInstance]) {
+    customSelects.get(el)?.syncLabel?.();
+    customSelects.get(el)?.closeMenu?.();
+  }
 }
 
 function currentFilters() {
@@ -570,4 +734,5 @@ function debounce(fn, ms) {
 }
 
 resetAll();
+ensureAllCustomSelects();
 wireEvents();
