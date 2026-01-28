@@ -60,11 +60,15 @@ code, pre { font-family: var(--mono); }
 
 .layout {
   display: grid;
-  grid-template-columns: 360px 1fr 460px;
+  grid-template-areas: "left center right";
+  grid-template-columns: minmax(320px, 360px) minmax(0, 1fr) minmax(360px, 460px);
   gap: 14px;
   padding: 14px;
 }
 .panel { min-width: 0; }
+.panel.left { grid-area: left; }
+.panel.center { grid-area: center; }
+.panel.right { grid-area: right; }
 .panel.left { display: flex; flex-direction: column; gap: 12px; }
 
 .dropzone {
@@ -165,12 +169,13 @@ code, pre { font-family: var(--mono); }
   margin-top: 10px;
   border: 1px solid rgba(231,236,255,0.08);
   border-radius: 12px;
-  overflow: hidden;
+  overflow: auto;
   background: rgba(0,0,0,0.14);
 }
 .table {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
   font-size: 12px;
 }
 .table thead th {
@@ -185,7 +190,12 @@ code, pre { font-family: var(--mono); }
   padding: 10px;
   border-bottom: 1px solid rgba(231,236,255,0.06);
   vertical-align: top;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+.table tbody td code { white-space: nowrap; }
+.table tbody td.colScope { white-space: nowrap; }
 .table tbody tr:hover { background: rgba(255,255,255,0.06); }
 .table tbody tr.active { background: rgba(110,168,254,0.12); }
 .emptyCell { color: var(--muted); font-size: 13px; padding: 14px; }
@@ -212,7 +222,8 @@ code, pre { font-family: var(--mono); }
 
 .details {
   margin-top: 10px;
-  max-height: calc(100vh - 220px);
+  max-height: calc(100vh - 260px);
+  min-height: 240px;
   overflow: auto;
   padding: 12px;
   border-radius: 12px;
@@ -230,12 +241,23 @@ code, pre { font-family: var(--mono); }
 }
 
 @media (max-width: 1200px) {
-  .layout { grid-template-columns: 360px 1fr; }
-  .panel.right { grid-column: 1 / -1; }
+  .layout {
+    grid-template-areas:
+      "left center"
+      "right right";
+    grid-template-columns: minmax(320px, 360px) minmax(0, 1fr);
+  }
   .details { max-height: 520px; }
 }
 
 @media (max-width: 860px) {
-  .layout { grid-template-columns: 1fr; }
+  .layout {
+    grid-template-areas:
+      "left"
+      "center"
+      "right";
+    grid-template-columns: 1fr;
+  }
+  .filters { grid-template-columns: 1fr; }
+  .colRk { width: 260px; }
 }
-
