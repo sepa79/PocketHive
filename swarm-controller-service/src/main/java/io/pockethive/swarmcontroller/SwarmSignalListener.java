@@ -213,11 +213,11 @@ public class SwarmSignalListener {
       String payloadRole = scopeNode.path("role").asText(null);
       String payloadInstance = scopeNode.path("instance").asText(null);
       warnMissingScopeFields("status", routingKey, body, payloadSwarm, payloadRole, payloadInstance);
-      if (payloadSwarm != null && !payloadSwarm.isBlank() && !"ALL".equalsIgnoreCase(payloadSwarm)
-          && !swarmId.equals(payloadSwarm)) {
-        log.debug("Ignoring status payload for swarm {} on routing key {}", payloadSwarm, routingKey);
-        return;
-      }
+	      if (payloadSwarm != null && !payloadSwarm.isBlank() && !ControlScope.isAll(payloadSwarm)
+	          && !swarmId.equals(payloadSwarm)) {
+	        log.debug("Ignoring status payload for swarm {} on routing key {}", payloadSwarm, routingKey);
+	        return;
+	      }
       boolean isStatusFull = isStatusFullEvent(eventKey);
       lifecycle.updateHeartbeat(role, instance);
       if (isStatusFull) {
@@ -1433,9 +1433,9 @@ public class SwarmSignalListener {
     return value.trim();
   }
 
-  private boolean isAllSegment(String value) {
-    return value != null && value.equalsIgnoreCase("ALL");
-  }
+	  private boolean isAllSegment(String value) {
+	    return ControlScope.isAll(value);
+	  }
 
   private String normaliseSwarmSegment(String value) {
     String resolved = defaultSegment(value, swarmId);

@@ -17,6 +17,10 @@ public record ControlScope(String swarmId, String role, String instance) {
 
     public static final ControlScope EMPTY = new ControlScope(ALL, ALL, ALL);
 
+    public static boolean isAll(String value) {
+        return value != null && value.equalsIgnoreCase(ALL);
+    }
+
     public ControlScope {
         swarmId = normalize(swarmId);
         role = normalize(role);
@@ -31,7 +35,7 @@ public record ControlScope(String swarmId, String role, String instance) {
         if (trimmed.isEmpty()) {
             return ALL;
         }
-        if (isAllSegment(trimmed)) {
+        if (isAll(trimmed)) {
             return ALL;
         }
         return trimmed;
@@ -51,10 +55,10 @@ public record ControlScope(String swarmId, String role, String instance) {
 
     @JsonIgnore
     public boolean isEmpty() {
-        return isAllSegment(swarmId) && isAllSegment(role) && isAllSegment(instance);
+        return isAll(swarmId) && isAll(role) && isAll(instance);
     }
 
     private static boolean isAllSegment(String value) {
-        return value != null && value.equalsIgnoreCase(ALL);
+        return isAll(value);
     }
 }

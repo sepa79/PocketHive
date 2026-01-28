@@ -1,5 +1,7 @@
 package io.pockethive.observability;
 
+import io.pockethive.control.ControlScope;
+import io.pockethive.control.ControlRuntime;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -121,27 +123,13 @@ public class StatusEnvelopeBuilder {
      * broadcast messages (scope.swarmId == ALL).</p>
      */
     public StatusEnvelopeBuilder runtime(Map<String, ?> runtime) {
-        if (runtime == null || runtime.isEmpty()) {
+        @SuppressWarnings("unchecked")
+        Map<String, Object> normalised = ControlRuntime.normalise((Map<String, Object>) runtime);
+        if (normalised == null) {
             root.remove("runtime");
-            return this;
+        } else {
+            root.put("runtime", normalised);
         }
-        Map<String, Object> cleaned = new LinkedHashMap<>();
-        for (Map.Entry<String, ?> entry : runtime.entrySet()) {
-            String key = entry.getKey();
-            if (key == null) {
-                throw new IllegalArgumentException("runtime must not contain null keys");
-            }
-            Object value = entry.getValue();
-            if (value == null) {
-                continue;
-            }
-            cleaned.put(key, value);
-        }
-        if (cleaned.isEmpty()) {
-            root.remove("runtime");
-            return this;
-        }
-        root.put("runtime", Map.copyOf(cleaned));
         return this;
     }
 
@@ -473,7 +461,7 @@ public class StatusEnvelopeBuilder {
         if (swarmId == null || swarmId.isBlank()) {
             throw new IllegalStateException("status metrics must include scope.swarmId");
         }
-        boolean isBroadcast = "ALL".equalsIgnoreCase(swarmId.trim());
+        boolean isBroadcast = ControlScope.isAll(swarmId.trim());
         boolean hasRuntime = root.get("runtime") instanceof Map<?, ?> map && !map.isEmpty();
         if (isBroadcast) {
             if (root.get("runtime") != null) {

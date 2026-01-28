@@ -270,18 +270,20 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${POCKETHIVE_SCENARIOS_RUNTIME_ROOT:-/opt/pockethive/scenarios-runtime}:/app/scenarios-runtime
-# all defaulted in application.yml, uncomment to override here
+    # all defaulted in application.yml, uncomment to override here
     environment:
       POCKETHIVE_SCENARIOS_RUNTIME_ROOT: /opt/pockethive/scenarios-runtime
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/pockethive
       SPRING_DATASOURCE_USERNAME: pockethive
       SPRING_DATASOURCE_PASSWORD: pockethive
       POCKETHIVE_JOURNAL_SINK: postgres
+      POCKETHIVE_TEMPLATE_ID: orchestrator
+      POCKETHIVE_JOURNAL_RUN_ID: hive
       POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_RABBIT_LOGGING_ENABLED: "true"
       POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_RABBIT_LOGS_EXCHANGE: ph.logs
-#      <<: *metrics-env
-#      POCKETHIVE_CONTROL_PLANE_EXCHANGE: ph.control
-#      POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE: ph.control
+    #      <<: *metrics-env
+    #      POCKETHIVE_CONTROL_PLANE_EXCHANGE: ph.control
+    #      POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE: ph.control
     depends_on:
       rabbitmq:
         condition: service_healthy

@@ -4,6 +4,7 @@ import io.pockethive.control.AlertMessage;
 import io.pockethive.control.CommandOutcome;
 import io.pockethive.control.CommandState;
 import io.pockethive.control.ConfirmationScope;
+import io.pockethive.control.ControlRuntime;
 import io.pockethive.control.ControlScope;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.payload.RoleContext;
@@ -45,25 +46,7 @@ public final class ControlPlaneEmitter {
     }
 
     private static Map<String, Object> normaliseRuntime(Map<String, Object> runtime) {
-        if (runtime == null || runtime.isEmpty()) {
-            return null;
-        }
-        Map<String, Object> cleaned = new LinkedHashMap<>();
-        for (Map.Entry<String, Object> entry : runtime.entrySet()) {
-            String key = entry.getKey();
-            if (key == null) {
-                throw new IllegalArgumentException("runtime must not contain null keys");
-            }
-            Object value = entry.getValue();
-            if (value == null) {
-                continue;
-            }
-            cleaned.put(key, value);
-        }
-        if (cleaned.isEmpty()) {
-            return null;
-        }
-        return Map.copyOf(cleaned);
+        return ControlRuntime.normalise(runtime);
     }
 
     public static ControlPlaneEmitter using(ControlPlaneTopologyDescriptor topology,

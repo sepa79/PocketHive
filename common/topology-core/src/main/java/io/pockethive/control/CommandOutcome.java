@@ -40,7 +40,7 @@ public record CommandOutcome(
         scope = Objects.requireNonNull(scope, "scope");
         correlationId = trimToNull(correlationId);
         idempotencyKey = trimToNull(idempotencyKey);
-        runtime = normaliseRuntime(scope, runtime);
+        runtime = ControlRuntime.normalise(scope, runtime);
         if (data != null && !data.isEmpty()) {
             data = Collections.unmodifiableMap(new LinkedHashMap<>(data));
         } else {
@@ -89,17 +89,4 @@ public record CommandOutcome(
         );
     }
 
-    private static Map<String, Object> normaliseRuntime(ControlScope scope, Map<String, Object> runtime) {
-        Objects.requireNonNull(scope, "scope");
-        if (ControlScope.ALL.equals(scope.swarmId())) {
-            if (runtime != null && !runtime.isEmpty()) {
-                throw new IllegalArgumentException("runtime must be omitted for broadcast scope (swarmId=ALL)");
-            }
-            return null;
-        }
-        if (runtime == null || runtime.isEmpty()) {
-            throw new IllegalArgumentException("runtime is required for non-broadcast scope");
-        }
-        return Collections.unmodifiableMap(new LinkedHashMap<>(runtime));
-    }
 }

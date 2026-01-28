@@ -9,7 +9,7 @@ import java.util.Objects;
  */
 public record ConfirmationScope(String swarmId, String role, String instance) {
 
-    public static final String ALL = "ALL";
+    public static final String ALL = ControlScope.ALL;
 
     public static final ConfirmationScope EMPTY = new ConfirmationScope(ALL, ALL, ALL);
 
@@ -27,7 +27,7 @@ public record ConfirmationScope(String swarmId, String role, String instance) {
         if (trimmed.isEmpty()) {
             return ALL;
         }
-        if (isAllSegment(trimmed)) {
+        if (ControlScope.isAll(trimmed)) {
             return ALL;
         }
         return trimmed;
@@ -43,10 +43,6 @@ public record ConfirmationScope(String swarmId, String role, String instance) {
 
     @JsonIgnore
     public boolean isEmpty() {
-        return isAllSegment(swarmId) && isAllSegment(role) && isAllSegment(instance);
-    }
-
-    private static boolean isAllSegment(String value) {
-        return value != null && value.equalsIgnoreCase(ALL);
+        return ControlScope.isAll(swarmId) && ControlScope.isAll(role) && ControlScope.isAll(instance);
     }
 }
