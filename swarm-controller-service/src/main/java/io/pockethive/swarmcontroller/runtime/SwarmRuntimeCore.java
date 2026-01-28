@@ -843,7 +843,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
   }
 
   private String runtimeStackName() {
-    return requireEnvValue("POCKETHIVE_RUNTIME_STACK_NAME");
+    return "ph-" + swarmId.toLowerCase(Locale.ROOT);
   }
 
   private static String envValue(String key) {
