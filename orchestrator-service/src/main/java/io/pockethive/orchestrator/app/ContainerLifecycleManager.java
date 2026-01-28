@@ -159,9 +159,7 @@ public class ContainerLifecycleManager {
             throw new IllegalStateException("templateMetadata must not be null");
         }
         env.put("POCKETHIVE_TEMPLATE_ID", requireText(templateMetadata.templateId(), "templateId"));
-        if (resolvedAdapterType == ComputeAdapterType.SWARM_STACK) {
-            env.put("POCKETHIVE_RUNTIME_STACK_NAME", "ph-" + resolvedSwarmId.toLowerCase(java.util.Locale.ROOT));
-        }
+        env.put("POCKETHIVE_RUNTIME_STACK_NAME", "ph-" + resolvedSwarmId.toLowerCase(java.util.Locale.ROOT));
         if (autoPullImages) {
             log.info("autoPullImages=true, pulling controller image {} before start", resolvedImage);
             docker.pullImage(resolvedImage);

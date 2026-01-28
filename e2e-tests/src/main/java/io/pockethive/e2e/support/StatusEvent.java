@@ -20,11 +20,13 @@ public record StatusEvent(
     Scope scope,
     String correlationId,
     String idempotencyKey,
+    Map<String, Object> runtime,
     Data data
 ) {
 
   public StatusEvent {
     scope = scope == null ? new Scope(null, null, null) : scope;
+    runtime = normaliseMap(runtime);
     data = data == null ? new Data() : data;
   }
 
@@ -53,7 +55,6 @@ public record StatusEvent(
     public Boolean enabled;
     public Long tps;
     public Instant startedAt;
-    public Map<String, Object> runtime;
     public Io io;
     public Map<String, Object> context;
 
@@ -74,10 +75,6 @@ public record StatusEvent(
       return startedAt;
     }
 
-    public Map<String, Object> runtime() {
-      return normaliseMap(runtime);
-    }
-
     public Io io() {
       return io == null ? new Io(null, null) : io;
     }
@@ -96,7 +93,6 @@ public record StatusEvent(
       if ("enabled".equals(key)
           || "tps".equals(key)
           || "startedAt".equals(key)
-          || "runtime".equals(key)
           || "io".equals(key)
           || "context".equals(key)) {
         return;

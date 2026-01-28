@@ -374,14 +374,14 @@ public class SwarmLifecycleSteps {
             && roleMatches("swarm-controller", env.status().role()))
         .max(Comparator.comparing(ControlPlaneEvents.StatusEnvelope::receivedAt));
     assertTrue(controllerEnv.isPresent(), "Expected status-full snapshot for swarm-controller");
-    assertRuntimeMeta(controllerEnv.get().status().data().runtime(), "swarm-controller");
+    assertRuntimeMeta(controllerEnv.get().status().runtime(), "swarm-controller");
 
     for (String role : workerRoles()) {
       String instance = workerInstances.get(role);
       assertNotNull(instance, () -> "Missing instance for role " + actualRoleName(role));
       StatusEvent full = latestStatusFull(actualRoleName(role), instance)
           .orElseThrow(() -> new AssertionError("No status-full captured for role " + actualRoleName(role)));
-      assertRuntimeMeta(full.data().runtime(), actualRoleName(role));
+      assertRuntimeMeta(full.runtime(), actualRoleName(role));
     }
   }
 

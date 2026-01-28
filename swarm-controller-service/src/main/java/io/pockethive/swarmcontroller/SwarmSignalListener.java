@@ -1057,14 +1057,7 @@ public class SwarmSignalListener {
   }
 
   private String runtimeStackName() {
-    SwarmControllerProperties.Docker docker = properties.getDocker();
-    ComputeAdapterType adapterType = docker == null
-        ? ComputeAdapterType.DOCKER_SINGLE
-        : ComputeAdapterType.defaulted(docker.computeAdapter());
-    if (adapterType == ComputeAdapterType.SWARM_STACK) {
-      return "ph-" + swarmId.toLowerCase(Locale.ROOT);
-    }
-    return null;
+    return requireEnvValue("POCKETHIVE_RUNTIME_STACK_NAME");
   }
 
   private static String envValue(String key) {
