@@ -21,6 +21,7 @@ import io.pockethive.orchestrator.domain.SwarmCreateTracker.Pending;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker.Phase;
 import io.pockethive.orchestrator.domain.HiveJournal;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
+import io.pockethive.orchestrator.domain.SwarmStateStore;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.orchestrator.domain.SwarmLifecycleStatus;
 import io.pockethive.swarm.model.SwarmPlan;
@@ -97,10 +98,11 @@ class SwarmEventFlowIntegrationTest {
             new io.pockethive.orchestrator.domain.ScenarioTimelineRegistry();
         tracker = new SwarmCreateTracker();
         registry = new SwarmStore();
-        signalListener = new SwarmSignalListener(plans, timelines, tracker, registry, lifecycle, mapper,
+        SwarmStateStore stateStore = new SwarmStateStore(registry, mapper);
+        signalListener = new SwarmSignalListener(plans, timelines, tracker, registry, stateStore, lifecycle, mapper,
             HiveJournal.noop(),
             controlPlane, controlEmitter, identity, descriptor, controlQueueName);
-        statusListener = new ControllerStatusListener(registry, mapper, statusRequests, signalListener);
+        statusListener = new ControllerStatusListener(registry, mapper, statusRequests, signalListener, stateStore);
         clearInvocations(controlPlane, controlEmitter, publisher, lifecycle);
     }
 

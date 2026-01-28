@@ -8,7 +8,9 @@ import io.pockethive.controlplane.messaging.ControlSignals;
 import io.pockethive.controlplane.messaging.SignalMessage;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.observability.ControlPlaneJson;
+import io.pockethive.orchestrator.domain.SwarmStateStore;
 import java.util.Objects;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -21,14 +23,14 @@ public class ControlPlaneStatusRequestPublisher {
 
     private final ManagerControlPlane controlPlane;
     private final ControlPlaneIdentity identity;
-    private final io.pockethive.orchestrator.domain.SwarmStore store;
+    private final SwarmStateStore stateStore;
 
     public ControlPlaneStatusRequestPublisher(ManagerControlPlane controlPlane,
                                               @Qualifier("managerControlPlaneIdentity") ControlPlaneIdentity identity,
-                                              io.pockethive.orchestrator.domain.SwarmStore store) {
+                                              SwarmStateStore stateStore) {
         this.controlPlane = Objects.requireNonNull(controlPlane, "controlPlane");
         this.identity = Objects.requireNonNull(identity, "identity");
-        this.store = Objects.requireNonNull(store, "store");
+        this.stateStore = Objects.requireNonNull(stateStore, "stateStore");
     }
 
     public void requestStatusForSwarm(String swarmId, String correlationId, String idempotencyKey) {
@@ -36,10 +38,12 @@ public class ControlPlaneStatusRequestPublisher {
             throw new IllegalArgumentException("swarmId must not be blank");
         }
         ControlScope target = ControlScope.forSwarm(swarmId);
+        Map<String, Object> runtime = stateStore.requireRuntimeFromLatestStatusFull(swarmId);
         publish(target,
             ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, swarmId, ControlScope.ALL, ControlScope.ALL),
             correlationId,
-            idempotencyKey);
+            idempotencyKey,
+            runtime);
     }
 
     public void requestStatusForAllControllers(String correlationId, String idempotencyKey) {
@@ -47,33 +51,34 @@ public class ControlPlaneStatusRequestPublisher {
         publish(target,
             ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, ControlScope.ALL, "swarm-controller", ControlScope.ALL),
             correlationId,
-            idempotencyKey);
+            idempotencyKey,
+            null);
     }
 
-    private void publish(ControlScope target, String routingKey, String correlationId, String idempotencyKey) {
-        var runtime = runtimeMetaForTarget(target);
+    public void requestStatusForSwarm(String swarmId,
+                                      String correlationId,
+                                      String idempotencyKey,
+                                      Map<String, Object> runtime) {
+        if (swarmId == null || swarmId.isBlank()) {
+            throw new IllegalArgumentException("swarmId must not be blank");
+        }
+        ControlScope target = ControlScope.forSwarm(swarmId);
+        publish(target,
+            ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, swarmId, ControlScope.ALL, ControlScope.ALL),
+            correlationId,
+            idempotencyKey,
+            runtime);
+    }
+
+    private void publish(ControlScope target,
+                         String routingKey,
+                         String correlationId,
+                         String idempotencyKey,
+                         Map<String, Object> runtime) {
         var signal = ControlSignals.statusRequest(identity.instanceId(), target, correlationId, idempotencyKey, runtime);
         String payload = ControlPlaneJson.write(signal, "status-request signal");
         controlPlane.publishSignal(new SignalMessage(routingKey, payload));
         log.info("[CTRL] SEND status-request rk={} correlationId={}", routingKey, correlationId);
     }
 
-    private java.util.Map<String, Object> runtimeMetaForTarget(ControlScope target) {
-        if (target == null || ControlScope.ALL.equals(target.swarmId())) {
-            return null;
-        }
-        String swarmId = target.swarmId();
-        var swarm = store.find(swarmId)
-            .orElseThrow(() -> new IllegalStateException("Swarm " + swarmId + " is not registered"));
-        String templateId = requireText(swarm.templateId(), "swarm.templateId");
-        String runId = requireText(swarm.getRunId(), "swarm.runId");
-        return java.util.Map.of("templateId", templateId, "runId", runId);
-    }
-
-    private static String requireText(String value, String field) {
-        if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException(field + " must not be blank");
-        }
-        return value.trim();
-    }
 }

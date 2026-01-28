@@ -24,6 +24,7 @@ import io.pockethive.orchestrator.domain.SwarmCreateTracker.Pending;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker.Phase;
 import io.pockethive.orchestrator.domain.HiveJournal;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
+import io.pockethive.orchestrator.domain.SwarmStateStore;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.orchestrator.domain.SwarmLifecycleStatus;
 import io.pockethive.swarm.model.SwarmPlan;
@@ -99,10 +100,11 @@ import static org.mockito.Mockito.verify;
         timelines = new io.pockethive.orchestrator.domain.ScenarioTimelineRegistry();
         tracker = new SwarmCreateTracker();
         registry = new SwarmStore();
+        SwarmStateStore stateStore = new SwarmStateStore(registry, mapper);
         lenient().when(controlPlane.publisher()).thenReturn(publisher);
         lenient().doNothing().when(controlEmitter).emitStatusSnapshot(any());
         lenient().doNothing().when(controlEmitter).emitStatusDelta(any());
-        listener = new SwarmSignalListener(plans, timelines, tracker, registry, lifecycle, mapper,
+        listener = new SwarmSignalListener(plans, timelines, tracker, registry, stateStore, lifecycle, mapper,
             HiveJournal.noop(),
             controlPlane, controlEmitter, identity, descriptor, controlQueueName);
         clearInvocations(controlPlane, controlEmitter, publisher, lifecycle);
@@ -143,10 +145,11 @@ import static org.mockito.Mockito.verify;
 	        Pending pending = new Pending(SWARM_ID, CONTROLLER_INSTANCE, "corr", "idem",
 	            Phase.CONTROLLER, Instant.now().plusSeconds(60));
 	        tracker.register(CONTROLLER_INSTANCE, pending);
-	        Swarm swarm = new Swarm(SWARM_ID, CONTROLLER_INSTANCE, "cid", "run-1");
-	        swarm.attachTemplate(new io.pockethive.orchestrator.domain.SwarmTemplateMetadata("tpl-1", "swarm-controller:latest", java.util.List.of()));
-	        registry.register(swarm);
-	        registry.updateStatus(SWARM_ID, SwarmLifecycleStatus.CREATING);
+        Swarm swarm = new Swarm(SWARM_ID, CONTROLLER_INSTANCE, "cid", "run-1");
+        swarm.attachTemplate(new io.pockethive.orchestrator.domain.SwarmTemplateMetadata("tpl-1", "swarm-controller:latest", java.util.List.of()));
+        registry.register(swarm);
+        registry.updateStatus(SWARM_ID, SwarmLifecycleStatus.CREATING);
+        cacheStatusFull("tpl-1", "run-1");
 
         String routingKey = ControlPlaneRouting.event("metric", "status-full",
             new ConfirmationScope(SWARM_ID, "swarm-controller", CONTROLLER_INSTANCE));
@@ -173,6 +176,26 @@ import static org.mockito.Mockito.verify;
         assertThat(outcome.data()).containsEntry("status", "Ready");
         assertThat(plans.find(CONTROLLER_INSTANCE)).isEmpty();
         assertThat(tracker.complete(SWARM_ID, Phase.TEMPLATE)).isPresent();
+    }
+
+    private void cacheStatusFull(String templateId, String runId) {
+        var status = mapper.createObjectNode();
+        status.put("timestamp", Instant.now().toString());
+        status.put("version", "1");
+        status.put("kind", "metric");
+        status.put("type", "status-full");
+        status.put("origin", "swarm-controller-1");
+        var scope = status.putObject("scope");
+        scope.put("swarmId", SWARM_ID);
+        scope.put("role", "swarm-controller");
+        scope.put("instance", CONTROLLER_INSTANCE);
+        status.set("runtime", mapper.valueToTree(Map.of("templateId", templateId, "runId", runId)));
+        status.putNull("correlationId");
+        status.putNull("idempotencyKey");
+        var data = status.putObject("data");
+        data.put("enabled", true);
+        data.putObject("context");
+        registry.cacheControllerStatusFull(SWARM_ID, status, Instant.now());
     }
 
     @Test
@@ -209,7 +232,8 @@ import static org.mockito.Mockito.verify;
 
     @Test
     void statusSnapshotIncludesControlRoutes() {
-        SwarmSignalListener fresh = new SwarmSignalListener(plans, timelines, tracker, registry, lifecycle, mapper,
+        SwarmStateStore stateStore = new SwarmStateStore(registry, mapper);
+        SwarmSignalListener fresh = new SwarmSignalListener(plans, timelines, tracker, registry, stateStore, lifecycle, mapper,
             HiveJournal.noop(),
             controlPlane, controlEmitter, identity, descriptor, controlQueueName);
 

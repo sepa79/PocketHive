@@ -15,6 +15,7 @@ import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.orchestrator.infra.InMemoryIdempotencyStore;
 import io.pockethive.orchestrator.domain.Swarm;
+import io.pockethive.orchestrator.domain.SwarmStateStore;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
 import java.util.Map;
@@ -44,11 +45,13 @@ class ComponentControllerTest {
 
     @Test
     void updateConfigPublishesControlSignal() throws Exception {
-        SwarmStore store = storeWithSwarm(SWARM_ID, TEMPLATE_ID, RUN_ID);
+        SwarmStore store = storeWithSwarm(mapper, SWARM_ID, TEMPLATE_ID, RUN_ID);
+        SwarmStateStore stateStore = new SwarmStateStore(store, mapper);
         ComponentController controller = new ComponentController(
             publisher,
             new InMemoryIdempotencyStore(),
             store,
+            stateStore,
             controlPlaneProperties());
         ComponentController.ConfigUpdateRequest request =
             new ComponentController.ConfigUpdateRequest("idem", Map.of("enabled", true), null, SWARM_ID);
@@ -80,10 +83,12 @@ class ComponentControllerTest {
     @Test
     void configUpdateIsIdempotent() {
         SwarmStore store = new SwarmStore();
+        SwarmStateStore stateStore = new SwarmStateStore(store, mapper);
         ComponentController controller = new ComponentController(
             publisher,
             new InMemoryIdempotencyStore(),
             store,
+            stateStore,
             controlPlaneProperties());
         ComponentController.ConfigUpdateRequest request =
             new ComponentController.ConfigUpdateRequest("idem", Map.of(), null, null);
@@ -99,11 +104,13 @@ class ComponentControllerTest {
 
     @Test
     void concurrentConfigUpdatesReuseCorrelation() throws Exception {
-        SwarmStore store = storeWithSwarm(SWARM_ID, TEMPLATE_ID, RUN_ID);
+        SwarmStore store = storeWithSwarm(mapper, SWARM_ID, TEMPLATE_ID, RUN_ID);
+        SwarmStateStore stateStore = new SwarmStateStore(store, mapper);
         ComponentController controller = new ComponentController(
             publisher,
             new InMemoryIdempotencyStore(),
             store,
+            stateStore,
             controlPlaneProperties());
         ComponentController.ConfigUpdateRequest request =
             new ComponentController.ConfigUpdateRequest("idem", Map.of(), null, SWARM_ID);
@@ -130,11 +137,28 @@ class ComponentControllerTest {
         assertThat(response1.getBody().correlationId()).isEqualTo(response2.getBody().correlationId());
     }
 
-    private static SwarmStore storeWithSwarm(String swarmId, String templateId, String runId) {
+    private static SwarmStore storeWithSwarm(ObjectMapper mapper, String swarmId, String templateId, String runId) {
         SwarmStore store = new SwarmStore();
         Swarm swarm = new Swarm(swarmId, "controller-1", "container-1", runId);
         swarm.attachTemplate(new SwarmTemplateMetadata(templateId, "swarm-controller:latest", java.util.List.of()));
         store.register(swarm);
+        var status = mapper.createObjectNode();
+        status.put("timestamp", java.time.Instant.now().toString());
+        status.put("version", "1");
+        status.put("kind", "metric");
+        status.put("type", "status-full");
+        status.put("origin", "swarm-controller-1");
+        var scope = status.putObject("scope");
+        scope.put("swarmId", swarmId);
+        scope.put("role", "swarm-controller");
+        scope.put("instance", "controller-1");
+        status.set("runtime", mapper.valueToTree(Map.of("templateId", templateId, "runId", runId)));
+        status.putNull("correlationId");
+        status.putNull("idempotencyKey");
+        var data = status.putObject("data");
+        data.put("enabled", true);
+        data.putObject("context");
+        store.cacheControllerStatusFull(swarmId, status, java.time.Instant.now());
         return store;
     }
 

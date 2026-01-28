@@ -12,6 +12,7 @@ import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.observability.ControlPlaneJson;
 import io.pockethive.orchestrator.domain.IdempotencyStore;
 import io.pockethive.orchestrator.domain.Swarm;
+import io.pockethive.orchestrator.domain.SwarmStateStore;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,15 +40,18 @@ public class ComponentController {
     private final IdempotencyStore idempotency;
     private final String originInstanceId;
     private final SwarmStore store;
+    private final SwarmStateStore stateStore;
 
     public ComponentController(
         ControlPlanePublisher controlPublisher,
         IdempotencyStore idempotency,
         SwarmStore store,
+        SwarmStateStore stateStore,
         ControlPlaneProperties controlPlaneProperties) {
         this.controlPublisher = controlPublisher;
         this.idempotency = idempotency;
         this.store = store;
+        this.stateStore = stateStore;
         this.originInstanceId = requireOrigin(controlPlaneProperties);
     }
 
@@ -116,9 +120,7 @@ public class ComponentController {
         }
         Swarm swarm = store.find(resolvedSwarmId)
             .orElseThrow(() -> new IllegalStateException("Swarm " + resolvedSwarmId + " is not registered"));
-        String templateId = requireText(swarm.templateId(), "swarm.templateId");
-        String runId = requireText(swarm.getRunId(), "swarm.runId");
-        return Map.of("templateId", templateId, "runId", runId);
+        return stateStore.requireRuntimeFromLatestStatusFull(swarm.getId());
     }
 
     private static String requireText(String value, String field) {

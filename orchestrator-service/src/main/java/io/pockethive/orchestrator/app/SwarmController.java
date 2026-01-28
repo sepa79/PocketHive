@@ -25,6 +25,7 @@ import io.pockethive.orchestrator.domain.HiveJournal;
 import io.pockethive.orchestrator.domain.HiveJournal.HiveJournalEntry;
 import io.pockethive.orchestrator.domain.SwarmHealth;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
+import io.pockethive.orchestrator.domain.SwarmStateStore;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
 import io.pockethive.swarm.model.Bee;
@@ -78,6 +79,7 @@ public class SwarmController {
     private final SwarmCreateTracker creates;
     private final IdempotencyStore idempotency;
     private final SwarmStore store;
+    private final SwarmStateStore stateStore;
     private final SwarmPlanRegistry plans;
     private final ScenarioTimelineRegistry timelines;
     private final ScenarioClient scenarios;
@@ -95,6 +97,7 @@ public class SwarmController {
                            SwarmCreateTracker creates,
                            IdempotencyStore idempotency,
                            SwarmStore store,
+                           SwarmStateStore stateStore,
                            ObjectMapper json,
                            ScenarioClient scenarios,
                            HiveJournal hiveJournal,
@@ -106,6 +109,7 @@ public class SwarmController {
         this.creates = creates;
         this.idempotency = idempotency;
         this.store = store;
+        this.stateStore = stateStore;
         this.json = json;
         this.scenarios = scenarios;
         this.hiveJournal = Objects.requireNonNull(hiveJournal, "hiveJournal");
@@ -375,7 +379,7 @@ public class SwarmController {
                 throw new IllegalStateException("Swarm " + swarmId + " is not registered with a controller instance");
             }
             ControlScope target = ControlScope.forInstance(swarmId, "swarm-controller", controllerInstance);
-            Map<String, Object> runtime = runtimeMetaForSwarm(swarmId);
+            Map<String, Object> runtime = stateStore.requireRuntimeFromLatestStatusFull(swarmId);
             ControlSignal payload = switch (signal) {
                 case "swarm-start" -> ControlSignals.swarmStart(originInstanceId, target, corr, idempotencyKey, runtime);
                 case "swarm-stop" -> ControlSignals.swarmStop(originInstanceId, target, corr, idempotencyKey, runtime);
@@ -412,15 +416,6 @@ public class SwarmController {
                 creates.expectStop(swarmId, corr, idempotencyKey, timeout);
             }
         });
-    }
-
-    private Map<String, Object> runtimeMetaForSwarm(String swarmId) {
-        String resolvedSwarmId = requireText(swarmId, "swarmId");
-        Swarm swarm = store.find(resolvedSwarmId)
-            .orElseThrow(() -> new IllegalStateException("Swarm " + resolvedSwarmId + " is not registered"));
-        String templateId = requireText(swarm.templateId(), "swarm.templateId");
-        String runId = requireText(swarm.getRunId(), "swarm.runId");
-        return Map.of("templateId", templateId, "runId", runId);
     }
 
     private static String requireText(String value, String field) {

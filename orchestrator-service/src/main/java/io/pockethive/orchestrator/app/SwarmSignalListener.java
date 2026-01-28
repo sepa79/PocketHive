@@ -7,6 +7,7 @@ import io.pockethive.control.ControlSignal;
 import io.pockethive.control.ControlScope;
 import io.pockethive.orchestrator.domain.ScenarioTimelineRegistry;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
+import io.pockethive.orchestrator.domain.SwarmStateStore;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker.Pending;
@@ -65,6 +66,7 @@ public class SwarmSignalListener {
     private final SwarmPlanRegistry plans;
     private final ScenarioTimelineRegistry timelines;
     private final SwarmStore store;
+    private final SwarmStateStore stateStore;
     private final SwarmCreateTracker creates;
     private final ContainerLifecycleManager lifecycle;
     private final ObjectMapper json;
@@ -82,6 +84,7 @@ public class SwarmSignalListener {
                                ScenarioTimelineRegistry timelines,
                                SwarmCreateTracker creates,
                                SwarmStore store,
+                               SwarmStateStore stateStore,
                                ContainerLifecycleManager lifecycle,
                                ObjectMapper json,
                                HiveJournal hiveJournal,
@@ -94,6 +97,7 @@ public class SwarmSignalListener {
         this.timelines = timelines;
         this.creates = creates;
         this.store = store;
+        this.stateStore = stateStore;
         this.lifecycle = lifecycle;
         this.json = json.findAndRegisterModules();
         this.hiveJournal = Objects.requireNonNull(hiveJournal, "hiveJournal");
@@ -328,13 +332,13 @@ public class SwarmSignalListener {
                 // swarm-template lifecycle signal.
                 String correlationId = java.util.UUID.randomUUID().toString();
                 String idempotencyKey = java.util.UUID.randomUUID().toString();
-	                ControlSignal payload = ControlSignals.swarmPlan(
-	                    instanceId,
-	                    ControlScope.forInstance(swarmId, "swarm-controller", controllerInstance),
-	                    correlationId,
-	                    idempotencyKey,
-	                    runtimeMetaForSwarm(swarmId),
-	                    args);
+		                ControlSignal payload = ControlSignals.swarmPlan(
+		                    instanceId,
+		                    ControlScope.forInstance(swarmId, "swarm-controller", controllerInstance),
+		                    correlationId,
+		                    idempotencyKey,
+		                    runtimeMetaForSignal(swarmId),
+		                    args);
                 String jsonPayload = ControlPlaneJson.write(payload, "swarm-plan signal");
                 String rk = ControlPlaneRouting.signal(signal, swarmId, "swarm-controller", controllerInstance);
                 log.info("sending swarm-plan for {} via controller {} (corr={}, idem={})",
@@ -501,21 +505,25 @@ public class SwarmSignalListener {
         }
     }
 
-    private ControlSignal templateSignal(SwarmPlan plan, Pending info, String controllerInstance) {
-        Map<String, Object> args = json.convertValue(plan, new TypeReference<Map<String, Object>>() {});
-        String correlationId = info != null && info.correlationId() != null && !info.correlationId().isBlank()
-            ? info.correlationId()
-            : java.util.UUID.randomUUID().toString();
-        String idempotencyKey = info != null && info.idempotencyKey() != null && !info.idempotencyKey().isBlank()
-            ? info.idempotencyKey()
-            : java.util.UUID.randomUUID().toString();
-        return ControlSignals.swarmTemplate(
-            instanceId,
-            ControlScope.forInstance(plan.id(), "swarm-controller", controllerInstance),
-            correlationId,
-            idempotencyKey,
-            runtimeMetaForSwarm(plan.id()),
-            args);
+	    private ControlSignal templateSignal(SwarmPlan plan, Pending info, String controllerInstance) {
+	        Map<String, Object> args = json.convertValue(plan, new TypeReference<Map<String, Object>>() {});
+	        String correlationId = info != null && info.correlationId() != null && !info.correlationId().isBlank()
+	            ? info.correlationId()
+	            : java.util.UUID.randomUUID().toString();
+	        String idempotencyKey = info != null && info.idempotencyKey() != null && !info.idempotencyKey().isBlank()
+	            ? info.idempotencyKey()
+	            : java.util.UUID.randomUUID().toString();
+	        return ControlSignals.swarmTemplate(
+	            instanceId,
+	            ControlScope.forInstance(plan.id(), "swarm-controller", controllerInstance),
+	            correlationId,
+	            idempotencyKey,
+	            runtimeMetaForSignal(plan.id()),
+	            args);
+	    }
+
+    private Map<String, Object> runtimeMetaForSignal(String swarmId) {
+        return stateStore.requireRuntimeFromLatestStatusFull(swarmId);
     }
 
     private void emitCreateReady(Pending info) {

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmLifecycleStatus;
+import io.pockethive.orchestrator.domain.SwarmStateStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -33,15 +34,18 @@ public class ControllerStatusListener {
     private final ObjectMapper mapper;
     private final ControlPlaneStatusRequestPublisher statusRequests;
     private final SwarmSignalListener swarmSignals;
+    private final SwarmStateStore stateStore;
 
     public ControllerStatusListener(SwarmStore store,
                                     ObjectMapper mapper,
                                     ControlPlaneStatusRequestPublisher statusRequests,
-                                    SwarmSignalListener swarmSignals) {
+                                    SwarmSignalListener swarmSignals,
+                                    SwarmStateStore stateStore) {
         this.store = Objects.requireNonNull(store, "store");
         this.mapper = Objects.requireNonNull(mapper, "mapper").findAndRegisterModules();
         this.statusRequests = Objects.requireNonNull(statusRequests, "statusRequests");
         this.swarmSignals = Objects.requireNonNull(swarmSignals, "swarmSignals");
+        this.stateStore = Objects.requireNonNull(stateStore, "stateStore");
     }
 
     @RabbitListener(queues = "#{controllerStatusQueue.name}")
@@ -64,9 +68,6 @@ public class ControllerStatusListener {
             boolean statusFull = routingKey.startsWith("event.metric.status-full.");
             boolean statusDelta = routingKey.startsWith("event.metric.status-delta.");
             JsonNode node = mapper.readTree(body);
-            if (statusFull) {
-                swarmSignals.handleControllerStatusFull(routingKey);
-            }
             JsonNode scope = node.path("scope");
             String swarmId = scope.path("swarmId").asText(null);
             String role = scope.path("role").asText(null);
@@ -84,20 +85,21 @@ public class ControllerStatusListener {
             if (controllerScope && swarm != null) {
                 if (statusFull) {
                     store.cacheControllerStatusFull(swarmId, node, Instant.now());
+                    swarmSignals.handleControllerStatusFull(routingKey);
                     if (discovered) {
-                        requestStatusFull(swarmId);
+                        requestStatusFull(swarmId, node);
                     }
                 } else if (statusDelta) {
                     SwarmStore.DeltaApplyResult result = store.applyControllerStatusDelta(swarmId, node, Instant.now());
                     if (result == SwarmStore.DeltaApplyResult.MISSING_BASELINE) {
-                        requestStatusFull(swarmId);
+                        requestStatusFull(swarmId, node);
                     } else if (result == SwarmStore.DeltaApplyResult.REJECTED_FULL_ONLY_FIELDS) {
                         log.warn("Ignoring status-delta with full-only fields for swarm {} rk={}", swarmId, routingKey);
                         return;
                     }
                 }
             } else if (statusDelta && controllerScope && swarmId != null) {
-                requestStatusFull(swarmId);
+                requestStatusFull(swarmId, node);
                 return;
             }
 
@@ -147,13 +149,14 @@ public class ControllerStatusListener {
         }
     }
 
-    private void requestStatusFull(String swarmId) {
+    private void requestStatusFull(String swarmId, JsonNode sourceEnvelope) {
         if (swarmId == null || swarmId.isBlank()) {
             return;
         }
         String corr = java.util.UUID.randomUUID().toString();
         String idem = "status-request:" + java.util.UUID.randomUUID();
-        statusRequests.requestStatusForSwarm(swarmId, corr, idem);
+        java.util.Map<String, Object> runtime = stateStore.requireRuntimeFromStatusEnvelope(sourceEnvelope, "status");
+        statusRequests.requestStatusForSwarm(swarmId, corr, idem, runtime);
     }
 
     @Scheduled(fixedRate = 5000L)

@@ -12,6 +12,7 @@ import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.observability.ControlPlaneJson;
 import io.pockethive.orchestrator.domain.IdempotencyStore;
 import io.pockethive.orchestrator.domain.Swarm;
+import io.pockethive.orchestrator.domain.SwarmStateStore;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,15 +44,18 @@ public class SwarmManagerController {
     private static final long CONFIG_UPDATE_TIMEOUT_MS = 60_000L;
 
     private final SwarmStore store;
+    private final SwarmStateStore stateStore;
     private final ControlPlanePublisher controlPublisher;
     private final IdempotencyStore idempotency;
     private final String originInstanceId;
 
     public SwarmManagerController(SwarmStore store,
+                                  SwarmStateStore stateStore,
                                   ControlPlanePublisher controlPublisher,
                                   IdempotencyStore idempotency,
                                   ControlPlaneProperties controlPlaneProperties) {
         this.store = store;
+        this.stateStore = stateStore;
         this.controlPublisher = controlPublisher;
         this.idempotency = idempotency;
         this.originInstanceId = requireOrigin(controlPlaneProperties);
@@ -126,7 +130,7 @@ public class SwarmManagerController {
                 continue;
             }
             ControlScope target = ControlScope.forInstance(swarmId, "swarm-controller", swarm.getInstanceId());
-            Map<String, Object> runtime = runtimeMetaForSwarm(swarm);
+            Map<String, Object> runtime = stateStore.requireRuntimeFromLatestStatusFull(swarm.getId());
             ControlSignal payload = ControlSignals.configUpdate(
                 originInstanceId,
                 target,
@@ -144,15 +148,6 @@ public class SwarmManagerController {
                 accepted(newCorrelation, request.idempotencyKey(), swarmSegment, swarm.getInstanceId()), false));
         }
         return new FanoutControlResponse(dispatches);
-    }
-
-    private static Map<String, Object> runtimeMetaForSwarm(Swarm swarm) {
-        if (swarm == null) {
-            throw new IllegalArgumentException("swarm must not be null");
-        }
-        String templateId = requireText(swarm.templateId(), "swarm.templateId");
-        String runId = requireText(swarm.getRunId(), "swarm.runId");
-        return Map.of("templateId", templateId, "runId", runId);
     }
 
     private static String requireText(String value, String field) {

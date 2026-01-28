@@ -28,6 +28,7 @@ import io.pockethive.orchestrator.domain.SwarmCreateTracker;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker.Phase;
 import io.pockethive.orchestrator.domain.ScenarioTimelineRegistry;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
+import io.pockethive.orchestrator.domain.SwarmStateStore;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.orchestrator.domain.SwarmLifecycleStatus;
 import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
@@ -93,6 +94,7 @@ class SwarmControllerTest {
         registry.register(swarm);
         registry.updateStatus("sw1", SwarmLifecycleStatus.CREATING);
         registry.updateStatus("sw1", SwarmLifecycleStatus.READY);
+        cacheStatusFull(registry, "sw1", "tpl-1", "run-1", "inst");
         SwarmController ctrl = controller(tracker, registry, new SwarmPlanRegistry());
         SwarmController.ControlRequest req = new SwarmController.ControlRequest("idem", null);
 
@@ -155,6 +157,7 @@ class SwarmControllerTest {
         Swarm swarm = new Swarm("sw1", "controller-inst", "ctrl", "run-1");
         swarm.attachTemplate(new SwarmTemplateMetadata("tpl-1", "swarm-controller:latest", List.of()));
         registry.register(swarm);
+        cacheStatusFull(registry, "sw1", "tpl-1", "run-1", "controller-inst");
         SwarmController ctrl = controller(new SwarmCreateTracker(), registry, new SwarmPlanRegistry());
         SwarmController.ControlRequest req = new SwarmController.ControlRequest("idem", null);
 
@@ -635,12 +638,14 @@ class SwarmControllerTest {
         SwarmStore registry,
         SwarmPlanRegistry plans,
         IdempotencyStore store) {
+        SwarmStateStore stateStore = new SwarmStateStore(registry, mapper);
         SwarmController controller = new SwarmController(
             publisher,
             lifecycle,
             tracker,
             store,
             registry,
+            stateStore,
             mapper,
             scenarioClient,
             HiveJournal.noop(),
@@ -663,5 +668,29 @@ class SwarmControllerTest {
         properties.setInstanceId("orch-instance");
         properties.getManager().setRole("orchestrator");
         return properties;
+    }
+
+    private void cacheStatusFull(SwarmStore store,
+                                 String swarmId,
+                                 String templateId,
+                                 String runId,
+                                 String controllerInstance) {
+        var status = mapper.createObjectNode();
+        status.put("timestamp", java.time.Instant.now().toString());
+        status.put("version", "1");
+        status.put("kind", "metric");
+        status.put("type", "status-full");
+        status.put("origin", "swarm-controller-1");
+        var scope = status.putObject("scope");
+        scope.put("swarmId", swarmId);
+        scope.put("role", "swarm-controller");
+        scope.put("instance", controllerInstance);
+        status.set("runtime", mapper.valueToTree(Map.of("templateId", templateId, "runId", runId)));
+        status.putNull("correlationId");
+        status.putNull("idempotencyKey");
+        var data = status.putObject("data");
+        data.put("enabled", true);
+        data.putObject("context");
+        store.cacheControllerStatusFull(swarmId, status, java.time.Instant.now());
     }
 }
