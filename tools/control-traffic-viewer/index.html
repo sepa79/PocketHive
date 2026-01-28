@@ -96,6 +96,16 @@
       </section>
 
       <section class="panel center">
+        <div class="card detailsCard">
+          <div class="cardTitle">Details</div>
+          <div class="cardSub">
+            Selected: <span id="selectedSummary" class="muted">—</span>
+          </div>
+          <div class="detailActions">
+            <button id="copyBodyBtn" class="btn secondary" type="button" disabled>Copy message JSON</button>
+          </div>
+          <pre id="details" class="details empty">Select a timeline row…</pre>
+        </div>
         <div class="card timelineCard">
           <div class="cardTitle">Timeline</div>
           <div class="cardSub">Click a row to inspect the message.</div>
@@ -115,16 +125,6 @@
               </tbody>
             </table>
           </div>
-        </div>
-        <div class="card detailsCard">
-          <div class="cardTitle">Details</div>
-          <div class="cardSub">
-            Selected: <span id="selectedSummary" class="muted">—</span>
-          </div>
-          <div class="detailActions">
-            <button id="copyBodyBtn" class="btn secondary" type="button" disabled>Copy message JSON</button>
-          </div>
-          <pre id="details" class="details empty">Select a timeline row…</pre>
         </div>
       </section>
     </main>

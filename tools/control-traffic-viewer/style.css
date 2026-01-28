@@ -18,6 +18,7 @@ body {
   margin: 0;
   font-family: var(--sans);
   color: var(--text);
+  color-scheme: dark;
   background: radial-gradient(1200px 800px at 20% -20%, rgba(110,168,254,0.22), transparent 55%),
               radial-gradient(900px 700px at 110% 10%, rgba(134,239,172,0.14), transparent 55%),
               var(--bg);
@@ -71,6 +72,8 @@ code, pre { font-family: var(--mono); }
 .panel.center { grid-area: center; }
 .panel.center { display: flex; flex-direction: column; gap: 12px; height: 100%; min-height: 0; }
 .panel.left { display: flex; flex-direction: column; gap: 12px; }
+.panel.left { position: relative; z-index: 2; }
+.panel.center { position: relative; z-index: 1; }
 
 .dropzone {
   border: 1px dashed rgba(110,168,254,0.35);
@@ -122,6 +125,7 @@ code, pre { font-family: var(--mono); }
   padding: 8px 10px;
   font-size: 13px;
   outline: none;
+  color-scheme: dark;
 }
 .filters input::placeholder { color: rgba(159,176,218,0.6); }
 .filterButtons { grid-column: 1 / -1; display: flex; justify-content: flex-end; }
@@ -173,7 +177,12 @@ code, pre { font-family: var(--mono); }
   overflow: auto;
   background: rgba(0,0,0,0.14);
 }
-.timelineCard { display: flex; flex-direction: column; min-height: 260px; }
+.timelineCard {
+  display: flex;
+  flex-direction: column;
+  min-height: 220px;
+  flex: 0 0 42vh;
+}
 .timelineCard .tableWrap { flex: 1 1 auto; min-height: 0; }
 .table {
   width: 100%;
@@ -236,7 +245,12 @@ code, pre { font-family: var(--mono); }
 }
 .details.empty { color: var(--muted); }
 
-.detailsCard { display: flex; flex-direction: column; min-height: 320px; }
+.detailsCard {
+  display: flex;
+  flex-direction: column;
+  min-height: 280px;
+  flex: 1 1 auto;
+}
 
 .detailActions {
   display: flex;
@@ -262,6 +276,7 @@ code, pre { font-family: var(--mono); }
       "center";
     grid-template-columns: 1fr;
   }
+  .timelineCard { flex: 0 0 48vh; }
 }
 
 /* Scrollbars (WebKit) */
