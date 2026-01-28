@@ -14,10 +14,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class DuplicateSignalGuardTest {
 
-    private final ControlSignal sample = ControlSignal.forInstance(
-        "config-update", "swarm", "role", "inst", "origin", "corr", "idemp",
-        java.util.Map.of("templateId", "tpl-1", "runId", "run-1"),
-        null);
+	    private final ControlSignal sample = ControlSignal.forInstance(
+	        "config-update", "swarm", "role", "inst", "origin", "corr", "idemp",
+	        null);
 
     @Test
     void allowsFirstDeliveryAndBlocksSecondWithinTtl() {

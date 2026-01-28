@@ -1,6 +1,5 @@
 package io.pockethive.control;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -22,8 +21,6 @@ public record ControlSignal(
     ControlScope scope,
     String correlationId,
     String idempotencyKey,
-    @JsonInclude(JsonInclude.Include.NON_NULL)
-    Map<String, Object> runtime,
     Map<String, Object> data
 ) {
 
@@ -39,7 +36,6 @@ public record ControlSignal(
         scope = Objects.requireNonNull(scope, "scope");
         correlationId = requireNonBlank("correlationId", correlationId);
         idempotencyKey = trimToNull(idempotencyKey);
-        runtime = ControlRuntime.normalise(scope, runtime);
         if (data != null && !data.isEmpty()) {
             data = Collections.unmodifiableMap(new LinkedHashMap<>(data));
         } else {
@@ -55,7 +51,6 @@ public record ControlSignal(
                                        ControlScope scope,
                                        String correlationId,
                                        String idempotencyKey,
-                                       Map<String, Object> runtime,
                                        Map<String, Object> data) {
         return new ControlSignal(
             Instant.now(),
@@ -66,7 +61,6 @@ public record ControlSignal(
             Objects.requireNonNull(scope, "scope"),
             correlationId,
             idempotencyKey,
-            runtime,
             data
         );
     }
@@ -76,9 +70,8 @@ public record ControlSignal(
                                          String origin,
                                          String correlationId,
                                          String idempotencyKey,
-                                         Map<String, Object> runtime,
                                          Map<String, Object> data) {
-        return signal(type, origin, ControlScope.forSwarm(swarmId), correlationId, idempotencyKey, runtime, data);
+        return signal(type, origin, ControlScope.forSwarm(swarmId), correlationId, idempotencyKey, data);
     }
 
     public static ControlSignal forInstance(String type,
@@ -88,9 +81,8 @@ public record ControlSignal(
                                             String origin,
                                             String correlationId,
                                             String idempotencyKey,
-                                            Map<String, Object> runtime,
                                             Map<String, Object> data) {
-        return signal(type, origin, ControlScope.forInstance(swarmId, role, instance), correlationId, idempotencyKey, runtime, data);
+        return signal(type, origin, ControlScope.forInstance(swarmId, role, instance), correlationId, idempotencyKey, data);
     }
 
     private static String requireNonBlank(String field, String value) {

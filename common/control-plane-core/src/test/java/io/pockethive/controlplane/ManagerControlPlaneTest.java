@@ -9,7 +9,6 @@ import io.pockethive.controlplane.messaging.SignalMessage;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
-import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -17,7 +16,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ManagerControlPlaneTest {
 
     private final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
-    private static final Map<String, Object> RUNTIME_META = Map.of("templateId", "tpl-1", "runId", "run-1");
 
     @Test
     void defaultsProcessSignals() throws Exception {
@@ -28,7 +26,6 @@ class ManagerControlPlaneTest {
 
         ControlSignal signal = ControlSignal.forInstance(
             "config-update", "swarm", "role", "inst", "orchestrator-1", "corr", "idem",
-            RUNTIME_META,
             null);
         String payload = mapper.writeValueAsString(signal);
 
@@ -49,7 +46,6 @@ class ManagerControlPlaneTest {
 
         ControlSignal signal = ControlSignal.forInstance(
             "config-update", "swarm", "role", "inst", "inst", "corr", "idem",
-            RUNTIME_META,
             null);
         String payload = mapper.writeValueAsString(signal);
 
@@ -70,7 +66,6 @@ class ManagerControlPlaneTest {
 
         ControlSignal signal = ControlSignal.forInstance(
             "config-update", "swarm", "role", "inst", "other-inst", "corr", "idem",
-            RUNTIME_META,
             null);
         String payload = mapper.writeValueAsString(signal);
 

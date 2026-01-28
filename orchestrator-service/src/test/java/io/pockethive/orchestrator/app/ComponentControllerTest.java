@@ -15,7 +15,6 @@ import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.orchestrator.infra.InMemoryIdempotencyStore;
 import io.pockethive.orchestrator.domain.Swarm;
-import io.pockethive.orchestrator.domain.SwarmStateStore;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
 import java.util.Map;
@@ -44,15 +43,13 @@ class ComponentControllerTest {
     private final ObjectMapper mapper = new JacksonConfiguration().objectMapper();
 
     @Test
-    void updateConfigPublishesControlSignal() throws Exception {
-        SwarmStore store = storeWithSwarm(mapper, SWARM_ID, TEMPLATE_ID, RUN_ID);
-        SwarmStateStore stateStore = new SwarmStateStore(store, mapper);
-        ComponentController controller = new ComponentController(
-            publisher,
-            new InMemoryIdempotencyStore(),
-            store,
-            stateStore,
-            controlPlaneProperties());
+	    void updateConfigPublishesControlSignal() throws Exception {
+	        SwarmStore store = storeWithSwarm(mapper, SWARM_ID, TEMPLATE_ID, RUN_ID);
+	        ComponentController controller = new ComponentController(
+	            publisher,
+	            new InMemoryIdempotencyStore(),
+	            store,
+	            controlPlaneProperties());
         ComponentController.ConfigUpdateRequest request =
             new ComponentController.ConfigUpdateRequest("idem", Map.of("enabled", true), null, SWARM_ID);
 
@@ -69,27 +66,23 @@ class ComponentControllerTest {
         assertThat(signal.scope().role()).isEqualTo("generator");
         assertThat(signal.scope().instance()).isEqualTo("c1");
         assertThat(signal.scope().swarmId()).isEqualTo(SWARM_ID);
-        assertThat(signal.idempotencyKey()).isEqualTo("idem");
-        assertThat(signal.data()).isNotNull();
-        assertThat(signal.data()).containsEntry("enabled", true);
-        assertThat(signal.runtime()).containsEntry("templateId", TEMPLATE_ID);
-        assertThat(signal.runtime()).containsEntry("runId", RUN_ID);
-        assertThat(response.getBody()).isNotNull();
-        assertThat(response.getBody().watch().successTopic())
-            .isEqualTo(ControlPlaneRouting.event("outcome", ControlPlaneSignals.CONFIG_UPDATE,
-                new ConfirmationScope(SWARM_ID, "generator", "c1")));
+	        assertThat(signal.idempotencyKey()).isEqualTo("idem");
+	        assertThat(signal.data()).isNotNull();
+	        assertThat(signal.data()).containsEntry("enabled", true);
+	        assertThat(response.getBody()).isNotNull();
+	        assertThat(response.getBody().watch().successTopic())
+	            .isEqualTo(ControlPlaneRouting.event("outcome", ControlPlaneSignals.CONFIG_UPDATE,
+	                new ConfirmationScope(SWARM_ID, "generator", "c1")));
     }
 
     @Test
-    void configUpdateIsIdempotent() {
-        SwarmStore store = new SwarmStore();
-        SwarmStateStore stateStore = new SwarmStateStore(store, mapper);
-        ComponentController controller = new ComponentController(
-            publisher,
-            new InMemoryIdempotencyStore(),
-            store,
-            stateStore,
-            controlPlaneProperties());
+	    void configUpdateIsIdempotent() {
+	        SwarmStore store = new SwarmStore();
+	        ComponentController controller = new ComponentController(
+	            publisher,
+	            new InMemoryIdempotencyStore(),
+	            store,
+	            controlPlaneProperties());
         ComponentController.ConfigUpdateRequest request =
             new ComponentController.ConfigUpdateRequest("idem", Map.of(), null, null);
 
@@ -103,15 +96,13 @@ class ComponentControllerTest {
     }
 
     @Test
-    void concurrentConfigUpdatesReuseCorrelation() throws Exception {
-        SwarmStore store = storeWithSwarm(mapper, SWARM_ID, TEMPLATE_ID, RUN_ID);
-        SwarmStateStore stateStore = new SwarmStateStore(store, mapper);
-        ComponentController controller = new ComponentController(
-            publisher,
-            new InMemoryIdempotencyStore(),
-            store,
-            stateStore,
-            controlPlaneProperties());
+	    void concurrentConfigUpdatesReuseCorrelation() throws Exception {
+	        SwarmStore store = storeWithSwarm(mapper, SWARM_ID, TEMPLATE_ID, RUN_ID);
+	        ComponentController controller = new ComponentController(
+	            publisher,
+	            new InMemoryIdempotencyStore(),
+	            store,
+	            controlPlaneProperties());
         ComponentController.ConfigUpdateRequest request =
             new ComponentController.ConfigUpdateRequest("idem", Map.of(), null, SWARM_ID);
 

@@ -63,13 +63,12 @@ class SwarmRuntimeCoreScenarioEngineTest {
         mock(io.pockethive.manager.ports.ComputeAdapter.class);
     io.pockethive.swarmcontroller.infra.amqp.SwarmQueueMetrics queueMetrics =
         new io.pockethive.swarmcontroller.infra.amqp.SwarmQueueMetrics("test-swarm", meterRegistry);
-		    io.pockethive.manager.runtime.ConfigFanout configFanout =
-		        new io.pockethive.manager.runtime.ConfigFanout(
-		            mapper,
-		            new io.pockethive.swarmcontroller.runtime.SwarmControlPlanePortAdapter(controlPublisher),
-		            props.getSwarmId(),
-		            "inst",
-		            java.util.Map.of("templateId", "tpl-1", "runId", "run-1"));
+			    io.pockethive.manager.runtime.ConfigFanout configFanout =
+			        new io.pockethive.manager.runtime.ConfigFanout(
+			            mapper,
+			            new io.pockethive.swarmcontroller.runtime.SwarmControlPlanePortAdapter(controlPublisher),
+			            props.getSwarmId(),
+			            "inst");
 
     SwarmRuntimeCore core = new SwarmRuntimeCore(
         amqp,

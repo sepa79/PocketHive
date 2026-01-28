@@ -22,11 +22,10 @@ import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker.Pending;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker.Phase;
-import io.pockethive.orchestrator.domain.HiveJournal;
-import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
-import io.pockethive.orchestrator.domain.SwarmStateStore;
-import io.pockethive.orchestrator.domain.SwarmStore;
-import io.pockethive.orchestrator.domain.SwarmLifecycleStatus;
+	import io.pockethive.orchestrator.domain.HiveJournal;
+	import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
+	import io.pockethive.orchestrator.domain.SwarmStore;
+	import io.pockethive.orchestrator.domain.SwarmLifecycleStatus;
 import io.pockethive.swarm.model.SwarmPlan;
 import java.time.Instant;
 import java.util.List;
@@ -96,19 +95,18 @@ import static org.mockito.Mockito.verify;
         controlQueueName = descriptor.controlQueue(identity.instanceId())
             .map(ControlQueueDescriptor::name)
             .orElseThrow();
-        plans = new SwarmPlanRegistry();
-        timelines = new io.pockethive.orchestrator.domain.ScenarioTimelineRegistry();
-        tracker = new SwarmCreateTracker();
-        registry = new SwarmStore();
-        SwarmStateStore stateStore = new SwarmStateStore(registry, mapper);
-        lenient().when(controlPlane.publisher()).thenReturn(publisher);
-        lenient().doNothing().when(controlEmitter).emitStatusSnapshot(any());
-        lenient().doNothing().when(controlEmitter).emitStatusDelta(any());
-        listener = new SwarmSignalListener(plans, timelines, tracker, registry, stateStore, lifecycle, mapper,
-            HiveJournal.noop(),
-            controlPlane, controlEmitter, identity, descriptor, controlQueueName);
-        clearInvocations(controlPlane, controlEmitter, publisher, lifecycle);
-    }
+	        plans = new SwarmPlanRegistry();
+	        timelines = new io.pockethive.orchestrator.domain.ScenarioTimelineRegistry();
+	        tracker = new SwarmCreateTracker();
+	        registry = new SwarmStore();
+	        lenient().when(controlPlane.publisher()).thenReturn(publisher);
+	        lenient().doNothing().when(controlEmitter).emitStatusSnapshot(any());
+	        lenient().doNothing().when(controlEmitter).emitStatusDelta(any());
+	        listener = new SwarmSignalListener(plans, timelines, tracker, registry, lifecycle, mapper,
+	            HiveJournal.noop(),
+	            controlPlane, controlEmitter, identity, descriptor, controlQueueName);
+	        clearInvocations(controlPlane, controlEmitter, publisher, lifecycle);
+	    }
 
     @Test
     void handleRejectsBlankRoutingKey() {
@@ -230,12 +228,11 @@ import static org.mockito.Mockito.verify;
             .contains(SwarmLifecycleStatus.FAILED);
     }
 
-    @Test
-    void statusSnapshotIncludesControlRoutes() {
-        SwarmStateStore stateStore = new SwarmStateStore(registry, mapper);
-        SwarmSignalListener fresh = new SwarmSignalListener(plans, timelines, tracker, registry, stateStore, lifecycle, mapper,
-            HiveJournal.noop(),
-            controlPlane, controlEmitter, identity, descriptor, controlQueueName);
+	    @Test
+	    void statusSnapshotIncludesControlRoutes() {
+	        SwarmSignalListener fresh = new SwarmSignalListener(plans, timelines, tracker, registry, lifecycle, mapper,
+	            HiveJournal.noop(),
+	            controlPlane, controlEmitter, identity, descriptor, controlQueueName);
 
         verify(controlEmitter).emitStatusSnapshot(statusCaptor.capture());
         StatusEnvelopeBuilder builder = new StatusEnvelopeBuilder();

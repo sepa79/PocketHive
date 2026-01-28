@@ -1,7 +1,6 @@
 package io.pockethive.orchestrator.app;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.orchestrator.domain.SwarmStateStore;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.orchestrator.domain.SwarmLifecycleStatus;
 import org.junit.jupiter.api.Test;
@@ -22,7 +21,7 @@ class ControllerStatusListenerRebuildTest {
         ControlPlaneStatusRequestPublisher requests = Mockito.mock(ControlPlaneStatusRequestPublisher.class);
         SwarmSignalListener swarmSignals = Mockito.mock(SwarmSignalListener.class);
         ControllerStatusListener listener =
-            new ControllerStatusListener(store, mapper, requests, swarmSignals, new SwarmStateStore(store, mapper));
+            new ControllerStatusListener(store, mapper, requests, swarmSignals);
 
         String json = """
             {
@@ -56,7 +55,7 @@ class ControllerStatusListenerRebuildTest {
 
         assertThat(store.find("sw1")).isPresent();
         assertThat(store.find("sw1").orElseThrow().getStatus()).isEqualTo(SwarmLifecycleStatus.STOPPED);
-        verify(requests).requestStatusForSwarm(eq("sw1"), anyString(), anyString(), any());
+        verify(requests).requestStatusForSwarm(eq("sw1"), anyString(), anyString());
     }
 
     @Test
@@ -66,7 +65,7 @@ class ControllerStatusListenerRebuildTest {
         ControlPlaneStatusRequestPublisher requests = Mockito.mock(ControlPlaneStatusRequestPublisher.class);
         SwarmSignalListener swarmSignals = Mockito.mock(SwarmSignalListener.class);
         ControllerStatusListener listener =
-            new ControllerStatusListener(store, mapper, requests, swarmSignals, new SwarmStateStore(store, mapper));
+            new ControllerStatusListener(store, mapper, requests, swarmSignals);
 
         String json = """
             {
@@ -86,6 +85,6 @@ class ControllerStatusListenerRebuildTest {
         listener.handle(json, "event.metric.status-delta.sw1.swarm-controller.controller-1");
         listener.handle(json, "event.metric.status-delta.sw1.swarm-controller.controller-1");
 
-        verify(requests, Mockito.times(2)).requestStatusForSwarm(eq("sw1"), anyString(), anyString(), any());
+        verify(requests, Mockito.times(2)).requestStatusForSwarm(eq("sw1"), anyString(), anyString());
     }
 }

@@ -107,16 +107,15 @@ class SwarmSignalListenerTest {
 
   private String signal(String sig, String instance, String id, String corr) {
     try {
-      ControlSignal cs = ControlSignal.forInstance(
-          sig,
-          TEST_SWARM_ID,
-          "swarm-controller",
-          instance,
-          ORIGIN,
-          corr,
-          id,
-          RUNTIME_META,
-          null);
+	      ControlSignal cs = ControlSignal.forInstance(
+	          sig,
+	          TEST_SWARM_ID,
+	          "swarm-controller",
+	          instance,
+	          ORIGIN,
+	          corr,
+	          id,
+	          null);
       return mapper.writeValueAsString(cs);
     } catch (Exception e) {
       throw new IllegalStateException(e);
@@ -126,16 +125,15 @@ class SwarmSignalListenerTest {
   private String configAllSignal(boolean enabled) {
     try {
       Map<String, Object> args = Map.of("enabled", enabled);
-      ControlSignal cs = ControlSignal.forInstance(
-          ControlPlaneSignals.CONFIG_UPDATE,
-          TEST_SWARM_ID,
-          "swarm-controller",
-          "ALL",
-          ORIGIN,
-          "c-all",
-          "i-all",
-          RUNTIME_META,
-          args);
+	      ControlSignal cs = ControlSignal.forInstance(
+	          ControlPlaneSignals.CONFIG_UPDATE,
+	          TEST_SWARM_ID,
+	          "swarm-controller",
+	          "ALL",
+	          ORIGIN,
+	          "c-all",
+	          "i-all",
+	          args);
       return mapper.writeValueAsString(cs);
     } catch (Exception e) {
       throw new IllegalStateException(e);
@@ -145,16 +143,15 @@ class SwarmSignalListenerTest {
   private String configUpdateSignal(String instance, String idempotencyKey, String correlationId, Map<String, Object> patch) {
     try {
       Map<String, Object> args = patch != null ? patch : null;
-      ControlSignal cs = ControlSignal.forInstance(
-          ControlPlaneSignals.CONFIG_UPDATE,
-          TEST_SWARM_ID,
-          "swarm-controller",
-          instance,
-          ORIGIN,
-          correlationId,
-          idempotencyKey,
-          RUNTIME_META,
-          args);
+	      ControlSignal cs = ControlSignal.forInstance(
+	          ControlPlaneSignals.CONFIG_UPDATE,
+	          TEST_SWARM_ID,
+	          "swarm-controller",
+	          instance,
+	          ORIGIN,
+	          correlationId,
+	          idempotencyKey,
+	          args);
       return mapper.writeValueAsString(cs);
     } catch (Exception e) {
       throw new IllegalStateException(e);

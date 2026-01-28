@@ -8,9 +8,7 @@ import io.pockethive.controlplane.messaging.ControlSignals;
 import io.pockethive.controlplane.messaging.SignalMessage;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.observability.ControlPlaneJson;
-import io.pockethive.orchestrator.domain.SwarmStateStore;
 import java.util.Objects;
-import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -23,14 +21,11 @@ public class ControlPlaneStatusRequestPublisher {
 
     private final ManagerControlPlane controlPlane;
     private final ControlPlaneIdentity identity;
-    private final SwarmStateStore stateStore;
 
     public ControlPlaneStatusRequestPublisher(ManagerControlPlane controlPlane,
-                                              @Qualifier("managerControlPlaneIdentity") ControlPlaneIdentity identity,
-                                              SwarmStateStore stateStore) {
+                                              @Qualifier("managerControlPlaneIdentity") ControlPlaneIdentity identity) {
         this.controlPlane = Objects.requireNonNull(controlPlane, "controlPlane");
         this.identity = Objects.requireNonNull(identity, "identity");
-        this.stateStore = Objects.requireNonNull(stateStore, "stateStore");
     }
 
     public void requestStatusForSwarm(String swarmId, String correlationId, String idempotencyKey) {
@@ -38,12 +33,10 @@ public class ControlPlaneStatusRequestPublisher {
             throw new IllegalArgumentException("swarmId must not be blank");
         }
         ControlScope target = ControlScope.forSwarm(swarmId);
-        Map<String, Object> runtime = stateStore.requireRuntimeFromLatestStatusFull(swarmId);
         publish(target,
             ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, swarmId, ControlScope.ALL, ControlScope.ALL),
             correlationId,
-            idempotencyKey,
-            runtime);
+            idempotencyKey);
     }
 
     public void requestStatusForAllControllers(String correlationId, String idempotencyKey) {
@@ -51,31 +44,14 @@ public class ControlPlaneStatusRequestPublisher {
         publish(target,
             ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, ControlScope.ALL, "swarm-controller", ControlScope.ALL),
             correlationId,
-            idempotencyKey,
-            null);
-    }
-
-    public void requestStatusForSwarm(String swarmId,
-                                      String correlationId,
-                                      String idempotencyKey,
-                                      Map<String, Object> runtime) {
-        if (swarmId == null || swarmId.isBlank()) {
-            throw new IllegalArgumentException("swarmId must not be blank");
-        }
-        ControlScope target = ControlScope.forSwarm(swarmId);
-        publish(target,
-            ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, swarmId, ControlScope.ALL, ControlScope.ALL),
-            correlationId,
-            idempotencyKey,
-            runtime);
+            idempotencyKey);
     }
 
     private void publish(ControlScope target,
                          String routingKey,
                          String correlationId,
-                         String idempotencyKey,
-                         Map<String, Object> runtime) {
-        var signal = ControlSignals.statusRequest(identity.instanceId(), target, correlationId, idempotencyKey, runtime);
+                         String idempotencyKey) {
+        var signal = ControlSignals.statusRequest(identity.instanceId(), target, correlationId, idempotencyKey);
         String payload = ControlPlaneJson.write(signal, "status-request signal");
         controlPlane.publishSignal(new SignalMessage(routingKey, payload));
         log.info("[CTRL] SEND status-request rk={} correlationId={}", routingKey, correlationId);

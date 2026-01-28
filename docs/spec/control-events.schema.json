@@ -60,7 +60,38 @@
           "type": "object",
           "additionalProperties": true
         }
-      },
+      }
+    },
+    "SignalEnvelopeBase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "timestamp",
+        "version",
+        "kind",
+        "type",
+        "origin",
+        "scope",
+        "correlationId",
+        "idempotencyKey",
+        "data"
+      ],
+      "properties": {
+        "timestamp": { "type": "string", "format": "date-time" },
+        "version": { "$ref": "#/$defs/NonEmptyString" },
+        "kind": { "$ref": "#/$defs/NonEmptyString" },
+        "type": { "$ref": "#/$defs/NonEmptyString" },
+        "origin": { "$ref": "#/$defs/NonEmptyString" },
+        "scope": { "$ref": "#/$defs/Scope" },
+        "correlationId": { "$ref": "#/$defs/NullableNonEmptyString" },
+        "idempotencyKey": { "$ref": "#/$defs/NullableNonEmptyString" },
+        "data": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "RuntimeScopeRule": {
       "allOf": [
         {
           "if": {
@@ -83,7 +114,7 @@
     },
     "ControlSignal": {
       "allOf": [
-        { "$ref": "#/$defs/EnvelopeBase" },
+        { "$ref": "#/$defs/SignalEnvelopeBase" },
         {
           "type": "object",
           "properties": {
@@ -97,6 +128,7 @@
     "CommandOutcome": {
       "allOf": [
         { "$ref": "#/$defs/EnvelopeBase" },
+        { "$ref": "#/$defs/RuntimeScopeRule" },
         {
           "type": "object",
           "properties": {
@@ -201,14 +233,15 @@
         "stackName": { "$ref": "#/$defs/NullableNonEmptyString" }
       }
     },
-	    "StatusFullMetric": {
-	      "allOf": [
-	        { "$ref": "#/$defs/EnvelopeBase" },
-	        {
-	          "type": "object",
-	          "properties": {
-	            "kind": { "const": "metric" },
-	            "type": { "const": "status-full" },
+    "StatusFullMetric": {
+      "allOf": [
+        { "$ref": "#/$defs/EnvelopeBase" },
+        { "$ref": "#/$defs/RuntimeScopeRule" },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "metric" },
+            "type": { "const": "status-full" },
 	                "data": {
 	                  "type": "object",
 	                  "additionalProperties": false,
@@ -234,6 +267,7 @@
     "StatusDeltaMetric": {
       "allOf": [
         { "$ref": "#/$defs/EnvelopeBase" },
+        { "$ref": "#/$defs/RuntimeScopeRule" },
         {
           "type": "object",
           "properties": {
@@ -257,6 +291,7 @@
     "AlertEvent": {
       "allOf": [
         { "$ref": "#/$defs/EnvelopeBase" },
+        { "$ref": "#/$defs/RuntimeScopeRule" },
         {
           "type": "object",
           "properties": {

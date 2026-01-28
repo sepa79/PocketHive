@@ -700,18 +700,17 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
     if (!hasText(idempotencyKey)) {
       idempotencyKey = "status-request:" + java.util.UUID.randomUUID();
     }
-	    io.pockethive.control.ControlScope target =
-	        io.pockethive.control.ControlScope.forInstance(swarmId, role, instance);
-	    io.pockethive.control.ControlSignal signal = io.pockethive.controlplane.messaging.ControlSignals.statusRequest(
-	        instanceId,
-	        target,
-	        correlationId,
-	        idempotencyKey,
-	        runtimeMeta());
-	    String payload = io.pockethive.observability.ControlPlaneJson.write(signal, "status-request signal");
-	    log.info("[CTRL] SEND rk={} inst={} payload={} (reason={})", rk, instanceId, snippet(payload), reason);
-	    controlPublisher.publishSignal(new io.pockethive.controlplane.messaging.SignalMessage(rk, payload));
-	  }
+		    io.pockethive.control.ControlScope target =
+		        io.pockethive.control.ControlScope.forInstance(swarmId, role, instance);
+		    io.pockethive.control.ControlSignal signal = io.pockethive.controlplane.messaging.ControlSignals.statusRequest(
+		        instanceId,
+		        target,
+		        correlationId,
+		        idempotencyKey);
+		    String payload = io.pockethive.observability.ControlPlaneJson.write(signal, "status-request signal");
+		    log.info("[CTRL] SEND rk={} inst={} payload={} (reason={})", rk, instanceId, snippet(payload), reason);
+		    controlPublisher.publishSignal(new io.pockethive.controlplane.messaging.SignalMessage(rk, payload));
+		  }
 
 	  private Map<String, Object> runtimeMeta() {
 	    String templateId = requireEnvValue("POCKETHIVE_TEMPLATE_ID");

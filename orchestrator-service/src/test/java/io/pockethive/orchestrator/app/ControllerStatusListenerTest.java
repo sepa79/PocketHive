@@ -6,7 +6,6 @@ import ch.qos.logback.classic.Logger;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmLifecycleStatus;
-import io.pockethive.orchestrator.domain.SwarmStateStore;
 import java.time.Instant;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -36,11 +35,10 @@ class ControllerStatusListenerTest {
     @Test
     void updatesRegistry() throws Exception {
         Swarm swarm = new Swarm("sw1", "inst1", "c1", "run-1");
-        swarm.updateControllerStatusFull(new ObjectMapper().readTree("{\"data\":{}}"), Instant.now());
-        when(store.find("sw1")).thenReturn(Optional.of(swarm));
-        ControllerStatusListener listener =
-            new ControllerStatusListener(store, new ObjectMapper(), statusRequests, swarmSignals,
-                new SwarmStateStore(store, new ObjectMapper()));
+	        swarm.updateControllerStatusFull(new ObjectMapper().readTree("{\"data\":{}}"), Instant.now());
+	        when(store.find("sw1")).thenReturn(Optional.of(swarm));
+	        ControllerStatusListener listener =
+	            new ControllerStatusListener(store, new ObjectMapper(), statusRequests, swarmSignals);
         String json = """
             {
               "timestamp": "2024-01-01T00:00:00Z",
@@ -63,11 +61,10 @@ class ControllerStatusListenerTest {
     @Test
     void updatesRegistryFromTopLevelFlags() throws Exception {
         Swarm swarm = new Swarm("sw1", "inst1", "c1", "run-1");
-        swarm.updateControllerStatusFull(new ObjectMapper().readTree("{\"data\":{}}"), Instant.now());
-        when(store.find("sw1")).thenReturn(Optional.of(swarm));
-        ControllerStatusListener listener =
-            new ControllerStatusListener(store, new ObjectMapper(), statusRequests, swarmSignals,
-                new SwarmStateStore(store, new ObjectMapper()));
+	        swarm.updateControllerStatusFull(new ObjectMapper().readTree("{\"data\":{}}"), Instant.now());
+	        when(store.find("sw1")).thenReturn(Optional.of(swarm));
+	        ControllerStatusListener listener =
+	            new ControllerStatusListener(store, new ObjectMapper(), statusRequests, swarmSignals);
         String json = """
             {
               "timestamp": "2024-01-01T00:00:00Z",
@@ -88,10 +85,9 @@ class ControllerStatusListenerTest {
     }
 
     @Test
-    void statusLogsEmitAtDebug(CapturedOutput output) {
-        ControllerStatusListener listener =
-            new ControllerStatusListener(store, new ObjectMapper(), statusRequests, swarmSignals,
-                new SwarmStateStore(store, new ObjectMapper()));
+	    void statusLogsEmitAtDebug(CapturedOutput output) {
+	        ControllerStatusListener listener =
+	            new ControllerStatusListener(store, new ObjectMapper(), statusRequests, swarmSignals);
         Logger logger = (Logger) LoggerFactory.getLogger(ControllerStatusListener.class);
         Level previous = logger.getLevel();
         logger.setLevel(Level.INFO);
@@ -104,10 +100,9 @@ class ControllerStatusListenerTest {
     }
 
     @Test
-    void handleRejectsBlankRoutingKey() {
-        ControllerStatusListener listener =
-            new ControllerStatusListener(store, new ObjectMapper(), statusRequests, swarmSignals,
-                new SwarmStateStore(store, new ObjectMapper()));
+	    void handleRejectsBlankRoutingKey() {
+	        ControllerStatusListener listener =
+	            new ControllerStatusListener(store, new ObjectMapper(), statusRequests, swarmSignals);
 
         assertThatThrownBy(() -> listener.handle("{}", "  "))
             .isInstanceOf(IllegalArgumentException.class)
@@ -115,10 +110,9 @@ class ControllerStatusListenerTest {
     }
 
     @Test
-    void handleRejectsNullRoutingKey() {
-        ControllerStatusListener listener =
-            new ControllerStatusListener(store, new ObjectMapper(), statusRequests, swarmSignals,
-                new SwarmStateStore(store, new ObjectMapper()));
+	    void handleRejectsNullRoutingKey() {
+	        ControllerStatusListener listener =
+	            new ControllerStatusListener(store, new ObjectMapper(), statusRequests, swarmSignals);
 
         assertThatThrownBy(() -> listener.handle("{}", null))
             .isInstanceOf(IllegalArgumentException.class)
@@ -126,10 +120,9 @@ class ControllerStatusListenerTest {
     }
 
     @Test
-    void handleRejectsBlankPayload() {
-        ControllerStatusListener listener =
-            new ControllerStatusListener(store, new ObjectMapper(), statusRequests, swarmSignals,
-                new SwarmStateStore(store, new ObjectMapper()));
+	    void handleRejectsBlankPayload() {
+	        ControllerStatusListener listener =
+	            new ControllerStatusListener(store, new ObjectMapper(), statusRequests, swarmSignals);
 
         assertThatThrownBy(() -> listener.handle(" ", "event.metric.status-delta.sw1.swarm-controller.inst1"))
             .isInstanceOf(IllegalArgumentException.class)

@@ -16,7 +16,6 @@ import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.orchestrator.domain.IdempotencyStore;
 import io.pockethive.orchestrator.domain.Swarm;
-import io.pockethive.orchestrator.domain.SwarmStateStore;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
 import java.util.List;
@@ -50,17 +49,15 @@ class SwarmManagerControllerTest {
         swarm2.attachTemplate(new SwarmTemplateMetadata("tpl-2", "swarm-controller:latest", List.of()));
         registry.register(swarm2);
         cacheStatusFull(mapper, registry, "sw2", "tpl-2", "run-2");
-        when(idempotency.reserve(eq("sw1"), eq(ControlPlaneSignals.CONFIG_UPDATE), eq("idem-1"), anyString()))
-            .thenReturn(Optional.empty());
-        when(idempotency.reserve(eq("sw2"), eq(ControlPlaneSignals.CONFIG_UPDATE), eq("idem-1"), anyString()))
-            .thenReturn(Optional.empty());
-        SwarmStateStore stateStore = new SwarmStateStore(registry, mapper);
-        SwarmManagerController controller = new SwarmManagerController(
-            registry,
-            stateStore,
-            publisher,
-            idempotency,
-            controlPlaneProperties());
+	        when(idempotency.reserve(eq("sw1"), eq(ControlPlaneSignals.CONFIG_UPDATE), eq("idem-1"), anyString()))
+	            .thenReturn(Optional.empty());
+	        when(idempotency.reserve(eq("sw2"), eq(ControlPlaneSignals.CONFIG_UPDATE), eq("idem-1"), anyString()))
+	            .thenReturn(Optional.empty());
+	        SwarmManagerController controller = new SwarmManagerController(
+	            registry,
+	            publisher,
+	            idempotency,
+	            controlPlaneProperties());
         SwarmManagerController.ToggleRequest request =
             new SwarmManagerController.ToggleRequest("idem-1", true, null);
 
@@ -91,16 +88,14 @@ class SwarmManagerControllerTest {
         Swarm swarm = new Swarm("sw9", "ctrl-z", "c9", "run-9");
         swarm.attachTemplate(new SwarmTemplateMetadata("tpl-9", "swarm-controller:latest", List.of()));
         registry.register(swarm);
-        cacheStatusFull(mapper, registry, "sw9", "tpl-9", "run-9");
-        when(idempotency.reserve(eq("sw9"), eq(ControlPlaneSignals.CONFIG_UPDATE), eq("idem-2"), anyString()))
-            .thenReturn(Optional.empty());
-        SwarmStateStore stateStore = new SwarmStateStore(registry, mapper);
-        SwarmManagerController controller = new SwarmManagerController(
-            registry,
-            stateStore,
-            publisher,
-            idempotency,
-            controlPlaneProperties());
+	        cacheStatusFull(mapper, registry, "sw9", "tpl-9", "run-9");
+	        when(idempotency.reserve(eq("sw9"), eq(ControlPlaneSignals.CONFIG_UPDATE), eq("idem-2"), anyString()))
+	            .thenReturn(Optional.empty());
+	        SwarmManagerController controller = new SwarmManagerController(
+	            registry,
+	            publisher,
+	            idempotency,
+	            controlPlaneProperties());
         SwarmManagerController.ToggleRequest request =
             new SwarmManagerController.ToggleRequest("idem-2", false, null);
 

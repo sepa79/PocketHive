@@ -40,23 +40,17 @@ public final class ConfigFanout {
   private final ControlPlanePort controlPlane;
   private final String swarmId;
   private final String controllerInstanceId;
-  private final Map<String, Object> runtimeMeta;
 
   private final ConcurrentMap<String, PendingConfig> pendingConfigUpdates = new ConcurrentHashMap<>();
 
   public ConfigFanout(ObjectMapper mapper,
                       ControlPlanePort controlPlane,
                       String swarmId,
-                      String controllerInstanceId,
-                      Map<String, Object> runtimeMeta) {
+                      String controllerInstanceId) {
     this.mapper = Objects.requireNonNull(mapper, "mapper").findAndRegisterModules();
     this.controlPlane = Objects.requireNonNull(controlPlane, "controlPlane");
     this.swarmId = Objects.requireNonNull(swarmId, "swarmId");
     this.controllerInstanceId = Objects.requireNonNull(controllerInstanceId, "controllerInstanceId");
-    if (runtimeMeta == null || runtimeMeta.isEmpty()) {
-      throw new IllegalArgumentException("runtimeMeta must not be null or empty");
-    }
-    this.runtimeMeta = Map.copyOf(runtimeMeta);
   }
 
   public void registerBootstrapConfig(String instance, String role, Map<String, Object> values) {
@@ -150,7 +144,6 @@ public final class ConfigFanout {
         target,
         correlationId,
         idempotencyKey,
-        runtimeMeta,
         dataMap);
     String payload = ControlPlaneJson.write(signal, "config-update signal");
     String routingKey = ControlPlaneRouting.signal(

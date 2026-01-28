@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmLifecycleStatus;
-import io.pockethive.orchestrator.domain.SwarmStateStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -34,18 +33,15 @@ public class ControllerStatusListener {
     private final ObjectMapper mapper;
     private final ControlPlaneStatusRequestPublisher statusRequests;
     private final SwarmSignalListener swarmSignals;
-    private final SwarmStateStore stateStore;
 
     public ControllerStatusListener(SwarmStore store,
                                     ObjectMapper mapper,
                                     ControlPlaneStatusRequestPublisher statusRequests,
-                                    SwarmSignalListener swarmSignals,
-                                    SwarmStateStore stateStore) {
+                                    SwarmSignalListener swarmSignals) {
         this.store = Objects.requireNonNull(store, "store");
         this.mapper = Objects.requireNonNull(mapper, "mapper").findAndRegisterModules();
         this.statusRequests = Objects.requireNonNull(statusRequests, "statusRequests");
         this.swarmSignals = Objects.requireNonNull(swarmSignals, "swarmSignals");
-        this.stateStore = Objects.requireNonNull(stateStore, "stateStore");
     }
 
     @RabbitListener(queues = "#{controllerStatusQueue.name}")
@@ -87,19 +83,19 @@ public class ControllerStatusListener {
                     store.cacheControllerStatusFull(swarmId, node, Instant.now());
                     swarmSignals.handleControllerStatusFull(routingKey);
                     if (discovered) {
-                        requestStatusFull(swarmId, node);
+                        requestStatusFull(swarmId);
                     }
                 } else if (statusDelta) {
                     SwarmStore.DeltaApplyResult result = store.applyControllerStatusDelta(swarmId, node, Instant.now());
                     if (result == SwarmStore.DeltaApplyResult.MISSING_BASELINE) {
-                        requestStatusFull(swarmId, node);
+                        requestStatusFull(swarmId);
                     } else if (result == SwarmStore.DeltaApplyResult.REJECTED_FULL_ONLY_FIELDS) {
                         log.warn("Ignoring status-delta with full-only fields for swarm {} rk={}", swarmId, routingKey);
                         return;
                     }
                 }
             } else if (statusDelta && controllerScope && swarmId != null) {
-                requestStatusFull(swarmId, node);
+                requestStatusFull(swarmId);
                 return;
             }
 
@@ -149,14 +145,13 @@ public class ControllerStatusListener {
         }
     }
 
-    private void requestStatusFull(String swarmId, JsonNode sourceEnvelope) {
+    private void requestStatusFull(String swarmId) {
         if (swarmId == null || swarmId.isBlank()) {
             return;
         }
         String corr = java.util.UUID.randomUUID().toString();
         String idem = "status-request:" + java.util.UUID.randomUUID();
-        java.util.Map<String, Object> runtime = stateStore.requireRuntimeFromStatusEnvelope(sourceEnvelope, "status");
-        statusRequests.requestStatusForSwarm(swarmId, corr, idem, runtime);
+        statusRequests.requestStatusForSwarm(swarmId, corr, idem);
     }
 
     @Scheduled(fixedRate = 5000L)

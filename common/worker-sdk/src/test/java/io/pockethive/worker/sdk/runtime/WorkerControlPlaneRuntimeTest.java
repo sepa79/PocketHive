@@ -126,17 +126,16 @@ class WorkerControlPlaneRuntimeTest {
                 "enabled", true,
                 "ratePerSec", 12.5
 	        );
-		        ControlSignal signal = ControlSignal.forInstance(
-		            "config-update",
-		            IDENTITY.swarmId(),
-		            IDENTITY.role(),
-		            IDENTITY.instanceId(),
-		            ORIGIN,
-		            correlationId,
-		            idempotencyKey,
-		            RUNTIME_META,
-		            args
-		        );
+			        ControlSignal signal = ControlSignal.forInstance(
+			            "config-update",
+			            IDENTITY.swarmId(),
+			            IDENTITY.role(),
+			            IDENTITY.instanceId(),
+			            ORIGIN,
+			            correlationId,
+			            idempotencyKey,
+			            args
+			        );
 	        String payload = MAPPER.writeValueAsString(signal);
 	        String routingKey = ControlPlaneRouting.signal("config-update", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
 
@@ -171,17 +170,16 @@ class WorkerControlPlaneRuntimeTest {
 	        Map<String, Object> args = Map.of(
 	            "templating", Map.of("reseed", true)
 	        );
-		        ControlSignal signal = ControlSignal.forInstance(
-		            "config-update",
-		            IDENTITY.swarmId(),
-		            IDENTITY.role(),
-		            IDENTITY.instanceId(),
-		            ORIGIN,
-		            correlationId,
-		            idempotencyKey,
-		            RUNTIME_META,
-		            args
-		        );
+			        ControlSignal signal = ControlSignal.forInstance(
+			            "config-update",
+			            IDENTITY.swarmId(),
+			            IDENTITY.role(),
+			            IDENTITY.instanceId(),
+			            ORIGIN,
+			            correlationId,
+			            idempotencyKey,
+			            args
+			        );
 	        String payload = MAPPER.writeValueAsString(signal);
 	        String routingKey = ControlPlaneRouting.signal("config-update", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
 
@@ -200,17 +198,16 @@ class WorkerControlPlaneRuntimeTest {
             "enabled", true,
             "ratePerSec", "not-a-number"
         );
-	        ControlSignal signal = ControlSignal.forInstance(
-	            "config-update",
-	            IDENTITY.swarmId(),
-	            IDENTITY.role(),
-	            IDENTITY.instanceId(),
-	            ORIGIN,
-	            correlationId,
-	            idempotencyKey,
-	            RUNTIME_META,
-	            args
-	        );
+		        ControlSignal signal = ControlSignal.forInstance(
+		            "config-update",
+		            IDENTITY.swarmId(),
+		            IDENTITY.role(),
+		            IDENTITY.instanceId(),
+		            ORIGIN,
+		            correlationId,
+		            idempotencyKey,
+		            args
+		        );
         String payload = MAPPER.writeValueAsString(signal);
         String routingKey = ControlPlaneRouting.signal("config-update", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
 
@@ -311,17 +308,16 @@ class WorkerControlPlaneRuntimeTest {
     @Test
 	    void configUpdateWithoutEnabledPreservesExistingState() throws Exception {
 	        Map<String, Object> initialArgs = Map.of("enabled", true);
-		        ControlSignal initialSignal = ControlSignal.forInstance(
-	            "config-update",
-		            IDENTITY.swarmId(),
-		            IDENTITY.role(),
-		            IDENTITY.instanceId(),
-		            ORIGIN,
-		            UUID.randomUUID().toString(),
-		            UUID.randomUUID().toString(),
-		            RUNTIME_META,
-		            initialArgs
-		        );
+			        ControlSignal initialSignal = ControlSignal.forInstance(
+		            "config-update",
+			            IDENTITY.swarmId(),
+			            IDENTITY.role(),
+			            IDENTITY.instanceId(),
+			            ORIGIN,
+			            UUID.randomUUID().toString(),
+			            UUID.randomUUID().toString(),
+			            initialArgs
+			        );
 	        String initialPayload = MAPPER.writeValueAsString(initialSignal);
 	        String routingKey = ControlPlaneRouting.signal("config-update", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
 
@@ -330,17 +326,16 @@ class WorkerControlPlaneRuntimeTest {
         assertThat(runtime.workerEnabled(definition.beanName())).isTrue();
 
 	        Map<String, Object> updateArgs = Map.of("ratePerSec", 20.0);
-		        ControlSignal updateSignal = ControlSignal.forInstance(
-	            "config-update",
-		            IDENTITY.swarmId(),
-		            IDENTITY.role(),
-		            IDENTITY.instanceId(),
-		            ORIGIN,
-		            UUID.randomUUID().toString(),
-		            UUID.randomUUID().toString(),
-		            RUNTIME_META,
-		            updateArgs
-		        );
+			        ControlSignal updateSignal = ControlSignal.forInstance(
+		            "config-update",
+			            IDENTITY.swarmId(),
+			            IDENTITY.role(),
+			            IDENTITY.instanceId(),
+			            ORIGIN,
+			            UUID.randomUUID().toString(),
+			            UUID.randomUUID().toString(),
+			            updateArgs
+			        );
 	        String updatePayload = MAPPER.writeValueAsString(updateSignal);
 
         runtime.handle(updatePayload, routingKey);
@@ -356,34 +351,32 @@ class WorkerControlPlaneRuntimeTest {
 	            "enabled", true,
                 "ratePerSec", 15.0
 	        );
-		        ControlSignal initialSignal = ControlSignal.forInstance(
-		            "config-update",
-		            IDENTITY.swarmId(),
-		            IDENTITY.role(),
-		            IDENTITY.instanceId(),
-		            ORIGIN,
-		            UUID.randomUUID().toString(),
-		            UUID.randomUUID().toString(),
-		            RUNTIME_META,
-		            initialArgs
-		        );
+			        ControlSignal initialSignal = ControlSignal.forInstance(
+			            "config-update",
+			            IDENTITY.swarmId(),
+			            IDENTITY.role(),
+			            IDENTITY.instanceId(),
+			            ORIGIN,
+			            UUID.randomUUID().toString(),
+			            UUID.randomUUID().toString(),
+			            initialArgs
+			        );
 	        String routingKey = ControlPlaneRouting.signal("config-update", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
 	        runtime.handle(MAPPER.writeValueAsString(initialSignal), routingKey);
 
         Map<String, Object> resetArgs = Map.of(
             "workers", Map.of(definition.beanName(), Map.of())
 	        );
-		        ControlSignal resetSignal = ControlSignal.forInstance(
-		            "config-update",
-		            IDENTITY.swarmId(),
-		            IDENTITY.role(),
-		            IDENTITY.instanceId(),
-		            ORIGIN,
-		            UUID.randomUUID().toString(),
-		            UUID.randomUUID().toString(),
-		            RUNTIME_META,
-		            resetArgs
-		        );
+			        ControlSignal resetSignal = ControlSignal.forInstance(
+			            "config-update",
+			            IDENTITY.swarmId(),
+			            IDENTITY.role(),
+			            IDENTITY.instanceId(),
+			            ORIGIN,
+			            UUID.randomUUID().toString(),
+			            UUID.randomUUID().toString(),
+			            resetArgs
+			        );
 
         runtime.handle(MAPPER.writeValueAsString(resetSignal), routingKey);
 
@@ -413,34 +406,32 @@ class WorkerControlPlaneRuntimeTest {
             "worker", definition.beanName(),
             "ratePerSec", 17.5
 	        );
-		        ControlSignal firstWorkerSignal = ControlSignal.forInstance(
-		            "config-update",
-		            IDENTITY.swarmId(),
-		            IDENTITY.role(),
-		            IDENTITY.instanceId(),
-		            ORIGIN,
-		            UUID.randomUUID().toString(),
-		            UUID.randomUUID().toString(),
-		            RUNTIME_META,
-		            firstWorkerArgs
-		        );
+			        ControlSignal firstWorkerSignal = ControlSignal.forInstance(
+			            "config-update",
+			            IDENTITY.swarmId(),
+			            IDENTITY.role(),
+			            IDENTITY.instanceId(),
+			            ORIGIN,
+			            UUID.randomUUID().toString(),
+			            UUID.randomUUID().toString(),
+			            firstWorkerArgs
+			        );
 	        runtime.handle(MAPPER.writeValueAsString(firstWorkerSignal), routingKey);
 
         Map<String, Object> secondWorkerArgs = Map.of(
             "worker", otherDefinition.beanName(),
             "ratePerSec", 42.0
 	        );
-		        ControlSignal secondWorkerSignal = ControlSignal.forInstance(
-		            "config-update",
-		            IDENTITY.swarmId(),
-		            IDENTITY.role(),
-		            IDENTITY.instanceId(),
-		            ORIGIN,
-		            UUID.randomUUID().toString(),
-		            UUID.randomUUID().toString(),
-		            RUNTIME_META,
-		            secondWorkerArgs
-		        );
+			        ControlSignal secondWorkerSignal = ControlSignal.forInstance(
+			            "config-update",
+			            IDENTITY.swarmId(),
+			            IDENTITY.role(),
+			            IDENTITY.instanceId(),
+			            ORIGIN,
+			            UUID.randomUUID().toString(),
+			            UUID.randomUUID().toString(),
+			            secondWorkerArgs
+			        );
 	        runtime.handle(MAPPER.writeValueAsString(secondWorkerSignal), routingKey);
 
         Map<String, Object> broadcastArgs = Map.of(
@@ -448,17 +439,16 @@ class WorkerControlPlaneRuntimeTest {
                 definition.beanName(), Map.of("ratePerSec", 99.0)
             )
 	        );
-		        ControlSignal broadcastSignal = ControlSignal.forInstance(
-		            "config-update",
-		            IDENTITY.swarmId(),
-		            IDENTITY.role(),
-		            IDENTITY.instanceId(),
-		            ORIGIN,
-		            UUID.randomUUID().toString(),
-		            UUID.randomUUID().toString(),
-		            RUNTIME_META,
-		            broadcastArgs
-		        );
+			        ControlSignal broadcastSignal = ControlSignal.forInstance(
+			            "config-update",
+			            IDENTITY.swarmId(),
+			            IDENTITY.role(),
+			            IDENTITY.instanceId(),
+			            ORIGIN,
+			            UUID.randomUUID().toString(),
+			            UUID.randomUUID().toString(),
+			            broadcastArgs
+			        );
 	        runtime.handle(MAPPER.writeValueAsString(broadcastSignal), routingKey);
 
         assertThat(runtime.workerRawConfig(definition.beanName()))
@@ -474,34 +464,32 @@ class WorkerControlPlaneRuntimeTest {
         Map<String, Object> initialArgs = Map.of(
             "ratePerSec", 18.0
 	        );
-		        ControlSignal initialSignal = ControlSignal.forInstance(
-		            "config-update",
-		            IDENTITY.swarmId(),
-		            IDENTITY.role(),
-		            IDENTITY.instanceId(),
-		            ORIGIN,
-		            UUID.randomUUID().toString(),
-		            UUID.randomUUID().toString(),
-		            RUNTIME_META,
-		            initialArgs
-		        );
+			        ControlSignal initialSignal = ControlSignal.forInstance(
+			            "config-update",
+			            IDENTITY.swarmId(),
+			            IDENTITY.role(),
+			            IDENTITY.instanceId(),
+			            ORIGIN,
+			            UUID.randomUUID().toString(),
+			            UUID.randomUUID().toString(),
+			            initialArgs
+			        );
         String routingKey = ControlPlaneRouting.signal("config-update", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
         runtime.handle(MAPPER.writeValueAsString(initialSignal), routingKey);
 
         Map<String, Object> noopArgs = Map.of(
             "worker", definition.beanName()
 	        );
-		        ControlSignal noopSignal = ControlSignal.forInstance(
-		            "config-update",
-		            IDENTITY.swarmId(),
-		            IDENTITY.role(),
-		            IDENTITY.instanceId(),
-		            ORIGIN,
-		            UUID.randomUUID().toString(),
-		            UUID.randomUUID().toString(),
-		            RUNTIME_META,
-		            noopArgs
-		        );
+			        ControlSignal noopSignal = ControlSignal.forInstance(
+			            "config-update",
+			            IDENTITY.swarmId(),
+			            IDENTITY.role(),
+			            IDENTITY.instanceId(),
+			            ORIGIN,
+			            UUID.randomUUID().toString(),
+			            UUID.randomUUID().toString(),
+			            noopArgs
+			        );
 
         runtime.handle(MAPPER.writeValueAsString(noopSignal), routingKey);
 
@@ -518,34 +506,32 @@ class WorkerControlPlaneRuntimeTest {
             "enabled", true,
             "ratePerSec", 9.5
 	        );
-		        ControlSignal initialSignal = ControlSignal.forInstance(
-		            "config-update",
-		            IDENTITY.swarmId(),
-		            IDENTITY.role(),
-		            IDENTITY.instanceId(),
-		            ORIGIN,
-		            UUID.randomUUID().toString(),
-		            UUID.randomUUID().toString(),
-		            RUNTIME_META,
-		            initialArgs
-		        );
+			        ControlSignal initialSignal = ControlSignal.forInstance(
+			            "config-update",
+			            IDENTITY.swarmId(),
+			            IDENTITY.role(),
+			            IDENTITY.instanceId(),
+			            ORIGIN,
+			            UUID.randomUUID().toString(),
+			            UUID.randomUUID().toString(),
+			            initialArgs
+			        );
         String routingKey = ControlPlaneRouting.signal("config-update", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
         runtime.handle(MAPPER.writeValueAsString(initialSignal), routingKey);
 
         Map<String, Object> toggleArgs = Map.of(
             "enabled", false
 	        );
-		        ControlSignal toggleSignal = ControlSignal.forInstance(
-		            "config-update",
-		            IDENTITY.swarmId(),
-		            IDENTITY.role(),
-		            IDENTITY.instanceId(),
-		            ORIGIN,
-		            UUID.randomUUID().toString(),
-		            UUID.randomUUID().toString(),
-		            RUNTIME_META,
-		            toggleArgs
-		        );
+			        ControlSignal toggleSignal = ControlSignal.forInstance(
+			            "config-update",
+			            IDENTITY.swarmId(),
+			            IDENTITY.role(),
+			            IDENTITY.instanceId(),
+			            ORIGIN,
+			            UUID.randomUUID().toString(),
+			            UUID.randomUUID().toString(),
+			            toggleArgs
+			        );
 
         runtime.handle(MAPPER.writeValueAsString(toggleSignal), routingKey);
 
@@ -567,17 +553,16 @@ class WorkerControlPlaneRuntimeTest {
         Map<String, Object> args = Map.of(
             "ratePerSec", 20.0
 	        );
-		        ControlSignal signal = ControlSignal.forInstance(
-		            "config-update",
-		            IDENTITY.swarmId(),
-		            IDENTITY.role(),
-		            IDENTITY.instanceId(),
-		            ORIGIN,
-		            UUID.randomUUID().toString(),
-		            UUID.randomUUID().toString(),
-		            RUNTIME_META,
-		            args
-		        );
+			        ControlSignal signal = ControlSignal.forInstance(
+			            "config-update",
+			            IDENTITY.swarmId(),
+			            IDENTITY.role(),
+			            IDENTITY.instanceId(),
+			            ORIGIN,
+			            UUID.randomUUID().toString(),
+			            UUID.randomUUID().toString(),
+			            args
+			        );
         String payload = MAPPER.writeValueAsString(signal);
         String routingKey = ControlPlaneRouting.signal("config-update", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
 
@@ -599,17 +584,16 @@ class WorkerControlPlaneRuntimeTest {
         Map<String, Object> data = new java.util.LinkedHashMap<>();
         data.put("ratePerSec", null);
 	        Map<String, Object> args = data;
-		        ControlSignal signal = ControlSignal.forInstance(
-		            "config-update",
-		            IDENTITY.swarmId(),
-		            IDENTITY.role(),
-		            IDENTITY.instanceId(),
-		            ORIGIN,
-		            UUID.randomUUID().toString(),
-		            UUID.randomUUID().toString(),
-		            RUNTIME_META,
-		            args
-		        );
+			        ControlSignal signal = ControlSignal.forInstance(
+			            "config-update",
+			            IDENTITY.swarmId(),
+			            IDENTITY.role(),
+			            IDENTITY.instanceId(),
+			            ORIGIN,
+			            UUID.randomUUID().toString(),
+			            UUID.randomUUID().toString(),
+			            args
+			        );
         String payload = MAPPER.writeValueAsString(signal);
         String routingKey = ControlPlaneRouting.signal("config-update", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
 
@@ -638,17 +622,16 @@ class WorkerControlPlaneRuntimeTest {
         assertThat(initial.exchange()).contains(definition.io().outboundExchange());
 
 	        Map<String, Object> args = Map.of("enabled", true);
-		        ControlSignal signal = ControlSignal.forInstance(
-		            "config-update",
-		            IDENTITY.swarmId(),
-		            IDENTITY.role(),
-		            IDENTITY.instanceId(),
-		            ORIGIN,
-		            UUID.randomUUID().toString(),
-		            UUID.randomUUID().toString(),
-		            RUNTIME_META,
-		            args
-		        );
+			        ControlSignal signal = ControlSignal.forInstance(
+			            "config-update",
+			            IDENTITY.swarmId(),
+			            IDENTITY.role(),
+			            IDENTITY.instanceId(),
+			            ORIGIN,
+			            UUID.randomUUID().toString(),
+			            UUID.randomUUID().toString(),
+			            args
+			        );
         String payload = MAPPER.writeValueAsString(signal);
         String routingKey = ControlPlaneRouting.signal("config-update", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
 
@@ -677,17 +660,16 @@ class WorkerControlPlaneRuntimeTest {
 	        reset(emitter);
 
 	        Map<String, Object> args = Map.of("enabled", true);
-	        ControlSignal signal = ControlSignal.forInstance(
-	            "config-update",
-	            IDENTITY.swarmId(),
-	            IDENTITY.role(),
-	            IDENTITY.instanceId(),
-	            ORIGIN,
-	            UUID.randomUUID().toString(),
-	            UUID.randomUUID().toString(),
-	            RUNTIME_META,
-	            args
-	        );
+		        ControlSignal signal = ControlSignal.forInstance(
+		            "config-update",
+		            IDENTITY.swarmId(),
+		            IDENTITY.role(),
+		            IDENTITY.instanceId(),
+		            ORIGIN,
+		            UUID.randomUUID().toString(),
+		            UUID.randomUUID().toString(),
+		            args
+		        );
         String payload = MAPPER.writeValueAsString(signal);
         String routingKey = ControlPlaneRouting.signal("config-update", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
 
@@ -729,16 +711,15 @@ class WorkerControlPlaneRuntimeTest {
 	        reset(emitter);
 
 	        String routingKey = ControlPlaneRouting.signal("status-request", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
-		        ControlSignal signal = ControlSignal.forInstance(
-		            "status-request",
-		            IDENTITY.swarmId(),
-		            IDENTITY.role(),
-		            IDENTITY.instanceId(),
-		            ORIGIN,
-		            UUID.randomUUID().toString(),
-		            null,
-		            RUNTIME_META,
-		            null);
+			        ControlSignal signal = ControlSignal.forInstance(
+			            "status-request",
+			            IDENTITY.swarmId(),
+			            IDENTITY.role(),
+			            IDENTITY.instanceId(),
+			            ORIGIN,
+			            UUID.randomUUID().toString(),
+			            null,
+			            null);
 
 	        boolean handled = runtime.handle(MAPPER.writeValueAsString(signal), routingKey);
 
@@ -755,17 +736,16 @@ class WorkerControlPlaneRuntimeTest {
             "enabled", true,
             "ratePerSec", 11.0
 	        );
-		        ControlSignal signal = ControlSignal.forInstance(
-		            "config-update",
-		            IDENTITY.swarmId(),
-		            IDENTITY.role(),
-		            IDENTITY.instanceId(),
-		            ORIGIN,
-		            UUID.randomUUID().toString(),
-		            UUID.randomUUID().toString(),
-		            RUNTIME_META,
-		            args
-	        );
+			        ControlSignal signal = ControlSignal.forInstance(
+			            "config-update",
+			            IDENTITY.swarmId(),
+			            IDENTITY.role(),
+			            IDENTITY.instanceId(),
+			            ORIGIN,
+			            UUID.randomUUID().toString(),
+			            UUID.randomUUID().toString(),
+			            args
+		        );
         String payload = MAPPER.writeValueAsString(signal);
         String routingKey = ControlPlaneRouting.signal("config-update", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
 

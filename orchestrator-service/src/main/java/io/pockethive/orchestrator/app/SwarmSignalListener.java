@@ -7,7 +7,6 @@ import io.pockethive.control.ControlSignal;
 import io.pockethive.control.ControlScope;
 import io.pockethive.orchestrator.domain.ScenarioTimelineRegistry;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
-import io.pockethive.orchestrator.domain.SwarmStateStore;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker.Pending;
@@ -63,11 +62,10 @@ public class SwarmSignalListener {
     private static final Duration TEMPLATE_TIMEOUT = Duration.ofMillis(120_000L);
     private static final Logger log = LoggerFactory.getLogger(SwarmSignalListener.class);
 
-    private final SwarmPlanRegistry plans;
-    private final ScenarioTimelineRegistry timelines;
-    private final SwarmStore store;
-    private final SwarmStateStore stateStore;
-    private final SwarmCreateTracker creates;
+	    private final SwarmPlanRegistry plans;
+	    private final ScenarioTimelineRegistry timelines;
+	    private final SwarmStore store;
+	    private final SwarmCreateTracker creates;
     private final ContainerLifecycleManager lifecycle;
     private final ObjectMapper json;
     private final HiveJournal hiveJournal;
@@ -80,25 +78,23 @@ public class SwarmSignalListener {
     private final List<String> controlRoutes;
     private final java.time.Instant startedAt;
 
-    public SwarmSignalListener(SwarmPlanRegistry plans,
-                               ScenarioTimelineRegistry timelines,
-                               SwarmCreateTracker creates,
-                               SwarmStore store,
-                               SwarmStateStore stateStore,
-                               ContainerLifecycleManager lifecycle,
-                               ObjectMapper json,
-                               HiveJournal hiveJournal,
-                               ManagerControlPlane controlPlane,
+	    public SwarmSignalListener(SwarmPlanRegistry plans,
+	                               ScenarioTimelineRegistry timelines,
+	                               SwarmCreateTracker creates,
+	                               SwarmStore store,
+	                               ContainerLifecycleManager lifecycle,
+	                               ObjectMapper json,
+	                               HiveJournal hiveJournal,
+	                               ManagerControlPlane controlPlane,
                                ControlPlaneEmitter controlEmitter,
                                ControlPlaneIdentity managerControlPlaneIdentity,
                                @Qualifier("managerControlPlaneTopologyDescriptor") ControlPlaneTopologyDescriptor descriptor,
                                @Qualifier("managerControlQueueName") String controlQueue) {
         this.plans = plans;
         this.timelines = timelines;
-        this.creates = creates;
-        this.store = store;
-        this.stateStore = stateStore;
-        this.lifecycle = lifecycle;
+	        this.creates = creates;
+	        this.store = store;
+	        this.lifecycle = lifecycle;
         this.json = json.findAndRegisterModules();
         this.hiveJournal = Objects.requireNonNull(hiveJournal, "hiveJournal");
         this.controlPlane = Objects.requireNonNull(controlPlane, "controlPlane");
@@ -332,13 +328,12 @@ public class SwarmSignalListener {
                 // swarm-template lifecycle signal.
                 String correlationId = java.util.UUID.randomUUID().toString();
                 String idempotencyKey = java.util.UUID.randomUUID().toString();
-		                ControlSignal payload = ControlSignals.swarmPlan(
-		                    instanceId,
-		                    ControlScope.forInstance(swarmId, "swarm-controller", controllerInstance),
-		                    correlationId,
-		                    idempotencyKey,
-		                    runtimeMetaForSignal(swarmId),
-		                    args);
+			                ControlSignal payload = ControlSignals.swarmPlan(
+			                    instanceId,
+			                    ControlScope.forInstance(swarmId, "swarm-controller", controllerInstance),
+			                    correlationId,
+			                    idempotencyKey,
+			                    args);
                 String jsonPayload = ControlPlaneJson.write(payload, "swarm-plan signal");
                 String rk = ControlPlaneRouting.signal(signal, swarmId, "swarm-controller", controllerInstance);
                 log.info("sending swarm-plan for {} via controller {} (corr={}, idem={})",
@@ -505,26 +500,21 @@ public class SwarmSignalListener {
         }
     }
 
-	    private ControlSignal templateSignal(SwarmPlan plan, Pending info, String controllerInstance) {
-	        Map<String, Object> args = json.convertValue(plan, new TypeReference<Map<String, Object>>() {});
+		    private ControlSignal templateSignal(SwarmPlan plan, Pending info, String controllerInstance) {
+		        Map<String, Object> args = json.convertValue(plan, new TypeReference<Map<String, Object>>() {});
 	        String correlationId = info != null && info.correlationId() != null && !info.correlationId().isBlank()
 	            ? info.correlationId()
 	            : java.util.UUID.randomUUID().toString();
 	        String idempotencyKey = info != null && info.idempotencyKey() != null && !info.idempotencyKey().isBlank()
 	            ? info.idempotencyKey()
 	            : java.util.UUID.randomUUID().toString();
-	        return ControlSignals.swarmTemplate(
-	            instanceId,
-	            ControlScope.forInstance(plan.id(), "swarm-controller", controllerInstance),
-	            correlationId,
-	            idempotencyKey,
-	            runtimeMetaForSignal(plan.id()),
-	            args);
-	    }
-
-    private Map<String, Object> runtimeMetaForSignal(String swarmId) {
-        return stateStore.requireRuntimeFromLatestStatusFull(swarmId);
-    }
+		        return ControlSignals.swarmTemplate(
+		            instanceId,
+		            ControlScope.forInstance(plan.id(), "swarm-controller", controllerInstance),
+		            correlationId,
+		            idempotencyKey,
+		            args);
+		    }
 
     private void emitCreateReady(Pending info) {
         if (info == null) {

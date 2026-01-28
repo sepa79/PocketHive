@@ -61,16 +61,15 @@ class ControlPlanePublisherIntegrationTest {
                 .build();
             emitter.emitReady(ready);
 
-            ControlSignal signal = ControlSignal.forInstance(
-                "config-update",
-                "swarm-A",
-                "generator",
-                "gen-1",
-                properties.getInstanceId(),
-                "corr-2",
-                "idem-2",
-                runtime,
-                null);
+	            ControlSignal signal = ControlSignal.forInstance(
+	                "config-update",
+	                "swarm-A",
+	                "generator",
+	                "gen-1",
+	                properties.getInstanceId(),
+	                "corr-2",
+	                "idem-2",
+	                null);
             String signalKey = ControlPlaneRouting.signal("config-update", "swarm-A", "generator", "gen-1");
             publisher.publishSignal(new SignalMessage(signalKey, signal));
 

@@ -371,21 +371,20 @@ public class SwarmController {
      */
     private ResponseEntity<ControlResponse> sendSignal(String signal, String swarmId, String idempotencyKey, long timeoutMs) {
         Duration timeout = Duration.ofMillis(timeoutMs);
-        return idempotentSend(signal, swarmId, idempotencyKey, timeoutMs, corr -> {
-            String controllerInstance = store.find(swarmId)
-                .map(Swarm::getInstanceId)
-                .orElse(null);
-            if (controllerInstance == null || controllerInstance.isBlank()) {
-                throw new IllegalStateException("Swarm " + swarmId + " is not registered with a controller instance");
-            }
-            ControlScope target = ControlScope.forInstance(swarmId, "swarm-controller", controllerInstance);
-            Map<String, Object> runtime = stateStore.requireRuntimeFromLatestStatusFull(swarmId);
-            ControlSignal payload = switch (signal) {
-                case "swarm-start" -> ControlSignals.swarmStart(originInstanceId, target, corr, idempotencyKey, runtime);
-                case "swarm-stop" -> ControlSignals.swarmStop(originInstanceId, target, corr, idempotencyKey, runtime);
-                case "swarm-remove" -> ControlSignals.swarmRemove(originInstanceId, target, corr, idempotencyKey, runtime);
-                default -> throw new IllegalArgumentException("Unsupported lifecycle signal: " + signal);
-            };
+	        return idempotentSend(signal, swarmId, idempotencyKey, timeoutMs, corr -> {
+	            String controllerInstance = store.find(swarmId)
+	                .map(Swarm::getInstanceId)
+	                .orElse(null);
+	            if (controllerInstance == null || controllerInstance.isBlank()) {
+	                throw new IllegalStateException("Swarm " + swarmId + " is not registered with a controller instance");
+	            }
+	            ControlScope target = ControlScope.forInstance(swarmId, "swarm-controller", controllerInstance);
+	            ControlSignal payload = switch (signal) {
+	                case "swarm-start" -> ControlSignals.swarmStart(originInstanceId, target, corr, idempotencyKey);
+	                case "swarm-stop" -> ControlSignals.swarmStop(originInstanceId, target, corr, idempotencyKey);
+	                case "swarm-remove" -> ControlSignals.swarmRemove(originInstanceId, target, corr, idempotencyKey);
+	                default -> throw new IllegalArgumentException("Unsupported lifecycle signal: " + signal);
+	            };
             String jsonPayload = toJson(payload);
             String routingKey = ControlPlaneRouting.signal(signal, swarmId, "swarm-controller", controllerInstance);
             sendControl(routingKey, jsonPayload, signal);
