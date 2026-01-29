@@ -3,7 +3,7 @@
 **Status**: Proposed  
 **Author**: Senior Software Architect  
 **Date**: 2024  
-**Target Release**: PocketHive 0.16.x (experimental)
+**Target Release**: PocketHive 0.17.x (experimental)
 
 ---
 
@@ -92,9 +92,11 @@ Setup procedures live in:
 
 Extend the Swarm Controller to execute **setup and teardown scripts** during swarm lifecycle events. Scripts can be:
 1. **Postman collections** (executed via Newman CLI)
-2. **PocketHive templates** (executed via request-builder → processor pipeline)
+2. **PocketHive templates** (executed via shared `protocol-client` library supporting HTTP and TCP)
 
 Both types run **synchronously** before/after swarm activation, ensuring deterministic environment state.
+
+**Key Architectural Decision**: Create a new shared `common/protocol-client` module by copying HTTP/TCP client code from `processor-service`. This ensures DRY principles and gives swarm-controller identical protocol handling capabilities without modifying the battle-tested processor-service code. Future optimization can refactor processor-service to use the shared library.
 
 ### Why Swarm Controller (Not a Separate Worker)
 
@@ -126,6 +128,48 @@ Both types run **synchronously** before/after swarm activation, ensuring determi
 
 ## Architecture & Design
 
+### Module Dependencies
+
+```mermaid
+graph TD
+    subgraph "Control Plane"
+        SC[swarm-controller-service]
+        MSDK[common/manager-sdk]
+    end
+    
+    subgraph "Data Plane"
+        PROC[processor-service]
+        WSDK[common/worker-sdk]
+    end
+    
+    subgraph "Shared Libraries"
+        PC[common/protocol-client]
+        SM[common/swarm-model]
+    end
+    
+    SC --> MSDK
+    SC --> PC
+    SC --> SM
+    
+    PROC --> WSDK
+    PROC -."uses own copy".-> PC_COPY[HTTP/TCP Client Code]
+    
+    WSDK --> SM
+    
+    PC -."copied from".-> PC_COPY
+    
+    style PC fill:#90EE90
+    style PC_COPY fill:#FFB6C1
+    style SC fill:#87CEEB
+    style PROC fill:#87CEEB
+```
+
+**Key Points:**
+- `common/protocol-client` is **copied** from processor-service (not refactored)
+- Processor-service keeps its existing HTTP/TCP code (no changes)
+- Swarm-controller uses protocol-client for lifecycle scripts
+- Both have identical HTTP/TCP capabilities
+
 ### Component Diagram
 
 ```
@@ -149,10 +193,16 @@ Both types run **synchronously** before/after swarm activation, ensuring determi
 │           ↓                       ↓                              │
 │  ┌─────────────────┐    ┌─────────────────────────┐            │
 │  │ NewmanRunner    │    │ PhTemplateExecutor      │            │
-│  │ (Postman CLI)   │    │ (request-builder +      │            │
-│  │                 │    │  processor pipeline)    │            │
-│  └─────────────────┘    └─────────────────────────┘            │
-│           │                       │                              │
+│  │ (Postman CLI)   │    │ (uses ProtocolClient)   │            │
+│  │                 │    │                         │            │
+│  └─────────────────┘    └────────┬────────────────┘            │
+│                                  │                              │
+│                                  ↓                              │
+│                         ┌─────────────────┐                    │
+│                         │ ProtocolClient  │                    │
+│                         │ (HTTP/TCP)      │                    │
+│                         └────────┬────────┘                    │
+│                                  │                              │
 │           └───────────┬───────────┘                              │
 │                       ↓                                          │
 │                  ┌─────────┐                                     │
@@ -204,53 +254,114 @@ UI          Orchestrator    SwarmController    SetupScriptExecutor    Newman/PH 
 ### File Structure
 
 ```
+common/
+  protocol-client/                            # NEW shared module
+    src/main/java/io/pockethive/protocol/
+      ProtocolClient.java                      # Interface
+      http/
+        HttpProtocolClient.java                # HTTP implementation
+        HttpClientConfig.java
+      tcp/
+        TcpProtocolClient.java                 # TCP implementation (all transports)
+        TcpTransportType.java                  # SOCKET, NIO, NETTY
+        TcpBehavior.java                       # ECHO, REQUEST_RESPONSE, FIRE_FORGET
+        TcpClientConfig.java
+        socket/
+          SocketTcpTransport.java              # Socket implementation
+        nio/
+          NioTcpTransport.java                 # NIO implementation
+        netty/
+          NettyTcpTransport.java               # Netty implementation
+
 swarm-controller-service/
   src/main/java/io/pockethive/swarmcontroller/
     lifecycle/
-      SwarmLifecycleManager.java          # Event listeners
-      SetupScriptExecutor.java            # Core execution logic
-      NewmanRunner.java                   # Postman CLI wrapper
-      PhTemplateExecutor.java             # PH template executor
-      ScriptTypeDetector.java             # File type detection
+      SwarmLifecycleManager.java               # Event listeners
+      SetupScriptExecutor.java                 # Core execution logic
+      NewmanRunner.java                        # Postman CLI wrapper
+      PhTemplateExecutor.java                  # PH template executor (uses ProtocolClient)
+      ScriptTypeDetector.java                  # File type detection
     config/
-      LifecycleProperties.java            # Configuration binding
+      LifecycleProperties.java                 # Configuration binding
   src/main/resources/
-    application.yml                       # Default config
+    application.yml                            # Default config
   src/test/java/
     lifecycle/
-      SetupScriptExecutorTest.java        # Unit tests
-      SwarmLifecycleIntegrationTest.java  # Integration tests
+      SetupScriptExecutorTest.java             # Unit tests
+      SwarmLifecycleIntegrationTest.java       # Integration tests
 
-Docker volumes:
-  /app/setup-scripts/                     # Mounted from host or scenario bundle
+processor-service/
+  # Now depends on common/protocol-client
+  # HTTP/TCP code moved to shared module
+
+Scenario bundle structure:
+  /app/scenario/setup-scripts/                 # From scenario bundle
     01-create-accounts.postman.json
     02-seed-data.template.json
     setup-env.yaml
-  /app/teardown-scripts/
+  /app/scenario/teardown-scripts/
     99-cleanup.postman.json
     teardown-env.yaml
 ```
 
 ### Configuration Schema
 
+**Application Defaults** (`application.yml` - Swarm Controller):
 ```yaml
 pockethive:
   control-plane:
     swarm-controller:
       lifecycle:
-        setup-folder: /app/setup-scripts
-        teardown-folder: /app/teardown-scripts
-        fail-on-setup-error: true          # Block swarm start if setup fails
-        fail-on-teardown-error: false      # Log but continue if teardown fails
-        script-timeout-seconds: 300        # Per-script timeout
+        setup-folder: /app/scenario/setup-scripts      # Default path in scenario bundle
+        teardown-folder: /app/scenario/teardown-scripts
+        fail-on-setup-error: true                      # Block swarm start if setup fails
+        fail-on-teardown-error: false                  # Log but continue if teardown fails
+        script-timeout-seconds: 300                    # Per-script timeout
         newman:
-          reporters: [cli, json]           # Newman output formats
-          bail: true                       # Stop on first failure
-          insecure: false                  # SSL verification
-        environment:
-          sutBaseUrl: http://wiremock:8080
-          apiKey: ${SETUP_API_KEY:default-key}
+          reporters: [cli, json]                       # Newman output formats
+          bail: true                                   # Stop on first failure
+          insecure: false                              # SSL verification
 ```
+
+**Scenario Configuration** (`scenario.yaml` - Per-scenario overrides):
+```yaml
+id: example-load-test
+name: Example Load Test
+description: Example load test with automated setup/teardown
+
+template:
+  image: swarm-controller:latest
+  
+  # Lifecycle configuration (NEW - added by this RFC)
+  lifecycle:
+    scriptTimeoutSeconds: 600                      # Override default 300s
+    failOnSetupError: true                         # Explicit (matches default)
+    
+    # Environment variables for setup/teardown scripts
+    environment:
+      apiKey: ${EXAMPLE_API_KEY}                   # From environment
+      accountCount: 1000                           # Scenario-specific
+      environment: staging
+  
+  bees:
+    - role: generator
+      image: generator:latest
+      config:
+        inputs:
+          scheduler:
+            ratePerSec: 100
+      work:
+        out:
+          out: genQ
+    # ... other bees
+```
+
+**How it works**:
+1. Swarm Controller reads defaults from `application.yml`
+2. Orchestrator passes scenario-specific config from `scenario.yaml` (under `template.lifecycle`)
+3. Controller merges: scenario config overrides defaults
+4. Environment variables in scenario config (e.g., `${EXAMPLE_API_KEY}`) are resolved at runtime
+5. Template context includes swarm metadata and lifecycle environment
 
 ### Script Type Detection Logic
 
@@ -355,7 +466,7 @@ public ScriptType detectScriptType(Path file) {
 
 #### Newman Installation
 
-**Option 1: Bake into Docker image** (Recommended)
+**Bake into Docker image:**
 ```dockerfile
 FROM eclipse-temurin:21-jre-alpine
 RUN apk add --no-cache nodejs npm && \
@@ -363,18 +474,6 @@ RUN apk add --no-cache nodejs npm && \
 COPY target/swarm-controller-service.jar /app/app.jar
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]
 ```
-
-**Option 2: Sidecar container**
-```yaml
-services:
-  swarm-controller:
-    image: pockethive/swarm-controller:latest
-  newman:
-    image: postman/newman:6-alpine
-    command: ["tail", "-f", "/dev/null"]  # Keep alive
-```
-
-**Recommendation**: Option 1 (baked in) - simpler, fewer moving parts.
 
 ---
 
@@ -405,14 +504,17 @@ curl http://api:8080/accounts/test-1  # Check account exists
 **New Workflow** (Automated):
 ```bash
 # 1. Place scripts in scenario bundle
-scenarios/payments-load-test/
-  setup/
+my-scenario/
+  setup-scripts/
     01-create-accounts.postman.json    # Creates 100 accounts
     02-configure-mocks.postman.json    # Sets up WireMock
     setup-env.yaml                     # Variables
+  teardown-scripts/
+    99-cleanup.postman.json
 
 # 2. Start swarm via UI (1 min)
-# Setup runs automatically
+# Scenario bundle mounted to /app/scenario/
+# Setup runs automatically from /app/scenario/setup-scripts/
 # Total: 1 minute
 ```
 
@@ -456,9 +558,18 @@ scenarios/payments-load-test/
 }
 ```
 
-**Environment Template** (`setup-env.yaml`):
+**Environment Template** (`setup-env.yaml` in scenario bundle):
 ```yaml
-baseUrl: "{{ config.sutBaseUrl }}"
+# Access SUT endpoints (from SwarmPlan.sutEnvironment)
+baseUrl: "{{ sut.endpoints['default'].baseUrl }}"
+wiremockUrl: "{{ sut.endpoints['wiremock'].baseUrl }}"
+
+# Access lifecycle environment (Postman-style)
+apiKey: "{{ pm.environment.apiKey }}"
+accountCount: "{{ pm.environment.accountCount }}"
+environment: "{{ pm.environment.environment }}"
+
+# Swarm context (injected by controller)
 swarmId: "{{ swarmId }}"
 accountPrefix: "swarm-{{ swarmId }}-"
 timestamp: "{{ eval('#nowIso') }}"
@@ -603,10 +714,11 @@ timestamp: "{{ eval('#nowIso') }}"
 
 **Folder Structure**:
 ```
-setup/
-  01-oauth-token.postman.json        # Complex: Get token, store in variable
-  02-create-session.template.yaml    # Simple: Single HTTP call
-  03-seed-data.postman.json          # Complex: Loop through CSV data
+my-scenario/
+  setup-scripts/
+    01-oauth-token.postman.json        # Complex: Get token, store in variable
+    02-create-session.template.yaml    # Simple: Single HTTP call
+    03-seed-data.postman.json          # Complex: Loop through CSV data
 ```
 
 **Why Mix?**
@@ -642,25 +754,54 @@ headersTemplate:
 **Environment Template** (`setup-env.yaml`):
 ```yaml
 # Rendered at runtime with swarm context
-baseUrl: "{{ config.sutBaseUrl }}"           # From swarm config
-apiKey: "{{ config.apiKey }}"                # From swarm config
-environment: "{{ config.environment }}"      # dev/staging/prod
-dataPrefix: "{{ environment }}-{{ swarmId }}-"
-accountCount: "{{ config.accountCount }}"    # 100 for dev, 10000 for prod
+# Access SUT endpoints (from SwarmPlan.sutEnvironment)
+baseUrl: "{{ sut.endpoints['default'].baseUrl }}"
+wiremockUrl: "{{ sut.endpoints['wiremock'].baseUrl }}"
+
+# Access lifecycle environment (Postman-style)
+apiKey: "{{ pm.environment.apiKey }}"
+environment: "{{ pm.environment.environment }}"
+dataPrefix: "{{ pm.environment.environment }}-{{ swarmId }}-"
+accountCount: "{{ pm.environment.accountCount }}"
 ```
 
-**Swarm Config** (injected by Orchestrator):
+**Scenario Config** (`scenario.yaml`):
 ```yaml
-# Dev swarm
-pockethive.worker.config.sutBaseUrl: http://dev-api:8080
-pockethive.worker.config.environment: dev
-pockethive.worker.config.accountCount: 100
+# Dev scenario (separate file per environment)
+id: example-dev
+name: Example Dev Load Test
+description: Development environment load test
 
-# Prod swarm
-pockethive.worker.config.sutBaseUrl: https://prod-api.example.com
-pockethive.worker.config.environment: prod
-pockethive.worker.config.accountCount: 10000
+template:
+  image: swarm-controller:latest
+  lifecycle:
+    environment:
+      environment: dev
+      accountCount: 100
+  bees:
+    - role: generator
+      image: generator:latest
+      # ... config
+
+---
+# Prod scenario (separate file: example-prod/scenario.yaml)
+id: example-prod
+name: Example Prod Load Test
+description: Production environment load test
+
+template:
+  image: swarm-controller:latest
+  lifecycle:
+    environment:
+      environment: prod
+      accountCount: 10000
+  bees:
+    - role: generator
+      image: generator:latest
+      # ... config
 ```
+
+**Note**: SUT endpoints are configured separately via Orchestrator and passed in SwarmPlan.sutEnvironment, not in scenario.yaml.
 
 **Value**: Single script set works across all environments, no duplication.
 
@@ -672,18 +813,18 @@ pockethive.worker.config.accountCount: 10000
 ### Functional Requirements
 
 #### FR1: Postman Collection Execution
-- [ ] **Given** a Postman collection in `/app/setup-scripts/01-test.postman.json`
+- [ ] **Given** a Postman collection in `/app/scenario/setup-scripts/01-test.postman.json`
 - [ ] **When** swarm starts
 - [ ] **Then** Newman executes the collection against the configured SUT
 - [ ] **And** collection results are logged to controller logs
 - [ ] **And** swarm start proceeds if collection passes
 
 #### FR2: PH Template Execution
-- [ ] **Given** a PH template in `/app/setup-scripts/02-test.template.yaml`
+- [ ] **Given** a PH template in `/app/scenario/setup-scripts/02-test.template.yaml`
 - [ ] **When** swarm starts
 - [ ] **Then** template is rendered with swarm context
-- [ ] **And** HTTP request is sent via processor-service HTTP client
-- [ ] **And** swarm start proceeds if request succeeds (2xx/3xx)
+- [ ] **And** HTTP/TCP request is sent via shared `ProtocolClient` (supports all processor-service capabilities)
+- [ ] **And** swarm start proceeds if request succeeds (2xx/3xx for HTTP, successful response for TCP)
 
 #### FR3: Script Type Detection
 - [ ] **Given** a file named `test.postman.json`
@@ -730,10 +871,14 @@ pockethive.worker.config.accountCount: 10000
 - [ ] **And** treated as failure (blocks setup, logs teardown)
 
 #### FR9: Configuration Override
-- [ ] **Given** `pockethive.control-plane.swarm-controller.lifecycle.setup-folder` is set
-- [ ] **Then** controller uses that path instead of default
-- [ ] **Given** `fail-on-setup-error: false`
+- [ ] **Given** scenario.yaml contains `template.lifecycle.scriptTimeoutSeconds: 600`
+- [ ] **Then** controller uses 600 seconds instead of default 300
+- [ ] **Given** scenario.yaml contains `template.lifecycle.failOnSetupError: false`
 - [ ] **Then** setup failures are logged but don't block swarm start
+- [ ] **Given** scenario.yaml contains `template.lifecycle.environment.apiKey`
+- [ ] **Then** value is available in setup-env.yaml as `{{ pm.environment.apiKey }}`
+- [ ] **Given** SwarmPlan contains `sutEnvironment.endpoints['default'].baseUrl`
+- [ ] **Then** value is available in setup-env.yaml as `{{ sut.endpoints['default'].baseUrl }}`
 
 #### FR10: Empty Folder Handling
 - [ ] **Given** setup folder is empty or doesn't exist
@@ -1024,31 +1169,48 @@ void rendersTemplateWithContext() {
     ctx.get("swarmId").equals("test-123")));
 }
 
+**PhTemplateExecutorTest** (4 tests)
+```java
 @Test
-void sendsHttpRequestViaProcessorClient() {
-  executor.execute("/test/template.yaml", Map.of());
-  verify(httpClient).exchange(
-    eq("http://wiremock:8080/api/test"),
-    eq(HttpMethod.POST),
-    any(),
-    eq(String.class));
+void rendersTemplateWithContext() {
+  Map<String, Object> context = Map.of("swarmId", "test-123");
+  executor.execute("/test/template.yaml", context);
+  verify(templateRenderer).render(any(), argThat(ctx ->
+    ctx.get("swarmId").equals("test-123")));
+}
+
+@Test
+void sendsHttpRequestViaProtocolClient() {
+  executor.execute("/test/http-template.yaml", Map.of());
+  verify(protocolClient).execute(argThat(req ->
+    req.getUrl().equals("http://wiremock:8080/api/test") &&
+    req.getMethod().equals(HttpMethod.POST)));
+}
+
+@Test
+void sendsTcpRequestViaProtocolClient() {
+  executor.execute("/test/tcp-template.yaml", Map.of());
+  verify(protocolClient).execute(argThat(req ->
+    req.getProtocol().equals("TCP") &&
+    req.getBehavior().equals(TcpBehavior.REQUEST_RESPONSE)));
 }
 
 @Test
 void returnsSuccessFor2xxResponse() {
-  when(httpClient.exchange(any(), any(), any(), any()))
-    .thenReturn(ResponseEntity.ok("success"));
+  when(protocolClient.execute(any()))
+    .thenReturn(ProtocolResponse.success("response"));
   PhTemplateResult result = executor.execute("/test/template.yaml", Map.of());
   assertTrue(result.isSuccess());
 }
 
 @Test
-void returnsFailureForNon2xxResponse() {
-  when(httpClient.exchange(any(), any(), any(), any()))
-    .thenReturn(ResponseEntity.status(500).body("error"));
+void returnsFailureForErrorResponse() {
+  when(protocolClient.execute(any()))
+    .thenReturn(ProtocolResponse.failure(500, "error"));
   PhTemplateResult result = executor.execute("/test/template.yaml", Map.of());
   assertFalse(result.isSuccess());
 }
+```
 ```
 
 ### Integration Tests (8 tests, ~20% coverage)
@@ -1078,7 +1240,7 @@ class SwarmLifecycleIntegrationTest {
     // Given: PH template that seeds data
     // When: swarm start event published
     eventPublisher.publishEvent(new SwarmStartEvent("test-swarm"));
-    // Then: HTTP request sent via processor client
+    // Then: HTTP request sent via ProtocolClient
     await().atMost(5, SECONDS).untilAsserted(() ->
       verify(wiremock).receivedRequest(postRequestedFor(urlEqualTo("/data"))));
   }
@@ -1164,7 +1326,7 @@ class LifecycleE2ETest {
     // And: Scenario with setup/teardown scripts
     
     // When: Start swarm via Orchestrator API
-    Response response = orchestratorClient.startSwarm("payments-load-test");
+    Response response = orchestratorClient.startSwarm("example-load-test");
     assertEquals(200, response.statusCode());
     
     // Then: Setup scripts executed (verify WireMock received requests)
@@ -1172,18 +1334,18 @@ class LifecycleE2ETest {
       wiremockClient.verify(postRequestedFor(urlEqualTo("/accounts"))));
     
     // And: Swarm is running
-    SwarmStatus status = orchestratorClient.getSwarmStatus("payments-load-test");
+    SwarmStatus status = orchestratorClient.getSwarmStatus("example-load-test");
     assertEquals("RUNNING", status.getState());
     
     // When: Stop swarm
-    orchestratorClient.stopSwarm("payments-load-test");
+    orchestratorClient.stopSwarm("example-load-test");
     
     // Then: Teardown scripts executed
     await().atMost(30, SECONDS).untilAsserted(() ->
       wiremockClient.verify(deleteRequestedFor(urlEqualTo("/accounts"))));
     
     // And: Swarm is stopped
-    status = orchestratorClient.getSwarmStatus("payments-load-test");
+    status = orchestratorClient.getSwarmStatus("example-load-test");
     assertEquals("STOPPED", status.getState());
   }
   
@@ -1194,7 +1356,7 @@ class LifecycleE2ETest {
     wiremockContainer.stop();
     
     // When: Start swarm
-    Response response = orchestratorClient.startSwarm("payments-load-test");
+    Response response = orchestratorClient.startSwarm("example-load-test");
     
     // Then: Swarm start fails
     assertEquals(500, response.statusCode());
@@ -1268,19 +1430,21 @@ class LifecycleE2ETest {
 **Goal**: Core infrastructure and script detection
 
 **Tasks**:
-1. Create `lifecycle` package in `swarm-controller-service`
-2. Implement `ScriptTypeDetector` with unit tests (TDD)
-3. Implement `LifecycleProperties` configuration binding
-4. Add Newman to Docker image (`Dockerfile` update)
-5. Create test fixtures (sample Postman collections, PH templates)
+1. Create `common/protocol-client` module by copying HTTP/TCP client code from processor-service
+2. Create `lifecycle` package in `swarm-controller-service`
+3. Implement `ScriptTypeDetector` with unit tests (TDD)
+4. Implement `LifecycleProperties` configuration binding
+5. Add Newman to Docker image (`Dockerfile` update)
+6. Create test fixtures (sample Postman collections, PH templates)
 
 **Deliverables**:
+- [ ] `common/protocol-client` module (copied from processor-service, no changes to processor)
 - [ ] `ScriptTypeDetector.java` (100% test coverage)
 - [ ] `LifecycleProperties.java`
 - [ ] Updated `Dockerfile` with Newman
 - [ ] Test fixtures in `src/test/resources/lifecycle/`
 
-**Acceptance**: All unit tests pass, Newman available in container
+**Acceptance**: All unit tests pass, Newman available in container, protocol-client module builds, processor-service unchanged
 
 ---
 
@@ -1290,7 +1454,7 @@ class LifecycleE2ETest {
 
 **Tasks**:
 1. Implement `NewmanRunner` with CLI wrapper (TDD)
-2. Implement `PhTemplateExecutor` using existing HTTP client (TDD)
+2. Implement `PhTemplateExecutor` using `ProtocolClient` (TDD)
 3. Implement `SetupScriptExecutor` orchestration logic (TDD)
 4. Add timeout protection and error handling
 5. Add Micrometer metrics
@@ -1302,6 +1466,8 @@ class LifecycleE2ETest {
 - [ ] Metrics: `ph_lifecycle_script_executions_total`, `ph_lifecycle_script_duration_seconds`
 
 **Acceptance**: Unit tests pass, scripts execute successfully in isolation
+
+**Note**: Processor-service remains unchanged. Future optimization can refactor it to use protocol-client.
 
 ---
 
@@ -1341,7 +1507,7 @@ class LifecycleE2ETest {
 
 **Deliverables**:
 - [ ] E2E tests (2 tests, all passing)
-- [ ] Example scripts in `scenario-manager-service/scenarios/examples/`
+- [ ] Example scripts in `docs/examples/lifecycle-scripts/`
 - [ ] Complete documentation
 - [ ] Updated architecture diagrams
 
@@ -1372,7 +1538,7 @@ class LifecycleE2ETest {
 
 ### Rollout Strategy
 
-**Experimental Release (0.16.x)**:
+**Experimental Release (0.17.x)**:
 - Feature flag: `pockethive.control-plane.swarm-controller.lifecycle.enabled: false` (default)
 - Opt-in for early adopters
 - Gather feedback for 2-4 weeks
@@ -1774,21 +1940,19 @@ headersTemplate:
 **File**: `setup-env.yaml`
 
 ```yaml
-# Base URLs
-baseUrl: "{{ config.sutBaseUrl }}"
-wiremockUrl: "{{ config.wiremockUrl }}"
+# SUT endpoints (from SwarmPlan.sutEnvironment passed by Orchestrator)
+baseUrl: "{{ sut.endpoints['default'].baseUrl }}"
+wiremockUrl: "{{ sut.endpoints['wiremock'].baseUrl }}"
 
-# Swarm context
+# Swarm context (always available)
 swarmId: "{{ swarmId }}"
 accountPrefix: "swarm-{{ swarmId }}-"
 timestamp: "{{ eval('#nowIso') }}"
 
-# Configuration
-accountCount: "{{ config.accountCount }}"
-environment: "{{ config.environment }}"
-
-# Secrets (from environment variables)
-apiKey: "{{ config.apiKey }}"
+# Lifecycle environment (Postman-style, from template.lifecycle.environment)
+accountCount: "{{ pm.environment.accountCount }}"
+environment: "{{ pm.environment.environment }}"
+apiKey: "{{ pm.environment.apiKey }}"
 ```
 
 ---
@@ -1797,48 +1961,97 @@ apiKey: "{{ config.apiKey }}"
 
 ### Complete Configuration Example
 
+**Application Defaults** (`swarm-controller-service/src/main/resources/application.yml`):
 ```yaml
 pockethive:
   control-plane:
     swarm-controller:
       lifecycle:
-        # Folder paths (mounted volumes)
-        setup-folder: /app/setup-scripts
-        teardown-folder: /app/teardown-scripts
+        # Folder paths (from scenario bundle)
+        setup-folder: /app/scenario/setup-scripts
+        teardown-folder: /app/scenario/teardown-scripts
         
-        # Error handling
+        # Error handling defaults
         fail-on-setup-error: true
         fail-on-teardown-error: false
         
-        # Timeouts
+        # Timeout defaults
         script-timeout-seconds: 300
         
-        # Newman configuration
+        # Newman defaults
         newman:
           reporters: [cli, json]
           bail: true
           insecure: false
           timeout-request: 30000
           timeout-script: 5000
-          
-        # Environment defaults
-        environment:
-          sutBaseUrl: http://wiremock:8080
-          wiremockUrl: http://wiremock:8080
-          apiKey: ${SETUP_API_KEY:default-key}
-          accountCount: 100
-          environment: dev
 ```
+
+**Scenario Configuration** (`scenario-manager-service/scenarios/example-load-test/scenario.yaml`):
+```yaml
+id: example-load-test
+name: Example Load Test
+description: Example load test with automated setup/teardown
+
+template:
+  image: swarm-controller:latest
+  
+  # Lifecycle configuration (NEW - added by this RFC)
+  lifecycle:
+    scriptTimeoutSeconds: 600           # Override default 300s
+    failOnSetupError: true              # Explicit (matches default)
+    
+    # Environment variables for setup/teardown scripts
+    environment:
+      apiKey: ${EXAMPLE_API_KEY}        # Resolved from environment
+      accountCount: 1000
+      environment: staging
+  
+  bees:
+    - role: generator
+      image: generator:latest
+      config:
+        inputs:
+          scheduler:
+            ratePerSec: 100
+      work:
+        out:
+          out: genQ
+    # ... other bees
+```
+
+**Environment Template** (`scenarios/example-load-test/setup-scripts/setup-env.yaml`):
+```yaml
+# Access SUT endpoints (from SwarmPlan.sutEnvironment passed by Orchestrator)
+baseUrl: "{{ sut.endpoints['default'].baseUrl }}"
+wiremockUrl: "{{ sut.endpoints['wiremock'].baseUrl }}"
+
+# Access lifecycle environment (Postman-style)
+apiKey: "{{ pm.environment.apiKey }}"
+accountCount: "{{ pm.environment.accountCount }}"
+environment: "{{ pm.environment.environment }}"
+
+# Swarm context (always available)
+swarmId: "{{ swarmId }}"
+timestamp: "{{ eval('#nowIso') }}"
+accountPrefix: "{{ pm.environment.environment }}-{{ swarmId }}-"
+```
+
+**Template Context Available**:
+- `sut` - SUT configuration from SwarmPlan.sutEnvironment (passed by Orchestrator)
+- `swarmId` - Swarm identifier
+- `pm.environment` - Lifecycle environment from template.lifecycle.environment (e.g., `pm.environment.apiKey`, `pm.environment.accountCount`)
+- `eval(expression)` - SpEL evaluation with helpers
 
 ### Environment Variables
 
 | Variable | Purpose | Default |
 |----------|---------|---------|
-| `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_LIFECYCLE_SETUP_FOLDER` | Setup scripts path | `/app/setup-scripts` |
-| `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_LIFECYCLE_TEARDOWN_FOLDER` | Teardown scripts path | `/app/teardown-scripts` |
+| `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_LIFECYCLE_SETUP_FOLDER` | Setup scripts path | `/app/scenario/setup-scripts` |
+| `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_LIFECYCLE_TEARDOWN_FOLDER` | Teardown scripts path | `/app/scenario/teardown-scripts` |
 | `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_LIFECYCLE_FAIL_ON_SETUP_ERROR` | Block swarm start on setup failure | `true` |
 | `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_LIFECYCLE_SCRIPT_TIMEOUT_SECONDS` | Per-script timeout | `300` |
-| `SETUP_API_KEY` | API key for setup scripts | `default-key` |
+| `EXAMPLE_API_KEY` | Example: API key referenced in scenario.yaml | (none) |
 
 ---
 
@@ -1852,16 +2065,16 @@ pockethive:
 
 **Diagnosis**:
 ```bash
-# Check if folder is mounted
-docker exec swarm-controller ls -la /app/setup-scripts
+# Check if scenario bundle is mounted
+docker exec swarm-controller ls -la /app/scenario/setup-scripts
 
 # Check controller logs
 docker logs swarm-controller | grep "setup"
 ```
 
 **Solutions**:
-- Verify volume mount in `docker-compose.yml`
-- Check folder path in configuration
+- Verify scenario bundle is mounted to `/app/scenario/`
+- Check folder path in configuration points to `/app/scenario/setup-scripts/`
 - Ensure scripts have correct file extensions
 
 ---
@@ -1907,7 +2120,7 @@ docker logs swarm-controller | grep "duration"
 **Diagnosis**:
 ```bash
 # Check if setup-env.yaml exists
-docker exec swarm-controller cat /app/setup-scripts/setup-env.yaml
+docker exec swarm-controller cat /app/scenario/setup-scripts/setup-env.yaml
 
 # Check template rendering logs
 docker logs swarm-controller | grep "template"
@@ -1933,16 +2146,17 @@ curl -X POST http://api:8080/accounts -d @accounts.json
 
 **After** (automated):
 1. Convert to Postman collection or PH template
-2. Place in `/app/setup-scripts/`
+2. Place in scenario bundle: `my-scenario/setup-scripts/`
 3. Add numeric prefix for ordering
-4. Mount volume in `docker-compose.yml`
+4. Scenario bundle is automatically mounted to `/app/scenario/` by Swarm Controller
 
 **Example**:
-```yaml
-services:
-  swarm-controller:
-    volumes:
-      - ./scenarios/payments/setup:/app/setup-scripts:ro
+```
+my-scenario/
+  setup-scripts/
+    01-create-accounts.postman.json
+  teardown-scripts/
+    99-cleanup.postman.json
 ```
 
 ---
@@ -1958,4 +2172,4 @@ This RFC proposes a low-risk, high-value enhancement to PocketHive that:
 
 The feature aligns with PocketHive's goals of **scenario-driven testing**, **fast iteration**, and **production-adjacent simulation** while respecting the existing architecture and control-plane patterns.
 
-**Recommendation**: ✅ **Approve for implementation in PocketHive 0.16.x (experimental)**
+**Recommendation**: ✅ **Approve for implementation in PocketHive 0.17.x (experimental)**
