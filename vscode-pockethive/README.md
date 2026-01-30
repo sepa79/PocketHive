@@ -5,9 +5,10 @@ Basic commands for the Orchestrator REST API.
 ## Setup
 
 1. Open this repo in VS Code.
-2. Set `pockethive.orchestratorUrl` (default: `http://localhost:8088/orchestrator`).
-3. Set `pockethive.scenarioManagerUrl` (default: `http://localhost:8088/scenario-manager`).
-3. Optional: set `pockethive.authToken` if the API requires auth.
+2. Run `init.sh`.
+3. Set `pockethive.orchestratorUrl` (default: `http://localhost:8088/orchestrator`).
+4. Set `pockethive.scenarioManagerUrl` (default: `http://localhost:8088/scenario-manager`).
+5. Optional: set `pockethive.authToken` if the API requires auth.
 
 ## Commands
 
