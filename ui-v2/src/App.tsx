@@ -18,7 +18,8 @@ export default function App() {
         <Route path="/home" element={<Navigate to="/" replace />} />
 
         <Route path="/scenarios/*" element={<ScenariosPage />} />
-        <Route path="/hive/*" element={<HivePage />} />
+        <Route path="/hive" element={<HivePage />} />
+        <Route path="/hive/:swarmId" element={<HivePage />} />
         <Route path="/journal/*" element={<JournalPage />} />
         <Route path="/other/*" element={<OtherPage />} />
         <Route path="/buzz" element={<WireLogPage />} />

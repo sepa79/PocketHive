@@ -60,17 +60,17 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
     },
     "correlationId": null,
     "idempotencyKey": null,
+    "runtime": {
+      "templateId": "baseline-demo",
+      "runId": "run-20260122-123455Z",
+      "containerId": null,
+      "image": "ghcr.io/pockethive/swarm-controller:1.2.3",
+      "stackName": null
+    },
     "data": {
       "enabled": true,
       "config": {},
       "startedAt": "2026-01-22T12:00:00Z",
-      "runtime": {
-        "templateId": "baseline-demo",
-        "runId": null,
-        "containerId": null,
-        "image": "ghcr.io/pockethive/swarm-controller:1.2.3",
-        "stackName": null
-      },
       "io": {},
       "ioState": {},
       "context": {
@@ -297,6 +297,8 @@ Deletes the tap queue and returns the last known tap state.
 {
   "templateId": "scenario-id",
   "idempotencyKey": "uuid-v4",
+  "autoPullImages": true,
+  "sutId": "optional-sut-id",
   "notes": "optional"
 }
 ```

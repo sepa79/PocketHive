@@ -1263,6 +1263,12 @@ textarea,
   font-size: 12px;
 }
 
+.swarmBeeInstance {
+  margin-left: 6px;
+  font-weight: 400;
+  color: var(--muted2);
+}
+
 .swarmBeeImage {
   color: var(--muted);
   font-size: 11px;
@@ -1274,6 +1280,26 @@ textarea,
   gap: 4px;
   font-size: 11px;
   color: var(--muted);
+}
+
+.ioTable {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 6px 12px;
+}
+
+.ioHead {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted2);
+}
+
+.ioCell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
 }
 
 .swarmWorkerDetail {
@@ -1538,6 +1564,13 @@ textarea,
   font-size: 10px;
   text-transform: lowercase;
   background: rgba(255, 255, 255, 0.08);
+}
+
+.chipRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
 }
 
 .chip-signal {

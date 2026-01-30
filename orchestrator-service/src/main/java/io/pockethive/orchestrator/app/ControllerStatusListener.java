@@ -72,7 +72,7 @@ public class ControllerStatusListener {
             JsonNode data = node.path("data");
             JsonNode context = data.path("context");
             String swarmStatusText = context.path("swarmStatus").asText(null);
-            String runId = context.path("journal").path("runId").asText(null);
+            String runId = node.path("runtime").path("runId").asText(null);
 
             boolean discovered = store.ensureDiscoveredSwarm(swarmId, controllerInstance, runId);
             Swarm swarm = swarmId == null ? null : store.find(swarmId).orElse(null);

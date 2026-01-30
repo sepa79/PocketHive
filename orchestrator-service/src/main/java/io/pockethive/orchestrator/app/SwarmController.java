@@ -733,19 +733,29 @@ public class SwarmController {
         if (workersNode == null || workersNode.isMissingNode() || !workersNode.isArray()) {
             return List.of();
         }
-        Set<String> roles = new LinkedHashSet<>();
+        Map<String, String> byRole = new LinkedHashMap<>();
         for (JsonNode workerNode : workersNode) {
             String role = textOrNull(workerNode, "role");
-            if (role != null) {
-                roles.add(role);
+            if (role == null) {
+                continue;
+            }
+            JsonNode runtime = workerNode.path("runtime");
+            String image = runtime != null && runtime.isObject() ? textOrNull(runtime, "image") : null;
+            String existing = byRole.get(role);
+            if (existing == null && !byRole.containsKey(role)) {
+                byRole.put(role, image);
+                continue;
+            }
+            if (existing == null && image != null) {
+                byRole.put(role, image);
             }
         }
-        if (roles.isEmpty()) {
+        if (byRole.isEmpty()) {
             return List.of();
         }
-        List<BeeSummary> bees = new ArrayList<>(roles.size());
-        for (String role : roles) {
-            bees.add(new BeeSummary(role, null));
+        List<BeeSummary> bees = new ArrayList<>(byRole.size());
+        for (Map.Entry<String, String> entry : byRole.entrySet()) {
+            bees.add(new BeeSummary(entry.getKey(), entry.getValue()));
         }
         return bees;
     }

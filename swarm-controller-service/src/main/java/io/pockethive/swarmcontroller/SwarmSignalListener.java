@@ -942,6 +942,7 @@ public class SwarmSignalListener {
     String state = determineState(m);
     maybeJournalHealthTransition(state, m);
     SwarmStatus status = lifecycle.getStatus();
+    String health = determineHealth(status, m);
     boolean workloadsEnabled = workloadsEnabled(status);
     ConfirmationScope scope = ConfirmationScope.forInstance(swarmId, role, instanceId);
     String rk = ControlPlaneRouting.event("metric", "status-full", scope);
@@ -960,6 +961,7 @@ public class SwarmSignalListener {
         .maxStalenessSec(MAX_STALENESS_MS / 1000)
         .totals(m.desired(), m.healthy(), m.running(), m.enabled())
         .data("swarmStatus", status.name())
+        .data("swarmHealth", health)
         .data("startedAt", startedAt)
         .config(statusConfigSnapshot())
         .data("workers", workers.snapshot())
@@ -967,9 +969,6 @@ public class SwarmSignalListener {
         .data("scenario", scenarioProgress())
         .data("bindings", Map.of("work", lifecycle.workBindingsSnapshot()));
     builder.runtime(runtimeMetaSnapshot());
-    if (journalRunId != null) {
-      builder.data("journal", Map.of("runId", journalRunId));
-    }
     String controlQueue = properties.controlQueueName(role, instanceId);
     builder.controlIn(controlQueue)
         .controlRoutes(SwarmControllerRoutes.controllerControlRoutes(swarmId, role, instanceId))
@@ -984,6 +983,7 @@ public class SwarmSignalListener {
     String state = determineState(m);
     maybeJournalHealthTransition(state, m);
     SwarmStatus status = lifecycle.getStatus();
+    String health = determineHealth(status, m);
     boolean workloadsEnabled = workloadsEnabled(status);
     ConfirmationScope scope = ConfirmationScope.forInstance(swarmId, role, instanceId);
     String rk = ControlPlaneRouting.event("metric", "status-delta", scope);
@@ -1000,6 +1000,7 @@ public class SwarmSignalListener {
         .watermark(m.watermark())
         .totals(m.desired(), m.healthy(), m.running(), m.enabled())
         .data("swarmStatus", status.name())
+        .data("swarmHealth", health)
         .data("scenario", scenarioProgress());
     builder.runtime(runtimeMetaSnapshot());
     appendTrafficDiagnostics(builder);
@@ -1278,6 +1279,16 @@ public class SwarmSignalListener {
       return "Degraded";
     }
     return lifecycle.getStatus().name();
+  }
+
+  private static String determineHealth(SwarmStatus status, SwarmMetrics m) {
+    if (status == SwarmStatus.FAILED) {
+      return "FAILED";
+    }
+    if (m != null && m.desired() > 0 && m.healthy() < m.desired()) {
+      return "DEGRADED";
+    }
+    return "RUNNING";
   }
 
   private void maybeJournalHealthTransition(String state, SwarmMetrics metrics) {

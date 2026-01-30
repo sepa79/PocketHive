@@ -80,6 +80,10 @@ Purpose:
 - optional graph (React Flow)
 - health/debug views
 
+Routes (URL is the state):
+- `/v2/hive`
+- `/v2/hive/:swarmId`
+
 Within Hive use tabs/panels for internal navigation, not SideNav expansion.
 
 ### Journal

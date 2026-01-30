@@ -40,14 +40,14 @@ class ControllerStatusListenerRebuildTest {
 	                "image": "swarm-controller:latest",
 	                "stackName": "ph-sw1"
 	              },
-	              "data": {
-	                "enabled": false,
-	                "ioState": {"filesystem": {"input":"unknown","output":"unknown"}},
-	                "config": {},
-	                "startedAt": "2024-01-01T00:00:00Z",
-	                "io": {},
-	                "context": {"swarmStatus": "STOPPED", "journal": {"runId":"run-1"}}
-	              }
+		              "data": {
+		                "enabled": false,
+		                "ioState": {"filesystem": {"input":"unknown","output":"unknown"}},
+		                "config": {},
+		                "startedAt": "2024-01-01T00:00:00Z",
+		                "io": {},
+		                "context": {"swarmStatus": "STOPPED"}
+		              }
             }
             """;
 
