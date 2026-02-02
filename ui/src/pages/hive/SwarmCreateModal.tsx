@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createSwarm } from '../../lib/orchestratorApi'
 import { apiFetch } from '../../lib/api'
+import YAML from 'yaml'
 
 interface Props {
   onClose: () => void
@@ -23,18 +24,17 @@ interface ScenarioBee {
 
 type ApiError = Error & { status?: number }
 
-interface SutEnvironment {
-  id: string
-  name: string
-  type: string | null
-}
+type VariablesProfile = { id: string; name: string | null }
 
 export default function SwarmCreateModal({ onClose, autoPullOnStart, onChangeAutoPull }: Props) {
   const [swarmId, setSwarmId] = useState('')
   const [templates, setTemplates] = useState<ScenarioTemplate[]>([])
   const [scenarioId, setScenarioId] = useState('')
-  const [sutEnvironments, setSutEnvironments] = useState<SutEnvironment[]>([])
+  const [bundleSuts, setBundleSuts] = useState<string[]>([])
   const [sutId, setSutId] = useState<string>('')
+  const [variablesProfiles, setVariablesProfiles] = useState<VariablesProfile[]>([])
+  const [variablesProfileId, setVariablesProfileId] = useState('')
+  const [variablesRequireSut, setVariablesRequireSut] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [showRawScenario, setShowRawScenario] = useState(false)
   const [scenarioPreview, setScenarioPreview] = useState<string | null>(null)
@@ -48,9 +48,6 @@ export default function SwarmCreateModal({ onClose, autoPullOnStart, onChangeAut
         const templatesResponse = await apiFetch('/scenario-manager/api/templates', {
           headers: { Accept: 'application/json' },
         })
-        const sutResponse = await apiFetch('/scenario-manager/sut-environments', {
-          headers: { Accept: 'application/json' },
-        })
 
         if (cancelled) return
 
@@ -61,16 +58,17 @@ export default function SwarmCreateModal({ onClose, autoPullOnStart, onChangeAut
 
         const templatesData = await templatesResponse.json()
         setTemplates(normalizeTemplates(templatesData))
-        if (sutResponse.ok) {
-          const sutData = (await sutResponse.json()) as unknown
-          setSutEnvironments(normalizeSutEnvironments(sutData))
-        } else {
-          setSutEnvironments([])
-        }
+        setBundleSuts([])
+        setVariablesProfiles([])
+        setVariablesProfileId('')
+        setVariablesRequireSut(false)
       } catch {
         if (!cancelled) {
           setTemplates([])
-          setSutEnvironments([])
+          setBundleSuts([])
+          setVariablesProfiles([])
+          setVariablesProfileId('')
+          setVariablesRequireSut(false)
         }
       }
     }
@@ -92,15 +90,25 @@ export default function SwarmCreateModal({ onClose, autoPullOnStart, onChangeAut
       setMessage('Invalid swarm ID')
       return
     }
+    if (variablesProfiles.length > 0 && !variablesProfileId) {
+      setMessage('Variables profile is required for this scenario')
+      return
+    }
+    if (variablesRequireSut && !sutId) {
+      setMessage('SUT is required for this scenario (sut-scoped variables exist)')
+      return
+    }
     try {
       await createSwarm(swarmId.trim(), scenarioId, {
         autoPullImages: autoPullOnStart,
         sutId: sutId || null,
+        variablesProfileId: variablesProfileId || null,
       })
       setMessage('Swarm created')
       setSwarmId('')
       setScenarioId('')
       setSutId('')
+      setVariablesProfileId('')
     } catch (error) {
       const apiError = error as ApiError
       if (apiError?.status === 409) {
@@ -120,6 +128,11 @@ export default function SwarmCreateModal({ onClose, autoPullOnStart, onChangeAut
     let cancelled = false
     setScenarioPreview(null)
     setScenarioPreviewError(null)
+    setBundleSuts([])
+    setSutId('')
+    setVariablesProfiles([])
+    setVariablesProfileId('')
+    setVariablesRequireSut(false)
 
     const loadScenario = async () => {
       if (!selectedTemplate) {
@@ -127,9 +140,21 @@ export default function SwarmCreateModal({ onClose, autoPullOnStart, onChangeAut
       }
       setShowRawScenario(false)
       try {
-        const response = await apiFetch(`/scenario-manager/scenarios/${encodeURIComponent(selectedTemplate.id)}`, {
-          headers: { Accept: 'application/json' },
-        })
+        const scenarioReq = apiFetch(
+          `/scenario-manager/scenarios/${encodeURIComponent(selectedTemplate.id)}`,
+          { headers: { Accept: 'application/json' } },
+        )
+        const sutsReq = apiFetch(
+          `/scenario-manager/scenarios/${encodeURIComponent(selectedTemplate.id)}/suts`,
+          { headers: { Accept: 'application/json' } },
+        )
+        const varsReq = apiFetch(
+          `/scenario-manager/scenarios/${encodeURIComponent(selectedTemplate.id)}/variables`,
+          { headers: { Accept: 'text/plain' } },
+        )
+        const response = await scenarioReq
+        const sutsResponse = await sutsReq
+        const varsResponse = await varsReq
         if (cancelled) return
         if (!response.ok) {
           setScenarioPreviewError('Failed to load scenario definition')
@@ -137,9 +162,37 @@ export default function SwarmCreateModal({ onClose, autoPullOnStart, onChangeAut
         }
         const body = await response.json()
         setScenarioPreview(JSON.stringify(body, null, 2))
+
+        if (sutsResponse.ok) {
+          const data = (await sutsResponse.json()) as unknown
+          const ids = Array.isArray(data)
+            ? data
+                .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
+                .filter((entry) => entry.length > 0)
+            : []
+          setBundleSuts(ids)
+        } else {
+          setBundleSuts([])
+        }
+
+        if (varsResponse.ok) {
+          const text = await varsResponse.text()
+          const parsed = parseVariables(text)
+          setVariablesProfiles(parsed.profiles)
+          setVariablesRequireSut(parsed.requiresSut)
+          if (parsed.profiles.length === 1) {
+            setVariablesProfileId(parsed.profiles[0].id)
+          }
+        } else {
+          setVariablesProfiles([])
+          setVariablesRequireSut(false)
+        }
       } catch {
         if (!cancelled) {
           setScenarioPreviewError('Failed to load scenario definition')
+          setBundleSuts([])
+          setVariablesProfiles([])
+          setVariablesRequireSut(false)
         }
       }
     }
@@ -179,23 +232,47 @@ export default function SwarmCreateModal({ onClose, autoPullOnStart, onChangeAut
             </div>
             <div className="flex items-end">
               <div className="flex flex-col gap-1 mr-4">
-                <label htmlFor="sutEnv" className="block text-xs mb-0.5 text-white/70">
-                  System under test
-                </label>
-                <select
-                  id="sutEnv"
-                  className="rounded border border-white/20 bg-[#020617] px-2 py-1 text-xs text-white"
-                  value={sutId}
-                  onChange={(e) => setSutId(e.target.value)}
-                >
-                  <option value="">(none)</option>
-                  {sutEnvironments.map((env) => (
-                    <option key={env.id} value={env.id}>
-                      {env.name} {env.type ? `(${env.type})` : ''}
-                    </option>
-                  ))}
-                </select>
+                {bundleSuts.length > 0 && (
+                  <>
+                    <label htmlFor="sutEnv" className="block text-xs mb-0.5 text-white/70">
+                      System under test
+                    </label>
+                    <select
+                      id="sutEnv"
+                      className="rounded border border-white/20 bg-[#020617] px-2 py-1 text-xs text-white"
+                      value={sutId}
+                      onChange={(e) => setSutId(e.target.value)}
+                    >
+                      <option value="">(none)</option>
+                      {bundleSuts.map((id) => (
+                        <option key={id} value={id}>
+                          {id}
+                        </option>
+                      ))}
+                    </select>
+                  </>
+                )}
               </div>
+              {variablesProfiles.length > 0 && (
+                <div className="flex flex-col gap-1 mr-4">
+                  <label htmlFor="varsProfile" className="block text-xs mb-0.5 text-white/70">
+                    Variables profile
+                  </label>
+                  <select
+                    id="varsProfile"
+                    className="rounded border border-white/20 bg-[#020617] px-2 py-1 text-xs text-white"
+                    value={variablesProfileId}
+                    onChange={(e) => setVariablesProfileId(e.target.value)}
+                  >
+                    <option value="">(select)</option>
+                    {variablesProfiles.map((profile) => (
+                      <option key={profile.id} value={profile.id}>
+                        {profile.name ? `${profile.name} (${profile.id})` : profile.id}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <label className="flex items-center gap-1 text-xs text-white/70">
                 <input
                   type="checkbox"
@@ -377,20 +454,28 @@ function normalizeBee(entry: unknown): ScenarioBee | null {
   return { role, image }
 }
 
-function normalizeSutEnvironments(data: unknown): SutEnvironment[] {
-  if (!Array.isArray(data)) return []
-  const result: SutEnvironment[] = []
-  for (const entry of data) {
-    if (!entry || typeof entry !== 'object') continue
-    const value = entry as Record<string, unknown>
-    const id = typeof value.id === 'string' ? value.id.trim() : ''
-    const name = typeof value.name === 'string' ? value.name.trim() : ''
-    if (!id || !name) continue
-    const type =
-      typeof value.type === 'string' && value.type.trim().length > 0
-        ? value.type.trim()
-        : null
-    result.push({ id, name, type })
+function parseVariables(text: string): { profiles: VariablesProfile[]; requiresSut: boolean } {
+  try {
+    const doc = (YAML.parse(text) ?? {}) as Record<string, unknown>
+    const definitions = Array.isArray(doc.definitions) ? doc.definitions : []
+    const requiresSut = definitions.some((def) => {
+      if (!def || typeof def !== 'object') return false
+      const scope = (def as Record<string, unknown>).scope
+      return typeof scope === 'string' && scope.trim().toLowerCase() === 'sut'
+    })
+    const profiles = Array.isArray(doc.profiles) ? doc.profiles : []
+    const normalized: VariablesProfile[] = profiles
+      .map((profile) => {
+        if (!profile || typeof profile !== 'object') return null
+        const record = profile as Record<string, unknown>
+        const id = typeof record.id === 'string' ? record.id.trim() : ''
+        if (!id) return null
+        const name = typeof record.name === 'string' ? record.name.trim() : null
+        return { id, name: name && name.length > 0 ? name : null }
+      })
+      .filter((p): p is VariablesProfile => Boolean(p))
+    return { profiles: normalized, requiresSut }
+  } catch {
+    return { profiles: [], requiresSut: false }
   }
-  return result
 }
