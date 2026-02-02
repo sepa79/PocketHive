@@ -71,8 +71,13 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
 
     reloadTemplatesIfNeeded(config);
 
+    WorkItem effectiveSeed = seed;
+    if (effectiveSeed.headers().get("vars") == null && config.vars() != null && !config.vars().isEmpty()) {
+      effectiveSeed = effectiveSeed.addStepHeader("vars", config.vars());
+    }
+
     String serviceId = resolveServiceId(seed, config);
-    String callId = resolveCallId(seed);
+    String callId = resolveCallId(effectiveSeed);
     if (callId == null || callId.isBlank()) {
       context.logger().warn("No callId present on work item; {}", missingBehavior(config));
       return handleMissing(config, seed, context);
@@ -97,7 +102,7 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
             .build();
 
         MessageTemplateRenderer.RenderedMessage rendered =
-            messageTemplateRenderer.render(template, seed);
+            messageTemplateRenderer.render(template, effectiveSeed);
 
         Map<String, String> headers = new HashMap<>(rendered.headers());
         
@@ -133,7 +138,7 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
             .build();
 
         MessageTemplateRenderer.RenderedMessage rendered =
-            messageTemplateRenderer.render(template, seed);
+            messageTemplateRenderer.render(template, effectiveSeed);
 
         Map<String, String> headers = new HashMap<>(rendered.headers());
         

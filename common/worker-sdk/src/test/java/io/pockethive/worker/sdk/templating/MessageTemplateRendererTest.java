@@ -3,6 +3,7 @@ package io.pockethive.worker.sdk.templating;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.pockethive.worker.sdk.api.WorkItem;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class MessageTemplateRendererTest {
@@ -39,5 +40,21 @@ class MessageTemplateRendererTest {
         assertThat(rendered.path()).isEqualTo("/missing");
         assertThat(rendered.body()).isEqualTo("null|not-json");
     }
-}
 
+    @Test
+    void exposesVarsFromHeadersToPebbleAndEval() {
+        WorkItem seed = WorkItem.text("hello")
+            .header("vars", Map.of("loopCount", 10, "enableFoo", true))
+            .build();
+        MessageTemplate template = MessageTemplate.builder()
+            .pathTemplate("/{{ vars.loopCount }}")
+            .methodTemplate("POST")
+            .bodyTemplate("flag={{ eval(\"vars.enableFoo ? 'Y' : 'N'\") }}")
+            .build();
+
+        MessageTemplateRenderer.RenderedMessage rendered = messageRenderer.render(template, seed);
+
+        assertThat(rendered.path()).isEqualTo("/10");
+        assertThat(rendered.body()).isEqualTo("flag=Y");
+    }
+}
