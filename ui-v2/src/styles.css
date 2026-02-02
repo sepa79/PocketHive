@@ -1019,6 +1019,12 @@ textarea,
   background: rgba(255, 255, 255, 0.08);
 }
 
+.actionButtonTiny {
+  padding: 2px 8px;
+  border-radius: 9px;
+  font-size: 11px;
+}
+
 .actionButtonDanger {
   border-color: rgba(255, 95, 95, 0.35);
   background: rgba(255, 95, 95, 0.12);
@@ -1102,6 +1108,215 @@ textarea,
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.swarmViewPage {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+
+.swarmViewHeader .h1 {
+  font-size: 16px;
+}
+
+.swarmViewGrid {
+  display: grid;
+  grid-template-columns: 380px minmax(0, 1fr);
+  gap: 12px;
+  min-height: 0;
+}
+
+@media (max-width: 1100px) {
+  .swarmViewGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.swarmViewCards {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.swarmCardList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: auto;
+  min-height: 0;
+  max-height: min(70vh, 760px);
+  padding-right: 2px;
+}
+
+.swarmWorkerCard {
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--border2);
+  background: var(--panel2);
+  border-radius: 12px;
+  padding: 10px 10px;
+  color: inherit;
+}
+
+.swarmWorkerCard:hover {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.swarmWorkerCardSelected {
+  border-color: rgba(51, 225, 255, 0.5);
+  box-shadow: 0 0 0 2px rgba(51, 225, 255, 0.12);
+}
+
+.swarmWorkerTitle {
+  min-width: 0;
+}
+
+.swarmWorkerRole {
+  font-weight: 700;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.swarmWorkerMeta {
+  font-size: 11px;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.swarmWorkerBadges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  justify-content: end;
+}
+
+.swarmWorkerIo {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.swarmWorkerQueues {
+  margin-top: 8px;
+  display: grid;
+  gap: 4px;
+}
+
+.swarmQueueRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 11px;
+  min-width: 0;
+}
+
+.swarmQueueName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.swarmQueueStat {
+  flex: 0 0 auto;
+  color: var(--muted2);
+}
+
+.swarmViewCanvas {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.swarmGraphSurface {
+  border-radius: 12px;
+  border: 1px solid var(--border2);
+  background: rgba(255, 255, 255, 0.02);
+  overflow: hidden;
+  height: min(70vh, 760px);
+  min-height: 360px;
+}
+
+.swarmGraphSurface .react-flow {
+  background: transparent;
+}
+
+.swarmFlowNode {
+  width: 220px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 10px 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+}
+
+.swarmFlowNodeSelected {
+  border-color: rgba(51, 225, 255, 0.75);
+  box-shadow: 0 0 0 2px rgba(51, 225, 255, 0.12), 0 10px 30px rgba(0, 0, 0, 0.2);
+}
+
+.swarmFlowNodeDim {
+  opacity: 0.35;
+}
+
+.swarmFlowNodeTitle {
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.2;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.swarmFlowNodeSubtitle {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.2;
+  color: rgba(255, 255, 255, 0.65);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.swarmFlowHandle {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.28);
+  background: rgba(8, 10, 14, 0.8);
+}
+
+.swarmGraphSvg {
+  width: 100%;
+  height: 100%;
+}
+
+.swarmGraphEdgeLabel {
+  font-size: 10px;
+  fill: rgba(255, 255, 255, 0.78);
+  paint-order: stroke;
+  stroke: rgba(0, 0, 0, 0.55);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+.swarmGraphNodeTitle {
+  font-size: 12px;
+  fill: rgba(255, 255, 255, 0.92);
+  font-weight: 700;
+}
+
+.swarmGraphNodeSub {
+  font-size: 10px;
+  fill: rgba(255, 255, 255, 0.65);
 }
 
 .swarmTableCard {

@@ -1056,6 +1056,14 @@ export function HivePage() {
 	                    >
 	                      {selectedSwarmId === swarm.id ? 'Hide' : 'Details'}
 	                    </button>
+	                    <button
+	                      type="button"
+	                      className="actionButton actionButtonGhost"
+	                      onClick={() => navigate(`/hive/${encodeURIComponent(swarm.id)}/view`)}
+	                      title="Open compact swarm view (workers + topology)."
+	                    >
+	                      View
+	                    </button>
 	                    {selectedSwarmId === swarm.id ? (
 	                      <button
 	                        type="button"
