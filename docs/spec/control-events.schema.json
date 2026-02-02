@@ -94,9 +94,12 @@
     "RuntimeScopeRule": {
       "allOf": [
         {
+          "type": "object",
           "if": {
+            "type": "object",
             "properties": {
               "scope": {
+                "type": "object",
                 "properties": {
                   "swarmId": { "const": "ALL" }
                 }
@@ -104,10 +107,17 @@
             }
           },
           "then": {
-            "not": { "required": ["runtime"] }
+            "type": "object",
+            "properties": {
+              "runtime": false
+            }
           },
           "else": {
-            "required": ["runtime"]
+            "type": "object",
+            "required": ["runtime"],
+            "properties": {
+              "runtime": true
+            }
           }
         }
       ]
