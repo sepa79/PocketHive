@@ -267,7 +267,7 @@ This is a concrete, implementation-oriented checklist. Treat the bundle as the S
 - [x] Orchestrator: resolve `vars` for the chosen `(variablesProfileId, sutId)`:
   - [x] `vars = values.global[profileId] + values.sut[profileId][sutId]` (flat map)
   - [x] hard error on missing `required` values (no fallback chains)
-- [x] Orchestrator: inject resolved `vars` into each bee config under a single, reserved key (example: `config.templating.vars`) so workers can use it at runtime without bespoke per-worker wiring.
+- [x] Orchestrator: inject resolved `vars` into each bee config under a single, reserved key: `config.vars` (map) so workers can use it at runtime without bespoke per-worker wiring.
 - [x] Orchestrator: record `variablesProfileId` and a small `vars` summary in the Hive journal entry for `swarm-create` (avoid dumping secrets).
 
 ### Worker SDK (Pebble + SpEL context)
@@ -278,7 +278,7 @@ The worker templating context is built in two main places today:
 
 Implementation intent:
 
-- [ ] Standardize a single config location for variables (example: `templating.vars` map).
+- [x] Standardize a single config location for variables: `config.vars` (map).
 - [x] Add `vars` to Pebble context maps passed to the renderer:
   - [x] `MessageTemplateRenderer`: include `ctx.put("vars", <resolvedVarsFromConfig>)`
   - [x] `TemplatingInterceptor`: include `templateContext.put("vars", <resolvedVarsFromConfig>)`
@@ -304,4 +304,4 @@ Follow `docs/correlation-vs-idempotency.md` for the semantics.
 
 - [x] Scenario Manager: unit tests for `variables.yaml` parsing + validation (types, unknown keys, required coverage).
 - [x] Worker SDK: tests that `vars.*` is accessible in Pebble and in `eval(...)`.
-- [ ] Orchestrator: a focused test that a `swarm-create` with `(sutId, variablesProfileId)` injects `config.templating.vars` into the produced plan/config.
+- [x] Orchestrator: a focused test that a `swarm-create` with `(sutId, variablesProfileId)` injects `config.vars` into the produced plan/config.
