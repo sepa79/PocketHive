@@ -224,6 +224,67 @@ public class ScenarioController {
         }
     }
 
+    @GetMapping(value = "/{id}/suts/{sutId}/raw", produces = MediaType.TEXT_PLAIN_VALUE)
+    public ResponseEntity<String> getBundleSutRaw(@PathVariable("id") String id,
+                                                  @PathVariable("sutId") String sutId,
+                                                  @RequestHeader(value = "X-Correlation-Id", required = false) String correlationId,
+                                                  @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKey) throws IOException {
+        log.info("[REST] GET /scenarios/{}/suts/{}/raw correlationId={} idempotencyKey={}", id, sutId, correlationId, idempotencyKey);
+        if (service.find(id).isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+        }
+        Optional<String> raw = service.readBundleSutRaw(id, sutId);
+        if (raw.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "sut.yaml not found");
+        }
+        String text = raw.get();
+        log.info("[REST] GET /scenarios/{}/suts/{}/raw -> status=200 ({} chars)", id, sutId, text.length());
+        return ResponseEntity.ok()
+            .contentType(MediaType.TEXT_PLAIN)
+            .body(text);
+    }
+
+    @PutMapping(value = "/{id}/suts/{sutId}/raw", consumes = MediaType.TEXT_PLAIN_VALUE)
+    public ResponseEntity<Void> putBundleSutRaw(@PathVariable("id") String id,
+                                                @PathVariable("sutId") String sutId,
+                                                @RequestBody String body,
+                                                @RequestHeader(value = "X-Correlation-Id", required = false) String correlationId,
+                                                @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKey) throws IOException {
+        int size = body != null ? body.length() : 0;
+        log.info("[REST] PUT /scenarios/{}/suts/{}/raw ({} chars) correlationId={} idempotencyKey={}",
+            id, sutId, size, correlationId, idempotencyKey);
+        if (service.find(id).isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+        }
+        try {
+            service.writeBundleSutRaw(id, sutId, body != null ? body : "");
+            log.info("[REST] PUT /scenarios/{}/suts/{}/raw -> status=204", id, sutId);
+            return ResponseEntity.noContent().build();
+        } catch (IllegalArgumentException e) {
+            log.warn("[REST] PUT /scenarios/{}/suts/{}/raw -> status=400 {}", id, sutId, e.getMessage());
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        }
+    }
+
+    @DeleteMapping(value = "/{id}/suts/{sutId}")
+    public ResponseEntity<Void> deleteBundleSut(@PathVariable("id") String id,
+                                                @PathVariable("sutId") String sutId,
+                                                @RequestHeader(value = "X-Correlation-Id", required = false) String correlationId,
+                                                @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKey) throws IOException {
+        log.info("[REST] DELETE /scenarios/{}/suts/{} correlationId={} idempotencyKey={}", id, sutId, correlationId, idempotencyKey);
+        if (service.find(id).isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+        }
+        try {
+            service.deleteBundleSut(id, sutId);
+            log.info("[REST] DELETE /scenarios/{}/suts/{} -> status=204", id, sutId);
+            return ResponseEntity.noContent().build();
+        } catch (IllegalArgumentException e) {
+            log.warn("[REST] DELETE /scenarios/{}/suts/{} -> status=404 {}", id, sutId, e.getMessage());
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
+        }
+    }
+
     @PutMapping(value = "/{id}/raw", consumes = MediaType.TEXT_PLAIN_VALUE)
     public ResponseEntity<?> putRaw(@PathVariable("id") String id, @RequestBody String body) {
         log.info("[REST] PUT /scenarios/{}/raw ({} chars)", id, body != null ? body.length() : 0);
