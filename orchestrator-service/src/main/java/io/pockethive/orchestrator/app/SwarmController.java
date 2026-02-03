@@ -592,8 +592,8 @@ public class SwarmController {
         Map<String, Object> result = (config == null || config.isEmpty())
             ? new LinkedHashMap<>()
             : new LinkedHashMap<>(config);
-        // Reserved key for scenario variables. Workers are expected to propagate this into the WorkItem headers
-        // so Pebble/SpEL templates can reference it as `vars.*`.
+        // Reserved key for scenario variables: config.vars (map).
+        // Workers are expected to propagate this into the WorkItem headers so Pebble/SpEL templates can reference it as `vars.*`.
         result.put("vars", vars);
         return Map.copyOf(result);
     }
