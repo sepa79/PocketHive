@@ -132,14 +132,7 @@ const COMMANDS = [
   {
     name: "create-swarm",
     description: "Create swarm via POST /api/swarms/{swarmId}/create",
-    params: [
-      "swarmId",
-      "templateId",
-      "[notes]",
-      "[--sutId <sutId>]",
-      "[--variablesProfileId <profileId>]",
-      "[--record]",
-    ],
+    params: ["swarmId", "templateId", "[notes]", "[--record]"],
   },
   {
     name: "start-swarm",
@@ -354,9 +347,7 @@ async function main() {
       await withOptionalRecording(async () => {
         const swarmId = args[1];
         const templateId = args[2];
-        const rest = args.slice(3);
-        const notes = rest[0] && !rest[0].startsWith("--") ? rest[0] : undefined;
-        const flags = parseFlags(rest);
+        const notes = args[3];
         if (!swarmId || !templateId) {
           console.error("create-swarm requires <swarmId> and <templateId>");
           process.exit(1);
@@ -365,10 +356,6 @@ async function main() {
           templateId,
           idempotencyKey: randomIdempotencyKey(),
           ...(notes ? { notes } : {}),
-          ...(flags.sutId ? { sutId: String(flags.sutId) } : {}),
-          ...(flags.variablesProfileId
-            ? { variablesProfileId: String(flags.variablesProfileId) }
-            : {}),
         };
         const resp = await httpJson(
           `/api/swarms/${encodeURIComponent(swarmId)}/create`,

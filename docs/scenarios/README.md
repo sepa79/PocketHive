@@ -60,7 +60,6 @@ control‑plane contract; scenarios are the authoring‑time format.
   scenarios.
 - `SCENARIO_TEMPLATING.md` – how to use Pebble + SpEL helpers,
   HTTP Builder templates, and the scenario‑templating CLI tool.
-- `SCENARIO_VARIABLES.md` – Scenario Variables (`variables.yaml`) and how `vars.*` is injected into templates.
 - `SCENARIO_PLAN_GUIDE.md` – user guide for the `plan` section and the
   Scenario Plan editor in Hive.
   - `local-rest-schema-demo/` – example of a generator that uses a JSON Schema
@@ -97,9 +96,6 @@ scenarios/
 - `sut/` and `datasets/` are optional and may contain SUT configs or input
   data; exact conventions are described in the in‑progress
   `docs/inProgress/scenario-bundle-runtime-plan.md`.
-
-Example bundles:
-- `scenarios/bundles/variables-demo/` – demonstrates `variables.yaml` + `vars.*` + `eval(...)`.
 
 Hive exposes these bundles on the **Scenarios** page:
 
