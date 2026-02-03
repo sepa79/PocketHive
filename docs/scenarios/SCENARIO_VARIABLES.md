@@ -228,24 +228,24 @@ This is a concrete, implementation-oriented checklist. Treat the bundle as the S
 
 ### Bundle + API surface
 
-- [x] Store scenario variables in `scenarios/bundles/<scenarioId>/variables.yaml` (optional file).
-- [x] Store bundle-local SUT definitions under `scenarios/bundles/<scenarioId>/sut/**` (SSOT for SUTs used by this scenario).
-- [x] Scenario Manager: add endpoints to read/update `variables.yaml` for a scenario bundle (avoid “generic file read”; keep it narrow/safe).
-- [x] Scenario Manager: add endpoints to list/get bundle-local SUTs for a scenario (used by the editor and create-swarm UI).
-- [x] Scenario Manager: validate `variables.yaml` on bundle upload/replace and on `variables.yaml` write.
+- [ ] Store scenario variables in `scenarios/bundles/<scenarioId>/variables.yaml` (optional file).
+- [ ] Store bundle-local SUT definitions under `scenarios/bundles/<scenarioId>/sut/**` (SSOT for SUTs used by this scenario).
+- [ ] Scenario Manager: add endpoints to read/update `variables.yaml` for a scenario bundle (avoid “generic file read”; keep it narrow/safe).
+- [ ] Scenario Manager: add endpoints to list/get bundle-local SUTs for a scenario (used by the editor and create-swarm UI).
+- [ ] Scenario Manager: validate `variables.yaml` on bundle upload/replace and on `variables.yaml` write.
 
 ### Data model + validation (Scenario Manager)
 
-- [x] Parse `variables.yaml` into a typed model (`definitions`, `profiles`, `values.global`, `values.sut`).
-- [x] Enforce strict schema rules:
-  - [x] unique `definitions[*].name`
-  - [x] `scope in {global,sut}` and `type in {string,int,float,bool}`
-  - [x] unique `profiles[*].id`
-  - [x] reject unknown keys in `values.*` not present in `definitions`
-  - [x] reject type mismatches
+- [ ] Parse `variables.yaml` into a typed model (`definitions`, `profiles`, `values.global`, `values.sut`).
+- [ ] Enforce strict schema rules:
+  - [ ] unique `definitions[*].name`
+  - [ ] `scope in {global,sut}` and `type in {string,int,float,bool}`
+  - [ ] unique `profiles[*].id`
+  - [ ] reject unknown keys in `values.*` not present in `definitions`
+  - [ ] reject type mismatches
 - [ ] Coverage validation levels:
   - [ ] **Editor save**: allow incomplete matrix coverage but emit warnings (return warnings to UI).
-  - [x] **Create swarm**: validate the selected `(variablesProfileId, sutId)` is fully resolvable for all `required: true` vars (hard error).
+  - [ ] **Create swarm**: validate the selected `(variablesProfileId, sutId)` is fully resolvable for all `required: true` vars (hard error).
 
 ### UI (Scenario Editor + Create swarm)
 
@@ -259,13 +259,13 @@ This is a concrete, implementation-oriented checklist. Treat the bundle as the S
 
 ### Orchestrator integration (create-time compilation)
 
-- [x] Extend `SwarmCreateRequest` to include `variablesProfileId` (and optionally an explicit toggle like `refreshSutFromTemplate` if you keep template refresh at create time).
-- [x] Orchestrator: fetch `variables.yaml` and bundle-local `sutId` definition from Scenario Manager during `swarm-create`.
-- [x] Orchestrator: resolve `vars` for the chosen `(variablesProfileId, sutId)`:
-  - [x] `vars = values.global[profileId] + values.sut[profileId][sutId]` (flat map)
-  - [x] hard error on missing `required` values (no fallback chains)
-- [x] Orchestrator: inject resolved `vars` into each bee config under a single, reserved key (example: `config.templating.vars`) so workers can use it at runtime without bespoke per-worker wiring.
-- [x] Orchestrator: record `variablesProfileId` and a small `vars` summary in the Hive journal entry for `swarm-create` (avoid dumping secrets).
+- [ ] Extend `SwarmCreateRequest` to include `variablesProfileId` (and optionally an explicit toggle like `refreshSutFromTemplate` if you keep template refresh at create time).
+- [ ] Orchestrator: fetch `variables.yaml` and bundle-local `sutId` definition from Scenario Manager during `swarm-create`.
+- [ ] Orchestrator: resolve `vars` for the chosen `(variablesProfileId, sutId)`:
+  - [ ] `vars = values.global[profileId] + values.sut[profileId][sutId]` (flat map)
+  - [ ] hard error on missing `required` values (no fallback chains)
+- [ ] Orchestrator: inject resolved `vars` into each bee config under a single, reserved key (example: `config.templating.vars`) so workers can use it at runtime without bespoke per-worker wiring.
+- [ ] Orchestrator: record `variablesProfileId` and a small `vars` summary in the Hive journal entry for `swarm-create` (avoid dumping secrets).
 
 ### Worker SDK (Pebble + SpEL context)
 
@@ -277,10 +277,10 @@ Implementation intent:
 
 - [ ] Standardize a single config location for variables (example: `templating.vars` map).
 - [ ] Add `vars` to Pebble context maps passed to the renderer:
-  - [x] `MessageTemplateRenderer`: include `ctx.put("vars", <resolvedVarsFromConfig>)`
-  - [x] `TemplatingInterceptor`: include `templateContext.put("vars", <resolvedVarsFromConfig>)`
+  - [ ] `MessageTemplateRenderer`: include `ctx.put("vars", <resolvedVarsFromConfig>)`
+  - [ ] `TemplatingInterceptor`: include `templateContext.put("vars", <resolvedVarsFromConfig>)`
 - [ ] Add `vars` to SpEL root variables inside `eval(...)`:
-  - [x] `PebbleEvalExtension`: if `context.getVariable("vars")` exists, include it in the root map as `vars`
+  - [ ] `PebbleEvalExtension`: if `context.getVariable("vars")` exists, include it in the root map as `vars`
 
 ### Tracing / observability (correlation + idempotency)
 
@@ -291,8 +291,8 @@ Follow `docs/correlation-vs-idempotency.md` for the semantics.
   - [ ] variables resolution (profile + sut selection)
   - [ ] any “refresh SUT from template” step
 - [ ] Orchestrator → Scenario Manager HTTP calls:
-  - [x] propagate `correlationId` + `idempotencyKey` as request headers (choose explicit header names and keep them consistent across services)
-  - [x] log both fields on the Scenario Manager side for these endpoints
+  - [ ] propagate `correlationId` + `idempotencyKey` as request headers (choose explicit header names and keep them consistent across services)
+  - [ ] log both fields on the Scenario Manager side for these endpoints
 - [ ] Worker-side: when template rendering fails (Pebble/SpEL), ensure the exception logs include enough context to trace:
   - [ ] worker role/instance + swarmId (where available)
   - [ ] correlationId/idempotencyKey from the triggering control signal (where available)
@@ -300,5 +300,5 @@ Follow `docs/correlation-vs-idempotency.md` for the semantics.
 ### Tests (targeted)
 
 - [ ] Scenario Manager: unit tests for `variables.yaml` parsing + validation (types, unknown keys, required coverage).
-- [x] Worker SDK: tests that `vars.*` is accessible in Pebble and in `eval(...)`.
+- [ ] Worker SDK: tests that `vars.*` is accessible in Pebble and in `eval(...)`.
 - [ ] Orchestrator: a focused test that a `swarm-create` with `(sutId, variablesProfileId)` injects `config.templating.vars` into the produced plan/config.
