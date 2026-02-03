@@ -15,6 +15,7 @@ When a template is rendered, the context contains at least:
 - `payload` – current step payload. Parsed as Map when valid JSON, otherwise string.
 - `headers` – map of current step headers.
 - `workItem` – full `WorkItem` object (steps, headers, payloads).
+- `vars` – resolved Scenario Variables map (when the scenario bundle provides `variables.yaml` and the swarm is created with a `variablesProfileId`).
 
 Generators and interceptors may add more fields, but these three are
 always available.
@@ -28,6 +29,47 @@ body: |
     "messageId": "{{ headers['message-id'] }}"
   }
 ```
+
+## Scenario Variables (`vars.*`)
+
+If a scenario bundle contains `variables.yaml` (see `docs/scenarios/SCENARIO_VARIABLES.md`) the Orchestrator resolves a flat
+map `vars` at **create-swarm** time and injects it into each bee config under:
+
+- `config.vars` (map)
+
+Workers propagate `config.vars` into the WorkItem header `vars`, so templates can reference:
+
+- Pebble: `{{ vars.customerId }}`, `{{ vars.loopCount }}`
+- SpEL via Pebble `eval(...)`: `{{ eval("vars.loopCount + 1") }}`
+
+### Example bundle
+
+See `scenarios/bundles/variables-demo/`:
+
+- `scenario.yaml` uses `vars.*` in body + `eval(...)`
+- `variables.yaml` defines two profiles (`default`, `france`) and a SUT-scoped `customerId`
+- `sut/` defines `sut-A` and `sut-B` (bundle-local SSOT)
+
+### How to run
+
+Create the swarm with both:
+
+- `sutId` (required when `sut`-scoped variables exist)
+- `variablesProfileId` (required when any variables exist)
+
+Via Orchestrator REST (`docs/ORCHESTRATOR-REST.md`):
+
+```json
+{
+  "templateId": "variables-demo",
+  "idempotencyKey": "uuid-v4",
+  "sutId": "sut-A",
+  "variablesProfileId": "france"
+}
+```
+
+If you run the local stack via `build-hive.sh`, you can also create it via the debug CLI:
+`node tools/mcp-orchestrator-debug/client.mjs create-swarm <swarmId> variables-demo --sutId sut-A --variablesProfileId france`
 
 ## SpEL helper: `eval(...)`
 

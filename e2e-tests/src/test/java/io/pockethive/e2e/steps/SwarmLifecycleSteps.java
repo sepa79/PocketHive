@@ -174,12 +174,14 @@ public class SwarmLifecycleSteps {
     ensureTemplate();
     String idempotencyKey = idKey("create");
     String sutId = resolveSutIdForScenario();
+    String variablesProfileId = resolveVariablesProfileIdForScenario();
     SwarmCreateRequest request = new SwarmCreateRequest(
         scenarioDetails.id(),
         idempotencyKey,
         "e2e lifecycle create",
         null,
-        sutId);
+        sutId,
+        variablesProfileId);
     createResponse = orchestratorClient.createSwarm(swarmId, request);
     LOGGER.info("Create request accepted correlation={} watch={}", createResponse.correlationId(), createResponse.watch());
   }
@@ -224,6 +226,22 @@ public class SwarmLifecycleSteps {
     return switch (scenarioId) {
       case "templated-rest", "redis-dataset-demo" -> "wiremock-local";
       case "tcp-socket-demo" -> "tcp-mock-local";
+      case "variables-demo" -> "sut-A";
+      default -> null;
+    };
+  }
+
+  /**
+   * Select the variables profile id for scenarios that include variables.yaml.
+   */
+  private String resolveVariablesProfileIdForScenario() {
+    ensureTemplate();
+    String scenarioId = scenarioDetails != null ? scenarioDetails.id() : null;
+    if (scenarioId == null) {
+      return null;
+    }
+    return switch (scenarioId) {
+      case "variables-demo" -> "france";
       default -> null;
     };
   }
@@ -797,6 +815,33 @@ public class SwarmLifecycleSteps {
         assertTrue(generatorMatched,
             () -> "No WorkItem step payload matched templated pattern /" + generatorPattern
                 + "/ for templated-rest scenario. payloads=" + stepPayloads);
+      } else if ("variables-demo".equals(scenarioId)) {
+        boolean matched = stepPayloads.stream()
+            .anyMatch(payload -> {
+              if (payload == null || payload.isBlank()) {
+                return false;
+              }
+              try {
+                JsonNode node = objectMapper.readTree(payload);
+                if (!node.has("path") || !node.has("method") || !node.has("headers") || !node.has("body")) {
+                  return false;
+                }
+                String body = node.path("body").asText("");
+                if (body.isBlank() || body.contains("{{")) {
+                  return false;
+                }
+                JsonNode rendered = objectMapper.readTree(body);
+                return rendered.path("customerId").asText("").equals("CUST-FR-A")
+                    && rendered.path("loopCount").asInt(-1) == 7
+                    && rendered.path("loopPlusOne").asInt(-1) == 8
+                    && rendered.path("enableFoo").asBoolean() == true
+                    && rendered.path("profile").asText("").equals("france");
+              } catch (Exception ex) {
+                return false;
+              }
+            });
+        assertTrue(matched,
+            () -> "No rendered HTTP request step matched expected vars for variables-demo (profile=france, sut=sut-A). payloads=" + stepPayloads);
       }
     } finally {
       message.ack();
