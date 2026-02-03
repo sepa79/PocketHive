@@ -181,14 +181,6 @@ public class SwarmController {
         try {
             response = idempotentSend("swarm-create", swarmId, req.idempotencyKey(), timeout.toMillis(), lockCorrelation, corr -> {
                 String templateId = req.templateId();
-                log.info("[CTRL] swarm-create start swarm={} templateId={} sutId={} variablesProfileId={} autoPullImages={} correlation={} idempotencyKey={}",
-                    swarmId,
-                    templateId,
-                    normalize(req.sutId()),
-                    normalize(req.variablesProfileId()),
-                    Boolean.TRUE.equals(req.autoPullImages()),
-                    corr,
-                    req.idempotencyKey());
                 ScenarioPlan planDescriptor = fetchScenario(templateId);
                 SwarmTemplate template = planDescriptor.template();
                 ScenarioPlan.Plan timeline = planDescriptor.plan();

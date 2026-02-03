@@ -207,9 +207,6 @@ Pins a swarm journal run into an archive so it can be kept beyond time-based ret
 {
   "templateId": "scenario-id",
   "idempotencyKey": "uuid-v4",
-  "autoPullImages": true,
-  "sutId": "optional; bundle-local SUT id",
-  "variablesProfileId": "optional; required when variables.yaml defines profiles",
   "notes": "optional"
 }
 ```
