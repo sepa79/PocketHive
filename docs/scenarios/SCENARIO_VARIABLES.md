@@ -289,16 +289,16 @@ Implementation intent:
 
 Follow `docs/correlation-vs-idempotency.md` for the semantics.
 
-- [x] Orchestrator: include `swarmId`, `correlationId`, and `idempotencyKey` in logs around:
-  - [x] `swarm-create` request handling
-  - [x] variables resolution (profile + sut selection)
-  - [x] any “refresh SUT from template” step (N/A: not implemented in this flow)
-- [x] Orchestrator → Scenario Manager HTTP calls:
+- [ ] Orchestrator: include `swarmId`, `correlationId`, and `idempotencyKey` in logs around:
+  - [ ] `swarm-create` request handling
+  - [ ] variables resolution (profile + sut selection)
+  - [ ] any “refresh SUT from template” step
+- [ ] Orchestrator → Scenario Manager HTTP calls:
   - [x] propagate `correlationId` + `idempotencyKey` as request headers (choose explicit header names and keep them consistent across services)
   - [x] log both fields on the Scenario Manager side for these endpoints
-- [x] Worker-side: when template rendering fails (Pebble/SpEL), ensure the exception logs include enough context to trace:
-  - [x] worker role/instance + swarmId (where available)
-  - [x] correlationId/idempotencyKey from the triggering control signal (where available)
+- [ ] Worker-side: when template rendering fails (Pebble/SpEL), ensure the exception logs include enough context to trace:
+  - [ ] worker role/instance + swarmId (where available)
+  - [ ] correlationId/idempotencyKey from the triggering control signal (where available)
 
 ### Tests (targeted)
 

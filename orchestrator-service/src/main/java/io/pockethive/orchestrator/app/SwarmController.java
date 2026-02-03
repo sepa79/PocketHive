@@ -204,13 +204,9 @@ public class SwarmController {
                 String variablesProfileId = normalize(req.variablesProfileId());
                 io.pockethive.swarm.model.SutEnvironment sutEnvironment = null;
                 if (sutId != null) {
-                    log.info("[CTRL] swarm-create resolve sut swarm={} templateId={} sutId={} correlation={} idempotencyKey={}",
-                        swarmId, templateId, sutId, corr, req.idempotencyKey());
                     try {
                         sutEnvironment = scenarios.fetchScenarioSut(templateId, sutId, corr, req.idempotencyKey());
                     } catch (Exception ex) {
-                        log.warn("[CTRL] swarm-create resolve sut FAILED swarm={} templateId={} sutId={} correlation={} idempotencyKey={}",
-                            swarmId, templateId, sutId, corr, req.idempotencyKey(), ex);
                         throw new IllegalStateException(
                             "Failed to resolve SUT environment '%s'".formatted(sutId), ex);
                     }
@@ -218,21 +214,14 @@ public class SwarmController {
                 final io.pockethive.swarm.model.SutEnvironment finalSutEnvironment = sutEnvironment;
                 ScenarioClient.ResolvedVariables resolvedVariables;
                 try {
-                    log.info("[CTRL] swarm-create resolve variables swarm={} templateId={} profileId={} sutId={} correlation={} idempotencyKey={}",
-                        swarmId, templateId, variablesProfileId, sutId, corr, req.idempotencyKey());
                     resolvedVariables = scenarios.resolveScenarioVariables(
                         templateId, variablesProfileId, sutId, corr, req.idempotencyKey());
                 } catch (Exception ex) {
-                    log.warn("[CTRL] swarm-create resolve variables FAILED swarm={} templateId={} profileId={} sutId={} correlation={} idempotencyKey={}",
-                        swarmId, templateId, variablesProfileId, sutId, corr, req.idempotencyKey(), ex);
                     throw new IllegalStateException("Failed to resolve scenario variables", ex);
                 }
                 java.util.Map<String, Object> resolvedVars = resolvedVariables.vars() == null
                     ? java.util.Map.of()
                     : resolvedVariables.vars();
-                int warningsCount = resolvedVariables.warnings() == null ? 0 : resolvedVariables.warnings().size();
-                log.info("[CTRL] swarm-create variables resolved swarm={} templateId={} profileId={} sutId={} vars={} warnings={} correlation={} idempotencyKey={}",
-                    swarmId, templateId, variablesProfileId, sutId, resolvedVars.size(), warningsCount, corr, req.idempotencyKey());
                 // Resolve bee images through the same repository prefix logic used for controllers
                 // so the swarm-controller sees fully-qualified image names and does not need to
                 // guess registry roots. While doing so, apply any SUT-aware templates in worker
