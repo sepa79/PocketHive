@@ -9,6 +9,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.lenient;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -35,6 +36,8 @@ import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.SwarmTemplate;
 import io.pockethive.swarm.model.Work;
+import java.util.List;
+import java.util.Map;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
@@ -499,6 +502,13 @@ class SwarmControllerTest {
         SwarmRegistry registry,
         SwarmPlanRegistry plans,
         IdempotencyStore store) {
+        try {
+            lenient().when(scenarioClient.resolveScenarioVariables(
+                anyString(), any(), any(), any(), any()))
+                .thenReturn(new ScenarioClient.ResolvedVariables(null, null, Map.of(), List.of()));
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
         SwarmController controller = new SwarmController(
             rabbit,
             lifecycle,

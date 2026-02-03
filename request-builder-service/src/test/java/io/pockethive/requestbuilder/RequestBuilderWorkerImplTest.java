@@ -63,7 +63,7 @@ class RequestBuilderWorkerImplTest {
 
     WorkItem seed = WorkItem.text("body").header("x-ph-call-id", "simple").build();
     RequestBuilderWorkerConfig config = new RequestBuilderWorkerConfig(
-        dir.toString(), "default", true);
+        dir.toString(), "default", true, Map.of());
     WorkerContext context = new TestWorkerContext(config);
 
     WorkItem result = worker.onMessage(seed, context);
@@ -92,7 +92,7 @@ class RequestBuilderWorkerImplTest {
 
     WorkItem seed = WorkItem.text("body").build();
     RequestBuilderWorkerConfig config = new RequestBuilderWorkerConfig(
-        dir.toString(), "default", false);
+        dir.toString(), "default", false, Map.of());
     WorkerContext context = new TestWorkerContext(config);
 
     WorkItem result = worker.onMessage(seed, context);
@@ -114,7 +114,7 @@ class RequestBuilderWorkerImplTest {
 
     WorkItem seed = WorkItem.text("body").header("x-ph-call-id", "unknown").build();
     RequestBuilderWorkerConfig config = new RequestBuilderWorkerConfig(
-        dir.toString(), "default", true);
+        dir.toString(), "default", true, Map.of());
     WorkerContext context = new TestWorkerContext(config);
 
     WorkItem result = worker.onMessage(seed, context);
@@ -150,7 +150,7 @@ class RequestBuilderWorkerImplTest {
 
     WorkItem seed = WorkItem.text("test-data").header("x-ph-call-id", "tcp-test").build();
     RequestBuilderWorkerConfig config = new RequestBuilderWorkerConfig(
-        dir.toString(), "default", true);
+        dir.toString(), "default", true, Map.of());
     WorkerContext context = new TestWorkerContext(config);
 
     WorkItem result = worker.onMessage(seed, context);
@@ -191,7 +191,7 @@ class RequestBuilderWorkerImplTest {
 
     WorkItem seed = WorkItem.text("stream-data").header("x-ph-call-id", "tcp-streaming").build();
     RequestBuilderWorkerConfig config = new RequestBuilderWorkerConfig(
-        dir.toString(), "default", true);
+        dir.toString(), "default", true, Map.of());
     WorkerContext context = new TestWorkerContext(config);
 
     WorkItem result = worker.onMessage(seed, context);
@@ -247,7 +247,7 @@ class RequestBuilderWorkerImplTest {
 
     // First call uses dir1 config.
     RequestBuilderWorkerConfig config1 = new RequestBuilderWorkerConfig(
-        dir1.toString(), "default", true);
+        dir1.toString(), "default", true, Map.of());
     WorkerContext ctx1 = new TestWorkerContext(config1);
     WorkItem result1 = worker.onMessage(seed, ctx1);
     JsonNode envelope1 = new ObjectMapper().readTree(result1.asString());
@@ -255,7 +255,7 @@ class RequestBuilderWorkerImplTest {
 
     // Second call supplies a control-plane override pointing at dir2; worker should reload.
     RequestBuilderWorkerConfig config2 = new RequestBuilderWorkerConfig(
-        dir2.toString(), "default", true);
+        dir2.toString(), "default", true, Map.of());
     WorkerContext ctx2 = new TestWorkerContext(config2);
     WorkItem result2 = worker.onMessage(seed, ctx2);
     JsonNode envelope2 = new ObjectMapper().readTree(result2.asString());

@@ -63,7 +63,7 @@ class HttpBuilderWorkerImplTest {
 
     WorkItem seed = WorkItem.text("body").header("x-ph-call-id", "simple").build();
     HttpBuilderWorkerConfig config = new HttpBuilderWorkerConfig(
-        dir.toString(), "default", true);
+        dir.toString(), "default", true, Map.of());
     WorkerContext context = new TestWorkerContext(config);
 
     WorkItem result = worker.onMessage(seed, context);
@@ -91,7 +91,7 @@ class HttpBuilderWorkerImplTest {
 
     WorkItem seed = WorkItem.text("body").build();
     HttpBuilderWorkerConfig config = new HttpBuilderWorkerConfig(
-        dir.toString(), "default", false);
+        dir.toString(), "default", false, Map.of());
     WorkerContext context = new TestWorkerContext(config);
 
     WorkItem result = worker.onMessage(seed, context);
@@ -113,7 +113,7 @@ class HttpBuilderWorkerImplTest {
 
     WorkItem seed = WorkItem.text("body").header("x-ph-call-id", "unknown").build();
     HttpBuilderWorkerConfig config = new HttpBuilderWorkerConfig(
-        dir.toString(), "default", true);
+        dir.toString(), "default", true, Map.of());
     WorkerContext context = new TestWorkerContext(config);
 
     WorkItem result = worker.onMessage(seed, context);
@@ -162,7 +162,7 @@ class HttpBuilderWorkerImplTest {
 
     // First call uses dir1 config.
     HttpBuilderWorkerConfig config1 = new HttpBuilderWorkerConfig(
-        dir1.toString(), "default", true);
+        dir1.toString(), "default", true, Map.of());
     WorkerContext ctx1 = new TestWorkerContext(config1);
     WorkItem result1 = worker.onMessage(seed, ctx1);
     JsonNode envelope1 = new ObjectMapper().readTree(result1.asString());
@@ -170,7 +170,7 @@ class HttpBuilderWorkerImplTest {
 
     // Second call supplies a control-plane override pointing at dir2; worker should reload.
     HttpBuilderWorkerConfig config2 = new HttpBuilderWorkerConfig(
-        dir2.toString(), "default", true);
+        dir2.toString(), "default", true, Map.of());
     WorkerContext ctx2 = new TestWorkerContext(config2);
     WorkItem result2 = worker.onMessage(seed, ctx2);
     JsonNode envelope2 = new ObjectMapper().readTree(result2.asString());
