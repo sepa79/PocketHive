@@ -1261,7 +1261,8 @@ public class SwarmLifecycleSteps {
         || "templated-rest".equals(scenarioId)
         || "history-policy-demo".equals(scenarioId)
         || "local-rest".equals(scenarioId)
-        || "local-rest-with-multi-generators".equals(scenarioId)) {
+        || "local-rest-with-multi-generators".equals(scenarioId)
+        || "variables-demo".equals(scenarioId)) {
       return "final";
     }
     if ("redis-dataset-demo".equals(scenarioId)
