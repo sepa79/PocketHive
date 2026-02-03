@@ -1320,13 +1320,11 @@ public class SwarmLifecycleSteps {
     if (workQueueConsumer != null) {
       return;
     }
-    // For the final sink queue we can safely consume from the queue directly (there should be no
-    // application consumer draining it). Using an exchange tap here is racy because the swarm may
-    // publish the final WorkItem before we bind the ephemeral tap queue.
-    String queueName = finalQueueName();
-    workQueueConsumer = new WorkQueueConsumer(rabbitSubscriptions.connectionFactory(), queueName);
-    tapQueueName = queueName;
-    LOGGER.info("Subscribed to final queue={} (direct consumer)", queueName);
+    String exchange = hiveExchangeName();
+    String routingKey = finalQueueName();
+    workQueueConsumer = WorkQueueConsumer.forExchangeTap(rabbitSubscriptions.connectionFactory(), exchange, routingKey);
+    tapQueueName = workQueueConsumer.queueName();
+    LOGGER.info("Subscribed to final exchange tap queue={} exchange={} routingKey={}", tapQueueName, exchange, routingKey);
   }
 
   private void ensureGeneratorTapForTemplating() {
