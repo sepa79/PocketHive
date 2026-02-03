@@ -27,10 +27,6 @@ public final class MessageTemplateRenderer {
         ctx.put("payloadAsJson", parsePayloadAsJson(seed.payload()));
         ctx.put("payload", seed.payload());
         ctx.put("headers", seed.headers());
-        Object vars = seed.headers().get("vars");
-        if (vars != null) {
-            ctx.put("vars", vars);
-        }
         ctx.put("workItem", seed);
 
         String body = render("bodyTemplate", template.bodyTemplate(), ctx);

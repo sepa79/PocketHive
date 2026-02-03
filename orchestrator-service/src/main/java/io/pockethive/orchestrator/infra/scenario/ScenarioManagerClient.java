@@ -6,7 +6,6 @@ import io.pockethive.orchestrator.config.OrchestratorProperties;
 import io.pockethive.orchestrator.domain.ScenarioPlan;
 import io.pockethive.swarm.model.SutEnvironment;
 import java.util.Objects;
-import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -77,83 +76,23 @@ public class ScenarioManagerClient implements ScenarioClient {
     }
 
     @Override
-    public SutEnvironment fetchScenarioSut(String templateId,
-                                           String sutId,
-                                           String correlationId,
-                                           String idempotencyKey) throws Exception {
-        String tpl = templateId == null ? null : templateId.trim();
-        if (tpl == null || tpl.isEmpty()) {
-            throw new IllegalArgumentException("templateId must not be null or blank");
+    public SutEnvironment fetchSutEnvironment(String environmentId) throws Exception {
+        String trimmed = environmentId == null ? null : environmentId.trim();
+        if (trimmed == null || trimmed.isEmpty()) {
+            throw new IllegalArgumentException("environmentId must not be null or blank");
         }
-        String sut = sutId == null ? null : sutId.trim();
-        if (sut == null || sut.isEmpty()) {
-            throw new IllegalArgumentException("sutId must not be null or blank");
-        }
-        String url = baseUrl + "/scenarios/" + tpl + "/suts/" + sut;
-        HttpResponse<String> resp = sendGet(url, "scenario-sut " + tpl + "/" + sut, correlationId, idempotencyKey);
+        String url = baseUrl + "/sut-environments/" + trimmed;
+        HttpResponse<String> resp = sendGet(url, "sut-environment " + trimmed);
         return json.readValue(resp.body(), SutEnvironment.class);
     }
 
-    @Override
-    public ResolvedVariables resolveScenarioVariables(String templateId,
-                                                      String profileId,
-                                                      String sutId,
-                                                      String correlationId,
-                                                      String idempotencyKey) throws Exception {
-        String tpl = templateId == null ? null : templateId.trim();
-        if (tpl == null || tpl.isEmpty()) {
-            throw new IllegalArgumentException("templateId must not be null or blank");
-        }
-        String prof = profileId == null ? null : profileId.trim();
-        if (prof != null && prof.isEmpty()) {
-            prof = null;
-        }
-        String sut = sutId == null ? null : sutId.trim();
-        if (sut != null && sut.isEmpty()) {
-            sut = null;
-        }
-        String url = baseUrl + "/scenarios/" + tpl + "/variables/resolve";
-        if (prof != null || sut != null) {
-            StringBuilder sb = new StringBuilder(url);
-            sb.append('?');
-            boolean first = true;
-            if (prof != null) {
-                sb.append("profileId=").append(java.net.URLEncoder.encode(prof, java.nio.charset.StandardCharsets.UTF_8));
-                first = false;
-            }
-            if (sut != null) {
-                if (!first) {
-                    sb.append('&');
-                }
-                sb.append("sutId=").append(java.net.URLEncoder.encode(sut, java.nio.charset.StandardCharsets.UTF_8));
-            }
-            url = sb.toString();
-        }
-        HttpResponse<String> resp = sendGet(url, "scenario-variables " + tpl, correlationId, idempotencyKey);
-        ScenarioVariablesResolveResponse body = json.readValue(resp.body(), ScenarioVariablesResolveResponse.class);
-        Map<String, Object> vars = body.vars() == null ? Map.of() : body.vars();
-        java.util.List<String> warnings = body.warnings() == null ? java.util.List.of() : body.warnings();
-        return new ResolvedVariables(body.profileId(), body.sutId(), vars, warnings);
-    }
-
     private HttpResponse<String> sendGet(String url, String label) throws Exception {
-        return sendGet(url, label, null, null);
-    }
-
-    private HttpResponse<String> sendGet(String url, String label, String correlationId, String idempotencyKey) throws Exception {
         log.info("fetching {} from {}", label, url);
-        HttpRequest.Builder builder = HttpRequest.newBuilder()
+        HttpRequest req = HttpRequest.newBuilder()
             .uri(URI.create(url))
             .header("Accept", "application/json")
             .timeout(requestTimeout)
-            ;
-        if (correlationId != null && !correlationId.isBlank()) {
-            builder.header("X-Correlation-Id", correlationId);
-        }
-        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
-            builder.header("X-Idempotency-Key", idempotencyKey);
-        }
-        HttpRequest req = builder.build();
+            .build();
         HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
         log.info("{} response status {} length {}", label, resp.statusCode(),
             resp.body() != null ? resp.body().length() : 0);
@@ -200,8 +139,5 @@ public class ScenarioManagerClient implements ScenarioClient {
     }
 
     public record ScenarioRuntimeResponse(String scenarioId, String swarmId, String runtimeDir) {
-    }
-
-    public record ScenarioVariablesResolveResponse(String profileId, String sutId, Map<String, Object> vars, java.util.List<String> warnings) {
     }
 }

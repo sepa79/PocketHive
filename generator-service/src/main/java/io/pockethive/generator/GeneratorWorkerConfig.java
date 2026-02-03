@@ -5,11 +5,10 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 
-public record GeneratorWorkerConfig(Message message, Map<String, Object> vars) {
+public record GeneratorWorkerConfig(Message message) {
 
   public GeneratorWorkerConfig {
     Objects.requireNonNull(message, "message");
-    vars = vars == null ? Map.of() : Map.copyOf(vars);
   }
 
   public record Message(MessageBodyType bodyType, String path, String method, String body, Map<String, String> headers) {

@@ -1,19 +1,16 @@
 package io.pockethive.requestbuilder;
 
-import java.util.Map;
 import java.util.Objects;
 
 public record RequestBuilderWorkerConfig(
     String templateRoot,
     String serviceId,
-    boolean passThroughOnMissingTemplate,
-    Map<String, Object> vars
+    boolean passThroughOnMissingTemplate
 ) {
 
   public RequestBuilderWorkerConfig {
     templateRoot = normalize(templateRoot, "/app/http-templates");
     serviceId = normalize(serviceId, "default");
-    vars = vars == null ? Map.of() : Map.copyOf(vars);
   }
 
   private static String normalize(String value, String defaultValue) {

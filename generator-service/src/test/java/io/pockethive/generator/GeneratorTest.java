@@ -59,8 +59,7 @@ class GeneratorTest {
             "put",
             "{\"value\":42}",
             Map.of("X-Custom", "yes")
-        ),
-        Map.of()
+        )
     );
 
     WorkItem result = worker.onMessage(seedMessage(), new TestWorkerContext(config));

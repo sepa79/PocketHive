@@ -75,14 +75,6 @@ final class PebbleEvalExtension extends AbstractExtension {
                 root.put("headers", headers);
             }
 
-            Object vars = context.getVariable("vars");
-            if (vars == null && headers instanceof Map<?, ?> headerMap) {
-                vars = headerMap.get("vars");
-            }
-            if (vars != null) {
-                root.put("vars", vars);
-            }
-
             Instant now = Instant.now();
             root.put("now", now);
             root.put("nowIso", DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(OffsetDateTime.ofInstant(now, ZoneOffset.UTC)));

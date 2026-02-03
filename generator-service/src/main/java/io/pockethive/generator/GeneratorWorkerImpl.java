@@ -118,10 +118,6 @@ class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
 
   private WorkItem buildMessage(GeneratorWorkerConfig config, WorkerContext context, WorkItem seed) {
     String messageId = UUID.randomUUID().toString();
-    WorkItem effectiveSeed = seed;
-    if (effectiveSeed.headers().get("vars") == null && config.vars() != null && !config.vars().isEmpty()) {
-      effectiveSeed = effectiveSeed.addStepHeader("vars", config.vars());
-    }
     GeneratorWorkerConfig.Message message = config.message();
     MessageTemplate template = MessageTemplate.builder()
         .bodyType(message.bodyType())
@@ -130,9 +126,9 @@ class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
         .bodyTemplate(message.body())
         .headerTemplates(message.headers())
         .build();
-    MessageTemplateRenderer.RenderedMessage rendered = messageTemplateRenderer.render(template, effectiveSeed);
+    MessageTemplateRenderer.RenderedMessage rendered = messageTemplateRenderer.render(template, seed);
 
-    Map<String, Object> baseHeaders = new HashMap<>(effectiveSeed.headers());
+    Map<String, Object> baseHeaders = new HashMap<>(seed.headers());
     baseHeaders.put("message-id", messageId);
     baseHeaders.put("x-ph-service", context.info().role());
 

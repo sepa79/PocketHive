@@ -52,10 +52,6 @@ public final class TemplatingInterceptor implements WorkerInvocationInterceptor 
         Map<String, Object> templateContext = new HashMap<>();
         templateContext.put("payload", parsePayload(current.payload()));
         templateContext.put("headers", current.headers());
-        Object vars = current.headers().get("vars");
-        if (vars != null) {
-            templateContext.put("vars", vars);
-        }
         templateContext.put("workItem", current);
 
         String rendered = renderer.render(template, templateContext);
