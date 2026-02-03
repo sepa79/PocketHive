@@ -256,7 +256,7 @@ class ScenarioServiceTest {
 
         service.deleteBundleSut("scenario-1", sutId);
 
-        assertThat(service.readBundleSutRaw("scenario-1", sutId)).isEmpty();
+        assertThat(service.readBundleSutRaw("scenario-1", sutId)).isNull();
         assertThat(service.listSutIds("scenario-1")).doesNotContain("sut-A");
     }
 
