@@ -280,8 +280,11 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
         String traceId = workItem.observabilityContext()
             .map(ObservabilityContext::getTraceId)
             .orElse(null);
-        log.warn("{} failed to process work item messageId={} callId={} correlationId={} idempotencyKey={} traceId={}",
+        log.warn("{} failed to process work item swarmId={} role={} instance={} messageId={} callId={} correlationId={} idempotencyKey={} traceId={}",
             displayName,
+            identity != null ? identity.swarmId() : null,
+            identity != null ? identity.role() : null,
+            identity != null ? identity.instanceId() : null,
             messageId != null ? String.valueOf(messageId) : null,
             callId != null ? String.valueOf(callId) : null,
             correlationId != null ? String.valueOf(correlationId) : null,
