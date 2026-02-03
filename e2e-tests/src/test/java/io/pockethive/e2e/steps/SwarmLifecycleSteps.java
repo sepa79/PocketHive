@@ -891,12 +891,20 @@ public class SwarmLifecycleSteps {
     WorkQueueConsumer.Message message = workQueueConsumer.consumeNext(SwarmAssertions.defaultTimeout())
         .orElseThrow(() -> new AssertionError("No message observed on tap queue " + queue));
 
-    try {
-      JsonNode envelope = objectMapper.readTree(message.body());
-      JsonNode stepsNode = envelope.path("steps");
-      if (!stepsNode.isArray() || stepsNode.isEmpty()) {
-        throw new AssertionError("Final queue WorkItem did not carry any steps");
-      }
+	    try {
+	      JsonNode envelope = objectMapper.readTree(message.body());
+	      JsonNode envelopeHeaders = envelope.path("headers");
+	      if (!envelopeHeaders.isObject()) {
+	        throw new AssertionError("Final queue WorkItem envelope did not include headers object: " + envelopeHeaders);
+	      }
+	      if (envelopeHeaders.has(LEGACY_SERVICE_HEADER)) {
+	        throw new AssertionError("WorkItem envelope headers should not include " + LEGACY_SERVICE_HEADER
+	            + ": " + envelopeHeaders);
+	      }
+	      JsonNode stepsNode = envelope.path("steps");
+	      if (!stepsNode.isArray() || stepsNode.isEmpty()) {
+	        throw new AssertionError("Final queue WorkItem did not carry any steps");
+	      }
       List<String> stepServices = new ArrayList<>();
       boolean sawProcessorStep = false;
       Map<String, Object> messageHeaders = message.headers();
