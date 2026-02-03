@@ -58,7 +58,7 @@ async function ensureOk(response: Response, fallback: string) {
 export async function createSwarm(
   id: string,
   templateId: string,
-  options?: { autoPullImages?: boolean; sutId?: string | null; variablesProfileId?: string | null },
+  options?: { autoPullImages?: boolean; sutId?: string | null },
 ) {
   const payload: Record<string, unknown> = {
     templateId,
@@ -69,9 +69,6 @@ export async function createSwarm(
   }
   if (options && typeof options.sutId === 'string' && options.sutId.trim()) {
     payload.sutId = options.sutId.trim()
-  }
-  if (options && typeof options.variablesProfileId === 'string' && options.variablesProfileId.trim()) {
-    payload.variablesProfileId = options.variablesProfileId.trim()
   }
 
   const body = JSON.stringify(payload)
