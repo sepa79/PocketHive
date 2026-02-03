@@ -638,21 +638,16 @@ public class ScenarioService {
         Files.delete(file);
     }
 
-    /**
-     * Reads {@code variables.yaml} for a scenario bundle.
-     *
-     * @return raw YAML if present, otherwise {@code null}
-     */
-    public String readVariablesRaw(String id) throws IOException {
+    public Optional<String> readVariablesRaw(String id) throws IOException {
         Path bundle = bundleDir(id);
         Path file = bundle.resolve("variables.yaml").normalize();
         if (!file.startsWith(bundle)) {
             throw new IllegalArgumentException("Invalid variables path");
         }
         if (!Files.isRegularFile(file)) {
-            return null;
+            return Optional.empty();
         }
-        return Files.readString(file);
+        return Optional.of(Files.readString(file));
     }
 
     public VariablesDocument parseVariables(String raw) {
@@ -856,7 +851,7 @@ public class ScenarioService {
                 }
             }
             case INT -> {
-                if (!isIntValue(value)) {
+                if (!(value instanceof Integer)) {
                     throw new IllegalArgumentException("%s must be an int".formatted(label));
                 }
             }
@@ -868,42 +863,16 @@ public class ScenarioService {
         }
     }
 
-    private static boolean isIntValue(Object value) {
-        if (!(value instanceof Number number)) {
-            return false;
-        }
-        if (number instanceof Integer || number instanceof Short || number instanceof Byte) {
-            return true;
-        }
-        if (number instanceof Long l) {
-            return l >= Integer.MIN_VALUE && l <= Integer.MAX_VALUE;
-        }
-        if (number instanceof java.math.BigInteger bigInteger) {
-            return bigInteger.compareTo(java.math.BigInteger.valueOf(Integer.MIN_VALUE)) >= 0
-                && bigInteger.compareTo(java.math.BigInteger.valueOf(Integer.MAX_VALUE)) <= 0;
-        }
-        if (number instanceof java.math.BigDecimal bigDecimal) {
-            java.math.BigDecimal normalized = bigDecimal.stripTrailingZeros();
-            if (normalized.scale() > 0) {
-                return false;
-            }
-            return normalized.compareTo(java.math.BigDecimal.valueOf(Integer.MIN_VALUE)) >= 0
-                && normalized.compareTo(java.math.BigDecimal.valueOf(Integer.MAX_VALUE)) <= 0;
-        }
-        // Reject Float/Double and other exotic Number impls to keep int strict.
-        return false;
-    }
-
     public VariablesResolutionResult resolveVariables(
         String scenarioId,
         String variablesProfileId,
         String sutId
     ) throws IOException {
-        String raw = readVariablesRaw(scenarioId);
-        if (raw == null) {
+        Optional<String> rawOpt = readVariablesRaw(scenarioId);
+        if (rawOpt.isEmpty()) {
             return new VariablesResolutionResult(Map.of(), List.of());
         }
-        VariablesDocument doc = parseVariables(raw);
+        VariablesDocument doc = parseVariables(rawOpt.get());
         VariablesValidationResult validation = validateVariables(scenarioId, doc);
 
         String profile = variablesProfileId == null ? null : variablesProfileId.trim();
@@ -953,9 +922,9 @@ public class ScenarioService {
                 }
                 continue;
             }
-            // Ensure floats are consistently numeric (YAML may parse ints/longs as integral types).
-            if (def.type() == VariablesDocument.Type.FLOAT && value instanceof Number number && !(value instanceof Double)) {
-                value = number.doubleValue();
+            // Ensure floats are consistently numeric (YAML may parse ints as Integer).
+            if (def.type() == VariablesDocument.Type.FLOAT && value instanceof Integer i) {
+                value = i.doubleValue();
             }
             resolved.put(name, value);
         }
@@ -1050,12 +1019,7 @@ public class ScenarioService {
         }
     }
 
-    /**
-     * Reads the raw bundle-local {@code sut/<sutId>/sut.yaml}.
-     *
-     * @return raw YAML if present, otherwise {@code null}
-     */
-    public String readBundleSutRaw(String scenarioId, String sutId) throws IOException {
+    public Optional<String> readBundleSutRaw(String scenarioId, String sutId) throws IOException {
         if (sutId == null || sutId.isBlank()) {
             throw new IllegalArgumentException("sutId must not be blank");
         }
@@ -1066,13 +1030,13 @@ public class ScenarioService {
             throw new IllegalArgumentException("Invalid sutId");
         }
         if (!Files.isDirectory(sutDir)) {
-            return null;
+            return Optional.empty();
         }
         Path file = sutDir.resolve("sut.yaml").normalize();
         if (!file.startsWith(sutDir) || !Files.isRegularFile(file)) {
-            return null;
+            return Optional.empty();
         }
-        return Files.readString(file);
+        return Optional.of(Files.readString(file));
     }
 
     public void writeBundleSutRaw(String scenarioId, String sutId, String raw) throws IOException {

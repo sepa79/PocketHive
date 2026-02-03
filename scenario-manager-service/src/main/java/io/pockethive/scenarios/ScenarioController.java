@@ -19,6 +19,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -43,9 +44,9 @@ public class ScenarioController {
             produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<Scenario> create(@Valid @RequestBody Scenario scenario,
                                            @RequestHeader(HttpHeaders.CONTENT_TYPE) String contentType) throws IOException {
-        log.info("[REST] POST /scenarios contentType={} scenario={}", contentType, safeJson(scenarioSummary(scenario)));
+        log.info("[REST] POST /scenarios contentType={} body={}", contentType, safeJson(scenario));
         Scenario created = service.create(scenario, ScenarioService.formatFrom(contentType));
-        log.info("[REST] POST /scenarios -> status=201 scenario={}", safeJson(scenarioSummary(created)));
+        log.info("[REST] POST /scenarios -> status=201 body={}", safeJson(created));
         return ResponseEntity.status(HttpStatus.CREATED)
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(created);
@@ -73,7 +74,7 @@ public class ScenarioController {
     public Scenario one(@PathVariable("id") String id) {
         log.info("[REST] GET /scenarios/{}", id);
         Scenario scenario = service.find(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        log.info("[REST] GET /scenarios/{} -> status=200 scenario={}", id, safeJson(scenarioSummary(scenario)));
+        log.info("[REST] GET /scenarios/{} -> status=200 body={}", id, safeJson(scenario));
         return scenario;
     }
 
@@ -84,9 +85,9 @@ public class ScenarioController {
     public Scenario update(@PathVariable("id") String id,
                            @Valid @RequestBody Scenario scenario,
                            @RequestHeader(HttpHeaders.CONTENT_TYPE) String contentType) throws IOException {
-        log.info("[REST] PUT /scenarios/{} contentType={} scenario={}", id, contentType, safeJson(scenarioSummary(scenario)));
+        log.info("[REST] PUT /scenarios/{} contentType={} body={}", id, contentType, safeJson(scenario));
         Scenario updated = service.update(id, scenario, ScenarioService.formatFrom(contentType));
-        log.info("[REST] PUT /scenarios/{} -> status=200 scenario={}", id, safeJson(scenarioSummary(updated)));
+        log.info("[REST] PUT /scenarios/{} -> status=200 body={}", id, safeJson(updated));
         return updated;
     }
 
@@ -132,10 +133,11 @@ public class ScenarioController {
         if (service.find(id).isEmpty()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND);
         }
-        String text = service.readVariablesRaw(id);
-        if (text == null) {
+        Optional<String> raw = service.readVariablesRaw(id);
+        if (raw.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "variables.yaml not found");
         }
+        String text = raw.get();
         log.info("[REST] GET /scenarios/{}/variables -> status=200 ({} chars)", id, text.length());
         return ResponseEntity.ok()
             .contentType(MediaType.TEXT_PLAIN)
@@ -231,10 +233,11 @@ public class ScenarioController {
         if (service.find(id).isEmpty()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND);
         }
-        String text = service.readBundleSutRaw(id, sutId);
-        if (text == null) {
+        Optional<String> raw = service.readBundleSutRaw(id, sutId);
+        if (raw.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "sut.yaml not found");
         }
+        String text = raw.get();
         log.info("[REST] GET /scenarios/{}/suts/{}/raw -> status=200 ({} chars)", id, sutId, text.length());
         return ResponseEntity.ok()
             .contentType(MediaType.TEXT_PLAIN)
@@ -483,17 +486,6 @@ public class ScenarioController {
             }
             return text;
         }
-    }
-
-    private static Map<String, Object> scenarioSummary(Scenario scenario) {
-        if (scenario == null) {
-            return Map.of();
-        }
-        Map<String, Object> summary = new java.util.LinkedHashMap<>();
-        summary.put("id", scenario.getId());
-        summary.put("name", scenario.getName());
-        summary.put("description", scenario.getDescription());
-        return summary;
     }
 
     public record RuntimeRequest(String swarmId) {
