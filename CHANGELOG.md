@@ -3,7 +3,17 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
-Timestamp: 2026-01-22T14:23:07Z
+Timestamp: 2026-02-03T14:27:54Z
+
+## [0.14.22] - 2026-02-03
+Timestamp: 2026-02-03T14:27:54Z
+
+- Scenarios: added Scenario Variables (`variables.yaml`) with strict validation (types: string/int/float/bool) and profile + SUT matrix resolution.
+- Scenarios: added bundle-local SUTs under `sut/<sutId>/sut.yaml`, plus Scenario Manager endpoints for listing/reading/editing them.
+- Orchestrator: `swarm-create` accepts `variablesProfileId` (and `sutId` when needed) and injects resolved variables into bee configs as `config.vars`.
+- Worker SDK: exposes `vars.*` in Pebble templates and `eval(...)` SpEL expressions; improved error/alert logs with correlation/idempotency context.
+- UI (legacy): scenario editor can edit `variables.yaml` and bundle-local `sut.yaml`; create-swarm supports selecting `variablesProfileId`.
+- Docs + examples: added `scenarios/bundles/variables-demo/` and expanded templating guides; E2E now covers Scenario Variables end-to-end.
 
 ## [0.14.21] - 2026-01-22
 Timestamp: 2026-01-22T14:23:07Z
