@@ -253,6 +253,7 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
                 messageResultPublisher.publish(result, outbound);
             }
         } catch (Exception ex) {
+            logWorkFailure(workItem, ex);
             if (emitWorkErrorAlerts) {
                 try {
                     controlPlaneRuntime.publishWorkError(workerDefinition.beanName(), workItem, ex);
@@ -262,6 +263,31 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
             }
             dispatchErrorHandler.accept(ex);
         }
+    }
+
+    private void logWorkFailure(WorkItem workItem, Exception ex) {
+        if (!log.isWarnEnabled()) {
+            return;
+        }
+        if (workItem == null) {
+            log.warn("{} failed to process work item (workItem=null)", displayName, ex);
+            return;
+        }
+        Object messageId = workItem.headers().get("message-id");
+        Object callId = workItem.headers().get("x-ph-call-id");
+        Object correlationId = workItem.headers().get("correlationId");
+        Object idempotencyKey = workItem.headers().get("idempotencyKey");
+        String traceId = workItem.observabilityContext()
+            .map(ObservabilityContext::getTraceId)
+            .orElse(null);
+        log.warn("{} failed to process work item messageId={} callId={} correlationId={} idempotencyKey={} traceId={}",
+            displayName,
+            messageId != null ? String.valueOf(messageId) : null,
+            callId != null ? String.valueOf(callId) : null,
+            correlationId != null ? String.valueOf(correlationId) : null,
+            idempotencyKey != null ? String.valueOf(idempotencyKey) : null,
+            (traceId != null && !traceId.isBlank()) ? traceId : null,
+            ex);
     }
 
     /**
