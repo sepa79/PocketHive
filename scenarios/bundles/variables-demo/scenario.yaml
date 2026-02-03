@@ -43,8 +43,3 @@ template:
       work:
         in: mod
         out: final
-    - role: postprocessor
-      image: postprocessor:latest
-      work:
-        in: final
-
