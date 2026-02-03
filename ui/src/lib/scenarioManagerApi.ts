@@ -263,48 +263,6 @@ export async function listScenarioBundleSuts(id: string): Promise<string[]> {
   }
 }
 
-export async function fetchScenarioSutRaw(
-  scenarioId: string,
-  sutId: string,
-): Promise<string | null> {
-  const response = await apiFetch(
-    `/scenario-manager/scenarios/${encodeURIComponent(scenarioId)}/suts/${encodeURIComponent(sutId)}/raw`,
-    { headers: { Accept: 'text/plain' } },
-  )
-  if (response.status === 404) {
-    return null
-  }
-  await ensureOk(response, 'Failed to load sut.yaml')
-  return response.text()
-}
-
-export async function saveScenarioSutRaw(
-  scenarioId: string,
-  sutId: string,
-  body: string,
-): Promise<void> {
-  const response = await apiFetch(
-    `/scenario-manager/scenarios/${encodeURIComponent(scenarioId)}/suts/${encodeURIComponent(sutId)}/raw`,
-    {
-      method: 'PUT',
-      headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
-      body,
-    },
-  )
-  await ensureOk(response, 'Failed to save sut.yaml')
-}
-
-export async function deleteScenarioSut(
-  scenarioId: string,
-  sutId: string,
-): Promise<void> {
-  const response = await apiFetch(
-    `/scenario-manager/scenarios/${encodeURIComponent(scenarioId)}/suts/${encodeURIComponent(sutId)}`,
-    { method: 'DELETE' },
-  )
-  await ensureOk(response, 'Failed to delete SUT')
-}
-
 export async function listHttpTemplates(id: string): Promise<string[]> {
   const response = await apiFetch(
     `/scenario-manager/scenarios/${encodeURIComponent(id)}/http-templates`,

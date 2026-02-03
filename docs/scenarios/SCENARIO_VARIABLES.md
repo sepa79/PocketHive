@@ -232,7 +232,6 @@ This is a concrete, implementation-oriented checklist. Treat the bundle as the S
 - [x] Store bundle-local SUT definitions under `scenarios/bundles/<scenarioId>/sut/**` (SSOT for SUTs used by this scenario).
 - [x] Scenario Manager: add endpoints to read/update `variables.yaml` for a scenario bundle (avoid “generic file read”; keep it narrow/safe).
 - [x] Scenario Manager: add endpoints to list/get bundle-local SUTs for a scenario (used by the editor and create-swarm UI).
-- [x] Scenario Manager: add endpoints to read/write/delete bundle-local `sut/<sutId>/sut.yaml` (editor CRUD).
 - [x] Scenario Manager: validate `variables.yaml` on bundle upload/replace and on `variables.yaml` write.
 
 ### Data model + validation (Scenario Manager)
@@ -244,21 +243,19 @@ This is a concrete, implementation-oriented checklist. Treat the bundle as the S
   - [x] unique `profiles[*].id`
   - [x] reject unknown keys in `values.*` not present in `definitions`
   - [x] reject type mismatches
-- [x] Coverage validation levels:
-  - [x] **Editor save**: allow incomplete matrix coverage but emit warnings (return warnings to UI).
+- [ ] Coverage validation levels:
+  - [ ] **Editor save**: allow incomplete matrix coverage but emit warnings (return warnings to UI).
   - [x] **Create swarm**: validate the selected `(variablesProfileId, sutId)` is fully resolvable for all `required: true` vars (hard error).
 
 ### UI (Scenario Editor + Create swarm)
 
 - [ ] Editor: CRUD `definitions` and `profiles` in one UI (single `variables.yaml` file).
 - [ ] Editor: grid editor for `values.sut[profileId][sutId]` (profile × SUT).
-- [x] Editor: show validation warnings returned by Scenario Manager (e.g. incomplete required coverage, unknown sut references).
-- [x] Editor: raw `sut.yaml` CRUD per bundle-local SUT.
-- [x] Create swarm dialog (legacy UI):
-  - [x] show `variablesProfileId` selector only if `variables.yaml` exists
-  - [x] require `variablesProfileId` if variables exist (profiles present)
-  - [x] require `sutId` + `variablesProfileId` if any `sut` vars exist
-- [ ] Create swarm dialog (UI v2): implement equivalent behavior in `ui-v2/` (tracked separately).
+- [ ] Editor: show validation warnings (incomplete coverage, unused definitions, missing optional cells).
+- [ ] Create swarm dialog:
+  - [ ] show `variablesProfileId` selector only if `variables.yaml` exists
+  - [ ] require `variablesProfileId` if any `global` vars exist
+  - [ ] require `sutId` + `variablesProfileId` if any `sut` vars exist
 
 ### Orchestrator integration (create-time compilation)
 
@@ -279,10 +276,10 @@ The worker templating context is built in two main places today:
 Implementation intent:
 
 - [ ] Standardize a single config location for variables (example: `templating.vars` map).
-- [x] Add `vars` to Pebble context maps passed to the renderer:
+- [ ] Add `vars` to Pebble context maps passed to the renderer:
   - [x] `MessageTemplateRenderer`: include `ctx.put("vars", <resolvedVarsFromConfig>)`
   - [x] `TemplatingInterceptor`: include `templateContext.put("vars", <resolvedVarsFromConfig>)`
-- [x] Add `vars` to SpEL root variables inside `eval(...)`:
+- [ ] Add `vars` to SpEL root variables inside `eval(...)`:
   - [x] `PebbleEvalExtension`: if `context.getVariable("vars")` exists, include it in the root map as `vars`
 
 ### Tracing / observability (correlation + idempotency)
@@ -302,6 +299,6 @@ Follow `docs/correlation-vs-idempotency.md` for the semantics.
 
 ### Tests (targeted)
 
-- [x] Scenario Manager: unit tests for `variables.yaml` parsing + validation (types, unknown keys, required coverage).
+- [ ] Scenario Manager: unit tests for `variables.yaml` parsing + validation (types, unknown keys, required coverage).
 - [x] Worker SDK: tests that `vars.*` is accessible in Pebble and in `eval(...)`.
 - [ ] Orchestrator: a focused test that a `swarm-create` with `(sutId, variablesProfileId)` injects `config.templating.vars` into the produced plan/config.

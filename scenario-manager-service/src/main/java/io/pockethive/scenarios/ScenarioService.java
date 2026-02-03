@@ -759,45 +759,6 @@ public class ScenarioService {
             throw new IllegalArgumentException("variables.yaml must declare profiles[] when definitions[] are present");
         }
 
-        List<String> requiredGlobalVars = byName.values().stream()
-            .filter(def -> def.scope() == VariablesDocument.Scope.GLOBAL)
-            .filter(def -> Boolean.TRUE.equals(def.required()))
-            .map(def -> def.name().trim())
-            .toList();
-        List<String> requiredSutVars = byName.values().stream()
-            .filter(def -> def.scope() == VariablesDocument.Scope.SUT)
-            .filter(def -> Boolean.TRUE.equals(def.required()))
-            .map(def -> def.name().trim())
-            .toList();
-
-        if (!profilesById.isEmpty()) {
-            for (String profileId : profilesById.keySet()) {
-                if (!requiredGlobalVars.isEmpty()) {
-                    Map<String, Object> perProfile = global.getOrDefault(profileId, Map.of());
-                    List<String> missing = requiredGlobalVars.stream()
-                        .filter(name -> perProfile.get(name) == null)
-                        .toList();
-                    if (!missing.isEmpty()) {
-                        warnings.add("profile '%s' is missing required global variables: %s".formatted(
-                            profileId, String.join(", ", missing)));
-                    }
-                }
-                if (!requiredSutVars.isEmpty()) {
-                    Map<String, Map<String, Object>> perProfile = sut.getOrDefault(profileId, Map.of());
-                    for (String sutId : allowedSutIds) {
-                        Map<String, Object> perSut = perProfile.getOrDefault(sutId, Map.of());
-                        List<String> missing = requiredSutVars.stream()
-                            .filter(name -> perSut.get(name) == null)
-                            .toList();
-                        if (!missing.isEmpty()) {
-                            warnings.add("profile '%s' sut '%s' is missing required sut variables: %s".formatted(
-                                profileId, sutId, String.join(", ", missing)));
-                        }
-                    }
-                }
-            }
-        }
-
         return new VariablesValidationResult(List.copyOf(warnings));
     }
 
@@ -978,7 +939,6 @@ public class ScenarioService {
         if (sutId == null || sutId.isBlank()) {
             throw new IllegalArgumentException("sutId must not be blank");
         }
-        sutId = sanitizeSutId(sutId);
         Path bundle = bundleDir(scenarioId);
         Path sutDir = bundle.resolve("sut").resolve(sutId).normalize();
         if (!sutDir.startsWith(bundle)) {
@@ -1017,86 +977,6 @@ public class ScenarioService {
             throw new IllegalArgumentException(
                 "Failed to parse SUT '%s' for scenario '%s'".formatted(sutId, scenarioId), e);
         }
-    }
-
-    public Optional<String> readBundleSutRaw(String scenarioId, String sutId) throws IOException {
-        if (sutId == null || sutId.isBlank()) {
-            throw new IllegalArgumentException("sutId must not be blank");
-        }
-        sutId = sanitizeSutId(sutId);
-        Path bundle = bundleDir(scenarioId);
-        Path sutDir = bundle.resolve("sut").resolve(sutId).normalize();
-        if (!sutDir.startsWith(bundle)) {
-            throw new IllegalArgumentException("Invalid sutId");
-        }
-        if (!Files.isDirectory(sutDir)) {
-            return Optional.empty();
-        }
-        Path file = sutDir.resolve("sut.yaml").normalize();
-        if (!file.startsWith(sutDir) || !Files.isRegularFile(file)) {
-            return Optional.empty();
-        }
-        return Optional.of(Files.readString(file));
-    }
-
-    public void writeBundleSutRaw(String scenarioId, String sutId, String raw) throws IOException {
-        if (sutId == null || sutId.isBlank()) {
-            throw new IllegalArgumentException("sutId must not be blank");
-        }
-        sutId = sanitizeSutId(sutId);
-        if (raw == null || raw.isBlank()) {
-            throw new IllegalArgumentException("sut.yaml must not be empty");
-        }
-
-        SutEnvironment env;
-        try {
-            env = yamlMapper.readValue(raw, SutEnvironment.class);
-        } catch (Exception e) {
-            throw new IllegalArgumentException("Failed to parse sut.yaml", e);
-        }
-        if (env == null || env.id() == null || env.id().isBlank()) {
-            throw new IllegalArgumentException("sut.yaml id must not be blank");
-        }
-        if (!sutId.equals(env.id())) {
-            throw new IllegalArgumentException("sut.yaml id '%s' does not match directory name '%s'".formatted(env.id(), sutId));
-        }
-
-        Path bundle = bundleDir(scenarioId);
-        Path sutDir = bundle.resolve("sut").resolve(sutId).normalize();
-        if (!sutDir.startsWith(bundle)) {
-            throw new IllegalArgumentException("Invalid sutId");
-        }
-        Files.createDirectories(sutDir);
-        Path file = sutDir.resolve("sut.yaml").normalize();
-        if (!file.startsWith(sutDir)) {
-            throw new IllegalArgumentException("Invalid sut.yaml path");
-        }
-        Files.writeString(file, raw);
-    }
-
-    public void deleteBundleSut(String scenarioId, String sutId) throws IOException {
-        if (sutId == null || sutId.isBlank()) {
-            throw new IllegalArgumentException("sutId must not be blank");
-        }
-        sutId = sanitizeSutId(sutId);
-        Path bundle = bundleDir(scenarioId);
-        Path sutDir = bundle.resolve("sut").resolve(sutId).normalize();
-        if (!sutDir.startsWith(bundle)) {
-            throw new IllegalArgumentException("Invalid sutId");
-        }
-        if (!Files.isDirectory(sutDir)) {
-            throw new IllegalArgumentException("SUT '%s' not found in bundle for scenario '%s'".formatted(sutId, scenarioId));
-        }
-        clearDirectory(sutDir);
-        Files.deleteIfExists(sutDir);
-    }
-
-    private String sanitizeSutId(String sutId) {
-        String cleaned = Paths.get(sutId).getFileName().toString();
-        if (!cleaned.equals(sutId) || cleaned.contains("..") || cleaned.isBlank()) {
-            throw new IllegalArgumentException("Invalid sutId");
-        }
-        return cleaned;
     }
 
     public Scenario createBundleFromZip(byte[] zipBytes) throws IOException {
