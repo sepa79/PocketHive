@@ -5,6 +5,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmLifecycleStatus;
+import io.pockethive.orchestrator.domain.HiveJournal;
+import io.pockethive.orchestrator.domain.HiveJournal.HiveJournalEntry;
+import io.pockethive.control.ControlScope;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -16,6 +19,8 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -33,34 +38,40 @@ public class ControllerStatusListener {
     private final ObjectMapper mapper;
     private final ControlPlaneStatusRequestPublisher statusRequests;
     private final SwarmSignalListener swarmSignals;
+    private final HiveJournal hiveJournal;
 
     public ControllerStatusListener(SwarmStore store,
                                     ObjectMapper mapper,
                                     ControlPlaneStatusRequestPublisher statusRequests,
-                                    SwarmSignalListener swarmSignals) {
+                                    SwarmSignalListener swarmSignals,
+                                    HiveJournal hiveJournal) {
         this.store = Objects.requireNonNull(store, "store");
         this.mapper = Objects.requireNonNull(mapper, "mapper").findAndRegisterModules();
         this.statusRequests = Objects.requireNonNull(statusRequests, "statusRequests");
         this.swarmSignals = Objects.requireNonNull(swarmSignals, "swarmSignals");
+        this.hiveJournal = Objects.requireNonNull(hiveJournal, "hiveJournal");
     }
 
     @RabbitListener(queues = "#{controllerStatusQueue.name}")
     public void handle(String body, @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String routingKey) {
-        if (routingKey == null || routingKey.isBlank()) {
-            log.warn("Received controller status message with null or blank routing key; payload snippet={}", snippet(body));
-            throw new IllegalArgumentException("Controller status routing key must not be null or blank");
-        }
-        if (body == null || body.isBlank()) {
-            log.warn("Received controller status message with null or blank payload for routing key {}", routingKey);
-            throw new IllegalArgumentException("Controller status payload must not be null or blank");
-        }
-        String payloadSnippet = snippet(body);
-        if (routingKey.startsWith("event.metric.status-")) {
-            log.debug("[CTRL] RECV rk={} payload={}", routingKey, payloadSnippet);
-        } else {
-            log.info("[CTRL] RECV rk={} payload={}", routingKey, payloadSnippet);
-        }
+        // Controller status messages are control-plane traffic: never requeue on failures (avoid storms).
         try {
+            if (routingKey == null || routingKey.isBlank()) {
+                log.error("Received controller status message with null or blank routing key; payload snippet={}", snippet(body));
+                journalParseError("hive", routingKey, "missing routing key", body, null);
+                return;
+            }
+            if (body == null || body.isBlank()) {
+                log.error("Received controller status message with null or blank payload for routing key {}", routingKey);
+                journalParseError("hive", routingKey, "missing payload", body, null);
+                return;
+            }
+            String payloadSnippet = snippet(body);
+            if (routingKey.startsWith("event.metric.status-")) {
+                log.debug("[CTRL] RECV rk={} payload={}", routingKey, payloadSnippet);
+            } else {
+                log.info("[CTRL] RECV rk={} payload={}", routingKey, payloadSnippet);
+            }
             boolean statusFull = routingKey.startsWith("event.metric.status-full.");
             boolean statusDelta = routingKey.startsWith("event.metric.status-delta.");
             JsonNode node = mapper.readTree(body);
@@ -141,7 +152,8 @@ public class ControllerStatusListener {
                 }
             }
         } catch (Exception e) {
-            log.warn("status parse", e);
+            log.error("Ignoring controller status message due to handler exception; rk={} payload snippet={}", routingKey, snippet(body), e);
+            journalParseError(bestEffortSwarmIdFromBody(body), routingKey, "handler exception", body, e);
         }
     }
 
@@ -186,8 +198,56 @@ public class ControllerStatusListener {
             missing.add("instance");
         }
         if (!missing.isEmpty()) {
-            log.warn("Received controller status payload with missing scope fields {}; rk={} payload snippet={}",
+            log.error("Received controller status payload with missing scope fields {}; rk={} payload snippet={}",
                 missing, routingKey, snippet(body));
+            journalParseError(
+                swarmId != null && !swarmId.isBlank() ? swarmId : "hive",
+                routingKey,
+                "missing scope fields: " + String.join(",", missing),
+                body,
+                null);
+        }
+    }
+
+    private void journalParseError(String swarmId,
+                                  String routingKey,
+                                  String reason,
+                                  String body,
+                                  Exception exception) {
+        String resolvedSwarmId = swarmId != null && !swarmId.isBlank() ? swarmId : "hive";
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("reason", reason);
+        if (exception != null) {
+            data.put("exception", exception.getClass().getSimpleName());
+            if (exception.getMessage() != null && !exception.getMessage().isBlank()) {
+                data.put("message", exception.getMessage());
+            }
+        }
+        hiveJournal.append(HiveJournalEntry.error(
+            resolvedSwarmId,
+            HiveJournal.Direction.IN,
+            "control-plane",
+            "status-parse-error",
+            "swarm-controller",
+            new ControlScope(resolvedSwarmId, "orchestrator", "controller-status-listener"),
+            null,
+            null,
+            routingKey,
+            data,
+            Map.of("payloadSnippet", snippet(body)),
+            null));
+    }
+
+    private String bestEffortSwarmIdFromBody(String body) {
+        if (body == null || body.isBlank()) {
+            return "hive";
+        }
+        try {
+            JsonNode node = mapper.readTree(body);
+            String swarmId = node.path("scope").path("swarmId").asText(null);
+            return swarmId != null && !swarmId.isBlank() ? swarmId : "hive";
+        } catch (Exception ignored) {
+            return "hive";
         }
     }
 }

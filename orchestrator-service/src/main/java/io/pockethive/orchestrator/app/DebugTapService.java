@@ -8,6 +8,7 @@ import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.Work;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -26,6 +27,7 @@ import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.QueueBuilder;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.http.HttpStatus;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -48,6 +50,7 @@ public class DebugTapService {
 
     public DebugTapResponse create(DebugTapRequest request) {
         Objects.requireNonNull(request, "request");
+        cleanupExpired(Instant.now());
         TapDirection direction = TapDirection.from(request.direction());
         TapBinding binding = resolveBinding(request, direction);
         int maxItems = resolveMaxItems(request.maxItems());
@@ -87,6 +90,7 @@ public class DebugTapService {
     }
 
     public DebugTapResponse read(String tapId, Integer drain) {
+        cleanupExpired(Instant.now());
         DebugTap tap = requireTap(tapId);
         int limit = resolveDrainLimit(drain, tap.maxItems());
         tap.drain(rabbitTemplate, limit);
@@ -98,7 +102,7 @@ public class DebugTapService {
         if (tap == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "debug tap not found");
         }
-        amqp.deleteQueue(tap.queue());
+        safeDeleteQueue(tap.queue());
         return tap.snapshot();
     }
 
@@ -107,7 +111,39 @@ public class DebugTapService {
         if (tap == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "debug tap not found");
         }
+        Instant now = Instant.now();
+        if (tap.isExpired(now)) {
+            taps.remove(tapId, tap);
+            safeDeleteQueue(tap.queue());
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "debug tap expired");
+        }
         return tap;
+    }
+
+    @Scheduled(fixedDelay = 5000L)
+    void cleanupExpiredScheduled() {
+        cleanupExpired(Instant.now());
+    }
+
+    void cleanupExpired(Instant now) {
+        for (Map.Entry<String, DebugTap> entry : taps.entrySet()) {
+            String tapId = entry.getKey();
+            DebugTap tap = entry.getValue();
+            if (!tap.isExpired(now)) {
+                continue;
+            }
+            if (taps.remove(tapId, tap)) {
+                safeDeleteQueue(tap.queue());
+            }
+        }
+    }
+
+    private void safeDeleteQueue(String name) {
+        try {
+            amqp.deleteQueue(name);
+        } catch (Exception ignored) {
+            // best-effort cleanup: tap queues are exclusive + auto-delete
+        }
     }
 
     private TapBinding resolveBinding(DebugTapRequest request, TapDirection direction) {
@@ -132,8 +168,10 @@ public class DebugTapService {
         if (suffix == null || suffix.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "unknown ioName for role");
         }
+        // Work queues are bound to the hive exchange using the resolved queue name as the routing key.
+        // See swarm-controller's SwarmWorkTopologyManager + applyWorkIoEnvironment.
         String exchange = "ph." + swarmId + ".hive";
-        String routingKey = "ph.work." + swarmId + "." + suffix.trim();
+        String routingKey = "ph." + swarmId + "." + suffix.trim();
         return new TapBinding(swarmId, role, ioName, exchange, routingKey);
     }
 
@@ -221,6 +259,7 @@ public class DebugTapService {
         private final int maxItems;
         private final int ttlSeconds;
         private final Instant createdAt;
+        private final Instant expiresAt;
         private final Deque<DebugTapSample> samples = new ArrayDeque<>();
         private final Object lock = new Object();
         private volatile Instant lastReadAt;
@@ -247,6 +286,7 @@ public class DebugTapService {
             this.maxItems = maxItems;
             this.ttlSeconds = ttlSeconds;
             this.createdAt = createdAt;
+            this.expiresAt = createdAt.plus(Duration.ofSeconds(ttlSeconds));
             this.lastReadAt = createdAt;
         }
 
@@ -256,6 +296,10 @@ public class DebugTapService {
 
         int maxItems() {
             return maxItems;
+        }
+
+        boolean isExpired(Instant now) {
+            return now.isAfter(expiresAt);
         }
 
         void drain(RabbitTemplate template, int limit) {

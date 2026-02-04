@@ -500,6 +500,35 @@ export function SwarmViewPage() {
     didInitialFitRef.current = false
   }, [swarmId])
 
+  const openTapViewer = useCallback(
+    async (role: string, direction: 'IN' | 'OUT', ioName: string | null) => {
+      const payload = {
+        swarmId,
+        role,
+        direction,
+        ioName,
+        maxItems: 5,
+        ttlSeconds: 20,
+      }
+      const response = await fetch(`${ORCHESTRATOR_BASE}/debug/taps`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (!response.ok) {
+        const text = await response.text()
+        throw new Error((text && text.trim().length ? text.trim() : null) ?? `Failed to create tap (HTTP ${response.status})`)
+      }
+      const created = (await response.json()) as { tapId?: string }
+      const tapId = created.tapId
+      if (!tapId) {
+        throw new Error('Tap created but tapId is missing in response.')
+      }
+      window.open(`/v2/debug/taps/${encodeURIComponent(tapId)}`, '_blank', 'noopener,noreferrer')
+    },
+    [swarmId],
+  )
+
   const refreshWorkers = useCallback((next: WorkerSnapshot[]) => {
     workersRef.current = next
     if (coalesceTimer.current != null) {
@@ -720,6 +749,8 @@ export function SwarmViewPage() {
         nodeId: entry.id,
         role: entry.bee.role ?? entry.id,
         instance: snap?.instance ?? null,
+        ioNamesIn: entry.bee.work?.in ? Object.keys(entry.bee.work.in).filter((k) => k && k.trim().length > 0) : [],
+        ioNamesOut: entry.bee.work?.out ? Object.keys(entry.bee.work.out).filter((k) => k && k.trim().length > 0) : [],
         rawEnvelope: snap?.rawEnvelope ?? null,
         enabled: snap?.enabled,
         tps: snap?.tps,
@@ -812,6 +843,36 @@ export function SwarmViewPage() {
                           }}
                         >
                           RAW
+                        </button>
+                        <button
+                          type="button"
+                          className="actionButton actionButtonGhost actionButtonTiny"
+                          title="Open Debug Tap Viewer (OUT). Creates an ephemeral tap queue and opens the viewer in a new tab."
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            const ioName = card.ioNamesOut[0] ?? 'out'
+                            openTapViewer(card.role, 'OUT', ioName).catch((err) => {
+                              console.error(err)
+                              window.alert(err instanceof Error ? err.message : 'Failed to create debug tap.')
+                            })
+                          }}
+                        >
+                          Tap OUT
+                        </button>
+                        <button
+                          type="button"
+                          className="actionButton actionButtonGhost actionButtonTiny"
+                          title="Open Debug Tap Viewer (IN). Creates an ephemeral tap queue and opens the viewer in a new tab."
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            const ioName = card.ioNamesIn[0] ?? 'in'
+                            openTapViewer(card.role, 'IN', ioName).catch((err) => {
+                              console.error(err)
+                              window.alert(err instanceof Error ? err.message : 'Failed to create debug tap.')
+                            })
+                          }}
+                        >
+                          Tap IN
                         </button>
                         <span className={`chip ${card.enabled === false ? 'chip-event' : 'chip-outcome'}`}>
                           {card.enabled == null ? 'enabled?' : card.enabled ? 'enabled' : 'disabled'}

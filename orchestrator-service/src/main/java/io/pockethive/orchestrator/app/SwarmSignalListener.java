@@ -114,29 +114,39 @@ public class SwarmSignalListener {
 
     @RabbitListener(queues = "#{managerControlQueueName}")
     public void handle(String body, @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String routingKey) {
-        if (routingKey == null || routingKey.isBlank()) {
-            log.warn("Received control-plane event with null or blank routing key; payload snippet={}", snippet(body));
-            throw new IllegalArgumentException("Control-plane routing key must not be null or blank");
-        }
-        if (!routingKey.startsWith("event.")) {
-            log.warn("Received control-plane event with unexpected routing key prefix; rk={} payload snippet={}", routingKey, snippet(body));
-            throw new IllegalArgumentException("Control-plane routing key must start with 'event.'");
-        }
-        String snippet = snippet(body);
-        if (routingKey.startsWith("event.metric.status-")) {
-            log.debug("[CTRL] RECV rk={} inst={} payload={}", routingKey, instanceId, snippet);
-            return;
-        }
-        RoutingKey key = ControlPlaneRouting.parseEvent(routingKey);
-        if (key == null || key.type() == null) {
-            log.warn("Unable to parse control event routing key {}; payload snippet={}", routingKey, snippet);
-            throw new IllegalArgumentException("Control-plane routing key is malformed");
-        }
+        // Control-plane traffic is not safe to requeue on errors: redelivery storms can overwhelm RabbitMQ.
+        // We always ACK by swallowing exceptions (log + drop) so a single bad/duplicate message cannot wedge the system.
+        try {
+            if (routingKey == null || routingKey.isBlank()) {
+                log.warn("Received control-plane event with null or blank routing key; payload snippet={}", snippet(body));
+                journalControlPlaneDrop(bestEffortSwarmIdFromRoutingKey(routingKey), routingKey, "missing routing key", body, null);
+                return;
+            }
+            if (!routingKey.startsWith("event.")) {
+                log.warn("Received control-plane event with unexpected routing key prefix; rk={} payload snippet={}", routingKey, snippet(body));
+                journalControlPlaneDrop(bestEffortSwarmIdFromRoutingKey(routingKey), routingKey, "unexpected routing key prefix", body, null);
+                return;
+            }
+            String snippet = snippet(body);
+            if (routingKey.startsWith("event.metric.status-")) {
+                log.debug("[CTRL] RECV rk={} inst={} payload={}", routingKey, instanceId, snippet);
+                return;
+            }
+            RoutingKey key = ControlPlaneRouting.parseEvent(routingKey);
+            if (key == null || key.type() == null) {
+                log.warn("Unable to parse control event routing key {}; payload snippet={}", routingKey, snippet);
+                journalControlPlaneDrop(bestEffortSwarmIdFromRoutingKey(routingKey), routingKey, "unable to parse routing key", body, null);
+                return;
+            }
 
-        log.info("[CTRL] RECV rk={} inst={} payload={}", routingKey, instanceId, snippet);
+            log.info("[CTRL] RECV rk={} inst={} payload={}", routingKey, instanceId, snippet);
 
-        if (key.type().startsWith("outcome.")) {
-            handleOutcomeEvent(key, routingKey, body);
+            if (key.type().startsWith("outcome.")) {
+                handleOutcomeEvent(key, routingKey, body);
+            }
+        } catch (Exception e) {
+            log.warn("Ignoring control-plane event due to handler exception; rk={} payload snippet={}", routingKey, snippet(body), e);
+            journalControlPlaneDrop(bestEffortSwarmIdFromRoutingKey(routingKey), routingKey, "handler exception", body, e);
         }
     }
 
@@ -449,7 +459,7 @@ public class SwarmSignalListener {
             return;
         }
         creates.complete(swarmId, Phase.START);
-        updateStatusFromContext(swarmId, contextStatus);
+        updateStatusFromContext(key, contextStatus);
     }
 
     private void onSwarmStopError(RoutingKey key) {
@@ -469,21 +479,55 @@ public class SwarmSignalListener {
             return;
         }
         creates.complete(swarmId, Phase.STOP);
-        updateStatusFromContext(swarmId, contextStatus);
+        updateStatusFromContext(key, contextStatus);
     }
 
-    private void updateStatusFromContext(String swarmId, String contextStatus) {
+    private void updateStatusFromContext(RoutingKey key, String contextStatus) {
+        String swarmId = key == null ? null : key.swarmId();
+        if (swarmId == null || swarmId.isBlank()) {
+            return;
+        }
         SwarmLifecycleStatus status = parseSwarmStatus(contextStatus);
         if (status == null) {
             return;
         }
         store.find(swarmId).ifPresent(swarm -> {
             SwarmLifecycleStatus current = swarm.getStatus();
-            if (current == status || current.canTransitionTo(status)) {
+            if (current == status) {
+                log.info("duplicate status update from outcome context for swarm {}: {} (ignoring)", swarmId, status);
+                hiveJournal.append(HiveJournalEntry.info(
+                    swarmId,
+                    HiveJournal.Direction.IN,
+                    "control-plane",
+                    "status-duplicate",
+                    "swarm-controller",
+                    new ControlScope(swarmId, key.role(), key.instance()),
+                    null,
+                    null,
+                    null,
+                    Map.of("status", status.name()),
+                    null,
+                    null));
+                return;
+            }
+            if (current.canTransitionTo(status)) {
                 store.updateStatus(swarmId, status);
             } else {
                 log.warn("illegal status transition from outcome context for swarm {}: {} -> {} (ignoring)",
                     swarmId, current, status);
+                hiveJournal.append(HiveJournalEntry.error(
+                    swarmId,
+                    HiveJournal.Direction.IN,
+                    "control-plane",
+                    "status-illegal-transition",
+                    "swarm-controller",
+                    new ControlScope(swarmId, key.role(), key.instance()),
+                    null,
+                    null,
+                    null,
+                    Map.of("from", current.name(), "to", status.name(), "contextStatus", contextStatus),
+                    null,
+                    null));
             }
         });
     }
@@ -498,6 +542,56 @@ public class SwarmSignalListener {
             log.warn("unknown swarm status '{}' in outcome context", status);
             return null;
         }
+    }
+
+    private void journalControlPlaneDrop(String swarmId,
+                                         String routingKey,
+                                         String reason,
+                                         String body,
+                                         Exception exception) {
+        if (swarmId == null || swarmId.isBlank()) {
+            return;
+        }
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("reason", reason);
+        if (routingKey != null) {
+            data.put("routingKey", routingKey);
+        }
+        if (exception != null) {
+            data.put("exception", exception.getClass().getSimpleName());
+            if (exception.getMessage() != null && !exception.getMessage().isBlank()) {
+                data.put("message", exception.getMessage());
+            }
+        }
+        hiveJournal.append(HiveJournalEntry.error(
+            swarmId,
+            HiveJournal.Direction.IN,
+            "control-plane",
+            "event-dropped",
+            ROLE,
+            new ControlScope(swarmId, ROLE, instanceId),
+            null,
+            null,
+            routingKey,
+            data,
+            Map.of("payloadSnippet", snippet(body)),
+            null));
+    }
+
+    private static String bestEffortSwarmIdFromRoutingKey(String routingKey) {
+        if (routingKey == null) {
+            return null;
+        }
+        // Expected: event.<kind>.<type>.<swarmId>.<role>.<instance>
+        String[] parts = routingKey.trim().split("\\.");
+        if (parts.length < 6) {
+            return null;
+        }
+        if (!"event".equals(parts[0])) {
+            return null;
+        }
+        String swarmId = parts[3];
+        return swarmId != null && !swarmId.isBlank() ? swarmId : null;
     }
 
 		    private ControlSignal templateSignal(SwarmPlan plan, Pending info, String controllerInstance) {

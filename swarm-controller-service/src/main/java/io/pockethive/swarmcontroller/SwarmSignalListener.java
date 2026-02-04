@@ -139,10 +139,11 @@ public class SwarmSignalListener {
 
   @RabbitListener(queues = "#{swarmControllerControlQueueName}")
   public void handle(String body, @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String routingKey) {
+    // Control-plane messages must never be requeued on failures: ACK (drop) always to avoid storms.
     try {
       if (routingKey == null || routingKey.isBlank()) {
         log.warn("Received control message with null or blank routing key; payload snippet={}", snippet(body));
-        throw new IllegalArgumentException("Control-plane routing key must not be null or blank");
+        return;
       }
       String snippet = snippet(body);
       if (routingKey.startsWith("event.metric.status-")
@@ -168,6 +169,8 @@ public class SwarmSignalListener {
       } else if (routingKey.startsWith("event.alert.")) {
         handleAlertEvent(routingKey, body);
       }
+    } catch (Exception e) {
+      log.warn("Ignoring control-plane message due to handler exception; rk={} payload snippet={}", routingKey, snippet(body), e);
     } finally {
       MDC.clear();
     }

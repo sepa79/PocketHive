@@ -13,8 +13,8 @@ import org.springframework.context.annotation.Configuration;
 public class SwarmConfiguration {
 
     @Bean
-    public SwarmStore swarmStore() {
-        return new SwarmStore();
+    public SwarmStore swarmStore(io.pockethive.orchestrator.domain.HiveJournal hiveJournal) {
+        return new SwarmStore(hiveJournal);
     }
 
     @Bean

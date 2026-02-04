@@ -260,7 +260,7 @@ temporary queue bound to the swarm's hive exchange and buffers samples for UI in
   "direction": "OUT",
   "ioName": "out",
   "exchange": "ph.demo.hive",
-  "routingKey": "ph.work.demo.post",
+  "routingKey": "ph.demo.post",
   "queue": "ph.debug.demo.postprocessor.ab12cd34",
   "maxItems": 1,
   "ttlSeconds": 60,

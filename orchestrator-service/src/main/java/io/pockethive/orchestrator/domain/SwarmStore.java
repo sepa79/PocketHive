@@ -2,6 +2,8 @@ package io.pockethive.orchestrator.domain;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.pockethive.control.ControlScope;
+import io.pockethive.orchestrator.domain.HiveJournal.HiveJournalEntry;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Map;
@@ -10,6 +12,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -17,7 +20,16 @@ public class SwarmStore {
 
     private static final Logger log = LoggerFactory.getLogger(SwarmStore.class);
 
+    private final HiveJournal hiveJournal;
     private final Map<String, Swarm> swarms = new ConcurrentHashMap<>();
+
+    public SwarmStore() {
+        this(HiveJournal.noop());
+    }
+
+    public SwarmStore(HiveJournal hiveJournal) {
+        this.hiveJournal = hiveJournal == null ? HiveJournal.noop() : hiveJournal;
+    }
 
     public enum DeltaApplyResult {
         MERGED,
@@ -81,6 +93,27 @@ public class SwarmStore {
         Swarm swarm = swarms.get(id);
         if (swarm != null) {
             SwarmLifecycleStatus previous = swarm.getStatus();
+            // Idempotency guard: control-plane outcome events can be duplicated/redelivered.
+            // Re-applying the same status would throw and trigger AMQP requeue loops (redelivery storms).
+            if (previous == status) {
+                log.info("SwarmStore: duplicate status update id={} status={} (ignoring)", id, status);
+                Map<String, Object> data = new LinkedHashMap<>();
+                data.put("status", status == null ? null : status.name());
+                hiveJournal.append(HiveJournalEntry.info(
+                    id,
+                    HiveJournal.Direction.LOCAL,
+                    "control-plane",
+                    "status-duplicate",
+                    "SwarmStore",
+                    new ControlScope(id, "orchestrator", "store"),
+                    null,
+                    null,
+                    null,
+                    data,
+                    null,
+                    null));
+                return;
+            }
             swarm.transitionTo(status);
             if (previous != status) {
                 log.info("SwarmStore: status change id={} {} -> {}", id, previous, status);

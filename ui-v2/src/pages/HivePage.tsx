@@ -600,15 +600,18 @@ export function HivePage() {
   const manifestIndex = useMemo(() => buildManifestIndex(capabilities), [capabilities])
 
   useEffect(() => {
-    setSelectedBeeKey(null)
     if (!selectedSwarmId) {
+      setSelectedBeeKey(null)
       void loadScenarioDetail(null)
       return
     }
-    if (!scenarioIdFromSnapshot) {
-      void loadScenarioDetail(null)
-      return
-    }
+  }, [loadScenarioDetail, selectedSwarmId])
+
+  useEffect(() => {
+    // Avoid UI flicker when the cached status snapshot is temporarily missing/refreshing.
+    // Only load (or reload) scenario details when we have a concrete templateId.
+    if (!selectedSwarmId) return
+    if (!scenarioIdFromSnapshot) return
     void loadScenarioDetail(scenarioIdFromSnapshot)
     void loadCapabilities()
   }, [loadCapabilities, loadScenarioDetail, scenarioIdFromSnapshot, selectedSwarmId])
@@ -798,7 +801,10 @@ export function HivePage() {
 	                      disabled={isBusy}
                       onClick={() => runSwarmAction(swarm, 'start')}
                     >
-                      {isBusy && busyAction === 'start' ? 'Starting...' : 'Start'}
+                      <span className="actionButtonContent">
+                        {isBusy && busyAction === 'start' ? <span className="spinner" aria-hidden="true" /> : null}
+                        <span>Start</span>
+                      </span>
                     </button>
                     <button
                       type="button"
@@ -806,7 +812,10 @@ export function HivePage() {
                       disabled={isBusy}
                       onClick={() => runSwarmAction(swarm, 'stop')}
                     >
-                      {isBusy && busyAction === 'stop' ? 'Stopping...' : 'Stop'}
+                      <span className="actionButtonContent">
+                        {isBusy && busyAction === 'stop' ? <span className="spinner" aria-hidden="true" /> : null}
+                        <span>Stop</span>
+                      </span>
                     </button>
                     <button
                       type="button"
@@ -814,7 +823,10 @@ export function HivePage() {
                       disabled={isBusy}
                       onClick={() => runSwarmAction(swarm, 'remove')}
                     >
-                      {isBusy && busyAction === 'remove' ? 'Removing...' : 'Remove'}
+                      <span className="actionButtonContent">
+                        {isBusy && busyAction === 'remove' ? <span className="spinner" aria-hidden="true" /> : null}
+                        <span>Remove</span>
+                      </span>
                     </button>
                   </div>
                 </div>

@@ -76,3 +76,62 @@ Notes:
 - Larger payloads (headers + steps now in JSON).
 - Any existing tooling that expected AMQP headers will break.
 - Control-plane / UI must be updated to read the new envelope.
+
+## Related (UI V2): Debug taps auto-close
+Debug taps are used to inspect **full WorkItem envelopes** in UI V2 without modifying worker code.
+They become more sensitive once WorkItem is fully transport-agnostic (payloads move out of AMQP headers).
+
+Implementation note:
+- UI must treat tap payloads as sensitive (PII/secrets) and **auto-close** taps.
+- Orchestrator must have a server-side fail-safe cleanup (in case the browser closes).
+
+Tracking checklist:
+- [ ] UI V2: tap panel closes taps on modal close / route change / timeout (createdAt + ttlSeconds).
+- [ ] Orchestrator: scheduled + on-read cleanup of expired taps; return 404 for expired tapId.
+
+## Related (UI V2): Debug tap viewer (separate tab)
+The tap modal is useful for quick checks, but it is not a great place to inspect high-volume traffic.
+We need a dedicated debug view that can be opened in a separate browser tab and focuses on **WorkItem** inspection.
+
+Assumptions:
+- Tap payloads are always **WorkItem envelopes** (no arbitrary strings).
+- The viewer is best-effort: if parsing fails, it still shows raw payload.
+
+### UX goals
+- Open tap inspection in a separate tab (stable URL).
+- Make it easy to copy/export payloads (raw + pretty JSON).
+- Avoid losing the currently inspected message when new samples arrive.
+
+### Proposed route
+- `GET /v2/debug/taps/:tapId` (UI route only; backed by Orchestrator `GET /api/debug/taps/{tapId}`)
+
+### Viewer layout (initial)
+- **Left**: samples list (timestamp, size, quick filter/search).
+- **Center**: parsed WorkItem view:
+  - top-level headers (global), observability, ids
+  - step timeline (`steps[]`), each step shows:
+    - step headers (including `ph.step.service`, `ph.step.instance`)
+    - payload (pretty JSON when possible)
+- **Right**: raw JSON (monospace) + copy/download actions.
+
+### Live update controls
+- **Drain**: reads up to `maxItems` messages from the tap queue (consumes them).
+- **Auto refresh**: periodically drains (e.g. every ~1.5s).
+- **Pause** (UI only): stop auto-refresh and stop replacing the selected/inspected sample.
+- **Pin sample** (UI only): keep a specific sample visible even while new samples arrive.
+
+### Implementation plan (UI V2)
+- [ ] Add `DebugTapViewerPage` route under `/v2/debug/taps/:tapId`.
+- [ ] Add “Open in debug tab” button in the tap modal (opens the viewer route for the current `tapId`).
+- [ ] Add explicit tooltips/help text for `Drain` vs `Auto refresh` vs `Pause` (avoid ambiguity).
+- [ ] Implement sample selection + **Pin** semantics:
+  - selected sample stays visible until user changes selection
+  - when pinned, auto-refresh may append new samples but must not change the selection
+- [ ] Implement **Pause** semantics:
+  - stop auto-refresh timer
+  - keep the currently selected/pinned sample stable
+- [ ] Implement “Copy raw / Copy pretty” per sample and “Download snapshot” (JSON file) for the current tap state.
+- [ ] Add best-effort WorkItem parsing helpers (WorkItem-only):
+  - parse JSON payload into the WorkItem DTO/envelope shape used by the SDK
+  - render steps as a timeline/accordion
+  - fallback to raw when parsing fails
