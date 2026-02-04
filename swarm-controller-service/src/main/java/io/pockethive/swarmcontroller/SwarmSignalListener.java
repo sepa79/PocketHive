@@ -25,6 +25,7 @@ import io.pockethive.swarm.model.BufferGuardPolicy;
 import io.pockethive.swarm.model.TrafficPolicy;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import io.pockethive.swarmcontroller.runtime.JournalControlPlanePublisher;
+import io.pockethive.swarmcontroller.runtime.SwarmControlPlaneJournalErrors;
 import io.pockethive.swarmcontroller.runtime.SwarmJournal;
 import io.pockethive.swarmcontroller.runtime.SwarmJournalEntries;
 import org.slf4j.Logger;
@@ -71,6 +72,7 @@ public class SwarmSignalListener {
   private final SwarmIoStateAggregator ioStates;
   private final SwarmWorkersAggregator workers;
   private final SwarmJournal journal;
+  private final SwarmControlPlaneJournalErrors journalErrors;
   private final String journalRunId;
   private final Map<String, Object> baseRuntimeMeta;
   private final String templateId;
@@ -108,6 +110,7 @@ public class SwarmSignalListener {
     this.ioStates = new SwarmIoStateAggregator();
     this.workers = new SwarmWorkersAggregator(MAX_STALENESS_MS);
     this.journal = journal != null ? journal : SwarmJournal.noop();
+    this.journalErrors = new SwarmControlPlaneJournalErrors(this.journal, swarmId, role, instanceId, "swarm-signal-listener");
     this.journalRunId = journalRunId != null && !journalRunId.isBlank() ? journalRunId.trim() : null;
     this.baseRuntimeMeta = buildBaseRuntimeMeta();
     this.templateId = requireEnvValue("POCKETHIVE_TEMPLATE_ID");
@@ -143,6 +146,12 @@ public class SwarmSignalListener {
     try {
       if (routingKey == null || routingKey.isBlank()) {
         log.warn("Received control message with null or blank routing key; payload snippet={}", snippet(body));
+        journalErrors.errorDrop("event-dropped", routingKey, "missing routing key", body, null);
+        return;
+      }
+      if (body == null || body.isBlank()) {
+        log.warn("Received control message with null or blank payload for routing key {}", routingKey);
+        journalErrors.errorDrop("event-dropped", routingKey, "missing payload", body, null);
         return;
       }
       String snippet = snippet(body);
@@ -168,9 +177,13 @@ public class SwarmSignalListener {
         handleStatusEvent(routingKey, body);
       } else if (routingKey.startsWith("event.alert.")) {
         handleAlertEvent(routingKey, body);
+      } else {
+        log.warn("Ignoring unsupported control-plane routing key {}; payload snippet={}", routingKey, snippet(body));
+        journalErrors.errorDrop("event-dropped", routingKey, "unsupported routing key", body, null);
       }
     } catch (Exception e) {
       log.warn("Ignoring control-plane message due to handler exception; rk={} payload snippet={}", routingKey, snippet(body), e);
+      journalErrors.errorDrop("event-dropped", routingKey, "handler exception", body, e);
     } finally {
       MDC.clear();
     }
@@ -182,14 +195,17 @@ public class SwarmSignalListener {
       MissingStatusSegment missingSegment = detectMissingStatusSegment(routingKey);
       if (missingSegment == MissingStatusSegment.ROLE) {
         log.warn("Received status event with missing role on routing key {}; payload snippet={}", routingKey, snippet(body));
-        throw new IllegalArgumentException("Status event routing key must include a role segment");
+        journalErrors.errorDrop("status-parse-error", routingKey, "missing role segment", body, null);
+        return;
       }
       if (missingSegment == MissingStatusSegment.INSTANCE) {
         log.warn("Received status event with missing instance on routing key {}; payload snippet={}", routingKey, snippet(body));
-        throw new IllegalArgumentException("Status event routing key must include an instance segment");
+        journalErrors.errorDrop("status-parse-error", routingKey, "missing instance segment", body, null);
+        return;
       }
       log.warn("Received status event with unparseable routing key {}; payload snippet={}", routingKey, snippet(body));
-      throw new IllegalArgumentException("Status event routing key must resolve to a confirmation scope");
+      journalErrors.errorDrop("status-parse-error", routingKey, "unparseable routing key", body, null);
+      return;
     }
     if (!isLocalSwarm(eventKey.swarmId())) {
       log.debug("Ignoring status for swarm {} on routing key {}", eventKey.swarmId(), routingKey);
@@ -198,12 +214,14 @@ public class SwarmSignalListener {
     String role = eventKey.role();
     if (role == null || role.isBlank()) {
       log.warn("Received status event with missing role on routing key {}; payload snippet={}", routingKey, snippet(body));
-      throw new IllegalArgumentException("Status event routing key must include a role segment");
+      journalErrors.errorDrop("status-parse-error", routingKey, "missing role segment", body, null);
+      return;
     }
     String instance = eventKey.instance();
     if (instance == null || instance.isBlank()) {
       log.warn("Received status event with missing instance on routing key {}; payload snippet={}", routingKey, snippet(body));
-      throw new IllegalArgumentException("Status event routing key must include an instance segment");
+      journalErrors.errorDrop("status-parse-error", routingKey, "missing instance segment", body, null);
+      return;
     }
     if (this.role.equalsIgnoreCase(role) && this.instanceId.equalsIgnoreCase(instance)) {
       // Do not treat controller self-status as a worker heartbeat; it skews totals by +1.
@@ -243,6 +261,7 @@ public class SwarmSignalListener {
       maybeEmitPendingStatusFull();
     } catch (Exception e) {
       log.warn("status parse", e);
+      journalErrors.errorDrop("status-parse-error", routingKey, "payload parse", body, e);
     }
   }
 
@@ -309,6 +328,7 @@ public class SwarmSignalListener {
     RoutingKey eventKey = ControlPlaneRouting.parseEvent(routingKey);
     if (eventKey == null) {
       log.warn("Received alert with unparseable routing key {}; payload snippet={}", routingKey, snippet(body));
+      journalErrors.errorDrop("alert-parse-error", routingKey, "unparseable routing key", body, null);
       return;
     }
     if (!isLocalSwarm(eventKey.swarmId())) {
@@ -339,6 +359,7 @@ public class SwarmSignalListener {
           .ifPresent(this::failPendingLifecycle);
     } catch (Exception e) {
       log.warn("alert parse", e);
+      journalErrors.errorDrop("alert-parse-error", routingKey, "payload parse", body, e);
     }
   }
 
@@ -381,6 +402,7 @@ public class SwarmSignalListener {
     if (!missing.isEmpty()) {
       log.warn("Received {} payload with missing scope fields {}; rk={} payload snippet={}",
           label, missing, routingKey, snippet(body));
+      journalErrors.errorDrop("event-dropped", routingKey, "missing scope fields: " + String.join(",", missing), body, null);
     }
   }
 

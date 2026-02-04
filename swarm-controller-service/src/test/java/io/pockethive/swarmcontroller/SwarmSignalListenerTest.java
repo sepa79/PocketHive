@@ -655,7 +655,7 @@ class SwarmSignalListenerTest {
   }
 
   @Test
-		  void configUpdateProducesJournalRequestAndAppliedEvents() throws Exception {
+  void configUpdateProducesJournalRequestAndAppliedEvents() throws Exception {
 		    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
 		    RecordingJournal journal = new RecordingJournal();
 		    SwarmSignalListener listener = new SwarmSignalListener(
@@ -674,8 +674,27 @@ class SwarmSignalListenerTest {
 	    java.util.List<String> entries = journal.entries.stream()
 	        .map(e -> e.kind() + "." + e.type())
 	        .toList();
-	    assertThat(entries).contains("signal.config-update", "outcome.config-update");
-	  }
+    assertThat(entries).contains("signal.config-update", "outcome.config-update");
+  }
+
+  @Test
+  void blankRoutingKeyIsJournaledAsDrop() {
+    RecordingJournal journal = new RecordingJournal();
+    SwarmSignalListener listener = new SwarmSignalListener(
+        lifecycle,
+        rabbit,
+        "inst",
+        mapper,
+        SwarmControllerTestProperties.defaults(),
+        journal,
+        "run-1");
+
+    assertThatCode(() -> listener.handle("{}", " "))
+        .doesNotThrowAnyException();
+
+    assertThat(journal.entries.stream().map(e -> e.kind() + "." + e.type()).toList())
+        .contains("control-plane.event-dropped");
+  }
 
   @Test
   void configUpdateAllProcessedOnce() throws Exception {

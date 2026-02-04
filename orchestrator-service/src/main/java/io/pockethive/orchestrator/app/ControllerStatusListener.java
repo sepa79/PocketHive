@@ -6,7 +6,6 @@ import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmLifecycleStatus;
 import io.pockethive.orchestrator.domain.HiveJournal;
-import io.pockethive.orchestrator.domain.HiveJournal.HiveJournalEntry;
 import io.pockethive.control.ControlScope;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,8 +18,6 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.LinkedHashMap;
-import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -38,6 +35,7 @@ public class ControllerStatusListener {
     private final ControlPlaneStatusRequestPublisher statusRequests;
     private final SwarmSignalListener swarmSignals;
     private final HiveJournal hiveJournal;
+    private final ControlPlaneJournalErrors journalErrors;
 
     public ControllerStatusListener(SwarmStore store,
                                     ObjectMapper mapper,
@@ -49,6 +47,7 @@ public class ControllerStatusListener {
         this.statusRequests = Objects.requireNonNull(statusRequests, "statusRequests");
         this.swarmSignals = Objects.requireNonNull(swarmSignals, "swarmSignals");
         this.hiveJournal = Objects.requireNonNull(hiveJournal, "hiveJournal");
+        this.journalErrors = new ControlPlaneJournalErrors(this.hiveJournal, "orchestrator", "controller-status-listener");
     }
 
     @RabbitListener(queues = "#{controllerStatusQueue.name}")
@@ -214,27 +213,15 @@ public class ControllerStatusListener {
                                   String body,
                                   Exception exception) {
         String resolvedSwarmId = swarmId != null && !swarmId.isBlank() ? swarmId : "hive";
-        Map<String, Object> data = new LinkedHashMap<>();
-        data.put("reason", reason);
-        if (exception != null) {
-            data.put("exception", exception.getClass().getSimpleName());
-            if (exception.getMessage() != null && !exception.getMessage().isBlank()) {
-                data.put("message", exception.getMessage());
-            }
-        }
-        hiveJournal.append(HiveJournalEntry.error(
+        journalErrors.errorDrop(
             resolvedSwarmId,
             HiveJournal.Direction.IN,
-            "control-plane",
             "status-parse-error",
-            "swarm-controller",
             new ControlScope(resolvedSwarmId, "orchestrator", "controller-status-listener"),
-            null,
-            null,
             routingKey,
-            data,
-            Map.of("payloadSnippet", snippet(body)),
-            null));
+            reason,
+            body,
+            exception);
     }
 
     private String bestEffortSwarmIdFromBody(String body) {

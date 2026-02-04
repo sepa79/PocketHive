@@ -69,6 +69,7 @@ public class SwarmSignalListener {
     private final ContainerLifecycleManager lifecycle;
     private final ObjectMapper json;
     private final HiveJournal hiveJournal;
+    private final ControlPlaneJournalErrors journalErrors;
     private final ManagerControlPlane controlPlane;
     private final ControlPlaneEmitter controlEmitter;
     private final ControlPlaneTopologyDescriptor topology;
@@ -102,6 +103,7 @@ public class SwarmSignalListener {
         this.topology = Objects.requireNonNull(descriptor, "descriptor");
         this.identity = Objects.requireNonNull(managerControlPlaneIdentity, "identity");
         this.instanceId = identity.instanceId();
+        this.journalErrors = new ControlPlaneJournalErrors(this.hiveJournal, ROLE, "swarm-signal-listener");
         this.controlQueue = Objects.requireNonNull(controlQueue, "controlQueue");
         this.controlRoutes = List.copyOf(resolveControlRoutes(descriptor.routes()));
         this.startedAt = java.time.Instant.now();
@@ -500,7 +502,7 @@ public class SwarmSignalListener {
                     HiveJournal.Direction.IN,
                     "control-plane",
                     "status-duplicate",
-                    "swarm-controller",
+                    ROLE,
                     new ControlScope(swarmId, key.role(), key.instance()),
                     null,
                     null,
@@ -520,7 +522,7 @@ public class SwarmSignalListener {
                     HiveJournal.Direction.IN,
                     "control-plane",
                     "status-illegal-transition",
-                    "swarm-controller",
+                    ROLE,
                     new ControlScope(swarmId, key.role(), key.instance()),
                     null,
                     null,
@@ -549,49 +551,31 @@ public class SwarmSignalListener {
                                          String reason,
                                          String body,
                                          Exception exception) {
-        if (swarmId == null || swarmId.isBlank()) {
-            return;
-        }
-        Map<String, Object> data = new LinkedHashMap<>();
-        data.put("reason", reason);
-        if (routingKey != null) {
-            data.put("routingKey", routingKey);
-        }
-        if (exception != null) {
-            data.put("exception", exception.getClass().getSimpleName());
-            if (exception.getMessage() != null && !exception.getMessage().isBlank()) {
-                data.put("message", exception.getMessage());
-            }
-        }
-        hiveJournal.append(HiveJournalEntry.error(
-            swarmId,
+        String resolvedSwarmId = (swarmId == null || swarmId.isBlank()) ? "hive" : swarmId;
+        journalErrors.errorDrop(
+            resolvedSwarmId,
             HiveJournal.Direction.IN,
-            "control-plane",
             "event-dropped",
-            ROLE,
-            new ControlScope(swarmId, ROLE, instanceId),
-            null,
-            null,
+            new ControlScope(resolvedSwarmId, ROLE, instanceId),
             routingKey,
-            data,
-            Map.of("payloadSnippet", snippet(body)),
-            null));
+            reason,
+            body,
+            exception);
     }
 
     private static String bestEffortSwarmIdFromRoutingKey(String routingKey) {
-        if (routingKey == null) {
+        if (routingKey == null || routingKey.isBlank()) {
             return null;
         }
-        // Expected: event.<kind>.<type>.<swarmId>.<role>.<instance>
-        String[] parts = routingKey.trim().split("\\.");
-        if (parts.length < 6) {
+        ControlPlaneRouting.RoutingKey key = ControlPlaneRouting.parseEvent(routingKey.trim());
+        if (key == null) {
             return null;
         }
-        if (!"event".equals(parts[0])) {
+        String swarmId = key.swarmId();
+        if (swarmId == null || swarmId.isBlank() || ControlScope.isAll(swarmId)) {
             return null;
         }
-        String swarmId = parts[3];
-        return swarmId != null && !swarmId.isBlank() ? swarmId : null;
+        return swarmId;
     }
 
     private ControlSignal templateSignal(SwarmPlan plan, Pending info, String controllerInstance) {
