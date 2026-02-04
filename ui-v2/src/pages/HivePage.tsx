@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useToolsBar } from '../components/ToolsBarContext'
 import { useNavigate, useParams } from 'react-router-dom'
+import { CreateSwarmModal } from './hive/CreateSwarmModal'
 import {
   buildManifestIndex,
   findManifestForImage,
@@ -64,20 +65,6 @@ type SwarmSnapshotView = {
   workers: SwarmWorkerSummary[]
 }
 
-type ScenarioTemplate = {
-  id: string
-  name: string
-  description: string | null
-  controllerImage: string | null
-  bees: BeeSummary[]
-}
-
-type SutEnvironment = {
-  id: string
-  name: string
-  type: string | null
-}
-
 type ScenarioBee = {
   id: string | null
   role: string | null
@@ -112,8 +99,6 @@ type ScenarioDefinition = {
 type SwarmAction = 'start' | 'stop' | 'remove'
 
 const ORCHESTRATOR_BASE = '/orchestrator/api'
-const TEMPLATES_ENDPOINT = '/scenario-manager/api/templates'
-const SUT_ENDPOINT = '/scenario-manager/sut-environments'
 const CAPABILITIES_ENDPOINT = '/scenario-manager/api/capabilities?all=true'
 
 function createIdempotencyKey() {
@@ -121,61 +106,6 @@ function createIdempotencyKey() {
     return crypto.randomUUID()
   }
   return `ph-${Date.now()}-${Math.random().toString(16).slice(2)}`
-}
-
-function normalizeTemplates(data: unknown): ScenarioTemplate[] {
-  if (!Array.isArray(data)) return []
-  return data
-    .map((entry) => {
-      if (!entry || typeof entry !== 'object') return null
-      const value = entry as Record<string, unknown>
-      const id = typeof value.id === 'string' ? value.id.trim() : ''
-      const name = typeof value.name === 'string' ? value.name.trim() : ''
-      if (!id || !name) return null
-      const description =
-        typeof value.description === 'string' && value.description.trim().length > 0
-          ? value.description.trim()
-          : null
-      const controllerImage =
-        typeof value.controllerImage === 'string' && value.controllerImage.trim().length > 0
-          ? value.controllerImage.trim()
-          : null
-      const bees: BeeSummary[] = Array.isArray(value.bees)
-        ? value.bees
-            .map((bee) => {
-              if (!bee || typeof bee !== 'object') return null
-              const beeValue = bee as Record<string, unknown>
-              const role = typeof beeValue.role === 'string' ? beeValue.role.trim() : ''
-              const image =
-                typeof beeValue.image === 'string' && beeValue.image.trim().length > 0
-                  ? beeValue.image.trim()
-                  : null
-              if (!role) return null
-              return { role, image }
-            })
-            .filter((bee): bee is BeeSummary => bee !== null)
-        : []
-      return { id, name, description, controllerImage, bees }
-    })
-    .filter((entry): entry is ScenarioTemplate => entry !== null)
-}
-
-function normalizeSutEnvironments(data: unknown): SutEnvironment[] {
-  if (!Array.isArray(data)) return []
-  const result: SutEnvironment[] = []
-  for (const entry of data) {
-    if (!entry || typeof entry !== 'object') continue
-    const value = entry as Record<string, unknown>
-    const id = typeof value.id === 'string' ? value.id.trim() : ''
-    const name = typeof value.name === 'string' ? value.name.trim() : ''
-    if (!id || !name) continue
-    const type =
-      typeof value.type === 'string' && value.type.trim().length > 0
-        ? value.type.trim()
-        : null
-    result.push({ id, name, type })
-  }
-  return result
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -477,12 +407,6 @@ export function HivePage() {
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
-  const [templates, setTemplates] = useState<ScenarioTemplate[]>([])
-  const [templateFilter, setTemplateFilter] = useState('')
-  const [swarmId, setSwarmId] = useState('')
-  const [templateId, setTemplateId] = useState('')
-  const [sutEnvironments, setSutEnvironments] = useState<SutEnvironment[]>([])
-  const [sutId, setSutId] = useState('')
   const [busySwarm, setBusySwarm] = useState<string | null>(null)
   const [busyAction, setBusyAction] = useState<SwarmAction | null>(null)
   const [selectedScenario, setSelectedScenario] = useState<ScenarioDefinition | null>(null)
@@ -522,34 +446,6 @@ export function HivePage() {
       setSwarms([])
     } finally {
       setLoading(false)
-    }
-  }, [])
-
-  const loadTemplates = useCallback(async () => {
-    try {
-      const response = await fetch(TEMPLATES_ENDPOINT, { headers: { Accept: 'application/json' } })
-      if (!response.ok) {
-        setTemplates([])
-        return
-      }
-      const payload = await response.json()
-      setTemplates(normalizeTemplates(payload))
-    } catch {
-      setTemplates([])
-    }
-  }, [])
-
-  const loadSutEnvironments = useCallback(async () => {
-    try {
-      const response = await fetch(SUT_ENDPOINT, { headers: { Accept: 'application/json' } })
-      if (!response.ok) {
-        setSutEnvironments([])
-        return
-      }
-      const payload = await response.json()
-      setSutEnvironments(normalizeSutEnvironments(payload))
-    } catch {
-      setSutEnvironments([])
     }
   }, [])
 
@@ -618,69 +514,6 @@ export function HivePage() {
   useEffect(() => {
     void loadSwarms()
   }, [loadSwarms])
-
-  useEffect(() => {
-    if (showCreate && templates.length === 0) {
-      void loadTemplates()
-    }
-    if (showCreate && sutEnvironments.length === 0) {
-      void loadSutEnvironments()
-    }
-  }, [loadSutEnvironments, loadTemplates, showCreate, sutEnvironments.length, templates.length])
-
-  const handleCreate = useCallback(
-    async (event: React.FormEvent) => {
-      event.preventDefault()
-      setMessage(null)
-      const trimmedSwarmId = swarmId.trim()
-      const trimmedTemplateId = templateId.trim()
-      if (!trimmedSwarmId || !trimmedTemplateId) {
-        setMessage('Swarm ID and template are required.')
-        return
-      }
-
-      try {
-        const response = await fetch(
-          `${ORCHESTRATOR_BASE}/swarms/${encodeURIComponent(trimmedSwarmId)}/create`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              templateId: trimmedTemplateId,
-              idempotencyKey: createIdempotencyKey(),
-              sutId: sutId.trim() ? sutId.trim() : null,
-            }),
-          },
-        )
-        if (!response.ok) {
-          throw new Error(await readErrorMessage(response))
-        }
-        setMessage(`Create request accepted for ${trimmedSwarmId}.`)
-        setSwarmId('')
-        setTemplateId('')
-        setSutId('')
-        setTemplateFilter('')
-        void loadSwarms()
-      } catch (err) {
-        setMessage(err instanceof Error ? err.message : 'Failed to create swarm.')
-      }
-    },
-    [loadSwarms, swarmId, templateId],
-  )
-
-  const filteredTemplates = useMemo(() => {
-    const needle = templateFilter.trim().toLowerCase()
-    if (!needle) return templates
-    return templates.filter((template) => {
-      const haystack = `${template.id} ${template.name} ${template.description ?? ''}`.toLowerCase()
-      return haystack.includes(needle)
-    })
-  }, [templateFilter, templates])
-
-  const selectedTemplate = useMemo(
-    () => templates.find((template) => template.id === templateId) ?? null,
-    [templateId, templates],
-  )
 
   const runSwarmAction = useCallback(
     async (swarm: SwarmSummary, action: SwarmAction) => {
@@ -798,7 +631,7 @@ export function HivePage() {
         <button
           type="button"
           className={showCreate ? 'actionButton' : 'actionButton actionButtonGhost'}
-          onClick={() => setShowCreate((prev) => !prev)}
+          onClick={() => setShowCreate(true)}
         >
           New swarm
         </button>
@@ -885,121 +718,7 @@ export function HivePage() {
       {error && <div className="card swarmMessage">{error}</div>}
       {message && <div className="card swarmMessage">{message}</div>}
 
-      {showCreate && (
-        <form className="card swarmCreateCard" onSubmit={handleCreate}>
-          <div className="row between">
-            <div>
-              <div className="h2">Create swarm</div>
-              <div className="muted">Provision a controller from a scenario template.</div>
-            </div>
-            <button
-              type="button"
-              className="actionButton actionButtonGhost"
-              onClick={() => setShowCreate(false)}
-            >
-              Close
-            </button>
-          </div>
-          <div className="formGrid">
-            <label className="field">
-              <span className="fieldLabel">Swarm ID</span>
-              <input
-                className="textInput"
-                value={swarmId}
-                onChange={(event) => setSwarmId(event.target.value)}
-                placeholder="demo"
-              />
-            </label>
-            <label className="field">
-              <span className="fieldLabel">System under test</span>
-              <select
-                className="textInput"
-                value={sutId}
-                onChange={(event) => setSutId(event.target.value)}
-              >
-                <option value="">(none)</option>
-                {sutEnvironments.map((env) => (
-                  <option key={env.id} value={env.id}>
-                    {env.name} {env.type ? `(${env.type})` : ''}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-          <div className="swarmTemplatePicker">
-            <div className="swarmTemplateList">
-              <div className="swarmTemplateListHeader">
-                <span>Templates</span>
-                <input
-                  className="textInput textInputCompact"
-                  value={templateFilter}
-                  onChange={(event) => setTemplateFilter(event.target.value)}
-                  placeholder="Filter"
-                />
-              </div>
-              <div className="swarmTemplateListBody">
-                {filteredTemplates.length === 0 ? (
-                  <div className="muted">No templates found.</div>
-                ) : (
-                  filteredTemplates.map((template) => (
-                    <button
-                      key={template.id}
-                      type="button"
-                      className={
-                        template.id === templateId
-                          ? 'swarmTemplateItem swarmTemplateItemSelected'
-                          : 'swarmTemplateItem'
-                      }
-                      onClick={() => setTemplateId(template.id)}
-                    >
-                      <div className="swarmTemplateTitle">{template.name}</div>
-                      <div className="swarmTemplateId">{template.id}</div>
-                      <div className="swarmTemplateDesc">
-                        {template.description ?? 'No description'}
-                      </div>
-                    </button>
-                  ))
-                )}
-              </div>
-            </div>
-            <div className="swarmTemplateDetail">
-              {selectedTemplate ? (
-                <>
-                  <div className="swarmTemplateTitle">{selectedTemplate.name}</div>
-                  <div className="swarmTemplateId">{selectedTemplate.id}</div>
-                  <div className="muted">
-                    {selectedTemplate.description ?? 'No description provided.'}
-                  </div>
-                  <div className="swarmTemplateMeta">
-                    <div>
-                      <span className="fieldLabel">Controller image</span>
-                      <div className="swarmTemplateValue">
-                        {selectedTemplate.controllerImage ?? '—'}
-                      </div>
-                    </div>
-                    <div>
-                      <span className="fieldLabel">Bees</span>
-                      <div className="swarmTemplateValue">
-                        {selectedTemplate.bees.length === 0
-                          ? '—'
-                          : selectedTemplate.bees.map((bee) => bee.role).join(', ')}
-                      </div>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div className="muted">Select a template to see details.</div>
-              )}
-            </div>
-          </div>
-          <div className="row between">
-            <div className="muted">Create sends a request; start is a separate action.</div>
-            <button type="submit" className="actionButton">
-              Create
-            </button>
-          </div>
-        </form>
-      )}
+      <CreateSwarmModal open={showCreate} onClose={() => setShowCreate(false)} onCreated={loadSwarms} />
 
       <div className="card swarmTableCard">
         <div className="row between">
