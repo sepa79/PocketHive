@@ -1,6 +1,7 @@
 package io.pockethive.orchestrator.app;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.orchestrator.domain.HiveJournal;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.orchestrator.domain.SwarmLifecycleStatus;
 import org.junit.jupiter.api.Test;
@@ -21,7 +22,7 @@ class ControllerStatusListenerRebuildTest {
         ControlPlaneStatusRequestPublisher requests = Mockito.mock(ControlPlaneStatusRequestPublisher.class);
         SwarmSignalListener swarmSignals = Mockito.mock(SwarmSignalListener.class);
         ControllerStatusListener listener =
-            new ControllerStatusListener(store, mapper, requests, swarmSignals);
+            new ControllerStatusListener(store, mapper, requests, swarmSignals, HiveJournal.noop());
 
         String json = """
             {
@@ -65,7 +66,7 @@ class ControllerStatusListenerRebuildTest {
         ControlPlaneStatusRequestPublisher requests = Mockito.mock(ControlPlaneStatusRequestPublisher.class);
         SwarmSignalListener swarmSignals = Mockito.mock(SwarmSignalListener.class);
         ControllerStatusListener listener =
-            new ControllerStatusListener(store, mapper, requests, swarmSignals);
+            new ControllerStatusListener(store, mapper, requests, swarmSignals, HiveJournal.noop());
 
         String json = """
             {

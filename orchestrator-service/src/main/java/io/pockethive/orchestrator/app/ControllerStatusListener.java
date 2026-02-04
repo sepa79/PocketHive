@@ -30,7 +30,6 @@ import java.util.Objects;
 @EnableScheduling
 public class ControllerStatusListener {
     private static final Logger log = LoggerFactory.getLogger(ControllerStatusListener.class);
-    private static final Duration DEGRADED_AFTER = Duration.ofSeconds(20);
     private static final Duration FAILED_AFTER = Duration.ofSeconds(40);
     private static final String SWARM_CONTROLLER_ROLE = "swarm-controller";
 

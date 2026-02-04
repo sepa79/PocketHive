@@ -16,13 +16,13 @@ import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
 import io.pockethive.controlplane.topology.ControlPlaneTopologySettings;
 import io.pockethive.controlplane.topology.ControlQueueDescriptor;
 import io.pockethive.orchestrator.domain.Swarm;
+import io.pockethive.orchestrator.domain.HiveJournal;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker.Pending;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker.Phase;
-	import io.pockethive.orchestrator.domain.HiveJournal;
-	import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
-	import io.pockethive.orchestrator.domain.SwarmStore;
-	import io.pockethive.orchestrator.domain.SwarmLifecycleStatus;
+import io.pockethive.orchestrator.domain.SwarmLifecycleStatus;
+import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
+import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.swarm.model.SwarmPlan;
 import java.time.Instant;
 import java.util.List;
@@ -95,14 +95,25 @@ class SwarmEventFlowIntegrationTest {
         plans = new SwarmPlanRegistry();
         io.pockethive.orchestrator.domain.ScenarioTimelineRegistry timelines =
             new io.pockethive.orchestrator.domain.ScenarioTimelineRegistry();
-	        tracker = new SwarmCreateTracker();
-	        registry = new SwarmStore();
-	        signalListener = new SwarmSignalListener(plans, timelines, tracker, registry, lifecycle, mapper,
-	            HiveJournal.noop(),
-	            controlPlane, controlEmitter, identity, descriptor, controlQueueName);
-	        statusListener = new ControllerStatusListener(registry, mapper, statusRequests, signalListener);
-	        clearInvocations(controlPlane, controlEmitter, publisher, lifecycle);
-	    }
+        HiveJournal journal = HiveJournal.noop();
+        tracker = new SwarmCreateTracker();
+        registry = new SwarmStore();
+        signalListener = new SwarmSignalListener(
+            plans,
+            timelines,
+            tracker,
+            registry,
+            lifecycle,
+            mapper,
+            journal,
+            controlPlane,
+            controlEmitter,
+            identity,
+            descriptor,
+            controlQueueName);
+        statusListener = new ControllerStatusListener(registry, mapper, statusRequests, signalListener, journal);
+        clearInvocations(controlPlane, controlEmitter, publisher, lifecycle);
+    }
 
     @Test
     void processesStatusAndConfirmations() throws Exception {

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { subscribeStatusSnapshots } from '../lib/controlPlane/stateStore'
+import { detectUiBasename } from '../lib/routing/basename'
 import {
   Background,
   Controls,
@@ -524,7 +525,8 @@ export function SwarmViewPage() {
       if (!tapId) {
         throw new Error('Tap created but tapId is missing in response.')
       }
-      window.open(`/v2/debug/taps/${encodeURIComponent(tapId)}`, '_blank', 'noopener,noreferrer')
+      const base = detectUiBasename(window.location.pathname)
+      window.open(`${base}/debug/taps/${encodeURIComponent(tapId)}`, '_blank', 'noopener,noreferrer')
     },
     [swarmId],
   )

@@ -558,6 +558,7 @@ class SwarmCreationMock1E2ETest {
     }
 
     private static void ensureScenarioManagerRunning() {
+        // Bootstraps an in-process Scenario Manager for orchestrator integration tests.
         if (scenarioManagerContext != null) {
             return;
         }
