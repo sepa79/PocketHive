@@ -186,3 +186,4 @@ Manual checks:
 - **Authentication**: RabbitMQ blocks remote logins for the built-in `guest` user; use the proxy or create a non-guest user.
 - **UI access**: ensure port `8088` is free or adjust mapping in `docker-compose.yml`.
 - **WSL2/Docker restarts**: if services suddenly time out talking to each other after a Docker restart (e.g. `log-aggregator` can’t reach `rabbitmq:15672`), rebuild the compose network: `docker compose down --remove-orphans && docker compose up -d`.
+- **WSL2 flakiness / “is it networking or the app?”**: run `tools/diag/docker-triage.sh` to collect container status, logs, and basic inter-container connectivity checks.

@@ -4,6 +4,9 @@
 
 set -euo pipefail
 
+DOCKER_DEFAULT_POOL_BASE="${DOCKER_DEFAULT_POOL_BASE:-10.200.0.0/16}"
+DOCKER_DEFAULT_POOL_SIZE="${DOCKER_DEFAULT_POOL_SIZE:-24}"
+
 echo "==> Updating apt package index"
 sudo apt-get update -y
 
@@ -29,6 +32,32 @@ sudo apt-get update -y
 
 echo "==> Installing Docker Engine (CE) and plugins"
 sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+echo "==> Configuring Docker default address pools (${DOCKER_DEFAULT_POOL_BASE} size /${DOCKER_DEFAULT_POOL_SIZE})"
+sudo install -m 0755 -d /etc/docker
+sudo python3 - <<PY
+import json
+from pathlib import Path
+
+pool_base = "${DOCKER_DEFAULT_POOL_BASE}"
+pool_size = int("${DOCKER_DEFAULT_POOL_SIZE}")
+
+p = Path("/etc/docker/daemon.json")
+data = {}
+if p.exists():
+    raw = p.read_text(encoding="utf-8").strip()
+    if raw:
+        try:
+            data = json.loads(raw)
+        except Exception as e:
+            raise SystemExit(f"ERROR: /etc/docker/daemon.json is not valid JSON: {e}")
+
+if "default-address-pools" not in data:
+    data["default-address-pools"] = [{"base": pool_base, "size": pool_size}]
+
+p.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+print("OK: wrote /etc/docker/daemon.json")
+PY
 
 if command -v systemctl >/dev/null 2>&1; then
   echo "==> Enabling and starting Docker service via systemd"
@@ -74,3 +103,4 @@ sudo apt-get install -y openjdk-21-jdk maven
 
 echo "==> Setup complete."
 echo "NOTE: log out and back in (or run 'newgrp docker') for docker group membership to take effect."
+echo "TIP: if containers time out talking to each other after a restart, try: docker compose down --remove-orphans && docker compose up -d"
