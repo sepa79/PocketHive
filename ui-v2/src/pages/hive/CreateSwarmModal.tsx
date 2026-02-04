@@ -398,7 +398,7 @@ export function CreateSwarmModal({
             )}
           </div>
 
-          <div className="swarmTemplatePicker" style={{ marginTop: 12 }}>
+          <div className="swarmTemplatePicker swarmTemplatePickerGrow" style={{ marginTop: 12 }}>
             <div className="swarmTemplateList">
               <div className="swarmTemplateListHeader">
                 <span>Templates</span>
@@ -466,4 +466,3 @@ export function CreateSwarmModal({
     </div>
   )
 }
-

@@ -1533,6 +1533,21 @@ textarea,
   gap: 12px;
 }
 
+.swarmTemplatePickerGrow {
+  flex: 1;
+  min-height: 0;
+}
+
+.swarmTemplatePickerGrow .swarmTemplateList,
+.swarmTemplatePickerGrow .swarmTemplateDetail {
+  min-height: 0;
+}
+
+.swarmTemplatePickerGrow .swarmTemplateListBody {
+  flex: 1;
+  max-height: none;
+}
+
 .swarmTemplateList,
 .swarmTemplateDetail {
   border: 1px solid var(--border);
