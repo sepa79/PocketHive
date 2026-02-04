@@ -9,6 +9,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.lenient;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -35,9 +36,12 @@ import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
 import io.pockethive.orchestrator.domain.HiveJournal;
 import io.pockethive.orchestrator.infra.InMemoryIdempotencyStore;
 import io.pockethive.swarm.model.Bee;
+import io.pockethive.swarm.model.SutEnvironment;
 import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.SwarmTemplate;
 import io.pockethive.swarm.model.Work;
+import java.util.List;
+import java.util.Map;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
@@ -149,6 +153,61 @@ class SwarmControllerTest {
         assertThat(pending.correlationId()).isNotBlank();
         assertThat(plans.find(instanceId)).isPresent();
         verify(scenarioClient).fetchScenario("tpl-1");
+    }
+
+    @Test
+    void createInjectsResolvedVarsIntoBeeConfig() throws Exception {
+        SwarmCreateTracker tracker = new SwarmCreateTracker();
+        SwarmPlanRegistry plans = new SwarmPlanRegistry();
+        SwarmTemplate template = new SwarmTemplate("ctrl-image", List.of(
+            new Bee(
+                "generator",
+                "img",
+                Work.ofDefaults(null, "out"),
+                Map.of(),
+                java.util.Map.<String, Object>of("worker", java.util.Map.of("x", "y"))
+            )
+        ));
+        when(scenarioClient.fetchScenario("tpl-1")).thenReturn(new ScenarioPlan(template, null, null, null));
+        when(scenarioClient.prepareScenarioRuntime("tpl-1", "sw1")).thenReturn("/tmp/runtime/sw1");
+        when(scenarioClient.fetchScenarioSut(eq("tpl-1"), eq("sut-A"), anyString(), eq("idem")))
+            .thenReturn(new SutEnvironment("sut-A", "SUT A", null, Map.of()));
+
+        AtomicReference<String> capturedInstance = new AtomicReference<>();
+        when(lifecycle.startSwarm(
+            eq("sw1"),
+            eq("ctrl-image"),
+            anyString(),
+            any(SwarmTemplateMetadata.class),
+            eq(false))).thenAnswer(inv -> {
+            String instanceId = inv.getArgument(2);
+            capturedInstance.set(instanceId);
+            return new Swarm("sw1", instanceId, "c1", "run-1");
+        });
+
+        SwarmController ctrl = controller(tracker, new SwarmStore(), plans);
+        when(scenarioClient.resolveScenarioVariables(
+            eq("tpl-1"),
+            any(),
+            any(),
+            anyString(),
+            eq("idem")
+        )).thenReturn(new ScenarioClient.ResolvedVariables(
+            "france",
+            "sut-A",
+            Map.of("loopCount", 10, "customerId", "123"),
+            List.of()
+        ));
+        SwarmCreateRequest req = new SwarmCreateRequest("tpl-1", "idem", null, false, "sut-A", "france");
+
+        ctrl.create("sw1", req);
+
+        String instanceId = capturedInstance.get();
+        SwarmPlan plan = plans.find(instanceId).orElseThrow();
+        assertThat(plan.bees()).hasSize(1);
+        Map<String, Object> config = plan.bees().get(0).config();
+        assertThat(config).containsKey("vars");
+        assertThat(config.get("vars")).isEqualTo(Map.of("loopCount", 10, "customerId", "123"));
     }
 
     @Test
@@ -639,6 +698,13 @@ class SwarmControllerTest {
         SwarmPlanRegistry plans,
         IdempotencyStore store) {
         SwarmStateStore stateStore = new SwarmStateStore(registry, mapper);
+        try {
+            lenient().when(scenarioClient.resolveScenarioVariables(
+                anyString(), any(), any(), any(), any()))
+                .thenReturn(new ScenarioClient.ResolvedVariables(null, null, Map.of(), List.of()));
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
         SwarmController controller = new SwarmController(
             publisher,
             lifecycle,

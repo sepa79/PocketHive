@@ -158,10 +158,11 @@ public final class OrchestratorClient {
                                    String idempotencyKey,
                                    String notes,
                                    Boolean autoPullImages,
-                                   String sutId) {
+                                   String sutId,
+                                   String variablesProfileId) {
 
     public SwarmCreateRequest(String templateId, String idempotencyKey, String notes) {
-      this(templateId, idempotencyKey, notes, null, null);
+      this(templateId, idempotencyKey, notes, null, null, null);
     }
   }
 

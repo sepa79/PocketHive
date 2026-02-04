@@ -1,0 +1,9 @@
+id: tcp-mock-local
+name: TCP Mock Server (local docker-compose)
+type: tcp
+endpoints:
+  tcp-server:
+    id: tcp-server
+    kind: tcp
+    baseUrl: tcp-mock-server:9090
+

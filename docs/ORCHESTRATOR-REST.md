@@ -298,7 +298,8 @@ Deletes the tap queue and returns the last known tap state.
   "templateId": "scenario-id",
   "idempotencyKey": "uuid-v4",
   "autoPullImages": true,
-  "sutId": "optional-sut-id",
+  "sutId": "optional; bundle-local SUT id",
+  "variablesProfileId": "optional; required when variables.yaml defines profiles",
   "notes": "optional"
 }
 ```

@@ -20,18 +20,19 @@ afterEach(() => {
 })
 
 test('loads available scenarios on mount', async () => {
-  apiFetchSpy
-    .mockResolvedValueOnce({
-      ok: true,
-      json: async () => [
-        { id: 'basic', name: 'Basic', bees: [] },
-        { id: 'advanced', name: 'Advanced', bees: [] },
-      ],
-    } as unknown as Response)
-    .mockResolvedValueOnce({
-      ok: true,
-      json: async () => [],
-    } as unknown as Response)
+  apiFetchSpy.mockImplementation(async (input: RequestInfo) => {
+    const url = typeof input === 'string' ? input : input.url
+    if (url === '/scenario-manager/api/templates') {
+      return {
+        ok: true,
+        json: async () => [
+          { id: 'basic', name: 'Basic', bees: [] },
+          { id: 'advanced', name: 'Advanced', bees: [] },
+        ],
+      } as unknown as Response
+    }
+    return { ok: true, json: async () => [] } as unknown as Response
+  })
 
   render(
     <CapabilitiesProvider>
@@ -51,21 +52,28 @@ test('loads available scenarios on mount', async () => {
 })
 
 test('submits selected scenario', async () => {
-  apiFetchSpy
-    .mockResolvedValueOnce({
-      ok: true,
-      json: async () => [{ id: 'basic', name: 'Basic', bees: [] }],
-    } as unknown as Response)
-    .mockResolvedValueOnce({
-      ok: true,
-      json: async () => [],
-    } as unknown as Response)
-    // scenario preview fetch
-    .mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ id: 'basic', name: 'Basic', template: {} }),
-    } as unknown as Response)
-    .mockResolvedValueOnce({ ok: true } as Response)
+  apiFetchSpy.mockImplementation(async (input: RequestInfo) => {
+    const url = typeof input === 'string' ? input : input.url
+    if (url === '/scenario-manager/api/templates') {
+      return {
+        ok: true,
+        json: async () => [{ id: 'basic', name: 'Basic', bees: [] }],
+      } as unknown as Response
+    }
+    if (url === '/scenario-manager/scenarios/basic') {
+      return { ok: true, json: async () => ({ id: 'basic', name: 'Basic', template: {} }) } as unknown as Response
+    }
+    if (url === '/scenario-manager/scenarios/basic/suts') {
+      return { ok: true, json: async () => [] } as unknown as Response
+    }
+    if (url === '/scenario-manager/scenarios/basic/variables') {
+      return { ok: false, status: 404, text: async () => '' } as unknown as Response
+    }
+    if (url === '/orchestrator/swarms/sw1/create') {
+      return { ok: true, json: async () => ({}) } as unknown as Response
+    }
+    return { ok: true, json: async () => ({}) } as unknown as Response
+  })
   render(
     <CapabilitiesProvider>
       <SwarmCreateModal onClose={() => {}} autoPullOnStart={false} onChangeAutoPull={() => {}} />
@@ -75,6 +83,9 @@ test('submits selected scenario', async () => {
   await screen.findByText('Basic')
   fireEvent.change(screen.getByLabelText(/swarm id/i), { target: { value: 'sw1' } })
   fireEvent.click(screen.getByRole('button', { name: 'Basic' }))
+  await waitFor(() =>
+    expect(apiFetchSpy.mock.calls.some((call) => call[0] === '/scenario-manager/scenarios/basic/variables')).toBe(true),
+  )
   fireEvent.click(screen.getByText('Create'))
   await waitFor(() =>
     expect(apiFetchSpy.mock.calls.some((call) => call[0] === '/orchestrator/swarms/sw1/create')).toBe(true),
@@ -91,25 +102,32 @@ test('submits selected scenario', async () => {
 })
 
 test('shows conflict message when swarm already exists', async () => {
-  apiFetchSpy
-    .mockResolvedValueOnce({
-      ok: true,
-      json: async () => [{ id: 'basic', name: 'Basic', bees: [] }],
-    } as unknown as Response)
-    .mockResolvedValueOnce({
-      ok: true,
-      json: async () => [],
-    } as unknown as Response)
-    // scenario preview fetch
-    .mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ id: 'basic', name: 'Basic', template: {} }),
-    } as unknown as Response)
-    .mockResolvedValueOnce({
-      ok: false,
-      status: 409,
-      text: async () => "{\"message\": \"Swarm 'sw1' already exists\"}",
-    } as unknown as Response)
+  apiFetchSpy.mockImplementation(async (input: RequestInfo) => {
+    const url = typeof input === 'string' ? input : input.url
+    if (url === '/scenario-manager/api/templates') {
+      return {
+        ok: true,
+        json: async () => [{ id: 'basic', name: 'Basic', bees: [] }],
+      } as unknown as Response
+    }
+    if (url === '/scenario-manager/scenarios/basic') {
+      return { ok: true, json: async () => ({ id: 'basic', name: 'Basic', template: {} }) } as unknown as Response
+    }
+    if (url === '/scenario-manager/scenarios/basic/suts') {
+      return { ok: true, json: async () => [] } as unknown as Response
+    }
+    if (url === '/scenario-manager/scenarios/basic/variables') {
+      return { ok: false, status: 404, text: async () => '' } as unknown as Response
+    }
+    if (url === '/orchestrator/swarms/sw1/create') {
+      return {
+        ok: false,
+        status: 409,
+        text: async () => "{\"message\": \"Swarm 'sw1' already exists\"}",
+      } as unknown as Response
+    }
+    return { ok: true, json: async () => ({}) } as unknown as Response
+  })
 
   render(
     <CapabilitiesProvider>
@@ -126,15 +144,16 @@ test('shows conflict message when swarm already exists', async () => {
 })
 
 test('does not submit when scenario selection is cleared', async () => {
-  apiFetchSpy
-    .mockResolvedValueOnce({
-      ok: true,
-      json: async () => [{ id: 'basic', name: 'Basic', bees: [] }],
-    } as unknown as Response)
-    .mockResolvedValueOnce({
-      ok: true,
-      json: async () => [],
-    } as unknown as Response)
+  apiFetchSpy.mockImplementation(async (input: RequestInfo) => {
+    const url = typeof input === 'string' ? input : input.url
+    if (url === '/scenario-manager/api/templates') {
+      return {
+        ok: true,
+        json: async () => [{ id: 'basic', name: 'Basic', bees: [] }],
+      } as unknown as Response
+    }
+    return { ok: true, json: async () => ({}) } as unknown as Response
+  })
     // no create call
   render(
     <CapabilitiesProvider>
@@ -146,24 +165,30 @@ test('does not submit when scenario selection is cleared', async () => {
   fireEvent.change(screen.getByLabelText(/swarm id/i), { target: { value: 'sw1' } })
   fireEvent.click(screen.getByText('Create'))
 
-  await waitFor(() => expect(apiFetchSpy.mock.calls.length).toBe(2))
+  await waitFor(() => expect(apiFetchSpy.mock.calls.length).toBe(1))
   await screen.findByText(/swarm id and scenario required/i)
 })
 
 test('loads scenario preview when a template is selected', async () => {
-  apiFetchSpy
-    .mockResolvedValueOnce({
-      ok: true,
-      json: async () => [{ id: 'basic', name: 'Basic', bees: [] }],
-    } as unknown as Response)
-    .mockResolvedValueOnce({
-      ok: true,
-      json: async () => [],
-    } as unknown as Response)
-    .mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ id: 'basic', name: 'Basic', template: { image: 'img' } }),
-    } as unknown as Response)
+  apiFetchSpy.mockImplementation(async (input: RequestInfo) => {
+    const url = typeof input === 'string' ? input : input.url
+    if (url === '/scenario-manager/api/templates') {
+      return {
+        ok: true,
+        json: async () => [{ id: 'basic', name: 'Basic', bees: [] }],
+      } as unknown as Response
+    }
+    if (url === '/scenario-manager/scenarios/basic') {
+      return { ok: true, json: async () => ({ id: 'basic', name: 'Basic', template: { image: 'img' } }) } as unknown as Response
+    }
+    if (url === '/scenario-manager/scenarios/basic/suts') {
+      return { ok: true, json: async () => [] } as unknown as Response
+    }
+    if (url === '/scenario-manager/scenarios/basic/variables') {
+      return { ok: false, status: 404, text: async () => '' } as unknown as Response
+    }
+    return { ok: true, json: async () => ({}) } as unknown as Response
+  })
 
   render(
     <CapabilitiesProvider>

@@ -202,6 +202,17 @@ public final class WorkerControlPlaneRuntime {
         Objects.requireNonNull(workItem, "workItem");
         Objects.requireNonNull(exception, "exception");
 
+        String correlationId = null;
+        String idempotencyKey = null;
+        Object correlationHeader = workItem.headers().get("correlationId");
+        if (correlationHeader != null) {
+            correlationId = String.valueOf(correlationHeader);
+        }
+        Object idempotencyHeader = workItem.headers().get("idempotencyKey");
+        if (idempotencyHeader != null) {
+            idempotencyKey = String.valueOf(idempotencyHeader);
+        }
+
         Map<String, Object> context = new LinkedHashMap<>();
         context.put("worker", workerBeanName);
 
@@ -219,16 +230,16 @@ public final class WorkerControlPlaneRuntime {
         });
 
         ControlScope scope = ControlScope.forInstance(identity.swarmId(), identity.role(), identity.instanceId());
-	        emitter.publishAlert(Alerts.fromException(
-	            identity.instanceId(),
-	            scope,
-	            null,
-	            null,
-	            runtimeMeta,
-	            "work",
-	            exception,
-	            null,
-	            context,
+        emitter.publishAlert(Alerts.fromException(
+            identity.instanceId(),
+            scope,
+            correlationId,
+            idempotencyKey,
+            runtimeMeta,
+            "work",
+            exception,
+            null,
+            context,
             Instant.now()
         ));
     }

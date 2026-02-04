@@ -188,6 +188,14 @@ public class SwarmController {
         try {
             response = idempotentSend("swarm-create", swarmId, req.idempotencyKey(), timeout.toMillis(), lockCorrelation, corr -> {
                 String templateId = req.templateId();
+                log.info("[CTRL] swarm-create start swarm={} templateId={} sutId={} variablesProfileId={} autoPullImages={} correlation={} idempotencyKey={}",
+                    swarmId,
+                    templateId,
+                    normalize(req.sutId()),
+                    normalize(req.variablesProfileId()),
+                    Boolean.TRUE.equals(req.autoPullImages()),
+                    corr,
+                    req.idempotencyKey());
                 ScenarioPlan planDescriptor = fetchScenario(templateId);
                 SwarmTemplate template = planDescriptor.template();
                 ScenarioPlan.Plan timeline = planDescriptor.plan();
@@ -203,16 +211,38 @@ public class SwarmController {
                 }
                 String scenarioVolume = runtimeRootSource + "/" + swarmId + ":/app/scenario:ro";
                 String sutId = normalize(req.sutId());
+                String variablesProfileId = normalize(req.variablesProfileId());
                 io.pockethive.swarm.model.SutEnvironment sutEnvironment = null;
                 if (sutId != null) {
+                    log.info("[CTRL] swarm-create resolve sut swarm={} templateId={} sutId={} correlation={} idempotencyKey={}",
+                        swarmId, templateId, sutId, corr, req.idempotencyKey());
                     try {
-                        sutEnvironment = scenarios.fetchSutEnvironment(sutId);
+                        sutEnvironment = scenarios.fetchScenarioSut(templateId, sutId, corr, req.idempotencyKey());
                     } catch (Exception ex) {
+                        log.warn("[CTRL] swarm-create resolve sut FAILED swarm={} templateId={} sutId={} correlation={} idempotencyKey={}",
+                            swarmId, templateId, sutId, corr, req.idempotencyKey(), ex);
                         throw new IllegalStateException(
                             "Failed to resolve SUT environment '%s'".formatted(sutId), ex);
                     }
                 }
                 final io.pockethive.swarm.model.SutEnvironment finalSutEnvironment = sutEnvironment;
+                ScenarioClient.ResolvedVariables resolvedVariables;
+                try {
+                    log.info("[CTRL] swarm-create resolve variables swarm={} templateId={} profileId={} sutId={} correlation={} idempotencyKey={}",
+                        swarmId, templateId, variablesProfileId, sutId, corr, req.idempotencyKey());
+                    resolvedVariables = scenarios.resolveScenarioVariables(
+                        templateId, variablesProfileId, sutId, corr, req.idempotencyKey());
+                } catch (Exception ex) {
+                    log.warn("[CTRL] swarm-create resolve variables FAILED swarm={} templateId={} profileId={} sutId={} correlation={} idempotencyKey={}",
+                        swarmId, templateId, variablesProfileId, sutId, corr, req.idempotencyKey(), ex);
+                    throw new IllegalStateException("Failed to resolve scenario variables", ex);
+                }
+                java.util.Map<String, Object> resolvedVars = resolvedVariables.vars() == null
+                    ? java.util.Map.of()
+                    : resolvedVariables.vars();
+                int warningsCount = resolvedVariables.warnings() == null ? 0 : resolvedVariables.warnings().size();
+                log.info("[CTRL] swarm-create variables resolved swarm={} templateId={} profileId={} sutId={} vars={} warnings={} correlation={} idempotencyKey={}",
+                    swarmId, templateId, variablesProfileId, sutId, resolvedVars.size(), warningsCount, corr, req.idempotencyKey());
                 // Resolve bee images through the same repository prefix logic used for controllers
                 // so the swarm-controller sees fully-qualified image names and does not need to
                 // guess registry roots. While doing so, apply any SUT-aware templates in worker
@@ -232,6 +262,9 @@ public class SwarmController {
                             java.util.Map<String, Object> config = bee.config();
                             if (scenarioVolume != null && !scenarioVolume.isBlank()) {
                                 config = addScenarioVolume(config, scenarioVolume);
+                            }
+                            if (resolvedVars != null && !resolvedVars.isEmpty()) {
+                                config = addScenarioVars(config, resolvedVars);
                             }
                             if (finalSutEnvironment != null && config != null && !config.isEmpty()) {
                                 config = applySutConfigTemplates(config, finalSutEnvironment);
@@ -272,6 +305,9 @@ public class SwarmController {
                     var data = new LinkedHashMap<String, Object>();
                     data.put("templateId", req.templateId());
                     data.put("sutId", sutId);
+                    if (variablesProfileId != null) {
+                        data.put("variablesProfileId", variablesProfileId);
+                    }
                     data.put("autoPullImages", autoPull);
                     data.put("controllerInstance", instanceId);
                     data.put("runId", swarm.getRunId());
@@ -575,6 +611,19 @@ public class SwarmController {
 
         docker.put("volumes", List.copyOf(volumes));
         result.put("docker", Map.copyOf(docker));
+        return Map.copyOf(result);
+    }
+
+    private static Map<String, Object> addScenarioVars(Map<String, Object> config, Map<String, Object> vars) {
+        if (vars == null || vars.isEmpty()) {
+            return config;
+        }
+        Map<String, Object> result = (config == null || config.isEmpty())
+            ? new LinkedHashMap<>()
+            : new LinkedHashMap<>(config);
+        // Reserved key for scenario variables: config.vars (map).
+        // Workers are expected to propagate this into the WorkItem headers so Pebble/SpEL templates can reference it as `vars.*`.
+        result.put("vars", vars);
         return Map.copyOf(result);
     }
 

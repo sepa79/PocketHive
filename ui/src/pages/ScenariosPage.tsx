@@ -4,6 +4,8 @@ import type { editor as MonacoEditor } from 'monaco-editor'
 import Editor from '@monaco-editor/react'
 import { useNavigate } from 'react-router-dom'
 import YAML from 'yaml'
+import ScenarioVariablesModal from './scenarios/ScenarioVariablesModal'
+import ScenarioSutsModal from './scenarios/ScenarioSutsModal'
 import {
   listScenarios,
   downloadScenarioBundle,
@@ -1985,6 +1987,8 @@ export default function ScenariosPage() {
   const [schemaEditorValues, setSchemaEditorValues] = useState<Record<string, string>>({})
   const [schemaEditorError, setSchemaEditorError] = useState<string | null>(null)
   const [schemaEditorShowRaw, setSchemaEditorShowRaw] = useState(false)
+  const [showVariablesModal, setShowVariablesModal] = useState(false)
+  const [showSutsModal, setShowSutsModal] = useState(false)
 
   const [schemaAttachState, setSchemaAttachState] = useState<SchemaAttachState | null>(null)
   const [schemaAttachError, setSchemaAttachError] = useState<string | null>(null)
@@ -3919,26 +3923,40 @@ export default function ScenariosPage() {
                   )}
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  className="rounded bg-white/10 px-2 py-1 text-[11px] text-white/80 hover:bg-white/20"
-                  onClick={() => void handleDownload(selectedSummary.id)}
-                >
-                  Download bundle
-                </button>
-                <button
-                  type="button"
-                  className="rounded bg-white/10 px-2 py-1 text-[11px] text-white/80 hover:bg-white/20"
-                  onClick={() => replaceInputRef.current?.click()}
-                >
-                  Replace bundle
-                </button>
-                <input
-                  ref={replaceInputRef}
-                  type="file"
-                  accept=".zip"
-                  className="hidden"
+	              <div className="flex items-center gap-2">
+	                <button
+	                  type="button"
+	                  className="rounded bg-white/10 px-2 py-1 text-[11px] text-white/80 hover:bg-white/20"
+	                  onClick={() => void handleDownload(selectedSummary.id)}
+	                >
+	                  Download bundle
+	                </button>
+	                <button
+	                  type="button"
+	                  className="rounded bg-white/10 px-2 py-1 text-[11px] text-white/80 hover:bg-white/20"
+	                  onClick={() => replaceInputRef.current?.click()}
+	                >
+	                  Replace bundle
+	                </button>
+	                <button
+	                  type="button"
+	                  className="rounded bg-white/10 px-2 py-1 text-[11px] text-white/80 hover:bg-white/20"
+	                  onClick={() => setShowSutsModal(true)}
+	                >
+	                  SUTs
+	                </button>
+	                <button
+	                  type="button"
+	                  className="rounded bg-white/10 px-2 py-1 text-[11px] text-white/80 hover:bg-white/20"
+	                  onClick={() => setShowVariablesModal(true)}
+	                >
+	                  Variables
+	                </button>
+	                <input
+	                  ref={replaceInputRef}
+	                  type="file"
+	                  accept=".zip"
+	                  className="hidden"
                   onChange={(e) => {
                     const [file] = Array.from(e.target.files ?? [])
                     void handleReplace(file ?? null)
@@ -5180,6 +5198,28 @@ export default function ScenariosPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {showVariablesModal && selectedId && (
+        <ScenarioVariablesModal
+          scenarioId={selectedId}
+          onClose={() => setShowVariablesModal(false)}
+          onSaved={(warnings) => {
+            if (warnings.length > 0) {
+              setToast(`Saved variables.yaml (${warnings.length} warning(s))`)
+            } else {
+              setToast('Saved variables.yaml')
+            }
+          }}
+        />
+      )}
+
+      {showSutsModal && selectedId && (
+        <ScenarioSutsModal
+          scenarioId={selectedId}
+          onClose={() => setShowSutsModal(false)}
+          onSaved={(sutId) => setToast(`Saved SUT '${sutId}'`)}
+        />
       )}
     </div>
   )

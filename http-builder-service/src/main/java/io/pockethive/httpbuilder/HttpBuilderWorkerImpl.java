@@ -80,8 +80,13 @@ class HttpBuilderWorkerImpl implements PocketHiveWorkerFunction {
 
     reloadTemplatesIfNeeded(config);
 
+    WorkItem effectiveSeed = seed;
+    if (effectiveSeed.headers().get("vars") == null && config.vars() != null && !config.vars().isEmpty()) {
+      effectiveSeed = effectiveSeed.addStepHeader("vars", config.vars());
+    }
+
     String serviceId = resolveServiceId(seed, config);
-    String callId = resolveCallId(seed);
+    String callId = resolveCallId(effectiveSeed);
     if (callId == null || callId.isBlank()) {
       context.logger().warn("No callId present on work item; {}", missingBehavior(config));
       return handleMissing(config, seed, context);
@@ -104,7 +109,7 @@ class HttpBuilderWorkerImpl implements PocketHiveWorkerFunction {
           .build();
 
       MessageTemplateRenderer.RenderedMessage rendered =
-          messageTemplateRenderer.render(template, seed);
+          messageTemplateRenderer.render(template, effectiveSeed);
 
       ObjectNode envelope = MAPPER.createObjectNode();
       envelope.put("protocol", "HTTP");

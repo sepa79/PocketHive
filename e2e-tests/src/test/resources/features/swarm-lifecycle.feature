@@ -42,6 +42,16 @@ Feature: Swarm lifecycle golden path
     And I start generator traffic
     Then the final queue receives the default generator response
 
+  @scenario-variables
+  Scenario: Scenario variables are resolved and visible in template rendering
+    And the "variables-demo" scenario template is requested
+    When I create the swarm from that template
+    Then the swarm is registered and queues are declared
+    When I start the swarm
+    Then the swarm reports running
+    And I start generator traffic
+    Then the final queue receives the default generator response
+
   @tcp-timeout
   Scenario: TCP processor reports timeout when tcp-mock delays response
     And the TCP mock server has the following mappings:

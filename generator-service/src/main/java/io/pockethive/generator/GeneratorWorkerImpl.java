@@ -47,7 +47,7 @@ import org.springframework.stereotype.Component;
  * <p>Because the generator is the entry point, it does not emit metrics on its own; instead it
  * updates the worker status stream. Watch the <em>Generator status</em> card in Grafana to confirm
  * it is emitting work. You can also inspect the generated {@code WorkItem}—it includes headers
- * like {@code contentType} and {@code messageId} to help with
+ * like {@code content-type}, {@code message-id}, and {@code x-ph-service} to help with
  * observability.</p>
  */
 @Component("generatorWorker")
@@ -90,10 +90,11 @@ class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
    * targeting and the effective HTTP settings. That update feeds the <em>Worker Status</em>
    * dashboards and is the first place to check if you wonder “why is nothing being generated?”.</p>
    *
-   * <p>The returned {@link WorkItem} includes default metadata:</p>
+   * <p>The returned {@link WorkItem} includes default headers:</p>
    * <ul>
-   *   <li>{@code contentType} → {@code application/json}</li>
-   *   <li>{@code messageId} → a generated UUID (helpful for tracing)</li>
+   *   <li>{@code content-type} → {@code application/json}</li>
+   *   <li>{@code message-id} → a generated UUID (helpful for tracing)</li>
+   *   <li>{@code x-ph-service} → the worker role so downstream services can attribute work</li>
    * </ul>
    *
    * <p>Downstream processors can extend this worker by adjusting the payload map in
@@ -118,6 +119,10 @@ class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
 
   private WorkItem buildMessage(GeneratorWorkerConfig config, WorkerContext context, WorkItem seed) {
     String messageId = UUID.randomUUID().toString();
+    WorkItem effectiveSeed = seed;
+    if (effectiveSeed.headers().get("vars") == null && config.vars() != null && !config.vars().isEmpty()) {
+      effectiveSeed = effectiveSeed.toBuilder().header("vars", config.vars()).build();
+    }
     GeneratorWorkerConfig.Message message = config.message();
     MessageTemplate template = MessageTemplate.builder()
         .bodyType(message.bodyType())
@@ -126,9 +131,9 @@ class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
         .bodyTemplate(message.body())
         .headerTemplates(message.headers())
         .build();
-    MessageTemplateRenderer.RenderedMessage rendered = messageTemplateRenderer.render(template, seed);
+    MessageTemplateRenderer.RenderedMessage rendered = messageTemplateRenderer.render(template, effectiveSeed);
 
-    Map<String, Object> baseHeaders = new HashMap<>(seed.headers());
+    Map<String, Object> baseHeaders = new HashMap<>(effectiveSeed.headers());
 
     if (rendered.bodyType() == MessageBodyType.SIMPLE) {
       Map<String, Object> headers = new LinkedHashMap<>(baseHeaders);

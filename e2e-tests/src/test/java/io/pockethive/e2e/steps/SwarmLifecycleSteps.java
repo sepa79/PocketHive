@@ -183,12 +183,14 @@ public class SwarmLifecycleSteps {
     ensureTemplate();
     String idempotencyKey = idKey("create");
     String sutId = resolveSutIdForScenario();
+    String variablesProfileId = resolveVariablesProfileIdForScenario();
     SwarmCreateRequest request = new SwarmCreateRequest(
         scenarioDetails.id(),
         idempotencyKey,
         "e2e lifecycle create",
         null,
-        sutId);
+        sutId,
+        variablesProfileId);
     createResponse = orchestratorClient.createSwarm(swarmId, request);
     LOGGER.info("Create request accepted correlation={} watch={}", createResponse.correlationId(), createResponse.watch());
   }
@@ -234,6 +236,22 @@ public class SwarmLifecycleSteps {
     return switch (scenarioId) {
       case "templated-rest", "redis-dataset-demo" -> "wiremock-local";
       case "tcp-socket-demo" -> "tcp-mock-local";
+      case "variables-demo" -> "sut-A";
+      default -> null;
+    };
+  }
+
+  /**
+   * Select the variables profile id for scenarios that include variables.yaml.
+   */
+  private String resolveVariablesProfileIdForScenario() {
+    ensureTemplate();
+    String scenarioId = scenarioDetails != null ? scenarioDetails.id() : null;
+    if (scenarioId == null) {
+      return null;
+    }
+    return switch (scenarioId) {
+      case "variables-demo" -> "france";
       default -> null;
     };
   }
@@ -876,6 +894,33 @@ public class SwarmLifecycleSteps {
         assertTrue(generatorMatched,
             () -> "No WorkItem step payload matched templated pattern /" + generatorPattern
                 + "/ for templated-rest scenario. payloads=" + stepPayloads);
+      } else if ("variables-demo".equals(scenarioId)) {
+        boolean matched = stepPayloads.stream()
+            .anyMatch(payload -> {
+              if (payload == null || payload.isBlank()) {
+                return false;
+              }
+              try {
+                JsonNode node = objectMapper.readTree(payload);
+                if (!node.has("path") || !node.has("method") || !node.has("headers") || !node.has("body")) {
+                  return false;
+                }
+                String body = node.path("body").asText("");
+                if (body.isBlank() || body.contains("{{")) {
+                  return false;
+                }
+                JsonNode rendered = objectMapper.readTree(body);
+                return rendered.path("customerId").asText("").equals("CUST-FR-A")
+                    && rendered.path("loopCount").asInt(-1) == 7
+                    && rendered.path("loopPlusOne").asInt(-1) == 8
+                    && rendered.path("enableFoo").asBoolean() == true
+                    && rendered.path("profile").asText("").equals("france");
+              } catch (Exception ex) {
+                return false;
+              }
+            });
+        assertTrue(matched,
+            () -> "No rendered HTTP request step matched expected vars for variables-demo (profile=france, sut=sut-A). payloads=" + stepPayloads);
       }
     } finally {
       message.ack();
@@ -1538,7 +1583,8 @@ public class SwarmLifecycleSteps {
         || "templated-rest".equals(scenarioId)
         || "history-policy-demo".equals(scenarioId)
         || "local-rest".equals(scenarioId)
-        || "local-rest-with-multi-generators".equals(scenarioId)) {
+        || "local-rest-with-multi-generators".equals(scenarioId)
+        || "variables-demo".equals(scenarioId)) {
       return "final";
     }
     if ("redis-dataset-demo".equals(scenarioId)
@@ -1596,11 +1642,13 @@ public class SwarmLifecycleSteps {
     if (workQueueConsumer != null) {
       return;
     }
-    String exchange = hiveExchangeName();
-    String routingKey = finalQueueName();
-    workQueueConsumer = WorkQueueConsumer.forExchangeTap(rabbitSubscriptions.connectionFactory(), exchange, routingKey);
-    tapQueueName = workQueueConsumer.queueName();
-    LOGGER.info("Subscribed to final exchange tap queue={} exchange={} routingKey={}", tapQueueName, exchange, routingKey);
+    // For the final sink queue we can safely consume from the queue directly (there should be no
+    // application consumer draining it). Using an exchange tap here is racy because the swarm may
+    // publish the final WorkItem before we bind the ephemeral tap queue.
+    String queueName = finalQueueName();
+    workQueueConsumer = new WorkQueueConsumer(rabbitSubscriptions.connectionFactory(), queueName);
+    tapQueueName = queueName;
+    LOGGER.info("Subscribed to final queue={} (direct consumer)", queueName);
   }
 
   private void ensureGeneratorTapForTemplating() {
