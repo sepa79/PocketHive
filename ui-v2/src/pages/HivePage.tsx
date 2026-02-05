@@ -431,7 +431,6 @@ export function HivePage() {
 
   const loadSwarms = useCallback(async () => {
     setLoading(true)
-    setError(null)
     try {
       const response = await fetch(`${ORCHESTRATOR_BASE}/swarms`, {
         headers: { Accept: 'application/json' },
@@ -440,10 +439,10 @@ export function HivePage() {
         throw new Error(await readErrorMessage(response))
       }
       const payload = (await response.json()) as SwarmSummary[]
+      setError(null)
       setSwarms(Array.isArray(payload) ? payload : [])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load swarms')
-      setSwarms([])
     } finally {
       setLoading(false)
     }
@@ -457,14 +456,12 @@ export function HivePage() {
       return
     }
     setSnapshotLoading(true)
-    setSnapshotError(null)
     try {
       const response = await fetch(
         `${ORCHESTRATOR_BASE}/swarms/${encodeURIComponent(selectedSwarmId)}`,
         { headers: { Accept: 'application/json' } },
       )
       if (response.status === 404) {
-        setSnapshot(null)
         setSnapshotError('No cached status-full snapshot yet for this swarm.')
         return
       }
@@ -474,13 +471,13 @@ export function HivePage() {
       const payload = (await response.json()) as Partial<StatusFullSnapshotResponse>
       const receivedAt = typeof payload.receivedAt === 'string' ? payload.receivedAt : ''
       const staleAfterSec = typeof payload.staleAfterSec === 'number' ? payload.staleAfterSec : 0
+      setSnapshotError(null)
       setSnapshot({
         receivedAt,
         staleAfterSec,
         envelope: payload.envelope,
       })
     } catch (err) {
-      setSnapshot(null)
       setSnapshotError(err instanceof Error ? err.message : 'Failed to load status-full snapshot')
     } finally {
       setSnapshotLoading(false)
@@ -518,7 +515,6 @@ export function HivePage() {
   const runSwarmAction = useCallback(
     async (swarm: SwarmSummary, action: SwarmAction) => {
       if (!swarm.id) return
-      setMessage(null)
       setBusySwarm(swarm.id)
       setBusyAction(action)
       try {
@@ -646,9 +642,12 @@ export function HivePage() {
         >
           ?
         </button>
+        <span className="spinnerSlot" aria-hidden="true" title={loading || busySwarm ? 'Working…' : undefined}>
+          <span className={loading || busySwarm ? 'spinner' : 'spinner spinnerHidden'} />
+        </span>
       </div>
     ),
-    [explainMode, loadSwarms, showCreate],
+    [busySwarm, explainMode, loadSwarms, loading, showCreate],
   )
 
   useToolsBar(toolsBar)
@@ -802,7 +801,6 @@ export function HivePage() {
                       onClick={() => runSwarmAction(swarm, 'start')}
                     >
                       <span className="actionButtonContent">
-                        {isBusy && busyAction === 'start' ? <span className="spinner" aria-hidden="true" /> : null}
                         <span>Start</span>
                       </span>
                     </button>
@@ -813,7 +811,6 @@ export function HivePage() {
                       onClick={() => runSwarmAction(swarm, 'stop')}
                     >
                       <span className="actionButtonContent">
-                        {isBusy && busyAction === 'stop' ? <span className="spinner" aria-hidden="true" /> : null}
                         <span>Stop</span>
                       </span>
                     </button>
@@ -824,7 +821,6 @@ export function HivePage() {
                       onClick={() => runSwarmAction(swarm, 'remove')}
                     >
                       <span className="actionButtonContent">
-                        {isBusy && busyAction === 'remove' ? <span className="spinner" aria-hidden="true" /> : null}
                         <span>Remove</span>
                       </span>
                     </button>

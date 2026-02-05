@@ -24,6 +24,8 @@ type DebugTap = {
   samples: DebugTapSample[]
 }
 
+type TapMeta = Omit<DebugTap, 'samples' | 'lastReadAt'>
+
 const ORCHESTRATOR_BASE = '/orchestrator/api'
 
 async function readErrorMessage(response: Response): Promise<string> {
@@ -63,13 +65,13 @@ type WorkItemEnvelope = {
   headers?: Record<string, unknown>
   messageId?: string
   contentType?: string
+  observability?: Record<string, unknown>
   steps?: Array<{
     index?: number
     payload?: string
     payloadEncoding?: string
     headers?: Record<string, unknown>
   }>
-  observability?: Record<string, unknown>
 }
 
 function parseWorkItemEnvelope(payload: string): WorkItemEnvelope | null {
@@ -92,31 +94,58 @@ function safeStringify(value: unknown): string {
   }
 }
 
+function metaFromTap(tap: DebugTap): TapMeta {
+  const { samples: _samples, lastReadAt: _lastReadAt, ...meta } = tap
+  return meta
+}
+
+function metaSignature(meta: TapMeta | null): string {
+  if (!meta) return ''
+  return [
+    meta.tapId,
+    meta.swarmId,
+    meta.role,
+    meta.direction,
+    meta.ioName,
+    meta.exchange,
+    meta.routingKey,
+    meta.queue,
+    meta.maxItems,
+    meta.ttlSeconds,
+    meta.createdAt,
+  ].join('|')
+}
+
+function mergeSamples(existing: DebugTapSample[], incoming: DebugTapSample[], limit: number): DebugTapSample[] {
+  if (!incoming.length) return existing
+  if (!existing.length) return incoming.slice(-limit)
+  const seen = new Set(existing.map((s) => s.id))
+  const appended: DebugTapSample[] = []
+  for (const sample of incoming) {
+    if (!seen.has(sample.id)) appended.push(sample)
+  }
+  if (!appended.length) return existing
+  return [...existing, ...appended].slice(-limit)
+}
+
 export function DebugTapViewerPage() {
   const { tapId: tapIdParam } = useParams<{ tapId: string }>()
   const tapId = (tapIdParam ?? '').trim()
 
-  const [tap, setTap] = useState<DebugTap | null>(null)
+  const [meta, setMeta] = useState<TapMeta | null>(null)
+  const [samples, setSamples] = useState<DebugTapSample[]>([])
+  const [activeSampleId, setActiveSampleId] = useState<string | null>(null)
+
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [autoRefresh, setAutoRefresh] = useState(false)
 
-  const [captureRunning, setCaptureRunning] = useState(false)
-  const [captureCount, setCaptureCount] = useState<number>(5)
-  const captureAbortRef = useRef(false)
-  const activeSampleId = useRef<string | null>(null)
-  const [, forceRerender] = useState(0)
+  const [fetchCount, setFetchCount] = useState<number>(10)
 
-  const activeSample = useMemo(() => {
-    if (!tap) return null
-    const id = activeSampleId.current
-    if (!id) return null
-    return tap.samples.find((s) => s.id === id) ?? null
-  }, [tap])
-
-  const activeEnvelope = useMemo(() => {
-    if (!activeSample) return null
-    return parseWorkItemEnvelope(activeSample.payload)
-  }, [activeSample])
+  const lastMetaSigRef = useRef<string>('')
+  const samplesByIdRef = useRef<Map<string, DebugTapSample>>(new Map())
+  const isClosedRef = useRef(false)
+  const inFlightRef = useRef(false)
 
   const fetchTap = useCallback(
     async (drain: number): Promise<DebugTap> => {
@@ -131,146 +160,172 @@ export function DebugTapViewerPage() {
     [tapId],
   )
 
-  const refreshTap = useCallback(
+  const applyTap = useCallback((tap: DebugTap) => {
+    const nextMeta = metaFromTap(tap)
+    const nextMetaSig = metaSignature(nextMeta)
+    if (nextMetaSig && nextMetaSig !== lastMetaSigRef.current) {
+      lastMetaSigRef.current = nextMetaSig
+      setMeta(nextMeta)
+    }
+
+    const limit = Math.max(1, Math.min(200, nextMeta.maxItems || 10))
+    if (tap.samples && tap.samples.length) {
+      // Use a ref map to avoid churn when server re-sends the full sample list.
+      let changed = false
+      for (const s of tap.samples) {
+        if (!samplesByIdRef.current.has(s.id)) {
+          samplesByIdRef.current.set(s.id, s)
+          changed = true
+        }
+      }
+      if (changed) {
+        setSamples((prev) => mergeSamples(prev, tap.samples, limit))
+      }
+    }
+  }, [])
+
+  const refresh = useCallback(
     async (drain: number) => {
       if (!tapId) return
-      if (busy) return
+      if (isClosedRef.current) return
+      if (inFlightRef.current) return
+      inFlightRef.current = true
       setBusy(true)
       setError(null)
       try {
-        const updated = await fetchTap(drain)
-        setTap(updated)
-        if (!activeSampleId.current && updated.samples.length) {
-          activeSampleId.current = updated.samples[updated.samples.length - 1]?.id ?? null
-          forceRerender((v) => v + 1)
-        }
+        const tap = await fetchTap(drain)
+        applyTap(tap)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to read tap.')
       } finally {
         setBusy(false)
+        inFlightRef.current = false
       }
     },
-    [busy, fetchTap, tapId],
+    [applyTap, fetchTap, tapId],
   )
-
-  useEffect(() => {
-    if (!tapId) {
-      setTap(null)
-      setError('Missing tapId.')
-      return
-    }
-    void refreshTap(0)
-  }, [refreshTap, tapId])
-
-  const stopCapture = useCallback(() => {
-    captureAbortRef.current = true
-    setCaptureRunning(false)
-  }, [])
 
   const closeTap = useCallback(async () => {
     if (!tapId) return
+    if (inFlightRef.current) return
+    inFlightRef.current = true
     setBusy(true)
     setError(null)
     try {
       const response = await fetch(`${ORCHESTRATOR_BASE}/debug/taps/${encodeURIComponent(tapId)}`, { method: 'DELETE' })
       if (!response.ok) throw new Error(await readErrorMessage(response))
+      isClosedRef.current = true
       const closed = (await response.json()) as DebugTap
-      setTap(closed)
-      setCaptureRunning(false)
+      const closedMeta = metaFromTap(closed)
+      setMeta(closedMeta)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to close tap.')
     } finally {
       setBusy(false)
+      inFlightRef.current = false
     }
   }, [tapId])
 
-  const capture = useCallback(async () => {
-    if (!tapId) return
-    if (captureRunning) return
-    captureAbortRef.current = false
-    setCaptureRunning(true)
-    setError(null)
-
-    const start = Date.now()
-    const ttlMs = Math.max(1000, (tap?.ttlSeconds ?? 20) * 1000)
-    const target = Math.max(1, Math.floor(captureCount))
-
-    try {
-      // Ensure we have the latest tap metadata first (maxItems/ttlSeconds).
-      const initial = await fetchTap(0)
-      setTap(initial)
-
-      while (!captureAbortRef.current) {
-        const current = await fetchTap(0)
-        setTap(current)
-        const currentCount = current.samples.length
-        const remaining = Math.max(0, target - currentCount)
-        if (remaining <= 0) break
-        if (Date.now() - start > ttlMs) break
-        const updated = await fetchTap(remaining)
-        setTap(updated)
-        if (!activeSampleId.current && updated.samples.length) {
-          activeSampleId.current = updated.samples[updated.samples.length - 1]?.id ?? null
-          forceRerender((v) => v + 1)
-        }
-        await new Promise((r) => setTimeout(r, 350))
-      }
-    } finally {
-      setCaptureRunning(false)
-      // Best-effort close: if we captured enough (or timed out), we don't want to keep an idle tap queue around.
-      void closeTap()
+  useEffect(() => {
+    if (!tapId) {
+      setError('Missing tapId.')
+      setMeta(null)
+      setSamples([])
+      setActiveSampleId(null)
+      return
     }
-  }, [captureCount, captureRunning, closeTap, fetchTap, tap?.ttlSeconds, tapId])
+    isClosedRef.current = false
+    lastMetaSigRef.current = ''
+    samplesByIdRef.current.clear()
+    setMeta(null)
+    setSamples([])
+    setActiveSampleId(null)
+    void refresh(0)
+  }, [refresh, tapId])
 
   useEffect(() => {
-    // Auto-capture by default (debug use-case: get a few messages, stop).
+    if (activeSampleId) return
+    if (!samples.length) return
+    setActiveSampleId(samples[samples.length - 1]?.id ?? null)
+  }, [activeSampleId, samples])
+
+  useEffect(() => {
+    if (!autoRefresh) return
     if (!tapId) return
-    if (!tap) return
-    if (tap.samples.length > 0) return
-    void capture()
-  }, [capture, tap, tapId])
+    if (isClosedRef.current) return
+    const timer = window.setInterval(() => {
+      // quiet refresh: no `busy` state toggling here, only applyTap if meaningful changes arrive
+      void fetchTap(0).then(applyTap).catch(() => {
+        // ignore (no flicker)
+      })
+    }, 1200)
+    return () => window.clearInterval(timer)
+  }, [applyTap, autoRefresh, fetchTap, tapId])
 
-  useEffect(() => {
-    if (!tap) return
-    const next = Math.max(1, tap.maxItems || 5)
-    setCaptureCount((prev) => (Number.isFinite(prev) && prev > 0 ? prev : next))
-  }, [tap?.maxItems])
+  const activeSample = useMemo(() => {
+    if (!activeSampleId) return null
+    return samples.find((s) => s.id === activeSampleId) ?? null
+  }, [activeSampleId, samples])
+
+  const activeEnvelope = useMemo(() => {
+    if (!activeSample) return null
+    return parseWorkItemEnvelope(activeSample.payload)
+  }, [activeSample])
+
+  const rawPayload = useMemo(() => {
+    if (!activeSample) return null
+    return tryPrettyJson(activeSample.payload) ?? activeSample.payload
+  }, [activeSample])
+
+  if (!tapId) {
+    return (
+      <div className="page">
+        <div className="card">Missing tapId.</div>
+      </div>
+    )
+  }
 
   return (
     <div className="page">
       <div className="pageHeader">
         <div>
-          <div className="h2">Debug tap viewer</div>
+          <div className="h2">Debug tap</div>
           <div className="muted">
-            tapId <code>{tapId || '—'}</code>
-            {tap ? (
+            tapId <code>{tapId}</code>
+            {meta ? (
               <>
                 {' '}
-                · swarm <code>{tap.swarmId}</code> · role <code>{tap.role}</code> · {tap.direction} <code>{tap.ioName}</code>
+                · swarm <code>{meta.swarmId}</code> · role <code>{meta.role}</code> · {meta.direction} <code>{meta.ioName}</code>
               </>
             ) : null}
           </div>
         </div>
         <div className="row" style={{ gap: 10, alignItems: 'center' }}>
-          <Link className="actionButton actionButtonGhost" to={tap?.swarmId ? `/hive/${encodeURIComponent(tap.swarmId)}/view` : '/hive'}>
+          <Link className="actionButton actionButtonGhost" to={meta?.swarmId ? `/hive/${encodeURIComponent(meta.swarmId)}/view` : '/hive'}>
             Back
           </Link>
+          <span className="spinnerSlot" aria-hidden="true" title={busy ? 'Working…' : undefined}>
+            <span className={busy ? 'spinner' : 'spinner spinnerHidden'} />
+          </span>
           <button
             type="button"
             className="actionButton actionButtonGhost"
-            disabled={busy || !tapId}
-            title="Deletes the tap queue and stops capturing. This is best-effort: queues are exclusive + auto-delete."
+            disabled={busy || isClosedRef.current}
+            title="Best-effort: deletes the tap queue and stops capturing."
             onClick={() => void closeTap()}
           >
-            Close tap
+            <span className="actionButtonContent">
+              <span>Close</span>
+            </span>
           </button>
         </div>
       </div>
 
-      <div className="card tapBanner" style={{ marginTop: 12 }}>
-        Mirrors data-plane traffic to an ephemeral queue. Treat payloads as sensitive (PII/secrets).{' '}
-        <span className="muted">Drain/auto-refresh consume messages from the tap queue.</span>
-      </div>
+      {meta ? (
+        <div className="card tapBanner" style={{ marginTop: 12 }}>
+          exchange <code>{meta.exchange}</code> · routingKey <code>{meta.routingKey}</code> · queue <code>{meta.queue}</code>
+        </div>
+      ) : null}
 
       {error ? (
         <div className="card swarmMessage" style={{ marginTop: 12 }}>
@@ -283,78 +338,68 @@ export function DebugTapViewerPage() {
           <button
             type="button"
             className="actionButton"
-            disabled={busy || !tapId}
-            title="Reads up to maxItems messages from the tap queue and appends them to the sample list. Messages are consumed (removed) from the tap queue."
-            onClick={() => void refreshTap(Math.max(1, tap?.maxItems ?? 10))}
+            disabled={busy || isClosedRef.current}
+            title="Reads tap metadata (no consume)."
+            onClick={() => void refresh(0)}
           >
-            Drain
+            <span className="actionButtonContent">
+              <span>Refresh</span>
+            </span>
           </button>
-
-          <label className="row" style={{ gap: 8, alignItems: 'center' }} title="How many messages to capture before auto-closing the tap.">
-            <span className="muted">Capture</span>
+          <label className="row" style={{ gap: 8, alignItems: 'center' }} title="How many messages to consume from the tap queue.">
+            <span className="muted">Fetch</span>
             <input
               className="textInput"
               style={{ width: 84 }}
               type="number"
               min={1}
-              value={captureCount}
+              value={fetchCount}
               onChange={(e) => {
                 if (e.target.value === '') return
                 const value = e.target.valueAsNumber
                 if (!Number.isFinite(value)) return
-                setCaptureCount(Math.max(1, Math.floor(value)))
+                setFetchCount(Math.max(1, Math.floor(value)))
               }}
             />
           </label>
           <button
             type="button"
             className="actionButton"
-            disabled={busy || !tapId || captureRunning}
-            title="Connects briefly, drains until N messages are captured, then closes the tap (best-effort). This avoids streaming thousands of messages into a debug queue."
-            onClick={() => void capture()}
+            disabled={busy || isClosedRef.current}
+            title="Consumes up to N messages from the tap queue and appends them to the sample list."
+            onClick={() => void refresh(Math.max(1, fetchCount))}
           >
-            Capture now
+            <span className="actionButtonContent">
+              <span>Fetch now</span>
+            </span>
           </button>
-          <button
-            type="button"
-            className="actionButton actionButtonGhost"
-            disabled={!captureRunning}
-            title="Stops the capture loop."
-            onClick={stopCapture}
-          >
-            Stop
-          </button>
+          <label className="row" style={{ gap: 8, alignItems: 'center' }} title="Polls metadata quietly. Only updates UI when new samples arrive.">
+            <input type="checkbox" checked={autoRefresh} onChange={(e) => setAutoRefresh(e.target.checked)} />
+            <span className="muted">Auto refresh</span>
+          </label>
         </div>
-
-        {tap ? (
-          <div className="muted">
-            exchange <code>{tap.exchange}</code> · routingKey <code>{tap.routingKey}</code> · queue <code>{tap.queue}</code>
-          </div>
-        ) : null}
+        <div className="muted">
+          samples <code>{samples.length}</code>
+          {isClosedRef.current ? ' · closed' : ''}
+        </div>
       </div>
 
       <div className="debugTapViewerGrid" style={{ marginTop: 12 }}>
         <div className="card debugTapViewerPanel">
           <div className="row between" style={{ marginBottom: 8 }}>
             <div className="h3">Samples</div>
-            <div className="muted">
-              {tap ? `${tap.samples.length}/${tap.maxItems}` : '—'}
-              {captureRunning ? ' · capturing…' : ''}
-            </div>
+            <div className="muted">{samples.length ? `${samples.length}` : '—'}</div>
           </div>
           <div className="debugTapSampleList">
-            {tap?.samples?.length ? (
-              tap.samples.map((s) => {
-                const isSelected = s.id === activeSampleId.current
+            {samples.length ? (
+              samples.map((s) => {
+                const isSelected = s.id === activeSampleId
                 return (
                   <button
                     key={s.id}
                     type="button"
                     className={isSelected ? 'debugTapSampleRow debugTapSampleRowSelected' : 'debugTapSampleRow'}
-                    onClick={() => {
-                      activeSampleId.current = s.id
-                      forceRerender((v) => v + 1)
-                    }}
+                    onClick={() => setActiveSampleId(s.id)}
                     title="Click to inspect."
                   >
                     <div className="row between" style={{ gap: 10 }}>
@@ -365,7 +410,7 @@ export function DebugTapViewerPage() {
                 )
               })
             ) : (
-              <div className="muted">No samples yet. Use “Capture” or “Drain”.</div>
+              <div className="muted">No samples yet. Use “Fetch now”.</div>
             )}
           </div>
         </div>
@@ -373,7 +418,7 @@ export function DebugTapViewerPage() {
         <div className="card debugTapViewerPanel">
           <div className="row between" style={{ marginBottom: 8 }}>
             <div className="h3">Parsed</div>
-            <div className="muted">{captureRunning ? 'capturing' : 'idle'}</div>
+            <div className="muted">{activeEnvelope ? 'work-item' : activeSample ? 'raw' : '—'}</div>
           </div>
           {activeSample ? (
             activeEnvelope ? (
@@ -383,44 +428,44 @@ export function DebugTapViewerPage() {
                     messageId <code>{activeEnvelope.messageId ?? '—'}</code> · contentType <code>{activeEnvelope.contentType ?? '—'}</code>
                   </div>
                 </div>
-                <details open>
-                  <summary className="muted">headers</summary>
-                  <pre className="codePre tapPayload">{safeStringify(activeEnvelope.headers ?? {})}</pre>
-                </details>
-                <details open>
-                  <summary className="muted">observability</summary>
-                  <pre className="codePre tapPayload">{safeStringify(activeEnvelope.observability ?? {})}</pre>
-                </details>
-                <details open>
-                  <summary className="muted">steps</summary>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
-                    {(activeEnvelope.steps ?? []).map((step, idx) => {
-                      const pretty = typeof step.payload === 'string' ? tryPrettyJson(step.payload) : null
-                      return (
-                        <div key={String(step.index ?? idx)} className="tapSample">
-                          <div className="muted" style={{ marginBottom: 6 }}>
-                            step <code>{step.index ?? idx}</code> · encoding <code>{step.payloadEncoding ?? 'utf-8'}</code> · service{' '}
-                            <code>{(step.headers?.['ph.step.service'] as string) ?? '—'}</code> · instance{' '}
-                            <code>{(step.headers?.['ph.step.instance'] as string) ?? '—'}</code>
-                          </div>
-                          <details>
-                            <summary className="muted">step.headers</summary>
-                            <pre className="codePre tapPayload">{safeStringify(step.headers ?? {})}</pre>
-                          </details>
-                          <details open>
-                            <summary className="muted">payload</summary>
-                            <pre className="codePre tapPayload">{pretty ?? (step.payload ?? '')}</pre>
-                          </details>
-                        </div>
-                      )
-                    })}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div>
+                    <div className="muted" style={{ marginBottom: 6 }}>
+                      envelope.headers
+                    </div>
+                    <pre className="codePre tapPayload">{safeStringify(activeEnvelope.headers ?? {})}</pre>
                   </div>
-                </details>
+                  <div>
+                    <div className="muted" style={{ marginBottom: 6 }}>
+                      envelope.observability
+                    </div>
+                    <pre className="codePre tapPayload">{safeStringify(activeEnvelope.observability ?? {})}</pre>
+                  </div>
+                  <div>
+                    <div className="muted" style={{ marginBottom: 6 }}>
+                      steps
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {(activeEnvelope.steps ?? []).map((step, idx) => {
+                        const pretty = typeof step.payload === 'string' ? tryPrettyJson(step.payload) : null
+                        return (
+                          <div key={String(step.index ?? idx)} className="tapSample">
+                            <div className="muted" style={{ marginBottom: 6 }}>
+                              step <code>{step.index ?? idx}</code> · encoding <code>{step.payloadEncoding ?? 'utf-8'}</code> · service{' '}
+                              <code>{(step.headers?.['ph.step.service'] as string) ?? '—'}</code> · instance{' '}
+                              <code>{(step.headers?.['ph.step.instance'] as string) ?? '—'}</code>
+                            </div>
+                            <pre className="codePre tapPayload">{safeStringify(step.headers ?? {})}</pre>
+                            <pre className="codePre tapPayload">{pretty ?? (step.payload ?? '')}</pre>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
               </div>
             ) : (
-              <div className="muted">
-                Payload is not valid JSON WorkItem envelope. Showing raw in the right panel.
-              </div>
+              <div className="muted">Selected payload is not a JSON WorkItem envelope.</div>
             )
           ) : (
             <div className="muted">Select a sample to inspect.</div>
@@ -432,11 +477,7 @@ export function DebugTapViewerPage() {
             <div className="h3">Raw</div>
             <div className="muted">{activeSample ? `${activeSample.sizeBytes}B` : '—'}</div>
           </div>
-          {activeSample ? (
-            <pre className="codePre tapPayload">{tryPrettyJson(activeSample.payload) ?? activeSample.payload}</pre>
-          ) : (
-            <div className="muted">Select a sample.</div>
-          )}
+          {rawPayload ? <pre className="codePre tapPayload">{rawPayload}</pre> : <div className="muted">Select a sample.</div>}
         </div>
       </div>
     </div>

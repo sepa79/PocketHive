@@ -493,6 +493,8 @@ export function SwarmViewPage() {
   const [flowEdges, setFlowEdges] = useState<Edge[]>([])
   const storedPositionsRef = useRef<Record<string, { x: number; y: number }>>({})
   const didInitialFitRef = useRef(false)
+  const [tapBusy, setTapBusy] = useState<Record<string, boolean>>({})
+  const isBusyTop = scenarioLoading || Object.keys(tapBusy).length > 0
 
   useEffect(() => {
     setSelectedNodeId(null)
@@ -530,6 +532,10 @@ export function SwarmViewPage() {
     },
     [swarmId],
   )
+
+  const tapBusyKey = useCallback((role: string, direction: 'IN' | 'OUT', ioName: string | null) => {
+    return `${role}::${direction}::${ioName ?? ''}`
+  }, [])
 
   const refreshWorkers = useCallback((next: WorkerSnapshot[]) => {
     workersRef.current = next
@@ -582,7 +588,6 @@ export function SwarmViewPage() {
     let cancelled = false
     const load = async () => {
       setScenarioLoading(true)
-      setScenarioError(null)
       try {
         const response = await fetch(`${ORCHESTRATOR_BASE}/swarms`, {
           headers: { Accept: 'application/json' },
@@ -612,11 +617,11 @@ export function SwarmViewPage() {
           throw new Error('Scenario payload could not be parsed.')
         }
         if (!cancelled) {
+          setScenarioError(null)
           setScenario(parsed)
         }
       } catch (err) {
         if (!cancelled) {
-          setScenario(null)
           setScenarioError(err instanceof Error ? err.message : 'Failed to load scenario')
         }
       } finally {
@@ -787,6 +792,9 @@ export function SwarmViewPage() {
           <Link className="actionButton actionButtonGhost" to={`/hive/${encodeURIComponent(swarmId)}`}>
             Back to details
           </Link>
+          <span className="spinnerSlot" aria-hidden="true" title={isBusyTop ? 'Working…' : undefined}>
+            <span className={isBusyTop ? 'spinner' : 'spinner spinnerHidden'} />
+          </span>
         </div>
       </div>
 
@@ -853,13 +861,28 @@ export function SwarmViewPage() {
                           onClick={(event) => {
                             event.stopPropagation()
                             const ioName = card.ioNamesOut[0] ?? 'out'
-                            openTapViewer(card.role, 'OUT', ioName).catch((err) => {
-                              console.error(err)
-                              window.alert(err instanceof Error ? err.message : 'Failed to create debug tap.')
-                            })
+                            const key = tapBusyKey(card.role, 'OUT', ioName)
+                            if (tapBusy[key]) return
+                            setTapBusy((prev) => ({ ...prev, [key]: true }))
+                            openTapViewer(card.role, 'OUT', ioName)
+                              .catch((err) => {
+                                console.error(err)
+                                window.alert(err instanceof Error ? err.message : 'Failed to create debug tap.')
+                              })
+                              .finally(() => {
+                                setTapBusy((prev) => {
+                                  if (!prev[key]) return prev
+                                  const next = { ...prev }
+                                  delete next[key]
+                                  return next
+                                })
+                              })
                           }}
+                          disabled={tapBusy[tapBusyKey(card.role, 'OUT', card.ioNamesOut[0] ?? 'out')] === true}
                         >
-                          Tap OUT
+                          <span className="actionButtonContent">
+                            <span>Tap OUT</span>
+                          </span>
                         </button>
                         <button
                           type="button"
@@ -868,13 +891,28 @@ export function SwarmViewPage() {
                           onClick={(event) => {
                             event.stopPropagation()
                             const ioName = card.ioNamesIn[0] ?? 'in'
-                            openTapViewer(card.role, 'IN', ioName).catch((err) => {
-                              console.error(err)
-                              window.alert(err instanceof Error ? err.message : 'Failed to create debug tap.')
-                            })
+                            const key = tapBusyKey(card.role, 'IN', ioName)
+                            if (tapBusy[key]) return
+                            setTapBusy((prev) => ({ ...prev, [key]: true }))
+                            openTapViewer(card.role, 'IN', ioName)
+                              .catch((err) => {
+                                console.error(err)
+                                window.alert(err instanceof Error ? err.message : 'Failed to create debug tap.')
+                              })
+                              .finally(() => {
+                                setTapBusy((prev) => {
+                                  if (!prev[key]) return prev
+                                  const next = { ...prev }
+                                  delete next[key]
+                                  return next
+                                })
+                              })
                           }}
+                          disabled={tapBusy[tapBusyKey(card.role, 'IN', card.ioNamesIn[0] ?? 'in')] === true}
                         >
-                          Tap IN
+                          <span className="actionButtonContent">
+                            <span>Tap IN</span>
+                          </span>
                         </button>
                         <span className={`chip ${card.enabled === false ? 'chip-event' : 'chip-outcome'}`}>
                           {card.enabled == null ? 'enabled?' : card.enabled ? 'enabled' : 'disabled'}
