@@ -3,9 +3,7 @@ package io.pockethive.worker.sdk.api;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.observability.ObservabilityContext;
-import io.pockethive.observability.ObservabilityContextUtil;
 import java.io.IOException;
-import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -22,25 +20,29 @@ import java.util.Optional;
  * worker implementations. Builders support text, JSON, and binary bodies, as described in
  * {@code docs/sdk/worker-sdk-quickstart.md}.
  * <p>
- * A {@code WorkItem} can also carry an optional step history made up of {@link WorkStep} snapshots. Existing
- * workers that only use {@link #asString()} and {@link #headers()} remain single-step by default; step APIs such
- * as {@link #addStepPayload(String)}, {@link #addStep(String, Map)}, and {@link #clearHistory()} are opt-in.
+ * A {@code WorkItem} carries an explicit step history made up of {@link WorkStep} snapshots. Callers must
+ * provide the initial step; builders do not auto-seed history.
  */
 public final class WorkItem {
 
     private static final ObjectMapper DEFAULT_MAPPER = new ObjectMapper().findAndRegisterModules();
+    public static final String STEP_SERVICE_HEADER = "ph.step.service";
+    public static final String STEP_INSTANCE_HEADER = "ph.step.instance";
 
     private final Map<String, Object> headers;
-    private final Charset charset;
+    private final String messageId;
+    private final String contentType;
     private final ObservabilityContext observabilityContext;
     private final List<WorkStep> steps;
 
     private WorkItem(Map<String, Object> headers,
-                     Charset charset,
+                     String messageId,
+                     String contentType,
                      ObservabilityContext observabilityContext,
                      List<WorkStep> steps) {
         this.headers = Collections.unmodifiableMap(new LinkedHashMap<>(headers));
-        this.charset = Objects.requireNonNull(charset, "charset");
+        this.messageId = normalize(messageId);
+        this.contentType = normalize(contentType);
         this.observabilityContext = observabilityContext;
         this.steps = steps == null
             ? List.of()
@@ -51,7 +53,15 @@ public final class WorkItem {
      * Returns the raw item body. Callers should treat the returned array as read-only.
      */
     public byte[] body() {
-        return asString().getBytes(charset);
+        WorkPayloadEncoding encoding = payloadEncoding();
+        String payload = payload();
+        if (payload == null) {
+            return new byte[0];
+        }
+        if (encoding == WorkPayloadEncoding.BASE64) {
+            return java.util.Base64.getDecoder().decode(payload);
+        }
+        return payload.getBytes(StandardCharsets.UTF_8);
     }
 
     /**
@@ -62,13 +72,6 @@ public final class WorkItem {
     }
 
     /**
-     * Returns the charset used to interpret the body when reading it as text.
-     */
-    public Charset charset() {
-        return charset;
-    }
-
-    /**
      * Returns the propagated {@link ObservabilityContext}, if present.
      */
     public Optional<ObservabilityContext> observabilityContext() {
@@ -76,7 +79,7 @@ public final class WorkItem {
     }
 
     /**
-     * Decodes the body as a {@link String} using the configured {@link #charset()}.
+     * Returns the current step payload as a String.
      */
     public String asString() {
         if (steps == null || steps.isEmpty()) {
@@ -84,6 +87,30 @@ public final class WorkItem {
         }
         WorkStep last = steps.get(steps.size() - 1);
         return last.payload();
+    }
+
+    public WorkPayloadEncoding payloadEncoding() {
+        if (steps == null || steps.isEmpty()) {
+            return WorkPayloadEncoding.UTF_8;
+        }
+        WorkStep last = steps.get(steps.size() - 1);
+        return last.payloadEncoding();
+    }
+
+    public Map<String, Object> stepHeaders() {
+        if (steps == null || steps.isEmpty()) {
+            return Map.of();
+        }
+        WorkStep last = steps.get(steps.size() - 1);
+        return last.headers();
+    }
+
+    public String messageId() {
+        return messageId;
+    }
+
+    public String contentType() {
+        return contentType;
     }
 
     /**
@@ -121,62 +148,80 @@ public final class WorkItem {
      */
     public WorkItem addStepPayload(String payload) {
         Objects.requireNonNull(payload, "payload");
-        return addStep(payload, Map.of());
+        return addStep(payload, WorkPayloadEncoding.UTF_8, Map.of());
+    }
+
+    public WorkItem addStepPayload(WorkerInfo info, String payload) {
+        Objects.requireNonNull(info, "info");
+        Objects.requireNonNull(payload, "payload");
+        return addStep(info, payload, WorkPayloadEncoding.UTF_8, Map.of());
     }
 
     /**
      * Adds a new step with the given payload and per-step headers.
      * <p>
-     * The caller sees the updated payload and merged headers via {@link #asString()} and {@link #headers()},
-     * while {@link #steps()} exposes the full history (initial step plus appended steps).
+     * The caller sees the updated payload via {@link #asString()} while {@link #steps()} exposes the full
+     * history (initial step plus appended steps). Per-step headers are available via {@link #stepHeaders()}.
      */
     public WorkItem addStep(String payload, Map<String, Object> stepHeaders) {
+        return addStep(payload, WorkPayloadEncoding.UTF_8, stepHeaders);
+    }
+
+    public WorkItem addStep(WorkerInfo info, String payload, Map<String, Object> stepHeaders) {
+        return addStep(info, payload, WorkPayloadEncoding.UTF_8, stepHeaders);
+    }
+
+    public WorkItem addStep(WorkerInfo info,
+                            String payload,
+                            WorkPayloadEncoding payloadEncoding,
+                            Map<String, Object> stepHeaders) {
+        Objects.requireNonNull(info, "info");
+        Map<String, Object> stamped = withTracking(info, stepHeaders);
+        return addStep(payload, payloadEncoding, stamped);
+    }
+
+    public WorkItem addStep(String payload, WorkPayloadEncoding payloadEncoding, Map<String, Object> stepHeaders) {
         Objects.requireNonNull(payload, "payload");
-        Map<String, Object> newHeaders = new LinkedHashMap<>(this.headers);
-        if (stepHeaders != null && !stepHeaders.isEmpty()) {
-            newHeaders.putAll(stepHeaders);
-        }
+        Objects.requireNonNull(payloadEncoding, "payloadEncoding");
+        Map<String, Object> newStepHeaders = stepHeaders == null ? Map.of() : Map.copyOf(stepHeaders);
         List<WorkStep> newSteps = new ArrayList<>();
-        if (this.steps == null || this.steps.isEmpty()) {
-            // Seed history with the current state as step 0 (e.g. after DISABLED history).
-            newSteps.add(new WorkStep(0, asString(), this.headers));
-        } else {
+        if (this.steps != null && !this.steps.isEmpty()) {
             newSteps.addAll(this.steps);
         }
-        newSteps.add(new WorkStep(newSteps.size(), payload, newHeaders));
+        newSteps.add(new WorkStep(newSteps.size(), payload, payloadEncoding, newStepHeaders));
 
-        return new WorkItem(newHeaders, StandardCharsets.UTF_8, observabilityContext, newSteps);
+        return new WorkItem(this.headers, messageId, contentType, observabilityContext, newSteps);
     }
 
     /**
-     * Adds or removes a header on the current step and message.
+     * Adds or removes a header on the current step.
      * <p>
      * Passing {@code null} as the value clears the header.
      */
     public WorkItem addStepHeader(String name, Object value) {
         Objects.requireNonNull(name, "name");
-        Map<String, Object> newHeaders = new LinkedHashMap<>(this.headers);
-        if (value == null) {
-            newHeaders.remove(name);
-        } else {
-            newHeaders.put(name, value);
+        if (value == null && (STEP_SERVICE_HEADER.equals(name) || STEP_INSTANCE_HEADER.equals(name))) {
+            throw new IllegalArgumentException("Cannot remove required step header " + name);
         }
-
         List<WorkStep> newSteps;
         if (this.steps == null || this.steps.isEmpty()) {
-            WorkStep current = new WorkStep(0, asString(), newHeaders);
-            newSteps = List.of(current);
-        } else {
-            newSteps = new ArrayList<>(this.steps.size());
-            int lastIndex = this.steps.size() - 1;
-            for (int i = 0; i < lastIndex; i++) {
-                newSteps.add(this.steps.get(i));
-            }
-            WorkStep last = this.steps.get(lastIndex);
-            newSteps.add(new WorkStep(last.index(), last.payload(), newHeaders));
+            throw new IllegalStateException("Cannot add step header without any steps");
         }
+        newSteps = new ArrayList<>(this.steps.size());
+        int lastIndex = this.steps.size() - 1;
+        for (int i = 0; i < lastIndex; i++) {
+            newSteps.add(this.steps.get(i));
+        }
+        WorkStep last = this.steps.get(lastIndex);
+        Map<String, Object> updated = new LinkedHashMap<>(last.headers());
+        if (value == null) {
+            updated.remove(name);
+        } else {
+            updated.put(name, value);
+        }
+        newSteps.add(last.withHeaders(Map.copyOf(updated)));
 
-        return new WorkItem(newHeaders, charset, observabilityContext, newSteps);
+        return new WorkItem(this.headers, messageId, contentType, observabilityContext, newSteps);
     }
 
     /**
@@ -190,8 +235,7 @@ public final class WorkItem {
         }
         WorkStep last = steps.get(steps.size() - 1);
         WorkStep normalised = last.withIndex(0);
-        Map<String, Object> newHeaders = normalised.headers();
-        return new WorkItem(newHeaders, StandardCharsets.UTF_8, observabilityContext, List.of(normalised));
+        return new WorkItem(this.headers, messageId, contentType, observabilityContext, List.of(normalised));
     }
 
     /**
@@ -201,7 +245,7 @@ public final class WorkItem {
      * <ul>
      *   <li>{@link HistoryPolicy#FULL} – returns this instance unchanged.</li>
      *   <li>{@link HistoryPolicy#LATEST_ONLY} – equivalent to {@link #clearHistory()}.</li>
-     *   <li>{@link HistoryPolicy#DISABLED} – returns a view with the same body/headers but no recorded steps.</li>
+     *   <li>{@link HistoryPolicy#DISABLED} – returns a view with the same body/headers but no prior history.</li>
      * </ul>
      */
     public WorkItem applyHistoryPolicy(HistoryPolicy policy) {
@@ -220,10 +264,23 @@ public final class WorkItem {
             }
             WorkStep last = steps.get(steps.size() - 1);
             WorkStep normalised = last.withIndex(0);
-            Map<String, Object> newHeaders = normalised.headers();
-            return new WorkItem(newHeaders, StandardCharsets.UTF_8, observabilityContext, List.of(normalised));
+            return new WorkItem(this.headers, messageId, contentType, observabilityContext, List.of(normalised));
         }
         return this;
+    }
+
+    private static Map<String, Object> withTracking(WorkerInfo info, Map<String, Object> stepHeaders) {
+        Map<String, Object> headers = new LinkedHashMap<>();
+        if (stepHeaders != null && !stepHeaders.isEmpty()) {
+            headers.putAll(stepHeaders);
+        }
+        headers.put(STEP_SERVICE_HEADER, info.role());
+        headers.put(STEP_INSTANCE_HEADER, info.instanceId());
+        return Map.copyOf(headers);
+    }
+
+    private static String normalize(String value) {
+        return value == null || value.isBlank() ? null : value;
     }
 
     /**
@@ -256,17 +313,14 @@ public final class WorkItem {
      * Creates a builder pre-populated with this item's contents, including any recorded steps.
      */
     public Builder toBuilder() {
-        // The builder primarily needs headers/charset/steps; it will seed any missing step 0
-        // from the provided body when required, but callers that go through toBuilder() already
-        // have an explicit history.
-        return new Builder(new byte[0], this.headers, this.charset, this.observabilityContext, this.steps);
+        return new Builder(this.headers, messageId, contentType, this.observabilityContext, this.steps);
     }
 
     /**
-     * Returns a new builder with an empty body and UTF-8 charset.
+     * Returns a new builder without any steps.
      */
     public static Builder builder() {
-        return new Builder(new byte[0], Map.of(), StandardCharsets.UTF_8, null, null);
+        return new Builder(Map.of(), null, null, null, null);
     }
 
     /**
@@ -274,7 +328,13 @@ public final class WorkItem {
      */
     public static Builder text(String body) {
         Objects.requireNonNull(body, "body");
-        return new Builder(body.getBytes(StandardCharsets.UTF_8), Map.of(), StandardCharsets.UTF_8, null, null);
+        return builder().step(body, WorkPayloadEncoding.UTF_8, Map.of());
+    }
+
+    public static Builder text(WorkerInfo info, String body) {
+        Objects.requireNonNull(info, "info");
+        Objects.requireNonNull(body, "body");
+        return builder().step(info, body, WorkPayloadEncoding.UTF_8, Map.of());
     }
 
     /**
@@ -284,7 +344,18 @@ public final class WorkItem {
         Objects.requireNonNull(value, "value");
         try {
             byte[] bytes = DEFAULT_MAPPER.writeValueAsBytes(value);
-            return new Builder(bytes, Map.of(), StandardCharsets.UTF_8, null, null);
+            return builder().step(new String(bytes, StandardCharsets.UTF_8), WorkPayloadEncoding.UTF_8, Map.of());
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to serialize JSON value", e);
+        }
+    }
+
+    public static Builder json(WorkerInfo info, Object value) {
+        Objects.requireNonNull(info, "info");
+        Objects.requireNonNull(value, "value");
+        try {
+            byte[] bytes = DEFAULT_MAPPER.writeValueAsBytes(value);
+            return builder().step(info, new String(bytes, StandardCharsets.UTF_8), WorkPayloadEncoding.UTF_8, Map.of());
         } catch (IOException e) {
             throw new IllegalStateException("Failed to serialize JSON value", e);
         }
@@ -295,66 +366,34 @@ public final class WorkItem {
      */
     public static Builder binary(byte[] body) {
         Objects.requireNonNull(body, "body");
-        return new Builder(body.clone(), Map.of(), StandardCharsets.UTF_8, null, null);
+        String encoded = java.util.Base64.getEncoder().encodeToString(body);
+        return builder().step(encoded, WorkPayloadEncoding.BASE64, Map.of());
+    }
+
+    public static Builder binary(WorkerInfo info, byte[] body) {
+        Objects.requireNonNull(info, "info");
+        Objects.requireNonNull(body, "body");
+        String encoded = java.util.Base64.getEncoder().encodeToString(body);
+        return builder().step(info, encoded, WorkPayloadEncoding.BASE64, Map.of());
     }
 
     public static final class Builder {
-        private byte[] body;
         private Map<String, Object> headers;
-        private Charset charset;
+        private String messageId;
+        private String contentType;
         private ObservabilityContext observabilityContext;
         private List<WorkStep> steps;
 
-        private Builder(byte[] body,
-                        Map<String, Object> headers,
-                        Charset charset,
+        private Builder(Map<String, Object> headers,
+                        String messageId,
+                        String contentType,
                         ObservabilityContext observabilityContext,
                         List<WorkStep> steps) {
-            this.body = body;
             this.headers = new LinkedHashMap<>(headers);
-            this.charset = charset;
+            this.messageId = messageId;
+            this.contentType = contentType;
             this.observabilityContext = observabilityContext;
             this.steps = (steps == null || steps.isEmpty()) ? null : List.copyOf(steps);
-        }
-
-        /**
-         * Sets the raw body contents. The provided array is defensively copied.
-         */
-        public Builder body(byte[] body) {
-            this.body = Objects.requireNonNull(body, "body").clone();
-            return this;
-        }
-
-        /**
-         * Sets a UTF-8 encoded text body.
-         */
-        public Builder textBody(String body) {
-            Objects.requireNonNull(body, "body");
-            this.body = body.getBytes(StandardCharsets.UTF_8);
-            this.charset = StandardCharsets.UTF_8;
-            return this;
-        }
-
-        /**
-         * Serialises a value as JSON and stores it in the body using UTF-8 encoding.
-         */
-        public Builder jsonBody(Object value) {
-            Objects.requireNonNull(value, "value");
-            try {
-                this.body = DEFAULT_MAPPER.writeValueAsBytes(value);
-                this.charset = StandardCharsets.UTF_8;
-            } catch (IOException e) {
-                throw new IllegalStateException("Failed to serialize JSON value", e);
-            }
-            return this;
-        }
-
-        /**
-         * Overrides the charset associated with the body for text conversions.
-         */
-        public Builder charset(Charset charset) {
-            this.charset = Objects.requireNonNull(charset, "charset");
-            return this;
         }
 
         /**
@@ -380,14 +419,66 @@ public final class WorkItem {
             return this;
         }
 
+        public Builder messageId(String messageId) {
+            this.messageId = messageId;
+            return this;
+        }
+
+        public Builder contentType(String contentType) {
+            this.contentType = contentType;
+            return this;
+        }
+
         /**
-         * Associates an {@link ObservabilityContext} with the item and synchronises the corresponding header.
+         * Associates an {@link ObservabilityContext} with the item.
          */
         public Builder observabilityContext(ObservabilityContext context) {
             this.observabilityContext = context;
-            if (context == null) {
-                this.headers.remove(ObservabilityContextUtil.HEADER);
+            return this;
+        }
+
+        public Builder step(String payload, Map<String, Object> stepHeaders) {
+            return step(payload, WorkPayloadEncoding.UTF_8, stepHeaders);
+        }
+
+        public Builder step(String payload, WorkPayloadEncoding payloadEncoding, Map<String, Object> stepHeaders) {
+            Objects.requireNonNull(payload, "payload");
+            Objects.requireNonNull(payloadEncoding, "payloadEncoding");
+            Map<String, Object> headersCopy = stepHeaders == null ? Map.of() : Map.copyOf(stepHeaders);
+            List<WorkStep> next = this.steps == null ? new ArrayList<>() : new ArrayList<>(this.steps);
+            next.add(new WorkStep(next.size(), payload, payloadEncoding, headersCopy));
+            this.steps = List.copyOf(next);
+            return this;
+        }
+
+        public Builder step(WorkerInfo info, String payload, Map<String, Object> stepHeaders) {
+            return step(info, payload, WorkPayloadEncoding.UTF_8, stepHeaders);
+        }
+
+        public Builder step(WorkerInfo info, String payload, WorkPayloadEncoding payloadEncoding, Map<String, Object> stepHeaders) {
+            Objects.requireNonNull(info, "info");
+            Map<String, Object> stamped = withTracking(info, stepHeaders);
+            return step(payload, payloadEncoding, stamped);
+        }
+
+        public Builder stepHeader(String name, Object value) {
+            Objects.requireNonNull(name, "name");
+            if (value == null && (STEP_SERVICE_HEADER.equals(name) || STEP_INSTANCE_HEADER.equals(name))) {
+                throw new IllegalArgumentException("Cannot remove required step header " + name);
             }
+            if (steps == null || steps.isEmpty()) {
+                throw new IllegalStateException("Cannot set step header without any steps");
+            }
+            List<WorkStep> next = new ArrayList<>(steps);
+            WorkStep last = next.remove(next.size() - 1);
+            Map<String, Object> headersCopy = new LinkedHashMap<>(last.headers());
+            if (value == null) {
+                headersCopy.remove(name);
+            } else {
+                headersCopy.put(name, value);
+            }
+            next.add(last.withHeaders(Map.copyOf(headersCopy)));
+            this.steps = List.copyOf(next);
             return this;
         }
 
@@ -415,26 +506,21 @@ public final class WorkItem {
          * Builds an immutable {@link WorkItem} instance.
          */
         public WorkItem build() {
-            Charset resolvedCharset = charset == null ? StandardCharsets.UTF_8 : charset;
             Map<String, Object> copy = new LinkedHashMap<>(headers);
             ObservabilityContext context = observabilityContext;
-            if (context == null) {
-                Object candidate = copy.get(ObservabilityContextUtil.HEADER);
-                if (candidate instanceof ObservabilityContext ctx) {
-                    context = ctx;
-                } else if (candidate instanceof String header && !header.isBlank()) {
-                    context = ObservabilityContextUtil.fromHeader(header);
-                }
-            } else {
-                copy.put(ObservabilityContextUtil.HEADER, ObservabilityContextUtil.toHeader(context));
-            }
             List<WorkStep> effectiveSteps = this.steps;
             if (effectiveSteps == null || effectiveSteps.isEmpty()) {
-                // Seed history with the initial state as step 0 so history is explicit from construction.
-                String initialPayload = new String(body, resolvedCharset);
-                effectiveSteps = List.of(new WorkStep(0, initialPayload, copy));
+                throw new IllegalStateException("WorkItem must include at least one explicit step");
             }
-            return new WorkItem(copy, resolvedCharset, context, effectiveSteps);
+            for (WorkStep step : effectiveSteps) {
+                Map<String, Object> stepHeaders = step.headers();
+                if (!stepHeaders.containsKey(STEP_SERVICE_HEADER) || !stepHeaders.containsKey(STEP_INSTANCE_HEADER)) {
+                    throw new IllegalStateException(
+                        "WorkItem step headers must include " + STEP_SERVICE_HEADER + " and "
+                            + STEP_INSTANCE_HEADER + ": " + stepHeaders);
+                }
+            }
+            return new WorkItem(copy, messageId, contentType, context, effectiveSteps);
         }
     }
 }

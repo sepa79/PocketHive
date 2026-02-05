@@ -115,7 +115,8 @@ public final class ControlPlaneTestFixtures {
             validated.swarmId(), validated.role(), validated.instanceId());
         ControlPlaneTopologyDescriptor descriptor = ControlPlaneTopologyDescriptorFactory
             .forWorkerRole(validated.role(), settings);
-        return ControlPlaneEmitter.using(descriptor, RoleContext.fromIdentity(validated), requirePublisher(publisher));
+        return ControlPlaneEmitter.using(descriptor, RoleContext.fromIdentity(validated), requirePublisher(publisher),
+            runtimeMeta(validated));
     }
 
     public static ControlPlaneEmitter managerEmitter(ControlPlanePublisher publisher, ControlPlaneIdentity identity) {
@@ -124,7 +125,15 @@ public final class ControlPlaneTestFixtures {
             validated.swarmId(), "ph.control", Map.of());
         ControlPlaneTopologyDescriptor descriptor = ControlPlaneTopologyDescriptorFactory
             .forManagerRole(validated.role(), settings);
-        return ControlPlaneEmitter.using(descriptor, RoleContext.fromIdentity(validated), requirePublisher(publisher));
+        return ControlPlaneEmitter.using(descriptor, RoleContext.fromIdentity(validated), requirePublisher(publisher),
+            runtimeMeta(validated));
+    }
+
+    private static Map<String, Object> runtimeMeta(ControlPlaneIdentity identity) {
+        if (identity == null || io.pockethive.control.ControlScope.ALL.equals(identity.swarmId())) {
+            return null;
+        }
+        return Map.of("templateId", "tpl-fixture", "runId", "run-fixture");
     }
 
     private static ControlPlanePublisher requirePublisher(ControlPlanePublisher publisher) {

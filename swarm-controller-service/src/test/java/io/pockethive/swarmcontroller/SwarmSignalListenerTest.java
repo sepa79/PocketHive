@@ -37,8 +37,9 @@ import java.util.Map;
 import java.util.OptionalLong;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
@@ -73,11 +74,12 @@ class SwarmSignalListenerTest {
         mapper,
         SwarmControllerTestProperties.defaults(),
         io.pockethive.swarmcontroller.runtime.SwarmJournal.noop(),
-        "");
+        "run-1");
   }
 
   private static final Map<String, QueueStats> DEFAULT_QUEUE_STATS =
       Map.of(TRAFFIC_PREFIX + ".work.in", new QueueStats(7L, 3, OptionalLong.of(42L)));
+  private static final Map<String, Object> RUNTIME_META = Map.of("templateId", "tpl-1", "runId", "run-1");
 
   private void stubLifecycleDefaults() {
     lenient().when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
@@ -87,6 +89,7 @@ class SwarmSignalListenerTest {
         "exchange", HIVE_EXCHANGE,
         "edges", List.of()));
     lenient().when(lifecycle.isReadyForWork()).thenReturn(true);
+    lenient().when(lifecycle.hasFreshWorkerStatusSnapshotsSince(anyLong())).thenReturn(true);
     lenient().when(lifecycle.trafficPolicy()).thenReturn(null);
   }
 
@@ -104,15 +107,15 @@ class SwarmSignalListenerTest {
 
   private String signal(String sig, String instance, String id, String corr) {
     try {
-      ControlSignal cs = ControlSignal.forInstance(
-          sig,
-          TEST_SWARM_ID,
-          "swarm-controller",
-          instance,
-          ORIGIN,
-          corr,
-          id,
-          null);
+	      ControlSignal cs = ControlSignal.forInstance(
+	          sig,
+	          TEST_SWARM_ID,
+	          "swarm-controller",
+	          instance,
+	          ORIGIN,
+	          corr,
+	          id,
+	          null);
       return mapper.writeValueAsString(cs);
     } catch (Exception e) {
       throw new IllegalStateException(e);
@@ -122,15 +125,15 @@ class SwarmSignalListenerTest {
   private String configAllSignal(boolean enabled) {
     try {
       Map<String, Object> args = Map.of("enabled", enabled);
-      ControlSignal cs = ControlSignal.forInstance(
-          ControlPlaneSignals.CONFIG_UPDATE,
-          TEST_SWARM_ID,
-          "swarm-controller",
-          "ALL",
-          ORIGIN,
-          "c-all",
-          "i-all",
-          args);
+	      ControlSignal cs = ControlSignal.forInstance(
+	          ControlPlaneSignals.CONFIG_UPDATE,
+	          TEST_SWARM_ID,
+	          "swarm-controller",
+	          "ALL",
+	          ORIGIN,
+	          "c-all",
+	          "i-all",
+	          args);
       return mapper.writeValueAsString(cs);
     } catch (Exception e) {
       throw new IllegalStateException(e);
@@ -140,15 +143,15 @@ class SwarmSignalListenerTest {
   private String configUpdateSignal(String instance, String idempotencyKey, String correlationId, Map<String, Object> patch) {
     try {
       Map<String, Object> args = patch != null ? patch : null;
-      ControlSignal cs = ControlSignal.forInstance(
-          ControlPlaneSignals.CONFIG_UPDATE,
-          TEST_SWARM_ID,
-          "swarm-controller",
-          instance,
-          ORIGIN,
-          correlationId,
-          idempotencyKey,
-          args);
+	      ControlSignal cs = ControlSignal.forInstance(
+	          ControlPlaneSignals.CONFIG_UPDATE,
+	          TEST_SWARM_ID,
+	          "swarm-controller",
+	          instance,
+	          ORIGIN,
+	          correlationId,
+	          idempotencyKey,
+	          args);
       return mapper.writeValueAsString(cs);
     } catch (Exception e) {
       throw new IllegalStateException(e);
@@ -157,7 +160,7 @@ class SwarmSignalListenerTest {
 
   private String status(String swarmId, String role, String instance, boolean enabled) {
     return """
-        {"timestamp":"2024-01-01T00:00:00Z","version":"1","kind":"metric","type":"status-delta","origin":"worker-1","scope":{"swarmId":"%s","role":"%s","instance":"%s"},"correlationId":null,"idempotencyKey":null,"data":{"enabled":%s,"tps":0}}
+        {"timestamp":"2024-01-01T00:00:00Z","version":"1","kind":"metric","type":"status-delta","origin":"worker-1","scope":{"swarmId":"%s","role":"%s","instance":"%s"},"correlationId":null,"idempotencyKey":null,"runtime":{"templateId":"tpl-1","runId":"run-1"},"data":{"enabled":%s,"tps":0}}
         """.formatted(swarmId, role, instance, enabled);
   }
 
@@ -201,6 +204,7 @@ class SwarmSignalListenerTest {
         ControlScope.forInstance(TEST_SWARM_ID, role, instance),
         "cfg-corr",
         "cfg-id",
+        RUNTIME_META,
         new AlertMessage.AlertData(
             "error",
             "ValidationError",
@@ -245,50 +249,55 @@ class SwarmSignalListenerTest {
   @Test
   void handleRejectsBlankRoutingKey() {
     SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
+    clearInvocations(lifecycle, rabbit);
 
-    assertThatThrownBy(() -> listener.handle("{}", " "))
-        .isInstanceOf(IllegalArgumentException.class)
-        .hasMessageContaining("routing key");
+    assertThatCode(() -> listener.handle("{}", " "))
+        .doesNotThrowAnyException();
+    verifyNoInteractions(lifecycle, rabbit);
   }
 
   @Test
   void handleRejectsNullRoutingKey() {
     SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
+    clearInvocations(lifecycle, rabbit);
 
-    assertThatThrownBy(() -> listener.handle("{}", null))
-        .isInstanceOf(IllegalArgumentException.class)
-        .hasMessageContaining("routing key");
+    assertThatCode(() -> listener.handle("{}", null))
+        .doesNotThrowAnyException();
+    verifyNoInteractions(lifecycle, rabbit);
   }
 
   @Test
   void statusEventRequiresParsableRoutingKey() {
     SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
+    clearInvocations(lifecycle, rabbit);
 
-    assertThatThrownBy(() -> listener.handle(status(TEST_SWARM_ID, "swarm-controller", "inst", true), "event.metric.status-"))
-        .isInstanceOf(IllegalArgumentException.class)
-        .hasMessageContaining("confirmation scope");
+    assertThatCode(() -> listener.handle(status(TEST_SWARM_ID, "swarm-controller", "inst", true), "event.metric.status-"))
+        .doesNotThrowAnyException();
+    verifyNoInteractions(lifecycle, rabbit);
   }
 
   @Test
   void statusEventRequiresRoleSegment() {
     SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
+    clearInvocations(lifecycle, rabbit);
 
     String routingKey = "event.metric.status-delta.%s..inst".formatted(TEST_SWARM_ID);
 
-    assertThatThrownBy(() -> listener.handle(status(TEST_SWARM_ID, "swarm-controller", "inst", true), routingKey))
-        .isInstanceOf(IllegalArgumentException.class)
-        .hasMessageContaining("role segment");
+    assertThatCode(() -> listener.handle(status(TEST_SWARM_ID, "swarm-controller", "inst", true), routingKey))
+        .doesNotThrowAnyException();
+    verifyNoInteractions(lifecycle, rabbit);
   }
 
   @Test
   void statusEventRequiresInstanceSegment() {
     SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
+    clearInvocations(lifecycle, rabbit);
 
     String routingKey = "event.metric.status-delta.%s.swarm-controller.".formatted(TEST_SWARM_ID);
 
-    assertThatThrownBy(() -> listener.handle(status(TEST_SWARM_ID, "swarm-controller", "inst", true), routingKey))
-        .isInstanceOf(IllegalArgumentException.class)
-        .hasMessageContaining("instance segment");
+    assertThatCode(() -> listener.handle(status(TEST_SWARM_ID, "swarm-controller", "inst", true), routingKey))
+        .doesNotThrowAnyException();
+    verifyNoInteractions(lifecycle, rabbit);
   }
 
   @Test
@@ -646,7 +655,7 @@ class SwarmSignalListenerTest {
   }
 
   @Test
-		  void configUpdateProducesJournalRequestAndAppliedEvents() throws Exception {
+  void configUpdateProducesJournalRequestAndAppliedEvents() throws Exception {
 		    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
 		    RecordingJournal journal = new RecordingJournal();
 		    SwarmSignalListener listener = new SwarmSignalListener(
@@ -656,7 +665,7 @@ class SwarmSignalListenerTest {
 	        mapper,
 	        SwarmControllerTestProperties.defaults(),
 	        journal,
-          "");
+          "run-1");
         markInitialized(listener);
 	    String body = configUpdateSignal("inst", "i4", "c4", Map.of("enabled", true));
 	
@@ -665,8 +674,27 @@ class SwarmSignalListenerTest {
 	    java.util.List<String> entries = journal.entries.stream()
 	        .map(e -> e.kind() + "." + e.type())
 	        .toList();
-	    assertThat(entries).contains("signal.config-update", "outcome.config-update");
-	  }
+    assertThat(entries).contains("signal.config-update", "outcome.config-update");
+  }
+
+  @Test
+  void blankRoutingKeyIsJournaledAsDrop() {
+    RecordingJournal journal = new RecordingJournal();
+    SwarmSignalListener listener = new SwarmSignalListener(
+        lifecycle,
+        rabbit,
+        "inst",
+        mapper,
+        SwarmControllerTestProperties.defaults(),
+        journal,
+        "run-1");
+
+    assertThatCode(() -> listener.handle("{}", " "))
+        .doesNotThrowAnyException();
+
+    assertThat(journal.entries.stream().map(e -> e.kind() + "." + e.type()).toList())
+        .contains("control-plane.event-dropped");
+  }
 
   @Test
   void configUpdateAllProcessedOnce() throws Exception {

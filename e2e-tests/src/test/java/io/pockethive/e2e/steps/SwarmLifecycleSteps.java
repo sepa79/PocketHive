@@ -12,6 +12,7 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -70,6 +71,14 @@ public class SwarmLifecycleSteps {
   private static final String MODERATOR_ROLE = "moderator";
   private static final String PROCESSOR_ROLE = "processor";
   private static final String POSTPROCESSOR_ROLE = "postprocessor";
+  private static final String LEGACY_SERVICE_HEADER = "x-ph-service";
+  private static final String STEP_SERVICE_HEADER = "ph.step.service";
+  private static final String STEP_INSTANCE_HEADER = "ph.step.instance";
+  private static final List<String> PROCESSOR_STEP_HEADERS = List.of(
+      "x-ph-processor-duration-ms",
+      "x-ph-processor-connection-latency-ms",
+      "x-ph-processor-success",
+      "x-ph-processor-status");
 
   private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
   private ServiceEndpoints endpoints;
@@ -174,12 +183,14 @@ public class SwarmLifecycleSteps {
     ensureTemplate();
     String idempotencyKey = idKey("create");
     String sutId = resolveSutIdForScenario();
+    String variablesProfileId = resolveVariablesProfileIdForScenario();
     SwarmCreateRequest request = new SwarmCreateRequest(
         scenarioDetails.id(),
         idempotencyKey,
         "e2e lifecycle create",
         null,
-        sutId);
+        sutId,
+        variablesProfileId);
     createResponse = orchestratorClient.createSwarm(swarmId, request);
     LOGGER.info("Create request accepted correlation={} watch={}", createResponse.correlationId(), createResponse.watch());
   }
@@ -225,6 +236,22 @@ public class SwarmLifecycleSteps {
     return switch (scenarioId) {
       case "templated-rest", "redis-dataset-demo" -> "wiremock-local";
       case "tcp-socket-demo" -> "tcp-mock-local";
+      case "variables-demo" -> "sut-A";
+      default -> null;
+    };
+  }
+
+  /**
+   * Select the variables profile id for scenarios that include variables.yaml.
+   */
+  private String resolveVariablesProfileIdForScenario() {
+    ensureTemplate();
+    String scenarioId = scenarioDetails != null ? scenarioDetails.id() : null;
+    if (scenarioId == null) {
+      return null;
+    }
+    return switch (scenarioId) {
+      case "variables-demo" -> "france";
       default -> null;
     };
   }
@@ -350,6 +377,29 @@ public class SwarmLifecycleSteps {
         assertFalse(delta.data().extra().containsKey("config"),
             () -> "status-delta should not include data.config for role " + actualRoleName(role));
       });
+    }
+  }
+
+  @And("the status-full snapshots include runtime metadata")
+  public void theStatusFullSnapshotsIncludeRuntimeMetadata() {
+    ensureStartResponse();
+    captureWorkerStatuses(true);
+
+    Optional<ControlPlaneEvents.StatusEnvelope> controllerEnv = controlPlaneEvents.statusesForSwarm(swarmId).stream()
+        .filter(env -> env != null
+            && env.status() != null
+            && "status-full".equalsIgnoreCase(env.status().type())
+            && roleMatches("swarm-controller", env.status().role()))
+        .max(Comparator.comparing(ControlPlaneEvents.StatusEnvelope::receivedAt));
+    assertTrue(controllerEnv.isPresent(), "Expected status-full snapshot for swarm-controller");
+    assertRuntimeMeta(controllerEnv.get().status().runtime(), "swarm-controller");
+
+    for (String role : workerRoles()) {
+      String instance = workerInstances.get(role);
+      assertNotNull(instance, () -> "Missing instance for role " + actualRoleName(role));
+      StatusEvent full = latestStatusFull(actualRoleName(role), instance)
+          .orElseThrow(() -> new AssertionError("No status-full captured for role " + actualRoleName(role)));
+      assertRuntimeMeta(full.runtime(), actualRoleName(role));
     }
   }
 
@@ -844,7 +894,110 @@ public class SwarmLifecycleSteps {
         assertTrue(generatorMatched,
             () -> "No WorkItem step payload matched templated pattern /" + generatorPattern
                 + "/ for templated-rest scenario. payloads=" + stepPayloads);
+      } else if ("variables-demo".equals(scenarioId)) {
+        boolean matched = stepPayloads.stream()
+            .anyMatch(payload -> {
+              if (payload == null || payload.isBlank()) {
+                return false;
+              }
+              try {
+                JsonNode node = objectMapper.readTree(payload);
+                if (!node.has("path") || !node.has("method") || !node.has("headers") || !node.has("body")) {
+                  return false;
+                }
+                String body = node.path("body").asText("");
+                if (body.isBlank() || body.contains("{{")) {
+                  return false;
+                }
+                JsonNode rendered = objectMapper.readTree(body);
+                return rendered.path("customerId").asText("").equals("CUST-FR-A")
+                    && rendered.path("loopCount").asInt(-1) == 7
+                    && rendered.path("loopPlusOne").asInt(-1) == 8
+                    && rendered.path("enableFoo").asBoolean() == true
+                    && rendered.path("profile").asText("").equals("france");
+              } catch (Exception ex) {
+                return false;
+              }
+            });
+        assertTrue(matched,
+            () -> "No rendered HTTP request step matched expected vars for variables-demo (profile=france, sut=sut-A). payloads=" + stepPayloads);
       }
+    } finally {
+      message.ack();
+    }
+  }
+
+  @Then("the final queue keeps processor headers in step history only")
+  public void theFinalQueueKeepsProcessorHeadersInStepHistoryOnly() throws Exception {
+    ensureStartResponse();
+    ensureFinalQueueTap();
+    String queue = tapQueueName != null ? tapQueueName : finalQueueName();
+
+    WorkQueueConsumer.Message message = workQueueConsumer.consumeNext(SwarmAssertions.defaultTimeout())
+        .orElseThrow(() -> new AssertionError("No message observed on tap queue " + queue));
+
+	    try {
+	      JsonNode envelope = objectMapper.readTree(message.body());
+	      JsonNode envelopeHeaders = envelope.path("headers");
+	      if (!envelopeHeaders.isObject()) {
+	        throw new AssertionError("Final queue WorkItem envelope did not include headers object: " + envelopeHeaders);
+	      }
+	      if (envelopeHeaders.has(LEGACY_SERVICE_HEADER)) {
+	        throw new AssertionError("WorkItem envelope headers should not include " + LEGACY_SERVICE_HEADER
+	            + ": " + envelopeHeaders);
+	      }
+	      JsonNode stepsNode = envelope.path("steps");
+	      if (!stepsNode.isArray() || stepsNode.isEmpty()) {
+	        throw new AssertionError("Final queue WorkItem did not carry any steps");
+	      }
+      List<String> stepServices = new ArrayList<>();
+      boolean sawProcessorStep = false;
+      Map<String, Object> messageHeaders = message.headers();
+      if (messageHeaders.containsKey(LEGACY_SERVICE_HEADER)) {
+        throw new AssertionError("WorkItem message headers should not include " + LEGACY_SERVICE_HEADER
+            + ": " + messageHeaders);
+      }
+      int stepIndex = 0;
+      for (JsonNode stepNode : stepsNode) {
+        JsonNode stepHeaders = stepNode.path("headers");
+        if (!stepHeaders.isObject()) {
+          throw new AssertionError("WorkItem step " + stepIndex + " did not include headers");
+        }
+        if (stepHeaders.has(LEGACY_SERVICE_HEADER)) {
+          throw new AssertionError("WorkItem step " + stepIndex + " should not include " + LEGACY_SERVICE_HEADER
+              + ": " + stepHeaders);
+        }
+        if (!stepHeaders.has(STEP_SERVICE_HEADER) || !stepHeaders.has(STEP_INSTANCE_HEADER)) {
+          throw new AssertionError("WorkItem step " + stepIndex + " missing tracking headers: " + stepHeaders);
+        }
+        String service = stepHeaders.path(STEP_SERVICE_HEADER).asText("");
+        String instance = stepHeaders.path(STEP_INSTANCE_HEADER).asText("");
+        if (service == null || service.isBlank()) {
+          throw new AssertionError("WorkItem step " + stepIndex + " header " + STEP_SERVICE_HEADER + " must not be blank");
+        }
+        if (instance == null || instance.isBlank()) {
+          throw new AssertionError("WorkItem step " + stepIndex + " header " + STEP_INSTANCE_HEADER + " must not be blank");
+        }
+        stepServices.add(service.toLowerCase(Locale.ROOT));
+
+        if (hasAnyProcessorHeader(stepHeaders)) {
+          sawProcessorStep = true;
+          if (!roleMatches(PROCESSOR_ROLE, service)) {
+            throw new AssertionError("Processor step did not include " + STEP_SERVICE_HEADER + "=processor: "
+                + stepHeaders);
+          }
+          for (String header : PROCESSOR_STEP_HEADERS) {
+            if (messageHeaders.containsKey(header)) {
+              throw new AssertionError("Processor header " + header + " leaked into message headers: " + messageHeaders);
+            }
+          }
+        }
+        stepIndex += 1;
+      }
+
+      assertTrue(sawProcessorStep, "No WorkItem step carried processor headers");
+      assertTrue(containsChain(stepServices, List.of(GENERATOR_ROLE, PROCESSOR_ROLE)),
+          () -> "Step tracking headers missing generator→processor chain: " + stepServices);
     } finally {
       message.ack();
     }
@@ -893,6 +1046,103 @@ public class SwarmLifecycleSteps {
           () -> "Expected at least one HTTP request envelope step (path/method/headers/body) but saw: " + stepPayloads);
       assertTrue(hasHttpResponse,
           () -> "Expected at least one HTTP response step (status/body) but saw: " + stepPayloads);
+    } finally {
+      message.ack();
+    }
+  }
+
+  @Then("the redis dataset demo payloads are fully rendered")
+  public void redisDatasetDemoPayloadsAreFullyRendered() throws Exception {
+    ensureStartResponse();
+    ensureFinalQueueTap();
+    String queue = tapQueueName != null ? tapQueueName : finalQueueName();
+
+    WorkQueueConsumer.Message message = workQueueConsumer.consumeNext(SwarmAssertions.defaultTimeout())
+        .orElseThrow(() -> new AssertionError("No message observed on tap queue " + queue));
+
+    try {
+      JsonNode root = objectMapper.readTree(message.bodyAsString());
+      JsonNode stepsNode = root.path("steps");
+      assertTrue(stepsNode.isArray() && stepsNode.size() > 0,
+          () -> "Redis dataset demo WorkItem carried no steps: " + root);
+
+      JsonNode datasetPayload = null;
+      String datasetRaw = null;
+      JsonNode requestEnvelope = null;
+      JsonNode responseEnvelope = null;
+
+      for (JsonNode stepNode : stepsNode) {
+        String payload = stepNode.path("payload").asText("");
+        if (payload.isBlank()) {
+          continue;
+        }
+        JsonNode payloadNode = parseJsonNode(payload);
+        if (payloadNode == null || !payloadNode.isObject()) {
+          continue;
+        }
+        if (looksLikeHttpRequestEnvelope(payloadNode)) {
+          requestEnvelope = payloadNode;
+          continue;
+        }
+        if (looksLikeHttpResponseEnvelope(payloadNode)) {
+          responseEnvelope = payloadNode;
+          continue;
+        }
+        if (looksLikeDatasetPayload(payloadNode)) {
+          datasetPayload = payloadNode;
+          datasetRaw = payload;
+        }
+      }
+
+      assertNotNull(requestEnvelope, "HTTP request envelope not found in WorkItem steps");
+      assertNotNull(responseEnvelope, "HTTP response envelope not found in WorkItem steps");
+
+      JsonNode headersNode = requestEnvelope.path("headers");
+      String demoCall = headerValue(headersNode, "x-demo-call");
+      assertNotNull(demoCall, "HTTP request headers missing x-demo-call: " + requestEnvelope);
+      assertTrue(Set.of("auth", "balance", "topup").contains(demoCall),
+          () -> "Unexpected x-demo-call value: " + demoCall);
+
+      assertEquals("/api/redis-demo", requestEnvelope.path("path").asText(),
+          "HTTP request path should match redis demo");
+      assertEquals("POST", requestEnvelope.path("method").asText(),
+          "HTTP request method should be POST");
+      assertEquals("application/json", headerValue(headersNode, "content-type"),
+          "HTTP request should advertise JSON content type");
+
+      String requestBody = requestEnvelope.path("body").asText(null);
+      assertNotNull(requestBody, "HTTP request body was empty");
+      assertFalse(requestBody.contains("{{"),
+          () -> "HTTP request body appears to contain unrendered templates: " + requestBody);
+
+      JsonNode requestBodyNode = parseJsonNode(requestBody);
+      assertNotNull(requestBodyNode, "HTTP request body was not valid JSON: " + requestBody);
+
+      if (datasetPayload == null) {
+        datasetPayload = requestBodyNode;
+      }
+      if (datasetRaw != null) {
+        assertFalse(datasetRaw.contains("{{"),
+            "Dataset payload appears to contain unrendered templates: " + datasetRaw);
+      }
+      assertDatasetPayload(datasetPayload);
+
+      String customerCode = requestBodyNode.path("customerCode").asText(null);
+      assertNotNull(customerCode, "HTTP request body missing customerCode");
+      assertTrue(Set.of("custA", "custB").contains(customerCode),
+          () -> "Unexpected customerCode: " + customerCode);
+
+      int status = responseEnvelope.path("status").asInt(-1);
+      assertEquals(200, status, "HTTP response status should be 200");
+
+      String responseBody = responseEnvelope.path("body").asText(null);
+      assertNotNull(responseBody, "HTTP response body was empty");
+      JsonNode responseNode = parseJsonNode(responseBody);
+      assertNotNull(responseNode, "HTTP response body was not valid JSON: " + responseBody);
+
+      String expectedMessage = "processed " + customerCode + " (" + demoCall + ")";
+      assertEquals(expectedMessage, responseNode.path("message").asText(),
+          "Unexpected response message for customer=" + customerCode + " call=" + demoCall);
     } finally {
       message.ack();
     }
@@ -1226,6 +1476,15 @@ public class SwarmLifecycleSteps {
     return Map.of();
   }
 
+  private void assertRuntimeMeta(Map<String, Object> runtime, String label) {
+    assertNotNull(runtime, () -> "Missing runtime metadata for " + label);
+    assertFalse(runtime.isEmpty(), () -> "Runtime metadata should not be empty for " + label);
+    assertTrue(runtime.containsKey("runId"), () -> "Runtime metadata missing runId for " + label);
+    assertTrue(runtime.containsKey("containerId"), () -> "Runtime metadata missing containerId for " + label);
+    assertTrue(runtime.containsKey("image"), () -> "Runtime metadata missing image for " + label);
+    assertTrue(runtime.containsKey("stackName"), () -> "Runtime metadata missing stackName for " + label);
+  }
+
   private Map<String, Object> snapshotProcessed(Map<String, Object> snapshot) {
     if (snapshot == null) {
       return Map.of();
@@ -1324,7 +1583,8 @@ public class SwarmLifecycleSteps {
         || "templated-rest".equals(scenarioId)
         || "history-policy-demo".equals(scenarioId)
         || "local-rest".equals(scenarioId)
-        || "local-rest-with-multi-generators".equals(scenarioId)) {
+        || "local-rest-with-multi-generators".equals(scenarioId)
+        || "variables-demo".equals(scenarioId)) {
       return "final";
     }
     if ("redis-dataset-demo".equals(scenarioId)
@@ -1382,11 +1642,13 @@ public class SwarmLifecycleSteps {
     if (workQueueConsumer != null) {
       return;
     }
-    String exchange = hiveExchangeName();
-    String routingKey = finalQueueName();
-    workQueueConsumer = WorkQueueConsumer.forExchangeTap(rabbitSubscriptions.connectionFactory(), exchange, routingKey);
-    tapQueueName = workQueueConsumer.queueName();
-    LOGGER.info("Subscribed to final exchange tap queue={} exchange={} routingKey={}", tapQueueName, exchange, routingKey);
+    // For the final sink queue we can safely consume from the queue directly (there should be no
+    // application consumer draining it). Using an exchange tap here is racy because the swarm may
+    // publish the final WorkItem before we bind the ephemeral tap queue.
+    String queueName = finalQueueName();
+    workQueueConsumer = new WorkQueueConsumer(rabbitSubscriptions.connectionFactory(), queueName);
+    tapQueueName = queueName;
+    LOGGER.info("Subscribed to final queue={} (direct consumer)", queueName);
   }
 
   private void ensureGeneratorTapForTemplating() {
@@ -1499,6 +1761,76 @@ public class SwarmLifecycleSteps {
     return payloads;
   }
 
+  private JsonNode parseJsonNode(String payload) {
+    if (!looksLikeJson(payload)) {
+      return null;
+    }
+    try {
+      return objectMapper.readTree(payload);
+    } catch (IOException ex) {
+      return null;
+    }
+  }
+
+  private boolean looksLikeHttpRequestEnvelope(JsonNode payloadNode) {
+    return payloadNode.has("path")
+        && payloadNode.has("method")
+        && payloadNode.has("headers")
+        && payloadNode.has("body");
+  }
+
+  private boolean looksLikeHttpResponseEnvelope(JsonNode payloadNode) {
+    return payloadNode.has("status")
+        && payloadNode.has("body");
+  }
+
+  private boolean looksLikeDatasetPayload(JsonNode payloadNode) {
+    return payloadNode.has("customerCode")
+        && payloadNode.has("accountNumber")
+        && payloadNode.has("cardNumber")
+        && payloadNode.has("nonce");
+  }
+
+  private void assertDatasetPayload(JsonNode payloadNode) {
+    assertNotNull(payloadNode, "Dataset payload missing from WorkItem steps");
+
+    String customerCode = payloadNode.path("customerCode").asText(null);
+    String accountNumber = payloadNode.path("accountNumber").asText(null);
+    String cardNumber = payloadNode.path("cardNumber").asText(null);
+    String nonce = payloadNode.path("nonce").asText(null);
+
+    assertNotNull(customerCode, "Dataset payload missing customerCode");
+    assertNotNull(accountNumber, "Dataset payload missing accountNumber");
+    assertNotNull(cardNumber, "Dataset payload missing cardNumber");
+    assertNotNull(nonce, "Dataset payload missing nonce");
+
+    assertTrue(accountNumber.matches("\\d{8}"),
+        () -> "Unexpected accountNumber format: " + accountNumber);
+    assertTrue(cardNumber.matches("\\d{16}"),
+        () -> "Unexpected cardNumber format: " + cardNumber);
+    try {
+      UUID.fromString(nonce);
+    } catch (IllegalArgumentException ex) {
+      throw new AssertionError("Unexpected nonce format: " + nonce, ex);
+    }
+  }
+
+  private String headerValue(JsonNode headersNode, String name) {
+    if (headersNode == null || !headersNode.isObject()) {
+      return null;
+    }
+    String target = name.toLowerCase(Locale.ROOT);
+    Iterator<Map.Entry<String, JsonNode>> fields = headersNode.fields();
+    while (fields.hasNext()) {
+      Map.Entry<String, JsonNode> entry = fields.next();
+      if (entry.getKey().toLowerCase(Locale.ROOT).equals(target)) {
+        JsonNode value = entry.getValue();
+        return value == null ? null : value.asText(null);
+      }
+    }
+    return null;
+  }
+
   private boolean containsChain(List<String> services, List<String> expected) {
     if (expected.isEmpty()) {
       return true;
@@ -1520,6 +1852,15 @@ public class SwarmLifecycleSteps {
       }
     }
     return -1;
+  }
+
+  private boolean hasAnyProcessorHeader(JsonNode headers) {
+    for (String header : PROCESSOR_STEP_HEADERS) {
+      if (headers.has(header)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private List<String> workerRoles() {

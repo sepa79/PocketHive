@@ -80,6 +80,10 @@ Purpose:
 - optional graph (React Flow)
 - health/debug views
 
+Routes (URL is the state):
+- `/v2/hive`
+- `/v2/hive/:swarmId`
+
 Within Hive use tabs/panels for internal navigation, not SideNav expansion.
 
 ### Journal
@@ -120,3 +124,83 @@ Global help entry:
 
 Diagnostics and debug tools live under the user menu (not SideNav):
 - Wire Log (Buzz v2)
+
+---
+
+## Hive — “Swarm close-up” graphical view (plan)
+
+Goal: add a compact, non-flickering “zoomed-in” view per swarm (similar intent to UI v1’s `TopologyView`, but scoped to one swarm and built for stability).
+
+### Entry point & routing
+
+- Add a button on each swarm card/row in Hive → opens a dedicated subpage (not a modal).
+- Proposed route:
+  - `/v2/hive/:swarmId/view` (or `/v2/hive/:swarmId/topology` if we want it explicit)
+- Breadcrumb must reflect the subpage and `Back` must work.
+
+### What UI v1 Hive had (features to carry over)
+
+From `ui/src/pages/hive/*`:
+- Graph view (React Flow) with stable node ids:
+  - per-swarm filter mode + overview mode
+  - queue depth influences edge color/width
+  - “Reset View” (fit) and a legend
+  - node drag with persisted positions (prevents constant re-layout jitter)
+- Swarm grouping + health signal per swarm row (heartbeat-derived).
+- Selection loop: click node → show details panel; click list item → highlight in graph.
+- Queue table in component details (depth/consumers/health).
+- Extra nodes/edges for SUT (HTTP roles) and “guard” diagnostics (where available).
+
+### Data sources (SSOT / contracts first)
+
+Use existing SSOT docs and schemas, do not handcraft parallel parsers:
+- Scenario graph (authoring-time SSOT): `docs/scenarios/SCENARIO_CONTRACT.md` (`template.bees[]` + `topology.edges[]`).
+- Runtime wiring + metrics:
+  - Control-plane envelopes (`status-full` / `status-delta`) decoded from `docs/spec/control-events.schema.json`.
+  - Key fields needed for the view:
+    - `data.io.work.queueStats[queue] = { depth, consumers, oldestAgeSec? }`
+    - `data.io.queues.{in,out,routes}` (for quick IO overview)
+    - `data.ioState.work` (input/output health)
+    - `data.tps`, `data.startedAt`
+- Swarm metadata & selection:
+  - Orchestrator REST (existing Hive list/details) for swarm ids, templateId, sut id, etc.
+
+### UX spec (compact, stable, “no flicker”)
+
+Layout proposal for `/v2/hive/:swarmId/view`:
+- Left column: worker cards (one per bee role/instance)
+  - show: role + instance, enabled, TPS, IO state (in/out), “seen age”, and top queues (depth/consumers)
+  - cards are clickable to select/highlight in the graph
+- Main area: graph canvas (React Flow)
+  - nodes: bees (from scenario template) + optional SUT node
+  - edges: from scenario `topology.edges` (logical), styled using runtime queue stats when available
+  - edge label: resolved queue (or logical `port` pair) + depth/consumers (tooltip for details)
+- Top controls: Fit/Reset, Auto-layout (toggle), Freeze layout (toggle), Labels (toggle)
+
+“No flicker” rules (hard requirements):
+- Never blank/unmount the canvas on refresh; keep last-known graph and show a stale indicator instead.
+- Keep stable React keys for nodes/edges; never regenerate ids.
+- Update nodes/edges incrementally (diff + patch), not “replace arrays from scratch” on every tick.
+- Persist node positions per `swarmId` + `nodeId` (session storage) to avoid jitter.
+- Throttle render updates from rapid status deltas (e.g. coalesce to 250–500ms).
+- Avoid layout recomputation unless:
+  - first time nodes appear, or
+  - user clicks “Auto-layout”, or
+  - topology definition changes (rare).
+
+### Implementation phases (no coding yet)
+
+1) **Route + shell**: add new subpage and a button in Hive swarm card to open it.
+2) **Static graph**: render nodes/edges purely from scenario `template + topology` (no metrics).
+3) **Runtime metrics overlay**:
+   - subscribe to decoded `status-*` snapshots for the swarm
+   - fill worker cards and edge styling from `io.work.queueStats`, `ioState`, `tps`
+4) **Selection & highlighting**:
+   - card ↔ node synchronization
+   - highlight connected edges and show tooltips (queue stats)
+5) **Anti-flicker polish**:
+   - position persistence + “Freeze layout”
+   - update coalescing and stale UX
+6) **Tests** (minimum):
+   - mapping tests: (`scenario topology` + `status-full`) → graph model (nodes, edges, metrics)
+   - smoke test: route renders without unmount flicker (basic “no blank on update” assertion)

@@ -177,10 +177,10 @@ import static org.junit.jupiter.api.Assertions.*;
   void declaresHiveAndWorkQueues() {
     String plan = """
         {"bees":[
-          {"role":"generator","work":{"out":"gen"}},
-          {"role":"moderator","work":{"in":"gen","out":"mod"}},
-          {"role":"processor","work":{"in":"mod","out":"final"}},
-          {"role":"postprocessor","work":{"in":"final"}}
+          {"role":"generator","work":{"out":{"out":"gen"}}},
+          {"role":"moderator","work":{"in":{"in":"gen"},"out":{"out":"mod"}}},
+          {"role":"processor","work":{"in":{"in":"mod"},"out":{"out":"final"}}},
+          {"role":"postprocessor","work":{"in":{"in":"final"}}}
         ]}
         """;
     manager.start(plan);
@@ -197,10 +197,10 @@ import static org.junit.jupiter.api.Assertions.*;
   void stopLeavesResourcesAndRemoveCleansUp() {
     String plan = """
         {"bees":[
-          {"role":"generator","work":{"out":"gen"}},
-          {"role":"moderator","work":{"in":"gen","out":"mod"}},
-          {"role":"processor","work":{"in":"mod","out":"final"}},
-          {"role":"postprocessor","work":{"in":"final"}}
+          {"role":"generator","work":{"out":{"out":"gen"}}},
+          {"role":"moderator","work":{"in":{"in":"gen"},"out":{"out":"mod"}}},
+          {"role":"processor","work":{"in":{"in":"mod"},"out":{"out":"final"}}},
+          {"role":"postprocessor","work":{"in":{"in":"final"}}}
         ]}
         """;
 

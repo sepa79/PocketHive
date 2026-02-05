@@ -22,12 +22,12 @@ class ControlPlaneWireShapeTest {
     AmqpTemplate template = mock(AmqpTemplate.class);
     AmqpControlPlanePublisher publisher = new AmqpControlPlanePublisher(template, "ph.control");
 
-    var signal = ControlSignals.statusRequest(
-        "origin",
-        ControlScope.forInstance("sw1", "role", "inst"),
-        "corr-1",
-        null);
-    publisher.publishSignal(new SignalMessage("signal.status-request.sw1.role.inst", signal));
+	    var signal = ControlSignals.statusRequest(
+	        "origin",
+	        ControlScope.forInstance("sw1", "role", "inst"),
+	        "corr-1",
+	        null);
+	    publisher.publishSignal(new SignalMessage("signal.status-request.sw1.role.inst", signal));
 
     ArgumentCaptor<Object> payload = ArgumentCaptor.forClass(Object.class);
     verify(template).convertAndSend(eq("ph.control"), eq("signal.status-request.sw1.role.inst"), payload.capture());

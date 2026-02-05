@@ -1,0 +1,80 @@
+id: local-rest-topology
+name: Local REST - Simple REST Swarm (Topology)
+description: Copy of local-rest with logical topology edges for UI testing.
+template:
+  image: swarm-controller:latest
+  bees:
+    - id: genA
+      role: generator
+      image: generator:latest
+      ports:
+        - { id: out, direction: out }
+      config:
+        inputs:
+          scheduler:
+            ratePerSec: 50
+        worker:
+          message:
+            bodyType: HTTP
+            path: /test
+            method: POST
+            body: '{"event":"local-rest"}'
+            headers:
+              content-type: application/json
+      work:
+        out:
+          out: genQ
+    - id: modA
+      role: moderator
+      image: moderator:latest
+      ports:
+        - { id: in, direction: in }
+        - { id: out, direction: out }
+      config:
+        worker:
+          mode:
+            type: rate-per-sec
+            ratePerSec: 10
+      work:
+        in:
+          in: genQ
+        out:
+          out: modQ
+    - id: procA
+      role: processor
+      image: processor:latest
+      ports:
+        - { id: in, direction: in }
+        - { id: out, direction: out }
+      config:
+        worker:
+          baseUrl: "{{ sut.endpoints['default'].baseUrl }}/api"
+      work:
+        in:
+          in: modQ
+        out:
+          out: finalQ
+    - id: postA
+      role: postprocessor
+      image: postprocessor:latest
+      ports:
+        - { id: in, direction: in }
+      config:
+        worker:
+          publishAllMetrics: true
+      work:
+        in:
+          in: finalQ
+
+topology:
+  version: 1
+  edges:
+    - id: e1
+      from: { beeId: genA, port: out }
+      to: { beeId: modA, port: in }
+    - id: e2
+      from: { beeId: modA, port: out }
+      to: { beeId: procA, port: in }
+    - id: e3
+      from: { beeId: procA, port: out }
+      to: { beeId: postA, port: in }

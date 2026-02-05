@@ -13,8 +13,8 @@ import io.pockethive.manager.runtime.ComputeAdapterType;
 import io.pockethive.manager.runtime.ManagerSpec;
 import io.pockethive.orchestrator.config.OrchestratorProperties;
 import io.pockethive.orchestrator.domain.Swarm;
-import io.pockethive.orchestrator.domain.SwarmRegistry;
-import io.pockethive.orchestrator.domain.SwarmStatus;
+import io.pockethive.orchestrator.domain.SwarmStore;
+import io.pockethive.orchestrator.domain.SwarmLifecycleStatus;
 import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
 import io.pockethive.orchestrator.infra.JournalRunMetadataWriter;
 import java.util.LinkedHashMap;
@@ -34,7 +34,7 @@ public class ContainerLifecycleManager {
     private static final String SCENARIOS_RUNTIME_DESTINATION = "/app/scenarios-runtime";
     private final DockerContainerClient docker;
     private final ComputeAdapter computeAdapter;
-    private final SwarmRegistry registry;
+    private final SwarmStore store;
     private final AmqpAdmin amqp;
     private final OrchestratorProperties properties;
     private final ControlPlaneProperties controlPlaneProperties;
@@ -55,7 +55,7 @@ public class ContainerLifecycleManager {
     public ContainerLifecycleManager(
         DockerContainerClient docker,
         ComputeAdapter computeAdapter,
-        SwarmRegistry registry,
+        SwarmStore store,
         AmqpAdmin amqp,
         OrchestratorProperties properties,
         ControlPlaneProperties controlPlaneProperties,
@@ -63,7 +63,7 @@ public class ContainerLifecycleManager {
         JournalRunMetadataWriter runMetadataWriter) {
         this.docker = Objects.requireNonNull(docker, "docker");
         this.computeAdapter = Objects.requireNonNull(computeAdapter, "computeAdapter");
-        this.registry = Objects.requireNonNull(registry, "registry");
+        this.store = Objects.requireNonNull(store, "store");
         this.amqp = Objects.requireNonNull(amqp, "amqp");
         this.properties = Objects.requireNonNull(properties, "properties");
         this.controlPlaneProperties = Objects.requireNonNull(controlPlaneProperties, "controlPlaneProperties");
@@ -154,6 +154,12 @@ public class ContainerLifecycleManager {
             resolvedAdapterType = ComputeAdapterType.DOCKER_SINGLE;
         }
         env.put("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_DOCKER_COMPUTE_ADAPTER", resolvedAdapterType.name());
+        env.put("POCKETHIVE_RUNTIME_IMAGE", resolvedImage);
+        if (templateMetadata == null) {
+            throw new IllegalStateException("templateMetadata must not be null");
+        }
+        env.put("POCKETHIVE_TEMPLATE_ID", requireText(templateMetadata.templateId(), "templateId"));
+        env.put("POCKETHIVE_RUNTIME_STACK_NAME", "ph-" + resolvedSwarmId.toLowerCase(java.util.Locale.ROOT));
         if (autoPullImages) {
             log.info("autoPullImages=true, pulling controller image {} before start", resolvedImage);
             docker.pullImage(resolvedImage);
@@ -180,8 +186,8 @@ public class ContainerLifecycleManager {
         if (templateMetadata != null) {
             swarm.attachTemplate(templateMetadata);
         }
-        registry.register(swarm);
-        registry.updateStatus(resolvedSwarmId, SwarmStatus.CREATING);
+        store.register(swarm);
+        store.updateStatus(resolvedSwarmId, SwarmLifecycleStatus.CREATING);
         return swarm;
     }
 
@@ -193,6 +199,13 @@ public class ContainerLifecycleManager {
         return trimmed.isEmpty() ? null : trimmed;
     }
 
+    private static String requireText(String value, String label) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(label + " must not be null or blank");
+        }
+        return value.trim();
+    }
+
     /**
      * Optionally pre-pull all images referenced by a swarm before starting work.
      * <p>
@@ -202,12 +215,13 @@ public class ContainerLifecycleManager {
      * configuration is left to the Docker daemon.
      */
     public void preloadSwarmImages(String swarmId) {
-        registry.find(swarmId).ifPresent(swarm -> {
-            swarm.controllerImage().ifPresent(image -> {
-                String resolved = resolveImage(image);
-                log.info("auto-pull: controller image {} (from {}) for swarm {}", resolved, image, swarmId);
+        store.find(swarmId).ifPresent(swarm -> {
+            String controllerImage = swarm.controllerImage();
+            if (controllerImage != null && !controllerImage.isBlank()) {
+                String resolved = resolveImage(controllerImage);
+                log.info("auto-pull: controller image {} (from {}) for swarm {}", resolved, controllerImage, swarmId);
                 docker.pullImage(resolved);
-            });
+            }
             swarm.bees().stream()
                 .map(bee -> bee.image())
                 .filter(image -> image != null && !image.isBlank())
@@ -243,22 +257,22 @@ public class ContainerLifecycleManager {
     }
 
     public void stopSwarm(String swarmId) {
-        registry.find(swarmId).ifPresent(swarm -> {
-            SwarmStatus current = swarm.getStatus();
-            if (current == SwarmStatus.STOPPING || current == SwarmStatus.STOPPED) {
+        store.find(swarmId).ifPresent(swarm -> {
+            SwarmLifecycleStatus current = swarm.getStatus();
+            if (current == SwarmLifecycleStatus.STOPPING || current == SwarmLifecycleStatus.STOPPED) {
                 log.info("swarm {} already {}", swarmId, current);
                 return;
             }
             log.info("marking swarm {} as stopped", swarmId);
-            registry.updateStatus(swarmId, SwarmStatus.STOPPING);
-            registry.updateStatus(swarmId, SwarmStatus.STOPPED);
+            store.updateStatus(swarmId, SwarmLifecycleStatus.STOPPING);
+            store.updateStatus(swarmId, SwarmLifecycleStatus.STOPPED);
         });
     }
 
     public void removeSwarm(String swarmId) {
-        registry.find(swarmId).ifPresent(swarm -> {
+        store.find(swarmId).ifPresent(swarm -> {
             log.info("tearing down controller container {} for swarm {}", swarm.getContainerId(), swarmId);
-            registry.updateStatus(swarmId, SwarmStatus.REMOVING);
+            store.updateStatus(swarmId, SwarmLifecycleStatus.REMOVING);
             computeAdapter.stopManager(swarm.getContainerId());
             // The swarm-controller's own control queue is declared via the manager
             // control-plane topology. Delete it from the orchestrator once the
@@ -280,9 +294,9 @@ public class ContainerLifecycleManager {
             amqp.deleteQueue("ph." + swarmId + ".gen");
             amqp.deleteQueue("ph." + swarmId + ".mod");
             amqp.deleteQueue("ph." + swarmId + ".final");
-            registry.updateStatus(swarmId, SwarmStatus.REMOVED);
+            store.updateStatus(swarmId, SwarmLifecycleStatus.REMOVED);
             swarm.clearTemplate();
-            registry.remove(swarmId);
+            store.remove(swarmId);
         });
     }
 

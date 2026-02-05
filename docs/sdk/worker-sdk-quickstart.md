@@ -69,8 +69,8 @@ is selected via `pockethive.inputs.type` in configuration, not via annotation at
 ## 3. Implement the worker interface
 
 The runtime discovers annotated beans that implement `PocketHiveWorkerFunction` and invokes
-`onMessage(WorkMessage, WorkerContext)` for each input message. Scheduler-driven inputs (such as the
-generator/trigger schedulers) emit synthetic seed messages, so the `message` parameter is always non-null even when no
+`onMessage(WorkItem, WorkerContext)` for each input message. Scheduler-driven inputs (such as the
+generator/trigger schedulers) emit synthetic seed work items, so the `message` parameter is always non-null even when no
 payload is supplied. The return value determines whether a downstream payload should be published.
 
 Use the `WorkerContext` to:
@@ -138,8 +138,8 @@ class TriggerWorkInputFactory implements WorkInputFactory {
 }
 ```
 
-The auto-configured helper registers control-plane listeners, converts AMQP messages via `RabbitWorkMessageConverter`,
-publishes `WorkResult.Message` payloads to the traffic exchange declared in `WorkerControlPlaneProperties`, and emits status
+The auto-configured helper registers control-plane listeners, converts AMQP messages via `RabbitWorkItemConverter`,
+publishes `WorkItem` payloads to the traffic exchange declared in `WorkerControlPlaneProperties`, and emits status
 snapshots/deltas for every worker. Only workers with unusual transports need to provide factories like the trigger example
 above; generator, moderator, processor, and postprocessor all run on the shared factories described in
 `docs/sdk/worker-autoconfig-plan.md`.
@@ -159,7 +159,7 @@ WorkerControlPlaneProperties props = ControlPlaneTestFixtures.workerProperties("
 ## 6. Observability and Stage 3 enhancements
 
 Stage 3 enriches the runtime with Micrometer and Observation support. `WorkerContext.meterRegistry()` and
-`WorkerContext.observationRegistry()` surface the shared registries, while `WorkMessage` builders accept an
+`WorkerContext.observationRegistry()` surface the shared registries, while `WorkItem` builders accept an
 `ObservabilityContext`. The SDK ensures that `WorkerContext.observabilityContext()` never returns {@code null} and
 includes a trace id, hop list, and swarm id, making it safe to append hop metadata or forward the context as-is.
 Use these hooks to emit custom metrics and propagate trace metadata as shown in the

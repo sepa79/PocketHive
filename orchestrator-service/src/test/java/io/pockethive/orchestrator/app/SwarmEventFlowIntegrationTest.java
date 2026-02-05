@@ -16,14 +16,13 @@ import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
 import io.pockethive.controlplane.topology.ControlPlaneTopologySettings;
 import io.pockethive.controlplane.topology.ControlQueueDescriptor;
 import io.pockethive.orchestrator.domain.Swarm;
+import io.pockethive.orchestrator.domain.HiveJournal;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker.Pending;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker.Phase;
-import io.pockethive.orchestrator.domain.HiveJournal;
+import io.pockethive.orchestrator.domain.SwarmLifecycleStatus;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
-import io.pockethive.orchestrator.domain.SwarmRegistry;
-import io.pockethive.orchestrator.domain.SwarmStatus;
-import io.pockethive.orchestrator.domain.SwarmHealth;
+import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.swarm.model.SwarmPlan;
 import java.time.Instant;
 import java.util.List;
@@ -37,7 +36,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.lenient;
@@ -82,7 +80,7 @@ class SwarmEventFlowIntegrationTest {
     private String controlQueueName;
     private SwarmPlanRegistry plans;
     private SwarmCreateTracker tracker;
-    private SwarmRegistry registry;
+    private SwarmStore registry;
     private SwarmSignalListener signalListener;
     private ControllerStatusListener statusListener;
 
@@ -97,12 +95,23 @@ class SwarmEventFlowIntegrationTest {
         plans = new SwarmPlanRegistry();
         io.pockethive.orchestrator.domain.ScenarioTimelineRegistry timelines =
             new io.pockethive.orchestrator.domain.ScenarioTimelineRegistry();
+        HiveJournal journal = HiveJournal.noop();
         tracker = new SwarmCreateTracker();
-        registry = new SwarmRegistry();
-        signalListener = new SwarmSignalListener(plans, timelines, tracker, registry, lifecycle, mapper,
-            HiveJournal.noop(),
-            controlPlane, controlEmitter, identity, descriptor, controlQueueName);
-        statusListener = new ControllerStatusListener(registry, mapper, statusRequests, signalListener);
+        registry = new SwarmStore();
+        signalListener = new SwarmSignalListener(
+            plans,
+            timelines,
+            tracker,
+            registry,
+            lifecycle,
+            mapper,
+            journal,
+            controlPlane,
+            controlEmitter,
+            identity,
+            descriptor,
+            controlQueueName);
+        statusListener = new ControllerStatusListener(registry, mapper, statusRequests, signalListener, journal);
         clearInvocations(controlPlane, controlEmitter, publisher, lifecycle);
     }
 
@@ -110,11 +119,13 @@ class SwarmEventFlowIntegrationTest {
     void processesStatusAndConfirmations() throws Exception {
         SwarmPlan plan = new SwarmPlan(SWARM_ID, List.of());
         plans.register(CONTROLLER_INSTANCE, plan);
-        Pending pending = new Pending(SWARM_ID, CONTROLLER_INSTANCE, "corr", "idem",
-            Phase.CONTROLLER, Instant.now().plusSeconds(60));
-        tracker.register(CONTROLLER_INSTANCE, pending);
-        registry.register(new Swarm(SWARM_ID, CONTROLLER_INSTANCE, "cid", "run-1"));
-        registry.updateStatus(SWARM_ID, SwarmStatus.CREATING);
+	        Pending pending = new Pending(SWARM_ID, CONTROLLER_INSTANCE, "corr", "idem",
+	            Phase.CONTROLLER, Instant.now().plusSeconds(60));
+	        tracker.register(CONTROLLER_INSTANCE, pending);
+	        Swarm swarm = new Swarm(SWARM_ID, CONTROLLER_INSTANCE, "cid", "run-1");
+	        swarm.attachTemplate(new io.pockethive.orchestrator.domain.SwarmTemplateMetadata("tpl-1", "swarm-controller:latest", java.util.List.of()));
+	        registry.register(swarm);
+	        registry.updateStatus(SWARM_ID, SwarmLifecycleStatus.CREATING);
 
         String statusPayload = """
             {
@@ -123,12 +134,26 @@ class SwarmEventFlowIntegrationTest {
               "kind": "metric",
               "type": "status-full",
               "origin": "%s",
-              "scope": {"swarmId":"%s","role":"swarm-controller","instance":"%s"},
-              "correlationId": null,
-              "idempotencyKey": null,
-              "data": {"enabled": false, "context": {"swarmStatus": "READY"}}
+	              "scope": {"swarmId":"%s","role":"swarm-controller","instance":"%s"},
+	              "correlationId": null,
+	              "idempotencyKey": null,
+	              "runtime": {
+	                "templateId": "tpl-1",
+	                "runId": "run-1",
+	                "containerId": "%s",
+	                "image": "swarm-controller:latest",
+	                "stackName": "ph-%s"
+	              },
+	              "data": {
+	                "enabled": false,
+	                "config": {},
+	                "startedAt": "2024-01-01T00:00:00Z",
+	                "io": {},
+	                "ioState": {},
+	                "context": {"swarmStatus": "READY"}
+	              }
             }
-            """.formatted(CONTROLLER_INSTANCE, SWARM_ID, CONTROLLER_INSTANCE);
+            """.formatted(CONTROLLER_INSTANCE, SWARM_ID, CONTROLLER_INSTANCE, CONTROLLER_INSTANCE, SWARM_ID);
 
         statusListener.handle(statusPayload, ControlPlaneRouting.event("metric", "status-full",
             new ConfirmationScope(SWARM_ID, "swarm-controller", CONTROLLER_INSTANCE)));
@@ -151,12 +176,12 @@ class SwarmEventFlowIntegrationTest {
 
         signalListener.handle("{\"data\":{\"status\":\"Ready\"}}", ControlPlaneRouting.event("outcome", "swarm-template",
             new ConfirmationScope(SWARM_ID, "swarm-controller", CONTROLLER_INSTANCE)));
-        assertThat(registry.find(SWARM_ID)).map(Swarm::getStatus).contains(SwarmStatus.READY);
+        assertThat(registry.find(SWARM_ID)).map(Swarm::getStatus).contains(SwarmLifecycleStatus.READY);
 
         tracker.expectStart(SWARM_ID, "start-corr", "start-idem", java.time.Duration.ofSeconds(30));
         signalListener.handle("{\"data\":{\"status\":\"Running\"}}", ControlPlaneRouting.event("outcome", "swarm-start",
             new ConfirmationScope(SWARM_ID, "swarm-controller", CONTROLLER_INSTANCE)));
-        assertThat(registry.find(SWARM_ID)).map(Swarm::getStatus).contains(SwarmStatus.RUNNING);
+        assertThat(registry.find(SWARM_ID)).map(Swarm::getStatus).contains(SwarmLifecycleStatus.RUNNING);
 
         statusListener.handle("""
             {
@@ -168,13 +193,20 @@ class SwarmEventFlowIntegrationTest {
               "scope": {"swarmId":"sw1","role":"swarm-controller","instance":"%s"},
               "correlationId": null,
               "idempotencyKey": null,
+              "runtime": {
+                "templateId": "tpl-1",
+                "runId": "run-1",
+                "containerId": "%s",
+                "image": "swarm-controller:latest",
+                "stackName": "ph-%s"
+              },
               "data": {"enabled": false, "context": {"swarmStatus": "RUNNING"}}
             }
-            """.formatted(CONTROLLER_INSTANCE, CONTROLLER_INSTANCE),
+            """.formatted(CONTROLLER_INSTANCE, CONTROLLER_INSTANCE, CONTROLLER_INSTANCE, SWARM_ID),
             "event.metric.status-delta.sw1.swarm-controller." + CONTROLLER_INSTANCE);
-        Swarm swarm = registry.find(SWARM_ID).orElseThrow();
-        assertEquals(SwarmHealth.RUNNING, swarm.getHealth());
-        assertThat(swarm.isWorkEnabled()).isFalse();
+        Swarm storedSwarm = registry.find(SWARM_ID).orElseThrow();
+        JsonNode cachedStatus = storedSwarm.getControllerStatusFull();
+        assertThat(cachedStatus.path("data").path("enabled").asBoolean()).isFalse();
 
         tracker.expectStop(SWARM_ID, "stop-corr", "stop-idem", java.time.Duration.ofSeconds(30));
         signalListener.handle("{\"data\":{\"status\":\"Stopped\"}}", ControlPlaneRouting.event("outcome", "swarm-stop",

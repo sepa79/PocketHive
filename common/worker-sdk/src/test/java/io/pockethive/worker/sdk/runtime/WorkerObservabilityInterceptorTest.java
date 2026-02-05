@@ -45,19 +45,20 @@ class WorkerObservabilityInterceptorTest {
         WorkerState state = new WorkerState(DEFINITION);
         state.setStatusPublisher(new WorkerStatusPublisher(state, () -> { }, () -> { }));
         WorkerObservabilityInterceptor interceptor = new WorkerObservabilityInterceptor();
+        WorkerContext context = workerContext(state);
         WorkerInvocationContext invocationContext = new WorkerInvocationContext(
             DEFINITION,
             state,
-            workerContext(state),
-            WorkItem.text("payload").build()
+            context,
+            WorkItem.text(context.info(), "payload").build()
         );
 
         WorkItem result = interceptor.intercept(invocationContext, ctx -> ctx.message());
 
-        ObservabilityContext context = invocationContext.workerContext().observabilityContext();
-        assertThat(context.getTraceId()).isNotBlank();
-        assertThat(context.getHops()).hasSize(1);
-        assertThat(context.getHops().get(0).getProcessedAt()).isNotNull();
+        ObservabilityContext observabilityContext = invocationContext.workerContext().observabilityContext();
+        assertThat(observabilityContext.getTraceId()).isNotBlank();
+        assertThat(observabilityContext.getHops()).hasSize(1);
+        assertThat(observabilityContext.getHops().get(0).getProcessedAt()).isNotNull();
 
         assertThat(MDC.get("traceId")).isNull();
         assertThat(MDC.get("swarmId")).isNull();

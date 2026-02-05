@@ -1,33 +1,29 @@
 package io.pockethive.orchestrator.domain;
 
 import io.pockethive.swarm.model.Bee;
+import com.fasterxml.jackson.databind.JsonNode;
 import java.time.Instant;
 import java.util.List;
-import java.util.Optional;
 
 public class Swarm {
     private final String id;
     private final String instanceId;
     private final String containerId;
     private final String runId;
-    private SwarmStatus status;
-    private SwarmHealth health;
-    private Instant heartbeat;
+    private SwarmLifecycleStatus status;
     private final Instant createdAt;
-    private boolean workEnabled;
     private SwarmTemplateMetadata templateMetadata;
     private String sutId;
+    private volatile JsonNode controllerStatusFull;
+    private volatile Instant controllerStatusReceivedAt;
 
     public Swarm(String id, String instanceId, String containerId, String runId) {
         this.id = id;
         this.instanceId = instanceId;
         this.containerId = containerId;
         this.runId = runId;
-        this.status = SwarmStatus.NEW;
-        this.health = SwarmHealth.UNKNOWN;
-        this.heartbeat = Instant.now();
+        this.status = SwarmLifecycleStatus.NEW;
         this.createdAt = Instant.now();
-        this.workEnabled = true;
     }
 
     public String getId() {
@@ -46,36 +42,15 @@ public class Swarm {
         return runId;
     }
 
-    public SwarmStatus getStatus() {
+    public SwarmLifecycleStatus getStatus() {
         return status;
     }
 
-    public void transitionTo(SwarmStatus next) {
+    public void transitionTo(SwarmLifecycleStatus next) {
         if (!status.canTransitionTo(next)) {
             throw new IllegalStateException("Cannot transition from " + status + " to " + next);
         }
         this.status = next;
-    }
-
-    public SwarmHealth getHealth() {
-        return health;
-    }
-
-    public Instant getHeartbeat() {
-        return heartbeat;
-    }
-
-    public void refresh(SwarmHealth health) {
-        this.health = health;
-        this.heartbeat = Instant.now();
-    }
-
-    public boolean isWorkEnabled() {
-        return workEnabled;
-    }
-
-    public void setWorkEnabled(boolean workEnabled) {
-        this.workEnabled = workEnabled;
     }
 
     public void attachTemplate(SwarmTemplateMetadata metadata) {
@@ -86,16 +61,16 @@ public class Swarm {
         this.templateMetadata = null;
     }
 
-    public Optional<SwarmTemplateMetadata> templateMetadata() {
-        return Optional.ofNullable(templateMetadata);
+    public SwarmTemplateMetadata templateMetadata() {
+        return templateMetadata;
     }
 
-    public Optional<String> templateId() {
-        return templateMetadata().map(SwarmTemplateMetadata::templateId);
+    public String templateId() {
+        return templateMetadata == null ? null : templateMetadata.templateId();
     }
 
-    public Optional<String> controllerImage() {
-        return templateMetadata().map(SwarmTemplateMetadata::controllerImage);
+    public String controllerImage() {
+        return templateMetadata == null ? null : templateMetadata.controllerImage();
     }
 
     public List<Bee> bees() {
@@ -110,15 +85,17 @@ public class Swarm {
         this.sutId = sutId;
     }
 
-    void expire(Instant now, java.time.Duration degradedAfter, java.time.Duration failedAfter) {
-        if (heartbeat == null) return;
-        if (now.isAfter(heartbeat.plus(failedAfter))) {
-            health = SwarmHealth.FAILED;
-        } else if (now.isAfter(heartbeat.plus(degradedAfter))) {
-            if (health != SwarmHealth.FAILED) {
-                health = SwarmHealth.DEGRADED;
-            }
-        }
+    public synchronized void updateControllerStatusFull(JsonNode envelope, Instant receivedAt) {
+        this.controllerStatusFull = envelope == null ? null : envelope.deepCopy();
+        this.controllerStatusReceivedAt = receivedAt;
+    }
+
+    public JsonNode getControllerStatusFull() {
+        return controllerStatusFull;
+    }
+
+    public Instant getControllerStatusReceivedAt() {
+        return controllerStatusReceivedAt;
     }
 
     public Instant getCreatedAt() {

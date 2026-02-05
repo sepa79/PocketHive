@@ -25,6 +25,7 @@ class HttpBuilderWorkerImplTest {
 
   private static final WorkerControlPlaneProperties WORKER_PROPERTIES =
       ControlPlaneTestFixtures.workerProperties("swarm", "http-builder", "instance");
+  private static final WorkerInfo SEED_INFO = new WorkerInfo("ingress", "swarm", "instance", null, null);
 
   private HttpBuilderWorkerProperties properties;
   private TemplateRenderer templateRenderer;
@@ -61,15 +62,15 @@ class HttpBuilderWorkerImplTest {
     HttpBuilderWorkerImpl worker =
         new HttpBuilderWorkerImpl(properties, templateRenderer, new HttpTemplateLoader());
 
-    WorkItem seed = WorkItem.text("body").header("x-ph-call-id", "simple").build();
+    WorkItem seed = WorkItem.text(SEED_INFO, "body").header("x-ph-call-id", "simple").build();
     HttpBuilderWorkerConfig config = new HttpBuilderWorkerConfig(
-        dir.toString(), "default", true);
+        dir.toString(), "default", true, Map.of());
     WorkerContext context = new TestWorkerContext(config);
 
     WorkItem result = worker.onMessage(seed, context);
 
     assertThat(result).isNotNull();
-    assertThat(result.headers()).containsEntry("x-ph-service", "http-builder");
+    assertThat(result.contentType()).isEqualTo("application/json");
 
     JsonNode envelope = new ObjectMapper().readTree(result.asString());
     assertThat(envelope.get("path").asText()).isEqualTo("/test");
@@ -89,9 +90,9 @@ class HttpBuilderWorkerImplTest {
     HttpBuilderWorkerImpl worker =
         new HttpBuilderWorkerImpl(properties, templateRenderer, new HttpTemplateLoader());
 
-    WorkItem seed = WorkItem.text("body").build();
+    WorkItem seed = WorkItem.text(SEED_INFO, "body").build();
     HttpBuilderWorkerConfig config = new HttpBuilderWorkerConfig(
-        dir.toString(), "default", false);
+        dir.toString(), "default", false, Map.of());
     WorkerContext context = new TestWorkerContext(config);
 
     WorkItem result = worker.onMessage(seed, context);
@@ -111,9 +112,9 @@ class HttpBuilderWorkerImplTest {
     HttpBuilderWorkerImpl worker =
         new HttpBuilderWorkerImpl(properties, templateRenderer, new HttpTemplateLoader());
 
-    WorkItem seed = WorkItem.text("body").header("x-ph-call-id", "unknown").build();
+    WorkItem seed = WorkItem.text(SEED_INFO, "body").header("x-ph-call-id", "unknown").build();
     HttpBuilderWorkerConfig config = new HttpBuilderWorkerConfig(
-        dir.toString(), "default", true);
+        dir.toString(), "default", true, Map.of());
     WorkerContext context = new TestWorkerContext(config);
 
     WorkItem result = worker.onMessage(seed, context);
@@ -158,11 +159,11 @@ class HttpBuilderWorkerImplTest {
     HttpBuilderWorkerImpl worker =
         new HttpBuilderWorkerImpl(properties, templateRenderer, new HttpTemplateLoader());
 
-    WorkItem seed = WorkItem.text("body").header("x-ph-call-id", "simple").build();
+    WorkItem seed = WorkItem.text(SEED_INFO, "body").header("x-ph-call-id", "simple").build();
 
     // First call uses dir1 config.
     HttpBuilderWorkerConfig config1 = new HttpBuilderWorkerConfig(
-        dir1.toString(), "default", true);
+        dir1.toString(), "default", true, Map.of());
     WorkerContext ctx1 = new TestWorkerContext(config1);
     WorkItem result1 = worker.onMessage(seed, ctx1);
     JsonNode envelope1 = new ObjectMapper().readTree(result1.asString());
@@ -170,7 +171,7 @@ class HttpBuilderWorkerImplTest {
 
     // Second call supplies a control-plane override pointing at dir2; worker should reload.
     HttpBuilderWorkerConfig config2 = new HttpBuilderWorkerConfig(
-        dir2.toString(), "default", true);
+        dir2.toString(), "default", true, Map.of());
     WorkerContext ctx2 = new TestWorkerContext(config2);
     WorkItem result2 = worker.onMessage(seed, ctx2);
     JsonNode envelope2 = new ObjectMapper().readTree(result2.asString());

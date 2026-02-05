@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
 import io.pockethive.worker.sdk.api.WorkItem;
+import io.pockethive.worker.sdk.api.WorkStep;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.auth.AuthConfig;
 import io.pockethive.worker.sdk.auth.AuthHeaderGenerator;
@@ -71,8 +72,13 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
 
     reloadTemplatesIfNeeded(config);
 
+    WorkItem effectiveSeed = seed;
+    if (effectiveSeed.headers().get("vars") == null && config.vars() != null && !config.vars().isEmpty()) {
+      effectiveSeed = effectiveSeed.addStepHeader("vars", config.vars());
+    }
+
     String serviceId = resolveServiceId(seed, config);
-    String callId = resolveCallId(seed);
+    String callId = resolveCallId(effectiveSeed);
     if (callId == null || callId.isBlank()) {
       context.logger().warn("No callId present on work item; {}", missingBehavior(config));
       return handleMissing(config, seed, context);
@@ -97,7 +103,7 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
             .build();
 
         MessageTemplateRenderer.RenderedMessage rendered =
-            messageTemplateRenderer.render(template, seed);
+            messageTemplateRenderer.render(template, effectiveSeed);
 
         Map<String, String> headers = new HashMap<>(rendered.headers());
         
@@ -133,7 +139,7 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
             .build();
 
         MessageTemplateRenderer.RenderedMessage rendered =
-            messageTemplateRenderer.render(template, seed);
+            messageTemplateRenderer.render(template, effectiveSeed);
 
         Map<String, String> headers = new HashMap<>(rendered.headers());
         
@@ -162,13 +168,16 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
         throw new IllegalStateException("Unknown template type: " + definition.getClass());
       }
 
-      WorkItem httpItem = WorkItem.json(envelope)
-          .header("content-type", "application/json")
-          .header("x-ph-service", context.info().role())
+      WorkItem httpItem = WorkItem.json(context.info(), envelope)
+          .contentType("application/json")
           .build();
 
       context.logger().debug("Request Builder envelope: {}", httpItem.asString());
-      WorkItem result = seed.addStep(httpItem.asString(), httpItem.headers());
+      WorkStep step = lastStep(httpItem);
+      WorkItem result = seed.toBuilder()
+          .contentType(httpItem.contentType())
+          .step(context.info(), step.payload(), step.payloadEncoding(), step.headers())
+          .build();
       publishStatus(context, config);
       return result;
     } catch (Exception ex) {
@@ -209,6 +218,17 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
     return config.passThroughOnMissingTemplate()
         ? "passing work item through unchanged"
         : "dropping work item (no output)";
+  }
+
+  private WorkStep lastStep(WorkItem item) {
+    WorkStep last = null;
+    for (WorkStep step : item.steps()) {
+      last = step;
+    }
+    if (last == null) {
+      throw new IllegalStateException("Request Builder produced a WorkItem without steps");
+    }
+    return last;
   }
 
   private static String resolveServiceId(WorkItem item, RequestBuilderWorkerConfig config) {

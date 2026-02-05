@@ -6,6 +6,7 @@ import './styles.css'
 import { installTheme } from './lib/theme'
 import { bootstrapControlPlane } from './lib/controlPlane/bootstrap'
 import { startControlPlaneHealth } from './lib/controlPlane/healthStore'
+import { detectUiBasename } from './lib/routing/basename'
 
 installTheme()
 bootstrapControlPlane()
@@ -13,7 +14,7 @@ startControlPlaneHealth()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <BrowserRouter basename="/v2">
+    <BrowserRouter basename={detectUiBasename(window.location.pathname) || undefined}>
       <App />
     </BrowserRouter>
   </StrictMode>,

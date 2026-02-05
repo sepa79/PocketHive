@@ -24,19 +24,23 @@ class ControlPlaneEventParserTest {
   private final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
 
   @Test
-  void parsesCommandOutcomes() throws Exception {
-    CommandOutcome outcome = new CommandOutcome(
-        Instant.parse("2024-07-01T12:00:00Z"),
-        "1",
-        "outcome",
-        "swarm-start",
-        "swarm-controller:alpha",
-        ControlScope.forInstance("swarm-test", "swarm-controller", "alpha"),
-        "corr-1",
-        "idem-1",
-        Map.of("status", "Running")
-    );
-    byte[] body = mapper.writeValueAsBytes(outcome);
+	  void parsesCommandOutcomes() throws Exception {
+	    CommandOutcome outcome = new CommandOutcome(
+	        Instant.parse("2024-07-01T12:00:00Z"),
+	        "1",
+	        "outcome",
+	        "swarm-start",
+	        "swarm-controller:alpha",
+	        ControlScope.forInstance("swarm-test", "swarm-controller", "alpha"),
+	        "corr-1",
+	        "idem-1",
+	        Map.of(
+	            "templateId", "tpl-1",
+	            "runId", "run-1"
+	        ),
+	        Map.of("status", "Running")
+	    );
+	    byte[] body = mapper.writeValueAsBytes(outcome);
 
     ControlPlaneEventParser parser = new ControlPlaneEventParser(mapper);
     ControlPlaneEventParser.ParsedEvent parsed = parser.parse(
@@ -54,20 +58,24 @@ class ControlPlaneEventParserTest {
   }
 
   @Test
-  void parsesAlertMessages() throws Exception {
-    AlertMessage alert = new AlertMessage(
-        Instant.parse("2024-07-01T12:00:01Z"),
-        "1",
-        "event",
-        "alert",
-        "swarm-controller:alpha",
-        ControlScope.forInstance("swarm-test", "swarm-controller", "alpha"),
-        "corr-2",
-        "idem-2",
-        new AlertMessage.AlertData(
-            "error",
-            "io.out-of-data",
-            "Out of data",
+	  void parsesAlertMessages() throws Exception {
+	    AlertMessage alert = new AlertMessage(
+	        Instant.parse("2024-07-01T12:00:01Z"),
+	        "1",
+	        "event",
+	        "alert",
+	        "swarm-controller:alpha",
+	        ControlScope.forInstance("swarm-test", "swarm-controller", "alpha"),
+	        "corr-2",
+	        "idem-2",
+	        Map.of(
+	            "templateId", "tpl-1",
+	            "runId", "run-1"
+	        ),
+	        new AlertMessage.AlertData(
+	            "error",
+	            "io.out-of-data",
+	            "Out of data",
             "RedisOutOfData",
             "dataset=orders",
             "logs://example",

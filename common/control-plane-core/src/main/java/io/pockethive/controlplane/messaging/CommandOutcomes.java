@@ -30,6 +30,7 @@ public final class CommandOutcomes {
                                          ControlScope scope,
                                          String correlationId,
                                          String idempotencyKey,
+                                         Map<String, Object> runtime,
                                          String status,
                                          Boolean enabled,
                                          Map<String, Object> context,
@@ -42,7 +43,7 @@ public final class CommandOutcomes {
         if (context != null && !context.isEmpty()) {
             data.put("context", immutableOrNull(context));
         }
-        return outcome(type, origin, scope, correlationId, idempotencyKey, data, timestamp);
+        return outcome(type, origin, scope, correlationId, idempotencyKey, runtime, data, timestamp);
     }
 
     public static CommandOutcome failure(String type,
@@ -50,6 +51,7 @@ public final class CommandOutcomes {
                                          ControlScope scope,
                                          String correlationId,
                                          String idempotencyKey,
+                                         Map<String, Object> runtime,
                                          String status,
                                          Boolean retryable,
                                          Boolean enabled,
@@ -66,7 +68,7 @@ public final class CommandOutcomes {
         if (context != null && !context.isEmpty()) {
             data.put("context", immutableOrNull(context));
         }
-        return outcome(type, origin, scope, correlationId, idempotencyKey, data, timestamp);
+        return outcome(type, origin, scope, correlationId, idempotencyKey, runtime, data, timestamp);
     }
 
     public static CommandOutcome fromState(String type,
@@ -74,6 +76,7 @@ public final class CommandOutcomes {
                                           ControlScope scope,
                                           String correlationId,
                                           String idempotencyKey,
+                                          Map<String, Object> runtime,
                                           CommandState state,
                                           Boolean retryable,
                                           Map<String, Object> extraContext,
@@ -87,12 +90,12 @@ public final class CommandOutcomes {
         }
         Map<String, Object> merged = mergeContext(state.details(), extraContext);
         if (retryable == null) {
-            return success(type, origin, scope, correlationId, idempotencyKey, status, enabled, merged, timestamp);
+            return success(type, origin, scope, correlationId, idempotencyKey, runtime, status, enabled, merged, timestamp);
         }
         if (Boolean.TRUE.equals(retryable) || Boolean.FALSE.equals(retryable)) {
-            return failure(type, origin, scope, correlationId, idempotencyKey, status, retryable, enabled, merged, timestamp);
+            return failure(type, origin, scope, correlationId, idempotencyKey, runtime, status, retryable, enabled, merged, timestamp);
         }
-        return success(type, origin, scope, correlationId, idempotencyKey, status, enabled, merged, timestamp);
+        return success(type, origin, scope, correlationId, idempotencyKey, runtime, status, enabled, merged, timestamp);
     }
 
     private static CommandOutcome outcome(String type,
@@ -100,6 +103,7 @@ public final class CommandOutcomes {
                                          ControlScope scope,
                                          String correlationId,
                                          String idempotencyKey,
+                                         Map<String, Object> runtime,
                                          Map<String, Object> data,
                                          Instant timestamp) {
         Objects.requireNonNull(scope, "scope");
@@ -113,6 +117,7 @@ public final class CommandOutcomes {
             scope,
             trimToNull(correlationId),
             trimToNull(idempotencyKey),
+            runtime,
             data == null || data.isEmpty() ? null : Collections.unmodifiableMap(new LinkedHashMap<>(data))
         );
     }

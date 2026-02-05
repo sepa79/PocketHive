@@ -66,7 +66,7 @@ References:
 - [x] Make SC `status-delta` an aggregate-only payload in `data.context` (no per-worker list)
 - [x] Make SC `status-full` a full aggregate snapshot in `data.context` including `context.workers[]`
 - [x] Include scenario progress consistently in SC status (current/next step, runs)
-- [x] Include journal `runId` in SC status (source: `pockethive.journal.run-id`, emit under `data.context.journal.runId`)
+- [x] Include journal `runId` in SC status (source: `pockethive.journal.run-id`, emit under `envelope.runtime.runId`)
 - [x] Add/adjust tests validating SC status envelopes against schema + “no heavy fields in delta”
 
 ### 3) Orchestrator projections / registry

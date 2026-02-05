@@ -8,7 +8,10 @@ import java.util.List;
  */
 public record SwarmTemplateMetadata(String templateId, String controllerImage, List<Bee> bees) {
     public SwarmTemplateMetadata {
+        if (templateId == null || templateId.isBlank()) {
+            throw new IllegalArgumentException("templateId must not be null or blank");
+        }
+        templateId = templateId.trim();
         bees = bees == null ? List.of() : List.copyOf(bees);
     }
 }
-

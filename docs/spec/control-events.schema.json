@@ -55,15 +55,76 @@
         "scope": { "$ref": "#/$defs/Scope" },
         "correlationId": { "$ref": "#/$defs/NullableNonEmptyString" },
         "idempotencyKey": { "$ref": "#/$defs/NullableNonEmptyString" },
+        "runtime": { "$ref": "#/$defs/RuntimeMeta" },
         "data": {
           "type": "object",
           "additionalProperties": true
         }
       }
     },
+    "SignalEnvelopeBase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "timestamp",
+        "version",
+        "kind",
+        "type",
+        "origin",
+        "scope",
+        "correlationId",
+        "idempotencyKey",
+        "data"
+      ],
+      "properties": {
+        "timestamp": { "type": "string", "format": "date-time" },
+        "version": { "$ref": "#/$defs/NonEmptyString" },
+        "kind": { "$ref": "#/$defs/NonEmptyString" },
+        "type": { "$ref": "#/$defs/NonEmptyString" },
+        "origin": { "$ref": "#/$defs/NonEmptyString" },
+        "scope": { "$ref": "#/$defs/Scope" },
+        "correlationId": { "$ref": "#/$defs/NullableNonEmptyString" },
+        "idempotencyKey": { "$ref": "#/$defs/NullableNonEmptyString" },
+        "data": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "RuntimeScopeRule": {
+      "allOf": [
+        {
+          "type": "object",
+          "if": {
+            "type": "object",
+            "properties": {
+              "scope": {
+                "type": "object",
+                "properties": {
+                  "swarmId": { "const": "ALL" }
+                }
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "runtime": false
+            }
+          },
+          "else": {
+            "type": "object",
+            "required": ["runtime"],
+            "properties": {
+              "runtime": true
+            }
+          }
+        }
+      ]
+    },
     "ControlSignal": {
       "allOf": [
-        { "$ref": "#/$defs/EnvelopeBase" },
+        { "$ref": "#/$defs/SignalEnvelopeBase" },
         {
           "type": "object",
           "properties": {
@@ -77,6 +138,7 @@
     "CommandOutcome": {
       "allOf": [
         { "$ref": "#/$defs/EnvelopeBase" },
+        { "$ref": "#/$defs/RuntimeScopeRule" },
         {
           "type": "object",
           "properties": {
@@ -168,39 +230,54 @@
         "filesystem": { "$ref": "#/$defs/IoState" }
       }
     },
+    "RuntimeMeta": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Runtime/infra metadata for this message scope.",
+      "required": ["templateId", "runId"],
+      "properties": {
+        "templateId": { "$ref": "#/$defs/NonEmptyString" },
+        "runId": { "$ref": "#/$defs/NonEmptyString" },
+        "containerId": { "$ref": "#/$defs/NullableNonEmptyString" },
+        "image": { "$ref": "#/$defs/NullableNonEmptyString" },
+        "stackName": { "$ref": "#/$defs/NullableNonEmptyString" }
+      }
+    },
     "StatusFullMetric": {
       "allOf": [
         { "$ref": "#/$defs/EnvelopeBase" },
+        { "$ref": "#/$defs/RuntimeScopeRule" },
         {
           "type": "object",
           "properties": {
             "kind": { "const": "metric" },
             "type": { "const": "status-full" },
-                "data": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": ["enabled", "config", "startedAt", "io", "ioState"],
-                  "properties": {
-                    "enabled": { "type": "boolean" },
-                    "config": {
-                      "type": "object",
-                      "additionalProperties": true,
-                      "description": "Snapshot of the effective configuration for this scope (role/instance). Must not include secrets."
-                    },
-                    "tps": { "type": "integer", "minimum": 0 },
-                    "startedAt": { "type": "string", "format": "date-time" },
-                    "io": { "$ref": "#/$defs/MetricIo" },
-                    "ioState": { "$ref": "#/$defs/MetricIoState" },
-                    "context": { "type": "object", "additionalProperties": true }
-                  }
-            }
-          }
-        }
-      ]
-    },
+	                "data": {
+	                  "type": "object",
+	                  "additionalProperties": false,
+	                  "required": ["enabled", "config", "startedAt", "io", "ioState"],
+	                  "properties": {
+	                    "enabled": { "type": "boolean" },
+	                    "config": {
+	                      "type": "object",
+	                      "additionalProperties": true,
+	                      "description": "Snapshot of the effective configuration for this scope (role/instance). Must not include secrets."
+	                    },
+	                    "tps": { "type": "integer", "minimum": 0 },
+	                    "startedAt": { "type": "string", "format": "date-time" },
+	                    "io": { "$ref": "#/$defs/MetricIo" },
+	                    "ioState": { "$ref": "#/$defs/MetricIoState" },
+	                    "context": { "type": "object", "additionalProperties": true }
+	                  }
+	            }
+	          }
+	        }
+	      ]
+	    },
     "StatusDeltaMetric": {
       "allOf": [
         { "$ref": "#/$defs/EnvelopeBase" },
+        { "$ref": "#/$defs/RuntimeScopeRule" },
         {
           "type": "object",
           "properties": {
@@ -224,6 +301,7 @@
     "AlertEvent": {
       "allOf": [
         { "$ref": "#/$defs/EnvelopeBase" },
+        { "$ref": "#/$defs/RuntimeScopeRule" },
         {
           "type": "object",
           "properties": {

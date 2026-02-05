@@ -15,6 +15,7 @@ Thumbs.db
 .vscode/
 !vscode-pockethive/.vscode/
 !vscode-pockethive/.vscode/launch.json
+vscode-pockethive/*.vsix
 .project
 .classpath
 .settings/

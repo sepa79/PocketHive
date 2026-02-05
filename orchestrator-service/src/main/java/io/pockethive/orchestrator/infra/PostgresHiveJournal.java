@@ -6,10 +6,12 @@ import io.pockethive.journal.postgres.BufferedPostgresJournalWriter;
 import io.pockethive.journal.postgres.PostgresJournalBackpressureEvents;
 import io.pockethive.journal.postgres.PostgresJournalRecord;
 import io.pockethive.orchestrator.domain.HiveJournal;
-import io.pockethive.orchestrator.domain.SwarmRegistry;
+import io.pockethive.orchestrator.domain.SwarmStore;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -26,18 +28,21 @@ import org.springframework.stereotype.Component;
 @ConditionalOnProperty(name = "pockethive.journal.sink", havingValue = "postgres")
 public class PostgresHiveJournal implements HiveJournal {
 
+  private static final Logger log = LoggerFactory.getLogger(PostgresHiveJournal.class);
+  private static final String HIVE_SWARM_ID = "hive";
+
   private static final int DEFAULT_CAPACITY = 50_000;
   private static final int DEFAULT_BATCH_SIZE = 1_000;
   private static final long DEFAULT_DB_FAILURE_BACKOFF_MILLIS = 30_000;
   private static final long DEFAULT_DROP_QUIET_PERIOD_MILLIS = 1_000;
 
   private final ObjectMapper mapper;
-  private final SwarmRegistry registry;
+  private final SwarmStore store;
   private final BufferedPostgresJournalWriter<HiveJournalEntry> writer;
 
   public PostgresHiveJournal(ObjectMapper mapper,
                              JdbcTemplate jdbc,
-                             SwarmRegistry registry,
+                             SwarmStore store,
                              @Value("${pockethive.journal.postgres.buffer-capacity:" + DEFAULT_CAPACITY + "}")
                              int capacity,
                              @Value("${pockethive.journal.postgres.batch-size:" + DEFAULT_BATCH_SIZE + "}")
@@ -48,7 +53,7 @@ public class PostgresHiveJournal implements HiveJournal {
                              long dropQuietPeriodMillis) {
     this.mapper = Objects.requireNonNull(mapper, "mapper").findAndRegisterModules();
     Objects.requireNonNull(jdbc, "jdbc");
-    this.registry = Objects.requireNonNull(registry, "registry");
+    this.store = Objects.requireNonNull(store, "store");
     this.writer = new BufferedPostgresJournalWriter<>(
         "Hive journal",
         Objects.requireNonNull(jdbc.getDataSource(), "dataSource"),
@@ -63,6 +68,21 @@ public class PostgresHiveJournal implements HiveJournal {
 
   @Override
   public void append(HiveJournalEntry entry) {
+    Objects.requireNonNull(entry, "entry");
+    String swarmId = entry.swarmId();
+    if (swarmId == null || swarmId.isBlank()) {
+      logMissingRunId("blank swarmId", entry);
+      return;
+    }
+    if (!HIVE_SWARM_ID.equals(swarmId)) {
+      String runId = store.find(swarmId)
+          .map(io.pockethive.orchestrator.domain.Swarm::getRunId)
+          .orElse(null);
+      if (runId == null || runId.isBlank()) {
+        logMissingRunId("missing runId in store", entry);
+        return;
+      }
+    }
     writer.append(entry);
   }
 
@@ -73,17 +93,20 @@ public class PostgresHiveJournal implements HiveJournal {
 
   private String resolveRunId(HiveJournalEntry entry) {
     String swarmId = entry.swarmId();
-    if (swarmId == null || swarmId.isBlank()) {
-      return "legacy";
+    if (HIVE_SWARM_ID.equals(swarmId)) {
+      return HIVE_SWARM_ID;
     }
-    return registry.find(swarmId)
+    String runId = store.find(swarmId)
         .map(io.pockethive.orchestrator.domain.Swarm::getRunId)
-        .filter(id -> id != null && !id.isBlank())
-        .orElse("legacy");
+        .orElse(null);
+    if (runId == null || runId.isBlank()) {
+      throw new IllegalStateException("runId is required for hive journal entry swarmId=" + swarmId);
+    }
+    return runId;
   }
 
   private HiveJournalEntry newDropEvent(String severity, String type, Map<String, Object> data) {
-    String swarmId = "hive";
+    String swarmId = HIVE_SWARM_ID;
     ControlScope scope = new ControlScope(swarmId, "orchestrator", "journal");
     return new HiveJournalEntry(
         Instant.now(),
@@ -134,6 +157,20 @@ public class PostgresHiveJournal implements HiveJournal {
     } catch (Exception e) {
       return null;
     }
+  }
+
+  private void logMissingRunId(String reason, HiveJournalEntry entry) {
+    // This is a hard reject (no guessing): if runId is missing, journaling that entry is unsafe
+    // because Postgres requires run_id and we must not fabricate it.
+    log.warn("Dropping hive journal entry ({}): swarmId={} kind={} type={} severity={} origin={} correlationId={} idempotencyKey={}",
+        reason,
+        entry.swarmId(),
+        entry.kind(),
+        entry.type(),
+        entry.severity(),
+        entry.origin(),
+        entry.correlationId(),
+        entry.idempotencyKey());
   }
 
   private final class HiveBackpressureEvents implements PostgresJournalBackpressureEvents<HiveJournalEntry> {

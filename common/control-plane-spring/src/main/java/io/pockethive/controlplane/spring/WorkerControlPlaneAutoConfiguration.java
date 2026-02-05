@@ -108,7 +108,36 @@ public class WorkerControlPlaneAutoConfiguration {
         ControlPlanePublisher publisher
     ) {
         RoleContext role = RoleContext.fromIdentity(identity);
-        return ControlPlaneEmitter.using(descriptor, role, publisher);
+        return ControlPlaneEmitter.using(descriptor, role, publisher, runtimeMeta());
+    }
+
+    private static Map<String, Object> runtimeMeta() {
+        String templateId = requireText(trimToNull(System.getenv("POCKETHIVE_TEMPLATE_ID")), "POCKETHIVE_TEMPLATE_ID");
+        String runId = requireText(trimToNull(System.getenv("POCKETHIVE_JOURNAL_RUN_ID")), "POCKETHIVE_JOURNAL_RUN_ID");
+        Map<String, Object> meta = new LinkedHashMap<>();
+        meta.put("templateId", templateId);
+        meta.put("runId", runId);
+        String containerId = trimToNull(System.getenv("HOSTNAME"));
+        if (containerId != null) {
+            meta.put("containerId", containerId);
+        }
+        String image = trimToNull(System.getenv("POCKETHIVE_RUNTIME_IMAGE"));
+        if (image != null) {
+            meta.put("image", image);
+        }
+        String stackName = trimToNull(System.getenv("POCKETHIVE_RUNTIME_STACK_NAME"));
+        if (stackName != null) {
+            meta.put("stackName", stackName);
+        }
+        return Map.copyOf(meta);
+    }
+
+    private static String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     @Bean(name = "workerControlQueueName")

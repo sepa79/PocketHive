@@ -97,11 +97,11 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     SwarmQueueMetrics queueMetrics = new SwarmQueueMetrics(properties.getSwarmId(), meterRegistry);
     io.pockethive.manager.ports.QueueStatsPort queueStatsPort =
         new io.pockethive.swarmcontroller.runtime.SwarmQueueStatsPortAdapter(amqp);
-    ConfigFanout configFanout =
-        new ConfigFanout(mapper,
-            new io.pockethive.swarmcontroller.runtime.SwarmControlPlanePortAdapter(controlPublisher),
-            properties.getSwarmId(),
-            instanceId);
+		    ConfigFanout configFanout =
+		        new ConfigFanout(mapper,
+		            new io.pockethive.swarmcontroller.runtime.SwarmControlPlanePortAdapter(controlPublisher),
+		            properties.getSwarmId(),
+		            instanceId);
 
     this.core = new SwarmRuntimeCore(
         amqp,
@@ -127,7 +127,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         instanceId);
   }
 
-  private static WorkerSettings deriveWorkerSettings(SwarmControllerProperties properties) {
+	  private static WorkerSettings deriveWorkerSettings(SwarmControllerProperties properties) {
     Objects.requireNonNull(properties, "properties");
     SwarmControllerProperties.Traffic traffic = properties.getTraffic();
     SwarmControllerProperties.Pushgateway pushgateway = properties.getMetrics().pushgateway();
@@ -144,7 +144,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         properties.getRabbit().logsExchange(),
         properties.getRabbit().logging().enabled(),
         metrics);
-  }
+	  }
 
   @Override
   public void prepare(String templateJson) {
@@ -192,6 +192,16 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
 
   void updateHeartbeat(String role, String instance, long timestamp) {
     core.updateHeartbeat(role, instance, timestamp);
+  }
+
+  @Override
+  public void recordStatusSnapshot(String role, String instance, long timestamp) {
+    core.recordStatusSnapshot(role, instance, timestamp);
+  }
+
+  @Override
+  public boolean hasFreshWorkerStatusSnapshotsSince(long cutoffMillis) {
+    return core.hasFreshWorkerStatusSnapshotsSince(cutoffMillis);
   }
 
   @Override

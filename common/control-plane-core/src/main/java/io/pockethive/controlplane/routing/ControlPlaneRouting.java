@@ -1,6 +1,7 @@
 package io.pockethive.controlplane.routing;
 
 import io.pockethive.control.ConfirmationScope;
+import io.pockethive.control.ControlScope;
 import java.util.Arrays;
 import java.util.Objects;
 import java.util.StringJoiner;
@@ -32,7 +33,7 @@ public final class ControlPlaneRouting {
 
     private static String segmentOrAll(String value) {
         if (value == null || value.isBlank()) {
-            return "ALL";
+            return ControlScope.ALL;
         }
         return value.trim();
     }
@@ -50,7 +51,7 @@ public final class ControlPlaneRouting {
 
     private static String normaliseType(String type) {
         String trimmed = trimmedOrNull(type);
-        return trimmed != null ? trimmed : "ALL";
+        return trimmed != null ? trimmed : ControlScope.ALL;
     }
 
     private static String combineType(String category, String signal) {
@@ -116,11 +117,11 @@ public final class ControlPlaneRouting {
             if (normalised == null) {
                 return false;
             }
-            if ("ALL".equalsIgnoreCase(normalised)) {
+            if (ControlScope.isAll(normalised)) {
                 return true;
             }
             String actual = trimmedOrNull(type);
-            return Objects.equals(normalised, actual) || "ALL".equalsIgnoreCase(actual);
+            return Objects.equals(normalised, actual) || ControlScope.isAll(actual);
         }
 
         public boolean matchesRole(String expectedRole) {
@@ -139,7 +140,7 @@ public final class ControlPlaneRouting {
             if (expected == null || actual == null) {
                 return false;
             }
-            if ("ALL".equalsIgnoreCase(expected) || "ALL".equalsIgnoreCase(actual)) {
+            if (ControlScope.isAll(expected) || ControlScope.isAll(actual)) {
                 return true;
             }
             return Objects.equals(expected, actual);

@@ -46,11 +46,12 @@ class PostProcessorTest {
         context.setHops(hops);
         context.setTraceId("trace-123");
 
-        WorkItem message = WorkItem.text("payload")
+        WorkerInfo processorInfo = new WorkerInfo("processor", "swarm", "proc-1", null, null);
+        WorkItem message = WorkItem.text(processorInfo, "payload")
                 .header("x-ph-error", true)
-                .header("x-ph-processor-duration-ms", "12")
-                .header("x-ph-processor-success", "true")
-                .header("x-ph-processor-status", "200")
+                .stepHeader("x-ph-processor-duration-ms", "12")
+                .stepHeader("x-ph-processor-success", "true")
+                .stepHeader("x-ph-processor-status", "200")
                 .observabilityContext(context)
                 .build();
 
@@ -122,10 +123,10 @@ class PostProcessorTest {
         context.setHops(hops);
         context.setTraceId("trace-789");
 
-        WorkItem message = WorkItem.text("payload")
-                .header("x-ph-processor-duration-ms", "30")
-                .header("x-ph-processor-success", "false")
-                .header("x-ph-processor-status", "500")
+        WorkItem message = WorkItem.text(processorInfo(), "payload")
+                .stepHeader("x-ph-processor-duration-ms", "30")
+                .stepHeader("x-ph-processor-success", "false")
+                .stepHeader("x-ph-processor-status", "500")
                 .observabilityContext(context)
                 .build();
 
@@ -172,7 +173,7 @@ class PostProcessorTest {
         context.setHops(hops);
         context.setTraceId("trace-456");
 
-        WorkItem message = WorkItem.text("payload")
+        WorkItem message = WorkItem.text(processorInfo(), "payload")
                 .observabilityContext(context)
                 .build();
 
@@ -204,7 +205,7 @@ class PostProcessorTest {
         ObservabilityContext context = new ObservabilityContext();
         context.setHops(List.of());
 
-        WorkItem message = WorkItem.text("payload")
+        WorkItem message = WorkItem.text(processorInfo(), "payload")
                 .build();
 
         TestWorkerContext workerContext = new TestWorkerContext(null, context, false);
@@ -226,10 +227,10 @@ class PostProcessorTest {
         context.setHops(hops);
         context.setTraceId("trace-456");
 
-        WorkItem message = WorkItem.text("payload")
-                .header("x-ph-processor-duration-ms", "42")
-                .header("x-ph-processor-success", "true")
-                .header("x-ph-processor-status", "200")
+        WorkItem message = WorkItem.text(processorInfo(), "payload")
+                .stepHeader("x-ph-processor-duration-ms", "42")
+                .stepHeader("x-ph-processor-success", "true")
+                .stepHeader("x-ph-processor-status", "200")
                 .observabilityContext(context)
                 .build();
 
@@ -355,6 +356,10 @@ class PostProcessorTest {
         boolean fullSnapshotEmitted() {
             return fullSnapshotEmitted;
         }
+    }
+
+    private static WorkerInfo processorInfo() {
+        return new WorkerInfo("processor", "swarm", "proc-1", null, null);
     }
 
     private static PostProcessorWorkerProperties workerProperties(boolean publishAllMetrics) {

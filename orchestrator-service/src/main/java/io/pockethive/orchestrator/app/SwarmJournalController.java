@@ -3,7 +3,7 @@ package io.pockethive.orchestrator.app;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.ControlScope;
 import io.pockethive.orchestrator.domain.Swarm;
-import io.pockethive.orchestrator.domain.SwarmRegistry;
+import io.pockethive.orchestrator.domain.SwarmStore;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -37,15 +37,15 @@ public class SwarmJournalController {
 
     private final ObjectMapper json;
     private final JdbcTemplate jdbc;
-    private final SwarmRegistry registry;
+    private final SwarmStore store;
 
     @Value("${pockethive.journal.sink:postgres}")
     private String journalSink;
 
-    public SwarmJournalController(ObjectMapper json, JdbcTemplate jdbc, SwarmRegistry registry) {
+    public SwarmJournalController(ObjectMapper json, JdbcTemplate jdbc, SwarmStore store) {
         this.json = json;
         this.jdbc = jdbc;
-        this.registry = registry;
+        this.store = store;
     }
 
     /**
@@ -215,7 +215,7 @@ public class SwarmJournalController {
                 .sorted(Comparator.comparing(JournalRunSummary::lastTs, Comparator.nullsLast(Comparator.naturalOrder())).reversed())
                 .toList();
 
-            if (runs.isEmpty() && registry.find(cleanedId).isEmpty()) {
+            if (runs.isEmpty() && store.find(cleanedId).isEmpty()) {
                 response = ResponseEntity.notFound().build();
             } else {
                 response = ResponseEntity.ok(List.copyOf(runs));
@@ -389,7 +389,7 @@ public class SwarmJournalController {
         if (candidate != null) {
             return candidate;
         }
-        String active = registry.find(swarmId)
+        String active = store.find(swarmId)
             .map(Swarm::getRunId)
             .orElse(null);
         if (active != null && !active.isBlank()) {
@@ -505,7 +505,7 @@ public class SwarmJournalController {
             return new Row(id, instant, java.util.Collections.unmodifiableMap(entry));
         });
 
-        if (rows.isEmpty() && registry.find(cleanedId).isEmpty()) {
+        if (rows.isEmpty() && store.find(cleanedId).isEmpty()) {
             return null;
         }
 
@@ -583,7 +583,7 @@ public class SwarmJournalController {
             entry.put("extra", parseJsonMap(rs.getString("extra")));
             return java.util.Collections.unmodifiableMap(entry);
         });
-        if (rows.isEmpty() && registry.find(cleanedId).isEmpty()) {
+        if (rows.isEmpty() && store.find(cleanedId).isEmpty()) {
             return null;
         }
         return List.copyOf(rows);
@@ -597,7 +597,7 @@ public class SwarmJournalController {
         if (candidate != null) {
             return candidate;
         }
-        String active = registry.find(swarmId)
+        String active = store.find(swarmId)
             .map(Swarm::getRunId)
             .orElse(null);
         if (active != null && !active.isBlank()) {

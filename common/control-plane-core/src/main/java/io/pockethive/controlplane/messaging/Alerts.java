@@ -33,6 +33,7 @@ public final class Alerts {
                                      ControlScope scope,
                                      String correlationId,
                                      String idempotencyKey,
+                                     Map<String, Object> runtime,
                                      String code,
                                      String message,
                                      String errorType,
@@ -60,6 +61,7 @@ public final class Alerts {
             scope,
             trimToNull(correlationId),
             trimToNull(idempotencyKey),
+            runtime,
             data
         );
     }
@@ -68,6 +70,7 @@ public final class Alerts {
                                              ControlScope scope,
                                              String correlationId,
                                              String idempotencyKey,
+                                             Map<String, Object> runtime,
                                              String phase,
                                              Throwable exception,
                                              String logRef,
@@ -84,7 +87,7 @@ public final class Alerts {
             merged.putAll(context);
         }
         String message = errorDetail != null ? errorDetail : errorType;
-        return error(origin, scope, correlationId, idempotencyKey,
+        return error(origin, scope, correlationId, idempotencyKey, runtime,
             Codes.RUNTIME_EXCEPTION,
             message,
             errorType,
@@ -98,6 +101,7 @@ public final class Alerts {
                                            ControlScope scope,
                                            String correlationId,
                                            String idempotencyKey,
+                                           Map<String, Object> runtime,
                                            String dataset,
                                            String message,
                                            String logRef,
@@ -113,7 +117,7 @@ public final class Alerts {
         String msg = (message == null || message.isBlank())
             ? "Out of data"
             : message.trim();
-        return error(origin, scope, correlationId, idempotencyKey,
+        return error(origin, scope, correlationId, idempotencyKey, runtime,
             Codes.IO_OUT_OF_DATA,
             msg,
             null,
@@ -146,4 +150,3 @@ public final class Alerts {
         return trimmed.isEmpty() ? null : trimmed;
     }
 }
-

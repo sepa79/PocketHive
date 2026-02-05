@@ -72,6 +72,7 @@ public final class WorkerControlPlaneRuntime {
     private volatile double lastComputedTps = 0.0;
     private volatile double lastIntervalSeconds = 0.0;
     private final Instant startedAt;
+    private final Map<String, Object> runtimeMeta;
 
     private static final List<String> IO_INPUT_PRECEDENCE = List.of(
         "upstream-error",
@@ -118,6 +119,7 @@ public final class WorkerControlPlaneRuntime {
         this.identity = Objects.requireNonNull(identity, "identity");
         this.configMerger = new ConfigMerger(this.objectMapper);
         this.templateRenderer = templateRenderer;
+        this.runtimeMeta = buildRuntimeMeta();
         WorkerControlPlaneProperties.ControlPlane resolvedControlPlane =
             Objects.requireNonNull(controlPlane, "controlPlane");
         this.controlQueueName = resolvedControlPlane.getControlQueueName();
@@ -200,12 +202,22 @@ public final class WorkerControlPlaneRuntime {
         Objects.requireNonNull(workItem, "workItem");
         Objects.requireNonNull(exception, "exception");
 
+        String correlationId = null;
+        String idempotencyKey = null;
+        Object correlationHeader = workItem.headers().get("correlationId");
+        if (correlationHeader != null) {
+            correlationId = String.valueOf(correlationHeader);
+        }
+        Object idempotencyHeader = workItem.headers().get("idempotencyKey");
+        if (idempotencyHeader != null) {
+            idempotencyKey = String.valueOf(idempotencyHeader);
+        }
+
         Map<String, Object> context = new LinkedHashMap<>();
         context.put("worker", workerBeanName);
 
-        Object messageId = workItem.headers().get("message-id");
-        if (messageId != null) {
-            context.put("messageId", String.valueOf(messageId));
+        if (workItem.messageId() != null) {
+            context.put("messageId", workItem.messageId());
         }
         Object callId = workItem.headers().get("x-ph-call-id");
         if (callId != null) {
@@ -221,8 +233,9 @@ public final class WorkerControlPlaneRuntime {
         emitter.publishAlert(Alerts.fromException(
             identity.instanceId(),
             scope,
-            null,
-            null,
+            correlationId,
+            idempotencyKey,
+            runtimeMeta,
             "work",
             exception,
             null,
@@ -769,7 +782,7 @@ public final class WorkerControlPlaneRuntime {
             }
             @SuppressWarnings("unchecked")
             Map<String, Object> ioMap = (Map<String, Object>) ioMapRaw;
-            Object workObj = ioMap.getOrDefault("work", ioMap);
+            Object workObj = ioMap.get("work");
             if (!(workObj instanceof Map<?, ?> workRaw)) {
                 continue;
             }
@@ -813,17 +826,48 @@ public final class WorkerControlPlaneRuntime {
                 logRef = s.trim();
             }
         }
-        emitter.publishAlert(Alerts.ioOutOfData(
-            identity.instanceId(),
-            io.pockethive.control.ControlScope.forInstance(identity.swarmId(), identity.role(), identity.instanceId()),
-            null,
-            null,
-            dataset,
-            null,
-            logRef,
-            context,
+	        emitter.publishAlert(Alerts.ioOutOfData(
+	            identity.instanceId(),
+	            io.pockethive.control.ControlScope.forInstance(identity.swarmId(), identity.role(), identity.instanceId()),
+	            null,
+	            null,
+	            runtimeMeta,
+	            dataset,
+	            null,
+	            logRef,
+	            context,
             Instant.now()
         ));
+    }
+
+	    private Map<String, Object> buildRuntimeMeta() {
+	        Map<String, Object> meta = new LinkedHashMap<>();
+	        meta.put("templateId", requireEnvValue("POCKETHIVE_TEMPLATE_ID"));
+	        meta.put("runId", requireEnvValue("POCKETHIVE_JOURNAL_RUN_ID"));
+	        meta.put("containerId", envValue("HOSTNAME"));
+	        meta.put("image", envValue("POCKETHIVE_RUNTIME_IMAGE"));
+	        meta.put("stackName", envValue("POCKETHIVE_RUNTIME_STACK_NAME"));
+	        return Collections.unmodifiableMap(meta);
+	    }
+
+    private static String envValue(String key) {
+        if (key == null || key.isBlank()) {
+            return null;
+        }
+        String value = System.getenv(key);
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isBlank() ? null : trimmed;
+    }
+
+    private static String requireEnvValue(String key) {
+        String value = envValue(key);
+        if (value == null) {
+            throw new IllegalStateException("Missing required environment variable: " + key);
+        }
+        return value;
     }
 
     private static String asIoState(Object value, List<String> allowed) {

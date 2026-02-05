@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>PocketHive Control-Plane Traffic Viewer (MVP)</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="title">
+        <div class="app">PocketHive Control-Plane Traffic Viewer</div>
+        <div class="sub">Load a <code>control-recording*.jsonl</code> file and review flows/threads.</div>
+      </div>
+      <div class="actions">
+        <label class="btn">
+          <input id="fileInput" type="file" accept=".jsonl,.txt,application/json" />
+          Load recording…
+        </label>
+        <button id="resetBtn" class="btn secondary" type="button" disabled>Reset</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="panel left">
+        <div id="dropZone" class="dropzone" tabindex="0">
+          <div class="dropTitle">Drag &amp; drop a recording here</div>
+          <div class="dropHint">Or click “Load recording…”</div>
+        </div>
+
+        <div class="status">
+          <div class="row">
+            <div class="label">File</div>
+            <div id="fileName" class="value muted">—</div>
+          </div>
+        <div class="row">
+          <div class="label">Parsed</div>
+          <div id="parsedCount" class="value muted">0</div>
+        </div>
+        <div class="row">
+          <div class="label">Parse errors</div>
+          <div id="errorCount" class="value muted">0</div>
+        </div>
+        <div class="row">
+          <div class="label">Filtered</div>
+          <div id="filteredCount" class="value muted">0</div>
+        </div>
+      </div>
+
+        <div class="card">
+          <div class="cardTitle">Filters</div>
+          <div class="filters">
+            <label>
+              <div class="fLabel">Swarm</div>
+              <select id="filterSwarm"></select>
+            </label>
+            <label>
+              <div class="fLabel">Kind</div>
+              <select id="filterKind"></select>
+            </label>
+            <label>
+              <div class="fLabel">Type</div>
+              <select id="filterType"></select>
+            </label>
+            <label>
+              <div class="fLabel">Role</div>
+              <select id="filterRole"></select>
+            </label>
+            <label>
+              <div class="fLabel">Instance</div>
+              <select id="filterInstance"></select>
+            </label>
+            <label>
+              <div class="fLabel">Origin contains</div>
+              <input id="filterOrigin" type="text" placeholder="e.g. orchestrator-local" />
+            </label>
+            <label>
+              <div class="fLabel">Correlation contains</div>
+              <input id="filterCorrelation" type="text" placeholder="UUID…" />
+            </label>
+            <label>
+              <div class="fLabel">RoutingKey contains</div>
+              <input id="filterRoutingKey" type="text" placeholder="signal.swarm-start…" />
+            </label>
+            <div class="filterButtons">
+              <button id="clearFiltersBtn" class="btn secondary" type="button" disabled>Clear filters</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="cardTitle">Threads (correlationId)</div>
+          <div class="cardSub">Click a thread to focus the timeline.</div>
+          <div id="threads" class="threads empty">Load a file first.</div>
+        </div>
+      </section>
+
+      <section class="panel center">
+        <div class="card detailsCard">
+          <div class="cardTitle">Details</div>
+          <div class="cardSub">
+            Selected: <span id="selectedSummary" class="muted">—</span>
+          </div>
+          <div class="detailActions">
+            <button id="copyBodyBtn" class="btn secondary" type="button" disabled>Copy message JSON</button>
+          </div>
+          <pre id="details" class="details empty">Select a timeline row…</pre>
+        </div>
+        <div class="card timelineCard">
+          <div class="cardTitle">Timeline</div>
+          <div class="cardSub">Click a row to inspect the message.</div>
+          <div class="tableWrap">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th class="colTime">Time</th>
+                  <th class="colKind">Kind.Type</th>
+                  <th class="colScope">swarm / role / instance</th>
+                  <th class="colOrigin">Origin</th>
+                  <th class="colCorr">Correlation</th>
+                </tr>
+              </thead>
+              <tbody id="timeline" class="empty">
+                <tr><td colspan="5" class="emptyCell">Load a recording to start.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="./viewer.js"></script>
+  </body>
+</html>

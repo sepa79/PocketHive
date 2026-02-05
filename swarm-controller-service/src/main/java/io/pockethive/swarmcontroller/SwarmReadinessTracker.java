@@ -12,14 +12,15 @@ import java.util.concurrent.ConcurrentMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * Tracks swarm-level readiness and basic worker metrics.
- * <p>
- * This component owns the bookkeeping for expected vs. ready workers, heartbeats,
- * and enabled flags, and can request fresh status snapshots via a callback when
- * it detects missing or stale heartbeats.
- */
-public final class SwarmReadinessTracker {
+  /**
+   * Tracks swarm-level readiness and basic worker metrics.
+   * <p>
+   * This component owns the bookkeeping for expected vs. ready workers, heartbeats,
+   * status-full snapshots, and enabled flags. It can request status on missing/stale
+   * heartbeats via a callback; snapshot freshness checks must remain side-effect free
+   * to avoid status-request storms.
+   */
+  public final class SwarmReadinessTracker {
 
   public interface StatusRequestCallback {
     void requestStatus(String role, String instance, String reason);
@@ -34,6 +35,7 @@ public final class SwarmReadinessTracker {
   private final Map<String, Integer> expectedReady = new HashMap<>();
   private final Map<String, List<String>> instancesByRole = new HashMap<>();
   private final ConcurrentMap<String, Long> lastSeen = new ConcurrentHashMap<>();
+  private final ConcurrentMap<String, Long> lastSnapshotSeen = new ConcurrentHashMap<>();
   private final ConcurrentMap<String, Boolean> enabled = new ConcurrentHashMap<>();
 
   public SwarmReadinessTracker(StatusRequestCallback statusRequestCallback) {
@@ -44,6 +46,7 @@ public final class SwarmReadinessTracker {
     expectedReady.clear();
     instancesByRole.clear();
     lastSeen.clear();
+    lastSnapshotSeen.clear();
     enabled.clear();
   }
 
@@ -59,6 +62,13 @@ public final class SwarmReadinessTracker {
       return;
     }
     lastSeen.put(key(role, instance), timestamp);
+  }
+
+  public void recordStatusSnapshot(String role, String instance, long timestamp) {
+    if (!hasText(role) || !hasText(instance)) {
+      return;
+    }
+    lastSnapshotSeen.put(key(role, instance), timestamp);
   }
 
   public void recordEnabled(String role, String instance, boolean flag) {
@@ -86,6 +96,27 @@ public final class SwarmReadinessTracker {
       return true;
     }
     return isFullyReady();
+  }
+
+  public boolean hasFreshSnapshotsSince(long cutoffMillis) {
+    Map<String, List<String>> snapshot;
+    synchronized (this) {
+      snapshot = new HashMap<>(instancesByRole);
+    }
+    if (snapshot.isEmpty()) {
+      return true;
+    }
+    for (Map.Entry<String, List<String>> entry : snapshot.entrySet()) {
+      String role = entry.getKey();
+      for (String instance : entry.getValue()) {
+        String key = key(role, instance);
+        Long ts = lastSnapshotSeen.get(key);
+        if (ts == null || ts < cutoffMillis) {
+          return false;
+        }
+      }
+    }
+    return true;
   }
 
   public SwarmMetrics metrics() {

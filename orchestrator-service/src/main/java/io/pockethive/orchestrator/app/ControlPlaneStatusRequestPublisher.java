@@ -47,10 +47,14 @@ public class ControlPlaneStatusRequestPublisher {
             idempotencyKey);
     }
 
-    private void publish(ControlScope target, String routingKey, String correlationId, String idempotencyKey) {
+    private void publish(ControlScope target,
+                         String routingKey,
+                         String correlationId,
+                         String idempotencyKey) {
         var signal = ControlSignals.statusRequest(identity.instanceId(), target, correlationId, idempotencyKey);
         String payload = ControlPlaneJson.write(signal, "status-request signal");
         controlPlane.publishSignal(new SignalMessage(routingKey, payload));
         log.info("[CTRL] SEND status-request rk={} correlationId={}", routingKey, correlationId);
     }
+
 }

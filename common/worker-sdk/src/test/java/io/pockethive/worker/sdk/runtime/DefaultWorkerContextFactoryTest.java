@@ -8,6 +8,7 @@ import io.micrometer.observation.ObservationRegistry;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.worker.sdk.api.WorkItem;
+import io.pockethive.worker.sdk.api.WorkerInfo;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.config.WorkInputConfig;
 import io.pockethive.worker.sdk.config.WorkOutputConfig;
@@ -32,6 +33,7 @@ class DefaultWorkerContextFactoryTest {
         "Test worker",
         Set.of(WorkerCapability.MESSAGE_DRIVEN)
     );
+    private static final WorkerInfo MESSAGE_INFO = new WorkerInfo("ingress", "swarm", "instance", null, null);
 
     private final WorkerState state = new WorkerState(DEFINITION);
     private final DefaultWorkerContextFactory factory = new DefaultWorkerContextFactory(
@@ -45,7 +47,7 @@ class DefaultWorkerContextFactoryTest {
 
     @Test
     void generatesObservabilityContextWhenMissing() {
-        WorkItem message = WorkItem.text("payload")
+        WorkItem message = WorkItem.text(MESSAGE_INFO, "payload")
             .header("swarmId", "swarm-1")
             .header("instanceId", "instance-1")
             .build();
@@ -66,7 +68,7 @@ class DefaultWorkerContextFactoryTest {
         inbound.setTraceId("");
         inbound.setSwarmId(null);
 
-        WorkItem message = WorkItem.text("payload")
+        WorkItem message = WorkItem.text(MESSAGE_INFO, "payload")
             .header("swarmId", "swarm-2")
             .header("instanceId", "instance-2")
             .observabilityContext(inbound)
@@ -83,7 +85,7 @@ class DefaultWorkerContextFactoryTest {
 
     @Test
     void fallsBackToConfiguredIdentityWhenHeadersMissing() {
-        WorkItem message = WorkItem.text("payload").build();
+        WorkItem message = WorkItem.text(MESSAGE_INFO, "payload").build();
 
         WorkerContext context = factory.createContext(DEFINITION, state, message);
 
@@ -101,7 +103,7 @@ class DefaultWorkerContextFactoryTest {
             ObservationRegistry.create()
         );
 
-        WorkItem message = WorkItem.text("payload").build();
+        WorkItem message = WorkItem.text(MESSAGE_INFO, "payload").build();
 
         assertThatThrownBy(() -> noIdentityFactory.createContext(DEFINITION, state, message))
             .isInstanceOf(IllegalStateException.class)

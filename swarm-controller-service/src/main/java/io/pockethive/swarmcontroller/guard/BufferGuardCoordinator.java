@@ -156,12 +156,12 @@ public final class BufferGuardCoordinator {
     try {
       var targetScope = io.pockethive.control.ControlScope.forRole(swarmId, targetRole);
       var patchData = mapper.convertValue(patch, Map.class);
-      var signal = io.pockethive.controlplane.messaging.ControlSignals.configUpdate(
-          instanceId,
-          targetScope,
-          java.util.UUID.randomUUID().toString(),
-          java.util.UUID.randomUUID().toString(),
-          patchData);
+	      var signal = io.pockethive.controlplane.messaging.ControlSignals.configUpdate(
+	          instanceId,
+	          targetScope,
+	          java.util.UUID.randomUUID().toString(),
+	          java.util.UUID.randomUUID().toString(),
+	          patchData);
       String payload = ControlPlaneJson.write(signal, "buffer-guard config-update");
       String rk = ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, swarmId, targetRole, null);
       log.info("buffer-guard config-update rk={} payload {}", rk, payload);

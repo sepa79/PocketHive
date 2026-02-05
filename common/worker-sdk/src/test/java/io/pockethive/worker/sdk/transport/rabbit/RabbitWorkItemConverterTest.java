@@ -2,7 +2,10 @@ package io.pockethive.worker.sdk.transport.rabbit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.pockethive.observability.ObservabilityContext;
+import io.pockethive.observability.ObservabilityContextUtil;
 import io.pockethive.worker.sdk.api.WorkItem;
+import io.pockethive.worker.sdk.api.WorkerInfo;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.core.Message;
@@ -14,39 +17,43 @@ class RabbitWorkItemConverterTest {
 
     @Test
     void roundTripPreservesHeadersAndBody() {
-        WorkItem original = WorkItem.json(Map.of("hello", "world"))
-            .header("content-type", MessageProperties.CONTENT_TYPE_JSON)
-            .header("message-id", "msg-123")
-            .header("x-ph-service", "generator")
+        WorkerInfo info = new WorkerInfo("generator", "swarm", "instance", null, null);
+        ObservabilityContext observability = ObservabilityContextUtil.init(info.role(), info.instanceId(), info.swarmId());
+        WorkItem original = WorkItem.json(info, Map.of("hello", "world"))
+            .header("x-test", "value")
+            .messageId("msg-123")
+            .contentType("application/json")
+            .observabilityContext(observability)
             .build();
 
         Message amqpMessage = converter.toMessage(original);
         assertThat(amqpMessage.getMessageProperties().getContentType()).isEqualTo(MessageProperties.CONTENT_TYPE_JSON);
-        assertThat(amqpMessage.getMessageProperties().getMessageId()).isEqualTo("msg-123");
-        assertThat(amqpMessage.getMessageProperties().getHeaders()).containsEntry("x-ph-service", "generator");
+        assertThat(amqpMessage.getMessageProperties().getMessageId()).isNull();
+        assertThat(amqpMessage.getMessageProperties().getHeaders()).isEmpty();
 
         WorkItem roundTrip = converter.fromMessage(amqpMessage);
         assertThat(roundTrip.asJsonNode()).isEqualTo(original.asJsonNode());
-        assertThat(roundTrip.headers()).containsEntry("x-ph-service", "generator");
-        assertThat(roundTrip.headers()).containsEntry("content-type", MessageProperties.CONTENT_TYPE_JSON);
+        assertThat(roundTrip.headers()).containsEntry("x-test", "value");
+        assertThat(roundTrip.messageId()).isEqualTo("msg-123");
+        assertThat(roundTrip.contentType()).isEqualTo("application/json");
+        assertThat(roundTrip.observabilityContext()).isPresent();
     }
 
     @Test
     void roundTripPreservesStepHistory() {
-        WorkItem seed = WorkItem.text("seed")
+        WorkerInfo info = new WorkerInfo("generator", "swarm", "instance", null, null);
+        ObservabilityContext observability = ObservabilityContextUtil.init(info.role(), info.instanceId(), info.swarmId());
+        WorkItem seed = WorkItem.text(info, "seed")
             .header("swarmId", "abc")
+            .observabilityContext(observability)
             .build();
-        WorkItem withTemplate = seed.addStepPayload("templated");
-        WorkItem withHttp = withTemplate.addStep(
-            "{\"path\":\"/test\",\"method\":\"POST\"}",
-            Map.of("x-ph-service", "generator"));
+        WorkItem withTemplate = seed.addStep(info, "templated", Map.of());
+        WorkItem withHttp = withTemplate.addStep(info, "{\"path\":\"/test\",\"method\":\"POST\"}", Map.of());
 
         Message amqpMessage = converter.toMessage(withHttp);
         WorkItem roundTrip = converter.fromMessage(amqpMessage);
 
         assertThat(roundTrip.payload()).isEqualTo(withHttp.payload());
-        assertThat(roundTrip.headers()).containsEntry("x-ph-service", "generator");
-
         assertThat(roundTrip.steps()).hasSize(3);
         assertThat(roundTrip.steps()).element(0).extracting("payload").isEqualTo("seed");
         assertThat(roundTrip.steps()).element(1).extracting("payload").isEqualTo("templated");

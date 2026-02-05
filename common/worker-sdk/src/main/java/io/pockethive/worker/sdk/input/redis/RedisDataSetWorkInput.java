@@ -5,8 +5,10 @@ import io.lettuce.core.RedisURI;
 import io.lettuce.core.api.StatefulRedisConnection;
 import io.lettuce.core.api.sync.RedisCommands;
 import io.pockethive.controlplane.ControlPlaneIdentity;
+import io.pockethive.observability.ObservabilityContextUtil;
 import io.pockethive.worker.sdk.api.StatusPublisher;
 import io.pockethive.worker.sdk.api.WorkItem;
+import io.pockethive.worker.sdk.api.WorkerInfo;
 import io.pockethive.worker.sdk.config.RedisDataSetInputProperties;
 import io.pockethive.worker.sdk.input.WorkInput;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
@@ -169,10 +171,18 @@ public final class RedisDataSetWorkInput implements WorkInput {
                 break;
             }
             try {
-                WorkItem item = WorkItem.text(value)
+                WorkerInfo info = new WorkerInfo(
+                    workerDefinition.role(),
+                    identity.swarmId(),
+                    identity.instanceId(),
+                    workerDefinition.io().inboundQueue(),
+                    workerDefinition.io().outboundQueue()
+                );
+                WorkItem item = WorkItem.text(info, value)
                     .header("swarmId", identity.swarmId())
                     .header("instanceId", identity.instanceId())
                     .header("x-ph-redis-list", properties.getListName())
+                    .observabilityContext(ObservabilityContextUtil.init(info.role(), info.instanceId(), info.swarmId()))
                     .build();
                 dispatchedCount.incrementAndGet();
                 lastPopAtMillis = now;

@@ -3,8 +3,10 @@ package io.pockethive.worker.sdk.input.csv;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.pockethive.controlplane.ControlPlaneIdentity;
+import io.pockethive.observability.ObservabilityContextUtil;
 import io.pockethive.worker.sdk.api.StatusPublisher;
 import io.pockethive.worker.sdk.api.WorkItem;
+import io.pockethive.worker.sdk.api.WorkerInfo;
 import io.pockethive.worker.sdk.input.WorkInput;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
@@ -149,7 +151,14 @@ public final class CsvDataSetWorkInput implements WorkInput {
 
     private void dispatchRow(String[] row, int rowIdx, long timestamp) throws Exception {
         String json = rowToJson(row);
-        WorkItem.Builder builder = WorkItem.text(json)
+        WorkerInfo info = new WorkerInfo(
+            workerDefinition.role(),
+            identity.swarmId(),
+            identity.instanceId(),
+            workerDefinition.io().inboundQueue(),
+            workerDefinition.io().outboundQueue()
+        );
+        WorkItem.Builder builder = WorkItem.text(info, json)
             .header("swarmId", identity.swarmId())
             .header("instanceId", identity.instanceId())
             .header("x-ph-csv-file", properties.getFilePath())
@@ -159,6 +168,7 @@ public final class CsvDataSetWorkInput implements WorkInput {
             long remaining = Math.max(0, csvRows.size() - currentRowIndex.get());
             builder.header("x-ph-csv-remaining", remaining);
         }
+        builder.observabilityContext(ObservabilityContextUtil.init(info.role(), info.instanceId(), info.swarmId()));
 
         dispatchedCount.incrementAndGet();
         lastDispatchAtMillis = timestamp;

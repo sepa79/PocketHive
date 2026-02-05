@@ -1,6 +1,6 @@
 package io.pockethive.orchestrator.app;
 
-import io.pockethive.orchestrator.domain.SwarmRegistry;
+import io.pockethive.orchestrator.domain.SwarmStore;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -16,24 +16,24 @@ public class ControlPlaneSyncService {
 
     private static final Duration MIN_INTERVAL = Duration.ofSeconds(2);
 
-    private final SwarmRegistry registry;
+    private final SwarmStore store;
     private final SwarmSignalListener orchestratorSignals;
     private final ControlPlaneStatusRequestPublisher publisher;
     private final Clock clock;
     private final AtomicLong lastIssuedMs = new AtomicLong(0L);
 
     @Autowired
-    public ControlPlaneSyncService(SwarmRegistry registry,
+    public ControlPlaneSyncService(SwarmStore store,
                                    SwarmSignalListener orchestratorSignals,
                                    ControlPlaneStatusRequestPublisher publisher) {
-        this(registry, orchestratorSignals, publisher, Clock.systemUTC());
+        this(store, orchestratorSignals, publisher, Clock.systemUTC());
     }
 
-    ControlPlaneSyncService(SwarmRegistry registry,
+    ControlPlaneSyncService(SwarmStore store,
                             SwarmSignalListener orchestratorSignals,
                             ControlPlaneStatusRequestPublisher publisher,
                             Clock clock) {
-        this.registry = Objects.requireNonNull(registry, "registry");
+        this.store = Objects.requireNonNull(store, "store");
         this.orchestratorSignals = Objects.requireNonNull(orchestratorSignals, "orchestratorSignals");
         this.publisher = Objects.requireNonNull(publisher, "publisher");
         this.clock = Objects.requireNonNull(clock, "clock");
@@ -58,7 +58,7 @@ public class ControlPlaneSyncService {
         lastIssuedMs.set(nowMs);
 
         if (mode == SyncMode.RESET) {
-            registry.clear();
+            store.clear();
         }
 
         orchestratorSignals.requestStatusFull();
@@ -67,7 +67,7 @@ public class ControlPlaneSyncService {
         String idempotencyKey = "status-request:" + UUID.randomUUID();
         int signals = 0;
 
-        List<String> swarmIds = registry.all().stream().map(s -> s.getId()).toList();
+        List<String> swarmIds = store.all().stream().map(s -> s.getId()).toList();
         if (swarmIds.isEmpty()) {
             publisher.requestStatusForAllControllers(correlationId, idempotencyKey);
             signals++;

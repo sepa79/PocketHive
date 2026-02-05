@@ -2,6 +2,7 @@ package io.pockethive.generator;
 
 import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
 import io.pockethive.worker.sdk.api.WorkItem;
+import io.pockethive.worker.sdk.api.WorkStep;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
 import io.pockethive.worker.sdk.config.WorkerCapability;
@@ -113,11 +114,15 @@ class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
             .data("method", config.message().method())
             .data("enabled", context.enabled()));
     WorkItem message = buildMessage(config, context, seed);
-    return seed.addStep(message.asString(), message.headers());
+    return appendMessageStep(seed, message, context);
   }
 
   private WorkItem buildMessage(GeneratorWorkerConfig config, WorkerContext context, WorkItem seed) {
     String messageId = UUID.randomUUID().toString();
+    WorkItem effectiveSeed = seed;
+    if (effectiveSeed.headers().get("vars") == null && config.vars() != null && !config.vars().isEmpty()) {
+      effectiveSeed = effectiveSeed.toBuilder().header("vars", config.vars()).build();
+    }
     GeneratorWorkerConfig.Message message = config.message();
     MessageTemplate template = MessageTemplate.builder()
         .bodyType(message.bodyType())
@@ -126,18 +131,17 @@ class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
         .bodyTemplate(message.body())
         .headerTemplates(message.headers())
         .build();
-    MessageTemplateRenderer.RenderedMessage rendered = messageTemplateRenderer.render(template, seed);
+    MessageTemplateRenderer.RenderedMessage rendered = messageTemplateRenderer.render(template, effectiveSeed);
 
-    Map<String, Object> baseHeaders = new HashMap<>(seed.headers());
-    baseHeaders.put("message-id", messageId);
-    baseHeaders.put("x-ph-service", context.info().role());
+    Map<String, Object> baseHeaders = new HashMap<>(effectiveSeed.headers());
 
     if (rendered.bodyType() == MessageBodyType.SIMPLE) {
       Map<String, Object> headers = new LinkedHashMap<>(baseHeaders);
       headers.putAll(rendered.headers());
-      return WorkItem.text(rendered.body())
-          .header("content-type", MessageProperties.CONTENT_TYPE_JSON)
+      return WorkItem.text(context.info(), rendered.body())
           .headers(headers)
+          .messageId(messageId)
+          .contentType(MessageProperties.CONTENT_TYPE_JSON)
           .build();
     }
 
@@ -149,10 +153,31 @@ class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
     payload.put("body", rendered.body());
     payload.put("createdAt", Instant.now().toString());
 
-    return WorkItem.json(payload)
-        .header("content-type", MessageProperties.CONTENT_TYPE_JSON)
-        .header("message-id", messageId)
-        .header("x-ph-service", context.info().role())
+    return WorkItem.json(context.info(), payload)
+        .headers(baseHeaders)
+        .messageId(messageId)
+        .contentType(MessageProperties.CONTENT_TYPE_JSON)
         .build();
+  }
+
+  private WorkItem appendMessageStep(WorkItem seed, WorkItem message, WorkerContext context) {
+    WorkStep step = lastStep(message);
+    return seed.toBuilder()
+        .headers(message.headers())
+        .messageId(message.messageId())
+        .contentType(message.contentType())
+        .step(context.info(), step.payload(), step.payloadEncoding(), step.headers())
+        .build();
+  }
+
+  private WorkStep lastStep(WorkItem item) {
+    WorkStep last = null;
+    for (WorkStep step : item.steps()) {
+      last = step;
+    }
+    if (last == null) {
+      throw new IllegalStateException("Generator message did not include any steps");
+    }
+    return last;
   }
 }

@@ -1,5 +1,7 @@
 package io.pockethive.observability;
 
+import io.pockethive.control.ControlScope;
+import io.pockethive.control.ControlRuntime;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -111,6 +113,23 @@ public class StatusEnvelopeBuilder {
 
     public StatusEnvelopeBuilder swarmId(String swarmId) {
         scope.put("swarmId", swarmId);
+        return this;
+    }
+
+    /**
+     * Attach canonical runtime metadata to the envelope.
+     *
+     * <p>Runtime is required for non-broadcast messages (scope.swarmId != ALL) and must be omitted for
+     * broadcast messages (scope.swarmId == ALL).</p>
+     */
+    public StatusEnvelopeBuilder runtime(Map<String, ?> runtime) {
+        @SuppressWarnings("unchecked")
+        Map<String, Object> normalised = ControlRuntime.normalise((Map<String, Object>) runtime);
+        if (normalised == null) {
+            root.remove("runtime");
+        } else {
+            root.put("runtime", normalised);
+        }
         return this;
     }
 
@@ -292,6 +311,9 @@ public class StatusEnvelopeBuilder {
         if (trimmed.isEmpty()) {
             return this;
         }
+        if ("runtime".equals(trimmed)) {
+            throw new IllegalStateException("status runtime is an envelope field; use runtime(...) instead of data(\"runtime\", ...)");
+        }
         if ("startedAt".equals(trimmed)) {
             data.put("startedAt", value);
             return this;
@@ -433,6 +455,20 @@ public class StatusEnvelopeBuilder {
         }
         if (isFull && !data.containsKey("config")) {
             data.put("config", Collections.emptyMap());
+        }
+
+        String swarmId = scope.get("swarmId") instanceof String value ? value : null;
+        if (swarmId == null || swarmId.isBlank()) {
+            throw new IllegalStateException("status metrics must include scope.swarmId");
+        }
+        boolean isBroadcast = ControlScope.isAll(swarmId.trim());
+        boolean hasRuntime = root.get("runtime") instanceof Map<?, ?> map && !map.isEmpty();
+        if (isBroadcast) {
+            if (root.get("runtime") != null) {
+                throw new IllegalStateException("broadcast status metrics must omit runtime");
+            }
+        } else if (!hasRuntime) {
+            throw new IllegalStateException("non-broadcast status metrics must include runtime");
         }
 
         if (!isFull) {

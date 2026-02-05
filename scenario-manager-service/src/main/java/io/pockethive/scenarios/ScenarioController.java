@@ -22,6 +22,7 @@ import java.util.Map;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
+import io.pockethive.swarm.model.SutEnvironment;
 
 @RestController
 @RequestMapping("/scenarios")
@@ -42,9 +43,9 @@ public class ScenarioController {
             produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<Scenario> create(@Valid @RequestBody Scenario scenario,
                                            @RequestHeader(HttpHeaders.CONTENT_TYPE) String contentType) throws IOException {
-        log.info("[REST] POST /scenarios contentType={} body={}", contentType, safeJson(scenario));
+        log.info("[REST] POST /scenarios contentType={} scenario={}", contentType, safeJson(scenarioSummary(scenario)));
         Scenario created = service.create(scenario, ScenarioService.formatFrom(contentType));
-        log.info("[REST] POST /scenarios -> status=201 body={}", safeJson(created));
+        log.info("[REST] POST /scenarios -> status=201 scenario={}", safeJson(scenarioSummary(created)));
         return ResponseEntity.status(HttpStatus.CREATED)
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(created);
@@ -72,7 +73,7 @@ public class ScenarioController {
     public Scenario one(@PathVariable("id") String id) {
         log.info("[REST] GET /scenarios/{}", id);
         Scenario scenario = service.find(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        log.info("[REST] GET /scenarios/{} -> status=200 body={}", id, safeJson(scenario));
+        log.info("[REST] GET /scenarios/{} -> status=200 scenario={}", id, safeJson(scenarioSummary(scenario)));
         return scenario;
     }
 
@@ -83,9 +84,9 @@ public class ScenarioController {
     public Scenario update(@PathVariable("id") String id,
                            @Valid @RequestBody Scenario scenario,
                            @RequestHeader(HttpHeaders.CONTENT_TYPE) String contentType) throws IOException {
-        log.info("[REST] PUT /scenarios/{} contentType={} body={}", id, contentType, safeJson(scenario));
+        log.info("[REST] PUT /scenarios/{} contentType={} scenario={}", id, contentType, safeJson(scenarioSummary(scenario)));
         Scenario updated = service.update(id, scenario, ScenarioService.formatFrom(contentType));
-        log.info("[REST] PUT /scenarios/{} -> status=200 body={}", id, safeJson(updated));
+        log.info("[REST] PUT /scenarios/{} -> status=200 scenario={}", id, safeJson(scenarioSummary(updated)));
         return updated;
     }
 
@@ -119,6 +120,164 @@ public class ScenarioController {
                     .body(text);
         } catch (IllegalArgumentException e) {
             log.warn("[REST] GET /scenarios/{}/raw -> status=404 {}", id, e.getMessage());
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
+        }
+    }
+
+    @GetMapping(value = "/{id}/variables", produces = MediaType.TEXT_PLAIN_VALUE)
+    public ResponseEntity<String> getVariables(@PathVariable("id") String id,
+                                               @RequestHeader(value = "X-Correlation-Id", required = false) String correlationId,
+                                               @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKey) throws IOException {
+        log.info("[REST] GET /scenarios/{}/variables correlationId={} idempotencyKey={}", id, correlationId, idempotencyKey);
+        if (service.find(id).isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+        }
+        String text = service.readVariablesRaw(id);
+        if (text == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "variables.yaml not found");
+        }
+        log.info("[REST] GET /scenarios/{}/variables -> status=200 ({} chars)", id, text.length());
+        return ResponseEntity.ok()
+            .contentType(MediaType.TEXT_PLAIN)
+            .body(text);
+    }
+
+    @PutMapping(value = "/{id}/variables", consumes = MediaType.TEXT_PLAIN_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<VariablesWriteResponse> putVariables(@PathVariable("id") String id,
+                                                               @RequestBody String body,
+                                                               @RequestHeader(value = "X-Correlation-Id", required = false) String correlationId,
+                                                               @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKey) throws IOException {
+        int size = body != null ? body.length() : 0;
+        log.info("[REST] PUT /scenarios/{}/variables ({} chars) correlationId={} idempotencyKey={}", id, size, correlationId, idempotencyKey);
+        if (service.find(id).isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+        }
+        try {
+            ScenarioService.VariablesValidationResult result = service.writeVariables(id, body != null ? body : "");
+            VariablesWriteResponse resp = new VariablesWriteResponse("ok", result.warnings());
+            log.info("[REST] PUT /scenarios/{}/variables -> status=200 warnings={}", id, resp.warnings().size());
+            return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(resp);
+        } catch (IllegalArgumentException e) {
+            log.warn("[REST] PUT /scenarios/{}/variables -> status=400 {}", id, e.getMessage());
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        }
+    }
+
+    @GetMapping(value = "/{id}/variables/resolve", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<VariablesResolveResponse> resolveVariables(@PathVariable("id") String id,
+                                                                     @RequestParam(name = "profileId", required = false) String profileId,
+                                                                     @RequestParam(name = "sutId", required = false) String sutId,
+                                                                     @RequestHeader(value = "X-Correlation-Id", required = false) String correlationId,
+                                                                     @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKey) throws IOException {
+        log.info("[REST] GET /scenarios/{}/variables/resolve profileId={} sutId={} correlationId={} idempotencyKey={}",
+            id, profileId, sutId, correlationId, idempotencyKey);
+        if (service.find(id).isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+        }
+        try {
+            ScenarioService.VariablesResolutionResult resolved = service.resolveVariables(id, profileId, sutId);
+            VariablesResolveResponse resp = new VariablesResolveResponse(
+                profileId,
+                sutId,
+                resolved.vars(),
+                resolved.warnings());
+            log.info("[REST] GET /scenarios/{}/variables/resolve -> status=200 vars={} warnings={}",
+                id, resp.vars().size(), resp.warnings().size());
+            return ResponseEntity.ok(resp);
+        } catch (IllegalArgumentException e) {
+            log.warn("[REST] GET /scenarios/{}/variables/resolve -> status=400 {}", id, e.getMessage());
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        }
+    }
+
+    @GetMapping(value = "/{id}/suts", produces = MediaType.APPLICATION_JSON_VALUE)
+    public List<String> listBundleSuts(@PathVariable("id") String id) throws IOException {
+        log.info("[REST] GET /scenarios/{}/suts", id);
+        if (service.find(id).isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+        }
+        List<String> ids = service.listSutIds(id);
+        log.info("[REST] GET /scenarios/{}/suts -> status=200 {} items", id, ids.size());
+        return ids;
+    }
+
+    @GetMapping(value = "/{id}/suts/{sutId}", produces = MediaType.APPLICATION_JSON_VALUE)
+    public SutEnvironment getBundleSut(@PathVariable("id") String id,
+                                       @PathVariable("sutId") String sutId,
+                                       @RequestHeader(value = "X-Correlation-Id", required = false) String correlationId,
+                                       @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKey) throws IOException {
+        log.info("[REST] GET /scenarios/{}/suts/{} correlationId={} idempotencyKey={}", id, sutId, correlationId, idempotencyKey);
+        if (service.find(id).isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+        }
+        try {
+            SutEnvironment env = service.readBundleSut(id, sutId);
+            log.info("[REST] GET /scenarios/{}/suts/{} -> status=200", id, sutId);
+            return env;
+        } catch (IllegalArgumentException e) {
+            log.warn("[REST] GET /scenarios/{}/suts/{} -> status=404 {}", id, sutId, e.getMessage());
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
+        }
+    }
+
+    @GetMapping(value = "/{id}/suts/{sutId}/raw", produces = MediaType.TEXT_PLAIN_VALUE)
+    public ResponseEntity<String> getBundleSutRaw(@PathVariable("id") String id,
+                                                  @PathVariable("sutId") String sutId,
+                                                  @RequestHeader(value = "X-Correlation-Id", required = false) String correlationId,
+                                                  @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKey) throws IOException {
+        log.info("[REST] GET /scenarios/{}/suts/{}/raw correlationId={} idempotencyKey={}", id, sutId, correlationId, idempotencyKey);
+        if (service.find(id).isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+        }
+        String text = service.readBundleSutRaw(id, sutId);
+        if (text == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "sut.yaml not found");
+        }
+        log.info("[REST] GET /scenarios/{}/suts/{}/raw -> status=200 ({} chars)", id, sutId, text.length());
+        return ResponseEntity.ok()
+            .contentType(MediaType.TEXT_PLAIN)
+            .body(text);
+    }
+
+    @PutMapping(value = "/{id}/suts/{sutId}/raw", consumes = MediaType.TEXT_PLAIN_VALUE)
+    public ResponseEntity<Void> putBundleSutRaw(@PathVariable("id") String id,
+                                                @PathVariable("sutId") String sutId,
+                                                @RequestBody String body,
+                                                @RequestHeader(value = "X-Correlation-Id", required = false) String correlationId,
+                                                @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKey) throws IOException {
+        int size = body != null ? body.length() : 0;
+        log.info("[REST] PUT /scenarios/{}/suts/{}/raw ({} chars) correlationId={} idempotencyKey={}",
+            id, sutId, size, correlationId, idempotencyKey);
+        if (service.find(id).isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+        }
+        try {
+            service.writeBundleSutRaw(id, sutId, body != null ? body : "");
+            log.info("[REST] PUT /scenarios/{}/suts/{}/raw -> status=204", id, sutId);
+            return ResponseEntity.noContent().build();
+        } catch (IllegalArgumentException e) {
+            log.warn("[REST] PUT /scenarios/{}/suts/{}/raw -> status=400 {}", id, sutId, e.getMessage());
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        }
+    }
+
+    @DeleteMapping(value = "/{id}/suts/{sutId}")
+    public ResponseEntity<Void> deleteBundleSut(@PathVariable("id") String id,
+                                                @PathVariable("sutId") String sutId,
+                                                @RequestHeader(value = "X-Correlation-Id", required = false) String correlationId,
+                                                @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKey) throws IOException {
+        log.info("[REST] DELETE /scenarios/{}/suts/{} correlationId={} idempotencyKey={}", id, sutId, correlationId, idempotencyKey);
+        if (service.find(id).isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+        }
+        try {
+            service.deleteBundleSut(id, sutId);
+            log.info("[REST] DELETE /scenarios/{}/suts/{} -> status=204", id, sutId);
+            return ResponseEntity.noContent().build();
+        } catch (IllegalArgumentException e) {
+            log.warn("[REST] DELETE /scenarios/{}/suts/{} -> status=404 {}", id, sutId, e.getMessage());
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
         }
     }
@@ -326,9 +485,26 @@ public class ScenarioController {
         }
     }
 
+    private static Map<String, Object> scenarioSummary(Scenario scenario) {
+        if (scenario == null) {
+            return Map.of();
+        }
+        Map<String, Object> summary = new java.util.LinkedHashMap<>();
+        summary.put("id", scenario.getId());
+        summary.put("name", scenario.getName());
+        summary.put("description", scenario.getDescription());
+        return summary;
+    }
+
     public record RuntimeRequest(String swarmId) {
     }
 
     public record ScenarioRuntimeResponse(String scenarioId, String swarmId, String runtimeDir) {
+    }
+
+    public record VariablesWriteResponse(String status, List<String> warnings) {
+    }
+
+    public record VariablesResolveResponse(String profileId, String sutId, Map<String, Object> vars, List<String> warnings) {
     }
 }

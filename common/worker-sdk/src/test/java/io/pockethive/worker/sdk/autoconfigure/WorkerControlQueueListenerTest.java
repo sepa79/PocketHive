@@ -1,6 +1,8 @@
 package io.pockethive.worker.sdk.autoconfigure;
 
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -9,7 +11,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.amqp.AmqpRejectAndDontRequeueException;
 
 @ExtendWith(MockitoExtension.class)
 class WorkerControlQueueListenerTest {
@@ -18,23 +19,23 @@ class WorkerControlQueueListenerTest {
     private WorkerControlPlaneRuntime runtime;
 
     @Test
-    void rejectsAndDoesNotRequeueBlankPayload() {
+    void dropsBlankPayloadWithoutThrowing() {
         WorkerControlQueueListener listener = new WorkerControlQueueListener(runtime);
 
-        assertThatThrownBy(() -> listener.onControl(" ", "signal.status-request.sw1.generator.inst1", null))
-            .isInstanceOf(AmqpRejectAndDontRequeueException.class)
-            .hasMessageContaining("Control payload must not be null or blank");
+        assertThatCode(() -> listener.onControl(" ", "signal.status-request.sw1.generator.inst1", null))
+            .doesNotThrowAnyException();
+        verifyNoInteractions(runtime);
     }
 
     @Test
-    void rejectsAndDoesNotRequeueWhenRuntimeFailsToParseMessage() {
+    void dropsPoisonPayloadWithoutThrowing() {
         WorkerControlQueueListener listener = new WorkerControlQueueListener(runtime);
         when(runtime.handle("{}", "signal.status-request.sw1.generator.inst1"))
             .thenThrow(new RuntimeException(new TestJsonProcessingException("bad json")));
 
-        assertThatThrownBy(() -> listener.onControl("{}", "signal.status-request.sw1.generator.inst1", null))
-            .isInstanceOf(AmqpRejectAndDontRequeueException.class)
-            .hasMessageContaining("Invalid control-plane message");
+        assertThatCode(() -> listener.onControl("{}", "signal.status-request.sw1.generator.inst1", null))
+            .doesNotThrowAnyException();
+        verify(runtime).handle("{}", "signal.status-request.sw1.generator.inst1");
     }
 
     private static final class TestJsonProcessingException extends JsonProcessingException {
@@ -43,4 +44,3 @@ class WorkerControlQueueListenerTest {
         }
     }
 }
-

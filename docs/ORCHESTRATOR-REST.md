@@ -24,10 +24,9 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
   {
     "id": "demo",
     "status": "RUNNING",
-    "health": "HEALTHY",
+    "health": "RUNNING",
     "heartbeat": "2024-03-15T12:00:00Z",
     "workEnabled": true,
-    "controllerEnabled": true,
     "templateId": "baseline-demo",
     "controllerImage": "ghcr.io/pockethive/swarm-controller:1.2.3",
     "bees": [
@@ -43,7 +42,47 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
 ### 2.2 Fetch swarm
 `GET /api/swarms/{swarmId}`
 
-**Response (200)** — same shape as the list entry above. Returns `404` when the swarm id is unknown.
+**Response (200)** — cached swarm-controller `status-full` snapshot (after delta aggregation).
+```json
+{
+  "receivedAt": "2026-01-22T12:34:56Z",
+  "staleAfterSec": 30,
+  "envelope": {
+    "timestamp": "2026-01-22T12:34:55Z",
+    "version": "1",
+    "kind": "metric",
+    "type": "status-full",
+    "origin": "swarm-controller-instance",
+    "scope": {
+      "swarmId": "demo",
+      "role": "swarm-controller",
+      "instance": "demo-marshal-bee-1234"
+    },
+    "correlationId": null,
+    "idempotencyKey": null,
+    "runtime": {
+      "templateId": "baseline-demo",
+      "runId": "run-20260122-123455Z",
+      "containerId": null,
+      "image": "ghcr.io/pockethive/swarm-controller:1.2.3",
+      "stackName": null
+    },
+    "data": {
+      "enabled": true,
+      "config": {},
+      "startedAt": "2026-01-22T12:00:00Z",
+      "io": {},
+      "ioState": {},
+      "context": {
+        "swarmStatus": "RUNNING",
+        "swarmHealth": "RUNNING"
+      }
+    }
+  }
+}
+```
+
+Returns `404` when the swarm id is unknown or no `status-full` has been cached yet.
 
 ### 2.3 Swarm journal (timeline)
 `GET /api/swarms/{swarmId}/journal`
@@ -193,6 +232,57 @@ Pins a swarm journal run into an archive so it can be kept beyond time-based ret
 }
 ```
 
+### 2.8 Debug taps (UI V2)
+Debug taps mirror data-plane messages without touching worker code. The orchestrator creates a
+temporary queue bound to the swarm's hive exchange and buffers samples for UI inspection.
+
+#### 2.8.1 Create tap
+`POST /api/debug/taps`
+
+**Request**
+```json
+{
+  "swarmId": "demo",
+  "role": "postprocessor",
+  "direction": "OUT",
+  "ioName": "out",
+  "maxItems": 1,
+  "ttlSeconds": 60
+}
+```
+
+**Response (200)**
+```json
+{
+  "tapId": "uuid",
+  "swarmId": "demo",
+  "role": "postprocessor",
+  "direction": "OUT",
+  "ioName": "out",
+  "exchange": "ph.demo.hive",
+  "routingKey": "ph.demo.post",
+  "queue": "ph.debug.demo.postprocessor.ab12cd34",
+  "maxItems": 1,
+  "ttlSeconds": 60,
+  "createdAt": "2025-01-01T12:34:56Z",
+  "lastReadAt": "2025-01-01T12:34:56Z",
+  "samples": []
+}
+```
+
+#### 2.8.2 Read tap
+`GET /api/debug/taps/{tapId}`
+
+	Query params:
+	- `drain` (optional) — max messages to drain from the tap queue before returning (defaults to `maxItems`; `0` means metadata-only, no consume).
+
+**Response (200)** — same shape as create response, with `samples` populated.
+
+#### 2.8.3 Close tap
+`DELETE /api/debug/taps/{tapId}`
+
+Deletes the tap queue and returns the last known tap state.
+
 ## 3.0 Create swarm
 `POST /api/swarms/{swarmId}/create`
 
@@ -207,6 +297,9 @@ Pins a swarm journal run into an archive so it can be kept beyond time-based ret
 {
   "templateId": "scenario-id",
   "idempotencyKey": "uuid-v4",
+  "autoPullImages": true,
+  "sutId": "optional; bundle-local SUT id",
+  "variablesProfileId": "optional; required when variables.yaml defines profiles",
   "notes": "optional"
 }
 ```
@@ -302,44 +395,6 @@ Pins a swarm journal run into an archive so it can be kept beyond time-based ret
   "timeoutMs": 180000
 }
 ```
-
-## 3.4 Apply swarm template
-`POST /api/swarms/{swarmId}/template`
-
-**Request**
-```json
-{
-  "idempotencyKey": "uuid-v4",
-  "swarmPlan": {
-    "id": "demo",
-    "bees": [
-      {
-        "role": "generator",
-        "image": "ghcr.io/pockethive/generator:latest",
-        "work": { "out": "gen-out" },
-        "config": {
-          "ratePerSec": 10,
-          "message": { "path": "/api/guarded", "body": "warmup" }
-        }
-      },
-      {
-        "role": "processor",
-        "image": "ghcr.io/pockethive/processor:latest",
-        "work": { "in": "gen-out", "out": "final" },
-        "config": {
-          "baseUrl": "{{ sut.endpoints['default'].baseUrl }}",
-          "timeoutMillis": 2500
-        }
-      }
-    ]
-  },
-  "notes": "optional"
-}
-```
-
-**Signal:** `signal.swarm-template.<swarmId>.swarm-controller.<controllerInstance>` → **Outcome:** `event.outcome.swarm-template.<swarmId>.swarm-controller.<controllerInstance>` (check `data.status`) → **Alerts:** `event.alert.{type}.<swarmId>.swarm-controller.<controllerInstance>`
-
-**Response (202)** — same envelope.
 
 ## 4. Components
 

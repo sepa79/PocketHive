@@ -1,0 +1,47 @@
+version: 1
+definitions:
+  - name: loopCount
+    scope: global
+    type: int
+    required: true
+  - name: enableFoo
+    scope: global
+    type: bool
+    required: true
+  - name: profile
+    scope: global
+    type: string
+    required: true
+  - name: customerId
+    scope: sut
+    type: string
+    required: true
+
+profiles:
+  - id: default
+    name: Default
+  - id: france
+    name: France
+
+values:
+  global:
+    default:
+      loopCount: 3
+      enableFoo: false
+      profile: "default"
+    france:
+      loopCount: 7
+      enableFoo: true
+      profile: "france"
+  sut:
+    default:
+      sut-A:
+        customerId: "CUST-DEFAULT-A"
+      sut-B:
+        customerId: "CUST-DEFAULT-B"
+    france:
+      sut-A:
+        customerId: "CUST-FR-A"
+      sut-B:
+        customerId: "CUST-FR-B"
+

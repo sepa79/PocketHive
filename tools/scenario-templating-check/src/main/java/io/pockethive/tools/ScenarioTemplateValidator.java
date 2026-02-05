@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import io.pockethive.httpbuilder.HttpTemplateDefinition;
 import io.pockethive.worker.sdk.api.WorkItem;
+import io.pockethive.worker.sdk.api.WorkerInfo;
 import io.pockethive.worker.sdk.templating.PebbleTemplateRenderer;
 import io.pockethive.worker.sdk.templating.MessageBodyType;
 import io.pockethive.worker.sdk.templating.MessageTemplate;
@@ -179,7 +180,7 @@ public final class ScenarioTemplateValidator {
 
         // 4) Render each template once with a dummy WorkItem to catch templating errors.
         MessageTemplateRenderer messageRenderer = new MessageTemplateRenderer(renderer);
-        WorkItem dummy = WorkItem.text("{}").build();
+        WorkItem dummy = WorkItem.text(dummyInfo(), "{}").build();
         Map<String, String> renderFailures = new HashMap<>();
 
         templates.forEach((key, loaded) -> {
@@ -223,7 +224,7 @@ public final class ScenarioTemplateValidator {
     }
 
     private static WorkItem workItem(String payload, Map<String, Object> headers) {
-        WorkItem item = WorkItem.text(payload).build();
+        WorkItem item = WorkItem.text(dummyInfo(), payload).build();
         if (headers == null || headers.isEmpty()) {
             return item;
         }
@@ -232,6 +233,10 @@ public final class ScenarioTemplateValidator {
             updated = updated.addStepHeader(Objects.toString(entry.getKey(), ""), entry.getValue());
         }
         return updated;
+    }
+
+    private static WorkerInfo dummyInfo() {
+        return new WorkerInfo("templating", "swarm", "instance", null, null);
     }
 
     private static Map<String, Object> loadYaml(Path path) throws IOException {

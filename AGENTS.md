@@ -37,6 +37,9 @@ This file is a **navigation and guardrails** page for both human and AI contribu
 - **No implicit Optionals:** Do not use `Optional` for core state like enablement/configuration flags unless a rule explicitly allows it. Every case where Optional is to be used must be consulted with humans.
 - **SSOT (Single Source of Truth) for contracts:** Never maintain multiple independent “definitions” / validators / parsers for the same on-wire or on-disk format. Put the contract in one place (doc + shared DTO/schema) and make all code reuse it.
 - **KISS:** Bias toward the simplest viable solution. Avoid clever or convoluted code paths when a straightforward approach works; complexity must be justified explicitly.
+- **Git safety (agents):**
+  - **No pushes:** agents must not run `git push` (ever).
+  - **No commits by default:** agents must not create commits unless a human makes an **EXPLICIT REQUEST TO COMMIT**.
 
 ### 2.1 Java & libraries
 - **Java 21 (LTS)** across services.

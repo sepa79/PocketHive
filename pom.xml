@@ -5,9 +5,9 @@
   <artifactId>pockethive-mvp</artifactId>
   <version>${revision}</version>
   <packaging>pom</packaging>
-  <properties>
+    <properties>
     <!-- Flatten plugin resolves this CI-friendly revision into published POMs; see build plugins below. -->
-    <revision>0.16.0</revision>
+    <revision>0.15.1</revision>
     <logstash.logback.version>8.1</logstash.logback.version>
   </properties>
   <modules>
@@ -35,27 +35,47 @@
     <module>e2e-tests</module>
     <module>tools/scenario-templating-check</module>
   </modules>
-  <build>
-    <pluginManagement>
-      <plugins>
-        <plugin>
-          <groupId>org.apache.maven.plugins</groupId>
-          <artifactId>maven-surefire-plugin</artifactId>
-          <version>3.2.5</version>
-        </plugin>
-        <plugin>
-          <groupId>org.apache.maven.plugins</groupId>
-          <artifactId>maven-failsafe-plugin</artifactId>
-          <version>3.2.5</version>
-        </plugin>
-      </plugins>
-    </pluginManagement>
-    <plugins>
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-enforcer-plugin</artifactId>
-        <version>3.4.1</version>
-        <executions>
+	  <build>
+	    <pluginManagement>
+	      <plugins>
+	        <plugin>
+	          <groupId>org.apache.maven.plugins</groupId>
+	          <artifactId>maven-surefire-plugin</artifactId>
+	          <version>3.2.5</version>
+	        </plugin>
+	        <plugin>
+	          <groupId>org.apache.maven.plugins</groupId>
+	          <artifactId>maven-failsafe-plugin</artifactId>
+	          <version>3.2.5</version>
+	        </plugin>
+	      </plugins>
+	    </pluginManagement>
+	    <plugins>
+	      <plugin>
+	        <groupId>org.apache.maven.plugins</groupId>
+	        <artifactId>maven-surefire-plugin</artifactId>
+	        <configuration>
+	          <environmentVariables>
+	            <POCKETHIVE_TEMPLATE_ID>test-template</POCKETHIVE_TEMPLATE_ID>
+	            <POCKETHIVE_JOURNAL_RUN_ID>test-run</POCKETHIVE_JOURNAL_RUN_ID>
+	          </environmentVariables>
+	        </configuration>
+	      </plugin>
+	      <plugin>
+	        <groupId>org.apache.maven.plugins</groupId>
+	        <artifactId>maven-failsafe-plugin</artifactId>
+	        <configuration>
+	          <environmentVariables>
+	            <POCKETHIVE_TEMPLATE_ID>test-template</POCKETHIVE_TEMPLATE_ID>
+	            <POCKETHIVE_JOURNAL_RUN_ID>test-run</POCKETHIVE_JOURNAL_RUN_ID>
+	          </environmentVariables>
+	        </configuration>
+	      </plugin>
+	      <plugin>
+	        <groupId>org.apache.maven.plugins</groupId>
+	        <artifactId>maven-enforcer-plugin</artifactId>
+	        <version>3.4.1</version>
+	        <executions>
           <execution>
             <id>enforce-java</id>
             <goals>

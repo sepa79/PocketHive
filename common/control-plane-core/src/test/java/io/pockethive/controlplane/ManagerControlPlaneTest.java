@@ -25,7 +25,8 @@ class ManagerControlPlaneTest {
             .build();
 
         ControlSignal signal = ControlSignal.forInstance(
-            "config-update", "swarm", "role", "inst", "orchestrator-1", "corr", "idem", null);
+            "config-update", "swarm", "role", "inst", "orchestrator-1", "corr", "idem",
+            null);
         String payload = mapper.writeValueAsString(signal);
 
         AtomicBoolean handled = new AtomicBoolean();
@@ -44,7 +45,8 @@ class ManagerControlPlaneTest {
             .build();
 
         ControlSignal signal = ControlSignal.forInstance(
-            "config-update", "swarm", "role", "inst", "inst", "corr", "idem", null);
+            "config-update", "swarm", "role", "inst", "inst", "corr", "idem",
+            null);
         String payload = mapper.writeValueAsString(signal);
 
         AtomicBoolean handled = new AtomicBoolean();
@@ -63,7 +65,8 @@ class ManagerControlPlaneTest {
             .build();
 
         ControlSignal signal = ControlSignal.forInstance(
-            "config-update", "swarm", "role", "inst", "other-inst", "corr", "idem", null);
+            "config-update", "swarm", "role", "inst", "other-inst", "corr", "idem",
+            null);
         String payload = mapper.writeValueAsString(signal);
 
         AtomicBoolean handled = new AtomicBoolean();

@@ -8,7 +8,9 @@ import { JournalPage } from './pages/JournalPage'
 import { LoginPage } from './pages/LoginPage'
 import { OtherPage } from './pages/OtherPage'
 import { ScenariosPage } from './pages/ScenariosPage'
+import { SwarmViewPage } from './pages/SwarmViewPage'
 import { WireLogPage } from './pages/WireLogPage'
+import { DebugTapViewerPage } from './pages/DebugTapViewerPage'
 
 export default function App() {
   return (
@@ -18,7 +20,10 @@ export default function App() {
         <Route path="/home" element={<Navigate to="/" replace />} />
 
         <Route path="/scenarios/*" element={<ScenariosPage />} />
-        <Route path="/hive/*" element={<HivePage />} />
+        <Route path="/hive" element={<HivePage />} />
+        <Route path="/hive/:swarmId" element={<HivePage />} />
+        <Route path="/hive/:swarmId/view" element={<SwarmViewPage />} />
+        <Route path="/debug/taps/:tapId" element={<DebugTapViewerPage />} />
         <Route path="/journal/*" element={<JournalPage />} />
         <Route path="/other/*" element={<OtherPage />} />
         <Route path="/buzz" element={<WireLogPage />} />

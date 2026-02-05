@@ -22,8 +22,9 @@ class AmqpControlPlanePublisherTest {
         AmqpTemplate template = mock(AmqpTemplate.class);
         AmqpControlPlanePublisher publisher = new AmqpControlPlanePublisher(template, "ph.control");
 
-        ControlSignal signal = ControlSignal.forInstance(
-            "config-update", "swarm", "role", "inst", "origin", "corr", "id", null);
+	        ControlSignal signal = ControlSignal.forInstance(
+	            "config-update", "swarm", "role", "inst", "origin", "corr", "id",
+	            null);
         publisher.publishSignal(new SignalMessage("signal.config-update.role.inst", signal));
         publisher.publishEvent(new EventMessage("event.outcome.config-update.swarm.role.inst", "payload"));
 

@@ -100,8 +100,9 @@ public class HttpProtocolHandler implements ProtocolHandler {
       result.set("headers", mapper.valueToTree(convertHeaders(response)));
       result.put("body", responseBody);
 
-      WorkItem responseItem = ResponseBuilder.build(result, context.info().role(), metrics);
-      return message.addStep(responseItem.asString(), responseItem.headers());
+      WorkItem responseItem = ResponseBuilder.build(result, context.info(), metrics);
+      WorkItem updated = message.addStep(context.info(), responseItem.asString(), responseItem.stepHeaders());
+      return updated.toBuilder().contentType(responseItem.contentType()).build();
     } catch (Exception ex) {
       long now = clock.millis();
       long totalDuration = Math.max(0L, now - start);

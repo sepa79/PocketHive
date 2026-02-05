@@ -112,6 +112,7 @@ class ControlPlaneEventsTest {
         source.scope(),
         source.correlationId(),
         source.idempotencyKey(),
+        source.runtime(),
         source.data()
     );
   }

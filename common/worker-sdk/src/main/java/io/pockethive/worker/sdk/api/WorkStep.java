@@ -12,14 +12,16 @@ public final class WorkStep {
 
     private final int index;
     private final String payload;
+    private final WorkPayloadEncoding payloadEncoding;
     private final Map<String, Object> headers;
 
-    public WorkStep(int index, String payload, Map<String, Object> headers) {
+    public WorkStep(int index, String payload, WorkPayloadEncoding payloadEncoding, Map<String, Object> headers) {
         if (index < 0) {
             throw new IllegalArgumentException("index must be >= 0");
         }
         this.index = index;
         this.payload = Objects.requireNonNull(payload, "payload");
+        this.payloadEncoding = Objects.requireNonNull(payloadEncoding, "payloadEncoding");
         this.headers = Map.copyOf(Objects.requireNonNull(headers, "headers"));
     }
 
@@ -34,6 +36,10 @@ public final class WorkStep {
         return payload;
     }
 
+    public WorkPayloadEncoding payloadEncoding() {
+        return payloadEncoding;
+    }
+
     /**
      * Headers that were in effect for this step.
      */
@@ -41,7 +47,15 @@ public final class WorkStep {
         return headers;
     }
 
-    WorkStep withIndex(int newIndex) {
-        return new WorkStep(newIndex, payload, headers);
+    public WorkStep withIndex(int newIndex) {
+        return new WorkStep(newIndex, payload, payloadEncoding, headers);
+    }
+
+    public WorkStep withHeaders(Map<String, Object> newHeaders) {
+        return new WorkStep(index, payload, payloadEncoding, newHeaders);
+    }
+
+    public WorkStep withPayload(String newPayload, WorkPayloadEncoding newEncoding) {
+        return new WorkStep(index, newPayload, newEncoding, headers);
     }
 }

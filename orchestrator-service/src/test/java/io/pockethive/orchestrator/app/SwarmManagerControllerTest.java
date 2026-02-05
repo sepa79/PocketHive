@@ -16,7 +16,8 @@ import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.orchestrator.domain.IdempotencyStore;
 import io.pockethive.orchestrator.domain.Swarm;
-import io.pockethive.orchestrator.domain.SwarmRegistry;
+import io.pockethive.orchestrator.domain.SwarmStore;
+import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -39,18 +40,24 @@ class SwarmManagerControllerTest {
 
     @Test
     void fanOutToggleToAllControllers() throws Exception {
-        SwarmRegistry registry = new SwarmRegistry();
-        registry.register(new Swarm("sw1", "ctrl-a", "c1", "run-1"));
-        registry.register(new Swarm("sw2", "ctrl-b", "c2", "run-2"));
-        when(idempotency.reserve(eq("sw1"), eq(ControlPlaneSignals.CONFIG_UPDATE), eq("idem-1"), anyString()))
-            .thenReturn(Optional.empty());
-        when(idempotency.reserve(eq("sw2"), eq(ControlPlaneSignals.CONFIG_UPDATE), eq("idem-1"), anyString()))
-            .thenReturn(Optional.empty());
-        SwarmManagerController controller = new SwarmManagerController(
-            registry,
-            publisher,
-            idempotency,
-            controlPlaneProperties());
+        SwarmStore registry = new SwarmStore();
+        Swarm swarm1 = new Swarm("sw1", "ctrl-a", "c1", "run-1");
+        swarm1.attachTemplate(new SwarmTemplateMetadata("tpl-1", "swarm-controller:latest", List.of()));
+        registry.register(swarm1);
+        cacheStatusFull(mapper, registry, "sw1", "tpl-1", "run-1");
+        Swarm swarm2 = new Swarm("sw2", "ctrl-b", "c2", "run-2");
+        swarm2.attachTemplate(new SwarmTemplateMetadata("tpl-2", "swarm-controller:latest", List.of()));
+        registry.register(swarm2);
+        cacheStatusFull(mapper, registry, "sw2", "tpl-2", "run-2");
+	        when(idempotency.reserve(eq("sw1"), eq(ControlPlaneSignals.CONFIG_UPDATE), eq("idem-1"), anyString()))
+	            .thenReturn(Optional.empty());
+	        when(idempotency.reserve(eq("sw2"), eq(ControlPlaneSignals.CONFIG_UPDATE), eq("idem-1"), anyString()))
+	            .thenReturn(Optional.empty());
+	        SwarmManagerController controller = new SwarmManagerController(
+	            registry,
+	            publisher,
+	            idempotency,
+	            controlPlaneProperties());
         SwarmManagerController.ToggleRequest request =
             new SwarmManagerController.ToggleRequest("idem-1", true, null);
 
@@ -77,15 +84,18 @@ class SwarmManagerControllerTest {
 
     @Test
     void toggleSingleControllerScope() throws Exception {
-        SwarmRegistry registry = new SwarmRegistry();
-        registry.register(new Swarm("sw9", "ctrl-z", "c9", "run-9"));
-        when(idempotency.reserve(eq("sw9"), eq(ControlPlaneSignals.CONFIG_UPDATE), eq("idem-2"), anyString()))
-            .thenReturn(Optional.empty());
-        SwarmManagerController controller = new SwarmManagerController(
-            registry,
-            publisher,
-            idempotency,
-            controlPlaneProperties());
+        SwarmStore registry = new SwarmStore();
+        Swarm swarm = new Swarm("sw9", "ctrl-z", "c9", "run-9");
+        swarm.attachTemplate(new SwarmTemplateMetadata("tpl-9", "swarm-controller:latest", List.of()));
+        registry.register(swarm);
+	        cacheStatusFull(mapper, registry, "sw9", "tpl-9", "run-9");
+	        when(idempotency.reserve(eq("sw9"), eq(ControlPlaneSignals.CONFIG_UPDATE), eq("idem-2"), anyString()))
+	            .thenReturn(Optional.empty());
+	        SwarmManagerController controller = new SwarmManagerController(
+	            registry,
+	            publisher,
+	            idempotency,
+	            controlPlaneProperties());
         SwarmManagerController.ToggleRequest request =
             new SwarmManagerController.ToggleRequest("idem-2", false, null);
 
@@ -132,5 +142,29 @@ class SwarmManagerControllerTest {
         properties.setInstanceId("orch-instance");
         properties.getManager().setRole("orchestrator");
         return properties;
+    }
+
+    private static void cacheStatusFull(ObjectMapper mapper,
+                                        SwarmStore store,
+                                        String swarmId,
+                                        String templateId,
+                                        String runId) {
+        var status = mapper.createObjectNode();
+        status.put("timestamp", java.time.Instant.now().toString());
+        status.put("version", "1");
+        status.put("kind", "metric");
+        status.put("type", "status-full");
+        status.put("origin", "swarm-controller-1");
+        var scope = status.putObject("scope");
+        scope.put("swarmId", swarmId);
+        scope.put("role", "swarm-controller");
+        scope.put("instance", "controller-1");
+        status.set("runtime", mapper.valueToTree(java.util.Map.of("templateId", templateId, "runId", runId)));
+        status.putNull("correlationId");
+        status.putNull("idempotencyKey");
+        var data = status.putObject("data");
+        data.put("enabled", true);
+        data.putObject("context");
+        store.cacheControllerStatusFull(swarmId, status, java.time.Instant.now());
     }
 }

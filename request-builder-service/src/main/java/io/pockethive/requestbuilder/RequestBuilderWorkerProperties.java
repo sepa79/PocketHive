@@ -15,6 +15,6 @@ class RequestBuilderWorkerProperties extends CanonicalWorkerProperties<RequestBu
   }
 
   RequestBuilderWorkerConfig defaultConfig() {
-    return toConfig(objectMapper()).orElseGet(() -> new RequestBuilderWorkerConfig("/app/http-templates", "default", true));
+    return toConfig(objectMapper()).orElseGet(() -> new RequestBuilderWorkerConfig("/app/http-templates", "default", true, java.util.Map.of()));
   }
 }

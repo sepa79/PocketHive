@@ -3,6 +3,7 @@ package io.pockethive.worker.sdk.transport.rabbit;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.observability.ObservabilityContextUtil;
 import io.pockethive.worker.sdk.api.WorkItem;
+import io.pockethive.worker.sdk.api.WorkerInfo;
 import io.pockethive.worker.sdk.config.MaxInFlightConfig;
 import io.pockethive.worker.sdk.runtime.WorkIoBindings;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
@@ -216,33 +217,24 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
      * The fallback:
      * <ul>
      *   <li>Uses the raw message body interpreted as UTF-8 text (empty string on failure).</li>
-     *   <li>Copies AMQP headers from {@link org.springframework.amqp.core.MessageProperties#getHeaders()}.</li>
-     *   <li>Normalises the AMQP {@code messageId} property into a {@code "message-id"} header, because the
-     *       PocketHive work envelope uses {@code "message-id"} as the canonical header key. In particular,
-     *       {@link WorkerControlPlaneRuntime#publishWorkError(String, WorkItem, Throwable)} reads it to attach
-     *       a {@code messageId} field to emitted alert context.</li>
+     *   <li>Does not copy AMQP headers into the WorkItem, keeping the envelope transport-agnostic.</li>
      * </ul>
      */
-    private static WorkItem messageConverterFallback(Message message) {
-        if (message == null) {
-            return WorkItem.text("").build();
-        }
-        byte[] body = message.getBody() != null ? message.getBody() : new byte[0];
+    private WorkItem messageConverterFallback(Message message) {
+        byte[] body = message != null && message.getBody() != null ? message.getBody() : new byte[0];
         String payload;
         try {
             payload = new String(body, java.nio.charset.StandardCharsets.UTF_8);
         } catch (Exception ignored) {
             payload = "";
         }
-        WorkItem.Builder builder = WorkItem.text(payload);
-        if (message.getMessageProperties() != null && message.getMessageProperties().getHeaders() != null) {
-            builder.headers(message.getMessageProperties().getHeaders());
-        }
-        if (message.getMessageProperties() != null && message.getMessageProperties().getMessageId() != null) {
-            // Mirror the AMQP "messageId" property into PocketHive's canonical WorkItem header key.
-            builder.header("message-id", message.getMessageProperties().getMessageId());
-        }
-        return builder.build();
+        WorkerInfo info = new WorkerInfo(
+            workerDefinition.role(),
+            identity.swarmId(),
+            identity.instanceId(),
+            null,
+            null);
+        return WorkItem.text(info, payload).build();
     }
 
     private void dispatchSynchronously(WorkItem workItem) {
@@ -253,6 +245,7 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
                 messageResultPublisher.publish(result, outbound);
             }
         } catch (Exception ex) {
+            logWorkFailure(workItem, ex);
             if (emitWorkErrorAlerts) {
                 try {
                     controlPlaneRuntime.publishWorkError(workerDefinition.beanName(), workItem, ex);
@@ -262,6 +255,34 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
             }
             dispatchErrorHandler.accept(ex);
         }
+    }
+
+    private void logWorkFailure(WorkItem workItem, Exception ex) {
+        if (!log.isWarnEnabled()) {
+            return;
+        }
+        if (workItem == null) {
+            log.warn("{} failed to process work item (workItem=null)", displayName, ex);
+            return;
+        }
+        Object messageId = workItem.headers().get("message-id");
+        Object callId = workItem.headers().get("x-ph-call-id");
+        Object correlationId = workItem.headers().get("correlationId");
+        Object idempotencyKey = workItem.headers().get("idempotencyKey");
+        String traceId = workItem.observabilityContext()
+            .map(ObservabilityContext::getTraceId)
+            .orElse(null);
+        log.warn("{} failed to process work item swarmId={} role={} instance={} messageId={} callId={} correlationId={} idempotencyKey={} traceId={}",
+            displayName,
+            identity != null ? identity.swarmId() : null,
+            identity != null ? identity.role() : null,
+            identity != null ? identity.instanceId() : null,
+            messageId != null ? String.valueOf(messageId) : null,
+            callId != null ? String.valueOf(callId) : null,
+            correlationId != null ? String.valueOf(correlationId) : null,
+            idempotencyKey != null ? String.valueOf(idempotencyKey) : null,
+            (traceId != null && !traceId.isBlank()) ? traceId : null,
+            ex);
     }
 
     /**

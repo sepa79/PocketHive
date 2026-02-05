@@ -20,11 +20,13 @@ public record StatusEvent(
     Scope scope,
     String correlationId,
     String idempotencyKey,
+    Map<String, Object> runtime,
     Data data
 ) {
 
   public StatusEvent {
     scope = scope == null ? new Scope(null, null, null) : scope;
+    runtime = normaliseMap(runtime);
     data = data == null ? new Data() : data;
   }
 
@@ -88,7 +90,11 @@ public record StatusEvent(
 
     @JsonAnySetter
     public void captureExtra(String key, Object value) {
-      if ("enabled".equals(key) || "tps".equals(key) || "startedAt".equals(key) || "io".equals(key) || "context".equals(key)) {
+      if ("enabled".equals(key)
+          || "tps".equals(key)
+          || "startedAt".equals(key)
+          || "io".equals(key)
+          || "context".equals(key)) {
         return;
       }
       extra.put(key, value);

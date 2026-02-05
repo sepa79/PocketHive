@@ -41,18 +41,4 @@ public final class RabbitWorkOutput implements WorkOutput {
         rabbitTemplate.send(exchange, routingKey, outbound);
     }
 
-    private void applyHeaders(WorkItem item, MessageProperties props) {
-        var headers = item.headers();
-        if (headers == null || headers.isEmpty()) {
-            return;
-        }
-        headers.forEach(props::setHeader);
-        Object explicitContentType = headers.get("content-type");
-        if (explicitContentType == null) {
-            explicitContentType = headers.get("content_type");
-        }
-        if (explicitContentType != null) {
-            props.setContentType(explicitContentType.toString());
-        }
-    }
 }

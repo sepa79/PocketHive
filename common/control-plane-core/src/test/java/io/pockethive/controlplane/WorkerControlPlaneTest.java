@@ -69,7 +69,8 @@ class WorkerControlPlaneTest {
     @Test
     void dispatchesStatusRequest() throws Exception {
         ControlSignal signal = ControlSignal.forInstance(
-            "status-request", "sw1", "generator", "inst", "orchestrator-1", "corr", "idem", null);
+            "status-request", "sw1", "generator", "inst", "orchestrator-1", "corr", "idem",
+            null);
         AtomicReference<WorkerStatusRequest> ref = new AtomicReference<>();
 
         WorkerSignalListener listener = new WorkerSignalListener() {
@@ -89,7 +90,8 @@ class WorkerControlPlaneTest {
     @Test
     void forwardsUnsupportedSignals() throws Exception {
         ControlSignal signal = ControlSignal.forInstance(
-            "unknown", "sw1", "generator", "inst", "orchestrator-1", "corr", "idem", null);
+            "unknown", "sw1", "generator", "inst", "orchestrator-1", "corr", "idem",
+            null);
         AtomicReference<WorkerSignalListener.WorkerSignalContext> ref = new AtomicReference<>();
 
         WorkerSignalListener listener = new WorkerSignalListener() {

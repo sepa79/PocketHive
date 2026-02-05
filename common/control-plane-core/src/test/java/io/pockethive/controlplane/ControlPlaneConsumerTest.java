@@ -31,7 +31,8 @@ class ControlPlaneConsumerTest {
             .build();
 
         ControlSignal signal = ControlSignal.forInstance(
-            "config-update", "swarm", "generator", "gen-1", "orchestrator-1", "corr", "idemp", null);
+            "config-update", "swarm", "generator", "gen-1", "orchestrator-1", "corr", "idemp",
+            null);
         String payload = mapper.writeValueAsString(signal);
 
         AtomicInteger processed = new AtomicInteger();
@@ -53,7 +54,8 @@ class ControlPlaneConsumerTest {
             .build();
 
         ControlSignal signal = ControlSignal.forInstance(
-            "config-update", "swarm", "generator", "gen-1", "gen-1", "corr", "id", null);
+            "config-update", "swarm", "generator", "gen-1", "gen-1", "corr", "id",
+            null);
         String payload = mapper.writeValueAsString(signal);
 
         AtomicInteger processed = new AtomicInteger();
@@ -71,7 +73,8 @@ class ControlPlaneConsumerTest {
             .build();
 
         ControlSignal signal = ControlSignal.forInstance(
-            "config-update", "swarm", "generator", "gen-1", "gen-2", "corr", "id", null);
+            "config-update", "swarm", "generator", "gen-1", "gen-2", "corr", "id",
+            null);
         String payload = mapper.writeValueAsString(signal);
 
         AtomicInteger processed = new AtomicInteger();
@@ -99,7 +102,8 @@ class ControlPlaneConsumerTest {
             .build();
 
         ControlSignal signal = ControlSignal.forInstance(
-            "config-update", "swarm", "generator", "gen-1", "orchestrator-1", "corr", "id", null);
+            "config-update", "swarm", "generator", "gen-1", "orchestrator-1", "corr", "id",
+            null);
         assertThatThrownBy(() -> consumer.consume(mapper.writeValueAsString(signal), "  ", env -> { }))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessage("routingKey must not be null or blank");
@@ -112,7 +116,8 @@ class ControlPlaneConsumerTest {
             .build();
 
         ControlSignal signal = ControlSignal.forInstance(
-            "config-update", "swarm", "generator", "gen-2", "orchestrator-1", "corr", "id", null);
+            "config-update", "swarm", "generator", "gen-2", "orchestrator-1", "corr", "id",
+            null);
         String payload = mapper.writeValueAsString(signal);
 
         AtomicInteger processed = new AtomicInteger();

@@ -20,6 +20,8 @@ public record AlertMessage(
     ControlScope scope,
     String correlationId,
     String idempotencyKey,
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    Map<String, Object> runtime,
     AlertData data
 ) {
 
@@ -38,6 +40,7 @@ public record AlertMessage(
         scope = Objects.requireNonNull(scope, "scope");
         correlationId = trimToNull(correlationId);
         idempotencyKey = trimToNull(idempotencyKey);
+        runtime = ControlRuntime.normalise(scope, runtime);
         data = Objects.requireNonNull(data, "data");
     }
 
@@ -78,4 +81,5 @@ public record AlertMessage(
             }
         }
     }
+
 }

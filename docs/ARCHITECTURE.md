@@ -45,7 +45,7 @@ PocketHive splits the control plane into **managers** (orchestrator + swarm cont
 - Applies the plan locally; **provisions** components; maintains the **aggregate** swarm view.
 - Declares the control queue `ph.control.<swarmId>.swarm-controller.<instance>` (instance ids already embed the swarm name) and binds it to `signal.swarm-template.{swarmId}.swarm-controller.<instance>`, `signal.swarm-plan.{swarmId}.swarm-controller.<instance>`, `signal.swarm-start.{swarmId}.swarm-controller.<instance>`, `signal.swarm-stop.{swarmId}.swarm-controller.<instance>`, `signal.swarm-remove.{swarmId}.swarm-controller.<instance>`, `signal.config-update.{swarmId}.swarm-controller.<instance>`, `signal.config-update.ALL.swarm-controller.ALL`, `signal.config-update.{swarmId}.ALL.ALL`, and the relevant status-request routes (`signal.status-request.{swarmId}.swarm-controller.<instance>`, `signal.status-request.{swarmId}.swarm-controller.ALL`, `signal.status-request.ALL.swarm-controller.ALL`).
 - Declares the shared hive exchange `ph.{swarmId}.hive` and **exclusively** provisions the `ph.work.{swarmId}.*` queues plus their bindings; worker services consume through the autoconfigured topology and must not override these declarations. See §3 and the [AsyncAPI spec](spec/asyncapi.yaml) for the canonical routing definitions.
-- Emits **swarm-level** lifecycle outcomes (`event.outcome.swarm-template.{swarmId}.swarm-controller.<instance>`, `event.outcome.swarm-plan.{swarmId}.swarm-controller.<instance>`, `event.outcome.swarm-start.{swarmId}.swarm-controller.<instance>`, `event.outcome.swarm-stop.{swarmId}.swarm-controller.<instance>`, `event.outcome.swarm-remove.{swarmId}.swarm-controller.<instance>`) plus controller config outcomes (`event.outcome.config-update.{swarmId}.swarm-controller.<instance>`) and periodic status metrics.
+- Emits **swarm-level** lifecycle outcomes (`event.outcome.swarm-template.{swarmId}.swarm-controller.<instance>`, `event.outcome.swarm-plan.{swarmId}.swarm-controller.<instance>`, `event.outcome.swarm-start.{swarmId}.swarm-controller.<instance>`, `event.outcome.swarm-stop.{swarmId}.swarm-controller.<instance>`, `event.outcome.swarm-remove.{swarmId}.swarm-controller.<instance>`) plus controller config outcomes (`event.outcome.config-update.{swarmId}.swarm-controller.<instance>`). Status metrics follow: **`status-delta` is periodic**, while **`status-full` is emitted on startup, on `status-request`, and after each swarm-level outcome**. For `swarm-template`/`swarm-plan` it is immediate once pending config updates clear; for `swarm-start`/`swarm-stop` it waits for fresh worker `status-full` snapshots (up to 5s) before emitting.
 - Consumes every component heartbeat within the swarm via `event.metric.status-{delta|full}.{swarmId}.*.*` to keep aggregate health and enablement up-to-date.
 - Treats AMQP `event.metric.status-{delta|full}` as the **sole heartbeat source**; if a component goes silent it issues `signal.status-request.{swarmId}.ALL.ALL` and marks the component stale if no response arrives.
 - May propagate workload enablement via `signal.config-update.{swarmId}.ALL.ALL` while keeping the control plane responsive.
@@ -93,6 +93,27 @@ pockethive:
 The Swarm Controller injects the same values into each container via `POCKETHIVE_INPUT_RABBIT_QUEUE` /
 `POCKETHIVE_OUTPUT_RABBIT_*`, and the Worker SDK fails fast when any required field is missing.
 
+### 2.4 WorkItem envelope (data plane, SSOT)
+
+The WorkItem on-wire format is a **single JSON envelope** defined in
+`docs/spec/workitem-envelope.schema.json`. Transport headers (AMQP/SQS/Kafka) **must not**
+carry WorkItem data — the full payload, headers, steps, and observability live inside the JSON body.
+
+Key rules:
+
+- `steps[]` is always present (min 1). Step headers **must** include `ph.step.service` and
+  `ph.step.instance` for every step.
+- The current payload is always the last step (`steps[-1]`). The `WorkItem` API exposes it via
+  `payload()` / `payloadEncoding()`; the on-wire envelope does not duplicate it at the top level.
+- Step 0 is explicit (no auto-seeding in builders). Empty payloads are allowed.
+- `messageId` and `contentType` are top-level only (do not duplicate in headers).
+- `x-ph-service` is deprecated for WorkItem tracking; tests enforce its absence in WorkItem headers.
+
+### 2.5 Debug taps (UI V2)
+Operators can inspect data-plane traffic via **debug taps**. A tap is a temporary AMQP queue
+bound to the swarm's hive exchange (e.g. `ph.<swarmId>.hive`) using the same routing key as the
+target work queue (e.g. `ph.work.<swarmId>.<queueName>`). The Orchestrator owns tap lifecycle
+and exposes REST endpoints for UI V2; workers remain AMQP-only and untouched.
 ---
 
 ## 3. Control-plane envelope & routing (SSOT)
@@ -220,6 +241,12 @@ For **outcome** messages (`kind = outcome`, `type = <command>`), outcomes use a 
   + readiness are satisfied and the swarm is already `RUNNING`. Rejections use the same
   `NotReady` outcome pattern; no side effects occur when rejected.
 
+**Config-update fan-out + acknowledgements**
+- Swarm Controller uses `ConfigFanout` to broadcast `signal.config-update` (enable/disable + config patches).
+- `pendingConfigUpdates` tracks **bootstrap config** deliveries; it is cleared when each worker
+  **reports status** (either `status-delta` or `status-full`). The acknowledgement is driven by
+  worker status events, **not** by outcomes.
+
 ### 3.5 Status metrics semantics
 
 **Control metrics (`kind=metric`)**
@@ -230,6 +257,7 @@ For **outcome** messages (`kind = outcome`, `type = <command>`), outcomes use a 
 |  | `startedAt` | Yes | RFC‑3339 timestamp when this component started processing workloads for its scope (or when the current process was started). |
 |  | `tps` | No | Integer ≥ 0. Throughput sample for the reporting interval. **Workers should emit this**; managers (Orchestrator / Swarm Controller) may omit. |
 |  | `config` | Yes | Snapshot of the effective configuration for this scope (role/instance). Must not include secrets. |
+|  | *(none)* | — | Runtime/infra metadata lives in the envelope as `runtime` (see below). |
 |  | `io` | Yes | Object describing IO bindings and queue health. **Workers** should include both planes (`io.work` + `io.control`); **managers** are control‑plane‑only and should include only `io.control` (no `io.work`). `queueStats` is optional and applies only to the work plane. Present only in `status-full`. |
 |  | `ioState` | Yes | Coarse IO health summary for workload/local IO only (for example `ioState.work`, `ioState.filesystem`). **Workers** should include `ioState.work` plus any local IO; **managers** include only local IO if applicable. `ioState` does not represent control‑plane health. |
 |  | `context` | No | Freeform role‑specific context. For swarm‑controller, `context` carries swarm aggregates (e.g. `swarmStatus`, `totals`, `watermark`, `maxStalenessSec`, scenario progress) and includes `context.workers[]` **only in `status-full`**. For orchestrator, `context` carries at least `swarmCount`; `computeAdapter` is effectively static and belongs in `status-full` (not `status-delta`). |
@@ -239,10 +267,12 @@ For **outcome** messages (`kind = outcome`, `type = <command>`), outcomes use a 
 |  | `context` | No | Same semantics as in `status-full`, but only for fields that change frequently (for example recent `swarmStatus`, rolling diagnostics). `data.config`, `data.io`, and `data.startedAt` must be omitted from deltas. |
 
 Additional rules:
+- `runtime` is an envelope field, not a `data` field. It is required for all swarm-scoped messages (that is, `scope.swarmId != ALL`) and must be omitted for global broadcasts (`scope.swarmId = ALL`).
 - `data.ioState` represents workload/local IO only (for example `ioState.work`, `ioState.filesystem`). It does not represent control-plane health.
 - `data.context` carries role-specific context. For swarm-controller:
   - `status-delta` carries a small aggregate only (no worker list).
   - `status-full` carries the full aggregate snapshot, including `data.context.workers[]`.
+  - `data.context.workers[]` entries may include a `runtime` object with the same shape as the envelope `runtime`.
 - For orchestrator, `data.context` carries at least `swarmCount`. The
   `computeAdapter` selection is effectively static and belongs in `status-full`
   only (never in deltas).
@@ -676,6 +706,12 @@ sequenceDiagram
     "startedAt": "2025-09-12T12:00:00Z",
     "tps": 12,
     "config": {},
+    "runtime": {
+      "runId": "run-2025-09-12-01",
+      "containerId": "alpha-processor-1",
+      "image": "ghcr.io/pockethive/processor:0.14.0",
+      "stackName": "ph-alpha"
+    },
     "io": {},
     "ioState": { "work": { "input": "ok", "output": "ok" } }
   }

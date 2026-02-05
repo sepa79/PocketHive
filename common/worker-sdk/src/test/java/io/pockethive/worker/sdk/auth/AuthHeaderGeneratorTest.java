@@ -33,10 +33,11 @@ class AuthHeaderGeneratorTest {
             Map.of("username", "user", "password", "pass")
         );
 
+        TestWorkerContext context = new TestWorkerContext();
         Map<String, String> headers = generator.generate(
-            new TestWorkerContext(),
+            context,
             config,
-            WorkItem.text("payload").build()
+            WorkItem.text(context.info(), "payload").build()
         );
 
         assertThat(headers).containsEntry("Authorization", "Basic dXNlcjpwYXNz");

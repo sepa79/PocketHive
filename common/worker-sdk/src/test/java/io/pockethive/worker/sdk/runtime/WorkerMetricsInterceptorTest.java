@@ -93,11 +93,12 @@ class WorkerMetricsInterceptorTest {
         WorkerMetricsInterceptor interceptor = new WorkerMetricsInterceptor(registry);
         WorkerState state = new WorkerState(DEFINITION);
         state.setStatusPublisher(new WorkerStatusPublisher(state, () -> { }, () -> { }));
+        WorkerContext workerContext = workerContext(state, registry);
         WorkerInvocationContext context = new WorkerInvocationContext(
             DEFINITION,
             state,
-            workerContext(state, registry),
-            WorkItem.text("body").build()
+            workerContext,
+            WorkItem.text(workerContext.info(), "body").build()
         );
 
         WorkItem result = interceptor.intercept(context, ctx -> null);

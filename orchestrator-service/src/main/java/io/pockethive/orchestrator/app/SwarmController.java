@@ -1,6 +1,7 @@
 package io.pockethive.orchestrator.app;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.ControlScope;
 import io.pockethive.control.ControlSignal;
@@ -12,7 +13,6 @@ import io.pockethive.controlplane.messaging.SignalMessage;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.observability.ControlPlaneJson;
-import io.pockethive.manager.runtime.ComputeAdapterType;
 import io.pockethive.orchestrator.domain.IdempotencyStore;
 import io.pockethive.orchestrator.domain.ScenarioPlan;
 import io.pockethive.orchestrator.domain.ScenarioTimelineRegistry;
@@ -25,8 +25,8 @@ import io.pockethive.orchestrator.domain.HiveJournal;
 import io.pockethive.orchestrator.domain.HiveJournal.HiveJournalEntry;
 import io.pockethive.orchestrator.domain.SwarmHealth;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
-import io.pockethive.orchestrator.domain.SwarmRegistry;
-import io.pockethive.orchestrator.domain.SwarmStatus;
+import io.pockethive.orchestrator.domain.SwarmStateStore;
+import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.SwarmPlan;
@@ -40,10 +40,12 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -71,11 +73,13 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/swarms")
 public class SwarmController {
     private static final Logger log = LoggerFactory.getLogger(SwarmController.class);
+    private static final Duration STATUS_FULL_STALE_AFTER = Duration.ofSeconds(30);
     private final ControlPlanePublisher controlPublisher;
     private final ContainerLifecycleManager lifecycle;
     private final SwarmCreateTracker creates;
     private final IdempotencyStore idempotency;
-    private final SwarmRegistry registry;
+    private final SwarmStore store;
+    private final SwarmStateStore stateStore;
     private final SwarmPlanRegistry plans;
     private final ScenarioTimelineRegistry timelines;
     private final ScenarioClient scenarios;
@@ -92,7 +96,8 @@ public class SwarmController {
                            ContainerLifecycleManager lifecycle,
                            SwarmCreateTracker creates,
                            IdempotencyStore idempotency,
-                           SwarmRegistry registry,
+                           SwarmStore store,
+                           SwarmStateStore stateStore,
                            ObjectMapper json,
                            ScenarioClient scenarios,
                            HiveJournal hiveJournal,
@@ -103,7 +108,8 @@ public class SwarmController {
         this.lifecycle = lifecycle;
         this.creates = creates;
         this.idempotency = idempotency;
-        this.registry = registry;
+        this.store = store;
+        this.stateStore = stateStore;
         this.json = json;
         this.scenarios = scenarios;
         this.hiveJournal = Objects.requireNonNull(hiveJournal, "hiveJournal");
@@ -146,7 +152,7 @@ public class SwarmController {
             return response;
         }
 
-        if (registry.find(swarmId).isPresent()) {
+        if (store.find(swarmId).isPresent()) {
             response = ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(new ErrorResponse("Swarm '%s' already exists".formatted(swarmId)));
             logRestResponse("POST", path, response);
@@ -182,6 +188,14 @@ public class SwarmController {
         try {
             response = idempotentSend("swarm-create", swarmId, req.idempotencyKey(), timeout.toMillis(), lockCorrelation, corr -> {
                 String templateId = req.templateId();
+                log.info("[CTRL] swarm-create start swarm={} templateId={} sutId={} variablesProfileId={} autoPullImages={} correlation={} idempotencyKey={}",
+                    swarmId,
+                    templateId,
+                    normalize(req.sutId()),
+                    normalize(req.variablesProfileId()),
+                    Boolean.TRUE.equals(req.autoPullImages()),
+                    corr,
+                    req.idempotencyKey());
                 ScenarioPlan planDescriptor = fetchScenario(templateId);
                 SwarmTemplate template = planDescriptor.template();
                 ScenarioPlan.Plan timeline = planDescriptor.plan();
@@ -197,16 +211,38 @@ public class SwarmController {
                 }
                 String scenarioVolume = runtimeRootSource + "/" + swarmId + ":/app/scenario:ro";
                 String sutId = normalize(req.sutId());
+                String variablesProfileId = normalize(req.variablesProfileId());
                 io.pockethive.swarm.model.SutEnvironment sutEnvironment = null;
                 if (sutId != null) {
+                    log.info("[CTRL] swarm-create resolve sut swarm={} templateId={} sutId={} correlation={} idempotencyKey={}",
+                        swarmId, templateId, sutId, corr, req.idempotencyKey());
                     try {
-                        sutEnvironment = scenarios.fetchSutEnvironment(sutId);
+                        sutEnvironment = scenarios.fetchScenarioSut(templateId, sutId, corr, req.idempotencyKey());
                     } catch (Exception ex) {
+                        log.warn("[CTRL] swarm-create resolve sut FAILED swarm={} templateId={} sutId={} correlation={} idempotencyKey={}",
+                            swarmId, templateId, sutId, corr, req.idempotencyKey(), ex);
                         throw new IllegalStateException(
                             "Failed to resolve SUT environment '%s'".formatted(sutId), ex);
                     }
                 }
                 final io.pockethive.swarm.model.SutEnvironment finalSutEnvironment = sutEnvironment;
+                ScenarioClient.ResolvedVariables resolvedVariables;
+                try {
+                    log.info("[CTRL] swarm-create resolve variables swarm={} templateId={} profileId={} sutId={} correlation={} idempotencyKey={}",
+                        swarmId, templateId, variablesProfileId, sutId, corr, req.idempotencyKey());
+                    resolvedVariables = scenarios.resolveScenarioVariables(
+                        templateId, variablesProfileId, sutId, corr, req.idempotencyKey());
+                } catch (Exception ex) {
+                    log.warn("[CTRL] swarm-create resolve variables FAILED swarm={} templateId={} profileId={} sutId={} correlation={} idempotencyKey={}",
+                        swarmId, templateId, variablesProfileId, sutId, corr, req.idempotencyKey(), ex);
+                    throw new IllegalStateException("Failed to resolve scenario variables", ex);
+                }
+                java.util.Map<String, Object> resolvedVars = resolvedVariables.vars() == null
+                    ? java.util.Map.of()
+                    : resolvedVariables.vars();
+                int warningsCount = resolvedVariables.warnings() == null ? 0 : resolvedVariables.warnings().size();
+                log.info("[CTRL] swarm-create variables resolved swarm={} templateId={} profileId={} sutId={} vars={} warnings={} correlation={} idempotencyKey={}",
+                    swarmId, templateId, variablesProfileId, sutId, resolvedVars.size(), warningsCount, corr, req.idempotencyKey());
                 // Resolve bee images through the same repository prefix logic used for controllers
                 // so the swarm-controller sees fully-qualified image names and does not need to
                 // guess registry roots. While doing so, apply any SUT-aware templates in worker
@@ -226,6 +262,9 @@ public class SwarmController {
                             java.util.Map<String, Object> config = bee.config();
                             if (scenarioVolume != null && !scenarioVolume.isBlank()) {
                                 config = addScenarioVolume(config, scenarioVolume);
+                            }
+                            if (resolvedVars != null && !resolvedVars.isEmpty()) {
+                                config = addScenarioVars(config, resolvedVars);
                             }
                             if (finalSutEnvironment != null && config != null && !config.isEmpty()) {
                                 config = applySutConfigTemplates(config, finalSutEnvironment);
@@ -266,6 +305,9 @@ public class SwarmController {
                     var data = new LinkedHashMap<String, Object>();
                     data.put("templateId", req.templateId());
                     data.put("sutId", sutId);
+                    if (variablesProfileId != null) {
+                        data.put("variablesProfileId", variablesProfileId);
+                    }
                     data.put("autoPullImages", autoPull);
                     data.put("controllerInstance", instanceId);
                     data.put("runId", swarm.getRunId());
@@ -360,13 +402,13 @@ public class SwarmController {
      * <p>
      * We build a {@link ControlSignal} scoped to the swarm controller instance, resolve the routing key via
      * {@link ControlPlaneRouting#signal(String, String, String, String)}, and update the
-     * {@link SwarmRegistry}/{@link SwarmCreateTracker} so downstream watchers know which confirmations to
+     * {@link SwarmStore}/{@link SwarmCreateTracker} so downstream watchers know which confirmations to
      * expect. The timeout is expressed in milliseconds for convenient alignment with API docs.
      */
-	    private ResponseEntity<ControlResponse> sendSignal(String signal, String swarmId, String idempotencyKey, long timeoutMs) {
-	        Duration timeout = Duration.ofMillis(timeoutMs);
+    private ResponseEntity<ControlResponse> sendSignal(String signal, String swarmId, String idempotencyKey, long timeoutMs) {
+        Duration timeout = Duration.ofMillis(timeoutMs);
 	        return idempotentSend(signal, swarmId, idempotencyKey, timeoutMs, corr -> {
-	            String controllerInstance = registry.find(swarmId)
+	            String controllerInstance = store.find(swarmId)
 	                .map(Swarm::getInstanceId)
 	                .orElse(null);
 	            if (controllerInstance == null || controllerInstance.isBlank()) {
@@ -379,9 +421,9 @@ public class SwarmController {
 	                case "swarm-remove" -> ControlSignals.swarmRemove(originInstanceId, target, corr, idempotencyKey);
 	                default -> throw new IllegalArgumentException("Unsupported lifecycle signal: " + signal);
 	            };
-	            String jsonPayload = toJson(payload);
-	            String routingKey = ControlPlaneRouting.signal(signal, swarmId, "swarm-controller", controllerInstance);
-	            sendControl(routingKey, jsonPayload, signal);
+            String jsonPayload = toJson(payload);
+            String routingKey = ControlPlaneRouting.signal(signal, swarmId, "swarm-controller", controllerInstance);
+            sendControl(routingKey, jsonPayload, signal);
                 try {
                     var data = new LinkedHashMap<String, Object>();
                     data.put("controllerInstance", controllerInstance);
@@ -403,12 +445,19 @@ public class SwarmController {
                     // best-effort
                 }
 	            if ("swarm-start".equals(signal)) {
-	                registry.markStartIssued(swarmId);
+	                store.markStartIssued(swarmId);
                 creates.expectStart(swarmId, corr, idempotencyKey, timeout);
             } else if ("swarm-stop".equals(signal)) {
                 creates.expectStop(swarmId, corr, idempotencyKey, timeout);
             }
         });
+    }
+
+    private static String requireText(String value, String field) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(field + " must not be blank");
+        }
+        return value.trim();
     }
 
     /**
@@ -464,7 +513,7 @@ public class SwarmController {
                 ControlPlaneRouting.event("outcome", "swarm-create", scope),
                 ControlPlaneRouting.event("alert", "alert", scope));
         }
-        String controllerInstance = registry.find(swarmId)
+        String controllerInstance = store.find(swarmId)
             .map(Swarm::getInstanceId)
             .orElse(null);
         if (controllerInstance == null || controllerInstance.isBlank()) {
@@ -565,15 +614,28 @@ public class SwarmController {
         return Map.copyOf(result);
     }
 
+    private static Map<String, Object> addScenarioVars(Map<String, Object> config, Map<String, Object> vars) {
+        if (vars == null || vars.isEmpty()) {
+            return config;
+        }
+        Map<String, Object> result = (config == null || config.isEmpty())
+            ? new LinkedHashMap<>()
+            : new LinkedHashMap<>(config);
+        // Reserved key for scenario variables: config.vars (map).
+        // Workers are expected to propagate this into the WorkItem headers so Pebble/SpEL templates can reference it as `vars.*`.
+        result.put("vars", vars);
+        return Map.copyOf(result);
+    }
+
     public record ControlRequest(String idempotencyKey, String notes) {}
 
     private record ErrorResponse(String message) {}
 
     /**
-     * GET {@code /api/swarms} — list all known swarms with their launch metadata.
+     * GET {@code /api/swarms} — list swarms from cached swarm-controller status-full snapshots.
      * <p>
-     * Returns {@link SwarmSummary} for each registered swarm so dashboards can reconnect after a UI
-     * refresh. Example payload:
+     * This endpoint intentionally reflects the orchestrator cache only: swarms without a cached
+     * swarm-controller status-full snapshot are omitted.
      * <pre>{@code
      * [
      *   {
@@ -590,13 +652,10 @@ public class SwarmController {
     public ResponseEntity<List<SwarmSummary>> list() {
         String path = "/api/swarms";
         logRestRequest("GET", path, null);
-        // Drop swarms that have already been marked FAILED by expiry logic so operators can
-        // recreate swarms after controllers disappear (for example, when containers are killed
-        // manually outside PocketHive).
-        registry.bringOutYourDead();
-        List<SwarmSummary> payload = registry.all().stream()
+        List<SwarmSummary> payload = store.all().stream()
             .sorted(Comparator.comparing(Swarm::getId))
-            .map(this::toSummary)
+            .map(swarm -> toSummaryFromStatusFull(swarm, swarm.getControllerStatusFull()))
+            .filter(Objects::nonNull)
             .toList();
         ResponseEntity<List<SwarmSummary>> response = ResponseEntity.ok(payload);
         logRestResponse("GET", path, response);
@@ -604,42 +663,154 @@ public class SwarmController {
     }
 
     /**
-     * GET {@code /api/swarms/{swarmId}} — fetch a snapshot of swarm state and launch metadata.
+     * GET {@code /api/swarms/{swarmId}} — fetch the latest cached swarm-controller status-full snapshot.
      */
     @GetMapping("/{swarmId}")
-    public ResponseEntity<SwarmSummary> view(@PathVariable String swarmId) {
+    public ResponseEntity<StatusFullSnapshot> view(@PathVariable String swarmId) {
         String path = "/api/swarms/" + swarmId;
         logRestRequest("GET", path, null);
-        ResponseEntity<SwarmSummary> response = registry.find(swarmId)
-            .map(s -> ResponseEntity.ok(toSummary(s)))
-            .orElse(ResponseEntity.notFound().build());
+        ResponseEntity<StatusFullSnapshot> response;
+        Optional<Swarm> swarmOpt = store.find(swarmId);
+        if (swarmOpt.isEmpty()) {
+            response = ResponseEntity.notFound().build();
+        } else {
+            Swarm swarm = swarmOpt.get();
+            JsonNode statusFull = swarm.getControllerStatusFull();
+            if (statusFull == null) {
+                response = ResponseEntity.notFound().build();
+            } else {
+                StatusFullSnapshot snapshot = new StatusFullSnapshot(
+                    swarm.getControllerStatusReceivedAt(),
+                    STATUS_FULL_STALE_AFTER.getSeconds(),
+                    statusFull);
+                response = ResponseEntity.ok(snapshot);
+            }
+        }
         logRestResponse("GET", path, response);
         return response;
     }
 
-    private SwarmSummary toSummary(Swarm swarm) {
-        List<BeeSummary> bees = swarm.bees().stream()
-            .map(b -> new BeeSummary(b.role(), b.image()))
-            .toList();
-        ComputeAdapterType adapterType = lifecycle.currentComputeAdapterType();
-        String stackName = adapterType == ComputeAdapterType.SWARM_STACK
-            ? ("ph-" + swarm.getId().toLowerCase())
-            : null;
-        return new SwarmSummary(
-            swarm.getId(),
-            swarm.getStatus(),
-            swarm.getHealth(),
-            swarm.getHeartbeat(),
-            swarm.isWorkEnabled(),
-            swarm.templateId().orElse(null),
-            swarm.controllerImage().orElse(null),
-            swarm.getSutId(),
+    private SwarmSummary toSummaryFromStatusFull(Swarm swarm, JsonNode statusFull) {
+        if (statusFull == null || statusFull.isMissingNode()) {
+            return null;
+        }
+	        JsonNode scope = statusFull.path("scope");
+	        JsonNode data = statusFull.path("data");
+	        JsonNode runtime = statusFull.path("runtime");
+	        JsonNode context = data.path("context");
+	        JsonNode workers = context.path("workers");
+
+        String id = swarm.getId();
+
+        SwarmRuntimeStatus status = parseSwarmStatus(textOrNull(context, "swarmStatus"), null);
+        SwarmHealth health = parseSwarmHealth(textOrNull(context, "swarmHealth"), null);
+        Instant heartbeat = parseInstant(textOrNull(statusFull, "timestamp"));
+
+        JsonNode enabledNode = data.get("enabled");
+        if (enabledNode == null || !enabledNode.isBoolean()) {
+            return null;
+        }
+        boolean workEnabled = enabledNode.asBoolean();
+
+	        String templateId = textOrNull(runtime, "templateId");
+	        String controllerImage = textOrNull(runtime, "image");
+	        String sutId = textOrNull(context, "sutId");
+	        List<BeeSummary> bees = beesFromWorkers(workers);
+
+	        String stackName = textOrNull(runtime, "stackName");
+	        return new SwarmSummary(
+	            id,
+	            status,
+            health,
+            heartbeat,
+            workEnabled,
+            templateId,
+            controllerImage,
+            sutId,
             stackName,
             bees);
     }
 
+    private static String textOrNull(JsonNode node, String field) {
+        if (node == null || field == null) {
+            return null;
+        }
+        JsonNode value = node.get(field);
+        if (value == null || value.isNull()) {
+            return null;
+        }
+        String text = value.asText(null);
+        return text == null || text.isBlank() ? null : text;
+    }
+
+    private static Instant parseInstant(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return Instant.parse(value);
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    private static SwarmRuntimeStatus parseSwarmStatus(String value, SwarmRuntimeStatus fallback) {
+        if (value == null || value.isBlank()) {
+            return fallback;
+        }
+        try {
+            return SwarmRuntimeStatus.valueOf(value.trim().toUpperCase());
+        } catch (Exception ex) {
+            return fallback;
+        }
+    }
+
+    private static SwarmHealth parseSwarmHealth(String value, SwarmHealth fallback) {
+        if (value == null || value.isBlank()) {
+            return fallback;
+        }
+        String normalized = value.trim().toUpperCase();
+        return switch (normalized) {
+            case "RUNNING" -> SwarmHealth.RUNNING;
+            case "FAILED" -> SwarmHealth.FAILED;
+            case "DEGRADED" -> SwarmHealth.DEGRADED;
+            default -> fallback;
+        };
+    }
+
+    private static List<BeeSummary> beesFromWorkers(JsonNode workersNode) {
+        if (workersNode == null || workersNode.isMissingNode() || !workersNode.isArray()) {
+            return List.of();
+        }
+        Map<String, String> byRole = new LinkedHashMap<>();
+        for (JsonNode workerNode : workersNode) {
+            String role = textOrNull(workerNode, "role");
+            if (role == null) {
+                continue;
+            }
+            JsonNode runtime = workerNode.path("runtime");
+            String image = runtime != null && runtime.isObject() ? textOrNull(runtime, "image") : null;
+            String existing = byRole.get(role);
+            if (existing == null && !byRole.containsKey(role)) {
+                byRole.put(role, image);
+                continue;
+            }
+            if (existing == null && image != null) {
+                byRole.put(role, image);
+            }
+        }
+        if (byRole.isEmpty()) {
+            return List.of();
+        }
+        List<BeeSummary> bees = new ArrayList<>(byRole.size());
+        for (Map.Entry<String, String> entry : byRole.entrySet()) {
+            bees.add(new BeeSummary(entry.getKey(), entry.getValue()));
+        }
+        return bees;
+    }
+
     public record SwarmSummary(String id,
-                               SwarmStatus status,
+                               SwarmRuntimeStatus status,
                                SwarmHealth health,
                                java.time.Instant heartbeat,
                                boolean workEnabled,
@@ -654,6 +825,11 @@ public class SwarmController {
     }
 
     public record BeeSummary(String role, String image) {}
+
+    public record StatusFullSnapshot(java.time.Instant receivedAt,
+                                     long staleAfterSec,
+                                     JsonNode envelope) {
+    }
 
     /**
      * Serialize control signals for RabbitMQ publishing.

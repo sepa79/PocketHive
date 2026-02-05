@@ -12,7 +12,7 @@ import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.observability.ControlPlaneJson;
 import io.pockethive.orchestrator.domain.IdempotencyStore;
 import io.pockethive.orchestrator.domain.Swarm;
-import io.pockethive.orchestrator.domain.SwarmRegistry;
+import io.pockethive.orchestrator.domain.SwarmStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -40,22 +40,22 @@ import java.util.UUID;
 @RequestMapping("/api/swarm-managers")
 public class SwarmManagerController {
     private static final Logger log = LoggerFactory.getLogger(SwarmManagerController.class);
-    private static final long CONFIG_UPDATE_TIMEOUT_MS = 60_000L;
+	    private static final long CONFIG_UPDATE_TIMEOUT_MS = 60_000L;
 
-    private final SwarmRegistry registry;
-    private final ControlPlanePublisher controlPublisher;
-    private final IdempotencyStore idempotency;
-    private final String originInstanceId;
+	    private final SwarmStore store;
+	    private final ControlPlanePublisher controlPublisher;
+	    private final IdempotencyStore idempotency;
+	    private final String originInstanceId;
 
-    public SwarmManagerController(SwarmRegistry registry,
-                                  ControlPlanePublisher controlPublisher,
-                                  IdempotencyStore idempotency,
-                                  ControlPlaneProperties controlPlaneProperties) {
-        this.registry = registry;
-        this.controlPublisher = controlPublisher;
-        this.idempotency = idempotency;
-        this.originInstanceId = requireOrigin(controlPlaneProperties);
-    }
+	    public SwarmManagerController(SwarmStore store,
+	                                  ControlPlanePublisher controlPublisher,
+	                                  IdempotencyStore idempotency,
+	                                  ControlPlaneProperties controlPlaneProperties) {
+	        this.store = store;
+	        this.controlPublisher = controlPublisher;
+	        this.idempotency = idempotency;
+	        this.originInstanceId = requireOrigin(controlPlaneProperties);
+	    }
 
     /**
      * POST {@code /api/swarm-managers/enabled} — fan-out a toggle to every registered swarm.
@@ -75,7 +75,7 @@ public class SwarmManagerController {
     public ResponseEntity<FanoutControlResponse> updateAll(@RequestBody ToggleRequest request) {
         String path = "/api/swarm-managers/enabled";
         logRestRequest("POST", path, request);
-        FanoutControlResponse body = dispatch(registry.all(), request);
+        FanoutControlResponse body = dispatch(store.all(), request);
         ResponseEntity<FanoutControlResponse> response = ResponseEntity.accepted().body(body);
         logRestResponse("POST", path, response);
         return response;
@@ -93,7 +93,7 @@ public class SwarmManagerController {
                                                            @RequestBody ToggleRequest request) {
         String path = "/api/swarm-managers/" + swarmId + "/enabled";
         logRestRequest("POST", path, request);
-        ResponseEntity<FanoutControlResponse> response = registry.find(swarmId)
+        ResponseEntity<FanoutControlResponse> response = store.find(swarmId)
             .map(swarm -> ResponseEntity.accepted().body(dispatch(List.of(swarm), request)))
             .orElseGet(() -> ResponseEntity.notFound().build());
         logRestResponse("POST", path, response);
@@ -124,14 +124,14 @@ public class SwarmManagerController {
                 dispatches.add(new Dispatch(swarmSegment, swarm.getInstanceId(),
                     accepted(existing.get(), request.idempotencyKey(), swarmSegment, swarm.getInstanceId()), true));
                 continue;
-            }
-            ControlScope target = ControlScope.forInstance(swarmId, "swarm-controller", swarm.getInstanceId());
-            ControlSignal payload = ControlSignals.configUpdate(
-                originInstanceId,
-                target,
-                newCorrelation,
-                request.idempotencyKey(),
-                Map.of("enabled", request.enabled()));
+	            }
+	            ControlScope target = ControlScope.forInstance(swarmId, "swarm-controller", swarm.getInstanceId());
+	            ControlSignal payload = ControlSignals.configUpdate(
+	                originInstanceId,
+	                target,
+	                newCorrelation,
+	                request.idempotencyKey(),
+	                Map.of("enabled", request.enabled()));
             try {
                 sendControl(routingKey(swarmSegment, swarm.getInstanceId()), toJson(payload));
             } catch (RuntimeException e) {
@@ -142,6 +142,13 @@ public class SwarmManagerController {
                 accepted(newCorrelation, request.idempotencyKey(), swarmSegment, swarm.getInstanceId()), false));
         }
         return new FanoutControlResponse(dispatches);
+    }
+
+    private static String requireText(String value, String field) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(field + " must not be blank");
+        }
+        return value.trim();
     }
 
     /**

@@ -3,6 +3,7 @@ package io.pockethive.worker.sdk.templating;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.pockethive.worker.sdk.api.WorkItem;
+import io.pockethive.worker.sdk.api.WorkerInfo;
 import java.lang.reflect.Field;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -27,7 +28,7 @@ class PebbleTemplateRendererTest {
     @Test
     void evaluatesSpelWithHelpers() {
         String payload = "{\"foo\":\"bar\",\"num\":123}";
-        WorkItem item = WorkItem.text(payload).build();
+        WorkItem item = WorkItem.text(new WorkerInfo("templating", "swarm", "instance", null, null), payload).build();
         String template = String.join("|",
             "{{ eval(\"payload + '!'\") }}",
             "{{ eval(\"#base64_encode(payload)\") }}",

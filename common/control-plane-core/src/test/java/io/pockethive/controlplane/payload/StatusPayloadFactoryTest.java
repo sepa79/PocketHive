@@ -10,6 +10,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.io.IOException;
 import java.time.Instant;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class StatusPayloadFactoryTest {
@@ -31,6 +32,12 @@ class StatusPayloadFactoryTest {
             .enabled(true)
             .tps(42)
             .data("startedAt", Instant.parse("2024-01-01T00:00:00Z"))
+            .runtime(Map.of(
+                "templateId", "template-1",
+                "runId", "run-1",
+                "containerId", "container-1",
+                "image", "worker:latest",
+                "stackName", "ph-swarm-1"))
             .watermark(Instant.parse("2024-01-01T00:00:00Z"))
             .totals(3, 2, 2, 3)
             .data("baseUrl", "https://example"));
@@ -45,7 +52,8 @@ class StatusPayloadFactoryTest {
         String json = factory.delta(builder -> builder
             .controlOut("rk.status")
             .enabled(false)
-            .tps(7));
+            .tps(7)
+            .runtime(Map.of("templateId", "template-1", "runId", "run-1")));
 
         JsonNode node = MAPPER.readTree(json);
         assertEquals("instance-7", node.get("origin").asText());

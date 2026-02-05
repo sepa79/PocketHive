@@ -22,10 +22,10 @@ import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker.Pending;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker.Phase;
-import io.pockethive.orchestrator.domain.HiveJournal;
-import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
-import io.pockethive.orchestrator.domain.SwarmRegistry;
-import io.pockethive.orchestrator.domain.SwarmStatus;
+	import io.pockethive.orchestrator.domain.HiveJournal;
+	import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
+	import io.pockethive.orchestrator.domain.SwarmStore;
+	import io.pockethive.orchestrator.domain.SwarmLifecycleStatus;
 import io.pockethive.swarm.model.SwarmPlan;
 import java.time.Instant;
 import java.util.List;
@@ -38,20 +38,22 @@ import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
-class SwarmSignalListenerTest {
-
-    private static final String SWARM_ID = "swarm-test";
-    private static final String ORCHESTRATOR_INSTANCE = "orch-1";
-    private static final String CONTROLLER_INSTANCE = "controller-1";
+	class SwarmSignalListenerTest {
+	
+	    private static final String SWARM_ID = "swarm-test";
+	    private static final String MANAGER_SWARM_ID = "ALL";
+	    private static final String ORCHESTRATOR_INSTANCE = "orch-1";
+	    private static final String CONTROLLER_INSTANCE = "controller-1";
 
     @Mock
     private ContainerLifecycleManager lifecycle;
@@ -74,19 +76,19 @@ class SwarmSignalListenerTest {
     @Captor
     private ArgumentCaptor<ControlPlaneEmitter.StatusContext> statusCaptor;
 
-    private final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
-    private final ControlPlaneTopologySettings settings =
-        new ControlPlaneTopologySettings(SWARM_ID, "ph.control", Map.of());
-    private final ControlPlaneTopologyDescriptor descriptor =
-        ControlPlaneTopologyDescriptorFactory.forManagerRole("orchestrator", settings);
-    private final ControlPlaneIdentity identity =
-        new ControlPlaneIdentity(SWARM_ID, descriptor.role(), ORCHESTRATOR_INSTANCE);
+	    private final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+	    private final ControlPlaneTopologySettings settings =
+	        new ControlPlaneTopologySettings(MANAGER_SWARM_ID, "ph.control", Map.of());
+	    private final ControlPlaneTopologyDescriptor descriptor =
+	        ControlPlaneTopologyDescriptorFactory.forManagerRole("orchestrator", settings);
+	    private final ControlPlaneIdentity identity =
+	        new ControlPlaneIdentity(MANAGER_SWARM_ID, descriptor.role(), ORCHESTRATOR_INSTANCE);
 
     private String controlQueueName;
     private SwarmPlanRegistry plans;
     private io.pockethive.orchestrator.domain.ScenarioTimelineRegistry timelines;
     private SwarmCreateTracker tracker;
-    private SwarmRegistry registry;
+    private SwarmStore registry;
     private SwarmSignalListener listener;
 
     @BeforeEach
@@ -94,56 +96,59 @@ class SwarmSignalListenerTest {
         controlQueueName = descriptor.controlQueue(identity.instanceId())
             .map(ControlQueueDescriptor::name)
             .orElseThrow();
-        plans = new SwarmPlanRegistry();
-        timelines = new io.pockethive.orchestrator.domain.ScenarioTimelineRegistry();
-        tracker = new SwarmCreateTracker();
-        registry = new SwarmRegistry();
-        lenient().when(controlPlane.publisher()).thenReturn(publisher);
-        lenient().doNothing().when(controlEmitter).emitStatusSnapshot(any());
-        lenient().doNothing().when(controlEmitter).emitStatusDelta(any());
-        listener = new SwarmSignalListener(plans, timelines, tracker, registry, lifecycle, mapper,
-            HiveJournal.noop(),
-            controlPlane, controlEmitter, identity, descriptor, controlQueueName);
-        clearInvocations(controlPlane, controlEmitter, publisher, lifecycle);
-    }
+	        plans = new SwarmPlanRegistry();
+	        timelines = new io.pockethive.orchestrator.domain.ScenarioTimelineRegistry();
+	        tracker = new SwarmCreateTracker();
+	        registry = new SwarmStore();
+	        lenient().when(controlPlane.publisher()).thenReturn(publisher);
+	        lenient().doNothing().when(controlEmitter).emitStatusSnapshot(any());
+	        lenient().doNothing().when(controlEmitter).emitStatusDelta(any());
+	        listener = new SwarmSignalListener(plans, timelines, tracker, registry, lifecycle, mapper,
+	            HiveJournal.noop(),
+	            controlPlane, controlEmitter, identity, descriptor, controlQueueName);
+	        clearInvocations(controlPlane, controlEmitter, publisher, lifecycle);
+	    }
 
     @Test
     void handleRejectsBlankRoutingKey() {
-        assertThatThrownBy(() -> listener.handle("{}", " "))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("routing key");
+        assertThatCode(() -> listener.handle("{}", " "))
+            .doesNotThrowAnyException();
+        verifyNoInteractions(controlPlane, controlEmitter, publisher, lifecycle);
     }
 
     @Test
     void handleRejectsNullRoutingKey() {
-        assertThatThrownBy(() -> listener.handle("{}", null))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("routing key");
+        assertThatCode(() -> listener.handle("{}", null))
+            .doesNotThrowAnyException();
+        verifyNoInteractions(controlPlane, controlEmitter, publisher, lifecycle);
     }
 
     @Test
     void handleRejectsNonEventRoutingKey() {
-        assertThatThrownBy(() -> listener.handle("{}", "signal.swarm-start.swarm-test.swarm-controller.controller-1"))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("start with 'event.'");
+        assertThatCode(() -> listener.handle("{}", "signal.swarm-start.swarm-test.swarm-controller.controller-1"))
+            .doesNotThrowAnyException();
+        verifyNoInteractions(controlPlane, controlEmitter, publisher, lifecycle);
     }
 
     @Test
     void handleRejectsMalformedRoutingKey() {
-        assertThatThrownBy(() -> listener.handle("{}", "event."))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("malformed");
+        assertThatCode(() -> listener.handle("{}", "event."))
+            .doesNotThrowAnyException();
+        verifyNoInteractions(controlPlane, controlEmitter, publisher, lifecycle);
     }
 
     @Test
     void controllerReadyDispatchesTemplateAndEmitsConfirmation() throws Exception {
         SwarmPlan plan = new SwarmPlan(SWARM_ID, List.of());
         plans.register(CONTROLLER_INSTANCE, plan);
-        Pending pending = new Pending(SWARM_ID, CONTROLLER_INSTANCE, "corr", "idem",
-            Phase.CONTROLLER, Instant.now().plusSeconds(60));
-        tracker.register(CONTROLLER_INSTANCE, pending);
-        registry.register(new Swarm(SWARM_ID, CONTROLLER_INSTANCE, "cid", "run-1"));
-        registry.updateStatus(SWARM_ID, SwarmStatus.CREATING);
+	        Pending pending = new Pending(SWARM_ID, CONTROLLER_INSTANCE, "corr", "idem",
+	            Phase.CONTROLLER, Instant.now().plusSeconds(60));
+	        tracker.register(CONTROLLER_INSTANCE, pending);
+        Swarm swarm = new Swarm(SWARM_ID, CONTROLLER_INSTANCE, "cid", "run-1");
+        swarm.attachTemplate(new io.pockethive.orchestrator.domain.SwarmTemplateMetadata("tpl-1", "swarm-controller:latest", java.util.List.of()));
+        registry.register(swarm);
+        registry.updateStatus(SWARM_ID, SwarmLifecycleStatus.CREATING);
+        cacheStatusFull("tpl-1", "run-1");
 
         String routingKey = ControlPlaneRouting.event("metric", "status-full",
             new ConfirmationScope(SWARM_ID, "swarm-controller", CONTROLLER_INSTANCE));
@@ -172,12 +177,34 @@ class SwarmSignalListenerTest {
         assertThat(tracker.complete(SWARM_ID, Phase.TEMPLATE)).isPresent();
     }
 
+    private void cacheStatusFull(String templateId, String runId) {
+        var status = mapper.createObjectNode();
+        status.put("timestamp", Instant.now().toString());
+        status.put("version", "1");
+        status.put("kind", "metric");
+        status.put("type", "status-full");
+        status.put("origin", "swarm-controller-1");
+        var scope = status.putObject("scope");
+        scope.put("swarmId", SWARM_ID);
+        scope.put("role", "swarm-controller");
+        scope.put("instance", CONTROLLER_INSTANCE);
+        status.set("runtime", mapper.valueToTree(Map.of("templateId", templateId, "runId", runId)));
+        status.putNull("correlationId");
+        status.putNull("idempotencyKey");
+        var data = status.putObject("data");
+        data.put("enabled", true);
+        data.putObject("context");
+        registry.cacheControllerStatusFull(SWARM_ID, status, Instant.now());
+    }
+
     @Test
     void controllerTimeoutEmitsErrorOutcomeAndAlert() throws Exception {
-        Pending pending = new Pending(SWARM_ID, CONTROLLER_INSTANCE, "corr", "idem",
-            Phase.CONTROLLER, Instant.now().minusSeconds(1));
-        tracker.register(CONTROLLER_INSTANCE, pending);
-        registry.register(new Swarm(SWARM_ID, CONTROLLER_INSTANCE, "cid", "run-1"));
+	        Pending pending = new Pending(SWARM_ID, CONTROLLER_INSTANCE, "corr", "idem",
+	            Phase.CONTROLLER, Instant.now().minusSeconds(1));
+	        tracker.register(CONTROLLER_INSTANCE, pending);
+	        Swarm swarm = new Swarm(SWARM_ID, CONTROLLER_INSTANCE, "cid", "run-1");
+	        swarm.attachTemplate(new io.pockethive.orchestrator.domain.SwarmTemplateMetadata("tpl-1", "swarm-controller:latest", java.util.List.of()));
+	        registry.register(swarm);
 
         listener.checkTimeouts();
 
@@ -199,20 +226,20 @@ class SwarmSignalListenerTest {
         assertThat(alert.data().message()).contains("did not become ready");
         assertThat(tracker.remove(CONTROLLER_INSTANCE)).isEmpty();
         assertThat(registry.find(SWARM_ID)).map(Swarm::getStatus)
-            .contains(SwarmStatus.FAILED);
+            .contains(SwarmLifecycleStatus.FAILED);
     }
 
-    @Test
-    void statusSnapshotIncludesControlRoutes() {
-        SwarmSignalListener fresh = new SwarmSignalListener(plans, timelines, tracker, registry, lifecycle, mapper,
-            HiveJournal.noop(),
-            controlPlane, controlEmitter, identity, descriptor, controlQueueName);
+	    @Test
+	    void statusSnapshotIncludesControlRoutes() {
+	        SwarmSignalListener fresh = new SwarmSignalListener(plans, timelines, tracker, registry, lifecycle, mapper,
+	            HiveJournal.noop(),
+	            controlPlane, controlEmitter, identity, descriptor, controlQueueName);
 
         verify(controlEmitter).emitStatusSnapshot(statusCaptor.capture());
         StatusEnvelopeBuilder builder = new StatusEnvelopeBuilder();
         builder.type("status-full")
             .origin(ORCHESTRATOR_INSTANCE)
-            .swarmId(SWARM_ID)
+            .swarmId(MANAGER_SWARM_ID)
             .role(identity.role())
             .instance(identity.instanceId());
         statusCaptor.getValue().customiser().accept(builder);
@@ -234,7 +261,7 @@ class SwarmSignalListenerTest {
         StatusEnvelopeBuilder builder = new StatusEnvelopeBuilder();
         builder.type("status-delta")
             .origin(ORCHESTRATOR_INSTANCE)
-            .swarmId(SWARM_ID)
+            .swarmId(MANAGER_SWARM_ID)
             .role(identity.role())
             .instance(identity.instanceId());
         statusCaptor.getValue().customiser().accept(builder);

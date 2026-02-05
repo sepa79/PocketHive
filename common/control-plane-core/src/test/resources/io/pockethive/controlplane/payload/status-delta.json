@@ -11,6 +11,10 @@
   },
   "correlationId": null,
   "idempotencyKey": null,
+  "runtime": {
+    "templateId": "template-1",
+    "runId": "run-1"
+  },
   "data": {
     "enabled": false,
     "tps": 7,

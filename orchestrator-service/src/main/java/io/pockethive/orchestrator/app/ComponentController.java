@@ -11,6 +11,7 @@ import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.observability.ControlPlaneJson;
 import io.pockethive.orchestrator.domain.IdempotencyStore;
+import io.pockethive.orchestrator.domain.SwarmStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -33,18 +34,21 @@ public class ComponentController {
     private static final long CONFIG_UPDATE_TIMEOUT_MS = 60_000L;
     private static final Logger log = LoggerFactory.getLogger(ComponentController.class);
 
-    private final ControlPlanePublisher controlPublisher;
-    private final IdempotencyStore idempotency;
-    private final String originInstanceId;
+	    private final ControlPlanePublisher controlPublisher;
+	    private final IdempotencyStore idempotency;
+	    private final String originInstanceId;
+	    private final SwarmStore store;
 
-    public ComponentController(
-        ControlPlanePublisher controlPublisher,
-        IdempotencyStore idempotency,
-        ControlPlaneProperties controlPlaneProperties) {
-        this.controlPublisher = controlPublisher;
-        this.idempotency = idempotency;
-        this.originInstanceId = requireOrigin(controlPlaneProperties);
-    }
+	    public ComponentController(
+	        ControlPlanePublisher controlPublisher,
+	        IdempotencyStore idempotency,
+	        SwarmStore store,
+	        ControlPlaneProperties controlPlaneProperties) {
+	        this.controlPublisher = controlPublisher;
+	        this.idempotency = idempotency;
+	        this.store = store;
+	        this.originInstanceId = requireOrigin(controlPlaneProperties);
+	    }
 
     @PostMapping("/{role}/{instance}/config")
     public ResponseEntity<ControlResponse> updateConfig(@PathVariable String role,
@@ -68,12 +72,12 @@ public class ComponentController {
             if (patch != null && patch.isEmpty()) {
                 patch = null;
             }
-            ControlSignal payload = ControlSignals.configUpdate(
-                originInstanceId,
-                ControlScope.forInstance(swarmId, role, instance),
-                newCorrelation,
-                request.idempotencyKey(),
-                patch);
+	            ControlSignal payload = ControlSignals.configUpdate(
+	                originInstanceId,
+	                ControlScope.forInstance(swarmId, role, instance),
+	                newCorrelation,
+	                request.idempotencyKey(),
+	                patch);
             String jsonPayload = toJson(payload);
             try {
                 sendControl(routingKey(swarmSegment, role, instance), jsonPayload, ControlPlaneSignals.CONFIG_UPDATE);
@@ -98,6 +102,13 @@ public class ComponentController {
             return swarmId;
         }
         return role + ":" + instance;
+    }
+
+    private static String requireText(String value, String field) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(field + " must not be blank");
+        }
+        return value.trim();
     }
 
     private ResponseEntity<ControlResponse> accepted(String correlationId,

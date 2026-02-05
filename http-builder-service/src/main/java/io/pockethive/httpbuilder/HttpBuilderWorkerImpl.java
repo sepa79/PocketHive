@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
 import io.pockethive.worker.sdk.api.WorkItem;
+import io.pockethive.worker.sdk.api.WorkStep;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
 import io.pockethive.worker.sdk.config.WorkerCapability;
@@ -79,8 +80,13 @@ class HttpBuilderWorkerImpl implements PocketHiveWorkerFunction {
 
     reloadTemplatesIfNeeded(config);
 
+    WorkItem effectiveSeed = seed;
+    if (effectiveSeed.headers().get("vars") == null && config.vars() != null && !config.vars().isEmpty()) {
+      effectiveSeed = effectiveSeed.addStepHeader("vars", config.vars());
+    }
+
     String serviceId = resolveServiceId(seed, config);
-    String callId = resolveCallId(seed);
+    String callId = resolveCallId(effectiveSeed);
     if (callId == null || callId.isBlank()) {
       context.logger().warn("No callId present on work item; {}", missingBehavior(config));
       return handleMissing(config, seed, context);
@@ -103,7 +109,7 @@ class HttpBuilderWorkerImpl implements PocketHiveWorkerFunction {
           .build();
 
       MessageTemplateRenderer.RenderedMessage rendered =
-          messageTemplateRenderer.render(template, seed);
+          messageTemplateRenderer.render(template, effectiveSeed);
 
       ObjectNode envelope = MAPPER.createObjectNode();
       envelope.put("protocol", "HTTP");
@@ -112,12 +118,15 @@ class HttpBuilderWorkerImpl implements PocketHiveWorkerFunction {
       envelope.set("headers", MAPPER.valueToTree(rendered.headers()));
       envelope.put("body", rendered.body());
 
-      WorkItem httpItem = WorkItem.json(envelope)
-          .header("content-type", "application/json")
-          .header("x-ph-service", context.info().role())
+      WorkItem httpItem = WorkItem.json(context.info(), envelope)
+          .contentType("application/json")
           .build();
 
-      WorkItem result = seed.addStep(httpItem.asString(), httpItem.headers());
+      WorkStep step = lastStep(httpItem);
+      WorkItem result = seed.toBuilder()
+          .contentType(httpItem.contentType())
+          .step(context.info(), step.payload(), step.payloadEncoding(), step.headers())
+          .build();
       publishStatus(context, config);
       return result;
     } catch (Exception ex) {
@@ -260,5 +269,16 @@ class HttpBuilderWorkerImpl implements PocketHiveWorkerFunction {
         .replace("\n", "\\n")
         .replace("\t", "\\t");
     return '"' + sanitized + '"';
+  }
+
+  private WorkStep lastStep(WorkItem item) {
+    WorkStep last = null;
+    for (WorkStep step : item.steps()) {
+      last = step;
+    }
+    if (last == null) {
+      throw new IllegalStateException("HTTP Builder produced a WorkItem without steps");
+    }
+    return last;
   }
 }

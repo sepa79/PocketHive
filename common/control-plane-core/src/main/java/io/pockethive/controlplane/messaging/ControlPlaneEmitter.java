@@ -4,6 +4,7 @@ import io.pockethive.control.AlertMessage;
 import io.pockethive.control.CommandOutcome;
 import io.pockethive.control.CommandState;
 import io.pockethive.control.ConfirmationScope;
+import io.pockethive.control.ControlRuntime;
 import io.pockethive.control.ControlScope;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.payload.RoleContext;
@@ -30,39 +31,49 @@ public final class ControlPlaneEmitter {
     private final RoleContext role;
     private final ControlPlanePublisher publisher;
     private final StatusPayloadFactory statusFactory;
+    private final Map<String, Object> runtime;
     private ControlPlaneEmitter(ControlPlaneTopologyDescriptor topology,
                                 RoleContext role,
                                 ControlPlanePublisher publisher,
-                                StatusPayloadFactory statusFactory) {
+                                StatusPayloadFactory statusFactory,
+                                Map<String, Object> runtime) {
         this.topology = Objects.requireNonNull(topology, "topology");
         this.role = Objects.requireNonNull(role, "role");
         this.publisher = Objects.requireNonNull(publisher, "publisher");
         this.statusFactory = Objects.requireNonNull(statusFactory, "statusFactory");
+        this.runtime = normaliseRuntime(runtime);
         requireRoleMatch();
+    }
+
+    private static Map<String, Object> normaliseRuntime(Map<String, Object> runtime) {
+        return ControlRuntime.normalise(runtime);
     }
 
     public static ControlPlaneEmitter using(ControlPlaneTopologyDescriptor topology,
                                             RoleContext role,
-                                            ControlPlanePublisher publisher) {
+                                            ControlPlanePublisher publisher,
+                                            Map<String, Object> runtime) {
         Objects.requireNonNull(topology, "topology");
         Objects.requireNonNull(role, "role");
         Objects.requireNonNull(publisher, "publisher");
         StatusPayloadFactory statusFactory = new StatusPayloadFactory(role);
-        return new ControlPlaneEmitter(topology, role, publisher, statusFactory);
+        return new ControlPlaneEmitter(topology, role, publisher, statusFactory, runtime);
     }
 
     public static ControlPlaneEmitter worker(ControlPlaneIdentity identity,
                                              ControlPlanePublisher publisher,
-                                             ControlPlaneTopologySettings settings) {
+                                             ControlPlaneTopologySettings settings,
+                                             Map<String, Object> runtime) {
         RoleContext role = RoleContext.fromIdentity(identity);
-        return using(new WorkerControlPlaneTopologyDescriptor(role.role(), settings), role, publisher);
+        return using(new WorkerControlPlaneTopologyDescriptor(role.role(), settings), role, publisher, runtime);
     }
 
     public static ControlPlaneEmitter swarmController(ControlPlaneIdentity identity,
                                                       ControlPlanePublisher publisher,
-                                                      ControlPlaneTopologySettings settings) {
+                                                      ControlPlaneTopologySettings settings,
+                                                      Map<String, Object> runtime) {
         RoleContext role = requireIdentity(identity, "swarm-controller");
-        return using(new SwarmControllerControlPlaneTopologyDescriptor(settings), role, publisher);
+        return using(new SwarmControllerControlPlaneTopologyDescriptor(settings), role, publisher, runtime);
     }
 
     public void emitReady(ReadyContext context) {
@@ -89,6 +100,7 @@ public final class ControlPlaneEmitter {
         String routingKey = ControlPlaneRouting.event("metric", type, role.toScope());
         Consumer<StatusEnvelopeBuilder> customiser = builder -> {
             builder.controlOut(routingKey);
+            builder.runtime(runtime);
             context.customiser().accept(builder);
         };
         String payload = switch (type) {
@@ -347,6 +359,7 @@ public final class ControlPlaneEmitter {
                 toControlScope(role.toScope()),
                 context.correlationId(),
                 context.idempotencyKey(),
+                runtime,
                 state,
                 null,
                 context.details(),
@@ -366,6 +379,7 @@ public final class ControlPlaneEmitter {
                 toControlScope(role.toScope()),
                 context.correlationId(),
                 context.idempotencyKey(),
+                runtime,
                 state,
                 retryable,
                 context.details(),
@@ -392,6 +406,7 @@ public final class ControlPlaneEmitter {
             toControlScope(role.toScope()),
             context.correlationId(),
             context.idempotencyKey(),
+            runtime,
             context.code(),
             context.message(),
             context.errorType(),

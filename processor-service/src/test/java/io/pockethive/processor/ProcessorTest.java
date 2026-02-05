@@ -81,12 +81,12 @@ class ProcessorTest {
             return response;
         });
 
-        WorkItem inbound = WorkItem.json(Map.of(
+        WorkItem inbound = inboundItem(Map.of(
                 "path", "/api",
                 "method", "post",
                 "headers", Map.of("X-Test", "true"),
                 "body", Map.of("value", 42)
-        )).build();
+        ));
 
         WorkItem outbound = invokeThroughObservabilityInterceptor(worker, context, inbound);
 
@@ -94,9 +94,8 @@ class ProcessorTest {
         JsonNode payload = MAPPER.readTree(outbound.asString());
         assertThat(payload.path("status").asInt()).isEqualTo(201);
         assertThat(payload.path("body").asText()).isEqualTo("{\"result\":\"ok\"}");
-        assertThat(outbound.headers())
-                .containsEntry("content-type", "application/json")
-                .containsEntry("x-ph-service", "processor")
+        assertThat(outbound.contentType()).isEqualTo("application/json");
+        assertThat(outbound.stepHeaders())
                 .containsEntry("x-ph-processor-duration-ms", "0")
                 .containsEntry("x-ph-processor-success", "true")
                 .containsEntry("x-ph-processor-status", "201");
@@ -104,8 +103,7 @@ class ProcessorTest {
         long stepCount = StreamSupport.stream(outbound.steps().spliterator(), false).count();
         assertThat(stepCount).isEqualTo(2L);
 
-        String traceHeader = (String) outbound.headers().get(ObservabilityContextUtil.HEADER);
-        ObservabilityContext trace = ObservabilityContextUtil.fromHeader(traceHeader);
+        ObservabilityContext trace = outbound.observabilityContext().orElseThrow();
         assertThat(trace.getHops()).hasSize(2);
         assertThat(trace.getHops().get(0).getService()).isEqualTo("ingress");
         assertThat(trace.getHops().get(1).getService()).isEqualTo("processor");
@@ -144,7 +142,7 @@ class ProcessorTest {
             return response;
         });
 
-        WorkItem inbound = WorkItem.json(Map.of("path", "/test")).build();
+        WorkItem inbound = inboundItem(Map.of("path", "/test"));
 
         worker.onMessage(inbound, context);
 
@@ -176,18 +174,18 @@ class ProcessorTest {
             return response;
         });
 
-        WorkItem inbound = WorkItem.json(Map.of("path", "/metrics")).build();
+        WorkItem inbound = inboundItem(Map.of("path", "/metrics"));
 
         WorkItem first = worker.onMessage(inbound, context);
         assertThat(first).isNotNull();
-        assertThat(first.headers())
+        assertThat(first.stepHeaders())
                 .containsEntry("x-ph-processor-duration-ms", "50")
                 .containsEntry("x-ph-processor-success", "true")
                 .containsEntry("x-ph-processor-status", "200");
 
         WorkItem second = worker.onMessage(inbound, context);
         assertThat(second).isNotNull();
-        assertThat(second.headers())
+        assertThat(second.stepHeaders())
                 .containsEntry("x-ph-processor-duration-ms", "150")
                 .containsEntry("x-ph-processor-success", "false")
                 .containsEntry("x-ph-processor-status", "502");
@@ -217,7 +215,7 @@ class ProcessorTest {
             return response;
         });
 
-        WorkItem inbound = WorkItem.json(Map.of("path", "/defaults" )).build();
+        WorkItem inbound = inboundItem(Map.of("path", "/defaults"));
 
         worker.onMessage(inbound, context);
 
@@ -236,14 +234,14 @@ class ProcessorTest {
         ProcessorWorkerConfig config = new ProcessorWorkerConfig(" ", null, 0, 0.0, null, null, null, null, null);
         TestWorkerContext context = new TestWorkerContext(config);
 
-        WorkItem inbound = WorkItem.json(Map.of("path", "/noop")).build();
+        WorkItem inbound = inboundItem(Map.of("path", "/noop"));
 
         WorkItem result = worker.onMessage(inbound, context);
 
         assertThat(result).isNotNull();
         JsonNode payload = MAPPER.readTree(result.asString());
         assertThat(payload.path("error").asText()).isEqualTo("invalid baseUrl");
-        assertThat(result.headers())
+        assertThat(result.stepHeaders())
             .containsEntry("x-ph-processor-duration-ms", "0")
             .containsEntry("x-ph-processor-success", "false")
             .containsEntry("x-ph-processor-status", "-1");
@@ -259,6 +257,11 @@ class ProcessorTest {
         WorkerInvocationContext invocationContext = instantiateInvocationContext(definition, state, context, inbound);
         return interceptor.intercept(invocationContext, invocation ->
                 worker.onMessage(invocation.message(), invocation.workerContext()));
+    }
+
+    private static WorkItem inboundItem(Map<String, Object> payload) {
+        WorkerInfo info = new WorkerInfo("ingress", "swarm", "ingress-instance", null, null);
+        return WorkItem.json(info, payload).build();
     }
 
     private static WorkerDefinition processorDefinition() {

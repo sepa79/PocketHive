@@ -9,6 +9,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.lenient;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -28,15 +29,19 @@ import io.pockethive.orchestrator.domain.SwarmCreateTracker;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker.Phase;
 import io.pockethive.orchestrator.domain.ScenarioTimelineRegistry;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
-import io.pockethive.orchestrator.domain.SwarmRegistry;
-import io.pockethive.orchestrator.domain.SwarmStatus;
+import io.pockethive.orchestrator.domain.SwarmStateStore;
+import io.pockethive.orchestrator.domain.SwarmStore;
+import io.pockethive.orchestrator.domain.SwarmLifecycleStatus;
 import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
 import io.pockethive.orchestrator.domain.HiveJournal;
 import io.pockethive.orchestrator.infra.InMemoryIdempotencyStore;
 import io.pockethive.swarm.model.Bee;
+import io.pockethive.swarm.model.SutEnvironment;
 import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.SwarmTemplate;
 import io.pockethive.swarm.model.Work;
+import java.util.List;
+import java.util.Map;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
@@ -87,10 +92,13 @@ class SwarmControllerTest {
     @Test
     void startPublishesControlSignal() throws Exception {
         SwarmCreateTracker tracker = new SwarmCreateTracker();
-        SwarmRegistry registry = new SwarmRegistry();
-        registry.register(new Swarm("sw1", "inst", "c", "run-1"));
-        registry.updateStatus("sw1", SwarmStatus.CREATING);
-        registry.updateStatus("sw1", SwarmStatus.READY);
+        SwarmStore registry = new SwarmStore();
+        Swarm swarm = new Swarm("sw1", "inst", "c", "run-1");
+        swarm.attachTemplate(new SwarmTemplateMetadata("tpl-1", "swarm-controller:latest", List.of()));
+        registry.register(swarm);
+        registry.updateStatus("sw1", SwarmLifecycleStatus.CREATING);
+        registry.updateStatus("sw1", SwarmLifecycleStatus.READY);
+        cacheStatusFull(registry, "sw1", "tpl-1", "run-1", "inst");
         SwarmController ctrl = controller(tracker, registry, new SwarmPlanRegistry());
         SwarmController.ControlRequest req = new SwarmController.ControlRequest("idem", null);
 
@@ -110,7 +118,7 @@ class SwarmControllerTest {
             ControlPlaneRouting.event("outcome", ControlPlaneSignals.SWARM_START,
                 new ConfirmationScope("sw1", "swarm-controller", "inst")));
         assertThat(tracker.complete("sw1", Phase.START)).isPresent();
-        assertThat(registry.find("sw1").get().getStatus()).isEqualTo(SwarmStatus.STARTING);
+        assertThat(registry.find("sw1").get().getStatus()).isEqualTo(SwarmLifecycleStatus.STARTING);
     }
 
     @Test
@@ -133,7 +141,7 @@ class SwarmControllerTest {
             capturedInstance.set(instanceId);
             return new Swarm("sw1", instanceId, "c1", "run-1");
         });
-        SwarmController ctrl = controller(tracker, new SwarmRegistry(), plans);
+        SwarmController ctrl = controller(tracker, new SwarmStore(), plans);
         SwarmCreateRequest req = new SwarmCreateRequest("tpl-1", "idem", null);
 
         ctrl.create("sw1", req);
@@ -148,9 +156,67 @@ class SwarmControllerTest {
     }
 
     @Test
+    void createInjectsResolvedVarsIntoBeeConfig() throws Exception {
+        SwarmCreateTracker tracker = new SwarmCreateTracker();
+        SwarmPlanRegistry plans = new SwarmPlanRegistry();
+        SwarmTemplate template = new SwarmTemplate("ctrl-image", List.of(
+            new Bee(
+                "generator",
+                "img",
+                Work.ofDefaults(null, "out"),
+                Map.of(),
+                java.util.Map.<String, Object>of("worker", java.util.Map.of("x", "y"))
+            )
+        ));
+        when(scenarioClient.fetchScenario("tpl-1")).thenReturn(new ScenarioPlan(template, null, null, null));
+        when(scenarioClient.prepareScenarioRuntime("tpl-1", "sw1")).thenReturn("/tmp/runtime/sw1");
+        when(scenarioClient.fetchScenarioSut(eq("tpl-1"), eq("sut-A"), anyString(), eq("idem")))
+            .thenReturn(new SutEnvironment("sut-A", "SUT A", null, Map.of()));
+
+        AtomicReference<String> capturedInstance = new AtomicReference<>();
+        when(lifecycle.startSwarm(
+            eq("sw1"),
+            eq("ctrl-image"),
+            anyString(),
+            any(SwarmTemplateMetadata.class),
+            eq(false))).thenAnswer(inv -> {
+            String instanceId = inv.getArgument(2);
+            capturedInstance.set(instanceId);
+            return new Swarm("sw1", instanceId, "c1", "run-1");
+        });
+
+        SwarmController ctrl = controller(tracker, new SwarmStore(), plans);
+        when(scenarioClient.resolveScenarioVariables(
+            eq("tpl-1"),
+            any(),
+            any(),
+            anyString(),
+            eq("idem")
+        )).thenReturn(new ScenarioClient.ResolvedVariables(
+            "france",
+            "sut-A",
+            Map.of("loopCount", 10, "customerId", "123"),
+            List.of()
+        ));
+        SwarmCreateRequest req = new SwarmCreateRequest("tpl-1", "idem", null, false, "sut-A", "france");
+
+        ctrl.create("sw1", req);
+
+        String instanceId = capturedInstance.get();
+        SwarmPlan plan = plans.find(instanceId).orElseThrow();
+        assertThat(plan.bees()).hasSize(1);
+        Map<String, Object> config = plan.bees().get(0).config();
+        assertThat(config).containsKey("vars");
+        assertThat(config.get("vars")).isEqualTo(Map.of("loopCount", 10, "customerId", "123"));
+    }
+
+    @Test
     void startIsIdempotent() {
-        SwarmRegistry registry = new SwarmRegistry();
-        registry.register(new Swarm("sw1", "controller-inst", "ctrl", "run-1"));
+        SwarmStore registry = new SwarmStore();
+        Swarm swarm = new Swarm("sw1", "controller-inst", "ctrl", "run-1");
+        swarm.attachTemplate(new SwarmTemplateMetadata("tpl-1", "swarm-controller:latest", List.of()));
+        registry.register(swarm);
+        cacheStatusFull(registry, "sw1", "tpl-1", "run-1", "controller-inst");
         SwarmController ctrl = controller(new SwarmCreateTracker(), registry, new SwarmPlanRegistry());
         SwarmController.ControlRequest req = new SwarmController.ControlRequest("idem", null);
 
@@ -165,7 +231,7 @@ class SwarmControllerTest {
     void concurrentCreateRequestsReuseReservation() throws Exception {
         SwarmCreateTracker tracker = new SwarmCreateTracker();
         SwarmPlanRegistry plans = new SwarmPlanRegistry();
-        SwarmRegistry registry = new SwarmRegistry();
+        SwarmStore registry = new SwarmStore();
         SwarmTemplate template = new SwarmTemplate("ctrl-image", List.of(
             new Bee("generator", "img", Work.ofDefaults(null, "out"), java.util.Map.of())
         ));
@@ -216,7 +282,7 @@ class SwarmControllerTest {
     void concurrentCreateRequestsWithDifferentKeysShareLeaderCorrelation() throws Exception {
         SwarmCreateTracker tracker = new SwarmCreateTracker();
         SwarmPlanRegistry plans = new SwarmPlanRegistry();
-        SwarmRegistry registry = new SwarmRegistry();
+        SwarmStore registry = new SwarmStore();
         SwarmTemplate template = new SwarmTemplate("ctrl-image", List.of(
             new Bee("generator", "img", Work.ofDefaults(null, "out"), java.util.Map.of())
         ));
@@ -273,7 +339,7 @@ class SwarmControllerTest {
     void followerAfterControllerPendingReusesLeaderCorrelation() {
         SwarmCreateTracker tracker = new SwarmCreateTracker();
         SwarmPlanRegistry plans = new SwarmPlanRegistry();
-        SwarmRegistry registry = new SwarmRegistry();
+        SwarmStore registry = new SwarmStore();
         InMemoryIdempotencyStore store = new InMemoryIdempotencyStore();
         tracker.register("leader-inst", new SwarmCreateTracker.Pending(
             "sw1",
@@ -299,40 +365,166 @@ class SwarmControllerTest {
     }
 
     @Test
-    void exposesSwarmSummaryWithTemplateMetadata() {
-        SwarmRegistry registry = new SwarmRegistry();
+    void exposesSwarmSummaryWithTemplateMetadata() throws Exception {
+        SwarmStore registry = new SwarmStore();
         Swarm swarm = new Swarm("sw1", "inst", "c", "run-1");
-        swarm.attachTemplate(new SwarmTemplateMetadata(
-            "tpl-1",
-            "ctrl-image",
-            List.of(new Bee("generator", "gen-image", Work.ofDefaults(null, "out"), java.util.Map.of()))));
+        String statusFull = """
+            {
+              "timestamp": "2026-01-22T12:00:00Z",
+              "version": "1",
+              "kind": "metric",
+              "type": "status-full",
+              "origin": "inst",
+	              "scope": { "swarmId": "sw1", "role": "swarm-controller", "instance": "inst" },
+	              "correlationId": null,
+	              "idempotencyKey": null,
+	              "runtime": {
+	                "templateId": "tpl-1",
+	                "runId": "run-1",
+	                "containerId": "container-1",
+	                "image": "ctrl-image",
+	                "stackName": "ph-sw1"
+	              },
+	              "data": {
+	                "enabled": true,
+	                "config": {},
+	                "startedAt": "2026-01-22T12:00:00Z",
+	                "io": {},
+	                "ioState": {},
+	                "context": {
+	                  "swarmStatus": "READY",
+	                  "swarmHealth": "RUNNING",
+                  "template": {
+                    "id": "tpl-1",
+                    "image": "ctrl-image",
+                    "bees": [ { "role": "generator", "image": "gen-image" } ]
+                  }
+                }
+              }
+            }
+            """;
+        swarm.updateControllerStatusFull(mapper.readTree(statusFull), Instant.now());
         registry.register(swarm);
         SwarmController ctrl = controller(new SwarmCreateTracker(), registry, new SwarmPlanRegistry());
 
-        ResponseEntity<SwarmController.SwarmSummary> resp = ctrl.view("sw1");
-        SwarmController.SwarmSummary body = resp.getBody();
-        assertThat(body.id()).isEqualTo("sw1");
-        assertThat(body.workEnabled()).isTrue();
-        assertThat(body.templateId()).isEqualTo("tpl-1");
-        assertThat(body.controllerImage()).isEqualTo("ctrl-image");
-        assertThat(body.bees()).containsExactly(new SwarmController.BeeSummary("generator", "gen-image"));
+        ResponseEntity<SwarmController.StatusFullSnapshot> resp = ctrl.view("sw1");
+        SwarmController.StatusFullSnapshot body = resp.getBody();
+        assertThat(body.envelope().path("scope").path("swarmId").asText()).isEqualTo("sw1");
+        assertThat(body.envelope().path("data").path("enabled").asBoolean()).isTrue();
+        assertThat(body.envelope().path("data").path("context").path("template").path("id").asText())
+            .isEqualTo("tpl-1");
+        assertThat(body.envelope().path("data").path("context").path("template").path("image").asText())
+            .isEqualTo("ctrl-image");
+        assertThat(body.envelope().path("data").path("context").path("template").path("bees").get(0).path("role").asText())
+            .isEqualTo("generator");
     }
 
     @Test
-    void listReturnsSortedSwarmsWithMetadata() {
-        SwarmRegistry registry = new SwarmRegistry();
+    void listReturnsSortedSwarmsWithMetadata() throws Exception {
+        SwarmStore registry = new SwarmStore();
         Swarm alpha = new Swarm("alpha", "inst-a", "c1", "run-a");
-        alpha.attachTemplate(new SwarmTemplateMetadata(
-            "tpl-alpha",
-            "ctrl-alpha",
-            List.of(new Bee("generator", "gen-alpha", Work.ofDefaults(null, "out"), java.util.Map.of()))));
+        String alphaStatusFull = """
+            {
+              "timestamp": "2026-01-22T12:00:01Z",
+              "version": "1",
+              "kind": "metric",
+              "type": "status-full",
+              "origin": "inst-a",
+	              "scope": { "swarmId": "alpha", "role": "swarm-controller", "instance": "inst-a" },
+	              "correlationId": null,
+	              "idempotencyKey": null,
+	              "runtime": {
+	                "templateId": "tpl-alpha",
+	                "runId": "run-alpha",
+	                "containerId": "container-alpha",
+	                "image": "ctrl-alpha",
+	                "stackName": "ph-alpha"
+	              },
+	              "data": {
+	                "enabled": true,
+	                "config": {},
+	                "startedAt": "2026-01-22T12:00:01Z",
+	                "io": {},
+	                "ioState": {},
+	                "context": {
+                  "swarmStatus": "READY",
+                  "swarmHealth": "RUNNING",
+                  "workers": [ { "role": "generator", "instance": "gen-1" } ],
+                  "template": {
+                    "id": "tpl-alpha",
+                    "image": "ctrl-alpha",
+                    "bees": [ { "role": "generator", "image": "gen-alpha" } ]
+                  }
+                }
+              }
+            }
+            """;
+        alpha.updateControllerStatusFull(mapper.readTree(alphaStatusFull), Instant.now());
         Swarm bravo = new Swarm("bravo", "inst-b", "c2", "run-b");
-        bravo.attachTemplate(new SwarmTemplateMetadata(
-            "tpl-bravo",
-            "ctrl-bravo",
-            List.of(new Bee("moderator", "mod-bravo", Work.ofDefaults("in", "out"), java.util.Map.of()))));
+        String bravoStatusFull = """
+            {
+              "timestamp": "2026-01-22T12:00:02Z",
+              "version": "1",
+              "kind": "metric",
+              "type": "status-full",
+              "origin": "inst-b",
+	              "scope": { "swarmId": "bravo", "role": "swarm-controller", "instance": "inst-b" },
+	              "correlationId": null,
+	              "idempotencyKey": null,
+	              "runtime": {
+	                "templateId": "tpl-bravo",
+	                "runId": "run-bravo",
+	                "containerId": "container-bravo",
+	                "image": "ctrl-bravo",
+	                "stackName": "ph-bravo"
+	              },
+	              "data": {
+	                "enabled": true,
+	                "config": {},
+	                "startedAt": "2026-01-22T12:00:02Z",
+	                "io": {},
+	                "ioState": {},
+	                "context": {
+                  "swarmStatus": "READY",
+                  "swarmHealth": "RUNNING",
+                  "workers": [ { "role": "moderator", "instance": "mod-1" } ],
+                  "template": {
+                    "id": "tpl-bravo",
+                    "image": "ctrl-bravo",
+                    "bees": [ { "role": "moderator", "image": "mod-bravo" } ]
+                  }
+                }
+              }
+            }
+            """;
+        bravo.updateControllerStatusFull(mapper.readTree(bravoStatusFull), Instant.now());
+        Swarm badEnabled = new Swarm("bad-enabled", "inst-x", "cx", "run-x");
+        String badEnabledStatusFull = """
+            {
+              "timestamp": "2026-01-22T12:00:03Z",
+              "version": "1",
+              "kind": "metric",
+              "type": "status-full",
+              "origin": "inst-x",
+	              "scope": { "swarmId": "bad-enabled", "role": "swarm-controller", "instance": "inst-x" },
+	              "correlationId": null,
+	              "idempotencyKey": null,
+	              "runtime": { "templateId": "tpl-bad" },
+	              "data": {
+	                "config": {},
+	                "startedAt": "2026-01-22T12:00:03Z",
+	                "io": {},
+	                "ioState": {},
+	                "context": {}
+	              }
+            }
+            """;
+        badEnabled.updateControllerStatusFull(mapper.readTree(badEnabledStatusFull), Instant.now());
+        Swarm noCache = new Swarm("no-cache", "inst-c", "c3", "run-c");
         registry.register(bravo);
         registry.register(alpha);
+        registry.register(badEnabled);
+        registry.register(noCache);
         SwarmController ctrl = controller(new SwarmCreateTracker(), registry, new SwarmPlanRegistry());
 
         ResponseEntity<List<SwarmController.SwarmSummary>> resp = ctrl.list();
@@ -340,9 +532,9 @@ class SwarmControllerTest {
 
         assertThat(body).extracting(SwarmController.SwarmSummary::id).containsExactly("alpha", "bravo");
         assertThat(body.get(0).templateId()).isEqualTo("tpl-alpha");
-        assertThat(body.get(0).bees()).containsExactly(new SwarmController.BeeSummary("generator", "gen-alpha"));
+        assertThat(body.get(0).bees()).containsExactly(new SwarmController.BeeSummary("generator", null));
         assertThat(body.get(1).templateId()).isEqualTo("tpl-bravo");
-        assertThat(body.get(1).bees()).containsExactly(new SwarmController.BeeSummary("moderator", "mod-bravo"));
+        assertThat(body.get(1).bees()).containsExactly(new SwarmController.BeeSummary("moderator", null));
     }
 
     @Test
@@ -350,7 +542,7 @@ class SwarmControllerTest {
         SwarmCreateTracker tracker = new SwarmCreateTracker();
         SwarmPlanRegistry plans = new SwarmPlanRegistry();
         when(scenarioClient.fetchScenario("tpl-missing")).thenThrow(new RuntimeException("boom"));
-        SwarmController ctrl = controller(tracker, new SwarmRegistry(), plans);
+        SwarmController ctrl = controller(tracker, new SwarmStore(), plans);
         SwarmCreateRequest req = new SwarmCreateRequest("tpl-missing", "idem", null);
 
         assertThatThrownBy(() -> ctrl.create("sw1", req))
@@ -363,7 +555,7 @@ class SwarmControllerTest {
 
     @Test
     void createRejectsRequestWhenTemplateIdMissing() throws Exception {
-        SwarmController ctrl = controller(new SwarmCreateTracker(), new SwarmRegistry(), new SwarmPlanRegistry());
+        SwarmController ctrl = controller(new SwarmCreateTracker(), new SwarmStore(), new SwarmPlanRegistry());
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(ctrl)
             .setMessageConverters(new MappingJackson2HttpMessageConverter(mapper))
@@ -381,7 +573,7 @@ class SwarmControllerTest {
 
     @Test
     void createRejectsRequestWhenTemplateIdBlank() throws Exception {
-        SwarmController ctrl = controller(new SwarmCreateTracker(), new SwarmRegistry(), new SwarmPlanRegistry());
+        SwarmController ctrl = controller(new SwarmCreateTracker(), new SwarmStore(), new SwarmPlanRegistry());
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(ctrl)
             .setMessageConverters(new MappingJackson2HttpMessageConverter(mapper))
@@ -399,8 +591,10 @@ class SwarmControllerTest {
 
     @Test
     void createRejectsDuplicateSwarm() throws Exception {
-        SwarmRegistry registry = new SwarmRegistry();
-        registry.register(new Swarm("sw1", "inst", "c", "run-1"));
+        SwarmStore registry = new SwarmStore();
+        Swarm swarm = new Swarm("sw1", "inst", "c", "run-1");
+        swarm.attachTemplate(new SwarmTemplateMetadata("tpl-1", "swarm-controller:latest", List.of()));
+        registry.register(swarm);
         SwarmController ctrl = controller(new SwarmCreateTracker(), registry, new SwarmPlanRegistry());
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(ctrl)
@@ -420,8 +614,10 @@ class SwarmControllerTest {
 
     @Test
     void createReturnsExistingCorrelationWhenSwarmAlreadyExists() {
-        SwarmRegistry registry = new SwarmRegistry();
-        registry.register(new Swarm("sw1", "inst", "c", "run-1"));
+        SwarmStore registry = new SwarmStore();
+        Swarm swarm = new Swarm("sw1", "inst", "c", "run-1");
+        swarm.attachTemplate(new SwarmTemplateMetadata("tpl-1", "swarm-controller:latest", List.of()));
+        registry.register(swarm);
         InMemoryIdempotencyStore store = new InMemoryIdempotencyStore();
         store.record("sw1", "swarm-create", "idem", "corr-123");
         SwarmController ctrl = controller(new SwarmCreateTracker(), registry, new SwarmPlanRegistry(), store);
@@ -443,7 +639,7 @@ class SwarmControllerTest {
 
     @Test
     void journalReadsSwarmJournalNdjsonFromRuntimeRoot() throws Exception {
-        SwarmJournalController ctrl = journalController(new SwarmRegistry());
+        SwarmJournalController ctrl = journalController(new SwarmStore());
         Path root = Path.of("scenarios-runtime").toAbsolutePath().normalize();
         Path swarmDir = root.resolve("sw1").resolve("run-1");
         Files.createDirectories(swarmDir);
@@ -491,22 +687,31 @@ class SwarmControllerTest {
 
     private SwarmController controller(
         SwarmCreateTracker tracker,
-        SwarmRegistry registry,
+        SwarmStore registry,
         SwarmPlanRegistry plans) {
         return controller(tracker, registry, plans, new InMemoryIdempotencyStore());
     }
 
     private SwarmController controller(
         SwarmCreateTracker tracker,
-        SwarmRegistry registry,
+        SwarmStore registry,
         SwarmPlanRegistry plans,
         IdempotencyStore store) {
+        SwarmStateStore stateStore = new SwarmStateStore(registry, mapper);
+        try {
+            lenient().when(scenarioClient.resolveScenarioVariables(
+                anyString(), any(), any(), any(), any()))
+                .thenReturn(new ScenarioClient.ResolvedVariables(null, null, Map.of(), List.of()));
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
         SwarmController controller = new SwarmController(
             publisher,
             lifecycle,
             tracker,
             store,
             registry,
+            stateStore,
             mapper,
             scenarioClient,
             HiveJournal.noop(),
@@ -517,7 +722,7 @@ class SwarmControllerTest {
         return controller;
     }
 
-    private SwarmJournalController journalController(SwarmRegistry registry) {
+    private SwarmJournalController journalController(SwarmStore registry) {
         return new SwarmJournalController(mapper, jdbc, registry);
     }
 
@@ -529,5 +734,29 @@ class SwarmControllerTest {
         properties.setInstanceId("orch-instance");
         properties.getManager().setRole("orchestrator");
         return properties;
+    }
+
+    private void cacheStatusFull(SwarmStore store,
+                                 String swarmId,
+                                 String templateId,
+                                 String runId,
+                                 String controllerInstance) {
+        var status = mapper.createObjectNode();
+        status.put("timestamp", java.time.Instant.now().toString());
+        status.put("version", "1");
+        status.put("kind", "metric");
+        status.put("type", "status-full");
+        status.put("origin", "swarm-controller-1");
+        var scope = status.putObject("scope");
+        scope.put("swarmId", swarmId);
+        scope.put("role", "swarm-controller");
+        scope.put("instance", controllerInstance);
+        status.set("runtime", mapper.valueToTree(Map.of("templateId", templateId, "runId", runId)));
+        status.putNull("correlationId");
+        status.putNull("idempotencyKey");
+        var data = status.putObject("data");
+        data.put("enabled", true);
+        data.putObject("context");
+        store.cacheControllerStatusFull(swarmId, status, java.time.Instant.now());
     }
 }

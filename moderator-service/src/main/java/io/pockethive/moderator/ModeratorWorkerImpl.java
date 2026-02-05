@@ -14,9 +14,8 @@ import org.springframework.stereotype.Component;
  * The moderator service is the steady gatekeeper that vets messages coming out of the generator
  * queue before they enter the main processing lane. In the default PocketHive swarm it sits
  * between the generator queue configured via {@code pockethive.inputs.rabbit.queue} and the
- * moderator routing key defined under {@code pockethive.outputs.rabbit.routing-key},
- * enriching messages with the {@code x-ph-service} header so downstream processors can tell who
- * handed them the payload.
+ * moderator routing key defined under {@code pockethive.outputs.rabbit.routing-key}. It is a
+ * pass-through worker that leaves the WorkItem unchanged.
  * Deploy it near the generator for low latency; smaller teams often co-locate the two services in
  * the same pod.
  *
@@ -52,9 +51,8 @@ class ModeratorWorkerImpl implements PocketHiveWorkerFunction {
    * simple JSON override looks like {@code {"enabled": true}} or
    * {@code {"mode": {"type": "rate-per-sec", "ratePerSec": 5}}}.
    *
-   * <p>The moderator does not alter the payload body; it only ensures the outbound message carries
-   * a {@code x-ph-service} header whose value is the worker role (for example {@code "moderator"}).
-   * That header is a reliable breadcrumb when you track messages in logs or trace viewers.</p>
+   * <p>The moderator does not alter the payload body or headers. It simply gates throughput and
+   * lets the runtime handle observability updates.</p>
    *
    * <p>New behaviors should be added by branching the {@code in.toBuilder()} call—e.g. set a
    * {@code moderation-status} header after evaluating your own rules, or drop the message entirely
@@ -83,10 +81,7 @@ class ModeratorWorkerImpl implements PocketHiveWorkerFunction {
           }
         });
     modeLimiter.await(mode);
-    WorkItem out = in.toBuilder()
-        .header("x-ph-service", context.info().role())
-        .build();
-    return out;
+    return in;
   }
 
   private static String formatMode(ModeratorOperationMode.Type type) {

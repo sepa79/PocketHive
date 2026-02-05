@@ -24,6 +24,11 @@
   </dependencyManagement>
   <dependencies>
     <dependency>
+      <groupId>io.pockethive</groupId>
+      <artifactId>topology-core</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-autoconfigure</artifactId>
       <version>${spring.boot.version}</version>

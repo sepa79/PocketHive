@@ -48,7 +48,8 @@ class ControlPlanePublisherIntegrationTest {
             ControlPlaneProperties properties = context.getBean(ControlPlaneProperties.class);
             ControlPlaneTopologySettings settings = new ControlPlaneTopologySettings(
                 properties.getSwarmId(), properties.getControlQueuePrefix(), Map.of());
-            ControlPlaneEmitter emitter = ControlPlaneEmitter.worker(identity, publisher, settings);
+            Map<String, Object> runtime = Map.of("templateId", "tpl-1", "runId", "run-1");
+            ControlPlaneEmitter emitter = ControlPlaneEmitter.worker(identity, publisher, settings, runtime);
             ConfirmationScope scope = new ConfirmationScope("swarm-A", "generator", "gen-1");
 
             ControlPlaneEmitter.ReadyContext ready = ControlPlaneEmitter.ReadyContext.builder(
@@ -60,15 +61,15 @@ class ControlPlanePublisherIntegrationTest {
                 .build();
             emitter.emitReady(ready);
 
-            ControlSignal signal = ControlSignal.forInstance(
-                "config-update",
-                "swarm-A",
-                "generator",
-                "gen-1",
-                properties.getInstanceId(),
-                "corr-2",
-                "idem-2",
-                null);
+	            ControlSignal signal = ControlSignal.forInstance(
+	                "config-update",
+	                "swarm-A",
+	                "generator",
+	                "gen-1",
+	                properties.getInstanceId(),
+	                "corr-2",
+	                "idem-2",
+	                null);
             String signalKey = ControlPlaneRouting.signal("config-update", "swarm-A", "generator", "gen-1");
             publisher.publishSignal(new SignalMessage(signalKey, signal));
 
