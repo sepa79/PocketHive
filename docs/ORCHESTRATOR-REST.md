@@ -273,8 +273,8 @@ temporary queue bound to the swarm's hive exchange and buffers samples for UI in
 #### 2.8.2 Read tap
 `GET /api/debug/taps/{tapId}`
 
-Query params:
-- `drain` (optional) — max messages to drain from the tap queue before returning (defaults to `maxItems`).
+	Query params:
+	- `drain` (optional) — max messages to drain from the tap queue before returning (defaults to `maxItems`; `0` means metadata-only, no consume).
 
 **Response (200)** — same shape as create response, with `samples` populated.
 

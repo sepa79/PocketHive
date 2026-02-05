@@ -1037,6 +1037,28 @@ textarea,
   font-size: 11px;
 }
 
+.tapIoSelect {
+  border: 1px solid var(--border);
+  background: var(--panel2);
+  color: inherit;
+  padding: 2px 8px;
+  border-radius: 9px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.tapIoSelect:hover {
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.tapIoSelect:disabled {
+  cursor: not-allowed;
+  color: var(--muted);
+  border-color: var(--border);
+  background: var(--panel2);
+}
+
 .actionButtonContent {
   display: inline-flex;
   align-items: center;
@@ -1962,7 +1984,7 @@ textarea,
 
 .debugTapViewerGrid {
   display: grid;
-  grid-template-columns: 320px 1.2fr 1fr;
+  grid-template-columns: 320px 1fr;
   gap: 12px;
   align-items: start;
 }
@@ -2013,6 +2035,69 @@ textarea,
 .debugTapParsed {
   overflow: auto;
   padding-right: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tapDisclosure {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.12);
+  padding: 10px 12px;
+}
+
+:root[data-theme='light'] .tapDisclosure {
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.tapDisclosure > summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  user-select: none;
+}
+
+.tapDisclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.tapDisclosureSummary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.tapDisclosureChevron {
+  opacity: 0.7;
+  width: 12px;
+  display: inline-flex;
+  justify-content: center;
+  transition: transform 120ms ease;
+}
+
+.tapDisclosure[open] .tapDisclosureChevron {
+  transform: rotate(90deg);
+}
+
+.tapDisclosureTitle {
+  font-size: 12px;
+}
+
+.tapDisclosureMeta {
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tapDisclosureBody {
+  margin-top: 10px;
   display: flex;
   flex-direction: column;
   gap: 10px;

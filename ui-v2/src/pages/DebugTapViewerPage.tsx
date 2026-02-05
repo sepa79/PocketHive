@@ -28,6 +28,12 @@ type TapMeta = Omit<DebugTap, 'samples' | 'lastReadAt'>
 
 const ORCHESTRATOR_BASE = '/orchestrator/api'
 
+function compactOneLine(value: string, maxLen: number): string {
+  const single = value.replace(/\s+/g, ' ').trim()
+  if (single.length <= maxLen) return single
+  return `${single.slice(0, Math.max(0, maxLen - 1))}…`
+}
+
 async function readErrorMessage(response: Response): Promise<string> {
   try {
     const contentType = response.headers.get('content-type') ?? ''
@@ -138,7 +144,9 @@ export function DebugTapViewerPage() {
 
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [status, setStatus] = useState<{ kind: 'ok' | 'err'; text: string; title?: string } | null>(null)
   const [autoRefresh, setAutoRefresh] = useState(false)
+  const [envelopeOpen, setEnvelopeOpen] = useState(true)
 
   const [fetchCount, setFetchCount] = useState<number>(10)
 
@@ -148,19 +156,22 @@ export function DebugTapViewerPage() {
   const inFlightRef = useRef(false)
 
   const fetchTap = useCallback(
-    async (drain: number): Promise<DebugTap> => {
+    async (drain: number): Promise<{ tap: DebugTap; httpStatus: number }> => {
       if (!tapId) throw new Error('Missing tapId.')
       const response = await fetch(
         `${ORCHESTRATOR_BASE}/debug/taps/${encodeURIComponent(tapId)}?drain=${encodeURIComponent(String(drain))}`,
         { headers: { Accept: 'application/json' } },
       )
+      const httpStatus = response.status
       if (!response.ok) throw new Error(await readErrorMessage(response))
-      return (await response.json()) as DebugTap
+      return { tap: (await response.json()) as DebugTap, httpStatus }
     },
     [tapId],
   )
 
-  const applyTap = useCallback((tap: DebugTap) => {
+  const applyTap = useCallback((tap: DebugTap): number => {
+    let addedSamples = 0
+
     const nextMeta = metaFromTap(tap)
     const nextMetaSig = metaSignature(nextMeta)
     if (nextMetaSig && nextMetaSig !== lastMetaSigRef.current) {
@@ -175,6 +186,7 @@ export function DebugTapViewerPage() {
       for (const s of tap.samples) {
         if (!samplesByIdRef.current.has(s.id)) {
           samplesByIdRef.current.set(s.id, s)
+          addedSamples++
           changed = true
         }
       }
@@ -182,6 +194,7 @@ export function DebugTapViewerPage() {
         setSamples((prev) => mergeSamples(prev, tap.samples, limit))
       }
     }
+    return addedSamples
   }, [])
 
   const refresh = useCallback(
@@ -193,10 +206,16 @@ export function DebugTapViewerPage() {
       setBusy(true)
       setError(null)
       try {
-        const tap = await fetchTap(drain)
-        applyTap(tap)
+        const { tap, httpStatus } = await fetchTap(drain)
+        const added = applyTap(tap)
+        setStatus({
+          kind: 'ok',
+          text: `OK ${httpStatus} · drain ${drain} · +${added} · samples ${tap.samples?.length ?? 0}/${tap.maxItems} · lastRead ${tap.lastReadAt}`,
+        })
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to read tap.')
+        const message = err instanceof Error ? err.message : 'Failed to read tap.'
+        setError(message)
+        setStatus({ kind: 'err', text: `ERR · ${compactOneLine(message, 160)}`, title: message })
       } finally {
         setBusy(false)
         inFlightRef.current = false
@@ -254,10 +273,20 @@ export function DebugTapViewerPage() {
     if (!tapId) return
     if (isClosedRef.current) return
     const timer = window.setInterval(() => {
+      if (inFlightRef.current) return
       // quiet refresh: no `busy` state toggling here, only applyTap if meaningful changes arrive
-      void fetchTap(0).then(applyTap).catch(() => {
-        // ignore (no flicker)
-      })
+      void fetchTap(1)
+        .then(({ tap, httpStatus }) => {
+          const added = applyTap(tap)
+          if (!added) return
+          setStatus({
+            kind: 'ok',
+            text: `OK ${httpStatus} · drain 1 · +${added} · samples ${tap.samples?.length ?? 0}/${tap.maxItems} · lastRead ${tap.lastReadAt}`,
+          })
+        })
+        .catch(() => {
+          // ignore (no flicker)
+        })
     }, 1200)
     return () => window.clearInterval(timer)
   }, [applyTap, autoRefresh, fetchTap, tapId])
@@ -327,11 +356,32 @@ export function DebugTapViewerPage() {
         </div>
       ) : null}
 
-      {error ? (
-        <div className="card swarmMessage" style={{ marginTop: 12 }}>
-          {error}
-        </div>
-      ) : null}
+      <div
+        className="card swarmMessage"
+        style={{
+          marginTop: 12,
+          minHeight: 44,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+        }}
+        title={status?.title}
+        aria-live="polite"
+      >
+        {error ? (
+          <span style={{ flex: '1 1 auto', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {compactOneLine(error, 240)}
+          </span>
+        ) : (
+          <span className="muted" style={{ flex: '1 1 auto', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {status?.text ?? 'OK · ready'}
+          </span>
+        )}
+        <span className="muted" style={{ flex: '0 0 auto' }}>
+          {isClosedRef.current ? 'closed' : ''}
+        </span>
+      </div>
 
       <div className="row between" style={{ marginTop: 12, gap: 12, flexWrap: 'wrap' }}>
         <div className="row" style={{ gap: 10, alignItems: 'center' }}>
@@ -347,7 +397,7 @@ export function DebugTapViewerPage() {
             </span>
           </button>
           <label className="row" style={{ gap: 8, alignItems: 'center' }} title="How many messages to consume from the tap queue.">
-            <span className="muted">Fetch</span>
+            <span className="muted">Pull</span>
             <input
               className="textInput"
               style={{ width: 84 }}
@@ -358,7 +408,9 @@ export function DebugTapViewerPage() {
                 if (e.target.value === '') return
                 const value = e.target.valueAsNumber
                 if (!Number.isFinite(value)) return
-                setFetchCount(Math.max(1, Math.floor(value)))
+                const next = Math.max(1, Math.floor(value))
+                const cap = meta?.maxItems ?? null
+                setFetchCount(cap ? Math.min(next, cap) : next)
               }}
             />
           </label>
@@ -367,10 +419,14 @@ export function DebugTapViewerPage() {
             className="actionButton"
             disabled={busy || isClosedRef.current}
             title="Consumes up to N messages from the tap queue and appends them to the sample list."
-            onClick={() => void refresh(Math.max(1, fetchCount))}
+            onClick={() => {
+              const cap = meta?.maxItems ?? null
+              const drain = cap ? Math.min(Math.max(1, fetchCount), cap) : Math.max(1, fetchCount)
+              void refresh(drain)
+            }}
           >
             <span className="actionButtonContent">
-              <span>Fetch now</span>
+              <span>Pull now</span>
             </span>
           </button>
           <label className="row" style={{ gap: 8, alignItems: 'center' }} title="Polls metadata quietly. Only updates UI when new samples arrive.">
@@ -410,74 +466,122 @@ export function DebugTapViewerPage() {
                 )
               })
             ) : (
-              <div className="muted">No samples yet. Use “Fetch now”.</div>
+              <div className="muted">No samples yet. Use “Pull now”.</div>
             )}
           </div>
         </div>
 
         <div className="card debugTapViewerPanel">
           <div className="row between" style={{ marginBottom: 8 }}>
-            <div className="h3">Parsed</div>
-            <div className="muted">{activeEnvelope ? 'work-item' : activeSample ? 'raw' : '—'}</div>
+            <div className="h3">Details</div>
+            <div className="muted">{activeEnvelope ? 'work-item' : activeSample ? 'message' : '—'}</div>
           </div>
           {activeSample ? (
-            activeEnvelope ? (
-              <div className="debugTapParsed">
-                <div className="tapMeta" style={{ marginBottom: 10 }}>
-                  <div className="muted">
-                    messageId <code>{activeEnvelope.messageId ?? '—'}</code> · contentType <code>{activeEnvelope.contentType ?? '—'}</code>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <div>
-                    <div className="muted" style={{ marginBottom: 6 }}>
-                      envelope.headers
+            <div className="debugTapParsed">
+              {activeEnvelope ? (
+                <>
+                  <div className="tapMeta" style={{ marginBottom: 2 }}>
+                    <div className="muted">
+                      messageId <code>{activeEnvelope.messageId ?? '—'}</code> · contentType <code>{activeEnvelope.contentType ?? '—'}</code>
                     </div>
-                    <pre className="codePre tapPayload">{safeStringify(activeEnvelope.headers ?? {})}</pre>
                   </div>
-                  <div>
-                    <div className="muted" style={{ marginBottom: 6 }}>
-                      envelope.observability
+
+                  <details
+                    className="tapDisclosure"
+                    open={envelopeOpen}
+                    onToggle={(e) => setEnvelopeOpen((e.currentTarget as HTMLDetailsElement).open)}
+                  >
+                    <summary>
+                      <span className="tapDisclosureSummary">
+                        <span className="tapDisclosureChevron">▸</span>
+                        <span className="tapDisclosureTitle">Envelope</span>
+                      </span>
+                      <span className="tapDisclosureMeta">headers + observability</span>
+                    </summary>
+                    <div className="tapDisclosureBody">
+                      <div>
+                        <div className="muted" style={{ marginBottom: 6 }}>
+                          envelope.headers
+                        </div>
+                        <pre className="codePre tapPayload">{safeStringify(activeEnvelope.headers ?? {})}</pre>
+                      </div>
+                      <div>
+                        <div className="muted" style={{ marginBottom: 6 }}>
+                          envelope.observability
+                        </div>
+                        <pre className="codePre tapPayload">{safeStringify(activeEnvelope.observability ?? {})}</pre>
+                      </div>
                     </div>
-                    <pre className="codePre tapPayload">{safeStringify(activeEnvelope.observability ?? {})}</pre>
+                  </details>
+
+                  <div className="muted" style={{ marginTop: 2 }}>
+                    steps
                   </div>
-                  <div>
-                    <div className="muted" style={{ marginBottom: 6 }}>
-                      steps
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      {(activeEnvelope.steps ?? []).map((step, idx) => {
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {(activeEnvelope.steps ?? []).length ? (
+                      (activeEnvelope.steps ?? []).map((step, idx) => {
                         const pretty = typeof step.payload === 'string' ? tryPrettyJson(step.payload) : null
+                        const stepIndex = step.index ?? idx
+                        const service = (step.headers?.['ph.step.service'] as string) ?? '—'
+                        const instance = (step.headers?.['ph.step.instance'] as string) ?? '—'
+                        const encoding = step.payloadEncoding ?? 'utf-8'
+                        const payload = pretty ?? (step.payload ?? '')
+                        const payloadBytes = typeof payload === 'string' ? payload.length : 0
                         return (
-                          <div key={String(step.index ?? idx)} className="tapSample">
-                            <div className="muted" style={{ marginBottom: 6 }}>
-                              step <code>{step.index ?? idx}</code> · encoding <code>{step.payloadEncoding ?? 'utf-8'}</code> · service{' '}
-                              <code>{(step.headers?.['ph.step.service'] as string) ?? '—'}</code> · instance{' '}
-                              <code>{(step.headers?.['ph.step.instance'] as string) ?? '—'}</code>
+                          <details key={String(stepIndex)} className="tapDisclosure">
+                            <summary>
+                              <span className="tapDisclosureSummary">
+                                <span className="tapDisclosureChevron">▸</span>
+                                <span className="tapDisclosureTitle">
+                                  step <code>{stepIndex}</code>
+                                </span>
+                              </span>
+                              <span className="tapDisclosureMeta">
+                                {service} · {instance} · {encoding} · {payloadBytes} chars
+                              </span>
+                            </summary>
+                            <div className="tapDisclosureBody">
+                              <div>
+                                <div className="muted" style={{ marginBottom: 6 }}>
+                                  step.headers
+                                </div>
+                                <pre className="codePre tapPayload">{safeStringify(step.headers ?? {})}</pre>
+                              </div>
+                              <div>
+                                <div className="muted" style={{ marginBottom: 6 }}>
+                                  step.payload
+                                </div>
+                                <pre className="codePre tapPayload">{payload}</pre>
+                              </div>
                             </div>
-                            <pre className="codePre tapPayload">{safeStringify(step.headers ?? {})}</pre>
-                            <pre className="codePre tapPayload">{pretty ?? (step.payload ?? '')}</pre>
-                          </div>
+                          </details>
                         )
-                      })}
-                    </div>
+                      })
+                    ) : (
+                      <div className="muted">No steps.</div>
+                    )}
                   </div>
+                </>
+              ) : (
+                <div className="muted">Selected payload is not a JSON WorkItem envelope.</div>
+              )}
+
+              <details className="tapDisclosure">
+                <summary>
+                  <span className="tapDisclosureSummary">
+                    <span className="tapDisclosureChevron">▸</span>
+                    <span className="tapDisclosureTitle">Raw</span>
+                  </span>
+                  <span className="tapDisclosureMeta">{activeSample.sizeBytes}B</span>
+                </summary>
+                <div className="tapDisclosureBody">
+                  {rawPayload ? <pre className="codePre tapPayload">{rawPayload}</pre> : <div className="muted">No payload.</div>}
                 </div>
-              </div>
-            ) : (
-              <div className="muted">Selected payload is not a JSON WorkItem envelope.</div>
-            )
+              </details>
+            </div>
           ) : (
             <div className="muted">Select a sample to inspect.</div>
           )}
-        </div>
-
-        <div className="card debugTapViewerPanel">
-          <div className="row between" style={{ marginBottom: 8 }}>
-            <div className="h3">Raw</div>
-            <div className="muted">{activeSample ? `${activeSample.sizeBytes}B` : '—'}</div>
-          </div>
-          {rawPayload ? <pre className="codePre tapPayload">{rawPayload}</pre> : <div className="muted">Select a sample.</div>}
         </div>
       </div>
     </div>

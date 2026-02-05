@@ -140,8 +140,18 @@ public class ControllerStatusListener {
                                 // Plan‑driven stop: make sure we walk through
                                 // STOPPING -> STOPPED so the local state
                                 // machine is satisfied.
-                                store.updateStatus(swarmId, SwarmLifecycleStatus.STOPPING);
-                                store.updateStatus(swarmId, SwarmLifecycleStatus.STOPPED);
+                                //
+                                // Note: during swarm-create we can receive early controller status metrics
+                                // while the local store is still in CREATING. In that case, transitioning
+                                // to STOPPING would be illegal; leave the store status unchanged and let the
+                                // create/template outcome drive the lifecycle.
+                                SwarmLifecycleStatus current = store.find(swarmId).map(Swarm::getStatus).orElse(null);
+                                if (current == SwarmLifecycleStatus.STOPPING) {
+                                    store.updateStatus(swarmId, SwarmLifecycleStatus.STOPPED);
+                                } else if (current != null && current.canTransitionTo(SwarmLifecycleStatus.STOPPING)) {
+                                    store.updateStatus(swarmId, SwarmLifecycleStatus.STOPPING);
+                                    store.updateStatus(swarmId, SwarmLifecycleStatus.STOPPED);
+                                }
                             }
                         }
                         case "FAILED" -> store.updateStatus(swarmId, SwarmLifecycleStatus.FAILED);

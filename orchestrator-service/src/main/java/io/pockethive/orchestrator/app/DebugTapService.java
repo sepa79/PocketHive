@@ -200,7 +200,10 @@ public class DebugTapService {
         if (requested == null) {
             return maxItems;
         }
-        return Math.max(1, requested);
+        if (requested <= 0) {
+            return 0;
+        }
+        return Math.min(requested, maxItems);
     }
 
     private static String normalize(String value, String field) {

@@ -63,6 +63,10 @@ class ControllerStatusListenerTest {
     @Test
     void updatesRegistryFromTopLevelFlags() throws Exception {
 	        Swarm swarm = new Swarm("sw1", "inst1", "c1", "run-1");
+	        swarm.transitionTo(SwarmLifecycleStatus.CREATING);
+	        swarm.transitionTo(SwarmLifecycleStatus.READY);
+	        swarm.transitionTo(SwarmLifecycleStatus.STARTING);
+	        swarm.transitionTo(SwarmLifecycleStatus.RUNNING);
 		        swarm.updateControllerStatusFull(new ObjectMapper().readTree("{\"data\":{}}"), Instant.now());
 		        when(store.find("sw1")).thenReturn(Optional.of(swarm));
 		        ControllerStatusListener listener =

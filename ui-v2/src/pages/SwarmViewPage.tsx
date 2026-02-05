@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { subscribeStatusSnapshots } from '../lib/controlPlane/stateStore'
-import { detectUiBasename } from '../lib/routing/basename'
 import {
   Background,
   Controls,
@@ -493,8 +492,7 @@ export function SwarmViewPage() {
   const [flowEdges, setFlowEdges] = useState<Edge[]>([])
   const storedPositionsRef = useRef<Record<string, { x: number; y: number }>>({})
   const didInitialFitRef = useRef(false)
-  const [tapBusy, setTapBusy] = useState<Record<string, boolean>>({})
-  const isBusyTop = scenarioLoading || Object.keys(tapBusy).length > 0
+  const isBusyTop = scenarioLoading
 
   useEffect(() => {
     setSelectedNodeId(null)
@@ -502,40 +500,6 @@ export function SwarmViewPage() {
     storedPositionsRef.current = loadStoredPositions(swarmId)
     didInitialFitRef.current = false
   }, [swarmId])
-
-  const openTapViewer = useCallback(
-    async (role: string, direction: 'IN' | 'OUT', ioName: string | null) => {
-      const payload = {
-        swarmId,
-        role,
-        direction,
-        ioName,
-        maxItems: 5,
-        ttlSeconds: 20,
-      }
-      const response = await fetch(`${ORCHESTRATOR_BASE}/debug/taps`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-      if (!response.ok) {
-        const text = await response.text()
-        throw new Error((text && text.trim().length ? text.trim() : null) ?? `Failed to create tap (HTTP ${response.status})`)
-      }
-      const created = (await response.json()) as { tapId?: string }
-      const tapId = created.tapId
-      if (!tapId) {
-        throw new Error('Tap created but tapId is missing in response.')
-      }
-      const base = detectUiBasename(window.location.pathname)
-      window.open(`${base}/debug/taps/${encodeURIComponent(tapId)}`, '_blank', 'noopener,noreferrer')
-    },
-    [swarmId],
-  )
-
-  const tapBusyKey = useCallback((role: string, direction: 'IN' | 'OUT', ioName: string | null) => {
-    return `${role}::${direction}::${ioName ?? ''}`
-  }, [])
 
   const refreshWorkers = useCallback((next: WorkerSnapshot[]) => {
     workersRef.current = next
@@ -853,66 +817,6 @@ export function SwarmViewPage() {
                           }}
                         >
                           RAW
-                        </button>
-                        <button
-                          type="button"
-                          className="actionButton actionButtonGhost actionButtonTiny"
-                          title="Open Debug Tap Viewer (OUT). Creates an ephemeral tap queue and opens the viewer in a new tab."
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            const ioName = card.ioNamesOut[0] ?? 'out'
-                            const key = tapBusyKey(card.role, 'OUT', ioName)
-                            if (tapBusy[key]) return
-                            setTapBusy((prev) => ({ ...prev, [key]: true }))
-                            openTapViewer(card.role, 'OUT', ioName)
-                              .catch((err) => {
-                                console.error(err)
-                                window.alert(err instanceof Error ? err.message : 'Failed to create debug tap.')
-                              })
-                              .finally(() => {
-                                setTapBusy((prev) => {
-                                  if (!prev[key]) return prev
-                                  const next = { ...prev }
-                                  delete next[key]
-                                  return next
-                                })
-                              })
-                          }}
-                          disabled={tapBusy[tapBusyKey(card.role, 'OUT', card.ioNamesOut[0] ?? 'out')] === true}
-                        >
-                          <span className="actionButtonContent">
-                            <span>Tap OUT</span>
-                          </span>
-                        </button>
-                        <button
-                          type="button"
-                          className="actionButton actionButtonGhost actionButtonTiny"
-                          title="Open Debug Tap Viewer (IN). Creates an ephemeral tap queue and opens the viewer in a new tab."
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            const ioName = card.ioNamesIn[0] ?? 'in'
-                            const key = tapBusyKey(card.role, 'IN', ioName)
-                            if (tapBusy[key]) return
-                            setTapBusy((prev) => ({ ...prev, [key]: true }))
-                            openTapViewer(card.role, 'IN', ioName)
-                              .catch((err) => {
-                                console.error(err)
-                                window.alert(err instanceof Error ? err.message : 'Failed to create debug tap.')
-                              })
-                              .finally(() => {
-                                setTapBusy((prev) => {
-                                  if (!prev[key]) return prev
-                                  const next = { ...prev }
-                                  delete next[key]
-                                  return next
-                                })
-                              })
-                          }}
-                          disabled={tapBusy[tapBusyKey(card.role, 'IN', card.ioNamesIn[0] ?? 'in')] === true}
-                        >
-                          <span className="actionButtonContent">
-                            <span>Tap IN</span>
-                          </span>
                         </button>
                         <span className={`chip ${card.enabled === false ? 'chip-event' : 'chip-outcome'}`}>
                           {card.enabled == null ? 'enabled?' : card.enabled ? 'enabled' : 'disabled'}

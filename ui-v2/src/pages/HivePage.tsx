@@ -8,6 +8,7 @@ import {
   normalizeManifests,
   type CapabilityManifest,
 } from '../lib/capabilities'
+import { detectUiBasename } from '../lib/routing/basename'
 
 const HIVE_EXPLAIN_KEY = 'PH_UI_HIVE_EXPLAIN'
 
@@ -428,6 +429,44 @@ export function HivePage() {
   const [capabilities, setCapabilities] = useState<CapabilityManifest[]>([])
   const [capabilitiesLoaded, setCapabilitiesLoaded] = useState(false)
   const [capabilitiesError, setCapabilitiesError] = useState<string | null>(null)
+  const [tapBusy, setTapBusy] = useState<Record<string, boolean>>({})
+  const [tapIoSelection, setTapIoSelection] = useState<Record<string, { in?: string | null; out?: string | null }>>({})
+
+  const tapBusyKey = useCallback((role: string, direction: 'IN' | 'OUT', ioName: string | null) => {
+    return `${role}::${direction}::${ioName ?? ''}`
+  }, [])
+
+  const openTapViewer = useCallback(
+    async (role: string, direction: 'IN' | 'OUT', ioName: string | null) => {
+      if (!selectedSwarmId) {
+        throw new Error('Missing swarm id.')
+      }
+      const payload = {
+        swarmId: selectedSwarmId,
+        role,
+        direction,
+        ioName,
+        maxItems: 50,
+        ttlSeconds: 60,
+      }
+      const response = await fetch(`${ORCHESTRATOR_BASE}/debug/taps`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response))
+      }
+      const created = (await response.json()) as { tapId?: string }
+      const tapId = created.tapId
+      if (!tapId) {
+        throw new Error('Tap created but tapId is missing in response.')
+      }
+      const base = detectUiBasename(window.location.pathname)
+      window.open(`${base}/debug/taps/${encodeURIComponent(tapId)}`, '_blank', 'noopener,noreferrer')
+    },
+    [selectedSwarmId],
+  )
 
   const loadSwarms = useCallback(async () => {
     setLoading(true)
@@ -1028,6 +1067,199 @@ export function HivePage() {
 		                                    </span>
 		                                    <span className="swarmBeeImage">{runtimeImage ?? activeBee.image ?? '—'}</span>
 		                                  </div>
+		                                  {(() => {
+		                                    const role =
+		                                      typeof activeBee.role === 'string' && activeBee.role.trim().length > 0
+		                                        ? activeBee.role.trim()
+		                                        : null
+		                                    const selectionKey =
+		                                      selectedSwarmId && activeKey
+		                                        ? `${selectedSwarmId}::${activeKey}`
+		                                        : null
+		                                    const selection = selectionKey ? tapIoSelection[selectionKey] ?? null : null
+		                                    const ioNamesIn = activeBee.work?.in
+		                                      ? Object.keys(activeBee.work.in)
+		                                          .map((name) => name.trim())
+		                                          .filter((name) => name.length > 0)
+		                                          .sort((a, b) => a.localeCompare(b))
+		                                      : []
+		                                    const ioNamesOut = activeBee.work?.out
+		                                      ? Object.keys(activeBee.work.out)
+		                                          .map((name) => name.trim())
+		                                          .filter((name) => name.length > 0)
+		                                          .sort((a, b) => a.localeCompare(b))
+		                                      : []
+		                                    const hasIn = ioNamesIn.length > 0
+		                                    const hasOut = ioNamesOut.length > 0
+		                                    const selectedIn = typeof selection?.in === 'string' ? selection.in : null
+		                                    const selectedOut = typeof selection?.out === 'string' ? selection.out : null
+		                                    const ioNameIn = hasIn
+		                                      ? selectedIn && ioNamesIn.includes(selectedIn)
+		                                        ? selectedIn
+		                                        : ioNamesIn[0]
+		                                      : null
+		                                    const ioNameOut = hasOut
+		                                      ? selectedOut && ioNamesOut.includes(selectedOut)
+		                                        ? selectedOut
+		                                        : ioNamesOut[0]
+		                                      : null
+		                                    const canTapIn = Boolean(selectedSwarmId && role && hasIn)
+		                                    const canTapOut = Boolean(selectedSwarmId && role && hasOut)
+		                                    const tapOutKey = canTapOut && role ? tapBusyKey(role, 'OUT', ioNameOut) : null
+		                                    const tapInKey = canTapIn && role ? tapBusyKey(role, 'IN', ioNameIn) : null
+		                                    return (
+		                                      <div className="chipRow">
+		                                        <button
+		                                          type="button"
+		                                          className="actionButton actionButtonGhost actionButtonTiny"
+		                                          title={
+		                                            !role
+		                                              ? 'Tap requires bee.role to be set in scenario template.'
+		                                              : !hasOut
+		                                                ? 'No outputs configured for this worker (work.out is empty).'
+		                                                : `Open Debug Tap Viewer (OUT, ioName=${ioNameOut}). Creates an ephemeral tap queue and opens the viewer in a new tab.`
+		                                          }
+		                                          disabled={!canTapOut || (tapOutKey ? tapBusy[tapOutKey] === true : false)}
+		                                          onClick={() => {
+		                                            if (!role || !ioNameOut) return
+		                                            const key = tapBusyKey(role, 'OUT', ioNameOut)
+		                                            if (tapBusy[key]) return
+		                                            setTapBusy((prev) => ({ ...prev, [key]: true }))
+		                                            openTapViewer(role, 'OUT', ioNameOut)
+		                                              .catch((err) => {
+		                                                console.error(err)
+		                                                setMessage(
+		                                                  err instanceof Error
+		                                                    ? err.message
+		                                                    : 'Failed to create debug tap.',
+		                                                )
+		                                              })
+		                                              .finally(() => {
+		                                                setTapBusy((prev) => {
+		                                                  if (!prev[key]) return prev
+		                                                  const next = { ...prev }
+		                                                  delete next[key]
+		                                                  return next
+		                                                })
+		                                              })
+		                                          }}
+		                                        >
+		                                          <span className="actionButtonContent">
+		                                            <span>Tap OUT</span>
+		                                          </span>
+		                                        </button>
+		                                        {ioNamesOut.length > 1 ? (
+		                                          <label
+		                                            className="row"
+		                                            style={{ gap: 6, alignItems: 'center' }}
+		                                            title="Select which work.out ioName to tap."
+		                                          >
+		                                            <span className="muted">out</span>
+		                                            <select
+		                                              className="tapIoSelect"
+		                                              value={ioNameOut ?? ''}
+		                                              disabled={!hasOut || !selectionKey}
+		                                              aria-label="Tap OUT ioName"
+		                                              onChange={(e) => {
+		                                                if (!selectionKey) return
+		                                                const next = e.currentTarget.value
+		                                                setTapIoSelection((prev) => ({
+		                                                  ...prev,
+		                                                  [selectionKey]: { ...(prev[selectionKey] ?? {}), out: next },
+		                                                }))
+		                                              }}
+		                                            >
+		                                              {ioNamesOut.map((name) => (
+		                                                <option key={name} value={name}>
+		                                                  {name}
+		                                                </option>
+		                                              ))}
+		                                            </select>
+		                                          </label>
+		                                        ) : null}
+		                                        <button
+		                                          type="button"
+		                                          className="actionButton actionButtonGhost actionButtonTiny"
+		                                          title={
+		                                            !role
+		                                              ? 'Tap requires bee.role to be set in scenario template.'
+		                                              : !hasIn
+		                                                ? 'No inputs configured for this worker (work.in is empty).'
+		                                                : `Open Debug Tap Viewer (IN, ioName=${ioNameIn}). Creates an ephemeral tap queue and opens the viewer in a new tab.`
+		                                          }
+		                                          disabled={!canTapIn || (tapInKey ? tapBusy[tapInKey] === true : false)}
+		                                          onClick={() => {
+		                                            if (!role || !ioNameIn) return
+		                                            const key = tapBusyKey(role, 'IN', ioNameIn)
+		                                            if (tapBusy[key]) return
+		                                            setTapBusy((prev) => ({ ...prev, [key]: true }))
+		                                            openTapViewer(role, 'IN', ioNameIn)
+		                                              .catch((err) => {
+		                                                console.error(err)
+		                                                setMessage(
+		                                                  err instanceof Error
+		                                                    ? err.message
+		                                                    : 'Failed to create debug tap.',
+		                                                )
+		                                              })
+		                                              .finally(() => {
+		                                                setTapBusy((prev) => {
+		                                                  if (!prev[key]) return prev
+		                                                  const next = { ...prev }
+		                                                  delete next[key]
+		                                                  return next
+		                                                })
+		                                              })
+		                                          }}
+		                                        >
+		                                          <span className="actionButtonContent">
+		                                            <span>Tap IN</span>
+		                                          </span>
+		                                        </button>
+		                                        {ioNamesIn.length > 1 ? (
+		                                          <label
+		                                            className="row"
+		                                            style={{ gap: 6, alignItems: 'center' }}
+		                                            title="Select which work.in ioName to tap."
+		                                          >
+		                                            <span className="muted">in</span>
+		                                            <select
+		                                              className="tapIoSelect"
+		                                              value={ioNameIn ?? ''}
+		                                              disabled={!hasIn || !selectionKey}
+		                                              aria-label="Tap IN ioName"
+		                                              onChange={(e) => {
+		                                                if (!selectionKey) return
+		                                                const next = e.currentTarget.value
+		                                                setTapIoSelection((prev) => ({
+		                                                  ...prev,
+		                                                  [selectionKey]: { ...(prev[selectionKey] ?? {}), in: next },
+		                                                }))
+		                                              }}
+		                                            >
+		                                              {ioNamesIn.map((name) => (
+		                                                <option key={name} value={name}>
+		                                                  {name}
+		                                                </option>
+		                                              ))}
+		                                            </select>
+		                                          </label>
+		                                        ) : null}
+		                                        {!role ? (
+		                                          <span className="muted">tap: role missing</span>
+		                                        ) : !hasIn && !hasOut ? (
+		                                          <span className="muted">tap: no I/O</span>
+		                                        ) : (
+		                                          <span
+		                                            className="muted"
+		                                            title="Tap uses the first configured ioName for each direction (sorted)."
+		                                          >
+		                                            io {ioNameIn ?? '—'}/{ioNameOut ?? '—'}
+		                                          </span>
+		                                        )}
+		                                      </div>
+		                                    )
+		                                  })()}
 		                                  <div className="swarmBeeMeta">
 		                                    <span
 		                                      title={
