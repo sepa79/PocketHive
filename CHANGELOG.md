@@ -2,10 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
-Timestamp: 2026-01-16T14:20:44Z
+## [0.15.1]
+Timestamp: 2026-02-05T19:26:25Z
 
-- E2E: revert a swarm lifecycle test regression so scenario progress and worker snapshots read from `data.context`, while status-full snapshots are preferred when available.
+- Compose: switch log-aggregator healthcheck to a readiness marker file (stable health without exposing HTTP).
+- Workers: disable embedded web server (set `WebApplicationType.NONE`) and provide explicit `ObjectMapper` beans to avoid hidden Spring Web autoconfiguration dependencies.
+- Orchestrator: harden controller status ingestion against illegal lifecycle transitions; allow `drain=0` for debug-tap reads (metadata-only).
+- UI v2 (Debug taps): improve tap viewer UX (stable status area, better refresh/pull semantics, collapsible envelope/steps/raw).
+- UI v2 (Hive): move tap controls to selected-worker details and add `ioName` dropdowns for multi-IO workers (buttons disabled when no in/out).
+
+## [0.15.0]
 - Docs: define scenario `topology` and logical ports in the scenario contract to support UI graph authoring.
 - Build: remove duplicate Spring Boot plugin declaration in `tcp-mock-server` and pin the plugin version.
 - **BREAKING**: scenario `work.in`/`work.out` are now port maps (default ports `in`/`out`), and swarm-controller `status-full` publishes topology-driven work bindings for multi-IO.
@@ -13,6 +19,14 @@ Timestamp: 2026-01-16T14:20:44Z
 - UI (Hive): prefer runtime work bindings for graph edges, with queue-derived fallback when bindings are missing or not mappable to instances.
 - UI (Swarms): add expandable rows with per-worker enable/disable controls plus inline in/out connection hints and selection-based highlighting; ensure the details drawer can load capability manifests.
 - UI (Scenarios): preserve unknown plan fields when merging edits to prevent losing custom sections (e.g., interceptors).
+- Work items: introduce a canonical WorkItem envelope contract + worker-sdk JSON codec; standardize step tracking and remove AMQP-header coupling (E2E updated accordingly).
+- Control-plane/status-full: move runtime metadata to the envelope root, propagate `templateId`, reduce status-request storms, and make swarm `stackName` deterministic.
+- Orchestrator: make `/api/swarms` cache-only, unify intent+cache via `SwarmStore`, stop guessing journal `runId`, and derive signal runtime from cached `status-full`.
+- Debug: add TAP debugging endpoints/viewer and harden control-plane `ack-always` behavior.
+- UI v2: add Hive swarm list + template picker, full-height create-swarm modal, Swarm close-up view (ReactFlow), and scenario-variable selection.
+- Tools: add a control-plane traffic viewer MVP (filters + timeline + JSON details) with a `run.sh` helper.
+- Scenarios: add scenario variables + bundle-local SUTs and Scenario Manager support for those bundles.
+- Dev tooling: add WSL helpers (docker address pool + triage) and bootstrap the `vscode-pockethive` authoring plugin.
 - Scenario manager: allow default image tag resolution when scenario images omit tags.
 - Compose/docs: set `POCKETHIVE_IMAGES_DEFAULT_TAG` for scenario-manager and document default tag behavior.
 
