@@ -933,7 +933,14 @@ public class ScenarioService {
      * @return raw YAML if present, otherwise {@code null}
      */
     public String readVariablesRaw(String id) throws IOException {
-        Path bundle = bundleDirFor(id);
+        ScenarioRecord record = scenarios.get(id);
+        if (record == null) {
+            throw new IllegalArgumentException("Scenario '%s' not found".formatted(id));
+        }
+        Path bundle = record.bundleDir();
+        if (bundle == null || !Files.isDirectory(bundle)) {
+            return null;
+        }
         Path file = bundle.resolve("variables.yaml").normalize();
         if (!file.startsWith(bundle)) {
             throw new IllegalArgumentException("Invalid variables path");
