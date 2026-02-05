@@ -69,6 +69,59 @@ public class ScenarioController {
         return summaries;
     }
 
+    @GetMapping(value = "/folders", produces = MediaType.APPLICATION_JSON_VALUE)
+    public List<String> listBundleFolders() throws IOException {
+        log.info("[REST] GET /scenarios/folders");
+        List<String> folders = service.listBundleFolders();
+        log.info("[REST] GET /scenarios/folders -> {} items body={}", folders.size(), safeJson(folders));
+        return folders;
+    }
+
+    @PostMapping(value = "/folders", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<Void> createBundleFolder(@RequestBody FolderRequest request) throws IOException {
+        String path = request != null ? request.path() : null;
+        log.info("[REST] POST /scenarios/folders path={}", path);
+        try {
+            service.createBundleFolder(path);
+            log.info("[REST] POST /scenarios/folders -> status=204");
+            return ResponseEntity.noContent().build();
+        } catch (IllegalArgumentException e) {
+            log.warn("[REST] POST /scenarios/folders -> status=400 {}", e.getMessage());
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        }
+    }
+
+    @DeleteMapping(value = "/folders")
+    public ResponseEntity<Void> deleteBundleFolder(@RequestParam(name = "path") String path) throws IOException {
+        log.info("[REST] DELETE /scenarios/folders path={}", path);
+        try {
+            service.deleteBundleFolder(path);
+            log.info("[REST] DELETE /scenarios/folders -> status=204");
+            return ResponseEntity.noContent().build();
+        } catch (IllegalArgumentException e) {
+            log.warn("[REST] DELETE /scenarios/folders -> status=400 {}", e.getMessage());
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        }
+    }
+
+    @PostMapping(value = "/{id}/move", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<Void> moveScenarioToFolder(@PathVariable("id") String id,
+                                                     @RequestBody FolderRequest request) throws IOException {
+        String path = request != null ? request.path() : null;
+        log.info("[REST] POST /scenarios/{}/move path={}", id, path);
+        if (service.find(id).isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+        }
+        try {
+            service.moveScenarioToFolder(id, path);
+            log.info("[REST] POST /scenarios/{}/move -> status=204", id);
+            return ResponseEntity.noContent().build();
+        } catch (IllegalArgumentException e) {
+            log.warn("[REST] POST /scenarios/{}/move -> status=400 {}", id, e.getMessage());
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        }
+    }
+
     @GetMapping(value = "/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
     public Scenario one(@PathVariable("id") String id) {
         log.info("[REST] GET /scenarios/{}", id);
@@ -506,5 +559,8 @@ public class ScenarioController {
     }
 
     public record VariablesResolveResponse(String profileId, String sutId, Map<String, Object> vars, List<String> warnings) {
+    }
+
+    public record FolderRequest(String path) {
     }
 }

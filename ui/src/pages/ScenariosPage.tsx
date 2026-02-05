@@ -8,6 +8,10 @@ import ScenarioVariablesModal from './scenarios/ScenarioVariablesModal'
 import ScenarioSutsModal from './scenarios/ScenarioSutsModal'
 import {
   listScenarios,
+  listScenarioFolders,
+  createScenarioFolder,
+  deleteScenarioFolder,
+  moveScenarioToFolder,
   downloadScenarioBundle,
   uploadScenarioBundle,
   replaceScenarioBundle,
@@ -1901,6 +1905,11 @@ function TopologyEditor({ topology, template, onChange }: TopologyEditorProps) {
 export default function ScenariosPage() {
   const navigate = useNavigate()
   const [items, setItems] = useState<ScenarioSummary[]>([])
+  const [folders, setFolders] = useState<string[]>([])
+  const [folderFilter, setFolderFilter] = useState<string | null>(null)
+  const [newFolderPath, setNewFolderPath] = useState('')
+  const [folderBusy, setFolderBusy] = useState(false)
+  const [moveFolderPath, setMoveFolderPath] = useState<string>('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -2205,12 +2214,15 @@ export default function ScenariosPage() {
     setLoading(true)
     setError(null)
     try {
-      const list = await listScenarios()
+      const [list, folderList] = await Promise.all([listScenarios(), listScenarioFolders()])
       setItems(list)
-      if (list.length > 0) {
-        setSelectedId((current) => current ?? list[0].id)
-      } else {
-        setSelectedId(null)
+      setFolders(folderList)
+      setSelectedId((current) => {
+        if (list.length === 0) return null
+        if (current && list.some((entry) => entry.id === current)) return current
+        return list[0].id
+      })
+      if (list.length === 0) {
         setSelectedScenario(null)
       }
     } catch (e) {
@@ -2419,6 +2431,81 @@ export default function ScenariosPage() {
     () => items.find((s) => s.id === selectedId) ?? null,
     [items, selectedId],
   )
+
+  const visibleItems = useMemo(() => {
+    if (folderFilter === null) return items
+    const target = folderFilter.trim()
+    return items.filter((scenario) => {
+      const scenarioFolder = (scenario.folderPath ?? '').trim()
+      return scenarioFolder === target
+    })
+  }, [folderFilter, items])
+
+  useEffect(() => {
+    const current = (selectedSummary?.folderPath ?? '').trim()
+    setMoveFolderPath(current)
+  }, [selectedSummary?.folderPath, selectedSummary?.id])
+
+  const handleCreateFolder = useCallback(async () => {
+    const path = newFolderPath.trim()
+    if (!path) {
+      setToast('Folder path is required')
+      return
+    }
+    setFolderBusy(true)
+    try {
+      await createScenarioFolder(path)
+      setNewFolderPath('')
+      await loadScenarios()
+      setToast(`Created folder ${path}`)
+    } catch (e) {
+      setToast(e instanceof Error ? `Create folder failed: ${e.message}` : 'Create folder failed')
+    } finally {
+      setFolderBusy(false)
+    }
+  }, [loadScenarios, newFolderPath, setToast])
+
+  const handleDeleteFolder = useCallback(async () => {
+    const path = folderFilter === null ? '' : folderFilter.trim()
+    if (!path) {
+      setToast('Select a non-root folder to delete')
+      return
+    }
+    setFolderBusy(true)
+    try {
+      await deleteScenarioFolder(path)
+      await loadScenarios()
+      setFolderFilter(null)
+      setToast(`Deleted folder ${path}`)
+    } catch (e) {
+      setToast(e instanceof Error ? `Delete folder failed: ${e.message}` : 'Delete folder failed')
+    } finally {
+      setFolderBusy(false)
+    }
+  }, [deleteScenarioFolder, folderFilter, loadScenarios, setToast])
+
+  const handleMoveSelectedScenario = useCallback(async () => {
+    if (!selectedId) return
+    const target = moveFolderPath.trim()
+    const current = (selectedSummary?.folderPath ?? '').trim()
+    if (target === current) {
+      return
+    }
+    setFolderBusy(true)
+    try {
+      await moveScenarioToFolder(selectedId, target.length > 0 ? target : null)
+      await loadScenarios()
+      setToast(
+        target.length > 0
+          ? `Moved ${selectedId} to ${target}`
+          : `Moved ${selectedId} to root`,
+      )
+    } catch (e) {
+      setToast(e instanceof Error ? `Move failed: ${e.message}` : 'Move failed')
+    } finally {
+      setFolderBusy(false)
+    }
+  }, [loadScenarios, moveFolderPath, selectedId, selectedSummary?.folderPath, setToast])
 
   const hasUnsavedChanges = useMemo(
     () => rawYaml !== savedYaml,
@@ -3873,9 +3960,73 @@ export default function ScenariosPage() {
             </div>
           </div>
         )}
+        <div className="space-y-2 rounded border border-white/15 bg-white/5 px-2 py-2 text-[11px] text-white/80">
+          <div className="flex items-center justify-between gap-2">
+            <div className="font-semibold text-white/90">Folders</div>
+            <button
+              type="button"
+              className="text-[11px] text-white/60 hover:text-white/80"
+              onClick={() => {
+                setFolderFilter(null)
+                setNewFolderPath('')
+              }}
+              disabled={folderBusy}
+              title="Reset folder filter"
+            >
+              Reset
+            </button>
+          </div>
+          <select
+            className="w-full rounded border border-white/20 bg-black/40 px-2 py-1 text-[11px] text-white/90"
+            value={folderFilter === null ? '__all__' : folderFilter === '' ? '__root__' : folderFilter}
+            onChange={(event) => {
+              const value = event.target.value
+              if (value === '__all__') setFolderFilter(null)
+              else if (value === '__root__') setFolderFilter('')
+              else setFolderFilter(value)
+            }}
+            disabled={folderBusy}
+          >
+            <option value="__all__">All folders</option>
+            <option value="__root__">Root</option>
+            {folders.map((path) => (
+              <option key={path} value={path}>
+                {path}
+              </option>
+            ))}
+          </select>
+          <div className="flex items-center gap-2">
+            <input
+              className="flex-1 rounded border border-white/20 bg-black/40 px-2 py-1 text-[11px] text-white/90"
+              placeholder="new/folder"
+              value={newFolderPath}
+              onChange={(event) => setNewFolderPath(event.target.value)}
+              disabled={folderBusy}
+            />
+            <button
+              type="button"
+              className="rounded bg-white/10 px-2 py-1 text-[11px] text-white/80 hover:bg-white/20 disabled:opacity-50"
+              onClick={() => void handleCreateFolder()}
+              disabled={folderBusy || newFolderPath.trim().length === 0}
+              title="Create folder"
+            >
+              Add
+            </button>
+          </div>
+          <button
+            type="button"
+            className="w-full rounded bg-white/10 px-2 py-1 text-[11px] text-white/80 hover:bg-white/20 disabled:opacity-50"
+            onClick={() => void handleDeleteFolder()}
+            disabled={folderBusy || folderFilter === null || folderFilter.trim().length === 0}
+            title="Delete selected folder (must be empty)"
+          >
+            Delete selected folder
+          </button>
+        </div>
         <div className="space-y-1 overflow-y-auto max-h-[calc(100vh-7rem)] pr-1">
-          {items.map((scenario) => {
+          {visibleItems.map((scenario) => {
             const isSelected = scenario.id === selectedId
+            const folderLabel = (scenario.folderPath ?? '').trim() || 'root'
             return (
               <button
                 key={scenario.id}
@@ -3893,12 +4044,12 @@ export default function ScenariosPage() {
                   </span>
                 </div>
                 <div className="mt-0.5 text-[10px] text-white/60">
-                  {scenario.id}
+                  {scenario.id} · {folderLabel}
                 </div>
               </button>
             )
           })}
-          {!loading && !error && items.length === 0 && (
+          {!loading && !error && visibleItems.length === 0 && (
             <div className="text-xs text-white/60">No scenarios defined.</div>
           )}
         </div>
@@ -3924,6 +4075,37 @@ export default function ScenariosPage() {
                 </div>
               </div>
 	              <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 rounded border border-white/15 bg-white/5 px-2 py-1">
+                    <span className="text-[11px] text-white/60">Folder</span>
+                    <select
+                      className="rounded border border-white/20 bg-black/40 px-2 py-1 text-[11px] text-white/90"
+                      value={moveFolderPath.trim().length === 0 ? '__root__' : moveFolderPath}
+                      onChange={(event) => {
+                        const value = event.target.value
+                        setMoveFolderPath(value === '__root__' ? '' : value)
+                      }}
+                      disabled={folderBusy}
+                    >
+                      <option value="__root__">root</option>
+                      {folders.map((path) => (
+                        <option key={path} value={path}>
+                          {path}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className="rounded bg-white/10 px-2 py-1 text-[11px] text-white/80 hover:bg-white/20 disabled:opacity-50"
+                      onClick={() => void handleMoveSelectedScenario()}
+                      disabled={
+                        folderBusy ||
+                        moveFolderPath.trim() === ((selectedSummary.folderPath ?? '').trim())
+                      }
+                      title="Move scenario to selected folder"
+                    >
+                      Move
+                    </button>
+                  </div>
 	                <button
 	                  type="button"
 	                  className="rounded bg-white/10 px-2 py-1 text-[11px] text-white/80 hover:bg-white/20"

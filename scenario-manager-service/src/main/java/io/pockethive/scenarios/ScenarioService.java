@@ -120,14 +120,14 @@ public class ScenarioService {
     public List<ScenarioSummary> listAvailableSummaries() {
         return streamRecords()
                 .filter(record -> !record.defunct())
-                .map(record -> toSummary(record.scenario()))
+                .map(this::toSummary)
                 .sorted(Comparator.comparing(ScenarioSummary::name))
                 .toList();
     }
 
     public List<ScenarioSummary> listAllSummaries() {
         return streamRecords()
-                .map(record -> toSummary(record.scenario()))
+                .map(this::toSummary)
                 .sorted(Comparator.comparing(ScenarioSummary::name))
                 .toList();
     }
@@ -135,7 +135,7 @@ public class ScenarioService {
     public List<ScenarioSummary> listDefunctSummaries() {
         return streamRecords()
                 .filter(ScenarioRecord::defunct)
-                .map(record -> toSummary(record.scenario()))
+                .map(this::toSummary)
                 .sorted(Comparator.comparing(ScenarioSummary::name))
                 .toList();
     }
@@ -159,15 +159,21 @@ public class ScenarioService {
     }
 
     public Scenario create(Scenario scenario, Format format) throws IOException {
-        ScenarioRecord record = recordFor(scenario, format);
-        if (scenarios.putIfAbsent(scenario.getId(), record) != null) {
+        Scenario resolved = applyDefaultImageTag(scenario);
+        boolean defunct = determineDefunct(resolved);
+        String id = resolved.getId();
+        Path bundleDir = bundleDir(id);
+        Path descriptor = descriptorFile(bundleDir, format);
+        ScenarioRecord record = new ScenarioRecord(resolved, format, defunct, descriptor, bundleDir, folderPath(bundleDir));
+
+        if (scenarios.putIfAbsent(id, record) != null) {
             throw new IllegalArgumentException("Scenario already exists");
         }
 
         try {
-            write(scenario, format);
+            writeDescriptor(resolved, format, bundleDir);
         } catch (IOException e) {
-            scenarios.remove(scenario.getId(), record);
+            scenarios.remove(id, record);
             throw e;
         }
 
@@ -176,11 +182,16 @@ public class ScenarioService {
 
     public Scenario update(String id, Scenario scenario, Format format) throws IOException {
         scenario.setId(id);
-        ScenarioRecord record = recordFor(scenario, format);
+        Scenario resolved = applyDefaultImageTag(scenario);
+        boolean defunct = determineDefunct(resolved);
+        ScenarioRecord existing = scenarios.get(id);
+        Path bundleDir = existing != null && existing.bundleDir() != null ? existing.bundleDir() : bundleDir(id);
+        Path descriptor = descriptorFile(bundleDir, format);
+        ScenarioRecord record = new ScenarioRecord(resolved, format, defunct, descriptor, bundleDir, folderPath(bundleDir));
         ScenarioRecord previous = scenarios.put(id, record);
 
         try {
-            write(scenario, format);
+            writeDescriptor(resolved, format, bundleDir);
         } catch (IOException e) {
             if (previous == null) {
                 scenarios.remove(id, record);
@@ -195,21 +206,154 @@ public class ScenarioService {
 
     public void delete(String id) throws IOException {
         ScenarioRecord removed = scenarios.remove(id);
-        Format format = removed != null ? removed.format() : null;
-        if (format != null) {
-            Files.deleteIfExists(pathFor(id, format));
+        if (removed == null) {
+            return;
         }
-        Path bundleDir = bundleDir(id);
-        if (Files.isDirectory(bundleDir)) {
+        Path bundleDir = removed.bundleDir();
+        if (bundleDir != null && Files.isDirectory(bundleDir)) {
             clearDirectory(bundleDir);
             Files.deleteIfExists(bundleDir);
+            return;
+        }
+        Path descriptor = removed.descriptorFile();
+        if (descriptor != null) {
+            Files.deleteIfExists(descriptor);
         }
     }
 
-    private ScenarioRecord recordFor(Scenario scenario, Format format) {
-        Scenario resolved = applyDefaultImageTag(scenario);
-        boolean defunct = determineDefunct(resolved);
-        return new ScenarioRecord(resolved, format, defunct);
+    public synchronized List<String> listBundleFolders() throws IOException {
+        Files.createDirectories(bundleRootDir);
+        Set<Path> scenarioRoots = scenarioBundleRoots();
+        List<String> folders = new ArrayList<>();
+        try (Stream<Path> stream = Files.walk(bundleRootDir)) {
+            for (Path path : (Iterable<Path>) stream::iterator) {
+                if (!Files.isDirectory(path)) {
+                    continue;
+                }
+                Path normalized = path.toAbsolutePath().normalize();
+                if (normalized.equals(bundleRootDir.toAbsolutePath().normalize())) {
+                    continue;
+                }
+                if (isUnderAnyScenarioRoot(normalized, scenarioRoots)) {
+                    continue;
+                }
+                String rel = bundleRootDir.toAbsolutePath().normalize().relativize(normalized).toString().replace('\\', '/');
+                if (!rel.isBlank()) {
+                    folders.add(rel);
+                }
+            }
+        }
+        folders.sort(String::compareTo);
+        return folders;
+    }
+
+    public synchronized void createBundleFolder(String folderPath) throws IOException {
+        Path dir = resolveBundleFolder(folderPath, false);
+        Set<Path> scenarioRoots = scenarioBundleRoots();
+        if (isUnderAnyScenarioRoot(dir, scenarioRoots)) {
+            throw new IllegalArgumentException("Folder path is inside a scenario bundle");
+        }
+        Files.createDirectories(dir);
+    }
+
+    public synchronized void deleteBundleFolder(String folderPath) throws IOException {
+        Path dir = resolveBundleFolder(folderPath, false);
+        if (!Files.isDirectory(dir)) {
+            throw new IllegalArgumentException("Folder not found");
+        }
+        Set<Path> scenarioRoots = scenarioBundleRoots();
+        if (isUnderAnyScenarioRoot(dir, scenarioRoots)) {
+            throw new IllegalArgumentException("Folder path is inside a scenario bundle");
+        }
+        try (Stream<Path> entries = Files.list(dir)) {
+            if (entries.findAny().isPresent()) {
+                throw new IllegalArgumentException("Folder must be empty");
+            }
+        }
+        Files.delete(dir);
+    }
+
+    public synchronized void moveScenarioToFolder(String scenarioId, String folderPath) throws IOException {
+        if (scenarioId == null || scenarioId.isBlank()) {
+            throw new IllegalArgumentException("scenarioId must not be blank");
+        }
+        ScenarioRecord record = scenarios.get(scenarioId);
+        if (record == null) {
+            throw new IllegalArgumentException("Scenario '%s' not found".formatted(scenarioId));
+        }
+        Path currentDir = record.bundleDir();
+        if (currentDir == null || !Files.isDirectory(currentDir)) {
+            throw new IllegalArgumentException("Scenario '%s' has no bundle directory".formatted(scenarioId));
+        }
+        Path targetParent = resolveBundleFolder(folderPath, true);
+        Set<Path> scenarioRoots = scenarioBundleRoots();
+        if (isUnderAnyScenarioRoot(targetParent, scenarioRoots)) {
+            throw new IllegalArgumentException("Target folder is inside a scenario bundle");
+        }
+        Files.createDirectories(targetParent);
+        Path targetDir = targetParent.resolve(sanitize(scenarioId)).toAbsolutePath().normalize();
+        if (targetDir.equals(currentDir.toAbsolutePath().normalize())) {
+            return;
+        }
+        if (Files.exists(targetDir)) {
+            throw new IllegalArgumentException("Target already exists");
+        }
+        Files.move(currentDir, targetDir);
+        reload();
+    }
+
+    private Path resolveBundleFolder(String folderPath, boolean allowRoot) {
+        String trimmed = folderPath == null ? "" : folderPath.trim();
+        if (trimmed.isEmpty()) {
+            if (!allowRoot) {
+                throw new IllegalArgumentException("Folder path must not be empty");
+            }
+            return bundleRootDir.toAbsolutePath().normalize();
+        }
+        if (trimmed.startsWith("/") || trimmed.contains("..")) {
+            throw new IllegalArgumentException("Invalid folder path");
+        }
+        Path resolved = bundleRootDir.toAbsolutePath().normalize();
+        for (String raw : trimmed.split("/")) {
+            String segment = raw.trim();
+            if (segment.isEmpty() || segment.equals(".") || segment.equals("..")) {
+                throw new IllegalArgumentException("Invalid folder path");
+            }
+            if (!segment.matches("[a-zA-Z0-9._-]+")) {
+                throw new IllegalArgumentException("Invalid folder path segment '%s'".formatted(segment));
+            }
+            resolved = resolved.resolve(segment);
+        }
+        Path normalized = resolved.normalize();
+        if (!normalized.startsWith(bundleRootDir.toAbsolutePath().normalize())) {
+            throw new IllegalArgumentException("Invalid folder path");
+        }
+        return normalized;
+    }
+
+    private Set<Path> scenarioBundleRoots() {
+        Set<Path> roots = new LinkedHashSet<>();
+        for (ScenarioRecord record : scenarios.values()) {
+            Path dir = record.bundleDir();
+            if (dir != null) {
+                roots.add(dir.toAbsolutePath().normalize());
+            }
+        }
+        return roots;
+    }
+
+    private boolean isUnderAnyScenarioRoot(Path path, Set<Path> scenarioRoots) {
+        if (path == null || scenarioRoots == null || scenarioRoots.isEmpty()) {
+            return false;
+        }
+        Path current = path.toAbsolutePath().normalize();
+        while (current != null && current.startsWith(bundleRootDir.toAbsolutePath().normalize())) {
+            if (scenarioRoots.contains(current)) {
+                return true;
+            }
+            current = current.getParent();
+        }
+        return false;
     }
 
     private boolean determineDefunct(Scenario scenario) {
@@ -356,17 +500,13 @@ public class ScenarioService {
         return (format == Format.JSON ? jsonMapper : yamlMapper).readValue(path.toFile(), Scenario.class);
     }
 
-    private void write(Scenario scenario, Format format) throws IOException {
+    private void writeDescriptor(Scenario scenario, Format format, Path bundleDir) throws IOException {
         String id = scenario.getId();
         if (id == null || id.isBlank()) {
             throw new IllegalArgumentException("Scenario id must not be null or blank");
         }
-        // Persist as a bundle descriptor under scenarios.dir/bundles/<id>/scenario.(yaml|json),
-        // which is the single source of truth for raw/plan/runtime operations.
-        Path bundleDir = bundleDir(id);
         Files.createDirectories(bundleDir);
-        String fileName = (format == Format.JSON) ? "scenario.json" : "scenario.yaml";
-        Path descriptor = bundleDir.resolve(fileName).normalize();
+        Path descriptor = descriptorFile(bundleDir, format);
         if (!descriptor.startsWith(bundleDir)) {
             throw new IllegalArgumentException("Invalid scenario id");
         }
@@ -375,8 +515,9 @@ public class ScenarioService {
             .writeValue(descriptor.toFile(), scenario);
     }
 
-    private ScenarioSummary toSummary(Scenario scenario) {
-        return new ScenarioSummary(scenario.getId(), scenario.getName());
+    private ScenarioSummary toSummary(ScenarioRecord record) {
+        Scenario scenario = record.scenario();
+        return new ScenarioSummary(scenario.getId(), scenario.getName(), record.folderPath());
     }
 
     Path bundleDir(String id) {
@@ -386,6 +527,48 @@ public class ScenarioService {
             throw new IllegalArgumentException("Invalid scenario id");
         }
         return dir;
+    }
+
+    private Path bundleDirFor(String scenarioId) {
+        ScenarioRecord record = scenarios.get(scenarioId);
+        if (record == null) {
+            throw new IllegalArgumentException("Scenario '%s' not found".formatted(scenarioId));
+        }
+        Path bundleDir = record.bundleDir();
+        if (bundleDir == null) {
+            throw new IllegalArgumentException("Scenario '%s' has no bundle directory".formatted(scenarioId));
+        }
+        return bundleDir;
+    }
+
+    private Path descriptorFile(Path bundleDir, Format format) {
+        String fileName = (format == Format.JSON) ? "scenario.json" : "scenario.yaml";
+        return bundleDir.resolve(fileName).normalize();
+    }
+
+    private String folderPath(Path bundleDir) {
+        if (bundleDir == null) {
+            return null;
+        }
+        Path normalized = bundleDir.normalize();
+        if (!normalized.startsWith(bundleRootDir)) {
+            return null;
+        }
+        Path rel = bundleRootDir.relativize(normalized);
+        Path parent = rel.getParent();
+        if (parent == null) {
+            return null;
+        }
+        String path = parent.toString().replace('\\', '/').trim();
+        return path.isEmpty() ? null : path;
+    }
+
+    private ScenarioRecord recordForLoaded(Scenario scenario, Format format, Path descriptorFile, Path bundleDir) {
+        Scenario resolved = applyDefaultImageTag(scenario);
+        boolean defunct = determineDefunct(resolved);
+        Path descriptor = descriptorFile != null ? descriptorFile.toAbsolutePath().normalize() : null;
+        Path bundle = bundleDir != null ? bundleDir.toAbsolutePath().normalize() : null;
+        return new ScenarioRecord(resolved, format, defunct, descriptor, bundle, folderPath(bundle));
     }
 
     Path runtimeDir(String swarmId) {
@@ -414,8 +597,9 @@ public class ScenarioService {
         }
         Files.createDirectories(target);
 
-        Path source = bundleDir(scenarioId);
-        if (Files.isDirectory(source)) {
+        ScenarioRecord record = scenarios.get(scenarioId);
+        Path source = record != null ? record.bundleDir() : null;
+        if (source != null && Files.isDirectory(source)) {
             copyDirectory(source, target);
         } else {
             logger.info("No bundle directory found for scenario '{}'; runtime directory {} will be empty",
@@ -462,7 +646,7 @@ public class ScenarioService {
             for (Path path : stream) {
                 Format format = detectFormat(path);
                 Scenario scenario = read(path, format);
-                ScenarioRecord record = recordFor(scenario, format);
+                ScenarioRecord record = recordForLoaded(scenario, format, path, null);
                 ScenarioRecord previous = target.put(scenario.getId(), record);
                 if (previous != null) {
                     logger.warn("Duplicate scenario id '{}' found while loading {}; keeping latest", scenario.getId(), path);
@@ -488,7 +672,7 @@ public class ScenarioService {
                 }
                 Format format = detectFormat(path);
                 Scenario scenario = read(path, format);
-                ScenarioRecord record = recordFor(scenario, format);
+                ScenarioRecord record = recordForLoaded(scenario, format, path, path.getParent());
                 ScenarioRecord previous = target.put(scenario.getId(), record);
                 if (previous != null) {
                     logger.warn("Duplicate scenario id '{}' found while loading {}; keeping latest", scenario.getId(), path);
@@ -601,7 +785,7 @@ public class ScenarioService {
     }
 
     public List<String> listSchemaFiles(String id) throws IOException {
-        Path bundle = bundleDir(id);
+        Path bundle = bundleDirFor(id);
         Path schemasDir = bundle.resolve("schemas").normalize();
         if (!schemasDir.startsWith(bundle) || !Files.isDirectory(schemasDir)) {
             return List.of();
@@ -624,7 +808,7 @@ public class ScenarioService {
         if (relativePath == null || relativePath.isBlank()) {
             throw new IllegalArgumentException("Schema path must not be null or blank");
         }
-        Path bundle = bundleDir(id);
+        Path bundle = bundleDirFor(id);
         Path file = bundle.resolve(relativePath).normalize();
         if (!file.startsWith(bundle)) {
             throw new IllegalArgumentException("Invalid schema path");
@@ -640,7 +824,7 @@ public class ScenarioService {
         if (relativePath == null || relativePath.isBlank()) {
             throw new IllegalArgumentException("File path must not be null or blank");
         }
-        Path bundle = bundleDir(id);
+        Path bundle = bundleDirFor(id);
         Path file = bundle.resolve(relativePath).normalize();
         if (!file.startsWith(bundle)) {
             throw new IllegalArgumentException("Invalid file path");
@@ -652,7 +836,7 @@ public class ScenarioService {
     }
 
     public List<String> listHttpTemplateFiles(String id) throws IOException {
-        Path bundle = bundleDir(id);
+        Path bundle = bundleDirFor(id);
         Path templatesDir = bundle.resolve("http-templates").normalize();
         if (!templatesDir.startsWith(bundle) || !Files.isDirectory(templatesDir)) {
             return List.of();
@@ -675,7 +859,7 @@ public class ScenarioService {
         if (relativePath == null || relativePath.isBlank()) {
             throw new IllegalArgumentException("Template path must not be null or blank");
         }
-        Path bundle = bundleDir(id);
+        Path bundle = bundleDirFor(id);
         Path file = bundle.resolve(relativePath).normalize();
         if (!file.startsWith(bundle)) {
             throw new IllegalArgumentException("Invalid template path");
@@ -695,7 +879,7 @@ public class ScenarioService {
         if (fromPath == null || fromPath.isBlank() || toPath == null || toPath.isBlank()) {
             throw new IllegalArgumentException("Template paths must not be null or blank");
         }
-        Path bundle = bundleDir(id);
+        Path bundle = bundleDirFor(id);
         Path templatesDir = bundle.resolve("http-templates").normalize();
         Path source = bundle.resolve(fromPath).normalize();
         Path target = bundle.resolve(toPath).normalize();
@@ -727,7 +911,7 @@ public class ScenarioService {
         if (relativePath == null || relativePath.isBlank()) {
             throw new IllegalArgumentException("Template path must not be null or blank");
         }
-        Path bundle = bundleDir(id);
+        Path bundle = bundleDirFor(id);
         Path templatesDir = bundle.resolve("http-templates").normalize();
         Path file = bundle.resolve(relativePath).normalize();
         if (!file.startsWith(bundle)) {
@@ -749,7 +933,7 @@ public class ScenarioService {
      * @return raw YAML if present, otherwise {@code null}
      */
     public String readVariablesRaw(String id) throws IOException {
-        Path bundle = bundleDir(id);
+        Path bundle = bundleDirFor(id);
         Path file = bundle.resolve("variables.yaml").normalize();
         if (!file.startsWith(bundle)) {
             throw new IllegalArgumentException("Invalid variables path");
@@ -1076,7 +1260,7 @@ public class ScenarioService {
             VariablesDocument doc = parseVariables(raw);
             VariablesValidationResult validation = validateVariables(scenarioId, doc);
 
-            Path bundle = bundleDir(scenarioId);
+            Path bundle = bundleDirFor(scenarioId);
             Path file = bundle.resolve("variables.yaml").normalize();
             if (!file.startsWith(bundle)) {
                 throw new IllegalArgumentException("Invalid variables path");
@@ -1088,7 +1272,7 @@ public class ScenarioService {
     }
 
     public List<String> listSutIds(String scenarioId) throws IOException {
-        Path bundle = bundleDir(scenarioId);
+        Path bundle = bundleDirFor(scenarioId);
         Path sutDir = bundle.resolve("sut").normalize();
         if (!sutDir.startsWith(bundle) || !Files.isDirectory(sutDir)) {
             return List.of();
@@ -1115,7 +1299,7 @@ public class ScenarioService {
             throw new IllegalArgumentException("sutId must not be blank");
         }
         sutId = sanitizeSutId(sutId);
-        Path bundle = bundleDir(scenarioId);
+        Path bundle = bundleDirFor(scenarioId);
         Path sutDir = bundle.resolve("sut").resolve(sutId).normalize();
         if (!sutDir.startsWith(bundle)) {
             throw new IllegalArgumentException("Invalid sutId");
@@ -1165,7 +1349,7 @@ public class ScenarioService {
             throw new IllegalArgumentException("sutId must not be blank");
         }
         sutId = sanitizeSutId(sutId);
-        Path bundle = bundleDir(scenarioId);
+        Path bundle = bundleDirFor(scenarioId);
         Path sutDir = bundle.resolve("sut").resolve(sutId).normalize();
         if (!sutDir.startsWith(bundle)) {
             throw new IllegalArgumentException("Invalid sutId");
@@ -1202,7 +1386,7 @@ public class ScenarioService {
             throw new IllegalArgumentException("sut.yaml id '%s' does not match directory name '%s'".formatted(env.id(), sutId));
         }
 
-        Path bundle = bundleDir(scenarioId);
+        Path bundle = bundleDirFor(scenarioId);
         Path sutDir = bundle.resolve("sut").resolve(sutId).normalize();
         if (!sutDir.startsWith(bundle)) {
             throw new IllegalArgumentException("Invalid sutId");
@@ -1220,7 +1404,7 @@ public class ScenarioService {
             throw new IllegalArgumentException("sutId must not be blank");
         }
         sutId = sanitizeSutId(sutId);
-        Path bundle = bundleDir(scenarioId);
+        Path bundle = bundleDirFor(scenarioId);
         Path sutDir = bundle.resolve("sut").resolve(sutId).normalize();
         if (!sutDir.startsWith(bundle)) {
             throw new IllegalArgumentException("Invalid sutId");
@@ -1250,7 +1434,7 @@ public class ScenarioService {
             if (scenarios.containsKey(id)) {
                 throw new IllegalArgumentException("Scenario '%s' already exists".formatted(id));
             }
-            writeBundle(uploaded);
+            writeBundle(uploaded, bundleDir(id));
             reload();
             ScenarioRecord record = scenarios.get(id);
             return record != null ? record.scenario() : uploaded.scenario();
@@ -1260,25 +1444,34 @@ public class ScenarioService {
     }
 
     private Path scenarioDescriptorFile(String id) throws IOException {
-        Path bundleDir = bundleDir(id);
-        if (!Files.isDirectory(bundleDir)) {
-            throw new IllegalArgumentException("Bundle directory not found for scenario '" + id + "'");
+        ScenarioRecord record = scenarios.get(id);
+        if (record == null) {
+            throw new IllegalArgumentException("Scenario '%s' not found".formatted(id));
         }
-        List<String> candidates = List.of("scenario.yaml", "scenario.yml", "scenario.json");
-        for (String name : candidates) {
-            Path candidate = bundleDir.resolve(name);
-            if (Files.isRegularFile(candidate)) {
-                return candidate;
+        Path descriptor = record.descriptorFile();
+        if (descriptor != null && Files.isRegularFile(descriptor)) {
+            return descriptor;
+        }
+        Path bundleDir = record.bundleDir();
+        if (bundleDir != null && Files.isDirectory(bundleDir)) {
+            List<String> candidates = List.of("scenario.yaml", "scenario.yml", "scenario.json");
+            for (String name : candidates) {
+                Path candidate = bundleDir.resolve(name);
+                if (Files.isRegularFile(candidate)) {
+                    return candidate;
+                }
             }
         }
-        throw new IllegalArgumentException("Scenario descriptor not found for scenario '" + id + "'");
+        throw new IllegalArgumentException("Scenario descriptor not found for scenario '%s'".formatted(id));
     }
 
     public Scenario replaceBundleFromZip(String expectedId, byte[] zipBytes) throws IOException {
         UploadedBundle uploaded = unpackBundle(zipBytes, expectedId);
         try {
             String id = uploaded.scenario().getId();
-            writeBundle(uploaded);
+            ScenarioRecord existing = scenarios.get(id);
+            Path targetDir = existing != null && existing.bundleDir() != null ? existing.bundleDir() : bundleDir(id);
+            writeBundle(uploaded, targetDir);
             reload();
             ScenarioRecord record = scenarios.get(id);
             return record != null ? record.scenario() : uploaded.scenario();
@@ -1447,10 +1640,8 @@ public class ScenarioService {
         return found;
     }
 
-    private void writeBundle(UploadedBundle uploaded) throws IOException {
-        String id = uploaded.scenario().getId();
+    private void writeBundle(UploadedBundle uploaded, Path targetDir) throws IOException {
         Path sourceDir = uploaded.rootDir();
-        Path targetDir = bundleDir(id);
         if (Files.exists(targetDir)) {
             clearDirectory(targetDir);
         }
@@ -1464,7 +1655,14 @@ public class ScenarioService {
         Files.deleteIfExists(tempRoot);
     }
 
-    private record ScenarioRecord(Scenario scenario, Format format, boolean defunct) { }
+    private record ScenarioRecord(
+        Scenario scenario,
+        Format format,
+        boolean defunct,
+        Path descriptorFile,
+        Path bundleDir,
+        String folderPath
+    ) { }
 
     private record ScenarioDescriptor(Scenario scenario, Path rootDir) { }
 
