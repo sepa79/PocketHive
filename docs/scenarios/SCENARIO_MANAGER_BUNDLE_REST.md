@@ -3,7 +3,7 @@
 This document describes the **Scenario Manager** REST endpoints used by the UI/editor to read and edit
 scenario bundle files that live under:
 
-`scenarios/bundles/<scenarioId>/`
+`scenarios/**/<scenarioId>/`
 
 It intentionally covers only the **bundle editing surface** (variables + bundle-local SUTs).
 
@@ -29,7 +29,7 @@ The service itself exposes the routes under:
 
 File path in bundle:
 
-- `scenarios/bundles/<scenarioId>/variables.yaml`
+- `scenarios/**/<scenarioId>/variables.yaml`
 
 ### Read variables
 
@@ -74,7 +74,7 @@ Response (200):
 
 Bundle layout:
 
-`scenarios/bundles/<scenarioId>/sut/<sutId>/sut.yaml`
+`scenarios/**/<scenarioId>/sut/<sutId>/sut.yaml`
 
 The JSON/YAML model is `io.pockethive.swarm.model.SutEnvironment`.
 
@@ -115,4 +115,3 @@ Returns `204 No Content` on success.
 Deletes the directory `sut/<sutId>/` from the bundle.
 
 Returns `204 No Content` on success.
-

@@ -12,6 +12,7 @@ interface Props {
 interface ScenarioTemplate {
   id: string
   name: string
+  folderPath: string | null
   description: string | null
   controllerImage: string | null
   bees: ScenarioBee[]
@@ -26,9 +27,76 @@ type ApiError = Error & { status?: number }
 
 type VariablesProfile = { id: string; name: string | null }
 
+type TemplateFolderNode = {
+  name: string
+  path: string
+  children: TemplateFolderNode[]
+  templates: ScenarioTemplate[]
+}
+
+function templateMatchesNeedle(template: ScenarioTemplate, needle: string): boolean {
+  if (!needle) return true
+  const haystack = `${template.folderPath ?? ''} ${template.id} ${template.name} ${template.description ?? ''}`.toLowerCase()
+  return haystack.includes(needle)
+}
+
+function buildTemplateFolderTree(templates: ScenarioTemplate[]): { folders: TemplateFolderNode[]; rootTemplates: ScenarioTemplate[] } {
+  const rootTemplates: ScenarioTemplate[] = []
+  type MutableNode = { name: string; path: string; children: Map<string, MutableNode>; templates: ScenarioTemplate[] }
+  type RootNode = { children: Map<string, MutableNode>; templates: ScenarioTemplate[] }
+  const root: RootNode = { children: new Map(), templates: [] }
+
+  const ensureNode = (parent: RootNode | MutableNode, name: string, path: string): MutableNode => {
+    const existing = parent.children.get(name)
+    if (existing) return existing
+    const created: MutableNode = { name, path, children: new Map<string, MutableNode>(), templates: [] }
+    parent.children.set(name, created)
+    return created
+  }
+
+  for (const template of templates) {
+    const folderPath = template.folderPath
+    if (!folderPath) {
+      rootTemplates.push(template)
+      continue
+    }
+    const segments = folderPath.split('/').map((seg) => seg.trim()).filter((seg) => seg.length > 0)
+    if (segments.length === 0) {
+      rootTemplates.push(template)
+      continue
+    }
+    let current: RootNode | MutableNode = root
+    let currentPath = ''
+    for (const segment of segments) {
+      currentPath = currentPath ? `${currentPath}/${segment}` : segment
+      current = ensureNode(current, segment, currentPath)
+    }
+    current.templates.push(template)
+  }
+
+  const finalize = (node: any): TemplateFolderNode => {
+    const children = Array.from(node.children.values()).map(finalize).sort((a, b) => a.name.localeCompare(b.name))
+    const templatesSorted = [...node.templates].sort((a, b) => a.name.localeCompare(b.name))
+    return { name: node.name, path: node.path, children, templates: templatesSorted }
+  }
+
+  const folders = Array.from(root.children.values()).map(finalize).sort((a, b) => a.name.localeCompare(b.name))
+  rootTemplates.sort((a, b) => a.name.localeCompare(b.name))
+  return { folders, rootTemplates }
+}
+
+function countTemplates(node: TemplateFolderNode): number {
+  let count = node.templates.length
+  for (const child of node.children) {
+    count += countTemplates(child)
+  }
+  return count
+}
+
 export default function SwarmCreateModal({ onClose, autoPullOnStart, onChangeAutoPull }: Props) {
   const [swarmId, setSwarmId] = useState('')
   const [templates, setTemplates] = useState<ScenarioTemplate[]>([])
+  const [templateFilter, setTemplateFilter] = useState('')
   const [scenarioId, setScenarioId] = useState('')
   const [bundleSuts, setBundleSuts] = useState<string[]>([])
   const [sutId, setSutId] = useState<string>('')
@@ -124,6 +192,30 @@ export default function SwarmCreateModal({ onClose, autoPullOnStart, onChangeAut
     [templates, scenarioId],
   )
 
+  const filteredTemplates = useMemo(() => {
+    const needle = templateFilter.trim().toLowerCase()
+    if (!needle) return templates
+    return templates.filter((template) => templateMatchesNeedle(template, needle))
+  }, [templateFilter, templates])
+
+  const hasAnyFolder = useMemo(() => templates.some((template) => Boolean(template.folderPath)), [templates])
+
+  const tree = useMemo(() => buildTemplateFolderTree(filteredTemplates), [filteredTemplates])
+
+  const openFolderPaths = useMemo(() => {
+    const needle = templateFilter.trim()
+    if (needle.length > 0) return null
+    if (!selectedTemplate?.folderPath) return new Set<string>()
+    const segments = selectedTemplate.folderPath.split('/').map((seg) => seg.trim()).filter((seg) => seg.length > 0)
+    const open = new Set<string>()
+    let current = ''
+    for (const segment of segments) {
+      current = current ? `${current}/${segment}` : segment
+      open.add(current)
+    }
+    return open
+  }, [selectedTemplate?.folderPath, templateFilter])
+
   useEffect(() => {
     let cancelled = false
     setScenarioPreview(null)
@@ -204,9 +296,46 @@ export default function SwarmCreateModal({ onClose, autoPullOnStart, onChangeAut
     }
   }, [selectedTemplate])
 
+  const renderTemplateButton = (template: ScenarioTemplate) => {
+    const selected = template.id === scenarioId
+    return (
+      <button
+        key={template.id}
+        type="button"
+        onClick={() => setScenarioId(template.id)}
+        aria-label={template.name}
+        className={`w-full text-left px-3 py-2 hover:bg-white/10 ${selected ? 'bg-white/15 text-white' : 'text-white/80'}`}
+      >
+        <div className="font-medium leading-snug break-words">{template.name}</div>
+        <div className="text-[10px] text-white/50 break-words">
+          {template.folderPath ? `${template.folderPath}/${template.id}` : template.id}
+        </div>
+        {template.description && <div className="text-[11px] text-white/50 line-clamp-2">{template.description}</div>}
+      </button>
+    )
+  }
+
+  const renderFolderNode = (node: TemplateFolderNode): React.ReactNode => {
+    const open = openFolderPaths === null ? true : openFolderPaths.has(node.path)
+    return (
+      <details key={node.path} open={open} className="border-t border-white/10">
+        <summary aria-label={`folder ${node.path}`} className="px-3 py-2 text-xs text-white/60 cursor-pointer select-none">
+          <span className="font-medium text-white/80">{node.name}</span>{' '}
+          <span className="text-white/40">({countTemplates(node)})</span>
+        </summary>
+        <div className="pl-3">
+          {node.children.map((child) => renderFolderNode(child))}
+          {node.templates.map((template) => (
+            <div key={template.id}>{renderTemplateButton(template)}</div>
+          ))}
+        </div>
+      </details>
+    )
+  }
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-[#1a1d24] p-5 rounded-lg w-[900px] max-w-[95vw] max-h-[85vh] flex flex-col shadow-xl border border-white/10">
+      <div className="bg-[#1a1d24] p-5 rounded-lg w-[900px] max-w-[95vw] h-[calc(92vh-8px)] max-h-[calc(92vh-8px)] min-h-[min(700px,80vh)] flex flex-col shadow-xl border border-white/10 overflow-hidden">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-xl font-semibold">Create Swarm</h3>
           <button
@@ -287,33 +416,48 @@ export default function SwarmCreateModal({ onClose, autoPullOnStart, onChangeAut
           <div className="flex gap-4 flex-1 min-h-0">
             <div className="w-64 flex flex-col border border-white/10 rounded-md bg-white/5">
               <div className="px-3 py-2 border-b border-white/10 text-xs uppercase tracking-wide text-white/60">
-                Scenarios
+                <div className="flex items-center justify-between gap-2">
+                  <span>Scenarios</span>
+                </div>
+                <div className="mt-2">
+                  <input
+                    value={templateFilter}
+                    onChange={(e) => setTemplateFilter(e.target.value)}
+                    placeholder="Filter"
+                    className="w-full rounded border border-white/20 bg-white/10 px-2 py-1 text-[11px] normal-case tracking-normal text-white/80"
+                    aria-label="Scenario filter"
+                  />
+                </div>
               </div>
               <div className="flex-1 overflow-y-auto">
-                {templates.length === 0 ? (
+                {filteredTemplates.length === 0 ? (
                   <div className="px-3 py-3 text-xs text-white/50">No scenarios available.</div>
+                ) : hasAnyFolder ? (
+                  <div className="text-sm">
+                    {tree.folders.map((folder) => renderFolderNode(folder))}
+                    {tree.rootTemplates.length > 0 ? (
+                      <details
+                        open={openFolderPaths === null || Boolean(selectedTemplate && !selectedTemplate.folderPath)}
+                        className="border-t border-white/10"
+                      >
+                        <summary className="px-3 py-2 text-xs text-white/60 cursor-pointer select-none">
+                          <span className="font-medium text-white/80">(root)</span>{' '}
+                          <span className="text-white/40">({tree.rootTemplates.length})</span>
+                        </summary>
+                        <div className="pl-3">
+                          {tree.rootTemplates.map((template) => (
+                            <div key={template.id}>{renderTemplateButton(template)}</div>
+                          ))}
+                        </div>
+                      </details>
+                    ) : null}
+                  </div>
                 ) : (
                   <ul className="text-sm">
-                    {templates.map((template) => {
-                      const selected = template.id === scenarioId
+                    {filteredTemplates.map((template) => {
                       return (
                         <li key={template.id}>
-                          <button
-                            type="button"
-                            onClick={() => setScenarioId(template.id)}
-                            className={`w-full text-left px-3 py-2 hover:bg-white/10 ${
-                              selected ? 'bg-white/15 text-white' : 'text-white/80'
-                            }`}
-                          >
-                            <div className="font-medium leading-snug break-words">
-                              {template.name}
-                            </div>
-                            {template.description && (
-                              <div className="text-[11px] text-white/50 line-clamp-2">
-                                {template.description}
-                              </div>
-                            )}
-                          </button>
+                          {renderTemplateButton(template)}
                         </li>
                       )
                     })}
@@ -431,6 +575,8 @@ function normalizeTemplate(entry: unknown): ScenarioTemplate | null {
   const name = typeof value.name === 'string' ? value.name : null
   if (!id || !name) return null
 
+  const folderPath =
+    typeof value.folderPath === 'string' && value.folderPath.trim().length > 0 ? value.folderPath.trim() : null
   const description = typeof value.description === 'string' ? value.description : null
   const controllerImage =
     typeof value.controllerImage === 'string' && value.controllerImage.trim().length > 0
@@ -442,7 +588,7 @@ function normalizeTemplate(entry: unknown): ScenarioTemplate | null {
         .filter((bee): bee is ScenarioBee => bee !== null)
     : []
 
-  return { id, name, description, controllerImage, bees }
+  return { id, name, folderPath, description, controllerImage, bees }
 }
 
 function normalizeBee(entry: unknown): ScenarioBee | null {

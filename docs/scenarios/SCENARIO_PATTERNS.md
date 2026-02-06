@@ -5,7 +5,7 @@ Each example links back to the contract in `SCENARIO_CONTRACT.md`.
 
 ## 1. Simple local REST swarm
 
-Authoritative example: `scenarios/bundles/local-rest/scenario.yaml`
+Authoritative example: `scenarios/**/local-rest/scenario.yaml` (in this repo: `scenarios/e2e/local-rest/scenario.yaml`)
 
 Highlights:
 
@@ -16,7 +16,7 @@ Highlights:
 
 ## 2. Redis dataset demo
 
-Authoritative example: `scenarios/bundles/redis-dataset-demo/scenario.yaml`
+Authoritative example: `scenarios/**/redis-dataset-demo/scenario.yaml` (in this repo: `scenarios/e2e/redis-dataset-demo/scenario.yaml`)
 
 Pattern:
 
@@ -41,7 +41,7 @@ Use this scenario as a reference when you need:
 
 ## 3. Guarded swarm (buffer guard)
 
-Source: `scenarios/bundles/local-rest-two-moderators/scenario.yaml`
+Source: `scenarios/**/local-rest-two-moderators/scenario.yaml`
 and related examples.
 
 Pattern:
@@ -75,9 +75,9 @@ upstream producers in a safe operating window.
 
 ## 4. HTTP Builder with on‑disk templates
 
-Primary example: `scenarios/bundles/redis-dataset-demo/scenario.yaml`
+Primary example: `scenarios/**/redis-dataset-demo/scenario.yaml` (in this repo: `scenarios/e2e/redis-dataset-demo/scenario.yaml`)
 combined with the HTTP templates under
-`scenarios/bundles/redis-dataset-demo/templates/http/default`.
+`scenarios/**/redis-dataset-demo/templates/http/default`.
 
 Pattern:
 

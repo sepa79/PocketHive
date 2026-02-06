@@ -9,6 +9,7 @@ type BeeSummary = {
 type ScenarioTemplate = {
   id: string
   name: string
+  folderPath: string | null
   description: string | null
   controllerImage: string | null
   bees: BeeSummary[]
@@ -65,6 +66,8 @@ function normalizeTemplates(data: unknown): ScenarioTemplate[] {
       const id = typeof value.id === 'string' ? value.id.trim() : ''
       const name = typeof value.name === 'string' ? value.name.trim() : ''
       if (!id || !name) return null
+      const folderPath =
+        typeof value.folderPath === 'string' && value.folderPath.trim().length > 0 ? value.folderPath.trim() : null
       const description =
         typeof value.description === 'string' && value.description.trim().length > 0 ? value.description.trim() : null
       const controllerImage =
@@ -82,9 +85,75 @@ function normalizeTemplates(data: unknown): ScenarioTemplate[] {
             })
             .filter((bee): bee is BeeSummary => bee !== null)
         : []
-      return { id, name, description, controllerImage, bees }
+      return { id, name, folderPath, description, controllerImage, bees }
     })
     .filter((template): template is ScenarioTemplate => template !== null)
+}
+
+type TemplateFolderNode = {
+  name: string
+  path: string
+  children: TemplateFolderNode[]
+  templates: ScenarioTemplate[]
+}
+
+function templateMatchesNeedle(template: ScenarioTemplate, needle: string): boolean {
+  if (!needle) return true
+  const haystack = `${template.folderPath ?? ''} ${template.id} ${template.name} ${template.description ?? ''}`.toLowerCase()
+  return haystack.includes(needle)
+}
+
+function buildTemplateFolderTree(templates: ScenarioTemplate[]): { folders: TemplateFolderNode[]; rootTemplates: ScenarioTemplate[] } {
+  const rootTemplates: ScenarioTemplate[] = []
+  type MutableNode = { name: string; path: string; children: Map<string, MutableNode>; templates: ScenarioTemplate[] }
+  type RootNode = { children: Map<string, MutableNode>; templates: ScenarioTemplate[] }
+  const root: RootNode = { children: new Map(), templates: [] }
+
+  const ensureNode = (parent: RootNode | MutableNode, name: string, path: string): MutableNode => {
+    const existing = parent.children.get(name)
+    if (existing) return existing
+    const created: MutableNode = { name, path, children: new Map<string, MutableNode>(), templates: [] }
+    parent.children.set(name, created)
+    return created
+  }
+
+  for (const template of templates) {
+    const folderPath = template.folderPath
+    if (!folderPath) {
+      rootTemplates.push(template)
+      continue
+    }
+    const segments = folderPath.split('/').map((seg) => seg.trim()).filter((seg) => seg.length > 0)
+    if (segments.length === 0) {
+      rootTemplates.push(template)
+      continue
+    }
+    let current: RootNode | MutableNode = root
+    let currentPath = ''
+    for (const segment of segments) {
+      currentPath = currentPath ? `${currentPath}/${segment}` : segment
+      current = ensureNode(current, segment, currentPath)
+    }
+    current.templates.push(template)
+  }
+
+  const finalize = (node: any): TemplateFolderNode => {
+    const children = Array.from(node.children.values()).map(finalize).sort((a, b) => a.name.localeCompare(b.name))
+    const templatesSorted = [...node.templates].sort((a, b) => a.name.localeCompare(b.name))
+    return { name: node.name, path: node.path, children, templates: templatesSorted }
+  }
+
+  const folders = Array.from(root.children.values()).map(finalize).sort((a, b) => a.name.localeCompare(b.name))
+  rootTemplates.sort((a, b) => a.name.localeCompare(b.name))
+  return { folders, rootTemplates }
+}
+
+function countTemplates(node: TemplateFolderNode): number {
+  let count = node.templates.length
+  for (const child of node.children) {
+    count += countTemplates(child)
+  }
+  return count
 }
 
 function extractVariablesMeta(yamlText: string): VariablesMeta {
@@ -135,6 +204,7 @@ export function CreateSwarmModal({
   const [templateFilter, setTemplateFilter] = useState('')
   const [templateId, setTemplateId] = useState('')
   const [swarmId, setSwarmId] = useState('')
+  const [autoPullImages, setAutoPullImages] = useState(false)
 
   const [sutIds, setSutIds] = useState<string[]>([])
   const [sutId, setSutId] = useState('')
@@ -260,17 +330,63 @@ export function CreateSwarmModal({
   const filteredTemplates = useMemo(() => {
     const needle = templateFilter.trim().toLowerCase()
     if (!needle) return templates
-    return templates.filter((template) => {
-      const haystack = `${template.id} ${template.name} ${template.description ?? ''}`.toLowerCase()
-      return haystack.includes(needle)
-    })
+    return templates.filter((template) => templateMatchesNeedle(template, needle))
   }, [templateFilter, templates])
 
   const selectedTemplate = useMemo(() => templates.find((template) => template.id === templateId) ?? null, [templateId, templates])
 
+  const hasAnyFolder = useMemo(() => templates.some((template) => Boolean(template.folderPath)), [templates])
+
+  const tree = useMemo(() => buildTemplateFolderTree(filteredTemplates), [filteredTemplates])
+
+  const openFolderPaths = useMemo(() => {
+    const needle = templateFilter.trim()
+    if (needle.length > 0) return null
+    if (!selectedTemplate?.folderPath) return new Set<string>()
+    const segments = selectedTemplate.folderPath.split('/').map((seg) => seg.trim()).filter((seg) => seg.length > 0)
+    const open = new Set<string>()
+    let current = ''
+    for (const segment of segments) {
+      current = current ? `${current}/${segment}` : segment
+      open.add(current)
+    }
+    return open
+  }, [selectedTemplate?.folderPath, templateFilter])
+
   const hasBundleSuts = sutIds.length > 0
   const requiresProfile = variablesMeta.exists && (variablesMeta.hasGlobalVars || variablesMeta.hasSutVars)
   const requiresSut = variablesMeta.exists && variablesMeta.hasSutVars
+
+  const renderTemplateButton = (template: ScenarioTemplate) => (
+    <button
+      key={template.id}
+      type="button"
+      className={template.id === templateId ? 'swarmTemplateItem swarmTemplateItemSelected' : 'swarmTemplateItem'}
+      onClick={() => setTemplateId(template.id)}
+      aria-label={template.name}
+    >
+      <div className="swarmTemplateTitle">{template.name}</div>
+      <div className="swarmTemplateId">
+        {template.folderPath ? `${template.folderPath}/${template.id}` : template.id}
+      </div>
+      <div className="swarmTemplateDesc">{template.description ?? 'No description'}</div>
+    </button>
+  )
+
+  const renderFolderNode = (node: TemplateFolderNode): React.ReactNode => {
+    const open = openFolderPaths === null ? true : openFolderPaths.has(node.path)
+    return (
+      <details key={node.path} open={open}>
+        <summary aria-label={`folder ${node.path}`} className="muted" style={{ cursor: 'pointer', padding: '6px 8px' }}>
+          {node.name} <span className="muted">({countTemplates(node)})</span>
+        </summary>
+        <div style={{ marginLeft: 12 }}>
+          {node.children.map((child) => renderFolderNode(child))}
+          {node.templates.map((template) => renderTemplateButton(template))}
+        </div>
+      </details>
+    )
+  }
 
   const handleCreate = useCallback(
     async (event: React.FormEvent) => {
@@ -307,6 +423,7 @@ export function CreateSwarmModal({
           body: JSON.stringify({
             templateId: trimmedTemplateId,
             idempotencyKey: createIdempotencyKey(),
+            autoPullImages,
             sutId: trimmedSutId ? trimmedSutId : null,
             variablesProfileId: trimmedProfileId ? trimmedProfileId : null,
           }),
@@ -318,6 +435,7 @@ export function CreateSwarmModal({
         setSwarmId('')
         setTemplateId('')
         setTemplateFilter('')
+        setAutoPullImages(false)
         setSutIds([])
         setSutId('')
         setVariablesMeta({ exists: false, hasGlobalVars: false, hasSutVars: false, profiles: [] })
@@ -330,7 +448,7 @@ export function CreateSwarmModal({
         setBusy(false)
       }
     },
-    [busy, onClose, onCreated, requiresProfile, requiresSut, swarmId, sutId, templateId, variablesProfileId],
+    [autoPullImages, busy, onClose, onCreated, requiresProfile, requiresSut, swarmId, sutId, templateId, variablesProfileId],
   )
 
   if (!open) return null
@@ -407,6 +525,7 @@ export function CreateSwarmModal({
                   value={templateFilter}
                   onChange={(event) => setTemplateFilter(event.target.value)}
                   placeholder="Filter"
+                  aria-label="Template filter"
                 />
               </div>
               <div className="swarmTemplateListBody">
@@ -415,18 +534,23 @@ export function CreateSwarmModal({
                 ) : filteredTemplates.length === 0 ? (
                   <div className="muted">No templates found.</div>
                 ) : (
-                  filteredTemplates.map((template) => (
-                    <button
-                      key={template.id}
-                      type="button"
-                      className={template.id === templateId ? 'swarmTemplateItem swarmTemplateItemSelected' : 'swarmTemplateItem'}
-                      onClick={() => setTemplateId(template.id)}
-                    >
-                      <div className="swarmTemplateTitle">{template.name}</div>
-                      <div className="swarmTemplateId">{template.id}</div>
-                      <div className="swarmTemplateDesc">{template.description ?? 'No description'}</div>
-                    </button>
-                  ))
+                  <>
+                    {hasAnyFolder ? (
+                      <div>
+                        {tree.folders.map((folder) => renderFolderNode(folder))}
+                        {tree.rootTemplates.length > 0 ? (
+                          <details open={openFolderPaths === null || Boolean(selectedTemplate && !selectedTemplate.folderPath)}>
+                            <summary className="muted" style={{ cursor: 'pointer', padding: '6px 8px' }}>
+                              (root) <span className="muted">({tree.rootTemplates.length})</span>
+                            </summary>
+                            <div style={{ marginLeft: 12 }}>{tree.rootTemplates.map((template) => renderTemplateButton(template))}</div>
+                          </details>
+                        ) : null}
+                      </div>
+                    ) : (
+                      filteredTemplates.map((template) => renderTemplateButton(template))
+                    )}
+                  </>
                 )}
               </div>
             </div>
@@ -434,7 +558,9 @@ export function CreateSwarmModal({
               {selectedTemplate ? (
                 <>
                   <div className="swarmTemplateTitle">{selectedTemplate.name}</div>
-                  <div className="swarmTemplateId">{selectedTemplate.id}</div>
+                  <div className="swarmTemplateId">
+                    {selectedTemplate.folderPath ? `${selectedTemplate.folderPath}/${selectedTemplate.id}` : selectedTemplate.id}
+                  </div>
                   <div className="muted">{selectedTemplate.description ?? 'No description provided.'}</div>
                   <div className="swarmTemplateMeta">
                     <div>
@@ -456,7 +582,15 @@ export function CreateSwarmModal({
           </div>
 
           <div className="row between" style={{ marginTop: 12 }}>
-            <div className="muted">Create sends a request; start is a separate action.</div>
+            <label className="muted" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input
+                type="checkbox"
+                checked={autoPullImages}
+                onChange={(event) => setAutoPullImages(event.target.checked)}
+                disabled={busy}
+              />
+              Pull images on create
+            </label>
             <button type="submit" className="actionButton" disabled={busy}>
               {busy ? 'Creating…' : 'Create'}
             </button>

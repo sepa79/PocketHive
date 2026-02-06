@@ -51,6 +51,36 @@ test('loads available scenarios on mount', async () => {
   )
 })
 
+test('renders folder tree when scenarios include folderPath', async () => {
+  apiFetchSpy.mockImplementation(async (input: RequestInfo) => {
+    const url = typeof input === 'string' ? input : input.url
+    if (url === '/scenario-manager/api/templates') {
+      return {
+        ok: true,
+        json: async () => [
+          { id: 'tcp-echo-demo', name: 'TCP Echo Demo', folderPath: 'tcp', bees: [] },
+          { id: 'tcp-nio-demo', name: 'TCP NIO Demo', folderPath: 'tcp', bees: [] },
+        ],
+      } as unknown as Response
+    }
+    return { ok: true, json: async () => [] } as unknown as Response
+  })
+
+  render(
+    <CapabilitiesProvider>
+      <SwarmCreateModal onClose={() => {}} autoPullOnStart={false} onChangeAutoPull={() => {}} />
+    </CapabilitiesProvider>,
+  )
+
+  const folderLabel = await screen.findByText('tcp')
+  expect(folderLabel.closest('summary')).toBeTruthy()
+
+  fireEvent.click(folderLabel)
+
+  await screen.findByText('TCP Echo Demo')
+  await screen.findByText('TCP NIO Demo')
+})
+
 test('submits selected scenario', async () => {
   apiFetchSpy.mockImplementation(async (input: RequestInfo) => {
     const url = typeof input === 'string' ? input : input.url

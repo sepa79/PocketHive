@@ -110,7 +110,8 @@ function normalizeSummary(input: unknown): ScenarioSummary | null {
   const id = asString(record['id'])
   if (!id) return null
   const name = asString(record['name']) ?? id
-  return { id, name }
+  const folderPath = asString(record['folderPath'])
+  return { id, name, folderPath }
 }
 
 export async function listScenarios(): Promise<ScenarioSummary[]> {
@@ -154,6 +155,48 @@ export async function createScenario(payload: {
     throw new Error('Scenario manager returned invalid scenario payload')
   }
   return summary
+}
+
+export async function listScenarioFolders(): Promise<string[]> {
+  const response = await apiFetch('/scenario-manager/scenarios/folders', {
+    headers: { Accept: 'application/json' },
+  })
+  await ensureOk(response, 'Failed to load scenario folders')
+  try {
+    const payload = (await response.json()) as unknown
+    if (!Array.isArray(payload)) return []
+    return payload
+      .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
+      .filter((entry) => entry.length > 0)
+  } catch {
+    return []
+  }
+}
+
+export async function createScenarioFolder(path: string): Promise<void> {
+  const response = await apiFetch('/scenario-manager/scenarios/folders', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path }),
+  })
+  await ensureOk(response, 'Failed to create scenario folder')
+}
+
+export async function deleteScenarioFolder(path: string): Promise<void> {
+  const params = new URLSearchParams({ path })
+  const response = await apiFetch(`/scenario-manager/scenarios/folders?${params.toString()}`, {
+    method: 'DELETE',
+  })
+  await ensureOk(response, 'Failed to delete scenario folder')
+}
+
+export async function moveScenarioToFolder(scenarioId: string, path: string | null): Promise<void> {
+  const response = await apiFetch(`/scenario-manager/scenarios/${encodeURIComponent(scenarioId)}/move`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path }),
+  })
+  await ensureOk(response, 'Failed to move scenario')
 }
 
 export async function downloadScenarioBundle(id: string): Promise<Blob> {

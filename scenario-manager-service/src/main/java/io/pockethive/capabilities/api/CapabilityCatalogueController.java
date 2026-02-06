@@ -68,7 +68,7 @@ public class CapabilityCatalogueController {
         List<BeeImage> bees = template == null ? List.of() : template.bees().stream()
                 .map(bee -> new BeeImage(bee.role(), bee.image()))
                 .toList();
-        return new ScenarioTemplateView(summary.id(), summary.name(),
+        return new ScenarioTemplateView(summary.id(), summary.name(), summary.folderPath(),
                 scenario != null ? scenario.getDescription() : null,
                 controllerImage, bees);
     }
@@ -79,6 +79,7 @@ public class CapabilityCatalogueController {
 
     public record ScenarioTemplateView(String id,
                                        String name,
+                                       String folderPath,
                                        String description,
                                        String controllerImage,
                                        List<BeeImage> bees) { }

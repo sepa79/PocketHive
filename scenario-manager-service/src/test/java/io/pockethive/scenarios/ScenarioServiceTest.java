@@ -67,6 +67,36 @@ class ScenarioServiceTest {
     }
 
     @Test
+    void e2eBundlesAreLoadedOnlyWhenShowTestScenariosEnabled() throws IOException {
+        writeManifest("ctrl", "ctrl-image");
+        capabilities.reload();
+
+        Path bundle = Files.createDirectories(scenariosDir.resolve("e2e").resolve("e2e-scenario"));
+        Files.writeString(bundle.resolve("scenario.yaml"), """
+                id: e2e-scenario
+                name: E2E Scenario
+                template:
+                  image: ctrl-image:latest
+                  bees: []
+                """);
+
+        service.reload();
+        assertThat(service.listAllSummaries())
+                .extracting(ScenarioSummary::id)
+                .contains("e2e-scenario");
+
+        ScenarioService withoutTestScenarios = new ScenarioService(
+                scenariosDir.toString(),
+                false,
+                "",
+                capabilities);
+        withoutTestScenarios.reload();
+        assertThat(withoutTestScenarios.listAllSummaries())
+                .extracting(ScenarioSummary::id)
+                .doesNotContain("e2e-scenario");
+    }
+
+    @Test
     void missingManifestMarksScenarioDefunctAndLogsWarning() throws IOException {
         writeManifest("ctrl", "ctrl-image");
         capabilities.reload();
@@ -232,9 +262,11 @@ class ScenarioServiceTest {
 
     @Test
     void variablesValidationEmitsCoverageWarningsForRequiredVariables() throws IOException {
+        writeBundleScenario("scenario-1");
         Path bundle = service.bundleDir("scenario-1");
         Files.createDirectories(bundle.resolve("sut").resolve("sut-A"));
         Files.createDirectories(bundle.resolve("sut").resolve("sut-B"));
+        service.reload();
 
         String raw = """
                 version: 1
@@ -279,6 +311,8 @@ class ScenarioServiceTest {
 
     @Test
     void bundleLocalSutRawCanBeWrittenReadAndDeleted() throws IOException {
+        writeBundleScenario("scenario-1");
+        service.reload();
         String sutId = "sut-A";
         String raw = """
                 id: sut-A
@@ -323,5 +357,17 @@ class ScenarioServiceTest {
 
     private void writeScenario(String fileName, String content) throws IOException {
         Files.writeString(scenariosDir.resolve(fileName), content);
+    }
+
+	    private void writeBundleScenario(String scenarioId) throws IOException {
+	        Path bundle = scenariosDir.resolve(scenarioId);
+	        Files.createDirectories(bundle);
+	        Files.writeString(bundle.resolve("scenario.yaml"), """
+	                id: %s
+	                name: %s
+                template:
+                  image: ctrl-image:latest
+                  bees: []
+                """.formatted(scenarioId, scenarioId));
     }
 }
