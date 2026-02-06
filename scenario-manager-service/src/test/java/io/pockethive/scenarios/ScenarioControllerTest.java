@@ -16,8 +16,11 @@ import io.pockethive.capabilities.CapabilityCatalogueService;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 import java.util.stream.Stream;
 
+import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -47,12 +50,14 @@ class ScenarioControllerTest {
     }
 
     @BeforeEach
-    void setUpManifests() throws IOException {
+    void setUpManifests() throws Exception {
         cleanDirectory(scenariosDir);
         cleanDirectory(capabilitiesDir);
         writeCapabilityManifest("ctrl", "ctrl-image");
         writeCapabilityManifest("worker", "worker-image");
         capabilityCatalogue.reload();
+        mvc.perform(post("/scenarios/reload"))
+                .andExpect(status().isNoContent());
     }
 
     @Test
@@ -86,6 +91,7 @@ class ScenarioControllerTest {
 
         mvc.perform(get("/scenarios").accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
                 .andExpect(jsonPath("$[0].id").value("1"))
                 .andExpect(jsonPath("$[0].name").value("Test"));
 
@@ -267,6 +273,51 @@ class ScenarioControllerTest {
         mvc.perform(get("/scenarios/http-demo/http-templates").accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isEmpty());
+    }
+
+    @Test
+    void bundleDownloadUsesRealBundleDirectoryWhenScenarioIsNestedInFolder() throws Exception {
+        Path nestedBundleDir = scenariosDir.resolve("tcp").resolve("nested-demo");
+        Files.createDirectories(nestedBundleDir);
+        Files.writeString(nestedBundleDir.resolve("scenario.yaml"), """
+                id: nested-demo
+                name: Nested demo
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - role: worker
+                      image: worker-image:latest
+                      work:
+                        in: {}
+                        out:
+                          out: q
+                """);
+        Files.writeString(nestedBundleDir.resolve("note.txt"), "hello");
+
+        mvc.perform(post("/scenarios/reload"))
+                .andExpect(status().isNoContent());
+
+        byte[] zipBytes = mvc.perform(get("/scenarios/nested-demo/bundle").accept("application/zip"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Disposition", "form-data; name=\"attachment\"; filename=\"nested-demo-bundle.zip\""))
+                .andReturn()
+                .getResponse()
+                .getContentAsByteArray();
+
+        boolean hasScenarioYaml = false;
+        boolean hasNote = false;
+        try (ZipInputStream zip = new ZipInputStream(new java.io.ByteArrayInputStream(zipBytes))) {
+            for (ZipEntry entry = zip.getNextEntry(); entry != null; entry = zip.getNextEntry()) {
+                if ("scenario.yaml".equals(entry.getName())) {
+                    hasScenarioYaml = true;
+                }
+                if ("note.txt".equals(entry.getName())) {
+                    hasNote = true;
+                }
+            }
+        }
+        org.junit.jupiter.api.Assertions.assertTrue(hasScenarioYaml, "zip should contain scenario.yaml");
+        org.junit.jupiter.api.Assertions.assertTrue(hasNote, "zip should contain note.txt");
     }
 
     @Test

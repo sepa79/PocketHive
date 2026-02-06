@@ -259,7 +259,7 @@ headersTemplate:
 ### Example 1: OAuth2 API Testing
 
 ```yaml
-# scenarios/bundles/oauth2-api/scenario.yaml
+# scenarios/**/oauth2-api/scenario.yaml
 id: oauth2-api-test
 name: OAuth2 API Load Test
 template:
@@ -549,4 +549,4 @@ For issues or questions:
 - Check logs for auth errors
 - Verify environment variables are set
 - Ensure auth type matches your API requirements
-- Review scenario examples in `scenarios/bundles/auth-example/`
+- Review scenario examples under `scenarios/**` (for example `scenarios/e2e/**` and `scenarios/tcp/**`).

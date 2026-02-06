@@ -553,7 +553,7 @@ public class ScenarioService {
         return dir;
     }
 
-    private Path bundleDirFor(String scenarioId) {
+    Path bundleDirFor(String scenarioId) {
         ScenarioRecord record = scenarios.get(scenarioId);
         if (record == null) {
             throw new IllegalArgumentException("Scenario '%s' not found".formatted(scenarioId));

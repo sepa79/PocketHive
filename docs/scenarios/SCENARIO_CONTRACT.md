@@ -277,12 +277,12 @@ Examples:
 ```bash
 # Check generator templating only
 tools/scenario-templating-check/run.sh \
-  --scenario scenarios/bundles/templated-rest/scenario.yaml
+  --scenario scenarios/e2e/templated-rest/scenario.yaml
 
 # Check generator + HTTP Builder templates referenced from a scenario
 tools/scenario-templating-check/run.sh \
   --check-http-templates \
-  --scenario scenarios/bundles/redis-dataset-demo/scenario.yaml
+  --scenario scenarios/e2e/redis-dataset-demo/scenario.yaml
 ```
 
 The tool will:

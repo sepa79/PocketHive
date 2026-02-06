@@ -21,11 +21,10 @@ and `io.pockethive.swarm.model.SwarmTemplate`:
   - `bees[]` – list of worker definitions (`Bee` records).
 - Optional `trafficPolicy` – buffer guards and other traffic shaping.
 
-Scenarios are stored as bundles under
-`scenarios/bundles/{scenarioId}/scenario.yaml` at the repo root and are
-loaded by the Scenario Manager service at startup. The authoring root is
-configurable via the `scenarios.dir` property; bundles are then expected
-under `scenarios.dir/bundles/{scenarioId}`.
+Scenarios are stored as bundles under `scenarios/**/<scenarioId>/scenario.yaml`
+at the repo root and are loaded by the Scenario Manager service at startup.
+The authoring root is configurable via the `scenarios.dir` property; bundles
+may live anywhere under that root (subfolders are supported).
 
 ## Key building blocks
 
@@ -82,8 +81,8 @@ In the repo (and on disk in deployments) scenarios are stored as
 
 ```text
 scenarios/
-  bundles/
-    local-rest-plan-demo/
+  <group-or-folder>/              # optional (e.g. tcp/, e2e/, demos/)
+    <scenarioId>/
       scenario.yaml
       templates/
         http/
@@ -100,8 +99,8 @@ scenarios/
   data; exact conventions are described in the in‑progress
   `docs/inProgress/scenario-bundle-runtime-plan.md`.
 
-Example bundles:
-- `scenarios/bundles/variables-demo/` – demonstrates `variables.yaml` + `vars.*` + `eval(...)`.
+Example bundles in this repo:
+- `scenarios/e2e/variables-demo/` – demonstrates `variables.yaml` + `vars.*` + `eval(...)`.
 
 Hive exposes these bundles on the **Scenarios** page:
 

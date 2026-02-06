@@ -443,7 +443,12 @@ public class ScenarioController {
     public ResponseEntity<byte[]> downloadBundle(@PathVariable("id") String id) throws IOException {
         log.info("[REST] GET /scenarios/{}/bundle", id);
         Scenario scenario = service.find(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        Path bundleDir = service.bundleDir(scenario.getId());
+        Path bundleDir;
+        try {
+            bundleDir = service.bundleDirFor(scenario.getId());
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Scenario bundle not found", e);
+        }
         if (!Files.isDirectory(bundleDir)) {
             log.warn("Bundle directory {} for scenario '{}' not found", bundleDir, id);
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Scenario bundle not found");

@@ -97,7 +97,7 @@ When starting a swarm from a scenario:
   - [x] Runtime root destination is hardcoded to `/app/scenarios-runtime`; the host bind-mount source is provided via `POCKETHIVE_SCENARIOS_RUNTIME_ROOT`.
 
 - [x] **Bundle location & registration**
-  - [x] Define where bundles live on disk (`scenarios/bundles/**` at repo root;
+  - [x] Define where bundles live on disk (`scenarios/**` at repo root;
         configurable via the `scenarios.dir` property for runtime).
   - [x] Map `scenarioId` → bundle path; document the layout.
 

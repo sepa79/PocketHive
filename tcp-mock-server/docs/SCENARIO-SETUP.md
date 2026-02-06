@@ -67,7 +67,7 @@ That's it. No per-scenario configuration.
 
 ```bash
 # Remove from all TCP scenarios
-find scenarios/bundles/tcp-* -name "sut.yaml" -delete
+find scenarios/tcp -name "sut.yaml" -delete
 ```
 
 All scenarios will use central `tcp-mock-local` SUT environment.

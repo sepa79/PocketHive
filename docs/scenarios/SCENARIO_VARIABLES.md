@@ -33,10 +33,10 @@ Resolution rules:
 
 ## 2) Bundle layout
 
-Recommended structure inside `scenarios/bundles/<scenarioId>/`:
+Recommended structure inside `scenarios/**/<scenarioId>/`:
 
 ```text
-scenarios/bundles/<scenarioId>/
+scenarios/<optional-folder>/<scenarioId>/
   scenario.yaml
   variables.yaml
   sut/
@@ -228,8 +228,8 @@ This is a concrete, implementation-oriented checklist. Treat the bundle as the S
 
 ### Bundle + API surface
 
-- [x] Store scenario variables in `scenarios/bundles/<scenarioId>/variables.yaml` (optional file).
-- [x] Store bundle-local SUT definitions under `scenarios/bundles/<scenarioId>/sut/**` (SSOT for SUTs used by this scenario).
+- [x] Store scenario variables in `scenarios/**/<scenarioId>/variables.yaml` (optional file).
+- [x] Store bundle-local SUT definitions under `scenarios/**/<scenarioId>/sut/**` (SSOT for SUTs used by this scenario).
 - [x] Scenario Manager: add endpoints to read/update `variables.yaml` for a scenario bundle (avoid “generic file read”; keep it narrow/safe).
 - [x] Scenario Manager: add endpoints to list/get bundle-local SUTs for a scenario (used by the editor and create-swarm UI).
 - [x] Scenario Manager: add endpoints to read/write/delete bundle-local `sut/<sutId>/sut.yaml` (editor CRUD).

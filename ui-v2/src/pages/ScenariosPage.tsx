@@ -117,7 +117,7 @@ export function ScenariosPage() {
     <div className="page">
       <div className="row between">
         <h1 className="h1">Scenarios</h1>
-        <div className="muted">Bundles can live anywhere under `scenarios/bundles/**`.</div>
+        <div className="muted">Bundles can live anywhere under `scenarios/**`.</div>
       </div>
 
       {error ? (

@@ -44,7 +44,7 @@ Workers propagate `config.vars` into the WorkItem header `vars`, so templates ca
 
 ### Example bundle
 
-See `scenarios/bundles/variables-demo/`:
+See `scenarios/e2e/variables-demo/`:
 
 - `scenario.yaml` uses `vars.*` in body + `eval(...)`
 - `variables.yaml` defines two profiles (`default`, `france`) and a SUT-scoped `customerId`
@@ -321,7 +321,7 @@ Note: `#json_path` expects a JSON **string** as first argument, so use `workItem
 ## HTTP Builder templates
 
 HTTP Builder loads templates from YAML or JSON files under the configured
-`templateRoot` (for example `scenarios/bundles/redis-dataset-demo/templates/http/default/*.yaml`).
+`templateRoot` (for example `scenarios/e2e/redis-dataset-demo/templates/http/default/*.yaml`).
 Each template can contain Pebble expressions in `pathTemplate`, `method`,
 `bodyTemplate` and header values.
 
@@ -362,11 +362,11 @@ referenced HTTP templates exist, use the CLI tool:
 ```bash
 # From repo root
 tools/scenario-templating-check/run.sh \
-  --scenario scenarios/bundles/redis-dataset-demo/scenario.yaml
+  --scenario scenarios/e2e/redis-dataset-demo/scenario.yaml
 
 tools/scenario-templating-check/run.sh \
   --check-http-templates \
-  --scenario scenarios/bundles/redis-dataset-demo/scenario.yaml
+  --scenario scenarios/e2e/redis-dataset-demo/scenario.yaml
 ```
 
 Behaviour:
