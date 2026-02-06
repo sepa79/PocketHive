@@ -9,6 +9,7 @@ type BeeSummary = {
 type ScenarioTemplate = {
   id: string
   name: string
+  folderPath: string | null
   description: string | null
   controllerImage: string | null
   bees: BeeSummary[]
@@ -65,6 +66,8 @@ function normalizeTemplates(data: unknown): ScenarioTemplate[] {
       const id = typeof value.id === 'string' ? value.id.trim() : ''
       const name = typeof value.name === 'string' ? value.name.trim() : ''
       if (!id || !name) return null
+      const folderPath =
+        typeof value.folderPath === 'string' && value.folderPath.trim().length > 0 ? value.folderPath.trim() : null
       const description =
         typeof value.description === 'string' && value.description.trim().length > 0 ? value.description.trim() : null
       const controllerImage =
@@ -82,7 +85,7 @@ function normalizeTemplates(data: unknown): ScenarioTemplate[] {
             })
             .filter((bee): bee is BeeSummary => bee !== null)
         : []
-      return { id, name, description, controllerImage, bees }
+      return { id, name, folderPath, description, controllerImage, bees }
     })
     .filter((template): template is ScenarioTemplate => template !== null)
 }
@@ -133,6 +136,7 @@ export function CreateSwarmModal({
   const [templates, setTemplates] = useState<ScenarioTemplate[]>([])
   const [templatesLoaded, setTemplatesLoaded] = useState(false)
   const [templateFilter, setTemplateFilter] = useState('')
+  const [templateFolderFilter, setTemplateFolderFilter] = useState<'__all__' | '__root__' | string>('__all__')
   const [templateId, setTemplateId] = useState('')
   const [swarmId, setSwarmId] = useState('')
 
@@ -259,14 +263,27 @@ export function CreateSwarmModal({
 
   const filteredTemplates = useMemo(() => {
     const needle = templateFilter.trim().toLowerCase()
-    if (!needle) return templates
-    return templates.filter((template) => {
-      const haystack = `${template.id} ${template.name} ${template.description ?? ''}`.toLowerCase()
+    const folderFiltered = templates.filter((template) => {
+      if (templateFolderFilter === '__all__') return true
+      if (templateFolderFilter === '__root__') return template.folderPath == null
+      return template.folderPath === templateFolderFilter
+    })
+    if (!needle) return folderFiltered
+    return folderFiltered.filter((template) => {
+      const haystack = `${template.folderPath ?? ''} ${template.id} ${template.name} ${template.description ?? ''}`.toLowerCase()
       return haystack.includes(needle)
     })
-  }, [templateFilter, templates])
+  }, [templateFilter, templateFolderFilter, templates])
 
   const selectedTemplate = useMemo(() => templates.find((template) => template.id === templateId) ?? null, [templateId, templates])
+
+  const availableTemplateFolders = useMemo(() => {
+    const folders = new Set<string>()
+    for (const template of templates) {
+      if (template.folderPath) folders.add(template.folderPath)
+    }
+    return Array.from(folders).sort((a, b) => a.localeCompare(b))
+  }, [templates])
 
   const hasBundleSuts = sutIds.length > 0
   const requiresProfile = variablesMeta.exists && (variablesMeta.hasGlobalVars || variablesMeta.hasSutVars)
@@ -318,6 +335,7 @@ export function CreateSwarmModal({
         setSwarmId('')
         setTemplateId('')
         setTemplateFilter('')
+        setTemplateFolderFilter('__all__')
         setSutIds([])
         setSutId('')
         setVariablesMeta({ exists: false, hasGlobalVars: false, hasSutVars: false, profiles: [] })
@@ -402,12 +420,28 @@ export function CreateSwarmModal({
             <div className="swarmTemplateList">
               <div className="swarmTemplateListHeader">
                 <span>Templates</span>
-                <input
-                  className="textInput textInputCompact"
-                  value={templateFilter}
-                  onChange={(event) => setTemplateFilter(event.target.value)}
-                  placeholder="Filter"
-                />
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <select
+                    className="textInput textInputCompact"
+                    value={templateFolderFilter}
+                    onChange={(event) => setTemplateFolderFilter(event.target.value)}
+                    aria-label="Folder filter"
+                  >
+                    <option value="__all__">(all)</option>
+                    <option value="__root__">(root)</option>
+                    {availableTemplateFolders.map((folder) => (
+                      <option key={folder} value={folder}>
+                        {folder}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    className="textInput textInputCompact"
+                    value={templateFilter}
+                    onChange={(event) => setTemplateFilter(event.target.value)}
+                    placeholder="Filter"
+                  />
+                </div>
               </div>
               <div className="swarmTemplateListBody">
                 {!templatesLoaded ? (
@@ -423,7 +457,9 @@ export function CreateSwarmModal({
                       onClick={() => setTemplateId(template.id)}
                     >
                       <div className="swarmTemplateTitle">{template.name}</div>
-                      <div className="swarmTemplateId">{template.id}</div>
+                      <div className="swarmTemplateId">
+                        {template.folderPath ? `${template.folderPath}/${template.id}` : template.id}
+                      </div>
                       <div className="swarmTemplateDesc">{template.description ?? 'No description'}</div>
                     </button>
                   ))
@@ -434,7 +470,9 @@ export function CreateSwarmModal({
               {selectedTemplate ? (
                 <>
                   <div className="swarmTemplateTitle">{selectedTemplate.name}</div>
-                  <div className="swarmTemplateId">{selectedTemplate.id}</div>
+                  <div className="swarmTemplateId">
+                    {selectedTemplate.folderPath ? `${selectedTemplate.folderPath}/${selectedTemplate.id}` : selectedTemplate.id}
+                  </div>
                   <div className="muted">{selectedTemplate.description ?? 'No description provided.'}</div>
                   <div className="swarmTemplateMeta">
                     <div>
