@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.15.2]
+Timestamp: 2026-02-06T15:16:08Z
+
+- Scenarios: load bundle scenarios from `scenarios/**` (no more `scenarios/bundles`), with `scenarios/e2e/**` gated by `scenarios.show-test`.
+- Scenarios: group TCP demo scenarios under `scenarios/tcp/**` (keeps the main list smaller; E2E TCP stays in `scenarios/e2e/**`).
+- Scenario Manager: include `folderPath` in `/api/templates` so UIs can show a folder tree.
+- UI (Hive/Create swarm): replace flat template list with a folder tree view (v1 + v2).
+- UI v1: keep Create Swarm modal at a fixed height (avoid layout jumping while browsing folders).
+- UI v2: add `Pull images on create` (sends `autoPullImages` to Orchestrator).
+
 ## [0.15.1]
 Timestamp: 2026-02-05T19:26:25Z
 
