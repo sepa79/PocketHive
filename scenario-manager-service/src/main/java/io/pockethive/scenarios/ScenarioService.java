@@ -73,9 +73,10 @@ public class ScenarioService {
 	                            boolean showTestScenarios,
 	                            String defaultImageTag,
 	                            CapabilityCatalogueService capabilities) throws IOException {
-	        this.storageDir = dir;
-	        this.testStorageDir = dir.resolve("e2e");
-	        this.bundleRootDir = dir;
+	        Path normalizedDir = dir.toAbsolutePath().normalize();
+	        this.storageDir = normalizedDir;
+	        this.testStorageDir = normalizedDir.resolve("e2e");
+	        this.bundleRootDir = normalizedDir;
 	        this.runtimeRootDir = runtimeRoot.toAbsolutePath().normalize();
 	        this.showTestScenarios = showTestScenarios;
 	        this.defaultImageTag = defaultImageTag;
