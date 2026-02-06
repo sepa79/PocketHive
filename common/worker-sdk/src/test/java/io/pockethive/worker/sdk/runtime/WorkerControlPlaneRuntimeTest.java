@@ -116,6 +116,34 @@ class WorkerControlPlaneRuntimeTest {
     }
 
     @Test
+    void configUpdateCanonicalisesKebabCaseKeys() throws Exception {
+        runtime.registerDefaultConfig(definition.beanName(), new TestConfig(false, 7.5));
+
+        Map<String, Object> args = Map.of("rate-per-sec", 10.0);
+        ControlSignal signal = ControlSignal.forInstance(
+            "config-update",
+            IDENTITY.swarmId(),
+            IDENTITY.role(),
+            IDENTITY.instanceId(),
+            ORIGIN,
+            UUID.randomUUID().toString(),
+            UUID.randomUUID().toString(),
+            args
+        );
+        String payload = MAPPER.writeValueAsString(signal);
+        String routingKey = ControlPlaneRouting.signal("config-update", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
+
+        runtime.handle(payload, routingKey);
+
+        Map<String, Object> rawConfig = runtime.workerRawConfig(definition.beanName());
+        assertThat(rawConfig)
+            .containsEntry("ratePerSec", 10.0)
+            .doesNotContainKey("rate-per-sec");
+        assertThat(runtime.workerConfig(definition.beanName(), TestConfig.class))
+            .contains(new TestConfig(false, 10.0));
+    }
+
+    @Test
 	    void workerConfigAccessibleAfterUpdate() throws Exception {
 	        String correlationId = UUID.randomUUID().toString();
 	        String idempotencyKey = UUID.randomUUID().toString();
