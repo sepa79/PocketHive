@@ -149,14 +149,14 @@ class ScenarioControllerTest {
                   }
                 }
                 """;
-        mvc.perform(post("/scenarios").contentType(MediaType.APPLICATION_JSON).content(body))
-                .andExpect(status().isCreated());
+	        mvc.perform(post("/scenarios").contentType(MediaType.APPLICATION_JSON).content(body))
+	                .andExpect(status().isCreated());
 
-        // Create a schemas directory and a simple schema file inside the bundle.
-        Path bundleDir = ScenarioControllerTest.scenariosDir.resolve("bundles").resolve("schema-demo");
-        Files.createDirectories(bundleDir.resolve("schemas"));
-        Path schemaFile = bundleDir.resolve("schemas").resolve("body.schema.json");
-        Files.writeString(schemaFile, "{\"type\":\"object\"}");
+	        // Create a schemas directory and a simple schema file inside the bundle.
+	        Path bundleDir = ScenarioControllerTest.scenariosDir.resolve("schema-demo");
+	        Files.createDirectories(bundleDir.resolve("schemas"));
+	        Path schemaFile = bundleDir.resolve("schemas").resolve("body.schema.json");
+	        Files.writeString(schemaFile, "{\"type\":\"object\"}");
 
         mvc.perform(get("/scenarios/schema-demo/schemas").accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
@@ -221,13 +221,13 @@ class ScenarioControllerTest {
                   }
                 }
                 """;
-        mvc.perform(post("/scenarios").contentType(MediaType.APPLICATION_JSON).content(body))
-                .andExpect(status().isCreated());
+	        mvc.perform(post("/scenarios").contentType(MediaType.APPLICATION_JSON).content(body))
+	                .andExpect(status().isCreated());
 
-        Path bundleDir = ScenarioControllerTest.scenariosDir.resolve("bundles").resolve("http-demo");
-        Files.createDirectories(bundleDir.resolve("http-templates"));
-        Path templateFile = bundleDir.resolve("http-templates").resolve("example.yaml");
-        Files.writeString(templateFile, "serviceId: default\ncallId: demo\nbodyTemplate: \"{}\"\n");
+	        Path bundleDir = ScenarioControllerTest.scenariosDir.resolve("http-demo");
+	        Files.createDirectories(bundleDir.resolve("http-templates"));
+	        Path templateFile = bundleDir.resolve("http-templates").resolve("example.yaml");
+	        Files.writeString(templateFile, "serviceId: default\ncallId: demo\nbodyTemplate: \"{}\"\n");
 
         mvc.perform(get("/scenarios/http-demo/http-templates").accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())

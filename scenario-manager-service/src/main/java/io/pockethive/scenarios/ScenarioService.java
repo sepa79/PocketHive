@@ -68,42 +68,45 @@ public class ScenarioService {
              capabilities);
     }
 
-    private ScenarioService(Path dir,
-                            Path runtimeRoot,
-                            boolean showTestScenarios,
-                            String defaultImageTag,
-                            CapabilityCatalogueService capabilities) throws IOException {
-        this.storageDir = dir;
-        this.testStorageDir = dir.resolve("e2e");
-        this.bundleRootDir = dir.resolve("bundles");
-        this.runtimeRootDir = runtimeRoot.toAbsolutePath().normalize();
-        this.showTestScenarios = showTestScenarios;
-        this.defaultImageTag = defaultImageTag;
-        Files.createDirectories(this.storageDir);
-        if (this.showTestScenarios) {
-            Files.createDirectories(this.testStorageDir);
-        }
-        Files.createDirectories(this.bundleRootDir);
-        Files.createDirectories(this.runtimeRootDir);
-        this.capabilities = capabilities;
-    }
+	    private ScenarioService(Path dir,
+	                            Path runtimeRoot,
+	                            boolean showTestScenarios,
+	                            String defaultImageTag,
+	                            CapabilityCatalogueService capabilities) throws IOException {
+	        this.storageDir = dir;
+	        this.testStorageDir = dir.resolve("e2e");
+	        this.bundleRootDir = dir;
+	        this.runtimeRootDir = runtimeRoot.toAbsolutePath().normalize();
+	        this.showTestScenarios = showTestScenarios;
+	        this.defaultImageTag = defaultImageTag;
+	        Files.createDirectories(this.storageDir);
+	        if (this.showTestScenarios) {
+	            Files.createDirectories(this.testStorageDir);
+	        }
+	        Files.createDirectories(this.bundleRootDir);
+	        Files.createDirectories(this.runtimeRootDir);
+	        this.capabilities = capabilities;
+	    }
 
     @PostConstruct
     void init() throws IOException {
         reload();
     }
 
-    public synchronized void reload() throws IOException {
-        Map<String, ScenarioRecord> loaded = new HashMap<>();
+	    public synchronized void reload() throws IOException {
+	        Map<String, ScenarioRecord> loaded = new HashMap<>();
 
-        loadFromDirectory(storageDir, loaded);
-        if (showTestScenarios && Files.isDirectory(testStorageDir)) {
-            loadFromDirectory(testStorageDir, loaded);
-        }
-        loadFromBundles(bundleRootDir, loaded);
+	        loadFromDirectory(storageDir, loaded);
+	        if (showTestScenarios && Files.isDirectory(testStorageDir)) {
+	            loadFromDirectory(testStorageDir, loaded);
+	        }
+	        loadFromBundles(bundleRootDir, loaded);
+	        if (showTestScenarios && Files.isDirectory(testStorageDir)) {
+	            loadFromBundles(testStorageDir, loaded);
+	        }
 
-        scenarios.clear();
-        scenarios.putAll(loaded);
+	        scenarios.clear();
+	        scenarios.putAll(loaded);
 
         long available = loaded.values().stream().filter(record -> !record.defunct()).count();
         logger.info("Loaded {} scenario(s) from {}{} ({} available)",
@@ -221,25 +224,28 @@ public class ScenarioService {
         }
     }
 
-    public synchronized List<String> listBundleFolders() throws IOException {
-        Files.createDirectories(bundleRootDir);
-        Set<Path> scenarioRoots = scenarioBundleRoots();
-        List<String> folders = new ArrayList<>();
-        try (Stream<Path> stream = Files.walk(bundleRootDir)) {
-            for (Path path : (Iterable<Path>) stream::iterator) {
-                if (!Files.isDirectory(path)) {
-                    continue;
-                }
-                Path normalized = path.toAbsolutePath().normalize();
-                if (normalized.equals(bundleRootDir.toAbsolutePath().normalize())) {
-                    continue;
-                }
-                if (isUnderAnyScenarioRoot(normalized, scenarioRoots)) {
-                    continue;
-                }
-                String rel = bundleRootDir.toAbsolutePath().normalize().relativize(normalized).toString().replace('\\', '/');
-                if (!rel.isBlank()) {
-                    folders.add(rel);
+	    public synchronized List<String> listBundleFolders() throws IOException {
+	        Files.createDirectories(bundleRootDir);
+	        Set<Path> scenarioRoots = scenarioBundleRoots();
+	        List<String> folders = new ArrayList<>();
+	        try (Stream<Path> stream = Files.walk(bundleRootDir)) {
+	            for (Path path : (Iterable<Path>) stream::iterator) {
+	                if (!Files.isDirectory(path)) {
+	                    continue;
+	                }
+	                Path normalized = path.toAbsolutePath().normalize();
+	                if (normalized.equals(bundleRootDir.toAbsolutePath().normalize())) {
+	                    continue;
+	                }
+	                if (isReservedWorkspaceDirectory(normalized)) {
+	                    continue;
+	                }
+	                if (isUnderAnyScenarioRoot(normalized, scenarioRoots)) {
+	                    continue;
+	                }
+	                String rel = bundleRootDir.toAbsolutePath().normalize().relativize(normalized).toString().replace('\\', '/');
+	                if (!rel.isBlank()) {
+	                    folders.add(rel);
                 }
             }
         }
@@ -302,34 +308,37 @@ public class ScenarioService {
         reload();
     }
 
-    private Path resolveBundleFolder(String folderPath, boolean allowRoot) {
-        String trimmed = folderPath == null ? "" : folderPath.trim();
-        if (trimmed.isEmpty()) {
-            if (!allowRoot) {
-                throw new IllegalArgumentException("Folder path must not be empty");
-            }
-            return bundleRootDir.toAbsolutePath().normalize();
-        }
-        if (trimmed.startsWith("/") || trimmed.contains("..")) {
-            throw new IllegalArgumentException("Invalid folder path");
-        }
-        Path resolved = bundleRootDir.toAbsolutePath().normalize();
-        for (String raw : trimmed.split("/")) {
-            String segment = raw.trim();
-            if (segment.isEmpty() || segment.equals(".") || segment.equals("..")) {
-                throw new IllegalArgumentException("Invalid folder path");
-            }
-            if (!segment.matches("[a-zA-Z0-9._-]+")) {
-                throw new IllegalArgumentException("Invalid folder path segment '%s'".formatted(segment));
-            }
-            resolved = resolved.resolve(segment);
-        }
-        Path normalized = resolved.normalize();
-        if (!normalized.startsWith(bundleRootDir.toAbsolutePath().normalize())) {
-            throw new IllegalArgumentException("Invalid folder path");
-        }
-        return normalized;
-    }
+	    private Path resolveBundleFolder(String folderPath, boolean allowRoot) {
+	        String trimmed = folderPath == null ? "" : folderPath.trim();
+	        if (trimmed.isEmpty()) {
+	            if (!allowRoot) {
+	                throw new IllegalArgumentException("Folder path must not be empty");
+	            }
+	            return bundleRootDir.toAbsolutePath().normalize();
+	        }
+	        if (trimmed.startsWith("/") || trimmed.contains("..")) {
+	            throw new IllegalArgumentException("Invalid folder path");
+	        }
+	        Path resolved = bundleRootDir.toAbsolutePath().normalize();
+	        for (String raw : trimmed.split("/")) {
+	            String segment = raw.trim();
+	            if (segment.isEmpty() || segment.equals(".") || segment.equals("..")) {
+	                throw new IllegalArgumentException("Invalid folder path");
+	            }
+	            if (!segment.matches("[a-zA-Z0-9._-]+")) {
+	                throw new IllegalArgumentException("Invalid folder path segment '%s'".formatted(segment));
+	            }
+	            resolved = resolved.resolve(segment);
+	        }
+	        Path normalized = resolved.normalize();
+	        if (!normalized.startsWith(bundleRootDir.toAbsolutePath().normalize())) {
+	            throw new IllegalArgumentException("Invalid folder path");
+	        }
+	        if (isReservedWorkspaceDirectory(normalized)) {
+	            throw new IllegalArgumentException("Folder path is reserved");
+	        }
+	        return normalized;
+	    }
 
     private Set<Path> scenarioBundleRoots() {
         Set<Path> roots = new LinkedHashSet<>();
@@ -342,19 +351,33 @@ public class ScenarioService {
         return roots;
     }
 
-    private boolean isUnderAnyScenarioRoot(Path path, Set<Path> scenarioRoots) {
-        if (path == null || scenarioRoots == null || scenarioRoots.isEmpty()) {
-            return false;
-        }
-        Path current = path.toAbsolutePath().normalize();
-        while (current != null && current.startsWith(bundleRootDir.toAbsolutePath().normalize())) {
-            if (scenarioRoots.contains(current)) {
-                return true;
-            }
-            current = current.getParent();
-        }
-        return false;
-    }
+	    private boolean isUnderAnyScenarioRoot(Path path, Set<Path> scenarioRoots) {
+	        if (path == null || scenarioRoots == null || scenarioRoots.isEmpty()) {
+	            return false;
+	        }
+	        Path current = path.toAbsolutePath().normalize();
+	        while (current != null && current.startsWith(bundleRootDir.toAbsolutePath().normalize())) {
+	            if (scenarioRoots.contains(current)) {
+	                return true;
+	            }
+	            current = current.getParent();
+	        }
+	        return false;
+	    }
+
+	    private boolean isReservedWorkspaceDirectory(Path path) {
+	        if (path == null) {
+	            return false;
+	        }
+	        Path normalized = path.toAbsolutePath().normalize();
+	        Path testRoot = testStorageDir.toAbsolutePath().normalize();
+	        if (normalized.startsWith(testRoot)) {
+	            return true;
+	        }
+	        Path root = bundleRootDir.toAbsolutePath().normalize();
+	        Path runtimeRoot = runtimeRootDir != null ? runtimeRootDir.toAbsolutePath().normalize() : null;
+	        return runtimeRoot != null && runtimeRoot.startsWith(root) && normalized.startsWith(runtimeRoot);
+	    }
 
     private boolean determineDefunct(Scenario scenario) {
         String scenarioId = scenario.getId();
@@ -655,31 +678,44 @@ public class ScenarioService {
         }
     }
 
-    private void loadFromBundles(Path bundleRoot, Map<String, ScenarioRecord> target) throws IOException {
-        if (!Files.isDirectory(bundleRoot)) {
-            return;
-        }
-        try (Stream<Path> stream = Files.walk(bundleRoot)) {
-            for (Path path : (Iterable<Path>) stream::iterator) {
-                if (!Files.isRegularFile(path)) {
-                    continue;
-                }
-                String name = path.getFileName().toString();
-                if (!name.equals("scenario.yaml")
-                    && !name.equals("scenario.yml")
-                    && !name.equals("scenario.json")) {
-                    continue;
-                }
-                Format format = detectFormat(path);
-                Scenario scenario = read(path, format);
-                ScenarioRecord record = recordForLoaded(scenario, format, path, path.getParent());
-                ScenarioRecord previous = target.put(scenario.getId(), record);
-                if (previous != null) {
-                    logger.warn("Duplicate scenario id '{}' found while loading {}; keeping latest", scenario.getId(), path);
-                }
-            }
-        }
-    }
+	    private void loadFromBundles(Path bundleRoot, Map<String, ScenarioRecord> target) throws IOException {
+	        if (!Files.isDirectory(bundleRoot)) {
+	            return;
+	        }
+	        Path normalizedRoot = bundleRoot.toAbsolutePath().normalize();
+	        Path normalizedStorageDir = storageDir.toAbsolutePath().normalize();
+	        Path normalizedTestDir = testStorageDir.toAbsolutePath().normalize();
+	        Path normalizedRuntimeRoot = runtimeRootDir.toAbsolutePath().normalize();
+	        boolean isMainScan = normalizedRoot.equals(normalizedStorageDir);
+	        boolean runtimeUnderRoot = normalizedRuntimeRoot.startsWith(normalizedRoot);
+	        try (Stream<Path> stream = Files.walk(bundleRoot)) {
+	            for (Path path : (Iterable<Path>) stream::iterator) {
+	                Path normalized = path.toAbsolutePath().normalize();
+	                if (runtimeUnderRoot && normalized.startsWith(normalizedRuntimeRoot)) {
+	                    continue;
+	                }
+	                if (isMainScan && normalized.startsWith(normalizedTestDir)) {
+	                    continue;
+	                }
+	                if (!Files.isRegularFile(path)) {
+	                    continue;
+	                }
+	                String name = path.getFileName().toString();
+	                if (!name.equals("scenario.yaml")
+	                    && !name.equals("scenario.yml")
+	                    && !name.equals("scenario.json")) {
+	                    continue;
+	                }
+	                Format format = detectFormat(path);
+	                Scenario scenario = read(path, format);
+	                ScenarioRecord record = recordForLoaded(scenario, format, path, path.getParent());
+	                ScenarioRecord previous = target.put(scenario.getId(), record);
+	                if (previous != null) {
+	                    logger.warn("Duplicate scenario id '{}' found while loading {}; keeping latest", scenario.getId(), path);
+	                }
+	            }
+	        }
+	    }
 
     private Path pathFor(String id, Format format) {
         String fileName = sanitize(id) + (format == Format.JSON ? ".json" : ".yaml");
