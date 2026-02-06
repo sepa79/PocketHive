@@ -3,8 +3,9 @@
 All notable changes to this project will be documented in this file.
 
 ## [0.15.2]
-Timestamp: 2026-02-06T15:16:08Z
+Timestamp: 2026-02-06T17:18:32Z
 
+- Worker SDK: canonicalise `config-update` payload keys (kebab/snake/camel case) so overrides like `baseUrl` are reliably applied (prevents accidental fallback to HTTP defaults when sending HTTPS endpoints).
 - Scenarios: load bundle scenarios from `scenarios/**` (no more `scenarios/bundles`), with `scenarios/e2e/**` gated by `scenarios.show-test`.
 - Scenarios: group TCP demo scenarios under `scenarios/tcp/**` (keeps the main list smaller; E2E TCP stays in `scenarios/e2e/**`).
 - Scenario Manager: include `folderPath` in `/api/templates` so UIs can show a folder tree.
@@ -20,7 +21,6 @@ Timestamp: 2026-02-05T19:26:25Z
 - Orchestrator: harden controller status ingestion against illegal lifecycle transitions; allow `drain=0` for debug-tap reads (metadata-only).
 - UI v2 (Debug taps): improve tap viewer UX (stable status area, better refresh/pull semantics, collapsible envelope/steps/raw).
 - UI v2 (Hive): move tap controls to selected-worker details and add `ioName` dropdowns for multi-IO workers (buttons disabled when no in/out).
-
 ## [0.15.0]
 - Docs: define scenario `topology` and logical ports in the scenario contract to support UI graph authoring.
 - Build: remove duplicate Spring Boot plugin declaration in `tcp-mock-server` and pin the plugin version.

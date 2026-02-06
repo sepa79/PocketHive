@@ -20,6 +20,7 @@ import io.pockethive.worker.sdk.config.RedisSequenceConfiguration;
 import io.pockethive.worker.sdk.config.WorkerCapability;
 import io.pockethive.worker.sdk.config.WorkerInputType;
 import io.pockethive.worker.sdk.config.WorkerOutputType;
+import io.pockethive.worker.sdk.config.ConfigKeyCanonicalizer;
 import io.pockethive.worker.sdk.templating.TemplateRenderer;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -360,12 +361,13 @@ public final class WorkerControlPlaneRuntime {
                 templateRenderer.resetSeededSelections();
             }
             Map<String, Object> filteredUpdate = filtered.values();
+            Map<String, Object> canonicalUpdate = ConfigKeyCanonicalizer.canonicalise(filteredUpdate);
             boolean previousEnabled = state.enabled();
             try {
                 ConfigMerger.ConfigMergeResult mergeResult = configMerger.merge(
                     state.definition(),
                     state.rawConfig(),
-                    filteredUpdate,
+                    canonicalUpdate,
                     patch.resetRequested()
                 );
                 Boolean enabled = command.enabled();
@@ -375,7 +377,7 @@ public final class WorkerControlPlaneRuntime {
                         state.definition().role(),
                         previousEnabled,
                         enabled,
-                        filteredUpdate);
+                        canonicalUpdate);
                 }
                 state.updateConfig(mergeResult.typedConfig(), mergeResult.replaced(), enabled);
                 state.updateRawConfig(mergeResult.rawConfig());
