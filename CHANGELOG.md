@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 Timestamp: 2026-02-03T14:27:54Z
 
+## [0.14.23] - 2026-02-06
+Timestamp: 2026-02-06T18:17:37Z
+
+- Worker SDK: canonicalise `config-update` payload keys (kebab/snake/camel case) so overrides like `baseUrl` are reliably applied (prevents accidental fallback to HTTP defaults when sending HTTPS endpoints).
+
 ## [0.14.22] - 2026-02-03
 Timestamp: 2026-02-03T14:27:54Z
 
