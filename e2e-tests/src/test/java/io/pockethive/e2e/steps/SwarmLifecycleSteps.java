@@ -905,12 +905,12 @@ public class SwarmLifecycleSteps {
                 if (!node.has("path") || !node.has("method") || !node.has("headers") || !node.has("body")) {
                   return false;
                 }
-                JsonNode bodyNode = node.path("body");
-                String bodyText = bodyNode.isTextual() ? bodyNode.asText("") : bodyNode.toString();
-                if (bodyText.isBlank() || bodyText.contains("{{")) {
+                JsonNode variablesBodyNode = node.path("body");
+                String variablesBodyText = variablesBodyNode.isTextual() ? variablesBodyNode.asText("") : variablesBodyNode.toString();
+                if (variablesBodyText.isBlank() || variablesBodyText.contains("{{")) {
                   return false;
                 }
-                JsonNode rendered = bodyNode.isTextual() ? objectMapper.readTree(bodyText) : bodyNode;
+                JsonNode rendered = variablesBodyNode.isTextual() ? objectMapper.readTree(variablesBodyText) : variablesBodyNode;
                 return rendered.path("customerId").asText("").equals("CUST-FR-A")
                     && rendered.path("loopCount").asInt(-1) == 7
                     && rendered.path("loopPlusOne").asInt(-1) == 8
