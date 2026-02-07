@@ -68,7 +68,7 @@ Bee fields (see `common/swarm-model/src/main/java/io/pockethive/swarm/model/Bee.
 
 - `role` (string, required)
   - Logical role name, e.g. `generator`, `processor`, `moderator`,
-    `postprocessor`, `http-builder`.
+    `postprocessor`, `request-builder`.
 - `id` (string, optional)
   - Stable identifier used by `topology.edges[].from|to.beeId`. Required if
     the scenario declares `topology`.

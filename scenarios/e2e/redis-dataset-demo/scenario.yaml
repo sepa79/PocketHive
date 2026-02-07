@@ -81,12 +81,11 @@ template:
         out:
           out: http-build
 
-    - role: http-builder
-      image: http-builder:latest
+    - role: request-builder
+      image: request-builder:latest
       config:
-        worker:
-          templateRoot: /app/scenario/http-templates
-          serviceId: default
+        templateRoot: /app/scenario/http-templates
+        serviceId: default
       work:
         in:
           in: http-build

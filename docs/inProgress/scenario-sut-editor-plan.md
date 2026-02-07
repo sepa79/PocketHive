@@ -97,7 +97,7 @@ intended to be edited by humans and AI directly when needed.
 
 - **Nodes**
   - One node per bee in `template.bees[]`:
-    - label: `role` (generator, moderator, processor, http-builder, postprocessor, …)  
+    - label: `role` (generator, moderator, processor, request-builder, postprocessor, …)  
     - icon hints for role category (input, processor, output).
   - Optional “SUT lane” showing the chosen `SutEnvironment` and its endpoints for this swarm.
 
