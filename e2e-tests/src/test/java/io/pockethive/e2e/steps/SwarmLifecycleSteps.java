@@ -905,11 +905,12 @@ public class SwarmLifecycleSteps {
                 if (!node.has("path") || !node.has("method") || !node.has("headers") || !node.has("body")) {
                   return false;
                 }
-                String body = node.path("body").asText("");
-                if (body.isBlank() || body.contains("{{")) {
+                JsonNode bodyNode = node.path("body");
+                String bodyText = bodyNode.isTextual() ? bodyNode.asText("") : bodyNode.toString();
+                if (bodyText.isBlank() || bodyText.contains("{{")) {
                   return false;
                 }
-                JsonNode rendered = objectMapper.readTree(body);
+                JsonNode rendered = bodyNode.isTextual() ? objectMapper.readTree(bodyText) : bodyNode;
                 return rendered.path("customerId").asText("").equals("CUST-FR-A")
                     && rendered.path("loopCount").asInt(-1) == 7
                     && rendered.path("loopPlusOne").asInt(-1) == 8
@@ -1110,12 +1111,13 @@ public class SwarmLifecycleSteps {
       assertEquals("application/json", headerValue(headersNode, "content-type"),
           "HTTP request should advertise JSON content type");
 
-      String requestBody = requestEnvelope.path("body").asText(null);
-      assertNotNull(requestBody, "HTTP request body was empty");
+      JsonNode bodyNode = requestEnvelope.path("body");
+      assertFalse(bodyNode.isMissingNode() || bodyNode.isNull(), "HTTP request body was empty");
+      String requestBody = bodyNode.isTextual() ? bodyNode.asText("") : bodyNode.toString();
       assertFalse(requestBody.contains("{{"),
           () -> "HTTP request body appears to contain unrendered templates: " + requestBody);
 
-      JsonNode requestBodyNode = parseJsonNode(requestBody);
+      JsonNode requestBodyNode = bodyNode.isTextual() ? parseJsonNode(requestBody) : bodyNode;
       assertNotNull(requestBodyNode, "HTTP request body was not valid JSON: " + requestBody);
 
       if (datasetPayload == null) {
