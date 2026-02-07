@@ -59,7 +59,7 @@ PocketHive splits the control plane into **managers** (orchestrator + swarm cont
 - Apply `signal.config-update.{swarmId}.{role}.{instance}` (`data.enabled: true|false`) to control **workload** state only while keeping control listeners responsive.
 - Runtime behaviour, worker interfaces, and adoption guidance are covered in the [Worker SDK quick start](sdk/worker-sdk-quickstart.md).
 
-### 2.3 HTTP Builder worker
+### 2.3 Request Builder worker
 
 - Optional worker that sits between **Data Providers** (or other producers) and the **processor** in the work topology.
 - **Input:** generic `WorkItem` from RabbitMQ with:

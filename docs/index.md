@@ -18,7 +18,7 @@ by the UI under `/docs/...` as part of the runtime image.
 - `docs/scenarios/SCENARIO_CONTRACT.md` – canonical scenario YAML
   contract and mapping to `SwarmTemplate` / `SwarmPlan`.
 - `docs/scenarios/SCENARIO_PATTERNS.md` – real e2e scenarios and
-  patterns (REST, Redis dataset, guards, HTTP Builder).
+  patterns (REST, Redis dataset, guards, Request Builder).
 - `docs/scenarios/SCENARIO_TEMPLATING.md` – Pebble + SpEL helpers and
   the scenario templating CLI.
 
@@ -58,6 +58,6 @@ by the UI under `/docs/...` as part of the runtime image.
 - `docs/spec/asyncapi.yaml` – messaging contract (AsyncAPI).
 - `docs/docs.html` – simple HTML viewer for the AsyncAPI spec.
 - `tools/scenario-templating-check` – CLI for validating generator and
-  HTTP Builder templates used in scenarios.
+  Request Builder templates used in scenarios.
 - `tools/mcp-orchestrator-debug` – MCP client for driving Orchestrator
   from tools/IDEs.

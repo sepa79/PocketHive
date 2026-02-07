@@ -387,7 +387,7 @@ export default function ComponentDetail({ component, onClose }: Props) {
         }
       }
     }
-    // HTTP workers (processor, http-builder): show SUT binding if present
+    // HTTP workers: show SUT binding if present
     if (HTTP_WORKER_ROLES.has(normalizedRole)) {
       const swarmSummary = findSwarm(component.swarmId ?? null)
       if (swarmSummary?.sutId) {

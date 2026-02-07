@@ -126,8 +126,7 @@ export default function ComponentList({
         const errored = Boolean(c.lastErrorAt)
         const swarm = findSwarm(c.swarmId ?? null)
         const sutId = swarm?.sutId?.trim()
-        const showSutBadge =
-          sutId && (normalizedRole === 'processor' || normalizedRole === 'http-builder')
+        const showSutBadge = sutId && normalizedRole === 'processor'
         const connections = connectionMap.get(c.id)
         const incomingHighlight = highlight.incoming.has(c.id)
         const outgoingHighlight = highlight.outgoing.has(c.id)

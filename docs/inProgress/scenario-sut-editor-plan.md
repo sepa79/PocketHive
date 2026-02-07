@@ -122,7 +122,7 @@ intended to be edited by humans and AI directly when needed.
     - env card + endpoints from SUT registry.
 
 - [ ] **SUT binding via drag‑and‑drop**
-  - [ ] Allow dragging an endpoint node (e.g. `default`) onto a HTTP‑aware worker (processor, HTTP Builder).  
+  - [ ] Allow dragging an endpoint node (e.g. `default`) onto a HTTP‑aware worker (processor, Request Builder).  
   - [ ] On drop, patch the worker config:
     - set / update `baseUrl` to `{{ sut.endpoints['<endpointId>'].baseUrl }}` or
       `{{ sut.endpoints['<endpointId>'].baseUrl }}/api/...`.  

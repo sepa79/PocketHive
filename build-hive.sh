@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}"
 
-ALL_SERVICES=(rabbitmq log-aggregator scenario-manager orchestrator tcp-mock-server ui ui-v2 prometheus grafana loki wiremock pushgateway redis redis-commander swarm-controller generator http-builder request-builder http-sequence moderator processor postprocessor trigger)
+ALL_SERVICES=(rabbitmq log-aggregator scenario-manager orchestrator tcp-mock-server ui ui-v2 prometheus grafana loki wiremock pushgateway redis redis-commander swarm-controller generator request-builder http-sequence moderator processor postprocessor trigger)
 declare -A DURATIONS=()
 TIMING_ORDER=(clean build_base maven_package stage_artifacts docker_build_workers docker_build compose_up restart)
 BUILD_START_TIME=0
@@ -15,7 +15,6 @@ JAR_MODULES=(
   tcp-mock-server
   swarm-controller-service
   generator-service
-  http-builder-service
   request-builder-service
   http-sequence-service
   moderator-service
@@ -31,7 +30,6 @@ declare -A MODULE_TO_SERVICE=(
   ["tcp-mock-server"]="tcp-mock-server"
   ["swarm-controller-service"]="swarm-controller"
   ["generator-service"]="generator"
-  ["http-builder-service"]="http-builder"
   ["request-builder-service"]="request-builder"
   ["http-sequence-service"]="http-sequence"
   ["moderator-service"]="moderator"
@@ -47,7 +45,6 @@ declare -A SERVICE_TO_MODULE=(
   ["tcp-mock-server"]="tcp-mock-server"
   ["swarm-controller"]="swarm-controller-service"
   ["generator"]="generator-service"
-  ["http-builder"]="http-builder-service"
   ["request-builder"]="request-builder-service"
   ["http-sequence"]="http-sequence-service"
   ["moderator"]="moderator-service"
@@ -210,7 +207,7 @@ clean_stack() {
     echo "Pruning local PocketHive images..."
     # Target only images built by this repo: core services and bees.
     mapfile -t ph_images < <(docker images --format '{{.Repository}} {{.ID}}' | awk '
-      $1 ~ /^(orchestrator|scenario-manager|log-aggregator|tcp-mock-server|ui|swarm-controller|generator|http-builder|request-builder|http-sequence|moderator|processor|postprocessor|trigger|pockethive-)/ { print $2 }')
+      $1 ~ /^(orchestrator|scenario-manager|log-aggregator|tcp-mock-server|ui|swarm-controller|generator|request-builder|http-sequence|moderator|processor|postprocessor|trigger|pockethive-)/ { print $2 }')
     for img in "${ph_images[@]}"; do
       if [[ -n "$img" ]]; then
         echo " - Removing image ${img}"
@@ -344,10 +341,6 @@ build_worker_images() {
       generator-service)
         image="generator:latest"
         target="generator"
-        ;;
-      http-builder-service)
-        image="http-builder:latest"
-        target="http-builder"
         ;;
       request-builder-service)
         image="request-builder:latest"

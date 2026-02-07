@@ -6,7 +6,7 @@ This document explains the available helpers and patterns.
 
 All templating is executed by `TemplateRenderer` / `PebbleTemplateRenderer`
 in the worker SDK, so behaviour is consistent across Generator,
-TemplateInterceptor, HTTP Builder, and other components.
+TemplateInterceptor, Request Builder, and other components.
 
 ## Template context
 
@@ -318,10 +318,10 @@ Common JSON Pointer patterns:
 
 Note: `#json_path` expects a JSON **string** as first argument, so use `workItem.payload()` not `payload`.
 
-## HTTP Builder templates
+## Request Builder templates
 
-HTTP Builder loads templates from YAML or JSON files under the configured
-`templateRoot` (for example `scenarios/e2e/redis-dataset-demo/templates/http/default/*.yaml`).
+Request Builder loads templates from YAML or JSON files under the configured
+`templateRoot` (for example `scenarios/e2e/redis-dataset-demo/http-templates/*.yaml`).
 Each template can contain Pebble expressions in `pathTemplate`, `method`,
 `bodyTemplate` and header values.
 
@@ -344,7 +344,7 @@ bodyTemplate: |
   </soapEnvelope>
 ```
 
-When HTTP Builder runs:
+When Request Builder runs:
 
 - It resolves `serviceId`/`callId` to a template file.
 - Renders the templates using the WorkItem context from upstream
@@ -375,7 +375,7 @@ Behaviour:
 - Locates the generator bee and renders its `worker.message` templates
   with a sample WorkItem.
 - Optionally (`--check-http-templates`):
-  - Loads HTTP Builder templates from the default root (or
+  - Loads Request Builder templates from the default root (or
     `--template-root`).
   - Finds all `x-ph-call-id` usages in the scenario.
   - Ensures there is a matching template for every callId.
@@ -391,4 +391,4 @@ anything fails to render or any callId is missing.
 - Only the listed helpers are available; attempts to access anything
   else will fail.
 - Keep templating logic small and focused; heavy test logic should live
-  in workers or HTTP Builder templates, not SpEL expressions.
+  in workers or Request Builder templates, not SpEL expressions.

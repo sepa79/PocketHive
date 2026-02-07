@@ -1,7 +1,7 @@
 # Scenario Bundle Runtime — Plan
 
 > Status: in progress  
-> Scope: Scenario Manager, Swarm Controller, HTTP Builder, Hive UI (no changes to worker JSON contracts).
+> Scope: Scenario Manager, Swarm Controller, Request Builder, Hive UI (no changes to worker JSON contracts).
 
 This plan introduces a **directory‑based scenario bundle** that keeps all
 scenario assets together (scenario YAML, SUTs, HTTP templates, datasets),
@@ -30,7 +30,7 @@ keeping volumes explicit and plan‑driven (NFF).
 - **Volume wiring is explicit**  
   - Swarm Controller passes a shared host path into bees via
     `config.docker.volumes`.  
-- Worker configs refer only to container paths (e.g. `/app/scenario/templates/http`);
+- Worker configs refer only to container paths (e.g. `/app/scenario/http-templates`);
     there are no implicit host defaults or fallbacks.
 
 - **Download/upload supported**  
@@ -109,10 +109,10 @@ When starting a swarm from a scenario:
         the same runtime dir without leaking stale files).
 
 - [x] **Enrich SwarmPlan with volume + config paths**
-  - [x] For each HTTP Builder bee (and other workers as needed):
+- [x] For each Request Builder bee (and other workers as needed):
     - [x] Append a `config.docker.volumes` entry  
           `${runtime-root}/${swarmId}:/app/scenario:ro`.  
-    - [x] Set `config.worker.templateRoot: /app/scenario/templates/http`
+    - [x] Set `config.templateRoot: /app/scenario/http-templates`
           in the canonical Redis dataset demo bundle.
   - [ ] For bees that need datasets (e.g. Redis, file inputs), map their config to
         subpaths under `/app/scenario/datasets`.  
