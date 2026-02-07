@@ -38,26 +38,28 @@ public class OAuth2PasswordGrantStrategy implements AuthStrategy {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
         
-        MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
-        body.add("grant_type", "password");
-        body.add("username", username);
-        body.add("password", password);
-        if (scope != null) {
-            body.add("scope", scope);
-        }
-        
-        HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(body, headers);
-        Map<String, Object> response = restTemplate.postForObject(tokenUrl, request, Map.class);
-        if (response == null || !response.containsKey("access_token")) {
-            throw new IllegalStateException("OAuth2 response missing access_token");
-        }
+	        MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
+	        body.add("grant_type", "password");
+	        body.add("username", username);
+	        body.add("password", password);
+	        if (scope != null) {
+	            body.add("scope", scope);
+	        }
+	        
+	        HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(body, headers);
+	        Map<?, ?> response = restTemplate.postForObject(tokenUrl, request, Map.class);
+	        if (response == null || !response.containsKey("access_token")) {
+	            throw new IllegalStateException("OAuth2 response missing access_token");
+	        }
 
-        String accessToken = response.get("access_token").toString();
-        String tokenType = response.getOrDefault("token_type", "Bearer").toString();
-        int expiresIn = ((Number) response.getOrDefault("expires_in", 3600)).intValue();
-        long now = Instant.now().getEpochSecond();
-        long expiresAt = now + expiresIn;
-        long refreshAt = expiresAt - config.refreshBuffer();
+	        String accessToken = String.valueOf(response.get("access_token"));
+	        Object tokenTypeObj = response.get("token_type");
+	        String tokenType = tokenTypeObj == null ? "Bearer" : tokenTypeObj.toString();
+	        Object expiresObj = response.get("expires_in");
+	        int expiresIn = expiresObj instanceof Number number ? number.intValue() : 3600;
+	        long now = Instant.now().getEpochSecond();
+	        long expiresAt = now + expiresIn;
+	        long refreshAt = expiresAt - config.refreshBuffer();
 
         Map<String, String> refreshConfig = new HashMap<>(config.properties());
         Map<String, Object> metadata = Map.of(

@@ -1,6 +1,5 @@
 package io.pockethive.worker.sdk.config;
 
-import io.pockethive.worker.sdk.config.WorkerInputType;
 import java.lang.reflect.Constructor;
 import java.util.Locale;
 import java.util.Objects;

@@ -5,7 +5,6 @@ import io.pockethive.control.ControlScope;
 import io.pockethive.journal.postgres.BufferedPostgresJournalWriter;
 import io.pockethive.journal.postgres.PostgresJournalBackpressureEvents;
 import io.pockethive.journal.postgres.PostgresJournalRecord;
-import io.pockethive.swarmcontroller.runtime.SwarmJournal.SwarmJournalEntry;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;

@@ -168,7 +168,7 @@ public class SmokeSteps {
           .block(HTTP_TIMEOUT);
       return new HttpProbeResult(target, entity.getStatusCode().value(), entity.getBody());
     } catch (WebClientResponseException ex) {
-      return new HttpProbeResult(target, ex.getRawStatusCode(), ex.getResponseBodyAsString());
+      return new HttpProbeResult(target, ex.getStatusCode().value(), ex.getResponseBodyAsString());
     } catch (Exception ex) {
       throw new IllegalStateException("Failed to call " + target, ex);
     }
@@ -188,7 +188,7 @@ public class SmokeSteps {
           .block(HTTP_TIMEOUT);
       return new HttpProbeResult(target, entity.getStatusCode().value(), entity.getBody());
     } catch (WebClientResponseException ex) {
-      return new HttpProbeResult(target, ex.getRawStatusCode(), ex.getResponseBodyAsString());
+      return new HttpProbeResult(target, ex.getStatusCode().value(), ex.getResponseBodyAsString());
     } catch (Exception ex) {
       throw new IllegalStateException("Failed to query swarm state at " + target, ex);
     }

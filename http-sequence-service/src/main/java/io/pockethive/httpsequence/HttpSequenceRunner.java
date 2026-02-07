@@ -23,7 +23,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.LongAdder;
-import org.slf4j.Logger;
 
 final class HttpSequenceRunner {
 
@@ -66,7 +65,6 @@ final class HttpSequenceRunner {
     Objects.requireNonNull(config, "config");
 
     journeys.increment();
-    Logger log = context.logger();
     WorkerInfo info = context.info();
 
     Map<String, Object> payload = parsePayloadAsMap(seed.payload());

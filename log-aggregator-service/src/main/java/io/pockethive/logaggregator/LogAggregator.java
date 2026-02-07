@@ -130,7 +130,7 @@ public class LogAggregator {
           if(response.getStatusCode().is2xxSuccessful()) {
             return;
           }
-          throw new RestClientException("HTTP " + response.getStatusCodeValue() + ": "
+          throw new RestClientException("HTTP " + response.getStatusCode().value() + ": "
               + Objects.toString(response.getBody(), ""));
         }catch(RestClientException e){
           if(attempt==maxRetries){

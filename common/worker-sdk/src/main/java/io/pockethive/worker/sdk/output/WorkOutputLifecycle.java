@@ -1,6 +1,5 @@
 package io.pockethive.worker.sdk.output;
 
-import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

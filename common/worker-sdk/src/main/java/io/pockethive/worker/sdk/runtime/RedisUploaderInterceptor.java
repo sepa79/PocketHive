@@ -56,7 +56,6 @@ public final class RedisUploaderInterceptor implements WorkerInvocationIntercept
             return chain.proceed(context);
         }
 
-        String targetList = resolveTargetList(config, message, payload);
         WorkItem inbound = context.message();
         WorkItem result;
         if (config.phase == Phase.AFTER) {
@@ -119,7 +118,6 @@ public final class RedisUploaderInterceptor implements WorkerInvocationIntercept
         return sourceStep == SourceStep.FIRST ? firstPayload(item) : item.payload();
     }
 
-    @SuppressWarnings("unchecked")
     private static ResolvedConfig resolveConfig(Map<String, Object> rawConfig) {
         if (rawConfig == null || rawConfig.isEmpty()) {
             return null;

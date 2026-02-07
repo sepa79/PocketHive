@@ -4,7 +4,6 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.pockethive.control.ControlScope;
-import io.pockethive.manager.runtime.ManagerStatus;
 import io.pockethive.manager.scenario.ManagerRuntimeView;
 import io.pockethive.manager.scenario.Scenario;
 import io.pockethive.manager.scenario.ScenarioContext;

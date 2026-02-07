@@ -1,6 +1,5 @@
 package io.pockethive.swarmcontroller.runtime;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -19,10 +18,8 @@ import io.pockethive.swarmcontroller.config.SwarmControllerProperties.SwarmContr
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties.Traffic;
 import java.lang.reflect.Field;
 import java.time.Duration;
-import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.core.AmqpAdmin;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.boot.autoconfigure.amqp.RabbitProperties;
 
 /**

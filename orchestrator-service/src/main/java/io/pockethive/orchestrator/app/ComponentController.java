@@ -104,13 +104,6 @@ public class ComponentController {
         return role + ":" + instance;
     }
 
-    private static String requireText(String value, String field) {
-        if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException(field + " must not be blank");
-        }
-        return value.trim();
-    }
-
     private ResponseEntity<ControlResponse> accepted(String correlationId,
                                                       String idempotencyKey,
                                                       String swarmSegment,

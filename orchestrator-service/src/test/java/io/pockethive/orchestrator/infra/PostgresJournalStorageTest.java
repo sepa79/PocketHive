@@ -390,7 +390,6 @@ class PostgresJournalStorageTest {
     JournalPageResponse page = ctrl.journalPage("sw1", null, null, 10, "run-1", null).getBody();
     assertThat(page).isNotNull();
     assertThat(page.items()).hasSize(3);
-    @SuppressWarnings("unchecked")
     Map<String, Object> first = (Map<String, Object>) page.items().get(0);
     assertThat(first.get("runId")).isEqualTo("run-1");
     assertThat(first.get("raw")).isNull();

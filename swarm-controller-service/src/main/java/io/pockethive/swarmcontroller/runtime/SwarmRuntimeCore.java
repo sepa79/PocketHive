@@ -12,7 +12,6 @@ import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.docker.DockerContainerClient;
 import io.pockethive.manager.ports.Clock;
 import io.pockethive.manager.ports.ComputeAdapter;
-import io.pockethive.manager.runtime.ComputeAdapterType;
 import io.pockethive.manager.runtime.ManagerLifecycle;
 import io.pockethive.manager.runtime.ManagerRuntimeCore;
 import io.pockethive.manager.runtime.ManagerStatus;
@@ -39,7 +38,6 @@ import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import io.pockethive.swarmcontroller.infra.amqp.SwarmQueueMetrics;
 import io.pockethive.swarmcontroller.infra.docker.WorkloadProvisioner;
 import io.pockethive.swarmcontroller.QueueStats;
-import io.pockethive.swarmcontroller.QueuePropertyCoercion;
 import io.pockethive.swarmcontroller.SwarmLifecycleManager;
 import io.pockethive.swarmcontroller.scenario.TimelineScenarioObserver;
 import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory;
@@ -58,17 +56,12 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.OptionalLong;
-import java.util.Properties;
 import java.util.Set;
-import java.util.UUID;
-import java.util.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.amqp.core.AmqpAdmin;
 import org.springframework.amqp.core.TopicExchange;
-import org.springframework.amqp.rabbit.core.RabbitAdmin;
 import org.springframework.boot.autoconfigure.amqp.RabbitProperties;
 
 /**
@@ -890,7 +883,6 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
     }
   }
 
-  @SuppressWarnings("unchecked")
   private static List<String> resolveVolumes(Map<String, Object> config) {
     if (config == null || config.isEmpty()) {
       return List.of();
@@ -916,7 +908,6 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
     return result.isEmpty() ? List.of() : List.copyOf(result);
   }
 
-  @SuppressWarnings("unchecked")
   private static Map<String, Object> enrichConfigWithSut(Map<String, Object> config,
                                                          SutEnvironment sutEnvironment) {
     if (sutEnvironment == null || config == null || config.isEmpty()) {

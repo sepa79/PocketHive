@@ -37,8 +37,8 @@ public class StatusEnvelopeBuilder {
     private final Map<String, Object> context = new LinkedHashMap<>();
 
     private final List<String> publishes = new ArrayList<>();
-    private final Map<String, Object> workQueues = new LinkedHashMap<>();
-    private final Map<String, Object> controlQueues = new LinkedHashMap<>();
+    private final Map<String, List<String>> workQueues = new LinkedHashMap<>();
+    private final Map<String, List<String>> controlQueues = new LinkedHashMap<>();
     private final Map<String, Object> totals = new LinkedHashMap<>();
     private final Map<String, Object> queueStats = new LinkedHashMap<>();
     private final Map<String, Object> workIoState = new LinkedHashMap<>();
@@ -185,9 +185,9 @@ public class StatusEnvelopeBuilder {
         return this;
     }
 
-    private void add(Map<String, Object> target, String key, String... values) {
+    private void add(Map<String, List<String>> target, String key, String... values) {
         if (values != null && values.length > 0) {
-            List<String> list = (List<String>) target.computeIfAbsent(key, k -> new ArrayList<String>());
+            List<String> list = target.computeIfAbsent(key, k -> new ArrayList<>());
             for (String v : values) {
                 if (v != null && !v.isBlank()) list.add(v);
             }

@@ -1,5 +1,6 @@
 package io.pockethive.orchestrator.app;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.ControlScope;
 import java.time.Instant;
@@ -27,6 +28,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/journal")
 public class JournalController {
+
+  private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
 
   private static final Logger log = LoggerFactory.getLogger(JournalController.class);
 
@@ -419,19 +422,17 @@ public class JournalController {
     }
   }
 
-  @SuppressWarnings("unchecked")
   private Map<String, Object> parseJsonMap(String jsonText) {
     if (jsonText == null || jsonText.isBlank()) {
       return null;
     }
     try {
-      return json.readValue(jsonText, Map.class);
+      return json.readValue(jsonText, MAP_TYPE);
     } catch (Exception ex) {
       return null;
     }
   }
 
-  @SuppressWarnings("unchecked")
   private List<String> parseJsonStringList(String jsonText) {
     if (jsonText == null || jsonText.isBlank()) {
       return null;

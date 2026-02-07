@@ -144,13 +144,6 @@ public class SwarmManagerController {
         return new FanoutControlResponse(dispatches);
     }
 
-    private static String requireText(String value, String field) {
-        if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException(field + " must not be blank");
-        }
-        return value.trim();
-    }
-
     /**
      * Compute the control-plane routing key for a given swarm segment and controller instance.
      * <p>

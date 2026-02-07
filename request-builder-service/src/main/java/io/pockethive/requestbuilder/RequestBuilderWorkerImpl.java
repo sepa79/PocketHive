@@ -10,8 +10,6 @@ import io.pockethive.worker.sdk.auth.AuthConfig;
 import io.pockethive.worker.sdk.auth.AuthHeaderGenerator;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
 import io.pockethive.worker.sdk.config.WorkerCapability;
-import io.pockethive.worker.sdk.config.WorkerInputType;
-import io.pockethive.worker.sdk.config.WorkerOutputType;
 import io.pockethive.worker.sdk.templating.MessageBodyType;
 import io.pockethive.worker.sdk.templating.MessageTemplate;
 import io.pockethive.worker.sdk.templating.MessageTemplateRenderer;

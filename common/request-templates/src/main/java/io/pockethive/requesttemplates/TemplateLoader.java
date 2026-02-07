@@ -1,6 +1,7 @@
 package io.pockethive.requesttemplates;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -62,11 +63,10 @@ public final class TemplateLoader {
         return Map.copyOf(templates);
     }
 
-    @SuppressWarnings("unchecked")
     private TemplateDefinition parseTemplate(Path path, String defaultServiceId) {
         try {
             ObjectMapper mapper = selectMapper(path);
-            Map<String, Object> templateMap = mapper.readValue(path.toFile(), Map.class);
+            Map<String, Object> templateMap = mapper.readValue(path.toFile(), new TypeReference<>() {});
             String protocol = (String) templateMap.getOrDefault("protocol", "HTTP");
 
             String rawService = templateMap.get("serviceId") == null ? null : templateMap.get("serviceId").toString();
@@ -120,4 +120,3 @@ public final class TemplateLoader {
     public record LoadedTemplate(TemplateDefinition definition, Path sourcePath) {
     }
 }
-

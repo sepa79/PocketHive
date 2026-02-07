@@ -120,8 +120,6 @@ public record HttpSequenceWorkerConfig(
       samplePct = clamp01(samplePct);
       maxBodyBytes = maxBodyBytes <= 0 ? 256 * 1024 : maxBodyBytes;
       maxJourneyBytes = maxJourneyBytes <= 0 ? 1024 * 1024 : maxJourneyBytes;
-      includeHeaders = includeHeaders;
-      includeRequest = includeRequest;
       bodyPreviewBytes = bodyPreviewBytes < 0 ? 0 : bodyPreviewBytes;
       redisTtlSeconds = redisTtlSeconds <= 0 ? 120 : redisTtlSeconds;
     }

@@ -1,5 +1,6 @@
 package io.pockethive.orchestrator.app;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.ControlScope;
 import io.pockethive.orchestrator.domain.Swarm;
@@ -34,6 +35,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class SwarmJournalController {
     private static final Logger log = LoggerFactory.getLogger(SwarmJournalController.class);
     private static final String SCENARIOS_RUNTIME_ROOT = "scenarios-runtime";
+    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
 
     private final ObjectMapper json;
     private final JdbcTemplate jdbc;
@@ -371,8 +373,7 @@ public class SwarmJournalController {
                 continue;
             }
             try {
-                @SuppressWarnings("unchecked")
-                Map<String, Object> entry = json.readValue(trimmed, Map.class);
+                Map<String, Object> entry = json.readValue(trimmed, MAP_TYPE);
                 result.add(entry);
             } catch (Exception ex) {
                 log.warn("Skipping malformed journal line in {}: {}", journal, ex.getMessage());
@@ -865,13 +866,12 @@ public class SwarmJournalController {
         return List.copyOf(rows);
     }
 
-    @SuppressWarnings("unchecked")
     private Map<String, Object> parseJsonMap(String jsonText) {
         if (jsonText == null || jsonText.isBlank()) {
             return null;
         }
         try {
-            return json.readValue(jsonText, Map.class);
+            return json.readValue(jsonText, MAP_TYPE);
         } catch (Exception ex) {
             return null;
         }

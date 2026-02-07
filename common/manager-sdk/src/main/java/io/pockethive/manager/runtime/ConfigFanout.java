@@ -9,7 +9,6 @@ import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.manager.ports.ControlPlanePort;
 import io.pockethive.observability.ControlPlaneJson;
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;

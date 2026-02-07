@@ -1,5 +1,6 @@
 package io.pockethive.swarmcontroller.runtime;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.AlertMessage;
 import io.pockethive.control.CommandOutcome;
@@ -9,6 +10,8 @@ import java.util.Map;
 import java.util.Objects;
 
 public final class SwarmJournalEntries {
+
+  private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
 
   private SwarmJournalEntries() {
   }
@@ -149,9 +152,8 @@ public final class SwarmJournalEntries {
     );
   }
 
-  @SuppressWarnings("unchecked")
   private static Map<String, Object> asRaw(ObjectMapper mapper, Object value) {
-    return mapper.convertValue(value, Map.class);
+    return mapper.convertValue(value, MAP_TYPE);
   }
 
   private static String requireSwarmId(ControlScope scope, String label) {

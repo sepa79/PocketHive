@@ -1,5 +1,6 @@
 package io.pockethive.tools;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import io.pockethive.httpbuilder.HttpTemplateDefinition;
@@ -40,6 +41,7 @@ public final class ScenarioTemplateValidator {
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
     private static final ObjectMapper YAML_MAPPER = new ObjectMapper(new YAMLFactory());
+    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
 
     public static void main(String[] args) throws Exception {
         Arguments parsed = Arguments.parse(args);
@@ -241,30 +243,32 @@ public final class ScenarioTemplateValidator {
 
     private static Map<String, Object> loadYaml(Path path) throws IOException {
         String content = Files.readString(path);
-        @SuppressWarnings("unchecked")
-        Map<String, Object> map = new Yaml().load(content);
-        if (map == null) {
+        Object loaded = new Yaml().load(content);
+        if (loaded == null) {
             throw new IllegalArgumentException("Scenario file is empty: " + path);
         }
-        return map;
+        return asMap(loaded, "scenario");
     }
 
     private static Map<String, Object> loadContext(Path path) throws IOException {
         if (path == null) {
             return Map.of();
         }
-        @SuppressWarnings("unchecked")
-        Map<String, Object> map = MAPPER.readValue(path.toFile(), Map.class);
+        Map<String, Object> map = MAPPER.readValue(path.toFile(), MAP_TYPE);
         return map == null ? Map.of() : Map.copyOf(map);
     }
 
     private static Map<String, Object> asMap(Object node, String label) {
-        if (!(node instanceof Map<?, ?> m)) {
+        if (!(node instanceof Map<?, ?> raw)) {
             throw new IllegalArgumentException("Expected map at " + label);
         }
-        @SuppressWarnings("unchecked")
-        Map<String, Object> cast = (Map<String, Object>) m;
-        return cast;
+        Map<String, Object> out = new LinkedHashMap<>();
+        raw.forEach((key, value) -> {
+            if (key != null) {
+                out.put(key.toString(), value);
+            }
+        });
+        return out;
     }
 
     private static List<?> asList(Object node, String label) {

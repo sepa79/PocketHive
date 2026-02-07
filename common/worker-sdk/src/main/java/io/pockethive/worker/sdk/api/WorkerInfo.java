@@ -1,7 +1,5 @@
 package io.pockethive.worker.sdk.api;
 
-import java.util.Objects;
-
 /**
  * Describes the worker identity and routing metadata available via {@link WorkerContext#info()}.
  * See {@code docs/sdk/worker-sdk-quickstart.md} for examples of how the runtime populates this data.

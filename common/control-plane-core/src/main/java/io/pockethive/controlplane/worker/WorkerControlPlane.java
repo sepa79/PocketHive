@@ -31,16 +31,15 @@ public final class WorkerControlPlane {
         return consumer.consume(payload, routingKey, handler(listener));
     }
 
-    private ControlSignalHandler handler(WorkerSignalListener listener) {
-        return envelope -> {
-            WorkerSignalListener.WorkerSignalContext context =
-                new WorkerSignalListener.WorkerSignalContext(envelope, envelope.payload());
-            ControlSignal signal = envelope.signal();
-            String resolvedSignal = resolveSignalName(envelope);
-            if (resolvedSignal == null) {
-                listener.onUnsupported(context);
-                return;
-            }
+	    private ControlSignalHandler handler(WorkerSignalListener listener) {
+	        return envelope -> {
+	            WorkerSignalListener.WorkerSignalContext context =
+	                new WorkerSignalListener.WorkerSignalContext(envelope, envelope.payload());
+	            String resolvedSignal = resolveSignalName(envelope);
+	            if (resolvedSignal == null) {
+	                listener.onUnsupported(context);
+	                return;
+	            }
             switch (resolvedSignal) {
                 case "config-update" -> listener.onConfigUpdate(WorkerConfigCommand.from(envelope, envelope.payload(), objectMapper));
                 case "status-request" -> listener.onStatusRequest(new WorkerStatusRequest(envelope, envelope.payload()));

@@ -21,6 +21,7 @@ import org.apache.hc.client5.http.classic.HttpClient;
 import org.apache.hc.client5.http.classic.methods.HttpUriRequestBase;
 import org.apache.hc.core5.http.ClassicHttpResponse;
 import org.apache.hc.core5.http.Header;
+import org.apache.hc.core5.http.io.HttpClientResponseHandler;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.slf4j.Logger;
 
@@ -74,33 +75,41 @@ public class HttpProtocolHandler implements ProtocolHandler {
     long pacingMillis = 0L;
     try {
       pacingMillis = applyExecutionMode(config);
+      final long pacingMillisForHandler = pacingMillis;
       HttpClient client = selectClient(config);
       HttpUriRequestBase apacheRequest = new HttpUriRequestBase(method, target);
       headersNode.fields().forEachRemaining(entry -> apacheRequest.addHeader(entry.getKey(), entry.getValue().asText()));
       body.ifPresent(value -> apacheRequest.setEntity(new org.apache.hc.core5.http.io.entity.StringEntity(value, StandardCharsets.UTF_8)));
 
-      ClassicHttpResponse response = (ClassicHttpResponse) client.execute(apacheRequest);
-      long endMillis = clock.millis();
-      long totalDuration = Math.max(0L, endMillis - start);
-      long callDuration = Math.max(0L, totalDuration - pacingMillis);
-      long connectionLatency = Math.max(0L, pacingMillis);
-      int statusCode = response.getCode();
+      record CallOutcome(int statusCode, Map<String, List<String>> headers, String body, CallMetrics metrics) {
+      }
 
-      String responseBody = response.getEntity() == null ? "" : EntityUtils.toString(response.getEntity(), StandardCharsets.UTF_8);
-      logger.debug("HTTP RESPONSE {} {} -> {} latency={}ms body={}", method, target, statusCode, callDuration, responseBody);
+      HttpClientResponseHandler<CallOutcome> handler = response -> {
+        long endMillis = clock.millis();
+        long totalDuration = Math.max(0L, endMillis - start);
+        long callDuration = Math.max(0L, totalDuration - pacingMillisForHandler);
+        long connectionLatency = Math.max(0L, pacingMillisForHandler);
+        int statusCode = response.getCode();
 
-      boolean success = statusCode >= 200 && statusCode < 300;
-      CallMetrics metrics = success
-          ? CallMetrics.success(callDuration, connectionLatency, statusCode)
-          : CallMetrics.failure(callDuration, connectionLatency, statusCode);
-      metricsRecorder.record(metrics);
+        String responseBody = response.getEntity() == null ? "" : EntityUtils.toString(response.getEntity(), StandardCharsets.UTF_8);
+        logger.debug("HTTP RESPONSE {} {} -> {} latency={}ms body={}", method, target, statusCode, callDuration, responseBody);
 
+        boolean success = statusCode >= 200 && statusCode < 300;
+        CallMetrics metrics = success
+            ? CallMetrics.success(callDuration, connectionLatency, statusCode)
+            : CallMetrics.failure(callDuration, connectionLatency, statusCode);
+        metricsRecorder.record(metrics);
+
+        return new CallOutcome(statusCode, convertHeaders(response), responseBody, metrics);
+      };
+
+      CallOutcome outcome = client.execute(apacheRequest, handler);
       ObjectNode result = mapper.createObjectNode();
-      result.put("status", statusCode);
-      result.set("headers", mapper.valueToTree(convertHeaders(response)));
-      result.put("body", responseBody);
+      result.put("status", outcome.statusCode());
+      result.set("headers", mapper.valueToTree(outcome.headers()));
+      result.put("body", outcome.body());
 
-      WorkItem responseItem = ResponseBuilder.build(result, context.info(), metrics);
+      WorkItem responseItem = ResponseBuilder.build(result, context.info(), outcome.metrics());
       WorkItem updated = message.addStep(context.info(), responseItem.asString(), responseItem.stepHeaders());
       return updated.toBuilder().contentType(responseItem.contentType()).build();
     } catch (Exception ex) {

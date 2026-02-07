@@ -1,7 +1,6 @@
 package io.pockethive.tcpmock.handler;
 
 import io.pockethive.tcpmock.service.*;
-import io.pockethive.tcpmock.handler.Iso8583Handler;
 import io.pockethive.tcpmock.util.TcpMetrics;
 import io.pockethive.tcpmock.model.TcpRequest;
 import io.pockethive.tcpmock.model.ProcessedResponse;
@@ -14,7 +13,6 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ForkJoinPool;
-import java.util.regex.Pattern;
 
 @Component
 @io.netty.channel.ChannelHandler.Sharable

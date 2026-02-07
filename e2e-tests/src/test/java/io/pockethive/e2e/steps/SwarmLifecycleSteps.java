@@ -1529,48 +1529,6 @@ public class SwarmLifecycleSteps {
     return false;
   }
 
-  private boolean hasPositiveCounter(Map<String, Object> counters) {
-    if (counters == null || counters.isEmpty()) {
-      return false;
-    }
-    for (Object value : counters.values()) {
-      if (isPositive(value)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  private boolean isPositive(Object value) {
-    if (value instanceof Number number) {
-      return number.doubleValue() > 0;
-    }
-    if (value instanceof String text) {
-      try {
-        return Double.parseDouble(text) > 0;
-      } catch (NumberFormatException ex) {
-        return false;
-      }
-    }
-    if (value instanceof Map<?, ?> map) {
-      for (Object nested : map.values()) {
-        if (isPositive(nested)) {
-          return true;
-        }
-      }
-      return false;
-    }
-    if (value instanceof Iterable<?> iterable) {
-      for (Object element : iterable) {
-        if (isPositive(element)) {
-          return true;
-        }
-      }
-      return false;
-    }
-    return false;
-  }
-
   private String finalQueueName() {
     String suffix = finalQueueSuffix();
     return queueNameForSuffix(suffix);
@@ -2069,16 +2027,6 @@ public class SwarmLifecycleSteps {
         .filter(bee -> bee != null && bee.role() != null && roleMatches(role, bee.role()))
         .findFirst()
         .orElseThrow(() -> new AssertionError("No bee with role " + role + " in template"));
-  }
-
-  private Bee findBeeOptional(String role) {
-    if (template == null || template.bees() == null || role == null || role.isBlank()) {
-      return null;
-    }
-    return template.bees().stream()
-        .filter(bee -> bee != null && bee.role() != null && roleMatches(role, bee.role()))
-        .findFirst()
-        .orElse(null);
   }
 
   private String queueNameForSuffix(String suffix) {

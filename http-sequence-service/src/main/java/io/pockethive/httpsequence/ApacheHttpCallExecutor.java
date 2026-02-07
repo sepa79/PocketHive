@@ -42,13 +42,14 @@ final class ApacheHttpCallExecutor implements HttpCallExecutor {
     }
 
     try {
-      ClassicHttpResponse response = (ClassicHttpResponse) httpClient.execute(request);
-      int code = response.getCode();
-      String responseBody = response.getEntity() == null
-          ? ""
-          : EntityUtils.toString(response.getEntity(), StandardCharsets.UTF_8);
-      Map<String, java.util.List<String>> headers = toLowercaseHeaderMap(response);
-      return new HttpCallResult(code, headers, responseBody, null);
+      return httpClient.execute(request, response -> {
+        int code = response.getCode();
+        String responseBody = response.getEntity() == null
+            ? ""
+            : EntityUtils.toString(response.getEntity(), StandardCharsets.UTF_8);
+        Map<String, java.util.List<String>> headers = toLowercaseHeaderMap(response);
+        return new HttpCallResult(code, headers, responseBody, null);
+      });
     } catch (Exception ex) {
       return new HttpCallResult(-1, Map.of(), "", ex.toString());
     }
@@ -82,4 +83,3 @@ final class ApacheHttpCallExecutor implements HttpCallExecutor {
     return Map.copyOf(result);
   }
 }
-

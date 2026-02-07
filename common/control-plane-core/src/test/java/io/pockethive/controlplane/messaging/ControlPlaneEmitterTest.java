@@ -1,6 +1,5 @@
 package io.pockethive.controlplane.messaging;
 
-import static io.pockethive.controlplane.payload.JsonFixtureAssertions.ANY_VALUE;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;

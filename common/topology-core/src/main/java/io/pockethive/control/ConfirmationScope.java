@@ -1,7 +1,6 @@
 package io.pockethive.control;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import java.util.Objects;
 
 /**
  * Identifies the swarm/role/instance addressed by a confirmation.

@@ -28,14 +28,20 @@ import java.util.Set;
  */
 public final class ManagerRuntimeCore implements ManagerLifecycle {
 
+  @SuppressWarnings("unused")
   private final WorkTopologyPort topology;
+  @SuppressWarnings("unused")
   private final WorkloadPort workload;
+  @SuppressWarnings("unused")
   private final ControlPlanePort controlPlane;
   private final QueueStatsPort queueStats;
   private final MetricsPort metricsPort;
   private final Clock clock;
+  @SuppressWarnings("unused")
   private final String swarmId;
+  @SuppressWarnings("unused")
   private final String role;
+  @SuppressWarnings("unused")
   private final String instanceId;
 
   private final ReadinessTracker readinessTracker;

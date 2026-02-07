@@ -1,7 +1,6 @@
 package io.pockethive.swarmcontroller.infra.docker;
 
 import com.github.dockerjava.api.model.Bind;
-import com.github.dockerjava.api.model.HostConfig;
 import io.pockethive.docker.DockerContainerClient;
 import java.util.List;
 import java.util.Map;

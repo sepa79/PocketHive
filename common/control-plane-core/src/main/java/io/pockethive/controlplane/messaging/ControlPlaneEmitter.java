@@ -344,12 +344,11 @@ public final class ControlPlaneEmitter {
         }
     }
 
-    private void publishOutcomeFromReady(ReadyContext context) {
-        CommandOutcomePolicy.OutcomeRules rules = CommandOutcomePolicy.rulesFor(context.signal());
-        CommandState baseState = context.state();
-        String overrideStatus = CommandOutcomePolicy.isNotReadyStatus(baseState.status())
-            ? CommandOutcomePolicy.STATUS_NOT_READY
-            : null;
+	    private void publishOutcomeFromReady(ReadyContext context) {
+	        CommandState baseState = context.state();
+	        String overrideStatus = CommandOutcomePolicy.isNotReadyStatus(baseState.status())
+	            ? CommandOutcomePolicy.STATUS_NOT_READY
+	            : null;
         String status = CommandOutcomePolicy.resolveSuccessStatus(context.signal(), overrideStatus);
         CommandState state = new CommandState(status, baseState.enabled(), baseState.details());
         publishOutcome(context.signal(),

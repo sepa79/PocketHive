@@ -9,8 +9,6 @@ import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
 import io.pockethive.worker.sdk.config.WorkInputConfig;
-import io.pockethive.worker.sdk.config.WorkerInputType;
-import io.pockethive.worker.sdk.config.WorkerOutputType;
 import io.pockethive.worker.sdk.input.WorkInput;
 import io.pockethive.worker.sdk.input.WorkInputFactory;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
