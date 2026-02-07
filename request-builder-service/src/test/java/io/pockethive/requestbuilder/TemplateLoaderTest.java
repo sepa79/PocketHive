@@ -2,6 +2,10 @@ package io.pockethive.requestbuilder;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.pockethive.requesttemplates.HttpTemplateDefinition;
+import io.pockethive.requesttemplates.TcpTemplateDefinition;
+import io.pockethive.requesttemplates.TemplateDefinition;
+import io.pockethive.requesttemplates.TemplateLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
