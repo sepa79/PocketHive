@@ -5119,7 +5119,7 @@ export default function ScenariosPage() {
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-xs font-semibold text-white/80">
                 {schemaEditorState.kind === 'http-template'
-                  ? 'Edit HTTP Builder body from schema'
+                  ? 'Edit HTTP template body from schema'
                   : 'Edit generator HTTP body from schema'}
               </h3>
               <button

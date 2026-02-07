@@ -3,9 +3,8 @@
   "callId": "example-call",
   "method": "GET",
   "pathTemplate": "/example",
-  "bodyTemplate": "Hello from HTTP Builder (payload={{ payload }})",
+  "bodyTemplate": "Hello from Request Builder (payload={{ payload }})",
   "headersTemplate": {
     "x-example": "true"
   }
 }
-
