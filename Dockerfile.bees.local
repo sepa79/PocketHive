@@ -18,6 +18,9 @@ COPY .local-jars/request-builder-service.jar /app/app.jar
 COPY request-builder-service/http-templates /app/http-templates
 COPY request-builder-service/tcp-templates /app/tcp-templates
 
+FROM bee-runtime AS http-sequence
+COPY .local-jars/http-sequence-service.jar /app/app.jar
+
 FROM bee-runtime AS payload-generator
 COPY .local-jars/payload-generator-service.jar /app/app.jar
 
