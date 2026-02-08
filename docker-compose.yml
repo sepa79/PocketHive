@@ -215,6 +215,26 @@ services:
 # PocketHive Services
 #--------------------------------------
 
+  docs-site:
+    image: node:20-alpine
+    working_dir: /app/docs-site
+    environment:
+      DOCS_URL: http://localhost:8088
+      DOCS_BASE_URL: /docs/
+    volumes:
+      - ./docs-site:/app/docs-site:ro
+      - ./docs:/app/docs:ro
+      - ./ui/assets:/app/ui/assets:ro
+      - docs-site-node-modules:/app/docs-site/node_modules
+      - docs-site-docusaurus:/app/docs-site/.docusaurus
+      - docs-site-build:/app/docs-site/build
+    command:
+      [
+        "sh",
+        "-c",
+        "npm ci && npm run build && npm run serve -- --host 0.0.0.0 --port 3000 --dir build"
+      ]
+
   ui:
     image: ${DOCKER_REGISTRY:-}ui:${POCKETHIVE_VERSION:-latest}
     depends_on:
@@ -331,9 +351,6 @@ volumes:
   redis-data:
   postgres-data:
   tcp-mock-data:
-
-networks:
-  default:
-    ipam:
-      config:
-        - subnet: 172.20.0.0/16
+  docs-site-node-modules:
+  docs-site-docusaurus:
+  docs-site-build:

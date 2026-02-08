@@ -112,7 +112,7 @@ variables, and `WorkerControlPlaneProperties` enforces that each declared entry 
 also provided through `POCKETHIVE_CONTROL_PLANE_WORKER_ROLE`, so services no longer hard-code it in their
 configuration files.
 
-For a detailed breakdown of the Swarm Controller's environment contract, including every required `pockethive.control-plane.*` and RabbitMQ property, see the [Swarm Controller configuration reference](../../swarm-controller-service/README.md#configuration-reference).
+For a detailed breakdown of the Swarm Controller's environment contract, including every required `pockethive.control-plane.*` and RabbitMQ property, see `swarm-controller-service/README.md#configuration-reference` in the repo.
 
 ### Runtime environment contract
 

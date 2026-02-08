@@ -141,11 +141,10 @@ export default function Layout() {
             </button>
             {sidebarOpen && (
               <div id="menu-dropdown" className="dropdown-panel absolute right-0 mt-2" onMouseLeave={closeSidebar}>
-                <a href="/docs/readme.html" className="dropdown-item" onClick={closeSidebar}>README</a>
-                <a href="/docs/bindings.html" className="dropdown-item" onClick={closeSidebar}>Buzz Bindings</a>
-                <a href="/docs/changelog.html" className="dropdown-item" onClick={closeSidebar}>Changelog</a>
-                <a href="/docs/index.html" className="dropdown-item" onClick={closeSidebar}>Docs</a>
-                <a href="/docs/docs.html" className="dropdown-item" onClick={closeSidebar}>AsyncAPI</a>
+                <a href="/docs/" className="dropdown-item" onClick={closeSidebar}>Docs (Start Here)</a>
+                <a href="/docs/guides/onboarding/quickstart-15min" className="dropdown-item" onClick={closeSidebar}>Quickstart</a>
+                <a href="/docs/scenarios/SCENARIO_CONTRACT" className="dropdown-item" onClick={closeSidebar}>Scenario Contract</a>
+                <a href="/docs/ORCHESTRATOR-REST" className="dropdown-item" onClick={closeSidebar}>Orchestrator REST</a>
               </div>
             )}
           </div>

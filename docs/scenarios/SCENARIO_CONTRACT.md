@@ -35,7 +35,7 @@ trafficPolicy:
   - `version` (number, required) – topology schema version (currently `1`).
   - `edges` (array, required) – list of logical edges.
 - `trafficPolicy` (object, optional) – controls guards and traffic
-  shaping; see `docs/traffic-shaping.md`.
+  shaping; see `docs/architecture/traffic-shaping.md`.
 
 Unknown top‑level fields are ignored by the Swarm model but should be
 avoided to keep scenarios portable.
@@ -68,7 +68,8 @@ Bee fields (see `common/swarm-model/src/main/java/io/pockethive/swarm/model/Bee.
 
 - `role` (string, required)
   - Logical role name, e.g. `generator`, `processor`, `moderator`,
-    `postprocessor`, `request-builder`.
+    `postprocessor`, `request-builder`, `http-sequence`.
+  - Legacy note: older bundles may still reference `http-builder`.
 - `id` (string, optional)
   - Stable identifier used by `topology.edges[].from|to.beeId`. Required if
     the scenario declares `topology`.
@@ -77,13 +78,13 @@ Bee fields (see `common/swarm-model/src/main/java/io/pockethive/swarm/model/Bee.
     configured repository, e.g. `generator:latest` →
     `ghcr.io/ORG/pockethive/generator:latest`.
 - `work` (object, required)
-  - `in` (map<string,string>, optional) – inbound queue suffixes keyed by input port id.
-  - `out` (map<string,string>, optional) – outbound queue suffixes keyed by output port id.
+  - `in` (`map<string,string>`, optional) – inbound queue suffixes keyed by input port id.
+  - `out` (`map<string,string>`, optional) – outbound queue suffixes keyed by output port id.
   - These suffixes are resolved to full queue names by the Swarm Controller
     using the swarm id and shared naming rules.
-- `env` (map<string,string>, optional)
+- `env` (`map<string,string>`, optional)
   - Raw environment variables to pass into the container.
-- `config` (map<string,object>, optional)
+- `config` (`map<string,object>`, optional)
   - Structured config for this role; becomes `SwarmPlan.bees[*].config`
     and is fanned out to the worker as a `config-update` signal during
     bootstrap.
@@ -255,7 +256,7 @@ config:
 
 The optional `trafficPolicy` section is used by Swarm Controller guards,
 especially the buffer guard. Its schema is documented in
-`docs/traffic-shaping.md` and validated by the guard engine.
+`docs/architecture/traffic-shaping.md` and validated by the guard engine.
 
 At a high level it allows you to:
 

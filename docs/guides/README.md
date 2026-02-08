@@ -5,6 +5,9 @@ It is designed for both human readers and AI agents.
 
 ## Worker guides
 
+- `docs/guides/onboarding/start-here.md` - product intro and doc map.
+- `docs/guides/onboarding/quickstart-15min.md` - run stack and start a swarm.
+- `docs/guides/onboarding/first-scenario.md` - copy/validate/reload your first scenario.
 - `docs/guides/workers-basics.md` - start here for worker roles, topology wiring, and minimal scenario setup.
 - `docs/guides/workers-advanced.md` - control-plane behavior, scaling patterns, and production hardening.
 
