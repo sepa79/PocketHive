@@ -57,11 +57,36 @@ echo
 echo "Finding local branches fully merged into '${BASE_BRANCH}'..."
 current_branch="$(git rev-parse --abbrev-ref HEAD)"
 
-# List local branches merged into BASE_BRANCH, excluding HEAD/BASE_BRANCH.
+# List local branches merged into BASE_BRANCH, excluding HEAD/BASE_BRANCH/current branch.
+# Notes:
+# - `git branch` prefixes branches checked out in another worktree with `+` (we skip those).
+# - We treat branch names as line-based data (avoid word-splitting issues).
 merged_branches=$(
-  git branch --merged "${BASE_BRANCH}" \
-    | sed 's/^[ *]*//' \
-    | grep -v -E "^(HEAD|${BASE_BRANCH})$" || true
+  git branch --merged "${BASE_BRANCH}" | while IFS= read -r line; do
+    trimmed="$(printf '%s' "${line}" | sed 's/^[[:space:]]*//')"
+    [ -z "${trimmed}" ] && continue
+
+    case "${trimmed}" in
+      +*)
+        # Checked out in another worktree; never try to delete.
+        continue
+        ;;
+      \**)
+        # Current branch marker.
+        branch="${trimmed#\*}"
+        branch="$(printf '%s' "${branch}" | sed 's/^[[:space:]]*//')"
+        ;;
+      *)
+        branch="${trimmed}"
+        ;;
+    esac
+
+    if [ "${branch}" = "HEAD" ] || [ "${branch}" = "${BASE_BRANCH}" ] || [ "${branch}" = "${current_branch}" ]; then
+      continue
+    fi
+
+    printf '%s\n' "${branch}"
+  done
 )
 
 if [ -z "${merged_branches}" ]; then
@@ -69,25 +94,10 @@ if [ -z "${merged_branches}" ]; then
   exit 0
 fi
 
-# Never delete the current branch, even if merged.
-filtered_branches=""
-for b in ${merged_branches}; do
-  if [ "$b" != "$current_branch" ]; then
-    filtered_branches="${filtered_branches} ${b}"
-  fi
-done
-
-# Trim leading space for display/looping.
-filtered_branches=$(printf '%s\n' "${filtered_branches}" | sed 's/^ *//')
-
-if [ -z "${filtered_branches}" ]; then
-  echo "All merged branches are either the base branch or the current branch; nothing to delete."
-  exit 0
-fi
-
 echo "The following local branches are merged into '${BASE_BRANCH}' and will be deleted:"
-for b in ${filtered_branches}; do
-  echo "  - $b"
+printf '%s\n' "${merged_branches}" | while IFS= read -r b; do
+  [ -z "${b}" ] && continue
+  echo "  - ${b}"
 done
 
 echo
@@ -102,9 +112,10 @@ case "$answer" in
     ;;
 esac
 
-for b in ${filtered_branches}; do
-  echo "Deleting local branch: $b"
-  git branch -d "$b" || true
+printf '%s\n' "${merged_branches}" | while IFS= read -r b; do
+  [ -z "${b}" ] && continue
+  echo "Deleting local branch: ${b}"
+  git branch -d "${b}" || true
 done
 
 echo
