@@ -1,7 +1,7 @@
 # Redis Sequence Generator
 
 > Status: archived. Current Pebble/SpEL templating documentation lives in
-> `../scenarios/SCENARIO_TEMPLATING.md`.
+> `../guides/templating-basics.md` and `../guides/templating-advanced.md`.
 
 The Redis sequence generator provides deterministic, thread-safe sequence generation for unique identifiers in PocketHive scenarios. Sequences are backed by Redis INCR operations and support multiple formats (numeric, alphabetic, alphanumeric, binary, hex) with printf-style formatting.
 

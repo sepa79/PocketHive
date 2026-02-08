@@ -57,8 +57,9 @@ control‑plane contract; scenarios are the authoring‑time format.
 - `SCENARIO_PATTERNS.md` – worked examples:
   simple REST swarm, templated REST, Redis dataset demo, and guarded
   scenarios.
-- `SCENARIO_TEMPLATING.md` – how to use Pebble + SpEL helpers,
-  Request Builder templates, and the scenario‑templating CLI tool.
+- `docs/guides/templating-basics.md` – Pebble + `eval(...)` baseline usage.
+- `docs/guides/templating-advanced.md` – Redis sequences, advanced patterns, and validation workflow.
+- `SCENARIO_TEMPLATING.md` – compatibility entry that redirects to the guides.
 - `SCENARIO_VARIABLES.md` – Scenario Variables (`variables.yaml`) and how `vars.*` is injected into templates.
 - `SCENARIO_PLAN_GUIDE.md` – user guide for the `plan` section and the
   Scenario Plan editor in Hive.
@@ -84,8 +85,8 @@ scenarios/
   <group-or-folder>/              # optional (e.g. tcp/, e2e/, demos/)
     <scenarioId>/
       scenario.yaml
-      http-templates/              # Request Builder templates
-      templates/                   # Other protocol templates (e.g. TCP)
+      templates/
+        http/
       sut/
       datasets/
       docs/
