@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.15.4]
+Timestamp: 2026-02-08T20:48:10Z
+
+- Docs: add a Docusaurus docs site (`docs-site/`) that renders content from `docs/`.
+- Compose/UI: mount docs under the main UI reverse-proxy at `http://localhost:8088/docs/`.
+- Guides: add onboarding “new user journey” docs under `docs/guides/onboarding/`.
+- Docs: harden MDX compatibility in key reference docs (no broken internal links, escape generic-like syntax).
+
 ## [0.15.3]
 Timestamp: 2026-02-07T22:43:15Z
 

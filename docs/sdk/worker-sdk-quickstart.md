@@ -80,9 +80,9 @@ Use the `WorkerContext` to:
 - Access Stage 3 observability hooks (`observationRegistry`, `observabilityContext`). The runtime guarantees that
   `observabilityContext()` returns an initialised instance so workers can append hops without null checks.
 
-Refer to the migrated [generator](../../generator-service/src/main/java/io/pockethive/generator/GeneratorWorkerImpl.java)
-and [processor](../../processor-service/src/main/java/io/pockethive/processor/ProcessorWorkerImpl.java) services for
-end-to-end implementations.
+Refer to the migrated generator and processor services for end-to-end implementations:
+`generator-service/src/main/java/io/pockethive/generator/GeneratorWorkerImpl.java` and
+`processor-service/src/main/java/io/pockethive/processor/ProcessorWorkerImpl.java`.
 
 ## 4. Let the SDK wire inputs and outputs
 
@@ -160,9 +160,9 @@ WorkerControlPlaneProperties props = ControlPlaneTestFixtures.workerProperties("
 
 Stage 3 enriches the runtime with Micrometer and Observation support. `WorkerContext.meterRegistry()` and
 `WorkerContext.observationRegistry()` surface the shared registries, while `WorkItem` builders accept an
-`ObservabilityContext`. The SDK ensures that `WorkerContext.observabilityContext()` never returns {@code null} and
+`ObservabilityContext`. The SDK ensures that `WorkerContext.observabilityContext()` never returns `null` and
 includes a trace id, hop list, and swarm id, making it safe to append hop metadata or forward the context as-is.
-Use these hooks to emit custom metrics and propagate trace metadata as shown in the
-[processor worker](../../processor-service/src/main/java/io/pockethive/processor/ProcessorWorkerImpl.java).
+Use these hooks to emit custom metrics and propagate trace metadata as shown in the processor worker:
+`processor-service/src/main/java/io/pockethive/processor/ProcessorWorkerImpl.java`.
 
 For the full roadmap and design rationale, review the Worker SDK simplification plan in the documentation archive.

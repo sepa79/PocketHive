@@ -1,0 +1,32 @@
+{
+  "name": "pockethive-docs-site",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Docusaurus site for PocketHive docs (content lives in ../docs).",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start": "docusaurus start",
+    "build": "docusaurus build",
+    "serve": "docusaurus serve",
+    "clear": "docusaurus clear",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@docusaurus/core": "3.6.0",
+    "@docusaurus/preset-classic": "3.6.0",
+    "@docusaurus/theme-mermaid": "3.6.0",
+    "@mdx-js/react": "^3.0.0",
+    "clsx": "^2.1.1",
+    "prism-react-renderer": "^2.3.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@docusaurus/tsconfig": "3.6.0",
+    "@types/react": "^18.2.66",
+    "@types/react-dom": "^18.2.22",
+    "typescript": "^5.5.4"
+  }
+}
