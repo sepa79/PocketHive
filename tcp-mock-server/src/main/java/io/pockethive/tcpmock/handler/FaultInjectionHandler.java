@@ -4,7 +4,6 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import io.pockethive.tcpmock.model.ProcessedResponse;
 import org.springframework.stereotype.Component;
-import java.nio.charset.StandardCharsets;
 import java.util.Random;
 
 @Component

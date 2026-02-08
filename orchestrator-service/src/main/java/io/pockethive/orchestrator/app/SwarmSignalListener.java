@@ -28,8 +28,6 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -422,18 +420,6 @@ public class SwarmSignalListener {
         lifecycle.removeSwarm(swarmId);
     }
 
-    private void onControllerError(RoutingKey key) {
-        String controllerInstance = key.instance();
-        if (controllerInstance == null || controllerInstance.isBlank()) {
-            log.warn("controller error event missing instance segment: {}", key);
-            return;
-        }
-        creates.remove(controllerInstance).ifPresent(info -> {
-            store.updateStatus(info.swarmId(), SwarmLifecycleStatus.FAILED);
-            emitCreateError(info);
-        });
-    }
-
     private void onSwarmTemplateError(RoutingKey key) {
         String swarmId = key.swarmId();
         if (swarmId == null || swarmId.isBlank()) {
@@ -614,29 +600,6 @@ public class SwarmSignalListener {
         }
     }
 
-    private void emitCreateError(Pending info) {
-        if (info == null) {
-            return;
-        }
-        try {
-            ControlPlaneEmitter emitter = emitterForSwarm(info.swarmId());
-            ControlPlaneEmitter.ErrorContext context = ControlPlaneEmitter.ErrorContext.builder(
-                    "swarm-create",
-                    requireText(info.correlationId(), "swarm-create correlationId"),
-                    requireText(info.idempotencyKey(), "swarm-create idempotencyKey"),
-                    new CommandState(null, null, null),
-                    "controller-bootstrap",
-                    "controller-error",
-                    "controller failed")
-                .timestamp(Instant.now())
-                .build();
-            logError(context);
-            emitter.emitError(context);
-        } catch (Exception e) {
-            log.warn("create error send", e);
-        }
-    }
-
     private void emitCreateTimeout(Pending info) {
         if (info == null) {
             return;
@@ -775,19 +738,18 @@ public class SwarmSignalListener {
         sendStatusFull();
     }
 
-    private void sendStatusDelta() {
-        ControlPlaneEmitter.StatusContext context = ControlPlaneEmitter.StatusContext.of(builder -> {
-            var b = builder
-                .workPlaneEnabled(false)
-                .tpsEnabled(false)
-                .enabled(true)
-                .controlIn(controlQueue)
-                .controlRoutes(controlRoutes.toArray(String[]::new))
-                .data("swarmCount", store.count());
-        });
-        controlEmitter.emitStatusDelta(context);
-        log.debug("[CTRL] SEND status-delta inst={} swarmCount={}", instanceId, store.count());
-    }
+	    private void sendStatusDelta() {
+	        ControlPlaneEmitter.StatusContext context = ControlPlaneEmitter.StatusContext.of(builder -> {
+	            builder.workPlaneEnabled(false)
+	                .tpsEnabled(false)
+	                .enabled(true)
+	                .controlIn(controlQueue)
+	                .controlRoutes(controlRoutes.toArray(String[]::new))
+	                .data("swarmCount", store.count());
+	        });
+	        controlEmitter.emitStatusDelta(context);
+	        log.debug("[CTRL] SEND status-delta inst={} swarmCount={}", instanceId, store.count());
+	    }
 
     private List<String> resolveControlRoutes(ControlPlaneRouteCatalog catalog) {
         if (catalog == null) {
@@ -826,10 +788,6 @@ public class SwarmSignalListener {
         } else {
             controlPlane.publishEvent(new EventMessage(routingKey, payload));
         }
-    }
-
-    private void sendControl(String routingKey, String payload) {
-        sendControl(routingKey, payload, null);
     }
 
     private void warnMissingScopeFields(String label,

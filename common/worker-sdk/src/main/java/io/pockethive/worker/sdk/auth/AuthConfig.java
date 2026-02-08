@@ -95,12 +95,15 @@ public record AuthConfig(
         };
     }
     
-    private static void validateAuthType(AuthType type, Map<String, String> props) {
-        switch (type) {
-            case OAUTH2_CLIENT_CREDENTIALS:
-                requireField(props, "tokenUrl", "clientId", "clientSecret");
-                break;
-            case OAUTH2_PASSWORD_GRANT:
+	    private static void validateAuthType(AuthType type, Map<String, String> props) {
+	        switch (type) {
+	            case NONE:
+	            case MESSAGE_FIELD_AUTH:
+	                break;
+	            case OAUTH2_CLIENT_CREDENTIALS:
+	                requireField(props, "tokenUrl", "clientId", "clientSecret");
+	                break;
+	            case OAUTH2_PASSWORD_GRANT:
                 requireField(props, "tokenUrl", "username", "password");
                 break;
             case BASIC_AUTH:
@@ -124,11 +127,11 @@ public record AuthConfig(
             case AWS_SIGNATURE_V4:
                 requireField(props, "accessKeyId", "secretAccessKey", "region", "service");
                 break;
-            case ISO8583_MAC:
-                requireField(props, "macKey");
-                break;
-        }
-    }
+	            case ISO8583_MAC:
+	                requireField(props, "macKey");
+	                break;
+	        }
+	    }
     
     private static void requireField(Map<String, String> props, String... fields) {
         for (String field : fields) {

@@ -12,6 +12,13 @@ Welcome to the PocketHive documentation hub. Use these resources to understand t
 - [Usage Guide](USAGE.md)
 - Prometheus helpers for the UI live in `ui/src/lib/prometheus.ts` and provide typed range/query helpers plus React Query hooks.
 
+## Guides
+- [Guides Hub](guides/README.md)
+- [Workers Basics](guides/workers-basics.md)
+- [Workers Advanced](guides/workers-advanced.md)
+- [Templating Basics](guides/templating-basics.md)
+- [Templating Advanced](guides/templating-advanced.md)
+
 ## Services
 - [Orchestrator](../orchestrator-service/README.md)
 - [Swarm Controller](../swarm-controller-service/README.md)
@@ -29,7 +36,10 @@ Welcome to the PocketHive documentation hub. Use these resources to understand t
 - [Worker SDK Quick Start](sdk/worker-sdk-quickstart.md)
 
 ## Scenarios
-- [Scenario templating (Pebble + SpEL)](scenarios/SCENARIO_TEMPLATING.md)
+- [Scenario overview](scenarios/README.md)
+- [Scenario contract](scenarios/SCENARIO_CONTRACT.md)
+- [Scenario patterns](scenarios/SCENARIO_PATTERNS.md)
+- [Scenario templating (moved)](scenarios/SCENARIO_TEMPLATING.md)
 
 ## Contributing
 - [Contributor Guide](../CONTRIBUTING.md)

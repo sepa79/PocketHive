@@ -1,0 +1,60 @@
+schemaVersion: "1.0"
+capabilitiesVersion: "1.1"
+role: http-sequence
+image:
+  name: http-sequence
+  tag: latest
+ui:
+  label: "HTTP Sequence"
+  color: "#0ea5e9"
+  shape: "square"
+  abbreviation: "HS"
+config:
+  - name: baseUrl
+    type: string
+    default: ""
+    ui:
+      label: Base URL
+      group: HTTP
+  - name: templateRoot
+    type: string
+    default: "/app/http-templates"
+    ui:
+      label: Template root
+      group: Templates
+  - name: serviceId
+    type: string
+    default: "default"
+    ui:
+      label: Service ID
+      group: Templates
+  - name: threadCount
+    type: number
+    default: 1
+    ui:
+      label: Max in-flight journeys
+      group: Runtime
+  - name: steps
+    type: json
+    default: []
+    multiline: true
+    ui:
+      label: Steps
+      group: Journey
+  - name: debugCapture
+    type: json
+    default:
+      mode: "ERROR_ONLY"
+      samplePct: 0.0
+      maxBodyBytes: 262144
+      maxJourneyBytes: 1048576
+      includeHeaders: true
+      includeRequest: false
+      bodyPreviewBytes: 4096
+      redisTtlSeconds: 120
+    multiline: true
+    ui:
+      label: Debug capture
+      group: Debug
+actions: []
+panels: []

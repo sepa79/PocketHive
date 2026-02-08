@@ -3,8 +3,6 @@ package io.pockethive.worker.sdk.config;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -25,8 +23,9 @@ public abstract class CanonicalWorkerProperties<T> extends PocketHiveWorkerPrope
     protected CanonicalWorkerProperties(java.util.function.Supplier<String> roleSupplier, Class<T> configType, ObjectMapper mapper) {
         super(roleSupplier, configType);
         this.mapper = Objects.requireNonNull(mapper, "mapper");
-        this.canonicalisingMapper = mapper.copy()
-            .configure(MapperFeature.ACCEPT_CASE_INSENSITIVE_PROPERTIES, true);
+        ObjectMapper copy = mapper.copy();
+        copy.setConfig(copy.getDeserializationConfig().with(MapperFeature.ACCEPT_CASE_INSENSITIVE_PROPERTIES));
+        this.canonicalisingMapper = copy;
     }
 
     @Override

@@ -106,7 +106,7 @@ Feature: Swarm lifecycle golden path
     And the postprocessor runtime config matches the local-rest scenario
 
   @redis-dataset-demo
-  Scenario: Redis dataset demo flows through HTTP Builder and Processor
+  Scenario: Redis dataset demo flows through Request Builder and Processor
     And the "redis-dataset-demo" scenario template is requested
     When I create the swarm from that template
     Then the swarm is registered and queues are declared

@@ -2,8 +2,6 @@ package io.pockethive.control;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
-import java.util.Objects;
-
 /**
  * Canonical scope tuple used by control-plane envelopes.
  * <p>
@@ -56,9 +54,5 @@ public record ControlScope(String swarmId, String role, String instance) {
     @JsonIgnore
     public boolean isEmpty() {
         return isAll(swarmId) && isAll(role) && isAll(instance);
-    }
-
-    private static boolean isAllSegment(String value) {
-        return isAll(value);
     }
 }

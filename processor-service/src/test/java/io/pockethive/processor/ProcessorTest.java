@@ -38,6 +38,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import org.apache.hc.client5.http.classic.HttpClient;
 import org.apache.hc.core5.http.ClassicHttpRequest;
+import org.apache.hc.core5.http.io.HttpClientResponseHandler;
 import org.apache.hc.core5.http.io.entity.StringEntity;
 import org.apache.hc.core5.http.message.BasicClassicHttpResponse;
 import org.apache.hc.core5.http.message.BasicHeader;
@@ -72,13 +73,14 @@ class ProcessorTest {
         TestWorkerContext context = new TestWorkerContext(config);
 
         AtomicReference<ClassicHttpRequest> requestRef = new AtomicReference<>();
-        when(httpClient.execute(any(ClassicHttpRequest.class))).thenAnswer(invocation -> {
+        when(httpClient.execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class))).thenAnswer(invocation -> {
             ClassicHttpRequest request = invocation.getArgument(0, ClassicHttpRequest.class);
+            HttpClientResponseHandler<?> handler = invocation.getArgument(1, HttpClientResponseHandler.class);
             requestRef.set(request);
             BasicClassicHttpResponse response = new BasicClassicHttpResponse(201, "Created");
             response.setHeader(new BasicHeader("content-type", "application/json"));
             response.setEntity(new StringEntity("{\"result\":\"ok\"}", java.nio.charset.StandardCharsets.UTF_8));
-            return response;
+            return handler.handleResponse(response);
         });
 
         WorkItem inbound = inboundItem(Map.of(
@@ -134,12 +136,13 @@ class ProcessorTest {
         TestWorkerContext context = new TestWorkerContext(config);
 
         AtomicReference<ClassicHttpRequest> requestRef = new AtomicReference<>();
-        when(httpClient.execute(any(ClassicHttpRequest.class))).thenAnswer(invocation -> {
+        when(httpClient.execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class))).thenAnswer(invocation -> {
             ClassicHttpRequest request = invocation.getArgument(0, ClassicHttpRequest.class);
+            HttpClientResponseHandler<?> handler = invocation.getArgument(1, HttpClientResponseHandler.class);
             requestRef.set(request);
             BasicClassicHttpResponse response = new BasicClassicHttpResponse(200, "OK");
             response.setEntity(new StringEntity("", java.nio.charset.StandardCharsets.UTF_8));
-            return response;
+            return handler.handleResponse(response);
         });
 
         WorkItem inbound = inboundItem(Map.of("path", "/test"));
@@ -162,16 +165,16 @@ class ProcessorTest {
         TestWorkerContext context = new TestWorkerContext(config);
 
         AtomicInteger invocation = new AtomicInteger();
-        when(httpClient.execute(any(ClassicHttpRequest.class))).thenAnswer(invocationOnMock -> {
-            ClassicHttpRequest request = invocationOnMock.getArgument(0, ClassicHttpRequest.class);
+        when(httpClient.execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class))).thenAnswer(invocationOnMock -> {
+            HttpClientResponseHandler<?> handler = invocationOnMock.getArgument(1, HttpClientResponseHandler.class);
             if (invocation.getAndIncrement() == 0) {
                 BasicClassicHttpResponse response = new BasicClassicHttpResponse(200, "OK");
                 response.setEntity(new StringEntity("ok", java.nio.charset.StandardCharsets.UTF_8));
-                return response;
+                return handler.handleResponse(response);
             }
             BasicClassicHttpResponse response = new BasicClassicHttpResponse(502, "Bad Gateway");
             response.setEntity(new StringEntity("bad", java.nio.charset.StandardCharsets.UTF_8));
-            return response;
+            return handler.handleResponse(response);
         });
 
         WorkItem inbound = inboundItem(Map.of("path", "/metrics"));
@@ -207,12 +210,13 @@ class ProcessorTest {
         TestWorkerContext context = new TestWorkerContext(null);
 
         AtomicReference<ClassicHttpRequest> requestRef = new AtomicReference<>();
-        when(httpClient.execute(any(ClassicHttpRequest.class))).thenAnswer(invocation -> {
+        when(httpClient.execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class))).thenAnswer(invocation -> {
             ClassicHttpRequest request = invocation.getArgument(0, ClassicHttpRequest.class);
+            HttpClientResponseHandler<?> handler = invocation.getArgument(1, HttpClientResponseHandler.class);
             requestRef.set(request);
             BasicClassicHttpResponse response = new BasicClassicHttpResponse(200, "OK");
             response.setEntity(new StringEntity("ok", java.nio.charset.StandardCharsets.UTF_8));
-            return response;
+            return handler.handleResponse(response);
         });
 
         WorkItem inbound = inboundItem(Map.of("path", "/defaults"));
@@ -245,7 +249,7 @@ class ProcessorTest {
             .containsEntry("x-ph-processor-duration-ms", "0")
             .containsEntry("x-ph-processor-success", "false")
             .containsEntry("x-ph-processor-status", "-1");
-        verify(httpClient, never()).execute(any(ClassicHttpRequest.class));
+        verify(httpClient, never()).execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class));
     }
 
     private WorkItem invokeThroughObservabilityInterceptor(ProcessorWorkerImpl worker,

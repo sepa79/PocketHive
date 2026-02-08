@@ -1,5 +1,6 @@
 package io.pockethive.swarmcontroller;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.CommandState;
@@ -19,7 +20,6 @@ import io.pockethive.controlplane.messaging.SignalMessage;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.routing.ControlPlaneRouting.RoutingKey;
 import io.pockethive.manager.guard.BufferGuardSettings;
-import io.pockethive.manager.runtime.ComputeAdapterType;
 import io.pockethive.observability.ControlPlaneJson;
 import io.pockethive.swarm.model.BufferGuardPolicy;
 import io.pockethive.swarm.model.TrafficPolicy;
@@ -43,7 +43,6 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -58,6 +57,7 @@ import java.util.concurrent.atomic.AtomicReference;
 @EnableScheduling
 public class SwarmSignalListener {
   private static final Logger log = LoggerFactory.getLogger(SwarmSignalListener.class);
+  private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
   private final SwarmLifecycle lifecycle;
   private final RabbitTemplate rabbit;
   private final String instanceId;
@@ -554,12 +554,11 @@ public class SwarmSignalListener {
           } else {
             lifecycle.configureBufferGuards(List.of(updated));
             TrafficPolicy effectivePolicy = trafficPolicyFromSettings(updated);
-            details.put("trafficPolicy", mapper.convertValue(effectivePolicy, Map.class));
+            details.put("trafficPolicy", mapper.convertValue(effectivePolicy, MAP_TYPE));
           }
         }
       }
 
-      List<Runnable> fanouts = new ArrayList<>();
       boolean controllerTarget = targetRole != null && this.role.equalsIgnoreCase(targetRole);
 
       if (controllerTarget) {
@@ -859,20 +858,6 @@ public class SwarmSignalListener {
     return key != null ? defaultSegment(key.type(), null) : null;
   }
 
-  private boolean isControllerCommand(ControlSignal cs) {
-    io.pockethive.control.ControlScope scope = cs.scope();
-    String role = scope != null ? scope.role() : null;
-    if (role == null || role.isBlank() || isAllSegment(role)) {
-      return false;
-    }
-    if (!this.role.equalsIgnoreCase(role)) {
-      return false;
-    }
-    String targetInstance = scope != null ? scope.instance() : null;
-    return targetInstance == null || targetInstance.isBlank() || isAllSegment(targetInstance)
-        || instanceId.equalsIgnoreCase(targetInstance);
-  }
-
   private record PendingTemplate(ControlSignal signal, String resolvedSignal, String swarmIdFallback) {}
 
   private record PendingStart(ControlSignal signal, String resolvedSignal, String swarmIdFallback, long freshnessCutoffMillis) {}
@@ -954,14 +939,6 @@ public class SwarmSignalListener {
     return signal;
   }
 
-  private String toJson(Object value) {
-    try {
-      return mapper.writeValueAsString(value);
-    } catch (Exception ex) {
-      throw new IllegalStateException("Unable to serialize confirmation", ex);
-    }
-  }
-
   private void sendStatusFull() {
     SwarmMetrics m = lifecycle.getMetrics();
     String state = determineState(m);
@@ -1031,28 +1008,6 @@ public class SwarmSignalListener {
     appendTrafficDiagnostics(builder);
     String payload = builder.toJson();
     sendControl(rk, payload, "status");
-  }
-
-  private Map<String, Map<String, Object>> toQueueStatsPayload(Map<String, QueueStats> snapshot) {
-    if (snapshot == null || snapshot.isEmpty()) {
-      return Map.of();
-    }
-    Map<String, Map<String, Object>> payload = new LinkedHashMap<>();
-    for (Map.Entry<String, QueueStats> entry : snapshot.entrySet()) {
-      String queueName = entry.getKey();
-      QueueStats stats = entry.getValue();
-      if (queueName == null || queueName.isBlank() || stats == null) {
-        continue;
-      }
-      Map<String, Object> values = new LinkedHashMap<>();
-      values.put("depth", stats.depth());
-      values.put("consumers", stats.consumers());
-      if (stats.oldestAgeSec() != null && stats.oldestAgeSec().isPresent()) {
-        values.put("oldestAgeSec", stats.oldestAgeSec().getAsLong());
-      }
-      payload.put(queueName, values);
-    }
-    return payload;
   }
 
   private Map<String, Object> scenarioProgress() {
@@ -1416,10 +1371,6 @@ public class SwarmSignalListener {
     }
   }
 
-  private void sendControl(String routingKey, String payload) {
-    sendControl(routingKey, payload, null);
-  }
-
   private static String snippet(String payload) {
     if (payload == null) {
       return "";
@@ -1462,17 +1413,9 @@ public class SwarmSignalListener {
     return value.trim();
   }
 
-	  private boolean isAllSegment(String value) {
-	    return ControlScope.isAll(value);
-	  }
-
-  private String normaliseSwarmSegment(String value) {
-    String resolved = defaultSegment(value, swarmId);
-    if (isAllSegment(resolved)) {
-      return swarmId;
-    }
-    return resolved;
-  }
+		  private boolean isAllSegment(String value) {
+		    return ControlScope.isAll(value);
+		  }
 
   private boolean isLocalSwarm(String value) {
     if (value == null || value.isBlank()) {

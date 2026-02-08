@@ -1,5 +1,6 @@
 package io.pockethive.swarmcontroller.guard;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tags;
@@ -15,23 +16,18 @@ import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.BufferGuardPolicy;
 import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.TrafficPolicy;
-import io.pockethive.swarm.model.Work;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalDouble;
-import java.util.OptionalLong;
-import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.amqp.core.AmqpAdmin;
 
 /**
  * Optional coordinator that wires the buffer guard on top of a running swarm.
@@ -43,6 +39,7 @@ import org.springframework.amqp.core.AmqpAdmin;
 public final class BufferGuardCoordinator {
 
   private static final Logger log = LoggerFactory.getLogger(BufferGuardCoordinator.class);
+  private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
 
   private enum InputKind {
     SCHEDULER,
@@ -155,12 +152,12 @@ public final class BufferGuardCoordinator {
     }
     try {
       var targetScope = io.pockethive.control.ControlScope.forRole(swarmId, targetRole);
-      var patchData = mapper.convertValue(patch, Map.class);
-	      var signal = io.pockethive.controlplane.messaging.ControlSignals.configUpdate(
-	          instanceId,
-	          targetScope,
-	          java.util.UUID.randomUUID().toString(),
-	          java.util.UUID.randomUUID().toString(),
+      Map<String, Object> patchData = mapper.convertValue(patch, MAP_TYPE);
+      var signal = io.pockethive.controlplane.messaging.ControlSignals.configUpdate(
+          instanceId,
+          targetScope,
+          java.util.UUID.randomUUID().toString(),
+          java.util.UUID.randomUUID().toString(),
 	          patchData);
       String payload = ControlPlaneJson.write(signal, "buffer-guard config-update");
       String rk = ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, swarmId, targetRole, null);
@@ -332,9 +329,6 @@ public final class BufferGuardCoordinator {
     if (value == null) {
       return OptionalDouble.empty();
     }
-    if (value == null) {
-      return OptionalDouble.empty();
-    }
     if (value instanceof Number number) {
       return OptionalDouble.of(number.doubleValue());
     }
@@ -387,7 +381,6 @@ public final class BufferGuardCoordinator {
     return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
   }
 
-  @SuppressWarnings("unchecked")
   private static InputKind resolveInputKind(Map<String, Object> config) {
     if (config == null || config.isEmpty()) {
       return null;

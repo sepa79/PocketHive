@@ -905,11 +905,12 @@ public class SwarmLifecycleSteps {
                 if (!node.has("path") || !node.has("method") || !node.has("headers") || !node.has("body")) {
                   return false;
                 }
-                String body = node.path("body").asText("");
-                if (body.isBlank() || body.contains("{{")) {
+                JsonNode variablesBodyNode = node.path("body");
+                String variablesBodyText = variablesBodyNode.isTextual() ? variablesBodyNode.asText("") : variablesBodyNode.toString();
+                if (variablesBodyText.isBlank() || variablesBodyText.contains("{{")) {
                   return false;
                 }
-                JsonNode rendered = objectMapper.readTree(body);
+                JsonNode rendered = variablesBodyNode.isTextual() ? objectMapper.readTree(variablesBodyText) : variablesBodyNode;
                 return rendered.path("customerId").asText("").equals("CUST-FR-A")
                     && rendered.path("loopCount").asInt(-1) == 7
                     && rendered.path("loopPlusOne").asInt(-1) == 8
@@ -1110,12 +1111,13 @@ public class SwarmLifecycleSteps {
       assertEquals("application/json", headerValue(headersNode, "content-type"),
           "HTTP request should advertise JSON content type");
 
-      String requestBody = requestEnvelope.path("body").asText(null);
-      assertNotNull(requestBody, "HTTP request body was empty");
+      JsonNode bodyNode = requestEnvelope.path("body");
+      assertFalse(bodyNode.isMissingNode() || bodyNode.isNull(), "HTTP request body was empty");
+      String requestBody = bodyNode.isTextual() ? bodyNode.asText("") : bodyNode.toString();
       assertFalse(requestBody.contains("{{"),
           () -> "HTTP request body appears to contain unrendered templates: " + requestBody);
 
-      JsonNode requestBodyNode = parseJsonNode(requestBody);
+      JsonNode requestBodyNode = bodyNode.isTextual() ? parseJsonNode(requestBody) : bodyNode;
       assertNotNull(requestBodyNode, "HTTP request body was not valid JSON: " + requestBody);
 
       if (datasetPayload == null) {
@@ -1525,48 +1527,6 @@ public class SwarmLifecycleSteps {
     }
     if (value instanceof String text) {
       return Boolean.parseBoolean(text);
-    }
-    return false;
-  }
-
-  private boolean hasPositiveCounter(Map<String, Object> counters) {
-    if (counters == null || counters.isEmpty()) {
-      return false;
-    }
-    for (Object value : counters.values()) {
-      if (isPositive(value)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  private boolean isPositive(Object value) {
-    if (value instanceof Number number) {
-      return number.doubleValue() > 0;
-    }
-    if (value instanceof String text) {
-      try {
-        return Double.parseDouble(text) > 0;
-      } catch (NumberFormatException ex) {
-        return false;
-      }
-    }
-    if (value instanceof Map<?, ?> map) {
-      for (Object nested : map.values()) {
-        if (isPositive(nested)) {
-          return true;
-        }
-      }
-      return false;
-    }
-    if (value instanceof Iterable<?> iterable) {
-      for (Object element : iterable) {
-        if (isPositive(element)) {
-          return true;
-        }
-      }
-      return false;
     }
     return false;
   }
@@ -2069,16 +2029,6 @@ public class SwarmLifecycleSteps {
         .filter(bee -> bee != null && bee.role() != null && roleMatches(role, bee.role()))
         .findFirst()
         .orElseThrow(() -> new AssertionError("No bee with role " + role + " in template"));
-  }
-
-  private Bee findBeeOptional(String role) {
-    if (template == null || template.bees() == null || role == null || role.isBlank()) {
-      return null;
-    }
-    return template.bees().stream()
-        .filter(bee -> bee != null && bee.role() != null && roleMatches(role, bee.role()))
-        .findFirst()
-        .orElse(null);
   }
 
   private String queueNameForSuffix(String suffix) {

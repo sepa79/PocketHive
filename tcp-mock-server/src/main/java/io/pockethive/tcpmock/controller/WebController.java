@@ -4,7 +4,6 @@ import io.pockethive.tcpmock.service.RequestStore;
 import io.pockethive.tcpmock.service.MessageTypeRegistry;
 import io.pockethive.tcpmock.service.RecordingMode;
 import io.pockethive.tcpmock.model.TcpRequest;
-import io.pockethive.tcpmock.model.MessageTypeMapping;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.http.ResponseEntity;

@@ -6,7 +6,6 @@ import io.pockethive.worker.sdk.auth.TokenInfo;
 import io.pockethive.worker.sdk.api.WorkItem;
 
 import javax.crypto.Cipher;
-import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;

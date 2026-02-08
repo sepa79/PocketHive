@@ -6,6 +6,7 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
@@ -40,7 +41,7 @@ public class TcpMockSteps {
             tcpMockUrl + "/api/__admin/mappings",
             HttpMethod.GET,
             request,
-            Map.class
+            new ParameterizedTypeReference<Map<String, Object>>() {}
         ).getBody();
         if (response == null) {
             return;

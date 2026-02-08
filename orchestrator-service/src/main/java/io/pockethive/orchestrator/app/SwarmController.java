@@ -28,24 +28,20 @@ import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
 import io.pockethive.orchestrator.domain.SwarmStateStore;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
-import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.SwarmTemplate;
 import io.pockethive.swarm.model.SutEndpoint;
 import io.pockethive.swarm.model.SutEnvironment;
-import io.pockethive.swarm.model.TrafficPolicy;
 import io.pockethive.util.BeeNameGenerator;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -453,13 +449,6 @@ public class SwarmController {
         });
     }
 
-    private static String requireText(String value, String field) {
-        if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException(field + " must not be blank");
-        }
-        return value.trim();
-    }
-
     /**
      * Apply the orchestrator's idempotency contract to an outgoing signal.
      * <p>
@@ -694,7 +683,6 @@ public class SwarmController {
         if (statusFull == null || statusFull.isMissingNode()) {
             return null;
         }
-	        JsonNode scope = statusFull.path("scope");
 	        JsonNode data = statusFull.path("data");
 	        JsonNode runtime = statusFull.path("runtime");
 	        JsonNode context = data.path("context");

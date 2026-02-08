@@ -229,13 +229,13 @@ import static org.mockito.Mockito.verifyNoInteractions;
             .contains(SwarmLifecycleStatus.FAILED);
     }
 
-	    @Test
-	    void statusSnapshotIncludesControlRoutes() {
-	        SwarmSignalListener fresh = new SwarmSignalListener(plans, timelines, tracker, registry, lifecycle, mapper,
-	            HiveJournal.noop(),
-	            controlPlane, controlEmitter, identity, descriptor, controlQueueName);
+		    @Test
+		    void statusSnapshotIncludesControlRoutes() {
+		        new SwarmSignalListener(plans, timelines, tracker, registry, lifecycle, mapper,
+		            HiveJournal.noop(),
+		            controlPlane, controlEmitter, identity, descriptor, controlQueueName);
 
-        verify(controlEmitter).emitStatusSnapshot(statusCaptor.capture());
+	        verify(controlEmitter).emitStatusSnapshot(statusCaptor.capture());
         StatusEnvelopeBuilder builder = new StatusEnvelopeBuilder();
         builder.type("status-full")
             .origin(ORCHESTRATOR_INSTANCE)

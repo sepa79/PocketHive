@@ -1,5 +1,6 @@
 package io.pockethive.worker.sdk.runtime;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.templating.TemplateRenderer;
@@ -32,6 +33,7 @@ public final class TemplatingInterceptor implements WorkerInvocationInterceptor 
     }
 
     private static final ObjectMapper MAPPER = new ObjectMapper().findAndRegisterModules();
+    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
 
     private final TemplateRenderer renderer;
     private final TemplateConfigResolver templateResolver;
@@ -69,7 +71,7 @@ public final class TemplatingInterceptor implements WorkerInvocationInterceptor 
             return payload;
         }
         try {
-            Map<String, Object> map = MAPPER.readValue(payload, Map.class);
+            Map<String, Object> map = MAPPER.readValue(payload, MAP_TYPE);
             return new PayloadWrapper(map);
         } catch (Exception e) {
             return payload;

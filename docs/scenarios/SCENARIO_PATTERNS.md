@@ -29,8 +29,8 @@ Pattern:
 - Two **consumer** generators (acting as data providers):
   - Input: `REDIS_DATASET` – one list per customer (`ph:dataset:custa`,
     `ph:dataset:custb`).
-  - Output: `RABBITMQ` – sends HTTP envelopes built by HTTP Builder.
-  - HTTP Builder selects callIds and uses on‑disk HTTP templates.
+  - Output: `RABBITMQ` – sends HTTP envelopes built by `request-builder`.
+  - `request-builder` selects callIds and uses on‑disk HTTP templates.
 
 Use this scenario as a reference when you need:
 
@@ -73,7 +73,7 @@ trafficPolicy:
 Use this pattern when you want Swarm Controller to automatically keep
 upstream producers in a safe operating window.
 
-## 4. HTTP Builder with on‑disk templates
+## 4. Request-builder with on-disk templates
 
 Primary example: `scenarios/**/redis-dataset-demo/scenario.yaml` (in this repo: `scenarios/e2e/redis-dataset-demo/scenario.yaml`)
 combined with the HTTP templates under
@@ -83,7 +83,7 @@ Pattern:
 
 - Generators or Redis‑based providers emit JSON payloads and set
   `x-ph-service-id` / `x-ph-call-id` headers.
-- HTTP Builder worker transforms these into HTTP envelopes using
+- `request-builder` transforms these into HTTP envelopes using
   templates stored inside the scenario bundle under
   `/app/scenario/templates/http`.
 - Scenario Manager materialises the bundle into a per-swarm runtime
@@ -98,5 +98,5 @@ Pattern:
       passThroughOnMissingTemplate: false
   ```
 
-Templates themselves can use Pebble + SpEL (see `SCENARIO_TEMPLATING.md`)
+Templates themselves can use Pebble + SpEL (see `docs/guides/templating-basics.md`)
 to pull fields from payload and headers.

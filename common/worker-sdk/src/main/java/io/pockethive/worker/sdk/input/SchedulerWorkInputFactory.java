@@ -54,7 +54,6 @@ public final class SchedulerWorkInputFactory implements WorkInputFactory, Ordere
     public WorkInput create(WorkerDefinition definition, WorkInputConfig config) {
         Logger logger = LoggerFactory.getLogger(definition.beanType());
         Class<?> configType = definition.configType();
-        @SuppressWarnings("unchecked")
         Class<Object> typedConfigType = (Class<Object>) configType;
         SchedulerInputProperties scheduling = config instanceof SchedulerInputProperties props
             ? props

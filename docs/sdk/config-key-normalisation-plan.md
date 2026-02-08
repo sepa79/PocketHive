@@ -19,7 +19,7 @@ Goal: converge on a single key style (camelCase) across worker configs, IO confi
   - [ ] Document the convention briefly in `docs/sdk` and reference it from worker docs.
 
 - [ ] Worker `application.yml` normalisation
-  - [ ] For each worker service (generator, processor, moderator, postprocessor, http-builder, trigger):
+  - [ ] For each worker service (generator, processor, moderator, postprocessor, trigger):
     - [ ] Update `pockethive.worker.config.*` keys to camelCase.
     - [ ] Ensure IO config blocks (`pockethive.inputs.*`, `pockethive.outputs.*`) also use camelCase for nested fields.
     - [ ] Verify that defaults still bind correctly via Spring Boot configuration properties.

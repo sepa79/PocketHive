@@ -50,7 +50,7 @@ capabilities only; concrete IO types come from config.
   - [x] Data Provider
   - [x] PostProcessor
   - [x] Moderator
-  - [x] HTTP Builder
+  - [x] Request Builder
   - [x] Trigger
 - [x] Clean-up & deprecation
   - [x] Remove `input` / `output` / `ioFromConfig` from `@PocketHiveWorker`; IO is now

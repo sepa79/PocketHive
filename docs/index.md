@@ -18,9 +18,16 @@ by the UI under `/docs/...` as part of the runtime image.
 - `docs/scenarios/SCENARIO_CONTRACT.md` – canonical scenario YAML
   contract and mapping to `SwarmTemplate` / `SwarmPlan`.
 - `docs/scenarios/SCENARIO_PATTERNS.md` – real e2e scenarios and
-  patterns (REST, Redis dataset, guards, HTTP Builder).
-- `docs/scenarios/SCENARIO_TEMPLATING.md` – Pebble + SpEL helpers and
-  the scenario templating CLI.
+  patterns (REST, Redis dataset, guards, request-builder/http-sequence).
+- `docs/guides/README.md` – practical guides for day-to-day use.
+- `docs/guides/workers-basics.md` – worker roles and minimal flow setup.
+- `docs/guides/workers-advanced.md` – control-plane operations and
+  multi-swarm patterns.
+- `docs/guides/templating-basics.md` – Pebble + `eval(...)` baseline.
+- `docs/guides/templating-advanced.md` – sequences, advanced patterns,
+  and validation workflow.
+- `docs/scenarios/SCENARIO_TEMPLATING.md` – compatibility entry pointing
+  to the guides.
 
 ## Worker SDK & IO
 
@@ -58,6 +65,6 @@ by the UI under `/docs/...` as part of the runtime image.
 - `docs/spec/asyncapi.yaml` – messaging contract (AsyncAPI).
 - `docs/docs.html` – simple HTML viewer for the AsyncAPI spec.
 - `tools/scenario-templating-check` – CLI for validating generator and
-  HTTP Builder templates used in scenarios.
+  request templates used in scenarios.
 - `tools/mcp-orchestrator-debug` – MCP client for driving Orchestrator
   from tools/IDEs.

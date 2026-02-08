@@ -347,12 +347,12 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
 
     private ThreadPoolExecutor createExecutor(int max) {
         SynchronousQueue<Runnable> queue = new SynchronousQueue<>();
-        ThreadFactory threadFactory = runnable -> {
-            Thread thread = new Thread(runnable);
-            thread.setName("ph-worker-" + workerDefinition.beanName() + "-exec-" + thread.getId());
-            thread.setDaemon(true);
-            return thread;
-        };
+	        ThreadFactory threadFactory = runnable -> {
+	            Thread thread = new Thread(runnable);
+	            thread.setName("ph-worker-" + workerDefinition.beanName() + "-exec-" + thread.threadId());
+	            thread.setDaemon(true);
+	            return thread;
+	        };
         ThreadPoolExecutor executor = new ThreadPoolExecutor(
             max,
             max,

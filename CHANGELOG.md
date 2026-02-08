@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.15.3]
+Timestamp: 2026-02-07T22:43:15Z
+
+- Workers: remove legacy `http-builder` worker in favour of `request-builder`.
+- Build: drop `http-builder-service` module and its worker image target from local build tooling.
+- Scenario Manager: remove `http-builder` capability manifest (UI no longer offers it).
+- Docs: update “HTTP Builder” references to “Request Builder” in architecture and scenario authoring docs.
+
 ## [0.15.2]
 Timestamp: 2026-02-06T17:18:32Z
 

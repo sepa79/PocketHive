@@ -207,7 +207,6 @@ public final class SchedulerWorkInput<C> implements WorkInput {
         listenersRegistered = true;
     }
 
-    @SuppressWarnings("unchecked")
     private void applyRawConfigOverrides(Map<String, Object> rawConfig) {
         if (rawConfig == null || rawConfig.isEmpty()) {
             return;

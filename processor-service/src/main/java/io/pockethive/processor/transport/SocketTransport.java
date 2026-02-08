@@ -70,8 +70,6 @@ public class SocketTransport implements TcpTransport {
                                                int connectTimeout,
                                                int readTimeout,
                                                boolean useSsl) throws TcpException {
-        String key = (useSsl ? "tcps://" : "tcp://") + request.host() + ":" + request.port();
-        Object lock = locks.computeIfAbsent(key, ignored -> new Object());
         Socket socket = null;
         try {
             socket = pool.getOrCreate(

@@ -29,7 +29,6 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -49,7 +48,6 @@ import org.slf4j.LoggerFactory;
 public final class WorkerControlPlaneRuntime {
 
     private static final Logger log = LoggerFactory.getLogger(WorkerControlPlaneRuntime.class);
-    private static final String CONFIG_PHASE = "apply";
 
     private final WorkerControlPlane workerControlPlane;
     private final WorkerStateStore stateStore;
@@ -599,32 +597,8 @@ public final class WorkerControlPlaneRuntime {
         return new WorkerConfigPatch(sanitized, false, false);
     }
 
-    private Map<String, Object> withoutNullValues(Map<String, Object> candidate) {
-        if (candidate.isEmpty()) {
-            return Map.of();
-        }
-        Map<String, Object> filtered = new LinkedHashMap<>();
-        candidate.forEach((key, value) -> {
-            if (value != null) {
-                filtered.put(key, value);
-            }
-        });
-        if (filtered.isEmpty()) {
-            return Map.of();
-        }
-        return Map.copyOf(filtered);
-    }
-
     private Map<String, Object> snapshotRawConfig(WorkerState state) {
         return state.rawConfig();
-    }
-
-    private Object currentTypedConfig(WorkerState state) {
-        Class<?> configType = state.definition().configType();
-        if (configType == Void.class) {
-            return null;
-        }
-        return state.config(configType).orElse(null);
     }
 
     private boolean shouldLogConfigUpdate(

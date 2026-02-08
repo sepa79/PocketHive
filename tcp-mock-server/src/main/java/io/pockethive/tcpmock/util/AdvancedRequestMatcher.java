@@ -19,36 +19,36 @@ public class AdvancedRequestMatcher {
             String key = entry.getKey();
             Object value = entry.getValue();
             
-            switch (key) {
-                case "bodyPattern":
-                    if (!matchBodyPattern(message, (String) value)) return false;
-                    break;
-                case "jsonPath":
-                    if (!matchJsonPath(message, (Map<String, Object>) value)) return false;
-                    break;
-                case "xmlPath":
-                    if (!matchXmlPath(message, (Map<String, Object>) value)) return false;
-                    break;
-                case "equalTo":
-                    if (!message.equals(value)) return false;
-                    break;
-                case "contains":
-                    if (!message.contains((String) value)) return false;
-                    break;
-                case "matches":
-                    if (!Pattern.matches((String) value, message)) return false;
-                    break;
-                case "startsWith":
-                    if (!message.startsWith((String) value)) return false;
-                    break;
-                case "endsWith":
-                    if (!message.endsWith((String) value)) return false;
-                    break;
-                case "length":
-                    if (!matchLength(message, (Map<String, Object>) value)) return false;
-                    break;
-            }
-        }
+	            switch (key) {
+	                case "bodyPattern":
+	                    if (!(value instanceof String pattern) || !matchBodyPattern(message, pattern)) return false;
+	                    break;
+	                case "jsonPath":
+	                    if (!(value instanceof Map<?, ?> rawCriteria) || !matchJsonPath(message, toStringObjectMap(rawCriteria))) return false;
+	                    break;
+	                case "xmlPath":
+	                    if (!(value instanceof Map<?, ?> rawCriteria) || !matchXmlPath(message, toStringObjectMap(rawCriteria))) return false;
+	                    break;
+	                case "equalTo":
+	                    if (!message.equals(value)) return false;
+	                    break;
+	                case "contains":
+	                    if (!(value instanceof String needle) || !message.contains(needle)) return false;
+	                    break;
+	                case "matches":
+	                    if (!(value instanceof String regex) || !Pattern.matches(regex, message)) return false;
+	                    break;
+	                case "startsWith":
+	                    if (!(value instanceof String prefix) || !message.startsWith(prefix)) return false;
+	                    break;
+	                case "endsWith":
+	                    if (!(value instanceof String suffix) || !message.endsWith(suffix)) return false;
+	                    break;
+	                case "length":
+	                    if (!(value instanceof Map<?, ?> rawCriteria) || !matchLength(message, toStringObjectMap(rawCriteria))) return false;
+	                    break;
+	            }
+	        }
         
         return true;
     }
@@ -116,11 +116,11 @@ public class AdvancedRequestMatcher {
         return false;
     }
     
-    private boolean matchLength(String message, Map<String, Object> criteria) {
-        int length = message.length();
-        
-        if (criteria.containsKey("equalTo")) {
-            return length == (Integer) criteria.get("equalTo");
+	    private boolean matchLength(String message, Map<String, Object> criteria) {
+	        int length = message.length();
+	        
+	        if (criteria.containsKey("equalTo")) {
+	            return length == (Integer) criteria.get("equalTo");
         }
         if (criteria.containsKey("greaterThan")) {
             return length > (Integer) criteria.get("greaterThan");
@@ -128,7 +128,20 @@ public class AdvancedRequestMatcher {
         if (criteria.containsKey("lessThan")) {
             return length < (Integer) criteria.get("lessThan");
         }
-        
-        return true;
-    }
-}
+	        
+	        return true;
+	    }
+
+	    private static Map<String, Object> toStringObjectMap(Map<?, ?> source) {
+	        if (source == null || source.isEmpty()) {
+	            return Map.of();
+	        }
+	        java.util.LinkedHashMap<String, Object> result = new java.util.LinkedHashMap<>();
+	        source.forEach((key, value) -> {
+	            if (key != null) {
+	                result.put(key.toString(), value);
+	            }
+	        });
+	        return Map.copyOf(result);
+	    }
+	}

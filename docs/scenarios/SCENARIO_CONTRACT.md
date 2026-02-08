@@ -68,7 +68,7 @@ Bee fields (see `common/swarm-model/src/main/java/io/pockethive/swarm/model/Bee.
 
 - `role` (string, required)
   - Logical role name, e.g. `generator`, `processor`, `moderator`,
-    `postprocessor`, `http-builder`.
+    `postprocessor`, `request-builder`.
 - `id` (string, optional)
   - Stable identifier used by `topology.edges[].from|to.beeId`. Required if
     the scenario declares `topology`.
@@ -279,7 +279,7 @@ Examples:
 tools/scenario-templating-check/run.sh \
   --scenario scenarios/e2e/templated-rest/scenario.yaml
 
-# Check generator + HTTP Builder templates referenced from a scenario
+# Check generator + Request Builder templates referenced from a scenario
 tools/scenario-templating-check/run.sh \
   --check-http-templates \
   --scenario scenarios/e2e/redis-dataset-demo/scenario.yaml
@@ -289,7 +289,7 @@ The tool will:
 
 - Parse the scenario and build a template context with a sample WorkItem.
 - Render generator templates via Pebble+SpEL and report errors.
-- For HTTP Builder:
+- For Request Builder:
   - Load HTTP templates from the configured root.
   - Check that every `x-ph-call-id` used in the scenario has a matching
     template.
@@ -400,7 +400,7 @@ config:
         }
 ```
 
-- The same `schemaRef` hint is also supported in **HTTP Builder templates** (for example next to `bodyTemplate`).
+- The same `schemaRef` hint is also supported in **Request Builder templates** (for example next to `bodyTemplate`).
 
 - `schemaRef` is treated as an opaque string by Scenario Manager and
   workers; it is only used by the UI to locate a schema file inside the

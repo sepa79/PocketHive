@@ -7,8 +7,11 @@
   <packaging>pom</packaging>
     <properties>
     <!-- Flatten plugin resolves this CI-friendly revision into published POMs; see build plugins below. -->
-    <revision>0.15.2</revision>
+    <revision>0.15.3</revision>
     <logstash.logback.version>8.1</logstash.logback.version>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+    <maven.compiler.encoding>${project.build.sourceEncoding}</maven.compiler.encoding>
   </properties>
   <modules>
     <module>observability</module>
@@ -17,6 +20,7 @@
     <module>common/control-plane-spring</module>
     <module>common/manager-sdk</module>
     <module>common/worker-sdk</module>
+    <module>common/request-templates</module>
     <module>common/docker-client</module>
     <module>common/swarm-model</module>
     <module>common/journal-postgres</module>
@@ -30,14 +34,28 @@
     <module>trigger-service</module>
     <module>scenario-manager-service</module>
     <module>tcp-mock-server</module>
-    <module>http-builder-service</module>
     <module>request-builder-service</module>
+    <module>http-sequence-service</module>
     <module>e2e-tests</module>
     <module>tools/scenario-templating-check</module>
   </modules>
 	  <build>
 	    <pluginManagement>
 	      <plugins>
+	        <plugin>
+	          <groupId>org.apache.maven.plugins</groupId>
+	          <artifactId>maven-compiler-plugin</artifactId>
+	          <configuration>
+	            <encoding>${project.build.sourceEncoding}</encoding>
+	          </configuration>
+	        </plugin>
+	        <plugin>
+	          <groupId>org.apache.maven.plugins</groupId>
+	          <artifactId>maven-resources-plugin</artifactId>
+	          <configuration>
+	            <encoding>${project.build.sourceEncoding}</encoding>
+	          </configuration>
+	        </plugin>
 	        <plugin>
 	          <groupId>org.apache.maven.plugins</groupId>
 	          <artifactId>maven-surefire-plugin</artifactId>

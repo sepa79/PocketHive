@@ -1,6 +1,7 @@
 package io.pockethive.tcpmock.service;
 
 import io.pockethive.tcpmock.model.TcpRequest;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Component;
 import org.springframework.stereotype.Service;
@@ -19,6 +20,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 public class ScenarioManager {
     private final Map<String, String> scenarioStates = new ConcurrentHashMap<>();
     private final ObjectMapper mapper = new ObjectMapper();
+    private static final TypeReference<Map<String, String>> MAP_TYPE = new TypeReference<>() {};
     private final String scenariosFile = "/app/data/scenarios-state.json";
     private final String defaultScenariosFile = "/app/scenarios-state-default.json";
 
@@ -31,20 +33,22 @@ public class ScenarioManager {
             Path path = Paths.get(scenariosFile);
             if (Files.exists(path)) {
                 String content = Files.readString(path);
-                @SuppressWarnings("unchecked")
-                Map<String, String> loaded = mapper.readValue(content, Map.class);
-                scenarioStates.putAll(loaded);
-                System.out.println("Loaded " + loaded.size() + " scenarios from disk");
+                Map<String, String> loaded = mapper.readValue(content, MAP_TYPE);
+                if (loaded != null && !loaded.isEmpty()) {
+                    scenarioStates.putAll(loaded);
+                    System.out.println("Loaded " + loaded.size() + " scenarios from disk");
+                }
             } else {
                 // Load defaults if no persisted state exists
                 Path defaultPath = Paths.get(defaultScenariosFile);
                 if (Files.exists(defaultPath)) {
                     String content = Files.readString(defaultPath);
-                    @SuppressWarnings("unchecked")
-                    Map<String, String> loaded = mapper.readValue(content, Map.class);
-                    scenarioStates.putAll(loaded);
-                    System.out.println("Loaded " + loaded.size() + " default scenarios");
-                    saveScenarios(); // Persist defaults
+                    Map<String, String> loaded = mapper.readValue(content, MAP_TYPE);
+                    if (loaded != null && !loaded.isEmpty()) {
+                        scenarioStates.putAll(loaded);
+                        System.out.println("Loaded " + loaded.size() + " default scenarios");
+                        saveScenarios(); // Persist defaults
+                    }
                 }
             }
         } catch (IOException e) {

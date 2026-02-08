@@ -15,11 +15,9 @@ import io.pockethive.worker.sdk.config.WorkerCapability;
 import io.pockethive.worker.sdk.config.WorkerInputType;
 import io.pockethive.worker.sdk.config.WorkerOutputType;
 import io.pockethive.worker.sdk.templating.TemplateRenderer;
-import java.util.Map;
 import java.util.Set;
 import java.util.stream.StreamSupport;
 import org.junit.jupiter.api.Test;
-import static org.assertj.core.api.Assertions.assertThat;
 
 class TemplatingInterceptorTest {
 

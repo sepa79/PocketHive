@@ -7,7 +7,6 @@ import io.pockethive.worker.sdk.api.WorkItem;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
-import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Instant;
@@ -15,7 +14,6 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.HexFormat;
 import java.util.Map;
-import java.util.TreeMap;
 
 public class AwsSignatureV4Strategy implements AuthStrategy {
     

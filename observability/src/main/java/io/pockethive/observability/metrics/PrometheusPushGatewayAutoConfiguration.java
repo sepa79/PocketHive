@@ -17,6 +17,7 @@ import org.springframework.util.StringUtils;
 
 @AutoConfiguration
 @ConditionalOnClass({PrometheusMeterRegistry.class, PrometheusPushGatewayManager.class})
+@SuppressWarnings("deprecation")
 public class PrometheusPushGatewayAutoConfiguration {
 
   private static final Logger log = LoggerFactory.getLogger(PrometheusPushGatewayAutoConfiguration.class);

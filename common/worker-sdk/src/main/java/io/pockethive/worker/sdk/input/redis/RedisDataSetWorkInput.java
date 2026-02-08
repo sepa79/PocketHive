@@ -227,7 +227,6 @@ public final class RedisDataSetWorkInput implements WorkInput {
         });
     }
 
-    @SuppressWarnings("unchecked")
     private void applyRawConfigOverrides(Map<String, Object> rawConfig) {
         if (rawConfig == null || rawConfig.isEmpty()) {
             return;

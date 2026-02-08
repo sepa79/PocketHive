@@ -23,7 +23,6 @@ import io.pockethive.worker.sdk.config.WorkerInputType;
 import io.pockethive.worker.sdk.config.WorkerOutputType;
 import io.pockethive.worker.sdk.input.WorkInput;
 import io.pockethive.worker.sdk.input.WorkInputFactory;
-import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
 import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.Test;

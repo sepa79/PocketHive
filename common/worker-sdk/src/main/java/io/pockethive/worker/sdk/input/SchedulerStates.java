@@ -3,7 +3,6 @@ package io.pockethive.worker.sdk.input;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import java.util.Objects;
 import java.util.function.DoubleSupplier;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

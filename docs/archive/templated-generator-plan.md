@@ -1,7 +1,7 @@
 # Config-Driven Templated Workers & Message History Plan
 
 > Status: **partially implemented / superseded**.  
-> Core ideas (WorkItem steps, templating interceptor, HTTP Builder, Redis uploader) are implemented; further pipeline work is tracked in `docs/sdk/workitem-refactor-plan.md` and `docs/sdk/http-request-processor-plan.md`.
+> Core ideas (WorkItem steps, templating interceptor, Request Builder, Redis uploader) are implemented; further pipeline work is tracked in `docs/sdk/workitem-refactor-plan.md` and `docs/sdk/http-request-processor-plan.md`.
 
 > Scope: make most workers composable and configuration-driven, with minimal Java code.  
 > Sources: align with `docs/ARCHITECTURE.md`, `docs/ORCHESTRATOR-REST.md`, and the Worker SDK plans in `docs/sdk/`.

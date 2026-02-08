@@ -48,8 +48,4 @@ public final class CsvDataSetWorkInputFactory implements WorkInputFactory, Order
         return Ordered.LOWEST_PRECEDENCE;
     }
 
-    private CsvDataSetInputProperties buildProperties_UNUSED() {
-        CsvDataSetInputProperties properties = new CsvDataSetInputProperties();
-        return properties;
-    }
 }

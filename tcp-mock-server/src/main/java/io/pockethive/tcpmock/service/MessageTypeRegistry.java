@@ -5,7 +5,6 @@ import io.pockethive.tcpmock.model.MockState;
 import io.pockethive.tcpmock.model.ProcessedResponse;
 import io.pockethive.tcpmock.util.PatternCache;
 import io.pockethive.tcpmock.util.AdvancedRequestMatcher;
-import io.pockethive.tcpmock.model.RequestVerification;
 import io.pockethive.tcpmock.handler.Iso8583Handler;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;

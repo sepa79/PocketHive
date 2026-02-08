@@ -4,8 +4,6 @@ import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
 import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
-import io.pockethive.worker.sdk.config.SchedulerInputProperties;
-import io.pockethive.worker.sdk.config.WorkerInputType;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.URI;

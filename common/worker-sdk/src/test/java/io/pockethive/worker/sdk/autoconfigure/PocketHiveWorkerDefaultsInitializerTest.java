@@ -66,7 +66,9 @@ class PocketHiveWorkerDefaultsInitializerTest {
 
         initializer.afterSingletonsInstantiated();
 
-        ArgumentCaptor<Map<String, Object>> captor = ArgumentCaptor.forClass(Map.class);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Map<String, Object>> captor =
+            (ArgumentCaptor<Map<String, Object>>) (ArgumentCaptor<?>) ArgumentCaptor.forClass(Map.class);
         verify(controlPlaneRuntime).registerDefaultConfig(eq("testWorker"), captor.capture());
         org.assertj.core.api.Assertions.assertThat(captor.getValue())
             .containsEntry("value", "demo");

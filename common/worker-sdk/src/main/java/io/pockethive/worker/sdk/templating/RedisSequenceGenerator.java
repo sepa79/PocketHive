@@ -8,7 +8,6 @@ import io.pockethive.worker.sdk.config.RedisSequenceProperties;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.regex.Pattern;
 
 /**
  * Redis-backed sequence generator for unique alphanumeric/binary sequences.
@@ -20,7 +19,6 @@ public final class RedisSequenceGenerator {
     private static final ConcurrentHashMap<String, Long> MAX_CACHE = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<String, ParsedFormat> FORMAT_CACHE = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<String, SequenceMode> MODE_CACHE = new ConcurrentHashMap<>();
-    private static final Pattern TOKEN_PATTERN = Pattern.compile("%[0-9]*[Ssd]");
     private static final String KEY_PREFIX = "ph:seq:";
     private static final long[] POW10 = {1,10,100,1000,10000,100000,1000000,10000000,100000000,1000000000,
         10000000000L,100000000000L,1000000000000L,10000000000000L,100000000000000L,1000000000000000L,

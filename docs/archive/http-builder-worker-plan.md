@@ -1,7 +1,7 @@
 # HTTP Builder Worker — Plan
 
 > Status: **implemented / archived**.  
-> The HTTP Builder worker and default HTTP templates are implemented; see `http-builder-service` and `docs/scenarios/SCENARIO_PATTERNS.md` for current usage.
+> The HTTP Builder worker was replaced by `request-builder` and the `http-builder-service` module was removed. This doc is kept for historical context.
 
 **Goal**
 - Add a generic HTTP Builder worker that takes `callId` + context from Rabbit, resolves a disk-backed template, and emits an HTTP request envelope for the existing processor (base URL, retries, etc. stay in the processor).
@@ -56,7 +56,7 @@
 
 - [x] Define the template file schema for a single HTTP call (fields + types + required/optional).
 - [x] Decide on the on-disk layout for templates (`serviceId`/`callId` tree and root path config).
-- [x] Extend `generator` scenario capabilities to carry `serviceId` + `callId` where needed (via headers/templating and the `http-builder` capability).
+- [x] Extend `generator` scenario capabilities to carry `serviceId` + `callId` where needed (via headers/templating and the request-builder capability).
 - [x] Define worker-level config for:
   - [x] Template root(s) (baked-in vs override).
   - [x] Default `serviceId` if upstream doesn’t supply one.
@@ -77,11 +77,11 @@
 
 ### 3. Integration with existing pipeline
 
-- [x] Update scenarios that should use HTTP Builder instead of embedding SOAP/HTTP in DataProvider/Generator (`redis-dataset-demo`).
+- [x] Update scenarios that should use Request Builder instead of embedding SOAP/HTTP in DataProvider/Generator (`redis-dataset-demo`).
 - [x] Adjust DataProvider configs to:
   - [x] Pick `callId` per message (weighted, via templating) and add it to the WorkItem (`x-ph-call-id`).
   - [x] Forward payload untouched (so templates have full context).
-- [x] Wire HTTP Builder between DataProviders and Processor in swarm templates.
+- [x] Wire Request Builder between DataProviders and Processor in swarm templates.
 
 ### 4. Tooling & validation
 
@@ -97,11 +97,11 @@
   - [x] Successful resolution and rendering for a simple call.
   - [x] Missing `callId` → clear error / no output (given `passThroughOnMissingTemplate=false`).
   - [x] Missing template for known `callId` → clear error (no fallback) and either pass-through or drop depending on config.
-- [x] Integration-style test wiring DataProvider → HTTP Builder → Processor via the e2e harness and the `redis-dataset-demo` scenario (end-to-end pipeline with WireMock in the stack).
+- [x] Integration-style test wiring DataProvider → Request Builder → Processor via the e2e harness and the `redis-dataset-demo` scenario (end-to-end pipeline with WireMock in the stack).
 
 ### 6. Documentation
 
 - [x] Add a new section to `docs/ARCHITECTURE.md` describing the HTTP Builder role and its place in the swarm.
-- [x] Document the template file format and directory layout (with examples) in `http-builder-service/README.md`.
+- [x] Document the template file format and directory layout (with examples) in `request-builder-service/README.md`.
 - [x] Document how to mount custom template directories via Docker and how overrides work.
 - [ ] (Optional) Draft requirements for a future Postman→template import tool (out of scope for this iteration).

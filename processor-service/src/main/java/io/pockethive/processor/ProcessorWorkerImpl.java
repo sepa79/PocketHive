@@ -81,7 +81,6 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
     this.properties = Objects.requireNonNull(properties, "properties");
     ThreadLocal<HttpClient> perThreadClient = ThreadLocal.withInitial(HttpClients::createDefault);
     java.util.concurrent.atomic.AtomicLong nextAllowedTimeNanos = new java.util.concurrent.atomic.AtomicLong(0L);
-    boolean sslVerify = properties.defaultConfig().sslVerify();
     this.protocolHandlers = Map.of(
         "HTTP", new HttpProtocolHandler(mapper, clock, metricsRecorder, httpClient, noKeepAliveClient, perThreadClient, nextAllowedTimeNanos),
         "TCP", new TcpProtocolHandler(mapper, clock, metricsRecorder, properties.defaultConfig().tcpTransport(), nextAllowedTimeNanos)

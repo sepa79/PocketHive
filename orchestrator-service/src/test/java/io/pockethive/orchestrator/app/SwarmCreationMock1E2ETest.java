@@ -446,7 +446,6 @@ class SwarmCreationMock1E2ETest {
             null,
             null);
 
-        @SuppressWarnings("unchecked")
         ResponseEntity<java.util.List> response =
             rest.getForEntity("/api/swarms/{swarmId}/journal", java.util.List.class, "journal-swarm");
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);

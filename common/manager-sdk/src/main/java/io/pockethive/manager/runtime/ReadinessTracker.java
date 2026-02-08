@@ -1,6 +1,5 @@
 package io.pockethive.manager.runtime;
 
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -90,10 +89,8 @@ public final class ReadinessTracker {
 
   public ManagerMetrics metrics() {
     int desired;
-    Map<String, Integer> expectedSnapshot;
     synchronized (this) {
       desired = expectedReady.values().stream().mapToInt(Integer::intValue).sum();
-      expectedSnapshot = new HashMap<>(expectedReady);
     }
     long now = System.currentTimeMillis();
     int healthy = 0;
@@ -162,4 +159,3 @@ public final class ReadinessTracker {
     return role + "." + instance;
   }
 }
-
