@@ -10,11 +10,15 @@ import io.pockethive.processor.response.ResponseBuilder;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.pockethive.worker.sdk.api.TcpRequestEnvelope;
 import io.pockethive.processor.transport.*;
 import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
+import java.util.LinkedHashMap;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicLong;
@@ -46,29 +50,52 @@ public class TcpProtocolHandler implements ProtocolHandler {
 
   @Override
   public WorkItem invoke(WorkItem message, JsonNode envelope, ProcessorWorkerConfig processorConfig, WorkerContext context) throws Exception {
+    String baseUrl = processorConfig.baseUrl();
+    Map<String, Object> requestMeta = requestMetadata(baseUrl, null, null, null, null);
+
+    TcpRequestEnvelope.TcpRequest requestEnvelope;
+    try {
+      requestEnvelope = parseRequest(envelope);
+    } catch (IllegalArgumentException ex) {
+      throw new ProcessorCallException(CallMetrics.failure(0L, 0L, -1), ex, requestMeta);
+    }
+
     TcpTransportConfig desired = processorConfig.tcpTransport() == null ? defaultConfig : processorConfig.tcpTransport();
     ensureTransportConfig(desired);
 
-    String baseUrl = processorConfig.baseUrl();
+    requestMeta = requestMetadata(baseUrl, null, null, requestEnvelope.behavior(), null);
     if (baseUrl == null || baseUrl.isBlank()) {
       throw new ProcessorCallException(CallMetrics.failure(0L, 0L, -1),
-          new IllegalArgumentException("invalid TCP baseUrl"));
+          new IllegalArgumentException("invalid TCP baseUrl"), requestMeta);
     }
 
     boolean useSsl = baseUrl.startsWith("tcps://");
-    String[] parts = parseUrl(baseUrl);
-    String host = parts[0];
-    int port = Integer.parseInt(parts[1]);
+    String host;
+    int port;
+    try {
+      String[] parts = parseUrl(baseUrl);
+      host = parts[0];
+      port = Integer.parseInt(parts[1]);
+    } catch (Exception ex) {
+      throw new ProcessorCallException(CallMetrics.failure(0L, 0L, -1),
+          new IllegalArgumentException("invalid TCP baseUrl"), requestMeta);
+    }
+    requestMeta = requestMetadata(baseUrl, host, port, requestEnvelope.behavior(), useSsl);
 
-    Optional<String> body = extractBody(envelope.path("body"));
+    Optional<String> body = extractBody(requestEnvelope.body());
     if (body.isEmpty()) {
       throw new ProcessorCallException(CallMetrics.failure(0L, 0L, -1),
-          new IllegalArgumentException("no TCP body"));
+          new IllegalArgumentException("no TCP body"), requestMeta);
     }
 
-    TcpBehavior behavior = TcpBehavior.valueOf(envelope.path("behavior").asText("REQUEST_RESPONSE"));
-    String endTag = envelope.path("endTag").asText(null);
-    Integer maxBytes = envelope.path("maxBytes").isInt() ? envelope.path("maxBytes").asInt() : null;
+    TcpBehavior behavior;
+    try {
+      behavior = TcpBehavior.valueOf(requestEnvelope.behavior().toUpperCase(Locale.ROOT));
+    } catch (IllegalArgumentException ex) {
+      throw new ProcessorCallException(CallMetrics.failure(0L, 0L, -1), ex, requestMeta);
+    }
+    String endTag = requestEnvelope.endTag();
+    Integer maxBytes = requestEnvelope.maxBytes();
 
     long start = clock.millis();
     long pacingMillis = 0L;
@@ -87,7 +114,7 @@ public class TcpProtocolHandler implements ProtocolHandler {
       options.put("maxBytes", maxBytes != null ? maxBytes : config.maxBytes());
       options.put("ssl", useSsl);
       options.put("sslVerify", config.sslVerify());
-      TcpRequest request = new TcpRequest(host, port, body.get().getBytes(StandardCharsets.UTF_8), options);
+      TcpRequest tcpRequest = new TcpRequest(host, port, body.get().getBytes(StandardCharsets.UTF_8), options);
 
       // Connection reuse strategy
       transport = switch (config.connectionReuse()) {
@@ -105,7 +132,7 @@ public class TcpProtocolHandler implements ProtocolHandler {
 
       for (int attempt = 0; attempt <= config.maxRetries(); attempt++) {
         try {
-          response = transport.execute(request, behavior);
+          response = transport.execute(tcpRequest, behavior);
           break;
         } catch (Exception ex) {
           lastException = ex;
@@ -141,7 +168,7 @@ public class TcpProtocolHandler implements ProtocolHandler {
       long connectionLatency = Math.max(0L, pacingMillis);
       CallMetrics metrics = CallMetrics.failure(callDuration, connectionLatency, -1);
       metricsRecorder.record(metrics);
-      throw new ProcessorCallException(metrics, ex);
+      throw new ProcessorCallException(metrics, ex, requestMeta);
     } finally {
       if (closeAfter && transport != null) {
         try {
@@ -159,10 +186,44 @@ public class TcpProtocolHandler implements ProtocolHandler {
     return url.split(":");
   }
 
-  private Optional<String> extractBody(JsonNode bodyNode) throws Exception {
-    return bodyNode == null || bodyNode.isMissingNode() || bodyNode.isNull() ? Optional.empty()
-        : bodyNode.isTextual() ? Optional.of(bodyNode.asText())
-        : Optional.of(mapper.writeValueAsString(bodyNode));
+  private Map<String, Object> requestMetadata(String baseUrl, String host, Integer port, String behavior, Boolean useSsl) {
+    Map<String, Object> request = new LinkedHashMap<>();
+    String scheme = Boolean.TRUE.equals(useSsl) ? "tcps" : "tcp";
+    request.put("transport", "tcp");
+    request.put("scheme", scheme);
+    request.put("method", normalizeMethod(behavior));
+    request.put("baseUrl", baseUrl == null ? "" : baseUrl);
+    request.put("path", "/");
+    if (host != null && port != null) {
+      request.put("url", scheme + "://" + host + ":" + port);
+    }
+    return request;
+  }
+
+  private String normalizeMethod(String behavior) {
+    if (behavior == null || behavior.isBlank()) {
+      return "TCP";
+    }
+    return behavior.trim().toUpperCase(Locale.ROOT);
+  }
+
+  private TcpRequestEnvelope.TcpRequest parseRequest(JsonNode envelope) {
+    try {
+      TcpRequestEnvelope parsed = mapper.treeToValue(envelope, TcpRequestEnvelope.class);
+      return parsed.request();
+    } catch (Exception ex) {
+      throw new IllegalArgumentException("Invalid TCP request envelope", ex);
+    }
+  }
+
+  private Optional<String> extractBody(Object bodyValue) throws Exception {
+    if (bodyValue == null) {
+      return Optional.empty();
+    }
+    if (bodyValue instanceof String textValue) {
+      return Optional.of(textValue);
+    }
+    return Optional.of(mapper.writeValueAsString(bodyValue));
   }
 
   private void ensureTransportConfig(TcpTransportConfig desired) {

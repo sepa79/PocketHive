@@ -74,11 +74,11 @@ class RequestBuilderWorkerImplTest {
     assertThat(result.contentType()).isEqualTo("application/json");
 
     JsonNode envelope = new ObjectMapper().readTree(result.asString());
-    assertThat(envelope.get("protocol").asText()).isEqualTo("HTTP");
-    assertThat(envelope.get("path").asText()).isEqualTo("/test");
-    assertThat(envelope.get("method").asText()).isEqualTo("POST");
-    assertThat(envelope.get("body").asText()).isEqualTo("body");
-    assertThat(envelope.get("headers").get("X-Test").asText()).isEqualTo("yes");
+    assertThat(envelope.get("kind").asText()).isEqualTo("http.request");
+    assertThat(envelope.get("request").get("path").asText()).isEqualTo("/test");
+    assertThat(envelope.get("request").get("method").asText()).isEqualTo("POST");
+    assertThat(envelope.get("request").get("body").asText()).isEqualTo("body");
+    assertThat(envelope.get("request").get("headers").get("X-Test").asText()).isEqualTo("yes");
   }
 
   @Test
@@ -159,11 +159,11 @@ class RequestBuilderWorkerImplTest {
 
     assertThat(result).isNotNull();
     JsonNode envelope = new ObjectMapper().readTree(result.asString());
-    assertThat(envelope.get("protocol").asText()).isEqualTo("TCP");
-    assertThat(envelope.get("behavior").asText()).isEqualTo("REQUEST_RESPONSE");
-    assertThat(envelope.get("body").asText()).isEqualTo("test-data");
-    assertThat(envelope.get("endTag").asText()).isEqualTo("</Document>");
-    assertThat(envelope.get("maxBytes").asInt()).isEqualTo(8192);
+    assertThat(envelope.get("kind").asText()).isEqualTo("tcp.request");
+    assertThat(envelope.get("request").get("behavior").asText()).isEqualTo("REQUEST_RESPONSE");
+    assertThat(envelope.get("request").get("body").asText()).isEqualTo("test-data");
+    assertThat(envelope.get("request").get("endTag").asText()).isEqualTo("</Document>");
+    assertThat(envelope.get("request").get("maxBytes").asInt()).isEqualTo(8192);
   }
 
   @Test
@@ -200,12 +200,12 @@ class RequestBuilderWorkerImplTest {
 
     assertThat(result).isNotNull();
     JsonNode envelope = new ObjectMapper().readTree(result.asString());
-    assertThat(envelope.get("protocol").asText()).isEqualTo("TCP");
-    assertThat(envelope.get("behavior").asText()).isEqualTo("STREAMING");
-    assertThat(envelope.get("body").asText()).isEqualTo("stream-data");
-    assertThat(envelope.get("maxBytes").asInt()).isEqualTo(1024);
-    // endTag should not be present in the envelope
-    assertThat(envelope.has("endTag")).isFalse();
+    assertThat(envelope.get("kind").asText()).isEqualTo("tcp.request");
+    assertThat(envelope.get("request").get("behavior").asText()).isEqualTo("STREAMING");
+    assertThat(envelope.get("request").get("body").asText()).isEqualTo("stream-data");
+    assertThat(envelope.get("request").get("maxBytes").asInt()).isEqualTo(1024);
+    // endTag is optional and remains null when not configured
+    assertThat(envelope.get("request").path("endTag").isNull()).isTrue();
   }
 
   @Test
@@ -253,7 +253,7 @@ class RequestBuilderWorkerImplTest {
     WorkerContext ctx1 = new TestWorkerContext(config1);
     WorkItem result1 = worker.onMessage(seed, ctx1);
     JsonNode envelope1 = new ObjectMapper().readTree(result1.asString());
-    assertThat(envelope1.get("path").asText()).isEqualTo("/one");
+    assertThat(envelope1.get("request").get("path").asText()).isEqualTo("/one");
 
     // Second call supplies a control-plane override pointing at dir2; worker should reload.
     RequestBuilderWorkerConfig config2 = new RequestBuilderWorkerConfig(
@@ -261,7 +261,7 @@ class RequestBuilderWorkerImplTest {
     WorkerContext ctx2 = new TestWorkerContext(config2);
     WorkItem result2 = worker.onMessage(seed, ctx2);
     JsonNode envelope2 = new ObjectMapper().readTree(result2.asString());
-    assertThat(envelope2.get("path").asText()).isEqualTo("/two");
+    assertThat(envelope2.get("request").get("path").asText()).isEqualTo("/two");
   }
 
   private static final class TestWorkerContext implements WorkerContext {

@@ -1,6 +1,7 @@
 package io.pockethive.generator;
 
 import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
+import io.pockethive.worker.sdk.api.HttpRequestEnvelope;
 import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkStep;
 import io.pockethive.worker.sdk.api.WorkerContext;
@@ -10,11 +11,9 @@ import io.pockethive.worker.sdk.templating.MessageBodyType;
 import io.pockethive.worker.sdk.templating.MessageTemplate;
 import io.pockethive.worker.sdk.templating.MessageTemplateRenderer;
 import io.pockethive.worker.sdk.templating.TemplateRenderer;
-import java.time.Instant;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.Locale;
 import java.util.UUID;
 import org.springframework.amqp.core.MessageProperties;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -143,13 +142,14 @@ class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
           .build();
     }
 
-    Map<String, Object> payload = new LinkedHashMap<>();
-    payload.put("id", messageId);
-    payload.put("path", rendered.path());
-    payload.put("method", rendered.method() == null ? null : rendered.method().toUpperCase(Locale.ROOT));
-    payload.put("headers", rendered.headers());
-    payload.put("body", rendered.body());
-    payload.put("createdAt", Instant.now().toString());
+    HttpRequestEnvelope payload = HttpRequestEnvelope.of(
+        new HttpRequestEnvelope.HttpRequest(
+            rendered.method(),
+            rendered.path(),
+            rendered.headers(),
+            rendered.body()
+        )
+    );
 
     return WorkItem.json(context.info(), payload)
         .headers(baseHeaders)

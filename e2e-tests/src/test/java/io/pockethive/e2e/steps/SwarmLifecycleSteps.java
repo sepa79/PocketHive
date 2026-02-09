@@ -828,14 +828,18 @@ public class SwarmLifecycleSteps {
       byte[] bodyBytes = httpPayload.getBytes(StandardCharsets.UTF_8);
 
       JsonNode root = objectMapper.readTree(bodyBytes);
-      int statusCode = root.path("status").asInt();
+      assertTrue(looksLikeHttpResponseEnvelope(root),
+          () -> "Final queue last step is not an http.result envelope: " + root);
+      int statusCode = root.path("outcome").path("status").asInt(-1);
       if (statusCode != 200) {
         LOGGER.warn("Final queue status code was {}. Body={} headers={}",
             statusCode, root, message.headers());
         assertEquals(200, statusCode, "Final queue response should report status 200");
       }
-      JsonNode bodyNode = root.path("body");
-      String bodyText = bodyNode.isMissingNode() ? new String(bodyBytes, StandardCharsets.UTF_8) : bodyNode.asText();
+      JsonNode bodyNode = root.path("outcome").path("body");
+      String bodyText = bodyNode.isMissingNode()
+          ? new String(bodyBytes, StandardCharsets.UTF_8)
+          : (bodyNode.isTextual() ? bodyNode.asText() : bodyNode.toString());
       if (bodyText == null || bodyText.isBlank()) {
         bodyText = new String(bodyBytes, StandardCharsets.UTF_8);
       }
@@ -875,7 +879,10 @@ public class SwarmLifecycleSteps {
               }
               try {
                 JsonNode node = objectMapper.readTree(payload);
-                JsonNode stepBody = node.path("body");
+                if (!looksLikeHttpRequestEnvelope(node)) {
+                  return false;
+                }
+                JsonNode stepBody = node.path("request").path("body");
                 String candidate = null;
                 if (stepBody.isTextual()) {
                   candidate = stepBody.asText();
@@ -902,10 +909,10 @@ public class SwarmLifecycleSteps {
               }
               try {
                 JsonNode node = objectMapper.readTree(payload);
-                if (!node.has("path") || !node.has("method") || !node.has("headers") || !node.has("body")) {
+                if (!looksLikeHttpRequestEnvelope(node)) {
                   return false;
                 }
-                JsonNode variablesBodyNode = node.path("body");
+                JsonNode variablesBodyNode = node.path("request").path("body");
                 String variablesBodyText = variablesBodyNode.isTextual() ? variablesBodyNode.asText("") : variablesBodyNode.toString();
                 if (variablesBodyText.isBlank() || variablesBodyText.contains("{{")) {
                   return false;
@@ -1030,10 +1037,10 @@ public class SwarmLifecycleSteps {
         }
         try {
           JsonNode node = objectMapper.readTree(payload);
-          if (node.has("path") && node.has("method") && node.has("headers") && node.has("body")) {
+          if (looksLikeHttpRequestEnvelope(node)) {
             hasHttpRequest = true;
           }
-          if (node.has("status") && node.has("body")) {
+          if (looksLikeHttpResponseEnvelope(node)) {
             hasHttpResponse = true;
           }
         } catch (IOException ex) {
@@ -1044,9 +1051,9 @@ public class SwarmLifecycleSteps {
       assertTrue(hasDataset,
           () -> "Expected at least one step payload containing customerCode but saw: " + stepPayloads);
       assertTrue(hasHttpRequest,
-          () -> "Expected at least one HTTP request envelope step (path/method/headers/body) but saw: " + stepPayloads);
+          () -> "Expected at least one HTTP request envelope step (kind=http.request, request{...}) but saw: " + stepPayloads);
       assertTrue(hasHttpResponse,
-          () -> "Expected at least one HTTP response step (status/body) but saw: " + stepPayloads);
+          () -> "Expected at least one HTTP response envelope step (kind=http.result, outcome{...}) but saw: " + stepPayloads);
     } finally {
       message.ack();
     }
@@ -1082,11 +1089,11 @@ public class SwarmLifecycleSteps {
           continue;
         }
         if (looksLikeHttpRequestEnvelope(payloadNode)) {
-          requestEnvelope = payloadNode;
+          requestEnvelope = payloadNode.path("request");
           continue;
         }
         if (looksLikeHttpResponseEnvelope(payloadNode)) {
-          responseEnvelope = payloadNode;
+          responseEnvelope = payloadNode.path("outcome");
           continue;
         }
         if (looksLikeDatasetPayload(payloadNode)) {
@@ -1137,9 +1144,10 @@ public class SwarmLifecycleSteps {
       int status = responseEnvelope.path("status").asInt(-1);
       assertEquals(200, status, "HTTP response status should be 200");
 
-      String responseBody = responseEnvelope.path("body").asText(null);
+      JsonNode responseBodyNode = responseEnvelope.path("body");
+      String responseBody = responseBodyNode.isTextual() ? responseBodyNode.asText(null) : responseBodyNode.toString();
       assertNotNull(responseBody, "HTTP response body was empty");
-      JsonNode responseNode = parseJsonNode(responseBody);
+      JsonNode responseNode = responseBodyNode.isTextual() ? parseJsonNode(responseBody) : responseBodyNode;
       assertNotNull(responseNode, "HTTP response body was not valid JSON: " + responseBody);
 
       String expectedMessage = "processed " + customerCode + " (" + demoCall + ")";
@@ -1650,8 +1658,12 @@ public class SwarmLifecycleSteps {
       JsonNode lastStep = stepsNode.get(stepsNode.size() - 1);
       String httpPayload = lastStep.path("payload").asText("");
       JsonNode root = objectMapper.readTree(httpPayload);
-      JsonNode bodyNode = root.path("body");
-      String requestBody = bodyNode.isMissingNode() ? null : bodyNode.asText(null);
+      assertTrue(looksLikeHttpRequestEnvelope(root),
+          () -> "Templated generator output should be http.request envelope but was: " + root);
+      JsonNode bodyNode = root.path("request").path("body");
+      String requestBody = bodyNode.isMissingNode()
+          ? null
+          : (bodyNode.isTextual() ? bodyNode.asText(null) : bodyNode.toString());
       assertNotNull(requestBody, "Templated generator work item did not include a 'body' field");
       LOGGER.info("Observed generator work item body for templated-rest scenario: {}", requestBody);
       assertFalse(requestBody.contains("{{"),
@@ -1733,15 +1745,27 @@ public class SwarmLifecycleSteps {
   }
 
   private boolean looksLikeHttpRequestEnvelope(JsonNode payloadNode) {
-    return payloadNode.has("path")
-        && payloadNode.has("method")
-        && payloadNode.has("headers")
-        && payloadNode.has("body");
+    if (!"http.request".equals(payloadNode.path("kind").asText())) {
+      return false;
+    }
+    JsonNode requestNode = payloadNode.path("request");
+    return requestNode.isObject()
+        && requestNode.has("path")
+        && requestNode.has("method")
+        && requestNode.has("headers")
+        && requestNode.has("body");
   }
 
   private boolean looksLikeHttpResponseEnvelope(JsonNode payloadNode) {
-    return payloadNode.has("status")
-        && payloadNode.has("body");
+    if (!"http.result".equals(payloadNode.path("kind").asText())) {
+      return false;
+    }
+    JsonNode requestNode = payloadNode.path("request");
+    JsonNode outcomeNode = payloadNode.path("outcome");
+    return requestNode.isObject()
+        && outcomeNode.isObject()
+        && outcomeNode.has("status")
+        && outcomeNode.has("body");
   }
 
   private boolean looksLikeDatasetPayload(JsonNode payloadNode) {
