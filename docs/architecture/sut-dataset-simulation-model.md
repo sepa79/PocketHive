@@ -188,18 +188,13 @@ Allow **in-place update** only for non-runtime metadata, for example:
 
 Running swarms always use the frozen binding snapshot captured at run start.
 
-## 5.8 Git-backed Provenance (recommended)
+## 5.8 DB-backed Provenance and Versioning (decided)
 
-Binding definitions, simulation programs, and dataset-space descriptors should support Git-backed provenance:
+Primary persistence for binding definitions, simulation programs, and dataset-space descriptors is database-backed.
 
-1. local repository mode (offline/team-local workflows),
-2. remote repository mode (shared governance/audit workflows).
-
-Goals:
-
-1. change history and reviewability,
-2. reproducible run configuration by commit/version reference,
-3. easy sharing across teams/environments.
+1. `Postgres` is the source of truth for metadata and version history.
+2. Versioning/audit is tracked in DB records (who/when/what changed).
+3. Export/import (YAML/JSON) is supported for portability and environment bootstrap, but is not a second source of truth.
 
 ## 5.9 Dataset Registry Scope (decided)
 
@@ -322,13 +317,81 @@ It does not replace scenarios; it composes validated scenario bindings into one 
 
 1. Introduce `Scenario Binding` as new runtime entrypoint while keeping existing scenario->swarm flow.
 2. Add explicit `requires/provides` contracts and validator.
-3. Move SUT references from "scenario-local implicit" to "binding-time explicit".
-4. Add `Dataset Space` registry scoped by SUT Environment.
-5. Introduce `Simulation Program` as an orchestrator-level grouping construct.
-6. Keep dual mode as a supported model:
+3. First migrate from heavy control payloads to `artifact-by-reference`:
+   - runtime artifacts/snapshots are persisted in shared artifact storage,
+   - control-plane signals carry only reference + checksum.
+4. Introduce minimal tenant boundary (`tenantId`) for all new entities/APIs (single-tenant default is allowed).
+5. Move SUT references from "scenario-local implicit" to "binding-time explicit".
+6. Add `Dataset Space` registry scoped by SUT Environment.
+7. Introduce `Simulation Program` as an orchestrator-level grouping construct.
+8. Keep dual mode as a supported model:
    - `global` SUT for governed/shared environments,
    - `scenario-local` SUT for portable/local/team workflows.
    Enforce `global` for `Simulation Program`; keep `scenario-local` for standalone runs.
+
+## 8.1 Ordered Implementation Plan (decided, PR-by-PR)
+
+Implementation is split into small, mergeable PRs. Each PR should keep system behavior stable and avoid mixing unrelated concerns.
+
+### PR 0: Contracts + shared validator baseline
+
+1. Define DTO/schema for `DatasetSpace`, `ScenarioBinding`, `SimulationProgram`, and binding snapshot.
+2. Build one shared compatibility validator library used by Scenario Manager (authoring) and Orchestrator (admission).
+3. Keep the SemVer-only version matching model already decided.
+
+### PR 1: Artifact-by-reference handoff
+
+1. Introduce runtime artifact store abstraction:
+   - local shared-dir backend first,
+   - pluggable backends later.
+2. Orchestrator persists runtime artifacts before swarm start.
+3. Control-plane carries artifact reference + checksum instead of large embedded plan payload.
+4. Swarm Controller resolves artifact by reference at startup.
+
+### PR 2: Minimal tenant boundary
+
+1. Add `tenantId` to all new entities and APIs (`SUT`, `DatasetSpace`, `Binding`, `SimulationProgram`).
+2. Enforce tenant scoping in Scenario Manager and Orchestrator reads/writes.
+3. Keep single-tenant runtime mode (`tenantId=default`) until full Org/Team/User/Role model is implemented.
+
+### PR 3: Core simulation model (one backend vertical slice)
+
+1. Implement SUT model/API updates:
+   - explicit source mode support (`global` / `scenario-local`),
+   - deployment policy checks for allowed SUT source modes,
+   - `Simulation Program` remains `global`-only for SUT source.
+2. Implement DB-backed SSOT (Postgres) for:
+   - SUT registry metadata,
+   - dataset-space descriptors,
+   - scenario bindings (versioned),
+   - simulation programs,
+   - simulation runtime state/checkpoints.
+3. Implement Scenario Manager registry APIs (tenant-aware):
+   - CRUD/read for `DatasetSpace`, `ScenarioBinding`, `SimulationProgram`,
+   - SUT APIs aligned to the same typed model,
+   - metadata-only responsibility (no data-plane operations).
+4. Implement Orchestrator admission/runtime integration:
+   - single-SUT enforcement,
+   - `global`-only SUT source in `Simulation Program`,
+   - compatibility validation before run admission,
+   - simulation lifecycle endpoints (`create/update/validate/start/pause/resume/stop/status`).
+5. Implement dataset alias projection:
+   - resolve `datasetAliasMap` into concrete runtime list/key names at snapshot creation time,
+   - project resolved aliases into explicit worker config fields (no implicit fallback).
+
+### PR 4: UI V2 end-to-end management
+
+1. Add `SUTs` page.
+2. Add `Datasets` page.
+3. Add `Simulations` page (bindings + phases + runtime controls/status).
+4. Update standalone Create Swarm flow with explicit `sutSourceMode` selection.
+5. Wire UI flows to PR 3 APIs with validation/error handling for the new model.
+
+### PR 5 (optional): Hardening split if PR 3 is too large
+
+1. Move non-critical but heavy items from PR 3 if needed (for example export/import CLI and advanced checkpoint/recovery details).
+2. Keep PR 3 as the minimum complete backend slice required by PR 4.
+3. Keep artifact/tenant assumptions unchanged.
 
 ---
 
