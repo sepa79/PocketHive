@@ -109,6 +109,7 @@ class TriggerWorkerImpl implements PocketHiveWorkerFunction {
       }
     } catch (Exception ex) {
       logger.warn("Trigger action failed: {}", ex.toString(), ex);
+      throw new IllegalStateException("Trigger action failed", ex);
     }
     return null;
   }

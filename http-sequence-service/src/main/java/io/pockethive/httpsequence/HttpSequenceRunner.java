@@ -81,80 +81,75 @@ final class HttpSequenceRunner {
     WorkItem current = seed;
     boolean failed = false;
     int totalCapturedBytes = 0;
-
-    for (int i = 0; i < config.steps().size(); i++) {
-      HttpSequenceWorkerConfig.Step step = config.steps().get(i);
-      if (step.callId() == null) {
-        current = appendErrorStep(current, context, i, payload, "Missing callId");
-        failed = true;
-        break;
-      }
-
-      String serviceId = step.serviceId() != null ? step.serviceId() : config.serviceId();
-      String key = TemplateLoader.key(serviceId, step.callId());
-      TemplateDefinition definition = templates.get(key);
-      if (!(definition instanceof HttpTemplateDefinition httpDef)) {
-        current = appendErrorStep(current, context, i, payload, "Missing HTTP template for " + key);
-        failed = true;
-        break;
-      }
-
-      HttpCallExecutor.RenderedCall rendered;
-      try {
-        rendered = renderCall(httpDef, serviceId, step.callId(), payload, current, context);
-      } catch (Exception ex) {
-        String msg = ex.getMessage() == null ? ex.toString() : ex.getMessage();
-        current = appendErrorStep(current, context, i, payload, msg);
-        failed = true;
-        break;
-      }
-
-      HttpCallAttempt attempt = executeWithRetry(config, step, rendered, context);
-      HttpCallExecutor.HttpCallResult result = attempt.result();
-
-      long durationMs = attempt.totalDurationMs();
-      int attempts = attempt.attempts();
-
-      boolean isError = result.statusCode() < 200 || result.statusCode() >= 300;
-      String sha256 = sha256Hex(result.body());
-      String debugRef = null;
-      String bodyPreview = preview(result.body(), config.debugCapture().bodyPreviewBytes());
-
-      if (shouldCapture(config.debugCapture(), isError)) {
-        int maxBodyBytes = config.debugCapture().maxBodyBytes();
-        int bodyBytes = result.body() == null ? 0 : result.body().getBytes(StandardCharsets.UTF_8).length;
-        if (bodyBytes > maxBodyBytes) {
-          bodyBytes = maxBodyBytes;
+    try {
+      for (int i = 0; i < config.steps().size(); i++) {
+        HttpSequenceWorkerConfig.Step step = config.steps().get(i);
+        if (step.callId() == null) {
+          throw new IllegalArgumentException("Missing callId for sequence step index " + i);
         }
-        if ((totalCapturedBytes + bodyBytes) <= config.debugCapture().maxJourneyBytes()) {
-          totalCapturedBytes += bodyBytes;
-          debugRef = debugCaptureStore.store(info, config.baseUrl(), serviceId, step.callId(), rendered, result, config.debugCapture());
+
+        String serviceId = step.serviceId() != null ? step.serviceId() : config.serviceId();
+        String key = TemplateLoader.key(serviceId, step.callId());
+        TemplateDefinition definition = templates.get(key);
+        if (!(definition instanceof HttpTemplateDefinition httpDef)) {
+          throw new IllegalArgumentException("Missing HTTP template for " + key);
+        }
+
+        HttpCallExecutor.RenderedCall rendered =
+            renderCall(httpDef, serviceId, step.callId(), payload, current, context);
+
+        HttpCallAttempt attempt = executeWithRetry(config, step, rendered, context);
+        HttpCallExecutor.HttpCallResult result = attempt.result();
+
+        long durationMs = attempt.totalDurationMs();
+        int attempts = attempt.attempts();
+
+        boolean isError = result.statusCode() < 200 || result.statusCode() >= 300;
+        String sha256 = sha256Hex(result.body());
+        String debugRef = null;
+        String bodyPreview = preview(result.body(), config.debugCapture().bodyPreviewBytes());
+
+        if (shouldCapture(config.debugCapture(), isError)) {
+          int maxBodyBytes = config.debugCapture().maxBodyBytes();
+          int bodyBytes = result.body() == null ? 0 : result.body().getBytes(StandardCharsets.UTF_8).length;
+          if (bodyBytes > maxBodyBytes) {
+            bodyBytes = maxBodyBytes;
+          }
+          if ((totalCapturedBytes + bodyBytes) <= config.debugCapture().maxJourneyBytes()) {
+            totalCapturedBytes += bodyBytes;
+            debugRef = debugCaptureStore.store(info, config.baseUrl(), serviceId, step.callId(), rendered, result,
+                config.debugCapture());
+          }
+        }
+
+        boolean extractedOk = applyExtracts(step, payload, result, context);
+        if (!extractedOk) {
+          throw new IllegalStateException("Required extract missing for callId=" + step.callId());
+        }
+        applySetters(step, payload, current, context);
+
+        current = appendResultStep(current, context, i, step, payload, serviceId, step.callId(), result, durationMs,
+            attempts, sha256, debugRef, bodyPreview, null);
+
+        if (isError && !step.continueOnNon2xx()) {
+          failed = true;
+          break;
         }
       }
 
-      boolean extractedOk = applyExtracts(step, payload, result, context);
-      if (!extractedOk) {
-        current = appendResultStep(current, context, i, step, payload, serviceId, step.callId(), result, durationMs, attempts, sha256, debugRef, bodyPreview, "required extract missing");
-        failed = true;
-        break;
+      if (failed) {
+        errorJourneys.increment();
+      } else {
+        okJourneys.increment();
       }
-      applySetters(step, payload, current, context);
-
-      current = appendResultStep(current, context, i, step, payload, serviceId, step.callId(), result, durationMs, attempts, sha256, debugRef, bodyPreview, null);
-
-      if (isError && !step.continueOnNon2xx()) {
-        failed = true;
-        break;
-      }
-    }
-
-    if (failed) {
+      return current;
+    } catch (RuntimeException ex) {
       errorJourneys.increment();
-    } else {
-      okJourneys.increment();
+      context.logger().warn("HTTP sequence runtime failure: {}", ex.toString(), ex);
+      throw ex;
+    } finally {
+      publishStatus(context, config);
     }
-    publishStatus(context, config);
-    return current;
   }
 
   private void publishStatus(WorkerContext context, HttpSequenceWorkerConfig config) {
@@ -465,14 +460,6 @@ final class HttpSequenceRunner {
     if (error != null && !error.isBlank()) {
       stepHeaders.put("x-ph-http-seq-failure", error);
     }
-    String nextPayload = serializePayload(payload);
-    return current.addStep(context.info(), nextPayload, stepHeaders).toBuilder().contentType("application/json").build();
-  }
-
-  private WorkItem appendErrorStep(WorkItem current, WorkerContext context, int stepIndex, Map<String, Object> payload, String message) {
-    Map<String, Object> stepHeaders = new LinkedHashMap<>();
-    stepHeaders.put("x-ph-http-seq-step-index", stepIndex);
-    stepHeaders.put("x-ph-http-seq-failure", message == null ? "unknown error" : message);
     String nextPayload = serializePayload(payload);
     return current.addStep(context.info(), nextPayload, stepHeaders).toBuilder().contentType("application/json").build();
   }

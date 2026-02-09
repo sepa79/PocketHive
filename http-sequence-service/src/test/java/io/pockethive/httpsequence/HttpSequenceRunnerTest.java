@@ -23,6 +23,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class HttpSequenceRunnerTest {
 
@@ -111,6 +112,28 @@ class HttpSequenceRunnerTest {
     assertThat(out.stepHeaders()).containsEntry("x-ph-http-seq-attempts", 3);
     assertThat(out.payload()).contains("result");
     assertThat(out.payload()).contains("location");
+  }
+
+  @Test
+  void throwsWhenSequenceStepTemplateIsMissing() throws Exception {
+    RecordingExecutor executor = new RecordingExecutor();
+    HttpSequenceRunner runner = newRunner(executor);
+    WorkerInfo info = new WorkerInfo("http-sequence", "swarm-1", "inst-1", null, null);
+    WorkItem seed = WorkItem.text(info, "{\"seed\":true}").contentType("application/json").build();
+
+    HttpSequenceWorkerConfig config = new HttpSequenceWorkerConfig(
+        "http://sut",
+        tempDir.toString(),
+        "default",
+        1,
+        List.of(new HttpSequenceWorkerConfig.Step("s1", "MISSING", null, false, null, List.of(), List.of())),
+        new HttpSequenceWorkerConfig.DebugCapture(HttpSequenceWorkerConfig.DebugCaptureMode.NONE, 0.0, 1, 1, false, false, 0, 1),
+        Map.of()
+    );
+
+    assertThatThrownBy(() -> runner.run(seed, new TestWorkerContext(info), config))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("Missing HTTP template");
   }
 
   private HttpSequenceRunner newRunner(RecordingExecutor executor) {
@@ -210,4 +233,3 @@ class HttpSequenceRunnerTest {
     }
   }
 }
-

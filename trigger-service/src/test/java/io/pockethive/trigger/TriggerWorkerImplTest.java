@@ -22,6 +22,7 @@ import org.mockito.MockitoAnnotations;
 import org.slf4j.Logger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -94,6 +95,27 @@ class TriggerWorkerImplTest {
     WorkerContext context = new TestWorkerContext(null, logger);
     WorkItem result = worker.onMessage(WorkItem.text(context.info(), "").build(), context);
     assertThat(result).isNull();
+  }
+
+  @Test
+  void throwsWhenTriggerActionFails() throws Exception {
+    TriggerWorkerConfig config = new TriggerWorkerConfig(
+        1000L,
+        false,
+        "rest",
+        "noop",
+        "https://service.test",
+        "post",
+        "{\"a\":1}",
+        Map.of("X-Test", "yes")
+    );
+    WorkerContext context = new TestWorkerContext(config, logger);
+    when(httpClient.send(any(HttpRequest.class), ArgumentMatchers.<HttpResponse.BodyHandler<String>>any()))
+        .thenThrow(new RuntimeException("network down"));
+
+    assertThatThrownBy(() -> worker.onMessage(WorkItem.text(context.info(), "").build(), context))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessage("Trigger action failed");
   }
 
   private static final class TestWorkerContext implements WorkerContext {

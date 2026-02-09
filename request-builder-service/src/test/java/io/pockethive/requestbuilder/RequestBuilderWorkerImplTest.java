@@ -1,6 +1,7 @@
 package io.pockethive.requestbuilder;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -262,6 +263,38 @@ class RequestBuilderWorkerImplTest {
     WorkItem result2 = worker.onMessage(seed, ctx2);
     JsonNode envelope2 = new ObjectMapper().readTree(result2.asString());
     assertThat(envelope2.get("request").get("path").asText()).isEqualTo("/two");
+  }
+
+  @Test
+  void throwsWhenTemplateRenderingProducesInvalidEnvelope() throws Exception {
+    Path dir = Files.createTempDirectory("http-templates-invalid");
+    Files.createDirectories(dir.resolve("default"));
+    Files.writeString(dir.resolve("default/invalid-call.json"), """
+        {
+          "serviceId": "default",
+          "callId": "invalid",
+          "method": "POST",
+          "pathTemplate": "   ",
+          "bodyTemplate": "{{ payload }}",
+          "headersTemplate": {}
+        }
+        """);
+
+    properties.setConfig(Map.of(
+        "templateRoot", dir.toString(),
+        "serviceId", "default",
+        "passThroughOnMissingTemplate", true
+    ));
+    RequestBuilderWorkerImpl worker =
+        new RequestBuilderWorkerImpl(properties, templateRenderer, new TemplateLoader(), null);
+
+    WorkItem seed = WorkItem.text(SEED_INFO, "body").header("x-ph-call-id", "invalid").build();
+    RequestBuilderWorkerConfig config = new RequestBuilderWorkerConfig(
+        dir.toString(), "default", true, Map.of());
+
+    assertThatThrownBy(() -> worker.onMessage(seed, new TestWorkerContext(config)))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("Request Builder runtime failure");
   }
 
   private static final class TestWorkerContext implements WorkerContext {

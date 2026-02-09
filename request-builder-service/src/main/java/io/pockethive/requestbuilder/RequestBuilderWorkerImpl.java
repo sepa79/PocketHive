@@ -188,7 +188,9 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
           serviceId, callId, ex);
       recordError();
       publishStatus(context, config);
-      return config.passThroughOnMissingTemplate() ? seed : null;
+      throw new IllegalStateException(
+          "Request Builder runtime failure for serviceId=%s callId=%s".formatted(serviceId, callId),
+          ex);
     }
   }
 
