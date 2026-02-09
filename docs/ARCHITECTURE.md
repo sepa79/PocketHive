@@ -652,6 +652,33 @@ sequenceDiagram
 - Manual verification should cover lifecycle commands, `signal.status-request` -> `event.metric.status-full`,
   config-update success/failure, and alert emission for runtime or IO errors.
 
+### 12.1 Validation ownership (authoring vs admission)
+
+- **Scenario Manager** is responsible for **static authoring validation** of scenario/template contracts
+  (shape/schema, required fields, and contract-level references).
+- **Orchestrator** is responsible for **admission/runtime validation** as the final gate before execution
+  (deployment policy, composition constraints, and run eligibility).
+- Shared compatibility rules should live in one reusable validation module/profile set so Scenario Manager
+  and Orchestrator do not diverge.
+
+### 12.2 Binding provenance and versioning
+
+- Runtime-impacting binding edits must create a new binding version; running swarms use frozen snapshots captured at run start.
+- Non-runtime metadata edits may be updated in place (for example labels/notes/owner).
+- Binding and simulation configuration should support Git-backed provenance (local and/or remote) for reviewability and reproducibility.
+
+### 12.3 Dataset registry scope
+
+- **Scenario Manager** owns dataset/SUT registry metadata (definitions, contracts, references).
+- **Scenario Manager** is not a data-plane executor and must not perform runtime dataset mutations.
+- Seeding, data generation, migrations, and record movement/refill are executed by swarms/workers dedicated to data-plane tasks.
+
+### 12.4 Contract version matching
+
+- Scenario-to-SUT contract matching uses SemVer constraints as a single model.
+- Exact matching is represented as a strict constraint (for example `=1.34.0`), while broader compatibility uses ranges.
+- Any future governance tightening (for example requiring exact pins in selected workflows) should be implemented as validation policy/rules, not as a separate matching mechanism.
+
 ---
 
 ## 13. Envelope examples
