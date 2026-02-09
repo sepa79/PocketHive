@@ -1,7 +1,7 @@
 # WorkItem v2 follow-ups (request/result envelopes)
 
-**Area:** Worker SDK + Request Builder + Processor  
-**Status:** Partially addressed, partially open  
+**Area:** WorkItem/log/journal sensitive-data handling  
+**Status:** Open (deferred for global solution)  
 **Impact:** Can affect debug quality and data sensitivity in WorkItem step history.
 
 ---
@@ -20,8 +20,8 @@ If operators configure endpoints with credentials or query tokens, those values 
 
 ### Current scope
 
-- This is currently accepted for local/experimental usage.
-- There is no dedicated redaction policy yet.
+- Redaction is intentionally deferred here; we do not want one-off masking in a single worker.
+- Plan is to introduce a global sensitive-data filter for logs/journal (and related debug surfaces).
 
 ### Follow-up direction
 
