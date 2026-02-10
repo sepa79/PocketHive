@@ -52,6 +52,8 @@ import io.pockethive.e2e.support.QueueProbe;
 import io.pockethive.e2e.support.SwarmAssertions;
 import io.pockethive.e2e.support.StatusEvent;
 import io.pockethive.e2e.support.WorkQueueConsumer;
+import io.pockethive.control.AlertMessage;
+import io.pockethive.controlplane.messaging.Alerts;
 import io.pockethive.controlplane.spring.ControlPlaneTopologyDescriptorFactory;
 import io.pockethive.controlplane.topology.ControlPlaneRouteCatalog;
 import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
@@ -105,6 +107,9 @@ public class SwarmLifecycleSteps {
   private final Map<String, String> roleAliasMap = new LinkedHashMap<>();
   private boolean roleAliasesInitialised;
   private boolean workerStatusesCaptured;
+  private boolean expectsRuntimeWorkErrorAlert;
+  private String expectedRuntimeWorkErrorAlertRole;
+  private String expectedRuntimeWorkErrorAlertInstance;
   private WorkQueueConsumer workQueueConsumer;
   private String tapQueueName;
   private WorkQueueConsumer generatorTapConsumer;
@@ -129,6 +134,9 @@ public class SwarmLifecycleSteps {
     String suffix = Long.toHexString(System.nanoTime());
     swarmId = baseSwarmId + "-gp-" + suffix;
     idempotencyPrefix = endpoints.idempotencyKeyPrefix();
+    expectsRuntimeWorkErrorAlert = false;
+    expectedRuntimeWorkErrorAlertRole = null;
+    expectedRuntimeWorkErrorAlertInstance = null;
 
     LOGGER.info("Lifecycle harness initialised with swarmId={} endpoints={} ", swarmId, endpoints.asMap());
   }
@@ -153,6 +161,9 @@ public class SwarmLifecycleSteps {
     workerStatusesCaptured = false;
     workerStatusByRole.clear();
     workerInstances.clear();
+    expectsRuntimeWorkErrorAlert = false;
+    expectedRuntimeWorkErrorAlertRole = null;
+    expectedRuntimeWorkErrorAlertInstance = null;
     logScenarioTemplate("default listing");
   }
 
@@ -175,6 +186,9 @@ public class SwarmLifecycleSteps {
     workerStatusesCaptured = false;
     workerStatusByRole.clear();
     workerInstances.clear();
+    expectsRuntimeWorkErrorAlert = false;
+    expectedRuntimeWorkErrorAlertRole = null;
+    expectedRuntimeWorkErrorAlertInstance = null;
     logScenarioTemplate("explicit request");
   }
 
@@ -1250,7 +1264,31 @@ public class SwarmLifecycleSteps {
     long removeOutcomeCount = controlPlaneEvents.outcomeCount("swarm-remove");
     assertTrue(removeOutcomeCount >= 1,
         () -> "Expected at least one swarm-remove outcome but saw " + removeOutcomeCount);
-    assertTrue(controlPlaneEvents.alerts().isEmpty(), "No alerts should be emitted during the golden path");
+    if (expectsRuntimeWorkErrorAlert) {
+      List<AlertMessage> swarmAlerts = controlPlaneEvents.alerts().stream()
+          .map(ControlPlaneEvents.AlertEnvelope::alert)
+          .filter(Objects::nonNull)
+          .filter(alert -> alert.scope() != null
+              && swarmId.equalsIgnoreCase(alert.scope().swarmId()))
+          .toList();
+      List<AlertMessage> expectedAlerts = swarmAlerts.stream()
+          .filter(alert -> roleMatches(expectedRuntimeWorkErrorAlertRole, alert.scope().role()))
+          .filter(alert -> expectedRuntimeWorkErrorAlertInstance == null
+              || expectedRuntimeWorkErrorAlertInstance.equalsIgnoreCase(alert.scope().instance()))
+          .filter(alert -> alert.data() != null
+              && Alerts.Codes.RUNTIME_EXCEPTION.equalsIgnoreCase(alert.data().code()))
+          .toList();
+      assertTrue(!expectedAlerts.isEmpty(),
+          () -> "Expected at least one runtime.exception alert for role="
+              + expectedRuntimeWorkErrorAlertRole + " instance=" + expectedRuntimeWorkErrorAlertInstance
+              + " but got alerts=" + swarmAlerts);
+      assertEquals(expectedAlerts.size(), swarmAlerts.size(),
+          () -> "Unexpected non-matching alerts in swarm " + swarmId
+              + " expectedRuntimeAlerts=" + expectedAlerts
+              + " allSwarmAlerts=" + swarmAlerts);
+    } else {
+      assertTrue(controlPlaneEvents.alerts().isEmpty(), "No alerts should be emitted during the golden path");
+    }
   }
 
   @Then("the swarm is removed after the early stop")
@@ -1565,41 +1603,46 @@ public class SwarmLifecycleSteps {
   @Then("the final queue reports a processor error")
   public void theFinalQueueReportsAProcessorError() throws Exception {
     ensureStartResponse();
+    captureWorkerStatuses();
+    String processorKey = roleKey(PROCESSOR_ROLE);
+    String expectedRole = actualRoleName(processorKey != null ? processorKey : PROCESSOR_ROLE);
+    String expectedInstance = processorKey == null ? null : workerInstances.get(processorKey);
+
+    SwarmAssertions.await("processor runtime.exception alert", () -> {
+      Optional<AlertMessage> maybeAlert = controlPlaneEvents.alerts().stream()
+          .map(ControlPlaneEvents.AlertEnvelope::alert)
+          .filter(Objects::nonNull)
+          .filter(alert -> alert.scope() != null
+              && swarmId.equalsIgnoreCase(alert.scope().swarmId()))
+          .filter(alert -> roleMatches(expectedRole, alert.scope().role()))
+          .filter(alert -> expectedInstance == null
+              || expectedInstance.equalsIgnoreCase(alert.scope().instance()))
+          .filter(alert -> alert.data() != null
+              && Alerts.Codes.RUNTIME_EXCEPTION.equalsIgnoreCase(alert.data().code()))
+          .findFirst();
+
+      AlertMessage alert = maybeAlert.orElseThrow(() ->
+          new AssertionError("Expected processor runtime.exception alert for role=" + expectedRole
+              + " instance=" + expectedInstance + " but got alerts=" + controlPlaneEvents.alerts()));
+      assertFalse(alert.data().message() == null || alert.data().message().isBlank(),
+          "runtime.exception alert should include non-empty message");
+    });
+
     ensureFinalQueueTap();
     String queue = tapQueueName != null ? tapQueueName : finalQueueName();
-
-    WorkQueueConsumer.Message message = workQueueConsumer.consumeNext(SwarmAssertions.defaultTimeout())
-        .orElseThrow(() -> new AssertionError("No message observed on tap queue " + queue));
-
-    try {
-      List<String> stepPayloads = workItemStepPayloads(message);
-      String error = findProcessorError(stepPayloads);
-      if (error == null || error.isBlank()) {
-        throw new AssertionError("Expected processor error in WorkItem steps but none found. payloads=" + stepPayloads);
-      }
-      LOGGER.info("Processor error captured from final queue: {}", error);
-    } finally {
-      message.ack();
-    }
-  }
-
-  private String findProcessorError(List<String> stepPayloads) {
-    for (String payload : stepPayloads) {
-      if (payload == null || payload.isBlank()) {
-        continue;
-      }
+    Optional<WorkQueueConsumer.Message> unexpected = workQueueConsumer.consumeNext(java.time.Duration.ofSeconds(2));
+    if (unexpected.isPresent()) {
+      WorkQueueConsumer.Message message = unexpected.get();
       try {
-        JsonNode node = objectMapper.readTree(payload);
-        if (node.has("error")) {
-          String error = node.path("error").asText();
-          if (error != null && !error.isBlank()) {
-            return error;
-          }
-        }
-      } catch (IOException ignored) {
+        throw new AssertionError("Expected no message on final queue " + queue
+            + " for runtime processor error, but got payload=" + message.bodyAsString());
+      } finally {
+        message.ack();
       }
     }
-    return null;
+    expectsRuntimeWorkErrorAlert = true;
+    expectedRuntimeWorkErrorAlertRole = expectedRole;
+    expectedRuntimeWorkErrorAlertInstance = expectedInstance;
   }
 
   private String hiveExchangeName() {

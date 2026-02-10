@@ -78,4 +78,23 @@ class TransportEnvelopeDtosTest {
 
         assertThat(envelope.request().body()).isEmpty();
     }
+
+    @Test
+    void tcpResultEnvelopeCarriesRequestOutcomeAndMetrics() {
+        TcpResultEnvelope result = TcpResultEnvelope.of(
+            new TcpResultEnvelope.TcpRequestInfo("tcp", "tcps", "request_response", "tcps://sut:9000", "tcps://sut:9000"),
+            new TcpResultEnvelope.TcpOutcome(
+                TcpResultEnvelope.OUTCOME_TCP_RESPONSE,
+                200,
+                "PONG",
+                null
+            ),
+            new TcpResultEnvelope.TcpMetrics(21, 3)
+        );
+
+        assertThat(result.kind()).isEqualTo(TcpResultEnvelope.KIND);
+        assertThat(result.request().method()).isEqualTo("REQUEST_RESPONSE");
+        assertThat(result.outcome().status()).isEqualTo(200);
+        assertThat(result.metrics().durationMs()).isEqualTo(21L);
+    }
 }

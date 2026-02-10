@@ -11,6 +11,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.pockethive.worker.sdk.api.TcpRequestEnvelope;
+import io.pockethive.worker.sdk.api.TcpResultEnvelope;
 import io.pockethive.processor.transport.*;
 import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerContext;
@@ -154,9 +155,17 @@ public class TcpProtocolHandler implements ProtocolHandler {
       CallMetrics metrics = CallMetrics.success(callDuration, connectionLatency, response.status());
       metricsRecorder.record(metrics);
 
-      ObjectNode result = mapper.createObjectNode();
-      result.put("status", response.status());
-      result.put("body", new String(response.body(), StandardCharsets.UTF_8));
+      TcpResultEnvelope resultEnvelope = TcpResultEnvelope.of(
+          mapper.convertValue(requestMeta, TcpResultEnvelope.TcpRequestInfo.class),
+          new TcpResultEnvelope.TcpOutcome(
+              TcpResultEnvelope.OUTCOME_TCP_RESPONSE,
+              response.status(),
+              new String(response.body(), StandardCharsets.UTF_8),
+              null
+          ),
+          new TcpResultEnvelope.TcpMetrics(metrics.durationMs(), metrics.connectionLatencyMs())
+      );
+      ObjectNode result = mapper.valueToTree(resultEnvelope);
 
       WorkItem responseItem = ResponseBuilder.build(result, context.info(), metrics);
       WorkItem updated = message.addStep(context.info(), responseItem.asString(), responseItem.stepHeaders());
@@ -192,10 +201,9 @@ public class TcpProtocolHandler implements ProtocolHandler {
     request.put("transport", "tcp");
     request.put("scheme", scheme);
     request.put("method", normalizeMethod(behavior));
-    request.put("baseUrl", baseUrl == null ? "" : baseUrl);
-    request.put("path", "/");
+    request.put("configuredTarget", baseUrl == null ? "" : baseUrl);
     if (host != null && port != null) {
-      request.put("url", scheme + "://" + host + ":" + port);
+      request.put("endpoint", scheme + "://" + host + ":" + port);
     }
     return request;
   }

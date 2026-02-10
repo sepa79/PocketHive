@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 ## [0.15.5]
 Timestamp: 2026-02-09T23:16:58Z
 
-- Processor/Request envelopes: completed the `http.request` / `http.result` and `tcp.request` typed envelope rollout, including E2E assertions and worker-level tests.
+- Processor/Request envelopes: completed the `http.request` / `http.result` and `tcp.request` / `tcp.result` typed envelope rollout, including E2E assertions and worker-level tests.
 - Runtime-error semantics: workers now propagate runtime failures to the SDK handling path (log + control-plane alert/journal + drop) instead of emitting runtime-error payloads into WorkItem steps.
 - Worker SDK transport: added explicit alert/log handling for async-dispatch rejection and decode failures, and hardened dispatch-error callback handling.
 - Docs: architecture now states the runtime error contract explicitly; `workitem-v2-followups` is narrowed to global sensitive-data filtering work (no one-off redaction in a single worker).
