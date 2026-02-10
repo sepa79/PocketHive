@@ -52,6 +52,8 @@ import io.pockethive.e2e.support.QueueProbe;
 import io.pockethive.e2e.support.SwarmAssertions;
 import io.pockethive.e2e.support.StatusEvent;
 import io.pockethive.e2e.support.WorkQueueConsumer;
+import io.pockethive.control.AlertMessage;
+import io.pockethive.controlplane.messaging.Alerts;
 import io.pockethive.controlplane.spring.ControlPlaneTopologyDescriptorFactory;
 import io.pockethive.controlplane.topology.ControlPlaneRouteCatalog;
 import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
@@ -105,6 +107,9 @@ public class SwarmLifecycleSteps {
   private final Map<String, String> roleAliasMap = new LinkedHashMap<>();
   private boolean roleAliasesInitialised;
   private boolean workerStatusesCaptured;
+  private boolean expectsRuntimeWorkErrorAlert;
+  private String expectedRuntimeWorkErrorAlertRole;
+  private String expectedRuntimeWorkErrorAlertInstance;
   private WorkQueueConsumer workQueueConsumer;
   private String tapQueueName;
   private WorkQueueConsumer generatorTapConsumer;
@@ -129,6 +134,9 @@ public class SwarmLifecycleSteps {
     String suffix = Long.toHexString(System.nanoTime());
     swarmId = baseSwarmId + "-gp-" + suffix;
     idempotencyPrefix = endpoints.idempotencyKeyPrefix();
+    expectsRuntimeWorkErrorAlert = false;
+    expectedRuntimeWorkErrorAlertRole = null;
+    expectedRuntimeWorkErrorAlertInstance = null;
 
     LOGGER.info("Lifecycle harness initialised with swarmId={} endpoints={} ", swarmId, endpoints.asMap());
   }
@@ -153,6 +161,9 @@ public class SwarmLifecycleSteps {
     workerStatusesCaptured = false;
     workerStatusByRole.clear();
     workerInstances.clear();
+    expectsRuntimeWorkErrorAlert = false;
+    expectedRuntimeWorkErrorAlertRole = null;
+    expectedRuntimeWorkErrorAlertInstance = null;
     logScenarioTemplate("default listing");
   }
 
@@ -175,6 +186,9 @@ public class SwarmLifecycleSteps {
     workerStatusesCaptured = false;
     workerStatusByRole.clear();
     workerInstances.clear();
+    expectsRuntimeWorkErrorAlert = false;
+    expectedRuntimeWorkErrorAlertRole = null;
+    expectedRuntimeWorkErrorAlertInstance = null;
     logScenarioTemplate("explicit request");
   }
 
@@ -828,14 +842,18 @@ public class SwarmLifecycleSteps {
       byte[] bodyBytes = httpPayload.getBytes(StandardCharsets.UTF_8);
 
       JsonNode root = objectMapper.readTree(bodyBytes);
-      int statusCode = root.path("status").asInt();
+      assertTrue(looksLikeHttpResponseEnvelope(root),
+          () -> "Final queue last step is not an http.result envelope: " + root);
+      int statusCode = root.path("outcome").path("status").asInt(-1);
       if (statusCode != 200) {
         LOGGER.warn("Final queue status code was {}. Body={} headers={}",
             statusCode, root, message.headers());
         assertEquals(200, statusCode, "Final queue response should report status 200");
       }
-      JsonNode bodyNode = root.path("body");
-      String bodyText = bodyNode.isMissingNode() ? new String(bodyBytes, StandardCharsets.UTF_8) : bodyNode.asText();
+      JsonNode bodyNode = root.path("outcome").path("body");
+      String bodyText = bodyNode.isMissingNode()
+          ? new String(bodyBytes, StandardCharsets.UTF_8)
+          : (bodyNode.isTextual() ? bodyNode.asText() : bodyNode.toString());
       if (bodyText == null || bodyText.isBlank()) {
         bodyText = new String(bodyBytes, StandardCharsets.UTF_8);
       }
@@ -875,7 +893,10 @@ public class SwarmLifecycleSteps {
               }
               try {
                 JsonNode node = objectMapper.readTree(payload);
-                JsonNode stepBody = node.path("body");
+                if (!looksLikeHttpRequestEnvelope(node)) {
+                  return false;
+                }
+                JsonNode stepBody = node.path("request").path("body");
                 String candidate = null;
                 if (stepBody.isTextual()) {
                   candidate = stepBody.asText();
@@ -902,10 +923,10 @@ public class SwarmLifecycleSteps {
               }
               try {
                 JsonNode node = objectMapper.readTree(payload);
-                if (!node.has("path") || !node.has("method") || !node.has("headers") || !node.has("body")) {
+                if (!looksLikeHttpRequestEnvelope(node)) {
                   return false;
                 }
-                JsonNode variablesBodyNode = node.path("body");
+                JsonNode variablesBodyNode = node.path("request").path("body");
                 String variablesBodyText = variablesBodyNode.isTextual() ? variablesBodyNode.asText("") : variablesBodyNode.toString();
                 if (variablesBodyText.isBlank() || variablesBodyText.contains("{{")) {
                   return false;
@@ -1030,10 +1051,10 @@ public class SwarmLifecycleSteps {
         }
         try {
           JsonNode node = objectMapper.readTree(payload);
-          if (node.has("path") && node.has("method") && node.has("headers") && node.has("body")) {
+          if (looksLikeHttpRequestEnvelope(node)) {
             hasHttpRequest = true;
           }
-          if (node.has("status") && node.has("body")) {
+          if (looksLikeHttpResponseEnvelope(node)) {
             hasHttpResponse = true;
           }
         } catch (IOException ex) {
@@ -1044,9 +1065,9 @@ public class SwarmLifecycleSteps {
       assertTrue(hasDataset,
           () -> "Expected at least one step payload containing customerCode but saw: " + stepPayloads);
       assertTrue(hasHttpRequest,
-          () -> "Expected at least one HTTP request envelope step (path/method/headers/body) but saw: " + stepPayloads);
+          () -> "Expected at least one HTTP request envelope step (kind=http.request, request{...}) but saw: " + stepPayloads);
       assertTrue(hasHttpResponse,
-          () -> "Expected at least one HTTP response step (status/body) but saw: " + stepPayloads);
+          () -> "Expected at least one HTTP response envelope step (kind=http.result, outcome{...}) but saw: " + stepPayloads);
     } finally {
       message.ack();
     }
@@ -1082,11 +1103,11 @@ public class SwarmLifecycleSteps {
           continue;
         }
         if (looksLikeHttpRequestEnvelope(payloadNode)) {
-          requestEnvelope = payloadNode;
+          requestEnvelope = payloadNode.path("request");
           continue;
         }
         if (looksLikeHttpResponseEnvelope(payloadNode)) {
-          responseEnvelope = payloadNode;
+          responseEnvelope = payloadNode.path("outcome");
           continue;
         }
         if (looksLikeDatasetPayload(payloadNode)) {
@@ -1137,9 +1158,10 @@ public class SwarmLifecycleSteps {
       int status = responseEnvelope.path("status").asInt(-1);
       assertEquals(200, status, "HTTP response status should be 200");
 
-      String responseBody = responseEnvelope.path("body").asText(null);
+      JsonNode responseBodyNode = responseEnvelope.path("body");
+      String responseBody = responseBodyNode.isTextual() ? responseBodyNode.asText(null) : responseBodyNode.toString();
       assertNotNull(responseBody, "HTTP response body was empty");
-      JsonNode responseNode = parseJsonNode(responseBody);
+      JsonNode responseNode = responseBodyNode.isTextual() ? parseJsonNode(responseBody) : responseBodyNode;
       assertNotNull(responseNode, "HTTP response body was not valid JSON: " + responseBody);
 
       String expectedMessage = "processed " + customerCode + " (" + demoCall + ")";
@@ -1242,7 +1264,31 @@ public class SwarmLifecycleSteps {
     long removeOutcomeCount = controlPlaneEvents.outcomeCount("swarm-remove");
     assertTrue(removeOutcomeCount >= 1,
         () -> "Expected at least one swarm-remove outcome but saw " + removeOutcomeCount);
-    assertTrue(controlPlaneEvents.alerts().isEmpty(), "No alerts should be emitted during the golden path");
+    if (expectsRuntimeWorkErrorAlert) {
+      List<AlertMessage> swarmAlerts = controlPlaneEvents.alerts().stream()
+          .map(ControlPlaneEvents.AlertEnvelope::alert)
+          .filter(Objects::nonNull)
+          .filter(alert -> alert.scope() != null
+              && swarmId.equalsIgnoreCase(alert.scope().swarmId()))
+          .toList();
+      List<AlertMessage> expectedAlerts = swarmAlerts.stream()
+          .filter(alert -> roleMatches(expectedRuntimeWorkErrorAlertRole, alert.scope().role()))
+          .filter(alert -> expectedRuntimeWorkErrorAlertInstance == null
+              || expectedRuntimeWorkErrorAlertInstance.equalsIgnoreCase(alert.scope().instance()))
+          .filter(alert -> alert.data() != null
+              && Alerts.Codes.RUNTIME_EXCEPTION.equalsIgnoreCase(alert.data().code()))
+          .toList();
+      assertTrue(!expectedAlerts.isEmpty(),
+          () -> "Expected at least one runtime.exception alert for role="
+              + expectedRuntimeWorkErrorAlertRole + " instance=" + expectedRuntimeWorkErrorAlertInstance
+              + " but got alerts=" + swarmAlerts);
+      assertEquals(expectedAlerts.size(), swarmAlerts.size(),
+          () -> "Unexpected non-matching alerts in swarm " + swarmId
+              + " expectedRuntimeAlerts=" + expectedAlerts
+              + " allSwarmAlerts=" + swarmAlerts);
+    } else {
+      assertTrue(controlPlaneEvents.alerts().isEmpty(), "No alerts should be emitted during the golden path");
+    }
   }
 
   @Then("the swarm is removed after the early stop")
@@ -1557,41 +1603,46 @@ public class SwarmLifecycleSteps {
   @Then("the final queue reports a processor error")
   public void theFinalQueueReportsAProcessorError() throws Exception {
     ensureStartResponse();
+    captureWorkerStatuses();
+    String processorKey = roleKey(PROCESSOR_ROLE);
+    String expectedRole = actualRoleName(processorKey != null ? processorKey : PROCESSOR_ROLE);
+    String expectedInstance = processorKey == null ? null : workerInstances.get(processorKey);
+
+    SwarmAssertions.await("processor runtime.exception alert", () -> {
+      Optional<AlertMessage> maybeAlert = controlPlaneEvents.alerts().stream()
+          .map(ControlPlaneEvents.AlertEnvelope::alert)
+          .filter(Objects::nonNull)
+          .filter(alert -> alert.scope() != null
+              && swarmId.equalsIgnoreCase(alert.scope().swarmId()))
+          .filter(alert -> roleMatches(expectedRole, alert.scope().role()))
+          .filter(alert -> expectedInstance == null
+              || expectedInstance.equalsIgnoreCase(alert.scope().instance()))
+          .filter(alert -> alert.data() != null
+              && Alerts.Codes.RUNTIME_EXCEPTION.equalsIgnoreCase(alert.data().code()))
+          .findFirst();
+
+      AlertMessage alert = maybeAlert.orElseThrow(() ->
+          new AssertionError("Expected processor runtime.exception alert for role=" + expectedRole
+              + " instance=" + expectedInstance + " but got alerts=" + controlPlaneEvents.alerts()));
+      assertFalse(alert.data().message() == null || alert.data().message().isBlank(),
+          "runtime.exception alert should include non-empty message");
+    });
+
     ensureFinalQueueTap();
     String queue = tapQueueName != null ? tapQueueName : finalQueueName();
-
-    WorkQueueConsumer.Message message = workQueueConsumer.consumeNext(SwarmAssertions.defaultTimeout())
-        .orElseThrow(() -> new AssertionError("No message observed on tap queue " + queue));
-
-    try {
-      List<String> stepPayloads = workItemStepPayloads(message);
-      String error = findProcessorError(stepPayloads);
-      if (error == null || error.isBlank()) {
-        throw new AssertionError("Expected processor error in WorkItem steps but none found. payloads=" + stepPayloads);
-      }
-      LOGGER.info("Processor error captured from final queue: {}", error);
-    } finally {
-      message.ack();
-    }
-  }
-
-  private String findProcessorError(List<String> stepPayloads) {
-    for (String payload : stepPayloads) {
-      if (payload == null || payload.isBlank()) {
-        continue;
-      }
+    Optional<WorkQueueConsumer.Message> unexpected = workQueueConsumer.consumeNext(java.time.Duration.ofSeconds(2));
+    if (unexpected.isPresent()) {
+      WorkQueueConsumer.Message message = unexpected.get();
       try {
-        JsonNode node = objectMapper.readTree(payload);
-        if (node.has("error")) {
-          String error = node.path("error").asText();
-          if (error != null && !error.isBlank()) {
-            return error;
-          }
-        }
-      } catch (IOException ignored) {
+        throw new AssertionError("Expected no message on final queue " + queue
+            + " for runtime processor error, but got payload=" + message.bodyAsString());
+      } finally {
+        message.ack();
       }
     }
-    return null;
+    expectsRuntimeWorkErrorAlert = true;
+    expectedRuntimeWorkErrorAlertRole = expectedRole;
+    expectedRuntimeWorkErrorAlertInstance = expectedInstance;
   }
 
   private String hiveExchangeName() {
@@ -1650,8 +1701,12 @@ public class SwarmLifecycleSteps {
       JsonNode lastStep = stepsNode.get(stepsNode.size() - 1);
       String httpPayload = lastStep.path("payload").asText("");
       JsonNode root = objectMapper.readTree(httpPayload);
-      JsonNode bodyNode = root.path("body");
-      String requestBody = bodyNode.isMissingNode() ? null : bodyNode.asText(null);
+      assertTrue(looksLikeHttpRequestEnvelope(root),
+          () -> "Templated generator output should be http.request envelope but was: " + root);
+      JsonNode bodyNode = root.path("request").path("body");
+      String requestBody = bodyNode.isMissingNode()
+          ? null
+          : (bodyNode.isTextual() ? bodyNode.asText(null) : bodyNode.toString());
       assertNotNull(requestBody, "Templated generator work item did not include a 'body' field");
       LOGGER.info("Observed generator work item body for templated-rest scenario: {}", requestBody);
       assertFalse(requestBody.contains("{{"),
@@ -1733,15 +1788,27 @@ public class SwarmLifecycleSteps {
   }
 
   private boolean looksLikeHttpRequestEnvelope(JsonNode payloadNode) {
-    return payloadNode.has("path")
-        && payloadNode.has("method")
-        && payloadNode.has("headers")
-        && payloadNode.has("body");
+    if (!"http.request".equals(payloadNode.path("kind").asText())) {
+      return false;
+    }
+    JsonNode requestNode = payloadNode.path("request");
+    return requestNode.isObject()
+        && requestNode.has("path")
+        && requestNode.has("method")
+        && requestNode.has("headers")
+        && requestNode.has("body");
   }
 
   private boolean looksLikeHttpResponseEnvelope(JsonNode payloadNode) {
-    return payloadNode.has("status")
-        && payloadNode.has("body");
+    if (!"http.result".equals(payloadNode.path("kind").asText())) {
+      return false;
+    }
+    JsonNode requestNode = payloadNode.path("request");
+    JsonNode outcomeNode = payloadNode.path("outcome");
+    return requestNode.isObject()
+        && outcomeNode.isObject()
+        && outcomeNode.has("status")
+        && outcomeNode.has("body");
   }
 
   private boolean looksLikeDatasetPayload(JsonNode payloadNode) {

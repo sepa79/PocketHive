@@ -2,14 +2,11 @@ package io.pockethive.processor;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.pockethive.processor.handler.ProtocolHandler;
 import io.pockethive.processor.handler.HttpProtocolHandler;
 import io.pockethive.processor.handler.TcpProtocolHandler;
-import io.pockethive.processor.metrics.CallMetrics;
 import io.pockethive.processor.metrics.CallMetricsRecorder;
 import io.pockethive.processor.exception.ProcessorCallException;
-import io.pockethive.processor.response.ResponseBuilder;
 import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
 import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerContext;
@@ -17,6 +14,7 @@ import io.pockethive.worker.sdk.config.PocketHiveWorker;
 import io.pockethive.worker.sdk.config.WorkerCapability;
 
 import java.time.Clock;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import org.apache.hc.client5.http.classic.HttpClient;
@@ -46,11 +44,12 @@ import org.springframework.stereotype.Component;
  *   "enabled": true
  * }}</pre></li>
  * </ul>
- * Once configured, the worker performs an outbound HTTP call using the payload's {@code path},
- * {@code method}, {@code headers}, and {@code body} fields. Success and failure paths both emit a
- * {@link WorkItem} to the configured final routing key
- * ({@code pockethive.outputs.rabbit.routing-key}), and the runtime's observability interceptor adds the hop
- * metadata so downstream services can trace the request.
+ * Once configured, the worker performs an outbound call from a typed request envelope
+ * (for example {@code kind=http.request} or {@code kind=tcp.request}). Successful calls append
+ * a result step and emit a {@link WorkItem} to the configured final routing key
+ * ({@code pockethive.outputs.rabbit.routing-key}). Runtime failures are propagated as exceptions;
+ * the SDK transport layer handles them out-of-band (log + alert/journal + drop) instead of
+ * emitting error payload steps.
  * <p>
  * The defaults above can be tweaked by editing {@code processor-service/src/main/resources}
  * configuration or by publishing control-plane overrides on the {@code processor.control.*} routing
@@ -94,40 +93,43 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
 
     Logger logger = context.logger();
     try {
-      WorkItem response = invoke(in, config, context);
-      publishStatus(context, config);
-      return response;
+      return invoke(in, config, context);
     } catch (ProcessorCallException ex) {
-      String message = ex.getCause() != null ? ex.getCause().getMessage() : ex.getMessage();
-      logger.warn("Processor request failed: {}", ex.getCause() != null ? ex.getCause().toString() : ex.toString(), ex);
-      WorkItem error = buildError(in, message, ex.metrics(), context);
-      publishStatus(context, config);
-      return error;
+      Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
+      logger.warn("Processor request failed: {}", cause.toString(), ex);
+      if (cause instanceof RuntimeException runtimeException) {
+        throw runtimeException;
+      }
+      throw new IllegalStateException("Processor request failed", cause);
+    } catch (RuntimeException ex) {
+      logger.warn("Processor runtime failure: {}", ex.toString(), ex);
+      throw ex;
     } catch (Exception ex) {
-      logger.warn("Processor request failed: {}", ex.toString(), ex);
-      WorkItem error = buildError(in, ex.toString(), CallMetrics.failure(0L, 0L, -1), context);
+      logger.warn("Processor runtime failure: {}", ex.toString(), ex);
+      throw new IllegalStateException("Processor runtime failure", ex);
+    } finally {
       publishStatus(context, config);
-      return error;
     }
   }
 
   private WorkItem invoke(WorkItem message, ProcessorWorkerConfig config, WorkerContext context) throws Exception {
     JsonNode envelope = message.asJsonNode();
-    String protocol = envelope.path("protocol").asText("HTTP").toUpperCase();
+    String protocol = resolveProtocol(envelope);
     ProtocolHandler handler = protocolHandlers.get(protocol);
     if (handler == null) {
-      throw new ProcessorCallException(CallMetrics.failure(0L, 0L, -1),
-          new IllegalArgumentException("Unsupported protocol: " + protocol));
+      throw new IllegalStateException("No protocol handler registered for protocol: " + protocol);
     }
     return handler.invoke(message, envelope, config, context);
   }
 
-  private WorkItem buildError(WorkItem in, String message, CallMetrics metrics, WorkerContext context) {
-    ObjectNode result = mapper.createObjectNode();
-    result.put("error", message);
-    WorkItem errorItem = ResponseBuilder.build(result, context.info(), metrics);
-    WorkItem updated = in.addStep(context.info(), errorItem.asString(), errorItem.stepHeaders());
-    return updated.toBuilder().contentType(errorItem.contentType()).build();
+  private static String resolveProtocol(JsonNode envelope) {
+    String kind = envelope.path("kind").asText("").trim().toLowerCase(Locale.ROOT);
+    return switch (kind) {
+      case "http.request" -> "HTTP";
+      case "tcp.request" -> "TCP";
+      case "" -> throw new IllegalArgumentException("Missing request kind");
+      default -> throw new IllegalArgumentException("Unsupported request kind: " + kind);
+    };
   }
 
   private void publishStatus(WorkerContext context, ProcessorWorkerConfig config) {

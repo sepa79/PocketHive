@@ -1,8 +1,9 @@
 package io.pockethive.requestbuilder;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.pockethive.worker.sdk.api.HttpRequestEnvelope;
 import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
+import io.pockethive.worker.sdk.api.TcpRequestEnvelope;
 import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkStep;
 import io.pockethive.worker.sdk.api.WorkerContext;
@@ -94,7 +95,7 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
     }
 
     try {
-      ObjectNode envelope = MAPPER.createObjectNode();
+      Object envelope;
       String protocol = definition.protocol() == null ? "HTTP" : definition.protocol().toUpperCase(Locale.ROOT);
 
       if ("TCP".equals(protocol) && definition instanceof TcpTemplateDefinition tcpDef) {
@@ -120,17 +121,15 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
           }
         }
 
-        envelope.put("protocol", "TCP");
-        envelope.put("method", "");
-        envelope.put("behavior", tcpDef.behavior());
-        if (tcpDef.endTag() != null) {
-          envelope.put("endTag", tcpDef.endTag());
-        }
-        if (tcpDef.maxBytes() != null) {
-          envelope.put("maxBytes", tcpDef.maxBytes());
-        }
-        envelope.put("body", rendered.body());
-        envelope.set("headers", MAPPER.valueToTree(headers));
+        envelope = TcpRequestEnvelope.of(
+            new TcpRequestEnvelope.TcpRequest(
+                tcpDef.behavior(),
+                rendered.body(),
+                headers,
+                tcpDef.endTag(),
+                tcpDef.maxBytes()
+            )
+        );
       } else if (definition instanceof HttpTemplateDefinition httpDef) {
         MessageTemplate template = MessageTemplate.builder()
             .bodyType(MessageBodyType.HTTP)
@@ -157,15 +156,17 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
         }
 
         String method = rendered.method() == null ? "GET" : rendered.method().toUpperCase(Locale.ROOT);
-        envelope.put("protocol", "HTTP");
-        envelope.put("path", rendered.path());
-        envelope.put("method", method);
-        envelope.set("headers", MAPPER.valueToTree(headers));
         String contentType = headers.getOrDefault("Content-Type", "").toLowerCase();
-        // Detect JSON to embed as compact node instead of escaped string
         boolean isJson = contentType.contains("application/json") ||
                         (contentType.isEmpty() && looksLikeJson(rendered.body()));
-        setBodyNode(envelope, rendered.body(), isJson);
+        envelope = HttpRequestEnvelope.of(
+            new HttpRequestEnvelope.HttpRequest(
+                method,
+                rendered.path(),
+                headers,
+                resolveBodyValue(rendered.body(), isJson)
+            )
+        );
       } else {
         throw new IllegalStateException("Unknown template type: " + definition.getClass());
       }
@@ -187,7 +188,9 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
           serviceId, callId, ex);
       recordError();
       publishStatus(context, config);
-      return config.passThroughOnMissingTemplate() ? seed : null;
+      throw new IllegalStateException(
+          "Request Builder runtime failure for serviceId=%s callId=%s".formatted(serviceId, callId),
+          ex);
     }
   }
 
@@ -249,19 +252,17 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
     return null;
   }
 
-  private void setBodyNode(ObjectNode envelope, String body, boolean isJson) {
+  private Object resolveBodyValue(String body, boolean isJson) {
     if (body == null || body.isBlank()) {
-      envelope.put("body", "");
-      return;
+      return "";
     }
     if (isJson) {
       try {
-        envelope.set("body", MAPPER.readTree(body));
-        return;
+        return MAPPER.readValue(body, Object.class);
       } catch (Exception ignored) {
       }
     }
-    envelope.put("body", body);
+    return body;
   }
 
   private static boolean looksLikeJson(String body) {

@@ -8,13 +8,17 @@ import io.pockethive.processor.response.ResponseBuilder;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.pockethive.worker.sdk.api.HttpRequestEnvelope;
+import io.pockethive.worker.sdk.api.HttpResultEnvelope;
 import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import org.apache.hc.client5.http.classic.HttpClient;
@@ -49,26 +53,30 @@ public class HttpProtocolHandler implements ProtocolHandler {
   @Override
   public WorkItem invoke(WorkItem message, JsonNode envelope, ProcessorWorkerConfig config, WorkerContext context) throws Exception {
     Logger logger = context.logger();
+    HttpRequestEnvelope.HttpRequest requestEnvelope = parseRequest(envelope);
+    String method = requestEnvelope.method();
+    String path = requestEnvelope.path();
     String baseUrl = config.baseUrl();
-    if (baseUrl == null || baseUrl.isBlank()) {
+    Map<String, Object> unresolvedRequest = requestMetadata(null, method, baseUrl, path);
+    boolean absolutePath = isAbsoluteHttpUri(path);
+    if (!absolutePath && (baseUrl == null || baseUrl.isBlank())) {
       logger.warn("No baseUrl configured; skipping HTTP call");
-      throw new ProcessorCallException(CallMetrics.failure(0L, 0L, -1), new IllegalArgumentException("invalid baseUrl"));
+      throw new ProcessorCallException(CallMetrics.failure(0L, 0L, -1),
+          new IllegalArgumentException("invalid baseUrl"), unresolvedRequest);
     }
 
-    String path = envelope.path("path").asText("/");
-    String method = envelope.path("method").asText("GET").toUpperCase();
     URI target = resolveTarget(baseUrl, path);
     if (target == null) {
       logger.warn("Invalid URI base='{}' path='{}'", baseUrl, path);
-      throw new ProcessorCallException(CallMetrics.failure(0L, 0L, -1), new IllegalArgumentException("invalid baseUrl"));
+      throw new ProcessorCallException(CallMetrics.failure(0L, 0L, -1),
+          new IllegalArgumentException("invalid baseUrl"), unresolvedRequest);
     }
+    Map<String, Object> request = requestMetadata(target, method, baseUrl, path);
 
-    JsonNode headersNode = envelope.path("headers");
-    if (headersNode.isObject()) {
-      headersNode.fields().forEachRemaining(entry -> logger.debug("header {}={}", entry.getKey(), entry.getValue().asText()));
-    }
+    JsonNode headersNode = mapper.valueToTree(requestEnvelope.headers());
+    headersNode.fields().forEachRemaining(entry -> logger.debug("header {}={}", entry.getKey(), entry.getValue().asText()));
 
-    Optional<String> body = extractBody(envelope.path("body"));
+    Optional<String> body = extractBody(requestEnvelope.body());
     logger.debug("HTTP REQUEST {} {} headers={} body={}", method, target, headersNode, body.orElse(""));
 
     long start = clock.millis();
@@ -104,10 +112,18 @@ public class HttpProtocolHandler implements ProtocolHandler {
       };
 
       CallOutcome outcome = client.execute(apacheRequest, handler);
-      ObjectNode result = mapper.createObjectNode();
-      result.put("status", outcome.statusCode());
-      result.set("headers", mapper.valueToTree(outcome.headers()));
-      result.put("body", outcome.body());
+      HttpResultEnvelope resultEnvelope = HttpResultEnvelope.of(
+          mapper.convertValue(request, HttpResultEnvelope.HttpRequestInfo.class),
+          new HttpResultEnvelope.HttpOutcome(
+              HttpResultEnvelope.OUTCOME_HTTP_RESPONSE,
+              outcome.statusCode(),
+              outcome.headers(),
+              outcome.body(),
+              null
+          ),
+          new HttpResultEnvelope.HttpMetrics(outcome.metrics().durationMs(), outcome.metrics().connectionLatencyMs())
+      );
+      ObjectNode result = mapper.valueToTree(resultEnvelope);
 
       WorkItem responseItem = ResponseBuilder.build(result, context.info(), outcome.metrics());
       WorkItem updated = message.addStep(context.info(), responseItem.asString(), responseItem.stepHeaders());
@@ -119,7 +135,42 @@ public class HttpProtocolHandler implements ProtocolHandler {
       long connectionLatency = Math.max(0L, pacingMillis);
       CallMetrics metrics = CallMetrics.failure(callDuration, connectionLatency, -1);
       metricsRecorder.record(metrics);
-      throw new ProcessorCallException(metrics, ex);
+      throw new ProcessorCallException(metrics, ex, request);
+    }
+  }
+
+  private HttpRequestEnvelope.HttpRequest parseRequest(JsonNode envelope) {
+    try {
+      HttpRequestEnvelope parsed = mapper.treeToValue(envelope, HttpRequestEnvelope.class);
+      return parsed.request();
+    } catch (Exception ex) {
+      throw new IllegalArgumentException("Invalid HTTP request envelope", ex);
+    }
+  }
+
+  private Map<String, Object> requestMetadata(URI target, String method, String baseUrl, String path) {
+    Map<String, Object> request = new LinkedHashMap<>();
+    request.put("transport", "http");
+    request.put("scheme", resolveScheme(target, baseUrl));
+    request.put("method", method == null ? "" : method);
+    request.put("baseUrl", baseUrl == null ? "" : baseUrl);
+    request.put("path", path == null ? "" : path);
+    if (target != null) {
+      request.put("url", target.toString());
+    }
+    return request;
+  }
+
+  private String resolveScheme(URI target, String baseUrl) {
+    if (target != null && target.getScheme() != null) {
+      return target.getScheme().toLowerCase(Locale.ROOT);
+    }
+    try {
+      URI base = URI.create(baseUrl);
+      String scheme = base.getScheme();
+      return scheme == null ? "" : scheme.toLowerCase(Locale.ROOT);
+    } catch (Exception ex) {
+      return "";
     }
   }
 
@@ -149,10 +200,33 @@ public class HttpProtocolHandler implements ProtocolHandler {
   }
 
   private URI resolveTarget(String baseUrl, String path) {
+    if (isAbsoluteHttpUri(path)) {
+      try {
+        return URI.create(path);
+      } catch (IllegalArgumentException ex) {
+        return null;
+      }
+    }
     try {
       return URI.create(baseUrl + (path == null ? "" : path));
     } catch (IllegalArgumentException ex) {
       return null;
+    }
+  }
+
+  private boolean isAbsoluteHttpUri(String path) {
+    if (path == null || path.isBlank()) {
+      return false;
+    }
+    try {
+      URI uri = URI.create(path);
+      if (!uri.isAbsolute() || uri.getScheme() == null) {
+        return false;
+      }
+      String scheme = uri.getScheme().toLowerCase(Locale.ROOT);
+      return "http".equals(scheme) || "https".equals(scheme);
+    } catch (IllegalArgumentException ex) {
+      return false;
     }
   }
 
@@ -178,9 +252,13 @@ public class HttpProtocolHandler implements ProtocolHandler {
     return result;
   }
 
-  private Optional<String> extractBody(JsonNode bodyNode) throws Exception {
-    return bodyNode == null || bodyNode.isMissingNode() || bodyNode.isNull() ? Optional.empty()
-        : bodyNode.isTextual() ? Optional.of(bodyNode.asText())
-        : Optional.of(mapper.writeValueAsString(bodyNode));
+  private Optional<String> extractBody(Object bodyValue) throws Exception {
+    if (bodyValue == null) {
+      return Optional.empty();
+    }
+    if (bodyValue instanceof String textValue) {
+      return Optional.of(textValue);
+    }
+    return Optional.of(mapper.writeValueAsString(bodyValue));
   }
 }

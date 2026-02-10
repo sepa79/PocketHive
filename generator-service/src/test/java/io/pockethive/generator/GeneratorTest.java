@@ -67,10 +67,11 @@ class GeneratorTest {
 
     assertThat(result).isNotNull();
     JsonNode payload = MAPPER.readTree(result.asString());
-    assertThat(payload.path("path").asText()).isEqualTo("/custom");
-    assertThat(payload.path("method").asText()).isEqualTo("PUT");
-    assertThat(payload.path("body").asText()).isEqualTo("{\"value\":42}");
-    assertThat(payload.path("headers").path("X-Custom").asText()).isEqualTo("yes");
+    assertThat(payload.path("kind").asText()).isEqualTo("http.request");
+    assertThat(payload.path("request").path("path").asText()).isEqualTo("/custom");
+    assertThat(payload.path("request").path("method").asText()).isEqualTo("PUT");
+    assertThat(payload.path("request").path("body").asText()).isEqualTo("{\"value\":42}");
+    assertThat(payload.path("request").path("headers").path("X-Custom").asText()).isEqualTo("yes");
     assertThat(result.contentType()).isEqualTo(MessageProperties.CONTENT_TYPE_JSON);
   }
 
@@ -80,9 +81,10 @@ class GeneratorTest {
 
     assertThat(result).isNotNull();
     JsonNode payload = MAPPER.readTree(result.asString());
-    assertThat(payload.path("path").asText()).isEqualTo("/default");
-    assertThat(payload.path("method").asText()).isEqualTo("POST");
-    assertThat(payload.path("headers").path("X-Test").asText()).isEqualTo("true");
+    assertThat(payload.path("kind").asText()).isEqualTo("http.request");
+    assertThat(payload.path("request").path("path").asText()).isEqualTo("/default");
+    assertThat(payload.path("request").path("method").asText()).isEqualTo("POST");
+    assertThat(payload.path("request").path("headers").path("X-Test").asText()).isEqualTo("true");
   }
 
   private static final class TestWorkerContext implements WorkerContext {

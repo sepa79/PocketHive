@@ -108,6 +108,9 @@ Key rules:
 - Step 0 is explicit (no auto-seeding in builders). Empty payloads are allowed.
 - `messageId` and `contentType` are top-level only (do not duplicate in headers).
 - `x-ph-service` is deprecated for WorkItem tracking; tests enforce its absence in WorkItem headers.
+- Worker runtime exceptions (for example malformed request payloads, missing required call config) are
+  **not** encoded as WorkItem steps. They are handled out-of-band: log entry + control-plane alert
+  (journal-visible), and the consumed message is dropped (no requeue/redelivery storm).
 
 ### 2.5 Debug taps (UI V2)
 Operators can inspect data-plane traffic via **debug taps**. A tap is a temporary AMQP queue

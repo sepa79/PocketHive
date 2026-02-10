@@ -189,7 +189,15 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
         try {
             executor.execute(() -> dispatchSynchronously(workItem));
         } catch (RejectedExecutionException ex) {
-            // As a safety net, fall back to synchronous dispatch if the executor rejects the task.
+            log.warn("{} async dispatch rejected; falling back to synchronous processing", displayName, ex);
+            if (emitWorkErrorAlerts) {
+                try {
+                    controlPlaneRuntime.publishWorkError(workerDefinition.beanName(), workItem, ex);
+                } catch (Exception publishFailure) {
+                    log.warn("{} failed to publish async-dispatch rejection alert", displayName, publishFailure);
+                }
+            }
+            reportDispatchFailure(ex);
             dispatchSynchronously(workItem);
         }
     }
@@ -203,7 +211,7 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
                 log.warn("{} failed to publish decode error alert", displayName, publishFailure);
             }
         }
-        dispatchErrorHandler.accept(ex);
+        reportDispatchFailure(ex);
     }
 
     /**
@@ -253,7 +261,15 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
                     log.warn("{} failed to publish work error alert", displayName, publishFailure);
                 }
             }
+            reportDispatchFailure(ex);
+        }
+    }
+
+    private void reportDispatchFailure(Exception ex) {
+        try {
             dispatchErrorHandler.accept(ex);
+        } catch (Exception handlerFailure) {
+            log.warn("{} dispatch error handler failed", displayName, handlerFailure);
         }
     }
 

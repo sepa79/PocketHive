@@ -7,6 +7,12 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.observability.ObservabilityContextUtil;
+import io.pockethive.processor.transport.TcpBehavior;
+import io.pockethive.processor.transport.TcpRequest;
+import io.pockethive.processor.transport.TcpResponse;
+import io.pockethive.processor.transport.TcpTransport;
+import io.pockethive.worker.sdk.api.HttpRequestEnvelope;
+import io.pockethive.worker.sdk.api.TcpRequestEnvelope;
 import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
 import io.pockethive.worker.sdk.api.StatusPublisher;
 import io.pockethive.worker.sdk.api.WorkItem;
@@ -25,6 +31,7 @@ import io.pockethive.worker.sdk.runtime.WorkerState;
 import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
 import java.net.URI;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -45,6 +52,7 @@ import org.apache.hc.core5.http.message.BasicHeader;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -94,8 +102,10 @@ class ProcessorTest {
 
         assertThat(outbound).isNotNull();
         JsonNode payload = MAPPER.readTree(outbound.asString());
-        assertThat(payload.path("status").asInt()).isEqualTo(201);
-        assertThat(payload.path("body").asText()).isEqualTo("{\"result\":\"ok\"}");
+        assertThat(payload.path("kind").asText()).isEqualTo("http.result");
+        assertThat(payload.path("request").path("url").asText()).isEqualTo("http://sut/api");
+        assertThat(payload.path("outcome").path("status").asInt()).isEqualTo(201);
+        assertThat(payload.path("outcome").path("body").asText()).isEqualTo("{\"result\":\"ok\"}");
         assertThat(outbound.contentType()).isEqualTo("application/json");
         assertThat(outbound.stepHeaders())
                 .containsEntry("x-ph-processor-duration-ms", "0")
@@ -229,7 +239,7 @@ class ProcessorTest {
     }
 
     @Test
-    void workerReturnsErrorWhenBaseUrlMissing() throws Exception {
+    void workerThrowsWhenBaseUrlMissingAndPathIsRelative() throws Exception {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
         properties.setConfig(Map.of("baseUrl", ""));
         HttpClient httpClient = mock(HttpClient.class);
@@ -240,15 +250,130 @@ class ProcessorTest {
 
         WorkItem inbound = inboundItem(Map.of("path", "/noop"));
 
+        assertThatThrownBy(() -> worker.onMessage(inbound, context))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("invalid baseUrl");
+        verify(httpClient, never()).execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class));
+    }
+
+    @Test
+    void workerAllowsAbsolutePathWithoutBaseUrl() throws Exception {
+        ProcessorWorkerProperties properties = newProcessorWorkerProperties();
+        properties.setConfig(Map.of("baseUrl", ""));
+        HttpClient httpClient = mock(HttpClient.class);
+        Clock clock = Clock.systemUTC();
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, clock);
+        ProcessorWorkerConfig config = new ProcessorWorkerConfig(" ", null, 0, 0.0, null, null, null, null, null);
+        TestWorkerContext context = new TestWorkerContext(config);
+
+        AtomicReference<ClassicHttpRequest> requestRef = new AtomicReference<>();
+        when(httpClient.execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class))).thenAnswer(invocation -> {
+            ClassicHttpRequest request = invocation.getArgument(0, ClassicHttpRequest.class);
+            HttpClientResponseHandler<?> handler = invocation.getArgument(1, HttpClientResponseHandler.class);
+            requestRef.set(request);
+            BasicClassicHttpResponse response = new BasicClassicHttpResponse(200, "OK");
+            response.setEntity(new StringEntity("{\"ok\":true}", java.nio.charset.StandardCharsets.UTF_8));
+            return handler.handleResponse(response);
+        });
+
+        WorkItem inbound = inboundItem(Map.of(
+            "method", "POST",
+            "path", "https://external.example/api/test",
+            "body", Map.of("value", 1)
+        ));
+
         WorkItem result = worker.onMessage(inbound, context);
 
         assertThat(result).isNotNull();
         JsonNode payload = MAPPER.readTree(result.asString());
-        assertThat(payload.path("error").asText()).isEqualTo("invalid baseUrl");
+        assertThat(payload.path("kind").asText()).isEqualTo("http.result");
+        assertThat(payload.path("request").path("baseUrl").isNull()).isTrue();
+        assertThat(payload.path("request").path("path").asText()).isEqualTo("https://external.example/api/test");
+        assertThat(payload.path("request").path("url").asText()).isEqualTo("https://external.example/api/test");
+        assertThat(payload.path("request").path("scheme").asText()).isEqualTo("https");
+        assertThat(payload.path("outcome").path("status").asInt()).isEqualTo(200);
+
+        ClassicHttpRequest request = requestRef.get();
+        assertThat(request).isNotNull();
+        assertThat(request.getUri()).isEqualTo(URI.create("https://external.example/api/test"));
+        assertThat(request.getMethod()).isEqualTo("POST");
+    }
+
+    @Test
+    void workerEmitsTcpResultEnvelope() throws Exception {
+        ProcessorWorkerProperties properties = newProcessorWorkerProperties();
+        properties.setConfig(Map.of("baseUrl", "tcp://tcp.example:9100"));
+        HttpClient httpClient = mock(HttpClient.class);
+        Clock clock = Clock.systemUTC();
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, clock);
+        injectGlobalTcpTransport(worker, new TcpTransport() {
+            @Override
+            public TcpResponse execute(TcpRequest request, TcpBehavior behavior) {
+                return new TcpResponse(200, "pong".getBytes(java.nio.charset.StandardCharsets.UTF_8), 0L);
+            }
+
+            @Override
+            public void close() {
+            }
+        });
+        ProcessorWorkerConfig config = new ProcessorWorkerConfig("tcp://tcp.example:9100", null, 0, 0.0, null, null, null, null, null);
+        TestWorkerContext context = new TestWorkerContext(config);
+
+        WorkItem inbound = inboundTcpItem("request_response", "ping");
+        WorkItem result = worker.onMessage(inbound, context);
+
+        assertThat(result).isNotNull();
+        JsonNode payload = MAPPER.readTree(result.asString());
+        assertThat(payload.path("kind").asText()).isEqualTo("tcp.result");
+        assertThat(payload.path("request").path("transport").asText()).isEqualTo("tcp");
+        assertThat(payload.path("request").path("scheme").asText()).isEqualTo("tcp");
+        assertThat(payload.path("request").path("method").asText()).isEqualTo("REQUEST_RESPONSE");
+        assertThat(payload.path("request").path("configuredTarget").asText()).isEqualTo("tcp://tcp.example:9100");
+        assertThat(payload.path("request").path("endpoint").asText()).isEqualTo("tcp://tcp.example:9100");
+        assertThat(payload.path("outcome").path("type").asText()).isEqualTo("tcp_response");
+        assertThat(payload.path("outcome").path("status").asInt()).isEqualTo(200);
+        assertThat(payload.path("outcome").path("body").asText()).isEqualTo("pong");
         assertThat(result.stepHeaders())
-            .containsEntry("x-ph-processor-duration-ms", "0")
-            .containsEntry("x-ph-processor-success", "false")
-            .containsEntry("x-ph-processor-status", "-1");
+            .containsEntry("x-ph-processor-success", "true")
+            .containsEntry("x-ph-processor-status", "200");
+        verify(httpClient, never()).execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class));
+    }
+
+    @Test
+    void workerThrowsWhenTcpBaseUrlMissing() throws Exception {
+        ProcessorWorkerProperties properties = newProcessorWorkerProperties();
+        properties.setConfig(Map.of("baseUrl", ""));
+        HttpClient httpClient = mock(HttpClient.class);
+        Clock clock = Clock.systemUTC();
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, clock);
+        ProcessorWorkerConfig config = new ProcessorWorkerConfig(" ", null, 0, 0.0, null, null, null, null, null);
+        TestWorkerContext context = new TestWorkerContext(config);
+
+        WorkItem inbound = inboundTcpItem("REQUEST_RESPONSE", "ping");
+
+        assertThatThrownBy(() -> worker.onMessage(inbound, context))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("invalid TCP baseUrl");
+    }
+
+    @Test
+    void workerRejectsLegacyPayloadWithoutKind() throws Exception {
+        ProcessorWorkerProperties properties = newProcessorWorkerProperties();
+        properties.setConfig(Map.of("baseUrl", "http://sut"));
+        HttpClient httpClient = mock(HttpClient.class);
+        Clock clock = Clock.systemUTC();
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, clock);
+        ProcessorWorkerConfig config = new ProcessorWorkerConfig("http://sut", null, 0, 0.0, null, null, null, null, null);
+        TestWorkerContext context = new TestWorkerContext(config);
+
+        WorkItem legacyInbound = WorkItem.json(
+            new WorkerInfo("ingress", "swarm", "ingress-instance", null, null),
+            Map.of("path", "/legacy", "method", "GET")
+        ).build();
+
+        assertThatThrownBy(() -> worker.onMessage(legacyInbound, context))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Missing request kind");
         verify(httpClient, never()).execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class));
     }
 
@@ -265,7 +390,57 @@ class ProcessorTest {
 
     private static WorkItem inboundItem(Map<String, Object> payload) {
         WorkerInfo info = new WorkerInfo("ingress", "swarm", "ingress-instance", null, null);
-        return WorkItem.json(info, payload).build();
+        return WorkItem.json(info, HttpRequestEnvelope.of(new HttpRequestEnvelope.HttpRequest(
+            payload.containsKey("method") ? String.valueOf(payload.get("method")) : "GET",
+            payload.containsKey("path") ? String.valueOf(payload.get("path")) : "/",
+            headersMap(payload.get("headers")),
+            payload.get("body")
+        ))).build();
+    }
+
+    private static WorkItem inboundTcpItem(String behavior, String body) {
+        WorkerInfo info = new WorkerInfo("ingress", "swarm", "ingress-instance", null, null);
+        return WorkItem.json(info, TcpRequestEnvelope.of(new TcpRequestEnvelope.TcpRequest(
+            behavior,
+            body,
+            Map.of(),
+            null,
+            1024
+        ))).build();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, String> headersMap(Object rawHeaders) {
+        if (!(rawHeaders instanceof Map<?, ?> headers)) {
+            return Map.of();
+        }
+        Map<String, String> normalized = new LinkedHashMap<>();
+        headers.forEach((key, value) -> {
+            if (key != null && value != null) {
+                normalized.put(String.valueOf(key), String.valueOf(value));
+            }
+        });
+        return normalized;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void injectGlobalTcpTransport(ProcessorWorkerImpl worker, TcpTransport transport)
+        throws ReflectiveOperationException {
+        Field protocolHandlersField = ProcessorWorkerImpl.class.getDeclaredField("protocolHandlers");
+        protocolHandlersField.setAccessible(true);
+        Map<String, Object> protocolHandlers = (Map<String, Object>) protocolHandlersField.get(worker);
+        Object tcpHandler = protocolHandlers.get("TCP");
+        if (tcpHandler == null) {
+            throw new IllegalStateException("TCP handler not registered");
+        }
+
+        Field globalTransportField = tcpHandler.getClass().getDeclaredField("globalTransport");
+        globalTransportField.setAccessible(true);
+        Object previous = globalTransportField.get(tcpHandler);
+        if (previous instanceof TcpTransport previousTransport) {
+            previousTransport.close();
+        }
+        globalTransportField.set(tcpHandler, transport);
     }
 
     private static WorkerDefinition processorDefinition() {

@@ -13,8 +13,12 @@ import io.pockethive.worker.sdk.config.WorkerOutputType;
 import io.pockethive.worker.sdk.runtime.WorkIoBindings;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
+import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.util.Set;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -153,6 +157,25 @@ class RabbitMessageWorkerAdapterTest {
     }
 
     @Test
+    void onWorkPublishesAlertWhenAsyncDispatchRejectedAndFallsBackToSync() throws Exception {
+        RabbitMessageWorkerAdapter adapter = builder().build();
+        RabbitWorkItemConverter converter = new RabbitWorkItemConverter();
+        Message inbound = converter.toMessage(workItem("payload"));
+        ThreadPoolExecutor rejectingExecutor = mock(ThreadPoolExecutor.class);
+        RejectedExecutionException rejection = new RejectedExecutionException("executor saturated");
+        doThrow(rejection).when(rejectingExecutor).execute(any(Runnable.class));
+        when(dispatcher.dispatch(any(WorkItem.class))).thenReturn(workItem("processed"));
+        setConcurrencyState(adapter, rejectingExecutor, 2);
+
+        assertThatCode(() -> adapter.onWork(inbound)).doesNotThrowAnyException();
+
+        verify(rejectingExecutor).execute(any(Runnable.class));
+        verify(controlPlaneRuntime).publishWorkError(eq(workerDefinition.beanName()), any(WorkItem.class), eq(rejection));
+        verify(errorHandler).accept(rejection);
+        verify(rabbitTemplate).send(eq(workerDefinition.io().outboundExchange()), eq(workerDefinition.io().outboundQueue()), any(Message.class));
+    }
+
+    @Test
     void onWorkErrorsDelegateToErrorHandler() throws Exception {
         RabbitMessageWorkerAdapter adapter = builder().build();
         RabbitWorkItemConverter converter = new RabbitWorkItemConverter();
@@ -168,6 +191,22 @@ class RabbitMessageWorkerAdapterTest {
     }
 
     @Test
+    void onWorkSwallowsDispatchErrorHandlerFailureWhenDispatcherThrows() throws Exception {
+        RabbitMessageWorkerAdapter adapter = builder().build();
+        RabbitWorkItemConverter converter = new RabbitWorkItemConverter();
+        Message inbound = converter.toMessage(workItem("payload"));
+        RuntimeException dispatchFailure = new RuntimeException("boom");
+        RuntimeException handlerFailure = new RuntimeException("handler failed");
+        doThrow(dispatchFailure).when(dispatcher).dispatch(any(WorkItem.class));
+        doThrow(handlerFailure).when(errorHandler).accept(any(Exception.class));
+
+        assertThatCode(() -> adapter.onWork(inbound)).doesNotThrowAnyException();
+
+        verify(controlPlaneRuntime).publishWorkError(eq(workerDefinition.beanName()), any(WorkItem.class), eq(dispatchFailure));
+        verifyNoInteractions(rabbitTemplate);
+    }
+
+    @Test
     void onWorkDecoderErrorsPublishAlertAndDelegateToErrorHandler() {
         RabbitMessageWorkerAdapter adapter = builder().build();
         Message inbound = new Message("not-a-json-envelope".getBytes(StandardCharsets.UTF_8), new org.springframework.amqp.core.MessageProperties());
@@ -176,6 +215,19 @@ class RabbitMessageWorkerAdapterTest {
 
         verify(controlPlaneRuntime).publishWorkError(eq(workerDefinition.beanName()), any(WorkItem.class), any(Throwable.class));
         verify(errorHandler).accept(any(Exception.class));
+        verifyNoInteractions(rabbitTemplate);
+    }
+
+    @Test
+    void onWorkSwallowsDispatchErrorHandlerFailureWhenDecodeFails() {
+        RabbitMessageWorkerAdapter adapter = builder().build();
+        Message inbound = new Message("not-a-json-envelope".getBytes(StandardCharsets.UTF_8), new org.springframework.amqp.core.MessageProperties());
+        RuntimeException handlerFailure = new RuntimeException("handler failed");
+        doThrow(handlerFailure).when(errorHandler).accept(any(Exception.class));
+
+        assertThatCode(() -> adapter.onWork(inbound)).doesNotThrowAnyException();
+
+        verify(controlPlaneRuntime).publishWorkError(eq(workerDefinition.beanName()), any(WorkItem.class), any(Throwable.class));
         verifyNoInteractions(rabbitTemplate);
     }
 
@@ -413,6 +465,25 @@ class RabbitMessageWorkerAdapterTest {
 
     private RabbitMessageWorkerAdapter.Builder builderWithoutTemplate() {
         return baseBuilder();
+    }
+
+    private static void setConcurrencyState(RabbitMessageWorkerAdapter adapter, ThreadPoolExecutor executor, int maxInFlight)
+        throws ReflectiveOperationException {
+        setField(adapter, "workExecutor", executor);
+        AtomicInteger counter = (AtomicInteger) readField(adapter, "maxInFlight");
+        counter.set(maxInFlight);
+    }
+
+    private static void setField(Object target, String fieldName, Object value) throws ReflectiveOperationException {
+        Field field = target.getClass().getDeclaredField(fieldName);
+        field.setAccessible(true);
+        field.set(target, value);
+    }
+
+    private static Object readField(Object target, String fieldName) throws ReflectiveOperationException {
+        Field field = target.getClass().getDeclaredField(fieldName);
+        field.setAccessible(true);
+        return field.get(target);
     }
 
     private record DummyConfig() {
