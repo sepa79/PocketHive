@@ -5,7 +5,61 @@ This file is a **navigation and guardrails** page for both human and AI contribu
 
 ---
 
-## 1) Authoritative sources (read these first)
+## 1) Rules **NON-NEGOTIABLE (NO DISCUSSION):**
+  - The rules in this section are hard constraints, not suggestions.
+  - Agents must not reinterpret, weaken, or silently bypass these rules.
+  - Any exception requires explicit human approval for that specific task.
+
+- **NFF (No Fraking Fallbacks).**
+  - Do not add cascading defaults, heuristic fallback chains, or silent compatibility shims.
+  - Every target must declare explicit adapter and explicit settings.
+  - Do not auto-switch from one adapter/protocol to another.
+  - Prefer explicit failure and explicit configuration over auto-recovery logic.
+  - Rationale: fallback-heavy code quickly becomes hard to reason about and hard to trust.
+- **No implicit backward compatibility.**
+  - Breaking changes are acceptable unless compatibility is explicitly required.
+- **No implicit Optional for core state/config flags.**
+  - Use explicit required fields and explicit enums/states.
+- **SSOT for contracts.**
+  - One canonical schema/DTO per API/event/config contract.
+  - Do not keep duplicate definitions, DTOs, schemas, validators, parsers, or mappers for the same contract format (API/event/config).
+- **KISS.**
+  - Prefer straightforward, maintainable implementations over clever abstractions.
+- **Git safety (agents):**
+  - **No pushes:** agents must not run `git push` (ever).
+  - **No commits by default:** agents must not create commits unless a human makes an **EXPLICIT REQUEST TO COMMIT**.
+
+---
+
+### 1.1 Java & libraries
+- **Java 21 (LTS)** across services.
+- **Lombok is allowed** to keep code concise. Recommended annotations:
+  - `@Value`, `@Builder`, `@With` for immutable DTOs/configs
+  - `@Data` (careful with equals/hashCode), `@RequiredArgsConstructor`
+  - `@Slf4j` for logging
+- Do **not** expose Lombok types in public JSON contracts (use plain records/DTOs for on‑wire types as defined in the contracts).
+
+### 1.2 Boundaries (SOLID in PocketHive terms)
+- **SRP:** each module does one thing (orchestrator, swarm‑controller, generator, moderator, processor, postprocessor, trigger). Don’t blend concerns.
+- **OCP:** extend via new components/handlers. Do **not** modify shared contracts for “just this case.”
+- **LSP:** adapter implementations must preserve behavior (e.g., a new sink still honors idempotency & timeouts).
+- **ISP:** keep interfaces small—`Publisher`, `Consumer`, `Shaper`, `MetricsSink`.
+- **DIP:** domain logic depends on ports; concrete adapters (RabbitMQ/HTTP/DB) live in infra. See `ARCHITECTURE.md` for layering.
+
+### 1.3 Messaging & routing
+- **Do not hand‑craft routing keys.** Use the shared routing utility and the examples in `ARCHITECTURE.md` / `ORCHESTRATOR-REST.md`.
+- When adding a new signal or event, **update the contract + topics file** first; code follows the contract.
+
+### 1.4 Observability (baseline)
+- Propagate **correlationId** and **(if used) trace context** end‑to‑end as specified in `correlation-vs-idempotency.md`.
+
+### 1.5 Tests & CI
+- Follow the **control‑plane testing** strategy in `docs/ci/control-plane-testing.md` (Testcontainers, RabbitMQ, WireMock, etc.).
+- For usage/dev commands, **do not copy here**—use `docs/USAGE.md`.
+
+---
+
+## 2) Authoritative sources (details and implementation guidance)
 
 - **System architecture & contracts**
   - Architecture (single source of truth): `docs/ARCHITECTURE.md`
@@ -27,51 +81,14 @@ This file is a **navigation and guardrails** page for both human and AI contribu
   - UI/React guidelines: `docs/ai/UI_REACT_GUIDELINES.md`
   - Java guidelines: `docs/ai/JAVA_GUIDELINES.md`
 
-> If anything here conflicts with those files, **the linked docs win**.
-
----
-
-## 2) Minimal, enforceable rules (no duplication)
-
-- **No cascading defaults, no implicit back-compat:** When configuring services or libraries, never layer fallback property chains. Assume breaking changes are acceptable unless the task explicitly calls for backward compatibility.
-- **No implicit Optionals:** Do not use `Optional` for core state like enablement/configuration flags unless a rule explicitly allows it. Every case where Optional is to be used must be consulted with humans.
-- **SSOT (Single Source of Truth) for contracts:** Never maintain multiple independent “definitions” / validators / parsers for the same on-wire or on-disk format. Put the contract in one place (doc + shared DTO/schema) and make all code reuse it.
-- **KISS:** Bias toward the simplest viable solution. Avoid clever or convoluted code paths when a straightforward approach works; complexity must be justified explicitly.
-- **Git safety (agents):**
-  - **No pushes:** agents must not run `git push` (ever).
-  - **No commits by default:** agents must not create commits unless a human makes an **EXPLICIT REQUEST TO COMMIT**.
-
-### 2.1 Java & libraries
-- **Java 21 (LTS)** across services.
-- **Lombok is allowed** to keep code concise. Recommended annotations:
-  - `@Value`, `@Builder`, `@With` for immutable DTOs/configs
-  - `@Data` (careful with equals/hashCode), `@RequiredArgsConstructor`
-  - `@Slf4j` for logging
-- Do **not** expose Lombok types in public JSON contracts (use plain records/DTOs for on‑wire types as defined in the contracts).
-
-### 2.2 Boundaries (SOLID in PocketHive terms)
-- **SRP:** each module does one thing (orchestrator, swarm‑controller, generator, moderator, processor, postprocessor, trigger). Don’t blend concerns.
-- **OCP:** extend via new components/handlers. Do **not** modify shared contracts for “just this case.”
-- **LSP:** adapter implementations must preserve behavior (e.g., a new sink still honors idempotency & timeouts).
-- **ISP:** keep interfaces small—`Publisher`, `Consumer`, `Shaper`, `MetricsSink`.
-- **DIP:** domain logic depends on ports; concrete adapters (RabbitMQ/HTTP/DB) live in infra. See `ARCHITECTURE.md` for layering.
-
-### 2.3 Messaging & routing
-- **Do not hand‑craft routing keys.** Use the shared routing utility and the examples in `ARCHITECTURE.md` / `ORCHESTRATOR-REST.md`.
-- When adding a new signal or event, **update the contract + topics file** first; code follows the contract.
-
-### 2.4 Observability (baseline)
-- Propagate **correlationId** and **(if used) trace context** end‑to‑end as specified in `correlation-vs-idempotency.md`.
-
-### 2.5 Tests & CI
-- Follow the **control‑plane testing** strategy in `docs/ci/control-plane-testing.md` (Testcontainers, RabbitMQ, WireMock, etc.).
-- For usage/dev commands, **do not copy here**—use `docs/USAGE.md`.
+> Precedence: if any referenced doc conflicts with §1 Rules, **§1 Rules win**.
+> On conflict or ambiguity, stop and ask for explicit human decision.
 
 ---
 
 ## 3) Contribution workflow (short)
 
-1. **Plan**: If your change affects routing, message schema, or REST, edit the relevant doc first (see §1) and get review.
+1. **Plan**: If your change affects routing, message schema, or REST, edit the relevant doc first (see §2) and get review.
 2. **Implement**: Keep code inside its module’s boundaries; prefer ports + adapters; use Lombok to avoid boilerplate.
 3. **Test**: Add/adjust tests at the right layer per `control-plane-testing.md`.
 4. **Observe**: Ensure logs/metrics match `observability.md`.
@@ -84,8 +101,8 @@ This file is a **navigation and guardrails** page for both human and AI contribu
 
 ## 4) Quick glossary (PocketHive‑specific)
 
-- **Signal / Event names, routing keys** — canonical list lives in the **Architecture** doc (see §1).  
-- **Correlation vs Idempotency** — how we wait for results, deduplicate, and time out (see §1).  
+- **Signal / Event names, routing keys** — canonical list lives in the **Architecture** doc (see §2).  
+- **Correlation vs Idempotency** — how we wait for results, deduplicate, and time out (see §2).  
 - **Ports/Adapters** — small interfaces vs transport‑specific implementations (see `ARCHITECTURE.md`).
 
 ---
