@@ -341,18 +341,24 @@ Implementation is split into small, mergeable PRs. Each PR should keep system be
 
 ### PR 1: Artifact-by-reference handoff
 
+Scope guard: PR 1 must not change AMQP routing/exchange contracts from `docs/ARCHITECTURE.md`.
+Tenant-scoped AMQP exchange changes are deferred to PR 2.
+
 1. Introduce runtime artifact store abstraction:
    - local shared-dir backend first,
    - pluggable backends later.
 2. Orchestrator persists runtime artifacts before swarm start.
 3. Control-plane carries artifact reference + checksum instead of large embedded plan payload.
 4. Swarm Controller resolves artifact by reference at startup.
+5. Use tenant-ready artifact namespace from day one with effective single-tenant id:
+   - write/read artifacts under `.../tenants/<effectiveSingleTenantId>/...` before full tenancy is implemented,
+   - default value is `defaultTenant`; keep artifact reference shape compatible with later per-request tenant ids.
 
 ### PR 2: Minimal tenant boundary
 
 1. Add `tenantId` to all new entities and APIs (`SUT`, `DatasetSpace`, `Binding`, `SimulationProgram`).
 2. Enforce tenant scoping in Scenario Manager and Orchestrator reads/writes.
-3. Keep single-tenant runtime mode (`tenantId=default`) until full Org/Team/User/Role model is implemented.
+3. Keep single-tenant runtime mode (`tenantId=defaultTenant`) until full Org/Team/User/Role model is implemented.
 
 ### PR 3: Core simulation model (one backend vertical slice)
 
@@ -410,6 +416,7 @@ After team sign-off on this model, produce a contract-focused follow-up doc:
 3. `Dataset Space` schema (draft),
 4. binding validation error model,
 5. minimal REST/API surface proposal.
+6. tenancy companion doc: `docs/architecture/tenancy-foundation-plan.md`.
 
 ---
 
