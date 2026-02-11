@@ -3335,31 +3335,36 @@ export default function ScenariosPage() {
     [],
   )
 
-  const inferIoTypeFromConfig = useCallback(
-    (componentConfig: Record<string, unknown> | undefined): string | undefined => {
-      if (!componentConfig) return undefined
+  const resolveIoSelectionsFromConfig = useCallback(
+    (
+      componentConfig: Record<string, unknown> | undefined,
+    ): Array<{ type: string; scope: 'INPUT' | 'OUTPUT' }> => {
+      if (!componentConfig) return []
+      const selections: Array<{ type: string; scope: 'INPUT' | 'OUTPUT' }> = []
+
       const inputsRaw = componentConfig['inputs']
-      if (!inputsRaw || typeof inputsRaw !== 'object' || Array.isArray(inputsRaw)) {
-        return undefined
+      if (inputsRaw && typeof inputsRaw === 'object' && !Array.isArray(inputsRaw)) {
+        const inputs = inputsRaw as Record<string, unknown>
+        const inputTypeRaw = inputs['type']
+        const inputType =
+          typeof inputTypeRaw === 'string' ? inputTypeRaw.trim().toUpperCase() : undefined
+        if (inputType) {
+          selections.push({ type: inputType, scope: 'INPUT' })
+        }
       }
-      const inputs = inputsRaw as Record<string, unknown>
-      const inputTypeRaw = inputs['type']
-      const inputType =
-        typeof inputTypeRaw === 'string' ? inputTypeRaw.trim().toUpperCase() : undefined
-      if (inputType === 'SCHEDULER' || inputType === 'REDIS_DATASET') {
-        return inputType
+
+      const outputsRaw = componentConfig['outputs']
+      if (outputsRaw && typeof outputsRaw === 'object' && !Array.isArray(outputsRaw)) {
+        const outputs = outputsRaw as Record<string, unknown>
+        const outputTypeRaw = outputs['type']
+        const outputType =
+          typeof outputTypeRaw === 'string' ? outputTypeRaw.trim().toUpperCase() : undefined
+        if (outputType) {
+          selections.push({ type: outputType, scope: 'OUTPUT' })
+        }
       }
-      const hasScheduler =
-        inputs.scheduler && typeof inputs.scheduler === 'object' && !Array.isArray(inputs.scheduler)
-      const hasRedis =
-        inputs.redis && typeof inputs.redis === 'object' && !Array.isArray(inputs.redis)
-      if (hasScheduler) {
-        return 'SCHEDULER'
-      }
-      if (hasRedis) {
-        return 'REDIS_DATASET'
-      }
-      return undefined
+
+      return selections
     },
     [],
   )
@@ -3370,16 +3375,26 @@ export default function ScenariosPage() {
       componentConfig: Record<string, unknown> | undefined,
     ): CapabilityConfigEntry[] => {
       const baseEntries = Array.isArray(manifest.config) ? manifest.config : []
-      const ioType = inferIoTypeFromConfig(componentConfig)
-      if (!ioType) {
+      const ioSelections = resolveIoSelectionsFromConfig(componentConfig)
+      if (ioSelections.length === 0) {
         return baseEntries
       }
       const allEntries: CapabilityConfigEntry[] = [...baseEntries]
       for (const m of manifests) {
         const ui = m.ui as Record<string, unknown> | undefined
         const ioTypeRaw = ui && typeof ui.ioType === 'string' ? ui.ioType : undefined
+        const ioScopeRaw = ui && typeof ui.ioScope === 'string' ? ui.ioScope : undefined
         const manifestIoType = ioTypeRaw ? ioTypeRaw.trim().toUpperCase() : undefined
-        if (manifestIoType && manifestIoType === ioType && Array.isArray(m.config)) {
+        const manifestIoScope = ioScopeRaw ? ioScopeRaw.trim().toUpperCase() : undefined
+        if (
+          manifestIoType &&
+          manifestIoScope &&
+          ioSelections.some(
+            (selection) =>
+              selection.type === manifestIoType && selection.scope === manifestIoScope,
+          ) &&
+          Array.isArray(m.config)
+        ) {
           allEntries.push(...m.config)
         }
       }
@@ -3391,7 +3406,7 @@ export default function ScenariosPage() {
       }
       return Array.from(byName.values())
     },
-    [inferIoTypeFromConfig, manifests],
+    [resolveIoSelectionsFromConfig, manifests],
   )
 
   useEffect(() => {

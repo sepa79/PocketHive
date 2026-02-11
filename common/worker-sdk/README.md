@@ -161,7 +161,61 @@ The templating interceptor builds a compact context map for Pebble templates:
   - Example: `{{ eval('#md5_hex(payload)') }}` to hash the current payload
   - Type references, `new`, bean lookups, and arbitrary method calls are blocked; stick to property access and the provided helpers.
 
-### Redis uploader interceptor (config-only)
+### Redis dataset input (single-list and multi-list)
+
+`REDIS_DATASET` supports two explicit source modes:
+
+- single list: `inputs.redis.listName`
+- multi-list: `inputs.redis.sources[]` with `pickStrategy`
+
+Exactly one mode must be configured.
+
+```yaml
+pockethive:
+  inputs:
+    type: REDIS_DATASET
+    redis:
+      host: redis
+      port: 6379
+      sources:
+        - listName: webauth.TOP.custA
+          weight: 1
+        - listName: webauth.RED.custA
+          weight: 3
+        - listName: webauth.RED.custB
+          weight: 2
+      pickStrategy: WEIGHTED_RANDOM   # ROUND_ROBIN or WEIGHTED_RANDOM
+      ratePerSec: 20
+```
+
+Each dispatched `WorkItem` carries `x-ph-redis-list` with the source list that produced the payload.
+
+### Redis output (`outputs.type=REDIS`)
+
+Set `pockethive.outputs.type=REDIS` to publish worker results directly to Redis without
+RabbitMQ output routing. The output uses the same routing model as the uploader:
+
+- `routes` (first match wins),
+- then `targetListTemplate`,
+- then `defaultList`.
+
+```yaml
+pockethive:
+  outputs:
+    type: REDIS
+    redis:
+      host: redis
+      port: 6379
+      sourceStep: FIRST          # FIRST or LAST; default LAST
+      pushDirection: RPUSH       # LPUSH or RPUSH
+      routes:
+        - header: x-ph-redis-list
+          headerMatch: '^webauth\\.TOP\\.custA$'
+          list: webauth.RED.custA
+      defaultList: ph:dataset:other
+```
+
+### Redis uploader interceptor (side-output)
 
 The SDK ships a Redis uploader interceptor that can be enabled purely via config under
 `pockethive.worker.config.interceptors.redisUploader`. It routes the selected payload to Redis
@@ -180,13 +234,22 @@ pockethive:
               sourceStep: FIRST              # or LAST; default FIRST
               pushDirection: RPUSH           # default; symmetric with redis input LPOP
               routes:                        # first match wins; optional
+                - header: x-ph-flow
+                  headerMatch: '^TOP$'
+                  list: webauth.RED.custA
                 - match: '^.*"status":\\s*200.*$'
                   list: ph:dataset:main
                 - match: 'no money'
                   list: ph:dataset:topup
-              fallbackList: ph:dataset:other # if omitted, uses the x-ph-redis-list header from the WorkItem; otherwise skips
+              targetListTemplate: "webauth.RED.{{ payloadAsJson.Customer }}" # optional, used when no route matches
+              defaultList: ph:dataset:other # optional explicit default target list
 ```
 
-If no route matches and `fallbackList` is blank, the interceptor falls back to the original list
-name carried in the `x-ph-redis-list` header (emitted by the Redis dataset input). Leave `enabled=false`
-to keep it dormant.
+Target list precedence is deterministic:
+
+1. First matching route in `routes`.
+2. `targetListTemplate` (if configured and render result is non-blank).
+3. `defaultList` (if configured).
+
+Use uploader for special side-output cases. For primary result flow, prefer native
+`outputs.type=REDIS`.

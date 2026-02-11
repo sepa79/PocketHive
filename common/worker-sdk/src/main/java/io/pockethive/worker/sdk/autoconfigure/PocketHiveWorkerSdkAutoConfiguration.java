@@ -15,6 +15,7 @@ import io.pockethive.worker.sdk.config.PocketHiveWorker;
 import io.pockethive.worker.sdk.config.PocketHiveWorkerProperties;
 import io.pockethive.worker.sdk.config.RabbitInputProperties;
 import io.pockethive.worker.sdk.config.RabbitOutputProperties;
+import io.pockethive.worker.sdk.config.RedisOutputProperties;
 import io.pockethive.worker.sdk.config.RedisDataSetInputProperties;
 import io.pockethive.worker.sdk.input.csv.CsvDataSetInputProperties;
 import io.pockethive.worker.sdk.config.SchedulerInputProperties;
@@ -58,6 +59,7 @@ import io.pockethive.worker.sdk.output.WorkOutputLifecycle;
 import io.pockethive.worker.sdk.output.WorkOutputRegistry;
 import io.pockethive.worker.sdk.output.WorkOutputRegistryInitializer;
 import io.pockethive.worker.sdk.output.RabbitWorkOutputFactory;
+import io.pockethive.worker.sdk.output.RedisWorkOutputFactory;
 import io.pockethive.worker.sdk.templating.PebbleTemplateRenderer;
 import io.pockethive.worker.sdk.templating.TemplateRenderer;
 import java.util.ArrayList;
@@ -333,6 +335,15 @@ public class PocketHiveWorkerSdkAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnBean(WorkerControlPlaneRuntime.class)
+    WorkOutputFactory redisWorkOutputFactory(
+        WorkerControlPlaneRuntime controlPlaneRuntime,
+        TemplateRenderer templateRenderer
+    ) {
+        return new RedisWorkOutputFactory(controlPlaneRuntime, templateRenderer);
+    }
+
+    @Bean
     @ConditionalOnBean({WorkerRuntime.class, WorkerControlPlaneRuntime.class})
     io.pockethive.worker.sdk.input.WorkInputFactory schedulerWorkInputFactory(
         WorkerRuntime workerRuntime,
@@ -402,8 +413,8 @@ public class PocketHiveWorkerSdkAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(RedisUploaderInterceptor.class)
-    WorkerInvocationInterceptor redisUploaderInterceptor() {
-        return new RedisUploaderInterceptor();
+    WorkerInvocationInterceptor redisUploaderInterceptor(TemplateRenderer templateRenderer) {
+        return new RedisUploaderInterceptor(templateRenderer);
     }
 
     @Bean
@@ -542,6 +553,7 @@ public class PocketHiveWorkerSdkAutoConfiguration {
         }
         return switch (outputType) {
             case RABBITMQ -> RabbitOutputProperties.class;
+            case REDIS -> RedisOutputProperties.class;
             default -> WorkOutputConfig.class;
         };
     }

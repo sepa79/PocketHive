@@ -1,0 +1,69 @@
+version: 1
+definitions:
+  - name: customers
+    scope: sut
+    type: object
+    required: true
+profiles:
+  - id: default
+    name: Default
+values:
+  sut:
+    default:
+      webauth-local:
+        customers:
+          custA:
+            client: "900001"
+            sendMD5: true
+            timestampMD5: true
+            md5Mechanism: "PACASSO_DEFAULT"
+            md5Secret: "dummy"
+            customerCode: "1111111"
+            productClassCode: "PCLASS_A"
+            origin: "12345678"
+            currency: "USD"
+            timestampMode: "DEFAULT"
+          custB:
+            client: "900002"
+            sendMD5: true
+            timestampMD5: true
+            md5Mechanism: "PACASSO_DEFAULT"
+            md5Secret: "dummy"
+            customerCode: "2222222"
+            productClassCode: "PCLASS_B"
+            origin: "22345678"
+            currency: "GBP"
+            timestampMode: "YMDHMS"
+          custC:
+            client: "900003"
+            sendMD5: true
+            timestampMD5: true
+            md5Mechanism: "PACASSO_DEFAULT"
+            md5Secret: "dummy"
+            customerCode: "3333333"
+            productClassCode: "PCLASS_C"
+            origin: "32345678"
+            currency: "EUR"
+            timestampMode: "ISO"
+          custD:
+            client: "900004"
+            sendMD5: true
+            timestampMD5: true
+            md5Mechanism: "PACASSO_DEFAULT"
+            md5Secret: "dummy"
+            customerCode: "4444444"
+            productClassCode: "PCLASS_D"
+            origin: "42345678"
+            currency: "PLN"
+            timestampMode: "DEFAULT + TIMEZONE"
+          custE:
+            client: "900005"
+            sendMD5: true
+            timestampMD5: true
+            md5Mechanism: "PACASSO_DEFAULT"
+            md5Secret: "dummy"
+            customerCode: "5555555"
+            productClassCode: "PCLASS_E"
+            origin: "52345678"
+            currency: "USD"
+            timestampMode: "DEFAULT"

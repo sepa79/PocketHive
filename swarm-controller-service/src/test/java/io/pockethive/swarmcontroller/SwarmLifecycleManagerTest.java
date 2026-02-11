@@ -267,6 +267,95 @@ class SwarmLifecycleManagerTest {
   }
 
   @Test
+  void exposesRedisOutputConfigAsEnvironmentVariables() throws Exception {
+    SwarmLifecycleManager manager = newManager();
+    SwarmPlan plan = new SwarmPlan("swarm", List.of(
+        new Bee(
+            "processor",
+            "img-proc",
+            Work.ofDefaults("proc-in", null),
+            null,
+            Map.of(
+                "outputs", Map.of(
+                    "type", "REDIS",
+                    "redis", Map.of(
+                        "host", "redis",
+                        "port", 6379,
+                        "sourceStep", "FIRST",
+                        "pushDirection", "RPUSH",
+                        "defaultList", "webauth.RED.custA",
+                        "targetListTemplate", "webauth.RED.{{ payloadAsJson.customerCode }}",
+                        "maxLen", 100
+                    )
+                )
+            )
+        )));
+    when(docker.createAndStartContainer(anyString(), anyMap(), anyString(), any())).thenReturn("c1");
+
+    manager.prepare(mapper.writeValueAsString(plan));
+
+    ArgumentCaptor<Map<String, String>> envCaptor = ArgumentCaptor.forClass(Map.class);
+    verify(docker).createAndStartContainer(anyString(), envCaptor.capture(), anyString(), any());
+    Map<String, String> env = envCaptor.getValue();
+    assertThat(env.get("POCKETHIVE_OUTPUTS_TYPE")).isEqualTo("REDIS");
+    assertThat(env.get("POCKETHIVE_OUTPUTS_REDIS_HOST")).isEqualTo("redis");
+    assertThat(env.get("POCKETHIVE_OUTPUTS_REDIS_PORT")).isEqualTo("6379");
+    assertThat(env.get("POCKETHIVE_OUTPUTS_REDIS_SOURCESTEP")).isEqualTo("FIRST");
+    assertThat(env.get("POCKETHIVE_OUTPUTS_REDIS_PUSHDIRECTION")).isEqualTo("RPUSH");
+    assertThat(env.get("POCKETHIVE_OUTPUTS_REDIS_DEFAULTLIST")).isEqualTo("webauth.RED.custA");
+    assertThat(env.get("POCKETHIVE_OUTPUTS_REDIS_TARGETLISTTEMPLATE"))
+        .isEqualTo("webauth.RED.{{ payloadAsJson.customerCode }}");
+    assertThat(env.get("POCKETHIVE_OUTPUTS_REDIS_MAXLEN")).isEqualTo("100");
+  }
+
+  @Test
+  void exposesRedisInputSourcesAsEnvironmentVariables() throws Exception {
+    SwarmLifecycleManager manager = newManager();
+    SwarmPlan plan = new SwarmPlan("swarm", List.of(
+        new Bee(
+            "generator",
+            "img-gen",
+            Work.ofDefaults(null, "gen-out"),
+            null,
+            Map.of(
+                "inputs", Map.of(
+                    "type", "REDIS_DATASET",
+                    "redis", Map.of(
+                        "host", "redis",
+                        "port", 6379,
+                        "pickStrategy", "WEIGHTED_RANDOM",
+                        "sources", List.of(
+                            Map.of("listName", "webauth.RED.custA", "weight", 40),
+                            Map.of("listName", "webauth.RED.custB", "weight", 25)
+                        )
+                    )
+                )
+            )
+        )));
+    when(docker.createAndStartContainer(anyString(), anyMap(), anyString(), any())).thenReturn("c1");
+
+    manager.prepare(mapper.writeValueAsString(plan));
+
+    ArgumentCaptor<Map<String, String>> envCaptor = ArgumentCaptor.forClass(Map.class);
+    verify(docker).createAndStartContainer(anyString(), envCaptor.capture(), anyString(), any());
+    Map<String, String> env = envCaptor.getValue();
+
+    assertThat(env.get("POCKETHIVE_INPUTS_TYPE")).isEqualTo("REDIS_DATASET");
+    assertThat(env.get("POCKETHIVE_INPUTS_REDIS_HOST")).isEqualTo("redis");
+    assertThat(env.get("POCKETHIVE_INPUTS_REDIS_PORT")).isEqualTo("6379");
+    assertThat(env.get("POCKETHIVE_INPUTS_REDIS_PICKSTRATEGY")).isEqualTo("WEIGHTED_RANDOM");
+    assertThat(env.get("POCKETHIVE_INPUTS_REDIS_SOURCESJSON")).isNotBlank();
+
+    JsonNode sourcesNode = mapper.readTree(env.get("POCKETHIVE_INPUTS_REDIS_SOURCESJSON"));
+    assertThat(sourcesNode.isArray()).isTrue();
+    assertThat(sourcesNode).hasSize(2);
+    assertThat(sourcesNode.get(0).path("listName").asText()).isEqualTo("webauth.RED.custA");
+    assertThat(sourcesNode.get(0).path("weight").asInt()).isEqualTo(40);
+    assertThat(sourcesNode.get(1).path("listName").asText()).isEqualTo("webauth.RED.custB");
+    assertThat(sourcesNode.get(1).path("weight").asInt()).isEqualTo(25);
+  }
+
+  @Test
   void prepareFailsWhenRabbitHostMissing() throws Exception {
     SwarmControllerProperties properties = SwarmControllerTestProperties.defaults();
     RabbitProperties rabbitProperties = new RabbitProperties();

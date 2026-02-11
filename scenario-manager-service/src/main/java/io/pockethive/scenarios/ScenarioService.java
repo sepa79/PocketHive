@@ -1198,6 +1198,11 @@ public class ScenarioService {
                     throw new IllegalArgumentException("%s must be a float".formatted(label));
                 }
             }
+            case OBJECT -> {
+                if (!(value instanceof Map<?, ?>)) {
+                    throw new IllegalArgumentException("%s must be an object".formatted(label));
+                }
+            }
         }
     }
 
@@ -1743,7 +1748,8 @@ public class ScenarioService {
             STRING,
             INT,
             FLOAT,
-            BOOL;
+            BOOL,
+            OBJECT;
 
             @com.fasterxml.jackson.annotation.JsonCreator
             public static Type fromJson(String value) {

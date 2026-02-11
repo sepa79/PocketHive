@@ -53,6 +53,7 @@ config:
     default: "RABBITMQ"
     options:
       - "RABBITMQ"
+      - "REDIS"
       - "NOOP"
     ui:
       label: Output type

@@ -159,7 +159,7 @@ config:
     scheduler:
       ratePerSec: 50
   outputs:
-    type: RABBITMQ             # or NOOP, etc. (subject to IO plan)
+    type: RABBITMQ             # or REDIS / NOOP, etc.
   worker:
     # worker‑specific settings
     message:
@@ -178,7 +178,7 @@ This mirrors how workers bind properties:
   - `<typeKey>` – type‑specific config section
     (e.g. `scheduler`, `redis`).
 - `outputs` – IO configuration for the outbound side.
-  - `type` – output type enum (e.g. `RABBITMQ`, `NOOP`).
+  - `type` – output type enum (e.g. `RABBITMQ`, `REDIS`, `NOOP`).
   - `<typeKey>` – type‑specific config.
 - `worker` – logical worker config.
   - Keys under this section are specific to each role and are documented
@@ -229,6 +229,44 @@ config:
       body: '{{ payload }}'
       headers:
         content-type: application/json
+```
+
+**Redis dataset consumer (multi-list):**
+
+```yaml
+config:
+  inputs:
+    type: REDIS_DATASET
+    redis:
+      host: redis
+      port: 6379
+      sources:
+        - listName: webauth.TOP.custA
+          weight: 1
+        - listName: webauth.RED.custA
+          weight: 3
+        - listName: webauth.RED.custB
+          weight: 2
+      pickStrategy: WEIGHTED_RANDOM   # ROUND_ROBIN | WEIGHTED_RANDOM
+      ratePerSec: 20
+```
+
+**Redis output routing:**
+
+```yaml
+config:
+  outputs:
+    type: REDIS
+    redis:
+      host: redis
+      port: 6379
+      sourceStep: FIRST
+      pushDirection: RPUSH
+      routes:
+        - header: x-ph-redis-list
+          headerMatch: '^webauth\\.TOP\\.custA$'
+          list: webauth.RED.custA
+      defaultList: ph:dataset:other
 ```
 
 ## Docker volumes

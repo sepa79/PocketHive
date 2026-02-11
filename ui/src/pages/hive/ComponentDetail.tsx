@@ -639,27 +639,28 @@ export default function ComponentDetail({ component, onClose }: Props) {
       cfg && cfg.inputs && typeof cfg.inputs === 'object'
         ? (cfg.inputs as Record<string, unknown>)
         : undefined
-    const inputTypeRaw = typeof inputs?.type === 'string' ? inputs.type.trim().toUpperCase() : undefined
-    const inferredIoType =
-      inputs && !inputTypeRaw
-        ? inputs.scheduler && typeof inputs.scheduler === 'object'
-          ? 'SCHEDULER'
-          : inputs.redis && typeof inputs.redis === 'object'
-            ? 'REDIS_DATASET'
-            : undefined
+    const inputType = typeof inputs?.type === 'string' ? inputs.type.trim().toUpperCase() : undefined
+    const outputs =
+      cfg && cfg.outputs && typeof cfg.outputs === 'object'
+        ? (cfg.outputs as Record<string, unknown>)
         : undefined
-    const inputType = inputTypeRaw ?? inferredIoType
+    const outputType =
+      typeof outputs?.type === 'string' ? outputs.type.trim().toUpperCase() : undefined
 
     const allEntries: CapabilityConfigEntry[] = [...baseEntries]
 
-    // Merge IO capabilities for the current input type, if any
-    if (inputType) {
+    // Merge IO capabilities for current explicit input/output types.
+    if (inputType || outputType) {
       const ioEntries: CapabilityConfigEntry[] = []
       for (const m of manifests) {
         const ui = m.ui as Record<string, unknown> | undefined
         const ioTypeRaw = ui && typeof ui.ioType === 'string' ? ui.ioType : undefined
+        const ioScopeRaw = ui && typeof ui.ioScope === 'string' ? ui.ioScope : undefined
         const ioType = ioTypeRaw ? ioTypeRaw.trim().toUpperCase() : undefined
-        if (ioType && ioType === inputType && Array.isArray(m.config)) {
+        const ioScope = ioScopeRaw ? ioScopeRaw.trim().toUpperCase() : undefined
+        const matchesInput = ioScope === 'INPUT' && ioType && ioType === inputType
+        const matchesOutput = ioScope === 'OUTPUT' && ioType && ioType === outputType
+        if ((matchesInput || matchesOutput) && Array.isArray(m.config)) {
           ioEntries.push(...m.config)
         }
       }

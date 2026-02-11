@@ -1,5 +1,7 @@
 package io.pockethive.worker.sdk.input.redis;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.lettuce.core.RedisClient;
 import io.lettuce.core.RedisURI;
 import io.lettuce.core.api.StatefulRedisConnection;
@@ -16,12 +18,18 @@ import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.runtime.WorkerRuntime;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.DoubleSupplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,6 +39,7 @@ import org.slf4j.LoggerFactory;
 public final class RedisDataSetWorkInput implements WorkInput {
 
     private static final Logger defaultLog = LoggerFactory.getLogger(RedisDataSetWorkInput.class);
+    private static final ObjectMapper JSON_MAPPER = new ObjectMapper().findAndRegisterModules();
 
     private final WorkerDefinition workerDefinition;
     private final WorkerControlPlaneRuntime controlPlaneRuntime;
@@ -38,6 +47,7 @@ public final class RedisDataSetWorkInput implements WorkInput {
     private final ControlPlaneIdentity identity;
     private final RedisDataSetInputProperties properties;
     private final RedisClientFactory clientFactory;
+    private final DoubleSupplier randomUnit;
     private final Logger log;
 
     private volatile boolean running;
@@ -52,6 +62,9 @@ public final class RedisDataSetWorkInput implements WorkInput {
     private volatile long lastEmptyAtMillis;
     private volatile long lastErrorAtMillis;
     private volatile String lastErrorMessage;
+    private volatile String lastPopListName;
+    private volatile boolean configErrorLogged;
+    private int roundRobinCursor;
 
     public RedisDataSetWorkInput(
         WorkerDefinition workerDefinition,
@@ -60,7 +73,16 @@ public final class RedisDataSetWorkInput implements WorkInput {
         ControlPlaneIdentity identity,
         RedisDataSetInputProperties properties
     ) {
-        this(workerDefinition, controlPlaneRuntime, workerRuntime, identity, properties, defaultLog, new LettuceRedisClientFactory());
+        this(
+            workerDefinition,
+            controlPlaneRuntime,
+            workerRuntime,
+            identity,
+            properties,
+            defaultLog,
+            new LettuceRedisClientFactory(),
+            () -> ThreadLocalRandom.current().nextDouble()
+        );
     }
 
     RedisDataSetWorkInput(
@@ -72,6 +94,28 @@ public final class RedisDataSetWorkInput implements WorkInput {
         Logger log,
         RedisClientFactory clientFactory
     ) {
+        this(
+            workerDefinition,
+            controlPlaneRuntime,
+            workerRuntime,
+            identity,
+            properties,
+            log,
+            clientFactory,
+            () -> ThreadLocalRandom.current().nextDouble()
+        );
+    }
+
+    RedisDataSetWorkInput(
+        WorkerDefinition workerDefinition,
+        WorkerControlPlaneRuntime controlPlaneRuntime,
+        WorkerRuntime workerRuntime,
+        ControlPlaneIdentity identity,
+        RedisDataSetInputProperties properties,
+        Logger log,
+        RedisClientFactory clientFactory,
+        DoubleSupplier randomUnit
+    ) {
         this.workerDefinition = Objects.requireNonNull(workerDefinition, "workerDefinition");
         this.controlPlaneRuntime = Objects.requireNonNull(controlPlaneRuntime, "controlPlaneRuntime");
         this.workerRuntime = Objects.requireNonNull(workerRuntime, "workerRuntime");
@@ -79,6 +123,7 @@ public final class RedisDataSetWorkInput implements WorkInput {
         this.properties = properties == null ? new RedisDataSetInputProperties() : properties;
         this.log = log == null ? defaultLog : log;
         this.clientFactory = clientFactory == null ? new LettuceRedisClientFactory() : clientFactory;
+        this.randomUnit = randomUnit == null ? () -> ThreadLocalRandom.current().nextDouble() : randomUnit;
     }
 
     @Override
@@ -86,7 +131,7 @@ public final class RedisDataSetWorkInput implements WorkInput {
         if (running) {
             return;
         }
-        validateConfiguration();
+        applySourcesJsonIfPresent();
         enabled = properties.isEnabled();
         tickIntervalMs = Math.max(100L, properties.getTickIntervalMs());
         registerStateListener();
@@ -98,7 +143,6 @@ public final class RedisDataSetWorkInput implements WorkInput {
             }
         }
         controlPlaneRuntime.emitStatusSnapshot();
-        redisClient = clientFactory.create(properties);
         schedulerExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread thread = new Thread(r, workerDefinition.beanName() + "-redis-dataset");
             thread.setDaemon(true);
@@ -107,8 +151,14 @@ public final class RedisDataSetWorkInput implements WorkInput {
         schedulerExecutor.scheduleAtFixedRate(this::safeTick, properties.getInitialDelayMs(), tickIntervalMs, TimeUnit.MILLISECONDS);
         running = true;
         if (log.isInfoEnabled()) {
-            log.info("{} redis dataset input started (list={}, instance={})",
-                workerDefinition.beanName(), properties.getListName(), identity.instanceId());
+            log.info(
+                "{} redis dataset input started (list={}, sources={}, strategy={}, instance={})",
+                workerDefinition.beanName(),
+                properties.getListName(),
+                properties.getSources().stream().map(RedisDataSetInputProperties.Source::getListName).toList(),
+                properties.getPickStrategy(),
+                identity.instanceId()
+            );
         }
     }
 
@@ -144,6 +194,9 @@ public final class RedisDataSetWorkInput implements WorkInput {
             carryOver = 0.0;
             return;
         }
+        if (!ensureReadyForTick(now)) {
+            return;
+        }
         int quota = planInvocations();
         if (quota <= 0) {
             if (log.isDebugEnabled()) {
@@ -152,24 +205,26 @@ public final class RedisDataSetWorkInput implements WorkInput {
             return;
         }
         for (int i = 0; i < quota; i++) {
-            String value;
+            PopResult popResult;
             try {
-                value = redisClient.pop(properties.getListName());
+                popResult = popNextValue();
             } catch (Exception ex) {
-                log.warn("{} failed to read from Redis list {}", workerDefinition.beanName(), properties.getListName(), ex);
+                log.warn("{} failed to read from Redis dataset source", workerDefinition.beanName(), ex);
                 lastErrorAtMillis = now;
                 lastErrorMessage = ex.getMessage();
                 publishDiagnostics();
                 break;
             }
-            if (value == null) {
+            if (popResult == null || popResult.payload == null) {
                 if (log.isDebugEnabled()) {
-                    log.debug("{} redis dataset is empty for list {}", workerDefinition.beanName(), properties.getListName());
+                    log.debug("{} redis dataset is empty for configured sources", workerDefinition.beanName());
                 }
                 lastEmptyAtMillis = now;
                 publishDiagnostics();
                 break;
             }
+            String value = popResult.payload;
+            String sourceList = popResult.listName;
             try {
                 WorkerInfo info = new WorkerInfo(
                     workerDefinition.role(),
@@ -181,17 +236,38 @@ public final class RedisDataSetWorkInput implements WorkInput {
                 WorkItem item = WorkItem.text(info, value)
                     .header("swarmId", identity.swarmId())
                     .header("instanceId", identity.instanceId())
-                    .header("x-ph-redis-list", properties.getListName())
+                    .header("x-ph-redis-list", sourceList)
                     .observabilityContext(ObservabilityContextUtil.init(info.role(), info.instanceId(), info.swarmId()))
                     .build();
                 dispatchedCount.incrementAndGet();
                 lastPopAtMillis = now;
+                lastPopListName = sourceList;
                 workerRuntime.dispatch(workerDefinition.beanName(), item);
             } catch (Exception ex) {
                 log.warn("{} failed to dispatch redis dataset item", workerDefinition.beanName(), ex);
             }
         }
         publishDiagnostics();
+    }
+
+    private boolean ensureReadyForTick(long now) {
+        try {
+            validateConfiguration();
+        } catch (IllegalStateException ex) {
+            recordConfigError(now, ex.getMessage(), ex, false);
+            return false;
+        }
+        if (redisClient != null) {
+            return true;
+        }
+        try {
+            redisClient = clientFactory.create(properties);
+            clearConfigError();
+            return true;
+        } catch (Exception ex) {
+            recordConfigError(now, "Failed to initialize Redis dataset client: " + ex.getMessage(), ex, true);
+            return false;
+        }
     }
 
     private void safeTick() {
@@ -240,11 +316,56 @@ public final class RedisDataSetWorkInput implements WorkInput {
             return;
         }
 
-        String listName = asText(redisMap.get("listName"));
-        if (listName != null && !listName.isBlank() && !listName.equals(properties.getListName())) {
-            properties.setListName(listName);
-            if (log.isInfoEnabled()) {
-                log.info("{} redis dataset list updated via config: {}", workerDefinition.beanName(), listName);
+        if (redisMap.containsKey("listName")) {
+            String listName = asText(redisMap.get("listName"));
+            String current = properties.getListName();
+            if (!Objects.equals(listName, current)) {
+                properties.setListName(listName);
+                if (listName != null && !listName.isBlank()) {
+                    properties.setSources(List.of());
+                }
+                if (log.isInfoEnabled()) {
+                    log.info("{} redis dataset list updated via config: {}", workerDefinition.beanName(), listName);
+                }
+            }
+        }
+
+        if (redisMap.containsKey("sources")) {
+            List<RedisDataSetInputProperties.Source> parsedSources = parseSources(redisMap.get("sources"));
+            if (!parsedSources.equals(properties.getSources())) {
+                properties.setSources(parsedSources);
+                if (!parsedSources.isEmpty()) {
+                    properties.setListName(null);
+                }
+                if (log.isInfoEnabled()) {
+                    log.info(
+                        "{} redis dataset sources updated via config: {}",
+                        workerDefinition.beanName(),
+                        parsedSources.stream().map(RedisDataSetInputProperties.Source::getListName).toList()
+                    );
+                }
+            }
+        }
+        if (redisMap.containsKey("sourcesJson")) {
+            properties.setSourcesJson(asText(redisMap.get("sourcesJson")));
+            applySourcesJsonIfPresent();
+        }
+
+        if (redisMap.containsKey("pickStrategy")) {
+            String strategy = asText(redisMap.get("pickStrategy"));
+            if (strategy != null && !strategy.isBlank()) {
+                try {
+                    RedisDataSetInputProperties.PickStrategy parsed =
+                        RedisDataSetInputProperties.PickStrategy.valueOf(strategy.trim().toUpperCase());
+                    if (parsed != properties.getPickStrategy()) {
+                        properties.setPickStrategy(parsed);
+                        if (log.isInfoEnabled()) {
+                            log.info("{} redis dataset pickStrategy updated via config: {}", workerDefinition.beanName(), parsed);
+                        }
+                    }
+                } catch (IllegalArgumentException ex) {
+                    log.warn("{} invalid redis pickStrategy '{}'", workerDefinition.beanName(), strategy);
+                }
             }
         }
         String host = asText(redisMap.get("host"));
@@ -267,6 +388,23 @@ public final class RedisDataSetWorkInput implements WorkInput {
             if (log.isInfoEnabled()) {
                 log.info("{} redis dataset ratePerSec updated via config: {}", workerDefinition.beanName(), rate);
             }
+        }
+    }
+
+    private void applySourcesJsonIfPresent() {
+        String sourcesJson = properties.getSourcesJson();
+        if (sourcesJson == null || sourcesJson.isBlank()) {
+            return;
+        }
+        try {
+            Object parsed = JSON_MAPPER.readValue(sourcesJson, Object.class);
+            List<RedisDataSetInputProperties.Source> sources = parseSources(parsed);
+            if (sources.isEmpty()) {
+                throw new IllegalStateException("Redis dataset sourcesJson must contain at least one source");
+            }
+            properties.setSources(sources);
+        } catch (JsonProcessingException ex) {
+            throw new IllegalStateException("Redis dataset sourcesJson must be a valid JSON array", ex);
         }
     }
 
@@ -302,6 +440,26 @@ public final class RedisDataSetWorkInput implements WorkInput {
         return null;
     }
 
+    private void recordConfigError(long now, String message, Exception ex, boolean warnWithStack) {
+        String previousError = lastErrorMessage;
+        lastErrorAtMillis = now;
+        lastErrorMessage = message;
+        if (!configErrorLogged || !Objects.equals(previousError, message)) {
+            if (warnWithStack) {
+                log.warn("{} {}", workerDefinition.beanName(), message, ex);
+            } else {
+                log.warn("{} {}", workerDefinition.beanName(), message);
+            }
+            configErrorLogged = true;
+        }
+        publishDiagnostics();
+    }
+
+    private void clearConfigError() {
+        configErrorLogged = false;
+        lastErrorMessage = null;
+    }
+
     private void publishDiagnostics() {
         StatusPublisher publisher = this.statusPublisher;
         if (publisher == null) {
@@ -317,8 +475,15 @@ public final class RedisDataSetWorkInput implements WorkInput {
             data.put("host", properties.getHost());
             data.put("port", properties.getPort());
             data.put("listName", properties.getListName());
+            data.put("pickStrategy", properties.getPickStrategy().name());
+            if (!properties.getSources().isEmpty()) {
+                data.put("sources", properties.getSources().stream().map(RedisDataSetInputProperties.Source::getListName).toList());
+            }
             data.put("ratePerSec", properties.getRatePerSec());
             data.put("dispatched", dispatched);
+            if (lastPopListName != null && !lastPopListName.isBlank()) {
+                data.put("lastPopList", lastPopListName);
+            }
             if (lastPop > 0L) {
                 data.put("lastPopAt", Instant.ofEpochMilli(lastPop).toString());
             }
@@ -339,9 +504,119 @@ public final class RedisDataSetWorkInput implements WorkInput {
         if (properties.getHost() == null || properties.getHost().isBlank()) {
             throw new IllegalStateException("Redis host must be configured for redis dataset input");
         }
-        if (properties.getListName() == null || properties.getListName().isBlank()) {
-            throw new IllegalStateException("Redis listName must be configured for redis dataset input");
+        String listName = properties.getListName();
+        List<RedisDataSetInputProperties.Source> sources = properties.getSources();
+        boolean hasSingleList = listName != null && !listName.isBlank();
+        boolean hasSources = sources != null && !sources.isEmpty();
+        if (hasSingleList == hasSources) {
+            throw new IllegalStateException(
+                "Redis dataset input requires exactly one source mode: either listName or sources[]");
         }
+        if (hasSources) {
+            Set<String> uniqueLists = new LinkedHashSet<>();
+            double totalWeight = 0.0;
+            for (RedisDataSetInputProperties.Source source : sources) {
+                if (source == null || source.getListName() == null || source.getListName().isBlank()) {
+                    throw new IllegalStateException("Redis dataset source.listName must not be blank");
+                }
+                if (!uniqueLists.add(source.getListName())) {
+                    throw new IllegalStateException("Redis dataset sources must not contain duplicates");
+                }
+                double weight = source.getWeight();
+                if (weight <= 0.0) {
+                    throw new IllegalStateException("Redis dataset source.weight must be > 0");
+                }
+                totalWeight += weight;
+            }
+            if (properties.getPickStrategy() == RedisDataSetInputProperties.PickStrategy.WEIGHTED_RANDOM
+                && totalWeight <= 0.0) {
+                throw new IllegalStateException("Redis dataset weighted strategy requires positive source.weight values");
+            }
+        }
+    }
+
+    private PopResult popNextValue() {
+        List<RedisDataSetInputProperties.Source> sources = properties.getSources();
+        if (sources == null || sources.isEmpty()) {
+            String listName = properties.getListName();
+            String value = redisClient.pop(listName);
+            return value == null ? null : new PopResult(listName, value);
+        }
+        List<RedisDataSetInputProperties.Source> ordered = orderedSources(sources);
+        for (RedisDataSetInputProperties.Source source : ordered) {
+            String listName = source.getListName();
+            String value = redisClient.pop(listName);
+            if (value != null) {
+                return new PopResult(listName, value);
+            }
+        }
+        return null;
+    }
+
+    private List<RedisDataSetInputProperties.Source> orderedSources(List<RedisDataSetInputProperties.Source> sources) {
+        if (sources.size() == 1) {
+            return List.of(sources.get(0));
+        }
+        if (properties.getPickStrategy() == RedisDataSetInputProperties.PickStrategy.WEIGHTED_RANDOM) {
+            int first = weightedIndex(sources);
+            List<RedisDataSetInputProperties.Source> ordered = new ArrayList<>(sources.size());
+            ordered.add(sources.get(first));
+            for (int offset = 1; offset < sources.size(); offset++) {
+                ordered.add(sources.get((first + offset) % sources.size()));
+            }
+            return ordered;
+        }
+        int size = sources.size();
+        int start = Math.floorMod(roundRobinCursor, size);
+        roundRobinCursor = (start + 1) % size;
+        List<RedisDataSetInputProperties.Source> ordered = new ArrayList<>(size);
+        for (int offset = 0; offset < size; offset++) {
+            ordered.add(sources.get((start + offset) % size));
+        }
+        return ordered;
+    }
+
+    private int weightedIndex(List<RedisDataSetInputProperties.Source> sources) {
+        double total = 0.0;
+        for (RedisDataSetInputProperties.Source source : sources) {
+            total += source.getWeight();
+        }
+        if (total <= 0.0) {
+            return 0;
+        }
+        double draw = randomUnit.getAsDouble();
+        if (draw < 0.0) {
+            draw = 0.0;
+        } else if (draw >= 1.0) {
+            draw = Math.nextDown(1.0);
+        }
+        double target = draw * total;
+        double running = 0.0;
+        for (int i = 0; i < sources.size(); i++) {
+            running += sources.get(i).getWeight();
+            if (target < running) {
+                return i;
+            }
+        }
+        return sources.size() - 1;
+    }
+
+    private static List<RedisDataSetInputProperties.Source> parseSources(Object sourcesObj) {
+        if (!(sourcesObj instanceof Iterable<?> iterable)) {
+            return List.of();
+        }
+        List<RedisDataSetInputProperties.Source> parsed = new ArrayList<>();
+        for (Object entry : iterable) {
+            if (!(entry instanceof Map<?, ?> sourceMap)) {
+                continue;
+            }
+            RedisDataSetInputProperties.Source source = new RedisDataSetInputProperties.Source();
+            source.setListName(asText(sourceMap.get("listName")));
+            Double weight = asDouble(sourceMap.get("weight"));
+            source.setWeight(weight == null ? 1.0 : weight);
+            parsed.add(source);
+        }
+        return parsed;
     }
 
     private static void closeQuietly(AutoCloseable resource) {
@@ -357,6 +632,9 @@ public final class RedisDataSetWorkInput implements WorkInput {
 
     interface RedisListClient extends AutoCloseable {
         String pop(String listName);
+    }
+
+    private record PopResult(String listName, String payload) {
     }
 
     interface RedisClientFactory {

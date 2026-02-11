@@ -133,6 +133,51 @@ Feature: Swarm lifecycle golden path
     When I remove the swarm
     Then the swarm is removed and lifecycle confirmations are recorded
 
+  @webauth-loop
+  Scenario: WebAuth 5-customers loop processes Redis traffic through processor
+    And the TCP mock request journal is cleared
+    And the Redis keys are cleared:
+      """
+      webauth.RED.custA
+      webauth.RED.custB
+      webauth.RED.custC
+      webauth.RED.custD
+      webauth.RED.custE
+      webauth.BAL.shared
+      webauth.TOP.shared
+      """
+    And the Redis list "webauth.RED.custA" is seeded with payloads:
+      """
+      {"Customer":"custA","AccountNumber":"86010100418512","Amount":"10"}
+      """
+    And the Redis list "webauth.RED.custB" is seeded with payloads:
+      """
+      {"Customer":"custB","AccountNumber":"86010100418520","Amount":"20"}
+      """
+    And the Redis list "webauth.RED.custC" is seeded with payloads:
+      """
+      {"Customer":"custC","AccountNumber":"86010100418538","Amount":"30"}
+      """
+    And the Redis list "webauth.RED.custD" is seeded with payloads:
+      """
+      {"Customer":"custD","AccountNumber":"86010100418546","Amount":"40"}
+      """
+    And the Redis list "webauth.RED.custE" is seeded with payloads:
+      """
+      {"Customer":"custE","AccountNumber":"86010100418554","Amount":"50"}
+      """
+    And the "webauth-loop-redis-5-customers" scenario template is requested
+    When I create the swarm from that template
+    Then the swarm is registered and queues are declared
+    When I start the swarm
+    Then the swarm reports running
+    And I start generator traffic
+    And the TCP mock eventually has at least 1 requests
+    When I stop the swarm
+    Then the swarm reports stopped
+    When I remove the swarm
+    Then the swarm is removed and lifecycle confirmations are recorded
+
   @plan-demo
   Scenario: Scenario plan drives swarm lifecycle
     And the "local-rest-plan-demo" scenario template is requested

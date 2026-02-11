@@ -323,9 +323,10 @@ For `config-update` steps the editor uses worker **capabilities**:
 
 - It resolves the worker image and capabilities manifest for the target bee.  
 - It builds a form for editable fields (for example
-  `inputs.scheduler.ratePerSec` or `inputs.redis.listName`).  
-- IO‑specific knobs are added from IO manifests when `config.inputs.type`
-  matches an IO type such as `SCHEDULER` or `REDIS_DATASET`.  
+  `inputs.scheduler.ratePerSec`, `inputs.redis.listName`, or `outputs.redis.routes`).  
+- IO‑specific knobs are added from IO manifests when `config.inputs.type`/`config.outputs.type`
+  matches both `ui.ioType` and `ui.ioScope` (for example `INPUT+SCHEDULER`, `INPUT+REDIS_DATASET`,
+  `OUTPUT+REDIS`).  
 - Each field has an “Override” toggle; only enabled overrides are written
   into the step’s `config`, keeping YAML deltas small and explicit.
 

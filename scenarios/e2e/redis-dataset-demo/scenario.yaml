@@ -36,7 +36,7 @@ template:
                 list: ph:dataset:custa
               - match: '"customerCode"\s*:\s*"custB"'
                 list: ph:dataset:custb
-            fallbackList: ph:dataset:other
+            defaultList: ph:dataset:other
       work: {}
 
     - role: dataProviderA

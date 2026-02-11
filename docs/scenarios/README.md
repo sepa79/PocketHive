@@ -42,7 +42,8 @@ may live anywhere under that root (subfolders are supported).
 - **Worker config** (`config.worker`, `config.inputs`, `config.outputs`)
   - Mirrors the configuration structure expected by worker services,
     including IO configuration such as `inputs.scheduler.ratePerSec`
-    or `inputs.redis.listName`.
+    or `inputs.redis.listName` / `inputs.redis.sources`, and output
+    configuration such as `outputs.redis.*` when `outputs.type=REDIS`.
 - **Docker config** (`config.docker.volumes`)
   - Optional list of volume bindings for this bee (`host:container[:mode]`).
 

@@ -89,6 +89,11 @@ definitions:
     type: float
     required: false
 
+  - name: customers
+    scope: sut
+    type: object
+    required: false
+
 profiles:
   - id: france
     name: France
@@ -113,6 +118,10 @@ values:
       sut-B:
         customerId: "765"
         discount: 0.20
+        customers:
+          custA:
+            client: "1211815181"
+            currency: "USD"
     romania:
       sut-A:
         customerId: "456"
@@ -147,6 +156,7 @@ At swarm creation time:
    - require `variablesProfileId`
    - use `values.sut[variablesProfileId][sutId]`
 5) Type-check each provided value against `definitions`.
+   - supported types: `string`, `bool`, `int`, `float`, `object`
 6) Ensure every declared `required: true` variable has a value for the selected inputs:
    - missing required value => hard error
 7) Reject unknown keys in value maps:

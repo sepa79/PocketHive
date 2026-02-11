@@ -1,0 +1,90 @@
+schemaVersion: "1.0"
+capabilitiesVersion: "1.0"
+role: io-redis-output
+image:
+  name: io-redis-output
+  tag: latest
+ui:
+  label: "Redis output IO"
+  ioType: "REDIS"
+  ioScope: "OUTPUT"
+config:
+  - name: outputs.redis.host
+    type: string
+    default: redis
+    ui:
+      label: Redis host
+      group: Redis output
+  - name: outputs.redis.port
+    type: number
+    default: 6379
+    min: 1
+    max: 65535
+    ui:
+      label: Redis port
+      group: Redis output
+  - name: outputs.redis.username
+    type: string
+    default: ""
+    ui:
+      label: Redis username
+      group: Redis output
+  - name: outputs.redis.password
+    type: string
+    default: ""
+    ui:
+      label: Redis password
+      group: Redis output
+  - name: outputs.redis.ssl
+    type: boolean
+    default: false
+    ui:
+      label: Redis SSL
+      group: Redis output
+  - name: outputs.redis.sourceStep
+    type: string
+    default: "LAST"
+    options:
+      - "FIRST"
+      - "LAST"
+    ui:
+      label: Source step
+      group: Redis output
+  - name: outputs.redis.pushDirection
+    type: string
+    default: "RPUSH"
+    options:
+      - "LPUSH"
+      - "RPUSH"
+    ui:
+      label: Push direction
+      group: Redis output
+  - name: outputs.redis.routes
+    type: json
+    default: []
+    multiline: true
+    ui:
+      label: Routes
+      group: Redis output
+      help: "Route by payload match and/or header+headerMatch. First match wins."
+  - name: outputs.redis.targetListTemplate
+    type: string
+    default: ""
+    ui:
+      label: Target list template
+      group: Redis output
+  - name: outputs.redis.defaultList
+    type: string
+    default: ""
+    ui:
+      label: Default list
+      group: Redis output
+  - name: outputs.redis.maxLen
+    type: number
+    default: -1
+    min: -1
+    ui:
+      label: Max list length
+      group: Redis output
+actions: []
+panels: []

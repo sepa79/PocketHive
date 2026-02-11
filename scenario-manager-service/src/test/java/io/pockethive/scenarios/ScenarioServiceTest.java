@@ -14,8 +14,10 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ScenarioServiceTest {
 
@@ -333,6 +335,79 @@ class ScenarioServiceTest {
 
         assertThat(service.readBundleSutRaw("scenario-1", sutId)).isNull();
         assertThat(service.listSutIds("scenario-1")).doesNotContain("sut-A");
+    }
+
+    @Test
+    void variablesSupportObjectTypeForSutScope() throws IOException {
+        writeBundleScenario("scenario-1");
+        Path bundle = service.bundleDir("scenario-1");
+        Files.createDirectories(bundle.resolve("sut").resolve("webauth-local"));
+        service.reload();
+
+        String raw = """
+                version: 1
+                definitions:
+                  - name: customers
+                    scope: sut
+                    type: object
+                    required: true
+                profiles:
+                  - id: default
+                    name: Default
+                values:
+                  sut:
+                    default:
+                      webauth-local:
+                        customers:
+                          custA:
+                            client: "1211815181"
+                            currency: "USD"
+                          custB:
+                            client: "1211815182"
+                            currency: "GBP"
+                """;
+
+        service.writeVariables("scenario-1", raw);
+
+        ScenarioService.VariablesResolutionResult resolved =
+                service.resolveVariables("scenario-1", "default", "webauth-local");
+
+        assertThat(resolved.vars()).containsKey("customers");
+        Object customersRaw = resolved.vars().get("customers");
+        assertThat(customersRaw).isInstanceOf(Map.class);
+        Map<?, ?> customers = (Map<?, ?>) customersRaw;
+        assertThat(customers.containsKey("custA")).isTrue();
+        assertThat(customers.containsKey("custB")).isTrue();
+        assertThat(customers.get("custA")).isInstanceOf(Map.class);
+    }
+
+    @Test
+    void variablesRejectNonObjectValueWhenTypeIsObject() throws IOException {
+        writeBundleScenario("scenario-1");
+        Path bundle = service.bundleDir("scenario-1");
+        Files.createDirectories(bundle.resolve("sut").resolve("webauth-local"));
+        service.reload();
+
+        String raw = """
+                version: 1
+                definitions:
+                  - name: customers
+                    scope: sut
+                    type: object
+                    required: true
+                profiles:
+                  - id: default
+                    name: Default
+                values:
+                  sut:
+                    default:
+                      webauth-local:
+                        customers: "not-an-object"
+                """;
+
+        assertThatThrownBy(() -> service.writeVariables("scenario-1", raw))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("must be an object");
     }
 
     private void writeManifest(String prefix, String imageName) throws IOException {

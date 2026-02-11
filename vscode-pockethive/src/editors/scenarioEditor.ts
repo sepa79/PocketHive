@@ -1495,37 +1495,45 @@ function getScenarioEditorHtml(webview: vscode.Webview): string {
       return current;
     }
 
-    function inferIoTypeFromConfig(config) {
+    function resolveIoSelectionsFromConfig(config) {
       if (!config || typeof config !== 'object' || Array.isArray(config)) {
-        return undefined;
+        return [];
       }
+      const selections = [];
       const inputs = config.inputs && typeof config.inputs === 'object' && !Array.isArray(config.inputs) ? config.inputs : undefined;
-      if (!inputs) {
-        return undefined;
+      if (inputs) {
+        const inputType = typeof inputs.type === 'string' ? inputs.type.trim().toUpperCase() : undefined;
+        if (inputType) {
+          selections.push({ type: inputType, scope: 'INPUT' });
+        }
       }
-      const inputType = typeof inputs.type === 'string' ? inputs.type.trim().toUpperCase() : undefined;
-      if (inputType === 'SCHEDULER' || inputType === 'REDIS_DATASET') {
-        return inputType;
+      const outputs = config.outputs && typeof config.outputs === 'object' && !Array.isArray(config.outputs) ? config.outputs : undefined;
+      if (outputs) {
+        const outputType = typeof outputs.type === 'string' ? outputs.type.trim().toUpperCase() : undefined;
+        if (outputType) {
+          selections.push({ type: outputType, scope: 'OUTPUT' });
+        }
       }
-      const hasScheduler = inputs.scheduler && typeof inputs.scheduler === 'object' && !Array.isArray(inputs.scheduler);
-      const hasRedis = inputs.redis && typeof inputs.redis === 'object' && !Array.isArray(inputs.redis);
-      if (hasScheduler) return 'SCHEDULER';
-      if (hasRedis) return 'REDIS_DATASET';
-      return undefined;
+      return selections;
     }
 
     function buildConfigEntriesForComponent(manifest, componentConfig, manifests) {
       const baseEntries = Array.isArray(manifest.config) ? manifest.config : [];
-      const ioType = inferIoTypeFromConfig(componentConfig);
-      if (!ioType) {
+      const ioSelections = resolveIoSelectionsFromConfig(componentConfig);
+      if (ioSelections.length === 0) {
         return baseEntries;
       }
       const allEntries = [...baseEntries];
       manifests.forEach((m) => {
         const ui = m.ui && typeof m.ui === 'object' ? m.ui : undefined;
         const ioTypeRaw = ui && typeof ui.ioType === 'string' ? ui.ioType : undefined;
+        const ioScopeRaw = ui && typeof ui.ioScope === 'string' ? ui.ioScope : undefined;
         const manifestIoType = ioTypeRaw ? ioTypeRaw.trim().toUpperCase() : undefined;
-        if (manifestIoType && manifestIoType === ioType && Array.isArray(m.config)) {
+        const manifestIoScope = ioScopeRaw ? ioScopeRaw.trim().toUpperCase() : undefined;
+        const matchesSelection = ioSelections.some((selection) =>
+          selection.type === manifestIoType && selection.scope === manifestIoScope
+        );
+        if (matchesSelection && Array.isArray(m.config)) {
           allEntries.push(...m.config);
         }
       });
