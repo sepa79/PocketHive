@@ -349,6 +349,12 @@ async function main() {
           console.error("create-swarm requires <swarmId> and <templateId>");
           process.exit(1);
         }
+        if (!flags.sutId || !flags.variablesProfileId) {
+          console.error(
+            "Hint: some scenarios require both --sutId and --variablesProfileId for variable resolution.\n" +
+              "Example: node tools/mcp-orchestrator-debug/client.mjs create-swarm <swarmId> <templateId> --sutId webauth-local --variablesProfileId default"
+          );
+        }
         const body = {
           templateId,
           idempotencyKey: randomIdempotencyKey(),
@@ -358,11 +364,22 @@ async function main() {
             ? { variablesProfileId: String(flags.variablesProfileId) }
             : {}),
         };
-        const resp = await httpJson(
-          `/api/swarms/${encodeURIComponent(swarmId)}/create`,
-          { method: "POST", body }
-        );
-        console.log(JSON.stringify(resp ?? null, null, 2));
+        try {
+          const resp = await httpJson(
+            `/api/swarms/${encodeURIComponent(swarmId)}/create`,
+            { method: "POST", body }
+          );
+          console.log(JSON.stringify(resp ?? null, null, 2));
+        } catch (err) {
+          const message = String(err?.message ?? err);
+          if (message.includes("Failed to resolve scenario variables")) {
+            console.error(
+              "Create failed while resolving scenario variables. Provide --sutId and --variablesProfileId.\n" +
+                "Example: node tools/mcp-orchestrator-debug/client.mjs create-swarm <swarmId> <templateId> --sutId webauth-local --variablesProfileId default"
+            );
+          }
+          throw err;
+        }
       });
       if (recordEnabled) {
         await printRecorded();

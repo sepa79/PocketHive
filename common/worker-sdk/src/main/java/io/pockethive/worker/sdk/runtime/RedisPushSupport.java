@@ -18,6 +18,7 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Shared Redis push utility used by both output transports and side-output interceptors.
@@ -25,6 +26,7 @@ import org.slf4j.Logger;
 public final class RedisPushSupport {
 
     private static final ObjectMapper MAPPER = new ObjectMapper().findAndRegisterModules();
+    private static final Logger LOGGER = LoggerFactory.getLogger(RedisPushSupport.class);
 
     private final RedisWriterFactory writerFactory;
     private final TemplateRenderer templateRenderer;
@@ -35,12 +37,12 @@ public final class RedisPushSupport {
     }
 
     public RedisPushSupport(TemplateRenderer templateRenderer) {
-        this(new LettuceRedisWriterFactory(), templateRenderer);
+        this(new LettuceRedisWriterFactory(), Objects.requireNonNull(templateRenderer, "templateRenderer"));
     }
 
     public RedisPushSupport(RedisWriterFactory writerFactory, TemplateRenderer templateRenderer) {
-        this.writerFactory = writerFactory == null ? new LettuceRedisWriterFactory() : writerFactory;
-        this.templateRenderer = templateRenderer == null ? new PebbleTemplateRenderer() : templateRenderer;
+        this.writerFactory = Objects.requireNonNull(writerFactory, "writerFactory");
+        this.templateRenderer = Objects.requireNonNull(templateRenderer, "templateRenderer");
     }
 
     public boolean push(PushRequest request, WorkItem message) {
@@ -61,6 +63,9 @@ public final class RedisPushSupport {
     }
 
     public String resolveTargetList(PushRequest request, WorkItem message, String payload) {
+        // NFF: this is an explicit precedence order within the Redis output configuration.
+        // It is not a compatibility shim or "try random defaults"; it is a deliberate selection:
+        // first matching route wins, otherwise template, otherwise an explicitly-configured defaultList.
         Optional<String> routed = request.routes().stream()
             .filter(route -> route.matches(message, payload))
             .map(Route::list)
@@ -84,7 +89,7 @@ public final class RedisPushSupport {
     private String renderTargetList(String template, WorkItem message, String payload) {
         Map<String, Object> context = new HashMap<>();
         context.put("payload", payload);
-        context.put("payloadAsJson", parsePayloadAsJson(payload));
+        context.put("payloadAsJson", parsePayloadAsJson(payload, template, message));
         context.put("headers", message.headers());
         Object vars = message.headers().get("vars");
         if (vars != null) {
@@ -113,12 +118,44 @@ public final class RedisPushSupport {
     }
 
     private static Object parsePayloadAsJson(String payload) {
+        return parsePayloadAsJson(payload, null, null);
+    }
+
+    private static Object parsePayloadAsJson(String payload, String template, WorkItem message) {
         if (payload == null || payload.isBlank()) {
             return null;
         }
         try {
             return MAPPER.readValue(payload, Object.class);
         } catch (Exception ex) {
+            // Some payloads are intentionally not JSON. We only warn when the template is likely to
+            // depend on payloadAsJson. Otherwise we log at DEBUG to avoid noisy logs.
+            boolean templateMentionsJson = template != null && template.contains("payloadAsJson");
+            int length = payload.length();
+            String messageId = message == null ? "" : String.valueOf(message.messageId());
+            String callId = message == null ? "" : String.valueOf(message.headers().getOrDefault("x-ph-call-id", ""));
+            String serviceId = message == null ? "" : String.valueOf(message.headers().getOrDefault("x-ph-service-id", ""));
+
+            if (templateMentionsJson) {
+                // TODO(0.15): attach this parse failure to the work/journal trail so it's visible in UI/journal views.
+                LOGGER.warn(
+                    "Failed to parse payload as JSON (payloadAsJson will be null). serviceId={} callId={} messageId={} len={} err={}",
+                    serviceId,
+                    callId,
+                    messageId,
+                    length,
+                    ex.getMessage()
+                );
+            } else if (LOGGER.isDebugEnabled()) {
+                LOGGER.debug(
+                    "Payload is not valid JSON; payloadAsJson will be null. serviceId={} callId={} messageId={} len={} err={}",
+                    serviceId,
+                    callId,
+                    messageId,
+                    length,
+                    ex.getMessage()
+                );
+            }
             return null;
         }
     }
