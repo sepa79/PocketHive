@@ -1,0 +1,83 @@
+id: webauth-loop-redis-minimal
+name: WebAuth Loop (Redis + Metrics)
+description: Single-loop WebAuth scenario. Runs TOP -> RED -> BAL -> TOP for custA using one Redis input, processor call, and postprocessor metrics before writing back to Redis.
+template:
+  image: swarm-controller:latest
+  bees:
+    - role: generator
+      image: generator:latest
+      config:
+        inputs:
+          type: REDIS_DATASET
+          redis:
+            host: redis
+            port: 6379
+            sources:
+              - listName: webauth.TOP.custA
+                weight: 1
+              - listName: webauth.RED.custA
+                weight: 1
+              - listName: webauth.BAL.custA
+                weight: 1
+            pickStrategy: ROUND_ROBIN
+            ratePerSec: 15
+        worker:
+          message:
+            bodyType: SIMPLE
+            body: "{{ payload }}"
+            headers:
+              content-type: application/json
+              x-ph-service-id: webauth
+              x-ph-call-id: webauth-loop
+      work:
+        out:
+          out: build
+
+    - role: request-builder
+      image: request-builder:latest
+      config:
+        templateRoot: /app/scenario/http-templates
+        serviceId: webauth
+        passThroughOnMissingTemplate: false
+      work:
+        in:
+          in: build
+        out:
+          out: proc
+
+    - role: processor
+      image: processor:latest
+      config:
+        baseUrl: "{{ sut.endpoints['webauth'].baseUrl }}"
+        outputs:
+          type: RABBITMQ
+      work:
+        in:
+          in: proc
+        out:
+          out: post
+
+    - role: postprocessor
+      image: postprocessor:latest
+      config:
+        publishAllMetrics: true
+        outputs:
+          type: REDIS
+          redis:
+            host: redis
+            port: 6379
+            sourceStep: FIRST
+            pushDirection: RPUSH
+            routes:
+              - header: x-ph-redis-list
+                headerMatch: '^webauth\\.TOP\\.custA$'
+                list: webauth.RED.custA
+              - header: x-ph-redis-list
+                headerMatch: '^webauth\\.RED\\.custA$'
+                list: webauth.BAL.custA
+              - header: x-ph-redis-list
+                headerMatch: '^webauth\\.BAL\\.custA$'
+                list: webauth.TOP.custA
+      work:
+        in:
+          in: post

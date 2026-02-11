@@ -58,10 +58,14 @@ One JSON (or YAML) **manifest per image**:
 **Notes**
 - `image` is the **match key** at runtime (prefer `digest` > `name+tag`).
 - `config`/`actions` are **semantic contracts**, not URLs; UI builds forms and buttons from them.
+- `config[].default` values are **UI authoring hints only** (initial form values). They must not be treated
+  as runtime fallbacks or compatibility shims. Runtime behaviour must come from explicitly provided
+  scenario configuration and worker defaults, not from capability manifest defaults.
 - `config` may include IO selector fields such as `inputs.type` / `outputs.type`. IO-specific
-  knobs (e.g. scheduler vs Redis dataset) are modelled as separate manifests with `ui.ioType`
-  set (`io.scheduler.latest.yaml`, `io.redis-dataset.latest.yaml`) and merged in the UI when
-  the selected input type matches.
+  knobs (e.g. scheduler vs Redis dataset vs Redis output) are modelled as separate manifests with
+  `ui.ioType` + `ui.ioScope` set (`io.scheduler.latest.yaml`, `io.redis-dataset.latest.yaml`,
+  `io.redis-output.latest.yaml`) and merged in the UI when selected `inputs.type`/`outputs.type`
+  matches both values.
 - `panels` are optional hints for rich UI; fallback renderer uses `config`/`actions` only.
 
 ### 3.2 Bundle

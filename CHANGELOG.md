@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.15.6]
+Timestamp: 2026-02-11T12:05:23Z
+
+- Worker SDK: Redis dataset input now supports multiple source lists (`sources[]`) with explicit pick strategies (weighted random, round-robin).
+- Worker SDK: add native Redis output transport plus shared push utility for output and side-output interceptors (routes, templated list, explicit default list).
+- Scenarios: add WebAuth Redis flows (redemption/balance/topup) and a shared BAL/TOP loop scenario; add E2E coverage for the 5-customer loop.
+- Scenario Manager/UI: add Redis IO capability manifests (dataset + output) and update scenario authoring/docs to reflect the new IO configuration surface.
+- Tools: improve `tools/mcp-orchestrator-debug/client.mjs` create-swarm UX by hinting required `--sutId`/`--variablesProfileId` when variable resolution fails.
+
 ## [0.15.5]
 Timestamp: 2026-02-09T23:16:58Z
 

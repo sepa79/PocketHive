@@ -1,7 +1,9 @@
 package io.pockethive.e2e.steps;
 
 import io.cucumber.java.en.Given;
+import io.cucumber.java.en.Then;
 import io.pockethive.e2e.config.EnvironmentConfig;
+import io.pockethive.e2e.support.SwarmAssertions;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -73,5 +75,34 @@ public class TcpMockSteps {
 
         HttpEntity<Void> request = new HttpEntity<>(headers);
         restTemplate.exchange(tcpMockUrl + "/api/__admin/mappings/" + mappingId, HttpMethod.DELETE, request, Void.class);
+    }
+
+    @Given("the TCP mock request journal is cleared")
+    public void theTcpMockRequestJournalIsCleared() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBasicAuth(username, password);
+        HttpEntity<Void> request = new HttpEntity<>(headers);
+        restTemplate.exchange(tcpMockUrl + "/api/requests", HttpMethod.DELETE, request, Void.class);
+    }
+
+    @Then("the TCP mock eventually has at least {int} requests")
+    public void theTcpMockEventuallyHasAtLeastRequests(int minRequests) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBasicAuth(username, password);
+        HttpEntity<Void> request = new HttpEntity<>(headers);
+
+        SwarmAssertions.await("tcp-mock requests >= " + minRequests, () -> {
+            List<Map<String, Object>> journal = restTemplate.exchange(
+                tcpMockUrl + "/api/requests",
+                HttpMethod.GET,
+                request,
+                new ParameterizedTypeReference<List<Map<String, Object>>>() {}
+            ).getBody();
+            int size = journal == null ? 0 : journal.size();
+            org.junit.jupiter.api.Assertions.assertTrue(
+                size >= minRequests,
+                () -> "Expected tcp-mock requests >= " + minRequests + " but was " + size
+            );
+        });
     }
 }

@@ -1,0 +1,55 @@
+id: webauth-topup-redis
+name: WebAuth Topup (Redis -> WebAuth -> Redis)
+description: Reads WebAuth topup payloads from Redis list webauth.TOP.custA and forwards original payloads to webauth.RED.custA after processing.
+template:
+  image: swarm-controller:latest
+  bees:
+    - role: generator
+      image: generator:latest
+      config:
+        inputs:
+          type: REDIS_DATASET
+          redis:
+            host: redis
+            port: 6379
+            listName: webauth.TOP.custA
+            ratePerSec: 5
+        worker:
+          message:
+            bodyType: SIMPLE
+            body: "{{ payload }}"
+            headers:
+              content-type: application/json
+              x-ph-service-id: webauth
+              x-ph-call-id: webauth-topup
+      work:
+        out:
+          out: build
+
+    - role: request-builder
+      image: request-builder:latest
+      config:
+        templateRoot: /app/scenario/http-templates
+        serviceId: webauth
+        passThroughOnMissingTemplate: false
+      work:
+        in:
+          in: build
+        out:
+          out: proc
+
+    - role: processor
+      image: processor:latest
+      config:
+        baseUrl: "{{ sut.endpoints['webauth'].baseUrl }}"
+        outputs:
+          type: REDIS
+          redis:
+            host: redis
+            port: 6379
+            sourceStep: FIRST
+            pushDirection: RPUSH
+            defaultList: webauth.RED.custA
+      work:
+        in:
+          in: proc

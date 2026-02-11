@@ -1,0 +1,70 @@
+serviceId: webauth
+callId: webauth-topup
+method: GET
+pathTemplate: /webauth/xmlauth?client={{ vars.client }}
+headersTemplate:
+  content-type: text/xml; charset=UTF-8
+  connection: keep-alive
+bodyTemplate: |
+  {% set requestType = 'TOP' %}
+  {% set accountNumber = payloadAsJson.AccountNumber %}
+  {% set amount = payloadAsJson.Amount %}
+
+  {% set sendMD5 = vars.sendMD5 %}
+  {% set timestampMD5 = vars.timestampMD5 %}
+  {% set md5Mechanism = vars.md5Mechanism %}
+  {% set md5Secret = vars.md5Secret %}
+  {% set customerCode = vars.customerCode %}
+  {% set productClassCode = vars.productClassCode %}
+  {% set origin = vars.origin %}
+  {% set currency = vars.currency %}
+
+  {% set serialNumber = '' %}
+  {% set requestId = eval('#randInt(100000,999999)') %}
+  {% set description = 'topup' %}
+  {% set authCode = '' %}
+
+  {% set timestampMode = vars.timestampMode %}
+  {% if timestampMode == 'ISO' %}
+    {% set timestampVal = eval("#date_format(now, 'yyyy-MM-dd''T''HH:mm:ss')") %}
+    {% set timestampFormat = 'YYYY-MM-DDTHH:MM:SS' %}
+  {% elseif timestampMode == 'YMDHMS' %}
+    {% set timestampVal = eval("#date_format(now, 'yyyyMMddHHmmss')") %}
+    {% set timestampFormat = 'CCYYMMDDHH24MISS' %}
+  {% elseif timestampMode == 'DEFAULT + TIMEZONE' %}
+    {% set timestampVal = eval("#date_format(now, 'dd/MM/yyyy HH:mm:ss Z')") %}
+    {% set timestampFormat = 'DD/MM/CCYY HH24:MI:SS ZZZ' %}
+  {% else %}
+    {% set timestampVal = eval("#date_format(now, 'dd/MM/yyyy HH:mm:ss')") %}
+    {% set timestampFormat = 'DD/MM/CCYY HH24:MI:SS' %}
+  {% endif %}
+
+  {% set accountIdForHash = customerCode ~ accountNumber ~ serialNumber %}
+  {% if md5Mechanism == 'EGC_DEFAULT' %}
+    {% set hashData = 'request' ~ requestType ~ origin ~ customerCode %}
+    {% set hash = eval("#md5_hex('" ~ hashData ~ md5Secret ~ "')") | upper %}
+  {% elseif md5Mechanism == 'EGC_SIMPLE' %}
+    {% set hashData = md5Secret ~ requestType ~ origin ~ customerCode %}
+    {% set hash = eval("#md5_hex('" ~ hashData ~ "')") | upper %}
+  {% else %}
+    {% if timestampMD5 %}
+      {% set hashData = 'request' ~ requestType ~ origin ~ accountIdForHash ~ timestampVal %}
+    {% else %}
+      {% set hashData = 'request' ~ requestType ~ origin ~ accountIdForHash %}
+    {% endif %}
+    {% set hash = eval("#md5_hex('" ~ hashData ~ md5Secret ~ "')") | upper %}
+  {% endif %}
+
+  <?xml version="1.0" encoding="UTF-8"?>
+  <request version="1.0"
+           type="{{ requestType }}"
+           origin="{{ origin }}"
+           id="{{ requestId }}"
+           txn_bal_code="{{ productClassCode }}">
+    <value type="LITERAL" amt="{{ amount }}" currency="{{ currency }}"/>
+    <account no="{{ customerCode }}" refer="{{ accountNumber }}"{% if serialNumber %} serial="{{ serialNumber }}"{% endif %}/>
+    {% if authCode %}<auth_code>{{ authCode }}</auth_code>{% endif %}
+    <desc>{{ description }}</desc>
+    <tstamp val="{{ timestampVal }}" format="{{ timestampFormat }}"/>
+    {% if sendMD5 %}<hash>{{ hash }}</hash>{% endif %}
+  </request>

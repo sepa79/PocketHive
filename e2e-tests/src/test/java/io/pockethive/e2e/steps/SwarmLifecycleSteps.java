@@ -251,6 +251,7 @@ public class SwarmLifecycleSteps {
       case "templated-rest", "redis-dataset-demo" -> "wiremock-local";
       case "tcp-socket-demo" -> "tcp-mock-local";
       case "variables-demo" -> "sut-A";
+      case "webauth-loop-redis-5-customers" -> "webauth-local";
       default -> null;
     };
   }
@@ -266,6 +267,7 @@ public class SwarmLifecycleSteps {
     }
     return switch (scenarioId) {
       case "variables-demo" -> "france";
+      case "webauth-loop-redis-5-customers" -> "default";
       default -> null;
     };
   }
@@ -314,24 +316,31 @@ public class SwarmLifecycleSteps {
     String generatorInstance = generatorKey == null ? null : workerInstances.get(generatorKey);
     assertNotNull(generatorInstance, "Generator instance should be discovered from status snapshots");
     String generatorRoleName = actualRoleName(generatorKey != null ? generatorKey : GENERATOR_ROLE);
+    List<String> generatorInstances = new ArrayList<>(generatorInstancesForRole(generatorRoleName));
+    if (!generatorInstances.contains(generatorInstance)) {
+      generatorInstances.add(generatorInstance);
+    }
+    assertFalse(generatorInstances.isEmpty(), "At least one generator instance should be discovered");
 
     Map<String, Object> patch = new LinkedHashMap<>();
     patch.put("enabled", true);
 
-    ComponentConfigRequest request = new ComponentConfigRequest(
-        idKey("generator-single"),
-        patch,
-        "e2e generator single request",
-        swarmId
-    );
+    for (int index = 0; index < generatorInstances.size(); index++) {
+      String instance = generatorInstances.get(index);
+      ComponentConfigRequest request = new ComponentConfigRequest(
+          idKey("generator-single-" + index),
+          patch,
+          "e2e generator single request",
+          swarmId
+      );
+      generatorConfigResponse = orchestratorClient.updateComponentConfig(generatorRoleName, instance, request);
+      LOGGER.info("Generator config-update requested for instance={} correlation={} ",
+          instance, generatorConfigResponse.correlationId());
 
-    generatorConfigResponse = orchestratorClient.updateComponentConfig(generatorRoleName, generatorInstance, request);
-    LOGGER.info("Generator config-update requested for instance={} correlation={} ",
-        generatorInstance, generatorConfigResponse.correlationId());
-
-    awaitReady("config-update", generatorConfigResponse);
-    assertNoErrors(generatorConfigResponse.correlationId(), "generator config-update");
-    assertWatchMatched(generatorConfigResponse);
+      awaitReady("config-update", generatorConfigResponse);
+      assertNoErrors(generatorConfigResponse.correlationId(), "generator config-update");
+      assertWatchMatched(generatorConfigResponse);
+    }
 
     SwarmAssertions.await("generator status delta", () -> {
       StatusEvent delta = controlPlaneEvents.latestStatusDeltaEvent(swarmId, generatorRoleName, generatorInstance)
@@ -1582,6 +1591,21 @@ public class SwarmLifecycleSteps {
     return queueNameForSuffix(suffix);
   }
 
+  private List<String> generatorInstancesForRole(String generatorRoleName) {
+    if (controlPlaneEvents == null || swarmId == null || generatorRoleName == null) {
+      return List.of();
+    }
+    return controlPlaneEvents.statusesForSwarm(swarmId).stream()
+        .map(ControlPlaneEvents.StatusEnvelope::status)
+        .filter(Objects::nonNull)
+        .filter(status -> generatorRoleName.equalsIgnoreCase(status.role()))
+        .map(StatusEvent::instance)
+        .filter(Objects::nonNull)
+        .filter(instance -> !instance.isBlank())
+        .distinct()
+        .toList();
+  }
+
   private String finalQueueSuffix() {
     ensureTemplate();
     String scenarioId = scenarioDetails != null ? scenarioDetails.id() : null;
@@ -1594,7 +1618,8 @@ public class SwarmLifecycleSteps {
       return "final";
     }
     if ("redis-dataset-demo".equals(scenarioId)
-        || "tcp-socket-demo".equals(scenarioId)) {
+        || "tcp-socket-demo".equals(scenarioId)
+        || "webauth-loop-redis-5-customers".equals(scenarioId)) {
       return "post";
     }
     throw new AssertionError("Unsupported scenario for final queue resolution: " + scenarioId);
@@ -1643,6 +1668,23 @@ public class SwarmLifecycleSteps {
     expectsRuntimeWorkErrorAlert = true;
     expectedRuntimeWorkErrorAlertRole = expectedRole;
     expectedRuntimeWorkErrorAlertInstance = expectedInstance;
+  }
+
+  @Then("the processor status eventually reports TPS above {double}")
+  public void theProcessorStatusEventuallyReportsTpsAbove(double minTps) {
+    ensureStartResponse();
+    captureWorkerStatuses(true);
+    String processorKey = roleKey(PROCESSOR_ROLE);
+    String actualRole = actualRoleName(processorKey != null ? processorKey : PROCESSOR_ROLE);
+    String expectedInstance = processorKey == null ? null : workerInstances.get(processorKey);
+
+    SwarmAssertions.await("processor TPS above " + minTps, () -> {
+      Optional<StatusEvent> latest = controlPlaneEvents.latestStatusEvent(swarmId, actualRole, expectedInstance);
+      StatusEvent status = latest.orElseThrow(() ->
+          new AssertionError("No processor status event for role=" + actualRole + " instance=" + expectedInstance));
+      double tps = status.data() == null || status.data().tps() == null ? 0.0 : status.data().tps();
+      assertTrue(tps > minTps, () -> "Expected processor TPS > " + minTps + " but was " + tps);
+    });
   }
 
   private String hiveExchangeName() {

@@ -32,6 +32,7 @@ public final class WorkOutputConfigBinder {
         Objects.requireNonNull(outputType, "outputType");
         String suffix = switch (outputType) {
             case RABBITMQ -> "rabbit";
+            case REDIS -> "redis";
             default -> outputType.name().toLowerCase(Locale.ROOT);
         };
         return "pockethive.outputs." + suffix;

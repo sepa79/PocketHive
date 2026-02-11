@@ -52,9 +52,30 @@ class WorkIOConfigBinderTest {
     }
 
     @Test
+    void bindsRedisInputSourcesJson() {
+        MapConfigurationPropertySource source = new MapConfigurationPropertySource(Map.of(
+            "pockethive.inputs.redis.sources-json", "[{\"listName\":\"webauth.RED.custA\",\"weight\":40}]",
+            "pockethive.inputs.redis.pick-strategy", "WEIGHTED_RANDOM"
+        ));
+        WorkInputConfigBinder binder = new WorkInputConfigBinder(new Binder(source));
+
+        RedisDataSetInputProperties config = binder.bind(WorkerInputType.REDIS_DATASET, RedisDataSetInputProperties.class);
+
+        assertThat(config.getSourcesJson()).isEqualTo("[{\"listName\":\"webauth.RED.custA\",\"weight\":40}]");
+        assertThat(config.getPickStrategy()).isEqualTo(RedisDataSetInputProperties.PickStrategy.WEIGHTED_RANDOM);
+    }
+
+    @Test
     void exposesRabbitOutputPrefix() {
         WorkOutputConfigBinder binder = new WorkOutputConfigBinder(new Binder(new MapConfigurationPropertySource()));
 
         assertThat(binder.prefix(WorkerOutputType.RABBITMQ)).isEqualTo("pockethive.outputs.rabbit");
+    }
+
+    @Test
+    void exposesRedisOutputPrefix() {
+        WorkOutputConfigBinder binder = new WorkOutputConfigBinder(new Binder(new MapConfigurationPropertySource()));
+
+        assertThat(binder.prefix(WorkerOutputType.REDIS)).isEqualTo("pockethive.outputs.redis");
     }
 }

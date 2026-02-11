@@ -816,6 +816,8 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
         putEnvIfPresent(env, "POCKETHIVE_INPUTS_REDIS_PASSWORD", redisMap.get("password"));
         putEnvIfPresent(env, "POCKETHIVE_INPUTS_REDIS_SSL", redisMap.get("ssl"));
         putEnvIfPresent(env, "POCKETHIVE_INPUTS_REDIS_LISTNAME", redisMap.get("listName"));
+        putEnvIfPresent(env, "POCKETHIVE_INPUTS_REDIS_PICKSTRATEGY", redisMap.get("pickStrategy"));
+        putEnvAsJsonIfPresent(env, "POCKETHIVE_INPUTS_REDIS_SOURCESJSON", redisMap.get("sources"));
         putEnvIfPresent(env, "POCKETHIVE_INPUTS_REDIS_RATEPERSEC", redisMap.get("ratePerSec"));
         putEnvIfPresent(env, "POCKETHIVE_INPUTS_REDIS_INITIALDELAYMS", redisMap.get("initialDelayMs"));
         putEnvIfPresent(env, "POCKETHIVE_INPUTS_REDIS_TICKINTERVALMS", redisMap.get("tickIntervalMs"));
@@ -830,6 +832,19 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
         if (!value.isBlank()) {
           env.put("POCKETHIVE_OUTPUTS_TYPE", value.toUpperCase(Locale.ROOT));
         }
+      }
+      Object redis = outputsMap.get("redis");
+      if (redis instanceof Map<?, ?> redisMap) {
+        putEnvIfPresent(env, "POCKETHIVE_OUTPUTS_REDIS_HOST", redisMap.get("host"));
+        putEnvIfPresent(env, "POCKETHIVE_OUTPUTS_REDIS_PORT", redisMap.get("port"));
+        putEnvIfPresent(env, "POCKETHIVE_OUTPUTS_REDIS_USERNAME", redisMap.get("username"));
+        putEnvIfPresent(env, "POCKETHIVE_OUTPUTS_REDIS_PASSWORD", redisMap.get("password"));
+        putEnvIfPresent(env, "POCKETHIVE_OUTPUTS_REDIS_SSL", redisMap.get("ssl"));
+        putEnvIfPresent(env, "POCKETHIVE_OUTPUTS_REDIS_SOURCESTEP", redisMap.get("sourceStep"));
+        putEnvIfPresent(env, "POCKETHIVE_OUTPUTS_REDIS_PUSHDIRECTION", redisMap.get("pushDirection"));
+        putEnvIfPresent(env, "POCKETHIVE_OUTPUTS_REDIS_DEFAULTLIST", redisMap.get("defaultList"));
+        putEnvIfPresent(env, "POCKETHIVE_OUTPUTS_REDIS_TARGETLISTTEMPLATE", redisMap.get("targetListTemplate"));
+        putEnvIfPresent(env, "POCKETHIVE_OUTPUTS_REDIS_MAXLEN", redisMap.get("maxLen"));
       }
     }
   }
@@ -865,6 +880,20 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
     String text = value.toString().trim();
     if (!text.isBlank()) {
       env.put(key, text);
+    }
+  }
+
+  private void putEnvAsJsonIfPresent(Map<String, String> env, String key, Object value) {
+    if (value == null) {
+      return;
+    }
+    try {
+      String json = mapper.writeValueAsString(value);
+      if (!json.isBlank()) {
+        env.put(key, json);
+      }
+    } catch (JsonProcessingException ex) {
+      throw new IllegalStateException("Failed to serialize " + key + " to JSON", ex);
     }
   }
 

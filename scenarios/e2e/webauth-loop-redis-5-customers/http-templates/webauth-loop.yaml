@@ -1,0 +1,29 @@
+serviceId: webauth
+callId: webauth-loop-5
+method: POST
+pathTemplate: /api/test
+headersTemplate:
+  content-type: application/json
+  connection: keep-alive
+  authorization: Basic YWRtaW46YWRtaW4=
+bodyTemplate: |
+  {% set inboundList = headers['x-ph-redis-list'] %}
+  {% if inboundList == 'webauth.TOP.shared' %}
+    {% set requestType = 'TOP' %}
+  {% elseif inboundList == 'webauth.RED.custA' or inboundList == 'webauth.RED.custB' or inboundList == 'webauth.RED.custC' or inboundList == 'webauth.RED.custD' or inboundList == 'webauth.RED.custE' %}
+    {% set requestType = 'RED' %}
+  {% elseif inboundList == 'webauth.BAL.shared' %}
+    {% set requestType = 'BAL' %}
+  {% else %}
+    {% set requestType = 'INVALID' %}
+  {% endif %}
+  {% set customerKey = payloadAsJson.Customer %}
+  {% set customer = vars.customers[customerKey] %}
+  {% set accountNumber = payloadAsJson.AccountNumber %}
+  {% set amount = payloadAsJson.Amount %}
+  {% set origin = customer.origin %}
+  {% set currency = customer.currency %}
+  {
+    "transport": "mock",
+    "message": "{{ requestType }},,{{ origin }},,,AUTO,{{ amount }},{{ currency }},,,,,DEFAULT,{{ accountNumber }},,,,,,,,,,,,,,"
+  }

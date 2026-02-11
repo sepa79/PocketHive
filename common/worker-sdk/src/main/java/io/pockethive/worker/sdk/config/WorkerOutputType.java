@@ -14,5 +14,10 @@ public enum WorkerOutputType {
     /**
      * Worker publishes results to RabbitMQ queues/exchanges.
      */
-    RABBITMQ
+    RABBITMQ,
+
+    /**
+     * Worker publishes results to Redis lists.
+     */
+    REDIS
 }
