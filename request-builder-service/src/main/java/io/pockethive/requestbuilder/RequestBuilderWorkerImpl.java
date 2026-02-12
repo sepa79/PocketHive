@@ -128,6 +128,9 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
         }
         envelope.put("body", rendered.body());
         envelope.set("headers", MAPPER.valueToTree(headers));
+        if (hasResultRules(tcpDef.resultRules())) {
+          envelope.set("resultRules", MAPPER.valueToTree(tcpDef.resultRules()));
+        }
       } else if (definition instanceof HttpTemplateDefinition httpDef) {
         MessageTemplate template = MessageTemplate.builder()
             .bodyType(MessageBodyType.HTTP)
@@ -163,6 +166,9 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
         boolean isJson = contentType.contains("application/json") ||
                         (contentType.isEmpty() && looksLikeJson(rendered.body()));
         setBodyNode(envelope, rendered.body(), isJson);
+        if (hasResultRules(httpDef.resultRules())) {
+          envelope.set("resultRules", MAPPER.valueToTree(httpDef.resultRules()));
+        }
       } else {
         throw new IllegalStateException("Unknown template type: " + definition.getClass());
       }
@@ -251,6 +257,19 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
     if (body == null || body.isBlank()) return false;
     char first = body.trim().charAt(0);
     return first == '{' || first == '[';
+  }
+
+  private static boolean hasResultRules(io.pockethive.httpbuilder.HttpTemplateDefinition.ResultRules rules) {
+    if (rules == null) {
+      return false;
+    }
+    if (rules.businessCode() != null) {
+      return true;
+    }
+    if (rules.successRegex() != null && !rules.successRegex().isBlank()) {
+      return true;
+    }
+    return rules.dimensions() != null && !rules.dimensions().isEmpty();
   }
 
   private void recordError() {

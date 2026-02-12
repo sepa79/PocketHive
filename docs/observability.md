@@ -35,7 +35,9 @@ Operators can correlate these numbers with the `queues` topology block to unders
 
 ## Postprocessor `publishAllMetrics`
 
-The postprocessor still emits aggregated latency and error metrics to Prometheus, but the high-frequency per-item (`publishAllMetrics=true`) metrics are currently disabled to avoid flooding the control plane and dashboards. A dedicated event-time sink (Influx/Loki) will be added in a future change; until then, `publishAllMetrics` only affects internal aggregation and no longer pushes per-message samples to Prometheus or status payloads.
+The postprocessor still emits aggregated latency and error metrics to Prometheus, but the high-frequency per-item (`publishAllMetrics=true`) metrics remain disabled to avoid flooding control-plane metrics.
+
+For per-transaction analytics, enable ClickHouse sink mode in `postprocessor-service`. Processor headers (`x-ph-call-id`, `x-ph-business-*`, `x-ph-dim-*`) are projected there as event-time rows designed for high-volume breakdown queries.
 
 ## Buffer Guard runbook
 

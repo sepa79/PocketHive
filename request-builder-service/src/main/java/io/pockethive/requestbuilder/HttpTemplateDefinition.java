@@ -17,7 +17,7 @@ public record HttpTemplateDefinition(
     String pathTemplate,
     String bodyTemplate,
     Map<String, String> headersTemplate,
-    Map<String, Object> auth
+    Map<String, Object> auth,
+    io.pockethive.httpbuilder.HttpTemplateDefinition.ResultRules resultRules
 ) implements TemplateDefinition {
 }
-

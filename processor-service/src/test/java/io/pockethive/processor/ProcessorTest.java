@@ -29,6 +29,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -123,6 +124,60 @@ class ProcessorTest {
                 .containsEntry("transactions", 1L)
                 .containsEntry("successRatio", 1.0)
                 .containsEntry("avgLatencyMs", 0.0);
+    }
+
+    @Test
+    void workerExtractsBusinessOutcomeHeadersFromTemplateRules() throws Exception {
+        ProcessorWorkerProperties properties = newProcessorWorkerProperties();
+        properties.setConfig(Map.of("baseUrl", "http://sut"));
+        HttpClient httpClient = mock(HttpClient.class);
+        Clock clock = Clock.fixed(Instant.parse("2024-03-01T00:00:00Z"), ZoneOffset.UTC);
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, clock);
+        ProcessorWorkerConfig config = new ProcessorWorkerConfig("http://sut", null, 0, 0.0, null, null, null, null, null);
+        TestWorkerContext context = new TestWorkerContext(config);
+
+        when(httpClient.execute(any(ClassicHttpRequest.class))).thenAnswer(invocation -> {
+            BasicClassicHttpResponse response = new BasicClassicHttpResponse(200, "OK");
+            response.setEntity(new StringEntity("{\"resultCode\":\"00\"}", java.nio.charset.StandardCharsets.UTF_8));
+            return response;
+        });
+
+        WorkItem inbound = WorkItem.json(Map.of(
+            "path", "/api",
+            "method", "post",
+            "headers", Map.of("X-Customer-Segment", "retail"),
+            "body", "{\"customerCode\":\"custA\",\"amount\":100}",
+            "resultRules", Map.of(
+                "businessCode", Map.of(
+                    "source", "RESPONSE_BODY",
+                    "pattern", "\"resultCode\":\"([^\"]+)\""
+                ),
+                "successRegex", "^(00)$",
+                "dimensions", List.of(
+                    Map.of(
+                        "name", "customer_code",
+                        "source", "REQUEST_BODY",
+                        "pattern", "\"customerCode\":\"([^\"]+)\""
+                    ),
+                    Map.of(
+                        "name", "segment",
+                        "source", "REQUEST_HEADER",
+                        "header", "X-Customer-Segment",
+                        "pattern", "(.+)"
+                    )
+                )
+            )
+        )).header("x-ph-call-id", "redis-auth").build();
+
+        WorkItem outbound = worker.onMessage(inbound, context);
+
+        assertThat(outbound).isNotNull();
+        assertThat(outbound.headers())
+            .containsEntry("x-ph-business-code", "00")
+            .containsEntry("x-ph-business-success", "true")
+            .containsEntry("x-ph-dim-customer_code", "custA")
+            .containsEntry("x-ph-dim-segment", "retail")
+            .containsEntry("x-ph-call-id", "redis-auth");
     }
 
     @Test

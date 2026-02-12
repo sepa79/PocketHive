@@ -6,3 +6,19 @@ bodyTemplate: "{{ payload }}"
 headersTemplate:
   content-type: application/json
   x-demo-call: auth
+resultRules:
+  businessCode:
+    source: RESPONSE_BODY
+    pattern: '"message"\s*:\s*"[^"]*\(([^)]+)\)"'
+  successRegex: 'auth|balance|topup'
+  dimensions:
+    - name: customer-id
+      source: REQUEST_BODY
+      pattern: '"customerCode"\s*:\s*"([^"]+)"'
+    - name: account-number
+      source: REQUEST_BODY
+      pattern: '"accountNumber"\s*:\s*"([^"]+)"'
+    - name: call-template
+      source: REQUEST_HEADER
+      header: x-demo-call
+      pattern: '(.+)'

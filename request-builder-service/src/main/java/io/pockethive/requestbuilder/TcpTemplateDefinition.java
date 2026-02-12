@@ -14,5 +14,6 @@ public record TcpTemplateDefinition(
     Map<String, String> headersTemplate,
     String endTag,          // End delimiter for response reading
     Integer maxBytes,       // Max bytes to read
-    Map<String, Object> auth
+    Map<String, Object> auth,
+    io.pockethive.httpbuilder.HttpTemplateDefinition.ResultRules resultRules
 ) implements TemplateDefinition {}

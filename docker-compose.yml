@@ -166,6 +166,21 @@ services:
       retries: 12
       start_period: 10s
 
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - ./clickhouse/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8123/ping | grep -q 'Ok.'"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+      start_period: 20s
+
   tcp-mock-server:
     image: ${DOCKER_REGISTRY:-}tcp-mock-server:${POCKETHIVE_VERSION:-latest}
     ports:
@@ -330,6 +345,7 @@ volumes:
   redis-data:
   postgres-data:
   tcp-mock-data:
+  clickhouse-data:
 
 networks:
   default:

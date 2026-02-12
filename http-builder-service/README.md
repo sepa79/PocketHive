@@ -47,6 +47,20 @@ Templates live under `templateRoot` in JSON or YAML files and are loaded once at
   "headersTemplate": {
     "content-type": "text/xml; charset=utf-8",
     "SOAPAction": "AuthorizePayment"
+  },
+  "resultRules": {
+    "businessCode": {
+      "source": "RESPONSE_BODY",
+      "pattern": "RC=([A-Z0-9]+)"
+    },
+    "successRegex": "^(00)$",
+    "dimensions": [
+      {
+        "name": "customer_code",
+        "source": "REQUEST_BODY",
+        "pattern": "customerCode:([A-Za-z0-9]+)"
+      }
+    ]
   }
 }
 ```
@@ -59,6 +73,10 @@ Fields:
 - `pathTemplate` – relative path, rendered via Pebble/SpEL (may contain parameters).
 - `bodyTemplate` – rendered body (SOAP XML, JSON, or any text).
 - `headersTemplate` – map of header name → templated value.
+- `resultRules` (optional) – extractor rules forwarded to `processor-service`:
+  - `businessCode`: source + regex used to derive business code from request/response.
+  - `successRegex`: regex evaluated against extracted business code.
+  - `dimensions[]`: named extractors (`name`, `source`, `pattern`, optional `header` for header sources).
 
 At runtime the worker uses the shared `TemplateRenderer`/SpEL integration from the Worker SDK. The template context includes:
 
@@ -160,7 +178,14 @@ When a template is found, the worker appends a new step whose payload is a JSON 
     "content-type": "application/json",
     "x-ph-call-id": "Example"
   },
-  "body": "{... rendered body ...}"
+  "body": "{... rendered body ...}",
+  "resultRules": {
+    "businessCode": { "source": "RESPONSE_BODY", "pattern": "RC=([A-Z0-9]+)" },
+    "successRegex": "^(00)$",
+    "dimensions": [
+      { "name": "customer_code", "source": "REQUEST_BODY", "pattern": "customerCode:([A-Za-z0-9]+)" }
+    ]
+  }
 }
 ```
 

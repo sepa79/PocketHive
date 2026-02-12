@@ -89,7 +89,8 @@ public final class TemplateLoader {
             def.headersTemplate(),
             def.endTag(),
             def.maxBytes(),
-            def.auth()
+            def.auth(),
+            def.resultRules()
         );
       } else {
         HttpTemplateDefinition def = mapper.readValue(path.toFile(), HttpTemplateDefinition.class);
@@ -101,7 +102,8 @@ public final class TemplateLoader {
             def.pathTemplate(),
             def.bodyTemplate(),
             def.headersTemplate(),
-            def.auth()
+            def.auth(),
+            def.resultRules()
         );
       }
     } catch (Exception ex) {

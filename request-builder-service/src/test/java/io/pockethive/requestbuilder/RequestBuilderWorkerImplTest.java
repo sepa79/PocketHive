@@ -49,6 +49,13 @@ class RequestBuilderWorkerImplTest {
           "bodyTemplate": "{{ payload }}",
           "headersTemplate": {
             "X-Test": "yes"
+          },
+          "resultRules": {
+            "businessCode": {
+              "source": "RESPONSE_BODY",
+              "pattern": "RC=([A-Z0-9]+)"
+            },
+            "successRegex": "^(00)$"
           }
         }
         """);
@@ -77,6 +84,8 @@ class RequestBuilderWorkerImplTest {
     assertThat(envelope.get("method").asText()).isEqualTo("POST");
     assertThat(envelope.get("body").asText()).isEqualTo("body");
     assertThat(envelope.get("headers").get("X-Test").asText()).isEqualTo("yes");
+    assertThat(envelope.get("resultRules")).isNotNull();
+    assertThat(envelope.get("resultRules").get("successRegex").asText()).isEqualTo("^(00)$");
   }
 
   @Test
@@ -136,7 +145,14 @@ class RequestBuilderWorkerImplTest {
           "bodyTemplate": "{{ payload }}",
           "headersTemplate": {},
           "endTag": "</Document>",
-          "maxBytes": 8192
+          "maxBytes": 8192,
+          "resultRules": {
+            "businessCode": {
+              "source": "RESPONSE_BODY",
+              "pattern": "RC=([A-Z0-9]+)"
+            },
+            "successRegex": "^(00)$"
+          }
         }
         """);
 
@@ -162,6 +178,7 @@ class RequestBuilderWorkerImplTest {
     assertThat(envelope.get("body").asText()).isEqualTo("test-data");
     assertThat(envelope.get("endTag").asText()).isEqualTo("</Document>");
     assertThat(envelope.get("maxBytes").asInt()).isEqualTo(8192);
+    assertThat(envelope.get("resultRules")).isNotNull();
   }
 
   @Test

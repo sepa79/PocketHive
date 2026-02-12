@@ -1,6 +1,7 @@
 package io.pockethive.processor.handler;
 
 import io.pockethive.processor.ProcessorWorkerConfig;
+import io.pockethive.processor.ResultRulesExtractor;
 import io.pockethive.processor.TcpTransportConfig;
 import io.pockethive.processor.metrics.CallMetrics;
 import io.pockethive.processor.metrics.CallMetricsRecorder;
@@ -66,6 +67,8 @@ public class TcpProtocolHandler implements ProtocolHandler {
       throw new ProcessorCallException(CallMetrics.failure(0L, 0L, -1),
           new IllegalArgumentException("no TCP body"));
     }
+    String requestBody = body.get();
+    Map<String, String> requestHeaders = requestHeaders(envelope.path("headers"));
 
     TcpBehavior behavior = TcpBehavior.valueOf(envelope.path("behavior").asText("REQUEST_RESPONSE"));
     String endTag = envelope.path("endTag").asText(null);
@@ -130,9 +133,18 @@ public class TcpProtocolHandler implements ProtocolHandler {
 
       ObjectNode result = mapper.createObjectNode();
       result.put("status", response.status());
-      result.put("body", new String(response.body(), StandardCharsets.UTF_8));
+      String responseBody = new String(response.body(), StandardCharsets.UTF_8);
+      result.put("body", responseBody);
 
-      WorkItem responseItem = ResponseBuilder.build(result, context.info().role(), metrics);
+      Map<String, Object> extractionHeaders = ResultRulesExtractor.extract(
+          mapper,
+          envelope,
+          requestBody,
+          requestHeaders,
+          responseBody,
+          Map.of());
+
+      WorkItem responseItem = ResponseBuilder.build(result, context.info().role(), metrics, extractionHeaders);
       return message.addStep(responseItem.asString(), responseItem.headers());
     } catch (Exception ex) {
       long now = clock.millis();
@@ -163,6 +175,15 @@ public class TcpProtocolHandler implements ProtocolHandler {
     return bodyNode == null || bodyNode.isMissingNode() || bodyNode.isNull() ? Optional.empty()
         : bodyNode.isTextual() ? Optional.of(bodyNode.asText())
         : Optional.of(mapper.writeValueAsString(bodyNode));
+  }
+
+  private Map<String, String> requestHeaders(JsonNode headersNode) {
+    if (headersNode == null || !headersNode.isObject()) {
+      return Map.of();
+    }
+    Map<String, String> headers = new java.util.LinkedHashMap<>();
+    headersNode.fields().forEachRemaining(entry -> headers.put(entry.getKey(), entry.getValue().asText()));
+    return Map.copyOf(headers);
   }
 
   private void ensureTransportConfig(TcpTransportConfig desired) {

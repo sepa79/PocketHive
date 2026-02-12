@@ -25,6 +25,7 @@ pockethive:
       postprocessor:
         enabled: true
         publish-all-metrics: true
+        forward-to-output: false
 ```
 
 When enabled, the worker still enriches the status snapshot with hop durations, hop metadata, and
@@ -32,3 +33,28 @@ processor call statistics. In addition, every processed message is written to de
 gauges (for example `ph_transaction_hop_duration_ms`, `ph_transaction_total_latency_ms`, and
 `ph_transaction_processor_*`) so operators can plot high-resolution timelines directly from scraped
 metrics.
+
+### Forwarding mode
+
+Set `forward-to-output: true` to pass the original `WorkItem` downstream (for example to a dedicated
+analytics sink worker). With the default `false`, postprocessor remains terminal and does not emit
+downstream messages.
+
+### ClickHouse sink mode
+
+Set `write-tx-outcome-to-click-house: true` to persist transaction outcomes directly from postprocessor.
+The worker projects `x-ph-call-id`, `x-ph-processor-*`, `x-ph-business-*`, and `x-ph-dim-*` headers into
+ClickHouse `JSONEachRow` inserts.
+
+```yaml
+pockethive:
+  control-plane:
+    worker:
+      postprocessor:
+        write-tx-outcome-to-click-house: true
+        drop-tx-outcome-without-call-id: true
+  sink:
+    clickhouse:
+      endpoint: http://clickhouse:8123
+      table: ph_tx_outcome_v1
+```

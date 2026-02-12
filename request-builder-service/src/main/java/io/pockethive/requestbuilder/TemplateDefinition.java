@@ -8,4 +8,5 @@ public interface TemplateDefinition {
     String protocol();
     String bodyTemplate();
     Map<String, String> headersTemplate();
+    io.pockethive.httpbuilder.HttpTemplateDefinition.ResultRules resultRules();
 }
