@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS ph_tx_outcome_v1 (
 ENGINE = MergeTree
 PARTITION BY toDate(eventTime)
 ORDER BY (swarmId, callId, eventTime)
-TTL eventTime + INTERVAL 14 DAY
+TTL toDateTime(eventTime) + INTERVAL 14 DAY
 SETTINGS index_granularity = 8192;
 ```
 
