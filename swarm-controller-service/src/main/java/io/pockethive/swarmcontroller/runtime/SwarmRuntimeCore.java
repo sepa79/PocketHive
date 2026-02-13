@@ -30,6 +30,7 @@ import io.pockethive.swarmcontroller.SwarmMetrics;
 import io.pockethive.swarmcontroller.SwarmReadinessTracker;
 import io.pockethive.swarmcontroller.SwarmStatus;
 import io.pockethive.swarmcontroller.infra.amqp.SwarmWorkTopologyManager;
+import io.pockethive.swarmcontroller.config.ClickHouseSinkPassthroughProperties;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import io.pockethive.swarmcontroller.infra.amqp.SwarmQueueMetrics;
 import io.pockethive.swarmcontroller.infra.docker.WorkloadProvisioner;
@@ -83,6 +84,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
   private final DockerContainerClient docker;
   private final RabbitProperties rabbitProperties;
   private final SwarmControllerProperties properties;
+  private final ClickHouseSinkPassthroughProperties clickHouseSink;
   private final MeterRegistry meterRegistry;
   private final WorkerSettings workerSettings;
   private final ControlPlanePublisher controlPublisher;
@@ -115,6 +117,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
                           DockerContainerClient docker,
                           RabbitProperties rabbitProperties,
                           SwarmControllerProperties properties,
+                          ClickHouseSinkPassthroughProperties clickHouseSink,
                           MeterRegistry meterRegistry,
                           ControlPlanePublisher controlPublisher,
                           SwarmWorkTopologyManager topology,
@@ -129,6 +132,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
     this.docker = Objects.requireNonNull(docker, "docker");
     this.rabbitProperties = Objects.requireNonNull(rabbitProperties, "rabbitProperties");
     this.properties = Objects.requireNonNull(properties, "properties");
+    this.clickHouseSink = Objects.requireNonNull(clickHouseSink, "clickHouseSink");
     this.meterRegistry = Objects.requireNonNull(meterRegistry, "meterRegistry");
     this.controlPublisher = Objects.requireNonNull(controlPublisher, "controlPublisher");
     this.topology = Objects.requireNonNull(topology, "topology");
@@ -328,6 +332,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
         Map<String, String> env = new LinkedHashMap<>(
             ControlPlaneContainerEnvironmentFactory.workerEnvironment(beeName, bee.role(), workerSettings, rabbitProperties));
         applyWorkIoEnvironment(bee, env);
+        applyClickHouseSinkEnvironment(bee, env);
         String net = docker.resolveControlNetwork();
         if (hasText(net)) {
           env.put("CONTROL_NETWORK", net);
@@ -661,6 +666,39 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
           env.put("POCKETHIVE_OUTPUTS_TYPE", value.toUpperCase(Locale.ROOT));
         }
       }
+    }
+  }
+
+  private void applyClickHouseSinkEnvironment(Bee bee, Map<String, String> env) {
+    if (bee == null || bee.role() == null) {
+      return;
+    }
+    if (!"postprocessor".equalsIgnoreCase(bee.role())) {
+      return;
+    }
+    if (!clickHouseSink.configured()) {
+      return;
+    }
+    putEnvIfMissing(env, "POCKETHIVE_SINK_CLICKHOUSE_ENDPOINT", clickHouseSink.getEndpoint());
+    putEnvIfMissing(env, "POCKETHIVE_SINK_CLICKHOUSE_TABLE", clickHouseSink.getTable());
+    putEnvIfMissing(env, "POCKETHIVE_SINK_CLICKHOUSE_USERNAME", clickHouseSink.getUsername());
+    putEnvIfMissing(env, "POCKETHIVE_SINK_CLICKHOUSE_PASSWORD", clickHouseSink.getPassword());
+    putEnvIfMissing(env, "POCKETHIVE_SINK_CLICKHOUSE_CONNECT_TIMEOUT_MS",
+        Integer.toString(clickHouseSink.getConnectTimeoutMs()));
+    putEnvIfMissing(env, "POCKETHIVE_SINK_CLICKHOUSE_READ_TIMEOUT_MS",
+        Integer.toString(clickHouseSink.getReadTimeoutMs()));
+  }
+
+  private static void putEnvIfMissing(Map<String, String> env, String key, String value) {
+    if (env.containsKey(key)) {
+      return;
+    }
+    if (value == null) {
+      return;
+    }
+    String text = value.trim();
+    if (!text.isBlank()) {
+      env.put(key, text);
     }
   }
 

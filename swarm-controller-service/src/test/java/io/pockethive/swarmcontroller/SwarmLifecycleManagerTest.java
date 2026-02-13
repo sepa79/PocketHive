@@ -21,6 +21,7 @@ import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.TrafficPolicy;
 import io.pockethive.swarm.model.Work;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
+import io.pockethive.swarmcontroller.config.ClickHouseSinkPassthroughProperties;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -276,7 +277,9 @@ class SwarmLifecycleManagerTest {
     SimpleMeterRegistry registry = new SimpleMeterRegistry();
     try {
       SwarmLifecycleManager manager = new SwarmLifecycleManager(
-          amqp, mapper, dockerClient, docker, rabbit, rabbitProperties, "inst", properties, registry,
+          amqp, mapper, dockerClient, docker, rabbit, rabbitProperties, "inst", properties,
+          new ClickHouseSinkPassthroughProperties(),
+          registry,
           io.pockethive.swarmcontroller.runtime.SwarmJournal.noop());
       SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img1", new Work(null, null), null)));
 
@@ -889,6 +892,7 @@ class SwarmLifecycleManagerTest {
         rabbitProperties,
         "inst",
         SwarmControllerTestProperties.defaults(bufferGuardEnabled),
+        new ClickHouseSinkPassthroughProperties(),
         meterRegistry,
         io.pockethive.swarmcontroller.runtime.SwarmJournal.noop());
   }
