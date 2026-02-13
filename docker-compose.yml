@@ -168,6 +168,9 @@ services:
 
   clickhouse:
     image: clickhouse/clickhouse-server:24.8
+    environment:
+      CLICKHOUSE_USER: pockethive
+      CLICKHOUSE_PASSWORD: pockethive
     ports:
       - "8123:8123"
       - "9000:9000"
