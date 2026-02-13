@@ -1,5 +1,6 @@
 package io.pockethive.postprocessor;
 
+import io.pockethive.sink.clickhouse.ClickHouseSinkProperties;
 import io.pockethive.worker.sdk.metrics.PrometheusPushGatewayProperties;
 import org.springframework.amqp.rabbit.annotation.EnableRabbit;
 import org.springframework.boot.SpringApplication;

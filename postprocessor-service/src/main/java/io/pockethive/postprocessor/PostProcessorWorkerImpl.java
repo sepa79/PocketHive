@@ -68,8 +68,6 @@ class PostProcessorWorkerImpl implements PocketHiveWorkerFunction {
   private final PostProcessorTxOutcomeWriter txOutcomeWriter;
   private final Clock clock;
   private final AtomicReference<PostProcessorMetrics> metricsRef = new AtomicReference<>();
-  private final AtomicReference<DetailedTransactionMetrics> detailedMetricsRef =
-      new AtomicReference<>();
   private final LongAdder txOutcomeInserted = new LongAdder();
   private final LongAdder txOutcomeDropped = new LongAdder();
   private final LongAdder txOutcomeFailed = new LongAdder();
@@ -134,8 +132,8 @@ class PostProcessorWorkerImpl implements PocketHiveWorkerFunction {
     PostProcessorMetrics metrics = metrics(context);
     metrics.record(measurements, error, processorStats);
     // When publishAllMetrics is enabled we still record aggregated metrics above, but
-    // skip per-item Micrometer publishing for now. A future InfluxDB path will handle
-    // per-transaction dots without overloading Prometheus.
+    // skip per-item Micrometer publishing to avoid flooding Prometheus. Use the ClickHouse
+    // tx-outcome sink for per-transaction breakdowns.
     RuntimeException txOutcomeFailure = null;
     String txOutcomeLastCallId = "";
     if (config.writeTxOutcomeToClickHouse()) {
@@ -374,21 +372,6 @@ class PostProcessorWorkerImpl implements PocketHiveWorkerFunction {
       if (current == null) {
         current = new PostProcessorMetrics(context.meterRegistry(), context);
         metricsRef.set(current);
-      }
-      return current;
-    }
-  }
-
-  private DetailedTransactionMetrics detailedMetrics(WorkerContext context) {
-    DetailedTransactionMetrics current = detailedMetricsRef.get();
-    if (current != null) {
-      return current;
-    }
-    synchronized (detailedMetricsRef) {
-      current = detailedMetricsRef.get();
-      if (current == null) {
-        current = new DetailedTransactionMetrics(context.meterRegistry(), context);
-        detailedMetricsRef.set(current);
       }
       return current;
     }

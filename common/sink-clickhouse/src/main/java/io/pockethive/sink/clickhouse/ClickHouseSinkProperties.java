@@ -1,9 +1,9 @@
-package io.pockethive.swarmcontroller.config;
+package io.pockethive.sink.clickhouse;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties(prefix = "pockethive.sink.clickhouse")
-public class ClickHouseSinkPassthroughProperties {
+public class ClickHouseSinkProperties {
 
   private String endpoint = "";
   private String table = "";

@@ -1,6 +1,7 @@
 package io.pockethive.postprocessor;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.sink.clickhouse.ClickHouseSinkProperties;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
@@ -28,7 +29,7 @@ class PostProcessorTxOutcomeWriter {
   }
 
   void write(TxOutcomeEvent event) throws Exception {
-    if (!configured()) {
+    if (!properties.configured()) {
       throw new IllegalStateException("ClickHouse sink is enabled but endpoint/table is not configured");
     }
     URI uri = insertUri();
@@ -52,10 +53,6 @@ class PostProcessorTxOutcomeWriter {
       }
       throw new IllegalStateException("ClickHouse insert failed status=" + response.statusCode() + " body=" + body);
     }
-  }
-
-  private boolean configured() {
-    return !trim(properties.getEndpoint()).isEmpty() && !trim(properties.getTable()).isEmpty();
   }
 
   private URI insertUri() {

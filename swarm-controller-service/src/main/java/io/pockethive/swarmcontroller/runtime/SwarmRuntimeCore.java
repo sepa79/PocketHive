@@ -30,7 +30,7 @@ import io.pockethive.swarmcontroller.SwarmMetrics;
 import io.pockethive.swarmcontroller.SwarmReadinessTracker;
 import io.pockethive.swarmcontroller.SwarmStatus;
 import io.pockethive.swarmcontroller.infra.amqp.SwarmWorkTopologyManager;
-import io.pockethive.swarmcontroller.config.ClickHouseSinkPassthroughProperties;
+import io.pockethive.sink.clickhouse.ClickHouseSinkProperties;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import io.pockethive.swarmcontroller.infra.amqp.SwarmQueueMetrics;
 import io.pockethive.swarmcontroller.infra.docker.WorkloadProvisioner;
@@ -84,7 +84,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
   private final DockerContainerClient docker;
   private final RabbitProperties rabbitProperties;
   private final SwarmControllerProperties properties;
-  private final ClickHouseSinkPassthroughProperties clickHouseSink;
+  private final ClickHouseSinkProperties clickHouseSink;
   private final MeterRegistry meterRegistry;
   private final WorkerSettings workerSettings;
   private final ControlPlanePublisher controlPublisher;
@@ -117,7 +117,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
                           DockerContainerClient docker,
                           RabbitProperties rabbitProperties,
                           SwarmControllerProperties properties,
-                          ClickHouseSinkPassthroughProperties clickHouseSink,
+                          ClickHouseSinkProperties clickHouseSink,
                           MeterRegistry meterRegistry,
                           ControlPlanePublisher controlPublisher,
                           SwarmWorkTopologyManager topology,

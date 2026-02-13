@@ -11,13 +11,13 @@ import io.pockethive.docker.compute.DockerSwarmServiceComputeAdapter;
 import io.pockethive.manager.ports.ComputeAdapter;
 import io.pockethive.manager.runtime.ComputeAdapterType;
 import io.pockethive.manager.runtime.ManagerSpec;
-import io.pockethive.orchestrator.config.ClickHouseSinkPassthroughProperties;
 import io.pockethive.orchestrator.config.OrchestratorProperties;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
 import io.pockethive.orchestrator.domain.SwarmStatus;
 import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
 import io.pockethive.orchestrator.infra.JournalRunMetadataWriter;
+import io.pockethive.sink.clickhouse.ClickHouseSinkProperties;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
@@ -42,7 +42,7 @@ public class ContainerLifecycleManager {
     private final ControlPlaneProperties controlPlaneProperties;
     private final RabbitProperties rabbitProperties;
     private final JournalRunMetadataWriter runMetadataWriter;
-    private final ClickHouseSinkPassthroughProperties clickHouseSink;
+    private final ClickHouseSinkProperties clickHouseSink;
     @Value("${POCKETHIVE_SCENARIOS_RUNTIME_ROOT:}")
     private String scenariosRuntimeRootSource;
     @Value("${pockethive.journal.sink:postgres}")
@@ -64,12 +64,12 @@ public class ContainerLifecycleManager {
         ControlPlaneProperties controlPlaneProperties,
         RabbitProperties rabbitProperties,
         JournalRunMetadataWriter runMetadataWriter,
-        ClickHouseSinkPassthroughProperties clickHouseSink) {
-        this.docker = Objects.requireNonNull(docker, "docker");
-        this.computeAdapter = Objects.requireNonNull(computeAdapter, "computeAdapter");
-        this.registry = Objects.requireNonNull(registry, "registry");
-        this.amqp = Objects.requireNonNull(amqp, "amqp");
-        this.properties = Objects.requireNonNull(properties, "properties");
+        ClickHouseSinkProperties clickHouseSink) {
+      this.docker = Objects.requireNonNull(docker, "docker");
+      this.computeAdapter = Objects.requireNonNull(computeAdapter, "computeAdapter");
+      this.registry = Objects.requireNonNull(registry, "registry");
+      this.amqp = Objects.requireNonNull(amqp, "amqp");
+      this.properties = Objects.requireNonNull(properties, "properties");
         this.controlPlaneProperties = Objects.requireNonNull(controlPlaneProperties, "controlPlaneProperties");
         this.rabbitProperties = Objects.requireNonNull(rabbitProperties, "rabbitProperties");
         this.runMetadataWriter = Objects.requireNonNull(runMetadataWriter, "runMetadataWriter");

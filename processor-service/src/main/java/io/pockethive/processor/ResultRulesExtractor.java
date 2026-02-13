@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.httpbuilder.HttpTemplateDefinition;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -152,7 +153,7 @@ public final class ResultRulesExtractor {
   }
 
   private static String normaliseDimensionName(String name) {
-    String trimmed = name.trim().toLowerCase();
+    String trimmed = name.trim().toLowerCase(Locale.ROOT);
     return trimmed.replaceAll("[^a-z0-9_-]", "-");
   }
 }

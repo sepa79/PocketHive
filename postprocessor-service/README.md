@@ -29,10 +29,10 @@ pockethive:
 ```
 
 When enabled, the worker still enriches the status snapshot with hop durations, hop metadata, and
-processor call statistics. In addition, every processed message is written to dedicated Prometheus
-gauges (for example `ph_transaction_hop_duration_ms`, `ph_transaction_total_latency_ms`, and
-`ph_transaction_processor_*`) so operators can plot high-resolution timelines directly from scraped
-metrics.
+processor call statistics. Per-item Prometheus metrics are intentionally not emitted (even when
+`publish-all-metrics: true`) to avoid flooding the control-plane metrics pipeline.
+
+For per-transaction analytics, use the ClickHouse sink mode described below.
 
 ### Forwarding mode
 

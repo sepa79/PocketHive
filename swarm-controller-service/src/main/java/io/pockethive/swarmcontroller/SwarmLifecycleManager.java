@@ -14,7 +14,6 @@ import io.pockethive.manager.runtime.ComputeAdapterType;
 import io.pockethive.manager.runtime.ConfigFanout;
 import io.pockethive.swarm.model.TrafficPolicy;
 import io.pockethive.swarmcontroller.QueueStats;
-import io.pockethive.swarmcontroller.config.ClickHouseSinkPassthroughProperties;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import io.pockethive.swarmcontroller.infra.amqp.SwarmQueueMetrics;
 import io.pockethive.swarmcontroller.infra.amqp.SwarmWorkTopologyManager;
@@ -23,6 +22,7 @@ import io.pockethive.swarmcontroller.infra.docker.WorkloadProvisioner;
 import io.pockethive.swarmcontroller.runtime.SwarmRuntimeContext;
 import io.pockethive.swarmcontroller.runtime.SwarmRuntimeCore;
 import io.pockethive.swarmcontroller.runtime.SwarmRuntimeState;
+import io.pockethive.sink.clickhouse.ClickHouseSinkProperties;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -60,7 +60,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
                                RabbitProperties rabbitProperties,
                                @Qualifier("instanceId") String instanceId,
                                SwarmControllerProperties properties,
-                               ClickHouseSinkPassthroughProperties clickHouseSink,
+                               ClickHouseSinkProperties clickHouseSink,
                                MeterRegistry meterRegistry,
                                io.pockethive.swarmcontroller.runtime.SwarmJournal journal) {
     this(amqp, mapper, dockerClient, docker, rabbit, rabbitProperties, instanceId, properties, meterRegistry,
@@ -79,7 +79,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
                         SwarmControllerProperties properties,
                         MeterRegistry meterRegistry,
                         io.pockethive.swarmcontroller.runtime.SwarmJournal journal,
-                        ClickHouseSinkPassthroughProperties clickHouseSink,
+                        ClickHouseSinkProperties clickHouseSink,
                         WorkerSettings workerSettings) {
     Objects.requireNonNull(workerSettings, "workerSettings");
     this.mapper = mapper;
