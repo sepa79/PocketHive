@@ -7,24 +7,28 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.observability.Hop;
 import io.pockethive.observability.ObservabilityContext;
+import io.pockethive.sink.clickhouse.ClickHouseSinkProperties;
 import io.pockethive.worker.sdk.api.StatusPublisher;
 import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.api.WorkerInfo;
 import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
 import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static java.util.stream.Collectors.toList;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class PostProcessorTest {
 
@@ -38,7 +42,7 @@ class PostProcessorTest {
     @Test
     void onMessageRecordsLatencyAndErrorsAndUpdatesStatus() {
         PostProcessorWorkerProperties properties = workerProperties(false);
-        PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(properties);
+        PostProcessorWorkerImpl worker = worker(properties);
         ObservabilityContext context = new ObservabilityContext();
         List<Hop> hops = new ArrayList<>();
         hops.add(new Hop("generator", "gen-1", START, START.plusMillis(5)));
@@ -115,7 +119,7 @@ class PostProcessorTest {
     @Test
     void onMessageRecordsProcessorFailureMetrics() {
         PostProcessorWorkerProperties properties = workerProperties(false);
-        PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(properties);
+        PostProcessorWorkerImpl worker = worker(properties);
         ObservabilityContext context = new ObservabilityContext();
         List<Hop> hops = new ArrayList<>();
         hops.add(new Hop("generator", "gen-1", START, START.plusMillis(5)));
@@ -162,7 +166,7 @@ class PostProcessorTest {
     @Test
     void onMessageCompletesInFlightHopBeforeRecording() {
         PostProcessorWorkerProperties properties = workerProperties(false);
-        PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(properties);
+        PostProcessorWorkerImpl worker = worker(properties);
         ObservabilityContext context = new ObservabilityContext();
         List<Hop> hops = new ArrayList<>();
         hops.add(new Hop("generator", "gen-1", START, START.plusMillis(5)));
@@ -200,7 +204,7 @@ class PostProcessorTest {
     @Test
     void onMessageUsesDefaultsWhenNoConfigPresent() {
         PostProcessorWorkerProperties properties = workerProperties(false);
-        PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(properties);
+        PostProcessorWorkerImpl worker = worker(properties);
         ObservabilityContext context = new ObservabilityContext();
         context.setHops(List.of());
 
@@ -218,7 +222,7 @@ class PostProcessorTest {
     @Test
     void onMessagePublishesFullSnapshotWhenPublishAllMetricsEnabled() {
         PostProcessorWorkerProperties properties = workerProperties(true);
-        PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(properties);
+        PostProcessorWorkerImpl worker = worker(properties);
         ObservabilityContext context = new ObservabilityContext();
         List<Hop> hops = new ArrayList<>();
         hops.add(new Hop("generator", "gen-1", START, START.plusMillis(5)));
@@ -249,6 +253,91 @@ class PostProcessorTest {
         assertThat(registry.find("ph_transaction_processor_duration_ms").gauges()).isNullOrEmpty();
         assertThat(registry.find("ph_transaction_processor_success").gauges()).isNullOrEmpty();
         assertThat(registry.find("ph_transaction_processor_status").gauges()).isNullOrEmpty();
+    }
+
+    @Test
+    void onMessageForwardsOriginalItemWhenForwardToOutputEnabled() {
+        PostProcessorWorkerProperties properties = workerProperties(false);
+        PostProcessorWorkerImpl worker = worker(properties);
+        ObservabilityContext context = new ObservabilityContext();
+        context.setHops(List.of());
+
+        WorkItem message = WorkItem.text("payload")
+                .header("x-ph-call-id", "redis-auth")
+                .observabilityContext(context)
+                .build();
+        TestWorkerContext workerContext =
+                new TestWorkerContext(new PostProcessorWorkerConfig(false, true), context);
+
+        WorkItem result = worker.onMessage(message, workerContext);
+
+        assertThat(result).isSameAs(message);
+    }
+
+    @Test
+    void onMessageWritesTxOutcomeToClickHouseWhenEnabled() {
+        PostProcessorWorkerProperties properties = workerProperties(false);
+        CapturingTxOutcomeWriter writer = new CapturingTxOutcomeWriter();
+        PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(
+            properties,
+            writer,
+            Clock.fixed(Instant.parse("2026-02-12T11:00:00.000Z"), java.time.ZoneOffset.UTC));
+        ObservabilityContext context = new ObservabilityContext();
+        context.setHops(List.of());
+        context.setTraceId("trace-1");
+
+        WorkItem message = WorkItem.text("payload")
+            .header("x-ph-call-id", "redis-auth")
+            .header("x-ph-processor-status", "200")
+            .header("x-ph-processor-success", "true")
+            .header("x-ph-processor-duration-ms", "11")
+            .header("x-ph-business-code", "00")
+            .header("x-ph-business-success", "true")
+            .header("x-ph-dim-customer-id", "C100")
+            .observabilityContext(context)
+            .build();
+
+        TestWorkerContext workerContext =
+            new TestWorkerContext(new PostProcessorWorkerConfig(false, false, true, true), context);
+
+        WorkItem result = worker.onMessage(message, workerContext);
+
+        assertThat(result).isNull();
+        assertThat(writer.captured.get()).isNotNull();
+        assertThat(writer.captured.get().callId()).isEqualTo("redis-auth");
+        assertThat(workerContext.statusData())
+            .containsEntry("txOutcomeSinkEnabled", true)
+            .containsEntry("txOutcomeInserted", 1L)
+            .containsEntry("txOutcomeDropped", 0L)
+            .containsEntry("txOutcomeFailed", 0L)
+            .containsEntry("txOutcomeLastCallId", "redis-auth")
+            .containsEntry("txOutcomeLastError", "");
+    }
+
+    @Test
+    void onMessageFailsWhenTxOutcomeSinkWriteFails() {
+        PostProcessorWorkerProperties properties = workerProperties(false);
+        FailingTxOutcomeWriter writer = new FailingTxOutcomeWriter();
+        PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(
+            properties,
+            writer,
+            Clock.fixed(Instant.parse("2026-02-12T11:00:00.000Z"), java.time.ZoneOffset.UTC));
+        ObservabilityContext context = new ObservabilityContext();
+        context.setHops(List.of());
+
+        WorkItem message = WorkItem.text("payload")
+            .header("x-ph-call-id", "redis-auth")
+            .build();
+        TestWorkerContext workerContext =
+            new TestWorkerContext(new PostProcessorWorkerConfig(false, false, true, true), context);
+
+        assertThatThrownBy(() -> worker.onMessage(message, workerContext))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("redis-auth");
+        assertThat(workerContext.statusData())
+            .containsEntry("txOutcomeFailed", 1L)
+            .containsEntry("txOutcomeLastCallId", "redis-auth")
+            .containsEntry("txOutcomeLastError", "boom");
     }
 
     private static final class TestWorkerContext implements WorkerContext {
@@ -363,5 +452,43 @@ class PostProcessorTest {
         config.put("publishAllMetrics", publishAllMetrics);
         properties.setConfig(config);
         return properties;
+    }
+
+    private static PostProcessorWorkerImpl worker(PostProcessorWorkerProperties properties) {
+        return new PostProcessorWorkerImpl(properties, new NoopTxOutcomeWriter(), Clock.systemUTC());
+    }
+
+    private static final class NoopTxOutcomeWriter extends PostProcessorTxOutcomeWriter {
+        private NoopTxOutcomeWriter() {
+            super(new ClickHouseSinkProperties(), new ObjectMapper());
+        }
+
+        @Override
+        void write(TxOutcomeEvent event) {
+        }
+    }
+
+    private static final class CapturingTxOutcomeWriter extends PostProcessorTxOutcomeWriter {
+        private final AtomicReference<TxOutcomeEvent> captured = new AtomicReference<>();
+
+        private CapturingTxOutcomeWriter() {
+            super(new ClickHouseSinkProperties(), new ObjectMapper());
+        }
+
+        @Override
+        void write(TxOutcomeEvent event) {
+            captured.set(event);
+        }
+    }
+
+    private static final class FailingTxOutcomeWriter extends PostProcessorTxOutcomeWriter {
+        private FailingTxOutcomeWriter() {
+            super(new ClickHouseSinkProperties(), new ObjectMapper());
+        }
+
+        @Override
+        void write(TxOutcomeEvent event) {
+            throw new IllegalStateException("boom");
+        }
     }
 }

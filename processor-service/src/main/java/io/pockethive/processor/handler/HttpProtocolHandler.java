@@ -1,6 +1,7 @@
 package io.pockethive.processor.handler;
 
 import io.pockethive.processor.ProcessorWorkerConfig;
+import io.pockethive.processor.ResultRulesExtractor;
 import io.pockethive.processor.metrics.*;
 import io.pockethive.processor.exception.ProcessorCallException;
 import io.pockethive.processor.response.ResponseBuilder;
@@ -66,8 +67,10 @@ public class HttpProtocolHandler implements ProtocolHandler {
     if (headersNode.isObject()) {
       headersNode.fields().forEachRemaining(entry -> logger.debug("header {}={}", entry.getKey(), entry.getValue().asText()));
     }
+    Map<String, String> requestHeaders = requestHeaders(headersNode);
 
     Optional<String> body = extractBody(envelope.path("body"));
+    String requestBody = body.orElse("");
     logger.debug("HTTP REQUEST {} {} headers={} body={}", method, target, headersNode, body.orElse(""));
 
     long start = clock.millis();
@@ -97,10 +100,19 @@ public class HttpProtocolHandler implements ProtocolHandler {
 
       ObjectNode result = mapper.createObjectNode();
       result.put("status", statusCode);
-      result.set("headers", mapper.valueToTree(convertHeaders(response)));
+      Map<String, List<String>> responseHeaders = convertHeaders(response);
+      result.set("headers", mapper.valueToTree(responseHeaders));
       result.put("body", responseBody);
 
-      WorkItem responseItem = ResponseBuilder.build(result, context.info().role(), metrics);
+      Map<String, Object> extractionHeaders = ResultRulesExtractor.extract(
+          mapper,
+          envelope,
+          requestBody,
+          requestHeaders,
+          responseBody,
+          responseHeaders);
+
+      WorkItem responseItem = ResponseBuilder.build(result, context.info().role(), metrics, extractionHeaders);
       return message.addStep(responseItem.asString(), responseItem.headers());
     } catch (Exception ex) {
       long now = clock.millis();
@@ -166,6 +178,15 @@ public class HttpProtocolHandler implements ProtocolHandler {
       result.computeIfAbsent(header.getName(), k -> new ArrayList<>()).add(header.getValue());
     }
     return result;
+  }
+
+  private Map<String, String> requestHeaders(JsonNode headersNode) {
+    if (headersNode == null || !headersNode.isObject()) {
+      return Map.of();
+    }
+    Map<String, String> headers = new java.util.LinkedHashMap<>();
+    headersNode.fields().forEachRemaining(entry -> headers.put(entry.getKey(), entry.getValue().asText()));
+    return Map.copyOf(headers);
   }
 
   private Optional<String> extractBody(JsonNode bodyNode) throws Exception {

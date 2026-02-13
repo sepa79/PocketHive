@@ -22,6 +22,7 @@ import io.pockethive.swarmcontroller.infra.docker.WorkloadProvisioner;
 import io.pockethive.swarmcontroller.runtime.SwarmRuntimeContext;
 import io.pockethive.swarmcontroller.runtime.SwarmRuntimeCore;
 import io.pockethive.swarmcontroller.runtime.SwarmRuntimeState;
+import io.pockethive.sink.clickhouse.ClickHouseSinkProperties;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -59,10 +60,12 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
                                RabbitProperties rabbitProperties,
                                @Qualifier("instanceId") String instanceId,
                                SwarmControllerProperties properties,
+                               ClickHouseSinkProperties clickHouseSink,
                                MeterRegistry meterRegistry,
                                io.pockethive.swarmcontroller.runtime.SwarmJournal journal) {
     this(amqp, mapper, dockerClient, docker, rabbit, rabbitProperties, instanceId, properties, meterRegistry,
         journal,
+        clickHouseSink,
         deriveWorkerSettings(properties));
   }
 
@@ -76,6 +79,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
                         SwarmControllerProperties properties,
                         MeterRegistry meterRegistry,
                         io.pockethive.swarmcontroller.runtime.SwarmJournal journal,
+                        ClickHouseSinkProperties clickHouseSink,
                         WorkerSettings workerSettings) {
     Objects.requireNonNull(workerSettings, "workerSettings");
     this.mapper = mapper;
@@ -109,6 +113,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         docker,
         rabbitProperties,
         properties,
+        clickHouseSink,
         meterRegistry,
         controlPublisher,
         topology,

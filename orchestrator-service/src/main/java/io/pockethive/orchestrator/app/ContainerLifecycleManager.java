@@ -17,7 +17,9 @@ import io.pockethive.orchestrator.domain.SwarmRegistry;
 import io.pockethive.orchestrator.domain.SwarmStatus;
 import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
 import io.pockethive.orchestrator.infra.JournalRunMetadataWriter;
+import io.pockethive.sink.clickhouse.ClickHouseSinkProperties;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import org.slf4j.Logger;
@@ -40,6 +42,7 @@ public class ContainerLifecycleManager {
     private final ControlPlaneProperties controlPlaneProperties;
     private final RabbitProperties rabbitProperties;
     private final JournalRunMetadataWriter runMetadataWriter;
+    private final ClickHouseSinkProperties clickHouseSink;
     @Value("${POCKETHIVE_SCENARIOS_RUNTIME_ROOT:}")
     private String scenariosRuntimeRootSource;
     @Value("${pockethive.journal.sink:postgres}")
@@ -60,15 +63,17 @@ public class ContainerLifecycleManager {
         OrchestratorProperties properties,
         ControlPlaneProperties controlPlaneProperties,
         RabbitProperties rabbitProperties,
-        JournalRunMetadataWriter runMetadataWriter) {
-        this.docker = Objects.requireNonNull(docker, "docker");
-        this.computeAdapter = Objects.requireNonNull(computeAdapter, "computeAdapter");
-        this.registry = Objects.requireNonNull(registry, "registry");
-        this.amqp = Objects.requireNonNull(amqp, "amqp");
-        this.properties = Objects.requireNonNull(properties, "properties");
+        JournalRunMetadataWriter runMetadataWriter,
+        ClickHouseSinkProperties clickHouseSink) {
+      this.docker = Objects.requireNonNull(docker, "docker");
+      this.computeAdapter = Objects.requireNonNull(computeAdapter, "computeAdapter");
+      this.registry = Objects.requireNonNull(registry, "registry");
+      this.amqp = Objects.requireNonNull(amqp, "amqp");
+      this.properties = Objects.requireNonNull(properties, "properties");
         this.controlPlaneProperties = Objects.requireNonNull(controlPlaneProperties, "controlPlaneProperties");
         this.rabbitProperties = Objects.requireNonNull(rabbitProperties, "rabbitProperties");
         this.runMetadataWriter = Objects.requireNonNull(runMetadataWriter, "runMetadataWriter");
+        this.clickHouseSink = Objects.requireNonNull(clickHouseSink, "clickHouseSink");
         // Initialise the resolved adapter type based on the injected adapter so that
         // status-full events emitted before the first swarm start report the correct mode.
         if (computeAdapter instanceof DockerSwarmServiceComputeAdapter) {
@@ -119,6 +124,7 @@ public class ContainerLifecycleManager {
                 controlPlaneProperties,
                 controllerSettings,
                 rabbitProperties));
+        applyClickHouseSinkEnv(env);
         String runtimeRootSource = scenariosRuntimeRootSource;
         if (runtimeRootSource != null && !runtimeRootSource.isBlank()) {
             env.put("POCKETHIVE_SCENARIOS_RUNTIME_ROOT", runtimeRootSource);
@@ -163,7 +169,7 @@ public class ContainerLifecycleManager {
         runMetadataWriter.upsertOnSwarmStart(resolvedSwarmId, runId, templateMetadata);
         log.info("launching controller for swarm {} as instance {} using image {} (runId={})",
             resolvedSwarmId, resolvedInstance, resolvedImage, runId);
-        log.info("docker env: {}", env);
+        log.info("docker env: {}", redactEnv(env));
         java.util.List<String> volumes = new java.util.ArrayList<>();
         volumes.add(dockerSocket + ":" + dockerSocket);
         if (runtimeRootSource != null && !runtimeRootSource.isBlank()) {
@@ -183,6 +189,54 @@ public class ContainerLifecycleManager {
         registry.register(swarm);
         registry.updateStatus(resolvedSwarmId, SwarmStatus.CREATING);
         return swarm;
+    }
+
+    private void applyClickHouseSinkEnv(Map<String, String> targetEnv) {
+        if (!clickHouseSink.configured()) {
+            return;
+        }
+        putEnvIfMissing(targetEnv, "POCKETHIVE_SINK_CLICKHOUSE_ENDPOINT", clickHouseSink.getEndpoint());
+        putEnvIfMissing(targetEnv, "POCKETHIVE_SINK_CLICKHOUSE_TABLE", clickHouseSink.getTable());
+        putEnvIfMissing(targetEnv, "POCKETHIVE_SINK_CLICKHOUSE_USERNAME", clickHouseSink.getUsername());
+        putEnvIfMissing(targetEnv, "POCKETHIVE_SINK_CLICKHOUSE_PASSWORD", clickHouseSink.getPassword());
+        putEnvIfMissing(targetEnv, "POCKETHIVE_SINK_CLICKHOUSE_CONNECT_TIMEOUT_MS",
+            Integer.toString(clickHouseSink.getConnectTimeoutMs()));
+        putEnvIfMissing(targetEnv, "POCKETHIVE_SINK_CLICKHOUSE_READ_TIMEOUT_MS",
+            Integer.toString(clickHouseSink.getReadTimeoutMs()));
+    }
+
+    private static Map<String, String> redactEnv(Map<String, String> env) {
+        Map<String, String> redacted = new LinkedHashMap<>();
+        for (Map.Entry<String, String> entry : env.entrySet()) {
+            String key = entry.getKey();
+            if (key == null) {
+                continue;
+            }
+            if (isSensitiveKey(key)) {
+                redacted.put(key, "***");
+            } else {
+                redacted.put(key, entry.getValue());
+            }
+        }
+        return redacted;
+    }
+
+    private static boolean isSensitiveKey(String key) {
+        String upper = key.toUpperCase(Locale.ROOT);
+        return upper.contains("PASSWORD") || upper.contains("SECRET") || upper.contains("TOKEN");
+    }
+
+    private static void putEnvIfMissing(Map<String, String> env, String key, String value) {
+        if (env.containsKey(key)) {
+            return;
+        }
+        if (value == null) {
+            return;
+        }
+        String text = value.trim();
+        if (!text.isBlank()) {
+            env.put(key, text);
+        }
     }
 
     private static String normalizeRuntimeRoot(String value) {

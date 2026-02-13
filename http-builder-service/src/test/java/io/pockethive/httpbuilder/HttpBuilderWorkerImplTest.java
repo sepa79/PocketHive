@@ -49,6 +49,20 @@ class HttpBuilderWorkerImplTest {
           "bodyTemplate": "{{ payload }}",
           "headersTemplate": {
             "X-Test": "yes"
+          },
+          "resultRules": {
+            "businessCode": {
+              "source": "RESPONSE_BODY",
+              "pattern": "RC=([A-Z0-9]+)"
+            },
+            "successRegex": "^(00)$",
+            "dimensions": [
+              {
+                "name": "customer_code",
+                "source": "REQUEST_BODY",
+                "pattern": "customerCode:([A-Za-z0-9]+)"
+              }
+            ]
           }
         }
         """);
@@ -76,6 +90,8 @@ class HttpBuilderWorkerImplTest {
     assertThat(envelope.get("method").asText()).isEqualTo("POST");
     assertThat(envelope.get("body").asText()).isEqualTo("body");
     assertThat(envelope.get("headers").get("X-Test").asText()).isEqualTo("yes");
+    assertThat(envelope.get("resultRules")).isNotNull();
+    assertThat(envelope.get("resultRules").get("successRegex").asText()).isEqualTo("^(00)$");
   }
 
   @Test

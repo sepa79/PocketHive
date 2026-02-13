@@ -7,7 +7,10 @@ import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 
 @EnableRabbit
 @SpringBootApplication
-@ConfigurationPropertiesScan(basePackages = "io.pockethive.swarmcontroller.config")
+@ConfigurationPropertiesScan(basePackages = {
+    "io.pockethive.swarmcontroller.config",
+    "io.pockethive.sink.clickhouse"
+})
 public class Application {
 
   public static void main(String[] args) {

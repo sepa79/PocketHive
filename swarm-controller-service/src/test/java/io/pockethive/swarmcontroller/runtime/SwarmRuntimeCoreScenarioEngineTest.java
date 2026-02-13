@@ -9,6 +9,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import io.pockethive.manager.scenario.ScenarioEngine;
+import io.pockethive.sink.clickhouse.ClickHouseSinkProperties;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties.Docker;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties.Manager;
@@ -76,6 +77,7 @@ class SwarmRuntimeCoreScenarioEngineTest {
         docker,
         rabbitProps,
         props,
+        new ClickHouseSinkProperties(),
         meterRegistry,
         controlPublisher,
         topology,

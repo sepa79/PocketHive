@@ -1,6 +1,6 @@
 id: redis-dataset-demo
 name: Redis dataset demo (generator + per-customer lists)
-description: Seeds Redis with randomised payloads and runs two low-rate data providers that each drain their own list.
+description: Seeds Redis with randomised payloads, executes template-driven HTTP calls, and persists extracted transaction outcomes to ClickHouse from postprocessor.
 template:
   image: swarm-controller:latest
   bees:
@@ -99,5 +99,10 @@ template:
 
     - role: postprocessor
       image: postprocessor:latest
+      config:
+        worker:
+          forwardToOutput: false
+          writeTxOutcomeToClickHouse: true
+          dropTxOutcomeWithoutCallId: true
       work:
         in: post

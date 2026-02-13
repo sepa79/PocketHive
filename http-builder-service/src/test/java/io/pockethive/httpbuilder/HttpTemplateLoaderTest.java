@@ -22,6 +22,20 @@ class HttpTemplateLoaderTest {
           "bodyTemplate": "{}",
           "headersTemplate": {
             "X-Test": "true"
+          },
+          "resultRules": {
+            "businessCode": {
+              "source": "RESPONSE_BODY",
+              "pattern": "RC=([A-Z0-9]+)"
+            },
+            "successRegex": "^(00)$",
+            "dimensions": [
+              {
+                "name": "customer_code",
+                "source": "REQUEST_BODY",
+                "pattern": "customerCode:([A-Za-z0-9]+)"
+              }
+            ]
           }
         }
         """);
@@ -37,6 +51,12 @@ class HttpTemplateLoaderTest {
     assertThat(def.pathTemplate()).isEqualTo("/test");
     assertThat(def.bodyTemplate()).isEqualTo("{}");
     assertThat(def.headersTemplate()).containsEntry("X-Test", "true");
+    assertThat(def.resultRules()).isNotNull();
+    assertThat(def.resultRules().businessCode()).isNotNull();
+    assertThat(def.resultRules().businessCode().source())
+        .isEqualTo(HttpTemplateDefinition.Source.RESPONSE_BODY);
+    assertThat(def.resultRules().successRegex()).isEqualTo("^(00)$");
+    assertThat(def.resultRules().dimensions()).hasSize(1);
+    assertThat(def.resultRules().dimensions().get(0).name()).isEqualTo("customer_code");
   }
 }
-

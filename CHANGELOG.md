@@ -3,7 +3,14 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
-Timestamp: 2026-02-03T14:27:54Z
+Timestamp: 2026-02-13T01:15:01Z
+
+## [0.14.24] - 2026-02-13
+Timestamp: 2026-02-13T01:15:01Z
+
+- Postprocessor: inject ClickHouse sink settings from the platform (orchestrator -> swarm-controller -> postprocessor env), avoiding any ClickHouse credentials in scenario bundles.
+- Orchestrator: redact sensitive values (password/secret/token) when logging container environment for swarm-controller launches.
+- ClickHouse: fix `ph_tx_outcome_v1` TTL expression to handle `DateTime64` columns reliably.
 
 ## [0.14.23] - 2026-02-06
 Timestamp: 2026-02-06T18:17:37Z

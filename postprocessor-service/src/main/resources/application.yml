@@ -26,6 +26,17 @@ pockethive:
   worker:
     config:
       publishAllMetrics: false
+      forwardToOutput: false
+      writeTxOutcomeToClickHouse: false
+      dropTxOutcomeWithoutCallId: true
+  sink:
+    clickhouse:
+      endpoint: ${POCKETHIVE_SINK_CLICKHOUSE_ENDPOINT:}
+      table: ${POCKETHIVE_SINK_CLICKHOUSE_TABLE:}
+      username: ${POCKETHIVE_SINK_CLICKHOUSE_USERNAME:}
+      password: ${POCKETHIVE_SINK_CLICKHOUSE_PASSWORD:}
+      connect-timeout-ms: ${POCKETHIVE_SINK_CLICKHOUSE_CONNECT_TIMEOUT_MS:3000}
+      read-timeout-ms: ${POCKETHIVE_SINK_CLICKHOUSE_READ_TIMEOUT_MS:5000}
   control-plane:
     exchange: ${POCKETHIVE_CONTROL_PLANE_EXCHANGE}
     swarm-id: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID}

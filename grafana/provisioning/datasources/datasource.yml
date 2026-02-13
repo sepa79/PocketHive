@@ -23,3 +23,16 @@ datasources:
       timescaledb: false
     secureJsonData:
       password: pockethive
+  - name: ClickHouse
+    uid: clickhouse
+    type: grafana-clickhouse-datasource
+    access: proxy
+    jsonData:
+      protocol: http
+      host: clickhouse
+      port: 8123
+      username: pockethive
+      defaultDatabase: default
+      tlsSkipVerify: false
+    secureJsonData:
+      password: pockethive

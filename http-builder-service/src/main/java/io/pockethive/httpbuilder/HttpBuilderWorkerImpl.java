@@ -116,6 +116,9 @@ class HttpBuilderWorkerImpl implements PocketHiveWorkerFunction {
       envelope.put("method", rendered.method() == null ? "GET" : rendered.method().toUpperCase(Locale.ROOT));
       envelope.set("headers", MAPPER.valueToTree(rendered.headers()));
       envelope.put("body", rendered.body());
+      if (hasResultRules(definition.resultRules())) {
+        envelope.set("resultRules", MAPPER.valueToTree(definition.resultRules()));
+      }
 
       WorkItem httpItem = WorkItem.json(envelope)
           .header("content-type", "application/json")
@@ -182,6 +185,19 @@ class HttpBuilderWorkerImpl implements PocketHiveWorkerFunction {
       return s.trim();
     }
     return null;
+  }
+
+  private static boolean hasResultRules(HttpTemplateDefinition.ResultRules rules) {
+    if (rules == null) {
+      return false;
+    }
+    if (rules.businessCode() != null) {
+      return true;
+    }
+    if (rules.successRegex() != null && !rules.successRegex().isBlank()) {
+      return true;
+    }
+    return rules.dimensions() != null && !rules.dimensions().isEmpty();
   }
 
   private void recordError() {

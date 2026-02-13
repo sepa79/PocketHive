@@ -83,6 +83,7 @@ services:
     environment:
       GF_SECURITY_ADMIN_USER: pockethive
       GF_SECURITY_ADMIN_PASSWORD: pockethive
+      GF_INSTALL_PLUGINS: grafana-clickhouse-datasource
     volumes:
       - ./grafana/grafana.ini:/etc/grafana/grafana.ini:ro
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
@@ -165,6 +166,24 @@ services:
       timeout: 5s
       retries: 12
       start_period: 10s
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8
+    environment:
+      CLICKHOUSE_USER: pockethive
+      CLICKHOUSE_PASSWORD: pockethive
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - ./clickhouse/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8123/ping | grep -q 'Ok.'"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+      start_period: 20s
 
   tcp-mock-server:
     image: ${DOCKER_REGISTRY:-}tcp-mock-server:${POCKETHIVE_VERSION:-latest}
@@ -277,6 +296,10 @@ services:
       SPRING_DATASOURCE_USERNAME: pockethive
       SPRING_DATASOURCE_PASSWORD: pockethive
       POCKETHIVE_JOURNAL_SINK: postgres
+      POCKETHIVE_SINK_CLICKHOUSE_ENDPOINT: http://clickhouse:8123
+      POCKETHIVE_SINK_CLICKHOUSE_TABLE: ph_tx_outcome_v1
+      POCKETHIVE_SINK_CLICKHOUSE_USERNAME: pockethive
+      POCKETHIVE_SINK_CLICKHOUSE_PASSWORD: pockethive
       POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_RABBIT_LOGGING_ENABLED: "true"
       POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_RABBIT_LOGS_EXCHANGE: ph.logs
 #      <<: *metrics-env
@@ -330,6 +353,7 @@ volumes:
   redis-data:
   postgres-data:
   tcp-mock-data:
+  clickhouse-data:
 
 networks:
   default:
