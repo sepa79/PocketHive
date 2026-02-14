@@ -36,7 +36,7 @@ import java.util.Map;
 import java.util.OptionalLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
@@ -232,50 +232,53 @@ class SwarmSignalListenerTest {
   @Test
   void handleRejectsBlankRoutingKey() {
     SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
+    clearInvocations(lifecycle, rabbit);
 
-    assertThatThrownBy(() -> listener.handle("{}", " "))
-        .isInstanceOf(IllegalArgumentException.class)
-        .hasMessageContaining("routing key");
+    assertThatCode(() -> listener.handle("{}", " ")).doesNotThrowAnyException();
+    verifyNoInteractions(lifecycle, rabbit);
   }
 
   @Test
   void handleRejectsNullRoutingKey() {
     SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
+    clearInvocations(lifecycle, rabbit);
 
-    assertThatThrownBy(() -> listener.handle("{}", null))
-        .isInstanceOf(IllegalArgumentException.class)
-        .hasMessageContaining("routing key");
+    assertThatCode(() -> listener.handle("{}", null)).doesNotThrowAnyException();
+    verifyNoInteractions(lifecycle, rabbit);
   }
 
   @Test
   void statusEventRequiresParsableRoutingKey() {
     SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
+    clearInvocations(lifecycle, rabbit);
 
-    assertThatThrownBy(() -> listener.handle(status(TEST_SWARM_ID, "swarm-controller", "inst", true), "event.metric.status-"))
-        .isInstanceOf(IllegalArgumentException.class)
-        .hasMessageContaining("confirmation scope");
+    assertThatCode(() -> listener.handle(status(TEST_SWARM_ID, "swarm-controller", "inst", true), "event.metric.status-"))
+        .doesNotThrowAnyException();
+    verifyNoInteractions(lifecycle, rabbit);
   }
 
   @Test
   void statusEventRequiresRoleSegment() {
     SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
+    clearInvocations(lifecycle, rabbit);
 
     String routingKey = "event.metric.status-delta.%s..inst".formatted(TEST_SWARM_ID);
 
-    assertThatThrownBy(() -> listener.handle(status(TEST_SWARM_ID, "swarm-controller", "inst", true), routingKey))
-        .isInstanceOf(IllegalArgumentException.class)
-        .hasMessageContaining("role segment");
+    assertThatCode(() -> listener.handle(status(TEST_SWARM_ID, "swarm-controller", "inst", true), routingKey))
+        .doesNotThrowAnyException();
+    verifyNoInteractions(lifecycle, rabbit);
   }
 
   @Test
   void statusEventRequiresInstanceSegment() {
     SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
+    clearInvocations(lifecycle, rabbit);
 
     String routingKey = "event.metric.status-delta.%s.swarm-controller.".formatted(TEST_SWARM_ID);
 
-    assertThatThrownBy(() -> listener.handle(status(TEST_SWARM_ID, "swarm-controller", "inst", true), routingKey))
-        .isInstanceOf(IllegalArgumentException.class)
-        .hasMessageContaining("instance segment");
+    assertThatCode(() -> listener.handle(status(TEST_SWARM_ID, "swarm-controller", "inst", true), routingKey))
+        .doesNotThrowAnyException();
+    verifyNoInteractions(lifecycle, rabbit);
   }
 
   @Test

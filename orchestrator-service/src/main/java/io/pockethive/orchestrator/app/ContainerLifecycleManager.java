@@ -309,7 +309,7 @@ public class ContainerLifecycleManager {
                 log.info("swarm {} already {}", swarmId, current);
                 return;
             }
-            if (current != SwarmStatus.RUNNING) {
+            if (current != SwarmStatus.RUNNING && current != SwarmStatus.FAILED) {
                 log.info("swarm {} is {}, stop is a no-op", swarmId, current);
                 return;
             }

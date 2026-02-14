@@ -3,6 +3,7 @@ package io.pockethive.orchestrator.app;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
+import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmHealth;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
 import io.pockethive.orchestrator.domain.SwarmStatus;
@@ -14,8 +15,10 @@ import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 import org.slf4j.LoggerFactory;
 
 @ExtendWith({MockitoExtension.class, OutputCaptureExtension.class})
@@ -50,6 +53,9 @@ class ControllerStatusListenerTest {
     @Test
     void updatesRegistryFromTopLevelFlags() {
         ControllerStatusListener listener = new ControllerStatusListener(registry, new ObjectMapper());
+        Swarm swarm = org.mockito.Mockito.mock(Swarm.class);
+        when(swarm.getStatus()).thenReturn(SwarmStatus.RUNNING);
+        when(registry.find("sw1")).thenReturn(java.util.Optional.of(swarm));
         String json = """
             {
               "timestamp": "2024-01-01T00:00:00Z",
@@ -66,6 +72,7 @@ class ControllerStatusListenerTest {
         listener.handle(json, "event.metric.status-delta.sw1.swarm-controller.inst1");
         verify(registry).refresh("sw1", SwarmHealth.DEGRADED);
         verify(registry).updateWorkEnabled("sw1", false);
+        verify(registry).find("sw1");
         // STOPPED + workloadsEnabled=false should map to STOPPING -> STOPPED
         verify(registry).updateStatus("sw1", SwarmStatus.STOPPING);
         verify(registry).updateStatus("sw1", SwarmStatus.STOPPED);
@@ -89,26 +96,24 @@ class ControllerStatusListenerTest {
     void handleRejectsBlankRoutingKey() {
         ControllerStatusListener listener = new ControllerStatusListener(registry, new ObjectMapper());
 
-        assertThatThrownBy(() -> listener.handle("{}", "  "))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("routing key");
+        assertThatCode(() -> listener.handle("{}", "  ")).doesNotThrowAnyException();
+        verifyNoMoreInteractions(registry);
     }
 
     @Test
     void handleRejectsNullRoutingKey() {
         ControllerStatusListener listener = new ControllerStatusListener(registry, new ObjectMapper());
 
-        assertThatThrownBy(() -> listener.handle("{}", null))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("routing key");
+        assertThatCode(() -> listener.handle("{}", null)).doesNotThrowAnyException();
+        verifyNoMoreInteractions(registry);
     }
 
     @Test
     void handleRejectsBlankPayload() {
         ControllerStatusListener listener = new ControllerStatusListener(registry, new ObjectMapper());
 
-        assertThatThrownBy(() -> listener.handle(" ", "event.metric.status-delta.sw1.swarm-controller.inst1"))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("payload");
+        assertThatCode(() -> listener.handle(" ", "event.metric.status-delta.sw1.swarm-controller.inst1"))
+            .doesNotThrowAnyException();
+        verifyNoMoreInteractions(registry);
     }
 }

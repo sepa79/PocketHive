@@ -39,12 +39,13 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
 class SwarmSignalListenerTest {
@@ -109,30 +110,27 @@ class SwarmSignalListenerTest {
 
     @Test
     void handleRejectsBlankRoutingKey() {
-        assertThatThrownBy(() -> listener.handle("{}", " "))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("routing key");
+        assertThatCode(() -> listener.handle("{}", " ")).doesNotThrowAnyException();
+        verifyNoInteractions(controlPlane, controlEmitter, publisher, lifecycle);
     }
 
     @Test
     void handleRejectsNullRoutingKey() {
-        assertThatThrownBy(() -> listener.handle("{}", null))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("routing key");
+        assertThatCode(() -> listener.handle("{}", null)).doesNotThrowAnyException();
+        verifyNoInteractions(controlPlane, controlEmitter, publisher, lifecycle);
     }
 
     @Test
     void handleRejectsNonEventRoutingKey() {
-        assertThatThrownBy(() -> listener.handle("{}", "signal.swarm-start.swarm-test.swarm-controller.controller-1"))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("start with 'event.'");
+        assertThatCode(() -> listener.handle("{}", "signal.swarm-start.swarm-test.swarm-controller.controller-1"))
+            .doesNotThrowAnyException();
+        verifyNoInteractions(controlPlane, controlEmitter, publisher, lifecycle);
     }
 
     @Test
     void handleRejectsMalformedRoutingKey() {
-        assertThatThrownBy(() -> listener.handle("{}", "event."))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("malformed");
+        assertThatCode(() -> listener.handle("{}", "event.")).doesNotThrowAnyException();
+        verifyNoInteractions(controlPlane, controlEmitter, publisher, lifecycle);
     }
 
     @Test

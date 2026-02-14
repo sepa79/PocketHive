@@ -217,19 +217,6 @@ services:
     depends_on:
       - prometheus
 
-  # promtail:
-  #   # disabled: logs are shipped via RabbitMQ and aggregated to Loki
-  #   image: grafana/promtail:2.9.1
-  #   command: -config.file=/etc/promtail/config.yml
-  #   ports:
-  #     - "9080:9080"
-  #   volumes:
-  #     - ./promtail/config.yml:/etc/promtail/config.yml:ro
-  #     - /var/lib/docker/containers:/var/lib/docker/containers:ro
-  #     - /var/run/docker.sock:/var/run/docker.sock:ro
-  #   depends_on:
-  #     - loki
-
 #--------------------------------------
 # PocketHive Services
 #--------------------------------------
