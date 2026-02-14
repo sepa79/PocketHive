@@ -120,33 +120,37 @@ public class SwarmSignalListener {
   @RabbitListener(queues = "#{swarmControllerControlQueueName}")
   public void handle(String body, @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String routingKey) {
     try {
-      if (routingKey == null || routingKey.isBlank()) {
-        log.warn("Received control message with null or blank routing key; payload snippet={}", snippet(body));
-        throw new IllegalArgumentException("Control-plane routing key must not be null or blank");
-      }
-      String snippet = snippet(body);
-      if (routingKey.startsWith("event.metric.status-")
-          || routingKey.startsWith("event.status-")
-          || routingKey.startsWith("signal." + ControlPlaneSignals.STATUS_REQUEST)) {
-        log.debug("[CTRL] RECV rk={} inst={} payload={}", routingKey, instanceId, snippet);
-      } else {
-        log.info("[CTRL] RECV rk={} inst={} payload={}", routingKey, instanceId, snippet);
-      }
-      if (routingKey.startsWith("signal.")) {
-        RoutingKey key = ControlPlaneRouting.parseSignal(routingKey);
-        if (!shouldAcceptSignal(key)) {
-          log.debug("Ignoring control signal on routing key {}", routingKey);
+      try {
+        if (routingKey == null || routingKey.isBlank()) {
+          log.warn("Received control message with null or blank routing key; payload snippet={}", snippet(body));
           return;
         }
-        boolean processed = controlPlane.consume(body, routingKey, envelope -> handleSignal(envelope, body));
-        if (!processed) {
-          log.debug("Ignoring control signal on routing key {}", routingKey);
+        String snippet = snippet(body);
+        if (routingKey.startsWith("event.metric.status-")
+            || routingKey.startsWith("event.status-")
+            || routingKey.startsWith("signal." + ControlPlaneSignals.STATUS_REQUEST)) {
+          log.debug("[CTRL] RECV rk={} inst={} payload={}", routingKey, instanceId, snippet);
+        } else {
+          log.info("[CTRL] RECV rk={} inst={} payload={}", routingKey, instanceId, snippet);
         }
-        return;
-      } else if (routingKey.startsWith("event.metric.status-")) {
-        handleStatusEvent(routingKey, body);
-      } else if (routingKey.startsWith("event.alert.alert")) {
-        handleAlertEvent(routingKey, body);
+        if (routingKey.startsWith("signal.")) {
+          RoutingKey key = ControlPlaneRouting.parseSignal(routingKey);
+          if (!shouldAcceptSignal(key)) {
+            log.debug("Ignoring control signal on routing key {}", routingKey);
+            return;
+          }
+          boolean processed = controlPlane.consume(body, routingKey, envelope -> handleSignal(envelope, body));
+          if (!processed) {
+            log.debug("Ignoring control signal on routing key {}", routingKey);
+          }
+          return;
+        } else if (routingKey.startsWith("event.metric.status-")) {
+          handleStatusEvent(routingKey, body);
+        } else if (routingKey.startsWith("event.alert.alert")) {
+          handleAlertEvent(routingKey, body);
+        }
+      } catch (Exception e) {
+        log.warn("Control-plane handler error (ack + drop). rk={} payload snippet={}", routingKey, snippet(body), e);
       }
     } finally {
       MDC.clear();
@@ -159,14 +163,14 @@ public class SwarmSignalListener {
       MissingStatusSegment missingSegment = detectMissingStatusSegment(routingKey);
       if (missingSegment == MissingStatusSegment.ROLE) {
         log.warn("Received status event with missing role on routing key {}; payload snippet={}", routingKey, snippet(body));
-        throw new IllegalArgumentException("Status event routing key must include a role segment");
+        return;
       }
       if (missingSegment == MissingStatusSegment.INSTANCE) {
         log.warn("Received status event with missing instance on routing key {}; payload snippet={}", routingKey, snippet(body));
-        throw new IllegalArgumentException("Status event routing key must include an instance segment");
+        return;
       }
       log.warn("Received status event with unparseable routing key {}; payload snippet={}", routingKey, snippet(body));
-      throw new IllegalArgumentException("Status event routing key must resolve to a confirmation scope");
+      return;
     }
     if (!isLocalSwarm(eventKey.swarmId())) {
       log.debug("Ignoring status for swarm {} on routing key {}", eventKey.swarmId(), routingKey);
@@ -175,12 +179,12 @@ public class SwarmSignalListener {
     String role = eventKey.role();
     if (role == null || role.isBlank()) {
       log.warn("Received status event with missing role on routing key {}; payload snippet={}", routingKey, snippet(body));
-      throw new IllegalArgumentException("Status event routing key must include a role segment");
+      return;
     }
     String instance = eventKey.instance();
     if (instance == null || instance.isBlank()) {
       log.warn("Received status event with missing instance on routing key {}; payload snippet={}", routingKey, snippet(body));
-      throw new IllegalArgumentException("Status event routing key must include an instance segment");
+      return;
     }
     if (this.role.equalsIgnoreCase(role) && this.instanceId.equalsIgnoreCase(instance)) {
       // Do not treat controller self-status as a worker heartbeat; it skews totals by +1.

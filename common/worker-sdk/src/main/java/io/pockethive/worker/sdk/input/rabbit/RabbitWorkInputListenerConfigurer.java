@@ -56,9 +56,12 @@ public final class RabbitWorkInputListenerConfigurer implements RabbitListenerCo
             .map(WorkInputRegistry.Registration::input)
             .filter(MessageListener.class::isInstance)
             .map(MessageListener.class::cast)
-            .ifPresentOrElse(
-                listener -> listener.onMessage(message),
-                () -> log.warn("Received message for worker {} but no Rabbit message listener is registered", beanName)
-            );
+            .ifPresentOrElse(listener -> {
+              try {
+                listener.onMessage(message);
+              } catch (Exception e) {
+                log.warn("Worker {} failed to handle Rabbit message (ack + drop)", beanName, e);
+              }
+            }, () -> log.warn("Received message for worker {} but no Rabbit message listener is registered", beanName));
     }
 }

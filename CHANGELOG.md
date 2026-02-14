@@ -3,7 +3,15 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
-Timestamp: 2026-02-13T01:15:01Z
+Timestamp: 2026-02-14T14:01:12Z
+
+## [0.14.25] - 2026-02-14
+Timestamp: 2026-02-14T14:01:12Z
+
+- Postprocessor/ClickHouse: batch tx-outcome inserts (`batch-size`, `flush-interval-ms`, `max-buffered-events`) and flush on shutdown; surface `txOutcomeBufferFull` in status for buffer backpressure.
+- Control plane + Worker SDK: prevent redelivery storms by ACKing and dropping malformed/failing control/work messages (`default-requeue-rejected: false`, plus defensive listener try/catch).
+- Orchestrator: fix illegal STOPPED -> STOPPING transition spam by making STOPPED transitions conditional on current registry state; stop is a no-op unless RUNNING.
+- Orchestrator/Swarm Controller: add explicit Hikari pool/timeouts via env to reduce Postgres connection pressure.
 
 ## [0.14.24] - 2026-02-13
 Timestamp: 2026-02-13T01:15:01Z

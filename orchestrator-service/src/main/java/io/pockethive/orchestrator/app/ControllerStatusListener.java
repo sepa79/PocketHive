@@ -37,11 +37,11 @@ public class ControllerStatusListener {
     public void handle(String body, @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String routingKey) {
         if (routingKey == null || routingKey.isBlank()) {
             log.warn("Received controller status message with null or blank routing key; payload snippet={}", snippet(body));
-            throw new IllegalArgumentException("Controller status routing key must not be null or blank");
+            return;
         }
         if (body == null || body.isBlank()) {
             log.warn("Received controller status message with null or blank payload for routing key {}", routingKey);
-            throw new IllegalArgumentException("Controller status payload must not be null or blank");
+            return;
         }
         String payloadSnippet = snippet(body);
         if (routingKey.startsWith("event.metric.status-")) {
@@ -79,13 +79,18 @@ public class ControllerStatusListener {
                         }
                         case "STOPPED" -> {
                             if (workloadsKnown && !workloadsEnabled) {
-                                // Plan‑driven stop: make sure we walk through
-                                // STOPPING -> STOPPED so the local state
-                                // machine is satisfied.
-                                registry.updateStatus(
-                                    swarmId, io.pockethive.orchestrator.domain.SwarmStatus.STOPPING);
-                                registry.updateStatus(
-                                    swarmId, io.pockethive.orchestrator.domain.SwarmStatus.STOPPED);
+                                // The swarm-controller reports STOPPED continuously (status-delta/full).
+                                // Only apply stop transitions when they are valid for the current local
+                                // state to avoid STOPPED -> STOPPING exceptions and control-plane storms.
+                                registry.find(swarmId).ifPresent(swarm -> {
+                                    io.pockethive.orchestrator.domain.SwarmStatus current = swarm.getStatus();
+                                    if (current == io.pockethive.orchestrator.domain.SwarmStatus.STOPPING) {
+                                        registry.updateStatus(swarmId, io.pockethive.orchestrator.domain.SwarmStatus.STOPPED);
+                                    } else if (current == io.pockethive.orchestrator.domain.SwarmStatus.RUNNING) {
+                                        registry.updateStatus(swarmId, io.pockethive.orchestrator.domain.SwarmStatus.STOPPING);
+                                        registry.updateStatus(swarmId, io.pockethive.orchestrator.domain.SwarmStatus.STOPPED);
+                                    }
+                                });
                             }
                         }
                         case "FAILED" -> registry.updateStatus(

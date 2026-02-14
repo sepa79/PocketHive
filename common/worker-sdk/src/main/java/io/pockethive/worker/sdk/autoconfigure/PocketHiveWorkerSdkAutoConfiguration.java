@@ -68,6 +68,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory;
+import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -387,6 +389,16 @@ public class PocketHiveWorkerSdkAutoConfiguration {
         WorkInputRegistry workInputRegistry
     ) {
         return new RabbitWorkInputListenerConfigurer(workerRegistry, workInputRegistry);
+    }
+
+    @Bean(name = "rabbitListenerContainerFactory")
+    @ConditionalOnMissingBean(name = "rabbitListenerContainerFactory")
+    @ConditionalOnBean(ConnectionFactory.class)
+    SimpleRabbitListenerContainerFactory rabbitListenerContainerFactory(ConnectionFactory connectionFactory) {
+        SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
+        factory.setConnectionFactory(connectionFactory);
+        factory.setDefaultRequeueRejected(false);
+        return factory;
     }
 
     @Bean

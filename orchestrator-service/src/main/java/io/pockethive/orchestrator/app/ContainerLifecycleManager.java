@@ -203,6 +203,12 @@ public class ContainerLifecycleManager {
             Integer.toString(clickHouseSink.getConnectTimeoutMs()));
         putEnvIfMissing(targetEnv, "POCKETHIVE_SINK_CLICKHOUSE_READ_TIMEOUT_MS",
             Integer.toString(clickHouseSink.getReadTimeoutMs()));
+        putEnvIfMissing(targetEnv, "POCKETHIVE_SINK_CLICKHOUSE_BATCH_SIZE",
+            Integer.toString(clickHouseSink.getBatchSize()));
+        putEnvIfMissing(targetEnv, "POCKETHIVE_SINK_CLICKHOUSE_FLUSH_INTERVAL_MS",
+            Integer.toString(clickHouseSink.getFlushIntervalMs()));
+        putEnvIfMissing(targetEnv, "POCKETHIVE_SINK_CLICKHOUSE_MAX_BUFFERED_EVENTS",
+            Integer.toString(clickHouseSink.getMaxBufferedEvents()));
     }
 
     private static Map<String, String> redactEnv(Map<String, String> env) {
@@ -301,6 +307,10 @@ public class ContainerLifecycleManager {
             SwarmStatus current = swarm.getStatus();
             if (current == SwarmStatus.STOPPING || current == SwarmStatus.STOPPED) {
                 log.info("swarm {} already {}", swarmId, current);
+                return;
+            }
+            if (current != SwarmStatus.RUNNING) {
+                log.info("swarm {} is {}, stop is a no-op", swarmId, current);
                 return;
             }
             log.info("marking swarm {} as stopped", swarmId);

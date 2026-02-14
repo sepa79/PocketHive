@@ -57,4 +57,12 @@ pockethive:
     clickhouse:
       endpoint: http://clickhouse:8123
       table: ph_tx_outcome_v1
+      # Performance knobs (batching). These are optional.
+      batch-size: 200
+      flush-interval-ms: 200
+      max-buffered-events: 50000
 ```
+
+The writer batches inserts in-memory and flushes either when `batch-size` is reached or when
+`flush-interval-ms` elapses. If the buffer reaches `max-buffered-events`, the worker reports the
+condition via status (`txOutcomeBufferFull`) and treats it as a sink failure.

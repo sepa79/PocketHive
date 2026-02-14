@@ -687,6 +687,12 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
         Integer.toString(clickHouseSink.getConnectTimeoutMs()));
     putEnvIfMissing(env, "POCKETHIVE_SINK_CLICKHOUSE_READ_TIMEOUT_MS",
         Integer.toString(clickHouseSink.getReadTimeoutMs()));
+    putEnvIfMissing(env, "POCKETHIVE_SINK_CLICKHOUSE_BATCH_SIZE",
+        Integer.toString(clickHouseSink.getBatchSize()));
+    putEnvIfMissing(env, "POCKETHIVE_SINK_CLICKHOUSE_FLUSH_INTERVAL_MS",
+        Integer.toString(clickHouseSink.getFlushIntervalMs()));
+    putEnvIfMissing(env, "POCKETHIVE_SINK_CLICKHOUSE_MAX_BUFFERED_EVENTS",
+        Integer.toString(clickHouseSink.getMaxBufferedEvents()));
   }
 
   private static void putEnvIfMissing(Map<String, String> env, String key, String value) {

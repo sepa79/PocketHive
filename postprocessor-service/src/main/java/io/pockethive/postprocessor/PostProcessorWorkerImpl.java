@@ -71,6 +71,7 @@ class PostProcessorWorkerImpl implements PocketHiveWorkerFunction {
   private final LongAdder txOutcomeInserted = new LongAdder();
   private final LongAdder txOutcomeDropped = new LongAdder();
   private final LongAdder txOutcomeFailed = new LongAdder();
+  private final LongAdder txOutcomeBufferFull = new LongAdder();
   private final AtomicReference<String> txOutcomeLastError = new AtomicReference<>("");
 
   @Autowired
@@ -150,6 +151,9 @@ class PostProcessorWorkerImpl implements PocketHiveWorkerFunction {
           txOutcomeLastError.set("");
         } catch (Exception ex) {
           txOutcomeFailed.increment();
+          if (ex instanceof ClickHouseTxOutcomeBufferFullException) {
+            txOutcomeBufferFull.increment();
+          }
           String message = ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage();
           txOutcomeLastError.set(message);
           txOutcomeFailure =
@@ -175,6 +179,7 @@ class PostProcessorWorkerImpl implements PocketHiveWorkerFunction {
           .data("txOutcomeInserted", txOutcomeInserted.sum())
           .data("txOutcomeDropped", txOutcomeDropped.sum())
           .data("txOutcomeFailed", txOutcomeFailed.sum())
+          .data("txOutcomeBufferFull", txOutcomeBufferFull.sum())
           .data("txOutcomeLastCallId", lastCallIdForStatus)
           .data("txOutcomeLastError", txOutcomeLastError.get());
     });

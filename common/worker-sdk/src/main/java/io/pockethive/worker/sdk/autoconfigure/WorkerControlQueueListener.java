@@ -34,14 +34,20 @@ public class WorkerControlQueueListener {
         ObservabilityContextUtil.populateMdc(context);
         try {
             if (routingKey == null || routingKey.isBlank()) {
-                throw new IllegalArgumentException("Control routing key must not be null or blank");
+                log.warn("Received control-plane payload with null/blank routing key (dropping).");
+                return;
             }
             if (payload == null || payload.isBlank()) {
-                throw new IllegalArgumentException("Control payload must not be null or blank");
+                log.warn("Received control-plane payload with null/blank body on routing key {} (dropping).", routingKey);
+                return;
             }
-            boolean handled = controlPlaneRuntime.handle(payload, routingKey);
-            if (!handled) {
-                log.debug("Ignoring control-plane payload on routing key {}", routingKey);
+            try {
+                boolean handled = controlPlaneRuntime.handle(payload, routingKey);
+                if (!handled) {
+                    log.debug("Ignoring control-plane payload on routing key {}", routingKey);
+                }
+            } catch (Exception e) {
+                log.warn("Control-plane handler error on routing key {} (ack + drop)", routingKey, e);
             }
         } finally {
             MDC.clear();

@@ -7,6 +7,19 @@ spring:
     username: ${SPRING_RABBITMQ_USERNAME:guest}
     password: ${SPRING_RABBITMQ_PASSWORD:guest}
     virtual-host: ${SPRING_RABBITMQ_VIRTUAL_HOST:/}
+    listener:
+      simple:
+        default-requeue-rejected: false
+  datasource:
+    hikari:
+      maximum-pool-size: ${POCKETHIVE_DATASOURCE_HIKARI_MAX_POOL_SIZE:5}
+      minimum-idle: ${POCKETHIVE_DATASOURCE_HIKARI_MIN_IDLE:0}
+      idle-timeout: ${POCKETHIVE_DATASOURCE_HIKARI_IDLE_TIMEOUT_MS:60000}
+      connection-timeout: ${POCKETHIVE_DATASOURCE_HIKARI_CONNECTION_TIMEOUT_MS:5000}
+      validation-timeout: ${POCKETHIVE_DATASOURCE_HIKARI_VALIDATION_TIMEOUT_MS:5000}
+      connection-test-query: SELECT 1
+      max-lifetime: ${POCKETHIVE_DATASOURCE_HIKARI_MAX_LIFETIME_MS:300000}
+      leak-detection-threshold: ${POCKETHIVE_DATASOURCE_HIKARI_LEAK_DETECTION_MS:0}
 
 management:
   endpoints:

@@ -11,6 +11,9 @@ public class ClickHouseSinkProperties {
   private String password = "";
   private int connectTimeoutMs = 3000;
   private int readTimeoutMs = 5000;
+  private int batchSize = 200;
+  private int flushIntervalMs = 200;
+  private int maxBufferedEvents = 50_000;
 
   public String getEndpoint() {
     return endpoint;
@@ -60,8 +63,31 @@ public class ClickHouseSinkProperties {
     this.readTimeoutMs = readTimeoutMs;
   }
 
+  public int getBatchSize() {
+    return batchSize;
+  }
+
+  public void setBatchSize(int batchSize) {
+    this.batchSize = batchSize;
+  }
+
+  public int getFlushIntervalMs() {
+    return flushIntervalMs;
+  }
+
+  public void setFlushIntervalMs(int flushIntervalMs) {
+    this.flushIntervalMs = flushIntervalMs;
+  }
+
+  public int getMaxBufferedEvents() {
+    return maxBufferedEvents;
+  }
+
+  public void setMaxBufferedEvents(int maxBufferedEvents) {
+    this.maxBufferedEvents = maxBufferedEvents;
+  }
+
   public boolean configured() {
     return endpoint != null && !endpoint.isBlank() && table != null && !table.isBlank();
   }
 }
-
