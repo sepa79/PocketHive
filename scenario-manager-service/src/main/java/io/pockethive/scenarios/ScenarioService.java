@@ -464,9 +464,10 @@ public class ScenarioService {
                     "Scenario id '" + scenario.getId() + "' does not match path id '" + id + "'");
         }
 
-        (format == Format.JSON ? jsonMapper : yamlMapper)
-                .writerWithDefaultPrettyPrinter()
-                .writeValue(file.toFile(), scenario);
+        // IMPORTANT: persist the raw user-provided content verbatim.
+        // Round-tripping through YAML/JSON mappers changes scalar styles (e.g. literal blocks)
+        // and can introduce escapes (e.g. `\"`) that break downstream template parsers.
+        Files.writeString(file, body);
 
         reload();
     }

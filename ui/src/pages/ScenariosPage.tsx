@@ -1445,14 +1445,11 @@ export default function ScenariosPage() {
       setRawYaml((current) => {
         if (!current) return current
         try {
-          const doc = YAML.parse(current) || {}
-          const root =
-            doc && typeof doc === 'object' && !Array.isArray(doc)
-              ? (doc as Record<string, unknown>)
-              : {}
+          const doc = YAML.parseDocument(current)
+          const root = (doc.toJS() ?? {}) as Record<string, unknown>
           const mergedPlan = mergePlan(root['plan'], next)
-          const updated: Record<string, unknown> = { ...root, plan: mergedPlan }
-          return YAML.stringify(updated)
+          doc.set('plan', mergedPlan)
+          return doc.toString()
         } catch {
           // If YAML is invalid, do not attempt to rewrite it here.
           return current
@@ -1466,20 +1463,13 @@ export default function ScenariosPage() {
     setRawYaml((current) => {
       if (!current) return current
       try {
-        const doc = YAML.parse(current) || {}
-        const root =
-          doc && typeof doc === 'object' && !Array.isArray(doc)
-            ? (doc as Record<string, unknown>)
-            : {}
+        const doc = YAML.parseDocument(current)
         if (next == null) {
-          if ('template' in root) {
-            // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
-            delete (root as Record<string, unknown>).template
-          }
+          doc.delete('template')
         } else {
-          ;(root as Record<string, unknown>).template = next
+          doc.set('template', next)
         }
-        return YAML.stringify(root)
+        return doc.toString()
       } catch {
         return current
       }

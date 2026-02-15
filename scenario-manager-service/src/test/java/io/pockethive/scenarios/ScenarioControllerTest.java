@@ -18,6 +18,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.stream.Stream;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -123,6 +124,50 @@ class ScenarioControllerTest {
         mvc.perform(get("/scenarios/2").accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.name").value("Yaml"));
+    }
+
+    @Test
+    void rawUpdatePreservesLiteralBlocksAndDoesNotIntroduceEscapes() throws Exception {
+        String id = "raw-escape-demo";
+        Path bundleDir = ScenarioControllerTest.scenariosDir.resolve("bundles").resolve(id);
+        Files.createDirectories(bundleDir);
+        Path scenarioFile = bundleDir.resolve("scenario.yaml");
+
+        String raw = """
+                id: raw-escape-demo
+                name: Raw escape demo
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - role: generator
+                      image: worker-image:latest
+                      work: {}
+                      config:
+                        inputs:
+                          type: SCHEDULER
+                          scheduler:
+                            ratePerSec: 1
+                        worker:
+                          message:
+                            bodyType: SIMPLE
+                            body: |
+                              {
+                                "initiatorTxId": "{{ eval('#sequenceWith("pcs-initiator", "numeric", "%06d", 200000, 999999)') }}"
+                              }
+                """;
+
+        Files.writeString(scenarioFile, raw);
+        mvc.perform(post("/scenarios/reload")).andExpect(status().isNoContent());
+
+        mvc.perform(put("/scenarios/" + id + "/raw")
+                        .contentType(MediaType.TEXT_PLAIN)
+                        .content(raw))
+                .andExpect(status().isNoContent());
+
+        mvc.perform(get("/scenarios/" + id + "/raw").accept(MediaType.TEXT_PLAIN))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString(
+                        "#sequenceWith(\"pcs-initiator\", \"numeric\", \"%06d\", 200000, 999999)")));
     }
 
     @Test

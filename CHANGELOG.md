@@ -3,7 +3,13 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
-Timestamp: 2026-02-14T14:01:12Z
+Timestamp: 2026-02-15T20:50:43Z
+
+## [0.14.26] - 2026-02-15
+Timestamp: 2026-02-15T20:50:43Z
+
+- Scenarios (UI): preserve YAML literal blocks (e.g. `body: |`) when editing plans/templates so YAML round-trips don’t introduce broken escapes.
+- Scenario Manager: raw scenario updates now persist the submitted YAML verbatim (after validation) instead of re-serializing via YAML mapper (keeps `|` blocks intact); add coverage test.
 
 ## [0.14.25] - 2026-02-14
 Timestamp: 2026-02-14T14:01:12Z
