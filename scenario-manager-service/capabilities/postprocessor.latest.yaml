@@ -13,8 +13,5 @@ config:
   - name: enabled
     type: boolean
     default: false
-  - name: publishAllMetrics
-    type: boolean
-    default: false
 actions: []
 panels: []

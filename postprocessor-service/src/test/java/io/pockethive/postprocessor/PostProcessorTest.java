@@ -6,12 +6,14 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.observability.Hop;
 import io.pockethive.observability.ObservabilityContext;
+import io.pockethive.sink.clickhouse.ClickHouseSinkProperties;
 import io.pockethive.worker.sdk.api.StatusPublisher;
 import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.api.WorkerInfo;
 import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
 import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -35,8 +37,8 @@ class PostProcessorTest {
 
     @Test
     void onMessageRecordsLatencyAndErrorsAndUpdatesStatus() {
-        PostProcessorWorkerProperties properties = workerProperties(false);
-        PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(properties);
+        PostProcessorWorkerProperties properties = workerProperties();
+        PostProcessorWorkerImpl worker = newWorker(properties);
         ObservabilityContext context = new ObservabilityContext();
         List<Hop> hops = new ArrayList<>();
         hops.add(new Hop("generator", "gen-1", START, START.plusMillis(5)));
@@ -60,7 +62,6 @@ class PostProcessorTest {
 
         assertThat(result).isNull();
         assertThat(workerContext.statusData().get("enabled")).isEqualTo(true);
-        assertThat(workerContext.statusData().get("publishAllMetrics")).isEqualTo(false);
         assertThat(workerContext.statusData().get("errors")).isEqualTo(1.0d);
         assertThat(workerContext.statusData().get("hopLatencyMs")).isEqualTo(0L);
         assertThat(workerContext.statusData().get("totalLatencyMs")).isEqualTo(15L);
@@ -113,8 +114,8 @@ class PostProcessorTest {
 
     @Test
     void onMessageRecordsProcessorFailureMetrics() {
-        PostProcessorWorkerProperties properties = workerProperties(false);
-        PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(properties);
+        PostProcessorWorkerProperties properties = workerProperties();
+        PostProcessorWorkerImpl worker = newWorker(properties);
         ObservabilityContext context = new ObservabilityContext();
         List<Hop> hops = new ArrayList<>();
         hops.add(new Hop("generator", "gen-1", START, START.plusMillis(5)));
@@ -160,8 +161,8 @@ class PostProcessorTest {
 
     @Test
     void onMessageCompletesInFlightHopBeforeRecording() {
-        PostProcessorWorkerProperties properties = workerProperties(false);
-        PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(properties);
+        PostProcessorWorkerProperties properties = workerProperties();
+        PostProcessorWorkerImpl worker = newWorker(properties);
         ObservabilityContext context = new ObservabilityContext();
         List<Hop> hops = new ArrayList<>();
         hops.add(new Hop("generator", "gen-1", START, START.plusMillis(5)));
@@ -198,8 +199,8 @@ class PostProcessorTest {
 
     @Test
     void onMessageUsesDefaultsWhenNoConfigPresent() {
-        PostProcessorWorkerProperties properties = workerProperties(false);
-        PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(properties);
+        PostProcessorWorkerProperties properties = workerProperties();
+        PostProcessorWorkerImpl worker = newWorker(properties);
         ObservabilityContext context = new ObservabilityContext();
         context.setHops(List.of());
 
@@ -211,13 +212,13 @@ class PostProcessorTest {
         worker.onMessage(message, workerContext);
 
         assertThat(workerContext.statusData().get("enabled")).isEqualTo(false);
-        assertThat(workerContext.statusData().get("publishAllMetrics")).isEqualTo(false);
+        assertThat(workerContext.statusData()).doesNotContainKey("publishAllMetrics");
     }
 
     @Test
-    void onMessagePublishesFullSnapshotWhenPublishAllMetricsEnabled() {
-        PostProcessorWorkerProperties properties = workerProperties(true);
-        PostProcessorWorkerImpl worker = new PostProcessorWorkerImpl(properties);
+    void onMessageDoesNotExposeDeprecatedPublishAllMetricsFlag() {
+        PostProcessorWorkerProperties properties = workerProperties();
+        PostProcessorWorkerImpl worker = newWorker(properties);
         ObservabilityContext context = new ObservabilityContext();
         List<Hop> hops = new ArrayList<>();
         hops.add(new Hop("generator", "gen-1", START, START.plusMillis(5)));
@@ -233,12 +234,12 @@ class PostProcessorTest {
                 .build();
 
         TestWorkerContext workerContext =
-                new TestWorkerContext(new PostProcessorWorkerConfig(true), context);
+                new TestWorkerContext(new PostProcessorWorkerConfig(false), context);
 
         worker.onMessage(message, workerContext);
 
         Map<String, Object> status = workerContext.statusData();
-        assertThat(status.get("publishAllMetrics")).isEqualTo(true);
+        assertThat(status).doesNotContainKey("publishAllMetrics");
         assertThat(status).doesNotContainKeys("hopDurationsMs", "hopTimeline", "processorCall", "workItemSteps");
         assertThat(workerContext.capturingPublisher().fullSnapshotEmitted()).isFalse();
 
@@ -360,10 +361,26 @@ class PostProcessorTest {
         return new WorkerInfo("processor", "swarm", "proc-1", null, null);
     }
 
-    private static PostProcessorWorkerProperties workerProperties(boolean publishAllMetrics) {
+    private static PostProcessorWorkerImpl newWorker(PostProcessorWorkerProperties properties) {
+        return new PostProcessorWorkerImpl(properties, new NoopTxOutcomeWriter(), Clock.systemUTC());
+    }
+
+    private static final class NoopTxOutcomeWriter extends PostProcessorTxOutcomeWriter {
+        private NoopTxOutcomeWriter() {
+            super(new ClickHouseSinkProperties(), new ObjectMapper());
+        }
+
+        @Override
+        void write(TxOutcomeEvent event) {
+        }
+    }
+
+    private static PostProcessorWorkerProperties workerProperties() {
         PostProcessorWorkerProperties properties = new PostProcessorWorkerProperties(new ObjectMapper(), WORKER_PROPERTIES);
         Map<String, Object> config = new LinkedHashMap<>();
-        config.put("publishAllMetrics", publishAllMetrics);
+        config.put("forwardToOutput", false);
+        config.put("writeTxOutcomeToClickHouse", false);
+        config.put("dropTxOutcomeWithoutCallId", true);
         properties.setConfig(config);
         return properties;
     }

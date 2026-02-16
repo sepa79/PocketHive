@@ -45,8 +45,6 @@ template:
           out: final
     - role: postprocessor
       image: postprocessor:latest
-      config:
-        publishAllMetrics: true
       work:
         in:
           in: final

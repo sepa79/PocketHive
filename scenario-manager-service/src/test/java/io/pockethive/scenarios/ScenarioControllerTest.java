@@ -138,6 +138,51 @@ class ScenarioControllerTest {
     }
 
     @Test
+    void rawUpdatePreservesYamlLiteralBlockFormatting() throws Exception {
+        String initial = """
+                id: literal-demo
+                name: Literal demo
+                template:
+                  image: ctrl-image:latest
+                  bees: []
+                """;
+        mvc.perform(post("/scenarios").contentType("application/x-yaml").content(initial))
+                .andExpect(status().isCreated());
+
+        String raw = """
+                id: literal-demo
+                name: Literal demo
+                template:
+                  image: ctrl-image:latest
+                  bees: []
+                plan:
+                  steps:
+                    - action: config-update
+                      role: generator
+                      config:
+                        worker:
+                          config:
+                            message:
+                              body: |
+                                {
+                                  "greeting": "hello"
+                                }
+                """;
+
+        mvc.perform(put("/scenarios/literal-demo/raw")
+                        .contentType(MediaType.TEXT_PLAIN)
+                        .content(raw))
+                .andExpect(status().isNoContent());
+
+        mvc.perform(get("/scenarios/literal-demo/raw").accept(MediaType.TEXT_PLAIN))
+                .andExpect(status().isOk())
+                .andExpect(content().string(raw))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("body: |")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("\"greeting\": \"hello\"")))
+                .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("\\\"greeting\\\""))));
+    }
+
+    @Test
     void reloadEndpoint() throws Exception {
         mvc.perform(post("/scenarios/reload"))
                 .andExpect(status().isNoContent());

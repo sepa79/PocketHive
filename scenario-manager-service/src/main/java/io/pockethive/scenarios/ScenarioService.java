@@ -790,9 +790,7 @@ public class ScenarioService {
                     "Scenario id '" + scenario.getId() + "' does not match path id '" + id + "'");
         }
 
-        (format == Format.JSON ? jsonMapper : yamlMapper)
-                .writerWithDefaultPrettyPrinter()
-                .writeValue(file.toFile(), scenario);
+        Files.writeString(file, body);
 
         reload();
     }

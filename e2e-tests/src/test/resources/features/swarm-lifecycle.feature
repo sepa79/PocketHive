@@ -133,6 +133,22 @@ Feature: Swarm lifecycle golden path
     When I remove the swarm
     Then the swarm is removed and lifecycle confirmations are recorded
 
+  @clickhouse-tx-outcomes
+  Scenario: Postprocessor writes tx outcomes to ClickHouse
+    And the "local-rest-defaults" scenario template is requested
+    When I create the swarm from that template
+    Then the swarm is registered and queues are declared
+    When I start the swarm
+    Then the swarm reports running
+    And I enable postprocessor tx-outcome sink
+    And I start generator traffic
+    Then the final queue receives the default generator response
+    And ClickHouse stores tx outcomes for the swarm
+    When I stop the swarm
+    Then the swarm reports stopped
+    When I remove the swarm
+    Then the swarm is removed and lifecycle confirmations are recorded
+
   @webauth-loop
   Scenario: WebAuth 5-customers loop processes Redis traffic through processor
     And the TCP mock request journal is cleared

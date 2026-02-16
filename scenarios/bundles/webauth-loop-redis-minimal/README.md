@@ -21,7 +21,7 @@ Total: **4 bees**.
 - It preserves source list header (`x-ph-redis-list`) from Redis input.
 - Request-builder uses one template (`callId=webauth-loop`) and maps source list to WebAuth request type.
 - Processor calls WebAuth and forwards results to postprocessor via RabbitMQ.
-- Postprocessor publishes metrics (`publishAllMetrics=true`) and routes original payload to next loop list using native Redis output (`outputs.redis.routes`) with header matching.
+- Postprocessor routes original payload to next loop list using native Redis output (`outputs.redis.routes`) with header matching.
 
 ## Required dataset payload in Redis
 

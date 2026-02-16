@@ -43,6 +43,7 @@ import io.pockethive.swarmcontroller.scenario.TimelineScenarioObserver;
 import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory;
 import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory.PushgatewaySettings;
 import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory.WorkerSettings;
+import io.pockethive.sink.clickhouse.ClickHouseSinkProperties;
 import io.pockethive.util.BeeNameGenerator;
 import java.time.Instant;
 import java.util.ArrayDeque;
@@ -96,6 +97,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
   private final String role;
   private final String swarmId;
   private final String scenariosRuntimeRootSource;
+  private final ClickHouseSinkProperties clickHouseSink;
   private final ManagerRuntimeCore managerCore;
   private final io.pockethive.swarmcontroller.scenario.TimelineScenario timelineScenario;
   private final ScenarioEngine scenarioEngine;
@@ -123,7 +125,8 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
                           SwarmQueueMetrics queueMetrics,
                           io.pockethive.manager.runtime.ConfigFanout configFanout,
                           SwarmJournal journal,
-                          String instanceId) {
+                          String instanceId,
+                          ClickHouseSinkProperties clickHouseSink) {
     this.amqp = Objects.requireNonNull(amqp, "amqp");
     this.mapper = Objects.requireNonNull(mapper, "mapper");
     this.docker = Objects.requireNonNull(docker, "docker");
@@ -141,6 +144,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
     this.role = properties.getRole();
     this.swarmId = properties.getSwarmId();
     this.scenariosRuntimeRootSource = System.getenv("POCKETHIVE_SCENARIOS_RUNTIME_ROOT");
+    this.clickHouseSink = Objects.requireNonNull(clickHouseSink, "clickHouseSink");
     this.workerSettings = deriveWorkerSettings(properties);
     this.readinessTracker = new SwarmReadinessTracker(this::requestStatus);
     this.managerCore = new ManagerRuntimeCore(
@@ -338,6 +342,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
           env.put("POCKETHIVE_RUNTIME_STACK_NAME", stackName);
         }
         applyWorkIoEnvironment(bee, env);
+        applyClickHouseSinkEnvironment(bee, env);
         String net = docker.resolveControlNetwork();
         if (hasText(net)) {
           env.put("CONTROL_NETWORK", net);
@@ -849,6 +854,42 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
     }
   }
 
+  private void applyClickHouseSinkEnvironment(Bee bee, Map<String, String> env) {
+    if (bee == null || env == null) {
+      return;
+    }
+    if (!"postprocessor".equalsIgnoreCase(bee.role())) {
+      return;
+    }
+    if (!clickHouseSink.configured()) {
+      return;
+    }
+    putEnvIfMissing(env, "POCKETHIVE_SINK_CLICKHOUSE_ENDPOINT", clickHouseSink.getEndpoint());
+    putEnvIfMissing(env, "POCKETHIVE_SINK_CLICKHOUSE_TABLE", clickHouseSink.getTable());
+    putEnvIfMissing(env, "POCKETHIVE_SINK_CLICKHOUSE_USERNAME", clickHouseSink.getUsername());
+    putEnvIfMissing(env, "POCKETHIVE_SINK_CLICKHOUSE_PASSWORD", clickHouseSink.getPassword());
+    putEnvIfMissing(
+        env,
+        "POCKETHIVE_SINK_CLICKHOUSE_CONNECT_TIMEOUT_MS",
+        Integer.toString(clickHouseSink.getConnectTimeoutMs()));
+    putEnvIfMissing(
+        env,
+        "POCKETHIVE_SINK_CLICKHOUSE_READ_TIMEOUT_MS",
+        Integer.toString(clickHouseSink.getReadTimeoutMs()));
+    putEnvIfMissing(
+        env,
+        "POCKETHIVE_SINK_CLICKHOUSE_BATCH_SIZE",
+        Integer.toString(clickHouseSink.getBatchSize()));
+    putEnvIfMissing(
+        env,
+        "POCKETHIVE_SINK_CLICKHOUSE_FLUSH_INTERVAL_MS",
+        Integer.toString(clickHouseSink.getFlushIntervalMs()));
+    putEnvIfMissing(
+        env,
+        "POCKETHIVE_SINK_CLICKHOUSE_MAX_BUFFERED_EVENTS",
+        Integer.toString(clickHouseSink.getMaxBufferedEvents()));
+  }
+
   private String runtimeStackName() {
     return "ph-" + swarmId.toLowerCase(Locale.ROOT);
   }
@@ -878,6 +919,19 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
       return;
     }
     String text = value.toString().trim();
+    if (!text.isBlank()) {
+      env.put(key, text);
+    }
+  }
+
+  private static void putEnvIfMissing(Map<String, String> env, String key, String value) {
+    if (env.containsKey(key)) {
+      return;
+    }
+    if (value == null) {
+      return;
+    }
+    String text = value.trim();
     if (!text.isBlank()) {
       env.put(key, text);
     }

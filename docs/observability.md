@@ -33,9 +33,9 @@ Status events now include an optional `queueStats` object keyed by queue name. E
 
 Operators can correlate these numbers with the `queues` topology block to understand which bindings map to a growing backlog. Empty or unavailable stats simply omit the `queueStats` object.
 
-## Postprocessor `publishAllMetrics`
+## Postprocessor ClickHouse tx-outcomes sink
 
-The postprocessor still emits aggregated latency and error metrics to Prometheus, but the high-frequency per-item (`publishAllMetrics=true`) metrics are currently disabled to avoid flooding the control plane and dashboards. A dedicated event-time sink (Influx/Loki) will be added in a future change; until then, `publishAllMetrics` only affects internal aggregation and no longer pushes per-message samples to Prometheus or status payloads.
+Per-transaction postprocessor observability now relies on the ClickHouse tx-outcomes sink. The postprocessor continues exporting aggregated service metrics to Prometheus, while transaction-level analysis (latency tails, success ratios, error mixes, segment drill-downs) should be done from `ph_tx_outcome_v1`.
 
 ## Buffer Guard runbook
 

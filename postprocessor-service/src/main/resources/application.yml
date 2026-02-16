@@ -25,7 +25,20 @@ pockethive:
       exchange: ${POCKETHIVE_OUTPUT_RABBIT_EXCHANGE}
   worker:
     config:
-      publishAllMetrics: false
+      forwardToOutput: false
+      writeTxOutcomeToClickHouse: false
+      dropTxOutcomeWithoutCallId: true
+  sink:
+    clickhouse:
+      endpoint: ${POCKETHIVE_SINK_CLICKHOUSE_ENDPOINT:}
+      table: ${POCKETHIVE_SINK_CLICKHOUSE_TABLE:}
+      username: ${POCKETHIVE_SINK_CLICKHOUSE_USERNAME:}
+      password: ${POCKETHIVE_SINK_CLICKHOUSE_PASSWORD:}
+      connect-timeout-ms: ${POCKETHIVE_SINK_CLICKHOUSE_CONNECT_TIMEOUT_MS:3000}
+      read-timeout-ms: ${POCKETHIVE_SINK_CLICKHOUSE_READ_TIMEOUT_MS:5000}
+      batch-size: ${POCKETHIVE_SINK_CLICKHOUSE_BATCH_SIZE:200}
+      flush-interval-ms: ${POCKETHIVE_SINK_CLICKHOUSE_FLUSH_INTERVAL_MS:200}
+      max-buffered-events: ${POCKETHIVE_SINK_CLICKHOUSE_MAX_BUFFERED_EVENTS:50000}
   control-plane:
     exchange: ${POCKETHIVE_CONTROL_PLANE_EXCHANGE}
     swarm-id: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID}

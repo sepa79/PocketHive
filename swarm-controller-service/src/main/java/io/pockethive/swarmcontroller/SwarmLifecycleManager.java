@@ -12,6 +12,7 @@ import io.pockethive.docker.compute.DockerSwarmServiceComputeAdapter;
 import io.pockethive.manager.ports.ComputeAdapter;
 import io.pockethive.manager.runtime.ComputeAdapterType;
 import io.pockethive.manager.runtime.ConfigFanout;
+import io.pockethive.sink.clickhouse.ClickHouseSinkProperties;
 import io.pockethive.swarm.model.TrafficPolicy;
 import io.pockethive.swarmcontroller.QueueStats;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
@@ -58,10 +59,12 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
                                @Qualifier("instanceId") String instanceId,
                                SwarmControllerProperties properties,
                                MeterRegistry meterRegistry,
-                               io.pockethive.swarmcontroller.runtime.SwarmJournal journal) {
+                               io.pockethive.swarmcontroller.runtime.SwarmJournal journal,
+                               ClickHouseSinkProperties clickHouseSink) {
     this(amqp, mapper, dockerClient, docker, rabbit, rabbitProperties, instanceId, properties, meterRegistry,
         journal,
-        deriveWorkerSettings(properties));
+        deriveWorkerSettings(properties),
+        clickHouseSink);
   }
 
   SwarmLifecycleManager(AmqpAdmin amqp,
@@ -74,7 +77,8 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
                         SwarmControllerProperties properties,
                         MeterRegistry meterRegistry,
                         io.pockethive.swarmcontroller.runtime.SwarmJournal journal,
-                        WorkerSettings workerSettings) {
+                        WorkerSettings workerSettings,
+                        ClickHouseSinkProperties clickHouseSink) {
     Objects.requireNonNull(workerSettings, "workerSettings");
     this.mapper = mapper;
     this.journal = journal != null ? journal : io.pockethive.swarmcontroller.runtime.SwarmJournal.noop();
@@ -115,7 +119,8 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         queueMetrics,
         configFanout,
         this.journal,
-        instanceId);
+        instanceId,
+        clickHouseSink);
     this.bufferGuard = new io.pockethive.swarmcontroller.guard.BufferGuardCoordinator(
         properties,
         queueStatsPort,

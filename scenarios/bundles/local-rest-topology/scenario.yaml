@@ -59,9 +59,6 @@ template:
       image: postprocessor:latest
       ports:
         - { id: in, direction: in }
-      config:
-        worker:
-          publishAllMetrics: true
       work:
         in:
           in: finalQ

@@ -46,9 +46,6 @@ template:
       out:
         out: null
     env: {}
-    config:
-      worker:
-        publishAllMetrics: true
 trafficPolicy: null
 plan:
   bees:

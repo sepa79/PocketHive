@@ -99,7 +99,6 @@ template:
     - role: postprocessor
       image: postprocessor:latest
       config:
-        publishAllMetrics: true
         outputs:
           type: REDIS
           redis:

@@ -1,0 +1,342 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": false,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "description": "Rozkład RTT klienta w czasie (p50/p95/p99). Pokazuje drift i rozjechanie tail latency bez znajomości etapów wewnętrznych.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 4,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "editorType": "sql",
+          "format": 1,
+          "queryType": "sql",
+          "rawSql": "SELECT\n  time,\n  percentile,\n  value_ms\nFROM (\n  SELECT\n    toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n    'p50' AS percentile,\n    quantileTDigest(0.50)(processorDurationMs) AS value_ms\n  FROM ph_tx_outcome_v1\n  WHERE $__timeFilter(eventTime)\n    AND match(swarmId, '${swarm:regex}')\n    AND match(callId, '${callId:regex}')\n  GROUP BY time\n\n  UNION ALL\n\n  SELECT\n    toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n    'p95' AS percentile,\n    quantileTDigest(0.95)(processorDurationMs) AS value_ms\n  FROM ph_tx_outcome_v1\n  WHERE $__timeFilter(eventTime)\n    AND match(swarmId, '${swarm:regex}')\n    AND match(callId, '${callId:regex}')\n  GROUP BY time\n\n  UNION ALL\n\n  SELECT\n    toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n    'p99' AS percentile,\n    quantileTDigest(0.99)(processorDurationMs) AS value_ms\n  FROM ph_tx_outcome_v1\n  WHERE $__timeFilter(eventTime)\n    AND match(swarmId, '${swarm:regex}')\n    AND match(callId, '${callId:regex}')\n  GROUP BY time\n)\nORDER BY time, percentile",
+          "refId": "A"
+        }
+      ],
+      "title": "RTT percentiles (p50/p95/p99)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "description": "Udział transakcji przekraczających progi SLO (1s/2s/5s). Daje szybki obraz jak duży jest tail latency.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 4,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "editorType": "sql",
+          "format": 1,
+          "queryType": "sql",
+          "rawSql": "SELECT\n  time,\n  threshold,\n  pct\nFROM (\n  SELECT\n    toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n    '>1s' AS threshold,\n    avg(if(processorDurationMs > 1000, 1, 0)) * 100 AS pct\n  FROM ph_tx_outcome_v1\n  WHERE $__timeFilter(eventTime)\n    AND match(swarmId, '${swarm:regex}')\n    AND match(callId, '${callId:regex}')\n  GROUP BY time\n\n  UNION ALL\n\n  SELECT\n    toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n    '>2s' AS threshold,\n    avg(if(processorDurationMs > 2000, 1, 0)) * 100 AS pct\n  FROM ph_tx_outcome_v1\n  WHERE $__timeFilter(eventTime)\n    AND match(swarmId, '${swarm:regex}')\n    AND match(callId, '${callId:regex}')\n  GROUP BY time\n\n  UNION ALL\n\n  SELECT\n    toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n    '>5s' AS threshold,\n    avg(if(processorDurationMs > 5000, 1, 0)) * 100 AS pct\n  FROM ph_tx_outcome_v1\n  WHERE $__timeFilter(eventTime)\n    AND match(swarmId, '${swarm:regex}')\n    AND match(callId, '${callId:regex}')\n  GROUP BY time\n)\nORDER BY time, threshold",
+          "refId": "A"
+        }
+      ],
+      "title": "Tail breach rate by SLO threshold",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "description": "Anomalie RTT: najwyższe zaobserwowane wartości per interwał i segment (typ operacji + protokół).",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "points",
+            "fillOpacity": 0,
+            "lineInterpolation": "linear",
+            "lineWidth": 0,
+            "pointSize": 4,
+            "showPoints": "always",
+            "spanNulls": false
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 8
+      },
+      "id": 3,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "editorType": "sql",
+          "format": 2,
+          "queryType": "sql",
+          "rawSql": "SELECT\n  toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n  concat(\n    multiIf(\n      notEmpty(dimensions['transaction_type']), dimensions['transaction_type'],\n      notEmpty(dimensions['tx_type']), dimensions['tx_type'],\n      notEmpty(dimensions['operation']), dimensions['operation'],\n      'unknown'\n    ),\n    ' | ',\n    multiIf(\n      notEmpty(dimensions['protocol']), dimensions['protocol'],\n      notEmpty(dimensions['channel']), dimensions['channel'],\n      notEmpty(dimensions['transport']), dimensions['transport'],\n      'unknown'\n    )\n  ) AS segment,\n  max(processorDurationMs) AS max_rtt_ms\nFROM ph_tx_outcome_v1\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callId, '${callId:regex}')\nGROUP BY time, segment\nORDER BY time, segment",
+          "refId": "A"
+        }
+      ],
+      "title": "Max RTT by transaction segment (anomaly view)",
+      "transformations": [
+        {
+          "id": "prepareTimeSeries",
+          "options": {
+            "format": "many"
+          }
+        }
+      ],
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "description": "Najgorsze callId/businessCode w wybranym oknie. Przydatne do triage i szybkiego wskazania dominujących outlierów.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 17
+      },
+      "id": 4,
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "max_rtt_ms"
+          }
+        ]
+      },
+      "targets": [
+        {
+          "editorType": "sql",
+          "format": 1,
+          "queryType": "sql",
+          "rawSql": "SELECT\n  if(callId = '', 'unknown', callId) AS call_id,\n  if(businessCode = '', 'n/a', businessCode) AS business_code,\n  count() AS txns,\n  quantileTDigest(0.95)(processorDurationMs) AS p95_rtt_ms,\n  quantileTDigest(0.99)(processorDurationMs) AS p99_rtt_ms,\n  max(processorDurationMs) AS max_rtt_ms,\n  avg(businessSuccess) * 100 AS business_success_pct\nFROM ph_tx_outcome_v1\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callId, '${callId:regex}')\nGROUP BY call_id, business_code\nORDER BY max_rtt_ms DESC\nLIMIT 100",
+          "refId": "A"
+        }
+      ],
+      "title": "Worst callId/businessCode by RTT",
+      "type": "table"
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": [
+    "pockethive",
+    "clickhouse",
+    "tx-outcome",
+    "client-rtt",
+    "latency"
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "allValue": ".*",
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "clickhouse"
+        },
+        "definition": "SELECT DISTINCT swarmId FROM ph_tx_outcome_v1 ORDER BY swarmId",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Swarm",
+        "multi": true,
+        "name": "swarm",
+        "options": [],
+        "query": "SELECT DISTINCT swarmId FROM ph_tx_outcome_v1 ORDER BY swarmId",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "allValue": ".*",
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "clickhouse"
+        },
+        "definition": "SELECT DISTINCT callId FROM ph_tx_outcome_v1 WHERE callId != '' ORDER BY callId LIMIT 500",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Call ID",
+        "multi": true,
+        "name": "callId",
+        "options": [],
+        "query": "SELECT DISTINCT callId FROM ph_tx_outcome_v1 WHERE callId != '' ORDER BY callId LIMIT 500",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "Tx RTT Latency & Tail (ClickHouse)",
+  "uid": "ph-tx-rtt-latency-ch",
+  "version": 1,
+  "weekStart": ""
+}

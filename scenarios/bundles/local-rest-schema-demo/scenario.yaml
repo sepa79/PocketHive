@@ -42,12 +42,8 @@ template:
           out: finalQ
     - role: postprocessor
       image: postprocessor:latest
-      config:
-        worker:
-          publishAllMetrics: true
       work:
         in:
           in: finalQ
 trafficPolicy: null
 plan: null
-

@@ -12,6 +12,7 @@ import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
 import io.pockethive.worker.sdk.config.WorkerCapability;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -62,13 +63,33 @@ class PostProcessorWorkerImpl implements PocketHiveWorkerFunction {
   private static final String PROCESSOR_STATUS_HEADER = "x-ph-processor-status";
 
   private final PostProcessorWorkerProperties properties;
+  private final PostProcessorTxOutcomeWriter txOutcomeWriter;
+  private final Clock clock;
   private final AtomicReference<PostProcessorMetrics> metricsRef = new AtomicReference<>();
+  private final LongAdder txOutcomeInserted = new LongAdder();
+  private final LongAdder txOutcomeDropped = new LongAdder();
+  private final LongAdder txOutcomeFailed = new LongAdder();
+  private final LongAdder txOutcomeBufferFull = new LongAdder();
+  private final AtomicReference<String> txOutcomeLastError = new AtomicReference<>("");
   private final AtomicReference<DetailedTransactionMetrics> detailedMetricsRef =
       new AtomicReference<>();
 
   @Autowired
-  PostProcessorWorkerImpl(PostProcessorWorkerProperties properties) {
+  PostProcessorWorkerImpl(
+      PostProcessorWorkerProperties properties,
+      PostProcessorTxOutcomeWriter txOutcomeWriter
+  ) {
+    this(properties, txOutcomeWriter, Clock.systemUTC());
+  }
+
+  PostProcessorWorkerImpl(
+      PostProcessorWorkerProperties properties,
+      PostProcessorTxOutcomeWriter txOutcomeWriter,
+      Clock clock
+  ) {
     this.properties = Objects.requireNonNull(properties, "properties");
+    this.txOutcomeWriter = Objects.requireNonNull(txOutcomeWriter, "txOutcomeWriter");
+    this.clock = Objects.requireNonNull(clock, "clock");
   }
 
   /**
@@ -111,24 +132,60 @@ class PostProcessorWorkerImpl implements PocketHiveWorkerFunction {
 
     PostProcessorMetrics metrics = metrics(context);
     metrics.record(measurements, error, processorStats);
-    // When publishAllMetrics is enabled we still record aggregated metrics above, but
-    // skip per-item Micrometer publishing for now. A future InfluxDB path will handle
-    // per-transaction dots without overloading Prometheus.
+    RuntimeException txOutcomeFailure = null;
+    String txOutcomeLastCallId = "";
+    if (config.writeTxOutcomeToClickHouse()) {
+      TxOutcomeEvent event = TxOutcomeProjector
+          .project(in, context, clock.instant(), config.dropTxOutcomeWithoutCallId())
+          .orElse(null);
+      if (event == null) {
+        txOutcomeDropped.increment();
+      } else {
+        txOutcomeLastCallId = event.callId();
+        try {
+          txOutcomeWriter.write(event);
+          txOutcomeInserted.increment();
+          txOutcomeLastError.set("");
+        } catch (Exception ex) {
+          txOutcomeFailed.increment();
+          if (ex instanceof ClickHouseTxOutcomeBufferFullException) {
+            txOutcomeBufferFull.increment();
+          }
+          String message = ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage();
+          txOutcomeLastError.set(message);
+          txOutcomeFailure =
+              new IllegalStateException("Postprocessor ClickHouse sink failed for callId=" + event.callId(), ex);
+        }
+      }
+    }
 
+    String lastCallIdForStatus = txOutcomeLastCallId;
     StatusPublisher publisher = context.statusPublisher();
     publisher.update(status -> {
       status
           .data("enabled", context.enabled())
-          .data("publishAllMetrics", config.publishAllMetrics())
           .data("errors", metrics.errorsCount())
           .data("hopLatencyMs", measurements.latestHopMs())
           .data("totalLatencyMs", measurements.totalMs())
           .data("hopCount", measurements.hopCount())
           .data("processorTransactions", metrics.processorTransactions())
           .data("processorSuccessRatio", metrics.processorSuccessRatio())
-          .data("processorAvgLatencyMs", metrics.processorAverageLatencyMs());
+          .data("processorAvgLatencyMs", metrics.processorAverageLatencyMs())
+          .data("txOutcomeSinkEnabled", config.writeTxOutcomeToClickHouse())
+          .data("txOutcomeInserted", txOutcomeInserted.sum())
+          .data("txOutcomeDropped", txOutcomeDropped.sum())
+          .data("txOutcomeFailed", txOutcomeFailed.sum())
+          .data("txOutcomeBufferFull", txOutcomeBufferFull.sum())
+          .data("txOutcomeLastCallId", lastCallIdForStatus)
+          .data("txOutcomeLastError", txOutcomeLastError.get());
     });
 
+    if (txOutcomeFailure != null) {
+      throw txOutcomeFailure;
+    }
+    if (config.forwardToOutput()) {
+      return in;
+    }
     return null;
   }
 

@@ -15,6 +15,7 @@ import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import com.github.dockerjava.api.DockerClient;
 import io.pockethive.docker.DockerContainerClient;
+import io.pockethive.sink.clickhouse.ClickHouseSinkProperties;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.BufferGuardPolicy;
 import io.pockethive.swarm.model.SwarmPlan;
@@ -365,7 +366,7 @@ class SwarmLifecycleManagerTest {
     try {
       SwarmLifecycleManager manager = new SwarmLifecycleManager(
           amqp, mapper, dockerClient, docker, rabbit, rabbitProperties, "inst", properties, registry,
-          io.pockethive.swarmcontroller.runtime.SwarmJournal.noop());
+          io.pockethive.swarmcontroller.runtime.SwarmJournal.noop(), new ClickHouseSinkProperties());
       SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img1", Work.ofDefaults(null, null), null)));
 
       assertThatThrownBy(() -> manager.prepare(mapper.writeValueAsString(plan)))
@@ -978,7 +979,7 @@ class SwarmLifecycleManagerTest {
         "inst",
         SwarmControllerTestProperties.defaults(bufferGuardEnabled),
         meterRegistry,
-        io.pockethive.swarmcontroller.runtime.SwarmJournal.noop());
+        io.pockethive.swarmcontroller.runtime.SwarmJournal.noop(), new ClickHouseSinkProperties());
   }
 
   private boolean waitForRate(Gauge gauge, DoublePredicate predicate) throws InterruptedException {

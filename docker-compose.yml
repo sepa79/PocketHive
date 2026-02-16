@@ -83,6 +83,7 @@ services:
     environment:
       GF_SECURITY_ADMIN_USER: pockethive
       GF_SECURITY_ADMIN_PASSWORD: pockethive
+      GF_INSTALL_PLUGINS: grafana-clickhouse-datasource
     volumes:
       - ./grafana/grafana.ini:/etc/grafana/grafana.ini:ro
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
@@ -166,6 +167,20 @@ services:
       retries: 12
       start_period: 10s
 
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: pockethive
+      CLICKHOUSE_PASSWORD: pockethive
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - ./clickhouse/init:/docker-entrypoint-initdb.d:ro
+
   tcp-mock-server:
     image: ${DOCKER_REGISTRY:-}tcp-mock-server:${POCKETHIVE_VERSION:-latest}
     ports:
@@ -217,22 +232,22 @@ services:
 
   docs-site:
     image: node:20-alpine
-    working_dir: /app/docs-site
+    working_dir: /workspace/work
     environment:
       DOCS_URL: http://localhost:8088
       DOCS_BASE_URL: /docs/
     volumes:
-      - ./docs-site:/app/docs-site:ro
-      - ./docs:/app/docs:ro
-      - ./ui/assets:/app/ui/assets:ro
-      - docs-site-node-modules:/app/docs-site/node_modules
-      - docs-site-docusaurus:/app/docs-site/.docusaurus
-      - docs-site-build:/app/docs-site/build
+      - ./docs-site:/workspace/src:ro
+      - ./docs:/workspace/docs:ro
+      - ./ui/assets:/workspace/ui/assets:ro
+      - docs-site-node-modules:/workspace/work/node_modules
+      - docs-site-docusaurus:/workspace/work/.docusaurus
+      - docs-site-build:/workspace/work/build
     command:
       [
         "sh",
         "-c",
-        "npm ci && npm run build && npm run serve -- --host 0.0.0.0 --port 3000 --dir build"
+        "find /workspace/work -mindepth 1 -maxdepth 1 ! -name node_modules ! -name .docusaurus ! -name build -exec rm -rf {} + && cp -a /workspace/src/. /workspace/work && npm ci && npm run build && npm run serve -- --host 0.0.0.0 --port 3000 --dir build"
       ]
 
   ui:
@@ -299,6 +314,10 @@ services:
       POCKETHIVE_JOURNAL_RUN_ID: hive
       POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_RABBIT_LOGGING_ENABLED: "true"
       POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_RABBIT_LOGS_EXCHANGE: ph.logs
+      POCKETHIVE_SINK_CLICKHOUSE_ENDPOINT: http://clickhouse:8123
+      POCKETHIVE_SINK_CLICKHOUSE_TABLE: ph_tx_outcome_v1
+      POCKETHIVE_SINK_CLICKHOUSE_USERNAME: pockethive
+      POCKETHIVE_SINK_CLICKHOUSE_PASSWORD: pockethive
     #      <<: *metrics-env
     #      POCKETHIVE_CONTROL_PLANE_EXCHANGE: ph.control
     #      POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE: ph.control
@@ -350,6 +369,7 @@ volumes:
   loki-data:
   redis-data:
   postgres-data:
+  clickhouse-data:
   tcp-mock-data:
   docs-site-node-modules:
   docs-site-docusaurus:

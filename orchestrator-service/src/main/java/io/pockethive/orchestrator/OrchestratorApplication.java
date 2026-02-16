@@ -5,7 +5,10 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 
 @SpringBootApplication
-@ConfigurationPropertiesScan(basePackages = "io.pockethive.orchestrator.config")
+@ConfigurationPropertiesScan(basePackages = {
+    "io.pockethive.orchestrator.config",
+    "io.pockethive.sink.clickhouse"
+})
 public class OrchestratorApplication {
     public static void main(String[] args) {
         SpringApplication.run(OrchestratorApplication.class, args);

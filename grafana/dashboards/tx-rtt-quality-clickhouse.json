@@ -1,0 +1,342 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": false,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "description": "Skuteczność biznesowa per protokół/kanał. Służy do odróżnienia problemów produktowych od problemów integracyjnych.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 4,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 90
+              },
+              {
+                "color": "green",
+                "value": 99
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "editorType": "sql",
+          "format": 1,
+          "queryType": "sql",
+          "rawSql": "SELECT\n  toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n  multiIf(\n    notEmpty(dimensions['protocol']), dimensions['protocol'],\n    notEmpty(dimensions['channel']), dimensions['channel'],\n    notEmpty(dimensions['transport']), dimensions['transport'],\n    'unknown'\n  ) AS protocol,\n  avg(businessSuccess) * 100 AS business_success_pct\nFROM ph_tx_outcome_v1\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callId, '${callId:regex}')\nGROUP BY time, protocol\nORDER BY time, protocol",
+          "refId": "A"
+        }
+      ],
+      "title": "Business success by protocol/channel",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "description": "Rozkład statusów technicznych (2xx/4xx/5xx/other) w czasie. Pozwala odseparować problemy klienta od błędów systemowych.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 4,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "editorType": "sql",
+          "format": 1,
+          "queryType": "sql",
+          "rawSql": "SELECT\n  toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n  multiIf(\n    processorStatus >= 200 AND processorStatus < 300, '2xx',\n    processorStatus >= 400 AND processorStatus < 500, '4xx',\n    processorStatus >= 500 AND processorStatus < 600, '5xx',\n    'other'\n  ) AS status_class,\n  count() AS txns\nFROM ph_tx_outcome_v1\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callId, '${callId:regex}')\nGROUP BY time, status_class\nORDER BY time, status_class",
+          "refId": "A"
+        }
+      ],
+      "title": "Processor status classes over time",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "description": "Mix operacji bankowych. Ułatwia wykrycie, że np. tylko reversal/topup przestały przechodzić.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 4,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "id": 3,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "editorType": "sql",
+          "format": 1,
+          "queryType": "sql",
+          "rawSql": "SELECT\n  toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n  multiIf(\n    notEmpty(dimensions['transaction_type']), dimensions['transaction_type'],\n    notEmpty(dimensions['tx_type']), dimensions['tx_type'],\n    notEmpty(dimensions['operation']), dimensions['operation'],\n    'unknown'\n  ) AS tx_type,\n  count() AS txns\nFROM ph_tx_outcome_v1\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callId, '${callId:regex}')\nGROUP BY time, tx_type\nORDER BY time, tx_type",
+          "refId": "A"
+        }
+      ],
+      "title": "Bank operation mix over time",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "description": "Tabela triage: które businessCode i segmenty mają najwięcej problemów jakościowych i najgorszy RTT.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "id": 4,
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "fail_pct"
+          }
+        ]
+      },
+      "targets": [
+        {
+          "editorType": "sql",
+          "format": 1,
+          "queryType": "sql",
+          "rawSql": "SELECT\n  if(businessCode = '', 'n/a', businessCode) AS business_code,\n  multiIf(\n    notEmpty(dimensions['transaction_type']), dimensions['transaction_type'],\n    notEmpty(dimensions['tx_type']), dimensions['tx_type'],\n    notEmpty(dimensions['operation']), dimensions['operation'],\n    'unknown'\n  ) AS tx_type,\n  multiIf(\n    notEmpty(dimensions['protocol']), dimensions['protocol'],\n    notEmpty(dimensions['channel']), dimensions['channel'],\n    notEmpty(dimensions['transport']), dimensions['transport'],\n    'unknown'\n  ) AS protocol,\n  count() AS txns,\n  (1 - avg(businessSuccess)) * 100 AS fail_pct,\n  quantileTDigest(0.95)(processorDurationMs) AS p95_rtt_ms,\n  max(processorDurationMs) AS max_rtt_ms\nFROM ph_tx_outcome_v1\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callId, '${callId:regex}')\nGROUP BY business_code, tx_type, protocol\nHAVING txns >= 20\nORDER BY fail_pct DESC, txns DESC\nLIMIT 100",
+          "refId": "A"
+        }
+      ],
+      "title": "Worst business segments (failure + RTT)",
+      "type": "table"
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": [
+    "pockethive",
+    "clickhouse",
+    "tx-outcome",
+    "client-rtt",
+    "quality"
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "allValue": ".*",
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "clickhouse"
+        },
+        "definition": "SELECT DISTINCT swarmId FROM ph_tx_outcome_v1 ORDER BY swarmId",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Swarm",
+        "multi": true,
+        "name": "swarm",
+        "options": [],
+        "query": "SELECT DISTINCT swarmId FROM ph_tx_outcome_v1 ORDER BY swarmId",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "allValue": ".*",
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "clickhouse"
+        },
+        "definition": "SELECT DISTINCT callId FROM ph_tx_outcome_v1 WHERE callId != '' ORDER BY callId LIMIT 500",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Call ID",
+        "multi": true,
+        "name": "callId",
+        "options": [],
+        "query": "SELECT DISTINCT callId FROM ph_tx_outcome_v1 WHERE callId != '' ORDER BY callId LIMIT 500",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "Tx Quality & Failure Mix (ClickHouse)",
+  "uid": "ph-tx-quality-ch",
+  "version": 1,
+  "weekStart": ""
+}

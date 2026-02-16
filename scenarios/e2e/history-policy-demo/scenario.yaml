@@ -40,8 +40,6 @@ template:
       config:
         worker:
           historyPolicy: FULL
-          publishAllMetrics: true
       work:
         in:
           in: final
-

@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import io.pockethive.manager.scenario.ScenarioEngine;
+import io.pockethive.sink.clickhouse.ClickHouseSinkProperties;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties.Docker;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties.Manager;
@@ -81,7 +82,8 @@ class SwarmRuntimeCoreScenarioEngineTest {
         queueMetrics,
         configFanout,
         SwarmJournal.noop(),
-        "inst");
+        "inst",
+        new ClickHouseSinkProperties());
 
     // Replace the internal ScenarioEngine with a spy so we can observe ticks.
     ScenarioEngine engineSpy = mock(ScenarioEngine.class);

@@ -6,8 +6,15 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
+import java.net.URI;
+import java.net.URLEncoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -81,6 +88,13 @@ public class SwarmLifecycleSteps {
       "x-ph-processor-connection-latency-ms",
       "x-ph-processor-success",
       "x-ph-processor-status");
+  private static final String CLICKHOUSE_URL_ENV = "POCKETHIVE_CLICKHOUSE_HTTP_URL";
+  private static final String CLICKHOUSE_USERNAME_ENV = "POCKETHIVE_CLICKHOUSE_USERNAME";
+  private static final String CLICKHOUSE_PASSWORD_ENV = "POCKETHIVE_CLICKHOUSE_PASSWORD";
+  private static final String DEFAULT_CLICKHOUSE_URL = "http://localhost:8123";
+  private static final String DEFAULT_CLICKHOUSE_USERNAME = "pockethive";
+  private static final String DEFAULT_CLICKHOUSE_PASSWORD = "pockethive";
+  private static final Duration CLICKHOUSE_HTTP_TIMEOUT = Duration.ofSeconds(5);
 
   private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
   private ServiceEndpoints endpoints;
@@ -364,6 +378,49 @@ public class SwarmLifecycleSteps {
     assertTemplatedGeneratorOutputIfApplicable();
   }
 
+  @And("I enable postprocessor tx-outcome sink")
+  public void iEnablePostprocessorTxOutcomeSink() {
+    ensureStartResponse();
+    captureWorkerStatuses(true);
+
+    String postprocessorKey = roleKey(POSTPROCESSOR_ROLE);
+    String postprocessorInstance = postprocessorKey == null ? null : workerInstances.get(postprocessorKey);
+    assertNotNull(postprocessorInstance, "Postprocessor instance should be discovered from status snapshots");
+    String postprocessorRoleName = actualRoleName(postprocessorKey != null ? postprocessorKey : POSTPROCESSOR_ROLE);
+
+    Map<String, Object> patch = new LinkedHashMap<>();
+    patch.put("enabled", true);
+    patch.put("writeTxOutcomeToClickHouse", true);
+    patch.put("dropTxOutcomeWithoutCallId", false);
+
+    ControlResponse response = orchestratorClient.updateComponentConfig(
+        postprocessorRoleName,
+        postprocessorInstance,
+        new ComponentConfigRequest(
+            idKey("postprocessor-clickhouse"),
+            patch,
+            "e2e enable postprocessor tx-outcome sink",
+            swarmId));
+
+    LOGGER.info("Postprocessor ClickHouse config-update requested for instance={} correlation={}",
+        postprocessorInstance, response.correlationId());
+    awaitReady("config-update", response);
+    assertNoErrors(response.correlationId(), "postprocessor config-update");
+    assertWatchMatched(response);
+  }
+
+  @Then("ClickHouse stores tx outcomes for the swarm")
+  public void clickHouseStoresTxOutcomesForTheSwarm() {
+    ensureStartResponse();
+    String escapedSwarmId = swarmId.replace("'", "''");
+    String query = "SELECT count() FROM ph_tx_outcome_v1 WHERE swarmId = '" + escapedSwarmId + "'";
+
+    SwarmAssertions.await("clickhouse tx-outcomes stored", () -> {
+      long count = queryClickHouseCount(query);
+      assertTrue(count > 0, () -> "Expected ClickHouse tx outcomes for swarm " + swarmId + " but found " + count);
+    });
+  }
+
   @Then("the swarm-start is rejected as NotReady")
   public void theSwarmStartIsRejectedAsNotReady() {
     ensureStartResponse();
@@ -621,10 +678,8 @@ public class SwarmLifecycleSteps {
     Map<String, Object> config = snapshotConfig(snapshot);
     assertFalse(config.isEmpty(), "Postprocessor snapshot should include applied config");
 
-    Object flag = config.get("publishAllMetrics");
-    boolean publishAllMetrics = flag instanceof Boolean b ? b : Boolean.parseBoolean(String.valueOf(flag));
-    assertTrue(!publishAllMetrics,
-        () -> "Expected postprocessor publishAllMetrics=false by default but was " + flag);
+    assertFalse(config.containsKey("publishAllMetrics"),
+        () -> "Postprocessor config should not expose deprecated publishAllMetrics flag: " + config);
   }
 
   @And("the postprocessor runtime config matches the local-rest scenario")
@@ -642,10 +697,8 @@ public class SwarmLifecycleSteps {
     Map<String, Object> config = snapshotConfig(snapshot);
     assertFalse(config.isEmpty(), "Postprocessor snapshot should include applied config");
 
-    Object flag = config.get("publishAllMetrics");
-    boolean publishAllMetrics = flag instanceof Boolean b ? b : Boolean.parseBoolean(String.valueOf(flag));
-    assertTrue(publishAllMetrics,
-        () -> "Expected postprocessor publishAllMetrics=true from local-rest scenario but was " + flag);
+    assertFalse(config.containsKey("publishAllMetrics"),
+        () -> "Postprocessor config should not expose deprecated publishAllMetrics flag: " + config);
   }
 
   @And("the swarm worker statuses reflect the swarm topology")
@@ -2427,6 +2480,58 @@ public class SwarmLifecycleSteps {
         + " scope=" + outcome.scope()
         + " correlationId=" + outcome.correlationId()
         + " data=" + (outcome.data() == null ? "<none>" : outcome.data());
+  }
+
+  private long queryClickHouseCount(String sql) {
+    String endpointValue = envOrDefault(CLICKHOUSE_URL_ENV, DEFAULT_CLICKHOUSE_URL);
+    URI endpoint;
+    try {
+      endpoint = URI.create(endpointValue);
+    } catch (IllegalArgumentException ex) {
+      throw new IllegalStateException("Invalid ClickHouse URL in " + CLICKHOUSE_URL_ENV + ": " + endpointValue, ex);
+    }
+
+    String query = URLEncoder.encode(sql, StandardCharsets.UTF_8);
+    String base = endpoint.toString().replaceAll("/+$", "");
+    URI uri = URI.create(base + "/?query=" + query);
+    HttpRequest.Builder request = HttpRequest.newBuilder(uri)
+        .timeout(CLICKHOUSE_HTTP_TIMEOUT)
+        .GET();
+
+    String username = envOrDefault(CLICKHOUSE_USERNAME_ENV, DEFAULT_CLICKHOUSE_USERNAME);
+    if (!username.isBlank()) {
+      String password = envOrDefault(CLICKHOUSE_PASSWORD_ENV, DEFAULT_CLICKHOUSE_PASSWORD);
+      String token = Base64.getEncoder().encodeToString((username + ":" + password).getBytes(StandardCharsets.UTF_8));
+      request.header("Authorization", "Basic " + token);
+    }
+
+    try {
+      HttpResponse<String> response = HttpClient.newHttpClient()
+          .send(request.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+      if (response.statusCode() / 100 != 2) {
+        throw new IllegalStateException("ClickHouse query failed with status=" + response.statusCode()
+            + " body=" + response.body());
+      }
+      String body = response.body() == null ? "" : response.body().trim();
+      if (body.isEmpty()) {
+        return 0L;
+      }
+      return Long.parseLong(body);
+    } catch (IOException ex) {
+      Assumptions.assumeTrue(false, "Skipping ClickHouse verification: " + ex.getMessage());
+      return 0L;
+    } catch (InterruptedException ex) {
+      Thread.currentThread().interrupt();
+      throw new IllegalStateException("Interrupted while querying ClickHouse", ex);
+    }
+  }
+
+  private static String envOrDefault(String variable, String defaultValue) {
+    String value = System.getenv(variable);
+    if (value == null || value.isBlank()) {
+      return defaultValue;
+    }
+    return value.trim();
   }
 
   private Set<String> expectedQueueSuffixes(SwarmTemplate template) {

@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.15.7]
+Timestamp: 2026-02-16T23:01:40Z
+
+- Postprocessor: remove deprecated `publishAllMetrics` flag from runtime config, status payloads, Scenario Manager capability manifest, and bundled/e2e scenarios.
+- Observability: transaction-level postprocessor analysis is now ClickHouse-first (`ph_tx_outcome_v1`) with dedicated Grafana dashboards for client-side RTT, tail latency, and quality/failure mixes.
+- Scenario Manager: `updateScenarioFromRaw(...)` persists raw YAML body verbatim (prevents mapper round-trip from rewriting YAML literals such as `body: |`).
+- Grafana/ClickHouse: add tx-outcomes dashboard improvements and new RTT-focused dashboard suite for high-range queries without raw-point overload.
+- **Migration note:** remove `publishAllMetrics` from custom postprocessor scenario configs. Keeping it now causes config binding failure (unknown field) in postprocessor worker config.
+
 ## [0.15.6]
 Timestamp: 2026-02-11T12:05:23Z
 
