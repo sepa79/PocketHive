@@ -172,7 +172,7 @@
       },
       "gridPos": {
         "h": 5,
-        "w": 6,
+        "w": 3,
         "x": 0,
         "y": 8
       },
@@ -200,6 +200,64 @@
         }
       ],
       "title": "Processor success (avg %)",
+      "type": "stat"
+    },
+    {
+      "datasource": "ClickHouse",
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 90
+              },
+              {
+                "color": "green",
+                "value": 99
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 3,
+        "x": 3,
+        "y": 8
+      },
+      "id": 6,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "editorType": "sql",
+          "format": 1,
+          "queryType": "sql",
+          "rawSql": "SELECT\n  avg(businessSuccess) * 100 AS success_pct\nFROM ph_tx_outcome_v1\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')",
+          "refId": "A"
+        }
+      ],
+      "title": "Business success (avg %)",
       "type": "stat"
     },
     {
