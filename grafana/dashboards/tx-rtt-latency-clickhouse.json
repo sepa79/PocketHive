@@ -24,7 +24,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Rozkład RTT klienta w czasie (p50/p95/p99). Pokazuje drift i rozjechanie tail latency bez znajomości etapów wewnętrznych.",
+      "description": "RTT percentiles over time grouped by swarmId, callId, and businessCode.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -75,7 +75,7 @@
           "editorType": "sql",
           "format": 1,
           "queryType": "sql",
-          "rawSql": "SELECT\n  time,\n  percentile,\n  value_ms\nFROM (\n  SELECT\n    toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n    'p50' AS percentile,\n    quantileTDigest(0.50)(processorDurationMs) AS value_ms\n  FROM ph_tx_outcome_v1\n  WHERE $__timeFilter(eventTime)\n    AND match(swarmId, '${swarm:regex}')\n    AND match(callId, '${callId:regex}')\n  GROUP BY time\n\n  UNION ALL\n\n  SELECT\n    toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n    'p95' AS percentile,\n    quantileTDigest(0.95)(processorDurationMs) AS value_ms\n  FROM ph_tx_outcome_v1\n  WHERE $__timeFilter(eventTime)\n    AND match(swarmId, '${swarm:regex}')\n    AND match(callId, '${callId:regex}')\n  GROUP BY time\n\n  UNION ALL\n\n  SELECT\n    toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n    'p99' AS percentile,\n    quantileTDigest(0.99)(processorDurationMs) AS value_ms\n  FROM ph_tx_outcome_v1\n  WHERE $__timeFilter(eventTime)\n    AND match(swarmId, '${swarm:regex}')\n    AND match(callId, '${callId:regex}')\n  GROUP BY time\n)\nORDER BY time, percentile",
+          "rawSql": "SELECT\n  time,\n  series,\n  value_ms\nFROM (\n  SELECT\n    toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n    concat(swarmId, ' | ', if(callId = '', 'unknown', callId), ' | ', if(businessCode = '', 'n/a', businessCode), ' | p50') AS series,\n    quantileTDigest(0.50)(processorDurationMs) AS value_ms\n  FROM ph_tx_outcome_v1\n  WHERE $__timeFilter(eventTime)\n    AND match(swarmId, '${swarm:regex}')\n    AND match(callId, '${callId:regex}')\n    AND match(if(businessCode = '', 'n/a', businessCode), '${businessCode:regex}')\n  GROUP BY time, swarmId, callId, businessCode\n\n  UNION ALL\n\n  SELECT\n    toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n    concat(swarmId, ' | ', if(callId = '', 'unknown', callId), ' | ', if(businessCode = '', 'n/a', businessCode), ' | p95') AS series,\n    quantileTDigest(0.95)(processorDurationMs) AS value_ms\n  FROM ph_tx_outcome_v1\n  WHERE $__timeFilter(eventTime)\n    AND match(swarmId, '${swarm:regex}')\n    AND match(callId, '${callId:regex}')\n    AND match(if(businessCode = '', 'n/a', businessCode), '${businessCode:regex}')\n  GROUP BY time, swarmId, callId, businessCode\n\n  UNION ALL\n\n  SELECT\n    toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n    concat(swarmId, ' | ', if(callId = '', 'unknown', callId), ' | ', if(businessCode = '', 'n/a', businessCode), ' | p99') AS series,\n    quantileTDigest(0.99)(processorDurationMs) AS value_ms\n  FROM ph_tx_outcome_v1\n  WHERE $__timeFilter(eventTime)\n    AND match(swarmId, '${swarm:regex}')\n    AND match(callId, '${callId:regex}')\n    AND match(if(businessCode = '', 'n/a', businessCode), '${businessCode:regex}')\n  GROUP BY time, swarmId, callId, businessCode\n)\nORDER BY time, series",
           "refId": "A"
         }
       ],
@@ -87,7 +87,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Udział transakcji przekraczających progi SLO (1s/2s/5s). Daje szybki obraz jak duży jest tail latency.",
+      "description": "SLO threshold breach rate over time grouped by swarmId, callId, and businessCode.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -138,7 +138,7 @@
           "editorType": "sql",
           "format": 1,
           "queryType": "sql",
-          "rawSql": "SELECT\n  time,\n  threshold,\n  pct\nFROM (\n  SELECT\n    toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n    '>1s' AS threshold,\n    avg(if(processorDurationMs > 1000, 1, 0)) * 100 AS pct\n  FROM ph_tx_outcome_v1\n  WHERE $__timeFilter(eventTime)\n    AND match(swarmId, '${swarm:regex}')\n    AND match(callId, '${callId:regex}')\n  GROUP BY time\n\n  UNION ALL\n\n  SELECT\n    toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n    '>2s' AS threshold,\n    avg(if(processorDurationMs > 2000, 1, 0)) * 100 AS pct\n  FROM ph_tx_outcome_v1\n  WHERE $__timeFilter(eventTime)\n    AND match(swarmId, '${swarm:regex}')\n    AND match(callId, '${callId:regex}')\n  GROUP BY time\n\n  UNION ALL\n\n  SELECT\n    toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n    '>5s' AS threshold,\n    avg(if(processorDurationMs > 5000, 1, 0)) * 100 AS pct\n  FROM ph_tx_outcome_v1\n  WHERE $__timeFilter(eventTime)\n    AND match(swarmId, '${swarm:regex}')\n    AND match(callId, '${callId:regex}')\n  GROUP BY time\n)\nORDER BY time, threshold",
+          "rawSql": "SELECT\n  time,\n  series,\n  pct\nFROM (\n  SELECT\n    toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n    concat(swarmId, ' | ', if(callId = '', 'unknown', callId), ' | ', if(businessCode = '', 'n/a', businessCode), ' | >1s') AS series,\n    avg(if(processorDurationMs > 1000, 1, 0)) * 100 AS pct\n  FROM ph_tx_outcome_v1\n  WHERE $__timeFilter(eventTime)\n    AND match(swarmId, '${swarm:regex}')\n    AND match(callId, '${callId:regex}')\n    AND match(if(businessCode = '', 'n/a', businessCode), '${businessCode:regex}')\n  GROUP BY time, swarmId, callId, businessCode\n\n  UNION ALL\n\n  SELECT\n    toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n    concat(swarmId, ' | ', if(callId = '', 'unknown', callId), ' | ', if(businessCode = '', 'n/a', businessCode), ' | >2s') AS series,\n    avg(if(processorDurationMs > 2000, 1, 0)) * 100 AS pct\n  FROM ph_tx_outcome_v1\n  WHERE $__timeFilter(eventTime)\n    AND match(swarmId, '${swarm:regex}')\n    AND match(callId, '${callId:regex}')\n    AND match(if(businessCode = '', 'n/a', businessCode), '${businessCode:regex}')\n  GROUP BY time, swarmId, callId, businessCode\n\n  UNION ALL\n\n  SELECT\n    toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n    concat(swarmId, ' | ', if(callId = '', 'unknown', callId), ' | ', if(businessCode = '', 'n/a', businessCode), ' | >5s') AS series,\n    avg(if(processorDurationMs > 5000, 1, 0)) * 100 AS pct\n  FROM ph_tx_outcome_v1\n  WHERE $__timeFilter(eventTime)\n    AND match(swarmId, '${swarm:regex}')\n    AND match(callId, '${callId:regex}')\n    AND match(if(businessCode = '', 'n/a', businessCode), '${businessCode:regex}')\n  GROUP BY time, swarmId, callId, businessCode\n)\nORDER BY time, series",
           "refId": "A"
         }
       ],
@@ -150,7 +150,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Anomalie RTT: najwyższe zaobserwowane wartości per interwał i segment (typ operacji + protokół).",
+      "description": "Maximum RTT anomaly view grouped by swarmId, callId, and businessCode.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -201,7 +201,7 @@
           "editorType": "sql",
           "format": 2,
           "queryType": "sql",
-          "rawSql": "SELECT\n  toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n  concat(\n    multiIf(\n      notEmpty(dimensions['transaction_type']), dimensions['transaction_type'],\n      notEmpty(dimensions['tx_type']), dimensions['tx_type'],\n      notEmpty(dimensions['operation']), dimensions['operation'],\n      'unknown'\n    ),\n    ' | ',\n    multiIf(\n      notEmpty(dimensions['protocol']), dimensions['protocol'],\n      notEmpty(dimensions['channel']), dimensions['channel'],\n      notEmpty(dimensions['transport']), dimensions['transport'],\n      'unknown'\n    )\n  ) AS segment,\n  max(processorDurationMs) AS max_rtt_ms\nFROM ph_tx_outcome_v1\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callId, '${callId:regex}')\nGROUP BY time, segment\nORDER BY time, segment",
+          "rawSql": "SELECT\n  toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n  concat(swarmId, ' | ', if(callId = '', 'unknown', callId), ' | ', if(businessCode = '', 'n/a', businessCode)) AS segment,\n  max(processorDurationMs) AS max_rtt_ms\nFROM ph_tx_outcome_v1\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callId, '${callId:regex}')\n  AND match(if(businessCode = '', 'n/a', businessCode), '${businessCode:regex}')\nGROUP BY time, swarmId, callId, businessCode\nORDER BY time, segment",
           "refId": "A"
         }
       ],
@@ -221,7 +221,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Najgorsze callId/businessCode w wybranym oknie. Przydatne do triage i szybkiego wskazania dominujących outlierów.",
+      "description": "Worst latency groups in the selected time range, grouped by swarmId, callId, and businessCode.",
       "fieldConfig": {
         "defaults": {
           "thresholds": {
@@ -257,7 +257,7 @@
           "editorType": "sql",
           "format": 1,
           "queryType": "sql",
-          "rawSql": "SELECT\n  if(callId = '', 'unknown', callId) AS call_id,\n  if(businessCode = '', 'n/a', businessCode) AS business_code,\n  count() AS txns,\n  quantileTDigest(0.95)(processorDurationMs) AS p95_rtt_ms,\n  quantileTDigest(0.99)(processorDurationMs) AS p99_rtt_ms,\n  max(processorDurationMs) AS max_rtt_ms,\n  avg(businessSuccess) * 100 AS business_success_pct\nFROM ph_tx_outcome_v1\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callId, '${callId:regex}')\nGROUP BY call_id, business_code\nORDER BY max_rtt_ms DESC\nLIMIT 100",
+          "rawSql": "SELECT\n  swarmId,\n  if(callId = '', 'unknown', callId) AS call_id,\n  if(businessCode = '', 'n/a', businessCode) AS business_code,\n  count() AS txns,\n  quantileTDigest(0.95)(processorDurationMs) AS p95_rtt_ms,\n  quantileTDigest(0.99)(processorDurationMs) AS p99_rtt_ms,\n  max(processorDurationMs) AS max_rtt_ms,\n  avg(processorSuccess) * 100 AS processor_success_pct,\n  avg(businessSuccess) * 100 AS business_success_pct\nFROM ph_tx_outcome_v1\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callId, '${callId:regex}')\n  AND match(if(businessCode = '', 'n/a', businessCode), '${businessCode:regex}')\nGROUP BY swarmId, call_id, business_code\nORDER BY max_rtt_ms DESC\nLIMIT 100",
           "refId": "A"
         }
       ],
@@ -288,15 +288,15 @@
           "type": "grafana-clickhouse-datasource",
           "uid": "clickhouse"
         },
-        "definition": "SELECT DISTINCT swarmId FROM ph_tx_outcome_v1 ORDER BY swarmId",
+        "definition": "SELECT DISTINCT swarmId FROM ph_tx_outcome_v1 WHERE $__timeFilter(eventTime) ORDER BY swarmId",
         "hide": 0,
         "includeAll": true,
         "label": "Swarm",
         "multi": true,
         "name": "swarm",
         "options": [],
-        "query": "SELECT DISTINCT swarmId FROM ph_tx_outcome_v1 ORDER BY swarmId",
-        "refresh": 1,
+        "query": "SELECT DISTINCT swarmId FROM ph_tx_outcome_v1 WHERE $__timeFilter(eventTime) ORDER BY swarmId",
+        "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
         "sort": 1,
@@ -313,15 +313,40 @@
           "type": "grafana-clickhouse-datasource",
           "uid": "clickhouse"
         },
-        "definition": "SELECT DISTINCT callId FROM ph_tx_outcome_v1 WHERE callId != '' ORDER BY callId LIMIT 500",
+        "definition": "SELECT DISTINCT callId FROM ph_tx_outcome_v1 WHERE $__timeFilter(eventTime) AND callId != '' ORDER BY callId LIMIT 500",
         "hide": 0,
         "includeAll": true,
         "label": "Call ID",
         "multi": true,
         "name": "callId",
         "options": [],
-        "query": "SELECT DISTINCT callId FROM ph_tx_outcome_v1 WHERE callId != '' ORDER BY callId LIMIT 500",
-        "refresh": 1,
+        "query": "SELECT DISTINCT callId FROM ph_tx_outcome_v1 WHERE $__timeFilter(eventTime) AND callId != '' ORDER BY callId LIMIT 500",
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "allValue": ".*",
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "clickhouse"
+        },
+        "definition": "SELECT DISTINCT if(businessCode = '', 'n/a', businessCode) FROM ph_tx_outcome_v1 WHERE $__timeFilter(eventTime) ORDER BY 1 LIMIT 500",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Business Code",
+        "multi": true,
+        "name": "businessCode",
+        "options": [],
+        "query": "SELECT DISTINCT if(businessCode = '', 'n/a', businessCode) FROM ph_tx_outcome_v1 WHERE $__timeFilter(eventTime) ORDER BY 1 LIMIT 500",
+        "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
         "sort": 1,
