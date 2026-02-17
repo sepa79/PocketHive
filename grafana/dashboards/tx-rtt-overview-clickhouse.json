@@ -73,10 +73,18 @@
       "targets": [
         {
           "editorType": "sql",
-          "format": 1,
+          "format": 2,
           "queryType": "sql",
           "rawSql": "SELECT\n  toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n  concat(swarmId, ' | ', if(callId = '', 'unknown', callId), ' | ', if(businessCode = '', 'n/a', businessCode)) AS series,\n  count() AS txns\nFROM ph_tx_outcome_v1\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callId, '${callId:regex}')\n  AND match(if(businessCode = '', 'n/a', businessCode), '${businessCode:regex}')\nGROUP BY time, swarmId, callId, businessCode\nORDER BY time, series",
           "refId": "A"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "prepareTimeSeries",
+          "options": {
+            "format": "many"
+          }
         }
       ],
       "title": "Tx volume by swarm/call/businessCode",
@@ -136,10 +144,18 @@
       "targets": [
         {
           "editorType": "sql",
-          "format": 1,
+          "format": 2,
           "queryType": "sql",
           "rawSql": "SELECT\n  toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n  concat(swarmId, ' | ', if(callId = '', 'unknown', callId), ' | ', if(businessCode = '', 'n/a', businessCode)) AS series,\n  avg(processorDurationMs) AS avg_rtt_ms\nFROM ph_tx_outcome_v1\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callId, '${callId:regex}')\n  AND match(if(businessCode = '', 'n/a', businessCode), '${businessCode:regex}')\nGROUP BY time, swarmId, callId, businessCode\nORDER BY time, series",
           "refId": "A"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "prepareTimeSeries",
+          "options": {
+            "format": "many"
+          }
         }
       ],
       "title": "Average RTT by swarm/call/businessCode",
@@ -207,10 +223,18 @@
       "targets": [
         {
           "editorType": "sql",
-          "format": 1,
+          "format": 2,
           "queryType": "sql",
           "rawSql": "SELECT\n  toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n  concat(swarmId, ' | ', if(callId = '', 'unknown', callId), ' | ', if(businessCode = '', 'n/a', businessCode)) AS series,\n  avg(businessSuccess) * 100 AS success_pct\nFROM ph_tx_outcome_v1\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callId, '${callId:regex}')\n  AND match(if(businessCode = '', 'n/a', businessCode), '${businessCode:regex}')\nGROUP BY time, swarmId, callId, businessCode\nORDER BY time, series",
           "refId": "A"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "prepareTimeSeries",
+          "options": {
+            "format": "many"
+          }
         }
       ],
       "title": "Business success by swarm/call/businessCode",

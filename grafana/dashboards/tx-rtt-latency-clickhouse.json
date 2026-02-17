@@ -73,10 +73,18 @@
       "targets": [
         {
           "editorType": "sql",
-          "format": 1,
+          "format": 2,
           "queryType": "sql",
           "rawSql": "SELECT\n  time,\n  series,\n  value_ms\nFROM (\n  SELECT\n    toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n    concat(swarmId, ' | ', if(callId = '', 'unknown', callId), ' | ', if(businessCode = '', 'n/a', businessCode), ' | p50') AS series,\n    quantileTDigest(0.50)(processorDurationMs) AS value_ms\n  FROM ph_tx_outcome_v1\n  WHERE $__timeFilter(eventTime)\n    AND match(swarmId, '${swarm:regex}')\n    AND match(callId, '${callId:regex}')\n    AND match(if(businessCode = '', 'n/a', businessCode), '${businessCode:regex}')\n  GROUP BY time, swarmId, callId, businessCode\n\n  UNION ALL\n\n  SELECT\n    toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n    concat(swarmId, ' | ', if(callId = '', 'unknown', callId), ' | ', if(businessCode = '', 'n/a', businessCode), ' | p95') AS series,\n    quantileTDigest(0.95)(processorDurationMs) AS value_ms\n  FROM ph_tx_outcome_v1\n  WHERE $__timeFilter(eventTime)\n    AND match(swarmId, '${swarm:regex}')\n    AND match(callId, '${callId:regex}')\n    AND match(if(businessCode = '', 'n/a', businessCode), '${businessCode:regex}')\n  GROUP BY time, swarmId, callId, businessCode\n\n  UNION ALL\n\n  SELECT\n    toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n    concat(swarmId, ' | ', if(callId = '', 'unknown', callId), ' | ', if(businessCode = '', 'n/a', businessCode), ' | p99') AS series,\n    quantileTDigest(0.99)(processorDurationMs) AS value_ms\n  FROM ph_tx_outcome_v1\n  WHERE $__timeFilter(eventTime)\n    AND match(swarmId, '${swarm:regex}')\n    AND match(callId, '${callId:regex}')\n    AND match(if(businessCode = '', 'n/a', businessCode), '${businessCode:regex}')\n  GROUP BY time, swarmId, callId, businessCode\n)\nORDER BY time, series",
           "refId": "A"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "prepareTimeSeries",
+          "options": {
+            "format": "many"
+          }
         }
       ],
       "title": "RTT percentiles (p50/p95/p99)",
@@ -136,10 +144,18 @@
       "targets": [
         {
           "editorType": "sql",
-          "format": 1,
+          "format": 2,
           "queryType": "sql",
           "rawSql": "SELECT\n  time,\n  series,\n  pct\nFROM (\n  SELECT\n    toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n    concat(swarmId, ' | ', if(callId = '', 'unknown', callId), ' | ', if(businessCode = '', 'n/a', businessCode), ' | >1s') AS series,\n    avg(if(processorDurationMs > 1000, 1, 0)) * 100 AS pct\n  FROM ph_tx_outcome_v1\n  WHERE $__timeFilter(eventTime)\n    AND match(swarmId, '${swarm:regex}')\n    AND match(callId, '${callId:regex}')\n    AND match(if(businessCode = '', 'n/a', businessCode), '${businessCode:regex}')\n  GROUP BY time, swarmId, callId, businessCode\n\n  UNION ALL\n\n  SELECT\n    toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n    concat(swarmId, ' | ', if(callId = '', 'unknown', callId), ' | ', if(businessCode = '', 'n/a', businessCode), ' | >2s') AS series,\n    avg(if(processorDurationMs > 2000, 1, 0)) * 100 AS pct\n  FROM ph_tx_outcome_v1\n  WHERE $__timeFilter(eventTime)\n    AND match(swarmId, '${swarm:regex}')\n    AND match(callId, '${callId:regex}')\n    AND match(if(businessCode = '', 'n/a', businessCode), '${businessCode:regex}')\n  GROUP BY time, swarmId, callId, businessCode\n\n  UNION ALL\n\n  SELECT\n    toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n    concat(swarmId, ' | ', if(callId = '', 'unknown', callId), ' | ', if(businessCode = '', 'n/a', businessCode), ' | >5s') AS series,\n    avg(if(processorDurationMs > 5000, 1, 0)) * 100 AS pct\n  FROM ph_tx_outcome_v1\n  WHERE $__timeFilter(eventTime)\n    AND match(swarmId, '${swarm:regex}')\n    AND match(callId, '${callId:regex}')\n    AND match(if(businessCode = '', 'n/a', businessCode), '${businessCode:regex}')\n  GROUP BY time, swarmId, callId, businessCode\n)\nORDER BY time, series",
           "refId": "A"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "prepareTimeSeries",
+          "options": {
+            "format": "many"
+          }
         }
       ],
       "title": "Tail breach rate by SLO threshold",

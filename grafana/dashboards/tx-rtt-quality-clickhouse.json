@@ -81,10 +81,18 @@
       "targets": [
         {
           "editorType": "sql",
-          "format": 1,
+          "format": 2,
           "queryType": "sql",
           "rawSql": "SELECT\n  toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n  concat(swarmId, ' | ', if(callId = '', 'unknown', callId), ' | ', if(businessCode = '', 'n/a', businessCode)) AS series,\n  avg(businessSuccess) * 100 AS business_success_pct\nFROM ph_tx_outcome_v1\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callId, '${callId:regex}')\n  AND match(if(businessCode = '', 'n/a', businessCode), '${businessCode:regex}')\nGROUP BY time, swarmId, callId, businessCode\nORDER BY time, series",
           "refId": "A"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "prepareTimeSeries",
+          "options": {
+            "format": "many"
+          }
         }
       ],
       "title": "Business success by swarm/call/businessCode",
@@ -144,10 +152,18 @@
       "targets": [
         {
           "editorType": "sql",
-          "format": 1,
+          "format": 2,
           "queryType": "sql",
           "rawSql": "SELECT\n  toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n  concat(\n    swarmId,\n    ' | ',\n    if(callId = '', 'unknown', callId),\n    ' | ',\n    if(businessCode = '', 'n/a', businessCode),\n    ' | ',\n    multiIf(\n      processorStatus >= 200 AND processorStatus < 300, '2xx',\n      processorStatus >= 400 AND processorStatus < 500, '4xx',\n      processorStatus >= 500 AND processorStatus < 600, '5xx',\n      'other'\n    )\n  ) AS series,\n  count() AS txns\nFROM ph_tx_outcome_v1\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callId, '${callId:regex}')\n  AND match(if(businessCode = '', 'n/a', businessCode), '${businessCode:regex}')\nGROUP BY time, swarmId, callId, businessCode, series\nORDER BY time, series",
           "refId": "A"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "prepareTimeSeries",
+          "options": {
+            "format": "many"
+          }
         }
       ],
       "title": "Processor status classes over time",
@@ -207,10 +223,18 @@
       "targets": [
         {
           "editorType": "sql",
-          "format": 1,
+          "format": 2,
           "queryType": "sql",
           "rawSql": "SELECT\n  toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n  concat(swarmId, ' | ', if(callId = '', 'unknown', callId), ' | ', if(businessCode = '', 'n/a', businessCode)) AS series,\n  avg(processorSuccess) * 100 AS processor_success_pct\nFROM ph_tx_outcome_v1\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callId, '${callId:regex}')\n  AND match(if(businessCode = '', 'n/a', businessCode), '${businessCode:regex}')\nGROUP BY time, swarmId, callId, businessCode\nORDER BY time, series",
           "refId": "A"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "prepareTimeSeries",
+          "options": {
+            "format": "many"
+          }
         }
       ],
       "title": "Processor success by swarm/call/businessCode",
