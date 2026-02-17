@@ -75,10 +75,18 @@
       "targets": [
         {
           "editorType": "sql",
-          "format": 1,
+          "format": 2,
           "queryType": "sql",
           "rawSql": "SELECT\n  toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n  concat(\n    swarmId,\n    ' | ',\n    if(callId = '', 'unknown', callId),\n    ' | ',\n    if(businessCode = '', 'n/a', businessCode)\n  ) AS series,\n  count() AS txns\nFROM ph_tx_outcome_v1\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callId, '${callId:regex}')\n  AND match(if(businessCode = '', 'n/a', businessCode), '${businessCode:regex}')\nGROUP BY time, swarmId, callId, businessCode\nORDER BY time, series",
           "refId": "A"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "prepareTimeSeries",
+          "options": {
+            "format": "many"
+          }
         }
       ],
       "title": "Tx outcomes (count)",
@@ -137,10 +145,18 @@
       "targets": [
         {
           "editorType": "sql",
-          "format": 1,
+          "format": 2,
           "queryType": "sql",
           "rawSql": "SELECT\n  toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n  concat(\n    swarmId,\n    ' | ',\n    if(callId = '', 'unknown', callId),\n    ' | ',\n    if(businessCode = '', 'n/a', businessCode)\n  ) AS series,\n  quantileTDigest(0.95)(processorDurationMs) AS p95_duration_ms\nFROM ph_tx_outcome_v1\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callId, '${callId:regex}')\n  AND match(if(businessCode = '', 'n/a', businessCode), '${businessCode:regex}')\nGROUP BY time, swarmId, callId, businessCode\nORDER BY time, series",
           "refId": "A"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "prepareTimeSeries",
+          "options": {
+            "format": "many"
+          }
         }
       ],
       "title": "Processor duration p95 (ms)",
@@ -181,38 +197,36 @@
       },
       "id": 3,
       "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
         },
-        "textMode": "auto"
-      },
-      "options": {
-        "showHeader": true,
-        "sortBy": [
-          {
-            "desc": true,
-            "displayName": "txns"
-          }
-        ]
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
       },
       "targets": [
         {
           "editorType": "sql",
-          "format": 1,
+          "format": 2,
           "queryType": "sql",
-          "rawSql": "SELECT\n  swarmId,\n  if(callId = '', 'unknown', callId) AS callId,\n  if(businessCode = '', 'n/a', businessCode) AS businessCode,\n  count() AS txns,\n  avg(processorSuccess) * 100 AS success_pct\nFROM ph_tx_outcome_v1\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callId, '${callId:regex}')\n  AND match(if(businessCode = '', 'n/a', businessCode), '${businessCode:regex}')\nGROUP BY swarmId, callId, businessCode\nORDER BY txns DESC\nLIMIT 50",
+          "rawSql": "SELECT\n  toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n  concat(swarmId, ' | ', if(callId = '', 'unknown', callId), ' | ', if(businessCode = '', 'n/a', businessCode)) AS series,\n  avg(processorSuccess) * 100 AS success_pct\nFROM ph_tx_outcome_v1\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callId, '${callId:regex}')\n  AND match(if(businessCode = '', 'n/a', businessCode), '${businessCode:regex}')\nGROUP BY time, swarmId, callId, businessCode\nORDER BY time, series",
           "refId": "A"
         }
       ],
       "title": "Processor success by swarm/call/businessCode",
-      "type": "table"
+      "transformations": [
+        {
+          "id": "prepareTimeSeries",
+          "options": {
+            "format": "many"
+          }
+        }
+      ],
+      "type": "timeseries"
     },
     {
       "datasource": "ClickHouse",
@@ -249,38 +263,36 @@
       },
       "id": 6,
       "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
         },
-        "textMode": "auto"
-      },
-      "options": {
-        "showHeader": true,
-        "sortBy": [
-          {
-            "desc": true,
-            "displayName": "txns"
-          }
-        ]
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
       },
       "targets": [
         {
           "editorType": "sql",
-          "format": 1,
+          "format": 2,
           "queryType": "sql",
-          "rawSql": "SELECT\n  swarmId,\n  if(callId = '', 'unknown', callId) AS callId,\n  if(businessCode = '', 'n/a', businessCode) AS businessCode,\n  count() AS txns,\n  avg(businessSuccess) * 100 AS success_pct\nFROM ph_tx_outcome_v1\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callId, '${callId:regex}')\n  AND match(if(businessCode = '', 'n/a', businessCode), '${businessCode:regex}')\nGROUP BY swarmId, callId, businessCode\nORDER BY txns DESC\nLIMIT 50",
+          "rawSql": "SELECT\n  toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n  concat(swarmId, ' | ', if(callId = '', 'unknown', callId), ' | ', if(businessCode = '', 'n/a', businessCode)) AS series,\n  avg(businessSuccess) * 100 AS success_pct\nFROM ph_tx_outcome_v1\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callId, '${callId:regex}')\n  AND match(if(businessCode = '', 'n/a', businessCode), '${businessCode:regex}')\nGROUP BY time, swarmId, callId, businessCode\nORDER BY time, series",
           "refId": "A"
         }
       ],
       "title": "Business success by swarm/call/businessCode",
-      "type": "table"
+      "transformations": [
+        {
+          "id": "prepareTimeSeries",
+          "options": {
+            "format": "many"
+          }
+        }
+      ],
+      "type": "timeseries"
     },
     {
       "datasource": "ClickHouse",
