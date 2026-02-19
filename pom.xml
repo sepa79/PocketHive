@@ -26,6 +26,7 @@
     <module>moderator-service</module>
     <module>orchestrator-service</module>
     <module>postprocessor-service</module>
+    <module>clearing-export-service</module>
     <module>processor-service</module>
     <module>swarm-controller-service</module>
     <module>trigger-service</module>
