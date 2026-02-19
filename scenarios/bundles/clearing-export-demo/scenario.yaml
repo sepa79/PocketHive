@@ -1,0 +1,56 @@
+id: clearing-export-demo
+name: Clearing Export Demo
+description: Runs 20 transactions through generator->moderator->processor->clearing-export and writes 2 clearing files.
+template:
+  image: swarm-controller:latest
+  bees:
+    - role: generator
+      image: generator:latest
+      config:
+        outputs:
+          type: RABBITMQ
+        inputs:
+          type: SCHEDULER
+          scheduler:
+            ratePerSec: 20
+            maxMessages: 20
+        worker:
+          message:
+            path: /api/test
+            method: POST
+            body: '{"tx":"demo","channel":"e2e-clearing"}'
+            headers:
+              content-type: application/json
+      work:
+        out: gen
+
+    - role: moderator
+      image: moderator:latest
+      work:
+        in: gen
+        out: mod
+
+    - role: processor
+      image: processor:latest
+      work:
+        in: mod
+        out: post
+
+    - role: clearing-export
+      image: clearing-export:latest
+      config:
+        worker:
+          maxRecordsPerFile: 10
+          flushIntervalMs: 60000
+          maxBufferedRecords: 5000
+          strictTemplate: true
+          lineSeparator: "\n"
+          fileNameTemplate: "CLEARING_{{ now }}.txt"
+          headerTemplate: "H|{{ now }}"
+          recordTemplate: "D|{{ record.payload }}"
+          footerTemplate: "T|{{ recordCount }}"
+          localTargetDir: "/tmp/pockethive/clearing-out"
+          localTempSuffix: ".tmp"
+          writeManifest: false
+      work:
+        in: post
