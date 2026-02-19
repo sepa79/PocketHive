@@ -33,9 +33,16 @@ public final class SwarmAssertions {
   public static void await(String description, Runnable assertion) {
     Objects.requireNonNull(description, "description");
     Objects.requireNonNull(assertion, "assertion");
+    await(description, DEFAULT_TIMEOUT, assertion);
+  }
+
+  public static void await(String description, Duration timeout, Runnable assertion) {
+    Objects.requireNonNull(description, "description");
+    Objects.requireNonNull(timeout, "timeout");
+    Objects.requireNonNull(assertion, "assertion");
     Awaitility.await(description)
         .pollInterval(DEFAULT_POLL_INTERVAL)
-        .atMost(DEFAULT_TIMEOUT)
+        .atMost(timeout)
         .untilAsserted(assertion::run);
   }
 }

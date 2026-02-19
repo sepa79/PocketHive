@@ -1,6 +1,8 @@
 # Transaction Outcome Extractors (Template-Driven) — V1 Plan
 
-> Status: in progress  
+> Status: **implemented / archived**.  
+> Follow-up: `docs/archive/tx-outcome-clickhouse-v1.md`, `docs/observability.md`.
+
 > Scope: `http-builder-service`, `processor-service`, `postprocessor-service`,
 > `common/worker-sdk`, tests, docs
 

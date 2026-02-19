@@ -30,5 +30,8 @@ COPY .local-jars/processor-service.jar /app/app.jar
 FROM bee-runtime AS postprocessor
 COPY .local-jars/postprocessor-service.jar /app/app.jar
 
+FROM bee-runtime AS clearing-export
+COPY .local-jars/clearing-export-service.jar /app/app.jar
+
 FROM bee-runtime AS trigger
 COPY .local-jars/trigger-service.jar /app/app.jar

@@ -1,0 +1,26 @@
+schemaVersion: "1.0"
+capabilitiesVersion: "1.0"
+role: clearing-export
+image:
+  name: clearing-export
+  tag: latest
+ui:
+  label: "Clearing Export"
+  color: "#84cc16"
+  shape: "hexagon"
+  abbreviation: "CE"
+config:
+  - name: enabled
+    type: boolean
+    default: false
+  - name: maxRecordsPerFile
+    type: integer
+    default: 1000
+  - name: flushIntervalMs
+    type: integer
+    default: 1000
+  - name: maxBufferedRecords
+    type: integer
+    default: 50000
+actions: []
+panels: []

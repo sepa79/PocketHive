@@ -1,0 +1,23 @@
+# Example business-only clearing templates for clearing-export-service.
+#
+# This snippet can be copied into:
+# pockethive.worker.config
+
+maxRecordsPerFile: 500
+flushIntervalMs: 2000
+maxBufferedRecords: 20000
+strictTemplate: true
+lineSeparator: "\n"
+
+# File names are business-oriented; no PocketHive metadata is used.
+fileNameTemplate: "CLEARING_{{ now }}.txt"
+
+# Example fixed-width-like business format (pipe-separated for readability).
+headerTemplate: "H|ISSUER-PL|MASTERCARD|{{ now }}"
+recordTemplate: "D|{{ record.json.clearingId }}|{{ record.json.panMasked }}|{{ record.json.amountMinor }}|{{ record.json.currency }}|{{ record.json.responseCode }}"
+footerTemplate: "T|{{ recordCount }}"
+
+localTargetDir: "/tmp/pockethive/clearing-out"
+localTempSuffix: ".tmp"
+writeManifest: true
+localManifestPath: "reports/clearing/manifest.jsonl"

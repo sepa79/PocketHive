@@ -60,6 +60,8 @@ public final class BeeNameGenerator {
           "moderator", "guardian",
           "processor", "worker",
           "postprocessor", "forager",
+          "request-builder", "composer",
+          "clearing-export", "packer",
           "trigger", "buzzer",
           "log-aggregator", "scribe",
           "swarm-controller", "marshal",
