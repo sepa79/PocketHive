@@ -1,0 +1,35 @@
+schemaId: pcs-clearing
+schemaVersion: "1.0.0"
+outputFormat: xml
+fileNameTemplate: "CLEARING_{{ now }}.xml"
+
+recordMapping:
+  payload:
+    expression: "{{ record.payload }}"
+    required: true
+    type: string
+  unitAmount:
+    expression: "1"
+    required: true
+    type: long
+
+headerMapping:
+  creationDateTime: "{{ now }}"
+  issuerCode: "ISSUER-PL"
+  schemeCode: "MASTERCARD"
+
+footerMapping:
+  recordCount: "{{ recordCount }}"
+  totalUnits: "{{ totals.sumUnitAmount }}"
+
+xml:
+  declaration: true
+  encoding: UTF-8
+  rootElement: Document
+  headerElement: FileHeader
+  recordsElement: Transactions
+  recordElement: Transaction
+  footerElement: FileTrailer
+  namespaceUri: ""
+  namespacePrefix: ""
+  indent: false

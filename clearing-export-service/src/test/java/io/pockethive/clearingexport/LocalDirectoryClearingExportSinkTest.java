@@ -18,6 +18,7 @@ class LocalDirectoryClearingExportSinkTest {
     LocalDirectoryClearingExportSink sink = new LocalDirectoryClearingExportSink();
 
     ClearingExportWorkerConfig config = new ClearingExportWorkerConfig(
+        "template",
         10,
         1_000,
         100,
@@ -30,7 +31,10 @@ class LocalDirectoryClearingExportSinkTest {
         tempDir.toString(),
         ".tmp",
         true,
-        "reports/clearing/manifest.jsonl"
+        "reports/clearing/manifest.jsonl",
+        "/tmp/schemas",
+        null,
+        null
     );
 
     ClearingRenderedFile file = new ClearingRenderedFile(

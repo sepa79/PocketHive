@@ -3,6 +3,7 @@ package io.pockethive.clearingexport;
 import java.util.Objects;
 
 public record ClearingExportWorkerConfig(
+    String mode,
     int maxRecordsPerFile,
     long flushIntervalMs,
     int maxBufferedRecords,
@@ -15,21 +16,40 @@ public record ClearingExportWorkerConfig(
     String localTargetDir,
     String localTempSuffix,
     boolean writeManifest,
-    String localManifestPath
+    String localManifestPath,
+    String schemaRegistryRoot,
+    String schemaId,
+    String schemaVersion
 ) {
 
   public ClearingExportWorkerConfig {
+    mode = defaultIfBlank(mode, "template");
     maxRecordsPerFile = Math.max(1, maxRecordsPerFile);
     flushIntervalMs = Math.max(1L, flushIntervalMs);
     maxBufferedRecords = Math.max(1, maxBufferedRecords);
     lineSeparator = defaultIfBlank(lineSeparator, "\n");
-    fileNameTemplate = requireNonBlank(fileNameTemplate, "fileNameTemplate");
-    headerTemplate = requireNonBlank(headerTemplate, "headerTemplate");
-    recordTemplate = requireNonBlank(recordTemplate, "recordTemplate");
-    footerTemplate = requireNonBlank(footerTemplate, "footerTemplate");
     localTargetDir = requireNonBlank(localTargetDir, "localTargetDir");
     localTempSuffix = defaultIfBlank(localTempSuffix, ".tmp");
     localManifestPath = defaultIfBlank(localManifestPath, "reports/clearing/manifest.jsonl");
+    schemaRegistryRoot = defaultIfBlank(schemaRegistryRoot, "/app/scenario/clearing-schemas");
+
+    if (isStructuredMode(mode)) {
+      schemaId = requireNonBlank(schemaId, "schemaId");
+      schemaVersion = requireNonBlank(schemaVersion, "schemaVersion");
+    } else {
+      fileNameTemplate = requireNonBlank(fileNameTemplate, "fileNameTemplate");
+      headerTemplate = requireNonBlank(headerTemplate, "headerTemplate");
+      recordTemplate = requireNonBlank(recordTemplate, "recordTemplate");
+      footerTemplate = requireNonBlank(footerTemplate, "footerTemplate");
+    }
+  }
+
+  boolean structuredMode() {
+    return isStructuredMode(mode);
+  }
+
+  private static boolean isStructuredMode(String value) {
+    return "structured".equalsIgnoreCase(value);
   }
 
   private static String requireNonBlank(String value, String name) {

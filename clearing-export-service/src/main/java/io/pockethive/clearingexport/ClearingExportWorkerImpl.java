@@ -31,6 +31,8 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
 
   private final ClearingExportWorkerProperties properties;
   private final ClearingExportBatchWriter batchWriter;
+  private final ClearingStructuredSchemaRegistry schemaRegistry;
+  private final StructuredRecordProjector structuredRecordProjector;
   private final TemplateRenderer templateRenderer;
   private final ObjectMapper objectMapper;
   private final Clock clock;
@@ -39,11 +41,15 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
   ClearingExportWorkerImpl(
       ClearingExportWorkerProperties properties,
       ClearingExportBatchWriter batchWriter,
+      ClearingStructuredSchemaRegistry schemaRegistry,
+      StructuredRecordProjector structuredRecordProjector,
       TemplateRenderer templateRenderer
   ) {
     this(
         properties,
         batchWriter,
+        schemaRegistry,
+        structuredRecordProjector,
         templateRenderer,
         new ObjectMapper().findAndRegisterModules(),
         Clock.systemUTC());
@@ -52,12 +58,16 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
   ClearingExportWorkerImpl(
       ClearingExportWorkerProperties properties,
       ClearingExportBatchWriter batchWriter,
+      ClearingStructuredSchemaRegistry schemaRegistry,
+      StructuredRecordProjector structuredRecordProjector,
       TemplateRenderer templateRenderer,
       ObjectMapper objectMapper,
       Clock clock
   ) {
     this.properties = Objects.requireNonNull(properties, "properties");
     this.batchWriter = Objects.requireNonNull(batchWriter, "batchWriter");
+    this.schemaRegistry = Objects.requireNonNull(schemaRegistry, "schemaRegistry");
+    this.structuredRecordProjector = Objects.requireNonNull(structuredRecordProjector, "structuredRecordProjector");
     this.templateRenderer = Objects.requireNonNull(templateRenderer, "templateRenderer");
     this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
     this.clock = Objects.requireNonNull(clock, "clock");
@@ -69,14 +79,17 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
         context.configOrDefault(ClearingExportWorkerConfig.class, properties::defaultConfig);
 
     Map<String, Object> record = projectRecord(in);
-    Map<String, Object> renderContext = new LinkedHashMap<>();
-    renderContext.put("record", record);
-    renderContext.put("now", Instant.now(clock).toString());
-
-    String renderedLine = templateRenderer.render(config.recordTemplate(), renderContext);
+    Map<String, Object> renderContext = baseRenderContext(record);
 
     try {
-      batchWriter.append(renderedLine, config);
+      if (config.structuredMode()) {
+        ClearingStructuredSchema schema = schemaRegistry.resolve(config);
+        StructuredProjectedRecord projected = structuredRecordProjector.project(schema, renderContext);
+        batchWriter.appendStructured(projected, config, schema);
+      } else {
+        String renderedLine = templateRenderer.render(config.recordTemplate(), renderContext);
+        batchWriter.append(renderedLine, config);
+      }
     } catch (Exception ex) {
       publishStatus(context);
       throw new IllegalStateException("Failed to append clearing export record", ex);
@@ -84,6 +97,13 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
 
     publishStatus(context);
     return null;
+  }
+
+  private Map<String, Object> baseRenderContext(Map<String, Object> record) {
+    Map<String, Object> renderContext = new LinkedHashMap<>();
+    renderContext.put("record", record);
+    renderContext.put("now", Instant.now(clock).toString());
+    return renderContext;
   }
 
   @Scheduled(fixedDelayString = "${pockethive.clearing-export.flush-check-ms:250}")

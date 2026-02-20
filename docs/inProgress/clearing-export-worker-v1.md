@@ -1,157 +1,164 @@
-# Clearing Export Worker — V1 Plan
+# Clearing Export Worker — V1/V2 Plan
 
 > Status: in progress
-> Scope: new worker role for terminal clearing export, template-based file assembly, local directory sink (SFTP deferred)
+> Scope: terminal clearing export worker with current template mode (V1) and planned universal schema-driven structured mode (V2)
 
 ## Goal
 
-Provide a simple terminal worker that:
+Build a universal clearing export worker that:
 
-- consumes matched `WorkItem` messages (request/response matching already done upstream),
+- consumes matched `WorkItem` messages,
 - batches records in memory,
-- renders a custom clearing file with configurable `header`, `record`, `footer` templates,
-- writes files to a configured local directory using atomic finalize semantics.
+- assembles business clearing files in deterministic format,
+- writes files via pluggable sinks,
+- supports protocol-specific behavior via external schema/config (not hardcoded worker logic).
 
-V1 explicitly targets local filesystem output only. SFTP is a follow-up sink implementation behind the same sink port.
+Detailed protocol specs (for example MC/PCS) may remain outside repo (NDA); worker must still support them through schema packs.
 
-## Non-goals (V1)
+## Delivery model
 
-- no CSV/JSON file modes,
-- no additional matching/reconciliation logic,
-- no schema autodiscovery,
-- no backward compatibility fallback chains in config keys.
+- V1 (already implemented): template mode + local sink.
+- V1.1 (near-term hardening): observability/test gaps in existing mode.
+- V2 (new): schema-driven structured mode for universal object-based file assembly.
 
-## Architecture fit
+## V1 baseline (current)
 
-- Worker role follows existing Worker SDK model (`MESSAGE_DRIVEN`) and can be wired similarly to postprocessor.
-- Input/output routing remains in `pockethive.inputs.*` / `pockethive.outputs.*` contracts (no bespoke queue declarations).
-- Worker is terminal by default (`onMessage` returns `null`), with optional forward mode only if explicitly needed later.
+Implemented today:
 
-## Processing flow
+- template mode (`headerTemplate`, `recordTemplate`, `footerTemplate`, `fileNameTemplate`),
+- local directory sink with `.tmp` + atomic rename,
+- batch policy (`maxRecordsPerFile`, `flushIntervalMs`, `maxBufferedRecords`),
+- optional manifest (`reports/clearing/manifest.jsonl`),
+- `clearing-export-demo` scenario and e2e coverage.
 
-1. `onMessage(WorkItem, WorkerContext)` projects the incoming message to a template context map.
-2. Worker renders one `record` line from `recordTemplate`.
-3. Record is appended to current in-memory batch state.
-4. Flush is triggered when either:
-   - `recordCount >= maxRecordsPerFile`, or
-   - `flushIntervalMs` elapsed since last flush.
-5. On flush, worker renders:
-   - `headerTemplate` with final batch aggregates,
-   - all rendered record lines in insertion order,
-   - `footerTemplate` with final batch aggregates.
-6. Sink writes file as `<filename>.tmp` and atomically renames to final filename.
+Design constraints already accepted:
 
-## Template model
+- worker output is business-only (no PocketHive metadata injected into clearing files),
+- worker remains terminal (`onMessage` returns `null`),
+- no fallback chains for config keys.
 
-Templates are custom text templates (Pebble via Worker SDK renderer) and are strict by default.
+## V1.1 hardening scope
 
-Required templates:
+### Missing pieces
 
-- `headerTemplate`
-- `recordTemplate`
-- `footerTemplate`
-- `fileNameTemplate`
+- Journal events for file lifecycle (`created`, `write-failed`, `finalize-failed`, `flush-summary`).
+- Unit/integration tests for flush policy and finalize semantics.
 
-Optional formatting:
+### Done criteria
 
-- `lineSeparator` (default `\n`)
+- Journal contains one file-level event per finalized file and explicit error events on failed write/finalize.
+- Deterministic tests verify:
+  - flush on `maxRecordsPerFile`,
+  - flush on `flushIntervalMs`,
+  - retry semantics after write failure,
+  - atomic rename contract.
 
-Template context shape:
+## V2 universal structured mode (new requirements)
 
-- `now` (UTC timestamp at flush time)
-- `recordCount`
-- `totals` (aggregates map, initially at least `recordCount`; extendable)
-- `record` (available only for `recordTemplate`, projected current message)
+Source requirements: `docs/inProgress/clearing-export-structured-mode-v1.md`.
 
-Template context must remain business-oriented. PocketHive metadata (`swarmId`, role, instance, control-plane identifiers)
-must not be injected into clearing file templates.
+### V2 objective
 
-If a referenced field is missing and `strictTemplate=true`, flush fails and worker reports sink/template error via status and logs.
+Add `mode: structured` alongside existing `mode: template`, where file structure is built from object mappings and schema rules, then formatted by XML formatter (`xml`).
 
-## V1 configuration contract
+### Key principles
+
+- `template` mode path must stay backward-compatible and unchanged.
+- Schema/config is SSOT for protocol-specific layout/validation rules.
+- Strict/fail-fast behavior by default for schema errors and missing required fields.
+- Deterministic output (field ordering, encoding, separators, numeric/date formatting).
+
+### User-facing scenario shape (target)
 
 ```yaml
-pockethive:
-  control-plane:
-    worker:
-      clearing-export:
-        enabled: true
-        max-records-per-file: 1000
-        flush-interval-ms: 1000
-        max-buffered-records: 50000
-        strict-template: true
-        line-separator: "\n"
-        file-name-template: "clearing_{{ now | date('yyyyMMdd_HHmmss_SSS') }}.dat"
-        header-template: "H|{{ now | date('yyyyMMdd') }}"
-        record-template: "D|{{ record.messageId }}|{{ record.amount }}|{{ record.responseCode }}"
-        footer-template: "T|{{ recordCount }}"
-        local:
-          target-dir: /var/lib/pockethive/clearing-out
+worker:
+  mode: structured
+  schema:
+    id: pcs-clearing
+    version: "1.0.0"
+  outputFormat: xml
+  fileNameTemplate: "CLEARING_{{ now }}.xml"
+  maxRecordsPerFile: 1000
+  flushIntervalMs: 60000
+  maxBufferedRecords: 50000
+  localTargetDir: "/tmp/pockethive/clearing-out"
 ```
 
-Notes:
+### Engine capabilities required in V2
 
-- `max-buffered-records` protects heap usage; exceeding it fails fast (same principle as postprocessor ClickHouse buffer guard).
-- No cascading defaults across unrelated keys; each required template/key must be explicitly present.
+- record projection via field mapping expressions,
+- typed validation/transforms per mapped field,
+- aggregate computation (`totals.*`) for footer/header,
+- formatter abstraction (`OutputFormatter`) with XML implementation,
+- schema preflight validation at config load/start,
+- clear runtime errors referencing schema field/rule.
 
-## Status/observability
+## V2 implementation plan
 
-Primary audit trail should be emitted to Journal (not to high-frequency worker status updates).
-Per-message appends are intentionally not journaled; only file-level lifecycle events are.
+### Phase 1: Config and mode dispatch
 
-Recommended Journal events:
+- Extend `ClearingExportWorkerConfig` with structured-mode fields.
+- Add `mode` dispatch in worker (`template` vs `structured`).
+- Add preflight validation for required structured fields (`recordMapping`, etc.).
 
-- `clearing-file-created` (finalized file ready): filename, recordCount, fileSizeBytes, checksum (optional), createdAt.
-- `clearing-file-write-failed`: filename/tmpName, stage (`assemble|write|rename`), error, attempt.
-- `clearing-file-finalize-failed`: tmpName, targetName, error.
-- `clearing-file-flush-summary`: bufferedBefore, flushedRecords, durationMs.
+### Phase 2: Structured projection and aggregates
 
-Worker status should stay lightweight (heartbeat/quick diagnostics only), for example:
+- Implement `StructuredRecordProjector` (mapping eval).
+- Implement `StructuredAggregates` (sum/min/max/count for numeric mapped fields).
+- Extend batch writer for structured record buffer.
 
-- `enabled`
-- `bufferedRecords`
-- `lastFileName`
-- `lastFlushAt`
-- `lastError`
+### Phase 3: Formatter layer
 
-Optional local report artifact in scenario directory:
+- Add `OutputFormatter` interface + factory.
+- Implement `XmlOutputFormatter` (`XMLStreamWriter`).
+- Wire `StructuredFileAssembler` into existing flush path.
 
-- write a compact manifest entry for each finalized file under a dedicated path (for example `/app/scenario/reports/clearing/manifest.jsonl`);
-- include: filename, recordCount, bytes, checksum, createdAt;
-- one line per file, append-only, no per-message entries.
+### Phase 4: Schema-driven validation contract
 
-Correlation/trace context must propagate unchanged according to `docs/correlation-vs-idempotency.md`.
+- Define canonical schema contract for structured mode (`schemaId`, `schemaVersion`, mappings, validation rules, output rules).
+- Add strict validation rules (required/type/enum/length/regex/number/date constraints).
+- Enforce deterministic ordering and null policy.
 
-## Failure semantics
+### Phase 5: Tests, docs, examples
 
-- Template render failure during record append: fail current message.
-- File write/rename failure during flush: keep batch in memory, expose failure, retry on next trigger.
-- Shutdown hook should attempt final flush (best effort), matching postprocessor writer behaviour.
+- Add formatter golden tests (XML).
+- Add schema validation tests (positive/negative cases).
+- Add integration tests for structured mode batch + flush + finalize.
+- Add examples and playbook updates for schema-driven usage.
 
-## Implementation sketch
+## Risks and decisions
 
-- `ClearingExportWorkerImpl` — message handler + status updates.
-- `ClearingExportBatchWriter` — buffer, flush policy, batch lifecycle.
-- `ClearingFileAssembler` — header/records/footer rendering.
-- `ClearingExportSink` (port) — sink abstraction.
-- `LocalDirectoryClearingSink` — V1 sink (`.tmp` + atomic rename).
-- `ClearingExportWorkerConfig` + `ClearingExportWorkerProperties` — typed config via control-plane worker config.
+- NDA protocol specs are external: worker must remain generic and schema-pack friendly.
+- Silent skipping of malformed numeric fields in totals is risky for compliance; default should be strict with explicit policy switch if needed.
+- Output determinism must be tested byte-to-byte for compliance-critical schemas.
 
-## Delivery order
+## Tracking
 
-1. Documentation + config contract (this file).
-2. Service scaffold with local directory sink and strict templates.
-3. Integration tests for flush triggers, template rendering, and atomic finalize.
-4. SFTP sink as a separate adapter (same `ClearingExportSink` port), no contract changes required.
+### V1.1 hardening
 
-## Implementation tracking
-
-- [x] V1 plan documented (scope, template model, local sink approach).
-- [x] `clearing-export-service` module scaffolded in Maven reactor.
-- [x] Worker runtime wiring (`Application`, `@PocketHiveWorker`, typed config binding).
-- [x] Template-driven assembler (`header`/`record`/`footer` + file name template).
-- [x] Local directory sink (`.tmp` write + atomic rename).
-- [x] Batch writer (size/time flush + bounded buffer guard).
 - [ ] Journal events for file lifecycle (`created`, `write-failed`, `finalize-failed`, `flush-summary`).
-- [x] Optional local manifest report (`/app/scenario/reports/clearing/manifest.jsonl`).
-- [ ] Unit/integration tests for flush policy and file finalize semantics.
+- [ ] Unit tests: flush-by-count and flush-by-time policy.
+- [ ] Integration tests: finalize semantics (`.tmp` + atomic rename).
+- [ ] Integration test: write failure keeps batch and retries on next trigger.
+
+### V2 structured mode
+
+- [x] `ClearingExportWorkerConfig` extended with structured-mode fields.
+- [x] Worker mode dispatch (`template`/`structured`) added.
+- [x] Preflight config validation for structured mode.
+- [x] `StructuredRecordProjector` implemented + tests.
+- [x] `StructuredAggregates` implemented in batch flush path (`totals.sum*`/`totals.min*`/`totals.max*`) + tests.
+- [x] Structured buffer support in `ClearingExportBatchWriter`.
+- [ ] `OutputFormatter` interface + factory implemented.
+- [x] `XmlOutputFormatter` implemented + tests.
+- [x] `StructuredFileAssembler` wired into flush pipeline (`ClearingExportFileAssembler.assembleStructured`).
+- [ ] Canonical schema contract documented (SSOT) and linked from playbook.
+- [x] Example schema added (non-NDA sample) and runnable demo scenario (`clearing-export-structured-demo`).
+- [x] E2E scenario added for structured XML export (`@clearing-export-structured-demo`).
+- [ ] Playbook updated with structured/schema-driven usage and troubleshooting.
+
+## References
+
+- `docs/inProgress/clearing-export-structured-mode-v1.md`
+- `docs/ai/CLEARING_EXPORT_WORKER_PLAYBOOK.md`
+- `docs/correlation-vs-idempotency.md`

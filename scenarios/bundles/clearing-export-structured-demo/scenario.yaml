@@ -1,0 +1,54 @@
+id: clearing-export-structured-demo
+name: Clearing Export Structured Demo
+description: Runs 20 transactions through generator->moderator->processor->clearing-export (structured mode XML) and writes 2 clearing files.
+template:
+  image: swarm-controller:latest
+  bees:
+    - role: generator
+      image: generator:latest
+      config:
+        outputs:
+          type: RABBITMQ
+        inputs:
+          type: SCHEDULER
+          scheduler:
+            ratePerSec: 20
+            maxMessages: 20
+        worker:
+          message:
+            path: /api/test
+            method: POST
+            body: '{"tx":"demo","channel":"e2e-clearing-structured"}'
+            headers:
+              content-type: application/json
+      work:
+        out: gen
+
+    - role: moderator
+      image: moderator:latest
+      work:
+        in: gen
+        out: mod
+
+    - role: processor
+      image: processor:latest
+      work:
+        in: mod
+        out: post
+
+    - role: clearing-export
+      image: clearing-export:latest
+      config:
+        worker:
+          mode: structured
+          schemaRegistryRoot: /app/scenario/clearing-schemas
+          schemaId: pcs-clearing
+          schemaVersion: "1.0.0"
+          maxRecordsPerFile: 10
+          flushIntervalMs: 60000
+          maxBufferedRecords: 5000
+          localTargetDir: "/tmp/pockethive/clearing-out"
+          localTempSuffix: ".tmp"
+          writeManifest: false
+      work:
+        in: post
