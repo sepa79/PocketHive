@@ -15,9 +15,10 @@ class ClearingExportFileAssemblerTest {
   void assemblesHeaderRecordsAndFooterUsingTemplates() {
     Clock fixed = Clock.fixed(Instant.parse("2026-02-18T10:15:30Z"), ZoneOffset.UTC);
     ClearingExportFileAssembler assembler =
-        new ClearingExportFileAssembler(new PebbleTemplateRenderer(), fixed);
+        new ClearingExportFileAssembler(new PebbleTemplateRenderer(), new XmlOutputFormatter(), fixed);
 
     ClearingExportWorkerConfig config = new ClearingExportWorkerConfig(
+        "template",
         10,
         1_000,
         100,
@@ -30,7 +31,10 @@ class ClearingExportFileAssemblerTest {
         "/tmp/out",
         ".tmp",
         false,
-        "reports/manifest.jsonl"
+        "reports/manifest.jsonl",
+        "/tmp/schemas",
+        null,
+        null
     );
 
     ClearingRenderedFile rendered = assembler.assemble(config, List.of("D|one", "D|two"));
