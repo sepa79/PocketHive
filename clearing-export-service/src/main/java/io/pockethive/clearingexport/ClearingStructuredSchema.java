@@ -101,6 +101,8 @@ record ClearingStructuredSchema(
       String footerElement,
       String namespaceUri,
       String namespacePrefix,
+      String recordNamespaceUri,
+      String recordNamespacePrefix,
       Boolean indent
   ) {
 
@@ -113,6 +115,8 @@ record ClearingStructuredSchema(
           "Transactions",
           "Transaction",
           "FileTrailer",
+          "",
+          "",
           "",
           "",
           false
@@ -130,6 +134,8 @@ record ClearingStructuredSchema(
           defaultIfBlank(footerElement, "FileTrailer"),
           namespaceUri == null ? "" : namespaceUri.trim(),
           namespacePrefix == null ? "" : namespacePrefix.trim(),
+          recordNamespaceUri == null ? "" : recordNamespaceUri.trim(),
+          recordNamespacePrefix == null ? "" : recordNamespacePrefix.trim(),
           indent == null ? false : indent
       );
     }

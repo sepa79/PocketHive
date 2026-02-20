@@ -31,20 +31,31 @@ class XmlOutputFormatter {
       if (xml.declaration()) {
         xw.writeStartDocument(xml.encoding(), "1.0");
       }
-      writeStartElement(xw, xml, xml.rootElement());
-      writeMapAsElement(xw, xml, xml.headerElement(), headerValues);
+      writeStartElement(xw, xml.namespaceUri(), xml.namespacePrefix(), xml.rootElement());
+      if (!xml.namespaceUri().isBlank()) {
+        String prefix = xml.namespacePrefix().isBlank() ? "xmlns" : "xmlns:" + xml.namespacePrefix();
+        xw.writeNamespace(xml.namespacePrefix().isBlank() ? "" : xml.namespacePrefix(), xml.namespaceUri());
+      }
 
-      if (xml.recordsElement() != null && !xml.recordsElement().isBlank()) {
-        writeStartElement(xw, xml, xml.recordsElement());
+      writeMapAsElement(xw, xml.namespaceUri(), xml.namespacePrefix(), xml.headerElement(), headerValues);
+
+      boolean hasRecordsWrapper = xml.recordsElement() != null && !xml.recordsElement().isBlank();
+      if (hasRecordsWrapper) {
+        writeStartElement(xw, xml.namespaceUri(), xml.namespacePrefix(), xml.recordsElement());
       }
       for (Map<String, String> record : records) {
-        writeMapAsElement(xw, xml, xml.recordElement(), record);
+        String recNs = xml.recordNamespaceUri().isBlank() ? xml.namespaceUri() : xml.recordNamespaceUri();
+        String recPrefix = xml.recordNamespaceUri().isBlank() ? xml.namespacePrefix() : xml.recordNamespacePrefix();
+        writeMapAsElement(xw, recNs, recPrefix, xml.recordElement(), record);
+        if (!xml.recordNamespaceUri().isBlank()) {
+          // namespace already written via writeStartElement; declare it on the element
+        }
       }
-      if (xml.recordsElement() != null && !xml.recordsElement().isBlank()) {
+      if (hasRecordsWrapper) {
         xw.writeEndElement();
       }
 
-      writeMapAsElement(xw, xml, xml.footerElement(), footerValues);
+      writeMapAsElement(xw, xml.namespaceUri(), xml.namespacePrefix(), xml.footerElement(), footerValues);
       xw.writeEndElement();
       xw.writeEndDocument();
       xw.flush();
@@ -57,14 +68,23 @@ class XmlOutputFormatter {
 
   private void writeMapAsElement(
       XMLStreamWriter xw,
-      ClearingStructuredSchema.XmlOutputConfig xml,
+      String namespaceUri,
+      String namespacePrefix,
       String elementName,
       Map<String, String> values
   ) throws XMLStreamException {
-    writeStartElement(xw, xml, elementName);
     Map<String, Object> tree = toTree(values);
+    writeStartElement(xw, namespaceUri, namespacePrefix, elementName);
+    // write attributes first (@key entries at top level)
     for (Map.Entry<String, Object> entry : tree.entrySet()) {
-      writeTreeEntry(xw, xml, entry.getKey(), entry.getValue());
+      if (entry.getKey().startsWith("@") && entry.getValue() instanceof String s) {
+        xw.writeAttribute(entry.getKey().substring(1), s);
+      }
+    }
+    for (Map.Entry<String, Object> entry : tree.entrySet()) {
+      if (!entry.getKey().startsWith("@")) {
+        writeTreeEntry(xw, namespaceUri, namespacePrefix, entry.getKey(), entry.getValue());
+      }
     }
     xw.writeEndElement();
   }
@@ -72,21 +92,45 @@ class XmlOutputFormatter {
   @SuppressWarnings("unchecked")
   private void writeTreeEntry(
       XMLStreamWriter xw,
-      ClearingStructuredSchema.XmlOutputConfig xml,
+      String namespaceUri,
+      String namespacePrefix,
       String key,
       Object value
   ) throws XMLStreamException {
-    writeStartElement(xw, xml, key);
     if (value instanceof Map<?, ?> map) {
-      for (Map.Entry<String, Object> nested : ((Map<String, Object>) map).entrySet()) {
-        writeTreeEntry(xw, xml, nested.getKey(), nested.getValue());
+      Map<String, Object> nested = (Map<String, Object>) map;
+      writeStartElement(xw, namespaceUri, namespacePrefix, key);
+      // write attributes on this element
+      for (Map.Entry<String, Object> entry : nested.entrySet()) {
+        if (entry.getKey().startsWith("@") && entry.getValue() instanceof String s) {
+          xw.writeAttribute(entry.getKey().substring(1), s);
+        }
       }
+      // #text = text content alongside attributes
+      Object textContent = nested.get("#text");
+      if (textContent != null) {
+        xw.writeCharacters(textContent.toString());
+      } else {
+        for (Map.Entry<String, Object> entry : nested.entrySet()) {
+          if (!entry.getKey().startsWith("@")) {
+            writeTreeEntry(xw, namespaceUri, namespacePrefix, entry.getKey(), entry.getValue());
+          }
+        }
+      }
+      xw.writeEndElement();
     } else {
+      writeStartElement(xw, namespaceUri, namespacePrefix, key);
       xw.writeCharacters(value == null ? "" : value.toString());
+      xw.writeEndElement();
     }
-    xw.writeEndElement();
   }
 
+  /**
+   * Converts flat dot-notation map to nested map tree.
+   * Keys starting with @ are attribute markers and are kept as-is at their level.
+   * Example: "TtlAmt.@Ccy" -> tree["TtlAmt"]["@Ccy"]
+   *          "TtlAmt.#text" -> tree["TtlAmt"]["#text"] (text content alongside attributes)
+   */
   private Map<String, Object> toTree(Map<String, String> flat) {
     Map<String, Object> root = new LinkedHashMap<>();
     for (Map.Entry<String, String> entry : flat.entrySet()) {
@@ -101,30 +145,32 @@ class XmlOutputFormatter {
           current = child;
         } else {
           @SuppressWarnings("unchecked")
-          Map<String, Object> nested = (Map<String, Object>) existing;
-          current = nested;
+          Map<String, Object> nestedMap = (Map<String, Object>) existing;
+          current = nestedMap;
         }
       }
-      current.put(segments[segments.length - 1], entry.getValue());
+      String lastSegment = segments[segments.length - 1];
+      // If last segment is #text, store as text content marker in parent map
+      current.put(lastSegment, entry.getValue());
     }
     return root;
   }
 
   private void writeStartElement(
       XMLStreamWriter xw,
-      ClearingStructuredSchema.XmlOutputConfig xml,
+      String namespaceUri,
+      String namespacePrefix,
       String localName
   ) throws XMLStreamException {
-    if (xml.namespaceUri() != null && !xml.namespaceUri().isBlank()) {
-      String prefix = xml.namespacePrefix() == null ? "" : xml.namespacePrefix();
+    if (namespaceUri != null && !namespaceUri.isBlank()) {
+      String prefix = namespacePrefix == null ? "" : namespacePrefix;
       if (!prefix.isBlank()) {
-        xw.writeStartElement(prefix, localName, xml.namespaceUri());
+        xw.writeStartElement(prefix, localName, namespaceUri);
       } else {
-        xw.writeStartElement("", localName, xml.namespaceUri());
+        xw.writeStartElement("", localName, namespaceUri);
       }
     } else {
       xw.writeStartElement(localName);
     }
   }
 }
-
