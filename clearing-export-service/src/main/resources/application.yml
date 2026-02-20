@@ -23,6 +23,7 @@ pockethive:
       exchange: ${POCKETHIVE_OUTPUT_RABBIT_EXCHANGE}
   worker:
     config:
+      mode: ${POCKETHIVE_CLEARING_EXPORT_MODE:template}
       maxRecordsPerFile: ${POCKETHIVE_CLEARING_EXPORT_MAX_RECORDS_PER_FILE:1000}
       flushIntervalMs: ${POCKETHIVE_CLEARING_EXPORT_FLUSH_INTERVAL_MS:1000}
       maxBufferedRecords: ${POCKETHIVE_CLEARING_EXPORT_MAX_BUFFERED_RECORDS:50000}
@@ -36,6 +37,9 @@ pockethive:
       localTempSuffix: ${POCKETHIVE_CLEARING_EXPORT_LOCAL_TEMP_SUFFIX:.tmp}
       writeManifest: ${POCKETHIVE_CLEARING_EXPORT_WRITE_MANIFEST:false}
       localManifestPath: ${POCKETHIVE_CLEARING_EXPORT_LOCAL_MANIFEST_PATH:reports/clearing/manifest.jsonl}
+      schemaRegistryRoot: ${POCKETHIVE_CLEARING_EXPORT_SCHEMA_REGISTRY_ROOT:/app/scenario/clearing-schemas}
+      schemaId: ${POCKETHIVE_CLEARING_EXPORT_SCHEMA_ID:}
+      schemaVersion: ${POCKETHIVE_CLEARING_EXPORT_SCHEMA_VERSION:}
   control-plane:
     exchange: ${POCKETHIVE_CONTROL_PLANE_EXCHANGE}
     swarm-id: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID}

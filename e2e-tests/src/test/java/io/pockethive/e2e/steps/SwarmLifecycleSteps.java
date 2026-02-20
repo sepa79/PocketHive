@@ -483,6 +483,30 @@ public class SwarmLifecycleSteps {
     }
   }
 
+  @And("the clearing export runtime config matches the structured demo")
+  public void theClearingExportRuntimeConfigMatchesTheStructuredDemo() {
+    ensureStartResponse();
+    captureWorkerStatuses(true);
+
+    String clearingKey = roleKey(CLEARING_EXPORT_ROLE);
+    String role = clearingKey != null ? clearingKey : CLEARING_EXPORT_ROLE;
+    StatusEvent status = workerStatusByRole.get(role);
+    String displayRole = actualRoleName(role);
+    assertNotNull(status, () -> "No status recorded for role " + displayRole);
+
+    Map<String, Object> snapshot = workerSnapshot(status, role);
+    assertFalse(snapshot.isEmpty(), () -> "Missing worker snapshot for role " + displayRole);
+    Map<String, Object> config = snapshotConfig(snapshot);
+    assertFalse(config.isEmpty(), "Clearing export snapshot should include applied config");
+
+    assertEquals("structured", String.valueOf(config.get("mode")),
+        "Expected mode=structured in clearing export config");
+    assertEquals("pcs-clearing", String.valueOf(config.get("schemaId")),
+        "Expected schemaId=pcs-clearing in clearing export config");
+    assertEquals("1.0.0", String.valueOf(config.get("schemaVersion")),
+        "Expected schemaVersion=1.0.0 in clearing export config");
+  }
+
   @And("the generator runtime config matches the service defaults")
   public void theGeneratorRuntimeConfigMatchesTheServiceDefaults() {
     ensureStartResponse();
@@ -1672,12 +1696,19 @@ public class SwarmLifecycleSteps {
     }
     if ("redis-dataset-demo".equals(scenarioId)
         || "tcp-socket-demo".equals(scenarioId)
-        || "webauth-loop-redis-5-customers".equals(scenarioId)) {
+        || "webauth-loop-redis-5-customers".equals(scenarioId)
+        || "clearing-export-demo".equals(scenarioId)
+        || "clearing-export-structured-demo".equals(scenarioId)) {
       return "post";
     }
     throw new AssertionError("Unsupported scenario for final queue resolution: " + scenarioId);
   }
 
+  private boolean shouldTapFinalQueue() {
+    String scenarioId = scenarioDetails != null ? scenarioDetails.id() : null;
+    return !"clearing-export-demo".equals(scenarioId)
+        && !"clearing-export-structured-demo".equals(scenarioId);
+  }
   @Then("the final queue reports a processor error")
   public void theFinalQueueReportsAProcessorError() throws Exception {
     ensureStartResponse();
