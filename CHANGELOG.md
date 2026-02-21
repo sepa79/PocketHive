@@ -3,7 +3,13 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
-Timestamp: 2026-02-15T20:50:43Z
+Timestamp: 2026-02-21T17:33:17Z
+
+## [0.14.27] - 2026-02-21
+Timestamp: 2026-02-21T17:33:17Z
+
+- Processor service: HTTP clients now use JVM/system networking properties (`proxy`, `https.proxy*`, `http.nonProxyHosts`) so processor traffic honors proxy + no-proxy configuration.
+- Processor service: added unit coverage confirming per-thread HTTP client uses the system route planner (`SystemDefaultRoutePlanner`).
 
 ## [0.14.26] - 2026-02-15
 Timestamp: 2026-02-15T20:50:43Z
