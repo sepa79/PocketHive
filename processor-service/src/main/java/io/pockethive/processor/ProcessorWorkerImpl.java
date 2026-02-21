@@ -159,6 +159,7 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
     manager.setDefaultMaxPerRoute(GLOBAL_MAX_PER_ROUTE);
     return HttpClients.custom()
         .setConnectionManager(manager)
+        .useSystemProperties()
         .build();
   }
 
@@ -166,6 +167,7 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
     ConnectionReuseStrategy noReuse = (request, response, context) -> false;
     return HttpClients.custom()
         .setConnectionReuseStrategy(noReuse)
+        .useSystemProperties()
         .build();
   }
 }
