@@ -29,9 +29,9 @@ import io.pockethive.worker.sdk.runtime.WorkerInvocationContext;
 import io.pockethive.worker.sdk.runtime.WorkerObservabilityInterceptor;
 import io.pockethive.worker.sdk.runtime.WorkerState;
 import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
-import java.net.URI;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
+import java.net.URI;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -375,6 +375,33 @@ class ProcessorTest {
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessage("Missing request kind");
         verify(httpClient, never()).execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class));
+    }
+
+    @Test
+    void perThreadClientUsesSystemProxyRoutePlanner() throws Exception {
+        ProcessorWorkerProperties properties = newProcessorWorkerProperties();
+        properties.setConfig(Map.of("baseUrl", "http://sut"));
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties);
+
+        Field handlersField = ProcessorWorkerImpl.class.getDeclaredField("protocolHandlers");
+        handlersField.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> handlers = (Map<String, Object>) handlersField.get(worker);
+        Object httpHandler = handlers.get("HTTP");
+
+        Field perThreadField = httpHandler.getClass().getDeclaredField("perThreadClient");
+        perThreadField.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        ThreadLocal<HttpClient> perThreadClient = (ThreadLocal<HttpClient>) perThreadField.get(httpHandler);
+        HttpClient client = perThreadClient.get();
+
+        Field routePlannerField = client.getClass().getDeclaredField("routePlanner");
+        routePlannerField.setAccessible(true);
+        Object routePlanner = routePlannerField.get(client);
+
+        assertThat(routePlanner).isNotNull();
+        assertThat(routePlanner.getClass().getName())
+            .isEqualTo("org.apache.hc.client5.http.impl.routing.SystemDefaultRoutePlanner");
     }
 
     private WorkItem invokeThroughObservabilityInterceptor(ProcessorWorkerImpl worker,
