@@ -4,6 +4,7 @@ import {
   subscribeComponents,
   type Topology,
   getNodePosition,
+  requestStatusSnapshots,
 } from '../../lib/stompClient'
 import type { Component } from '../../types/hive'
 import { buildGraph, type GraphData } from './TopologyBuilder'
@@ -49,6 +50,21 @@ export function useTopologyData(swarmId?: string): TopologyData {
     })
     return () => unsub()
   }, [swarmId])
+
+  useEffect(() => {
+    // Refresh status snapshots when Hive topology mounts so queues/edges are available
+    // even if only status-delta events were observed after a browser reload.
+    requestStatusSnapshots({ force: true })
+    let attempts = 0
+    const retry = window.setInterval(() => {
+      attempts += 1
+      const requested = requestStatusSnapshots()
+      if (requested || attempts >= 3) {
+        window.clearInterval(retry)
+      }
+    }, 1500)
+    return () => window.clearInterval(retry)
+  }, [])
 
   const data = useMemo(
     () => augmentGraphWithSuts(rawGraph, swarms, swarmId),

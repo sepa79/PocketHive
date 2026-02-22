@@ -3423,7 +3423,7 @@ export default function ScenariosPage() {
               </button>
             </div>
             {viewMode === 'plan' && planDraft && (
-              <div className="border border-white/15 rounded-md p-3 bg-white/5 space-y-3">
+              <div className="border border-white/15 rounded-md p-3 bg-white/5 space-y-3 max-h-[78vh] min-h-[520px] overflow-y-auto">
                 <div className="flex items-center justify-between">
                   <h3 className="text-xs font-semibold text-white/80">
                     Plan overview
@@ -3758,7 +3758,7 @@ export default function ScenariosPage() {
               </div>
             )}
             {viewMode === 'yaml' && (
-              <div className="flex flex-col gap-3 h-[60vh]">
+              <div className="flex flex-col gap-3 h-[78vh] min-h-[520px]">
                 <div className="flex items-center justify-between">
                   <h3 className="text-xs font-semibold text-white/80">
                     Scenario YAML
@@ -3850,19 +3850,21 @@ export default function ScenariosPage() {
               </div>
             )}
             {viewMode === 'swarm' && (
-              <div className="border border-white/15 rounded-md p-3 bg-white/5 space-y-3">
-                <SwarmTemplateEditor
-                  template={templateDraft}
-                  onChange={applyTemplateUpdate}
-                  onOpenConfig={(beeIndex) =>
-                    openConfigModal({ kind: 'template-bee', beeIndex, stepIndex: 0 })
-                  }
-                  onOpenSchemaEditor={(beeIndex) => void openSchemaEditor(beeIndex)}
-                />
+              <div className="border border-white/15 rounded-md p-3 bg-white/5 h-[78vh] min-h-[520px] flex flex-col">
+                <div className="flex-1 min-h-0 overflow-y-auto">
+                  <SwarmTemplateEditor
+                    template={templateDraft}
+                    onChange={applyTemplateUpdate}
+                    onOpenConfig={(beeIndex) =>
+                      openConfigModal({ kind: 'template-bee', beeIndex, stepIndex: 0 })
+                    }
+                    onOpenSchemaEditor={(beeIndex) => void openSchemaEditor(beeIndex)}
+                  />
+                </div>
               </div>
             )}
             {viewMode === 'httpTemplates' && (
-              <div className="border border-white/15 rounded-md p-3 bg-white/5 space-y-3">
+              <div className="border border-white/15 rounded-md p-3 bg-white/5 space-y-3 h-[78vh] min-h-[520px] flex flex-col">
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-xs font-semibold text-white/80">
                     HTTP templates
@@ -4027,7 +4029,7 @@ export default function ScenariosPage() {
                   </div>
                 )}
                 {selectedId && (
-                  <div className="flex gap-3">
+                  <div className="flex gap-3 flex-1 min-h-0">
                     <div className="w-64 border border-white/15 rounded bg-black/40 p-2 text-[11px] text-white/80">
                       <div className="font-semibold mb-1 text-white/80">Template files</div>
                       {httpTemplateLoading && (
@@ -4042,7 +4044,7 @@ export default function ScenariosPage() {
                         </div>
                       )}
                       {httpTemplatePaths.length > 0 && (
-                        <ul className="mt-1 max-h-56 overflow-y-auto">
+                        <ul className="mt-1 max-h-[66vh] overflow-y-auto">
                           {httpTemplatePaths.map((path) => {
                             const isSelected = path === httpTemplateSelectedPath
                             return (
@@ -4078,7 +4080,7 @@ export default function ScenariosPage() {
                         </ul>
                       )}
                     </div>
-                    <div className="flex-1 flex flex-col min-h-[260px]">
+                    <div className="flex-1 flex flex-col min-h-0">
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-[11px] text-white/80">
                           Template YAML

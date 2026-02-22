@@ -4,6 +4,8 @@ import { useTopologyData } from './useTopologyData'
 
 vi.mock('../../lib/stompClient', () => {
   return {
+    requestStatusSnapshots: vi.fn(() => true),
+    getNodePosition: vi.fn(() => undefined),
     subscribeTopology: (cb: (topo: any) => void) => {
       ;(subscribeTopology as any).cb = cb
       return () => {}
@@ -20,6 +22,8 @@ const subscribeComponents: { cb?: (comps: any[]) => void } = {}
 
 // Wire our callback holders into the mock implementation
 vi.doMock('../../lib/stompClient', () => ({
+  requestStatusSnapshots: vi.fn(() => true),
+  getNodePosition: vi.fn(() => undefined),
   subscribeTopology: (cb: (topo: any) => void) => {
     subscribeTopology.cb = cb
     return () => {}

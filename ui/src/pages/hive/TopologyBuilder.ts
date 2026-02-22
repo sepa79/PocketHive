@@ -279,6 +279,33 @@ function applyFallbackPositions(nodes: GraphNode[], links: GraphLink[]): GraphNo
     })
   })
 
+  // In the overview graph we later collapse swarm internals into controller-backed
+  // group nodes. Keep orchestrator aligned with controllers so cross-swarm control
+  // edges do not span excessive vertical distance when many worker nodes exist.
+  const controllerYs = nodes
+    .filter((node) => node.type === 'swarm-controller')
+    .map((node) => {
+      if (typeof node.y === 'number' && Number.isFinite(node.y)) {
+        return node.y
+      }
+      return fallbackPositions.get(node.id)?.y
+    })
+    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
+
+  if (controllerYs.length > 0) {
+    const controllerCenterY =
+      controllerYs.reduce((sum, value) => sum + value, 0) / controllerYs.length
+    nodes
+      .filter((node) => node.type === 'orchestrator')
+      .forEach((node) => {
+        const hasY = typeof node.y === 'number' && Number.isFinite(node.y)
+        if (hasY) return
+        const fallback = fallbackPositions.get(node.id)
+        if (!fallback) return
+        fallbackPositions.set(node.id, { x: fallback.x, y: controllerCenterY })
+      })
+  }
+
   return nodes.map((node) => {
     const fallback = fallbackPositions.get(node.id)
     const hasX = typeof node.x === 'number' && Number.isFinite(node.x)
