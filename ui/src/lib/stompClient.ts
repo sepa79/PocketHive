@@ -46,16 +46,30 @@ interface QueueMetrics {
 const queueMetrics: Record<string, QueueMetrics> = {}
 const IGNORED_SWARM_IDS = new Set(['hive'])
 const nodePositions: Record<string, { x: number; y: number }> = {}
+const QUEUE_CACHE_STORAGE_KEY = 'pockethive.ui.topology.queue-cache.v1'
+
+type QueueCacheEntry = {
+  swarmId?: string
+  queues: QueueInfo[]
+  updatedAt: number
+}
+
+const queueCache: Record<string, QueueCacheEntry> = loadQueueCache()
 
 function dropSwarmComponents(swarmId: string) {
   const normalized = swarmId.trim()
   if (!normalized) return
+  let queueCacheChanged = false
 
   Object.entries(components).forEach(([key, comp]) => {
     const compSwarm = comp.swarmId?.trim()
     if (compSwarm && compSwarm === normalized) {
       delete components[key]
       delete componentErrors[key]
+      if (key in queueCache) {
+        delete queueCache[key]
+        queueCacheChanged = true
+      }
     }
   })
 
@@ -64,8 +78,16 @@ function dropSwarmComponents(swarmId: string) {
     if (compSwarm && compSwarm === normalized) {
       delete syntheticComponents[key]
       delete componentErrors[key]
+      if (key in queueCache) {
+        delete queueCache[key]
+        queueCacheChanged = true
+      }
     }
   })
+
+  if (queueCacheChanged) {
+    persistQueueCache()
+  }
 }
 
 function applyComponentError(component: Component, error: { at: number; code?: string; message?: string }) {
@@ -188,6 +210,76 @@ function updateQueueMetrics(stats: Record<string, unknown> | undefined) {
   })
 }
 
+function loadQueueCache(): Record<string, QueueCacheEntry> {
+  const storage = getLocalStorage()
+  if (!storage) return {}
+  try {
+    const raw = storage.getItem(QUEUE_CACHE_STORAGE_KEY)
+    if (!raw) return {}
+    const parsed = JSON.parse(raw)
+    if (!isRecord(parsed)) return {}
+    const out: Record<string, QueueCacheEntry> = {}
+    Object.entries(parsed).forEach(([componentId, entry]) => {
+      if (!isRecord(entry)) return
+      const queuesRaw = entry['queues']
+      if (!Array.isArray(queuesRaw)) return
+      const queues: QueueInfo[] = []
+      queuesRaw.forEach((queue) => {
+        if (!isRecord(queue)) return
+        const name = getString(queue['name'])
+        const role = queue['role']
+        if (!name) return
+        if (role !== 'producer' && role !== 'consumer') return
+        queues.push({ name, role })
+      })
+      if (queues.length === 0) return
+      const swarmId = getString(entry['swarmId'])
+      const updatedAt = typeof entry['updatedAt'] === 'number' ? entry['updatedAt'] : Date.now()
+      out[componentId] = { swarmId, queues, updatedAt }
+    })
+    return out
+  } catch {
+    return {}
+  }
+}
+
+function persistQueueCache() {
+  const storage = getLocalStorage()
+  if (!storage) return
+  try {
+    storage.setItem(QUEUE_CACHE_STORAGE_KEY, JSON.stringify(queueCache))
+  } catch {
+    // ignore storage errors
+  }
+}
+
+function rememberQueues(componentId: string, swarmId: string, queues: QueueInfo[]) {
+  const compact = queues
+    .map((queue) => ({ name: queue.name, role: queue.role }))
+    .filter((queue) => queue.name && (queue.role === 'producer' || queue.role === 'consumer'))
+  if (compact.length === 0) return
+  queueCache[componentId] = {
+    swarmId,
+    queues: compact,
+    updatedAt: Date.now(),
+  }
+  persistQueueCache()
+}
+
+function restoreQueues(componentId: string, swarmId: string): QueueInfo[] | null {
+  const cached = queueCache[componentId]
+  if (!cached || cached.queues.length === 0) return null
+  const cachedSwarmId = cached.swarmId?.trim()
+  if (cachedSwarmId && cachedSwarmId !== swarmId.trim()) return null
+  return cached.queues.map((queue) => ({ name: queue.name, role: queue.role }))
+}
+
+function getLocalStorage(): Storage | null {
+  if (typeof globalThis === 'undefined') return null
+  const storage = (globalThis as { localStorage?: Storage }).localStorage
+  return storage ?? null
+}
+
 function extractQueueStats(evt: StatusMetricEnvelope): Record<string, unknown> | undefined {
   const io = evt.data['io']
   if (!isRecord(io)) return undefined
@@ -279,6 +371,13 @@ function buildTopology(allComponents: Record<string, Component> = getMergedCompo
 function emitTopology() {
   const topo = buildTopology()
   topoListeners.forEach((l) => l(topo))
+}
+
+export function requestStatusSnapshots(options?: { force?: boolean }): boolean {
+  void options
+  // Default UI credentials are read-only (`ph-observer`), so publishing control
+  // signals via STOMP can cause broker disconnects. Keep this as a no-op.
+  return false
 }
 
 export function setClient(newClient: Client | null, destination = controlDestination) {
@@ -446,6 +545,12 @@ export function setClient(newClient: Client | null, destination = controlDestina
           q.push(...extractedQueues.controlIn.map((n) => ({ name: n, role: 'consumer' as const })))
           q.push(...extractedQueues.controlOut.map((n) => ({ name: n, role: 'producer' as const })))
           comp.queues = q
+          rememberQueues(id, swarmId, q)
+        } else if (!comp.queues.length) {
+          const restored = restoreQueues(id, swarmId)
+          if (restored) {
+            comp.queues = restored
+          }
         }
         components[id] = comp
         updateQueueMetrics(eventQueueStats)

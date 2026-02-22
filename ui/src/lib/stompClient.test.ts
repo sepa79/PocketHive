@@ -4,6 +4,7 @@ import {
   setClient,
   subscribeComponents,
   subscribeTopology,
+  requestStatusSnapshots,
   upsertSyntheticComponent,
   removeSyntheticComponent,
 } from './stompClient'
@@ -460,6 +461,89 @@ describe('swarm lifecycle', () => {
     })
 
     unsubscribeTopology()
+    setClient(null)
+  })
+
+  it('retains queues when status-delta omits io payload', () => {
+    const publish = vi.fn()
+    let cb: (msg: { body: string; headers: Record<string, string> }) => void = () => {}
+    const subscribe = vi
+      .fn()
+      .mockImplementation((_dest: string, fn: (msg: { body: string; headers: Record<string, string> }) => void) => {
+        cb = fn
+        return { unsubscribe() {} }
+      })
+    setClient({ active: true, publish, subscribe } as unknown as Client)
+
+    let latest: Component[] = []
+    const unsubscribe = subscribeComponents((list) => {
+      latest = list.map((component) => ({
+        ...component,
+        queues: component.queues.map((queue) => ({ ...queue })),
+      }))
+    })
+
+    const headers = {
+      destination: '/exchange/ph.control/event.metric.status-full.sw-cache.processor.proc-cache',
+    }
+    cb({
+      headers,
+      body: JSON.stringify(
+        statusMetricEnvelope({
+          swarmId: 'sw-cache',
+          role: 'processor',
+          instance: 'proc-cache',
+          data: {
+            io: {
+              work: {
+                queues: {
+                  out: ['ph.sw-cache.work.out'],
+                },
+              },
+            },
+          },
+        }),
+      ),
+    })
+
+    cb({
+      headers: {
+        destination: '/exchange/ph.control/event.metric.status-delta.sw-cache.processor.proc-cache',
+      },
+      body: JSON.stringify(
+        statusMetricEnvelope({
+          swarmId: 'sw-cache',
+          role: 'processor',
+          instance: 'proc-cache',
+          type: 'status-delta',
+          data: { enabled: true, tps: 5 },
+        }),
+      ),
+    })
+
+    const component = latest.find((entry) => entry.id === 'proc-cache')
+    expect(component?.queues).toContainEqual({
+      name: 'ph.sw-cache.work.out',
+      role: 'producer',
+    })
+
+    unsubscribe()
+    setClient(null)
+  })
+
+  it('does not publish status-request signals over read-only stomp client', () => {
+    const publish = vi.fn()
+    const subscribe = vi
+      .fn()
+      .mockImplementation((_dest: string, _fn: (msg: { body: string; headers: Record<string, string> }) => void) => {
+        return { unsubscribe() {} }
+      })
+    setClient({ active: true, publish, subscribe } as unknown as Client)
+
+    const requested = requestStatusSnapshots({ force: true })
+    expect(requested).toBe(false)
+    expect(publish).not.toHaveBeenCalled()
+
     setClient(null)
   })
 

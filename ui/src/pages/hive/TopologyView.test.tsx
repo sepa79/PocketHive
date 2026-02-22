@@ -200,6 +200,8 @@ vi.mock('@xyflow/react', () => {
 
 vi.mock('../../lib/stompClient', () => {
   return {
+    requestStatusSnapshots: () => false,
+    getNodePosition: () => undefined,
     subscribeTopology: (cb: (t: { nodes: Node[]; edges: unknown[] }) => void) => {
       listener = cb
       cb(data)
