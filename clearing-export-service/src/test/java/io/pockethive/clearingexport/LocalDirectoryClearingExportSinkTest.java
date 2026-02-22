@@ -104,4 +104,44 @@ class LocalDirectoryClearingExportSinkTest {
     String content = Files.readString(tempDir.resolve("stream.dat"));
     assertThat(content).isEqualTo("H|x\nD|one\nT|1\n");
   }
+
+  @Test
+  void finalizeStreamingMovesTempFileAtomicallyToFinalLocation() throws Exception {
+    LocalDirectoryClearingExportSink sink = new LocalDirectoryClearingExportSink();
+    ClearingExportWorkerConfig config = new ClearingExportWorkerConfig(
+        "template",
+        true,
+        21_600_000L,
+        10,
+        1_000,
+        100,
+        true,
+        "\n",
+        "stream.dat",
+        "H",
+        "D",
+        "T",
+        tempDir.toString(),
+        ".tmp",
+        false,
+        "reports/clearing/manifest.jsonl",
+        "/tmp/schemas",
+        null,
+        null
+    );
+
+    sink.openStreamingFile(config, "stream.dat", "H|x", "\n");
+    sink.appendStreamingRecord(config, "stream.dat", "D|one", "\n");
+    sink.finalizeStreamingFile(
+        config,
+        "stream.dat",
+        "T|1",
+        "\n",
+        1,
+        Instant.parse("2026-02-21T10:00:00Z"));
+
+    assertThat(Files.exists(tempDir.resolve("stream.dat.tmp"))).isFalse();
+    assertThat(Files.exists(tempDir.resolve("stream.dat"))).isTrue();
+    assertThat(Files.readString(tempDir.resolve("stream.dat"))).isEqualTo("H|x\nD|one\nT|1\n");
+  }
 }

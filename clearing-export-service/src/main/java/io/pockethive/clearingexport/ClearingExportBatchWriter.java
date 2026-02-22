@@ -7,6 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Consumer;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -40,6 +41,7 @@ class ClearingExportBatchWriter {
   private final AtomicReference<ClearingStructuredSchema> lastSchema = new AtomicReference<>();
   private final AtomicReference<StreamingTemplateFileState> streamingState = new AtomicReference<>();
   private final ScheduledExecutorService streamingTicker;
+  private volatile Consumer<ClearingExportLifecycleEvent> lifecycleListener = event -> { };
 
   ClearingExportBatchWriter(ClearingExportFileAssembler assembler, ClearingExportSink sink) {
     this.assembler = Objects.requireNonNull(assembler, "assembler");
@@ -188,6 +190,10 @@ class ClearingExportBatchWriter {
     }
   }
 
+  void setLifecycleListener(Consumer<ClearingExportLifecycleEvent> listener) {
+    this.lifecycleListener = listener == null ? event -> { } : listener;
+  }
+
   private boolean shouldFlush(ClearingExportWorkerConfig config, long nowMs) {
     if (bufferedCount.get() <= 0) {
       return false;
@@ -245,6 +251,8 @@ class ClearingExportBatchWriter {
         lastFileBytes.set(sinkResult.bytes());
         lastError.set("");
         lastFlushAt.set(sinkResult.createdAt());
+        emitLifecycle(ClearingExportLifecycleEventType.CREATED, sinkResult, null);
+        emitLifecycle(ClearingExportLifecycleEventType.FLUSH_SUMMARY, sinkResult, null);
       } catch (Exception ex) {
         if (config.structuredMode()) {
           for (StructuredProjectedRecord record : drainedStructured) {
@@ -259,6 +267,7 @@ class ClearingExportBatchWriter {
         }
         filesFailed.incrementAndGet();
         lastError.set(ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage());
+        emitLifecycle(ClearingExportLifecycleEventType.WRITE_FAILED, null, ex);
         throw ex;
       } finally {
         lastFlushAtMs.set(nowMs);
@@ -280,17 +289,33 @@ class ClearingExportBatchWriter {
 
       StreamingTemplateFileState state = streamingState.get();
       if (state == null) {
-        state = openStreamingTemplateFile(config, nowMs);
+        try {
+          state = openStreamingTemplateFile(config, nowMs);
+        } catch (Exception ex) {
+          emitLifecycle(ClearingExportLifecycleEventType.WRITE_FAILED, null, ex);
+          throw ex;
+        }
         streamingState.set(state);
       }
 
       if (state.recordCount > 0 && nowMs - state.openedAtMs >= config.streamingWindowMs()) {
         finalizeStreamingState(config, state, nowMs);
-        state = openStreamingTemplateFile(config, nowMs);
+        streamingState.set(null);
+        try {
+          state = openStreamingTemplateFile(config, nowMs);
+        } catch (Exception ex) {
+          emitLifecycle(ClearingExportLifecycleEventType.WRITE_FAILED, null, ex);
+          throw ex;
+        }
         streamingState.set(state);
       }
 
-      sink.appendStreamingRecord(config, state.fileName, renderedRecordLine, config.lineSeparator());
+      try {
+        sink.appendStreamingRecord(config, state.fileName, renderedRecordLine, config.lineSeparator());
+      } catch (Exception ex) {
+        emitLifecycle(ClearingExportLifecycleEventType.WRITE_FAILED, null, ex);
+        throw ex;
+      }
       state.recordCount++;
       bufferedCount.incrementAndGet();
       recordsAccepted.incrementAndGet();
@@ -373,14 +398,20 @@ class ClearingExportBatchWriter {
     Instant finalizeAt = Instant.ofEpochMilli(nowMs);
     String footer = assembler.renderTemplateFooter(config, finalizeAt, state.recordCount);
 
-    ClearingExportSinkWriteResult sinkResult =
-        sink.finalizeStreamingFile(
-            config,
-            state.fileName,
-            footer,
-            config.lineSeparator(),
-            state.recordCount,
-            finalizeAt);
+    ClearingExportSinkWriteResult sinkResult;
+    try {
+      sinkResult =
+          sink.finalizeStreamingFile(
+              config,
+              state.fileName,
+              footer,
+              config.lineSeparator(),
+              state.recordCount,
+              finalizeAt);
+    } catch (Exception ex) {
+      emitLifecycle(ClearingExportLifecycleEventType.FINALIZE_FAILED, null, ex);
+      throw ex;
+    }
     filesWritten.incrementAndGet();
     lastFileName.set(sinkResult.fileName());
     lastFileRecordCount.set(sinkResult.recordCount());
@@ -389,6 +420,20 @@ class ClearingExportBatchWriter {
     lastFlushAt.set(sinkResult.createdAt());
     bufferedCount.addAndGet(-state.recordCount);
     lastFlushAtMs.set(nowMs);
+    emitLifecycle(ClearingExportLifecycleEventType.CREATED, sinkResult, null);
+    emitLifecycle(ClearingExportLifecycleEventType.FLUSH_SUMMARY, sinkResult, null);
+  }
+
+  private void emitLifecycle(
+      ClearingExportLifecycleEventType type,
+      ClearingExportSinkWriteResult sinkResult,
+      Exception failure
+  ) {
+    try {
+      lifecycleListener.accept(new ClearingExportLifecycleEvent(type, sinkResult, failure));
+    } catch (Exception ignored) {
+      // Journal/event publication must not interfere with processing path.
+    }
   }
 
   private List<String> drainTemplate(int max) {
@@ -497,5 +542,19 @@ class ClearingExportBatchWriter {
       min = min == null ? value : Math.min(min, value);
       max = max == null ? value : Math.max(max, value);
     }
+  }
+
+  enum ClearingExportLifecycleEventType {
+    CREATED,
+    WRITE_FAILED,
+    FINALIZE_FAILED,
+    FLUSH_SUMMARY
+  }
+
+  record ClearingExportLifecycleEvent(
+      ClearingExportLifecycleEventType type,
+      ClearingExportSinkWriteResult sinkResult,
+      Exception failure
+  ) {
   }
 }

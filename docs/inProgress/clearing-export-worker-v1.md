@@ -41,7 +41,7 @@ Design constraints already accepted:
 
 ### Missing pieces
 
-- Journal events for file lifecycle (`created`, `write-failed`, `finalize-failed`, `flush-summary`).
+- Journal events for file lifecycle (`created`, `write-failed`, `finalize-failed`, `flush-summary`) published as normal journal outcomes (not `event.alert`).
 - Unit/integration tests for flush policy and finalize semantics.
 
 ### Done criteria
@@ -168,10 +168,10 @@ Known runtime limitation (documented, no behavior change in this iteration):
 
 ### V1.1 hardening
 
-- [ ] Journal events for file lifecycle (`created`, `write-failed`, `finalize-failed`, `flush-summary`).
-- [ ] Unit tests: flush-by-count and flush-by-time policy.
-- [ ] Integration tests: finalize semantics (`.tmp` + atomic rename).
-- [ ] Integration test: write failure keeps batch and retries on next trigger.
+- [x] Journal events for file lifecycle (`created`, `write-failed`, `finalize-failed`, `flush-summary`).
+- [x] Unit tests: flush-by-count and flush-by-time policy.
+- [x] Integration tests: finalize semantics (`.tmp` + atomic rename).
+- [x] Integration test: write failure keeps batch and retries on next trigger.
 
 ### V1 template streaming append mode
 
@@ -189,16 +189,17 @@ Known runtime limitation (documented, no behavior change in this iteration):
 - [x] `StructuredRecordProjector` implemented + tests.
 - [x] `StructuredAggregates` implemented in batch flush path (`totals.sum*`/`totals.min*`/`totals.max*`) + tests.
 - [x] Structured buffer support in `ClearingExportBatchWriter`.
-- [ ] `OutputFormatter` interface + factory implemented.
+- [ ] `OutputFormatter` interface + factory implemented. (out of scope for this iteration)
 - [x] `XmlOutputFormatter` implemented + tests.
 - [x] `StructuredFileAssembler` wired into flush pipeline (`ClearingExportFileAssembler.assembleStructured`).
-- [ ] Canonical schema contract documented (SSOT) and linked from playbook.
+- [x] Canonical schema contract documented (SSOT) and linked from playbook.
 - [x] Example schema added (non-NDA sample) and runnable demo scenario (`clearing-export-structured-demo`).
 - [x] E2E scenario added for structured XML export (`@clearing-export-structured-demo`).
-- [ ] Playbook updated with structured/schema-driven usage and troubleshooting.
+- [x] Playbook updated with structured/schema-driven usage and troubleshooting.
 
 ## References
 
 - `docs/inProgress/clearing-export-structured-mode-v1.md`
+- `docs/clearing/CLEARING_STRUCTURED_SCHEMA_CONTRACT.md`
 - `docs/ai/CLEARING_EXPORT_WORKER_PLAYBOOK.md`
 - `docs/correlation-vs-idempotency.md`

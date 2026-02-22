@@ -336,6 +336,36 @@ class WorkerControlPlaneRuntimeTest {
     }
 
     @Test
+    void publishWorkJournalEventEmitsOutcomeReadyContext() {
+        ObservabilityContext trace = ObservabilityContextUtil.init("worker", IDENTITY.instanceId(), IDENTITY.swarmId());
+        runtime.publishWorkJournalEvent(
+            definition.beanName(),
+            "corr-1",
+            null,
+            "work-journal",
+            "recorded",
+            "clearing-export-created",
+            "mid-2",
+            trace.getTraceId(),
+            Map.of("event", "created", "fileName", "batch-0001.dat"));
+
+        ArgumentCaptor<ControlPlaneEmitter.ReadyContext> contextCaptor =
+            ArgumentCaptor.forClass(ControlPlaneEmitter.ReadyContext.class);
+        verify(emitter).emitReady(contextCaptor.capture());
+        ControlPlaneEmitter.ReadyContext ready = contextCaptor.getValue();
+        assertThat(ready.signal()).isEqualTo("work-journal");
+        assertThat(ready.correlationId()).isEqualTo("corr-1");
+        assertThat(ready.state().status()).isEqualTo("recorded");
+        assertThat(ready.details())
+            .containsEntry("worker", definition.beanName())
+            .containsEntry("messageId", "mid-2")
+            .containsEntry("callId", "clearing-export-created")
+            .containsEntry("event", "created")
+            .containsEntry("fileName", "batch-0001.dat")
+            .containsEntry("traceId", trace.getTraceId());
+    }
+
+    @Test
 	    void configUpdateWithoutEnabledPreservesExistingState() throws Exception {
 	        Map<String, Object> initialArgs = Map.of(
 	            "data", Map.of("enabled", true)

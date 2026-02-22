@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 Timestamp: 2026-02-22T00:00:00Z
 
+- Clearing Export lifecycle journal: file lifecycle events (`created`, `write-failed`, `finalize-failed`, `flush-summary`) are now published as normal control-plane outcomes (`work-journal`) instead of alerts.
+- Worker SDK: added explicit `publishWorkJournalEvent(...)` API for journal outcomes without synthetic `WorkItem` fallback, with required `correlationId` and normalized optional context fields.
+- Clearing Export streaming hardening: improved failure semantics and state recovery for append/open/finalize paths (including rollover reopen failure handling) to avoid duplicate/misclassified lifecycle events.
+- Clearing Export tests: added hardening coverage for flush policy, retry semantics, streaming open/finalize/reopen failures, and local sink finalize atomic rename behavior.
+- Docs: expanded structured clearing playbook, linked canonical structured schema contract SSOT, and updated in-progress implementation tracking.
+
 ## [0.14.28] - 2026-02-22
 Timestamp: 2026-02-22T00:00:00Z
 

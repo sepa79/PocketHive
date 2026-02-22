@@ -2,6 +2,9 @@
 
 This playbook defines the exact way to configure and use `clearing-export-service`.
 
+Canonical schema contract (structured mode SSOT):
+- `docs/clearing/CLEARING_STRUCTURED_SCHEMA_CONTRACT.md`
+
 ## 1. Scope guardrails
 
 - Build business clearing files only.
@@ -64,6 +67,9 @@ Path: `pockethive.worker.config.*`
 | `localTempSuffix` | string | no | `.tmp` | Temporary suffix used before atomic rename. |
 | `writeManifest` | boolean | no | `false` | Enables local JSONL manifest (one line per finalized file). |
 | `localManifestPath` | string | no | `reports/clearing/manifest.jsonl` | Manifest path. Relative paths are resolved under `localTargetDir`. |
+| `schemaRegistryRoot` | string | structured only | `/app/scenario/clearing-schemas` | Root directory for structured schemas. |
+| `schemaId` | string | structured only | `""` | Structured schema id to load from registry. |
+| `schemaVersion` | string | structured only | `""` | Structured schema version to load from registry. |
 
 Streaming notes:
 
@@ -101,7 +107,48 @@ Same example file exists at:
 
 - `clearing-export-service/examples/clearing-template-basic.yaml`
 
-## 6. Example input payloads
+## 6. Structured mode usage
+
+### 6.1 Worker config (Scenario or service config)
+
+```yaml
+pockethive:
+  worker:
+    config:
+      mode: structured
+      schemaRegistryRoot: /app/scenario/clearing-schemas
+      schemaId: pcs-clearing
+      schemaVersion: "1.0.0"
+      maxRecordsPerFile: 10
+      flushIntervalMs: 1000
+      maxBufferedRecords: 50000
+      localTargetDir: /tmp/pockethive/clearing-out
+      localTempSuffix: .tmp
+      writeManifest: false
+```
+
+### 6.2 Required schema location
+
+```text
+/app/scenario/clearing-schemas/<schemaId>/<schemaVersion>/schema.yaml
+```
+
+Example:
+- `scenarios/bundles/clearing-export-structured-demo/clearing-schemas/pcs-clearing/1.0.0/schema.yaml`
+
+### 6.3 Runtime behavior
+
+1. Worker loads schema by `schemaRegistryRoot + schemaId + schemaVersion`.
+2. Record values are projected with `recordMapping`.
+3. Header/footer and file name use `now`, `recordCount`, `totals.*`.
+4. XML file is generated and written through standard sink (`.tmp` + atomic rename).
+
+### 6.4 Current limits
+
+- `outputFormat` currently supports only `xml`.
+- `streamingAppendEnabled` is template-only and rejected in structured mode.
+
+## 7. Example input payloads
 
 - `clearing-export-service/examples/payloads/clearing-message-1.json`
 - `clearing-export-service/examples/payloads/clearing-message-2.json`
@@ -118,7 +165,7 @@ Example payload shape:
 }
 ```
 
-## 7. Example output file
+## 8. Example output file
 
 For two input messages, example output:
 
@@ -135,7 +182,7 @@ If `writeManifest=true`, a manifest line is appended:
 {"fileName":"CLEARING_2026-02-18T12:00:00Z.txt","recordCount":2,"bytes":170,"createdAt":"2026-02-18T12:00:00Z","path":"/tmp/pockethive/clearing-out/CLEARING_2026-02-18T12:00:00Z.txt"}
 ```
 
-## 8. Usage steps for AI contributors
+## 9. Usage steps for AI contributors
 
 1. Set `pockethive.worker.config` (section 5).
 2. Build and run tests:
@@ -148,7 +195,17 @@ If `writeManifest=true`, a manifest line is appended:
    - no PocketHive metadata appears in file body.
 5. If manifest enabled, verify one JSON line per finalized file.
 
-## 9. Common mistakes to avoid
+## 10. Structured troubleshooting
+
+| Symptom | Likely cause | What to check |
+| --- | --- | --- |
+| `Schema not found under ...` | wrong path/id/version | Validate `schemaRegistryRoot`, `schemaId`, `schemaVersion`, and file exists as `schema.yaml/json/yml`. |
+| `recordMapping must be configured for structured mode` | missing/empty mapping | Add non-empty `recordMapping` in schema file. |
+| `Only xml outputFormat is currently supported` | schema has unsupported `outputFormat` | Set `outputFormat: xml`. |
+| `Unsupported field type: ...` | invalid `recordMapping.<field>.type` | Use only `string`, `long`, or `decimal`. |
+| `streamingAppendEnabled is supported only in template mode` | structured + streaming enabled | Remove streaming flag for structured worker. |
+
+## 11. Common mistakes to avoid
 
 - Adding fallback chains for required config keys.
 - Writing one file per message (ignore batching rules).
