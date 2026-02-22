@@ -244,6 +244,68 @@ public final class WorkerControlPlaneRuntime {
     }
 
     /**
+     * Publish a control-plane outcome (kind=event,type=outcome) for non-error worker journal entries.
+     * This is intended for informational lifecycle events that must be visible in journal projections
+     * without polluting alert channels.
+     */
+    public void publishWorkJournalEvent(String workerBeanName,
+                                        String correlationId,
+                                        String idempotencyKey,
+                                        String signal,
+                                        String status,
+                                        String callId,
+                                        String messageId,
+                                        String traceId,
+                                        Map<String, Object> details) {
+        Objects.requireNonNull(workerBeanName, "workerBeanName");
+        String journalCorrelationId = requireNonBlank(correlationId, "correlationId");
+        String journalSignal = requireNonBlank(signal, "signal");
+        String journalStatus = requireNonBlank(status, "status");
+
+        Map<String, Object> context = new LinkedHashMap<>();
+        context.put("worker", workerBeanName);
+
+        String normalizedMessageId = normalizeBlank(messageId);
+        if (normalizedMessageId != null) {
+            context.put("messageId", normalizedMessageId);
+        }
+        String normalizedCallId = normalizeBlank(callId);
+        if (normalizedCallId != null) {
+            context.put("callId", normalizedCallId);
+        }
+        if (details != null && !details.isEmpty()) {
+            context.putAll(details);
+        }
+        String normalizedTraceId = normalizeBlank(traceId);
+        if (normalizedTraceId != null) {
+            context.put("traceId", normalizedTraceId);
+        }
+
+        emitter.emitReady(ControlPlaneEmitter.ReadyContext.builder(
+                journalSignal,
+                journalCorrelationId,
+                normalizeBlank(idempotencyKey),
+                io.pockethive.control.CommandState.status(journalStatus))
+            .details(context)
+            .build());
+    }
+
+    private static String requireNonBlank(String value, String field) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(field + " must not be blank");
+        }
+        return value.trim();
+    }
+
+    private static String normalizeBlank(String value) {
+        if (value == null) {
+            return null;
+        }
+        String text = value.trim();
+        return text.isEmpty() ? null : text;
+    }
+
+    /**
      * Registers a listener that will be invoked whenever the specified worker's state changes. The listener is
      * invoked immediately with the current snapshot if the worker is known.
      */

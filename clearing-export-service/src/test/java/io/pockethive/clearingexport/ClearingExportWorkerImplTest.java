@@ -31,10 +31,12 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.argThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -159,6 +161,112 @@ class ClearingExportWorkerImplTest {
         argThat(item -> "clearing-export-flush".equals(String.valueOf(item.headers().get("x-ph-call-id")))),
         any(Exception.class));
     verify(applicationContext, timeout(500)).close();
+  }
+
+  @Test
+  void lifecycleEventsArePublishedAsJournalOutcomesWithExpectedCallIds() throws Exception {
+    ClearingExportWorkerProperties properties = mock(ClearingExportWorkerProperties.class);
+    ClearingExportBatchWriter batchWriter = mock(ClearingExportBatchWriter.class);
+    ClearingStructuredSchemaRegistry schemaRegistry = mock(ClearingStructuredSchemaRegistry.class);
+    StructuredRecordProjector projector = mock(StructuredRecordProjector.class);
+    TemplateRenderer templateRenderer = mock(TemplateRenderer.class);
+    WorkerControlPlaneRuntime controlPlaneRuntime = mock(WorkerControlPlaneRuntime.class);
+    ConfigurableApplicationContext applicationContext = mock(ConfigurableApplicationContext.class);
+
+    ClearingExportWorkerImpl worker = new ClearingExportWorkerImpl(
+        properties,
+        batchWriter,
+        schemaRegistry,
+        projector,
+        templateRenderer,
+        controlPlaneRuntime,
+        applicationContext,
+        new ObjectMapper().findAndRegisterModules(),
+        Clock.fixed(Instant.parse("2026-02-21T00:00:00Z"), ZoneOffset.UTC));
+
+    @SuppressWarnings("unchecked")
+    org.mockito.ArgumentCaptor<Consumer<ClearingExportBatchWriter.ClearingExportLifecycleEvent>> lifecycleCaptor =
+        org.mockito.ArgumentCaptor.forClass(Consumer.class);
+    worker.registerPreflightStateListener();
+    verify(batchWriter).setLifecycleListener(lifecycleCaptor.capture());
+
+    lifecycleCaptor.getValue().accept(new ClearingExportBatchWriter.ClearingExportLifecycleEvent(
+        ClearingExportBatchWriter.ClearingExportLifecycleEventType.CREATED,
+        new ClearingExportSinkWriteResult("file.dat", 10, 200L, Instant.parse("2026-02-21T00:00:01Z"), "/tmp/file.dat"),
+        null));
+    lifecycleCaptor.getValue().accept(new ClearingExportBatchWriter.ClearingExportLifecycleEvent(
+        ClearingExportBatchWriter.ClearingExportLifecycleEventType.WRITE_FAILED,
+        null,
+        new IllegalStateException("write-failed")));
+    lifecycleCaptor.getValue().accept(new ClearingExportBatchWriter.ClearingExportLifecycleEvent(
+        ClearingExportBatchWriter.ClearingExportLifecycleEventType.FINALIZE_FAILED,
+        null,
+        new IllegalStateException("finalize-failed")));
+    lifecycleCaptor.getValue().accept(new ClearingExportBatchWriter.ClearingExportLifecycleEvent(
+        ClearingExportBatchWriter.ClearingExportLifecycleEventType.FLUSH_SUMMARY,
+        new ClearingExportSinkWriteResult("file.dat", 10, 200L, Instant.parse("2026-02-21T00:00:01Z"), "/tmp/file.dat"),
+        null));
+
+    verify(controlPlaneRuntime, times(4)).publishWorkJournalEvent(
+        eq("clearingExportWorker"),
+        anyString(),
+        isNull(),
+        eq("work-journal"),
+        eq("recorded"),
+        anyString(),
+        isNull(),
+        isNull(),
+        anyMap());
+    verify(controlPlaneRuntime).publishWorkJournalEvent(
+        eq("clearingExportWorker"),
+        anyString(),
+        isNull(),
+        eq("work-journal"),
+        eq("recorded"),
+        eq("clearing-export-created"),
+        isNull(),
+        isNull(),
+        argThat(details -> "created".equals(String.valueOf(details.get("event")))));
+    verify(controlPlaneRuntime).publishWorkJournalEvent(
+        eq("clearingExportWorker"),
+        anyString(),
+        isNull(),
+        eq("work-journal"),
+        eq("recorded"),
+        eq("clearing-export-write-failed"),
+        isNull(),
+        isNull(),
+        argThat(details -> "write_failed".equals(String.valueOf(details.get("event")))));
+    verify(controlPlaneRuntime).publishWorkJournalEvent(
+        eq("clearingExportWorker"),
+        anyString(),
+        isNull(),
+        eq("work-journal"),
+        eq("recorded"),
+        eq("clearing-export-finalize-failed"),
+        isNull(),
+        isNull(),
+        argThat(details -> "finalize_failed".equals(String.valueOf(details.get("event")))));
+    verify(controlPlaneRuntime).publishWorkJournalEvent(
+        eq("clearingExportWorker"),
+        anyString(),
+        isNull(),
+        eq("work-journal"),
+        eq("recorded"),
+        eq("clearing-export-flush-summary"),
+        isNull(),
+        isNull(),
+        argThat(details -> "flush_summary".equals(String.valueOf(details.get("event")))));
+    verify(controlPlaneRuntime, never()).publishWorkError(
+        eq("clearingExportWorker"),
+        argThat(item -> {
+          Object callId = item.headers().get("x-ph-call-id");
+          return "clearing-export-created".equals(String.valueOf(callId))
+              || "clearing-export-write-failed".equals(String.valueOf(callId))
+              || "clearing-export-finalize-failed".equals(String.valueOf(callId))
+              || "clearing-export-flush-summary".equals(String.valueOf(callId));
+        }),
+        any(Throwable.class));
   }
 
   private static WorkerStateSnapshot buildSnapshot(ClearingExportWorkerConfig config, boolean enabled) throws Exception {

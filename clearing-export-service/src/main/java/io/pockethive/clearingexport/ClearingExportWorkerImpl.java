@@ -17,6 +17,7 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
@@ -50,6 +51,7 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
   private final AtomicReference<StatusPublisher> lastStatusPublisher = new AtomicReference<>();
   private final AtomicReference<Boolean> lastEnabled = new AtomicReference<>(true);
   private final AtomicReference<String> fatalReason = new AtomicReference<>();
+  private final String lifecycleCorrelationId;
 
   @Autowired
   ClearingExportWorkerImpl(
@@ -93,6 +95,7 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
     this.applicationContext = Objects.requireNonNull(applicationContext, "applicationContext");
     this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
     this.clock = Objects.requireNonNull(clock, "clock");
+    this.lifecycleCorrelationId = "clearing-export-lifecycle-" + UUID.randomUUID();
   }
 
   @PostConstruct
@@ -100,6 +103,7 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
     if (!preflightListenerRegistered.compareAndSet(false, true)) {
       return;
     }
+    batchWriter.setLifecycleListener(this::publishLifecycleJournalEvent);
     controlPlaneRuntime.registerStateListener(WORKER_BEAN_NAME, this::preflightOrHaltOnStateUpdate);
   }
 
@@ -252,6 +256,51 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
     } catch (Exception publishEx) {
       log.warn("Failed to publish control-plane alert for clearing-export failure", publishEx);
     }
+  }
+
+  private void publishLifecycleJournalEvent(ClearingExportBatchWriter.ClearingExportLifecycleEvent event) {
+    if (event == null) {
+      return;
+    }
+
+    String callId = switch (event.type()) {
+      case CREATED -> "clearing-export-created";
+      case WRITE_FAILED -> "clearing-export-write-failed";
+      case FINALIZE_FAILED -> "clearing-export-finalize-failed";
+      case FLUSH_SUMMARY -> "clearing-export-flush-summary";
+    };
+
+    try {
+      controlPlaneRuntime.publishWorkJournalEvent(
+          WORKER_BEAN_NAME,
+          lifecycleCorrelationId,
+          null,
+          "work-journal",
+          "recorded",
+          callId,
+          null,
+          null,
+          lifecycleDetails(event));
+    } catch (Exception publishEx) {
+      log.warn("Failed to publish clearing-export lifecycle journal event", publishEx);
+    }
+  }
+
+  private Map<String, Object> lifecycleDetails(ClearingExportBatchWriter.ClearingExportLifecycleEvent event) {
+    Map<String, Object> details = new LinkedHashMap<>();
+    details.put("event", event.type().name().toLowerCase());
+    ClearingExportSinkWriteResult result = event.sinkResult();
+    if (result != null) {
+      details.put("fileName", result.fileName());
+      details.put("recordCount", result.recordCount());
+      details.put("bytes", result.bytes());
+    }
+    Throwable failure = event.failure();
+    if (failure != null) {
+      details.put("errorType", failure.getClass().getName());
+      details.put("errorMessage", failure.getMessage() == null ? "" : failure.getMessage());
+    }
+    return details;
   }
 
   private void requestWorkerStop(String message) {
