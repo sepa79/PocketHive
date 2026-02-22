@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.14.29] - 2026-02-22
+Timestamp: 2026-02-22T19:30:00Z
+
+- Scenarios UI (v1): increased vertical workspace for Scenario YAML, Plan editor, Swarm template, and HTTP templates panes so editors use most of the available screen height instead of a compact 60vh layout.
+- Hive topology: improved fallback node positioning by vertically centering orchestrator nodes relative to swarm controllers in overview mode, reducing extreme long `swarm-control` edges when many swarms are present.
+- Hive UI runtime stability: removed STOMP-based `status-request` publishing from the read-only client path (to avoid broker disconnects with observer credentials) and kept queue-path cache restoration for topology continuity after refresh.
+- Hive tests: added fallback layout coverage for orchestrator/controller alignment and updated topology mocks for the extended stomp client exports.
+
 ## [0.14.28] - 2026-02-22
 Timestamp: 2026-02-22T17:26:00Z
 
