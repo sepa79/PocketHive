@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.15.8]
+Timestamp: 2026-02-22T23:10:00Z
+
+- Processor service: added proxy-awareness for outbound HTTP by exposing both runtime HTTP clients to JVM system properties sourced from worker environment configuration.
+- UI (Scenario Editor): increased available vertical workspace across Plan/YAML/Swarm/HTTP templates views (larger fixed-height panes, internal scroll regions), so editors no longer render at ~1/3 screen height.
+
 ## [0.15.7]
 Timestamp: 2026-02-16T23:01:40Z
 
