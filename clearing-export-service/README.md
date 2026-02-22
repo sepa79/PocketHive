@@ -6,7 +6,12 @@ V1 scope:
 
 - custom templates only (`headerTemplate`, `recordTemplate`, `footerTemplate`, `fileNameTemplate`),
 - local directory sink with `*.tmp` + atomic rename,
+- optional template streaming append mode (`streamingAppendEnabled`) for long file windows,
 - optional local manifest (`jsonl`) with one entry per finalized file.
+
+Operational note:
+
+- treat `streamingAppendEnabled` as startup-time mode; changing it from `true` to `false` on a running instance is not supported in current implementation (restart worker for mode change).
 
 ## Example templates
 

@@ -33,14 +33,9 @@ class ClearingExportFileAssembler {
     Instant now = clock.instant();
     int recordCount = recordLines.size();
 
-    Map<String, Object> baseContext = new LinkedHashMap<>();
-    baseContext.put("now", now.toString());
-    baseContext.put("recordCount", recordCount);
-    baseContext.put("totals", Map.of("recordCount", recordCount));
-
-    String header = templateRenderer.render(config.headerTemplate(), baseContext);
-    String footer = templateRenderer.render(config.footerTemplate(), baseContext);
-    String fileName = templateRenderer.render(config.fileNameTemplate(), baseContext);
+    String header = renderTemplateHeader(config, now, recordCount);
+    String footer = renderTemplateFooter(config, now, recordCount);
+    String fileName = renderTemplateFileName(config, now, recordCount);
 
     String separator = config.lineSeparator();
     StringBuilder payload = new StringBuilder(Math.max(128, recordLines.size() * 64));
@@ -51,6 +46,18 @@ class ClearingExportFileAssembler {
     payload.append(footer).append(separator);
 
     return new ClearingRenderedFile(fileName, payload.toString(), recordCount, now);
+  }
+
+  String renderTemplateHeader(ClearingExportWorkerConfig config, Instant now, int recordCount) {
+    return templateRenderer.render(config.headerTemplate(), templateBaseContext(now, recordCount));
+  }
+
+  String renderTemplateFooter(ClearingExportWorkerConfig config, Instant now, int recordCount) {
+    return templateRenderer.render(config.footerTemplate(), templateBaseContext(now, recordCount));
+  }
+
+  String renderTemplateFileName(ClearingExportWorkerConfig config, Instant now, int recordCount) {
+    return templateRenderer.render(config.fileNameTemplate(), templateBaseContext(now, recordCount));
   }
 
   ClearingRenderedFile assembleStructured(
@@ -84,5 +91,13 @@ class ClearingExportFileAssembler {
       rendered.put(entry.getKey(), templateRenderer.render(entry.getValue(), context));
     }
     return Map.copyOf(rendered);
+  }
+
+  private Map<String, Object> templateBaseContext(Instant now, int recordCount) {
+    Map<String, Object> baseContext = new LinkedHashMap<>();
+    baseContext.put("now", now.toString());
+    baseContext.put("recordCount", recordCount);
+    baseContext.put("totals", Map.of("recordCount", recordCount));
+    return baseContext;
   }
 }

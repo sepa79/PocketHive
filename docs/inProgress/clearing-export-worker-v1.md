@@ -132,6 +132,38 @@ worker:
 - Silent skipping of malformed numeric fields in totals is risky for compliance; default should be strict with explicit policy switch if needed.
 - Output determinism must be tested byte-to-byte for compliance-critical schemas.
 
+## V1 template streaming append mode (new)
+
+Goal: support long file windows (for example 6h) without buffering all records in memory.
+
+Config (template mode only):
+
+```yaml
+worker:
+  mode: template
+  streamingAppendEnabled: true    # default: false
+  streamingWindowMs: 21600000     # 6h
+  maxRecordsPerFile: 1000000
+  flushIntervalMs: 1000           # scheduler check cadence; streaming finalize uses window/count
+```
+
+Behavior:
+
+- Each record is appended immediately to the current `*.tmp` file.
+- File is finalized when:
+  - `streamingWindowMs` elapsed, or
+  - `maxRecordsPerFile` reached.
+- Finalization writes footer and performs atomic rename from temp file.
+- ACK behavior is unchanged.
+- `streamingAppendEnabled` is rejected in `mode: structured` (current scope).
+- `streamingFsyncPolicy` is intentionally not implemented in V1 (to avoid storage-specific assumptions, for example EFS/GlusterFS behavior).
+
+Known runtime limitation (documented, no behavior change in this iteration):
+
+- Do not toggle `streamingAppendEnabled` from `true` to `false` on a running worker instance.
+- Current implementation routes flush path by current config value; if an active streaming `*.tmp` file exists and config is switched to non-streaming, that open streaming state may remain unfinalized until process restart/shutdown with streaming mode still enabled.
+- Operational guidance: treat `streamingAppendEnabled` as startup-time mode and restart worker when changing it.
+
 ## Tracking
 
 ### V1.1 hardening
@@ -140,6 +172,14 @@ worker:
 - [ ] Unit tests: flush-by-count and flush-by-time policy.
 - [ ] Integration tests: finalize semantics (`.tmp` + atomic rename).
 - [ ] Integration test: write failure keeps batch and retries on next trigger.
+
+### V1 template streaming append mode
+
+- [x] `streamingAppendEnabled` + `streamingWindowMs` config added (default off).
+- [x] Streaming append implementation for template mode (`*.tmp` append + finalize by time/count).
+- [x] Structured mode guard (`streamingAppendEnabled` unsupported in `mode=structured`).
+- [x] Local sink streaming finalize support (atomic rename + optional manifest).
+- [x] E2E scenario for streaming finalize (`@clearing-export-streaming-demo`).
 
 ### V2 structured mode
 

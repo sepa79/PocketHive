@@ -8,6 +8,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -34,16 +38,27 @@ class ClearingExportBatchWriter {
   private final ReentrantLock flushLock = new ReentrantLock();
   private final AtomicReference<ClearingExportWorkerConfig> lastConfig = new AtomicReference<>();
   private final AtomicReference<ClearingStructuredSchema> lastSchema = new AtomicReference<>();
+  private final AtomicReference<StreamingTemplateFileState> streamingState = new AtomicReference<>();
+  private final ScheduledExecutorService streamingTicker;
 
   ClearingExportBatchWriter(ClearingExportFileAssembler assembler, ClearingExportSink sink) {
     this.assembler = Objects.requireNonNull(assembler, "assembler");
     this.sink = Objects.requireNonNull(sink, "sink");
+    this.streamingTicker = Executors.newSingleThreadScheduledExecutor(new StreamingTickerThreadFactory());
+    this.streamingTicker.scheduleWithFixedDelay(this::tickStreamingFlush, 250, 250, TimeUnit.MILLISECONDS);
   }
 
   void append(String renderedRecordLine, ClearingExportWorkerConfig config) throws Exception {
     Objects.requireNonNull(renderedRecordLine, "renderedRecordLine");
     Objects.requireNonNull(config, "config");
     lastConfig.set(config);
+
+    // NOTE: mode switch is evaluated from the current config.
+    // Toggling streaming true->false at runtime is not supported; treat it as startup-time mode.
+    if (config.streamingAppendEnabled()) {
+      appendStreaming(renderedRecordLine, config, System.currentTimeMillis());
+      return;
+    }
 
     int maxBuffered = config.maxBufferedRecords();
     if (bufferedCount.get() >= maxBuffered) {
@@ -72,6 +87,10 @@ class ClearingExportBatchWriter {
     lastConfig.set(config);
     lastSchema.set(schema);
 
+    if (config.streamingAppendEnabled()) {
+      throw new IllegalStateException("streamingAppendEnabled is supported only in template mode");
+    }
+
     int maxBuffered = config.maxBufferedRecords();
     if (bufferedCount.get() >= maxBuffered) {
       throw new ClearingExportBufferFullException(
@@ -92,7 +111,14 @@ class ClearingExportBatchWriter {
     if (config == null) {
       return;
     }
+
     long now = System.currentTimeMillis();
+    // NOTE: flush path is selected by current config value (see append() note about runtime mode toggles).
+    if (config.streamingAppendEnabled()) {
+      flushStreamingIfDue(config, now);
+      return;
+    }
+
     if (shouldFlush(config, now)) {
       flush(config, now);
     }
@@ -100,12 +126,19 @@ class ClearingExportBatchWriter {
 
   @PreDestroy
   void flushOnShutdown() {
+    streamingTicker.shutdownNow();
     ClearingExportWorkerConfig config = lastConfig.get();
     if (config == null) {
       return;
     }
     try {
-      flush(config, System.currentTimeMillis());
+      // NOTE: shutdown finalization also follows current config value.
+      // Streaming mode should be treated as startup-time mode (no live true->false toggle).
+      if (config.streamingAppendEnabled()) {
+        flushStreamingOnShutdown(config, System.currentTimeMillis());
+      } else {
+        flush(config, System.currentTimeMillis());
+      }
     } catch (Exception ignored) {
       // Best-effort flush on shutdown.
     }
@@ -145,6 +178,14 @@ class ClearingExportBatchWriter {
 
   Instant lastFlushAt() {
     return lastFlushAt.get();
+  }
+
+  void preflight(ClearingExportWorkerConfig config) {
+    Objects.requireNonNull(config, "config");
+    if (config.streamingAppendEnabled() && !sink.supportsStreaming()) {
+      throw new IllegalStateException(
+          "Configured sink does not support streaming append mode: " + sink.getClass().getSimpleName());
+    }
   }
 
   private boolean shouldFlush(ClearingExportWorkerConfig config, long nowMs) {
@@ -197,13 +238,13 @@ class ClearingExportBatchWriter {
           bufferedCount.addAndGet(-drainedCount);
           file = assembler.assemble(config, drainedTemplate);
         }
-        sink.writeFile(config, file);
+        ClearingExportSinkWriteResult sinkResult = sink.writeFile(config, file);
         filesWritten.incrementAndGet();
-        lastFileName.set(file.fileName());
-        lastFileRecordCount.set(file.recordCount());
-        lastFileBytes.set(file.bytesUtf8());
+        lastFileName.set(sinkResult.fileName());
+        lastFileRecordCount.set(sinkResult.recordCount());
+        lastFileBytes.set(sinkResult.bytes());
         lastError.set("");
-        lastFlushAt.set(file.createdAt());
+        lastFlushAt.set(sinkResult.createdAt());
       } catch (Exception ex) {
         if (config.structuredMode()) {
           for (StructuredProjectedRecord record : drainedStructured) {
@@ -225,6 +266,129 @@ class ClearingExportBatchWriter {
     } finally {
       flushLock.unlock();
     }
+  }
+
+  private void appendStreaming(String renderedRecordLine, ClearingExportWorkerConfig config, long nowMs)
+      throws Exception {
+    flushLock.lock();
+    try {
+      int maxBuffered = config.maxBufferedRecords();
+      if (bufferedCount.get() >= maxBuffered) {
+        throw new ClearingExportBufferFullException(
+            "Clearing export buffer is full: maxBufferedRecords=" + maxBuffered);
+      }
+
+      StreamingTemplateFileState state = streamingState.get();
+      if (state == null) {
+        state = openStreamingTemplateFile(config, nowMs);
+        streamingState.set(state);
+      }
+
+      if (state.recordCount > 0 && nowMs - state.openedAtMs >= config.streamingWindowMs()) {
+        finalizeStreamingState(config, state, nowMs);
+        state = openStreamingTemplateFile(config, nowMs);
+        streamingState.set(state);
+      }
+
+      sink.appendStreamingRecord(config, state.fileName, renderedRecordLine, config.lineSeparator());
+      state.recordCount++;
+      bufferedCount.incrementAndGet();
+      recordsAccepted.incrementAndGet();
+
+      if (state.recordCount >= config.maxRecordsPerFile()) {
+        finalizeStreamingState(config, state, nowMs);
+        streamingState.set(null);
+      }
+    } catch (Exception ex) {
+      filesFailed.incrementAndGet();
+      lastError.set(ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage());
+      throw ex;
+    } finally {
+      flushLock.unlock();
+    }
+  }
+
+  private void flushStreamingIfDue(ClearingExportWorkerConfig config, long nowMs) throws Exception {
+    if (!flushLock.tryLock()) {
+      return;
+    }
+    try {
+      StreamingTemplateFileState state = streamingState.get();
+      if (state == null || state.recordCount <= 0) {
+        return;
+      }
+      if (nowMs - state.openedAtMs >= config.streamingWindowMs()) {
+        finalizeStreamingState(config, state, nowMs);
+        streamingState.set(null);
+      }
+    } finally {
+      flushLock.unlock();
+    }
+  }
+
+  private void flushStreamingOnShutdown(ClearingExportWorkerConfig config, long nowMs) throws Exception {
+    flushLock.lock();
+    try {
+      StreamingTemplateFileState state = streamingState.get();
+      if (state == null || state.recordCount <= 0) {
+        return;
+      }
+      finalizeStreamingState(config, state, nowMs);
+      streamingState.set(null);
+    } finally {
+      flushLock.unlock();
+    }
+  }
+
+  private void tickStreamingFlush() {
+    try {
+      ClearingExportWorkerConfig config = lastConfig.get();
+      if (config == null || !config.streamingAppendEnabled()) {
+        return;
+      }
+      flushStreamingIfDue(config, System.currentTimeMillis());
+    } catch (Exception ignored) {
+      // Best-effort periodic flush for streaming append mode.
+    }
+  }
+
+  private StreamingTemplateFileState openStreamingTemplateFile(ClearingExportWorkerConfig config, long nowMs)
+      throws Exception {
+    Instant openedAt = Instant.ofEpochMilli(nowMs);
+    String fileName = assembler.renderTemplateFileName(config, openedAt, 0);
+    String header = assembler.renderTemplateHeader(config, openedAt, 0);
+    sink.openStreamingFile(config, fileName, header, config.lineSeparator());
+    return new StreamingTemplateFileState(fileName, nowMs);
+  }
+
+  private void finalizeStreamingState(
+      ClearingExportWorkerConfig config,
+      StreamingTemplateFileState state,
+      long nowMs
+  ) throws Exception {
+    if (state.recordCount <= 0) {
+      return;
+    }
+
+    Instant finalizeAt = Instant.ofEpochMilli(nowMs);
+    String footer = assembler.renderTemplateFooter(config, finalizeAt, state.recordCount);
+
+    ClearingExportSinkWriteResult sinkResult =
+        sink.finalizeStreamingFile(
+            config,
+            state.fileName,
+            footer,
+            config.lineSeparator(),
+            state.recordCount,
+            finalizeAt);
+    filesWritten.incrementAndGet();
+    lastFileName.set(sinkResult.fileName());
+    lastFileRecordCount.set(sinkResult.recordCount());
+    lastFileBytes.set(sinkResult.bytes());
+    lastError.set("");
+    lastFlushAt.set(sinkResult.createdAt());
+    bufferedCount.addAndGet(-state.recordCount);
+    lastFlushAtMs.set(nowMs);
   }
 
   private List<String> drainTemplate(int max) {
@@ -300,6 +464,27 @@ class ClearingExportBatchWriter {
       List<Map<String, String>> recordValues,
       Map<String, Object> totals
   ) {
+  }
+
+  private static final class StreamingTemplateFileState {
+    private final String fileName;
+    private final long openedAtMs;
+    private int recordCount;
+
+    private StreamingTemplateFileState(String fileName, long openedAtMs) {
+      this.fileName = fileName;
+      this.openedAtMs = openedAtMs;
+      this.recordCount = 0;
+    }
+  }
+
+  private static final class StreamingTickerThreadFactory implements ThreadFactory {
+    @Override
+    public Thread newThread(Runnable task) {
+      Thread thread = new Thread(task, "clearing-export-streaming-ticker");
+      thread.setDaemon(true);
+      return thread;
+    }
   }
 
   private static final class NumericAccumulator {
