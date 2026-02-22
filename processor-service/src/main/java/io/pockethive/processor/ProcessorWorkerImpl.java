@@ -78,7 +78,7 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
   ProcessorWorkerImpl(ObjectMapper mapper, ProcessorWorkerProperties properties, HttpClient httpClient, HttpClient noKeepAliveClient, Clock clock) {
     this.mapper = Objects.requireNonNull(mapper, "mapper");
     this.properties = Objects.requireNonNull(properties, "properties");
-    ThreadLocal<HttpClient> perThreadClient = ThreadLocal.withInitial(HttpClients::createDefault);
+    ThreadLocal<HttpClient> perThreadClient = ThreadLocal.withInitial(HttpClients::createSystem);
     java.util.concurrent.atomic.AtomicLong nextAllowedTimeNanos = new java.util.concurrent.atomic.AtomicLong(0L);
     this.protocolHandlers = Map.of(
         "HTTP", new HttpProtocolHandler(mapper, clock, metricsRecorder, httpClient, noKeepAliveClient, perThreadClient, nextAllowedTimeNanos),
@@ -161,6 +161,7 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
     manager.setDefaultMaxPerRoute(GLOBAL_MAX_PER_ROUTE);
     return HttpClients.custom()
         .setConnectionManager(manager)
+        .useSystemProperties()
         .build();
   }
 
@@ -168,6 +169,7 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
     ConnectionReuseStrategy noReuse = (request, response, context) -> false;
     return HttpClients.custom()
         .setConnectionReuseStrategy(noReuse)
+        .useSystemProperties()
         .build();
   }
 }
