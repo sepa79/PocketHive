@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.worker.sdk.api.StatusPublisher;
 import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerContext;
+import io.pockethive.worker.sdk.api.WorkerInfo;
 import io.pockethive.worker.sdk.config.WorkInputConfig;
 import io.pockethive.worker.sdk.config.WorkOutputConfig;
 import io.pockethive.worker.sdk.config.WorkerCapability;
@@ -41,6 +42,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class ClearingExportWorkerImplTest {
+  private static final WorkerInfo TEST_WORKER_INFO =
+      new WorkerInfo("generator", "swarm-test", "generator-test-1", "in", "out");
 
   @Test
   void stateListenerPreflightFailurePublishesJournalAndStopsWorker() throws Exception {
@@ -123,7 +126,7 @@ class ClearingExportWorkerImplTest {
         new ObjectMapper().findAndRegisterModules(),
         Clock.fixed(Instant.parse("2026-02-21T00:00:00Z"), ZoneOffset.UTC));
 
-    assertThatThrownBy(() -> worker.onMessage(WorkItem.text("{\"id\":1}").build(), context))
+    assertThatThrownBy(() -> worker.onMessage(WorkItem.text(TEST_WORKER_INFO, "{\"id\":1}").build(), context))
         .isInstanceOf(IllegalStateException.class)
         .hasMessageContaining("Failed to append clearing export record");
 

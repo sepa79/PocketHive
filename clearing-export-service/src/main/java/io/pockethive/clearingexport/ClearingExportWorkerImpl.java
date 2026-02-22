@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
 import io.pockethive.worker.sdk.api.StatusPublisher;
 import io.pockethive.worker.sdk.api.WorkItem;
+import io.pockethive.worker.sdk.api.WorkerInfo;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
 import io.pockethive.worker.sdk.config.WorkerCapability;
@@ -37,6 +38,8 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
   private static final Logger log = LoggerFactory.getLogger(ClearingExportWorkerImpl.class);
   private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
   private static final String WORKER_BEAN_NAME = "clearingExportWorker";
+  private static final WorkerInfo SYSTEM_WORKER_INFO =
+      new WorkerInfo("clearing-export", "system", "clearing-export-system", null, null);
 
   private final ClearingExportWorkerProperties properties;
   private final ClearingExportBatchWriter batchWriter;
@@ -169,9 +172,7 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
     } catch (Exception ex) {
       String message = "Streaming preflight failed: " + ex.getMessage();
       publishStatusFromRuntimeFailure(message);
-      WorkItem synthetic = WorkItem.text("")
-          .header("x-ph-call-id", "clearing-export-preflight")
-          .build();
+      WorkItem synthetic = syntheticFailureItem("clearing-export-preflight");
       publishJournalAlert(synthetic, ex);
       requestWorkerStop(message);
     }
@@ -206,11 +207,15 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
     if (statusPublisher != null) {
       publishStatus(statusPublisher, Boolean.TRUE.equals(lastEnabled.get()), message);
     }
-    WorkItem synthetic = WorkItem.text("")
-        .header("x-ph-call-id", "clearing-export-" + phase)
-        .build();
+    WorkItem synthetic = syntheticFailureItem("clearing-export-" + phase);
     publishJournalAlert(synthetic, ex);
     requestWorkerStop(message);
+  }
+
+  private WorkItem syntheticFailureItem(String callId) {
+    return WorkItem.text(SYSTEM_WORKER_INFO, "")
+        .header("x-ph-call-id", callId)
+        .build();
   }
 
   private void publishStatus(WorkerContext context) {
