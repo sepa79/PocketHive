@@ -32,6 +32,18 @@ class BeeNameGeneratorTest {
   }
 
   @Test
+  void mapsRequestBuilderToComposer() {
+    String name = BeeNameGenerator.generate("request-builder", "sw1");
+    assertTrue(name.startsWith("sw1-composer-bee-"));
+  }
+
+  @Test
+  void mapsClearingExportToPacker() {
+    String name = BeeNameGenerator.generate("clearing-export", "sw1");
+    assertTrue(name.startsWith("sw1-packer-bee-"));
+  }
+
+  @Test
   void stripsUnsupportedCharactersFromSwarmId() {
     String name = BeeNameGenerator.generate("swarm-controller", "client/alpha:beta");
     assertTrue(name.startsWith("clientalphabeta-marshal-bee-"));
