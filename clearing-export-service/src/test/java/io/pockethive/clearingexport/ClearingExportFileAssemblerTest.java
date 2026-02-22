@@ -19,6 +19,8 @@ class ClearingExportFileAssemblerTest {
 
     ClearingExportWorkerConfig config = new ClearingExportWorkerConfig(
         "template",
+        false,
+        21_600_000L,
         10,
         1_000,
         100,

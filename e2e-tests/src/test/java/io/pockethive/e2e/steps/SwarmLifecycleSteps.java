@@ -507,6 +507,64 @@ public class SwarmLifecycleSteps {
         "Expected schemaVersion=1.0.0 in clearing export config");
   }
 
+  @And("the clearing export runtime config matches the streaming demo")
+  public void theClearingExportRuntimeConfigMatchesTheStreamingDemo() {
+    ensureStartResponse();
+    captureWorkerStatuses(true);
+
+    String clearingKey = roleKey(CLEARING_EXPORT_ROLE);
+    String role = clearingKey != null ? clearingKey : CLEARING_EXPORT_ROLE;
+    StatusEvent status = workerStatusByRole.get(role);
+    String displayRole = actualRoleName(role);
+    assertNotNull(status, () -> "No status recorded for role " + displayRole);
+
+    Map<String, Object> snapshot = workerSnapshot(status, role);
+    assertFalse(snapshot.isEmpty(), () -> "Missing worker snapshot for role " + displayRole);
+    Map<String, Object> config = snapshotConfig(snapshot);
+    assertFalse(config.isEmpty(), "Clearing export snapshot should include applied config");
+
+    assertEquals("template", String.valueOf(config.get("mode")),
+        "Expected mode=template in clearing export config");
+    assertEquals("true", String.valueOf(config.get("streamingAppendEnabled")),
+        "Expected streamingAppendEnabled=true in clearing export config");
+  }
+
+  @Then("the clearing export streaming worker writes 1 file from 20 transactions")
+  public void theClearingExportStreamingWorkerWritesOneFileFromTwentyTransactions() {
+    ensureStartResponse();
+    captureWorkerStatuses(true);
+
+    String clearingKey = roleKey(CLEARING_EXPORT_ROLE);
+    String displayRole = actualRoleName(clearingKey);
+
+    SwarmAssertions.await("clearing-export streaming writes one file", () -> {
+      captureWorkerStatuses(true);
+      StatusEvent status = workerStatusByRole.get(clearingKey);
+      assertNotNull(status, () -> "No status recorded for role " + displayRole);
+
+      Map<String, Object> snapshot = workerSnapshot(status, clearingKey);
+      assertFalse(snapshot.isEmpty(), () -> "Missing worker snapshot for role " + displayRole);
+
+      Map<String, Object> data = toMap(snapshot.get("data"));
+      long filesWritten = asLong(data.get("filesWritten"));
+      long recordsAccepted = asLong(data.get("recordsAccepted"));
+      long buffered = asLong(data.get("bufferedRecords"));
+      long lastFileRecordCount = asLong(data.get("lastFileRecordCount"));
+
+      assertTrue(filesWritten >= 1L,
+          () -> "Expected at least 1 clearing file, got filesWritten=" + filesWritten + " snapshot=" + snapshot);
+      assertTrue(recordsAccepted >= 20L,
+          () -> "Expected at least 20 processed transactions, got recordsAccepted=" + recordsAccepted
+              + " snapshot=" + snapshot);
+      assertEquals(0L, buffered,
+          () -> "Expected buffered records to be empty after streaming finalize, got buffered=" + buffered
+              + " snapshot=" + snapshot);
+      assertEquals(20L, lastFileRecordCount,
+          () -> "Expected last finalized file size 20 records, got lastFileRecordCount="
+              + lastFileRecordCount + " snapshot=" + snapshot);
+    });
+  }
+
   @And("the generator runtime config matches the service defaults")
   public void theGeneratorRuntimeConfigMatchesTheServiceDefaults() {
     ensureStartResponse();
@@ -1698,7 +1756,8 @@ public class SwarmLifecycleSteps {
         || "tcp-socket-demo".equals(scenarioId)
         || "webauth-loop-redis-5-customers".equals(scenarioId)
         || "clearing-export-demo".equals(scenarioId)
-        || "clearing-export-structured-demo".equals(scenarioId)) {
+        || "clearing-export-structured-demo".equals(scenarioId)
+        || "clearing-export-streaming-demo".equals(scenarioId)) {
       return "post";
     }
     throw new AssertionError("Unsupported scenario for final queue resolution: " + scenarioId);
@@ -1707,7 +1766,8 @@ public class SwarmLifecycleSteps {
   private boolean shouldTapFinalQueue() {
     String scenarioId = scenarioDetails != null ? scenarioDetails.id() : null;
     return !"clearing-export-demo".equals(scenarioId)
-        && !"clearing-export-structured-demo".equals(scenarioId);
+        && !"clearing-export-structured-demo".equals(scenarioId)
+        && !"clearing-export-streaming-demo".equals(scenarioId);
   }
   @Then("the final queue reports a processor error")
   public void theFinalQueueReportsAProcessorError() throws Exception {

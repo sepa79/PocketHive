@@ -29,6 +29,8 @@ class XmlOutputFormatterTest {
             "Footer",
             "",
             "",
+            "",
+            "",
             false
         )
     );

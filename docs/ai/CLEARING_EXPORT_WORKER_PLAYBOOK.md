@@ -48,6 +48,9 @@ Path: `pockethive.worker.config.*`
 
 | Field | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
+| `mode` | string | no | `template` | Worker mode: `template` or `structured`. |
+| `streamingAppendEnabled` | boolean | no | `false` | Template-only mode. Appends each record directly to an open `*.tmp` file, then finalizes by time/count. |
+| `streamingWindowMs` | long | no | `21600000` | Max open-file window for streaming append mode (for example 6h). |
 | `maxRecordsPerFile` | int | yes | `1000` | Max records per output file. Minimum effective value is `1`. |
 | `flushIntervalMs` | long | yes | `1000` | Max time between flushes. Minimum effective value is `1`. |
 | `maxBufferedRecords` | int | yes | `50000` | In-memory guard. When exceeded, worker throws buffer-full error. |
@@ -62,12 +65,23 @@ Path: `pockethive.worker.config.*`
 | `writeManifest` | boolean | no | `false` | Enables local JSONL manifest (one line per finalized file). |
 | `localManifestPath` | string | no | `reports/clearing/manifest.jsonl` | Manifest path. Relative paths are resolved under `localTargetDir`. |
 
+Streaming notes:
+
+- `streamingAppendEnabled=true` is supported only in `mode=template`.
+- No ACK behavior changes are introduced by this mode.
+- Finalization trigger is: `streamingWindowMs` elapsed OR `maxRecordsPerFile` reached.
+- `streamingFsyncPolicy` is not exposed/configured in this version by design.
+- Treat `streamingAppendEnabled` as startup-time mode. Do not switch `true -> false` on a live worker instance; restart the worker when changing this flag.
+
 ## 5. Complete configuration example
 
 ```yaml
 pockethive:
   worker:
     config:
+      mode: template
+      streamingAppendEnabled: false
+      streamingWindowMs: 21600000
       maxRecordsPerFile: 500
       flushIntervalMs: 2000
       maxBufferedRecords: 20000

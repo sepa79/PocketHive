@@ -19,6 +19,8 @@ class LocalDirectoryClearingExportSinkTest {
 
     ClearingExportWorkerConfig config = new ClearingExportWorkerConfig(
         "template",
+        false,
+        21_600_000L,
         10,
         1_000,
         100,
@@ -55,5 +57,51 @@ class LocalDirectoryClearingExportSinkTest {
     String manifestText = Files.readString(manifest);
     assertThat(manifestText).contains("\"fileName\":\"settlement_001.dat\"");
     assertThat(manifestText).contains("\"recordCount\":1");
+  }
+
+  @Test
+  void finalizeStreamingIsIdempotentAndDoesNotDuplicateFooter() throws Exception {
+    LocalDirectoryClearingExportSink sink = new LocalDirectoryClearingExportSink();
+    ClearingExportWorkerConfig config = new ClearingExportWorkerConfig(
+        "template",
+        true,
+        21_600_000L,
+        10,
+        1_000,
+        100,
+        true,
+        "\n",
+        "stream.dat",
+        "H",
+        "D",
+        "T",
+        tempDir.toString(),
+        ".tmp",
+        false,
+        "reports/clearing/manifest.jsonl",
+        "/tmp/schemas",
+        null,
+        null
+    );
+
+    sink.openStreamingFile(config, "stream.dat", "H|x", "\n");
+    sink.appendStreamingRecord(config, "stream.dat", "D|one", "\n");
+    sink.finalizeStreamingFile(
+        config,
+        "stream.dat",
+        "T|1",
+        "\n",
+        1,
+        Instant.parse("2026-02-21T10:00:00Z"));
+    sink.finalizeStreamingFile(
+        config,
+        "stream.dat",
+        "T|1",
+        "\n",
+        1,
+        Instant.parse("2026-02-21T10:00:01Z"));
+
+    String content = Files.readString(tempDir.resolve("stream.dat"));
+    assertThat(content).isEqualTo("H|x\nD|one\nT|1\n");
   }
 }

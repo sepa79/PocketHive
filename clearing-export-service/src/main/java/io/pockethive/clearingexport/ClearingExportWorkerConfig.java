@@ -4,6 +4,8 @@ import java.util.Objects;
 
 public record ClearingExportWorkerConfig(
     String mode,
+    boolean streamingAppendEnabled,
+    long streamingWindowMs,
     int maxRecordsPerFile,
     long flushIntervalMs,
     int maxBufferedRecords,
@@ -24,6 +26,7 @@ public record ClearingExportWorkerConfig(
 
   public ClearingExportWorkerConfig {
     mode = defaultIfBlank(mode, "template");
+    streamingWindowMs = Math.max(1L, streamingWindowMs);
     maxRecordsPerFile = Math.max(1, maxRecordsPerFile);
     flushIntervalMs = Math.max(1L, flushIntervalMs);
     maxBufferedRecords = Math.max(1, maxBufferedRecords);
@@ -34,6 +37,9 @@ public record ClearingExportWorkerConfig(
     schemaRegistryRoot = defaultIfBlank(schemaRegistryRoot, "/app/scenario/clearing-schemas");
 
     if (isStructuredMode(mode)) {
+      if (streamingAppendEnabled) {
+        throw new IllegalArgumentException("streamingAppendEnabled is supported only in template mode");
+      }
       schemaId = requireNonBlank(schemaId, "schemaId");
       schemaVersion = requireNonBlank(schemaVersion, "schemaVersion");
     } else {
