@@ -3,7 +3,15 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
-Timestamp: 2026-02-21T17:33:17Z
+Timestamp: 2026-02-22T00:00:00Z
+
+## [0.14.28] - 2026-02-22
+Timestamp: 2026-02-22T00:00:00Z
+
+- Clearing Export: added template streaming append mode (`streamingAppendEnabled`, `streamingWindowMs`) to support long file windows with low memory usage (`*.tmp` append + finalize by time/count + atomic rename).
+- Clearing Export: added structured schema-driven path hardening (schema registry usage, strict structured mode validation, XML formatter coverage, and structured demo scenario wiring).
+- E2E/observability: added `clearing-export-streaming-demo` end-to-end scenario and fixed clearing-export status refresh after scheduled flush so `filesWritten`/buffer metrics stay accurate in runtime snapshots.
+- Docs/playbook: expanded clearing-export configuration and usage guidance, including explicit note that `streamingFsyncPolicy` is intentionally not exposed in this version.
 
 ## [0.14.27] - 2026-02-21
 Timestamp: 2026-02-21T17:33:17Z
