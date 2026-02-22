@@ -1,6 +1,8 @@
 # Transaction Outcome Event + ClickHouse Sink — V1 Draft
 
-> Status: in progress  
+> Status: **implemented / archived**.  
+> Follow-up: `postprocessor-service/README.md`, `docs/observability.md`.
+
 > Scope: `postprocessor-service` (ClickHouse sink mode), processor/postprocessor headers, ClickHouse table `ph_tx_outcome_v1`
 
 ## Goal

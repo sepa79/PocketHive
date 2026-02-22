@@ -16,8 +16,7 @@ Notable in‑progress plans:
 - `docs/sdk/config-key-normalisation-plan.md` – Normalising config key shapes.
 - `docs/inProgress/scenario-bundle-runtime-plan.md` – Directory-based scenario bundles and per-swarm runtimes.
 - `docs/inProgress/scenario-sut-editor-plan.md` – Scenario + SUT editors (Scenario editor notes superseded by `docs/scenarios/SCENARIO_EDITOR_STATUS.md`).
-- `docs/inProgress/tx-outcome-template-extractors-v1-plan.md` – Template-driven transaction outcome extraction for processor/postprocessor flow.
-- `docs/inProgress/tx-outcome-clickhouse-v1.md` – V1 transaction-outcome event schema and ClickHouse sink design.
+- `docs/inProgress/clearing-export-worker-v1.md` – Template-driven clearing file export worker (V1 local directory sink).
 
-Each of those files carries a `Status: in progress` header so it’s clear
+Files in this folder should carry a `Status: in progress` header so it’s clear
 they are live design documents rather than historical notes.

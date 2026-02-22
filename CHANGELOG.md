@@ -2,8 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
-Timestamp: 2026-02-21T17:33:17Z
+## [0.14.28] - 2026-02-22
+Timestamp: 2026-02-22T17:26:00Z
+
+- Clearing Export lifecycle journal: file lifecycle events (`created`, `write-failed`, `finalize-failed`, `flush-summary`) are now published as normal control-plane outcomes (`work-journal`) instead of alerts.
+- Worker SDK: added explicit `publishWorkJournalEvent(...)` API for journal outcomes without synthetic `WorkItem` fallback, with required `correlationId` and normalized optional context fields.
+- Clearing Export streaming hardening: improved failure semantics and state recovery for append/open/finalize paths (including rollover reopen failure handling) to avoid duplicate/misclassified lifecycle events.
+- Clearing Export tests: added hardening coverage for flush policy, retry semantics, streaming open/finalize/reopen failures, and local sink finalize atomic rename behavior.
+- Docs: expanded structured clearing playbook, linked canonical structured schema contract SSOT, and updated in-progress implementation tracking.
+- Clearing Export: added template streaming append mode (`streamingAppendEnabled`, `streamingWindowMs`) to support long file windows with low memory usage (`*.tmp` append + finalize by time/count + atomic rename).
+- Clearing Export: added structured schema-driven path hardening (schema registry usage, strict structured mode validation, XML formatter coverage, and structured demo scenario wiring).
+- E2E/observability: added `clearing-export-streaming-demo` end-to-end scenario and fixed clearing-export status refresh after scheduled flush so `filesWritten`/buffer metrics stay accurate in runtime snapshots.
+- Docs/playbook: expanded clearing-export configuration and usage guidance, including explicit note that `streamingFsyncPolicy` is intentionally not exposed in this version.
 
 ## [0.14.27] - 2026-02-21
 Timestamp: 2026-02-21T17:33:17Z
