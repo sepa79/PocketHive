@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.14.30] - 2026-02-23
+Timestamp: 2026-02-23T17:30:00Z
+
+- Orchestrator recovery: added swarm rehydration from `status-delta` / `status-full` events so, after orchestrator restart, existing swarm-controller instances are re-registered in local state with aligned lifecycle status.
+- Orchestrator API: added `POST /api/swarms/refresh` to force full swarm refresh by clearing in-memory registry and broadcasting `status-request` to all swarm-controller instances (`signal.status-request.ALL.swarm-controller.ALL`).
+- Hive UI (v1): changed `Refresh swarms` flow to call orchestrator refresh first, then reload swarm metadata, so the button can recover control after orchestrator restarts.
+- Tests: added backend/UI coverage for forced refresh behavior and status-based swarm recovery paths.
+
 ## [0.14.29] - 2026-02-22
 Timestamp: 2026-02-22T19:30:00Z
 
