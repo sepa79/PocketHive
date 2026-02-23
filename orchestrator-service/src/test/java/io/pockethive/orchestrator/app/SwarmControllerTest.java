@@ -219,6 +219,31 @@ class SwarmControllerTest {
     }
 
     @Test
+    void refreshClearsRegistryAndBroadcastsStatusRequest() throws Exception {
+        SwarmRegistry registry = new SwarmRegistry();
+        registry.register(new Swarm("sw1", "inst-1", "c1", "run-1"));
+        registry.register(new Swarm("sw2", "inst-2", "c2", "run-2"));
+        SwarmController ctrl = controller(new SwarmCreateTracker(), registry, new SwarmPlanRegistry());
+
+        ResponseEntity<ControlResponse> response =
+            ctrl.refresh(new SwarmController.ControlRequest("idem-refresh", null));
+
+        ArgumentCaptor<String> payloadCaptor = ArgumentCaptor.forClass(String.class);
+        verify(rabbit).convertAndSend(
+            eq("ph.control"),
+            eq(ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, "ALL", "swarm-controller", "ALL")),
+            payloadCaptor.capture());
+        ControlSignal signal = mapper.readValue(payloadCaptor.getValue(), ControlSignal.class);
+        assertThat(signal.type()).isEqualTo(ControlPlaneSignals.STATUS_REQUEST);
+        assertThat(signal.scope().swarmId()).isEqualTo("ALL");
+        assertThat(signal.scope().role()).isEqualTo("swarm-controller");
+        assertThat(signal.scope().instance()).isEqualTo("ALL");
+        assertThat(signal.idempotencyKey()).isEqualTo("idem-refresh");
+        assertThat(registry.count()).isZero();
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
+    }
+
+    @Test
     void concurrentCreateRequestsReuseReservation() throws Exception {
         SwarmCreateTracker tracker = new SwarmCreateTracker();
         SwarmPlanRegistry plans = new SwarmPlanRegistry();

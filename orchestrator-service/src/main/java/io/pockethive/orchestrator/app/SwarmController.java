@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.ControlScope;
 import io.pockethive.control.ControlSignal;
+import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.controlplane.messaging.ControlSignals;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
@@ -382,6 +383,36 @@ public class SwarmController {
         String path = "/api/swarms/" + swarmId + "/remove";
         logRestRequest("POST", path, req);
         ResponseEntity<ControlResponse> response = sendSignal("swarm-remove", swarmId, req.idempotencyKey(), 180_000L);
+        logRestResponse("POST", path, response);
+        return response;
+    }
+
+    /**
+     * POST {@code /api/swarms/refresh} — force full swarm metadata refresh.
+     * <p>
+     * This clears the in-memory swarm registry and broadcasts a {@code status-request}
+     * to all swarm-controller instances. Controllers respond with {@code status-full},
+     * which allows the orchestrator to rebuild registry entries after restarts.
+     */
+    @PostMapping("/refresh")
+    public ResponseEntity<ControlResponse> refresh(@RequestBody(required = false) ControlRequest req) {
+        String path = "/api/swarms/refresh";
+        logRestRequest("POST", path, req);
+        String idempotencyKey = req != null && req.idempotencyKey() != null && !req.idempotencyKey().isBlank()
+            ? req.idempotencyKey()
+            : UUID.randomUUID().toString();
+        String correlation = UUID.randomUUID().toString();
+        registry.clear();
+        ControlScope target = ControlScope.forInstance("ALL", "swarm-controller", "ALL");
+        ControlSignal payload = ControlSignals.statusRequest(originInstanceId, target, correlation, idempotencyKey);
+        String routingKey = ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, "ALL", "swarm-controller", "ALL");
+        sendControl(routingKey, toJson(payload), ControlPlaneSignals.STATUS_REQUEST);
+        ControlResponse responseBody = new ControlResponse(
+            correlation,
+            idempotencyKey,
+            new ControlResponse.Watch("event.metric.status-full.*.swarm-controller.*", "event.alert.alert.*.swarm-controller.*"),
+            15_000L);
+        ResponseEntity<ControlResponse> response = ResponseEntity.accepted().body(responseBody);
         logRestResponse("POST", path, response);
         return response;
     }

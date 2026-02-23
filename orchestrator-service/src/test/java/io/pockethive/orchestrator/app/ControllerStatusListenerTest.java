@@ -19,6 +19,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.times;
 import org.slf4j.LoggerFactory;
 
 @ExtendWith({MockitoExtension.class, OutputCaptureExtension.class})
@@ -29,6 +30,8 @@ class ControllerStatusListenerTest {
     @Test
     void updatesRegistry() {
         ControllerStatusListener listener = new ControllerStatusListener(registry, new ObjectMapper());
+        Swarm swarm = org.mockito.Mockito.mock(Swarm.class);
+        when(registry.find("sw1")).thenReturn(java.util.Optional.of(swarm));
         String json = """
             {
               "timestamp": "2024-01-01T00:00:00Z",
@@ -48,6 +51,35 @@ class ControllerStatusListenerTest {
         // RUNNING + workloadsEnabled=true should drive the registry into RUNNING
         // using the normal lifecycle helper.
         verify(registry).markStartConfirmed("sw1");
+    }
+
+    @Test
+    void recoversMissingSwarmFromStatusEvent() {
+        SwarmRegistry localRegistry = new SwarmRegistry();
+        ControllerStatusListener listener = new ControllerStatusListener(localRegistry, new ObjectMapper());
+        String json = """
+            {
+              "timestamp": "2024-01-01T00:00:00Z",
+              "version": "1",
+              "kind": "metric",
+              "type": "status-delta",
+              "origin": "inst1",
+              "scope": {"swarmId":"sw1","role":"swarm-controller","instance":"inst1"},
+              "correlationId": null,
+              "idempotencyKey": null,
+              "data": {"enabled": true, "tps": 0, "swarmStatus": "RUNNING"}
+            }
+            """;
+
+        listener.handle(json, "event.metric.status-delta.sw1.swarm-controller.inst1");
+
+        Swarm recovered = localRegistry.find("sw1").orElseThrow();
+        assertThat(recovered.getId()).isEqualTo("sw1");
+        assertThat(recovered.getInstanceId()).isEqualTo("inst1");
+        assertThat(recovered.getContainerId()).isEqualTo("inst1");
+        assertThat(recovered.getStatus()).isEqualTo(SwarmStatus.RUNNING);
+        assertThat(recovered.getHealth()).isEqualTo(SwarmHealth.RUNNING);
+        assertThat(recovered.isWorkEnabled()).isTrue();
     }
 
     @Test
@@ -72,7 +104,7 @@ class ControllerStatusListenerTest {
         listener.handle(json, "event.metric.status-delta.sw1.swarm-controller.inst1");
         verify(registry).refresh("sw1", SwarmHealth.DEGRADED);
         verify(registry).updateWorkEnabled("sw1", false);
-        verify(registry).find("sw1");
+        verify(registry, times(2)).find("sw1");
         // STOPPED + workloadsEnabled=false should map to STOPPING -> STOPPED
         verify(registry).updateStatus("sw1", SwarmStatus.STOPPING);
         verify(registry).updateStatus("sw1", SwarmStatus.STOPPED);

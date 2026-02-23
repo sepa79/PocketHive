@@ -301,6 +301,16 @@ export async function listSwarms(): Promise<SwarmSummary[]> {
   return parseSwarmSummaries(response)
 }
 
+export async function refreshSwarmRegistry(): Promise<void> {
+  const body = JSON.stringify({ idempotencyKey: randomId() })
+  const response = await apiFetch('/orchestrator/swarms/refresh', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body,
+  })
+  await ensureOk(response, 'Failed to trigger swarm refresh')
+}
+
 export async function getSwarm(id: string): Promise<SwarmSummary | null> {
   const response = await apiFetch(`/orchestrator/swarms/${id}`, {
     headers: { Accept: 'application/json' },

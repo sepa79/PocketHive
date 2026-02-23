@@ -9,15 +9,17 @@ import type { SwarmMetadataContextValue } from './SwarmMetadataContext'
 
 vi.mock('../lib/orchestratorApi', () => ({
   listSwarms: vi.fn(),
+  refreshSwarmRegistry: vi.fn(),
 }))
 
 vi.mock('../lib/stompClient', () => ({
   setSwarmMetadataRefreshHandler: vi.fn(),
 }))
 
-const { listSwarms } = await import('../lib/orchestratorApi')
+const { listSwarms, refreshSwarmRegistry } = await import('../lib/orchestratorApi')
 const { setSwarmMetadataRefreshHandler } = await import('../lib/stompClient')
 const listSwarmsMock = vi.mocked(listSwarms)
+const refreshSwarmRegistryMock = vi.mocked(refreshSwarmRegistry)
 const setRefreshMock = vi.mocked(setSwarmMetadataRefreshHandler)
 
 function Capture({ onValue }: { onValue: (value: SwarmMetadataContextValue) => void }) {
@@ -31,6 +33,7 @@ function Capture({ onValue }: { onValue: (value: SwarmMetadataContextValue) => v
 describe('SwarmMetadataContext', () => {
 beforeEach(() => {
   listSwarmsMock.mockReset()
+  refreshSwarmRegistryMock.mockReset()
   setRefreshMock.mockClear()
 })
 
@@ -72,6 +75,7 @@ beforeEach(() => {
     listSwarmsMock.mockResolvedValueOnce(initialPayload)
     listSwarmsMock.mockResolvedValueOnce(refreshedPayload)
     listSwarmsMock.mockResolvedValue(refreshedPayload)
+    refreshSwarmRegistryMock.mockResolvedValue()
 
     let context: SwarmMetadataContextValue | null = null
 
@@ -103,9 +107,10 @@ beforeEach(() => {
 
     await act(async () => {
       handler?.(' sw2 ')
-      await Promise.resolve()
+      await new Promise((resolve) => window.setTimeout(resolve, 350))
     })
 
+    expect(refreshSwarmRegistryMock).toHaveBeenCalledTimes(1)
     expect(listSwarmsMock).toHaveBeenCalledTimes(2)
     expect(context!.swarms).toEqual(refreshedPayload)
     expect(context!.getControllerImage('sw2')).toBe('ctrl:2')

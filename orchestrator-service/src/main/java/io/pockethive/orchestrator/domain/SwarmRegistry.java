@@ -136,4 +136,10 @@ public class SwarmRegistry {
     public int count() {
         return swarms.size();
     }
+
+    public void clear() {
+        int removed = swarms.size();
+        swarms.clear();
+        log.info("SwarmRegistry: cleared {} swarms", removed);
+    }
 }
