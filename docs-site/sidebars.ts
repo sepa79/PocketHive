@@ -4,6 +4,11 @@ const sidebars: SidebarsConfig = {
   docsSidebar: [
     {
       type: "category",
+      label: "Presentation",
+      items: ["guides/presentation/interactive-pockethive-overview"],
+    },
+    {
+      type: "category",
       label: "Onboarding",
       items: [
         "guides/onboarding/start-here",

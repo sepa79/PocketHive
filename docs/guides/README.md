@@ -16,6 +16,10 @@ It is designed for both human readers and AI agents.
 - `docs/guides/templating-basics.md` - Pebble + `eval(...)` basics, template context, and request templates.
 - `docs/guides/templating-advanced.md` - Redis sequences, advanced extraction patterns, and validation workflow.
 
+## Presentation guides
+
+- `docs/guides/presentation/interactive-pockethive-overview.mdx` - clickable system map with animated Redis loop walkthrough.
+
 ## Related references
 
 - `docs/scenarios/SCENARIO_CONTRACT.md` - full scenario schema and contract mapping.

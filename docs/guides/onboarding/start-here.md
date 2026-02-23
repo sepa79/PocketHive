@@ -1,7 +1,3 @@
----
-slug: /
----
-
 # Start Here
 
 PocketHive is a RabbitMQ-centric load and behavior simulator that runs **swarms**
