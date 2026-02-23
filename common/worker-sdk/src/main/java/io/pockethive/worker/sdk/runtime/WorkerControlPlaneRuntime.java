@@ -88,6 +88,15 @@ public final class WorkerControlPlaneRuntime {
         "ok",
         "unknown"
     );
+    private static final Set<String> RESERVED_STATUS_KEYS = Set.of(
+        "enabled",
+        "tps",
+        "startedAt",
+        "config",
+        "io",
+        "ioState",
+        "context"
+    );
 
     private final AtomicReference<String> lastWorkInputState = new AtomicReference<>(null);
 
@@ -731,6 +740,7 @@ public final class WorkerControlPlaneRuntime {
 
         StatusSnapshot snapshotData = collectSnapshot(states, snapshot);
         Map<String, Object> configSnapshot = snapshot ? statusConfigSnapshot(states) : Map.of();
+        Map<String, Object> workerStatusData = singleWorkerStatusData(states);
 
         IoStateAggregate workerIo = ioStateFromWorkers(states);
         IoStateAggregate ioStateForEnvelope = workerIo != null
@@ -790,6 +800,7 @@ public final class WorkerControlPlaneRuntime {
                 builder.data("startedAt", startedAt);
                 builder.config(configSnapshot);
             }
+            workerStatusData.forEach(builder::data);
         };
 
         maybeEmitIoOutOfData(workerIo);
@@ -1084,6 +1095,31 @@ public final class WorkerControlPlaneRuntime {
             workers.add(workerEntry);
         }
         return new StatusSnapshot(processedTotal, allEnabled, workers, workIn, workOut);
+    }
+
+    private Map<String, Object> singleWorkerStatusData(List<WorkerState> states) {
+        if (states == null || states.size() != 1) {
+            return Map.of();
+        }
+        WorkerState state = states.getFirst();
+        if (state == null) {
+            return Map.of();
+        }
+        Map<String, Object> statusData = state.statusData();
+        if (statusData == null || statusData.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, Object> filtered = new LinkedHashMap<>();
+        statusData.forEach((key, value) -> {
+            if (key == null || value == null || RESERVED_STATUS_KEYS.contains(key)) {
+                return;
+            }
+            filtered.put(key, value);
+        });
+        if (filtered.isEmpty()) {
+            return Map.of();
+        }
+        return Map.copyOf(filtered);
     }
 
     private WorkerStatusPublisher ensureStatusPublisher(WorkerState state) {

@@ -22,19 +22,24 @@ template:
             headers:
               content-type: application/json
       work:
-        out: gen
+        out:
+          out: gen
 
     - role: moderator
       image: moderator:latest
       work:
-        in: gen
-        out: mod
+        in:
+          in: gen
+        out:
+          out: mod
 
     - role: processor
       image: processor:latest
       work:
-        in: mod
-        out: post
+        in:
+          in: mod
+        out:
+          out: post
 
     - role: clearing-export
       image: clearing-export:latest
@@ -51,4 +56,5 @@ template:
           localTempSuffix: ".tmp"
           writeManifest: false
       work:
-        in: post
+        in:
+          in: post
