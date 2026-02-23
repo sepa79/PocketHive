@@ -2,8 +2,10 @@ package io.pockethive.orchestrator.app;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmHealth;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
+import io.pockethive.orchestrator.domain.SwarmStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -51,9 +53,13 @@ public class ControllerStatusListener {
         }
         try {
             JsonNode node = mapper.readTree(body);
-            String swarmId = node.path("scope").path("swarmId").asText(null);
+            JsonNode scope = node.path("scope");
+            String swarmId = scope.path("swarmId").asText(null);
+            String role = scope.path("role").asText(null);
+            String instanceId = scope.path("instance").asText(null);
             JsonNode data = node.path("data");
             String swarmStatusText = data.path("swarmStatus").asText(null);
+            boolean recovered = recoverSwarmIfMissing(swarmId, role, instanceId, swarmStatusText, data);
             if (swarmId != null && swarmStatusText != null) {
                 registry.refresh(swarmId, map(swarmStatusText));
             }
@@ -72,35 +78,116 @@ public class ControllerStatusListener {
                     switch (normalized) {
                         case "RUNNING" -> {
                             if (workloadsKnown && workloadsEnabled) {
-                                // Use the existing lifecycle helper so that
-                                // status transitions obey the state machine.
-                                registry.markStartConfirmed(swarmId);
+                                if (recovered) {
+                                    alignRecoveredStatus(swarmId, SwarmStatus.RUNNING);
+                                } else {
+                                    // Use the existing lifecycle helper so that
+                                    // status transitions obey the state machine.
+                                    registry.markStartConfirmed(swarmId);
+                                }
                             }
                         }
                         case "STOPPED" -> {
                             if (workloadsKnown && !workloadsEnabled) {
-                                // The swarm-controller reports STOPPED continuously (status-delta/full).
-                                // Only apply stop transitions when they are valid for the current local
-                                // state to avoid STOPPED -> STOPPING exceptions and control-plane storms.
-                                registry.find(swarmId).ifPresent(swarm -> {
-                                    io.pockethive.orchestrator.domain.SwarmStatus current = swarm.getStatus();
-                                    if (current == io.pockethive.orchestrator.domain.SwarmStatus.STOPPING) {
-                                        registry.updateStatus(swarmId, io.pockethive.orchestrator.domain.SwarmStatus.STOPPED);
-                                    } else if (current == io.pockethive.orchestrator.domain.SwarmStatus.RUNNING) {
-                                        registry.updateStatus(swarmId, io.pockethive.orchestrator.domain.SwarmStatus.STOPPING);
-                                        registry.updateStatus(swarmId, io.pockethive.orchestrator.domain.SwarmStatus.STOPPED);
-                                    }
-                                });
+                                if (recovered) {
+                                    alignRecoveredStatus(swarmId, SwarmStatus.STOPPED);
+                                } else {
+                                    // The swarm-controller reports STOPPED continuously (status-delta/full).
+                                    // Only apply stop transitions when they are valid for the current local
+                                    // state to avoid STOPPED -> STOPPING exceptions and control-plane storms.
+                                    registry.find(swarmId).ifPresent(swarm -> {
+                                        SwarmStatus current = swarm.getStatus();
+                                        if (current == SwarmStatus.STOPPING) {
+                                            registry.updateStatus(swarmId, SwarmStatus.STOPPED);
+                                        } else if (current == SwarmStatus.RUNNING) {
+                                            registry.updateStatus(swarmId, SwarmStatus.STOPPING);
+                                            registry.updateStatus(swarmId, SwarmStatus.STOPPED);
+                                        }
+                                    });
+                                }
                             }
                         }
-                        case "FAILED" -> registry.updateStatus(
-                            swarmId, io.pockethive.orchestrator.domain.SwarmStatus.FAILED);
+                        case "FAILED" -> registry.updateStatus(swarmId, SwarmStatus.FAILED);
                         default -> { /* leave registry status unchanged for other states */ }
                     }
                 }
             }
         } catch (Exception e) {
             log.warn("status parse", e);
+        }
+    }
+
+    private boolean recoverSwarmIfMissing(String swarmId,
+                                          String role,
+                                          String instanceId,
+                                          String swarmStatusText,
+                                          JsonNode data) {
+        if (swarmId == null || swarmId.isBlank()) {
+            return false;
+        }
+        if (!"swarm-controller".equalsIgnoreCase(role)) {
+            return false;
+        }
+        if (instanceId == null || instanceId.isBlank()) {
+            return false;
+        }
+        if (registry.find(swarmId).isPresent()) {
+            return false;
+        }
+        // Recovery path for orchestrator restarts: status events carry enough identity
+        // to restore control-plane routing even when in-memory registry was lost.
+        String runId = "recovered";
+        registry.register(new Swarm(swarmId, instanceId, instanceId, runId));
+        if (data != null) {
+            registry.updateWorkEnabled(swarmId, data.path("enabled").asBoolean(false));
+        }
+        alignRecoveredStatus(swarmId, statusFromController(swarmStatusText));
+        log.info("Recovered swarm {} from status stream (instance={})", swarmId, instanceId);
+        return true;
+    }
+
+    private SwarmStatus statusFromController(String swarmStatusText) {
+        if (swarmStatusText == null || swarmStatusText.isBlank()) {
+            return SwarmStatus.READY;
+        }
+        return switch (swarmStatusText.trim().toUpperCase()) {
+            case "RUNNING" -> SwarmStatus.RUNNING;
+            case "STOPPED" -> SwarmStatus.STOPPED;
+            case "FAILED" -> SwarmStatus.FAILED;
+            default -> SwarmStatus.READY;
+        };
+    }
+
+    private void alignRecoveredStatus(String swarmId, SwarmStatus target) {
+        if (swarmId == null || swarmId.isBlank() || target == null) {
+            return;
+        }
+        tryUpdateStatus(swarmId, SwarmStatus.CREATING);
+        tryUpdateStatus(swarmId, SwarmStatus.READY);
+        switch (target) {
+            case RUNNING -> {
+                tryUpdateStatus(swarmId, SwarmStatus.STARTING);
+                tryUpdateStatus(swarmId, SwarmStatus.RUNNING);
+            }
+            case STOPPED -> {
+                tryUpdateStatus(swarmId, SwarmStatus.STARTING);
+                tryUpdateStatus(swarmId, SwarmStatus.RUNNING);
+                tryUpdateStatus(swarmId, SwarmStatus.STOPPING);
+                tryUpdateStatus(swarmId, SwarmStatus.STOPPED);
+            }
+            case FAILED -> tryUpdateStatus(swarmId, SwarmStatus.FAILED);
+            default -> {
+                // READY is already applied above.
+            }
+        }
+    }
+
+    private void tryUpdateStatus(String swarmId, SwarmStatus next) {
+        try {
+            registry.updateStatus(swarmId, next);
+        } catch (RuntimeException ex) {
+            log.debug("Skipped status transition while recovering swarm {} -> {}: {}",
+                swarmId, next, ex.getMessage());
         }
     }
 

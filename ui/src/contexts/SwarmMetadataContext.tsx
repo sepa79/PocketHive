@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { listSwarms } from '../lib/orchestratorApi'
+import { listSwarms, refreshSwarmRegistry } from '../lib/orchestratorApi'
 import type { SwarmSummary } from '../types/orchestrator'
 import { setSwarmMetadataRefreshHandler } from '../lib/stompClient'
 
@@ -97,7 +97,9 @@ export function SwarmMetadataProvider({ children }: Props) {
     return runFetch()
   }, [hasLoaded, swarms, runFetch])
 
-  const refreshSwarms = useCallback(() => {
+  const refreshSwarms = useCallback(async () => {
+    await refreshSwarmRegistry()
+    await new Promise((resolve) => window.setTimeout(resolve, 300))
     return runFetch()
   }, [runFetch])
 
