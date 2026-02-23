@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.14.31] - 2026-02-23
+Timestamp: 2026-02-23T18:00:00Z
+
+- Hive topology recovery: fixed missing worker connections for recovered swarms by materializing worker components from swarm-controller `status-full/status-delta` snapshots (`data.workers`) and reconstructing queue edges from `inQueue/outQueue`.
+- Hive tests: added coverage for topology edge reconstruction from swarm-controller worker snapshots (without requiring separate worker heartbeat events).
+
 ## [0.14.30] - 2026-02-23
 Timestamp: 2026-02-23T17:30:00Z
 

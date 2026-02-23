@@ -314,6 +314,92 @@ function extractQueues(evt: StatusMetricEnvelope): {
   return { workIn: work.in, workOut: work.out, controlIn: control.in, controlOut: control.out }
 }
 
+function mergeWorkerSnapshotData(
+  component: Component,
+  workerEntry: Record<string, unknown>,
+  swarmId: string,
+  timestamp: string,
+  version: string,
+  statusType: string,
+) {
+  const cfg = { ...(component.config || {}) }
+  const configSection = workerEntry['config']
+  if (isRecord(configSection)) {
+    Object.entries(configSection).forEach(([key, value]) => {
+      cfg[key] = value
+    })
+  }
+  const dataSection = workerEntry['data']
+  if (isRecord(dataSection)) {
+    const configKeys = isRecord(configSection)
+      ? new Set(Object.keys(configSection as Record<string, unknown>))
+      : new Set<string>()
+    Object.entries(dataSection).forEach(([key, value]) => {
+      if (configKeys.has(key)) return
+      cfg[key] = value
+    })
+  }
+  const enabled = getBoolean(workerEntry['enabled'])
+  if (typeof enabled === 'boolean') {
+    cfg.enabled = enabled
+  }
+  if (Object.keys(cfg).length > 0) {
+    component.config = cfg
+  }
+  component.swarmId = swarmId
+  component.version = version
+  component.status = statusType
+  component.lastHeartbeat = new Date(timestamp).getTime()
+}
+
+function upsertWorkersFromControllerSnapshot(
+  swarmId: string,
+  timestamp: string,
+  version: string,
+  statusType: string,
+  workers: unknown[],
+) {
+  workers.forEach((entry) => {
+    if (!isRecord(entry)) return
+    const role = getString(entry['role'])
+    if (!role) return
+    const id = `${role}-${swarmId}`
+    const existing = components[id]
+    const comp: Component =
+      existing || {
+        id,
+        name: id,
+        role,
+        swarmId,
+        lastHeartbeat: 0,
+        queues: [],
+      }
+    comp.name = id
+    comp.role = role
+    mergeWorkerSnapshotData(comp, entry, swarmId, timestamp, version, statusType)
+
+    const inQueue = getString(entry['inQueue'])
+    const outQueue = getString(entry['outQueue'])
+    const queues: QueueInfo[] = []
+    if (inQueue) queues.push({ name: inQueue, role: 'consumer' })
+    if (outQueue) queues.push({ name: outQueue, role: 'producer' })
+    if (queues.length > 0) {
+      comp.queues = queues
+      rememberQueues(id, swarmId, queues)
+    } else if (!comp.queues.length) {
+      const restored = restoreQueues(id, swarmId)
+      if (restored) {
+        comp.queues = restored
+      }
+    }
+    const existingError = componentErrors[id]
+    if (existingError) {
+      applyComponentError(comp, existingError)
+    }
+    components[id] = comp
+  })
+}
+
 function buildTopology(allComponents: Record<string, Component> = getMergedComponents()): Topology {
   const queues: Record<string, { prod: Set<string>; cons: Set<string> }> = {}
   Object.values(allComponents).forEach((comp) => {
@@ -509,6 +595,15 @@ export function setClient(newClient: Client | null, destination = controlDestina
               if (typeof workerEnabledCandidate === 'boolean') {
                 workerEnabled = workerEnabledCandidate
               }
+            }
+            if (normalizedRole === 'swarm-controller') {
+              upsertWorkersFromControllerSnapshot(
+                swarmId,
+                evt.timestamp,
+                evt.version,
+                evt.type,
+                workers,
+              )
             }
           }
           Object.entries(rest).forEach(([key, value]) => {

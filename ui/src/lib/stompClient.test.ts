@@ -464,6 +464,60 @@ describe('swarm lifecycle', () => {
     setClient(null)
   })
 
+  it('builds worker edges from swarm-controller status workers snapshot', () => {
+    const publish = vi.fn()
+    let cb: (msg: { body: string; headers: Record<string, string> }) => void = () => {}
+    const subscribe = vi
+      .fn()
+      .mockImplementation((_dest: string, fn: (msg: { body: string; headers: Record<string, string> }) => void) => {
+        cb = fn
+        return { unsubscribe() {} }
+      })
+    setClient({ active: true, publish, subscribe } as unknown as Client)
+
+    let latest: { edges: { from: string; to: string; queue: string }[] } | null = null
+    const unsubscribeTopology = subscribeTopology((topology) => {
+      latest = { edges: topology.edges.map((edge) => ({ ...edge })) }
+    })
+
+    cb({
+      headers: { destination: '/exchange/ph.control/event.metric.status-full.sw1.swarm-controller.sw1-swarm-controller' },
+      body: JSON.stringify(
+        statusMetricEnvelope({
+          swarmId: 'sw1',
+          role: 'swarm-controller',
+          instance: 'sw1-swarm-controller',
+          data: {
+            workers: [
+              {
+                role: 'generator',
+                inQueue: 'ph.sw1.gen',
+                outQueue: 'ph.sw1.jobs',
+                enabled: true,
+              },
+              {
+                role: 'processor',
+                inQueue: 'ph.sw1.jobs',
+                outQueue: 'ph.sw1.final',
+                enabled: true,
+              },
+            ],
+          },
+        }),
+      ),
+    })
+
+    expect(latest).not.toBeNull()
+    expect(latest!.edges).toContainEqual({
+      from: 'generator-sw1',
+      to: 'processor-sw1',
+      queue: 'ph.sw1.jobs',
+    })
+
+    unsubscribeTopology()
+    setClient(null)
+  })
+
   it('retains queues when status-delta omits io payload', () => {
     const publish = vi.fn()
     let cb: (msg: { body: string; headers: Record<string, string> }) => void = () => {}
