@@ -3,7 +3,7 @@
 All notable changes to this project will be documented in this file.
 
 ## [0.15.8]
-Timestamp: 2026-02-22T23:10:00Z
+Timestamp: 2026-02-24T00:00:00Z
 
 - Processor service: added proxy-awareness for outbound HTTP by exposing both runtime HTTP clients to JVM system properties sourced from worker environment configuration.
 - UI (Scenario Editor): increased available vertical workspace across Plan/YAML/Swarm/HTTP templates views (larger fixed-height panes, internal scroll regions), so editors no longer render at ~1/3 screen height.
@@ -12,6 +12,9 @@ Timestamp: 2026-02-22T23:10:00Z
 - Clearing Export streaming hardening: improved failure semantics and state recovery for append/open/finalize paths (including rollover reopen failure handling) to avoid duplicate/misclassified lifecycle events.
 - Clearing Export tests: added hardening coverage for flush policy, retry semantics, streaming open/finalize/reopen failures, and local sink finalize atomic rename behavior.
 - Docs: expanded structured clearing playbook, linked canonical structured schema contract SSOT, and updated in-progress implementation tracking.
+- Clearing Export worker contract: aligned synthetic work item emission to the step-header contract used by WorkItem v2, removing legacy header drift in lifecycle/status paths.
+- Clearing Export status migration: moved worker status/journal publishing to the 0.15 control-plane contract (`work-journal` signal + explicit status context), and updated lifecycle e2e assertions to consume latest status deltas for export counters.
+- Docs site: added interactive PocketHive architecture explorer and Redis flow demos in presentation guides, with matching docs-site components/styles/sidebar wiring.
 
 ## [0.15.7]
 Timestamp: 2026-02-16T23:01:40Z
