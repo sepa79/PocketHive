@@ -7,25 +7,35 @@ import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmHealth;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
 import io.pockethive.orchestrator.domain.SwarmStatus;
+import io.pockethive.controlplane.routing.ControlPlaneRouting;
+import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.amqp.core.AmqpTemplate;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.eq;
+import static org.mockito.Mockito.never;
 import org.slf4j.LoggerFactory;
 
 @ExtendWith({MockitoExtension.class, OutputCaptureExtension.class})
 class ControllerStatusListenerTest {
     @Mock
     SwarmRegistry registry;
+    @Mock
+    AmqpTemplate rabbit;
+    @Mock
+    ControlPlaneProperties controlPlaneProperties;
 
     @Test
     void updatesRegistry() {
@@ -147,5 +157,60 @@ class ControllerStatusListenerTest {
         assertThatCode(() -> listener.handle(" ", "event.metric.status-delta.sw1.swarm-controller.inst1"))
             .doesNotThrowAnyException();
         verifyNoMoreInteractions(registry);
+    }
+
+    @Test
+    void statusFullFromControllerRequestsWorkerSnapshotsOnceWithinCooldown() {
+        when(controlPlaneProperties.getExchange()).thenReturn("ph.control");
+        when(controlPlaneProperties.getInstanceId()).thenReturn("orch-1");
+        when(registry.find("sw1")).thenReturn(java.util.Optional.empty());
+        ControllerStatusListener listener = new ControllerStatusListener(
+            registry, new ObjectMapper(), rabbit, controlPlaneProperties);
+        String json = """
+            {
+              "timestamp": "2024-01-01T00:00:00Z",
+              "version": "1",
+              "kind": "metric",
+              "type": "status-full",
+              "origin": "inst1",
+              "scope": {"swarmId":"sw1","role":"swarm-controller","instance":"inst1"},
+              "correlationId": null,
+              "idempotencyKey": null,
+              "data": {"enabled": true, "tps": 0, "swarmStatus": "RUNNING"}
+            }
+            """;
+
+        listener.handle(json, "event.metric.status-full.sw1.swarm-controller.inst1");
+        listener.handle(json, "event.metric.status-full.sw1.swarm-controller.inst1");
+
+        verify(rabbit, times(1)).convertAndSend(
+            eq("ph.control"),
+            eq(ControlPlaneRouting.signal("status-request", "sw1", "ALL", "ALL")),
+            anyString());
+    }
+
+    @Test
+    void statusDeltaDoesNotRequestWorkerSnapshots() {
+        when(controlPlaneProperties.getExchange()).thenReturn("ph.control");
+        when(controlPlaneProperties.getInstanceId()).thenReturn("orch-1");
+        ControllerStatusListener listener = new ControllerStatusListener(
+            registry, new ObjectMapper(), rabbit, controlPlaneProperties);
+        String json = """
+            {
+              "timestamp": "2024-01-01T00:00:00Z",
+              "version": "1",
+              "kind": "metric",
+              "type": "status-delta",
+              "origin": "inst1",
+              "scope": {"swarmId":"sw1","role":"swarm-controller","instance":"inst1"},
+              "correlationId": null,
+              "idempotencyKey": null,
+              "data": {"enabled": true, "tps": 0, "swarmStatus": "RUNNING"}
+            }
+            """;
+
+        listener.handle(json, "event.metric.status-delta.sw1.swarm-controller.inst1");
+
+        verify(rabbit, never()).convertAndSend(anyString(), anyString(), anyString());
     }
 }

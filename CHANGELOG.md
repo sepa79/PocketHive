@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.14.32] - 2026-02-24
+Timestamp: 2026-02-24T00:48:47Z
+
+- Hive topology (UI): removed queue-edge reconstruction fallback based on `swarm-controller.data.workers[*].inQueue/outQueue`; topology edges are now sourced from canonical `data.io.*.queues` status data only.
+- Orchestrator status recovery: when a `swarm-controller` publishes `status-full`, orchestrator now triggers a follow-up `signal.status-request.<swarmId>.ALL.ALL` so worker `status-full` snapshots are refreshed after restart/reconnect.
+- Tests: updated UI and orchestrator tests to cover the no-fallback topology path and controller-driven worker snapshot refresh behavior.
+
 ## [0.14.31] - 2026-02-23
 Timestamp: 2026-02-23T18:00:00Z
 

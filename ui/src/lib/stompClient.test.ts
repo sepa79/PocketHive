@@ -464,7 +464,7 @@ describe('swarm lifecycle', () => {
     setClient(null)
   })
 
-  it('builds worker edges from swarm-controller status workers snapshot', () => {
+  it('does not build worker edges from swarm-controller workers snapshot payload', () => {
     const publish = vi.fn()
     let cb: (msg: { body: string; headers: Record<string, string> }) => void = () => {}
     const subscribe = vi
@@ -508,7 +508,7 @@ describe('swarm lifecycle', () => {
     })
 
     expect(latest).not.toBeNull()
-    expect(latest!.edges).toContainEqual({
+    expect(latest!.edges).not.toContainEqual({
       from: 'generator-sw1',
       to: 'processor-sw1',
       queue: 'ph.sw1.jobs',

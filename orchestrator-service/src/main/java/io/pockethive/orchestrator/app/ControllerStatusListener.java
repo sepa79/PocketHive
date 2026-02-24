@@ -2,20 +2,31 @@ package io.pockethive.orchestrator.app;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.control.ControlScope;
+import io.pockethive.control.ControlSignal;
+import io.pockethive.controlplane.ControlPlaneSignals;
+import io.pockethive.controlplane.messaging.ControlSignals;
+import io.pockethive.controlplane.routing.ControlPlaneRouting;
+import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmHealth;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
 import io.pockethive.orchestrator.domain.SwarmStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.amqp.core.AmqpTemplate;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.support.AmqpHeaders;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.UUID;
 
 /**
  * Consumes swarm-controller aggregate status events and updates the local registry.
@@ -26,13 +37,43 @@ public class ControllerStatusListener {
     private static final Logger log = LoggerFactory.getLogger(ControllerStatusListener.class);
     private static final Duration DEGRADED_AFTER = Duration.ofSeconds(20);
     private static final Duration FAILED_AFTER = Duration.ofSeconds(40);
+    private static final Duration WORKER_STATUS_REQUEST_COOLDOWN = Duration.ofSeconds(15);
 
     private final SwarmRegistry registry;
     private final ObjectMapper mapper;
+    private final AmqpTemplate rabbit;
+    private final String controlExchange;
+    private final String originInstanceId;
+    private final ConcurrentMap<String, Long> lastWorkerStatusRequestAtMillis = new ConcurrentHashMap<>();
 
     public ControllerStatusListener(SwarmRegistry registry, ObjectMapper mapper) {
+        this(registry, mapper, null, null, null);
+    }
+
+    @Autowired
+    public ControllerStatusListener(SwarmRegistry registry,
+                                    ObjectMapper mapper,
+                                    AmqpTemplate rabbit,
+                                    ControlPlaneProperties controlPlaneProperties) {
+        this(
+            registry,
+            mapper,
+            rabbit,
+            controlPlaneProperties != null ? controlPlaneProperties.getExchange() : null,
+            controlPlaneProperties != null ? controlPlaneProperties.getInstanceId() : null
+        );
+    }
+
+    private ControllerStatusListener(SwarmRegistry registry,
+                                     ObjectMapper mapper,
+                                     AmqpTemplate rabbit,
+                                     String controlExchange,
+                                     String originInstanceId) {
         this.registry = registry;
         this.mapper = mapper.findAndRegisterModules();
+        this.rabbit = rabbit;
+        this.controlExchange = normalise(controlExchange);
+        this.originInstanceId = normalise(originInstanceId);
     }
 
     @RabbitListener(queues = "#{controllerStatusQueue.name}")
@@ -57,8 +98,10 @@ public class ControllerStatusListener {
             String swarmId = scope.path("swarmId").asText(null);
             String role = scope.path("role").asText(null);
             String instanceId = scope.path("instance").asText(null);
+            String metricType = node.path("type").asText(null);
             JsonNode data = node.path("data");
             String swarmStatusText = data.path("swarmStatus").asText(null);
+            maybeRequestWorkerStatusSnapshots(swarmId, role, metricType);
             boolean recovered = recoverSwarmIfMissing(swarmId, role, instanceId, swarmStatusText, data);
             if (swarmId != null && swarmStatusText != null) {
                 registry.refresh(swarmId, map(swarmStatusText));
@@ -213,5 +256,55 @@ public class ControllerStatusListener {
             return trimmed.substring(0, 300) + "…";
         }
         return trimmed;
+    }
+
+    private void maybeRequestWorkerStatusSnapshots(String swarmId, String role, String metricType) {
+        if (swarmId == null || swarmId.isBlank()) {
+            return;
+        }
+        if (!"swarm-controller".equalsIgnoreCase(role)) {
+            return;
+        }
+        if (!"status-full".equalsIgnoreCase(metricType)) {
+            return;
+        }
+        if (rabbit == null || controlExchange == null || originInstanceId == null) {
+            return;
+        }
+
+        long now = System.currentTimeMillis();
+        long cooldownMs = WORKER_STATUS_REQUEST_COOLDOWN.toMillis();
+        Long previous = lastWorkerStatusRequestAtMillis.get(swarmId);
+        if (previous != null && now - previous < cooldownMs) {
+            return;
+        }
+        lastWorkerStatusRequestAtMillis.put(swarmId, now);
+
+        ControlScope target = ControlScope.forInstance(swarmId, "ALL", "ALL");
+        ControlSignal payload = ControlSignals.statusRequest(
+            originInstanceId,
+            target,
+            UUID.randomUUID().toString(),
+            UUID.randomUUID().toString());
+        String routingKey = ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, swarmId, "ALL", "ALL");
+        try {
+            rabbit.convertAndSend(controlExchange, routingKey, mapper.writeValueAsString(payload));
+            log.debug("Requested full worker status snapshots for swarm {} via {}", swarmId, routingKey);
+        } catch (Exception ex) {
+            if (previous == null) {
+                lastWorkerStatusRequestAtMillis.remove(swarmId);
+            } else {
+                lastWorkerStatusRequestAtMillis.put(swarmId, previous);
+            }
+            log.warn("Failed to request worker status snapshots for swarm {} via {}", swarmId, routingKey, ex);
+        }
+    }
+
+    private static String normalise(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 }
