@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.14.33] - 2026-02-24
+Timestamp: 2026-02-24T12:19:23Z
+
+- Orchestrator startup: added automatic control-plane broadcast `signal.status-request.ALL.swarm-controller.ALL` on application ready, so controller snapshots are requested without manual refresh.
+- Orchestrator swarm recovery: when re-registering swarms from controller status stream, orchestrator now restores `templateId/controllerImage/bees` from latest `journal_run.scenario_id` + Scenario Manager template data.
+- Hive capabilities recovery: `/api/swarms` metadata stays complete after orchestrator restart, so UI can resolve worker image -> capability manifest mapping without role-based fallback logic.
+- Tests: extended `ControllerStatusListenerTest` with startup broadcast and template metadata recovery coverage.
+
 ## [0.14.32] - 2026-02-24
 Timestamp: 2026-02-24T00:48:47Z
 

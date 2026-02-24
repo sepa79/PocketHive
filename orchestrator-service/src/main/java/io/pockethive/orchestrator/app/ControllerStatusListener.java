@@ -8,15 +8,20 @@ import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.messaging.ControlSignals;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
+import io.pockethive.orchestrator.domain.ScenarioPlan;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmHealth;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
 import io.pockethive.orchestrator.domain.SwarmStatus;
+import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
+import io.pockethive.orchestrator.infra.JournalRunMetadataWriter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.AmqpTemplate;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.support.AmqpHeaders;
+import org.springframework.context.event.EventListener;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -24,6 +29,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.UUID;
@@ -44,23 +50,36 @@ public class ControllerStatusListener {
     private final AmqpTemplate rabbit;
     private final String controlExchange;
     private final String originInstanceId;
+    private final JournalRunMetadataWriter runMetadataWriter;
+    private final ScenarioClient scenarios;
     private final ConcurrentMap<String, Long> lastWorkerStatusRequestAtMillis = new ConcurrentHashMap<>();
 
     public ControllerStatusListener(SwarmRegistry registry, ObjectMapper mapper) {
-        this(registry, mapper, null, null, null);
+        this(registry, mapper, null, null, null, null, null);
+    }
+
+    public ControllerStatusListener(SwarmRegistry registry,
+                                    ObjectMapper mapper,
+                                    AmqpTemplate rabbit,
+                                    ControlPlaneProperties controlPlaneProperties) {
+        this(registry, mapper, rabbit, controlPlaneProperties, null, null);
     }
 
     @Autowired
     public ControllerStatusListener(SwarmRegistry registry,
                                     ObjectMapper mapper,
                                     AmqpTemplate rabbit,
-                                    ControlPlaneProperties controlPlaneProperties) {
+                                    ControlPlaneProperties controlPlaneProperties,
+                                    JournalRunMetadataWriter runMetadataWriter,
+                                    ScenarioClient scenarios) {
         this(
             registry,
             mapper,
             rabbit,
             controlPlaneProperties != null ? controlPlaneProperties.getExchange() : null,
-            controlPlaneProperties != null ? controlPlaneProperties.getInstanceId() : null
+            controlPlaneProperties != null ? controlPlaneProperties.getInstanceId() : null,
+            runMetadataWriter,
+            scenarios
         );
     }
 
@@ -68,12 +87,16 @@ public class ControllerStatusListener {
                                      ObjectMapper mapper,
                                      AmqpTemplate rabbit,
                                      String controlExchange,
-                                     String originInstanceId) {
+                                     String originInstanceId,
+                                     JournalRunMetadataWriter runMetadataWriter,
+                                     ScenarioClient scenarios) {
         this.registry = registry;
         this.mapper = mapper.findAndRegisterModules();
         this.rabbit = rabbit;
         this.controlExchange = normalise(controlExchange);
         this.originInstanceId = normalise(originInstanceId);
+        this.runMetadataWriter = runMetadataWriter;
+        this.scenarios = scenarios;
     }
 
     @RabbitListener(queues = "#{controllerStatusQueue.name}")
@@ -180,7 +203,9 @@ public class ControllerStatusListener {
         // Recovery path for orchestrator restarts: status events carry enough identity
         // to restore control-plane routing even when in-memory registry was lost.
         String runId = "recovered";
-        registry.register(new Swarm(swarmId, instanceId, instanceId, runId));
+        Swarm recovered = new Swarm(swarmId, instanceId, instanceId, runId);
+        attachRecoveredTemplateMetadata(swarmId, recovered);
+        registry.register(recovered);
         if (data != null) {
             registry.updateWorkEnabled(swarmId, data.path("enabled").asBoolean(false));
         }
@@ -258,6 +283,15 @@ public class ControllerStatusListener {
         return trimmed;
     }
 
+    @EventListener(ApplicationReadyEvent.class)
+    void requestControllerStatusSnapshotsOnStartup() {
+        try {
+            requestStatusSnapshots("ALL", "swarm-controller", "ALL", "orchestrator-startup");
+        } catch (RuntimeException ex) {
+            log.warn("Failed to request controller status snapshots on startup: {}", ex.getMessage());
+        }
+    }
+
     private void maybeRequestWorkerStatusSnapshots(String swarmId, String role, String metricType) {
         if (swarmId == null || swarmId.isBlank()) {
             return;
@@ -279,24 +313,70 @@ public class ControllerStatusListener {
             return;
         }
         lastWorkerStatusRequestAtMillis.put(swarmId, now);
-
-        ControlScope target = ControlScope.forInstance(swarmId, "ALL", "ALL");
-        ControlSignal payload = ControlSignals.statusRequest(
-            originInstanceId,
-            target,
-            UUID.randomUUID().toString(),
-            UUID.randomUUID().toString());
-        String routingKey = ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, swarmId, "ALL", "ALL");
         try {
-            rabbit.convertAndSend(controlExchange, routingKey, mapper.writeValueAsString(payload));
-            log.debug("Requested full worker status snapshots for swarm {} via {}", swarmId, routingKey);
+            requestStatusSnapshots(swarmId, "ALL", "ALL", "controller-status-full");
         } catch (Exception ex) {
             if (previous == null) {
                 lastWorkerStatusRequestAtMillis.remove(swarmId);
             } else {
                 lastWorkerStatusRequestAtMillis.put(swarmId, previous);
             }
-            log.warn("Failed to request worker status snapshots for swarm {} via {}", swarmId, routingKey, ex);
+            log.warn("Failed to request worker status snapshots for swarm {}", swarmId, ex);
+        }
+    }
+
+    private void attachRecoveredTemplateMetadata(String swarmId, Swarm recovered) {
+        if (swarmId == null || swarmId.isBlank() || recovered == null) {
+            return;
+        }
+        if (runMetadataWriter == null || scenarios == null) {
+            return;
+        }
+        String templateId = runMetadataWriter.findLatestScenarioId(swarmId);
+        if (templateId == null || templateId.isBlank()) {
+            return;
+        }
+        try {
+            ScenarioPlan plan = scenarios.fetchScenario(templateId);
+            if (plan == null || plan.template() == null) {
+                return;
+            }
+            String controllerImage = normalise(plan.template().image());
+            List<io.pockethive.swarm.model.Bee> bees = plan.template().bees();
+            recovered.attachTemplate(new SwarmTemplateMetadata(templateId, controllerImage, bees));
+            log.info("Recovered template metadata for swarm {} from scenario {}", swarmId, templateId);
+        } catch (Exception ex) {
+            log.warn("Failed to recover template metadata for swarm {} from scenario {}: {}",
+                swarmId, templateId, ex.getMessage());
+        }
+    }
+
+    private void requestStatusSnapshots(String swarmId, String role, String instance, String reason) {
+        if (swarmId == null || swarmId.isBlank()) {
+            return;
+        }
+        if (role == null || role.isBlank()) {
+            return;
+        }
+        if (instance == null || instance.isBlank()) {
+            return;
+        }
+        if (rabbit == null || controlExchange == null || originInstanceId == null) {
+            return;
+        }
+        ControlScope target = ControlScope.forInstance(swarmId, role, instance);
+        ControlSignal payload = ControlSignals.statusRequest(
+            originInstanceId,
+            target,
+            UUID.randomUUID().toString(),
+            UUID.randomUUID().toString());
+        String routingKey = ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, swarmId, role, instance);
+        try {
+            rabbit.convertAndSend(controlExchange, routingKey, mapper.writeValueAsString(payload));
+            log.debug("Requested status snapshots swarm={} role={} instance={} rk={} reason={}",
+                swarmId, role, instance, routingKey, reason);
+        } catch (Exception ex) {
+            throw new IllegalStateException("Failed to send status-request via " + routingKey, ex);
         }
     }
 

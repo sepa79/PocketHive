@@ -3,10 +3,15 @@ package io.pockethive.orchestrator.app;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
+import io.pockethive.orchestrator.domain.ScenarioPlan;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmHealth;
 import io.pockethive.orchestrator.domain.SwarmRegistry;
 import io.pockethive.orchestrator.domain.SwarmStatus;
+import io.pockethive.orchestrator.infra.JournalRunMetadataWriter;
+import io.pockethive.swarm.model.Bee;
+import io.pockethive.swarm.model.SwarmTemplate;
+import io.pockethive.swarm.model.Work;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import org.junit.jupiter.api.Test;
@@ -36,6 +41,10 @@ class ControllerStatusListenerTest {
     AmqpTemplate rabbit;
     @Mock
     ControlPlaneProperties controlPlaneProperties;
+    @Mock
+    JournalRunMetadataWriter runMetadataWriter;
+    @Mock
+    ScenarioClient scenarios;
 
     @Test
     void updatesRegistry() {
@@ -212,5 +221,69 @@ class ControllerStatusListenerTest {
         listener.handle(json, "event.metric.status-delta.sw1.swarm-controller.inst1");
 
         verify(rabbit, never()).convertAndSend(anyString(), anyString(), anyString());
+    }
+
+    @Test
+    void startupRequestsControllerStatusSnapshots() {
+        when(controlPlaneProperties.getExchange()).thenReturn("ph.control");
+        when(controlPlaneProperties.getInstanceId()).thenReturn("orch-1");
+        ControllerStatusListener listener = new ControllerStatusListener(
+            registry, new ObjectMapper(), rabbit, controlPlaneProperties);
+
+        listener.requestControllerStatusSnapshotsOnStartup();
+
+        verify(rabbit).convertAndSend(
+            eq("ph.control"),
+            eq(ControlPlaneRouting.signal("status-request", "ALL", "swarm-controller", "ALL")),
+            anyString());
+    }
+
+    @Test
+    void recoversTemplateMetadataFromJournalScenario() throws Exception {
+        SwarmRegistry localRegistry = new SwarmRegistry();
+        when(controlPlaneProperties.getExchange()).thenReturn("ph.control");
+        when(controlPlaneProperties.getInstanceId()).thenReturn("orch-1");
+        when(runMetadataWriter.findLatestScenarioId("sw1")).thenReturn("tpl-1");
+        ScenarioPlan scenario = new ScenarioPlan(
+            new SwarmTemplate(
+                "swarm-controller:latest",
+                java.util.List.of(new Bee("generator", "generator:1", new Work("ph.sw1.in", "ph.sw1.out"), null, java.util.Map.of()))),
+            null,
+            null
+        );
+        when(scenarios.fetchScenario("tpl-1")).thenReturn(scenario);
+        ControllerStatusListener listener = new ControllerStatusListener(
+            localRegistry,
+            new ObjectMapper(),
+            rabbit,
+            controlPlaneProperties,
+            runMetadataWriter,
+            scenarios
+        );
+
+        String json = """
+            {
+              "timestamp": "2024-01-01T00:00:00Z",
+              "version": "1",
+              "kind": "metric",
+              "type": "status-delta",
+              "origin": "inst1",
+              "scope": {"swarmId":"sw1","role":"swarm-controller","instance":"inst1"},
+              "correlationId": null,
+              "idempotencyKey": null,
+              "data": {"enabled": true, "tps": 0, "swarmStatus": "RUNNING"}
+            }
+            """;
+
+        listener.handle(json, "event.metric.status-delta.sw1.swarm-controller.inst1");
+
+        Swarm recovered = localRegistry.find("sw1").orElseThrow();
+        assertThat(recovered.templateId()).contains("tpl-1");
+        assertThat(recovered.controllerImage()).contains("swarm-controller:latest");
+        assertThat(recovered.bees())
+            .extracting(Bee::role, Bee::image)
+            .containsExactly(org.assertj.core.groups.Tuple.tuple("generator", "generator:1"));
+        verify(runMetadataWriter).findLatestScenarioId("sw1");
+        verify(scenarios).fetchScenario("tpl-1");
     }
 }

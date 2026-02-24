@@ -45,5 +45,35 @@ public class JournalRunMetadataWriter {
       log.warn("Failed to upsert journal run metadata for swarm {} (runId={}): {}", swarmId, runId, ex.getMessage());
     }
   }
-}
 
+  public String findLatestScenarioId(String swarmId) {
+    if (swarmId == null || swarmId.isBlank()) {
+      return null;
+    }
+    String sql = """
+        SELECT scenario_id
+        FROM journal_run
+        WHERE swarm_id = ?
+          AND scenario_id IS NOT NULL
+          AND scenario_id <> ''
+        ORDER BY updated_at DESC
+        LIMIT 1
+        """;
+    try {
+      return jdbc.query(sql, rs -> {
+        if (!rs.next()) {
+          return null;
+        }
+        String scenarioId = rs.getString(1);
+        if (scenarioId == null) {
+          return null;
+        }
+        String trimmed = scenarioId.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+      }, swarmId);
+    } catch (Exception ex) {
+      log.warn("Failed to lookup latest scenario id for swarm {}: {}", swarmId, ex.getMessage());
+      return null;
+    }
+  }
+}
