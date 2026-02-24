@@ -1,0 +1,61 @@
+spring:
+  application:
+    name: clearing-export-service
+  rabbitmq:
+    host: ${SPRING_RABBITMQ_HOST}
+    port: ${SPRING_RABBITMQ_PORT}
+    username: ${SPRING_RABBITMQ_USERNAME}
+    password: ${SPRING_RABBITMQ_PASSWORD}
+    virtual-host: ${SPRING_RABBITMQ_VIRTUAL_HOST}
+
+logging:
+  pattern:
+    level: "%5p [%X{traceId}]"
+
+pockethive:
+  inputs:
+    type: RABBITMQ
+    rabbit:
+      queue: ${POCKETHIVE_INPUT_RABBIT_QUEUE}
+  outputs:
+    type: NONE
+    rabbit:
+      exchange: ${POCKETHIVE_OUTPUT_RABBIT_EXCHANGE}
+  worker:
+    config:
+      mode: ${POCKETHIVE_CLEARING_EXPORT_MODE:template}
+      streamingAppendEnabled: ${POCKETHIVE_CLEARING_EXPORT_STREAMING_APPEND_ENABLED:false}
+      streamingWindowMs: ${POCKETHIVE_CLEARING_EXPORT_STREAMING_WINDOW_MS:21600000}
+      maxRecordsPerFile: ${POCKETHIVE_CLEARING_EXPORT_MAX_RECORDS_PER_FILE:1000}
+      flushIntervalMs: ${POCKETHIVE_CLEARING_EXPORT_FLUSH_INTERVAL_MS:1000}
+      maxBufferedRecords: ${POCKETHIVE_CLEARING_EXPORT_MAX_BUFFERED_RECORDS:50000}
+      strictTemplate: ${POCKETHIVE_CLEARING_EXPORT_STRICT_TEMPLATE:true}
+      lineSeparator: "\n"
+      fileNameTemplate: ${POCKETHIVE_CLEARING_EXPORT_FILE_NAME_TEMPLATE:clearing_{{ now }}.dat}
+      headerTemplate: ${POCKETHIVE_CLEARING_EXPORT_HEADER_TEMPLATE:H|{{ now }}}
+      recordTemplate: ${POCKETHIVE_CLEARING_EXPORT_RECORD_TEMPLATE:D|{{ record.payload }}}
+      footerTemplate: ${POCKETHIVE_CLEARING_EXPORT_FOOTER_TEMPLATE:T|{{ recordCount }}}
+      localTargetDir: ${POCKETHIVE_CLEARING_EXPORT_LOCAL_TARGET_DIR:/tmp/pockethive/clearing-out}
+      localTempSuffix: ${POCKETHIVE_CLEARING_EXPORT_LOCAL_TEMP_SUFFIX:.tmp}
+      writeManifest: ${POCKETHIVE_CLEARING_EXPORT_WRITE_MANIFEST:false}
+      localManifestPath: ${POCKETHIVE_CLEARING_EXPORT_LOCAL_MANIFEST_PATH:reports/clearing/manifest.jsonl}
+      schemaRegistryRoot: ${POCKETHIVE_CLEARING_EXPORT_SCHEMA_REGISTRY_ROOT:/app/scenario/clearing-schemas}
+      schemaId: ${POCKETHIVE_CLEARING_EXPORT_SCHEMA_ID:}
+      schemaVersion: ${POCKETHIVE_CLEARING_EXPORT_SCHEMA_VERSION:}
+  control-plane:
+    exchange: ${POCKETHIVE_CONTROL_PLANE_EXCHANGE}
+    swarm-id: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID}
+    instance-id: ${POCKETHIVE_CONTROL_PLANE_INSTANCE_ID}
+    control-queue-prefix: ${POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX}
+    worker:
+      role: ${POCKETHIVE_CONTROL_PLANE_WORKER_ROLE}
+      skip-self-signals: false
+
+management:
+  prometheus:
+    metrics:
+      export:
+        pushgateway:
+          job: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID}
+          grouping-key:
+            instance: ${POCKETHIVE_CONTROL_PLANE_INSTANCE_ID}

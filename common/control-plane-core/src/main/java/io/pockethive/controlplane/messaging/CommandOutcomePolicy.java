@@ -35,7 +35,8 @@ public final class CommandOutcomePolicy {
         ControlPlaneSignals.SWARM_START, new OutcomeRules("Running", "Failed", RetryablePolicy.TRUE),
         ControlPlaneSignals.SWARM_STOP, new OutcomeRules("Stopped", "Failed", RetryablePolicy.TRUE),
         ControlPlaneSignals.SWARM_REMOVE, new OutcomeRules("Removed", "Failed", RetryablePolicy.TRUE),
-        ControlPlaneSignals.CONFIG_UPDATE, new OutcomeRules("Applied", "Failed", RetryablePolicy.FALSE)
+        ControlPlaneSignals.CONFIG_UPDATE, new OutcomeRules("Applied", "Failed", RetryablePolicy.FALSE),
+        ControlPlaneSignals.WORK_JOURNAL, new OutcomeRules("recorded", "failed", RetryablePolicy.FALSE)
     );
 
     private CommandOutcomePolicy() {

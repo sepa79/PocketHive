@@ -202,3 +202,47 @@ Feature: Swarm lifecycle golden path
     When I start the swarm
     Then the swarm reports running
     And the plan demo scenario plan drives the swarm lifecycle
+
+  @clearing-export-demo
+  Scenario: Clearing export batches 20 transactions into 2 files
+    And the "clearing-export-demo" scenario template is requested
+    When I create the swarm from that template
+    Then the swarm is registered and queues are declared
+    When I start the swarm
+    Then the swarm reports running
+    And I start generator traffic
+    Then the clearing export worker writes 2 clearing files from 20 transactions
+    When I stop the swarm
+    Then the swarm reports stopped
+    When I remove the swarm
+    Then the swarm is removed and lifecycle confirmations are recorded
+
+  @clearing-export-structured-demo
+  Scenario: Clearing export structured mode batches 20 transactions into XML files
+    And the "clearing-export-structured-demo" scenario template is requested
+    When I create the swarm from that template
+    Then the swarm is registered and queues are declared
+    When I start the swarm
+    Then the swarm reports running
+    And the clearing export runtime config matches the structured demo
+    And I start generator traffic
+    Then the clearing export worker writes 2 clearing files from 20 transactions
+    When I stop the swarm
+    Then the swarm reports stopped
+    When I remove the swarm
+    Then the swarm is removed and lifecycle confirmations are recorded
+
+  @clearing-export-streaming-demo
+  Scenario: Clearing export streaming mode finalizes one file by time window
+    And the "clearing-export-streaming-demo" scenario template is requested
+    When I create the swarm from that template
+    Then the swarm is registered and queues are declared
+    When I start the swarm
+    Then the swarm reports running
+    And the clearing export runtime config matches the streaming demo
+    And I start generator traffic
+    Then the clearing export streaming worker writes 1 file from 20 transactions
+    When I stop the swarm
+    Then the swarm reports stopped
+    When I remove the swarm
+    Then the swarm is removed and lifecycle confirmations are recorded

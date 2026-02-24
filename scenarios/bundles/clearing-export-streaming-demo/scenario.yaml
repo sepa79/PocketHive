@@ -1,0 +1,64 @@
+id: clearing-export-streaming-demo
+name: Clearing Export Streaming Demo
+description: Runs 20 transactions through generator->moderator->processor->clearing-export (template streaming mode) and writes one file after time window.
+template:
+  image: swarm-controller:latest
+  bees:
+    - role: generator
+      image: generator:latest
+      config:
+        outputs:
+          type: RABBITMQ
+        inputs:
+          type: SCHEDULER
+          scheduler:
+            ratePerSec: 20
+            maxMessages: 20
+        worker:
+          message:
+            path: /api/test
+            method: POST
+            body: '{"tx":"demo","channel":"e2e-clearing-streaming"}'
+            headers:
+              content-type: application/json
+      work:
+        out:
+          out: gen
+
+    - role: moderator
+      image: moderator:latest
+      work:
+        in:
+          in: gen
+        out:
+          out: mod
+
+    - role: processor
+      image: processor:latest
+      work:
+        in:
+          in: mod
+        out:
+          out: post
+
+    - role: clearing-export
+      image: clearing-export:latest
+      config:
+        worker:
+          mode: template
+          streamingAppendEnabled: true
+          streamingWindowMs: 2000
+          maxRecordsPerFile: 1000000
+          flushIntervalMs: 1000
+          maxBufferedRecords: 5000000
+          lineSeparator: "\n"
+          fileNameTemplate: "STREAM_{{ now }}.dat"
+          headerTemplate: "H|{{ now }}"
+          recordTemplate: "D|{{ record.payload }}"
+          footerTemplate: "T|{{ recordCount }}"
+          localTargetDir: "/tmp/pockethive/clearing-out"
+          localTempSuffix: ".tmp"
+          writeManifest: false
+      work:
+        in:
+          in: post

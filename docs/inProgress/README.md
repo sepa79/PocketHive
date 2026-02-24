@@ -17,6 +17,7 @@ Notable in‑progress plans:
 - `docs/inProgress/scenario-bundle-runtime-plan.md` – Directory-based scenario bundles and per-swarm runtimes.
 - `docs/inProgress/scenario-sut-editor-plan.md` – Scenario + SUT editors (Scenario editor notes superseded by `docs/scenarios/SCENARIO_EDITOR_STATUS.md`).
 - `docs/inProgress/redis-loop-io-optimization-plan.md` – Redis multi-list input, weighted pick, and dynamic uploader routing for loop scenarios.
+- `docs/inProgress/clearing-export-worker-v1.md` – Template-driven clearing file export worker (V1 local directory sink).
 
-Each of those files carries a `Status: in progress` header so it’s clear
+Files in this folder should carry a `Status: in progress` header so it’s clear
 they are live design documents rather than historical notes.

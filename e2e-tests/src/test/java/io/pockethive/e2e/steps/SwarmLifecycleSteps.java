@@ -80,6 +80,7 @@ public class SwarmLifecycleSteps {
   private static final String MODERATOR_ROLE = "moderator";
   private static final String PROCESSOR_ROLE = "processor";
   private static final String POSTPROCESSOR_ROLE = "postprocessor";
+  private static final String CLEARING_EXPORT_ROLE = "clearing-export";
   private static final String LEGACY_SERVICE_HEADER = "x-ph-service";
   private static final String STEP_SERVICE_HEADER = "ph.step.service";
   private static final String STEP_INSTANCE_HEADER = "ph.step.instance";
@@ -324,7 +325,9 @@ public class SwarmLifecycleSteps {
   public void iStartGeneratorTraffic() {
     ensureStartResponse();
     captureWorkerStatuses();
-    ensureFinalQueueTap();
+    if (shouldTapFinalQueue()) {
+      ensureFinalQueueTap();
+    }
     ensureGeneratorTapForTemplating();
     String generatorKey = roleKey(GENERATOR_ROLE);
     String generatorInstance = generatorKey == null ? null : workerInstances.get(generatorKey);
@@ -481,6 +484,109 @@ public class SwarmLifecycleSteps {
           .orElseThrow(() -> new AssertionError("No status-full captured for role " + actualRoleName(role)));
       assertRuntimeMeta(full.runtime(), actualRoleName(role));
     }
+  }
+
+  @And("the clearing export runtime config matches the structured demo")
+  public void theClearingExportRuntimeConfigMatchesTheStructuredDemo() {
+    ensureStartResponse();
+    captureWorkerStatuses(true);
+
+    String clearingKey = roleKey(CLEARING_EXPORT_ROLE);
+    String role = clearingKey != null ? clearingKey : CLEARING_EXPORT_ROLE;
+    StatusEvent status = workerStatusByRole.get(role);
+    String displayRole = actualRoleName(role);
+    assertNotNull(status, () -> "No status recorded for role " + displayRole);
+
+    Map<String, Object> snapshot = workerSnapshot(status, role);
+    assertFalse(snapshot.isEmpty(), () -> "Missing worker snapshot for role " + displayRole);
+    Map<String, Object> config = snapshotConfig(snapshot);
+    assertFalse(config.isEmpty(), "Clearing export snapshot should include applied config");
+
+    assertEquals("structured", String.valueOf(config.get("mode")),
+        "Expected mode=structured in clearing export config");
+    assertEquals("pcs-clearing", String.valueOf(config.get("schemaId")),
+        "Expected schemaId=pcs-clearing in clearing export config");
+    assertEquals("1.0.0", String.valueOf(config.get("schemaVersion")),
+        "Expected schemaVersion=1.0.0 in clearing export config");
+  }
+
+  @And("the clearing export runtime config matches the streaming demo")
+  public void theClearingExportRuntimeConfigMatchesTheStreamingDemo() {
+    ensureStartResponse();
+    captureWorkerStatuses(true);
+
+    String clearingKey = roleKey(CLEARING_EXPORT_ROLE);
+    String role = clearingKey != null ? clearingKey : CLEARING_EXPORT_ROLE;
+    StatusEvent status = workerStatusByRole.get(role);
+    String displayRole = actualRoleName(role);
+    assertNotNull(status, () -> "No status recorded for role " + displayRole);
+
+    Map<String, Object> snapshot = workerSnapshot(status, role);
+    assertFalse(snapshot.isEmpty(), () -> "Missing worker snapshot for role " + displayRole);
+    Map<String, Object> config = snapshotConfig(snapshot);
+    assertFalse(config.isEmpty(), "Clearing export snapshot should include applied config");
+
+    assertEquals("template", String.valueOf(config.get("mode")),
+        "Expected mode=template in clearing export config");
+    assertEquals("true", String.valueOf(config.get("streamingAppendEnabled")),
+        "Expected streamingAppendEnabled=true in clearing export config");
+  }
+
+  @Then("the clearing export streaming worker writes 1 file from 20 transactions")
+  public void theClearingExportStreamingWorkerWritesOneFileFromTwentyTransactions() {
+    assertClearingExportWrites(1, 20, true);
+  }
+
+  @Then("the clearing export worker writes {int} clearing files from {int} transactions")
+  public void theClearingExportWorkerWritesClearingFilesFromTransactions(Integer expectedFiles, Integer expectedTx) {
+    assertClearingExportWrites(expectedFiles, expectedTx, false);
+  }
+
+  private void assertClearingExportWrites(int expectedFiles, int expectedTx, boolean streamingMode) {
+    ensureStartResponse();
+    captureWorkerStatuses(true);
+
+    String clearingKey = roleKey(CLEARING_EXPORT_ROLE);
+    String displayRole = actualRoleName(clearingKey);
+
+    SwarmAssertions.await("clearing-export writes files", () -> {
+      captureWorkerStatuses(true);
+      StatusEvent baseline = workerStatusByRole.get(clearingKey);
+      assertNotNull(baseline, () -> "No status recorded for role " + displayRole);
+
+      String instance = baseline.instance();
+      StatusEvent status = (instance == null || instance.isBlank())
+          ? baseline
+          : controlPlaneEvents.latestStatusDeltaEvent(swarmId, displayRole, instance).orElse(baseline);
+
+      Map<String, Object> snapshot = workerSnapshot(status, clearingKey);
+      assertFalse(snapshot.isEmpty(), () -> "Missing worker snapshot for role " + displayRole);
+
+      Map<String, Object> context = status.data().context();
+      long filesWritten = asLong(context.get("filesWritten"));
+      long recordsAccepted = asLong(context.get("recordsAccepted"));
+      long buffered = asLong(context.get("bufferedRecords"));
+      long lastFileRecordCount = asLong(context.get("lastFileRecordCount"));
+
+      assertTrue(filesWritten >= expectedFiles,
+          () -> "Expected at least " + expectedFiles + " clearing file(s), got filesWritten="
+              + filesWritten + " context=" + context + " snapshot=" + snapshot);
+      assertTrue(recordsAccepted >= expectedTx,
+          () -> "Expected at least " + expectedTx + " processed transactions, got recordsAccepted=" + recordsAccepted
+              + " context=" + context + " snapshot=" + snapshot);
+      assertEquals(0L, buffered,
+          () -> "Expected buffered records to be empty after streaming finalize, got buffered=" + buffered
+              + " context=" + context + " snapshot=" + snapshot);
+      if (streamingMode) {
+        assertEquals(expectedTx, lastFileRecordCount,
+            () -> "Expected last finalized file size " + expectedTx + " records, got lastFileRecordCount="
+                + lastFileRecordCount + " context=" + context + " snapshot=" + snapshot);
+      } else {
+        assertTrue(lastFileRecordCount > 0L,
+            () -> "Expected positive lastFileRecordCount, got " + lastFileRecordCount
+                + " context=" + context + " snapshot=" + snapshot);
+      }
+    });
   }
 
   @And("the generator runtime config matches the service defaults")
@@ -1562,6 +1668,13 @@ public class SwarmLifecycleSteps {
       if (config instanceof Map<?, ?> map) {
         snapshot.put("config", copyMap(map));
       }
+      Map<String, Object> data = new LinkedHashMap<>(copyMap(status.data().extra()));
+      if (!data.isEmpty()) {
+        data.remove("config");
+        if (!data.isEmpty()) {
+          snapshot.put("data", Map.copyOf(data));
+        }
+      }
       return snapshot.isEmpty() ? Map.of() : Map.copyOf(snapshot);
     }
     for (Object candidate : list) {
@@ -1639,6 +1752,28 @@ public class SwarmLifecycleSteps {
     return false;
   }
 
+  private long asLong(Object value) {
+    if (value == null) {
+      return 0L;
+    }
+    if (value instanceof Number number) {
+      return number.longValue();
+    }
+    if (value instanceof String text) {
+      String trimmed = text.trim();
+      if (trimmed.isEmpty()) {
+        return 0L;
+      }
+      try {
+        return Long.parseLong(trimmed);
+      } catch (NumberFormatException ex) {
+        throw new AssertionError("Expected numeric long value but got: '" + text + "'", ex);
+      }
+    }
+    throw new AssertionError("Expected numeric long value but got type "
+        + value.getClass().getSimpleName() + ": " + value);
+  }
+
   private String finalQueueName() {
     String suffix = finalQueueSuffix();
     return queueNameForSuffix(suffix);
@@ -1672,12 +1807,21 @@ public class SwarmLifecycleSteps {
     }
     if ("redis-dataset-demo".equals(scenarioId)
         || "tcp-socket-demo".equals(scenarioId)
-        || "webauth-loop-redis-5-customers".equals(scenarioId)) {
+        || "webauth-loop-redis-5-customers".equals(scenarioId)
+        || "clearing-export-demo".equals(scenarioId)
+        || "clearing-export-structured-demo".equals(scenarioId)
+        || "clearing-export-streaming-demo".equals(scenarioId)) {
       return "post";
     }
     throw new AssertionError("Unsupported scenario for final queue resolution: " + scenarioId);
   }
 
+  private boolean shouldTapFinalQueue() {
+    String scenarioId = scenarioDetails != null ? scenarioDetails.id() : null;
+    return !"clearing-export-demo".equals(scenarioId)
+        && !"clearing-export-structured-demo".equals(scenarioId)
+        && !"clearing-export-streaming-demo".equals(scenarioId);
+  }
   @Then("the final queue reports a processor error")
   public void theFinalQueueReportsAProcessorError() throws Exception {
     ensureStartResponse();

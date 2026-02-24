@@ -27,4 +27,9 @@ public final class ControlPlaneSignals {
     public static final String SWARM_STOP = "swarm-stop";
 
     public static final String SWARM_REMOVE = "swarm-remove";
+
+    /**
+     * Worker lifecycle journal signal for non-error operational outcomes.
+     */
+    public static final String WORK_JOURNAL = "work-journal";
 }

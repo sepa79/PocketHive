@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}"
 
-ALL_SERVICES=(rabbitmq log-aggregator scenario-manager orchestrator tcp-mock-server ui ui-v2 docs-site prometheus grafana loki wiremock pushgateway redis redis-commander swarm-controller generator request-builder http-sequence moderator processor postprocessor trigger)
+ALL_SERVICES=(rabbitmq log-aggregator scenario-manager orchestrator tcp-mock-server ui ui-v2 docs-site prometheus grafana loki wiremock pushgateway redis redis-commander swarm-controller generator request-builder http-sequence moderator processor postprocessor clearing-export trigger)
 declare -A DURATIONS=()
 TIMING_ORDER=(clean build_base maven_package stage_artifacts docker_build_workers docker_build compose_up restart)
 BUILD_START_TIME=0
@@ -20,6 +20,7 @@ JAR_MODULES=(
   moderator-service
   processor-service
   postprocessor-service
+  clearing-export-service
   trigger-service
 )
 
@@ -35,6 +36,7 @@ declare -A MODULE_TO_SERVICE=(
   ["moderator-service"]="moderator"
   ["processor-service"]="processor"
   ["postprocessor-service"]="postprocessor"
+  ["clearing-export-service"]="clearing-export"
   ["trigger-service"]="trigger"
 )
 
@@ -50,6 +52,7 @@ declare -A SERVICE_TO_MODULE=(
   ["moderator"]="moderator-service"
   ["processor"]="processor-service"
   ["postprocessor"]="postprocessor-service"
+  ["clearing-export"]="clearing-export-service"
   ["trigger"]="trigger-service"
 )
 
@@ -207,7 +210,7 @@ clean_stack() {
     echo "Pruning local PocketHive images..."
     # Target only images built by this repo: core services and bees.
     mapfile -t ph_images < <(docker images --format '{{.Repository}} {{.ID}}' | awk '
-      $1 ~ /^(orchestrator|scenario-manager|log-aggregator|tcp-mock-server|ui|swarm-controller|generator|request-builder|http-sequence|moderator|processor|postprocessor|trigger|pockethive-)/ { print $2 }')
+      $1 ~ /^(orchestrator|scenario-manager|log-aggregator|tcp-mock-server|ui|swarm-controller|generator|request-builder|http-sequence|moderator|processor|postprocessor|clearing-export|trigger|pockethive-)/ { print $2 }')
     for img in "${ph_images[@]}"; do
       if [[ -n "$img" ]]; then
         echo " - Removing image ${img}"
@@ -361,6 +364,10 @@ build_worker_images() {
       postprocessor-service)
         image="postprocessor:latest"
         target="postprocessor"
+        ;;
+      clearing-export-service)
+        image="clearing-export:latest"
+        target="clearing-export"
         ;;
       trigger-service)
         image="trigger:latest"

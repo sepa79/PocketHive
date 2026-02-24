@@ -88,6 +88,15 @@ public final class WorkerControlPlaneRuntime {
         "ok",
         "unknown"
     );
+    private static final Set<String> RESERVED_STATUS_KEYS = Set.of(
+        "enabled",
+        "tps",
+        "startedAt",
+        "config",
+        "io",
+        "ioState",
+        "context"
+    );
 
     private final AtomicReference<String> lastWorkInputState = new AtomicReference<>(null);
 
@@ -241,6 +250,68 @@ public final class WorkerControlPlaneRuntime {
             context,
             Instant.now()
         ));
+    }
+
+    /**
+     * Publish a control-plane outcome (kind=event,type=outcome) for non-error worker journal entries.
+     * This is intended for informational lifecycle events that must be visible in journal projections
+     * without polluting alert channels.
+     */
+    public void publishWorkJournalEvent(String workerBeanName,
+                                        String correlationId,
+                                        String idempotencyKey,
+                                        String signal,
+                                        String status,
+                                        String callId,
+                                        String messageId,
+                                        String traceId,
+                                        Map<String, Object> details) {
+        Objects.requireNonNull(workerBeanName, "workerBeanName");
+        String journalCorrelationId = requireNonBlank(correlationId, "correlationId");
+        String journalSignal = requireNonBlank(signal, "signal");
+        String journalStatus = requireNonBlank(status, "status");
+
+        Map<String, Object> context = new LinkedHashMap<>();
+        context.put("worker", workerBeanName);
+
+        String normalizedMessageId = normalizeBlank(messageId);
+        if (normalizedMessageId != null) {
+            context.put("messageId", normalizedMessageId);
+        }
+        String normalizedCallId = normalizeBlank(callId);
+        if (normalizedCallId != null) {
+            context.put("callId", normalizedCallId);
+        }
+        if (details != null && !details.isEmpty()) {
+            context.putAll(details);
+        }
+        String normalizedTraceId = normalizeBlank(traceId);
+        if (normalizedTraceId != null) {
+            context.put("traceId", normalizedTraceId);
+        }
+
+        emitter.emitReady(ControlPlaneEmitter.ReadyContext.builder(
+                journalSignal,
+                journalCorrelationId,
+                normalizeBlank(idempotencyKey),
+                io.pockethive.control.CommandState.status(journalStatus))
+            .details(context)
+            .build());
+    }
+
+    private static String requireNonBlank(String value, String field) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(field + " must not be blank");
+        }
+        return value.trim();
+    }
+
+    private static String normalizeBlank(String value) {
+        if (value == null) {
+            return null;
+        }
+        String text = value.trim();
+        return text.isEmpty() ? null : text;
     }
 
     /**
@@ -669,6 +740,7 @@ public final class WorkerControlPlaneRuntime {
 
         StatusSnapshot snapshotData = collectSnapshot(states, snapshot);
         Map<String, Object> configSnapshot = snapshot ? statusConfigSnapshot(states) : Map.of();
+        Map<String, Object> workerStatusData = singleWorkerStatusData(states);
 
         IoStateAggregate workerIo = ioStateFromWorkers(states);
         IoStateAggregate ioStateForEnvelope = workerIo != null
@@ -728,6 +800,7 @@ public final class WorkerControlPlaneRuntime {
                 builder.data("startedAt", startedAt);
                 builder.config(configSnapshot);
             }
+            workerStatusData.forEach(builder::data);
         };
 
         maybeEmitIoOutOfData(workerIo);
@@ -1022,6 +1095,31 @@ public final class WorkerControlPlaneRuntime {
             workers.add(workerEntry);
         }
         return new StatusSnapshot(processedTotal, allEnabled, workers, workIn, workOut);
+    }
+
+    private Map<String, Object> singleWorkerStatusData(List<WorkerState> states) {
+        if (states == null || states.size() != 1) {
+            return Map.of();
+        }
+        WorkerState state = states.getFirst();
+        if (state == null) {
+            return Map.of();
+        }
+        Map<String, Object> statusData = state.statusData();
+        if (statusData == null || statusData.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, Object> filtered = new LinkedHashMap<>();
+        statusData.forEach((key, value) -> {
+            if (key == null || value == null || RESERVED_STATUS_KEYS.contains(key)) {
+                return;
+            }
+            filtered.put(key, value);
+        });
+        if (filtered.isEmpty()) {
+            return Map.of();
+        }
+        return Map.copyOf(filtered);
     }
 
     private WorkerStatusPublisher ensureStatusPublisher(WorkerState state) {

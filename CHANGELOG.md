@@ -7,6 +7,11 @@ Timestamp: 2026-02-22T23:10:00Z
 
 - Processor service: added proxy-awareness for outbound HTTP by exposing both runtime HTTP clients to JVM system properties sourced from worker environment configuration.
 - UI (Scenario Editor): increased available vertical workspace across Plan/YAML/Swarm/HTTP templates views (larger fixed-height panes, internal scroll regions), so editors no longer render at ~1/3 screen height.
+- Clearing Export lifecycle journal: file lifecycle events (`created`, `write-failed`, `finalize-failed`, `flush-summary`) are now published as normal control-plane outcomes (`work-journal`) instead of alerts.
+- Worker SDK: added explicit `publishWorkJournalEvent(...)` API for journal outcomes without synthetic `WorkItem` fallback, with required `correlationId` and normalized optional context fields.
+- Clearing Export streaming hardening: improved failure semantics and state recovery for append/open/finalize paths (including rollover reopen failure handling) to avoid duplicate/misclassified lifecycle events.
+- Clearing Export tests: added hardening coverage for flush policy, retry semantics, streaming open/finalize/reopen failures, and local sink finalize atomic rename behavior.
+- Docs: expanded structured clearing playbook, linked canonical structured schema contract SSOT, and updated in-progress implementation tracking.
 
 ## [0.15.7]
 Timestamp: 2026-02-16T23:01:40Z
