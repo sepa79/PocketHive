@@ -59,6 +59,10 @@ const config: Config = {
   themeConfig: {
     navbar: {
       title: "PocketHive",
+      logo: {
+        alt: "PocketHive Logo",
+        src: "img/logo.svg",
+      },
       items: [
         { to: "/", label: "Docs", position: "left" },
         { to: "/", label: "Start here", position: "left" },

@@ -9,11 +9,12 @@ import {
   RedisBasicLoopExplorer,
   RedisMultiSwarmExplorer,
 } from "@site/src/components/InteractivePocketHiveExplorer";
+import useBaseUrl from "@docusaurus/useBaseUrl";
 
 # Interactive PocketHive Overview
 
 <div style={{ textAlign: "center", marginBottom: "1.25rem" }}>
-  <img src="/docs/img/logo.svg" alt="PocketHive logo" width="620" />
+  <img src={useBaseUrl("/img/logo.svg")} alt="PocketHive logo" width="620" />
 </div>
 
 PocketHive is a RabbitMQ-centric load and behavior simulator that orchestrates swarms
