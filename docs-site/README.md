@@ -3,6 +3,9 @@
 This folder contains a Docusaurus site that renders the repository documentation
 from `../docs` as a browsable, searchable web site.
 
+By default, the `ui` image bundles a static build from this folder under `/docs/*`.
+This folder remains the source for local docs authoring (`npm start`) and for GitHub Pages publishing.
+
 ## Prerequisites
 
 - Node.js 18+
@@ -42,3 +45,4 @@ npm run build
 Notes:
 - The site reads docs from `../docs` (it does not duplicate content).
 - `docs/archive/**` and `docs/inProgress/**` are excluded from the site build.
+- GitHub Pages publishing is handled by `.github/workflows/docs-pages.yml`.

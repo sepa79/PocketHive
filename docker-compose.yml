@@ -230,26 +230,6 @@ services:
 # PocketHive Services
 #--------------------------------------
 
-  docs-site:
-    image: node:20-alpine
-    working_dir: /workspace/work
-    environment:
-      DOCS_URL: http://localhost:8088
-      DOCS_BASE_URL: /docs/
-    volumes:
-      - ./docs-site:/workspace/src:ro
-      - ./docs:/workspace/docs:ro
-      - ./ui/assets:/workspace/ui/assets:ro
-      - docs-site-node-modules:/workspace/work/node_modules
-      - docs-site-docusaurus:/workspace/work/.docusaurus
-      - docs-site-build:/workspace/work/build
-    command:
-      [
-        "sh",
-        "-c",
-        "find /workspace/work -mindepth 1 -maxdepth 1 ! -name node_modules ! -name .docusaurus ! -name build -exec rm -rf {} + && cp -a /workspace/src/. /workspace/work && npm ci && npm run build && npm run serve -- --host 0.0.0.0 --port 3000 --dir build"
-      ]
-
   ui:
     image: ${DOCKER_REGISTRY:-}ui:${POCKETHIVE_VERSION:-latest}
     depends_on:
@@ -371,6 +351,3 @@ volumes:
   postgres-data:
   clickhouse-data:
   tcp-mock-data:
-  docs-site-node-modules:
-  docs-site-docusaurus:
-  docs-site-build:

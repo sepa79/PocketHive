@@ -15,6 +15,18 @@ COPY ui/ .
 # Build for production
 RUN npm run build
 
+# Build Docusaurus docs as static files mounted under /docs.
+FROM node:20-alpine AS docs-build
+WORKDIR /workspace/docs-site
+COPY docs-site/package.json docs-site/package-lock.json ./
+RUN npm ci
+COPY docs-site/ ./
+COPY docs/ /workspace/docs/
+COPY ui/assets/ /workspace/ui/assets/
+ENV DOCS_URL=http://localhost:8088
+ENV DOCS_BASE_URL=/docs/
+RUN npm run build
+
 # Serve with Nginx
 FROM nginx:1.27-alpine
 # Nginx configuration for static SPA and proxies
@@ -23,7 +35,7 @@ COPY ui/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist/ /usr/share/nginx/html/
 # Include project metadata and docs
 COPY CHANGELOG.md README.md pom.xml /usr/share/nginx/html/
-COPY docs/ /usr/share/nginx/html/docs/
+COPY --from=docs-build /workspace/docs-site/build/ /usr/share/nginx/html/docs/
 
 # Generate /VERSION from pom.xml revision to avoid a separate source of truth.
 RUN set -eu; \
