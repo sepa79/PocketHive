@@ -8,6 +8,7 @@ V1 scope:
 - local directory sink with `*.tmp` + atomic rename,
 - optional template streaming append mode (`streamingAppendEnabled`) for long file windows,
 - explicit source-step selection for record build (`recordSourceStep`, `recordSourceStepIndex`),
+- multi-step render context for request/response mixing in templates and structured mappings (`steps.*`),
 - explicit failure policy for record build path (`recordBuildFailurePolicy`),
 - optional local manifest (`jsonl`) with one entry per finalized file.
 
