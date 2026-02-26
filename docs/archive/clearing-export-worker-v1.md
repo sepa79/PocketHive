@@ -1,6 +1,6 @@
 # Clearing Export Worker — V1/V2 Plan
 
-> Status: in progress
+> Status: **implemented / archived**.
 > Scope: terminal clearing export worker with current template mode (V1) and planned universal schema-driven structured mode (V2)
 
 ## Goal

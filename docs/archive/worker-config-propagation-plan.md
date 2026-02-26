@@ -1,7 +1,7 @@
 # Worker Config Propagation Plan
 
-> Status: **in progress**.  
-> Scenario → SwarmPlan → worker config propagation is largely implemented; this plan tracks behaviour and remaining refinements.
+> Status: **implemented / archived**.  
+> Historical implementation plan for Scenario → SwarmPlan → worker config propagation.
 
 Purpose: allow scenario definitions to provide full worker `config` sections that swarm startup forwards through the control plane (instead of enumerating every key as an env var).
 

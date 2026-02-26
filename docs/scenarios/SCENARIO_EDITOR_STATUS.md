@@ -165,7 +165,7 @@ Desired:
 These docs exist and contain editor-related plans or promises; they should be
 treated as **inputs**, not as “current behaviour”:
 
-- `docs/inProgress/scenario-sut-editor-plan.md`
+- `docs/toBeReviewed/scenario-sut-editor-plan.md`
   - Contains a React Flow + side-panel editor plan. Some ideas exist in the
     current editor, but the plan is not implemented as written.
 - `docs/archive/pockethive_scenario_builder_mvp/*`
@@ -175,9 +175,9 @@ treated as **inputs**, not as “current behaviour”:
 - `docs/archive/MVP_ROADMAP.md`
   - Historical roadmap that includes a “Scenario Editor UI” phase; superseded by
     this document for editor status.
-- `docs/inProgress/scenario-bundle-runtime-plan.md`
-  - Tracks bundle upload/download + optional validation-on-upload; parts are done,
-    but the optional validation and some bundle conventions remain open.
+- `docs/archive/scenario-bundle-runtime-plan.md`
+  - Historical implementation plan for bundle upload/download and runtime
+    layout conventions.
 
 ---
 

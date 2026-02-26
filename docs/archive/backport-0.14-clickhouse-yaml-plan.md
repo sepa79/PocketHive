@@ -1,5 +1,7 @@
 # Backport plan: `release/0.14` -> `main` (ClickHouse tx-outcomes + raw YAML)
 
+> Status: **implemented / archived**.
+
 ## Scope
 
 This plan covers only:

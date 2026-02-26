@@ -1,7 +1,7 @@
 # Swarm Controller Queue Guard Plan
 
-> Status: **in progress**.  
-> BufferGuard is implemented and exercised by e2e scenarios; remaining tasks focus on documentation and operator guidance.
+> Status: **implemented / archived**.  
+> Historical implementation plan for Swarm Controller BufferGuard / queue guard.
 
 > Scope: add controller + scenario changes so Generator `ratePerSec` is actively regulated to keep the Gen→Mod buffer inside a configurable bracket without breaking Moderator shaping.
 
@@ -159,8 +159,8 @@ Each phase ends with targeted tests (unit + integration). Phase B requires Rabbi
 
 - ### Phase D – Tooling & Docs
   - [x] Add sample scenarios (e.g., `local-rest-two-moderators.yaml`) showcasing guard config.
-  - [ ] Update operator docs (`docs/USAGE.md`, scenario authoring guides) with tuning guidance.
-  - [ ] Document runbook steps + dashboards for monitoring guard performance.
+  - [x] Update operator docs (`docs/USAGE.md`, scenario authoring guides) with tuning guidance.
+  - [x] Document runbook steps + dashboards for monitoring guard performance.
 
 Mark the checkboxes as each task ships so stakeholders can see progress inline with the plan.
 

@@ -42,7 +42,7 @@ control how long generators run and what host paths they see.
 - Update:
   - `SchedulerInputProperties` in worker SDK.
   - IO plans / docs:
-    - `docs/sdk/worker-configurable-io-plan.md`
+    - `docs/toBeReviewed/worker-configurable-io-plan.md`
     - Any relevant README snippets for generator/trigger.
 
 ### 1.2 Scheduler state & counters

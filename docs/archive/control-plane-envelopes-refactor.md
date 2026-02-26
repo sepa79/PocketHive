@@ -353,7 +353,7 @@ Notes:
   - queue stats (from workers / SC snapshots where available).
 
 Tracking / tasks:
-Moved to `docs/inProgress/ui-v2-control-plane-adoption.md`.
+Moved to `docs/toBeReviewed/ui-v2-control-plane-adoption.md`.
 
 ---
 

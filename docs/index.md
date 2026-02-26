@@ -35,10 +35,10 @@ by the UI under `/docs/...` as part of the runtime image.
   basics, how to write a worker.
 - `docs/sdk/worker-interceptors.md` – interceptor pipeline (metrics,
   observability, templating hooks).
-- `docs/sdk/worker-configurable-io-plan.md` (Status: in progress) –
+- `docs/toBeReviewed/worker-configurable-io-plan.md` (Status: to be reviewed) –
   config-driven IO types and future IO factory work.
-- `docs/sdk/config-key-normalisation-plan.md` (Status: in progress) –
-  key naming conventions.
+- `docs/todo/config-key-normalisation-plan.md` (Status: future / design) –
+  key naming conventions backlog.
 
 ## Control Plane, Manager, Orchestrator
 
@@ -46,19 +46,26 @@ by the UI under `/docs/...` as part of the runtime image.
   contracts.
 - `docs/ORCHESTRATOR-REST.md` – Orchestrator API and control-plane
   signals.
-- `docs/architecture/manager-sdk-plan.md` (Status: in progress) –
+- `docs/archive/manager-sdk-plan.md`
+  (Status: implemented / archived) – historical implementation plan for
   Manager SDK and Swarm Controller extraction.
-- `docs/control-plane/worker-config-propagation-plan.md`
-  (Status: in progress) – how worker config flows from scenario to
-  workers via control-plane.
-- `docs/control-plane/queue-guard-plan.md` (Status: in progress) –
-  BufferGuard/queue guard details.
-- `docs/architecture/sut-environments-plan.md` (Status: in progress) –
-  System Under Test (SUT) environments and how swarms bind to them.
-- `docs/inProgress/scenario-bundle-runtime-plan.md` (Status: in progress) –
-  directory-based scenario bundles and per-swarm runtimes.
-- `docs/inProgress/scenario-sut-editor-plan.md` (Status: in progress) –
-  visual + text editors for SUT environments and scenarios.
+- `docs/archive/worker-config-propagation-plan.md`
+  (Status: implemented / archived) – historical implementation plan for
+  worker config flow from scenario to control-plane.
+- `docs/archive/queue-guard-plan.md` (Status: implemented / archived) –
+  historical BufferGuard/queue guard implementation plan.
+- `docs/toBeReviewed/sut-environments-plan.md` (Status: to be reviewed) –
+  SUT environments and swarm binding plan pending final review.
+- `docs/toBeReviewed/ScenarioPlan.md` (Status: to be reviewed) –
+  scenario engine architecture plan pending review against SUT plan
+  changes from branch work.
+- `docs/archive/scenario-bundle-runtime-plan.md`
+  (Status: implemented / archived) – directory-based scenario bundles and
+  per-swarm runtimes (historical implementation plan).
+- `docs/toBeReviewed/scenario-sut-editor-plan.md` (Status: to be reviewed) –
+  SUT/scenario editor plan pending review against SUT environment plan.
+- `docs/toBeReviewed/ui-v2-control-plane-adoption.md` (Status: to be reviewed) –
+  UI-v2 control-plane adoption plan with review findings pending alignment.
 
 ## Specs & Tools
 

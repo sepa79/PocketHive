@@ -1,5 +1,7 @@
 # Client-side RTT dashboard suite (ClickHouse)
 
+> Status: **implemented / archived**.
+
 Poniżej zestaw dashboardów dla danych transakcyjnych widzianych tylko z perspektywy klienta (bez etapów wewnętrznych).
 
 ## 1) Tx RTT Overview

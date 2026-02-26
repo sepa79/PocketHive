@@ -1,7 +1,7 @@
 # Swarm Controller Refactor Findings & Proposal
 
 > Status: **implemented / archived**.  
-> The refactor has landed; see `docs/ARCHITECTURE.md` and `docs/architecture/manager-sdk-plan.md` for the current design.
+> The refactor has landed; see `docs/ARCHITECTURE.md` and `docs/archive/manager-sdk-plan.md` for the current design.
 
 ## Summary of issues
 - **Responsibilities concentrated in one manager class.** `SwarmLifecycleManager` wires AMQP topology, Docker lifecycle, readiness tracking, BufferGuard policy, metrics registration, and config fan-out in a single component, which makes reuse by the orchestrator or Worker SDK difficult and tightly couples control logic to infrastructure choices.【F:swarm-controller-service/src/main/java/io/pockethive/swarmcontroller/SwarmLifecycleManager.java†L82-L166】

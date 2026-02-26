@@ -1,7 +1,7 @@
 # Manager SDK & Guard/Scenario Extraction — Plan
 
-> Status: **in progress**.  
-> Core Manager SDK pieces are implemented; remaining items are documentation/alignment and incremental improvements.
+> Status: **implemented / archived**.  
+> Historical implementation plan for Manager SDK and Swarm Controller extraction.
 
 This document sketches how to extract a reusable **Manager SDK** from the current
 Swarm Controller implementation, and how to move guards and scenarios into

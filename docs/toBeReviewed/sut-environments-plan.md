@@ -1,7 +1,10 @@
 # System Under Test (SUT) & Environments — Plan
 
-> Status: in progress  
+> Status: **to be reviewed**  
 > Scope: Scenario Manager, Orchestrator, Swarm Controller, UI, Worker SDK (templating)
+>
+> Review note: related SUT editor plan exists in `docs/toBeReviewed/scenario-sut-editor-plan.md`
+> and should be reviewed together with this document for consistency.
 
 This plan introduces **System Under Test (SUT) environments** as first‑class
 objects that scenarios and swarms can bind to. The goal is to stop hard‑coding

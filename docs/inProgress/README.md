@@ -8,16 +8,5 @@ index is a convenience for humans and tools.
 
 Notable in‑progress plans:
 
-- `docs/architecture/ScenarioPlan.md` – Scenario engine and environment/SUT profiles.
-- `docs/architecture/manager-sdk-plan.md` – Manager SDK and Swarm Controller reuse.
-- `docs/control-plane/worker-config-propagation-plan.md` – Scenario → SwarmPlan → worker config propagation.
-- `docs/control-plane/queue-guard-plan.md` – BufferGuard and queue guard behaviour.
-- `docs/sdk/worker-configurable-io-plan.md` – Configurable worker IO types and factories.
-- `docs/sdk/config-key-normalisation-plan.md` – Normalising config key shapes.
-- `docs/inProgress/scenario-bundle-runtime-plan.md` – Directory-based scenario bundles and per-swarm runtimes.
-- `docs/inProgress/scenario-sut-editor-plan.md` – Scenario + SUT editors (Scenario editor notes superseded by `docs/scenarios/SCENARIO_EDITOR_STATUS.md`).
-- `docs/inProgress/redis-loop-io-optimization-plan.md` – Redis multi-list input, weighted pick, and dynamic uploader routing for loop scenarios.
-- `docs/inProgress/clearing-export-worker-v1.md` – Template-driven clearing file export worker (V1 local directory sink).
-
 Files in this folder should carry a `Status: in progress` header so it’s clear
 they are live design documents rather than historical notes.
