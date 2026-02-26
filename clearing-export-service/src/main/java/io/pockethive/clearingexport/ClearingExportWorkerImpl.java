@@ -124,8 +124,10 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
     }
 
     try {
-      Map<String, Object> record = projectRecord(in, config);
-      Map<String, Object> renderContext = baseRenderContext(record);
+      List<WorkStep> steps = collectSteps(in);
+      WorkStep selectedStep = selectStep(steps, config);
+      Map<String, Object> record = projectStep(selectedStep);
+      Map<String, Object> renderContext = baseRenderContext(record, steps, selectedStep);
       if (config.structuredMode()) {
         ClearingStructuredSchema schema = schemaRegistry.resolve(config);
         StructuredProjectedRecord projected = structuredRecordProjector.project(schema, renderContext);
@@ -143,9 +145,14 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
     return null;
   }
 
-  private Map<String, Object> baseRenderContext(Map<String, Object> record) {
+  private Map<String, Object> baseRenderContext(
+      Map<String, Object> record,
+      List<WorkStep> steps,
+      WorkStep selectedStep
+  ) {
     Map<String, Object> renderContext = new LinkedHashMap<>();
     renderContext.put("record", record);
+    renderContext.put("steps", buildStepContext(steps, selectedStep));
     renderContext.put("now", Instant.now(clock).toString());
     return renderContext;
   }
@@ -343,12 +350,12 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
     }
   }
 
-  private Map<String, Object> projectRecord(WorkItem item, ClearingExportWorkerConfig config) {
-    WorkStep selectedStep = selectStep(item, config);
-    String payload = selectedStep.payload();
+  private Map<String, Object> projectStep(WorkStep step) {
+    String payload = step.payload();
     Map<String, Object> record = new LinkedHashMap<>();
+    record.put("index", step.index());
     record.put("payload", payload);
-    record.put("headers", selectedStep.headers());
+    record.put("headers", step.headers());
 
     if (payload != null && !payload.isBlank()) {
       try {
@@ -357,10 +364,51 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
         // Payload is not JSON object; templates can still use record.payload.
       }
     }
-    return record;
+    return Map.copyOf(record);
   }
 
-  private WorkStep selectStep(WorkItem item, ClearingExportWorkerConfig config) {
+  private Map<String, Object> buildStepContext(List<WorkStep> steps, WorkStep selectedStep) {
+    List<Map<String, Object>> all = new ArrayList<>(steps.size());
+    Map<String, Object> byIndex = new LinkedHashMap<>();
+    Map<String, Object> first = null;
+    Map<String, Object> latest = null;
+    Map<String, Object> previous = null;
+    Map<String, Object> selected = null;
+
+    for (int i = 0; i < steps.size(); i++) {
+      WorkStep step = steps.get(i);
+      Map<String, Object> projected = projectStep(step);
+      all.add(projected);
+      byIndex.put(Integer.toString(step.index()), projected);
+      if (i == 0) {
+        first = projected;
+      }
+      if (i == steps.size() - 1) {
+        latest = projected;
+      }
+      if (i == steps.size() - 2) {
+        previous = projected;
+      }
+      if (step.index() == selectedStep.index()) {
+        selected = projected;
+      }
+    }
+
+    Map<String, Object> context = new LinkedHashMap<>();
+    context.put("all", List.copyOf(all));
+    context.put("byIndex", Map.copyOf(byIndex));
+    context.put("first", first);
+    context.put("latest", latest);
+    context.put("selected", selected == null ? projectStep(selectedStep) : selected);
+    context.put("selectedIndex", selectedStep.index());
+    context.put("count", steps.size());
+    if (previous != null) {
+      context.put("previous", previous);
+    }
+    return Map.copyOf(context);
+  }
+
+  private List<WorkStep> collectSteps(WorkItem item) {
     List<WorkStep> steps = new ArrayList<>();
     for (WorkStep step : item.steps()) {
       if (step != null) {
@@ -370,7 +418,10 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
     if (steps.isEmpty()) {
       throw new IllegalStateException("WorkItem has no steps");
     }
+    return steps;
+  }
 
+  private WorkStep selectStep(List<WorkStep> steps, ClearingExportWorkerConfig config) {
     return switch (config.sourceStepMode()) {
       case LATEST -> steps.get(steps.size() - 1);
       case FIRST -> steps.get(0);

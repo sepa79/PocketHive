@@ -33,6 +33,15 @@ Available in `recordTemplate`:
 - `record.payload`: payload string from the selected `WorkItem` step (`recordSourceStep`).
 - `record.headers`: headers map from the selected `WorkItem` step.
 - `record.json`: parsed JSON object when selected step payload is a valid JSON object.
+- `record.index`: selected step index.
+- `steps.first`: first step object (`index`, `payload`, `headers`, optional `json`).
+- `steps.latest`: latest step object (`index`, `payload`, `headers`, optional `json`).
+- `steps.previous`: previous step object when available (`index`, `payload`, `headers`, optional `json`).
+- `steps.selected`: same step object as `record` (explicit alias).
+- `steps.byIndex["<index>"]`: step object by exact `WorkStep.index()`.
+- `steps.all`: ordered list of all step objects (first -> latest).
+- `steps.count`: number of available steps.
+- `steps.selectedIndex`: selected step index.
 - `now`: current UTC timestamp string.
 
 Available in `headerTemplate`, `footerTemplate`, `fileNameTemplate`:
@@ -152,7 +161,7 @@ Example:
 ### 6.3 Runtime behavior
 
 1. Worker loads schema by `schemaRegistryRoot + schemaId + schemaVersion`.
-2. Record values are projected with `recordMapping`.
+2. Record values are projected with `recordMapping` using the same context as template mode (`record.*`, `steps.*`, `now`).
 3. Header/footer and file name use `now`, `recordCount`, `totals.*`.
 4. XML file is generated and written through standard sink (`.tmp` + atomic rename).
 

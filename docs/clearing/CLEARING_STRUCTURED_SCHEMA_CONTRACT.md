@@ -67,7 +67,11 @@ Rules:
 - `required` defaults to `true`.
 
 Runtime meaning:
-- expressions are rendered from record context (`record.payload`, `record.headers`, optional `record.json`, `now`).
+- expressions are rendered from record context:
+  - selected step: `record.index`, `record.payload`, `record.headers`, optional `record.json`
+  - multi-step access: `steps.first`, `steps.latest`, optional `steps.previous`, `steps.selected`,
+    `steps.byIndex["<index>"]`, `steps.all`, `steps.count`, `steps.selectedIndex`
+  - timestamp: `now`
 - numeric fields (`long`/`decimal`) are used for aggregate totals.
 
 ## 4. `xml` contract
