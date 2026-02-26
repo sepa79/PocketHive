@@ -8,6 +8,7 @@ Timestamp: 2026-02-26T10:15:00Z
 - Clearing Export: added explicit `WorkItem` step source selection for record rendering via `recordSourceStep` (`latest`, `first`, `previous`, `index`) and `recordSourceStepIndex` (matching `WorkStep.index()`).
 - Clearing Export: added explicit `recordBuildFailurePolicy` for record build/append failures (`silent_drop`, `journal_and_log_error`, `log_error`, `stop`), with default set to `stop`.
 - Clearing Export runtime: kept a single failure trap for record build + append path and routed handling through the configured failure policy.
+- Clearing Export templates/structured mapping: added multi-step render context (`steps.first/latest/previous/selected`, `steps.byIndex`, `steps.all`) so one record can combine request and response fields.
 - Tests/docs: added coverage for step selection and config validation paths, plus playbook clarification for `recordSourceStepIndex` semantics.
 
 ## [0.14.33] - 2026-02-24
