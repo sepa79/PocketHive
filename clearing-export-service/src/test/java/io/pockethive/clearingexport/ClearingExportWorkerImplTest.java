@@ -27,7 +27,6 @@ import java.util.function.Consumer;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.ConfigurableApplicationContext;
 
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -97,7 +96,7 @@ class ClearingExportWorkerImplTest {
   }
 
   @Test
-  void onMessageFailureDoesNotPublishManualWorkError() throws Exception {
+  void onMessageUsesConfiguredFirstStepForRecordTemplateContext() throws Exception {
     ClearingExportWorkerProperties properties = mock(ClearingExportWorkerProperties.class);
     ClearingExportBatchWriter batchWriter = mock(ClearingExportBatchWriter.class);
     ClearingStructuredSchemaRegistry schemaRegistry = mock(ClearingStructuredSchemaRegistry.class);
@@ -106,7 +105,77 @@ class ClearingExportWorkerImplTest {
     WorkerControlPlaneRuntime controlPlaneRuntime = mock(WorkerControlPlaneRuntime.class);
     ConfigurableApplicationContext applicationContext = mock(ConfigurableApplicationContext.class);
     WorkerContext context = mock(WorkerContext.class);
-    ClearingExportWorkerConfig config = testConfig();
+    ClearingExportWorkerConfig config = testConfigWith("first", -1, "log_error");
+
+    when(context.enabled()).thenReturn(true);
+    when(context.statusPublisher()).thenReturn(StatusPublisher.NO_OP);
+    when(context.config(ClearingExportWorkerConfig.class)).thenReturn(config);
+    when(templateRenderer.render(eq(config.recordTemplate()), anyMap())).thenReturn("D|x");
+
+    ClearingExportWorkerImpl worker = new ClearingExportWorkerImpl(
+        properties,
+        batchWriter,
+        schemaRegistry,
+        projector,
+        templateRenderer,
+        controlPlaneRuntime,
+        applicationContext,
+        new ObjectMapper().findAndRegisterModules(),
+        Clock.fixed(Instant.parse("2026-02-21T00:00:00Z"), ZoneOffset.UTC));
+
+    WorkItem input = WorkItem.text("{\"id\":1}")
+        .header("step", "first")
+        .build()
+        .addStep("{\"id\":2}", Map.of("step", "latest"));
+
+    worker.onMessage(input, context);
+
+    verify(templateRenderer).render(eq(config.recordTemplate()), argThat(renderContext -> {
+      Object recordObject = renderContext.get("record");
+      if (!(recordObject instanceof Map<?, ?> record)) {
+        return false;
+      }
+      return "{\"id\":1}".equals(record.get("payload"))
+          && (record.get("headers") instanceof Map<?, ?> headers)
+          && "first".equals(String.valueOf(headers.get("step")));
+    }));
+    verify(batchWriter).append("D|x", config);
+    verify(batchWriter, never()).preflight(any(ClearingExportWorkerConfig.class));
+  }
+
+  @Test
+  void onMessageFailureWithSilentDropPolicyDoesNotPublishManualWorkError() throws Exception {
+    runOnMessageFailurePolicyScenario(testConfigWith("latest", -1, "silent_drop"), false, false);
+  }
+
+  @Test
+  void onMessageFailureWithJournalAndLogPolicyPublishesManualWorkError() throws Exception {
+    runOnMessageFailurePolicyScenario(testConfigWith("latest", -1, "journal_and_log_error"), true, false);
+  }
+
+  @Test
+  void onMessageFailureWithLogOnlyPolicyDoesNotPublishManualWorkError() throws Exception {
+    runOnMessageFailurePolicyScenario(testConfigWith("latest", -1, "log_error"), false, false);
+  }
+
+  @Test
+  void onMessageFailureWithStopPolicyPublishesManualWorkErrorAndStopsWorker() throws Exception {
+    runOnMessageFailurePolicyScenario(testConfigWith("latest", -1, "stop"), true, true);
+  }
+
+  private void runOnMessageFailurePolicyScenario(
+      ClearingExportWorkerConfig config,
+      boolean expectWorkError,
+      boolean expectStop
+  ) throws Exception {
+    ClearingExportWorkerProperties properties = mock(ClearingExportWorkerProperties.class);
+    ClearingExportBatchWriter batchWriter = mock(ClearingExportBatchWriter.class);
+    ClearingStructuredSchemaRegistry schemaRegistry = mock(ClearingStructuredSchemaRegistry.class);
+    StructuredRecordProjector projector = mock(StructuredRecordProjector.class);
+    TemplateRenderer templateRenderer = mock(TemplateRenderer.class);
+    WorkerControlPlaneRuntime controlPlaneRuntime = mock(WorkerControlPlaneRuntime.class);
+    ConfigurableApplicationContext applicationContext = mock(ConfigurableApplicationContext.class);
+    WorkerContext context = mock(WorkerContext.class);
 
     when(context.enabled()).thenReturn(true);
     when(context.statusPublisher()).thenReturn(StatusPublisher.NO_OP);
@@ -126,12 +195,19 @@ class ClearingExportWorkerImplTest {
         new ObjectMapper().findAndRegisterModules(),
         Clock.fixed(Instant.parse("2026-02-21T00:00:00Z"), ZoneOffset.UTC));
 
-    assertThatThrownBy(() -> worker.onMessage(WorkItem.text(TEST_WORKER_INFO, "{\"id\":1}").build(), context))
-        .isInstanceOf(IllegalStateException.class)
-        .hasMessageContaining("Failed to append clearing export record");
+    worker.onMessage(WorkItem.text("{\"id\":1}").build(), context);
 
     verify(batchWriter, never()).preflight(any(ClearingExportWorkerConfig.class));
-    verify(controlPlaneRuntime, never()).publishWorkError(anyString(), any(WorkItem.class), any(Throwable.class));
+    if (expectWorkError) {
+      verify(controlPlaneRuntime).publishWorkError(anyString(), any(WorkItem.class), any(Exception.class));
+    } else {
+      verify(controlPlaneRuntime, never()).publishWorkError(anyString(), any(WorkItem.class), any(Throwable.class));
+    }
+    if (expectStop) {
+      verify(applicationContext, timeout(500)).close();
+    } else {
+      verify(applicationContext, never()).close();
+    }
   }
 
   @Test
@@ -301,6 +377,14 @@ class ClearingExportWorkerImplTest {
   }
 
   private static ClearingExportWorkerConfig testConfig() {
+    return testConfigWith("latest", -1, "journal_and_log_error");
+  }
+
+  private static ClearingExportWorkerConfig testConfigWith(
+      String recordSourceStep,
+      int recordSourceStepIndex,
+      String recordBuildFailurePolicy
+  ) {
     return new ClearingExportWorkerConfig(
         "template",
         true,
@@ -320,7 +404,10 @@ class ClearingExportWorkerImplTest {
         "reports/clearing/manifest.jsonl",
         "/tmp/schemas",
         null,
-        null
+        null,
+        recordSourceStep,
+        recordSourceStepIndex,
+        recordBuildFailurePolicy
     );
   }
 }

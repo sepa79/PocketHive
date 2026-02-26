@@ -7,6 +7,8 @@ V1 scope:
 - custom templates only (`headerTemplate`, `recordTemplate`, `footerTemplate`, `fileNameTemplate`),
 - local directory sink with `*.tmp` + atomic rename,
 - optional template streaming append mode (`streamingAppendEnabled`) for long file windows,
+- explicit source-step selection for record build (`recordSourceStep`, `recordSourceStepIndex`),
+- explicit failure policy for record build path (`recordBuildFailurePolicy`),
 - optional local manifest (`jsonl`) with one entry per finalized file.
 
 Operational note:

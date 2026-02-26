@@ -1,5 +1,6 @@
 package io.pockethive.clearingexport;
 
+import java.util.Locale;
 import java.util.Objects;
 
 public record ClearingExportWorkerConfig(
@@ -21,11 +22,60 @@ public record ClearingExportWorkerConfig(
     String localManifestPath,
     String schemaRegistryRoot,
     String schemaId,
-    String schemaVersion
+    String schemaVersion,
+    String recordSourceStep,
+    Integer recordSourceStepIndex,
+    String recordBuildFailurePolicy
 ) {
 
+  public ClearingExportWorkerConfig(
+      String mode,
+      boolean streamingAppendEnabled,
+      long streamingWindowMs,
+      int maxRecordsPerFile,
+      long flushIntervalMs,
+      int maxBufferedRecords,
+      boolean strictTemplate,
+      String lineSeparator,
+      String fileNameTemplate,
+      String headerTemplate,
+      String recordTemplate,
+      String footerTemplate,
+      String localTargetDir,
+      String localTempSuffix,
+      boolean writeManifest,
+      String localManifestPath,
+      String schemaRegistryRoot,
+      String schemaId,
+      String schemaVersion
+  ) {
+    this(
+        mode,
+        streamingAppendEnabled,
+        streamingWindowMs,
+        maxRecordsPerFile,
+        flushIntervalMs,
+        maxBufferedRecords,
+        strictTemplate,
+        lineSeparator,
+        fileNameTemplate,
+        headerTemplate,
+        recordTemplate,
+        footerTemplate,
+        localTargetDir,
+        localTempSuffix,
+        writeManifest,
+        localManifestPath,
+        schemaRegistryRoot,
+        schemaId,
+        schemaVersion,
+        "latest",
+        -1,
+        "journal_and_log_error");
+  }
+
   public ClearingExportWorkerConfig {
-    mode = defaultIfBlank(mode, "template");
+    mode = defaultIfBlank(mode, "template").trim();
     streamingWindowMs = Math.max(1L, streamingWindowMs);
     maxRecordsPerFile = Math.max(1, maxRecordsPerFile);
     flushIntervalMs = Math.max(1L, flushIntervalMs);
@@ -35,6 +85,18 @@ public record ClearingExportWorkerConfig(
     localTempSuffix = defaultIfBlank(localTempSuffix, ".tmp");
     localManifestPath = defaultIfBlank(localManifestPath, "reports/clearing/manifest.jsonl");
     schemaRegistryRoot = defaultIfBlank(schemaRegistryRoot, "/app/scenario/clearing-schemas");
+    recordSourceStep = normalizeChoice(recordSourceStep, "latest");
+    recordSourceStepIndex = recordSourceStepIndex == null ? -1 : recordSourceStepIndex;
+    recordBuildFailurePolicy = normalizeChoice(recordBuildFailurePolicy, "journal_and_log_error");
+
+    RecordSourceStep sourceStep = RecordSourceStep.from(recordSourceStep);
+    if (sourceStep == RecordSourceStep.INDEX && recordSourceStepIndex < 0) {
+      throw new IllegalArgumentException("recordSourceStep=index requires recordSourceStepIndex >= 0");
+    }
+    if (sourceStep != RecordSourceStep.INDEX && recordSourceStepIndex < -1) {
+      throw new IllegalArgumentException("recordSourceStepIndex must be >= -1");
+    }
+    RecordBuildFailurePolicy.from(recordBuildFailurePolicy);
 
     if (isStructuredMode(mode)) {
       if (streamingAppendEnabled) {
@@ -54,8 +116,23 @@ public record ClearingExportWorkerConfig(
     return isStructuredMode(mode);
   }
 
+  RecordSourceStep sourceStepMode() {
+    return RecordSourceStep.from(recordSourceStep);
+  }
+
+  RecordBuildFailurePolicy recordBuildFailurePolicyMode() {
+    return RecordBuildFailurePolicy.from(recordBuildFailurePolicy);
+  }
+
   private static boolean isStructuredMode(String value) {
     return "structured".equalsIgnoreCase(value);
+  }
+
+  private static String normalizeChoice(String value, String defaultValue) {
+    return defaultIfBlank(value, defaultValue)
+        .trim()
+        .toLowerCase(Locale.ROOT)
+        .replace('-', '_');
   }
 
   private static String requireNonBlank(String value, String name) {
@@ -70,5 +147,51 @@ public record ClearingExportWorkerConfig(
       return Objects.requireNonNull(defaultValue, "defaultValue");
     }
     return value;
+  }
+
+  enum RecordSourceStep {
+    LATEST("latest"),
+    FIRST("first"),
+    PREVIOUS("previous"),
+    INDEX("index");
+
+    private final String value;
+
+    RecordSourceStep(String value) {
+      this.value = value;
+    }
+
+    static RecordSourceStep from(String raw) {
+      for (RecordSourceStep candidate : values()) {
+        if (candidate.value.equals(raw)) {
+          return candidate;
+        }
+      }
+      throw new IllegalArgumentException(
+          "recordSourceStep must be one of: latest, first, previous, index");
+    }
+  }
+
+  enum RecordBuildFailurePolicy {
+    SILENT_DROP("silent_drop"),
+    JOURNAL_AND_LOG_ERROR("journal_and_log_error"),
+    LOG_ERROR("log_error"),
+    STOP("stop");
+
+    private final String value;
+
+    RecordBuildFailurePolicy(String value) {
+      this.value = value;
+    }
+
+    static RecordBuildFailurePolicy from(String raw) {
+      for (RecordBuildFailurePolicy candidate : values()) {
+        if (candidate.value.equals(raw)) {
+          return candidate;
+        }
+      }
+      throw new IllegalArgumentException(
+          "recordBuildFailurePolicy must be one of: silent_drop, journal_and_log_error, log_error, stop");
+    }
   }
 }
