@@ -30,6 +30,9 @@ pockethive:
       flushIntervalMs: ${POCKETHIVE_CLEARING_EXPORT_FLUSH_INTERVAL_MS:1000}
       maxBufferedRecords: ${POCKETHIVE_CLEARING_EXPORT_MAX_BUFFERED_RECORDS:50000}
       strictTemplate: ${POCKETHIVE_CLEARING_EXPORT_STRICT_TEMPLATE:true}
+      recordSourceStep: ${POCKETHIVE_CLEARING_EXPORT_RECORD_SOURCE_STEP:latest}
+      recordSourceStepIndex: ${POCKETHIVE_CLEARING_EXPORT_RECORD_SOURCE_STEP_INDEX:-1}
+      recordBuildFailurePolicy: ${POCKETHIVE_CLEARING_EXPORT_RECORD_BUILD_FAILURE_POLICY:stop}
       lineSeparator: "\n"
       fileNameTemplate: ${POCKETHIVE_CLEARING_EXPORT_FILE_NAME_TEMPLATE:clearing_{{ now }}.dat}
       headerTemplate: ${POCKETHIVE_CLEARING_EXPORT_HEADER_TEMPLATE:H|{{ now }}}

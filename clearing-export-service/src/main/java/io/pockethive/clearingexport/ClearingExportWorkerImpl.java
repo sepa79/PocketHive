@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
 import io.pockethive.worker.sdk.api.StatusPublisher;
 import io.pockethive.worker.sdk.api.WorkItem;
+import io.pockethive.worker.sdk.api.WorkStep;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
 import io.pockethive.worker.sdk.config.WorkerCapability;
@@ -12,8 +13,10 @@ import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime.WorkerStateSna
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import jakarta.annotation.PostConstruct;
 import io.pockethive.worker.sdk.templating.TemplateRenderer;
+import java.util.ArrayList;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -115,13 +118,14 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
       throw new IllegalStateException("Clearing-export worker is halted: " + fatal);
     }
 
-    ClearingExportWorkerConfig config =
-        context.configOrDefault(ClearingExportWorkerConfig.class, properties::defaultConfig);
-
-    Map<String, Object> record = projectRecord(in);
-    Map<String, Object> renderContext = baseRenderContext(record);
+    ClearingExportWorkerConfig config = context.config(ClearingExportWorkerConfig.class);
+    if (config == null) {
+      config = properties.defaultConfig();
+    }
 
     try {
+      Map<String, Object> record = projectRecord(in, config);
+      Map<String, Object> renderContext = baseRenderContext(record);
       if (config.structuredMode()) {
         ClearingStructuredSchema schema = schemaRegistry.resolve(config);
         StructuredProjectedRecord projected = structuredRecordProjector.project(schema, renderContext);
@@ -131,8 +135,8 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
         batchWriter.append(renderedLine, config);
       }
     } catch (Exception ex) {
-      publishStatus(context);
-      throw new IllegalStateException("Failed to append clearing export record", ex);
+      handleRecordBuildFailure(in, context, config, ex);
+      return null;
     }
 
     publishStatus(context);
@@ -312,12 +316,40 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
     shutdownThread.start();
   }
 
-  private Map<String, Object> projectRecord(WorkItem item) {
-    Map<String, Object> record = new LinkedHashMap<>();
-    record.put("payload", item.payload());
-    record.put("headers", item.headers());
+  private void handleRecordBuildFailure(
+      WorkItem item,
+      WorkerContext context,
+      ClearingExportWorkerConfig config,
+      Exception ex
+  ) {
+    String message = "Failed to append clearing export record (recordSourceStep=" + config.recordSourceStep() + ")";
+    switch (config.recordBuildFailurePolicyMode()) {
+      case SILENT_DROP -> publishStatus(context);
+      case JOURNAL_AND_LOG_ERROR -> {
+        log.error(message, ex);
+        publishJournalAlert(item, ex);
+        publishStatus(context);
+      }
+      case LOG_ERROR -> {
+        log.error(message, ex);
+        publishStatus(context);
+      }
+      case STOP -> {
+        log.error(message, ex);
+        publishJournalAlert(item, ex);
+        publishStatus(context.statusPublisher(), context.enabled(), message);
+        requestWorkerStop(message);
+      }
+    }
+  }
 
-    String payload = item.payload();
+  private Map<String, Object> projectRecord(WorkItem item, ClearingExportWorkerConfig config) {
+    WorkStep selectedStep = selectStep(item, config);
+    String payload = selectedStep.payload();
+    Map<String, Object> record = new LinkedHashMap<>();
+    record.put("payload", payload);
+    record.put("headers", selectedStep.headers());
+
     if (payload != null && !payload.isBlank()) {
       try {
         record.put("json", objectMapper.readValue(payload, MAP_TYPE));
@@ -326,5 +358,39 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
       }
     }
     return record;
+  }
+
+  private WorkStep selectStep(WorkItem item, ClearingExportWorkerConfig config) {
+    List<WorkStep> steps = new ArrayList<>();
+    for (WorkStep step : item.steps()) {
+      if (step != null) {
+        steps.add(step);
+      }
+    }
+    if (steps.isEmpty()) {
+      throw new IllegalStateException("WorkItem has no steps");
+    }
+
+    return switch (config.sourceStepMode()) {
+      case LATEST -> steps.get(steps.size() - 1);
+      case FIRST -> steps.get(0);
+      case PREVIOUS -> {
+        if (steps.size() < 2) {
+          throw new IllegalStateException(
+              "recordSourceStep=previous requires at least two WorkItem steps");
+        }
+        yield steps.get(steps.size() - 2);
+      }
+      case INDEX -> selectStepByIndex(steps, config.recordSourceStepIndex());
+    };
+  }
+
+  private WorkStep selectStepByIndex(List<WorkStep> steps, int index) {
+    for (WorkStep step : steps) {
+      if (step.index() == index) {
+        return step;
+      }
+    }
+    throw new IllegalStateException("recordSourceStepIndex=" + index + " not found in WorkItem steps");
   }
 }

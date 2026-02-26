@@ -30,9 +30,9 @@ Canonical schema contract (structured mode SSOT):
 
 Available in `recordTemplate`:
 
-- `record.payload`: raw payload string from `WorkItem`.
-- `record.headers`: headers map from `WorkItem`.
-- `record.json`: parsed JSON object when payload is valid JSON object.
+- `record.payload`: payload string from the selected `WorkItem` step (`recordSourceStep`).
+- `record.headers`: headers map from the selected `WorkItem` step.
+- `record.json`: parsed JSON object when selected step payload is a valid JSON object.
 - `now`: current UTC timestamp string.
 
 Available in `headerTemplate`, `footerTemplate`, `fileNameTemplate`:
@@ -58,6 +58,9 @@ Path: `pockethive.worker.config.*`
 | `flushIntervalMs` | long | yes | `1000` | Max time between flushes. Minimum effective value is `1`. |
 | `maxBufferedRecords` | int | yes | `50000` | In-memory guard. When exceeded, worker throws buffer-full error. |
 | `strictTemplate` | boolean | yes | `true` | Reserved flag for strict template mode. Keep `true` for forward compatibility. |
+| `recordSourceStep` | string | no | `latest` | Which `WorkItem` step is used to build clearing record context: `latest`, `first`, `previous`, `index`. |
+| `recordSourceStepIndex` | int | no | `-1` | Used only when `recordSourceStep=index`; matches exact `WorkStep.index()` value (not list position). |
+| `recordBuildFailurePolicy` | string | no | `stop` | Behavior when record build/append fails: `silent_drop`, `journal_and_log_error`, `log_error`, `stop`. |
 | `lineSeparator` | string | no | `\\n` | Line separator used between header/records/footer. |
 | `fileNameTemplate` | string | yes | `clearing_{{ now }}.dat` | Template for output file name. |
 | `headerTemplate` | string | yes | `H|{{ now }}` | Template for file header line. |
@@ -79,6 +82,13 @@ Streaming notes:
 - `streamingFsyncPolicy` is not exposed/configured in this version by design.
 - Treat `streamingAppendEnabled` as startup-time mode. Do not switch `true -> false` on a live worker instance; restart the worker when changing this flag.
 
+Record build failure policy notes:
+
+- `silent_drop`: drop failed message without log/journal event.
+- `journal_and_log_error`: publish control-plane work error and write `ERROR` log.
+- `log_error`: write `ERROR` log only.
+- `stop`: publish control-plane work error, write `ERROR` log, and stop worker process.
+
 ## 5. Complete configuration example
 
 ```yaml
@@ -92,6 +102,9 @@ pockethive:
       flushIntervalMs: 2000
       maxBufferedRecords: 20000
       strictTemplate: true
+      recordSourceStep: latest
+      recordSourceStepIndex: -1
+      recordBuildFailurePolicy: stop
       lineSeparator: "\n"
       fileNameTemplate: "CLEARING_{{ now }}.txt"
       headerTemplate: "H|ISSUER-PL|MASTERCARD|{{ now }}"
