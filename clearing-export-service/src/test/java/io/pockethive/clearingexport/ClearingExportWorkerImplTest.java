@@ -141,6 +141,116 @@ class ClearingExportWorkerImplTest {
   }
 
   @Test
+  void onMessageUsesConfiguredPreviousStepForRecordTemplateContext() throws Exception {
+    ClearingExportWorkerProperties properties = mock(ClearingExportWorkerProperties.class);
+    ClearingExportBatchWriter batchWriter = mock(ClearingExportBatchWriter.class);
+    ClearingStructuredSchemaRegistry schemaRegistry = mock(ClearingStructuredSchemaRegistry.class);
+    StructuredRecordProjector projector = mock(StructuredRecordProjector.class);
+    TemplateRenderer templateRenderer = mock(TemplateRenderer.class);
+    WorkerControlPlaneRuntime controlPlaneRuntime = mock(WorkerControlPlaneRuntime.class);
+    ConfigurableApplicationContext applicationContext = mock(ConfigurableApplicationContext.class);
+    WorkerContext context = mock(WorkerContext.class);
+    ClearingExportWorkerConfig config = testConfigWith("previous", -1, "log_error");
+
+    when(context.enabled()).thenReturn(true);
+    when(context.statusPublisher()).thenReturn(StatusPublisher.NO_OP);
+    when(context.config(ClearingExportWorkerConfig.class)).thenReturn(config);
+    when(templateRenderer.render(eq(config.recordTemplate()), anyMap())).thenReturn("D|x");
+
+    ClearingExportWorkerImpl worker = new ClearingExportWorkerImpl(
+        properties,
+        batchWriter,
+        schemaRegistry,
+        projector,
+        templateRenderer,
+        controlPlaneRuntime,
+        applicationContext,
+        new ObjectMapper().findAndRegisterModules(),
+        Clock.fixed(Instant.parse("2026-02-21T00:00:00Z"), ZoneOffset.UTC));
+
+    WorkItem input = WorkItem.text("{\"id\":1}")
+        .header("step", "first")
+        .build()
+        .addStep("{\"id\":2}", Map.of("step", "previous"))
+        .addStep("{\"id\":3}", Map.of("step", "latest"));
+
+    worker.onMessage(input, context);
+
+    verify(templateRenderer).render(eq(config.recordTemplate()), argThat(renderContext -> {
+      Object recordObject = renderContext.get("record");
+      if (!(recordObject instanceof Map<?, ?> record)) {
+        return false;
+      }
+      return "{\"id\":2}".equals(record.get("payload"))
+          && (record.get("headers") instanceof Map<?, ?> headers)
+          && "previous".equals(String.valueOf(headers.get("step")));
+    }));
+    verify(batchWriter).append("D|x", config);
+  }
+
+  @Test
+  void onMessageUsesConfiguredIndexedStepForRecordTemplateContext() throws Exception {
+    ClearingExportWorkerProperties properties = mock(ClearingExportWorkerProperties.class);
+    ClearingExportBatchWriter batchWriter = mock(ClearingExportBatchWriter.class);
+    ClearingStructuredSchemaRegistry schemaRegistry = mock(ClearingStructuredSchemaRegistry.class);
+    StructuredRecordProjector projector = mock(StructuredRecordProjector.class);
+    TemplateRenderer templateRenderer = mock(TemplateRenderer.class);
+    WorkerControlPlaneRuntime controlPlaneRuntime = mock(WorkerControlPlaneRuntime.class);
+    ConfigurableApplicationContext applicationContext = mock(ConfigurableApplicationContext.class);
+    WorkerContext context = mock(WorkerContext.class);
+    ClearingExportWorkerConfig config = testConfigWith("index", 1, "log_error");
+
+    when(context.enabled()).thenReturn(true);
+    when(context.statusPublisher()).thenReturn(StatusPublisher.NO_OP);
+    when(context.config(ClearingExportWorkerConfig.class)).thenReturn(config);
+    when(templateRenderer.render(eq(config.recordTemplate()), anyMap())).thenReturn("D|x");
+
+    ClearingExportWorkerImpl worker = new ClearingExportWorkerImpl(
+        properties,
+        batchWriter,
+        schemaRegistry,
+        projector,
+        templateRenderer,
+        controlPlaneRuntime,
+        applicationContext,
+        new ObjectMapper().findAndRegisterModules(),
+        Clock.fixed(Instant.parse("2026-02-21T00:00:00Z"), ZoneOffset.UTC));
+
+    WorkItem input = WorkItem.text("{\"id\":1}")
+        .header("step", "first")
+        .build()
+        .addStep("{\"id\":2}", Map.of("step", "index-1"))
+        .addStep("{\"id\":3}", Map.of("step", "latest"));
+
+    worker.onMessage(input, context);
+
+    verify(templateRenderer).render(eq(config.recordTemplate()), argThat(renderContext -> {
+      Object recordObject = renderContext.get("record");
+      if (!(recordObject instanceof Map<?, ?> record)) {
+        return false;
+      }
+      return "{\"id\":2}".equals(record.get("payload"))
+          && (record.get("headers") instanceof Map<?, ?> headers)
+          && "index-1".equals(String.valueOf(headers.get("step")));
+    }));
+    verify(batchWriter).append("D|x", config);
+  }
+
+  @Test
+  void onMessageFailureWhenPreviousStepMissingWithStopPolicyPublishesWorkErrorAndStopsWorker() throws Exception {
+    ClearingExportWorkerConfig config = testConfigWith("previous", -1, "stop");
+    WorkItem item = WorkItem.text("{\"id\":1}").build();
+    runStepSelectionFailureScenario(config, item);
+  }
+
+  @Test
+  void onMessageFailureWhenIndexedStepMissingWithStopPolicyPublishesWorkErrorAndStopsWorker() throws Exception {
+    ClearingExportWorkerConfig config = testConfigWith("index", 7, "stop");
+    WorkItem item = WorkItem.text("{\"id\":1}").build().addStep("{\"id\":2}", Map.of());
+    runStepSelectionFailureScenario(config, item);
+  }
+
+  @Test
   void onMessageFailureWithSilentDropPolicyDoesNotPublishManualWorkError() throws Exception {
     runOnMessageFailurePolicyScenario(testConfigWith("latest", -1, "silent_drop"), false, false);
   }
@@ -205,6 +315,42 @@ class ClearingExportWorkerImplTest {
     } else {
       verify(applicationContext, never()).close();
     }
+  }
+
+  private void runStepSelectionFailureScenario(
+      ClearingExportWorkerConfig config,
+      WorkItem item
+  ) throws Exception {
+    ClearingExportWorkerProperties properties = mock(ClearingExportWorkerProperties.class);
+    ClearingExportBatchWriter batchWriter = mock(ClearingExportBatchWriter.class);
+    ClearingStructuredSchemaRegistry schemaRegistry = mock(ClearingStructuredSchemaRegistry.class);
+    StructuredRecordProjector projector = mock(StructuredRecordProjector.class);
+    TemplateRenderer templateRenderer = mock(TemplateRenderer.class);
+    WorkerControlPlaneRuntime controlPlaneRuntime = mock(WorkerControlPlaneRuntime.class);
+    ConfigurableApplicationContext applicationContext = mock(ConfigurableApplicationContext.class);
+    WorkerContext context = mock(WorkerContext.class);
+
+    when(context.enabled()).thenReturn(true);
+    when(context.statusPublisher()).thenReturn(StatusPublisher.NO_OP);
+    when(context.config(ClearingExportWorkerConfig.class)).thenReturn(config);
+
+    ClearingExportWorkerImpl worker = new ClearingExportWorkerImpl(
+        properties,
+        batchWriter,
+        schemaRegistry,
+        projector,
+        templateRenderer,
+        controlPlaneRuntime,
+        applicationContext,
+        new ObjectMapper().findAndRegisterModules(),
+        Clock.fixed(Instant.parse("2026-02-21T00:00:00Z"), ZoneOffset.UTC));
+
+    worker.onMessage(item, context);
+
+    verify(templateRenderer, never()).render(anyString(), anyMap());
+    verify(batchWriter, never()).append(anyString(), any(ClearingExportWorkerConfig.class));
+    verify(controlPlaneRuntime).publishWorkError(anyString(), any(WorkItem.class), any(Exception.class));
+    verify(applicationContext, timeout(500)).close();
   }
 
   @Test
@@ -374,7 +520,7 @@ class ClearingExportWorkerImplTest {
   }
 
   private static ClearingExportWorkerConfig testConfig() {
-    return testConfigWith("latest", -1, "journal_and_log_error");
+    return testConfigWith("latest", -1, "stop");
   }
 
   private static ClearingExportWorkerConfig testConfigWith(

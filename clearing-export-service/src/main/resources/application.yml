@@ -32,7 +32,7 @@ pockethive:
       strictTemplate: ${POCKETHIVE_CLEARING_EXPORT_STRICT_TEMPLATE:true}
       recordSourceStep: ${POCKETHIVE_CLEARING_EXPORT_RECORD_SOURCE_STEP:latest}
       recordSourceStepIndex: ${POCKETHIVE_CLEARING_EXPORT_RECORD_SOURCE_STEP_INDEX:-1}
-      recordBuildFailurePolicy: ${POCKETHIVE_CLEARING_EXPORT_RECORD_BUILD_FAILURE_POLICY:journal_and_log_error}
+      recordBuildFailurePolicy: ${POCKETHIVE_CLEARING_EXPORT_RECORD_BUILD_FAILURE_POLICY:stop}
       lineSeparator: "\n"
       fileNameTemplate: ${POCKETHIVE_CLEARING_EXPORT_FILE_NAME_TEMPLATE:clearing_{{ now }}.dat}
       headerTemplate: ${POCKETHIVE_CLEARING_EXPORT_HEADER_TEMPLATE:H|{{ now }}}
