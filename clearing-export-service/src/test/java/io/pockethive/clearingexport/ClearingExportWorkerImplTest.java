@@ -129,12 +129,15 @@ class ClearingExportWorkerImplTest {
     worker.onMessage(input, context);
 
     verify(templateRenderer).render(eq(config.recordTemplate()), argThat(renderContext -> {
-      Object recordObject = renderContext.get("record");
-      if (!(recordObject instanceof Map<?, ?> record)) {
+      if (renderContext.containsKey("record")) {
         return false;
       }
-      return "{\"id\":1}".equals(record.get("payload"))
-          && (record.get("headers") instanceof Map<?, ?> headers)
+      if (!(renderContext.get("steps") instanceof Map<?, ?> steps)) {
+        return false;
+      }
+      return (steps.get("selected") instanceof Map<?, ?> selected)
+          && "{\"id\":1}".equals(selected.get("payload"))
+          && (selected.get("headers") instanceof Map<?, ?> headers)
           && "first".equals(String.valueOf(headers.get("step")));
     }));
     verify(batchWriter).append("D|x", config);
@@ -178,12 +181,15 @@ class ClearingExportWorkerImplTest {
     worker.onMessage(input, context);
 
     verify(templateRenderer).render(eq(config.recordTemplate()), argThat(renderContext -> {
-      Object recordObject = renderContext.get("record");
-      if (!(recordObject instanceof Map<?, ?> record)) {
+      if (renderContext.containsKey("record")) {
         return false;
       }
-      return "{\"id\":2}".equals(record.get("payload"))
-          && (record.get("headers") instanceof Map<?, ?> headers)
+      if (!(renderContext.get("steps") instanceof Map<?, ?> steps)) {
+        return false;
+      }
+      return (steps.get("selected") instanceof Map<?, ?> selected)
+          && "{\"id\":2}".equals(selected.get("payload"))
+          && (selected.get("headers") instanceof Map<?, ?> headers)
           && "previous".equals(String.valueOf(headers.get("step")));
     }));
     verify(batchWriter).append("D|x", config);
@@ -226,12 +232,15 @@ class ClearingExportWorkerImplTest {
     worker.onMessage(input, context);
 
     verify(templateRenderer).render(eq(config.recordTemplate()), argThat(renderContext -> {
-      Object recordObject = renderContext.get("record");
-      if (!(recordObject instanceof Map<?, ?> record)) {
+      if (renderContext.containsKey("record")) {
         return false;
       }
-      return "{\"id\":2}".equals(record.get("payload"))
-          && (record.get("headers") instanceof Map<?, ?> headers)
+      if (!(renderContext.get("steps") instanceof Map<?, ?> steps)) {
+        return false;
+      }
+      return (steps.get("selected") instanceof Map<?, ?> selected)
+          && "{\"id\":2}".equals(selected.get("payload"))
+          && (selected.get("headers") instanceof Map<?, ?> headers)
           && "index-1".equals(String.valueOf(headers.get("step")));
     }));
     verify(batchWriter).append("D|x", config);
@@ -293,7 +302,7 @@ class ClearingExportWorkerImplTest {
         "1.0.0",
         "xml",
         "out.xml",
-        Map.of("payload", new ClearingStructuredSchema.StructuredFieldRule("{{ record.payload }}", true, "string")),
+        Map.of("payload", new ClearingStructuredSchema.StructuredFieldRule("{{ steps.selected.payload }}", true, "string")),
         Map.of(),
         Map.of(),
         ClearingStructuredSchema.XmlOutputConfig.defaults()
@@ -618,19 +627,9 @@ class ClearingExportWorkerImplTest {
   }
 
   private static boolean hasExpectedMixedStepContext(Map<String, Object> renderContext) {
-    if (!(renderContext.get("record") instanceof Map<?, ?> record)) {
+    if (renderContext.containsKey("record")) {
       return false;
     }
-    if (!"{\"phase\":\"response\",\"responseCode\":\"00\"}".equals(record.get("payload"))) {
-      return false;
-    }
-    if (!(record.get("json") instanceof Map<?, ?> selectedJson)) {
-      return false;
-    }
-    if (!"00".equals(String.valueOf(selectedJson.get("responseCode")))) {
-      return false;
-    }
-
     if (!(renderContext.get("steps") instanceof Map<?, ?> steps)) {
       return false;
     }
@@ -686,7 +685,7 @@ class ClearingExportWorkerImplTest {
         "\n",
         "stream.dat",
         "H|{{ now }}",
-        "D|{{ record.payload }}",
+        "D|{{ steps.selected.payload }}",
         "T|{{ recordCount }}",
         "/tmp/out",
         ".tmp",
@@ -717,7 +716,7 @@ class ClearingExportWorkerImplTest {
         "\n",
         "out.xml",
         "H|{{ now }}",
-        "D|{{ record.payload }}",
+        "D|{{ steps.selected.payload }}",
         "T|{{ recordCount }}",
         "/tmp/out",
         ".tmp",

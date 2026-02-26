@@ -17,7 +17,7 @@ fileNameTemplate: "CLEARING_{{ now }}.txt"
 
 # Example fixed-width-like business format (pipe-separated for readability).
 headerTemplate: "H|ISSUER-PL|MASTERCARD|{{ now }}"
-recordTemplate: "D|{{ record.json.clearingId }}|{{ record.json.panMasked }}|{{ record.json.amountMinor }}|{{ record.json.currency }}|{{ record.json.responseCode }}"
+recordTemplate: "D|{{ steps.selected.json.clearingId }}|{{ steps.selected.json.panMasked }}|{{ steps.selected.json.amountMinor }}|{{ steps.selected.json.currency }}|{{ steps.selected.json.responseCode }}"
 footerTemplate: "T|{{ recordCount }}"
 
 localTargetDir: "/tmp/pockethive/clearing-out"

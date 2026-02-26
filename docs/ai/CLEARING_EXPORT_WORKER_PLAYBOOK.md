@@ -30,14 +30,10 @@ Canonical schema contract (structured mode SSOT):
 
 Available in `recordTemplate`:
 
-- `record.payload`: payload string from the selected `WorkItem` step (`recordSourceStep`).
-- `record.headers`: headers map from the selected `WorkItem` step.
-- `record.json`: parsed JSON object when selected step payload is a valid JSON object.
-- `record.index`: selected step index.
 - `steps.first`: first step object (`index`, `payload`, `headers`, optional `json`).
 - `steps.latest`: latest step object (`index`, `payload`, `headers`, optional `json`).
 - `steps.previous`: previous step object when available (`index`, `payload`, `headers`, optional `json`).
-- `steps.selected`: same step object as `record` (explicit alias).
+- `steps.selected`: selected step object from `recordSourceStep` (`index`, `payload`, `headers`, optional `json`).
 - `steps.byIndex["<index>"]`: step object by exact `WorkStep.index()`.
 - `steps.all`: ordered list of all step objects (first -> latest).
 - `steps.count`: number of available steps.
@@ -73,7 +69,7 @@ Path: `pockethive.worker.config.*`
 | `lineSeparator` | string | no | `\\n` | Line separator used between header/records/footer. |
 | `fileNameTemplate` | string | yes | `clearing_{{ now }}.dat` | Template for output file name. |
 | `headerTemplate` | string | yes | `H|{{ now }}` | Template for file header line. |
-| `recordTemplate` | string | yes | `D|{{ record.payload }}` | Template for each record line. |
+| `recordTemplate` | string | yes | `D|{{ steps.selected.payload }}` | Template for each record line. |
 | `footerTemplate` | string | yes | `T|{{ recordCount }}` | Template for file footer line. |
 | `localTargetDir` | string | yes | `/tmp/pockethive/clearing-out` | Directory for finalized files. |
 | `localTempSuffix` | string | no | `.tmp` | Temporary suffix used before atomic rename. |
@@ -117,7 +113,7 @@ pockethive:
       lineSeparator: "\n"
       fileNameTemplate: "CLEARING_{{ now }}.txt"
       headerTemplate: "H|ISSUER-PL|MASTERCARD|{{ now }}"
-      recordTemplate: "D|{{ record.json.clearingId }}|{{ record.json.panMasked }}|{{ record.json.amountMinor }}|{{ record.json.currency }}|{{ record.json.responseCode }}"
+      recordTemplate: "D|{{ steps.selected.json.clearingId }}|{{ steps.selected.json.panMasked }}|{{ steps.selected.json.amountMinor }}|{{ steps.selected.json.currency }}|{{ steps.selected.json.responseCode }}"
       footerTemplate: "T|{{ recordCount }}"
       localTargetDir: "/tmp/pockethive/clearing-out"
       localTempSuffix: ".tmp"
@@ -161,7 +157,7 @@ Example:
 ### 6.3 Runtime behavior
 
 1. Worker loads schema by `schemaRegistryRoot + schemaId + schemaVersion`.
-2. Record values are projected with `recordMapping` using the same context as template mode (`record.*`, `steps.*`, `now`).
+2. Record values are projected with `recordMapping` using the same context as template mode (`steps.*`, `now`).
 3. Header/footer and file name use `now`, `recordCount`, `totals.*`.
 4. XML file is generated and written through standard sink (`.tmp` + atomic rename).
 

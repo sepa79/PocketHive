@@ -5,7 +5,7 @@ fileNameTemplate: "CLEARING_{{ now }}.xml"
 
 recordMapping:
   payload:
-    expression: "{{ record.payload }}"
+    expression: "{{ steps.selected.payload }}"
     required: true
     type: string
   unitAmount:

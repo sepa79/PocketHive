@@ -28,7 +28,7 @@ class ClearingExportFileAssemblerTest {
         "\n",
         "out_{{ recordCount }}.txt",
         "H|{{ now }}",
-        "D|{{ record.payload }}",
+        "D|{{ steps.selected.payload }}",
         "T|{{ recordCount }}",
         "/tmp/out",
         ".tmp",

@@ -126,8 +126,7 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
     try {
       List<WorkStep> steps = collectSteps(in);
       WorkStep selectedStep = selectStep(steps, config);
-      Map<String, Object> record = projectStep(selectedStep);
-      Map<String, Object> renderContext = baseRenderContext(record, steps, selectedStep);
+      Map<String, Object> renderContext = baseRenderContext(steps, selectedStep);
       if (config.structuredMode()) {
         ClearingStructuredSchema schema = schemaRegistry.resolve(config);
         StructuredProjectedRecord projected = structuredRecordProjector.project(schema, renderContext);
@@ -146,12 +145,10 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
   }
 
   private Map<String, Object> baseRenderContext(
-      Map<String, Object> record,
       List<WorkStep> steps,
       WorkStep selectedStep
   ) {
     Map<String, Object> renderContext = new LinkedHashMap<>();
-    renderContext.put("record", record);
     renderContext.put("steps", buildStepContext(steps, selectedStep));
     renderContext.put("now", Instant.now(clock).toString());
     return renderContext;
@@ -361,7 +358,7 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
       try {
         record.put("json", objectMapper.readValue(payload, MAP_TYPE));
       } catch (Exception ignored) {
-        // Payload is not JSON object; templates can still use record.payload.
+        // Payload is not JSON object; templates can still use steps.*.payload.
       }
     }
     return Map.copyOf(record);
@@ -389,9 +386,12 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
       if (i == steps.size() - 2) {
         previous = projected;
       }
-      if (step.index() == selectedStep.index()) {
+      if (step == selectedStep) {
         selected = projected;
       }
+    }
+    if (selected == null) {
+      throw new IllegalStateException("Selected WorkStep is missing from WorkItem steps");
     }
 
     Map<String, Object> context = new LinkedHashMap<>();
@@ -399,7 +399,7 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
     context.put("byIndex", Map.copyOf(byIndex));
     context.put("first", first);
     context.put("latest", latest);
-    context.put("selected", selected == null ? projectStep(selectedStep) : selected);
+    context.put("selected", selected);
     context.put("selectedIndex", selectedStep.index());
     context.put("count", steps.size());
     if (previous != null) {
