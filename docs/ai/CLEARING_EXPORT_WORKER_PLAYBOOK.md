@@ -60,7 +60,7 @@ Path: `pockethive.worker.config.*`
 | `strictTemplate` | boolean | yes | `true` | Reserved flag for strict template mode. Keep `true` for forward compatibility. |
 | `recordSourceStep` | string | no | `latest` | Which `WorkItem` step is used to build clearing record context: `latest`, `first`, `previous`, `index`. |
 | `recordSourceStepIndex` | int | no | `-1` | Used only when `recordSourceStep=index`; selects exact step index. |
-| `recordBuildFailurePolicy` | string | no | `journal_and_log_error` | Behavior when record build/append fails: `silent_drop`, `journal_and_log_error`, `log_error`, `stop`. |
+| `recordBuildFailurePolicy` | string | no | `stop` | Behavior when record build/append fails: `silent_drop`, `journal_and_log_error`, `log_error`, `stop`. |
 | `lineSeparator` | string | no | `\\n` | Line separator used between header/records/footer. |
 | `fileNameTemplate` | string | yes | `clearing_{{ now }}.dat` | Template for output file name. |
 | `headerTemplate` | string | yes | `H|{{ now }}` | Template for file header line. |
@@ -104,7 +104,7 @@ pockethive:
       strictTemplate: true
       recordSourceStep: latest
       recordSourceStepIndex: -1
-      recordBuildFailurePolicy: journal_and_log_error
+      recordBuildFailurePolicy: stop
       lineSeparator: "\n"
       fileNameTemplate: "CLEARING_{{ now }}.txt"
       headerTemplate: "H|ISSUER-PL|MASTERCARD|{{ now }}"

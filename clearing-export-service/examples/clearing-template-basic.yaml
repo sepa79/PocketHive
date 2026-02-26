@@ -9,7 +9,7 @@ maxBufferedRecords: 20000
 strictTemplate: true
 recordSourceStep: "latest"
 recordSourceStepIndex: -1
-recordBuildFailurePolicy: "journal_and_log_error"
+recordBuildFailurePolicy: "stop"
 lineSeparator: "\n"
 
 # File names are business-oriented; no PocketHive metadata is used.

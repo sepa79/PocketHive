@@ -71,7 +71,7 @@ public record ClearingExportWorkerConfig(
         schemaVersion,
         "latest",
         -1,
-        "journal_and_log_error");
+        "stop");
   }
 
   public ClearingExportWorkerConfig {
@@ -87,7 +87,7 @@ public record ClearingExportWorkerConfig(
     schemaRegistryRoot = defaultIfBlank(schemaRegistryRoot, "/app/scenario/clearing-schemas");
     recordSourceStep = normalizeChoice(recordSourceStep, "latest");
     recordSourceStepIndex = recordSourceStepIndex == null ? -1 : recordSourceStepIndex;
-    recordBuildFailurePolicy = normalizeChoice(recordBuildFailurePolicy, "journal_and_log_error");
+    recordBuildFailurePolicy = normalizeChoice(recordBuildFailurePolicy, "stop");
 
     RecordSourceStep sourceStep = RecordSourceStep.from(recordSourceStep);
     if (sourceStep == RecordSourceStep.INDEX && recordSourceStepIndex < 0) {
