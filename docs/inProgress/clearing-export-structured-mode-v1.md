@@ -37,13 +37,13 @@ outputFormat: xml               # "xml" | "json" | "csv"
 # Field mappings — Pebble expressions evaluated per record.
 # Keys become element/field names in output. Nested keys use dot notation.
 recordMapping:
-  clearingId:        "{{ record.json.id }}"
-  pan:               "{{ record.json.panMasked }}"
-  amount:            "{{ record.json.amount }}"
-  currency:          "{{ record.json.currency }}"
-  responseCode:      "{{ record.json.responseCode }}"
-  acceptorName:      "{{ record.json.acceptor.commonName }}"
-  acceptorId:        "{{ record.json.acceptor.identification }}"
+  clearingId:        "{{ steps.selected.json.id }}"
+  pan:               "{{ steps.selected.json.panMasked }}"
+  amount:            "{{ steps.selected.json.amount }}"
+  currency:          "{{ steps.selected.json.currency }}"
+  responseCode:      "{{ steps.selected.json.responseCode }}"
+  acceptorName:      "{{ steps.selected.json.acceptor.commonName }}"
+  acceptorId:        "{{ steps.selected.json.acceptor.identification }}"
 
 # Header mapping — evaluated once at flush time.
 # Context: now, recordCount, totals.*
@@ -100,7 +100,7 @@ to numeric aggregates.
 ## Processing flow (structured mode)
 
 1. `onMessage` — same entry point as template mode.
-2. `projectRecord` — same as today (produces `record.payload`, `record.headers`, `record.json`).
+2. Step context build — same as current implementation (produces `steps.first/latest/previous/selected/byIndex/all`).
 3. **NEW** `StructuredRecordProjector.project(recordMapping, renderContext)`:
    - evaluates each Pebble expression in `recordMapping`,
    - returns `Map<String, String>` (field name → rendered value).

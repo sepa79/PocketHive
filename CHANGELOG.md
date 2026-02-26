@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.14.35] - 2026-02-26
+Timestamp: 2026-02-26T12:35:00Z
+
+- Clearing Export scenarios: updated `clearing-export-demo` and `clearing-export-streaming-demo` templates to explicit `steps.selected.payload` context after removal of legacy `record.*` alias.
+- Docs (in-progress): aligned structured-mode plan examples/flow to explicit `steps.selected.json.*` and `steps.*` context naming.
+
 ## [0.14.34] - 2026-02-26
 Timestamp: 2026-02-26T10:15:00Z
 

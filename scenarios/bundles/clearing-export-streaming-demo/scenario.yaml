@@ -49,7 +49,7 @@ template:
           lineSeparator: "\n"
           fileNameTemplate: "STREAM_{{ now }}.dat"
           headerTemplate: "H|{{ now }}"
-          recordTemplate: "D|{{ record.payload }}"
+          recordTemplate: "D|{{ steps.selected.payload }}"
           footerTemplate: "T|{{ recordCount }}"
           localTargetDir: "/tmp/pockethive/clearing-out"
           localTempSuffix: ".tmp"
