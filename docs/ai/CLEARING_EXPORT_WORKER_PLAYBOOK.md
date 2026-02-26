@@ -59,7 +59,7 @@ Path: `pockethive.worker.config.*`
 | `maxBufferedRecords` | int | yes | `50000` | In-memory guard. When exceeded, worker throws buffer-full error. |
 | `strictTemplate` | boolean | yes | `true` | Reserved flag for strict template mode. Keep `true` for forward compatibility. |
 | `recordSourceStep` | string | no | `latest` | Which `WorkItem` step is used to build clearing record context: `latest`, `first`, `previous`, `index`. |
-| `recordSourceStepIndex` | int | no | `-1` | Used only when `recordSourceStep=index`; selects exact step index. |
+| `recordSourceStepIndex` | int | no | `-1` | Used only when `recordSourceStep=index`; matches exact `WorkStep.index()` value (not list position). |
 | `recordBuildFailurePolicy` | string | no | `stop` | Behavior when record build/append fails: `silent_drop`, `journal_and_log_error`, `log_error`, `stop`. |
 | `lineSeparator` | string | no | `\\n` | Line separator used between header/records/footer. |
 | `fileNameTemplate` | string | yes | `clearing_{{ now }}.dat` | Template for output file name. |
