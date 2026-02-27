@@ -83,7 +83,7 @@ template:
       image: http-builder:latest
       config:
         worker:
-          templateRoot: /app/scenario/http-templates
+          templateRoot: /app/scenario/templates/http
           serviceId: default
       work:
         in: http-build

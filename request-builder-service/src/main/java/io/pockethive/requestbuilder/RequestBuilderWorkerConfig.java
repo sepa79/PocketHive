@@ -11,7 +11,7 @@ public record RequestBuilderWorkerConfig(
 ) {
 
   public RequestBuilderWorkerConfig {
-    templateRoot = normalize(templateRoot, "/app/http-templates");
+    templateRoot = normalize(templateRoot, "/app/templates/http");
     serviceId = normalize(serviceId, "default");
     vars = vars == null ? Map.of() : Map.copyOf(vars);
   }

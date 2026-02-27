@@ -1,4 +1,5 @@
 {
+  "protocol": "HTTP",
   "serviceId": "default",
   "callId": "example-call",
   "method": "GET",

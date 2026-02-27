@@ -1,3 +1,4 @@
+protocol: HTTP
 serviceId: default
 callId: redis-topup
 method: POST

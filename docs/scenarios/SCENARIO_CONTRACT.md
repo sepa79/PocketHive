@@ -171,7 +171,7 @@ To mount host directories into bee containers from a scenario, use
 config:
   docker:
     volumes:
-      - /opt/pockethive/http-templates:/app/http-templates:ro
+      - /opt/pockethive/http-templates:/app/templates/http:ro
       - /opt/pockethive/scenario-overrides:/app/scenarios:ro
   worker:
     # normal worker config...

@@ -1,9 +1,10 @@
+protocol: HTTP
 serviceId: default
-callId: redis-balance
+callId: redis-topup
 method: POST
 pathTemplate: /api/redis-demo
 bodyTemplate: "{{ payload }}"
 headersTemplate:
   content-type: application/json
-  x-demo-call: balance
+  x-demo-call: topup
 

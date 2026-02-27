@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.14.36] - 2026-02-27
+Timestamp: 2026-02-27T22:45:00Z
+
+- Request Builder templates: unified default template layout to `templates/<protocol>/...` (HTTP + TCP) in repo bundles and worker image packaging.
+- Request Builder loading: removed implicit HTTP fallback for template protocol; templates now require explicit `protocol` and fail fast on missing/unsupported values.
+- Scenario Manager API: generalized HTTP-template endpoints to protocol-agnostic template endpoints (`/templates`, `/template`, `/template/rename`) and aligned storage paths to `templates/...`.
+- Hive UI scenarios page: switched to generic template API functions and HTTP template operations under `templates/http/...`.
+- Scenario bundles/docs/tooling: updated scenario `templateRoot` usage and docs/examples to the new templates layout for `release/0.14`.
+
 ## [0.14.35] - 2026-02-26
 Timestamp: 2026-02-26T12:35:00Z
 

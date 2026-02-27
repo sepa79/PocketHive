@@ -37,13 +37,14 @@ class RequestBuilderWorkerImplTest {
 
   @Test
   void buildsHttpEnvelopeFromTemplate() throws Exception {
-    Path dir = Files.createTempDirectory("http-templates");
+    Path dir = Files.createTempDirectory("templates");
     Files.createDirectories(dir.resolve("default"));
     Path file = dir.resolve("default/simple-call.json");
     Files.writeString(file, """
         {
           "serviceId": "default",
           "callId": "simple",
+          "protocol": "HTTP",
           "method": "POST",
           "pathTemplate": "/test",
           "bodyTemplate": "{{ payload }}",
@@ -111,7 +112,7 @@ class RequestBuilderWorkerImplTest {
 
   @Test
   void passesThroughWhenTemplateMissingAndPassThroughEnabled() throws Exception {
-    Path dir = Files.createTempDirectory("http-templates-missing");
+    Path dir = Files.createTempDirectory("templates-missing");
     // Intentionally do not create any template files.
     properties.setConfig(Map.of(
         "templateRoot", dir.toString(),
@@ -225,12 +226,13 @@ class RequestBuilderWorkerImplTest {
 
   @Test
   void reloadsTemplatesWhenConfigChanges() throws Exception {
-    Path dir1 = Files.createTempDirectory("http-templates-1");
+    Path dir1 = Files.createTempDirectory("templates-1");
     Files.createDirectories(dir1.resolve("default"));
     Files.writeString(dir1.resolve("default/simple-call.json"), """
         {
           "serviceId": "default",
           "callId": "simple",
+          "protocol": "HTTP",
           "method": "POST",
           "pathTemplate": "/one",
           "bodyTemplate": "{{ payload }}",
@@ -238,12 +240,13 @@ class RequestBuilderWorkerImplTest {
         }
         """);
 
-    Path dir2 = Files.createTempDirectory("http-templates-2");
+    Path dir2 = Files.createTempDirectory("templates-2");
     Files.createDirectories(dir2.resolve("default"));
     Files.writeString(dir2.resolve("default/simple-call.json"), """
         {
           "serviceId": "default",
           "callId": "simple",
+          "protocol": "HTTP",
           "method": "POST",
           "pathTemplate": "/two",
           "bodyTemplate": "{{ payload }}",
