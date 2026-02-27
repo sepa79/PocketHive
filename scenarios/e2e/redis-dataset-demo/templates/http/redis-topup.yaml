@@ -1,5 +1,6 @@
 serviceId: default
 callId: redis-topup
+protocol: HTTP
 method: POST
 pathTemplate: /api/redis-demo
 bodyTemplate: "{{ payload }}"

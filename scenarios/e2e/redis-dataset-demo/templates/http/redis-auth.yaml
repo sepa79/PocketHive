@@ -1,9 +1,9 @@
-schemaRef: "schemas/redis-payload.schema.json"
 serviceId: default
-callId: redis-balance
+callId: redis-auth
+protocol: HTTP
 method: POST
 pathTemplate: /api/redis-demo
 bodyTemplate: "{{ payload }}"
 headersTemplate:
   content-type: application/json
-  x-demo-call: balance
+  x-demo-call: auth

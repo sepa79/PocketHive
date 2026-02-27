@@ -154,6 +154,7 @@ class HttpSequenceRunnerTest {
 
   private void writeTemplate(String callId) throws Exception {
     String yaml = """
+        protocol: HTTP
         callId: %s
         method: GET
         pathTemplate: /%s

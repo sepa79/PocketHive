@@ -30,7 +30,7 @@ keeping volumes explicit and plan‑driven (NFF).
 - **Volume wiring is explicit**  
   - Swarm Controller passes a shared host path into bees via
     `config.docker.volumes`.  
-- Worker configs refer only to container paths (e.g. `/app/scenario/http-templates`);
+- Worker configs refer only to container paths (e.g. `/app/scenario/templates/http`);
     there are no implicit host defaults or fallbacks.
 
 - **Download/upload supported**  
@@ -112,7 +112,7 @@ When starting a swarm from a scenario:
 - [x] For each Request Builder bee (and other workers as needed):
     - [x] Append a `config.docker.volumes` entry  
           `${runtime-root}/${swarmId}:/app/scenario:ro`.  
-    - [x] Set `config.templateRoot: /app/scenario/http-templates`
+    - [x] Set `config.templateRoot: /app/scenario/templates/<protocol>`
           in the canonical Redis dataset demo bundle.
   - [ ] For bees that need datasets (e.g. Redis, file inputs), map their config to
         subpaths under `/app/scenario/datasets`.  

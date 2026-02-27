@@ -203,6 +203,8 @@ public class NettyTransport implements TcpTransport {
                 complete = true;
             } else if (behavior == TcpBehavior.STREAMING && currentData.length >= maxBytes) {
                 complete = true;
+            } else if (behavior == TcpBehavior.LENGTH_PREFIX_2B && isLengthPrefixedFrameComplete(currentData)) {
+                complete = true;
             } else if (behavior == TcpBehavior.REQUEST_RESPONSE && endsWithTag(currentData)) {
                 complete = true;
             }
@@ -237,6 +239,20 @@ public class NettyTransport implements TcpTransport {
                     byte[] truncated = new byte[payload.length];
                     System.arraycopy(data, 0, truncated, 0, payload.length);
                     data = truncated;
+                } else if (behavior == TcpBehavior.LENGTH_PREFIX_2B) {
+                    if (data.length < 2) {
+                        throw new IllegalStateException("Length-prefixed frame missing 2-byte length header");
+                    }
+                    int frameLength = ((data[0] & 0xFF) << 8) | (data[1] & 0xFF);
+                    if (frameLength > maxBytes) {
+                        throw new IllegalStateException("Length-prefixed response exceeds maxBytes: " + frameLength);
+                    }
+                    if (data.length < 2 + frameLength) {
+                        throw new IllegalStateException("Incomplete length-prefixed frame");
+                    }
+                    byte[] framed = new byte[frameLength];
+                    System.arraycopy(data, 2, framed, 0, frameLength);
+                    data = framed;
                 }
                 responseFuture.complete(data);
                 ctx.close();
@@ -258,7 +274,11 @@ public class NettyTransport implements TcpTransport {
         @Override
         public void channelInactive(ChannelHandlerContext ctx) {
             if (!responseFuture.isDone()) {
-                responseFuture.complete(responseBuffer.toByteArray());
+                if (behavior == TcpBehavior.LENGTH_PREFIX_2B) {
+                    responseFuture.completeExceptionally(new IllegalStateException("Connection closed before full length-prefixed response"));
+                } else {
+                    responseFuture.complete(responseBuffer.toByteArray());
+                }
             }
         }
 
@@ -270,6 +290,17 @@ public class NettyTransport implements TcpTransport {
         private void fail(ChannelHandlerContext ctx, Throwable cause) {
             responseFuture.completeExceptionally(cause);
             ctx.close();
+        }
+
+        private boolean isLengthPrefixedFrameComplete(byte[] data) {
+            if (data.length < 2) {
+                return false;
+            }
+            int frameLength = ((data[0] & 0xFF) << 8) | (data[1] & 0xFF);
+            if (frameLength > maxBytes) {
+                throw new IllegalStateException("Length-prefixed response exceeds maxBytes: " + frameLength);
+            }
+            return data.length >= 2 + frameLength;
         }
     }
 

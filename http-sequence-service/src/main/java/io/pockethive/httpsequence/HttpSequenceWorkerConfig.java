@@ -16,7 +16,7 @@ public record HttpSequenceWorkerConfig(
 
   public HttpSequenceWorkerConfig {
     baseUrl = normalise(baseUrl);
-    templateRoot = normaliseOrDefault(templateRoot, "/app/http-templates");
+    templateRoot = normaliseOrDefault(templateRoot, "/app/templates/http");
     serviceId = normaliseOrDefault(serviceId, "default");
     threadCount = threadCount <= 0 ? 1 : threadCount;
     steps = steps == null ? List.of() : List.copyOf(steps);

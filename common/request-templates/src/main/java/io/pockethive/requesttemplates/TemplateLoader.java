@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Stream;
@@ -67,43 +68,72 @@ public final class TemplateLoader {
         try {
             ObjectMapper mapper = selectMapper(path);
             Map<String, Object> templateMap = mapper.readValue(path.toFile(), new TypeReference<>() {});
-            String protocol = (String) templateMap.getOrDefault("protocol", "HTTP");
+            String protocol = normalizeProtocol(templateMap.get("protocol"), path);
 
             String rawService = templateMap.get("serviceId") == null ? null : templateMap.get("serviceId").toString();
             String serviceId = rawService == null || rawService.isBlank()
                 ? defaultServiceId
                 : rawService.trim();
 
-            if ("TCP".equals(protocol)) {
-                TcpTemplateDefinition def = mapper.readValue(path.toFile(), TcpTemplateDefinition.class);
-                return new TcpTemplateDefinition(
-                    serviceId,
-                    def.callId(),
-                    def.protocol(),
-                    def.behavior(),
-                    def.transport(),
-                    def.bodyTemplate(),
-                    def.headersTemplate(),
-                    def.endTag(),
-                    def.maxBytes(),
-                    def.auth()
-                );
-            }
-
-            HttpTemplateDefinition def = mapper.readValue(path.toFile(), HttpTemplateDefinition.class);
-            return new HttpTemplateDefinition(
-                serviceId,
-                def.callId(),
-                def.protocol() != null ? def.protocol() : "HTTP",
-                def.method(),
-                def.pathTemplate(),
-                def.bodyTemplate(),
-                def.headersTemplate(),
-                def.auth()
-            );
+            return switch (protocol) {
+                case "TCP" -> {
+                    TcpTemplateDefinition def = mapper.readValue(path.toFile(), TcpTemplateDefinition.class);
+                    yield new TcpTemplateDefinition(
+                        serviceId,
+                        def.callId(),
+                        "TCP",
+                        def.behavior(),
+                        def.transport(),
+                        def.bodyTemplate(),
+                        def.headersTemplate(),
+                        def.endTag(),
+                        def.maxBytes(),
+                        def.auth()
+                    );
+                }
+                case "HTTP" -> {
+                    HttpTemplateDefinition def = mapper.readValue(path.toFile(), HttpTemplateDefinition.class);
+                    yield new HttpTemplateDefinition(
+                        serviceId,
+                        def.callId(),
+                        "HTTP",
+                        def.method(),
+                        def.pathTemplate(),
+                        def.bodyTemplate(),
+                        def.headersTemplate(),
+                        def.auth()
+                    );
+                }
+                case "ISO8583" -> {
+                    Iso8583TemplateDefinition def = mapper.readValue(path.toFile(), Iso8583TemplateDefinition.class);
+                    yield new Iso8583TemplateDefinition(
+                        serviceId,
+                        def.callId(),
+                        "ISO8583",
+                        def.wireProfileId(),
+                        def.payloadAdapter(),
+                        def.bodyTemplate(),
+                        def.headersTemplate(),
+                        def.schemaRef(),
+                        def.auth()
+                    );
+                }
+                default -> throw new IllegalArgumentException("Unsupported protocol in template: " + protocol);
+            };
         } catch (Exception ex) {
             throw new IllegalStateException("Failed to parse template " + path, ex);
         }
+    }
+
+    private static String normalizeProtocol(Object value, Path path) {
+        if (value == null) {
+            throw new IllegalArgumentException("Template protocol must be explicitly set in " + path);
+        }
+        String text = value.toString().trim();
+        if (text.isEmpty()) {
+            throw new IllegalArgumentException("Template protocol must not be blank in " + path);
+        }
+        return text.toUpperCase(Locale.ROOT);
     }
 
     private ObjectMapper selectMapper(Path path) {

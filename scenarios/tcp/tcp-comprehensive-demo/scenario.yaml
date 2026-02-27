@@ -88,7 +88,7 @@ template:
     env: {}
     config:
       worker:
-        templateRoot: "/app/scenario/templates"
+        templateRoot: "/app/scenario/templates/tcp"
         serviceId: "demo"
   - role: "request-builder-perf"
     image: "request-builder:latest"
@@ -100,7 +100,7 @@ template:
     env: {}
     config:
       worker:
-        templateRoot: "/app/scenario/templates"
+        templateRoot: "/app/scenario/templates/tcp"
         serviceId: "demo"
   - role: "request-builder-netty"
     image: "request-builder:latest"
@@ -112,7 +112,7 @@ template:
     env: {}
     config:
       worker:
-        templateRoot: "/app/scenario/templates"
+        templateRoot: "/app/scenario/templates/tcp"
         serviceId: "demo"
   - role: "processor"
     image: "processor:latest"

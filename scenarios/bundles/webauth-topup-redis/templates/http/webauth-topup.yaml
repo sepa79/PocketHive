@@ -1,26 +1,13 @@
 serviceId: webauth
-callId: webauth-loop
+callId: webauth-topup
+protocol: HTTP
 method: GET
 pathTemplate: /webauth/xmlauth?client={{ vars.client }}
 headersTemplate:
   content-type: text/xml; charset=UTF-8
   connection: keep-alive
 bodyTemplate: |
-  {% set inboundList = headers['x-ph-redis-list'] %}
-  {% if inboundList == 'webauth.TOP.custA' %}
-    {% set requestType = 'TOP' %}
-    {% set description = 'topup' %}
-  {% elseif inboundList == 'webauth.RED.custA' %}
-    {% set requestType = 'RED' %}
-    {% set description = 'redemption' %}
-  {% elseif inboundList == 'webauth.BAL.custA' %}
-    {% set requestType = 'BAL' %}
-    {% set description = 'balance' %}
-  {% else %}
-    {% set requestType = 'INVALID' %}
-    {% set description = 'invalid-source-list' %}
-  {% endif %}
-
+  {% set requestType = 'TOP' %}
   {% set accountNumber = payloadAsJson.AccountNumber %}
   {% set amount = payloadAsJson.Amount %}
 
@@ -35,6 +22,7 @@ bodyTemplate: |
 
   {% set serialNumber = '' %}
   {% set requestId = eval('#randInt(100000,999999)') %}
+  {% set description = 'topup' %}
   {% set authCode = '' %}
 
   {% set timestampMode = vars.timestampMode %}

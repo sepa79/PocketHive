@@ -26,7 +26,7 @@ pockethive:
       routingKey: ${POCKETHIVE_OUTPUT_RABBIT_ROUTING_KEY}
   worker:
     config:
-      templateRoot: /app/http-templates
+      templateRoot: /app/templates/http
       serviceId: default
       passThroughOnMissingTemplate: true
   control-plane:

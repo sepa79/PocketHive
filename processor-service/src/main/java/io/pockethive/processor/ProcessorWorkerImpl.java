@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.processor.handler.ProtocolHandler;
 import io.pockethive.processor.handler.HttpProtocolHandler;
+import io.pockethive.processor.handler.Iso8583ProtocolHandler;
 import io.pockethive.processor.handler.TcpProtocolHandler;
 import io.pockethive.processor.metrics.CallMetricsRecorder;
 import io.pockethive.processor.exception.ProcessorCallException;
@@ -82,7 +83,13 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
     java.util.concurrent.atomic.AtomicLong nextAllowedTimeNanos = new java.util.concurrent.atomic.AtomicLong(0L);
     this.protocolHandlers = Map.of(
         "HTTP", new HttpProtocolHandler(mapper, clock, metricsRecorder, httpClient, noKeepAliveClient, perThreadClient, nextAllowedTimeNanos),
-        "TCP", new TcpProtocolHandler(mapper, clock, metricsRecorder, properties.defaultConfig().tcpTransport(), nextAllowedTimeNanos)
+        "TCP", new TcpProtocolHandler(mapper, clock, metricsRecorder, properties.defaultConfig().tcpTransport(), nextAllowedTimeNanos),
+        "ISO8583", new Iso8583ProtocolHandler(
+            mapper,
+            clock,
+            metricsRecorder,
+            properties.defaultConfig().tcpTransport(),
+            nextAllowedTimeNanos)
     );
   }
 
@@ -127,6 +134,7 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
     return switch (kind) {
       case "http.request" -> "HTTP";
       case "tcp.request" -> "TCP";
+      case "iso8583.request" -> "ISO8583";
       case "" -> throw new IllegalArgumentException("Missing request kind");
       default -> throw new IllegalArgumentException("Unsupported request kind: " + kind);
     };

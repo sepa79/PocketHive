@@ -1,5 +1,6 @@
 serviceId: webauth
 callId: webauth-balance
+protocol: HTTP
 method: GET
 pathTemplate: /webauth/xmlauth?client={{ vars.client }}
 headersTemplate:

@@ -12,6 +12,7 @@ import io.pockethive.processor.transport.TcpRequest;
 import io.pockethive.processor.transport.TcpResponse;
 import io.pockethive.processor.transport.TcpTransport;
 import io.pockethive.worker.sdk.api.HttpRequestEnvelope;
+import io.pockethive.worker.sdk.api.Iso8583RequestEnvelope;
 import io.pockethive.worker.sdk.api.TcpRequestEnvelope;
 import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
 import io.pockethive.worker.sdk.api.StatusPublisher;
@@ -29,9 +30,13 @@ import io.pockethive.worker.sdk.runtime.WorkerInvocationContext;
 import io.pockethive.worker.sdk.runtime.WorkerObservabilityInterceptor;
 import io.pockethive.worker.sdk.runtime.WorkerState;
 import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.net.URI;
+import java.net.ServerSocket;
+import java.net.Socket;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -40,6 +45,8 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.StreamSupport;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -340,6 +347,138 @@ class ProcessorTest {
     }
 
     @Test
+    void workerEmitsIso8583ResultEnvelope() throws Exception {
+        byte[] requestPayload = hex("0200A1B2C3D4");
+        byte[] responsePayload = hex("0210CAFEBABE");
+        try (IsoTestServer server = new IsoTestServer(responsePayload)) {
+            server.start();
+
+            ProcessorWorkerProperties properties = newProcessorWorkerProperties();
+            properties.setConfig(Map.of("baseUrl", "tcp://127.0.0.1:" + server.port()));
+            HttpClient httpClient = mock(HttpClient.class);
+            Clock clock = Clock.fixed(Instant.parse("2024-02-20T12:00:00Z"), ZoneOffset.UTC);
+            ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, clock);
+            ProcessorWorkerConfig config = new ProcessorWorkerConfig(
+                "tcp://127.0.0.1:" + server.port(),
+                null,
+                0,
+                0.0,
+                null,
+                null,
+                null,
+                null,
+                null
+            );
+            TestWorkerContext context = new TestWorkerContext(config);
+
+            WorkItem inbound = inboundIsoItem("MC_2BYTE_LEN_BIN_BITMAP", "RAW_HEX", "0200A1B2C3D4");
+            WorkItem result = worker.onMessage(inbound, context);
+
+            assertThat(result).isNotNull();
+            JsonNode payload = MAPPER.readTree(result.asString());
+            assertThat(payload.path("kind").asText()).isEqualTo("iso8583.result");
+            assertThat(payload.path("request").path("transport").asText()).isEqualTo("iso8583");
+            assertThat(payload.path("request").path("scheme").asText()).isEqualTo("tcp");
+            assertThat(payload.path("request").path("method").asText()).isEqualTo("SEND");
+            assertThat(payload.path("request").path("wireProfileId").asText()).isEqualTo("MC_2BYTE_LEN_BIN_BITMAP");
+            assertThat(payload.path("request").path("payloadAdapter").asText()).isEqualTo("RAW_HEX");
+            assertThat(payload.path("request").path("payloadBytes").asInt()).isEqualTo(requestPayload.length);
+            assertThat(payload.path("outcome").path("type").asText()).isEqualTo("iso8583_response");
+            assertThat(payload.path("outcome").path("status").asInt()).isEqualTo(200);
+            assertThat(payload.path("outcome").path("responseHex").asText()).isEqualTo("0210CAFEBABE");
+            assertThat(result.stepHeaders())
+                .containsEntry("x-ph-processor-success", "true")
+                .containsEntry("x-ph-processor-status", "200");
+            assertThat(server.awaitHandled()).isTrue();
+            assertThat(server.lastRequestPayload()).containsExactly(requestPayload);
+            verify(httpClient, never()).execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class));
+        }
+    }
+
+    @Test
+    void workerRejectsUnsupportedIso8583PayloadAdapter() throws Exception {
+        ProcessorWorkerProperties properties = newProcessorWorkerProperties();
+        properties.setConfig(Map.of("baseUrl", "tcp://127.0.0.1:6036"));
+        HttpClient httpClient = mock(HttpClient.class);
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC());
+        ProcessorWorkerConfig config = new ProcessorWorkerConfig("tcp://127.0.0.1:6036", null, 0, 0.0, null, null, null, null, null);
+        TestWorkerContext context = new TestWorkerContext(config);
+
+        WorkItem inbound = inboundIsoItem("MC_2BYTE_LEN_BIN_BITMAP", "UNSUPPORTED_ADAPTER", "<fields/>");
+
+        assertThatThrownBy(() -> worker.onMessage(inbound, context))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Unsupported ISO8583 payloadAdapter: UNSUPPORTED_ADAPTER");
+        verify(httpClient, never()).execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class));
+    }
+
+    @Test
+    void workerRetriesIso8583WhenTcpRetryConfigured() throws Exception {
+        byte[] responsePayload = hex("0210A0B1C2D3");
+        try (IsoTestServer server = new IsoTestServer(responsePayload, 1)) {
+            server.start();
+
+            ProcessorWorkerProperties properties = newProcessorWorkerProperties();
+            properties.setConfig(Map.of("baseUrl", "tcp://127.0.0.1:" + server.port()));
+            HttpClient httpClient = mock(HttpClient.class);
+            ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC());
+
+            TcpTransportConfig transport = new TcpTransportConfig(
+                "socket",
+                2000,
+                3000,
+                8192,
+                true,
+                4,
+                true,
+                false,
+                TcpTransportConfig.ConnectionReuse.NONE,
+                1
+            );
+            ProcessorWorkerConfig config = new ProcessorWorkerConfig(
+                "tcp://127.0.0.1:" + server.port(),
+                null,
+                0,
+                0.0,
+                null,
+                null,
+                null,
+                null,
+                transport
+            );
+
+            WorkItem inbound = inboundIsoItem("MC_2BYTE_LEN_BIN_BITMAP", "RAW_HEX", "0200A1B2C3D4");
+            WorkItem result = worker.onMessage(inbound, new TestWorkerContext(config));
+
+            assertThat(result).isNotNull();
+            JsonNode payload = MAPPER.readTree(result.asString());
+            assertThat(payload.path("kind").asText()).isEqualTo("iso8583.result");
+            assertThat(payload.path("outcome").path("status").asInt()).isEqualTo(200);
+            assertThat(payload.path("outcome").path("responseHex").asText()).isEqualTo("0210A0B1C2D3");
+            assertThat(server.awaitHandled()).isTrue();
+            assertThat(server.connectionAttempts()).isEqualTo(2);
+            verify(httpClient, never()).execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class));
+        }
+    }
+
+    @Test
+    void workerRejectsUnknownIso8583WireProfile() throws Exception {
+        ProcessorWorkerProperties properties = newProcessorWorkerProperties();
+        properties.setConfig(Map.of("baseUrl", "tcp://127.0.0.1:6036"));
+        HttpClient httpClient = mock(HttpClient.class);
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC());
+        ProcessorWorkerConfig config = new ProcessorWorkerConfig("tcp://127.0.0.1:6036", null, 0, 0.0, null, null, null, null, null);
+        TestWorkerContext context = new TestWorkerContext(config);
+
+        WorkItem inbound = inboundIsoItem("UNKNOWN_PROFILE", "RAW_HEX", "0102");
+
+        assertThatThrownBy(() -> worker.onMessage(inbound, context))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Unsupported ISO8583 wireProfileId: UNKNOWN_PROFILE");
+        verify(httpClient, never()).execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class));
+    }
+
+    @Test
     void workerThrowsWhenTcpBaseUrlMissing() throws Exception {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
         properties.setConfig(Map.of("baseUrl", ""));
@@ -434,6 +573,28 @@ class ProcessorTest {
             null,
             1024
         ))).build();
+    }
+
+    private static WorkItem inboundIsoItem(String wireProfileId, String payloadAdapter, String payload) {
+        return inboundIsoItem(wireProfileId, payloadAdapter, payload, Map.of());
+    }
+
+    private static WorkItem inboundIsoItem(String wireProfileId,
+                                           String payloadAdapter,
+                                           String payload,
+                                           Map<String, String> headers) {
+        WorkerInfo info = new WorkerInfo("ingress", "swarm", "ingress-instance", null, null);
+        return WorkItem.json(info, Iso8583RequestEnvelope.of(new Iso8583RequestEnvelope.Iso8583Request(
+            wireProfileId,
+            payloadAdapter,
+            payload,
+            headers,
+            null
+        ))).build();
+    }
+
+    private static byte[] hex(String value) {
+        return java.util.HexFormat.of().parseHex(value);
     }
 
     @SuppressWarnings("unchecked")
@@ -580,6 +741,102 @@ class ProcessorTest {
 
         Map<String, Object> statusData() {
             return Map.copyOf(statusPublisher.data);
+        }
+    }
+
+    private static final class IsoTestServer implements AutoCloseable {
+        private final ServerSocket serverSocket;
+        private final byte[] responsePayload;
+        private final CountDownLatch handled = new CountDownLatch(1);
+        private final AtomicReference<byte[]> lastRequestPayload = new AtomicReference<>();
+        private final AtomicInteger failuresBeforeSuccess;
+        private final AtomicInteger connectionAttempts = new AtomicInteger(0);
+        private volatile Thread acceptThread;
+
+        private IsoTestServer(byte[] responsePayload) throws Exception {
+            this(responsePayload, 0);
+        }
+
+        private IsoTestServer(byte[] responsePayload, int failuresBeforeSuccess) throws Exception {
+            this.serverSocket = new ServerSocket(0);
+            this.serverSocket.setReuseAddress(true);
+            this.responsePayload = responsePayload;
+            this.failuresBeforeSuccess = new AtomicInteger(Math.max(0, failuresBeforeSuccess));
+        }
+
+        int port() {
+            return serverSocket.getLocalPort();
+        }
+
+        void start() {
+            acceptThread = new Thread(this::acceptLoop, "iso-test-server");
+            acceptThread.setDaemon(true);
+            acceptThread.start();
+        }
+
+        boolean awaitHandled() throws InterruptedException {
+            return handled.await(2, TimeUnit.SECONDS);
+        }
+
+        byte[] lastRequestPayload() {
+            return lastRequestPayload.get();
+        }
+
+        int connectionAttempts() {
+            return connectionAttempts.get();
+        }
+
+        private void acceptLoop() {
+            while (!serverSocket.isClosed()) {
+                try (Socket socket = serverSocket.accept();
+                     InputStream in = socket.getInputStream();
+                     OutputStream out = socket.getOutputStream()) {
+                    connectionAttempts.incrementAndGet();
+                    byte[] lengthBytes = readFully(in, 2);
+                    int length = ((lengthBytes[0] & 0xFF) << 8) | (lengthBytes[1] & 0xFF);
+                    byte[] payload = readFully(in, length);
+                    lastRequestPayload.set(payload);
+
+                    int remainingFailures = failuresBeforeSuccess.getAndUpdate(v -> v > 0 ? v - 1 : 0);
+                    if (remainingFailures > 0) {
+                        continue;
+                    }
+
+                    int responseLength = responsePayload.length;
+                    out.write((responseLength >> 8) & 0xFF);
+                    out.write(responseLength & 0xFF);
+                    out.write(responsePayload);
+                    out.flush();
+                    handled.countDown();
+                    return;
+                } catch (Exception ignored) {
+                    return;
+                }
+            }
+        }
+
+        private static byte[] readFully(InputStream in, int length) throws Exception {
+            byte[] bytes = new byte[length];
+            int offset = 0;
+            while (offset < length) {
+                int read = in.read(bytes, offset, length - offset);
+                if (read < 0) {
+                    throw new IllegalStateException("Unexpected end of stream");
+                }
+                offset += read;
+            }
+            return bytes;
+        }
+
+        @Override
+        public void close() throws Exception {
+            try {
+                serverSocket.close();
+            } finally {
+                if (acceptThread != null) {
+                    acceptThread.join(500);
+                }
+            }
         }
     }
 

@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 ## [0.15.8]
 Timestamp: 2026-02-24T00:00:00Z
 
+- Scenario template storage normalized to protocol-scoped layout (`templates/<protocol>/...`) across bundled/e2e scenarios and baked request-builder templates; scenario `templateRoot` paths now point to explicit protocol roots (for example `/app/scenario/templates/http` or `/app/scenario/templates/tcp`).
+- Scenario Manager template API renamed from HTTP-specific paths to generic bundle template paths (`/scenarios/{id}/templates`, `/scenarios/{id}/template`, `/template/rename`) with matching service/UI updates.
+- Request template loading now requires explicit `protocol` in every template definition; fixtures and examples were updated accordingly.
+- Request Builder and HTTP Sequence default template roots aligned to `/app/templates/http` (replacing legacy `/app/http-templates` usage).
 - Processor service: added proxy-awareness for outbound HTTP by exposing both runtime HTTP clients to JVM system properties sourced from worker environment configuration.
 - UI (Scenario Editor): increased available vertical workspace across Plan/YAML/Swarm/HTTP templates views (larger fixed-height panes, internal scroll regions), so editors no longer render at ~1/3 screen height.
 - Clearing Export lifecycle journal: file lifecycle events (`created`, `write-failed`, `finalize-failed`, `flush-summary`) are now published as normal control-plane outcomes (`work-journal`) instead of alerts.

@@ -40,13 +40,14 @@ class RequestBuilderWorkerImplTest {
 
   @Test
   void buildsHttpEnvelopeFromTemplate() throws Exception {
-    Path dir = Files.createTempDirectory("http-templates");
+    Path dir = Files.createTempDirectory("templates");
     Files.createDirectories(dir.resolve("default"));
     Path file = dir.resolve("default/simple-call.json");
     Files.writeString(file, """
         {
           "serviceId": "default",
           "callId": "simple",
+          "protocol": "HTTP",
           "method": "POST",
           "pathTemplate": "/test",
           "bodyTemplate": "{{ payload }}",
@@ -105,7 +106,7 @@ class RequestBuilderWorkerImplTest {
 
   @Test
   void passesThroughWhenTemplateMissingAndPassThroughEnabled() throws Exception {
-    Path dir = Files.createTempDirectory("http-templates-missing");
+    Path dir = Files.createTempDirectory("templates-missing");
     // Intentionally do not create any template files.
     properties.setConfig(Map.of(
         "templateRoot", dir.toString(),
@@ -210,13 +211,111 @@ class RequestBuilderWorkerImplTest {
   }
 
   @Test
+  void buildsIso8583EnvelopeAndCompilesFieldListXmlToRawHex() throws Exception {
+    Path dir = Files.createTempDirectory("iso-templates");
+    Files.createDirectories(dir.resolve("default"));
+
+    Path schemaRoot = dir.resolve("iso-schemas");
+    Path schemaDir = schemaRoot.resolve("ctap-belgium-auth").resolve("1.0.0");
+    Files.createDirectories(schemaDir);
+    Files.writeString(schemaDir.resolve("ctap-j8583.xml"), """
+        <j8583-config>
+          <parse type="0100">
+            <field num="2" type="LLVAR"/>
+            <field num="3" type="NUMERIC" length="6"/>
+          </parse>
+        </j8583-config>
+        """);
+
+    Files.writeString(dir.resolve("default/ctap-iso.json"), """
+        {
+          "serviceId": "default",
+          "callId": "ctap-iso",
+          "protocol": "ISO8583",
+          "wireProfileId": "MC_2BYTE_LEN_BIN_BITMAP",
+          "payloadAdapter": "FIELD_LIST_XML",
+          "bodyTemplate": "<iso8583 mti=\\"0100\\"><field num=\\"2\\" value=\\"5554213493338337\\"/><field num=\\"3\\" value=\\"000000\\"/></iso8583>",
+          "headersTemplate": {
+            "x-iso-flow": "ctap"
+          },
+          "schemaRef": {
+            "schemaRegistryRoot": "%s",
+            "schemaId": "ctap-belgium-auth",
+            "schemaVersion": "1.0.0",
+            "schemaAdapter": "J8583_XML",
+            "schemaFile": "ctap-j8583.xml"
+          }
+        }
+        """.formatted(schemaRoot.toString().replace("\\", "\\\\")));
+
+    properties.setConfig(Map.of(
+        "templateRoot", dir.toString(),
+        "serviceId", "default",
+        "passThroughOnMissingTemplate", true
+    ));
+    RequestBuilderWorkerImpl worker =
+        new RequestBuilderWorkerImpl(properties, templateRenderer, new TemplateLoader(), null);
+
+    WorkItem seed = WorkItem.text(SEED_INFO, "unused").header("x-ph-call-id", "ctap-iso").build();
+    RequestBuilderWorkerConfig config = new RequestBuilderWorkerConfig(
+        dir.toString(), "default", true, Map.of());
+    WorkerContext context = new TestWorkerContext(config);
+
+    WorkItem result = worker.onMessage(seed, context);
+
+    assertThat(result).isNotNull();
+    JsonNode envelope = new ObjectMapper().readTree(result.asString());
+    assertThat(envelope.get("kind").asText()).isEqualTo("iso8583.request");
+    assertThat(envelope.get("request").get("wireProfileId").asText()).isEqualTo("MC_2BYTE_LEN_BIN_BITMAP");
+    assertThat(envelope.get("request").get("payloadAdapter").asText()).isEqualTo("RAW_HEX");
+    assertThat(envelope.get("request").get("payload").asText())
+        .isEqualTo("303130306000000000000000313635353534323133343933333338333337303030303030");
+    assertThat(envelope.get("request").get("headers").get("x-iso-flow").asText()).isEqualTo("ctap");
+    assertThat(envelope.get("request").path("schemaRef").isNull()).isTrue();
+  }
+
+  @Test
+  void failsWhenIso8583TemplateUsesUnsupportedPayloadAdapter() throws Exception {
+    Path dir = Files.createTempDirectory("iso-templates-invalid");
+    Files.createDirectories(dir.resolve("default"));
+    Files.writeString(dir.resolve("default/ctap-iso.json"), """
+        {
+          "serviceId": "default",
+          "callId": "ctap-iso",
+          "protocol": "ISO8583",
+          "wireProfileId": "MC_2BYTE_LEN_BIN_BITMAP",
+          "payloadAdapter": "UNKNOWN_ADAPTER",
+          "bodyTemplate": "<iso8583 mti=\\"0100\\"/>",
+          "headersTemplate": {}
+        }
+        """);
+
+    properties.setConfig(Map.of(
+        "templateRoot", dir.toString(),
+        "serviceId", "default",
+        "passThroughOnMissingTemplate", true
+    ));
+    RequestBuilderWorkerImpl worker =
+        new RequestBuilderWorkerImpl(properties, templateRenderer, new TemplateLoader(), null);
+
+    WorkItem seed = WorkItem.text(SEED_INFO, "unused").header("x-ph-call-id", "ctap-iso").build();
+    RequestBuilderWorkerConfig config = new RequestBuilderWorkerConfig(
+        dir.toString(), "default", true, Map.of());
+
+    assertThatThrownBy(() -> worker.onMessage(seed, new TestWorkerContext(config)))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("Request Builder runtime failure");
+  }
+
+  @Test
   void reloadsTemplatesWhenConfigChanges() throws Exception {
-    Path dir1 = Files.createTempDirectory("http-templates-1");
+    Path dir1 = Files.createTempDirectory("templates-1");
     Files.createDirectories(dir1.resolve("default"));
     Files.writeString(dir1.resolve("default/simple-call.json"), """
         {
           "serviceId": "default",
           "callId": "simple",
+          "protocol": "HTTP",
           "method": "POST",
           "pathTemplate": "/one",
           "bodyTemplate": "{{ payload }}",
@@ -224,12 +323,13 @@ class RequestBuilderWorkerImplTest {
         }
         """);
 
-    Path dir2 = Files.createTempDirectory("http-templates-2");
+    Path dir2 = Files.createTempDirectory("templates-2");
     Files.createDirectories(dir2.resolve("default"));
     Files.writeString(dir2.resolve("default/simple-call.json"), """
         {
           "serviceId": "default",
           "callId": "simple",
+          "protocol": "HTTP",
           "method": "POST",
           "pathTemplate": "/two",
           "bodyTemplate": "{{ payload }}",
@@ -267,12 +367,13 @@ class RequestBuilderWorkerImplTest {
 
   @Test
   void throwsWhenTemplateRenderingProducesInvalidEnvelope() throws Exception {
-    Path dir = Files.createTempDirectory("http-templates-invalid");
+    Path dir = Files.createTempDirectory("templates-invalid");
     Files.createDirectories(dir.resolve("default"));
     Files.writeString(dir.resolve("default/invalid-call.json"), """
         {
           "serviceId": "default",
           "callId": "invalid",
+          "protocol": "HTTP",
           "method": "POST",
           "pathTemplate": "   ",
           "bodyTemplate": "{{ payload }}",

@@ -16,7 +16,6 @@ class HttpSequenceWorkerProperties extends CanonicalWorkerProperties<HttpSequenc
 
   HttpSequenceWorkerConfig defaultConfig() {
     return toConfig(objectMapper()).orElseGet(
-        () -> new HttpSequenceWorkerConfig(null, "/app/http-templates", "default", 1, java.util.List.of(), null, java.util.Map.of()));
+        () -> new HttpSequenceWorkerConfig(null, "/app/templates/http", "default", 1, java.util.List.of(), null, java.util.Map.of()));
   }
 }
-
