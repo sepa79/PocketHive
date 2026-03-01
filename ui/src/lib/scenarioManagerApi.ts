@@ -312,7 +312,7 @@ export async function listTemplates(id: string): Promise<string[]> {
       headers: { Accept: 'application/json' },
     },
   )
-  await ensureOk(response, 'Failed to load HTTP templates')
+  await ensureOk(response, 'Failed to load templates')
   try {
     const payload = (await response.json()) as unknown
     if (!Array.isArray(payload)) return []
@@ -332,7 +332,7 @@ export async function fetchTemplate(id: string, path: string): Promise<string> {
       headers: { Accept: 'text/plain' },
     },
   )
-  await ensureOk(response, 'Failed to load HTTP template')
+  await ensureOk(response, 'Failed to load template')
   return response.text()
 }
 
@@ -346,7 +346,7 @@ export async function saveTemplate(id: string, path: string, body: string): Prom
       body,
     },
   )
-  await ensureOk(response, 'Failed to save HTTP template')
+  await ensureOk(response, 'Failed to save template')
 }
 
 export async function renameTemplate(id: string, fromPath: string, toPath: string): Promise<void> {
@@ -357,7 +357,7 @@ export async function renameTemplate(id: string, fromPath: string, toPath: strin
       method: 'POST',
     },
   )
-  await ensureOk(response, 'Failed to rename HTTP template')
+  await ensureOk(response, 'Failed to rename template')
 }
 
 export async function deleteTemplate(id: string, path: string): Promise<void> {
@@ -368,7 +368,7 @@ export async function deleteTemplate(id: string, path: string): Promise<void> {
       method: 'DELETE',
     },
   )
-  await ensureOk(response, 'Failed to delete HTTP template')
+  await ensureOk(response, 'Failed to delete template')
 }
 
 export interface ScenarioPlanStep {
