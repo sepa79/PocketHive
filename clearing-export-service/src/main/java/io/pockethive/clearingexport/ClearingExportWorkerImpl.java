@@ -21,9 +21,11 @@ import java.time.Instant;
 import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,6 +46,7 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
   private static final String WORKER_BEAN_NAME = "clearingExportWorker";
   private static final WorkerInfo SYSTEM_WORKER_INFO =
       new WorkerInfo("clearing-export", "system", "clearing-export-system", null, null);
+  private static final String HEADER_BUSINESS_CODE = "x-ph-business-code";
 
   private final ClearingExportWorkerProperties properties;
   private final ClearingExportBatchWriter batchWriter;
@@ -58,6 +61,7 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
   private final AtomicReference<StatusPublisher> lastStatusPublisher = new AtomicReference<>();
   private final AtomicReference<Boolean> lastEnabled = new AtomicReference<>(true);
   private final AtomicReference<String> fatalReason = new AtomicReference<>();
+  private final AtomicLong recordsFilteredByBusinessCode = new AtomicLong();
   private final String lifecycleCorrelationId;
 
   @Autowired
@@ -129,6 +133,11 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
 
     try {
       List<WorkStep> steps = collectSteps(in);
+      if (shouldSkipByBusinessCodeFilter(config, steps)) {
+        recordsFilteredByBusinessCode.incrementAndGet();
+        publishStatus(context);
+        return null;
+      }
       WorkStep selectedStep = selectStep(steps, config);
       Map<String, Object> renderContext = baseRenderContext(steps, selectedStep);
       if (config.structuredMode()) {
@@ -261,6 +270,7 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
         .data("lastFileBytes", batchWriter.lastFileBytes())
         .data("lastFlushAt", batchWriter.lastFlushAt() == null ? "" : batchWriter.lastFlushAt().toString())
         .data("lastError", batchWriter.lastError())
+        .data("recordsFilteredByBusinessCode", recordsFilteredByBusinessCode.get())
         .data("fatalError", fatalMessage == null ? "" : fatalMessage));
   }
 
@@ -438,16 +448,73 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
         }
         yield steps.get(steps.size() - 2);
       }
-      case INDEX -> selectStepByIndex(steps, config.recordSourceStepIndex());
+      case INDEX -> selectStepByIndex(steps, config.recordSourceStepIndex(), "recordSourceStepIndex");
     };
   }
 
   private WorkStep selectStepByIndex(List<WorkStep> steps, int index) {
+    return selectStepByIndex(steps, index, "recordSourceStepIndex");
+  }
+
+  private WorkStep selectStepByIndex(List<WorkStep> steps, int index, String fieldName) {
     for (WorkStep step : steps) {
       if (step.index() == index) {
         return step;
       }
     }
-    throw new IllegalStateException("recordSourceStepIndex=" + index + " not found in WorkItem steps");
+    throw new IllegalStateException(fieldName + "=" + index + " not found in WorkItem steps");
+  }
+
+  private boolean shouldSkipByBusinessCodeFilter(ClearingExportWorkerConfig config, List<WorkStep> steps) {
+    if (!config.businessCodeFilterEnabled()) {
+      return false;
+    }
+    WorkStep sourceStep = selectBusinessCodeStep(steps, config);
+    String businessCode = readHeaderValue(sourceStep.headers(), HEADER_BUSINESS_CODE);
+    if (businessCode == null || businessCode.isBlank()) {
+      return true;
+    }
+    String normalizedCode = businessCode.trim().toUpperCase(Locale.ROOT);
+    return !config.businessCodeAllowList().contains(normalizedCode);
+  }
+
+  private WorkStep selectBusinessCodeStep(List<WorkStep> steps, ClearingExportWorkerConfig config) {
+    return switch (config.businessCodeSourceStepMode()) {
+      case LATEST -> steps.get(steps.size() - 1);
+      case FIRST -> steps.get(0);
+      case PREVIOUS -> {
+        if (steps.size() < 2) {
+          throw new IllegalStateException(
+              "businessCodeSourceStep=previous requires at least two WorkItem steps");
+        }
+        yield steps.get(steps.size() - 2);
+      }
+      case INDEX -> selectStepByIndex(steps, config.businessCodeSourceStepIndex(), "businessCodeSourceStepIndex");
+    };
+  }
+
+  private String readHeaderValue(Map<String, Object> headers, String name) {
+    if (headers == null || headers.isEmpty() || name == null || name.isBlank()) {
+      return null;
+    }
+    for (Map.Entry<String, Object> entry : headers.entrySet()) {
+      String key = entry.getKey();
+      if (key != null && key.equalsIgnoreCase(name)) {
+        Object rawValue = entry.getValue();
+        if (rawValue == null) {
+          return null;
+        }
+        if (rawValue instanceof Iterable<?> iterable) {
+          for (Object value : iterable) {
+            if (value != null) {
+              return String.valueOf(value);
+            }
+          }
+          return null;
+        }
+        return String.valueOf(rawValue);
+      }
+    }
+    return null;
   }
 }
