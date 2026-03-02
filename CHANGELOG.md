@@ -2,16 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.14.37] - 2026-03-02
+## [0.14.36] - 2026-03-02
 Timestamp: 2026-03-02T10:30:00Z
 
 - Scenarios (TCP): flattened bundle template paths from nested folders (for example `templates/tcp/demo/...`, `templates/tcp/default/...`) to direct `templates/tcp/*.yaml` layout.
 - Hive UI (Scenarios): template browser now lists all files under `templates/` (not only `templates/http/`), so TCP templates and extraction/mapping files are visible in the editor.
 - Hive UI/API copy: generalized template labels and error messages from HTTP-specific wording to protocol-agnostic wording.
-
-## [0.14.36] - 2026-02-27
-Timestamp: 2026-02-27T22:45:00Z
-
+- Additional backport updates (2026-02-27):
 - Request Builder templates: unified default template layout to `templates/<protocol>/...` (HTTP + TCP) in repo bundles and worker image packaging.
 - Request Builder loading: removed implicit HTTP fallback for template protocol; templates now require explicit `protocol` and fail fast on missing/unsupported values.
 - Scenario Manager API: generalized HTTP-template endpoints to protocol-agnostic template endpoints (`/templates`, `/template`, `/template/rename`) and aligned storage paths to `templates/...`.
