@@ -86,13 +86,13 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
     TemplateDefinition definition =
         templates.get(TemplateLoader.key(serviceId, callId));
     if (definition == null) {
-      context.logger().warn("No HTTP template found for serviceId={} callId={}; {}", serviceId, callId, missingBehavior(config));
+      context.logger().warn("No request template found for serviceId={} callId={}; {}", serviceId, callId, missingBehavior(config));
       return handleMissing(config, seed, context);
     }
 
     try {
       ObjectNode envelope = MAPPER.createObjectNode();
-      String protocol = definition.protocol() == null ? "HTTP" : definition.protocol().toUpperCase(Locale.ROOT);
+      String protocol = definition.protocol().toUpperCase(Locale.ROOT);
 
       if ("TCP".equals(protocol) && definition instanceof TcpTemplateDefinition tcpDef) {
         MessageTemplate template = MessageTemplate.builder()

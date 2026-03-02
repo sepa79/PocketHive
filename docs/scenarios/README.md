@@ -85,14 +85,14 @@ scenarios/
   bundles/
     local-rest-plan-demo/
       scenario.yaml
-      http-templates/
+      templates/http/
       sut/
       datasets/
       docs/
 ```
 
 - `scenario.yaml` contains the **template** and optional **plan**.  
-- `http-templates/` holds HTTP Builder templates used by generator/processor
+- `templates/http/` holds HTTP Builder templates used by generator/processor
   workers.  
 - `sut/` and `datasets/` are optional and may contain SUT configs or input
   data; exact conventions are described in the in‑progress

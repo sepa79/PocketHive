@@ -1,3 +1,4 @@
+protocol: HTTP
 serviceId: default
 callId: redis-auth
 method: POST

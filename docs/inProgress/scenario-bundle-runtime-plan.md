@@ -30,7 +30,7 @@ keeping volumes explicit and plan‑driven (NFF).
 - **Volume wiring is explicit**  
   - Swarm Controller passes a shared host path into bees via
     `config.docker.volumes`.  
-  - Worker configs refer only to container paths (e.g. `/app/scenario/http-templates`);
+  - Worker configs refer only to container paths (e.g. `/app/scenario/templates/http`);
     there are no implicit host defaults or fallbacks.
 
 - **Download/upload supported**  
@@ -46,7 +46,7 @@ Target layout for a bundle on disk or in a zip:
 ```text
 my-scenario/
   scenario.yaml            # Scenario (template + plan)
-  http-templates/          # HTTP Builder templates (YAML/JSON)
+  templates/http/          # HTTP Builder templates (YAML/JSON)
     default/*.yaml
   sut/                     # Optional SUT overrides for this scenario
     sut-environments.yaml
@@ -109,7 +109,7 @@ When starting a swarm from a scenario:
   - [x] For each HTTP Builder bee (and other workers as needed):
     - [x] Append a `config.docker.volumes` entry  
           `${runtime-root}/${swarmId}:/app/scenario:ro`.  
-    - [x] Set `config.worker.templateRoot: /app/scenario/http-templates`
+    - [x] Set `config.worker.templateRoot: /app/scenario/templates/http`
           in the canonical Redis dataset demo bundle.
   - [ ] For bees that need datasets (e.g. Redis, file inputs), map their config to
         subpaths under `/app/scenario/datasets`.  
@@ -132,7 +132,7 @@ Most plumbing already exists; tasks here are mainly documentation and validation
 
 - [ ] **Scenario bundle awareness**
   - [ ] Document the expectation that workers read under `/app/scenario/**` when
-        scenarios provide bundle content (no hard‑coded `/app/http-templates` etc.).
+        scenarios provide bundle content (no hard‑coded `/app/templates/http` etc.).
 
 No worker JSON contracts change; this is all file‑system wiring.
 

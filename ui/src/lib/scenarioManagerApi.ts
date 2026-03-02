@@ -305,14 +305,14 @@ export async function deleteScenarioSut(
   await ensureOk(response, 'Failed to delete SUT')
 }
 
-export async function listHttpTemplates(id: string): Promise<string[]> {
+export async function listTemplates(id: string): Promise<string[]> {
   const response = await apiFetch(
-    `/scenario-manager/scenarios/${encodeURIComponent(id)}/http-templates`,
+    `/scenario-manager/scenarios/${encodeURIComponent(id)}/templates`,
     {
       headers: { Accept: 'application/json' },
     },
   )
-  await ensureOk(response, 'Failed to load HTTP templates')
+  await ensureOk(response, 'Failed to load templates')
   try {
     const payload = (await response.json()) as unknown
     if (!Array.isArray(payload)) return []
@@ -324,51 +324,51 @@ export async function listHttpTemplates(id: string): Promise<string[]> {
   }
 }
 
-export async function fetchHttpTemplate(id: string, path: string): Promise<string> {
+export async function fetchTemplate(id: string, path: string): Promise<string> {
   const params = new URLSearchParams({ path })
   const response = await apiFetch(
-    `/scenario-manager/scenarios/${encodeURIComponent(id)}/http-template?${params.toString()}`,
+    `/scenario-manager/scenarios/${encodeURIComponent(id)}/template?${params.toString()}`,
     {
       headers: { Accept: 'text/plain' },
     },
   )
-  await ensureOk(response, 'Failed to load HTTP template')
+  await ensureOk(response, 'Failed to load template')
   return response.text()
 }
 
-export async function saveHttpTemplate(id: string, path: string, body: string): Promise<void> {
+export async function saveTemplate(id: string, path: string, body: string): Promise<void> {
   const params = new URLSearchParams({ path })
   const response = await apiFetch(
-    `/scenario-manager/scenarios/${encodeURIComponent(id)}/http-template?${params.toString()}`,
+    `/scenario-manager/scenarios/${encodeURIComponent(id)}/template?${params.toString()}`,
     {
       method: 'PUT',
       headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
       body,
     },
   )
-  await ensureOk(response, 'Failed to save HTTP template')
+  await ensureOk(response, 'Failed to save template')
 }
 
-export async function renameHttpTemplate(id: string, fromPath: string, toPath: string): Promise<void> {
+export async function renameTemplate(id: string, fromPath: string, toPath: string): Promise<void> {
   const params = new URLSearchParams({ from: fromPath, to: toPath })
   const response = await apiFetch(
-    `/scenario-manager/scenarios/${encodeURIComponent(id)}/http-template/rename?${params.toString()}`,
+    `/scenario-manager/scenarios/${encodeURIComponent(id)}/template/rename?${params.toString()}`,
     {
       method: 'POST',
     },
   )
-  await ensureOk(response, 'Failed to rename HTTP template')
+  await ensureOk(response, 'Failed to rename template')
 }
 
-export async function deleteHttpTemplate(id: string, path: string): Promise<void> {
+export async function deleteTemplate(id: string, path: string): Promise<void> {
   const params = new URLSearchParams({ path })
   const response = await apiFetch(
-    `/scenario-manager/scenarios/${encodeURIComponent(id)}/http-template?${params.toString()}`,
+    `/scenario-manager/scenarios/${encodeURIComponent(id)}/template?${params.toString()}`,
     {
       method: 'DELETE',
     },
   )
-  await ensureOk(response, 'Failed to delete HTTP template')
+  await ensureOk(response, 'Failed to delete template')
 }
 
 export interface ScenarioPlanStep {

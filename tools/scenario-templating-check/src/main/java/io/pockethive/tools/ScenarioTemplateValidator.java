@@ -275,10 +275,10 @@ public final class ScenarioTemplateValidator {
         System.out.println("    --scenario <path/to/scenario.yaml> [--context <path/to/context.json>]");
         System.out.println();
         System.out.println("  List HTTP builder templates:");
-        System.out.println("    --list-http-templates [--template-root <path/to/http-templates>]");
+        System.out.println("    --list-http-templates [--template-root <path/to/templates/http>]");
         System.out.println();
         System.out.println("  Validate HTTP builder templates against a scenario:");
-        System.out.println("    --check-http-templates --scenario <path/to/scenario.yaml> [--template-root <path/to/http-templates>]");
+        System.out.println("    --check-http-templates --scenario <path/to/scenario.yaml> [--template-root <path/to/templates/http>]");
         System.out.println();
         System.out.println("Context JSON may contain {\"payload\":\"...\",\"headers\":{\"k\":\"v\"}}.");
     }
@@ -287,8 +287,8 @@ public final class ScenarioTemplateValidator {
         if (explicitRoot != null) {
             return explicitRoot;
         }
-        // Default to the HTTP builder's on-disk templates when running from the repo root.
-        return Path.of("http-builder-service", "http-templates");
+        // Default to request-builder HTTP templates when running from the repo root.
+        return Path.of("request-builder-service", "templates", "http");
     }
 
     private static void collectCallIdsFromNode(Object node, Set<String> collector) {

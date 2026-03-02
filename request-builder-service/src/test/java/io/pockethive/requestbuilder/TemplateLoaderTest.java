@@ -1,6 +1,7 @@
 package io.pockethive.requestbuilder;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -11,13 +12,14 @@ class TemplateLoaderTest {
 
   @Test
   void loadsHttpTemplate() throws Exception {
-    Path dir = Files.createTempDirectory("http-templates");
+    Path dir = Files.createTempDirectory("templates");
     Path file
       = dir.resolve("default-call.json");
     Files.writeString(file, """
         {
           "serviceId": "svc",
           "callId": "CallA",
+          "protocol": "HTTP",
           "method": "POST",
           "pathTemplate": "/test",
           "bodyTemplate": "{}",
@@ -89,5 +91,28 @@ class TemplateLoaderTest {
     assertThat(tcpDef.behavior()).isEqualTo("ECHO");
     assertThat(tcpDef.resultRules()).isNotNull();
     assertThat(tcpDef.resultRules().successRegex()).isEqualTo("^(00)$");
+  }
+
+  @Test
+  void failsWhenProtocolMissing() throws Exception {
+    Path dir = Files.createTempDirectory("missing-protocol-templates");
+    Path file = dir.resolve("default-call.json");
+    Files.writeString(file, """
+        {
+          "serviceId": "svc",
+          "callId": "CallA",
+          "method": "POST",
+          "pathTemplate": "/test",
+          "bodyTemplate": "{}",
+          "headersTemplate": {}
+        }
+        """);
+
+    TemplateLoader loader = new TemplateLoader();
+    assertThatThrownBy(() -> loader.load(dir.toString(), "default"))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("Failed to parse template")
+        .hasRootCauseInstanceOf(IllegalArgumentException.class)
+        .hasRootCauseMessage("Template protocol must be explicitly set in " + file);
   }
 }

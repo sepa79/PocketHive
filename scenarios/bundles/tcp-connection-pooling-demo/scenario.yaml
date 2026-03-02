@@ -97,7 +97,7 @@ template:
       image: request-builder:latest
       config:
         worker:
-          templateRoot: /app/scenario/templates
+          templateRoot: /app/scenario/templates/tcp
           serviceId: default
       work:
         in: build-global
@@ -106,7 +106,7 @@ template:
       image: request-builder:latest
       config:
         worker:
-          templateRoot: /app/scenario/templates
+          templateRoot: /app/scenario/templates/tcp
           serviceId: default
       work:
         in: build-per-thread
@@ -115,7 +115,7 @@ template:
       image: request-builder:latest
       config:
         worker:
-          templateRoot: /app/scenario/templates
+          templateRoot: /app/scenario/templates/tcp
           serviceId: default
       work:
         in: build-none
