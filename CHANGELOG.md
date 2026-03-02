@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.14.37] - 2026-03-02
+Timestamp: 2026-03-02T10:30:00Z
+
+- Scenarios (TCP): flattened bundle template paths from nested folders (for example `templates/tcp/demo/...`, `templates/tcp/default/...`) to direct `templates/tcp/*.yaml` layout.
+- Hive UI (Scenarios): template browser now lists all files under `templates/` (not only `templates/http/`), so TCP templates and extraction/mapping files are visible in the editor.
+- Hive UI/API copy: generalized template labels and error messages from HTTP-specific wording to protocol-agnostic wording.
+
 ## [0.14.36] - 2026-02-27
 Timestamp: 2026-02-27T22:45:00Z
 
