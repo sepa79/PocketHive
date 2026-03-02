@@ -66,6 +66,10 @@ Path: `pockethive.worker.config.*`
 | `recordSourceStep` | string | no | `latest` | Which `WorkItem` step is used to build clearing record context: `latest`, `first`, `previous`, `index`. |
 | `recordSourceStepIndex` | int | no | `-1` | Used only when `recordSourceStep=index`; matches exact `WorkStep.index()` value (not list position). |
 | `recordBuildFailurePolicy` | string | no | `stop` | Behavior when record build/append fails: `silent_drop`, `journal_and_log_error`, `log_error`, `stop`. |
+| `businessCodeFilterEnabled` | boolean | no | `false` | Enables pre-render filtering by `x-ph-business-code`. |
+| `businessCodeAllowList` | list[string] | when filter enabled | `[]` | Allowed business codes (case-insensitive; normalized to uppercase). Messages with missing/non-matching code are dropped before render. |
+| `businessCodeSourceStep` | string | when filter enabled | none | Explicit step selector for business code extraction: `latest`, `first`, `previous`, `index`. |
+| `businessCodeSourceStepIndex` | int | when `businessCodeSourceStep=index` | `-1` | Exact `WorkStep.index()` used by the filter source step. |
 | `lineSeparator` | string | no | `\\n` | Line separator used between header/records/footer. |
 | `fileNameTemplate` | string | yes | `clearing_{{ now }}.dat` | Template for output file name. |
 | `headerTemplate` | string | yes | `H|{{ now }}` | Template for file header line. |
@@ -93,6 +97,13 @@ Record build failure policy notes:
 - `journal_and_log_error`: publish control-plane work error and write `ERROR` log.
 - `log_error`: write `ERROR` log only.
 - `stop`: publish control-plane work error, write `ERROR` log, and stop worker process.
+
+Business code filter notes:
+
+- Filtering reads `x-ph-business-code` only from the explicitly configured business-code source step.
+- If `businessCodeFilterEnabled=true`, `businessCodeAllowList` must be non-empty.
+- If `businessCodeFilterEnabled=true`, `businessCodeSourceStep` must be explicitly configured.
+- Missing business code header is treated as non-matching (record is dropped).
 
 ## 5. Complete configuration example
 

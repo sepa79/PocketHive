@@ -340,6 +340,83 @@ class ClearingExportWorkerImplTest {
   }
 
   @Test
+  void onMessageSkipsWhenBusinessCodeIsNotAllowed() throws Exception {
+    ClearingExportWorkerProperties properties = mock(ClearingExportWorkerProperties.class);
+    ClearingExportBatchWriter batchWriter = mock(ClearingExportBatchWriter.class);
+    ClearingStructuredSchemaRegistry schemaRegistry = mock(ClearingStructuredSchemaRegistry.class);
+    StructuredRecordProjector projector = mock(StructuredRecordProjector.class);
+    TemplateRenderer templateRenderer = mock(TemplateRenderer.class);
+    WorkerControlPlaneRuntime controlPlaneRuntime = mock(WorkerControlPlaneRuntime.class);
+    ConfigurableApplicationContext applicationContext = mock(ConfigurableApplicationContext.class);
+    WorkerContext context = mock(WorkerContext.class);
+    ClearingExportWorkerConfig config = testConfigWithBusinessCodeFilter(List.of("00", "08"), "first", -1);
+
+    when(context.enabled()).thenReturn(true);
+    when(context.statusPublisher()).thenReturn(StatusPublisher.NO_OP);
+    when(context.config(ClearingExportWorkerConfig.class)).thenReturn(config);
+
+    ClearingExportWorkerImpl worker = new ClearingExportWorkerImpl(
+        properties,
+        batchWriter,
+        schemaRegistry,
+        projector,
+        templateRenderer,
+        controlPlaneRuntime,
+        applicationContext,
+        new ObjectMapper().findAndRegisterModules(),
+        Clock.fixed(Instant.parse("2026-02-21T00:00:00Z"), ZoneOffset.UTC));
+
+    WorkItem input = WorkItem.text("{\"phase\":\"request\"}")
+        .header("x-ph-business-code", "05")
+        .build()
+        .addStep("{\"phase\":\"response\"}", Map.of("x-ph-business-code", "00"));
+
+    worker.onMessage(input, context);
+
+    verify(templateRenderer, never()).render(anyString(), anyMap());
+    verify(batchWriter, never()).append(anyString(), any(ClearingExportWorkerConfig.class));
+  }
+
+  @Test
+  void onMessageProcessesWhenBusinessCodeIsAllowed() throws Exception {
+    ClearingExportWorkerProperties properties = mock(ClearingExportWorkerProperties.class);
+    ClearingExportBatchWriter batchWriter = mock(ClearingExportBatchWriter.class);
+    ClearingStructuredSchemaRegistry schemaRegistry = mock(ClearingStructuredSchemaRegistry.class);
+    StructuredRecordProjector projector = mock(StructuredRecordProjector.class);
+    TemplateRenderer templateRenderer = mock(TemplateRenderer.class);
+    WorkerControlPlaneRuntime controlPlaneRuntime = mock(WorkerControlPlaneRuntime.class);
+    ConfigurableApplicationContext applicationContext = mock(ConfigurableApplicationContext.class);
+    WorkerContext context = mock(WorkerContext.class);
+    ClearingExportWorkerConfig config = testConfigWithBusinessCodeFilter(List.of("00", "08"), "first", -1);
+
+    when(context.enabled()).thenReturn(true);
+    when(context.statusPublisher()).thenReturn(StatusPublisher.NO_OP);
+    when(context.config(ClearingExportWorkerConfig.class)).thenReturn(config);
+    when(templateRenderer.render(eq(config.recordTemplate()), anyMap())).thenReturn("D|ok");
+
+    ClearingExportWorkerImpl worker = new ClearingExportWorkerImpl(
+        properties,
+        batchWriter,
+        schemaRegistry,
+        projector,
+        templateRenderer,
+        controlPlaneRuntime,
+        applicationContext,
+        new ObjectMapper().findAndRegisterModules(),
+        Clock.fixed(Instant.parse("2026-02-21T00:00:00Z"), ZoneOffset.UTC));
+
+    WorkItem input = WorkItem.text("{\"phase\":\"request\"}")
+        .header("x-ph-business-code", "00")
+        .build()
+        .addStep("{\"phase\":\"response\"}", Map.of("x-ph-business-code", "05"));
+
+    worker.onMessage(input, context);
+
+    verify(templateRenderer).render(eq(config.recordTemplate()), anyMap());
+    verify(batchWriter).append("D|ok", config);
+  }
+
+  @Test
   void onMessageFailureWhenPreviousStepMissingWithStopPolicyPublishesWorkErrorAndStopsWorker() throws Exception {
     ClearingExportWorkerConfig config = testConfigWith("previous", -1, "stop");
     WorkItem item = WorkItem.text("{\"id\":1}").build();
@@ -728,6 +805,41 @@ class ClearingExportWorkerImplTest {
         recordSourceStep,
         recordSourceStepIndex,
         recordBuildFailurePolicy
+    );
+  }
+
+  private static ClearingExportWorkerConfig testConfigWithBusinessCodeFilter(
+      List<String> allowedCodes,
+      String sourceStep,
+      int sourceStepIndex
+  ) {
+    return new ClearingExportWorkerConfig(
+        "template",
+        true,
+        2_000L,
+        1_000,
+        1_000,
+        50_000,
+        true,
+        "\n",
+        "stream.dat",
+        "H|{{ now }}",
+        "D|{{ steps.selected.payload }}",
+        "T|{{ recordCount }}",
+        "/tmp/out",
+        ".tmp",
+        false,
+        "reports/clearing/manifest.jsonl",
+        "/tmp/schemas",
+        null,
+        null,
+        "latest",
+        -1,
+        "log_error",
+        true,
+        allowedCodes,
+        sourceStep,
+        sourceStepIndex
     );
   }
 }

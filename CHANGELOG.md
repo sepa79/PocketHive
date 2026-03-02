@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.14.37] - 2026-03-02
+Timestamp: 2026-03-02T18:00:00Z
+
+- Clearing Export: added optional business-code filtering before record rendering (`businessCodeFilterEnabled`, `businessCodeAllowList`).
+- Clearing Export: filtering source step is now explicit (`businessCodeSourceStep`, `businessCodeSourceStepIndex`); no implicit step scanning is used.
+- Clearing Export: added worker status counter `recordsFilteredByBusinessCode` and tests covering filter/config validation paths.
+- Docs: updated Clearing Export playbook with the explicit business-code filter configuration contract.
+
 ## [0.14.36] - 2026-03-02
 Timestamp: 2026-03-02T10:30:00Z
 
