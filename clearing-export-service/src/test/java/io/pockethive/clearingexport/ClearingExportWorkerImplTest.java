@@ -124,10 +124,10 @@ class ClearingExportWorkerImplTest {
         new ObjectMapper().findAndRegisterModules(),
         Clock.fixed(Instant.parse("2026-02-21T00:00:00Z"), ZoneOffset.UTC));
 
-    WorkItem input = WorkItem.text("{\"id\":1}")
-        .header("step", "first")
+    WorkItem input = WorkItem.text(TEST_WORKER_INFO, "{\"id\":1}")
+        .stepHeader("step", "first")
         .build()
-        .addStep("{\"id\":2}", Map.of("step", "latest"));
+        .addStep(TEST_WORKER_INFO, "{\"id\":2}", Map.of("step", "latest"));
 
     worker.onMessage(input, context);
 
@@ -175,11 +175,11 @@ class ClearingExportWorkerImplTest {
         new ObjectMapper().findAndRegisterModules(),
         Clock.fixed(Instant.parse("2026-02-21T00:00:00Z"), ZoneOffset.UTC));
 
-    WorkItem input = WorkItem.text("{\"id\":1}")
-        .header("step", "first")
+    WorkItem input = WorkItem.text(TEST_WORKER_INFO, "{\"id\":1}")
+        .stepHeader("step", "first")
         .build()
-        .addStep("{\"id\":2}", Map.of("step", "previous"))
-        .addStep("{\"id\":3}", Map.of("step", "latest"));
+        .addStep(TEST_WORKER_INFO, "{\"id\":2}", Map.of("step", "previous"))
+        .addStep(TEST_WORKER_INFO, "{\"id\":3}", Map.of("step", "latest"));
 
     worker.onMessage(input, context);
 
@@ -226,11 +226,11 @@ class ClearingExportWorkerImplTest {
         new ObjectMapper().findAndRegisterModules(),
         Clock.fixed(Instant.parse("2026-02-21T00:00:00Z"), ZoneOffset.UTC));
 
-    WorkItem input = WorkItem.text("{\"id\":1}")
-        .header("step", "first")
+    WorkItem input = WorkItem.text(TEST_WORKER_INFO, "{\"id\":1}")
+        .stepHeader("step", "first")
         .build()
-        .addStep("{\"id\":2}", Map.of("step", "index-1"))
-        .addStep("{\"id\":3}", Map.of("step", "latest"));
+        .addStep(TEST_WORKER_INFO, "{\"id\":2}", Map.of("step", "index-1"))
+        .addStep(TEST_WORKER_INFO, "{\"id\":3}", Map.of("step", "latest"));
 
     worker.onMessage(input, context);
 
@@ -277,10 +277,10 @@ class ClearingExportWorkerImplTest {
         new ObjectMapper().findAndRegisterModules(),
         Clock.fixed(Instant.parse("2026-02-21T00:00:00Z"), ZoneOffset.UTC));
 
-    WorkItem input = WorkItem.text("{\"phase\":\"request\",\"amountMinor\":1250}")
-        .header("step", "request")
+    WorkItem input = WorkItem.text(TEST_WORKER_INFO, "{\"phase\":\"request\",\"amountMinor\":1250}")
+        .stepHeader("step", "request")
         .build()
-        .addStep("{\"phase\":\"response\",\"responseCode\":\"00\"}", Map.of("step", "response"));
+        .addStep(TEST_WORKER_INFO, "{\"phase\":\"response\",\"responseCode\":\"00\"}", Map.of("step", "response"));
 
     worker.onMessage(input, context);
 
@@ -329,10 +329,10 @@ class ClearingExportWorkerImplTest {
         new ObjectMapper().findAndRegisterModules(),
         Clock.fixed(Instant.parse("2026-02-21T00:00:00Z"), ZoneOffset.UTC));
 
-    WorkItem input = WorkItem.text("{\"phase\":\"request\",\"amountMinor\":1250}")
-        .header("step", "request")
+    WorkItem input = WorkItem.text(TEST_WORKER_INFO, "{\"phase\":\"request\",\"amountMinor\":1250}")
+        .stepHeader("step", "request")
         .build()
-        .addStep("{\"phase\":\"response\",\"responseCode\":\"00\"}", Map.of("step", "response"));
+        .addStep(TEST_WORKER_INFO, "{\"phase\":\"response\",\"responseCode\":\"00\"}", Map.of("step", "response"));
 
     worker.onMessage(input, context);
 
@@ -369,10 +369,10 @@ class ClearingExportWorkerImplTest {
         new ObjectMapper().findAndRegisterModules(),
         Clock.fixed(Instant.parse("2026-02-21T00:00:00Z"), ZoneOffset.UTC));
 
-    WorkItem input = WorkItem.text("{\"phase\":\"request\"}")
-        .header("x-ph-business-code", "05")
+    WorkItem input = WorkItem.text(TEST_WORKER_INFO, "{\"phase\":\"request\"}")
+        .stepHeader("x-ph-business-code", "05")
         .build()
-        .addStep("{\"phase\":\"response\"}", Map.of("x-ph-business-code", "00"));
+        .addStep(TEST_WORKER_INFO, "{\"phase\":\"response\"}", Map.of("x-ph-business-code", "00"));
 
     worker.onMessage(input, context);
 
@@ -408,10 +408,10 @@ class ClearingExportWorkerImplTest {
         new ObjectMapper().findAndRegisterModules(),
         Clock.fixed(Instant.parse("2026-02-21T00:00:00Z"), ZoneOffset.UTC));
 
-    WorkItem input = WorkItem.text("{\"phase\":\"request\"}")
-        .header("x-ph-business-code", "00")
+    WorkItem input = WorkItem.text(TEST_WORKER_INFO, "{\"phase\":\"request\"}")
+        .stepHeader("x-ph-business-code", "00")
         .build()
-        .addStep("{\"phase\":\"response\"}", Map.of("x-ph-business-code", "05"));
+        .addStep(TEST_WORKER_INFO, "{\"phase\":\"response\"}", Map.of("x-ph-business-code", "05"));
 
     worker.onMessage(input, context);
 
@@ -422,14 +422,15 @@ class ClearingExportWorkerImplTest {
   @Test
   void onMessageFailureWhenPreviousStepMissingWithStopPolicyPublishesWorkErrorAndStopsWorker() throws Exception {
     ClearingExportWorkerConfig config = testConfigWith("previous", -1, "stop");
-    WorkItem item = WorkItem.text("{\"id\":1}").build();
+    WorkItem item = WorkItem.text(TEST_WORKER_INFO, "{\"id\":1}").build();
     runStepSelectionFailureScenario(config, item);
   }
 
   @Test
   void onMessageFailureWhenIndexedStepMissingWithStopPolicyPublishesWorkErrorAndStopsWorker() throws Exception {
     ClearingExportWorkerConfig config = testConfigWith("index", 7, "stop");
-    WorkItem item = WorkItem.text("{\"id\":1}").build().addStep("{\"id\":2}", Map.of());
+    WorkItem item = WorkItem.text(TEST_WORKER_INFO, "{\"id\":1}").build()
+        .addStep(TEST_WORKER_INFO, "{\"id\":2}", Map.of());
     runStepSelectionFailureScenario(config, item);
   }
 
@@ -485,7 +486,7 @@ class ClearingExportWorkerImplTest {
         new ObjectMapper().findAndRegisterModules(),
         Clock.fixed(Instant.parse("2026-02-21T00:00:00Z"), ZoneOffset.UTC));
 
-    worker.onMessage(WorkItem.text("{\"id\":1}").build(), context);
+    worker.onMessage(WorkItem.text(TEST_WORKER_INFO, "{\"id\":1}").build(), context);
 
     verify(batchWriter, never()).preflight(any(ClearingExportWorkerConfig.class));
     if (expectWorkError) {
