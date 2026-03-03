@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.14.38] - 2026-03-03
+Timestamp: 2026-03-03T12:45:00Z
+
+- CI (GitHub Actions): added `clearing-export` to Docker image publish workflow (service matrix + staged JAR list), so release tagging publishes this image to GHCR.
+- Swarm Controller: removed role-based gating for ClickHouse sink env propagation; `POCKETHIVE_SINK_CLICKHOUSE_*` vars are now injected into every created worker container when sink config is present.
+- Trigger input factory: added explicit `WARNING/TODO` note that hardcoded role-name gating (`"trigger"`) is temporary and should be replaced with capability/type-based selection.
+- Contributor guardrails: added a strict "no magic strings for core behavior" rule to `AGENTS.md`.
+
 ## [0.14.37] - 2026-03-02
 Timestamp: 2026-03-02T18:00:00Z
 

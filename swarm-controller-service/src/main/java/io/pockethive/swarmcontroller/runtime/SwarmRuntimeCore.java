@@ -332,7 +332,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
         Map<String, String> env = new LinkedHashMap<>(
             ControlPlaneContainerEnvironmentFactory.workerEnvironment(beeName, bee.role(), workerSettings, rabbitProperties));
         applyWorkIoEnvironment(bee, env);
-        applyClickHouseSinkEnvironment(bee, env);
+        applyClickHouseSinkEnvironment(env);
         String net = docker.resolveControlNetwork();
         if (hasText(net)) {
           env.put("CONTROL_NETWORK", net);
@@ -669,13 +669,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
     }
   }
 
-  private void applyClickHouseSinkEnvironment(Bee bee, Map<String, String> env) {
-    if (bee == null || bee.role() == null) {
-      return;
-    }
-    if (!"postprocessor".equalsIgnoreCase(bee.role())) {
-      return;
-    }
+  private void applyClickHouseSinkEnvironment(Map<String, String> env) {
     if (!clickHouseSink.configured()) {
       return;
     }
