@@ -36,7 +36,7 @@ pockethive:
       lineSeparator: "\n"
       fileNameTemplate: ${POCKETHIVE_CLEARING_EXPORT_FILE_NAME_TEMPLATE:clearing_{{ now }}.dat}
       headerTemplate: ${POCKETHIVE_CLEARING_EXPORT_HEADER_TEMPLATE:H|{{ now }}}
-      recordTemplate: ${POCKETHIVE_CLEARING_EXPORT_RECORD_TEMPLATE:D|{{ record.payload }}}
+      recordTemplate: ${POCKETHIVE_CLEARING_EXPORT_RECORD_TEMPLATE:D|{{ steps.selected.payload }}}
       footerTemplate: ${POCKETHIVE_CLEARING_EXPORT_FOOTER_TEMPLATE:T|{{ recordCount }}}
       localTargetDir: ${POCKETHIVE_CLEARING_EXPORT_LOCAL_TARGET_DIR:/tmp/pockethive/clearing-out}
       localTempSuffix: ${POCKETHIVE_CLEARING_EXPORT_LOCAL_TEMP_SUFFIX:.tmp}

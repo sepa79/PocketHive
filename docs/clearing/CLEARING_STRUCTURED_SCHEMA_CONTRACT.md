@@ -68,9 +68,9 @@ Rules:
 
 Runtime meaning:
 - expressions are rendered from record context:
-  - selected step: `record.index`, `record.payload`, `record.headers`, optional `record.json`
-  - multi-step access: `steps.first`, `steps.latest`, optional `steps.previous`, `steps.selected`,
+  - step access: `steps.first`, `steps.latest`, optional `steps.previous`, `steps.selected`,
     `steps.byIndex["<index>"]`, `steps.all`, `steps.count`, `steps.selectedIndex`
+  - each step object contains: `index`, `payload`, `headers`, optional `json`
   - timestamp: `now`
 - numeric fields (`long`/`decimal`) are used for aggregate totals.
 
@@ -107,7 +107,7 @@ fileNameTemplate: "CLEARING_{{ now }}.xml"
 
 recordMapping:
   payload:
-    expression: "{{ record.payload }}"
+    expression: "{{ steps.selected.payload }}"
     required: true
     type: string
   unitAmount:
