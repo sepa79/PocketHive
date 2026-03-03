@@ -153,6 +153,9 @@ jobs:
           - name: postprocessor
             dockerfile: Dockerfile.bees.local
             target: postprocessor
+          - name: clearing-export
+            dockerfile: Dockerfile.bees.local
+            target: clearing-export
           - name: trigger
             dockerfile: Dockerfile.bees.local
             target: trigger
@@ -187,6 +190,7 @@ jobs:
             moderator-service \
             processor-service \
             postprocessor-service \
+            clearing-export-service \
             trigger-service
           do
             jar="$(find "${module}/target" -maxdepth 1 -type f -name '*-exec.jar' ! -name '*-sources.jar' ! -name '*-javadoc.jar' ! -name 'original-*.jar' | head -n1 || true)"

@@ -342,7 +342,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
           env.put("POCKETHIVE_RUNTIME_STACK_NAME", stackName);
         }
         applyWorkIoEnvironment(bee, env);
-        applyClickHouseSinkEnvironment(bee, env);
+        applyClickHouseSinkEnvironment(env);
         String net = docker.resolveControlNetwork();
         if (hasText(net)) {
           env.put("CONTROL_NETWORK", net);
@@ -854,11 +854,8 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
     }
   }
 
-  private void applyClickHouseSinkEnvironment(Bee bee, Map<String, String> env) {
-    if (bee == null || env == null) {
-      return;
-    }
-    if (!"postprocessor".equalsIgnoreCase(bee.role())) {
+  private void applyClickHouseSinkEnvironment(Map<String, String> env) {
+    if (env == null) {
       return;
     }
     if (!clickHouseSink.configured()) {
