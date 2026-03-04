@@ -8,7 +8,7 @@ Timestamp: 2026-03-03T21:31:04Z
 - Build/CI: include `clearing-export` worker image in the publish workflow.
 - Swarm runtime: inject ClickHouse sink environment variables into every worker container (removed the `postprocessor`-only gate).
 - Trigger service: add an explicit WARNING/TODO on role-name based work-item extraction path that must be replaced with contract-driven routing.
-- Clearing Export: add explicit step selection for record rendering (`recordSourceStep`, `recordSourceStepIndex`) and explicit record build failure policy (`recordBuildFailurePolicy`).
+- Clearing Export: add explicit step selection for record rendering (`recordSourceStep`, `recordSourceStepIndex`) and explicit record build failure policy (`recordBuildFailurePolicy`, default `stop`).
 - Clearing Export: remove legacy `record.*` render alias; templates and structured mappings now use explicit `steps.*` context with multi-step projection support.
 - Clearing Export: add optional business-code filtering before rendering (`businessCodeFilterEnabled`, `businessCodeAllowList`, explicit source step mode/index).
 - Clearing Export tests/docs: extend step-selection + filtering coverage and align tests with WorkItem v2 step-header contract (`ph.step.*`).
