@@ -10,6 +10,8 @@ import io.pockethive.worker.sdk.config.WorkerOutputType;
 import io.pockethive.worker.sdk.runtime.WorkIoBindings;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
+import io.pockethive.worker.sdk.templating.AuthTokenHolder;
+import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.util.Set;
 import java.util.function.Consumer;
@@ -47,6 +49,7 @@ import static org.mockito.Mockito.when;
 class RabbitMessageWorkerAdapterTest {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(RabbitMessageWorkerAdapterTest.class);
+    private static final Method AUTH_TOKEN_GETTER = initAuthTokenGetter();
 
     @Mock
     private WorkerControlPlaneRuntime controlPlaneRuntime;
@@ -162,6 +165,25 @@ class RabbitMessageWorkerAdapterTest {
         verify(errorHandler).accept(failure);
         verify(controlPlaneRuntime).publishWorkError(eq(workerDefinition.beanName()), any(WorkItem.class), eq(failure));
         verifyNoInteractions(rabbitTemplate);
+    }
+
+    @Test
+    void onWorkClearsAuthTokenHolderBeforeAndAfterDispatch() throws Exception {
+        RabbitMessageWorkerAdapter adapter = builder().build();
+        RabbitWorkItemConverter converter = new RabbitWorkItemConverter();
+        Message inbound = converter.toMessage(WorkItem.text("payload").build());
+        AuthTokenHolder.clear();
+        AuthTokenHolder.setToken("token-key", "stale-token");
+
+        when(dispatcher.dispatch(any(WorkItem.class))).thenAnswer(invocation -> {
+            assertThat(readAuthToken("token-key")).isEmpty();
+            AuthTokenHolder.setToken("token-key", "fresh-token");
+            return null;
+        });
+
+        adapter.onWork(inbound);
+
+        assertThat(readAuthToken("token-key")).isEmpty();
     }
 
     @Test
@@ -399,5 +421,24 @@ class RabbitMessageWorkerAdapterTest {
     }
 
     private record DummyConfig() {
+    }
+
+    private static Method initAuthTokenGetter() {
+        try {
+            Method method = AuthTokenHolder.class.getDeclaredMethod("getToken", String.class);
+            method.setAccessible(true);
+            return method;
+        } catch (Exception e) {
+            throw new IllegalStateException("Unable to access AuthTokenHolder.getToken for tests", e);
+        }
+    }
+
+    private static String readAuthToken(String tokenKey) {
+        try {
+            Object value = AUTH_TOKEN_GETTER.invoke(null, tokenKey);
+            return value == null ? "" : String.valueOf(value);
+        } catch (Exception e) {
+            throw new IllegalStateException("Unable to read auth token from holder", e);
+        }
     }
 }

@@ -8,6 +8,7 @@ import io.pockethive.worker.sdk.runtime.WorkIoBindings;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime.WorkerStateSnapshot;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
+import io.pockethive.worker.sdk.templating.AuthTokenHolder;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.RejectedExecutionException;
@@ -246,6 +247,7 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
     }
 
     private void dispatchSynchronously(WorkItem workItem) {
+        AuthTokenHolder.clear();
         try {
             WorkItem result = dispatcher.dispatch(workItem);
             if (result != null) {
@@ -262,6 +264,8 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
                 }
             }
             dispatchErrorHandler.accept(ex);
+        } finally {
+            AuthTokenHolder.clear();
         }
     }
 

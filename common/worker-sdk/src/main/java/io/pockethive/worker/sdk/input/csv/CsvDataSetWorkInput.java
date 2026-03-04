@@ -184,7 +184,7 @@ public final class CsvDataSetWorkInput implements WorkInput {
         return quota;
     }
 
-    private String resolveCsvPath(String filePath) {
+    static String resolveCsvPath(String filePath) {
         if (filePath == null) {
             return null;
         }
@@ -193,10 +193,14 @@ public final class CsvDataSetWorkInput implements WorkInput {
             return null;
         }
         Path path = Paths.get(trimmed);
-        if (path.isAbsolute()) {
-            return path.normalize().toString();
+        Path normalized = path.isAbsolute()
+            ? path.normalize()
+            : SCENARIO_ROOT.resolve(path).normalize();
+        if (!normalized.startsWith(SCENARIO_ROOT)) {
+            throw new IllegalArgumentException(
+                "CSV filePath must stay within " + SCENARIO_ROOT + " (got: " + filePath + ")");
         }
-        return SCENARIO_ROOT.resolve(trimmed).normalize().toString();
+        return normalized.toString();
     }
 
     private void loadCsvFile() {

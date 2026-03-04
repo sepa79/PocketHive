@@ -23,7 +23,7 @@ public final class AuthTokenHolder {
         return TOKENS.get().getOrDefault(tokenKey, "");
     }
 
-    static void clear() {
+    public static void clear() {
         TOKENS.get().clear();
     }
 
