@@ -18,15 +18,16 @@ class StructuredRecordProjectorTest {
         "xml",
         "out.xml",
         Map.of(
-            "amount", new ClearingStructuredSchema.StructuredFieldRule("{{ record.json.amount }}", true, "long"),
-            "optionalField", new ClearingStructuredSchema.StructuredFieldRule("{{ record.json.missing }}", false, "string")
+            "amount", new ClearingStructuredSchema.StructuredFieldRule("{{ steps.selected.json.amount }}", true, "long"),
+            "optionalField", new ClearingStructuredSchema.StructuredFieldRule("{{ steps.selected.json.missing }}", false, "string")
         ),
         Map.of(),
         Map.of(),
         ClearingStructuredSchema.XmlOutputConfig.defaults()
     );
 
-    Map<String, Object> context = Map.of("record", Map.of("json", Map.of("amount", 12)));
+    Map<String, Object> context = Map.of(
+        "steps", Map.of("selected", Map.of("json", Map.of("amount", 12))));
     StructuredProjectedRecord record = projector.project(schema, context);
     assertThat(record.values()).containsEntry("amount", "12");
     assertThat(record.values()).doesNotContainKey("optionalField");
@@ -41,16 +42,15 @@ class StructuredRecordProjectorTest {
         "1.0.0",
         "xml",
         "out.xml",
-        Map.of("amount", new ClearingStructuredSchema.StructuredFieldRule("{{ record.json.amount }}", true, "long")),
+        Map.of("amount", new ClearingStructuredSchema.StructuredFieldRule("{{ steps.selected.json.amount }}", true, "long")),
         Map.of(),
         Map.of(),
         ClearingStructuredSchema.XmlOutputConfig.defaults()
     );
 
-    Map<String, Object> context = Map.of("record", Map.of("json", Map.of()));
+    Map<String, Object> context = Map.of("steps", Map.of("selected", Map.of("json", Map.of())));
     assertThatThrownBy(() -> projector.project(schema, context))
         .isInstanceOf(IllegalStateException.class)
         .hasMessageContaining("required field");
   }
 }
-

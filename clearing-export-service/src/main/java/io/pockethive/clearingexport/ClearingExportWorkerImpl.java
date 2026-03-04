@@ -7,6 +7,7 @@ import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
 import io.pockethive.worker.sdk.api.StatusPublisher;
 import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerInfo;
+import io.pockethive.worker.sdk.api.WorkStep;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
 import io.pockethive.worker.sdk.config.WorkerCapability;
@@ -14,13 +15,17 @@ import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime.WorkerStateSna
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import jakarta.annotation.PostConstruct;
 import io.pockethive.worker.sdk.templating.TemplateRenderer;
+import java.util.ArrayList;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,6 +46,7 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
   private static final String WORKER_BEAN_NAME = "clearingExportWorker";
   private static final WorkerInfo SYSTEM_WORKER_INFO =
       new WorkerInfo("clearing-export", "system", "clearing-export-system", null, null);
+  private static final String HEADER_BUSINESS_CODE = "x-ph-business-code";
 
   private final ClearingExportWorkerProperties properties;
   private final ClearingExportBatchWriter batchWriter;
@@ -55,6 +61,7 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
   private final AtomicReference<StatusPublisher> lastStatusPublisher = new AtomicReference<>();
   private final AtomicReference<Boolean> lastEnabled = new AtomicReference<>(true);
   private final AtomicReference<String> fatalReason = new AtomicReference<>();
+  private final AtomicLong recordsFilteredByBusinessCode = new AtomicLong();
   private final String lifecycleCorrelationId;
 
   @Autowired
@@ -119,13 +126,20 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
       throw new IllegalStateException("Clearing-export worker is halted: " + fatal);
     }
 
-    ClearingExportWorkerConfig config =
-        context.configOrDefault(ClearingExportWorkerConfig.class, properties::defaultConfig);
-
-    Map<String, Object> record = projectRecord(in);
-    Map<String, Object> renderContext = baseRenderContext(record);
+    ClearingExportWorkerConfig config = context.config(ClearingExportWorkerConfig.class);
+    if (config == null) {
+      config = properties.defaultConfig();
+    }
 
     try {
+      List<WorkStep> steps = collectSteps(in);
+      if (shouldSkipByBusinessCodeFilter(config, steps)) {
+        recordsFilteredByBusinessCode.incrementAndGet();
+        publishStatus(context);
+        return null;
+      }
+      WorkStep selectedStep = selectStep(steps, config);
+      Map<String, Object> renderContext = baseRenderContext(steps, selectedStep);
       if (config.structuredMode()) {
         ClearingStructuredSchema schema = schemaRegistry.resolve(config);
         StructuredProjectedRecord projected = structuredRecordProjector.project(schema, renderContext);
@@ -135,17 +149,20 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
         batchWriter.append(renderedLine, config);
       }
     } catch (Exception ex) {
-      publishStatus(context);
-      throw new IllegalStateException("Failed to append clearing export record", ex);
+      handleRecordBuildFailure(in, context, config, ex);
+      return null;
     }
 
     publishStatus(context);
     return null;
   }
 
-  private Map<String, Object> baseRenderContext(Map<String, Object> record) {
+  private Map<String, Object> baseRenderContext(
+      List<WorkStep> steps,
+      WorkStep selectedStep
+  ) {
     Map<String, Object> renderContext = new LinkedHashMap<>();
-    renderContext.put("record", record);
+    renderContext.put("steps", buildStepContext(steps, selectedStep));
     renderContext.put("now", Instant.now(clock).toString());
     return renderContext;
   }
@@ -253,6 +270,7 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
         .data("lastFileBytes", batchWriter.lastFileBytes())
         .data("lastFlushAt", batchWriter.lastFlushAt() == null ? "" : batchWriter.lastFlushAt().toString())
         .data("lastError", batchWriter.lastError())
+        .data("recordsFilteredByBusinessCode", recordsFilteredByBusinessCode.get())
         .data("fatalError", fatalMessage == null ? "" : fatalMessage));
   }
 
@@ -318,19 +336,185 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
     shutdownThread.start();
   }
 
-  private Map<String, Object> projectRecord(WorkItem item) {
-    Map<String, Object> record = new LinkedHashMap<>();
-    record.put("payload", item.payload());
-    record.put("headers", item.headers());
+  private void handleRecordBuildFailure(
+      WorkItem item,
+      WorkerContext context,
+      ClearingExportWorkerConfig config,
+      Exception ex
+  ) {
+    String message = "Failed to append clearing export record (recordSourceStep=" + config.recordSourceStep() + ")";
+    switch (config.recordBuildFailurePolicyMode()) {
+      case SILENT_DROP -> publishStatus(context);
+      case JOURNAL_AND_LOG_ERROR -> {
+        log.error(message, ex);
+        publishJournalAlert(item, ex);
+        publishStatus(context);
+      }
+      case LOG_ERROR -> {
+        log.error(message, ex);
+        publishStatus(context);
+      }
+      case STOP -> {
+        log.error(message, ex);
+        publishJournalAlert(item, ex);
+        publishStatus(context.statusPublisher(), context.enabled(), message);
+        requestWorkerStop(message);
+      }
+    }
+  }
 
-    String payload = item.payload();
+  private Map<String, Object> projectStep(WorkStep step) {
+    String payload = step.payload();
+    Map<String, Object> record = new LinkedHashMap<>();
+    record.put("index", step.index());
+    record.put("payload", payload);
+    record.put("headers", step.headers());
+
     if (payload != null && !payload.isBlank()) {
       try {
         record.put("json", objectMapper.readValue(payload, MAP_TYPE));
       } catch (Exception ignored) {
-        // Payload is not JSON object; templates can still use record.payload.
+        // Payload is not JSON object; templates can still use steps.*.payload.
       }
     }
-    return record;
+    return Map.copyOf(record);
+  }
+
+  private Map<String, Object> buildStepContext(List<WorkStep> steps, WorkStep selectedStep) {
+    List<Map<String, Object>> all = new ArrayList<>(steps.size());
+    Map<String, Object> byIndex = new LinkedHashMap<>();
+    Map<String, Object> first = null;
+    Map<String, Object> latest = null;
+    Map<String, Object> previous = null;
+    Map<String, Object> selected = null;
+
+    for (int i = 0; i < steps.size(); i++) {
+      WorkStep step = steps.get(i);
+      Map<String, Object> projected = projectStep(step);
+      all.add(projected);
+      byIndex.put(Integer.toString(step.index()), projected);
+      if (i == 0) {
+        first = projected;
+      }
+      if (i == steps.size() - 1) {
+        latest = projected;
+      }
+      if (i == steps.size() - 2) {
+        previous = projected;
+      }
+      if (step == selectedStep) {
+        selected = projected;
+      }
+    }
+    if (selected == null) {
+      throw new IllegalStateException("Selected WorkStep is missing from WorkItem steps");
+    }
+
+    Map<String, Object> context = new LinkedHashMap<>();
+    context.put("all", List.copyOf(all));
+    context.put("byIndex", Map.copyOf(byIndex));
+    context.put("first", first);
+    context.put("latest", latest);
+    context.put("selected", selected);
+    context.put("selectedIndex", selectedStep.index());
+    context.put("count", steps.size());
+    if (previous != null) {
+      context.put("previous", previous);
+    }
+    return Map.copyOf(context);
+  }
+
+  private List<WorkStep> collectSteps(WorkItem item) {
+    List<WorkStep> steps = new ArrayList<>();
+    for (WorkStep step : item.steps()) {
+      if (step != null) {
+        steps.add(step);
+      }
+    }
+    if (steps.isEmpty()) {
+      throw new IllegalStateException("WorkItem has no steps");
+    }
+    return steps;
+  }
+
+  private WorkStep selectStep(List<WorkStep> steps, ClearingExportWorkerConfig config) {
+    return switch (config.sourceStepMode()) {
+      case LATEST -> steps.get(steps.size() - 1);
+      case FIRST -> steps.get(0);
+      case PREVIOUS -> {
+        if (steps.size() < 2) {
+          throw new IllegalStateException(
+              "recordSourceStep=previous requires at least two WorkItem steps");
+        }
+        yield steps.get(steps.size() - 2);
+      }
+      case INDEX -> selectStepByIndex(steps, config.recordSourceStepIndex(), "recordSourceStepIndex");
+    };
+  }
+
+  private WorkStep selectStepByIndex(List<WorkStep> steps, int index) {
+    return selectStepByIndex(steps, index, "recordSourceStepIndex");
+  }
+
+  private WorkStep selectStepByIndex(List<WorkStep> steps, int index, String fieldName) {
+    for (WorkStep step : steps) {
+      if (step.index() == index) {
+        return step;
+      }
+    }
+    throw new IllegalStateException(fieldName + "=" + index + " not found in WorkItem steps");
+  }
+
+  private boolean shouldSkipByBusinessCodeFilter(ClearingExportWorkerConfig config, List<WorkStep> steps) {
+    if (!config.businessCodeFilterEnabled()) {
+      return false;
+    }
+    WorkStep sourceStep = selectBusinessCodeStep(steps, config);
+    String businessCode = readHeaderValue(sourceStep.headers(), HEADER_BUSINESS_CODE);
+    if (businessCode == null || businessCode.isBlank()) {
+      return true;
+    }
+    String normalizedCode = businessCode.trim().toUpperCase(Locale.ROOT);
+    return !config.businessCodeAllowList().contains(normalizedCode);
+  }
+
+  private WorkStep selectBusinessCodeStep(List<WorkStep> steps, ClearingExportWorkerConfig config) {
+    return switch (config.businessCodeSourceStepMode()) {
+      case LATEST -> steps.get(steps.size() - 1);
+      case FIRST -> steps.get(0);
+      case PREVIOUS -> {
+        if (steps.size() < 2) {
+          throw new IllegalStateException(
+              "businessCodeSourceStep=previous requires at least two WorkItem steps");
+        }
+        yield steps.get(steps.size() - 2);
+      }
+      case INDEX -> selectStepByIndex(steps, config.businessCodeSourceStepIndex(), "businessCodeSourceStepIndex");
+    };
+  }
+
+  private String readHeaderValue(Map<String, Object> headers, String name) {
+    if (headers == null || headers.isEmpty() || name == null || name.isBlank()) {
+      return null;
+    }
+    for (Map.Entry<String, Object> entry : headers.entrySet()) {
+      String key = entry.getKey();
+      if (key != null && key.equalsIgnoreCase(name)) {
+        Object rawValue = entry.getValue();
+        if (rawValue == null) {
+          return null;
+        }
+        if (rawValue instanceof Iterable<?> iterable) {
+          for (Object value : iterable) {
+            if (value != null) {
+              return String.valueOf(value);
+            }
+          }
+          return null;
+        }
+        return String.valueOf(rawValue);
+      }
+    }
+    return null;
   }
 }

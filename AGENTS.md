@@ -25,6 +25,10 @@ This file is a **navigation and guardrails** page for both human and AI contribu
   - Do not keep duplicate definitions, DTOs, schemas, validators, parsers, or mappers for the same contract format (API/event/config).
 - **KISS.**
   - Prefer straightforward, maintainable implementations over clever abstractions.
+- **No magic strings for core behavior.**
+  - Never hardcode raw string literals to drive domain behavior (roles, protocols, event types, routing keys, header names).
+  - Use shared constants/enums/contract types.
+  - String parsing is allowed only at system boundaries, then normalize/map once.
 - **Git safety (agents):**
   - **No pushes:** agents must not run `git push` (ever).
   - **No commits by default:** agents must not create commits unless a human makes an **EXPLICIT REQUEST TO COMMIT**.

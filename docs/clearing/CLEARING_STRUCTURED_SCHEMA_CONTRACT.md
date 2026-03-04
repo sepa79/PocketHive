@@ -67,7 +67,11 @@ Rules:
 - `required` defaults to `true`.
 
 Runtime meaning:
-- expressions are rendered from record context (`record.payload`, `record.headers`, optional `record.json`, `now`).
+- expressions are rendered from record context:
+  - step access: `steps.first`, `steps.latest`, optional `steps.previous`, `steps.selected`,
+    `steps.byIndex["<index>"]`, `steps.all`, `steps.count`, `steps.selectedIndex`
+  - each step object contains: `index`, `payload`, `headers`, optional `json`
+  - timestamp: `now`
 - numeric fields (`long`/`decimal`) are used for aggregate totals.
 
 ## 4. `xml` contract
@@ -103,7 +107,7 @@ fileNameTemplate: "CLEARING_{{ now }}.xml"
 
 recordMapping:
   payload:
-    expression: "{{ record.payload }}"
+    expression: "{{ steps.selected.payload }}"
     required: true
     type: string
   unitAmount:

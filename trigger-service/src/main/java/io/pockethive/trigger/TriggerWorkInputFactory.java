@@ -36,6 +36,10 @@ class TriggerWorkInputFactory implements WorkInputFactory {
 
   @Override
   public boolean supports(WorkerDefinition definition) {
+    // WARNING/TODO:
+    // This factory selection currently relies on a hardcoded role name ("trigger").
+    // This is intentionally temporary and must be replaced with an explicit capability/type contract
+    // so worker role names can stay fully user-defined.
     return definition.input() == WorkerInputType.SCHEDULER
         && "trigger".equalsIgnoreCase(definition.role());
   }

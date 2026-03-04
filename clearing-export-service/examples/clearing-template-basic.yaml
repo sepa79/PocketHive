@@ -7,6 +7,9 @@ maxRecordsPerFile: 500
 flushIntervalMs: 2000
 maxBufferedRecords: 20000
 strictTemplate: true
+recordSourceStep: "latest"
+recordSourceStepIndex: -1
+recordBuildFailurePolicy: "stop"
 lineSeparator: "\n"
 
 # File names are business-oriented; no PocketHive metadata is used.
@@ -14,7 +17,7 @@ fileNameTemplate: "CLEARING_{{ now }}.txt"
 
 # Example fixed-width-like business format (pipe-separated for readability).
 headerTemplate: "H|ISSUER-PL|MASTERCARD|{{ now }}"
-recordTemplate: "D|{{ record.json.clearingId }}|{{ record.json.panMasked }}|{{ record.json.amountMinor }}|{{ record.json.currency }}|{{ record.json.responseCode }}"
+recordTemplate: "D|{{ steps.selected.json.clearingId }}|{{ steps.selected.json.panMasked }}|{{ steps.selected.json.amountMinor }}|{{ steps.selected.json.currency }}|{{ steps.selected.json.responseCode }}"
 footerTemplate: "T|{{ recordCount }}"
 
 localTargetDir: "/tmp/pockethive/clearing-out"

@@ -30,9 +30,14 @@ Canonical schema contract (structured mode SSOT):
 
 Available in `recordTemplate`:
 
-- `record.payload`: raw payload string from `WorkItem`.
-- `record.headers`: headers map from `WorkItem`.
-- `record.json`: parsed JSON object when payload is valid JSON object.
+- `steps.first`: first step object (`index`, `payload`, `headers`, optional `json`).
+- `steps.latest`: latest step object (`index`, `payload`, `headers`, optional `json`).
+- `steps.previous`: previous step object when available (`index`, `payload`, `headers`, optional `json`).
+- `steps.selected`: selected step object from `recordSourceStep` (`index`, `payload`, `headers`, optional `json`).
+- `steps.byIndex["<index>"]`: step object by exact `WorkStep.index()`.
+- `steps.all`: ordered list of all step objects (first -> latest).
+- `steps.count`: number of available steps.
+- `steps.selectedIndex`: selected step index.
 - `now`: current UTC timestamp string.
 
 Available in `headerTemplate`, `footerTemplate`, `fileNameTemplate`:
@@ -58,10 +63,17 @@ Path: `pockethive.worker.config.*`
 | `flushIntervalMs` | long | yes | `1000` | Max time between flushes. Minimum effective value is `1`. |
 | `maxBufferedRecords` | int | yes | `50000` | In-memory guard. When exceeded, worker throws buffer-full error. |
 | `strictTemplate` | boolean | yes | `true` | Reserved flag for strict template mode. Keep `true` for forward compatibility. |
+| `recordSourceStep` | string | no | `latest` | Which `WorkItem` step is used to build clearing record context: `latest`, `first`, `previous`, `index`. |
+| `recordSourceStepIndex` | int | no | `-1` | Used only when `recordSourceStep=index`; matches exact `WorkStep.index()` value (not list position). |
+| `recordBuildFailurePolicy` | string | no | `stop` | Behavior when record build/append fails: `silent_drop`, `journal_and_log_error`, `log_error`, `stop`. |
+| `businessCodeFilterEnabled` | boolean | no | `false` | Enables pre-render filtering by `x-ph-business-code`. |
+| `businessCodeAllowList` | list[string] | when filter enabled | `[]` | Allowed business codes (case-insensitive; normalized to uppercase). Messages with missing/non-matching code are dropped before render. |
+| `businessCodeSourceStep` | string | when filter enabled | none | Explicit step selector for business code extraction: `latest`, `first`, `previous`, `index`. |
+| `businessCodeSourceStepIndex` | int | when `businessCodeSourceStep=index` | `-1` | Exact `WorkStep.index()` used by the filter source step. |
 | `lineSeparator` | string | no | `\\n` | Line separator used between header/records/footer. |
 | `fileNameTemplate` | string | yes | `clearing_{{ now }}.dat` | Template for output file name. |
 | `headerTemplate` | string | yes | `H|{{ now }}` | Template for file header line. |
-| `recordTemplate` | string | yes | `D|{{ record.payload }}` | Template for each record line. |
+| `recordTemplate` | string | yes | `D|{{ steps.selected.payload }}` | Template for each record line. |
 | `footerTemplate` | string | yes | `T|{{ recordCount }}` | Template for file footer line. |
 | `localTargetDir` | string | yes | `/tmp/pockethive/clearing-out` | Directory for finalized files. |
 | `localTempSuffix` | string | no | `.tmp` | Temporary suffix used before atomic rename. |
@@ -79,6 +91,20 @@ Streaming notes:
 - `streamingFsyncPolicy` is not exposed/configured in this version by design.
 - Treat `streamingAppendEnabled` as startup-time mode. Do not switch `true -> false` on a live worker instance; restart the worker when changing this flag.
 
+Record build failure policy notes:
+
+- `silent_drop`: drop failed message without log/journal event.
+- `journal_and_log_error`: publish control-plane work error and write `ERROR` log.
+- `log_error`: write `ERROR` log only.
+- `stop`: publish control-plane work error, write `ERROR` log, and stop worker process.
+
+Business code filter notes:
+
+- Filtering reads `x-ph-business-code` only from the explicitly configured business-code source step.
+- If `businessCodeFilterEnabled=true`, `businessCodeAllowList` must be non-empty.
+- If `businessCodeFilterEnabled=true`, `businessCodeSourceStep` must be explicitly configured.
+- Missing business code header is treated as non-matching (record is dropped).
+
 ## 5. Complete configuration example
 
 ```yaml
@@ -92,10 +118,13 @@ pockethive:
       flushIntervalMs: 2000
       maxBufferedRecords: 20000
       strictTemplate: true
+      recordSourceStep: latest
+      recordSourceStepIndex: -1
+      recordBuildFailurePolicy: stop
       lineSeparator: "\n"
       fileNameTemplate: "CLEARING_{{ now }}.txt"
       headerTemplate: "H|ISSUER-PL|MASTERCARD|{{ now }}"
-      recordTemplate: "D|{{ record.json.clearingId }}|{{ record.json.panMasked }}|{{ record.json.amountMinor }}|{{ record.json.currency }}|{{ record.json.responseCode }}"
+      recordTemplate: "D|{{ steps.selected.json.clearingId }}|{{ steps.selected.json.panMasked }}|{{ steps.selected.json.amountMinor }}|{{ steps.selected.json.currency }}|{{ steps.selected.json.responseCode }}"
       footerTemplate: "T|{{ recordCount }}"
       localTargetDir: "/tmp/pockethive/clearing-out"
       localTempSuffix: ".tmp"
@@ -139,7 +168,7 @@ Example:
 ### 6.3 Runtime behavior
 
 1. Worker loads schema by `schemaRegistryRoot + schemaId + schemaVersion`.
-2. Record values are projected with `recordMapping`.
+2. Record values are projected with `recordMapping` using the same context as template mode (`steps.*`, `now`).
 3. Header/footer and file name use `now`, `recordCount`, `totals.*`.
 4. XML file is generated and written through standard sink (`.tmp` + atomic rename).
 

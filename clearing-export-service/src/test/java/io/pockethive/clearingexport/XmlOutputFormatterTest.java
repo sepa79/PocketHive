@@ -16,7 +16,7 @@ class XmlOutputFormatterTest {
         "1.0.0",
         "xml",
         "out.xml",
-        Map.of("amount", new ClearingStructuredSchema.StructuredFieldRule("{{ record.json.amount }}", true, "long")),
+        Map.of("amount", new ClearingStructuredSchema.StructuredFieldRule("{{ steps.selected.json.amount }}", true, "long")),
         Map.of("creationDateTime", "{{ now }}"),
         Map.of("recordCount", "{{ recordCount }}"),
         new ClearingStructuredSchema.XmlOutputConfig(
