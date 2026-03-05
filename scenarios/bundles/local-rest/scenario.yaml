@@ -41,7 +41,17 @@ template:
     - role: postprocessor
       image: postprocessor:latest
       config:
+        outputs:
+          type: RABBITMQ
         worker:
           publishAllMetrics: true
       work:
         in: finalQ
+        out: sec
+    - role: postprocessortwo
+      image: postprocessor:latest
+      config:
+        worker:
+          publishAllMetrics: false
+      work:
+        in: sec
