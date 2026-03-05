@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.LongSupplier;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -15,7 +16,8 @@ class ClearingExportBatchWriterHardeningTest {
   @Test
   void flushesByRecordCountThreshold() throws Exception {
     RecordingSink sink = new RecordingSink(0);
-    ClearingExportBatchWriter writer = newWriter(sink);
+    TestClock clock = new TestClock(1_000L);
+    ClearingExportBatchWriter writer = newWriter(sink, clock);
     ClearingExportWorkerConfig config = config(2, 60_000L);
 
     writer.append("D|one", config);
@@ -35,14 +37,15 @@ class ClearingExportBatchWriterHardeningTest {
   @Test
   void flushesByTimeIntervalWhenBelowCountThreshold() throws Exception {
     RecordingSink sink = new RecordingSink(0);
-    ClearingExportBatchWriter writer = newWriter(sink);
+    TestClock clock = new TestClock(1_000L);
+    ClearingExportBatchWriter writer = newWriter(sink, clock);
     ClearingExportWorkerConfig config = config(100, 20L);
 
     writer.append("D|one", config);
     assertThat(writer.filesWritten()).isEqualTo(0L);
     assertThat(writer.bufferedRecords()).isEqualTo(1L);
 
-    Thread.sleep(35L);
+    clock.advanceBy(35L);
     writer.flushIfDue();
 
     assertThat(writer.filesWritten()).isEqualTo(1L);
@@ -54,7 +57,8 @@ class ClearingExportBatchWriterHardeningTest {
   @Test
   void keepsBatchAfterWriteFailureAndRetriesOnNextTrigger() throws Exception {
     RecordingSink sink = new RecordingSink(1);
-    ClearingExportBatchWriter writer = newWriter(sink);
+    TestClock clock = new TestClock(1_000L);
+    ClearingExportBatchWriter writer = newWriter(sink, clock);
     ClearingExportWorkerConfig config = config(2, 60_000L);
 
     writer.append("D|one", config);
@@ -78,7 +82,8 @@ class ClearingExportBatchWriterHardeningTest {
   @Test
   void emitsCreatedAndFlushSummaryLifecycleEventsOnSuccessfulFlush() throws Exception {
     RecordingSink sink = new RecordingSink(0);
-    ClearingExportBatchWriter writer = newWriter(sink);
+    TestClock clock = new TestClock(1_000L);
+    ClearingExportBatchWriter writer = newWriter(sink, clock);
     List<ClearingExportBatchWriter.ClearingExportLifecycleEventType> events = new ArrayList<>();
     writer.setLifecycleListener(event -> events.add(event.type()));
     ClearingExportWorkerConfig config = config(2, 60_000L);
@@ -95,7 +100,8 @@ class ClearingExportBatchWriterHardeningTest {
   @Test
   void emitsWriteFailedLifecycleEventWhenBatchWriteFails() throws Exception {
     RecordingSink sink = new RecordingSink(1);
-    ClearingExportBatchWriter writer = newWriter(sink);
+    TestClock clock = new TestClock(1_000L);
+    ClearingExportBatchWriter writer = newWriter(sink, clock);
     List<ClearingExportBatchWriter.ClearingExportLifecycleEventType> events = new ArrayList<>();
     writer.setLifecycleListener(event -> events.add(event.type()));
     ClearingExportWorkerConfig config = config(2, 60_000L);
@@ -111,13 +117,14 @@ class ClearingExportBatchWriterHardeningTest {
   @Test
   void emitsFinalizeFailedLifecycleEventWhenStreamingFinalizeFails() throws Exception {
     StreamingFinalizeFailingSink sink = new StreamingFinalizeFailingSink();
-    ClearingExportBatchWriter writer = newWriter(sink);
+    TestClock clock = new TestClock(1_000L);
+    ClearingExportBatchWriter writer = newWriter(sink, clock);
     List<ClearingExportBatchWriter.ClearingExportLifecycleEventType> events = new ArrayList<>();
     writer.setLifecycleListener(event -> events.add(event.type()));
     ClearingExportWorkerConfig config = streamingConfig(15L);
 
     writer.append("D|one", config);
-    Thread.sleep(30L);
+    clock.advanceBy(30L);
     assertThatThrownBy(() -> writer.flushIfDue())
         .isInstanceOf(IllegalStateException.class)
         .hasMessageContaining("simulated finalize failure");
@@ -128,7 +135,8 @@ class ClearingExportBatchWriterHardeningTest {
   @Test
   void emitsWriteFailedLifecycleEventWhenStreamingOpenFails() {
     StreamingOpenFailingSink sink = new StreamingOpenFailingSink();
-    ClearingExportBatchWriter writer = newWriter(sink);
+    TestClock clock = new TestClock(1_000L);
+    ClearingExportBatchWriter writer = newWriter(sink, clock);
     List<ClearingExportBatchWriter.ClearingExportLifecycleEventType> events = new ArrayList<>();
     writer.setLifecycleListener(event -> events.add(event.type()));
     ClearingExportWorkerConfig config = streamingConfig(1_000L);
@@ -143,13 +151,14 @@ class ClearingExportBatchWriterHardeningTest {
   @Test
   void clearsStreamingStateWhenReopenFailsAfterSuccessfulFinalize() throws Exception {
     ReopenFailingSink sink = new ReopenFailingSink();
-    ClearingExportBatchWriter writer = newWriter(sink);
+    TestClock clock = new TestClock(1_000L);
+    ClearingExportBatchWriter writer = newWriter(sink, clock);
     List<ClearingExportBatchWriter.ClearingExportLifecycleEventType> events = new ArrayList<>();
     writer.setLifecycleListener(event -> events.add(event.type()));
     ClearingExportWorkerConfig config = streamingConfig(10L);
 
     writer.append("D|one", config);
-    Thread.sleep(20L);
+    clock.advanceBy(20L);
     assertThatThrownBy(() -> writer.append("D|two", config))
         .isInstanceOf(IllegalStateException.class)
         .hasMessageContaining("simulated reopen failure");
@@ -163,10 +172,10 @@ class ClearingExportBatchWriterHardeningTest {
     );
   }
 
-  private static ClearingExportBatchWriter newWriter(ClearingExportSink sink) {
+  private static ClearingExportBatchWriter newWriter(ClearingExportSink sink, LongSupplier nowMsSupplier) {
     ClearingExportFileAssembler assembler =
         new ClearingExportFileAssembler(new PebbleTemplateRenderer(), new XmlOutputFormatter());
-    return new ClearingExportBatchWriter(assembler, sink);
+    return new ClearingExportBatchWriter(assembler, sink, nowMsSupplier, false);
   }
 
   private static ClearingExportWorkerConfig config(int maxRecordsPerFile, long flushIntervalMs) {
@@ -335,6 +344,23 @@ class ClearingExportBatchWriterHardeningTest {
       if (opens.incrementAndGet() > 1) {
         throw new IllegalStateException("simulated reopen failure");
       }
+    }
+  }
+
+  private static final class TestClock implements LongSupplier {
+    private long nowMs;
+
+    private TestClock(long initialMs) {
+      this.nowMs = initialMs;
+    }
+
+    @Override
+    public long getAsLong() {
+      return nowMs;
+    }
+
+    private void advanceBy(long millis) {
+      nowMs += millis;
     }
   }
 }

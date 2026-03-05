@@ -571,13 +571,6 @@ main() {
 
   determine_targets
 
-  # Special case: --quick with no module/service filters → reuse existing jars/images,
-  # just clean + compose up (no Maven package, no docker build).
-  if $SKIP_TESTS && (( ${#MODULE_FILTER[@]} == 0 )) && (( ${#SERVICE_FILTER[@]} == 0 )); then
-    MODULES_TO_BUILD=()
-    SERVICES_TO_BUILD=()
-  fi
-
   # Special case: just --clean → only tear down containers/stack.
   if $CLEAN_STACK && $ONLY_CLEAN; then
     measure "clean" clean_stack
@@ -627,13 +620,6 @@ main() {
     measure "restart" compose_up_services "${RESTART_TARGETS[@]}"
   else
     DURATIONS["restart"]=-1
-  fi
-
-  # Convenience: when using --quick with no module/service filters, we reuse
-  # existing images but still want local scenario/capability changes to be
-  # visible without rebuilding the Scenario Manager image.
-  if $SKIP_TESTS && (( ${#MODULE_FILTER[@]} == 0 )) && (( ${#SERVICE_FILTER[@]} == 0 )); then
-    sync_scenarios
   fi
 
   print_timing_summary
