@@ -3,6 +3,7 @@ package io.pockethive.clearingexport;
 import io.pockethive.worker.sdk.templating.PebbleTemplateRenderer;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.function.LongSupplier;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -16,10 +17,11 @@ class ClearingExportBatchWriterStreamingTest {
 
   @Test
   void streamingModeFinalizesByTimeWindowWithoutBufferingWholeBatch() throws Exception {
+    TestClock clock = new TestClock(1_000L);
     ClearingExportFileAssembler assembler =
         new ClearingExportFileAssembler(new PebbleTemplateRenderer(), new XmlOutputFormatter());
     ClearingExportBatchWriter writer =
-        new ClearingExportBatchWriter(assembler, new LocalDirectoryClearingExportSink());
+        new ClearingExportBatchWriter(assembler, new LocalDirectoryClearingExportSink(), clock, false);
 
     ClearingExportWorkerConfig config = new ClearingExportWorkerConfig(
         "template",
@@ -46,7 +48,7 @@ class ClearingExportBatchWriterStreamingTest {
     writer.append("D|one", config);
     writer.append("D|two", config);
 
-    Thread.sleep(40L);
+    clock.advanceBy(40L);
     writer.flushIfDue();
 
     assertThat(writer.filesWritten()).isEqualTo(1L);
@@ -64,6 +66,7 @@ class ClearingExportBatchWriterStreamingTest {
 
   @Test
   void preflightFailsWhenSinkDoesNotSupportStreaming() {
+    TestClock clock = new TestClock(1_000L);
     ClearingExportFileAssembler assembler =
         new ClearingExportFileAssembler(new PebbleTemplateRenderer(), new XmlOutputFormatter());
     ClearingExportSink sink = new ClearingExportSink() {
@@ -72,7 +75,7 @@ class ClearingExportBatchWriterStreamingTest {
         return new ClearingExportSinkWriteResult(file.fileName(), file.recordCount(), file.bytesUtf8(), file.createdAt(), "memory://test");
       }
     };
-    ClearingExportBatchWriter writer = new ClearingExportBatchWriter(assembler, sink);
+    ClearingExportBatchWriter writer = new ClearingExportBatchWriter(assembler, sink, clock, false);
 
     ClearingExportWorkerConfig config = new ClearingExportWorkerConfig(
         "template",
@@ -99,5 +102,22 @@ class ClearingExportBatchWriterStreamingTest {
     assertThatThrownBy(() -> writer.preflight(config))
         .isInstanceOf(IllegalStateException.class)
         .hasMessageContaining("does not support streaming append mode");
+  }
+
+  private static final class TestClock implements LongSupplier {
+    private long nowMs;
+
+    private TestClock(long initialMs) {
+      this.nowMs = initialMs;
+    }
+
+    @Override
+    public long getAsLong() {
+      return nowMs;
+    }
+
+    private void advanceBy(long millis) {
+      nowMs += millis;
+    }
   }
 }

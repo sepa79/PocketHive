@@ -17,6 +17,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.LongSupplier;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -27,7 +28,7 @@ class ClearingExportBatchWriter {
   private final ConcurrentLinkedQueue<String> bufferedLines = new ConcurrentLinkedQueue<>();
   private final ConcurrentLinkedQueue<StructuredProjectedRecord> bufferedStructured = new ConcurrentLinkedQueue<>();
   private final AtomicInteger bufferedCount = new AtomicInteger();
-  private final AtomicLong lastFlushAtMs = new AtomicLong(System.currentTimeMillis());
+  private final AtomicLong lastFlushAtMs = new AtomicLong();
   private final AtomicLong recordsAccepted = new AtomicLong();
   private final AtomicLong filesWritten = new AtomicLong();
   private final AtomicLong filesFailed = new AtomicLong();
@@ -40,14 +41,40 @@ class ClearingExportBatchWriter {
   private final AtomicReference<ClearingExportWorkerConfig> lastConfig = new AtomicReference<>();
   private final AtomicReference<ClearingStructuredSchema> lastSchema = new AtomicReference<>();
   private final AtomicReference<StreamingTemplateFileState> streamingState = new AtomicReference<>();
+  private final LongSupplier nowMsSupplier;
   private final ScheduledExecutorService streamingTicker;
   private volatile Consumer<ClearingExportLifecycleEvent> lifecycleListener = event -> { };
 
+  /**
+   * Production constructor: uses the system clock and starts the background streaming ticker.
+   */
   ClearingExportBatchWriter(ClearingExportFileAssembler assembler, ClearingExportSink sink) {
+    this(assembler, sink, System::currentTimeMillis, true);
+  }
+
+  /**
+   * Internal/test constructor with explicit time source and ticker control.
+   *
+   * <p>All time-based decisions (flush interval, streaming window, shutdown flush) must come from
+   * a single source to keep behavior consistent and testable. Tests can inject a deterministic
+   * clock and disable the background ticker to avoid sleep-based race conditions.
+   */
+  ClearingExportBatchWriter(
+      ClearingExportFileAssembler assembler,
+      ClearingExportSink sink,
+      LongSupplier nowMsSupplier,
+      boolean startStreamingTicker
+  ) {
     this.assembler = Objects.requireNonNull(assembler, "assembler");
     this.sink = Objects.requireNonNull(sink, "sink");
-    this.streamingTicker = Executors.newSingleThreadScheduledExecutor(new StreamingTickerThreadFactory());
-    this.streamingTicker.scheduleWithFixedDelay(this::tickStreamingFlush, 250, 250, TimeUnit.MILLISECONDS);
+    this.nowMsSupplier = Objects.requireNonNull(nowMsSupplier, "nowMsSupplier");
+    this.lastFlushAtMs.set(nowMs());
+    if (startStreamingTicker) {
+      this.streamingTicker = Executors.newSingleThreadScheduledExecutor(new StreamingTickerThreadFactory());
+      this.streamingTicker.scheduleWithFixedDelay(this::tickStreamingFlush, 250, 250, TimeUnit.MILLISECONDS);
+    } else {
+      this.streamingTicker = null;
+    }
   }
 
   void append(String renderedRecordLine, ClearingExportWorkerConfig config) throws Exception {
@@ -58,7 +85,7 @@ class ClearingExportBatchWriter {
     // NOTE: mode switch is evaluated from the current config.
     // Toggling streaming true->false at runtime is not supported; treat it as startup-time mode.
     if (config.streamingAppendEnabled()) {
-      appendStreaming(renderedRecordLine, config, System.currentTimeMillis());
+      appendStreaming(renderedRecordLine, config, nowMs());
       return;
     }
 
@@ -72,7 +99,7 @@ class ClearingExportBatchWriter {
     bufferedCount.incrementAndGet();
     recordsAccepted.incrementAndGet();
 
-    long now = System.currentTimeMillis();
+    long now = nowMs();
     if (shouldFlush(config, now)) {
       flush(config, now);
     }
@@ -102,7 +129,7 @@ class ClearingExportBatchWriter {
     bufferedCount.incrementAndGet();
     recordsAccepted.incrementAndGet();
 
-    long now = System.currentTimeMillis();
+    long now = nowMs();
     if (shouldFlush(config, now)) {
       flush(config, now);
     }
@@ -114,7 +141,7 @@ class ClearingExportBatchWriter {
       return;
     }
 
-    long now = System.currentTimeMillis();
+    long now = nowMs();
     // NOTE: flush path is selected by current config value (see append() note about runtime mode toggles).
     if (config.streamingAppendEnabled()) {
       flushStreamingIfDue(config, now);
@@ -128,7 +155,9 @@ class ClearingExportBatchWriter {
 
   @PreDestroy
   void flushOnShutdown() {
-    streamingTicker.shutdownNow();
+    if (streamingTicker != null) {
+      streamingTicker.shutdownNow();
+    }
     ClearingExportWorkerConfig config = lastConfig.get();
     if (config == null) {
       return;
@@ -137,9 +166,9 @@ class ClearingExportBatchWriter {
       // NOTE: shutdown finalization also follows current config value.
       // Streaming mode should be treated as startup-time mode (no live true->false toggle).
       if (config.streamingAppendEnabled()) {
-        flushStreamingOnShutdown(config, System.currentTimeMillis());
+        flushStreamingOnShutdown(config, nowMs());
       } else {
-        flush(config, System.currentTimeMillis());
+        flush(config, nowMs());
       }
     } catch (Exception ignored) {
       // Best-effort flush on shutdown.
@@ -371,10 +400,20 @@ class ClearingExportBatchWriter {
       if (config == null || !config.streamingAppendEnabled()) {
         return;
       }
-      flushStreamingIfDue(config, System.currentTimeMillis());
+      flushStreamingIfDue(config, nowMs());
     } catch (Exception ignored) {
       // Best-effort periodic flush for streaming append mode.
     }
+  }
+
+  /**
+   * Returns current epoch millis from the configured time source.
+   *
+   * <p>Using this method instead of direct {@code System.currentTimeMillis()} calls guarantees one
+   * coherent clock across all code paths.
+   */
+  private long nowMs() {
+    return nowMsSupplier.getAsLong();
   }
 
   private StreamingTemplateFileState openStreamingTemplateFile(ClearingExportWorkerConfig config, long nowMs)
