@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.14.39] - 2026-03-05
+Timestamp: 2026-03-05T18:11:16Z
+
+- Postprocessor config: added `pockethive.outputs.rabbit.routingKey` override support in `postprocessor-service/src/main/resources/application.yml` via `POCKETHIVE_OUTPUT_RABBIT_ROUTING_KEY`.
+
 ## [0.14.38] - 2026-03-03
 Timestamp: 2026-03-03T12:45:00Z
 
