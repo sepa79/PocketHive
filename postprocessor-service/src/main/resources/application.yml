@@ -23,6 +23,7 @@ pockethive:
     type: NONE
     rabbit:
       exchange: ${POCKETHIVE_OUTPUT_RABBIT_EXCHANGE}
+      routingKey: ${POCKETHIVE_OUTPUT_RABBIT_ROUTING_KEY:}
   worker:
     config:
       forwardToOutput: false
