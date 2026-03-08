@@ -46,6 +46,7 @@ import io.pockethive.e2e.clients.OrchestratorClient.ControlRequest;
 import io.pockethive.e2e.clients.OrchestratorClient.ControlResponse;
 import io.pockethive.e2e.clients.OrchestratorClient.SwarmCreateRequest;
 import io.pockethive.e2e.clients.OrchestratorClient.SwarmView;
+import io.pockethive.e2e.clients.NetworkProxyManagerClient;
 import io.pockethive.e2e.clients.RabbitManagementClient;
 import io.pockethive.e2e.clients.RabbitSubscriptions;
 import io.pockethive.e2e.clients.ScenarioManagerClient;
@@ -67,6 +68,8 @@ import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
 import io.pockethive.controlplane.topology.ControlPlaneTopologySettings;
 import io.pockethive.controlplane.topology.ControlQueueDescriptor;
 import io.pockethive.swarm.model.Bee;
+import io.pockethive.swarm.model.NetworkBinding;
+import io.pockethive.swarm.model.NetworkMode;
 import io.pockethive.swarm.model.SwarmTemplate;
 import io.pockethive.swarm.model.Work;
 
@@ -101,6 +104,7 @@ public class SwarmLifecycleSteps {
   private ServiceEndpoints endpoints;
   private OrchestratorClient orchestratorClient;
   private ScenarioManagerClient scenarioManagerClient;
+  private NetworkProxyManagerClient networkProxyManagerClient;
   private RabbitSubscriptions rabbitSubscriptions;
   private RabbitManagementClient rabbitManagementClient;
   private ControlPlaneEvents controlPlaneEvents;
@@ -140,6 +144,7 @@ public class SwarmLifecycleSteps {
 
     orchestratorClient = OrchestratorClient.create(endpoints.orchestratorBaseUrl());
     scenarioManagerClient = ScenarioManagerClient.create(endpoints.scenarioManagerBaseUrl());
+    networkProxyManagerClient = NetworkProxyManagerClient.create(endpoints.networkProxyManagerBaseUrl());
     controlPlane = endpoints.controlPlane();
     rabbitSubscriptions = RabbitSubscriptions.from(endpoints.rabbitMq(), controlPlane);
     rabbitManagementClient = RabbitManagementClient.create(endpoints.rabbitMq());
@@ -219,7 +224,9 @@ public class SwarmLifecycleSteps {
         "e2e lifecycle create",
         null,
         sutId,
-        variablesProfileId);
+        variablesProfileId,
+        resolveNetworkModeForScenario(),
+        resolveNetworkProfileIdForScenario());
     createResponse = orchestratorClient.createSwarm(swarmId, request);
     LOGGER.info("Create request accepted correlation={} watch={}", createResponse.correlationId(), createResponse.watch());
   }
@@ -247,6 +254,21 @@ public class SwarmLifecycleSteps {
     }
   }
 
+  @And("the network binding is proxied with profile {string}")
+  public void theNetworkBindingIsProxiedWithProfile(String expectedProfileId) {
+    ensureCreateResponse();
+    String expectedSutId = resolveSutIdForScenario();
+    SwarmAssertions.await("proxied network binding", () -> {
+      Optional<NetworkBinding> binding = networkProxyManagerClient.findBinding(swarmId);
+      assertTrue(binding.isPresent(), "Expected network binding for swarm " + swarmId);
+      assertEquals(NetworkMode.PROXIED, binding.get().networkMode(), "Binding should be PROXIED");
+      assertEquals(NetworkMode.PROXIED, binding.get().effectiveMode(), "Effective binding should be PROXIED");
+      assertEquals(expectedProfileId, binding.get().networkProfileId(), "Unexpected network profile");
+      assertEquals(expectedSutId, binding.get().sutId(), "Unexpected SUT bound in proxy manager");
+      assertFalse(binding.get().affectedEndpoints().isEmpty(), "Expected at least one proxied endpoint");
+    });
+  }
+
   /**
    * Select a SUT environment id for scenarios that rely on SUT-aware templating.
    * <p>
@@ -264,9 +286,35 @@ public class SwarmLifecycleSteps {
     }
     return switch (scenarioId) {
       case "templated-rest", "redis-dataset-demo" -> "wiremock-local";
+      case "http-proxy-demo" -> "wiremock-proxy-local";
+      case "https-proxy-demo" -> "wiremock-proxy-local-tls";
       case "tcp-socket-demo" -> "tcp-mock-local";
       case "variables-demo" -> "sut-A";
       case "webauth-loop-redis-5-customers" -> "webauth-local";
+      default -> null;
+    };
+  }
+
+  private String resolveNetworkModeForScenario() {
+    ensureTemplate();
+    String scenarioId = scenarioDetails != null ? scenarioDetails.id() : null;
+    if (scenarioId == null) {
+      return null;
+    }
+    return switch (scenarioId) {
+      case "http-proxy-demo", "https-proxy-demo" -> "PROXIED";
+      default -> null;
+    };
+  }
+
+  private String resolveNetworkProfileIdForScenario() {
+    ensureTemplate();
+    String scenarioId = scenarioDetails != null ? scenarioDetails.id() : null;
+    if (scenarioId == null) {
+      return null;
+    }
+    return switch (scenarioId) {
+      case "http-proxy-demo", "https-proxy-demo" -> "passthrough";
       default -> null;
     };
   }
@@ -767,6 +815,48 @@ public class SwarmLifecycleSteps {
     String baseUrl = String.valueOf(config.get("baseUrl"));
     assertEquals("{{ sut.endpoints['default'].baseUrl }}/api", baseUrl,
         "Expected processor baseUrl=\"{{ sut.endpoints['default'].baseUrl }}/api\" from local-rest scenario");
+  }
+
+  @And("the processor runtime config matches the proxied HTTP scenario")
+  public void theProcessorRuntimeConfigMatchesTheProxiedHttpScenario() {
+    ensureStartResponse();
+    captureWorkerStatuses(true);
+    String processorKey = roleKey(PROCESSOR_ROLE);
+    String roleKey = processorKey != null ? processorKey : PROCESSOR_ROLE;
+    StatusEvent status = workerStatusByRole.get(roleKey);
+    String displayRole = actualRoleName(roleKey);
+    assertNotNull(status, () -> "No status recorded for role " + displayRole);
+
+    Map<String, Object> snapshot = workerSnapshot(status, roleKey);
+    assertFalse(snapshot.isEmpty(), "Processor snapshot should include worker details");
+    Map<String, Object> config = snapshotConfig(snapshot);
+    assertFalse(config.isEmpty(), "Processor snapshot should include applied config");
+
+    String baseUrl = String.valueOf(config.get("baseUrl"));
+    assertEquals("http://haproxy:18080/api", baseUrl,
+        "Expected processor baseUrl=http://haproxy:18080/api from proxied HTTP scenario");
+  }
+
+  @And("the processor runtime config matches the proxied HTTPS scenario")
+  public void theProcessorRuntimeConfigMatchesTheProxiedHttpsScenario() {
+    ensureStartResponse();
+    captureWorkerStatuses(true);
+    String processorKey = roleKey(PROCESSOR_ROLE);
+    String roleKey = processorKey != null ? processorKey : PROCESSOR_ROLE;
+    StatusEvent status = workerStatusByRole.get(roleKey);
+    String displayRole = actualRoleName(roleKey);
+    assertNotNull(status, () -> "No status recorded for role " + displayRole);
+
+    Map<String, Object> snapshot = workerSnapshot(status, roleKey);
+    assertFalse(snapshot.isEmpty(), "Processor snapshot should include worker details");
+    Map<String, Object> config = snapshotConfig(snapshot);
+    assertFalse(config.isEmpty(), "Processor snapshot should include applied config");
+
+    String baseUrl = String.valueOf(config.get("baseUrl"));
+    assertEquals("https://haproxy:18443/api", baseUrl,
+        "Expected processor baseUrl=https://haproxy:18443/api from proxied HTTPS scenario");
+    assertEquals(Boolean.FALSE, config.get("sslVerify"),
+        "Expected processor sslVerify=false from proxied HTTPS scenario");
   }
 
   @And("the postprocessor runtime config matches the service defaults")
@@ -1457,6 +1547,15 @@ public class SwarmLifecycleSteps {
     } else {
       assertTrue(controlPlaneEvents.alerts().isEmpty(), "No alerts should be emitted during the golden path");
     }
+  }
+
+  @And("the network binding is cleared")
+  public void theNetworkBindingIsCleared() {
+    ensureRemoveResponse();
+    SwarmAssertions.await("network binding removed", () -> {
+      Optional<NetworkBinding> binding = networkProxyManagerClient.findBinding(swarmId);
+      assertTrue(binding.isEmpty(), "Expected no active network binding for swarm " + swarmId);
+    });
   }
 
   @Then("the swarm is removed after the early stop")

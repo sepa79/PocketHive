@@ -1,0 +1,24 @@
+- id: passthrough
+  name: Passthrough
+  faults: []
+  targets:
+    - default
+
+- id: latency-250ms
+  name: Latency 250ms
+  faults:
+    - type: latency
+      config:
+        latency: 250
+        jitter: 25
+  targets:
+    - default
+
+- id: bandwidth-1mbps
+  name: Bandwidth 1 Mbps
+  faults:
+    - type: bandwidth
+      config:
+        rateKbps: 1024
+  targets:
+    - default

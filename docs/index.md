@@ -55,6 +55,9 @@ by the UI under `/docs/...` as part of the runtime image.
   BufferGuard/queue guard details.
 - `docs/architecture/sut-environments-plan.md` (Status: in progress) –
   System Under Test (SUT) environments and how swarms bind to them.
+- `docs/inProgress/network-proxy-plan.md` (Status: in progress) –
+  shared-per-SUT network proxying, secure traffic routing, and runtime fault
+  profiles.
 - `docs/inProgress/scenario-bundle-runtime-plan.md` (Status: in progress) –
   directory-based scenario bundles and per-swarm runtimes.
 - `docs/inProgress/scenario-sut-editor-plan.md` (Status: in progress) –

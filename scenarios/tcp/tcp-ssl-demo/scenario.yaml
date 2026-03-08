@@ -19,7 +19,7 @@ template:
               {
                 "sessionId": "SEC_{{ eval('#uuid()') }}",
                 "encryptedData": "{{ eval("#base64_encode('Sensitive data: ' + #randInt(1000, 9999))") }}",
-                "signature": "{{ eval("#hmac_sha256_hex('secretkey', payload.sessionId)") }}",
+                "signature": "{{ eval("#hmac_sha256_hex('secretkey', #uuid())") }}",
                 "timestamp": "{{ eval("#date_format(now, 'yyyy-MM-dd''T''HH:mm:ss.SSS''Z''')") }}"
               }
             headers:
@@ -49,6 +49,7 @@ template:
             maxRetries: 2
             connectTimeoutMs: 5000
             readTimeoutMs: 8000
+            sslVerify: false
       work:
         in:
           in: proc

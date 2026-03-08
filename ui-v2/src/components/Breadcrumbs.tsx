@@ -22,6 +22,7 @@ function buildCrumbs(pathname: string): Crumb[] {
     return crumbs
   }
   if (section === 'hive') return [{ label: 'Hive', to: '/hive' }, ...parts.slice(1).map((p) => ({ label: p }))]
+  if (section === 'proxy') return [{ label: 'Proxy', to: '/proxy' }, ...parts.slice(1).map((p) => ({ label: p }))]
   if (section === 'journal')
     return [{ label: 'Journal', to: '/journal' }, ...parts.slice(1).map((p) => ({ label: p }))]
   if (section === 'other') return [{ label: 'Other', to: '/other' }, ...parts.slice(1).map((p) => ({ label: p }))]

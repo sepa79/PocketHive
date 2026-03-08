@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.orchestrator.app.ScenarioClient;
 import io.pockethive.orchestrator.config.OrchestratorProperties;
 import io.pockethive.orchestrator.domain.ScenarioPlan;
+import io.pockethive.swarm.model.NetworkProfile;
 import io.pockethive.swarm.model.SutEnvironment;
 import java.util.Objects;
 import java.util.Map;
@@ -134,6 +135,19 @@ public class ScenarioManagerClient implements ScenarioClient {
         Map<String, Object> vars = body.vars() == null ? Map.of() : body.vars();
         java.util.List<String> warnings = body.warnings() == null ? java.util.List.of() : body.warnings();
         return new ResolvedVariables(body.profileId(), body.sutId(), vars, warnings);
+    }
+
+    @Override
+    public NetworkProfile fetchNetworkProfile(String profileId,
+                                              String correlationId,
+                                              String idempotencyKey) throws Exception {
+        String profile = profileId == null ? null : profileId.trim();
+        if (profile == null || profile.isEmpty()) {
+            throw new IllegalArgumentException("profileId must not be null or blank");
+        }
+        String url = baseUrl + "/network-profiles/" + profile;
+        HttpResponse<String> resp = sendGet(url, "network-profile " + profile, correlationId, idempotencyKey);
+        return json.readValue(resp.body(), NetworkProfile.class);
     }
 
     private HttpResponse<String> sendGet(String url, String label) throws Exception {

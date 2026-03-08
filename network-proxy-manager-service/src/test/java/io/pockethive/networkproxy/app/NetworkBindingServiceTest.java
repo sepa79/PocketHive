@@ -1,0 +1,200 @@
+package io.pockethive.networkproxy.app;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import io.pockethive.networkproxy.config.NetworkProxyManagerProperties;
+import io.pockethive.swarm.model.NetworkBinding;
+import io.pockethive.swarm.model.NetworkBindingClearRequest;
+import io.pockethive.swarm.model.NetworkBindingRequest;
+import io.pockethive.swarm.model.NetworkFault;
+import io.pockethive.swarm.model.NetworkMode;
+import io.pockethive.swarm.model.NetworkProfile;
+import io.pockethive.swarm.model.ResolvedSutEndpoint;
+import io.pockethive.swarm.model.ResolvedSutEnvironment;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import org.junit.jupiter.api.Test;
+
+class NetworkBindingServiceTest {
+
+    @Test
+    void bindCreatesProxyAndToxicsForTargetedEndpoint() throws Exception {
+        FakeNetworkProfileClient profileClient = new FakeNetworkProfileClient(Map.of(
+            "latency-250ms", new NetworkProfile(
+                "latency-250ms",
+                "Latency 250ms",
+                List.of(new NetworkFault("latency", Map.of("latency", 250, "jitter", 25))),
+                List.of("payments"))));
+        FakeToxiproxyAdminClient toxiproxy = new FakeToxiproxyAdminClient();
+        FakeHaproxyAdminClient haproxy = new FakeHaproxyAdminClient();
+        NetworkBindingService service = new NetworkBindingService(profileClient, toxiproxy, haproxy, properties());
+
+        NetworkBinding binding = service.bind("swarm-a", new NetworkBindingRequest(
+            "sut-a",
+            NetworkMode.PROXIED,
+            "latency-250ms",
+            "orchestrator",
+            null,
+            resolvedSut("sut-a", Map.of(
+                "payments", new ResolvedSutEndpoint("payments", "HTTPS", "https://proxy.local:9443", "proxy.local:9443", "internal-a:443"),
+                "other", new ResolvedSutEndpoint("other", "TCP", "tcp://proxy.local:9900", "proxy.local:9900", "tcp-upstream:9000")))));
+
+        assertThat(binding.networkMode()).isEqualTo(NetworkMode.PROXIED);
+        assertThat(binding.affectedEndpoints()).extracting(ResolvedSutEndpoint::endpointId)
+            .containsExactly("payments");
+        assertThat(toxiproxy.proxies()).containsKey("sut-a__payments");
+        assertThat(toxiproxy.proxies().get("sut-a__payments").listen()).isEqualTo("0.0.0.0:19443");
+        assertThat(toxiproxy.toxics("sut-a__payments")).hasSize(1);
+        assertThat(toxiproxy.toxics("sut-a__payments").getFirst().type()).isEqualTo("latency");
+        assertThat(toxiproxy.toxics("sut-a__payments").getFirst().attributes())
+            .containsEntry("latency", 250)
+            .containsEntry("jitter", 25);
+        assertThat(haproxy.routes()).containsExactly(
+            new HaproxyAdminClient.RouteRecord("sut-a__payments", "0.0.0.0:9443", "toxiproxy:19443"));
+    }
+
+    @Test
+    void clearReconcilesSharedSutBackToPreviousBinding() throws Exception {
+        FakeNetworkProfileClient profileClient = new FakeNetworkProfileClient(Map.of(
+            "passthrough", new NetworkProfile("passthrough", "Passthrough", List.of(), List.of("payments")),
+            "latency-250ms", new NetworkProfile(
+                "latency-250ms",
+                "Latency 250ms",
+                List.of(new NetworkFault("latency", Map.of("latency", 250))),
+                List.of("payments"))));
+        FakeToxiproxyAdminClient toxiproxy = new FakeToxiproxyAdminClient();
+        FakeHaproxyAdminClient haproxy = new FakeHaproxyAdminClient();
+        NetworkBindingService service = new NetworkBindingService(profileClient, toxiproxy, haproxy, properties());
+
+        service.bind("swarm-a", new NetworkBindingRequest(
+            "sut-a",
+            NetworkMode.PROXIED,
+            "passthrough",
+            "orchestrator",
+            null,
+            resolvedSut("sut-a", Map.of(
+                "payments", new ResolvedSutEndpoint("payments", "HTTPS", "https://proxy.local:9443", "proxy.local:9443", "internal-a:443")))));
+
+        service.bind("swarm-b", new NetworkBindingRequest(
+            "sut-a",
+            NetworkMode.PROXIED,
+            "latency-250ms",
+            "orchestrator",
+            null,
+            resolvedSut("sut-a", Map.of(
+                "payments", new ResolvedSutEndpoint("payments", "HTTPS", "https://proxy.local:9443", "proxy.local:9443", "internal-a:443")))));
+
+        assertThat(toxiproxy.toxics("sut-a__payments")).hasSize(1);
+
+        service.clear("swarm-b", new NetworkBindingClearRequest("sut-a", "ui", "manual clear"));
+
+        assertThat(service.findBinding("swarm-a")).isNotNull();
+        assertThat(service.findBinding("swarm-b")).isNull();
+        assertThat(toxiproxy.proxies()).containsKey("sut-a__payments");
+        assertThat(toxiproxy.toxics("sut-a__payments")).isEmpty();
+        assertThat(haproxy.routes()).containsExactly(
+            new HaproxyAdminClient.RouteRecord("sut-a__payments", "0.0.0.0:9443", "toxiproxy:19443"));
+    }
+
+    @Test
+    void bindRejectsTargetThatDoesNotExistInResolvedSut() {
+        FakeNetworkProfileClient profileClient = new FakeNetworkProfileClient(Map.of(
+                "missing-target", new NetworkProfile("missing-target", "Missing", List.of(), List.of("payments"))));
+        FakeToxiproxyAdminClient toxiproxy = new FakeToxiproxyAdminClient();
+        FakeHaproxyAdminClient haproxy = new FakeHaproxyAdminClient();
+        NetworkBindingService service = new NetworkBindingService(profileClient, toxiproxy, haproxy, properties());
+
+        assertThatThrownBy(() -> service.bind("swarm-a", new NetworkBindingRequest(
+            "sut-a",
+            NetworkMode.PROXIED,
+            "missing-target",
+            "orchestrator",
+            null,
+            resolvedSut("sut-a", Map.of(
+                "other", new ResolvedSutEndpoint("other", "HTTPS", "https://proxy.local:9443", "proxy.local:9443", "internal-a:443"))))))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("networkProfile target 'payments'");
+    }
+
+    private static NetworkProxyManagerProperties properties() {
+        NetworkProxyManagerProperties properties = new NetworkProxyManagerProperties();
+        properties.getToxiproxy().setListenHost("0.0.0.0");
+        properties.getToxiproxy().setListenPortOffset(10_000);
+        properties.getHaproxy().setBackendHost("toxiproxy");
+        return properties;
+    }
+
+    private static ResolvedSutEnvironment resolvedSut(String sutId, Map<String, ResolvedSutEndpoint> endpoints) {
+        return new ResolvedSutEnvironment(sutId, "SUT", null, endpoints);
+    }
+
+    private static final class FakeNetworkProfileClient implements NetworkProfileClient {
+        private final Map<String, NetworkProfile> profiles;
+
+        private FakeNetworkProfileClient(Map<String, NetworkProfile> profiles) {
+            this.profiles = profiles;
+        }
+
+        @Override
+        public NetworkProfile fetch(String profileId) {
+            NetworkProfile profile = profiles.get(profileId);
+            if (profile == null) {
+                throw new IllegalStateException("missing profile " + profileId);
+            }
+            return profile;
+        }
+    }
+
+    private static final class FakeToxiproxyAdminClient implements ToxiproxyAdminClient {
+        private final Map<String, ProxyRecord> proxies = new LinkedHashMap<>();
+        private final Map<String, List<ToxicRecord>> toxics = new LinkedHashMap<>();
+
+        @Override
+        public Map<String, ProxyRecord> listProxies() {
+            return new LinkedHashMap<>(proxies);
+        }
+
+        @Override
+        public void deleteProxy(String proxyName) {
+            proxies.remove(proxyName);
+            toxics.remove(proxyName);
+        }
+
+        @Override
+        public ProxyRecord createProxy(ProxyRecord proxy) {
+            proxies.put(proxy.name(), proxy);
+            toxics.put(proxy.name(), new ArrayList<>());
+            return proxy;
+        }
+
+        @Override
+        public ToxicRecord createToxic(String proxyName, ToxicRecord toxic) {
+            toxics.computeIfAbsent(proxyName, ignored -> new ArrayList<>()).add(toxic);
+            return toxic;
+        }
+
+        private Map<String, ProxyRecord> proxies() {
+            return proxies;
+        }
+
+        private List<ToxicRecord> toxics(String proxyName) {
+            return toxics.getOrDefault(proxyName, List.of());
+        }
+    }
+
+    private static final class FakeHaproxyAdminClient implements HaproxyAdminClient {
+        private List<RouteRecord> routes = List.of();
+
+        @Override
+        public void applyRoutes(List<RouteRecord> routes) {
+            this.routes = routes == null ? List.of() : List.copyOf(routes);
+        }
+
+        private List<RouteRecord> routes() {
+            return routes;
+        }
+    }
+}

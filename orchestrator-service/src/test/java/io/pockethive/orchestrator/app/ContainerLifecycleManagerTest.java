@@ -311,6 +311,9 @@ class ContainerLifecycleManagerTest {
                 new OrchestratorProperties.Images(null),
                 new OrchestratorProperties.ScenarioManager(
                     "http://scenario-manager:8080",
+                    new OrchestratorProperties.Http(Duration.ofSeconds(5), Duration.ofSeconds(30))),
+                new OrchestratorProperties.NetworkProxyManager(
+                    "http://network-proxy-manager:8080",
                     new OrchestratorProperties.Http(Duration.ofSeconds(5), Duration.ofSeconds(30)))));
     }
 
@@ -334,6 +337,9 @@ class ContainerLifecycleManagerTest {
                 new OrchestratorProperties.Images(null),
                 new OrchestratorProperties.ScenarioManager(
                     "http://scenario-manager:8080",
+                    new OrchestratorProperties.Http(Duration.ofSeconds(5), Duration.ofSeconds(30))),
+                new OrchestratorProperties.NetworkProxyManager(
+                    "http://network-proxy-manager:8080",
                     new OrchestratorProperties.Http(Duration.ofSeconds(5), Duration.ofSeconds(30)))));
     }
 
@@ -357,6 +363,9 @@ class ContainerLifecycleManagerTest {
                 new OrchestratorProperties.Images(prefix),
                 new OrchestratorProperties.ScenarioManager(
                     "http://scenario-manager:8080",
+                    new OrchestratorProperties.Http(Duration.ofSeconds(5), Duration.ofSeconds(30))),
+                new OrchestratorProperties.NetworkProxyManager(
+                    "http://network-proxy-manager:8080",
                     new OrchestratorProperties.Http(Duration.ofSeconds(5), Duration.ofSeconds(30)))));
     }
 

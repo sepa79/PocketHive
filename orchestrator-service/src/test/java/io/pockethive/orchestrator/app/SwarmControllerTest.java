@@ -36,6 +36,11 @@ import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
 import io.pockethive.orchestrator.domain.HiveJournal;
 import io.pockethive.orchestrator.infra.InMemoryIdempotencyStore;
 import io.pockethive.swarm.model.Bee;
+import io.pockethive.swarm.model.NetworkBinding;
+import io.pockethive.swarm.model.NetworkBindingClearRequest;
+import io.pockethive.swarm.model.NetworkBindingRequest;
+import io.pockethive.swarm.model.NetworkMode;
+import io.pockethive.swarm.model.NetworkProfile;
 import io.pockethive.swarm.model.SutEnvironment;
 import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.SwarmTemplate;
@@ -78,6 +83,9 @@ class SwarmControllerTest {
 
     @Mock
     ScenarioClient scenarioClient;
+
+    @Mock
+    NetworkProxyClient networkProxyClient;
 
     @Mock
     JdbcTemplate jdbc;
@@ -206,6 +214,225 @@ class SwarmControllerTest {
         Map<String, Object> config = plan.bees().get(0).config();
         assertThat(config).containsKey("vars");
         assertThat(config.get("vars")).isEqualTo(Map.of("loopCount", 10, "customerId", "123"));
+    }
+
+    @Test
+    void createResolvesNetworkProfileWhenProxied() throws Exception {
+        SwarmCreateTracker tracker = new SwarmCreateTracker();
+        SwarmPlanRegistry plans = new SwarmPlanRegistry();
+        SwarmTemplate template = new SwarmTemplate("ctrl-image", List.of(
+            new Bee("generator", "img", Work.ofDefaults(null, "out"), java.util.Map.of())
+        ));
+        when(scenarioClient.fetchScenario("tpl-1")).thenReturn(new ScenarioPlan(template, null, null, null));
+        when(scenarioClient.prepareScenarioRuntime("tpl-1", "sw1")).thenReturn("/tmp/runtime/sw1");
+        when(scenarioClient.fetchNetworkProfile(eq("latency-250ms"), anyString(), eq("idem")))
+            .thenReturn(new NetworkProfile("latency-250ms", "Latency 250ms", List.of(), List.of("default")));
+        when(scenarioClient.fetchScenarioSut(eq("tpl-1"), eq("sut-A"), anyString(), eq("idem")))
+            .thenReturn(new SutEnvironment(
+                "sut-A",
+                "SUT A",
+                null,
+                Map.of("payments", new io.pockethive.swarm.model.SutEndpoint(
+                    "payments",
+                    "HTTPS",
+                    "https://proxy.testenv.company.com:9443",
+                    "https://api.testenv.company.com"))));
+        when(networkProxyClient.bindSwarm(eq("sw1"), any(), anyString(), eq("idem")))
+            .thenReturn(new NetworkBinding(
+                "sw1",
+                "sut-A",
+                NetworkMode.PROXIED,
+                "latency-250ms",
+                NetworkMode.PROXIED,
+                "orchestrator",
+                Instant.now(),
+                List.of()));
+
+        AtomicReference<String> capturedInstance = new AtomicReference<>();
+        when(lifecycle.startSwarm(
+            eq("sw1"),
+            eq("ctrl-image"),
+            anyString(),
+            any(SwarmTemplateMetadata.class),
+            eq(false))).thenAnswer(inv -> {
+            String instanceId = inv.getArgument(2);
+            capturedInstance.set(instanceId);
+            return new Swarm("sw1", instanceId, "c1", "run-1");
+        });
+
+        SwarmController ctrl = controller(tracker, new SwarmStore(), plans);
+        SwarmCreateRequest req = new SwarmCreateRequest(
+            "tpl-1",
+            "idem",
+            null,
+            false,
+            "sut-A",
+            null,
+            NetworkMode.PROXIED,
+            "latency-250ms");
+
+        ctrl.create("sw1", req);
+
+        ArgumentCaptor<NetworkBindingRequest> bindingCaptor = ArgumentCaptor.forClass(NetworkBindingRequest.class);
+        assertThat(capturedInstance.get()).isNotBlank();
+        verify(scenarioClient).fetchNetworkProfile(eq("latency-250ms"), anyString(), eq("idem"));
+        verify(networkProxyClient).bindSwarm(eq("sw1"), bindingCaptor.capture(), anyString(), eq("idem"));
+        assertThat(bindingCaptor.getValue().resolvedSut().endpoints().get("payments").clientAuthority())
+            .isEqualTo("proxy.testenv.company.com:9443");
+        assertThat(bindingCaptor.getValue().resolvedSut().endpoints().get("payments").upstreamAuthority())
+            .isEqualTo("api.testenv.company.com:443");
+        assertThat(plans.find(capturedInstance.get())).isPresent();
+    }
+
+    @Test
+    void createResolvesTcpSutAuthorityWithoutUriSchemeWhenProxied() throws Exception {
+        SwarmCreateTracker tracker = new SwarmCreateTracker();
+        SwarmPlanRegistry plans = new SwarmPlanRegistry();
+        SwarmTemplate template = new SwarmTemplate("ctrl-image", List.of(
+            new Bee("processor", "img", Work.ofDefaults("in", "out"), java.util.Map.of())
+        ));
+        when(scenarioClient.fetchScenario("tpl-1")).thenReturn(new ScenarioPlan(template, null, null, null));
+        when(scenarioClient.prepareScenarioRuntime("tpl-1", "sw1")).thenReturn("/tmp/runtime/sw1");
+        when(scenarioClient.fetchNetworkProfile(eq("passthrough"), anyString(), eq("idem")))
+            .thenReturn(new NetworkProfile("passthrough", "Passthrough", List.of(), List.of("default")));
+        when(scenarioClient.fetchScenarioSut(eq("tpl-1"), eq("tcp-sut"), anyString(), eq("idem")))
+            .thenReturn(new SutEnvironment(
+                "tcp-sut",
+                "TCP SUT",
+                "tcp",
+                Map.of("tcp-server", new io.pockethive.swarm.model.SutEndpoint(
+                    "tcp-server",
+                    "tcp",
+                    "toxiproxy:19090",
+                    "tcp-mock-server:9090"))));
+        when(networkProxyClient.bindSwarm(eq("sw1"), any(), anyString(), eq("idem")))
+            .thenReturn(new NetworkBinding(
+                "sw1",
+                "tcp-sut",
+                NetworkMode.PROXIED,
+                "passthrough",
+                NetworkMode.PROXIED,
+                "orchestrator",
+                Instant.now(),
+                List.of()));
+        when(lifecycle.startSwarm(
+            eq("sw1"),
+            eq("ctrl-image"),
+            anyString(),
+            any(SwarmTemplateMetadata.class),
+            eq(false)))
+            .thenAnswer(invocation -> new Swarm("sw1", invocation.getArgument(2), "c1", "run-1"));
+
+        SwarmController ctrl = controller(tracker, new SwarmStore(), plans);
+
+        ctrl.create("sw1", new SwarmCreateRequest(
+            "tpl-1",
+            "idem",
+            null,
+            false,
+            "tcp-sut",
+            null,
+            NetworkMode.PROXIED,
+            "passthrough"));
+
+        ArgumentCaptor<NetworkBindingRequest> bindingCaptor = ArgumentCaptor.forClass(NetworkBindingRequest.class);
+        verify(networkProxyClient).bindSwarm(eq("sw1"), bindingCaptor.capture(), anyString(), eq("idem"));
+        assertThat(bindingCaptor.getValue().resolvedSut().endpoints().get("tcp-server").clientAuthority())
+            .isEqualTo("toxiproxy:19090");
+        assertThat(bindingCaptor.getValue().resolvedSut().endpoints().get("tcp-server").upstreamAuthority())
+            .isEqualTo("tcp-mock-server:9090");
+    }
+
+    @Test
+    void updateNetworkAppliesProxiedBindingForExistingSwarm() throws Exception {
+        SwarmStore registry = new SwarmStore();
+        Swarm swarm = new Swarm("sw1", "inst", "c1", "run-1");
+        swarm.attachTemplate(new SwarmTemplateMetadata("tpl-1", "ctrl-image", List.of()));
+        swarm.setSutId("sut-A");
+        registry.register(swarm);
+        cacheStatusFull(registry, "sw1", "tpl-1", "run-1", "inst");
+        when(scenarioClient.fetchNetworkProfile(eq("latency-250ms"), anyString(), any()))
+            .thenReturn(new NetworkProfile("latency-250ms", "Latency 250ms", List.of(), List.of("default")));
+        when(scenarioClient.fetchScenarioSut(eq("tpl-1"), eq("sut-A"), anyString(), any()))
+            .thenReturn(new SutEnvironment(
+                "sut-A",
+                "SUT A",
+                null,
+                Map.of("payments", new io.pockethive.swarm.model.SutEndpoint(
+                    "payments",
+                    "HTTPS",
+                    "https://haproxy:18443",
+                    "https://wiremock:8443"))));
+        when(networkProxyClient.bindSwarm(eq("sw1"), any(), anyString(), any()))
+            .thenReturn(new NetworkBinding(
+                "sw1",
+                "sut-A",
+                NetworkMode.PROXIED,
+                "latency-250ms",
+                NetworkMode.PROXIED,
+                "hive",
+                Instant.now(),
+                List.of()));
+
+        SwarmController ctrl = controller(new SwarmCreateTracker(), registry, new SwarmPlanRegistry());
+
+        ResponseEntity<?> response = ctrl.updateNetwork(
+            "sw1",
+            new SwarmController.SwarmNetworkUpdateRequest(
+                NetworkMode.PROXIED,
+                "latency-250ms",
+                "idem-network",
+                null));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isInstanceOf(NetworkBinding.class);
+        ArgumentCaptor<NetworkBindingRequest> captor = ArgumentCaptor.forClass(NetworkBindingRequest.class);
+        verify(networkProxyClient).bindSwarm(eq("sw1"), captor.capture(), anyString(), eq("idem-network"));
+        assertThat(captor.getValue().requestedBy()).isEqualTo("hive");
+        assertThat(captor.getValue().networkProfileId()).isEqualTo("latency-250ms");
+        assertThat(registry.find("sw1").orElseThrow().getNetworkMode()).isEqualTo(NetworkMode.PROXIED);
+        assertThat(registry.find("sw1").orElseThrow().getNetworkProfileId()).isEqualTo("latency-250ms");
+    }
+
+    @Test
+    void updateNetworkClearsBindingBackToDirect() throws Exception {
+        SwarmStore registry = new SwarmStore();
+        Swarm swarm = new Swarm("sw1", "inst", "c1", "run-1");
+        swarm.attachTemplate(new SwarmTemplateMetadata("tpl-1", "ctrl-image", List.of()));
+        swarm.setSutId("sut-A");
+        swarm.setNetworkMode(NetworkMode.PROXIED);
+        swarm.setNetworkProfileId("passthrough");
+        registry.register(swarm);
+        cacheStatusFull(registry, "sw1", "tpl-1", "run-1", "inst");
+        when(networkProxyClient.clearSwarm(eq("sw1"), any(), anyString(), any()))
+            .thenReturn(new NetworkBinding(
+                "sw1",
+                "sut-A",
+                NetworkMode.DIRECT,
+                null,
+                NetworkMode.DIRECT,
+                "hive",
+                Instant.now(),
+                List.of()));
+
+        SwarmController ctrl = controller(new SwarmCreateTracker(), registry, new SwarmPlanRegistry());
+
+        ResponseEntity<?> response = ctrl.updateNetwork(
+            "sw1",
+            new SwarmController.SwarmNetworkUpdateRequest(
+                NetworkMode.DIRECT,
+                null,
+                "idem-clear",
+                "manual clear"));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isInstanceOf(NetworkBinding.class);
+        ArgumentCaptor<NetworkBindingClearRequest> captor = ArgumentCaptor.forClass(NetworkBindingClearRequest.class);
+        verify(networkProxyClient).clearSwarm(eq("sw1"), captor.capture(), anyString(), eq("idem-clear"));
+        assertThat(captor.getValue().requestedBy()).isEqualTo("hive");
+        assertThat(captor.getValue().reason()).isEqualTo("manual clear");
+        assertThat(registry.find("sw1").orElseThrow().getNetworkMode()).isEqualTo(NetworkMode.DIRECT);
+        assertThat(registry.find("sw1").orElseThrow().getNetworkProfileId()).isNull();
     }
 
     @Test
@@ -712,6 +939,7 @@ class SwarmControllerTest {
             stateStore,
             mapper,
             scenarioClient,
+            networkProxyClient,
             HiveJournal.noop(),
             plans,
             new ScenarioTimelineRegistry(),

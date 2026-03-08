@@ -128,6 +128,7 @@ services:
       [
         "--verbose",                          # useful logs for debugging
         "--disable-banner",                   # cleaner output
+        "--https-port=8443",                 # enable local TLS endpoint for proxied HTTPS smoke tests
         "--async-response-enabled",           # enable async responses (better throughput)
         "--global-response-templating",       # allows templating across all stubs
         "--record-mappings",                  # auto-record mappings (if needed for tests)
@@ -212,6 +213,63 @@ services:
       start_period: 10s
     depends_on:
       - prometheus
+
+  tcp-mock-server-tls:
+    image: ${DOCKER_REGISTRY:-}tcp-mock-server:${POCKETHIVE_VERSION:-latest}
+    ports:
+      - "8084:8080"  # Web UI port
+      - "9091:9090"  # TLS TCP server port
+    environment:
+      SERVER_PORT: 8080
+      POCKETHIVE_TCP_MOCK_PORT: 9090
+      POCKETHIVE_TCP_MOCK_NODE_ID: "tcp-mock-tls-1"
+      POCKETHIVE_TCP_MOCK_DASHBOARD_ENABLED: "true"
+      POCKETHIVE_TCP_MOCK_DASHBOARD_USERNAME: "admin"
+      # Please change before deploying in prod.
+      POCKETHIVE_TCP_MOCK_DASHBOARD_PASSWORD: "admin"
+      POCKETHIVE_TCP_MOCK_SSL_ENABLED: "true"
+      POCKETHIVE_TCP_MOCK_VALIDATION_ENABLED: "true"
+      POCKETHIVE_TCP_MOCK_FILTERING_ENABLED: "true"
+      POCKETHIVE_LOGS_RABBIT_ENABLED: "true"
+      POCKETHIVE_LOGS_EXCHANGE: ph.logs
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "health,info,metrics,prometheus"
+    volumes:
+      - ./tcp-mock-server/mappings:/app/mappings:ro
+      - ./tcp-mock-server/__files:/app/__files:ro
+      - tcp-mock-tls-data:/app/data
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8080/actuator/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      - prometheus
+
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy:2.11.0
+    command: ["-host", "0.0.0.0"]
+    ports:
+      - "18474:8474"
+    healthcheck:
+      test: ["CMD", "/toxiproxy-cli", "list"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  haproxy:
+    image: ${DOCKER_REGISTRY:-}network-proxy-haproxy:${POCKETHIVE_VERSION:-latest}
+    environment:
+      HAPROXY_CONFIG_FILE: /opt/haproxy-runtime/haproxy.cfg
+    volumes:
+      - haproxy-runtime:/opt/haproxy-runtime
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8404/healthz | grep -q ok"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+      start_period: 10s
 
   # promtail:
   #   # disabled: logs are shipped via RabbitMQ and aggregated to Loki
@@ -308,6 +366,8 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
+      network-proxy-manager:
+        condition: service_healthy
 
 
   scenario-manager:
@@ -339,6 +399,32 @@ services:
       log-aggregator:
         condition: service_healthy
 
+  network-proxy-manager:
+    image: ${DOCKER_REGISTRY:-}network-proxy-manager:${POCKETHIVE_VERSION:-latest}
+    environment:
+      POCKETHIVE_NETWORK_PROXY_MANAGER_SCENARIO_MANAGER_URL: http://scenario-manager:8080
+      POCKETHIVE_NETWORK_PROXY_MANAGER_TOXIPROXY_URL: http://toxiproxy:8474
+      POCKETHIVE_NETWORK_PROXY_MANAGER_HAPROXY_CONFIG_FILE: /opt/haproxy-runtime/haproxy.cfg
+      POCKETHIVE_NETWORK_PROXY_MANAGER_HAPROXY_BACKEND_HOST: toxiproxy
+      POCKETHIVE_NETWORK_PROXY_MANAGER_TOXIPROXY_LISTEN_PORT_OFFSET: 10000
+    volumes:
+      - haproxy-runtime:/opt/haproxy-runtime
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/actuator/health | grep -q UP"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+    ports:
+      - "1082:8080"
+    depends_on:
+      scenario-manager:
+        condition: service_healthy
+      toxiproxy:
+        condition: service_healthy
+      haproxy:
+        condition: service_healthy
+
 #------------------------------------------
 # Volumes
 #------------------------------------------
@@ -351,3 +437,5 @@ volumes:
   postgres-data:
   clickhouse-data:
   tcp-mock-data:
+  tcp-mock-tls-data:
+  haproxy-runtime:
