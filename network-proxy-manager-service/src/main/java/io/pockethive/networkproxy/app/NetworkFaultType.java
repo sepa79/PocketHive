@@ -3,6 +3,8 @@ package io.pockethive.networkproxy.app;
 enum NetworkFaultType {
     LATENCY("latency"),
     BANDWIDTH("bandwidth"),
+    SLOW_CLOSE("slow-close"),
+    LIMIT_DATA("limit-data"),
     TIMEOUT("timeout"),
     RESET_PEER("reset-peer");
 

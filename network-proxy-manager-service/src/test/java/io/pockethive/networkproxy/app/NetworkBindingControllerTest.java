@@ -113,6 +113,8 @@ class NetworkBindingControllerTest {
                       "latencyMs": 300,
                       "jitterMs": 30,
                       "bandwidthKbps": 2048,
+                      "slowCloseDelayMs": 1200,
+                      "limitDataBytes": 65536,
                       "requestedBy": "hive",
                       "reason": "live tuning"
                     }
@@ -120,7 +122,9 @@ class NetworkBindingControllerTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.enabled").value(true))
             .andExpect(jsonPath("$.latencyMs").value(300))
-            .andExpect(jsonPath("$.bandwidthKbps").value(2048));
+            .andExpect(jsonPath("$.bandwidthKbps").value(2048))
+            .andExpect(jsonPath("$.slowCloseDelayMs").value(1200))
+            .andExpect(jsonPath("$.limitDataBytes").value(65536));
 
         mvc.perform(post("/api/network/manual-override/drop-connections")
                 .contentType(MediaType.APPLICATION_JSON)

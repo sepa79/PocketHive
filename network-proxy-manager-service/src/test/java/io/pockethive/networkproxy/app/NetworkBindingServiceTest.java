@@ -141,19 +141,23 @@ class NetworkBindingServiceTest {
             400,
             40,
             2048,
+            1200,
+            65_536,
             null,
             "hive",
             "live tuning"));
 
         assertThat(enabled.enabled()).isTrue();
         assertThat(toxiproxy.toxics("sut-a__payments")).extracting(ToxiproxyAdminClient.ToxicRecord::type)
-            .containsExactly("latency", "bandwidth");
+            .containsExactly("latency", "bandwidth", "slow_close", "limit_data");
 
         ManualNetworkOverrideStatus disabled = service.applyManualOverride(new ManualNetworkOverrideRequest(
             false,
             400,
             40,
             2048,
+            1200,
+            65_536,
             null,
             "hive",
             "override off"));
@@ -183,6 +187,35 @@ class NetworkBindingServiceTest {
 
         assertThat(toxiproxy.createdTransientResetPeer()).isGreaterThan(0);
         assertThat(toxiproxy.toxics("sut-a__payments")).isEmpty();
+    }
+
+    @Test
+    void bindMapsSlowCloseAndLimitDataFaults() throws Exception {
+        FakeNetworkProfileClient profileClient = new FakeNetworkProfileClient(Map.of(
+            "edge-cases", new NetworkProfile(
+                "edge-cases",
+                "Edge cases",
+                List.of(
+                    new NetworkFault("slow-close", Map.of("delayMs", 1500)),
+                    new NetworkFault("limit-data", Map.of("bytes", 4096))),
+                List.of("payments"))));
+        FakeToxiproxyAdminClient toxiproxy = new FakeToxiproxyAdminClient();
+        FakeHaproxyAdminClient haproxy = new FakeHaproxyAdminClient();
+        NetworkBindingService service = new NetworkBindingService(profileClient, toxiproxy, haproxy, properties());
+
+        service.bind("swarm-a", new NetworkBindingRequest(
+            "sut-a",
+            NetworkMode.PROXIED,
+            "edge-cases",
+            "orchestrator",
+            null,
+            resolvedSut("sut-a", Map.of(
+                "payments", new ResolvedSutEndpoint("payments", "HTTPS", "https://proxy.local:9443", "proxy.local:9443", "internal-a:443")))));
+
+        assertThat(toxiproxy.toxics("sut-a__payments")).extracting(ToxiproxyAdminClient.ToxicRecord::type)
+            .containsExactly("slow_close", "limit_data");
+        assertThat(toxiproxy.toxics("sut-a__payments").get(0).attributes()).containsEntry("delay", 1500);
+        assertThat(toxiproxy.toxics("sut-a__payments").get(1).attributes()).containsEntry("bytes", 4096);
     }
 
     private static NetworkProxyManagerProperties properties() {

@@ -28,6 +28,10 @@ type ManualOverrideDraft = {
   jitterMs: number
   bandwidthEnabled: boolean
   rateKbps: number
+  slowCloseEnabled: boolean
+  slowCloseDelayMs: number
+  limitDataEnabled: boolean
+  limitDataKb: number
   timeoutEnabled: boolean
   timeoutMs: number
 }
@@ -40,6 +44,8 @@ type ToxicDocLinkProps = {
 const TOXIPROXY_DOCS = {
   latency: 'https://github.com/Shopify/toxiproxy#latency',
   bandwidth: 'https://github.com/Shopify/toxiproxy#bandwidth',
+  slowClose: 'https://github.com/Shopify/toxiproxy#slow_close',
+  limitData: 'https://github.com/Shopify/toxiproxy#limit_data',
   timeout: 'https://github.com/Shopify/toxiproxy#timeout',
   resetPeer: 'https://github.com/Shopify/toxiproxy#reset_peer',
 } as const
@@ -51,6 +57,10 @@ const DEFAULT_MANUAL_OVERRIDE: ManualOverrideDraft = {
   jitterMs: 25,
   bandwidthEnabled: false,
   rateKbps: 1024,
+  slowCloseEnabled: false,
+  slowCloseDelayMs: 1000,
+  limitDataEnabled: false,
+  limitDataKb: 64,
   timeoutEnabled: false,
   timeoutMs: 2000,
 }
@@ -94,6 +104,11 @@ function draftFromManualOverride(override: ManualNetworkOverride): ManualOverrid
     jitterMs: override.jitterMs ?? DEFAULT_MANUAL_OVERRIDE.jitterMs,
     bandwidthEnabled: override.bandwidthKbps !== null,
     rateKbps: override.bandwidthKbps ?? DEFAULT_MANUAL_OVERRIDE.rateKbps,
+    slowCloseEnabled: override.slowCloseDelayMs !== null,
+    slowCloseDelayMs: override.slowCloseDelayMs ?? DEFAULT_MANUAL_OVERRIDE.slowCloseDelayMs,
+    limitDataEnabled: override.limitDataBytes !== null,
+    limitDataKb:
+      override.limitDataBytes !== null ? Math.max(1, Math.round(override.limitDataBytes / 1024)) : DEFAULT_MANUAL_OVERRIDE.limitDataKb,
     timeoutEnabled: override.timeoutMs !== null,
     timeoutMs: override.timeoutMs ?? DEFAULT_MANUAL_OVERRIDE.timeoutMs,
   }
@@ -105,6 +120,8 @@ function toManualOverridePayload(draft: ManualOverrideDraft) {
     latencyMs: draft.latencyEnabled ? clamp(draft.latencyMs, 0, 5000) : null,
     jitterMs: draft.latencyEnabled ? clamp(draft.jitterMs, 0, 1000) : null,
     bandwidthKbps: draft.bandwidthEnabled ? clamp(draft.rateKbps, 64, 100000) : null,
+    slowCloseDelayMs: draft.slowCloseEnabled ? clamp(draft.slowCloseDelayMs, 1, 60000) : null,
+    limitDataBytes: draft.limitDataEnabled ? clamp(draft.limitDataKb, 1, 10240) * 1024 : null,
     timeoutMs: draft.timeoutEnabled ? clamp(draft.timeoutMs, 100, 60000) : null,
     requestedBy: 'hive',
     reason: 'manual direct control',
@@ -646,8 +663,90 @@ export function ProxyPage() {
                         disabled={!manualOverride.enabled || !manualOverride.bandwidthEnabled || manualOverrideApplying || dropConnectionsBusy}
                       />
                       <div className="muted">{manualOverride.rateKbps} Kbps</div>
-                    </label>
+                  </label>
+                </div>
+
+                <div className="proxyOverrideGroup">
+                  <div className="proxyOverrideGroupHead">
+                    <div className="proxyToggleRow">
+                      <label className="proxyToggle">
+                        <input
+                          type="checkbox"
+                          checked={manualOverride.slowCloseEnabled}
+                          onChange={(event) =>
+                            setManualOverride((current) => ({
+                              ...current,
+                              slowCloseEnabled: event.target.checked,
+                            }))
+                          }
+                          disabled={!manualOverride.enabled || manualOverrideApplying || dropConnectionsBusy}
+                        />
+                        <span>Slow close</span>
+                      </label>
+                      <ToxicDocLink href={TOXIPROXY_DOCS.slowClose} label="slow close toxic" />
+                    </div>
+                    <div className="muted">delays socket close by the selected amount</div>
                   </div>
+                  <label className="field">
+                    <span className="fieldLabel">Delay close by ms</span>
+                    <input
+                      type="range"
+                      min="1"
+                      max="10000"
+                      step="50"
+                      value={manualOverride.slowCloseDelayMs}
+                      onChange={(event) =>
+                        setManualOverride((current) => ({
+                          ...current,
+                          slowCloseDelayMs: Number(event.target.value),
+                        }))
+                      }
+                      disabled={!manualOverride.enabled || !manualOverride.slowCloseEnabled || manualOverrideApplying || dropConnectionsBusy}
+                    />
+                    <div className="muted">{manualOverride.slowCloseDelayMs} ms</div>
+                  </label>
+                </div>
+
+                <div className="proxyOverrideGroup">
+                  <div className="proxyOverrideGroupHead">
+                    <div className="proxyToggleRow">
+                      <label className="proxyToggle">
+                        <input
+                          type="checkbox"
+                          checked={manualOverride.limitDataEnabled}
+                          onChange={(event) =>
+                            setManualOverride((current) => ({
+                              ...current,
+                              limitDataEnabled: event.target.checked,
+                            }))
+                          }
+                          disabled={!manualOverride.enabled || manualOverrideApplying || dropConnectionsBusy}
+                        />
+                        <span>Limit data</span>
+                      </label>
+                      <ToxicDocLink href={TOXIPROXY_DOCS.limitData} label="limit data toxic" />
+                    </div>
+                    <div className="muted">allows only the first chunk of data through, then closes the connection</div>
+                  </div>
+                  <label className="field">
+                    <span className="fieldLabel">Allow KiB before close</span>
+                    <input
+                      type="range"
+                      min="1"
+                      max="1024"
+                      step="1"
+                      value={manualOverride.limitDataKb}
+                      onChange={(event) =>
+                        setManualOverride((current) => ({
+                          ...current,
+                          limitDataKb: Number(event.target.value),
+                        }))
+                      }
+                      disabled={!manualOverride.enabled || !manualOverride.limitDataEnabled || manualOverrideApplying || dropConnectionsBusy}
+                    />
+                    <div className="muted">{manualOverride.limitDataKb} KiB</div>
+                  </label>
+                </div>
 
                 <div className="proxyOverrideGroup">
                   <div className="proxyOverrideGroupHead">
@@ -718,6 +817,8 @@ export function ProxyPage() {
                     ? `${[
                         manualOverride.latencyEnabled ? `latency ${manualOverride.latencyMs} ms / jitter ${manualOverride.jitterMs} ms` : null,
                         manualOverride.bandwidthEnabled ? `bandwidth ${manualOverride.rateKbps} Kbps` : null,
+                        manualOverride.slowCloseEnabled ? `slow close ${manualOverride.slowCloseDelayMs} ms` : null,
+                        manualOverride.limitDataEnabled ? `limit data ${manualOverride.limitDataKb} KiB` : null,
                         manualOverride.timeoutEnabled ? `stall then close after ${manualOverride.timeoutMs} ms` : null,
                       ]
                         .filter(Boolean)

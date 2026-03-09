@@ -31,6 +31,8 @@ export type ManualNetworkOverride = {
   latencyMs: number | null
   jitterMs: number | null
   bandwidthKbps: number | null
+  slowCloseDelayMs: number | null
+  limitDataBytes: number | null
   timeoutMs: number | null
   requestedBy: string
   reason: string | null
@@ -189,6 +191,8 @@ export function normalizeManualOverride(data: unknown): ManualNetworkOverride {
     latencyMs: integerOrNull(value.latencyMs),
     jitterMs: integerOrNull(value.jitterMs),
     bandwidthKbps: integerOrNull(value.bandwidthKbps),
+    slowCloseDelayMs: integerOrNull(value.slowCloseDelayMs),
+    limitDataBytes: integerOrNull(value.limitDataBytes),
     timeoutMs: integerOrNull(value.timeoutMs),
     requestedBy: typeof value.requestedBy === 'string' && value.requestedBy.trim().length > 0 ? value.requestedBy.trim() : 'unknown',
     reason: typeof value.reason === 'string' && value.reason.trim().length > 0 ? value.reason.trim() : null,

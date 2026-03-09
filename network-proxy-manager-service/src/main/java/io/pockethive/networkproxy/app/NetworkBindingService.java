@@ -116,12 +116,14 @@ public class NetworkBindingService {
         Objects.requireNonNull(request, "request");
         manualOverrideState = ManualOverrideState.from(request);
         reconcileAllSuts();
-        log.info("applied manual network override enabled={} requestedBy={} latencyMs={} jitterMs={} bandwidthKbps={} timeoutMs={}",
+        log.info("applied manual network override enabled={} requestedBy={} latencyMs={} jitterMs={} bandwidthKbps={} slowCloseDelayMs={} limitDataBytes={} timeoutMs={}",
             manualOverrideState.enabled(),
             manualOverrideState.requestedBy(),
             manualOverrideState.latencyMs(),
             manualOverrideState.jitterMs(),
             manualOverrideState.bandwidthKbps(),
+            manualOverrideState.slowCloseDelayMs(),
+            manualOverrideState.limitDataBytes(),
             manualOverrideState.timeoutMs());
         return manualOverrideState.toStatus();
     }
@@ -327,6 +329,18 @@ public class NetworkBindingService {
                     streamOf(fault, "downstream"),
                     toxicityOf(fault),
                     Map.of("rate", requireInt(fault.config(), "rateKbps")));
+                case SLOW_CLOSE -> new ToxiproxyAdminClient.ToxicRecord(
+                    toxicName,
+                    "slow_close",
+                    streamOf(fault, "downstream"),
+                    toxicityOf(fault),
+                    Map.of("delay", requireInt(fault.config(), "delayMs")));
+                case LIMIT_DATA -> new ToxiproxyAdminClient.ToxicRecord(
+                    toxicName,
+                    "limit_data",
+                    streamOf(fault, "downstream"),
+                    toxicityOf(fault),
+                    Map.of("bytes", requireInt(fault.config(), "bytes")));
                 case TIMEOUT -> new ToxiproxyAdminClient.ToxicRecord(
                     toxicName,
                     "timeout",
@@ -486,13 +500,15 @@ public class NetworkBindingService {
                                        Integer latencyMs,
                                        Integer jitterMs,
                                        Integer bandwidthKbps,
+                                       Integer slowCloseDelayMs,
+                                       Integer limitDataBytes,
                                        Integer timeoutMs,
                                        String requestedBy,
                                        String reason,
                                        Instant appliedAt) {
 
         private static ManualOverrideState disabled() {
-            return new ManualOverrideState(false, 250, 25, null, null, "system", null, Instant.now());
+            return new ManualOverrideState(false, 250, 25, null, null, null, null, "system", null, Instant.now());
         }
 
         private static ManualOverrideState from(ManualNetworkOverrideRequest request) {
@@ -501,6 +517,8 @@ public class NetworkBindingService {
                 nullableClamped(request.latencyMs(), 0, 5_000, "latencyMs"),
                 nullableClamped(request.jitterMs(), 0, 1_000, "jitterMs"),
                 nullableClamped(request.bandwidthKbps(), 64, 100_000, "bandwidthKbps"),
+                nullableClamped(request.slowCloseDelayMs(), 1, 60_000, "slowCloseDelayMs"),
+                nullableClamped(request.limitDataBytes(), 1, 10_485_760, "limitDataBytes"),
                 nullableClamped(request.timeoutMs(), 100, 60_000, "timeoutMs"),
                 requireText(request.requestedBy(), "requestedBy"),
                 trimmedOrNull(request.reason()),
@@ -520,6 +538,12 @@ public class NetworkBindingService {
             if (bandwidthKbps != null) {
                 faults.add(new NetworkFault("bandwidth", Map.of("rateKbps", bandwidthKbps)));
             }
+            if (slowCloseDelayMs != null) {
+                faults.add(new NetworkFault("slow-close", Map.of("delayMs", slowCloseDelayMs)));
+            }
+            if (limitDataBytes != null) {
+                faults.add(new NetworkFault("limit-data", Map.of("bytes", limitDataBytes)));
+            }
             if (timeoutMs != null) {
                 faults.add(new NetworkFault("timeout", Map.of("timeoutMs", timeoutMs)));
             }
@@ -532,6 +556,8 @@ public class NetworkBindingService {
                 latencyMs,
                 jitterMs,
                 bandwidthKbps,
+                slowCloseDelayMs,
+                limitDataBytes,
                 timeoutMs,
                 requestedBy,
                 reason,
