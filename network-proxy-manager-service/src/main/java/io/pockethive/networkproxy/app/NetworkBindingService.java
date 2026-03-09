@@ -26,6 +26,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class NetworkBindingService {
     private static final Logger log = LoggerFactory.getLogger(NetworkBindingService.class);
+    private static final long DROP_CONNECTIONS_WINDOW_MILLIS = 250L;
 
     private final Map<String, NetworkBinding> bindings = new ConcurrentHashMap<>();
     private final NetworkProfileClient profileClient;
@@ -34,6 +35,7 @@ public class NetworkBindingService {
     private final String toxiproxyListenHost;
     private final String haproxyBackendHost;
     private final int toxiproxyListenPortOffset;
+    private ManualOverrideState manualOverrideState = ManualOverrideState.disabled();
 
     public NetworkBindingService(NetworkProfileClient profileClient,
                                  ToxiproxyAdminClient toxiproxy,
@@ -106,6 +108,60 @@ public class NetworkBindingService {
             List.of());
     }
 
+    public synchronized ManualNetworkOverrideStatus manualOverride() {
+        return manualOverrideState.toStatus();
+    }
+
+    public synchronized ManualNetworkOverrideStatus applyManualOverride(ManualNetworkOverrideRequest request) throws Exception {
+        Objects.requireNonNull(request, "request");
+        manualOverrideState = ManualOverrideState.from(request);
+        reconcileAllSuts();
+        log.info("applied manual network override enabled={} requestedBy={} latencyMs={} jitterMs={} bandwidthKbps={} timeoutMs={}",
+            manualOverrideState.enabled(),
+            manualOverrideState.requestedBy(),
+            manualOverrideState.latencyMs(),
+            manualOverrideState.jitterMs(),
+            manualOverrideState.bandwidthKbps(),
+            manualOverrideState.timeoutMs());
+        return manualOverrideState.toStatus();
+    }
+
+    public synchronized ManualNetworkOverrideStatus dropConnections(ManualNetworkActionRequest request) throws Exception {
+        ManualNetworkActionRequest action = request == null ? new ManualNetworkActionRequest("unknown", null) : request;
+        String requestedBy = requireText(action.requestedBy(), "requestedBy");
+        List<String> createdToxics = new ArrayList<>();
+        try {
+            for (NetworkBinding binding : winningBindings()) {
+                for (ResolvedSutEndpoint endpoint : binding.affectedEndpoints()) {
+                    String proxyName = proxyName(binding.sutId(), endpoint.endpointId());
+                    String toxicName = "manual-drop-" + Instant.now().toEpochMilli() + "-" + endpoint.endpointId();
+                    toxiproxy.createToxic(proxyName, new ToxiproxyAdminClient.ToxicRecord(
+                        toxicName,
+                        "reset_peer",
+                        "downstream",
+                        1.0d,
+                        Map.of("timeout", 0)));
+                    createdToxics.add(proxyName + "|" + toxicName);
+                }
+            }
+            if (!createdToxics.isEmpty()) {
+                sleepDropWindow();
+            }
+            log.info("manual drop-connections requestedBy={} reason={} affectedProxies={}",
+                requestedBy, action.reason(), createdToxics.size());
+            return manualOverrideState.toStatus();
+        } finally {
+            for (String reference : createdToxics) {
+                String[] parts = reference.split("\\|", 2);
+                try {
+                    toxiproxy.deleteToxic(parts[0], parts[1]);
+                } catch (Exception ex) {
+                    log.warn("failed to delete transient toxic {} from {}", parts[1], parts[0], ex);
+                }
+            }
+        }
+    }
+
     private void reconcileSut(String sutId) throws Exception {
         String trimmedSutId = requireText(sutId, "sutId");
         List<NetworkBinding> activeBindings = bindings.values().stream()
@@ -121,7 +177,7 @@ public class NetworkBindingService {
             return;
         }
         NetworkBinding winner = activeBindings.get(activeBindings.size() - 1);
-        NetworkProfile profile = profileClient.fetch(winner.networkProfileId());
+        NetworkProfile profile = effectiveProfile(profileClient.fetch(winner.networkProfileId()));
         Map<String, ToxiproxyAdminClient.ProxyRecord> remainingProxies = toxiproxy.listProxies();
         validatePortConflicts(trimmedSutId, winner.affectedEndpoints(), remainingProxies);
         for (ResolvedSutEndpoint endpoint : winner.affectedEndpoints()) {
@@ -139,6 +195,16 @@ public class NetworkBindingService {
         haproxy.applyRoutes(routesForWinningBindings());
         log.info("reconciled proxied listeners for sut={} using swarm={} profile={} endpoints={}",
             trimmedSutId, winner.swarmId(), winner.networkProfileId(), winner.affectedEndpoints().size());
+    }
+
+    private void reconcileAllSuts() throws Exception {
+        Set<String> sutIds = bindings.values().stream()
+            .map(NetworkBinding::sutId)
+            .filter(Objects::nonNull)
+            .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+        for (String sutId : sutIds) {
+            reconcileSut(sutId);
+        }
     }
 
     private void deleteManagedProxies(String sutId,
@@ -169,8 +235,7 @@ public class NetworkBindingService {
         }
     }
 
-    private List<HaproxyAdminClient.RouteRecord> routesForWinningBindings() {
-        Map<Integer, String> occupiedFrontendPorts = new LinkedHashMap<>();
+    private List<NetworkBinding> winningBindings() {
         return bindings.values().stream()
             .filter(binding -> binding.networkMode() == NetworkMode.PROXIED)
             .collect(java.util.stream.Collectors.groupingBy(
@@ -180,6 +245,12 @@ public class NetworkBindingService {
             .values().stream()
             .flatMap(java.util.Optional::stream)
             .sorted(Comparator.comparing(NetworkBinding::sutId))
+            .toList();
+    }
+
+    private List<HaproxyAdminClient.RouteRecord> routesForWinningBindings() {
+        Map<Integer, String> occupiedFrontendPorts = new LinkedHashMap<>();
+        return winningBindings().stream()
             .flatMap(binding -> binding.affectedEndpoints().stream()
                 .sorted(Comparator.comparing(ResolvedSutEndpoint::endpointId))
                 .map(endpoint -> toHaproxyRoute(binding.sutId(), endpoint, occupiedFrontendPorts)))
@@ -271,6 +342,23 @@ public class NetworkBindingService {
             });
         }
         return List.copyOf(toxics);
+    }
+
+    private NetworkProfile effectiveProfile(NetworkProfile baseProfile) {
+        if (!manualOverrideState.enabled()) {
+            return baseProfile;
+        }
+        Set<String> overriddenTypes = manualOverrideState.faults().stream()
+            .map(NetworkFault::type)
+            .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+        List<NetworkFault> effectiveFaults = new ArrayList<>();
+        for (NetworkFault fault : baseProfile.faults()) {
+            if (!overriddenTypes.contains(fault.type())) {
+                effectiveFaults.add(fault);
+            }
+        }
+        effectiveFaults.addAll(manualOverrideState.faults());
+        return new NetworkProfile(baseProfile.id(), baseProfile.name(), effectiveFaults, baseProfile.targets());
     }
 
     private String toxiproxyListenAddress(ResolvedSutEndpoint endpoint) {
@@ -378,10 +466,93 @@ public class NetworkBindingService {
         return value;
     }
 
+    private static void sleepDropWindow() {
+        try {
+            Thread.sleep(DROP_CONNECTIONS_WINDOW_MILLIS);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("manual drop-connections interrupted", ex);
+        }
+    }
+
     private static String requireText(String value, String field) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(field + " must not be blank");
         }
         return value.trim();
+    }
+
+    private record ManualOverrideState(boolean enabled,
+                                       Integer latencyMs,
+                                       Integer jitterMs,
+                                       Integer bandwidthKbps,
+                                       Integer timeoutMs,
+                                       String requestedBy,
+                                       String reason,
+                                       Instant appliedAt) {
+
+        private static ManualOverrideState disabled() {
+            return new ManualOverrideState(false, 250, 25, null, null, "system", null, Instant.now());
+        }
+
+        private static ManualOverrideState from(ManualNetworkOverrideRequest request) {
+            return new ManualOverrideState(
+                request.enabled(),
+                nullableClamped(request.latencyMs(), 0, 5_000, "latencyMs"),
+                nullableClamped(request.jitterMs(), 0, 1_000, "jitterMs"),
+                nullableClamped(request.bandwidthKbps(), 64, 100_000, "bandwidthKbps"),
+                nullableClamped(request.timeoutMs(), 100, 60_000, "timeoutMs"),
+                requireText(request.requestedBy(), "requestedBy"),
+                trimmedOrNull(request.reason()),
+                Instant.now());
+        }
+
+        private List<NetworkFault> faults() {
+            if (!enabled) {
+                return List.of();
+            }
+            List<NetworkFault> faults = new ArrayList<>();
+            if (latencyMs != null) {
+                faults.add(new NetworkFault("latency", Map.of(
+                    "latency", latencyMs,
+                    "jitter", jitterMs == null ? 0 : jitterMs)));
+            }
+            if (bandwidthKbps != null) {
+                faults.add(new NetworkFault("bandwidth", Map.of("rateKbps", bandwidthKbps)));
+            }
+            if (timeoutMs != null) {
+                faults.add(new NetworkFault("timeout", Map.of("timeoutMs", timeoutMs)));
+            }
+            return List.copyOf(faults);
+        }
+
+        private ManualNetworkOverrideStatus toStatus() {
+            return new ManualNetworkOverrideStatus(
+                enabled,
+                latencyMs,
+                jitterMs,
+                bandwidthKbps,
+                timeoutMs,
+                requestedBy,
+                reason,
+                appliedAt);
+        }
+
+        private static Integer nullableClamped(Integer value, int min, int max, String field) {
+            if (value == null) {
+                return null;
+            }
+            if (value < min || value > max) {
+                throw new IllegalArgumentException(field + " must be between " + min + " and " + max);
+            }
+            return value;
+        }
+
+        private static String trimmedOrNull(String value) {
+            if (value == null || value.isBlank()) {
+                return null;
+            }
+            return value.trim();
+        }
     }
 }

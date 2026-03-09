@@ -1,268 +1,183 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  fetchJson,
+  formatInstant,
+  normalizeManualOverride,
+  normalizeBindings,
+  normalizeProfiles,
+  readErrorMessage,
+  summarizeFaultConfig,
+  summarizeFaults,
+  type ManualNetworkOverride,
+  type NetworkBinding,
+  type NetworkProfile,
+} from '../lib/networkProxy'
 
-type NetworkMode = 'DIRECT' | 'PROXIED'
+type HealthStatus = 'UP' | 'DOWN' | 'UNKNOWN'
 
-type SwarmSummary = {
-  id: string
-  status: string | null
-  templateId: string | null
-  sutId: string | null
-  networkMode: NetworkMode
-  networkProfileId: string | null
+type ActuatorHealth = {
+  status: HealthStatus
 }
 
-type ResolvedSutEndpoint = {
-  endpointId: string
-  kind: string | null
-  clientBaseUrl: string | null
-  clientAuthority: string | null
-  upstreamAuthority: string | null
+type EditorMode = 'manual' | 'raw'
+
+type ManualOverrideDraft = {
+  enabled: boolean
+  latencyEnabled: boolean
+  latencyMs: number
+  jitterMs: number
+  bandwidthEnabled: boolean
+  rateKbps: number
+  timeoutEnabled: boolean
+  timeoutMs: number
 }
 
-type NetworkBinding = {
-  swarmId: string
-  sutId: string
-  networkMode: NetworkMode
-  networkProfileId: string | null
-  effectiveMode: NetworkMode
-  requestedBy: string
-  appliedAt: string | null
-  affectedEndpoints: ResolvedSutEndpoint[]
+type ToxicDocLinkProps = {
+  href: string
+  label: string
 }
 
-type NetworkProfile = {
-  id: string
-  name: string | null
-  faults: { type: string; config: Record<string, unknown> }[]
-  targets: string[]
+const TOXIPROXY_DOCS = {
+  latency: 'https://github.com/Shopify/toxiproxy#latency',
+  bandwidth: 'https://github.com/Shopify/toxiproxy#bandwidth',
+  timeout: 'https://github.com/Shopify/toxiproxy#timeout',
+  resetPeer: 'https://github.com/Shopify/toxiproxy#reset_peer',
+} as const
+
+const DEFAULT_MANUAL_OVERRIDE: ManualOverrideDraft = {
+  enabled: false,
+  latencyEnabled: true,
+  latencyMs: 250,
+  jitterMs: 25,
+  bandwidthEnabled: false,
+  rateKbps: 1024,
+  timeoutEnabled: false,
+  timeoutMs: 2000,
 }
 
-type ProxyRow = {
-  swarmId: string
-  status: string | null
-  templateId: string | null
-  sutId: string | null
-  networkMode: NetworkMode
-  networkProfileId: string | null
-  appliedAt: string | null
-  affectedEndpoints: ResolvedSutEndpoint[]
-  bindingRequestedBy: string | null
-  hasBinding: boolean
+function normalizeHealth(data: unknown): HealthStatus {
+  if (!data || typeof data !== 'object') return 'UNKNOWN'
+  const value = data as Record<string, unknown>
+  return value.status === 'UP' || value.status === 'DOWN' ? value.status : 'UNKNOWN'
 }
 
-function createIdempotencyKey() {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-    return crypto.randomUUID()
-  }
-  return `ph-${Date.now()}-${Math.random().toString(16).slice(2)}`
-}
-
-async function readErrorMessage(response: Response): Promise<string> {
-  try {
-    const contentType = response.headers.get('content-type') ?? ''
-    if (contentType.includes('application/json')) {
-      const payload = (await response.json()) as unknown
-      if (payload && typeof payload === 'object' && 'message' in payload) {
-        const maybeMessage = (payload as Record<string, unknown>).message
-        if (typeof maybeMessage === 'string' && maybeMessage.trim().length > 0) {
-          return maybeMessage.trim()
-        }
-      }
-      return JSON.stringify(payload)
-    }
-    const text = await response.text()
-    return text.trim().length > 0 ? text.trim() : `${response.status} ${response.statusText}`
-  } catch {
-    return `${response.status} ${response.statusText}`
-  }
-}
-
-async function fetchJson<T>(url: string): Promise<T> {
+async function fetchHealth(url: string): Promise<ActuatorHealth> {
   const response = await fetch(url, { headers: { Accept: 'application/json' } })
   if (!response.ok) {
     throw new Error(await readErrorMessage(response))
   }
-  return (await response.json()) as T
+  return { status: normalizeHealth(await response.json()) }
 }
 
-function normalizeMode(value: unknown): NetworkMode {
-  return value === 'PROXIED' ? 'PROXIED' : 'DIRECT'
+function healthPill(status: HealthStatus): string {
+  if (status === 'UP') return 'pill pillOk'
+  if (status === 'DOWN') return 'pill pillBad'
+  return 'pill pillWarn'
 }
 
-function normalizeSwarmSummaries(data: unknown): SwarmSummary[] {
-  if (!Array.isArray(data)) return []
-  return data
-    .map((entry) => {
-      if (!entry || typeof entry !== 'object') return null
-      const value = entry as Record<string, unknown>
-      const id = typeof value.id === 'string' ? value.id.trim() : ''
-      if (!id) return null
-      return {
-        id,
-        status: typeof value.status === 'string' ? value.status.trim() : null,
-        templateId: typeof value.templateId === 'string' && value.templateId.trim().length > 0 ? value.templateId.trim() : null,
-        sutId: typeof value.sutId === 'string' && value.sutId.trim().length > 0 ? value.sutId.trim() : null,
-        networkMode: normalizeMode(value.networkMode),
-        networkProfileId:
-          typeof value.networkProfileId === 'string' && value.networkProfileId.trim().length > 0
-            ? value.networkProfileId.trim()
-            : null,
-      } satisfies SwarmSummary
-    })
-    .filter((entry): entry is SwarmSummary => entry !== null)
+function renderHealthLabel(status: HealthStatus): string {
+  if (status === 'UP') return 'UP'
+  if (status === 'DOWN') return 'DOWN'
+  return 'UNKNOWN'
 }
 
-function normalizeEndpoint(entry: unknown): ResolvedSutEndpoint | null {
-  if (!entry || typeof entry !== 'object') return null
-  const value = entry as Record<string, unknown>
-  const endpointId = typeof value.endpointId === 'string' ? value.endpointId.trim() : ''
-  if (!endpointId) return null
+function clamp(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return min
+  return Math.min(max, Math.max(min, Math.round(value)))
+}
+
+function draftFromManualOverride(override: ManualNetworkOverride): ManualOverrideDraft {
   return {
-    endpointId,
-    kind: typeof value.kind === 'string' && value.kind.trim().length > 0 ? value.kind.trim() : null,
-    clientBaseUrl: typeof value.clientBaseUrl === 'string' && value.clientBaseUrl.trim().length > 0 ? value.clientBaseUrl.trim() : null,
-    clientAuthority:
-      typeof value.clientAuthority === 'string' && value.clientAuthority.trim().length > 0 ? value.clientAuthority.trim() : null,
-    upstreamAuthority:
-      typeof value.upstreamAuthority === 'string' && value.upstreamAuthority.trim().length > 0
-        ? value.upstreamAuthority.trim()
-        : null,
+    enabled: override.enabled,
+    latencyEnabled: override.latencyMs !== null,
+    latencyMs: override.latencyMs ?? DEFAULT_MANUAL_OVERRIDE.latencyMs,
+    jitterMs: override.jitterMs ?? DEFAULT_MANUAL_OVERRIDE.jitterMs,
+    bandwidthEnabled: override.bandwidthKbps !== null,
+    rateKbps: override.bandwidthKbps ?? DEFAULT_MANUAL_OVERRIDE.rateKbps,
+    timeoutEnabled: override.timeoutMs !== null,
+    timeoutMs: override.timeoutMs ?? DEFAULT_MANUAL_OVERRIDE.timeoutMs,
   }
 }
 
-function normalizeBindings(data: unknown): NetworkBinding[] {
-  if (!Array.isArray(data)) return []
-  return data
-    .map((entry) => {
-      if (!entry || typeof entry !== 'object') return null
-      const value = entry as Record<string, unknown>
-      const swarmId = typeof value.swarmId === 'string' ? value.swarmId.trim() : ''
-      const sutId = typeof value.sutId === 'string' ? value.sutId.trim() : ''
-      if (!swarmId || !sutId) return null
-      return {
-        swarmId,
-        sutId,
-        networkMode: normalizeMode(value.networkMode),
-        networkProfileId:
-          typeof value.networkProfileId === 'string' && value.networkProfileId.trim().length > 0
-            ? value.networkProfileId.trim()
-            : null,
-        effectiveMode: normalizeMode(value.effectiveMode),
-        requestedBy: typeof value.requestedBy === 'string' ? value.requestedBy.trim() : 'unknown',
-        appliedAt: typeof value.appliedAt === 'string' && value.appliedAt.trim().length > 0 ? value.appliedAt.trim() : null,
-        affectedEndpoints: Array.isArray(value.affectedEndpoints)
-          ? value.affectedEndpoints.map(normalizeEndpoint).filter((item): item is ResolvedSutEndpoint => item !== null)
-          : [],
-      } satisfies NetworkBinding
-    })
-    .filter((entry): entry is NetworkBinding => entry !== null)
+function toManualOverridePayload(draft: ManualOverrideDraft) {
+  return {
+    enabled: draft.enabled,
+    latencyMs: draft.latencyEnabled ? clamp(draft.latencyMs, 0, 5000) : null,
+    jitterMs: draft.latencyEnabled ? clamp(draft.jitterMs, 0, 1000) : null,
+    bandwidthKbps: draft.bandwidthEnabled ? clamp(draft.rateKbps, 64, 100000) : null,
+    timeoutMs: draft.timeoutEnabled ? clamp(draft.timeoutMs, 100, 60000) : null,
+    requestedBy: 'hive',
+    reason: 'manual direct control',
+  }
 }
 
-function normalizeProfiles(data: unknown): NetworkProfile[] {
-  if (!Array.isArray(data)) return []
-  return data
-    .map((entry) => {
-      if (!entry || typeof entry !== 'object') return null
-      const value = entry as Record<string, unknown>
-      const id = typeof value.id === 'string' ? value.id.trim() : ''
-      if (!id) return null
-      const faults = Array.isArray(value.faults)
-        ? value.faults
-            .map((fault) => {
-              if (!fault || typeof fault !== 'object') return null
-              const faultValue = fault as Record<string, unknown>
-              const type = typeof faultValue.type === 'string' ? faultValue.type.trim() : ''
-              if (!type) return null
-              const config =
-                faultValue.config && typeof faultValue.config === 'object' && !Array.isArray(faultValue.config)
-                  ? (faultValue.config as Record<string, unknown>)
-                  : {}
-              return { type, config }
-            })
-            .filter((fault): fault is { type: string; config: Record<string, unknown> } => fault !== null)
-        : []
-      const targets = Array.isArray(value.targets)
-        ? value.targets
-            .map((target) => (typeof target === 'string' ? target.trim() : ''))
-            .filter((target) => target.length > 0)
-        : []
-      return {
-        id,
-        name: typeof value.name === 'string' && value.name.trim().length > 0 ? value.name.trim() : null,
-        faults,
-        targets,
-      } satisfies NetworkProfile
-    })
-    .filter((entry): entry is NetworkProfile => entry !== null)
-}
-
-function formatInstant(value: string | null): string {
-  if (!value) return '—'
-  const timestamp = Date.parse(value)
-  if (Number.isNaN(timestamp)) return value
-  return new Date(timestamp).toLocaleString()
-}
-
-function summarizeFaults(profile: NetworkProfile): string {
-  if (profile.faults.length === 0) return 'No faults'
-  return profile.faults.map((fault) => fault.type).join(', ')
-}
-
-function summarizeFaultConfig(config: Record<string, unknown>): string {
-  const entries = Object.entries(config)
-  if (entries.length === 0) return 'default'
-  return entries
-    .map(([key, value]) => `${key}=${String(value)}`)
-    .join(', ')
+function ToxicDocLink({ href, label }: ToxicDocLinkProps) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className="proxyDocLink"
+      aria-label={`Open Toxiproxy documentation for ${label}`}
+      title={`Open Toxiproxy documentation for ${label}`}
+    >
+      ?
+    </a>
+  )
 }
 
 export function ProxyPage() {
   const [loading, setLoading] = useState(false)
+  const [savingRaw, setSavingRaw] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
-  const [busySwarmId, setBusySwarmId] = useState<string | null>(null)
-  const [swarms, setSwarms] = useState<SwarmSummary[]>([])
   const [bindings, setBindings] = useState<NetworkBinding[]>([])
   const [proxies, setProxies] = useState<NetworkBinding[]>([])
   const [profiles, setProfiles] = useState<NetworkProfile[]>([])
-  const [profileDrafts, setProfileDrafts] = useState<Record<string, string>>({})
+  const [rawProfiles, setRawProfiles] = useState('')
+  const [rawLoaded, setRawLoaded] = useState(false)
+  const [proxyManagerHealth, setProxyManagerHealth] = useState<HealthStatus>('UNKNOWN')
+  const [profileRegistryHealth, setProfileRegistryHealth] = useState<HealthStatus>('UNKNOWN')
+  const [editorMode, setEditorMode] = useState<EditorMode>('manual')
+  const [manualOverride, setManualOverride] = useState<ManualOverrideDraft>(DEFAULT_MANUAL_OVERRIDE)
+  const [manualOverrideLoaded, setManualOverrideLoaded] = useState(false)
+  const [manualOverrideApplying, setManualOverrideApplying] = useState(false)
+  const [manualOverrideStatus, setManualOverrideStatus] = useState<ManualNetworkOverride | null>(null)
+  const [dropConnectionsBusy, setDropConnectionsBusy] = useState(false)
+  const manualOverridePayloadRef = useRef<string>('')
 
   const reload = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const [swarmData, bindingData, profileData, proxyData] = await Promise.all([
-        fetchJson<unknown>('/orchestrator/api/swarms'),
+      const [bindingData, profileData, proxyData, rawData, managerHealth, scenarioHealth, manualOverrideData] = await Promise.all([
         fetchJson<unknown>('/network-proxy-manager/api/network/bindings'),
         fetchJson<unknown>('/scenario-manager/network-profiles'),
         fetchJson<unknown>('/network-proxy-manager/api/network/proxies'),
+        fetch('/scenario-manager/network-profiles/raw', { headers: { Accept: 'text/plain' } }).then(async (response) => {
+          if (!response.ok) {
+            throw new Error(await readErrorMessage(response))
+          }
+          return response.text()
+        }),
+        fetchHealth('/network-proxy-manager/actuator/health'),
+        fetchHealth('/scenario-manager/actuator/health'),
+        fetchJson<unknown>('/network-proxy-manager/api/network/manual-override'),
       ])
-      const nextSwarms = normalizeSwarmSummaries(swarmData)
-      const nextBindings = normalizeBindings(bindingData)
-      const nextProfiles = normalizeProfiles(profileData)
-      const nextProxies = normalizeBindings(proxyData)
-      setSwarms(nextSwarms)
-      setBindings(nextBindings)
-      setProfiles(nextProfiles)
-      setProxies(nextProxies)
-      setProfileDrafts((current) => {
-        const next = { ...current }
-        const fallbackProfileId = nextProfiles[0]?.id ?? ''
-        for (const swarm of nextSwarms) {
-          if (!next[swarm.id] || next[swarm.id].trim().length === 0) {
-            next[swarm.id] = swarm.networkProfileId ?? fallbackProfileId
-          }
-        }
-        for (const binding of nextBindings) {
-          if (!next[binding.swarmId] || next[binding.swarmId].trim().length === 0) {
-            next[binding.swarmId] = binding.networkProfileId ?? fallbackProfileId
-          }
-        }
-        return next
-      })
+      setBindings(normalizeBindings(bindingData))
+      setProfiles(normalizeProfiles(profileData))
+      setProxies(normalizeBindings(proxyData))
+      setRawProfiles(rawData)
+      setRawLoaded(true)
+      setProxyManagerHealth(managerHealth.status)
+      setProfileRegistryHealth(scenarioHealth.status)
+      const nextManualOverride = normalizeManualOverride(manualOverrideData)
+      setManualOverrideStatus(nextManualOverride)
+      setManualOverride(draftFromManualOverride(nextManualOverride))
+      manualOverridePayloadRef.current = JSON.stringify(toManualOverridePayload(draftFromManualOverride(nextManualOverride)))
+      setManualOverrideLoaded(true)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load proxy state')
+      setError(e instanceof Error ? e.message : 'Failed to load proxy stack state')
     } finally {
       setLoading(false)
     }
@@ -272,82 +187,103 @@ export function ProxyPage() {
     void reload()
   }, [reload])
 
-  const rows = useMemo<ProxyRow[]>(() => {
-    const swarmsById = new Map(swarms.map((entry) => [entry.id, entry]))
-    const bindingsById = new Map(bindings.map((entry) => [entry.swarmId, entry]))
-    const ids = new Set<string>([...swarmsById.keys(), ...bindingsById.keys()])
-    return Array.from(ids)
-      .sort((left, right) => left.localeCompare(right))
-      .map((swarmId) => {
-        const swarm = swarmsById.get(swarmId)
-        const binding = bindingsById.get(swarmId)
-        return {
-          swarmId,
-          status: swarm?.status ?? null,
-          templateId: swarm?.templateId ?? null,
-          sutId: binding?.sutId ?? swarm?.sutId ?? null,
-          networkMode: binding?.effectiveMode ?? swarm?.networkMode ?? 'DIRECT',
-          networkProfileId: binding?.networkProfileId ?? swarm?.networkProfileId ?? null,
-          appliedAt: binding?.appliedAt ?? null,
-          affectedEndpoints: binding?.affectedEndpoints ?? [],
-          bindingRequestedBy: binding?.requestedBy ?? null,
-          hasBinding: binding != null,
-        }
+  const saveRawProfiles = useCallback(async () => {
+    setSavingRaw(true)
+    setError(null)
+    setMessage(null)
+    try {
+      const response = await fetch('/scenario-manager/network-profiles/raw', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'text/plain' },
+        body: rawProfiles,
       })
-  }, [bindings, swarms])
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response))
+      }
+      setMessage('Saved network profiles YAML to Scenario Manager.')
+      await reload()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to save network profiles YAML')
+    } finally {
+      setSavingRaw(false)
+    }
+  }, [rawProfiles, reload])
 
   const totals = useMemo(() => {
-    const proxied = rows.filter((row) => row.networkMode === 'PROXIED').length
-    const direct = rows.length - proxied
-    const endpointCount = rows.reduce((sum, row) => sum + row.affectedEndpoints.length, 0)
-    return { proxied, direct, endpointCount }
-  }, [rows])
+    const activeEndpoints = bindings.reduce((sum, binding) => sum + binding.affectedEndpoints.length, 0)
+    const proxiedBindings = bindings.filter((binding) => binding.effectiveMode === 'PROXIED').length
+    const uniqueSuts = new Set(bindings.map((binding) => binding.sutId)).size
+    return {
+      activeBindings: bindings.length,
+      proxiedBindings,
+      activeEndpoints,
+      uniqueSuts,
+    }
+  }, [bindings])
 
-  const applyNetworkMode = useCallback(
-    async (swarmId: string, networkMode: NetworkMode) => {
-      setBusySwarmId(swarmId)
+  useEffect(() => {
+    if (!manualOverrideLoaded) return
+    const payload = toManualOverridePayload(manualOverride)
+    const serialized = JSON.stringify(payload)
+    if (serialized === manualOverridePayloadRef.current) {
+      return
+    }
+    const timeoutId = window.setTimeout(async () => {
+      setManualOverrideApplying(true)
       setError(null)
-      setMessage(null)
       try {
-        const profileId = (profileDrafts[swarmId] ?? '').trim()
-        if (networkMode === 'PROXIED' && profileId.length === 0) {
-          throw new Error(`Select a network profile for swarm '${swarmId}'`)
-        }
-        const body =
-          networkMode === 'PROXIED'
-            ? { networkMode, networkProfileId: profileId, idempotencyKey: createIdempotencyKey() }
-            : { networkMode, idempotencyKey: createIdempotencyKey() }
-        const response = await fetch(`/orchestrator/api/swarms/${encodeURIComponent(swarmId)}/network`, {
-          method: 'POST',
-          headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
+        const response = await fetch('/network-proxy-manager/api/network/manual-override', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: serialized,
         })
         if (!response.ok) {
           throw new Error(await readErrorMessage(response))
         }
-        setMessage(
-          networkMode === 'PROXIED'
-            ? `Applied profile '${profileId}' to swarm '${swarmId}'.`
-            : `Cleared proxy routing for swarm '${swarmId}'.`,
-        )
+        const data = normalizeManualOverride(await response.json())
+        manualOverridePayloadRef.current = serialized
+        setManualOverrideStatus(data)
+        setMessage(data.enabled ? 'Manual override applied to the shared proxy stack.' : 'Manual override cleared from the shared proxy stack.')
         await reload()
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Network update failed')
+        setError(e instanceof Error ? e.message : 'Failed to apply manual override')
       } finally {
-        setBusySwarmId(null)
+        setManualOverrideApplying(false)
       }
-    },
-    [profileDrafts, reload],
-  )
+    }, 250)
+    return () => window.clearTimeout(timeoutId)
+  }, [manualOverride, manualOverrideLoaded, reload])
+
+  const dropConnectionsNow = useCallback(async () => {
+    setDropConnectionsBusy(true)
+    setError(null)
+    setMessage(null)
+    try {
+      const response = await fetch('/network-proxy-manager/api/network/manual-override/drop-connections', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ requestedBy: 'hive', reason: 'drop connections now' }),
+      })
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response))
+      }
+      setMessage('Issued one-shot connection drop across the shared proxy stack.')
+      await reload()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to drop connections')
+    } finally {
+      setDropConnectionsBusy(false)
+    }
+  }, [reload])
 
   return (
-    <div className="page">
+    <div className="page proxyPage">
       <div className="row between">
         <div>
-          <h1 className="h1">Proxy Console</h1>
-          <div className="muted">Runtime control for `DIRECT` and `PROXIED` swarms, backed by orchestrator + proxy manager.</div>
+          <h1 className="h1">Proxy</h1>
+          <div className="muted">Shared proxy stack, runtime routes and profile administration.</div>
         </div>
-        <button type="button" className="actionButton" onClick={() => void reload()} disabled={loading || busySwarmId !== null}>
+        <button type="button" className="actionButton" onClick={() => void reload()} disabled={loading || savingRaw}>
           Refresh
         </button>
       </div>
@@ -370,231 +306,446 @@ export function ProxyPage() {
         </div>
       ) : null}
 
-      <div className="tileGrid" style={{ marginTop: 12 }}>
-        <div className="card">
-          <div className="muted">Tracked swarms</div>
-          <div className="h1" style={{ marginTop: 8 }}>
-            {rows.length}
+      <div className="card proxyHero" style={{ marginTop: 12 }}>
+        <div className="proxyHeroHeader">
+          <div>
+            <div className="h2">Shared stack</div>
+            <div className="muted">One shared HAProxy + Toxiproxy stack for v1. Per-swarm mode selection lives on Hive.</div>
+          </div>
+          <div className="proxyHeroBadges">
+            <span className="pill pillInfo">shared-default</span>
+            <span className={healthPill(proxyManagerHealth)}>manager {renderHealthLabel(proxyManagerHealth)}</span>
+            <span className={healthPill(profileRegistryHealth)}>profiles {renderHealthLabel(profileRegistryHealth)}</span>
           </div>
         </div>
-        <div className="card">
-          <div className="muted">Proxied</div>
-          <div className="h1" style={{ marginTop: 8 }}>
-            {totals.proxied}
+
+        <div className="proxyOverviewGrid">
+          <div className="proxyMetric">
+            <div className="proxyMetricLabel">Active bindings</div>
+            <div className="proxyMetricValue">{totals.activeBindings}</div>
+            <div className="muted">proxied {totals.proxiedBindings}</div>
           </div>
-        </div>
-        <div className="card">
-          <div className="muted">Direct</div>
-          <div className="h1" style={{ marginTop: 8 }}>
-            {totals.direct}
+          <div className="proxyMetric">
+            <div className="proxyMetricLabel">Tracked SUTs</div>
+            <div className="proxyMetricValue">{totals.uniqueSuts}</div>
+            <div className="muted">shared blast radius</div>
           </div>
-        </div>
-        <div className="card">
-          <div className="muted">Active endpoints</div>
-          <div className="h1" style={{ marginTop: 8 }}>
-            {totals.endpointCount}
+          <div className="proxyMetric">
+            <div className="proxyMetricLabel">Runtime endpoints</div>
+            <div className="proxyMetricValue">{totals.activeEndpoints}</div>
+            <div className="muted">resolved routes</div>
+          </div>
+          <div className="proxyMetric">
+            <div className="proxyMetricLabel">Profiles</div>
+            <div className="proxyMetricValue">{profiles.length}</div>
+            <div className="muted">catalog entries</div>
           </div>
         </div>
       </div>
 
-      <div className="swarmViewGrid" style={{ marginTop: 12 }}>
-        <div className="swarmViewCards">
-          <div className="card">
-            <div className="row between">
-              <div className="h2">Bindings</div>
-              <div className={loading ? 'pill pillInfo' : 'pill pillOk'}>{loading ? 'LOADING' : `${rows.length}`}</div>
+      <div className="proxySectionGrid" style={{ marginTop: 12 }}>
+        <div className="card">
+          <div className="row between">
+            <div>
+              <div className="h2">Runtime bindings</div>
+              <div className="muted">What is currently materialized on the shared stack.</div>
             </div>
+            <div className="pill pillInfo">{bindings.length}</div>
+          </div>
 
-            <div className="swarmCardList" style={{ maxHeight: 'min(74vh, 920px)', marginTop: 12 }}>
-              {rows.map((row) => {
-                const selectedProfile = profileDrafts[row.swarmId] ?? row.networkProfileId ?? profiles[0]?.id ?? ''
-                const busy = busySwarmId === row.swarmId
-                const canControl = row.sutId != null
-                return (
-                  <div key={row.swarmId} className="swarmWorkerCard">
-                    <div className="row between">
-                      <div>
-                        <div className="h2">{row.swarmId}</div>
-                        <div className="muted" style={{ marginTop: 4 }}>
-                          template `{row.templateId ?? '—'}` • sut `{row.sutId ?? '—'}`
-                        </div>
-                      </div>
-                      <div className="row">
-                        <div className={row.networkMode === 'PROXIED' ? 'pill pillInfo' : 'pill pillWarn'}>{row.networkMode}</div>
-                        {row.status ? <div className="pill pillOk">{row.status}</div> : null}
-                      </div>
-                    </div>
-
-                    <div className="kvGrid" style={{ marginTop: 12 }}>
-                      <div className="kv">
-                        <div className="k">Profile</div>
-                        <div className="v">{row.networkProfileId ?? '—'}</div>
-                      </div>
-                      <div className="kv">
-                        <div className="k">Applied at</div>
-                        <div className="v">{formatInstant(row.appliedAt)}</div>
-                      </div>
-                      <div className="kv">
-                        <div className="k">Endpoints</div>
-                        <div className="v">{row.affectedEndpoints.length}</div>
-                      </div>
-                      <div className="kv">
-                        <div className="k">Requested by</div>
-                        <div className="v">{row.bindingRequestedBy ?? '—'}</div>
-                      </div>
-                    </div>
-
-                    {row.affectedEndpoints.length > 0 ? (
-                      <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
-                        {row.affectedEndpoints.map((endpoint) => (
-                          <div key={`${row.swarmId}:${endpoint.endpointId}`} className="card" style={{ padding: 10 }}>
-                            <div className="row between">
-                              <div className="h2">{endpoint.endpointId}</div>
-                              <div className="pill pillInfo">{endpoint.kind ?? 'UNKNOWN'}</div>
-                            </div>
-                            <div className="muted" style={{ marginTop: 6 }}>
-                              client `{endpoint.clientAuthority ?? endpoint.clientBaseUrl ?? '—'}`
-                            </div>
-                            <div className="muted" style={{ marginTop: 4 }}>
-                              upstream `{endpoint.upstreamAuthority ?? '—'}`
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="muted" style={{ marginTop: 12 }}>
-                        {row.hasBinding ? 'Binding exists but has no affected endpoints.' : 'No active binding in proxy manager.'}
-                      </div>
-                    )}
-
-                    <div className="formGrid" style={{ marginTop: 14 }}>
-                      <label className="field">
-                        <span className="fieldLabel">Profile for PROXIED</span>
-                        <select
-                          className="textInput textInputCompact"
-                          value={selectedProfile}
-                          onChange={(event) =>
-                            setProfileDrafts((current) => ({
-                              ...current,
-                              [row.swarmId]: event.target.value,
-                            }))
-                          }
-                          disabled={busy || !canControl || profiles.length === 0}
-                        >
-                          {profiles.length === 0 ? <option value="">No profiles</option> : null}
-                          {profiles.map((profile) => (
-                            <option key={profile.id} value={profile.id}>
-                              {profile.name ? `${profile.id} · ${profile.name}` : profile.id}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <div className="field">
-                        <span className="fieldLabel">Actions</span>
-                        <div className="row" style={{ flexWrap: 'wrap' }}>
-                          <button
-                            type="button"
-                            className="actionButton"
-                            onClick={() => void applyNetworkMode(row.swarmId, 'PROXIED')}
-                            disabled={busy || !canControl || selectedProfile.trim().length === 0}
-                          >
-                            Proxy enabled
-                          </button>
-                          <button
-                            type="button"
-                            className="actionButton actionButtonGhost"
-                            onClick={() => void applyNetworkMode(row.swarmId, 'DIRECT')}
-                            disabled={busy || !canControl}
-                          >
-                            Direct
-                          </button>
-                          <Link className="actionButton actionButtonGhost" to={`/hive/${encodeURIComponent(row.swarmId)}`}>
-                            Open swarm
-                          </Link>
-                        </div>
-                        {!canControl ? (
-                          <div className="muted" style={{ marginTop: 6 }}>
-                            Runtime control requires a swarm with bound SUT metadata.
-                          </div>
-                        ) : null}
-                      </div>
-                    </div>
+          <div className="proxyList" style={{ marginTop: 12 }}>
+            {bindings.map((binding) => (
+              <div key={`${binding.swarmId}:${binding.sutId}`} className="proxyRuntimeRow">
+                <div className="proxyRuntimeHead">
+                  <div>
+                    <div className="proxyRuntimeTitle">{binding.sutId}</div>
+                    <div className="muted">swarm `{binding.swarmId}`</div>
                   </div>
-                )
-              })}
-              {!loading && rows.length === 0 ? <div className="muted">No swarms or bindings available.</div> : null}
-            </div>
+                  <div className="row">
+                    <span className={binding.effectiveMode === 'PROXIED' ? 'pill pillInfo' : 'pill pillWarn'}>
+                      {binding.effectiveMode}
+                    </span>
+                    <span className="pill pillInfo">{binding.networkProfileId ?? '—'}</span>
+                  </div>
+                </div>
+                <div className="proxyRuntimeMeta">
+                  <span>requestedBy `{binding.requestedBy}`</span>
+                  <span>{formatInstant(binding.appliedAt)}</span>
+                  <span>{binding.affectedEndpoints.length} endpoint(s)</span>
+                </div>
+                {binding.affectedEndpoints.length > 0 ? (
+                  <div className="proxyEndpointList">
+                    {binding.affectedEndpoints.map((endpoint) => (
+                      <div key={`${binding.swarmId}:${endpoint.endpointId}`} className="proxyEndpointItem">
+                        <div className="proxyEndpointTitle">
+                          <strong>{endpoint.endpointId}</strong>
+                          <span className="pill pillInfo">{endpoint.kind ?? 'UNKNOWN'}</span>
+                        </div>
+                        <div className="muted">client `{endpoint.clientAuthority ?? endpoint.clientBaseUrl ?? '—'}`</div>
+                        <div className="muted">upstream `{endpoint.upstreamAuthority ?? '—'}`</div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+            {!loading && bindings.length === 0 ? <div className="muted">No active bindings on the shared proxy stack.</div> : null}
           </div>
         </div>
 
-        <div className="swarmViewCards">
-          <div className="card">
-            <div className="row between">
+        <div className="card">
+          <div className="row between">
+            <div>
+              <div className="h2">Proxy listeners</div>
+              <div className="muted">Listener/runtime entries currently reconciled in Toxiproxy.</div>
+            </div>
+            <div className="pill pillInfo">{proxies.length}</div>
+          </div>
+
+          <div className="proxyList" style={{ marginTop: 12 }}>
+            {proxies.map((proxy) => (
+              <div key={`${proxy.swarmId}:${proxy.sutId}:runtime`} className="proxyRuntimeRow">
+                <div className="proxyRuntimeHead">
+                  <div className="proxyRuntimeTitle">{proxy.sutId}</div>
+                  <span className={proxy.effectiveMode === 'PROXIED' ? 'pill pillInfo' : 'pill pillWarn'}>
+                    {proxy.effectiveMode}
+                  </span>
+                </div>
+                <div className="proxyRuntimeMeta">
+                  <span>swarm `{proxy.swarmId}`</span>
+                  <span>profile `{proxy.networkProfileId ?? '—'}`</span>
+                  <span>{formatInstant(proxy.appliedAt)}</span>
+                </div>
+              </div>
+            ))}
+            {!loading && proxies.length === 0 ? <div className="muted">No active proxy listener entries.</div> : null}
+          </div>
+        </div>
+      </div>
+
+      <div className="proxySectionGrid" style={{ marginTop: 12 }}>
+        <div className="card">
+          <div className="row between">
+            <div>
               <div className="h2">Profiles</div>
-              <div className="pill pillInfo">{profiles.length}</div>
+              <div className="muted">Catalog for proxied swarms. Assignment happens on the swarm page.</div>
             </div>
+            <div className="pill pillInfo">{profiles.length}</div>
+          </div>
 
-            <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
-              {profiles.map((profile) => (
-                <div key={profile.id} className="swarmWorkerCard">
-                  <div className="row between">
-                    <div className="h2">{profile.id}</div>
-                    <div className={profile.faults.length === 0 ? 'pill pillWarn' : 'pill pillInfo'}>
-                      {profile.faults.length === 0 ? 'PASSTHROUGH' : `${profile.faults.length} FAULTS`}
-                    </div>
+          <div className="proxyList" style={{ marginTop: 12 }}>
+            {profiles.map((profile) => (
+              <div key={profile.id} className="proxyProfileRow">
+                <div className="proxyProfileHead">
+                  <div>
+                    <div className="proxyRuntimeTitle">{profile.id}</div>
+                    <div className="muted">{profile.name ?? 'Unnamed profile'}</div>
                   </div>
-                  <div className="muted" style={{ marginTop: 6 }}>
-                    {profile.name ?? 'Unnamed profile'}
+                  <div className={profile.faults.length === 0 ? 'pill pillWarn' : 'pill pillInfo'}>
+                    {profile.faults.length === 0 ? 'PASSTHROUGH' : `${profile.faults.length} FAULTS`}
                   </div>
-                  <div className="muted" style={{ marginTop: 6 }}>
-                    Targets: {profile.targets.length === 0 ? 'all resolved endpoints' : profile.targets.join(', ')}
-                  </div>
-                  <div className="muted" style={{ marginTop: 6 }}>
-                    {summarizeFaults(profile)}
-                  </div>
-                  {profile.faults.length > 0 ? (
-                    <div style={{ marginTop: 8, display: 'grid', gap: 6 }}>
-                      {profile.faults.map((fault, index) => (
-                        <div key={`${profile.id}:${fault.type}:${index}`} className="card" style={{ padding: 10 }}>
-                          <div className="h2">{fault.type}</div>
-                          <div className="muted" style={{ marginTop: 4 }}>
-                            {summarizeFaultConfig(fault.config)}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
                 </div>
-              ))}
-              {!loading && profiles.length === 0 ? <div className="muted">No network profiles available.</div> : null}
+                <div className="proxyRuntimeMeta">
+                  <span>targets {profile.targets.length === 0 ? 'all resolved endpoints' : profile.targets.join(', ')}</span>
+                  <span>{summarizeFaults(profile)}</span>
+                </div>
+                {profile.faults.length > 0 ? (
+                  <div className="proxyFaultList">
+                    {profile.faults.map((fault, index) => (
+                      <div key={`${profile.id}:${fault.type}:${index}`} className="proxyFaultChip">
+                        <strong>{fault.type}</strong>
+                        <span>{summarizeFaultConfig(fault.config)}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+            {!loading && profiles.length === 0 ? <div className="muted">No network profiles available.</div> : null}
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="row between">
+            <div>
+              <div className="h2">{editorMode === 'manual' ? 'Manual override' : 'Raw profile editor'}</div>
+              <div className="muted">
+                {editorMode === 'manual'
+                  ? 'Build a transient override profile with guarded controls instead of editing YAML by hand.'
+                  : 'Add profiles or tune fault parameters in `network-profiles.yaml`.'}
+              </div>
+            </div>
+            <div className="proxyEditorToolbar">
+              <div className="proxyTabStrip" role="tablist" aria-label="Proxy editor mode">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={editorMode === 'manual'}
+                  className={editorMode === 'manual' ? 'proxyTabButton proxyTabButtonActive' : 'proxyTabButton'}
+                  onClick={() => setEditorMode('manual')}
+                  disabled={savingRaw}
+                >
+                  Manual override
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={editorMode === 'raw'}
+                  className={editorMode === 'raw' ? 'proxyTabButton proxyTabButtonActive' : 'proxyTabButton'}
+                  onClick={() => setEditorMode('raw')}
+                  disabled={savingRaw}
+                >
+                  Raw editor
+                </button>
+              </div>
+              {editorMode === 'raw' ? (
+                <div className="row">
+                  <button
+                    type="button"
+                    className="actionButton actionButtonGhost"
+                    onClick={() => void reload()}
+                    disabled={loading || savingRaw}
+                  >
+                    Reload
+                  </button>
+                  <button type="button" className="actionButton" onClick={() => void saveRawProfiles()} disabled={savingRaw || !rawLoaded}>
+                    Save YAML
+                  </button>
+                </div>
+              ) : null}
             </div>
           </div>
 
-          <div className="card" style={{ marginTop: 12 }}>
-            <div className="row between">
-              <div className="h2">Proxy runtime</div>
-              <div className="pill pillInfo">{proxies.length}</div>
-            </div>
-            <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
-              {proxies.map((proxy) => (
-                <div key={`${proxy.swarmId}:${proxy.sutId}`} className="swarmWorkerCard">
-                  <div className="row between">
-                    <div className="h2">{proxy.swarmId}</div>
-                    <div className={proxy.effectiveMode === 'PROXIED' ? 'pill pillInfo' : 'pill pillWarn'}>
-                      {proxy.effectiveMode}
-                    </div>
-                  </div>
-                  <div className="muted" style={{ marginTop: 6 }}>
-                    sut `{proxy.sutId}` • profile `{proxy.networkProfileId ?? '—'}`
-                  </div>
-                  <div className="muted" style={{ marginTop: 6 }}>
-                    requestedBy `{proxy.requestedBy}` • {formatInstant(proxy.appliedAt)}
+          {editorMode === 'manual' ? (
+            <div className="proxyManualPanel" style={{ marginTop: 12 }}>
+              <div className="proxyManualHeader">
+                <div>
+                  <div className="fieldLabel">Direct control</div>
+                  <div className="muted">
+                    Live controls for the shared proxy stack. Changes apply immediately to active proxied routes.
                   </div>
                 </div>
-              ))}
-              {!loading && proxies.length === 0 ? <div className="muted">No active proxy runtime entries.</div> : null}
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={manualOverride.enabled}
+                  className={manualOverride.enabled ? 'proxyOverrideSwitch proxyOverrideSwitchEnabled' : 'proxyOverrideSwitch'}
+                  onClick={() =>
+                    setManualOverride((current) => ({
+                      ...current,
+                      enabled: !current.enabled,
+                    }))
+                  }
+                  disabled={manualOverrideApplying || dropConnectionsBusy}
+                >
+                  <span className="proxyOverrideSwitchKnob" />
+                  <span className="proxyOverrideSwitchText">
+                    <strong>{manualOverride.enabled ? 'Manual override enabled' : 'Manual override disabled'}</strong>
+                    <span>{manualOverride.enabled ? 'Runtime override is active on the shared stack.' : 'Enable to unlock live controls below.'}</span>
+                  </span>
+                </button>
+              </div>
+
+              <div className={`proxyOverrideControls ${manualOverride.enabled ? '' : 'proxyOverrideControlsDisabled'}`}>
+                <div className="proxyOverrideGroup">
+                  <div className="proxyOverrideGroupHead">
+                    <div className="proxyToggleRow">
+                      <label className="proxyToggle">
+                        <input
+                          type="checkbox"
+                          checked={manualOverride.latencyEnabled}
+                          onChange={(event) =>
+                            setManualOverride((current) => ({
+                              ...current,
+                              latencyEnabled: event.target.checked,
+                            }))
+                          }
+                          disabled={!manualOverride.enabled || manualOverrideApplying || dropConnectionsBusy}
+                        />
+                        <span>Latency</span>
+                      </label>
+                      <ToxicDocLink href={TOXIPROXY_DOCS.latency} label="latency toxic" />
+                    </div>
+                    <div className="muted">adds delay and jitter</div>
+                  </div>
+                  <div className="proxySliderGrid">
+                    <label className="field">
+                      <span className="fieldLabel">Latency ms</span>
+                      <input
+                        type="range"
+                        min="0"
+                        max="5000"
+                        step="25"
+                        value={manualOverride.latencyMs}
+                        onChange={(event) =>
+                          setManualOverride((current) => ({
+                            ...current,
+                            latencyMs: Number(event.target.value),
+                          }))
+                        }
+                        disabled={!manualOverride.enabled || !manualOverride.latencyEnabled || manualOverrideApplying || dropConnectionsBusy}
+                      />
+                      <div className="muted">{manualOverride.latencyMs} ms</div>
+                    </label>
+                    <label className="field">
+                      <span className="fieldLabel">Jitter ms</span>
+                      <input
+                        type="range"
+                        min="0"
+                        max="1000"
+                        step="5"
+                        value={manualOverride.jitterMs}
+                        onChange={(event) =>
+                          setManualOverride((current) => ({
+                            ...current,
+                            jitterMs: Number(event.target.value),
+                          }))
+                        }
+                        disabled={!manualOverride.enabled || !manualOverride.latencyEnabled || manualOverrideApplying || dropConnectionsBusy}
+                      />
+                      <div className="muted">{manualOverride.jitterMs} ms</div>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="proxyOverrideGroup">
+                  <div className="proxyOverrideGroupHead">
+                    <div className="proxyToggleRow">
+                      <label className="proxyToggle">
+                        <input
+                          type="checkbox"
+                          checked={manualOverride.bandwidthEnabled}
+                          onChange={(event) =>
+                            setManualOverride((current) => ({
+                              ...current,
+                              bandwidthEnabled: event.target.checked,
+                            }))
+                          }
+                          disabled={!manualOverride.enabled || manualOverrideApplying || dropConnectionsBusy}
+                        />
+                        <span>Bandwidth cap</span>
+                      </label>
+                      <ToxicDocLink href={TOXIPROXY_DOCS.bandwidth} label="bandwidth toxic" />
+                    </div>
+                    <div className="muted">caps throughput</div>
+                  </div>
+                  <label className="field">
+                    <span className="fieldLabel">Rate Kbps</span>
+                    <input
+                      type="range"
+                      min="64"
+                      max="10000"
+                      step="64"
+                      value={manualOverride.rateKbps}
+                      onChange={(event) =>
+                          setManualOverride((current) => ({
+                            ...current,
+                            rateKbps: Number(event.target.value),
+                          }))
+                        }
+                        disabled={!manualOverride.enabled || !manualOverride.bandwidthEnabled || manualOverrideApplying || dropConnectionsBusy}
+                      />
+                      <div className="muted">{manualOverride.rateKbps} Kbps</div>
+                    </label>
+                  </div>
+
+                <div className="proxyOverrideGroup">
+                  <div className="proxyOverrideGroupHead">
+                    <div className="proxyToggleRow">
+                      <label className="proxyToggle">
+                        <input
+                          type="checkbox"
+                          checked={manualOverride.timeoutEnabled}
+                          onChange={(event) =>
+                            setManualOverride((current) => ({
+                              ...current,
+                              timeoutEnabled: event.target.checked,
+                            }))
+                          }
+                          disabled={!manualOverride.enabled || manualOverrideApplying || dropConnectionsBusy}
+                        />
+                        <span>Stall then close</span>
+                      </label>
+                      <ToxicDocLink href={TOXIPROXY_DOCS.timeout} label="timeout toxic" />
+                    </div>
+                    <div className="muted">hangs each affected connection, then closes it after the selected delay</div>
+                  </div>
+                  <label className="field">
+                    <span className="fieldLabel">Close after ms</span>
+                    <input
+                      type="range"
+                      min="100"
+                      max="10000"
+                      step="100"
+                      value={manualOverride.timeoutMs}
+                      onChange={(event) =>
+                          setManualOverride((current) => ({
+                            ...current,
+                            timeoutMs: Number(event.target.value),
+                          }))
+                        }
+                        disabled={!manualOverride.enabled || !manualOverride.timeoutEnabled || manualOverrideApplying || dropConnectionsBusy}
+                      />
+                      <div className="muted">{manualOverride.timeoutMs} ms</div>
+                    </label>
+                  </div>
+
+                <div className="proxyOverrideGroup">
+                  <div className="proxyOverrideGroupHead">
+                    <div>
+                      <div className="proxyInlineHead">
+                        <div className="fieldLabel">Drop connections now</div>
+                        <ToxicDocLink href={TOXIPROXY_DOCS.resetPeer} label="reset peer toxic" />
+                      </div>
+                      <div className="muted">One-shot operator action that tears down active proxied connections on the shared stack.</div>
+                    </div>
+                    <button
+                      type="button"
+                      className="actionButton"
+                      onClick={() => void dropConnectionsNow()}
+                      disabled={dropConnectionsBusy || manualOverrideApplying || totals.proxiedBindings === 0}
+                    >
+                      {dropConnectionsBusy ? 'Dropping...' : 'Drop now'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="proxyManualSummary">
+                <div className="fieldLabel">Preview</div>
+                <div className="muted">
+                  {manualOverride.enabled
+                    ? `${[
+                        manualOverride.latencyEnabled ? `latency ${manualOverride.latencyMs} ms / jitter ${manualOverride.jitterMs} ms` : null,
+                        manualOverride.bandwidthEnabled ? `bandwidth ${manualOverride.rateKbps} Kbps` : null,
+                        manualOverride.timeoutEnabled ? `stall then close after ${manualOverride.timeoutMs} ms` : null,
+                      ]
+                        .filter(Boolean)
+                        .join(', ') || 'No active faults'} on ${totals.proxiedBindings} proxied binding(s).`
+                    : `Manual direct control is off. Base profile behavior remains unchanged.`}
+                </div>
+                <div className="muted" style={{ marginTop: 6 }}>
+                  {manualOverrideApplying
+                    ? 'Applying changes...'
+                    : manualOverrideStatus
+                      ? `Last applied ${formatInstant(manualOverrideStatus.appliedAt)} by ${manualOverrideStatus.requestedBy}.`
+                      : 'No runtime override state loaded yet.'}
+                </div>
+              </div>
             </div>
-          </div>
+          ) : (
+            <label className="field" style={{ marginTop: 12 }}>
+              <span className="fieldLabel">network-profiles.yaml</span>
+              <textarea
+                className="textInput proxyYamlEditor"
+                value={rawProfiles}
+                onChange={(event) => setRawProfiles(event.target.value)}
+                spellCheck={false}
+                rows={20}
+                disabled={!rawLoaded || savingRaw}
+              />
+            </label>
+          )}
         </div>
       </div>
     </div>

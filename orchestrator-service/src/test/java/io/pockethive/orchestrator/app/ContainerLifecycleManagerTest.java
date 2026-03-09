@@ -17,6 +17,7 @@ import io.pockethive.orchestrator.domain.SwarmLifecycleStatus;
 import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
 import io.pockethive.orchestrator.infra.JournalRunMetadataWriter;
 import io.pockethive.sink.clickhouse.ClickHouseSinkProperties;
+import io.pockethive.swarm.model.NetworkMode;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.Work;
 import java.time.Duration;
@@ -76,6 +77,7 @@ class ContainerLifecycleManagerTest {
         assertEquals("ph.control", env.get("POCKETHIVE_CONTROL_PLANE_EXCHANGE"));
         assertEquals("sw1", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_ID"));
         assertEquals("tpl-1", env.get("POCKETHIVE_TEMPLATE_ID"));
+        assertEquals("DIRECT", env.get("POCKETHIVE_NETWORK_MODE"));
         assertFalse(env.containsKey("RABBITMQ_HOST"));
         assertFalse(env.containsKey("RABBITMQ_PORT"));
         assertFalse(env.containsKey("RABBITMQ_DEFAULT_USER"));
@@ -107,6 +109,33 @@ class ContainerLifecycleManagerTest {
         assertNotNull(volumes);
         assertEquals(1, volumes.size());
         assertEquals("/var/run/docker.sock:/var/run/docker.sock", volumes.get(0));
+    }
+
+    @Test
+    void startSwarmPropagatesNetworkMetadataToControllerEnv() {
+        SwarmStore registry = new SwarmStore();
+        OrchestratorProperties properties = defaultProperties();
+        ControlPlaneProperties controlPlane = controlPlaneProperties();
+        when(computeAdapter.startManager(any(ManagerSpec.class))).thenReturn("cid");
+        ContainerLifecycleManager manager = new ContainerLifecycleManager(
+            docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitProperties(), runMetadataWriter, new ClickHouseSinkProperties());
+
+        manager.startSwarm(
+            "sw1",
+            "img",
+            "inst1",
+            new SwarmTemplateMetadata("tpl-1", "img", List.of()),
+            false,
+            "wiremock-proxy-local",
+            NetworkMode.PROXIED,
+            "passthrough");
+
+        ArgumentCaptor<ManagerSpec> specCaptor = ArgumentCaptor.forClass(ManagerSpec.class);
+        verify(computeAdapter).startManager(specCaptor.capture());
+        Map<String, String> env = specCaptor.getValue().environment();
+        assertEquals("wiremock-proxy-local", env.get("POCKETHIVE_SUT_ID"));
+        assertEquals("PROXIED", env.get("POCKETHIVE_NETWORK_MODE"));
+        assertEquals("passthrough", env.get("POCKETHIVE_NETWORK_PROFILE_ID"));
     }
 
     @Test

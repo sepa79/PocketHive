@@ -771,6 +771,20 @@ class SwarmSignalListenerTest {
   }
 
   @Test
+  void statusOmitsNullNetworkProfileIdForDirectMode() throws Exception {
+    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+
+    newListener(lifecycle, rabbit, "inst", mapper);
+
+    ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
+    verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
+        eq(statusEvent("status-full", "swarm-controller", "inst")), payload.capture());
+    JsonNode context = mapper.readTree(payload.getValue()).path("data").path("context");
+    assertThat(context.path("networkMode").asText()).isEqualTo("DIRECT");
+    assertThat(context.has("networkProfileId")).isFalse();
+  }
+
+  @Test
   void repliesToStatusRequest() {
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
     SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);

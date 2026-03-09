@@ -1901,6 +1901,8 @@ public class SwarmLifecycleSteps {
         || "history-policy-demo".equals(scenarioId)
         || "local-rest".equals(scenarioId)
         || "local-rest-with-multi-generators".equals(scenarioId)
+        || "http-proxy-demo".equals(scenarioId)
+        || "https-proxy-demo".equals(scenarioId)
         || "variables-demo".equals(scenarioId)) {
       return "final";
     }

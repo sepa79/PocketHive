@@ -119,6 +119,72 @@ class NetworkBindingServiceTest {
             .hasMessageContaining("networkProfile target 'payments'");
     }
 
+    @Test
+    void manualOverrideReconcilesWinningBindingsImmediately() throws Exception {
+        FakeNetworkProfileClient profileClient = new FakeNetworkProfileClient(Map.of(
+            "passthrough", new NetworkProfile("passthrough", "Passthrough", List.of(), List.of("payments"))));
+        FakeToxiproxyAdminClient toxiproxy = new FakeToxiproxyAdminClient();
+        FakeHaproxyAdminClient haproxy = new FakeHaproxyAdminClient();
+        NetworkBindingService service = new NetworkBindingService(profileClient, toxiproxy, haproxy, properties());
+
+        service.bind("swarm-a", new NetworkBindingRequest(
+            "sut-a",
+            NetworkMode.PROXIED,
+            "passthrough",
+            "orchestrator",
+            null,
+            resolvedSut("sut-a", Map.of(
+                "payments", new ResolvedSutEndpoint("payments", "HTTPS", "https://proxy.local:9443", "proxy.local:9443", "internal-a:443")))));
+
+        ManualNetworkOverrideStatus enabled = service.applyManualOverride(new ManualNetworkOverrideRequest(
+            true,
+            400,
+            40,
+            2048,
+            null,
+            "hive",
+            "live tuning"));
+
+        assertThat(enabled.enabled()).isTrue();
+        assertThat(toxiproxy.toxics("sut-a__payments")).extracting(ToxiproxyAdminClient.ToxicRecord::type)
+            .containsExactly("latency", "bandwidth");
+
+        ManualNetworkOverrideStatus disabled = service.applyManualOverride(new ManualNetworkOverrideRequest(
+            false,
+            400,
+            40,
+            2048,
+            null,
+            "hive",
+            "override off"));
+
+        assertThat(disabled.enabled()).isFalse();
+        assertThat(toxiproxy.toxics("sut-a__payments")).isEmpty();
+    }
+
+    @Test
+    void dropConnectionsAddsTransientResetPeerToxic() throws Exception {
+        FakeNetworkProfileClient profileClient = new FakeNetworkProfileClient(Map.of(
+            "passthrough", new NetworkProfile("passthrough", "Passthrough", List.of(), List.of("payments"))));
+        FakeToxiproxyAdminClient toxiproxy = new FakeToxiproxyAdminClient();
+        FakeHaproxyAdminClient haproxy = new FakeHaproxyAdminClient();
+        NetworkBindingService service = new NetworkBindingService(profileClient, toxiproxy, haproxy, properties());
+
+        service.bind("swarm-a", new NetworkBindingRequest(
+            "sut-a",
+            NetworkMode.PROXIED,
+            "passthrough",
+            "orchestrator",
+            null,
+            resolvedSut("sut-a", Map.of(
+                "payments", new ResolvedSutEndpoint("payments", "HTTPS", "https://proxy.local:9443", "proxy.local:9443", "internal-a:443")))));
+
+        service.dropConnections(new ManualNetworkActionRequest("hive", "drop now"));
+
+        assertThat(toxiproxy.createdTransientResetPeer()).isGreaterThan(0);
+        assertThat(toxiproxy.toxics("sut-a__payments")).isEmpty();
+    }
+
     private static NetworkProxyManagerProperties properties() {
         NetworkProxyManagerProperties properties = new NetworkProxyManagerProperties();
         properties.getToxiproxy().setListenHost("0.0.0.0");
@@ -151,6 +217,7 @@ class NetworkBindingServiceTest {
     private static final class FakeToxiproxyAdminClient implements ToxiproxyAdminClient {
         private final Map<String, ProxyRecord> proxies = new LinkedHashMap<>();
         private final Map<String, List<ToxicRecord>> toxics = new LinkedHashMap<>();
+        private int transientResetPeerCount = 0;
 
         @Override
         public Map<String, ProxyRecord> listProxies() {
@@ -173,7 +240,16 @@ class NetworkBindingServiceTest {
         @Override
         public ToxicRecord createToxic(String proxyName, ToxicRecord toxic) {
             toxics.computeIfAbsent(proxyName, ignored -> new ArrayList<>()).add(toxic);
+            if ("reset_peer".equals(toxic.type()) && toxic.name().startsWith("manual-drop-")) {
+                transientResetPeerCount++;
+            }
             return toxic;
+        }
+
+        @Override
+        public void deleteToxic(String proxyName, String toxicName) {
+            toxics.computeIfAbsent(proxyName, ignored -> new ArrayList<>())
+                .removeIf(toxic -> toxic.name().equals(toxicName));
         }
 
         private Map<String, ProxyRecord> proxies() {
@@ -182,6 +258,10 @@ class NetworkBindingServiceTest {
 
         private List<ToxicRecord> toxics(String proxyName) {
             return toxics.getOrDefault(proxyName, List.of());
+        }
+
+        private int createdTransientResetPeer() {
+            return transientResetPeerCount;
         }
     }
 

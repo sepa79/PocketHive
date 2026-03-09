@@ -13,6 +13,8 @@ public interface ToxiproxyAdminClient {
 
     ToxicRecord createToxic(String proxyName, ToxicRecord toxic) throws Exception;
 
+    void deleteToxic(String proxyName, String toxicName) throws Exception;
+
     record ProxyRecord(String name, String listen, String upstream, boolean enabled) {
     }
 

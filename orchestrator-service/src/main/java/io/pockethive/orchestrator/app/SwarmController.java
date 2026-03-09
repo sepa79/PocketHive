@@ -7,6 +7,7 @@ import io.pockethive.control.ControlScope;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
+import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.messaging.ControlSignals;
 import io.pockethive.controlplane.messaging.EventMessage;
 import io.pockethive.controlplane.messaging.SignalMessage;
@@ -349,7 +350,10 @@ public class SwarmController {
                         image,
                         instanceId,
                         new SwarmTemplateMetadata(templateId, image, plan.bees()),
-                        autoPull);
+                        autoPull,
+                        sutId,
+                        networkMode,
+                        networkProfileId);
                 } catch (RuntimeException ex) {
                     if (networkBindingApplied) {
                         rollbackNetworkBinding(swarmId, sutId, corr, req.idempotencyKey(), ex);
@@ -495,6 +499,7 @@ public class SwarmController {
                 "hive");
             swarm.setNetworkMode(NetworkMode.DIRECT);
             swarm.setNetworkProfileId(null);
+            publishControllerNetworkContext(swarm, sutId, NetworkMode.DIRECT, null, correlationId, idempotencyKey);
             response = ResponseEntity.ok(cleared);
             logRestResponse("POST", path, response);
             return response;
@@ -524,6 +529,7 @@ public class SwarmController {
             "hive");
         swarm.setNetworkMode(NetworkMode.PROXIED);
         swarm.setNetworkProfileId(networkProfileId);
+        publishControllerNetworkContext(swarm, sutId, NetworkMode.PROXIED, networkProfileId, correlationId, idempotencyKey);
         response = ResponseEntity.ok(binding);
         logRestResponse("POST", path, response);
         return response;
@@ -813,6 +819,34 @@ public class SwarmController {
         } catch (Exception ignore) {
             // best-effort
         }
+    }
+
+    private void publishControllerNetworkContext(Swarm swarm,
+                                                 String sutId,
+                                                 NetworkMode networkMode,
+                                                 String networkProfileId,
+                                                 String correlationId,
+                                                 String idempotencyKey) {
+        if (swarm == null) {
+            return;
+        }
+        String controllerInstance = normalize(swarm.getInstanceId());
+        if (controllerInstance == null) {
+            return;
+        }
+        ControlScope target = ControlScope.forInstance(swarm.getId(), "swarm-controller", controllerInstance);
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("sutId", normalize(sutId));
+        data.put("networkMode", NetworkMode.directIfNull(networkMode).name());
+        data.put("networkProfileId", normalize(networkProfileId));
+        ControlSignal payload = ControlSignals.configUpdate(
+            originInstanceId,
+            target,
+            correlationId,
+            idempotencyKey,
+            data);
+        String routingKey = ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, swarm.getId(), "swarm-controller", controllerInstance);
+        sendControl(routingKey, toJson(payload), "signal.config-update.network-context");
     }
 
     private static ResolvedSutEnvironment resolveSutEnvironment(SutEnvironment sutEnvironment, boolean proxied) {
@@ -1121,6 +1155,9 @@ public class SwarmController {
         String templateId = textOrNull(runtime, "templateId");
         String controllerImage = textOrNull(runtime, "image");
         String sutId = textOrNull(context, "sutId");
+        if (sutId == null) {
+            sutId = normalize(swarm.getSutId());
+        }
         NetworkMode networkMode = parseNetworkMode(textOrNull(context, "networkMode"), swarm.getNetworkMode());
         String networkProfileId = textOrNull(context, "networkProfileId");
         if (networkProfileId == null) {

@@ -117,6 +117,25 @@ public class ToxiproxyHttpClient implements ToxiproxyAdminClient {
         return new ToxicRecord(created.name(), created.type(), created.stream(), created.toxicity(), created.attributes());
     }
 
+    @Override
+    public void deleteToxic(String proxyName, String toxicName) throws Exception {
+        String trimmedProxyName = requireText(proxyName, "proxyName");
+        String trimmedToxicName = requireText(toxicName, "toxicName");
+        HttpRequest request = HttpRequest.newBuilder()
+            .uri(URI.create(baseUrl + "/proxies/" + trimmedProxyName + "/toxics/" + trimmedToxicName))
+            .timeout(requestTimeout)
+            .DELETE()
+            .build();
+        HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
+        if (response.statusCode() == HttpStatus.NOT_FOUND.value()) {
+            return;
+        }
+        if (response.statusCode() != HttpStatus.NO_CONTENT.value()) {
+            throw new IllegalStateException("toxiproxy delete toxic status " + response.statusCode()
+                + " for proxy " + trimmedProxyName + " toxic " + trimmedToxicName);
+        }
+    }
+
     private HttpResponse<String> sendJson(String method, String url, Object payload) throws Exception {
         String body = json.writeValueAsString(payload);
         log.info("toxiproxy {} {}", method, url);

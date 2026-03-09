@@ -142,7 +142,10 @@ class SwarmControllerTest {
             eq("ctrl-image"),
             anyString(),
             any(SwarmTemplateMetadata.class),
-            eq(false))).thenAnswer(inv -> {
+            eq(false),
+            any(),
+            any(),
+            any())).thenAnswer(inv -> {
             String instanceId = inv.getArgument(2);
             capturedInstance.set(instanceId);
             return new Swarm("sw1", instanceId, "c1", "run-1");
@@ -185,7 +188,10 @@ class SwarmControllerTest {
             eq("ctrl-image"),
             anyString(),
             any(SwarmTemplateMetadata.class),
-            eq(false))).thenAnswer(inv -> {
+            eq(false),
+            any(),
+            any(),
+            any())).thenAnswer(inv -> {
             String instanceId = inv.getArgument(2);
             capturedInstance.set(instanceId);
             return new Swarm("sw1", instanceId, "c1", "run-1");
@@ -254,7 +260,10 @@ class SwarmControllerTest {
             eq("ctrl-image"),
             anyString(),
             any(SwarmTemplateMetadata.class),
-            eq(false))).thenAnswer(inv -> {
+            eq(false),
+            any(),
+            any(),
+            any())).thenAnswer(inv -> {
             String instanceId = inv.getArgument(2);
             capturedInstance.set(instanceId);
             return new Swarm("sw1", instanceId, "c1", "run-1");
@@ -320,7 +329,10 @@ class SwarmControllerTest {
             eq("ctrl-image"),
             anyString(),
             any(SwarmTemplateMetadata.class),
-            eq(false)))
+            eq(false),
+            any(),
+            any(),
+            any()))
             .thenAnswer(invocation -> new Swarm("sw1", invocation.getArgument(2), "c1", "run-1"));
 
         SwarmController ctrl = controller(tracker, new SwarmStore(), plans);
@@ -467,7 +479,10 @@ class SwarmControllerTest {
             eq("ctrl-image"),
             anyString(),
             any(SwarmTemplateMetadata.class),
-            eq(false)))
+            eq(false),
+            any(),
+            any(),
+            any()))
             .thenAnswer(invocation -> new Swarm("sw1", invocation.getArgument(2), "corr", "run-1"));
         IdempotencyStore store = new InMemoryIdempotencyStore();
         SwarmController ctrl = controller(tracker, registry, plans, store);
@@ -494,7 +509,10 @@ class SwarmControllerTest {
             eq("ctrl-image"),
             anyString(),
             any(SwarmTemplateMetadata.class),
-            eq(false));
+            eq(false),
+            any(),
+            any(),
+            any());
         verify(scenarioClient, times(1)).fetchScenario("tpl-1");
         assertThat(response1.getBody()).isInstanceOf(ControlResponse.class);
         assertThat(response2.getBody()).isInstanceOf(ControlResponse.class);
@@ -518,7 +536,10 @@ class SwarmControllerTest {
             eq("ctrl-image"),
             anyString(),
             any(SwarmTemplateMetadata.class),
-            eq(false)))
+            eq(false),
+            any(),
+            any(),
+            any()))
             .thenAnswer(invocation -> new Swarm("sw1", invocation.getArgument(2), "corr", "run-1"));
         InMemoryIdempotencyStore store = new InMemoryIdempotencyStore();
         SwarmController ctrl = controller(tracker, registry, plans, store);
@@ -546,7 +567,10 @@ class SwarmControllerTest {
             eq("ctrl-image"),
             anyString(),
             any(SwarmTemplateMetadata.class),
-            eq(false));
+            eq(false),
+            any(),
+            any(),
+            any());
         verify(scenarioClient, times(1)).fetchScenario("tpl-1");
         assertThat(leaderResponse.getBody()).isInstanceOf(ControlResponse.class);
         assertThat(followerResponse.getBody()).isInstanceOf(ControlResponse.class);
@@ -760,6 +784,49 @@ class SwarmControllerTest {
         assertThat(body.get(0).bees()).containsExactly(new SwarmController.BeeSummary("generator", null));
         assertThat(body.get(1).templateId()).isEqualTo("tpl-bravo");
         assertThat(body.get(1).bees()).containsExactly(new SwarmController.BeeSummary("moderator", null));
+    }
+
+    @Test
+    void listFallsBackToStoredSutIdWhenStatusFullOmitsIt() throws Exception {
+        SwarmStore registry = new SwarmStore();
+        Swarm swarm = new Swarm("sw1", "inst", "c1", "run-1");
+        swarm.setSutId("wiremock-proxy-local");
+        swarm.setNetworkMode(NetworkMode.DIRECT);
+        String statusFull = """
+            {
+              "timestamp": "2026-01-22T12:00:01Z",
+              "version": "1",
+              "kind": "metric",
+              "type": "status-full",
+              "origin": "inst",
+              "scope": { "swarmId": "sw1", "role": "swarm-controller", "instance": "inst" },
+              "runtime": {
+                "templateId": "tpl-1",
+                "runId": "run-1",
+                "containerId": "container-1",
+                "image": "ctrl-image",
+                "stackName": "ph-sw1"
+              },
+              "data": {
+                "enabled": true,
+                "context": {
+                  "swarmStatus": "READY",
+                  "swarmHealth": "RUNNING",
+                  "networkMode": "DIRECT",
+                  "workers": []
+                }
+              }
+            }
+            """;
+        swarm.updateControllerStatusFull(mapper.readTree(statusFull), Instant.now());
+        registry.register(swarm);
+        SwarmController ctrl = controller(new SwarmCreateTracker(), registry, new SwarmPlanRegistry());
+
+        ResponseEntity<List<SwarmController.SwarmSummary>> resp = ctrl.list();
+
+        assertThat(resp.getBody()).hasSize(1);
+        assertThat(resp.getBody().get(0).sutId()).isEqualTo("wiremock-proxy-local");
+        assertThat(resp.getBody().get(0).networkMode()).isEqualTo(NetworkMode.DIRECT);
     }
 
     @Test

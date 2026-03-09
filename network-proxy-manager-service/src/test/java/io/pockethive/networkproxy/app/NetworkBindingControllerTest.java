@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -45,6 +46,7 @@ class NetworkBindingControllerTest {
         when(toxiproxy.createProxy(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(toxiproxy.createToxic(any(), any())).thenAnswer(invocation -> invocation.getArgument(1));
         Mockito.doNothing().when(toxiproxy).deleteProxy(any());
+        Mockito.doNothing().when(toxiproxy).deleteToxic(any(), any());
         Mockito.doNothing().when(haproxy).applyRoutes(any());
     }
 
@@ -95,5 +97,40 @@ class NetworkBindingControllerTest {
 
         mvc.perform(get("/api/network/bindings/swarm-a"))
             .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void manualOverrideEndpointsWork() throws Exception {
+        mvc.perform(get("/api/network/manual-override"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.enabled").value(false));
+
+        mvc.perform(put("/api/network/manual-override")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "enabled": true,
+                      "latencyMs": 300,
+                      "jitterMs": 30,
+                      "bandwidthKbps": 2048,
+                      "requestedBy": "hive",
+                      "reason": "live tuning"
+                    }
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.enabled").value(true))
+            .andExpect(jsonPath("$.latencyMs").value(300))
+            .andExpect(jsonPath("$.bandwidthKbps").value(2048));
+
+        mvc.perform(post("/api/network/manual-override/drop-connections")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "requestedBy": "hive",
+                      "reason": "operator action"
+                    }
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.enabled").value(true));
     }
 }

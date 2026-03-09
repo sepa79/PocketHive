@@ -11,6 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -50,5 +51,20 @@ public class NetworkBindingController {
     @GetMapping(value = "/proxies", produces = MediaType.APPLICATION_JSON_VALUE)
     public List<NetworkBinding> listProxies() {
         return service.listProxies();
+    }
+
+    @GetMapping(value = "/manual-override", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ManualNetworkOverrideStatus manualOverride() {
+        return service.manualOverride();
+    }
+
+    @PutMapping(value = "/manual-override", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    public ManualNetworkOverrideStatus applyManualOverride(@Valid @RequestBody ManualNetworkOverrideRequest request) throws Exception {
+        return service.applyManualOverride(request);
+    }
+
+    @PostMapping(value = "/manual-override/drop-connections", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    public ManualNetworkOverrideStatus dropConnections(@Valid @RequestBody ManualNetworkActionRequest request) throws Exception {
+        return service.dropConnections(request);
     }
 }
