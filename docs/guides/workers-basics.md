@@ -49,7 +49,7 @@ template:
         out:
           out: proc
       config:
-        templateRoot: /app/http-templates
+        templateRoot: /app/templates/http
         serviceId: default
     - role: processor
       image: processor:latest

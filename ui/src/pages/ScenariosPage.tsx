@@ -24,11 +24,11 @@ import {
   saveScenarioSchema,
   listScenarioSchemas,
   fetchScenarioSchema,
-  listHttpTemplates,
-  fetchHttpTemplate,
-  saveHttpTemplate,
-  renameHttpTemplate,
-  deleteHttpTemplate,
+  listTemplates,
+  fetchTemplate,
+  saveTemplate,
+  renameTemplate,
+  deleteTemplate,
   type ScenarioPayload,
   type ScenarioPlanView,
   type ScenarioPlanStep,
@@ -1967,7 +1967,7 @@ export default function ScenariosPage() {
   const [configPatchModalState, setConfigPatchModalState] = useState<ConfigPatchModalState | null>(null)
 
   type SchemaEditorState = {
-    kind: 'generator' | 'http-template'
+    kind: 'generator' | 'template'
     beeIndex: number | null
     templatePath?: string
     schemaPath: string
@@ -1979,7 +1979,7 @@ export default function ScenariosPage() {
     templateRaw?: string
   }
 
-  type SchemaAttachTarget = 'generator' | 'http-template'
+  type SchemaAttachTarget = 'generator' | 'template'
 
   type SchemaAttachState = {
     target: SchemaAttachTarget
@@ -2812,7 +2812,7 @@ export default function ScenariosPage() {
     }
     let templatePaths: string[]
     try {
-      templatePaths = await listHttpTemplates(selectedId)
+      templatePaths = await listTemplates(selectedId)
     } catch (e) {
       setToast(
         e instanceof Error ? `Failed to list HTTP templates: ${e.message}` : 'Failed to list HTTP templates',
@@ -2820,7 +2820,7 @@ export default function ScenariosPage() {
       return
     }
     if (!templatePaths || templatePaths.length === 0) {
-      setToast('No HTTP templates found in this scenario bundle (expected under http-templates/)')
+      setToast('No HTTP templates found in this scenario bundle (expected under templates/)')
       return
     }
     const templatePath =
@@ -2829,7 +2829,7 @@ export default function ScenariosPage() {
         : templatePaths[0]
     let templateText: string
     try {
-      templateText = await fetchHttpTemplate(selectedId, templatePath)
+      templateText = await fetchTemplate(selectedId, templatePath)
     } catch (e) {
       setToast(
         e instanceof Error ? `Failed to load HTTP template: ${e.message}` : 'Failed to load HTTP template',
@@ -2878,7 +2878,7 @@ export default function ScenariosPage() {
 
     if (!schemaRefValue) {
       setSchemaAttachState({
-        target: 'http-template',
+        target: 'template',
         beeIndex: null,
         templatePath,
         existingOptions: schemaOptions,
@@ -2998,7 +2998,7 @@ export default function ScenariosPage() {
     }
 
     setSchemaEditorState({
-      kind: 'http-template',
+      kind: 'template',
       beeIndex: null,
       templatePath,
       schemaPath,
@@ -3012,7 +3012,7 @@ export default function ScenariosPage() {
     setSchemaEditorValues(initialValues)
     setSchemaEditorError(null)
     setSchemaEditorShowRaw(false)
-  }, [fetchHttpTemplate, fetchScenarioSchema, listHttpTemplates, listScenarioSchemas, selectedId, setToast])
+  }, [fetchTemplate, fetchScenarioSchema, listTemplates, listScenarioSchemas, selectedId, setToast])
 
   const applySchemaAttach = useCallback(async () => {
     if (!schemaAttachState || !selectedId) {
@@ -3122,14 +3122,14 @@ export default function ScenariosPage() {
         ;(base as Record<string, unknown>).bees = beesRaw
         return base
       })
-    } else if (target === 'http-template') {
+    } else if (target === 'template') {
       if (!templatePath) {
         setSchemaAttachError('Internal error: missing template path for HTTP template')
         return
       }
       let raw: string
       try {
-        raw = await fetchHttpTemplate(selectedId, templatePath)
+        raw = await fetchTemplate(selectedId, templatePath)
       } catch (error) {
         setSchemaAttachError(
           error instanceof Error
@@ -3165,7 +3165,7 @@ export default function ScenariosPage() {
         return
       }
       try {
-        await saveHttpTemplate(selectedId, templatePath, updatedYaml)
+        await saveTemplate(selectedId, templatePath, updatedYaml)
         if (viewMode === 'httpTemplates' && templatePath === httpTemplateSelectedPath) {
           setHttpTemplateRaw(updatedYaml)
         }
@@ -3181,8 +3181,8 @@ export default function ScenariosPage() {
     setSchemaAttachError(null)
   }, [
     applyTemplateUpdate,
-    fetchHttpTemplate,
-    saveHttpTemplate,
+    fetchTemplate,
+    saveTemplate,
     saveScenarioSchema,
     schemaAttachBusy,
     schemaAttachState,
@@ -3266,7 +3266,7 @@ export default function ScenariosPage() {
         ;(base as Record<string, unknown>).bees = beesRaw
         return base
       })
-    } else if (kind === 'http-template') {
+    } else if (kind === 'template') {
       if (!selectedId || !templatePath) {
         setSchemaEditorError('Internal error: missing template path for HTTP template editor')
         return
@@ -3308,7 +3308,7 @@ export default function ScenariosPage() {
         }
         return current
       })
-      void saveHttpTemplate(selectedId, templatePath, updatedYaml).catch((error) => {
+      void saveTemplate(selectedId, templatePath, updatedYaml).catch((error) => {
         setSchemaEditorError(
           error instanceof Error ? `Failed to save HTTP template: ${error.message}` : 'Failed to save HTTP template',
         )
@@ -3317,7 +3317,7 @@ export default function ScenariosPage() {
     setSchemaEditorState(null)
     setSchemaEditorValues({})
     setSchemaEditorError(null)
-  }, [applyTemplateUpdate, saveHttpTemplate, schemaEditorState, schemaEditorValues, selectedId])
+  }, [applyTemplateUpdate, saveTemplate, schemaEditorState, schemaEditorValues, selectedId])
 
   const getValueForPath = useCallback(
     (config: Record<string, unknown> | undefined, path: string): unknown => {
@@ -3424,7 +3424,7 @@ export default function ScenariosPage() {
       setHttpTemplateLoading(true)
       setHttpTemplateError(null)
       try {
-        const paths = await listHttpTemplates(selectedId)
+        const paths = await listTemplates(selectedId)
         if (cancelled) return
         setHttpTemplatePaths(paths)
         if (paths.length === 0) {
@@ -3435,7 +3435,7 @@ export default function ScenariosPage() {
         const first = paths[0]!
         setHttpTemplateSelectedPath(first)
         try {
-          const text = await fetchHttpTemplate(selectedId, first)
+          const text = await fetchTemplate(selectedId, first)
           if (cancelled) return
           setHttpTemplateRaw(text)
         } catch (e) {
@@ -3459,7 +3459,7 @@ export default function ScenariosPage() {
     return () => {
       cancelled = true
     }
-  }, [fetchHttpTemplate, listHttpTemplates, selectedId, viewMode])
+  }, [fetchTemplate, listTemplates, selectedId, viewMode])
 
   useEffect(() => {
     if (!selectedId || viewMode !== 'httpTemplates') {
@@ -3476,7 +3476,7 @@ export default function ScenariosPage() {
       setHttpTemplateLoading(true)
       setHttpTemplateError(null)
       try {
-        const paths = await listHttpTemplates(selectedId)
+        const paths = await listTemplates(selectedId)
         if (cancelled) return
         setHttpTemplatePaths(paths)
         if (paths.length === 0) {
@@ -3487,7 +3487,7 @@ export default function ScenariosPage() {
         const first = paths[0]!
         setHttpTemplateSelectedPath(first)
         try {
-          const text = await fetchHttpTemplate(selectedId, first)
+          const text = await fetchTemplate(selectedId, first)
           if (cancelled) return
           setHttpTemplateRaw(text)
         } catch (e) {
@@ -3511,7 +3511,7 @@ export default function ScenariosPage() {
     return () => {
       cancelled = true
     }
-  }, [fetchHttpTemplate, listHttpTemplates, selectedId, viewMode])
+  }, [fetchTemplate, listTemplates, selectedId, viewMode])
 
   const openConfigModal = useCallback(
     async (target: ConfigTarget) => {
@@ -4715,7 +4715,7 @@ export default function ScenariosPage() {
                       onClick={async () => {
                         if (!selectedId || !httpTemplateSelectedPath) return
                         const nextRaw = window.prompt(
-                          'Rename HTTP template (path under http-templates/)',
+                          'Rename HTTP template (path under templates/)',
                           httpTemplateSelectedPath,
                         )
                         if (nextRaw == null) return
@@ -4725,9 +4725,9 @@ export default function ScenariosPage() {
                           return
                         }
                         const cleaned = trimmed.replace(/^\/+/, '')
-                        const nextPath = cleaned.startsWith('http-templates/')
+                        const nextPath = cleaned.startsWith('templates/')
                           ? cleaned
-                          : `http-templates/${cleaned}`
+                          : `templates/${cleaned}`
                         if (nextPath === httpTemplateSelectedPath) {
                           setToast('Template path unchanged')
                           return
@@ -4735,7 +4735,7 @@ export default function ScenariosPage() {
                         setHttpTemplateSaving(true)
                         setHttpTemplateError(null)
                         try {
-                          await renameHttpTemplate(selectedId, httpTemplateSelectedPath, nextPath)
+                          await renameTemplate(selectedId, httpTemplateSelectedPath, nextPath)
                           setHttpTemplatePaths((current) => {
                             const updated = current.map((entry) =>
                               entry === httpTemplateSelectedPath ? nextPath : entry,
@@ -4770,7 +4770,7 @@ export default function ScenariosPage() {
                         setHttpTemplateSaving(true)
                         setHttpTemplateError(null)
                         try {
-                          await deleteHttpTemplate(selectedId, httpTemplateSelectedPath)
+                          await deleteTemplate(selectedId, httpTemplateSelectedPath)
                           const updated = httpTemplatePaths
                             .filter((entry) => entry !== httpTemplateSelectedPath)
                             .sort((a, b) => a.localeCompare(b))
@@ -4782,7 +4782,7 @@ export default function ScenariosPage() {
                             return
                           }
                           try {
-                            const text = await fetchHttpTemplate(selectedId, nextPath)
+                            const text = await fetchTemplate(selectedId, nextPath)
                             setHttpTemplateRaw(text)
                           } catch (e) {
                             setHttpTemplateError(
@@ -4814,7 +4814,7 @@ export default function ScenariosPage() {
                         let index = 1
                         let path: string
                         do {
-                          path = `http-templates/template-${index}.yaml`
+                          path = `templates/template-${index}.yaml`
                           index += 1
                         } while (existing.has(path))
                         const initialYaml = [
@@ -4829,7 +4829,7 @@ export default function ScenariosPage() {
                         setHttpTemplateSaving(true)
                         setHttpTemplateError(null)
                         try {
-                          await saveHttpTemplate(selectedId, path, initialYaml)
+                          await saveTemplate(selectedId, path, initialYaml)
                           setHttpTemplatePaths((current) => {
                             const next = [...current, path]
                             next.sort((a, b) => a.localeCompare(b))
@@ -4869,7 +4869,7 @@ export default function ScenariosPage() {
                       )}
                       {!httpTemplateLoading && !httpTemplateError && httpTemplatePaths.length === 0 && (
                         <div className="text-[10px] text-white/60">
-                          No HTTP templates found (expected under <span className="font-mono">http-templates/</span>).
+                          No HTTP templates found (expected under <span className="font-mono">templates/</span>).
                         </div>
                       )}
                       {httpTemplatePaths.length > 0 && (
@@ -4890,7 +4890,7 @@ export default function ScenariosPage() {
                                     setHttpTemplateSelectedPath(path)
                                     setHttpTemplateError(null)
                                     try {
-                                      const text = await fetchHttpTemplate(selectedId, path)
+                                      const text = await fetchTemplate(selectedId, path)
                                       setHttpTemplateRaw(text)
                                     } catch (e) {
                                       setHttpTemplateError(
@@ -4928,7 +4928,7 @@ export default function ScenariosPage() {
                             setHttpTemplateSaving(true)
                             setHttpTemplateError(null)
                             try {
-                              await saveHttpTemplate(selectedId, httpTemplateSelectedPath, httpTemplateRaw)
+                              await saveTemplate(selectedId, httpTemplateSelectedPath, httpTemplateRaw)
                             } catch (e) {
                               setHttpTemplateError(
                                 e instanceof Error
@@ -4981,7 +4981,7 @@ export default function ScenariosPage() {
           >
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-xs font-semibold text-white/80">
-                {schemaAttachState.target === 'http-template'
+                {schemaAttachState.target === 'template'
                   ? 'Attach schema for HTTP template'
                   : 'Attach schema for generator HTTP body'}
               </h3>
@@ -5135,7 +5135,7 @@ export default function ScenariosPage() {
           >
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-xs font-semibold text-white/80">
-                {schemaEditorState.kind === 'http-template'
+                {schemaEditorState.kind === 'template'
                   ? 'Edit HTTP template body from schema'
                   : 'Edit generator HTTP body from schema'}
               </h3>

@@ -201,7 +201,7 @@ control how long generators run and what host paths they see.
     fake DockerContainerClient to capture `HostConfig`).
   - Optionally, an integration test that starts a swarm with a mounted volume
     and verifies files are visible inside a worker container (e.g., HTTP
-    Builder loading templates from `/app/http-templates`).
+    Builder loading templates from `/app/templates`).
 - Docs:
   - Scenario-driven volumes are now described in
     `docs/architecture/swarm-controller-refactor.md` (see the “worker mounts”

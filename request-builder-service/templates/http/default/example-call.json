@@ -1,6 +1,7 @@
 {
   "serviceId": "default",
   "callId": "example-call",
+  "protocol": "HTTP",
   "method": "GET",
   "pathTemplate": "/example",
   "bodyTemplate": "Hello from Request Builder (payload={{ payload }})",

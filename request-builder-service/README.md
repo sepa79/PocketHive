@@ -8,7 +8,7 @@ The Request Builder worker takes a generic `WorkItem` from Rabbit, resolves a di
 - **Output**: `WorkerOutputType.RABBITMQ` – the queue that the `processor-service` consumes.
 - The worker looks for two headers on the current `WorkItem`:
   - `x-ph-service-id` (optional): logical service namespace.
-  - `x-ph-call-id` (required): which HTTP call template to apply.
+  - `x-ph-call-id` (required): which request template to apply.
 
 If `x-ph-service-id` is missing or blank, the worker uses `pockethive.worker.config.serviceId` (default `default`). Behaviour for missing `callId` / template is explicit and configurable via `passThroughOnMissingTemplate`:
 
@@ -23,16 +23,16 @@ Service config (`request-builder-service/src/main/resources/application.yml`):
 pockethive:
   worker:
     config:
-      templateRoot: /app/http-templates
+      templateRoot: /app/templates/http
       serviceId: default
       passThroughOnMissingTemplate: true
 ```
 
-To use the baked-in TCP templates instead, set `templateRoot: /app/tcp-templates`.
+To use the baked-in TCP templates instead, set `templateRoot: /app/templates/tcp`.
 
 Capability manifest (`scenario-manager-service/capabilities/request-builder.latest.yaml`) exposes:
 
-- `templateRoot`: root directory for HTTP templates (baked into the image, overridable via a Docker volume).
+- `templateRoot`: root directory for templates of one protocol family (for example `/app/templates/http`).
 - `serviceId`: default logical service id used when the header is not present.
 
 ## Template files
@@ -41,6 +41,7 @@ Templates live under `templateRoot` in JSON or YAML files and are loaded once at
 
 ```json
 {
+  "protocol": "HTTP",
   "serviceId": "payments",
   "callId": "AuthorizePayment",
   "method": "POST",
@@ -57,6 +58,7 @@ Fields:
 
 - `serviceId` – optional; if missing/blank, the worker fills it with the configured `serviceId`.
 - `callId` – required; identifies the call. Together with `serviceId` it forms the lookup key.
+- `protocol` – required (`HTTP`, `TCP`, `ISO8583`), explicit in every template.
 - `method` – HTTP method (`GET`, `POST`, etc.).
 - `pathTemplate` – relative path, rendered via Pebble/SpEL (may contain parameters).
 - `bodyTemplate` – rendered body (SOAP XML, JSON, or any text).
@@ -82,7 +84,7 @@ You can treat `serviceId` as a namespace for calls. Three common patterns:
   pockethive:
     worker:
       config:
-        templateRoot: /app/http-templates
+        templateRoot: /app/templates/http
         serviceId: default
   ```
 
@@ -170,14 +172,14 @@ The processor combines this `path` with its configured `baseUrl` to execute the 
 
 ## Overriding templates
 
-- The Docker image bakes default templates under `/app/http-templates`.
+- The Docker image bakes default templates under `/app/templates/{protocol}`.
 - You can override or extend these by mounting a host directory at the same path, for example:
 
   ```yaml
   services:
     request-builder:
       volumes:
-        - ./my-http-templates:/app/http-templates:ro
+        - ./my-templates-http:/app/templates/http:ro
   ```
 
 - On startup the worker scans the effective `templateRoot` and fails fast if any template cannot be parsed. Callers can use the `scenario-templating-check` tool to list loaded `(serviceId, callId)` pairs and validate scenarios against the available templates.

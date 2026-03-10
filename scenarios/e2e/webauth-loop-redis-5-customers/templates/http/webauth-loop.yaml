@@ -1,5 +1,6 @@
 serviceId: webauth
 callId: webauth-loop-5
+protocol: HTTP
 method: POST
 pathTemplate: /api/test
 headersTemplate:
