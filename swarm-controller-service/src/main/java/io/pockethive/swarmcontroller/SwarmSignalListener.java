@@ -22,6 +22,7 @@ import io.pockethive.controlplane.routing.ControlPlaneRouting.RoutingKey;
 import io.pockethive.manager.guard.BufferGuardSettings;
 import io.pockethive.observability.ControlPlaneJson;
 import io.pockethive.swarm.model.BufferGuardPolicy;
+import io.pockethive.swarm.model.NetworkMode;
 import io.pockethive.swarm.model.TrafficPolicy;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import io.pockethive.swarmcontroller.runtime.JournalControlPlanePublisher;
@@ -85,6 +86,9 @@ public class SwarmSignalListener {
   private final AtomicBoolean templateApplied = new AtomicBoolean(false);
   private final AtomicBoolean planApplied = new AtomicBoolean(false);
   private final java.time.Instant startedAt;
+  private final String configuredSutId;
+  private volatile NetworkMode networkMode;
+  private volatile String networkProfileId;
   private volatile String lastHealthState;
   private volatile Instant healthJournalSuppressUntil;
   private volatile boolean healthWorkloadsEnabled;
@@ -130,6 +134,9 @@ public class SwarmSignalListener {
             Map.of())
     , runtimeMetaSnapshot());
     this.startedAt = java.time.Instant.now();
+    this.configuredSutId = trimToNull(envValue("POCKETHIVE_SUT_ID"));
+    this.networkMode = parseNetworkMode(envValue("POCKETHIVE_NETWORK_MODE"));
+    this.networkProfileId = trimToNull(envValue("POCKETHIVE_NETWORK_PROFILE_ID"));
     this.lastHealthState = null;
     this.healthJournalSuppressUntil = null;
     this.healthWorkloadsEnabled = false;
@@ -522,18 +529,19 @@ public class SwarmSignalListener {
           envelope.routingKey(), cs.correlationId());
       return;
     }
-    if (rejectIfNotReady(cs, resolvedSignal, swarmIdOrDefault(cs), true)) {
-      return;
-    }
-
     JsonNode node = mapper.createObjectNode();
     if (cs.data() != null) {
       node = mapper.valueToTree(cs.data());
+    }
+    boolean networkContextOnly = isControllerNetworkContextOnly(targetRole, node);
+    if (rejectIfNotReady(cs, resolvedSignal, swarmIdOrDefault(cs), !networkContextOnly)) {
+      return;
     }
 
     try {
       JsonNode dataNode = node;
       Boolean enabledFlag = dataNode.has("enabled") ? dataNode.path("enabled").asBoolean() : null;
+      boolean networkContextChanged = applyNetworkContextOverride(dataNode);
 
       Map<String, Object> details = new LinkedHashMap<>();
       boolean scenarioChanged = false;
@@ -575,7 +583,7 @@ public class SwarmSignalListener {
         // config-update signals for non-controller roles are routed directly to those roles/instances.
       }
 
-      if (scenarioChanged) {
+      if (scenarioChanged || networkContextChanged) {
         sendStatusDelta();
       }
       CommandState state = configCommandState(details);
@@ -970,6 +978,7 @@ public class SwarmSignalListener {
         .data("swarmDiagnostics", diagnostics.snapshot())
         .data("scenario", scenarioProgress())
         .data("bindings", Map.of("work", lifecycle.workBindingsSnapshot()));
+    appendNetworkContext(builder);
     builder.runtime(runtimeMetaSnapshot());
     String controlQueue = properties.controlQueueName(role, instanceId);
     builder.controlIn(controlQueue)
@@ -1004,6 +1013,7 @@ public class SwarmSignalListener {
         .data("swarmStatus", status.name())
         .data("swarmHealth", health)
         .data("scenario", scenarioProgress());
+    appendNetworkContext(builder);
     builder.runtime(runtimeMetaSnapshot());
     appendTrafficDiagnostics(builder);
     String payload = builder.toJson();
@@ -1119,6 +1129,73 @@ public class SwarmSignalListener {
       config.put("bufferGuards", List.copyOf(guards));
     }
     return Map.copyOf(config);
+  }
+
+  private void appendNetworkContext(StatusEnvelopeBuilder builder) {
+    if (builder == null) {
+      return;
+    }
+    String sutId = currentSutId();
+    if (sutId != null) {
+      builder.data("sutId", sutId);
+    }
+    builder.data("networkMode", networkMode.name());
+    if (networkProfileId != null) {
+      builder.data("networkProfileId", networkProfileId);
+    }
+  }
+
+  private boolean applyNetworkContextOverride(JsonNode dataNode) {
+    if (dataNode == null || !dataNode.isObject()) {
+      return false;
+    }
+    boolean changed = false;
+    String requestedSutId = trimToNull(textOrNull(dataNode.path("sutId")));
+    String currentSutId = currentSutId();
+    if (requestedSutId != null && currentSutId != null && !currentSutId.equals(requestedSutId)) {
+      throw new IllegalArgumentException("sutId override does not match configured swarm SUT");
+    }
+    if (dataNode.has("networkMode")) {
+      NetworkMode requestedMode = parseNetworkMode(textOrNull(dataNode.path("networkMode")));
+      if (networkMode != requestedMode) {
+        networkMode = requestedMode;
+        changed = true;
+      }
+    }
+    if (dataNode.has("networkProfileId")) {
+      String requestedProfileId = trimToNull(textOrNull(dataNode.path("networkProfileId")));
+      if (!java.util.Objects.equals(networkProfileId, requestedProfileId)) {
+        networkProfileId = requestedProfileId;
+        changed = true;
+      }
+    }
+    if (networkMode == NetworkMode.DIRECT && networkProfileId != null) {
+      networkProfileId = null;
+      changed = true;
+    }
+    return changed;
+  }
+
+  private boolean isControllerNetworkContextOnly(String targetRole, JsonNode dataNode) {
+    if (targetRole == null || !role.equalsIgnoreCase(targetRole) || dataNode == null || !dataNode.isObject()) {
+      return false;
+    }
+    java.util.Iterator<String> fieldNames = dataNode.fieldNames();
+    boolean sawNetworkField = false;
+    while (fieldNames.hasNext()) {
+      String field = fieldNames.next();
+      if ("sutId".equals(field) || "networkMode".equals(field) || "networkProfileId".equals(field)) {
+        sawNetworkField = true;
+        continue;
+      }
+      return false;
+    }
+    return sawNetworkField;
+  }
+
+  private String currentSutId() {
+    String runtimeSutId = trimToNull(lifecycle.sutId());
+    return runtimeSutId != null ? runtimeSutId : configuredSutId;
   }
 
   private TrafficPolicy effectiveTrafficPolicy() {
@@ -1241,6 +1318,21 @@ public class SwarmSignalListener {
     }
     String trimmed = node.asText().trim();
     return trimmed.isEmpty() ? null : trimmed;
+  }
+
+  private static String trimToNull(String value) {
+    if (value == null) {
+      return null;
+    }
+    String trimmed = value.trim();
+    return trimmed.isEmpty() ? null : trimmed;
+  }
+
+  private static NetworkMode parseNetworkMode(String value) {
+    if (value == null || value.isBlank()) {
+      return NetworkMode.DIRECT;
+    }
+    return NetworkMode.valueOf(value.trim().toUpperCase(Locale.ROOT));
   }
 
   private static int intOr(JsonNode node, String field, int fallback) {

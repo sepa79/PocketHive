@@ -20,7 +20,13 @@ import java.util.Objects;
 import org.apache.hc.client5.http.classic.HttpClient;
 import org.apache.hc.client5.http.impl.classic.HttpClients;
 import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManager;
+import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManagerBuilder;
+import org.apache.hc.client5.http.ssl.NoopHostnameVerifier;
+import org.apache.hc.client5.http.ssl.SSLConnectionSocketFactory;
+import org.apache.hc.client5.http.ssl.SSLConnectionSocketFactoryBuilder;
+import org.apache.hc.client5.http.ssl.TrustAllStrategy;
 import org.apache.hc.core5.http.ConnectionReuseStrategy;
+import org.apache.hc.core5.ssl.SSLContextBuilder;
 import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -65,6 +71,9 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
   private static final int GLOBAL_MAX_CONNECTIONS = 200;
   private static final int GLOBAL_MAX_PER_ROUTE = 200;
 
+  private record HttpClientBundle(HttpClient pooled, HttpClient noKeepAlive, ThreadLocal<HttpClient> perThread) {
+  }
+
   private final ObjectMapper mapper;
   private final ProcessorWorkerProperties properties;
   private final CallMetricsRecorder metricsRecorder = new CallMetricsRecorder();
@@ -72,16 +81,49 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
 
   @Autowired
   ProcessorWorkerImpl(ObjectMapper mapper, ProcessorWorkerProperties properties) {
-    this(mapper, properties, newPooledClient(), newNoKeepAliveClient(), Clock.systemUTC());
+    this(mapper, properties, newHttpClientBundle(true), newHttpClientBundle(false), Clock.systemUTC());
   }
 
   ProcessorWorkerImpl(ObjectMapper mapper, ProcessorWorkerProperties properties, HttpClient httpClient, HttpClient noKeepAliveClient, Clock clock) {
+    this(mapper, properties,
+        new HttpClientBundle(httpClient, noKeepAliveClient, ThreadLocal.withInitial(() -> httpClient)),
+        new HttpClientBundle(httpClient, noKeepAliveClient, ThreadLocal.withInitial(() -> httpClient)),
+        clock);
+  }
+
+  ProcessorWorkerImpl(ObjectMapper mapper,
+                      ProcessorWorkerProperties properties,
+                      HttpClient verifiedClient,
+                      HttpClient verifiedNoKeepAliveClient,
+                      HttpClient insecureClient,
+                      HttpClient insecureNoKeepAliveClient,
+                      Clock clock) {
+    this(mapper, properties,
+        new HttpClientBundle(verifiedClient, verifiedNoKeepAliveClient, ThreadLocal.withInitial(() -> verifiedClient)),
+        new HttpClientBundle(insecureClient, insecureNoKeepAliveClient, ThreadLocal.withInitial(() -> insecureClient)),
+        clock);
+  }
+
+  private ProcessorWorkerImpl(ObjectMapper mapper,
+                              ProcessorWorkerProperties properties,
+                              HttpClientBundle verifiedClients,
+                              HttpClientBundle insecureClients,
+                              Clock clock) {
     this.mapper = Objects.requireNonNull(mapper, "mapper");
     this.properties = Objects.requireNonNull(properties, "properties");
-    ThreadLocal<HttpClient> perThreadClient = ThreadLocal.withInitial(HttpClients::createSystem);
     java.util.concurrent.atomic.AtomicLong nextAllowedTimeNanos = new java.util.concurrent.atomic.AtomicLong(0L);
     this.protocolHandlers = Map.of(
-        "HTTP", new HttpProtocolHandler(mapper, clock, metricsRecorder, httpClient, noKeepAliveClient, perThreadClient, nextAllowedTimeNanos),
+        "HTTP", new HttpProtocolHandler(
+            mapper,
+            clock,
+            metricsRecorder,
+            verifiedClients.pooled(),
+            verifiedClients.noKeepAlive(),
+            verifiedClients.perThread(),
+            insecureClients.pooled(),
+            insecureClients.noKeepAlive(),
+            insecureClients.perThread(),
+            nextAllowedTimeNanos),
         "TCP", new TcpProtocolHandler(mapper, clock, metricsRecorder, properties.defaultConfig().tcpTransport(), nextAllowedTimeNanos)
     );
   }
@@ -153,23 +195,48 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
         : reuse == ProcessorWorkerConfig.ConnectionReuse.PER_THREAD ? config.threadCount() : 0;
   }
 
+  private static HttpClientBundle newHttpClientBundle(boolean sslVerify) {
+    return new HttpClientBundle(
+        newHttpClient(sslVerify, true),
+        newHttpClient(sslVerify, false),
+        ThreadLocal.withInitial(() -> newHttpClient(sslVerify, true)));
+  }
 
-
-  private static HttpClient newPooledClient() {
-    PoolingHttpClientConnectionManager manager = new PoolingHttpClientConnectionManager();
-    manager.setMaxTotal(GLOBAL_MAX_CONNECTIONS);
-    manager.setDefaultMaxPerRoute(GLOBAL_MAX_PER_ROUTE);
-    return HttpClients.custom()
-        .setConnectionManager(manager)
+  private static HttpClient newHttpClient(boolean sslVerify, boolean keepAlive) {
+    PoolingHttpClientConnectionManager manager = newConnectionManager(sslVerify);
+    var builder = HttpClients.custom()
         .useSystemProperties()
+        .setConnectionManager(manager);
+    if (keepAlive) {
+      return builder.build();
+    }
+    ConnectionReuseStrategy noReuse = (request, response, context) -> false;
+    return builder
+        .setConnectionReuseStrategy(noReuse)
         .build();
   }
 
-  private static HttpClient newNoKeepAliveClient() {
-    ConnectionReuseStrategy noReuse = (request, response, context) -> false;
-    return HttpClients.custom()
-        .setConnectionReuseStrategy(noReuse)
-        .useSystemProperties()
-        .build();
+  private static PoolingHttpClientConnectionManager newConnectionManager(boolean sslVerify) {
+    PoolingHttpClientConnectionManagerBuilder builder = PoolingHttpClientConnectionManagerBuilder.create();
+    if (sslVerify) {
+      builder.useSystemProperties();
+    } else {
+      builder.setSSLSocketFactory(insecureSocketFactory());
+    }
+    PoolingHttpClientConnectionManager manager = builder.build();
+    manager.setMaxTotal(GLOBAL_MAX_CONNECTIONS);
+    manager.setDefaultMaxPerRoute(GLOBAL_MAX_PER_ROUTE);
+    return manager;
+  }
+
+  private static SSLConnectionSocketFactory insecureSocketFactory() {
+    try {
+      return SSLConnectionSocketFactoryBuilder.create()
+          .setSslContext(SSLContextBuilder.create().loadTrustMaterial(null, TrustAllStrategy.INSTANCE).build())
+          .setHostnameVerifier(NoopHostnameVerifier.INSTANCE)
+          .build();
+    } catch (Exception ex) {
+      throw new IllegalStateException("Failed to create insecure HTTP client SSL context", ex);
+    }
   }
 }

@@ -211,6 +211,45 @@ class ProcessorTest {
     }
 
     @Test
+    void workerSelectsHttpClientFromSslVerifyFlag() throws Exception {
+        ProcessorWorkerProperties properties = newProcessorWorkerProperties();
+        properties.setConfig(Map.of("baseUrl", "https://sut"));
+        HttpClient verifiedClient = mock(HttpClient.class);
+        HttpClient insecureClient = mock(HttpClient.class);
+        Clock clock = Clock.fixed(Instant.parse("2024-03-03T00:00:00Z"), ZoneOffset.UTC);
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(
+            MAPPER,
+            properties,
+            verifiedClient,
+            verifiedClient,
+            insecureClient,
+            insecureClient,
+            clock
+        );
+
+        when(verifiedClient.execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class))).thenAnswer(invocation -> {
+            HttpClientResponseHandler<?> handler = invocation.getArgument(1, HttpClientResponseHandler.class);
+            BasicClassicHttpResponse response = new BasicClassicHttpResponse(200, "OK");
+            response.setEntity(new StringEntity("verified", java.nio.charset.StandardCharsets.UTF_8));
+            return handler.handleResponse(response);
+        });
+        when(insecureClient.execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class))).thenAnswer(invocation -> {
+            HttpClientResponseHandler<?> handler = invocation.getArgument(1, HttpClientResponseHandler.class);
+            BasicClassicHttpResponse response = new BasicClassicHttpResponse(200, "OK");
+            response.setEntity(new StringEntity("insecure", java.nio.charset.StandardCharsets.UTF_8));
+            return handler.handleResponse(response);
+        });
+
+        WorkItem inbound = inboundItem(Map.of("path", "/tls"));
+
+        worker.onMessage(inbound, new TestWorkerContext(new ProcessorWorkerConfig("https://sut", null, 0, 0.0, null, null, null, Boolean.FALSE, null)));
+        worker.onMessage(inbound, new TestWorkerContext(new ProcessorWorkerConfig("https://sut", null, 0, 0.0, null, null, null, Boolean.TRUE, null)));
+
+        verify(insecureClient).execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class));
+        verify(verifiedClient).execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class));
+    }
+
+    @Test
     void workerFallsBackToDefaultsWhenConfigMissing() throws Exception {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
         properties.setConfig(Map.of("baseUrl", "http://defaults"));

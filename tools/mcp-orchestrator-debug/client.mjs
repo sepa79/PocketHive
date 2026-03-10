@@ -68,6 +68,7 @@ function printUsage() {
       "  node tools/mcp-orchestrator-debug/client.mjs get-swarm foo\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs worker-configs foo\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs create-swarm foo local-rest-defaults\n" +
+      "  node tools/mcp-orchestrator-debug/client.mjs create-swarm proxy-http-smoke http-proxy-demo --sutId wiremock-proxy-local --networkMode PROXIED --networkProfileId passthrough\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs swarm-plan foo local-rest-plan-demo swarm-controller-1 --record\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs start-swarm foo --record\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs remove-swarm foo --record\n" +
@@ -132,6 +133,8 @@ const COMMANDS = [
       "[notes]",
       "[--sutId <sutId>]",
       "[--variablesProfileId <profileId>]",
+      "[--networkMode DIRECT|PROXIED]",
+      "[--networkProfileId <profileId>]",
       "[--record]",
     ],
   },
@@ -362,6 +365,10 @@ async function main() {
           ...(flags.sutId ? { sutId: String(flags.sutId) } : {}),
           ...(flags.variablesProfileId
             ? { variablesProfileId: String(flags.variablesProfileId) }
+            : {}),
+          ...(flags.networkMode ? { networkMode: String(flags.networkMode) } : {}),
+          ...(flags.networkProfileId
+            ? { networkProfileId: String(flags.networkProfileId) }
             : {}),
         };
         try {

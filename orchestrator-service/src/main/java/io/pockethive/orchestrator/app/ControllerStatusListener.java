@@ -2,6 +2,7 @@ package io.pockethive.orchestrator.app;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.swarm.model.NetworkMode;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmLifecycleStatus;
@@ -18,6 +19,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Locale;
 import java.util.Objects;
 
 /**
@@ -88,6 +90,7 @@ public class ControllerStatusListener {
             boolean controllerScope = SWARM_CONTROLLER_ROLE.equals(role);
 
             if (controllerScope && swarm != null) {
+                hydrateNetworkMetadata(swarm, context);
                 if (statusFull) {
                     store.cacheControllerStatusFull(swarmId, node, Instant.now());
                     swarmSignals.handleControllerStatusFull(routingKey);
@@ -174,6 +177,20 @@ public class ControllerStatusListener {
         statusRequests.requestStatusForSwarm(swarmId, corr, idem);
     }
 
+    private void hydrateNetworkMetadata(Swarm swarm, JsonNode context) {
+        if (swarm == null || context == null || !context.isObject()) {
+            return;
+        }
+        String sutId = textOrNull(context.path("sutId"));
+        if (sutId != null) {
+            swarm.setSutId(sutId);
+        }
+        NetworkMode networkMode = parseNetworkMode(textOrNull(context.path("networkMode")));
+        swarm.setNetworkMode(networkMode);
+        String networkProfileId = textOrNull(context.path("networkProfileId"));
+        swarm.setNetworkProfileId(networkMode == NetworkMode.PROXIED ? networkProfileId : null);
+    }
+
     @Scheduled(fixedRate = 5000L)
     public void expire() {
         store.pruneStaleControllers(FAILED_AFTER);
@@ -245,5 +262,24 @@ public class ControllerStatusListener {
         } catch (Exception ignored) {
             return "hive";
         }
+    }
+
+    private static String textOrNull(JsonNode node) {
+        if (node == null || node.isNull()) {
+            return null;
+        }
+        String value = node.asText(null);
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private static NetworkMode parseNetworkMode(String value) {
+        if (value == null || value.isBlank()) {
+            return NetworkMode.DIRECT;
+        }
+        return NetworkMode.valueOf(value.trim().toUpperCase(Locale.ROOT));
     }
 }

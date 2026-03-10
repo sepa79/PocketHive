@@ -5,6 +5,7 @@ Welcome to the PocketHive documentation hub. Use these resources to understand t
 ## Architecture
 - [System Architecture](ARCHITECTURE.md)
 - [SUT + Dataset + Simulation Model (proposal)](architecture/sut-dataset-simulation-model.md)
+- [Network Proxy Plan](inProgress/network-proxy-plan.md)
 
 ## Roadmap
 - [Release Notes](../CHANGELOG.md)

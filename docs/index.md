@@ -66,6 +66,9 @@ by the UI under `/docs/...` as part of the runtime image.
   SUT/scenario editor plan pending review against SUT environment plan.
 - `docs/toBeReviewed/ui-v2-control-plane-adoption.md` (Status: to be reviewed) –
   UI-v2 control-plane adoption plan with review findings pending alignment.
+- `docs/inProgress/network-proxy-plan.md` (Status: in progress) –
+  shared-per-SUT network proxying, secure traffic routing, and runtime fault
+  profiles.
 
 ## Specs & Tools
 

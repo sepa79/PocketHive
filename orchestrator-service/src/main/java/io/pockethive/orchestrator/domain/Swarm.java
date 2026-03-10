@@ -1,6 +1,7 @@
 package io.pockethive.orchestrator.domain;
 
 import io.pockethive.swarm.model.Bee;
+import io.pockethive.swarm.model.NetworkMode;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.time.Instant;
 import java.util.List;
@@ -14,6 +15,8 @@ public class Swarm {
     private final Instant createdAt;
     private SwarmTemplateMetadata templateMetadata;
     private String sutId;
+    private NetworkMode networkMode = NetworkMode.DIRECT;
+    private String networkProfileId;
     private volatile JsonNode controllerStatusFull;
     private volatile Instant controllerStatusReceivedAt;
 
@@ -83,6 +86,27 @@ public class Swarm {
 
     public void setSutId(String sutId) {
         this.sutId = sutId;
+    }
+
+    public NetworkMode getNetworkMode() {
+        return networkMode;
+    }
+
+    public void setNetworkMode(NetworkMode networkMode) {
+        this.networkMode = NetworkMode.directIfNull(networkMode);
+        if (this.networkMode == NetworkMode.DIRECT) {
+            this.networkProfileId = null;
+        }
+    }
+
+    public String getNetworkProfileId() {
+        return networkProfileId;
+    }
+
+    public void setNetworkProfileId(String networkProfileId) {
+        this.networkProfileId = networkProfileId == null || networkProfileId.isBlank()
+            ? null
+            : networkProfileId.trim();
     }
 
     public synchronized void updateControllerStatusFull(JsonNode envelope, Instant receivedAt) {

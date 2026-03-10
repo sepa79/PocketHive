@@ -219,6 +219,10 @@ public interface SwarmLifecycle {
     return Optional.empty();
   }
 
+  default String sutId() {
+    return null;
+  }
+
   default void fail(String reason) {
   }
 

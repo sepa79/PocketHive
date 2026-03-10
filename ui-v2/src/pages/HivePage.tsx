@@ -9,6 +9,15 @@ import {
   type CapabilityManifest,
 } from '../lib/capabilities'
 import { detectUiBasename } from '../lib/routing/basename'
+import {
+  createIdempotencyKey as createNetworkIdempotencyKey,
+  formatInstant,
+  normalizeBindings,
+  normalizeProfiles,
+  type NetworkBinding,
+  type NetworkMode,
+  type NetworkProfile,
+} from '../lib/networkProxy'
 
 const HIVE_EXPLAIN_KEY = 'PH_UI_HIVE_EXPLAIN'
 
@@ -27,6 +36,9 @@ type SwarmSummary = {
   templateId?: string | null
   controllerImage?: string | null
   bees?: BeeSummary[]
+  sutId?: string | null
+  networkMode?: NetworkMode
+  networkProfileId?: string | null
 }
 
 type StatusFullSnapshotResponse = {
@@ -431,6 +443,12 @@ export function HivePage() {
   const [capabilitiesError, setCapabilitiesError] = useState<string | null>(null)
   const [tapBusy, setTapBusy] = useState<Record<string, boolean>>({})
   const [tapIoSelection, setTapIoSelection] = useState<Record<string, { in?: string | null; out?: string | null }>>({})
+  const [networkProfiles, setNetworkProfiles] = useState<NetworkProfile[]>([])
+  const [networkBinding, setNetworkBinding] = useState<NetworkBinding | null>(null)
+  const [networkLoading, setNetworkLoading] = useState(false)
+  const [networkBusy, setNetworkBusy] = useState(false)
+  const [networkError, setNetworkError] = useState<string | null>(null)
+  const [networkProfileDraft, setNetworkProfileDraft] = useState('')
 
   const tapBusyKey = useCallback((role: string, direction: 'IN' | 'OUT', ioName: string | null) => {
     return `${role}::${direction}::${ioName ?? ''}`
@@ -547,9 +565,69 @@ export function HivePage() {
     }
   }, [capabilitiesLoaded])
 
+  const selectedSwarm = useMemo(
+    () => (selectedSwarmId ? swarms.find((swarm) => swarm.id === selectedSwarmId) ?? null : null),
+    [selectedSwarmId, swarms],
+  )
+
+  const loadNetworkState = useCallback(async () => {
+    if (!selectedSwarmId) {
+      setNetworkBinding(null)
+      setNetworkProfiles([])
+      setNetworkError(null)
+      setNetworkLoading(false)
+      return
+    }
+    setNetworkLoading(true)
+    try {
+      const [profileResponse, bindingResponse] = await Promise.all([
+        fetch('/scenario-manager/network-profiles', { headers: { Accept: 'application/json' } }),
+        fetch(`/network-proxy-manager/api/network/bindings/${encodeURIComponent(selectedSwarmId)}`, {
+          headers: { Accept: 'application/json' },
+        }),
+      ])
+
+      if (!profileResponse.ok) {
+        throw new Error(await readErrorMessage(profileResponse))
+      }
+
+      const profilePayload = await profileResponse.json()
+      const nextProfiles = normalizeProfiles(profilePayload)
+      setNetworkProfiles(nextProfiles)
+
+      if (bindingResponse.status === 404) {
+        setNetworkBinding(null)
+      } else {
+        if (!bindingResponse.ok) {
+          throw new Error(await readErrorMessage(bindingResponse))
+        }
+        const bindingPayload = await bindingResponse.json()
+        const normalized = normalizeBindings([bindingPayload])
+        setNetworkBinding(normalized[0] ?? null)
+      }
+
+      setNetworkError(null)
+    } catch (err) {
+      setNetworkError(err instanceof Error ? err.message : 'Failed to load network state')
+    } finally {
+      setNetworkLoading(false)
+    }
+  }, [selectedSwarmId])
+
   useEffect(() => {
     void loadSwarms()
   }, [loadSwarms])
+
+  useEffect(() => {
+    void loadNetworkState()
+    if (!selectedSwarmId) {
+      return
+    }
+    const handle = window.setInterval(() => {
+      void loadNetworkState()
+    }, 5000)
+    return () => window.clearInterval(handle)
+  }, [loadNetworkState, selectedSwarmId])
 
   const runSwarmAction = useCallback(
     async (swarm: SwarmSummary, action: SwarmAction) => {
@@ -578,6 +656,49 @@ export function HivePage() {
       }
     },
     [loadSwarms],
+  )
+
+  const applyNetworkMode = useCallback(
+    async (networkMode: NetworkMode) => {
+      if (!selectedSwarm) return
+      setNetworkBusy(true)
+      setNetworkError(null)
+      setMessage(null)
+      try {
+        const profileId = networkProfileDraft.trim()
+        if (networkMode === 'PROXIED') {
+          if (!selectedSwarm.sutId) {
+            throw new Error('Proxy mode requires a swarm with bound SUT metadata.')
+          }
+          if (profileId.length === 0) {
+            throw new Error('Select a network profile before enabling proxy mode.')
+          }
+        }
+        const body =
+          networkMode === 'PROXIED'
+            ? { networkMode, networkProfileId: profileId, idempotencyKey: createNetworkIdempotencyKey() }
+            : { networkMode, idempotencyKey: createNetworkIdempotencyKey() }
+        const response = await fetch(`${ORCHESTRATOR_BASE}/swarms/${encodeURIComponent(selectedSwarm.id)}/network`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        })
+        if (!response.ok) {
+          throw new Error(await readErrorMessage(response))
+        }
+        setMessage(
+          networkMode === 'PROXIED'
+            ? `Applied profile '${profileId}' to swarm '${selectedSwarm.id}'.`
+            : `Cleared proxy routing for swarm '${selectedSwarm.id}'.`,
+        )
+        await Promise.all([loadSwarms(), loadNetworkState()])
+      } catch (err) {
+        setNetworkError(err instanceof Error ? err.message : 'Failed to update swarm network mode')
+      } finally {
+        setNetworkBusy(false)
+      }
+    },
+    [loadNetworkState, loadSwarms, networkProfileDraft, selectedSwarm],
   )
 
   useEffect(() => {
@@ -650,6 +771,15 @@ export function HivePage() {
     void loadScenarioDetail(scenarioIdFromSnapshot)
     void loadCapabilities()
   }, [loadCapabilities, loadScenarioDetail, scenarioIdFromSnapshot, selectedSwarmId])
+
+  useEffect(() => {
+    const activeProfile =
+      networkBinding?.networkProfileId ??
+      selectedSwarm?.networkProfileId ??
+      networkProfiles[0]?.id ??
+      ''
+    setNetworkProfileDraft(activeProfile)
+  }, [networkBinding?.networkProfileId, networkProfiles, selectedSwarm?.networkProfileId])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -935,6 +1065,151 @@ export function HivePage() {
                         </div>
 	                      </div>
 	                    )}
+
+                      <div className="card" style={{ marginTop: 10 }}>
+                        <div className="row between">
+                          <div>
+                            <div className="h2">Network</div>
+                            <div className="muted">Per-swarm proxy binding. Shared stack administration lives on the Proxy page.</div>
+                          </div>
+                          <div className="row">
+                            <div
+                              className={
+                                (networkBinding?.effectiveMode ?? selectedSwarm?.networkMode ?? 'DIRECT') === 'PROXIED'
+                                  ? 'pill pillInfo'
+                                  : 'pill pillWarn'
+                              }
+                            >
+                              {networkBinding?.effectiveMode ?? selectedSwarm?.networkMode ?? 'DIRECT'}
+                            </div>
+                            <button
+                              type="button"
+                              className="actionButton actionButtonGhost"
+                              onClick={() => void loadNetworkState()}
+                              disabled={networkLoading || networkBusy}
+                            >
+                              Refresh network
+                            </button>
+                          </div>
+                        </div>
+
+                        {networkError ? (
+                          <div className="card swarmMessage" style={{ marginTop: 10 }}>
+                            {networkError}
+                          </div>
+                        ) : null}
+
+                        <div className="kvGrid" style={{ marginTop: 10 }}>
+                          <div className="kv">
+                            <div className="k">SUT</div>
+                            <div className="v">{selectedSwarm?.sutId ?? '—'}</div>
+                          </div>
+                          <div className="kv">
+                            <div className="k">Stack</div>
+                            <div className="v">shared-default</div>
+                          </div>
+                          <div className="kv">
+                            <div className="k">Profile</div>
+                            <div className="v">{networkBinding?.networkProfileId ?? selectedSwarm?.networkProfileId ?? '—'}</div>
+                          </div>
+                          <div className="kv">
+                            <div className="k">Binding</div>
+                            <div className="v">{networkBinding ? 'active' : 'direct / none'}</div>
+                          </div>
+                          <div className="kv">
+                            <div className="k">Requested by</div>
+                            <div className="v">{networkBinding?.requestedBy ?? '—'}</div>
+                          </div>
+                          <div className="kv">
+                            <div className="k">Applied at</div>
+                            <div className="v">{formatInstant(networkBinding?.appliedAt ?? null)}</div>
+                          </div>
+                        </div>
+
+                        <div className="formGrid" style={{ marginTop: 14 }}>
+                          <label className="field">
+                            <span className="fieldLabel">Profile for PROXIED</span>
+                            <select
+                              className="textInput textInputCompact"
+                              value={networkProfileDraft}
+                              onChange={(event) => setNetworkProfileDraft(event.target.value)}
+                              disabled={networkBusy || networkLoading || networkProfiles.length === 0 || !selectedSwarm?.sutId}
+                            >
+                              {networkProfiles.length === 0 ? <option value="">No profiles</option> : null}
+                              {networkProfiles.map((profile) => (
+                                <option key={profile.id} value={profile.id}>
+                                  {profile.name ? `${profile.id} · ${profile.name}` : profile.id}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <div className="field">
+                            <span className="fieldLabel">Actions</span>
+                            <div className="row" style={{ flexWrap: 'wrap' }}>
+                              <button
+                                type="button"
+                                className="actionButton"
+                                onClick={() => void applyNetworkMode('PROXIED')}
+                                disabled={
+                                  networkBusy ||
+                                  networkLoading ||
+                                  !selectedSwarm?.sutId ||
+                                  networkProfileDraft.trim().length === 0
+                                }
+                              >
+                                Proxy enabled
+                              </button>
+                              <button
+                                type="button"
+                                className="actionButton actionButtonGhost"
+                                onClick={() => void applyNetworkMode('DIRECT')}
+                                disabled={networkBusy || networkLoading || !selectedSwarm?.sutId}
+                              >
+                                Direct
+                              </button>
+                              <button
+                                type="button"
+                                className="actionButton actionButtonGhost"
+                                onClick={() => navigate('/proxy')}
+                              >
+                                Open Proxy
+                              </button>
+                            </div>
+                            {!selectedSwarm?.sutId ? (
+                              <div className="muted" style={{ marginTop: 6 }}>
+                                Proxy mode requires a swarm with bound SUT metadata.
+                              </div>
+                            ) : (
+                              <div className="muted" style={{ marginTop: 6 }}>
+                                This page controls the current swarm binding. Shared stack health and profile authoring live on `Proxy`.
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {networkBinding?.affectedEndpoints?.length ? (
+                          <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
+                            {networkBinding.affectedEndpoints.map((endpoint) => (
+                              <div key={`${selectedSwarm?.id ?? 'swarm'}:${endpoint.endpointId}`} className="card" style={{ padding: 10 }}>
+                                <div className="row between">
+                                  <div className="h2">{endpoint.endpointId}</div>
+                                  <div className="pill pillInfo">{endpoint.kind ?? 'UNKNOWN'}</div>
+                                </div>
+                                <div className="muted" style={{ marginTop: 6 }}>
+                                  client `{endpoint.clientAuthority ?? endpoint.clientBaseUrl ?? '—'}`
+                                </div>
+                                <div className="muted" style={{ marginTop: 4 }}>
+                                  upstream `{endpoint.upstreamAuthority ?? '—'}`
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="muted" style={{ marginTop: 12 }}>
+                            {networkLoading ? 'Loading network binding…' : 'No active proxy binding for this swarm.'}
+                          </div>
+                        )}
+                      </div>
 
 	                    {scenarioLoading && <div className="muted">Loading scenario topology…</div>}
 	                    {scenarioError && <div className="muted">{scenarioError}</div>}

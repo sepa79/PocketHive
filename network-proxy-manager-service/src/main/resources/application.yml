@@ -1,0 +1,27 @@
+spring:
+  application:
+    name: network-proxy-manager
+
+pockethive:
+  network-proxy-manager:
+    http:
+      connect-timeout: PT5S
+      read-timeout: PT30S
+    scenario-manager:
+      url: http://scenario-manager:8080
+    toxiproxy:
+      url: http://toxiproxy:8474
+      listen-host: 0.0.0.0
+      listen-port-offset: 10000
+    haproxy:
+      config-file: /opt/haproxy-runtime/haproxy.cfg
+      backend-host: toxiproxy
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+logging:
+  config: classpath:logback-spring.xml

@@ -1,0 +1,9 @@
+id: wiremock-proxy-local-tls
+name: WireMock via Toxiproxy TLS (local docker-compose)
+type: https
+endpoints:
+  default:
+    id: default
+    kind: https
+    baseUrl: https://haproxy:18443
+    upstreamBaseUrl: https://wiremock:8443

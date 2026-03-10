@@ -40,6 +40,25 @@ describe('orchestratorApi', () => {
     expect(body.notes).toBeUndefined()
     expect(body.idempotencyKey).toBeDefined()
     expect(body.autoPullImages).toBeUndefined()
+    expect(body.networkMode).toBe('DIRECT')
+    expect(body.networkProfileId).toBeUndefined()
+  })
+
+  it('posts proxied swarm creation', async () => {
+    await createSwarm('sw1', 'tpl', { networkMode: 'PROXIED', networkProfileId: 'latency-250ms' })
+    const init = (apiFetch as unknown as Mock).mock.calls[0][1]
+    const body = JSON.parse(init?.body)
+    expect(body.networkMode).toBe('PROXIED')
+    expect(body.networkProfileId).toBe('latency-250ms')
+  })
+
+  it('rejects inconsistent network payloads before sending', async () => {
+    await expect(createSwarm('sw1', 'tpl', { networkMode: 'PROXIED' })).rejects.toThrow(
+      'networkProfileId is required when networkMode=PROXIED',
+    )
+    await expect(createSwarm('sw1', 'tpl', { networkMode: 'DIRECT', networkProfileId: 'passthrough' })).rejects.toThrow(
+      'networkProfileId requires networkMode=PROXIED',
+    )
   })
 
   it.todo('posts swarm creation with explicit notes once supported')
@@ -214,6 +233,8 @@ describe('orchestratorApi', () => {
       templateId: null,
       controllerImage: 'ctrl:1',
       sutId: null,
+      networkMode: 'DIRECT',
+      networkProfileId: null,
       stackName: null,
       bees: [{ role: 'generator', image: 'gen:1' }],
     })

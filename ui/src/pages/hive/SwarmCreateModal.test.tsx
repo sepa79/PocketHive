@@ -31,6 +31,9 @@ test('loads available scenarios on mount', async () => {
         ],
       } as unknown as Response
     }
+    if (url === '/scenario-manager/network-profiles') {
+      return { ok: true, json: async () => [] } as unknown as Response
+    }
     return { ok: true, json: async () => [] } as unknown as Response
   })
 
@@ -49,6 +52,12 @@ test('loads available scenarios on mount', async () => {
       headers: expect.objectContaining({ Accept: 'application/json' }),
     }),
   )
+  expect(apiFetchSpy).toHaveBeenCalledWith(
+    '/scenario-manager/network-profiles',
+    expect.objectContaining({
+      headers: expect.objectContaining({ Accept: 'application/json' }),
+    }),
+  )
 })
 
 test('renders folder tree when scenarios include folderPath', async () => {
@@ -62,6 +71,9 @@ test('renders folder tree when scenarios include folderPath', async () => {
           { id: 'tcp-nio-demo', name: 'TCP NIO Demo', folderPath: 'tcp', bees: [] },
         ],
       } as unknown as Response
+    }
+    if (url === '/scenario-manager/network-profiles') {
+      return { ok: true, json: async () => [] } as unknown as Response
     }
     return { ok: true, json: async () => [] } as unknown as Response
   })
@@ -89,6 +101,9 @@ test('submits selected scenario', async () => {
         ok: true,
         json: async () => [{ id: 'basic', name: 'Basic', bees: [] }],
       } as unknown as Response
+    }
+    if (url === '/scenario-manager/network-profiles') {
+      return { ok: true, json: async () => [] } as unknown as Response
     }
     if (url === '/scenario-manager/scenarios/basic') {
       return { ok: true, json: async () => ({ id: 'basic', name: 'Basic', template: {} }) } as unknown as Response
@@ -127,6 +142,7 @@ test('submits selected scenario', async () => {
   expect(typeof body).toBe('string')
   const parsed = JSON.parse(body as string)
   expect(parsed).toMatchObject({ templateId: 'basic' })
+  expect(parsed.networkMode).toBe('DIRECT')
   expect(parsed.notes).toBeUndefined()
   expect(await screen.findByText('Swarm created')).toBeTruthy()
 })
@@ -139,6 +155,9 @@ test('shows conflict message when swarm already exists', async () => {
         ok: true,
         json: async () => [{ id: 'basic', name: 'Basic', bees: [] }],
       } as unknown as Response
+    }
+    if (url === '/scenario-manager/network-profiles') {
+      return { ok: true, json: async () => [] } as unknown as Response
     }
     if (url === '/scenario-manager/scenarios/basic') {
       return { ok: true, json: async () => ({ id: 'basic', name: 'Basic', template: {} }) } as unknown as Response
@@ -182,6 +201,9 @@ test('does not submit when scenario selection is cleared', async () => {
         json: async () => [{ id: 'basic', name: 'Basic', bees: [] }],
       } as unknown as Response
     }
+    if (url === '/scenario-manager/network-profiles') {
+      return { ok: true, json: async () => [] } as unknown as Response
+    }
     return { ok: true, json: async () => ({}) } as unknown as Response
   })
     // no create call
@@ -195,7 +217,7 @@ test('does not submit when scenario selection is cleared', async () => {
   fireEvent.change(screen.getByLabelText(/swarm id/i), { target: { value: 'sw1' } })
   fireEvent.click(screen.getByText('Create'))
 
-  await waitFor(() => expect(apiFetchSpy.mock.calls.length).toBe(1))
+  await waitFor(() => expect(apiFetchSpy.mock.calls.length).toBe(2))
   await screen.findByText(/swarm id and scenario required/i)
 })
 
@@ -207,6 +229,9 @@ test('loads scenario preview when a template is selected', async () => {
         ok: true,
         json: async () => [{ id: 'basic', name: 'Basic', bees: [] }],
       } as unknown as Response
+    }
+    if (url === '/scenario-manager/network-profiles') {
+      return { ok: true, json: async () => [] } as unknown as Response
     }
     if (url === '/scenario-manager/scenarios/basic') {
       return { ok: true, json: async () => ({ id: 'basic', name: 'Basic', template: { image: 'img' } }) } as unknown as Response

@@ -17,6 +17,7 @@ import io.pockethive.orchestrator.domain.SwarmLifecycleStatus;
 import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
 import io.pockethive.orchestrator.infra.JournalRunMetadataWriter;
 import io.pockethive.sink.clickhouse.ClickHouseSinkProperties;
+import io.pockethive.swarm.model.NetworkMode;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
@@ -83,14 +84,14 @@ public class ContainerLifecycleManager {
     }
 
     public Swarm startSwarm(String swarmId, String image, String instanceId) {
-        return startSwarm(swarmId, image, instanceId, null, false);
+        return startSwarm(swarmId, image, instanceId, null, false, null, NetworkMode.DIRECT, null);
     }
 
     public Swarm startSwarm(String swarmId,
                             String image,
                             String instanceId,
                             SwarmTemplateMetadata templateMetadata) {
-        return startSwarm(swarmId, image, instanceId, templateMetadata, false);
+        return startSwarm(swarmId, image, instanceId, templateMetadata, false, null, NetworkMode.DIRECT, null);
     }
 
     public Swarm startSwarm(String swarmId,
@@ -98,6 +99,17 @@ public class ContainerLifecycleManager {
                             String instanceId,
                             SwarmTemplateMetadata templateMetadata,
                             boolean autoPullImages) {
+        return startSwarm(swarmId, image, instanceId, templateMetadata, autoPullImages, null, NetworkMode.DIRECT, null);
+    }
+
+    public Swarm startSwarm(String swarmId,
+                            String image,
+                            String instanceId,
+                            SwarmTemplateMetadata templateMetadata,
+                            boolean autoPullImages,
+                            String sutId,
+                            NetworkMode networkMode,
+                            String networkProfileId) {
         String resolvedInstance = requireNonBlank(instanceId, "controller instance");
         String resolvedSwarmId = requireNonBlank(swarmId, "swarmId");
         String resolvedImage = resolveImage(image);
@@ -165,6 +177,9 @@ public class ContainerLifecycleManager {
         }
         env.put("POCKETHIVE_TEMPLATE_ID", requireText(templateMetadata.templateId(), "templateId"));
         env.put("POCKETHIVE_RUNTIME_STACK_NAME", "ph-" + resolvedSwarmId.toLowerCase(java.util.Locale.ROOT));
+        putEnvIfMissing(env, "POCKETHIVE_SUT_ID", normalizeRuntimeRoot(sutId));
+        env.put("POCKETHIVE_NETWORK_MODE", NetworkMode.directIfNull(networkMode).name());
+        putEnvIfMissing(env, "POCKETHIVE_NETWORK_PROFILE_ID", normalizeRuntimeRoot(networkProfileId));
         if (autoPullImages) {
             log.info("autoPullImages=true, pulling controller image {} before start", resolvedImage);
             docker.pullImage(resolvedImage);

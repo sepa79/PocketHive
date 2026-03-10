@@ -30,7 +30,10 @@ class OrchestratorPropertiesBindingTest {
                 "pockethive.control-plane.orchestrator.images.repository-prefix=",
                 "pockethive.control-plane.orchestrator.scenario-manager.url=http://scenario-manager:8080",
                 "pockethive.control-plane.orchestrator.scenario-manager.http.connect-timeout=PT5S",
-                "pockethive.control-plane.orchestrator.scenario-manager.http.read-timeout=PT30S")
+                "pockethive.control-plane.orchestrator.scenario-manager.http.read-timeout=PT30S",
+                "pockethive.control-plane.orchestrator.network-proxy-manager.url=http://network-proxy-manager:8080",
+                "pockethive.control-plane.orchestrator.network-proxy-manager.http.connect-timeout=PT5S",
+                "pockethive.control-plane.orchestrator.network-proxy-manager.http.read-timeout=PT30S")
             .run(context -> {
                 assertThat(context).hasNotFailed();
                 OrchestratorProperties properties = context.getBean(OrchestratorProperties.class);
@@ -55,6 +58,12 @@ class OrchestratorPropertiesBindingTest {
                     .isEqualTo(java.time.Duration.ofSeconds(5));
                 assertThat(properties.getScenarioManager().getHttp().getReadTimeout())
                     .isEqualTo(java.time.Duration.ofSeconds(30));
+                assertThat(properties.getNetworkProxyManager().getUrl())
+                    .isEqualTo("http://network-proxy-manager:8080");
+                assertThat(properties.getNetworkProxyManager().getHttp().getConnectTimeout())
+                    .isEqualTo(java.time.Duration.ofSeconds(5));
+                assertThat(properties.getNetworkProxyManager().getHttp().getReadTimeout())
+                    .isEqualTo(java.time.Duration.ofSeconds(30));
             });
     }
 
@@ -74,7 +83,10 @@ class OrchestratorPropertiesBindingTest {
                 "pockethive.control-plane.orchestrator.docker.socket-path=/var/run/docker.sock",
                 "pockethive.control-plane.orchestrator.scenario-manager.url=http://scenario-manager:8080",
                 "pockethive.control-plane.orchestrator.scenario-manager.http.connect-timeout=PT5S",
-                "pockethive.control-plane.orchestrator.scenario-manager.http.read-timeout=PT30S")
+                "pockethive.control-plane.orchestrator.scenario-manager.http.read-timeout=PT30S",
+                "pockethive.control-plane.orchestrator.network-proxy-manager.url=http://network-proxy-manager:8080",
+                "pockethive.control-plane.orchestrator.network-proxy-manager.http.connect-timeout=PT5S",
+                "pockethive.control-plane.orchestrator.network-proxy-manager.http.read-timeout=PT30S")
             .run(context -> {
                 assertThat(context).hasFailed();
                 Throwable failure = context.getStartupFailure();

@@ -36,10 +36,18 @@ public class HttpProtocolHandler implements ProtocolHandler {
   private final HttpClient httpClient;
   private final HttpClient noKeepAliveClient;
   private final ThreadLocal<HttpClient> perThreadClient;
+  private final HttpClient insecureHttpClient;
+  private final HttpClient insecureNoKeepAliveClient;
+  private final ThreadLocal<HttpClient> insecurePerThreadClient;
   private final java.util.concurrent.atomic.AtomicLong nextAllowedTimeNanos;
 
-  public HttpProtocolHandler(ObjectMapper mapper, Clock clock, CallMetricsRecorder metricsRecorder, HttpClient httpClient,
-                             HttpClient noKeepAliveClient, ThreadLocal<HttpClient> perThreadClient,
+  public HttpProtocolHandler(ObjectMapper mapper, Clock clock, CallMetricsRecorder metricsRecorder,
+                             HttpClient httpClient,
+                             HttpClient noKeepAliveClient,
+                             ThreadLocal<HttpClient> perThreadClient,
+                             HttpClient insecureHttpClient,
+                             HttpClient insecureNoKeepAliveClient,
+                             ThreadLocal<HttpClient> insecurePerThreadClient,
                              java.util.concurrent.atomic.AtomicLong nextAllowedTimeNanos) {
     this.mapper = mapper;
     this.clock = clock;
@@ -47,6 +55,9 @@ public class HttpProtocolHandler implements ProtocolHandler {
     this.httpClient = httpClient;
     this.noKeepAliveClient = noKeepAliveClient;
     this.perThreadClient = perThreadClient;
+    this.insecureHttpClient = insecureHttpClient;
+    this.insecureNoKeepAliveClient = insecureNoKeepAliveClient;
+    this.insecurePerThreadClient = insecurePerThreadClient;
     this.nextAllowedTimeNanos = nextAllowedTimeNanos;
   }
 
@@ -231,15 +242,16 @@ public class HttpProtocolHandler implements ProtocolHandler {
   }
 
   private HttpClient selectClient(ProcessorWorkerConfig config) {
+    boolean sslVerify = Boolean.TRUE.equals(config.sslVerify());
     ProcessorWorkerConfig.ConnectionReuse reuse = config.connectionReuse();
     boolean keepAliveEnabled = Boolean.TRUE.equals(config.keepAlive());
     if (!keepAliveEnabled || reuse == ProcessorWorkerConfig.ConnectionReuse.NONE) {
-      return noKeepAliveClient;
+      return sslVerify ? noKeepAliveClient : insecureNoKeepAliveClient;
     }
     if (reuse == ProcessorWorkerConfig.ConnectionReuse.PER_THREAD) {
-      return perThreadClient.get();
+      return sslVerify ? perThreadClient.get() : insecurePerThreadClient.get();
     }
-    return httpClient;
+    return sslVerify ? httpClient : insecureHttpClient;
   }
 
   private Map<String, List<String>> convertHeaders(ClassicHttpResponse response) {

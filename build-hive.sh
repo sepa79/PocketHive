@@ -4,13 +4,14 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}"
 
-ALL_SERVICES=(rabbitmq log-aggregator scenario-manager orchestrator tcp-mock-server ui ui-v2 prometheus grafana loki wiremock pushgateway redis redis-commander swarm-controller generator request-builder http-sequence moderator processor postprocessor clearing-export trigger)
+ALL_SERVICES=(rabbitmq log-aggregator scenario-manager network-proxy-manager haproxy orchestrator tcp-mock-server ui ui-v2 prometheus grafana loki wiremock pushgateway redis redis-commander swarm-controller generator request-builder http-sequence moderator processor postprocessor clearing-export trigger)
 declare -A DURATIONS=()
 TIMING_ORDER=(clean build_base maven_package stage_artifacts docker_build_workers docker_build compose_up restart)
 BUILD_START_TIME=0
 JAR_MODULES=(
   log-aggregator-service
   scenario-manager-service
+  network-proxy-manager-service
   orchestrator-service
   tcp-mock-server
   swarm-controller-service
@@ -27,6 +28,7 @@ JAR_MODULES=(
 declare -A MODULE_TO_SERVICE=(
   ["log-aggregator-service"]="log-aggregator"
   ["scenario-manager-service"]="scenario-manager"
+  ["network-proxy-manager-service"]="network-proxy-manager"
   ["orchestrator-service"]="orchestrator"
   ["tcp-mock-server"]="tcp-mock-server"
   ["swarm-controller-service"]="swarm-controller"
@@ -43,6 +45,7 @@ declare -A MODULE_TO_SERVICE=(
 declare -A SERVICE_TO_MODULE=(
   ["log-aggregator"]="log-aggregator-service"
   ["scenario-manager"]="scenario-manager-service"
+  ["network-proxy-manager"]="network-proxy-manager-service"
   ["orchestrator"]="orchestrator-service"
   ["tcp-mock-server"]="tcp-mock-server"
   ["swarm-controller"]="swarm-controller-service"
@@ -124,6 +127,21 @@ compose_build_services() {
           -f scenario-manager-service/Dockerfile.runtime \
           --build-arg RUNTIME_IMAGE="${RUNTIME_IMAGE}" \
           -t scenario-manager:latest .
+        built_any=true
+        ;;
+      network-proxy-manager)
+        echo "Building network-proxy-manager image from network-proxy-manager-service/Dockerfile.runtime"
+        docker build \
+          -f network-proxy-manager-service/Dockerfile.runtime \
+          --build-arg RUNTIME_IMAGE="${RUNTIME_IMAGE}" \
+          -t network-proxy-manager:latest .
+        built_any=true
+        ;;
+      haproxy)
+        echo "Building network-proxy-haproxy image from network-proxy-haproxy/Dockerfile"
+        docker build \
+          -f network-proxy-haproxy/Dockerfile \
+          -t network-proxy-haproxy:latest network-proxy-haproxy
         built_any=true
         ;;
       orchestrator)
@@ -210,7 +228,7 @@ clean_stack() {
     echo "Pruning local PocketHive images..."
     # Target only images built by this repo: core services and bees.
     mapfile -t ph_images < <(docker images --format '{{.Repository}} {{.ID}}' | awk '
-      $1 ~ /^(orchestrator|scenario-manager|log-aggregator|tcp-mock-server|ui|swarm-controller|generator|request-builder|http-sequence|moderator|processor|postprocessor|clearing-export|trigger|pockethive-)/ { print $2 }')
+      $1 ~ /^(orchestrator|scenario-manager|log-aggregator|network-proxy-manager|network-proxy-haproxy|tcp-mock-server|ui|swarm-controller|generator|request-builder|http-sequence|moderator|processor|postprocessor|clearing-export|trigger|pockethive-)/ { print $2 }')
     for img in "${ph_images[@]}"; do
       if [[ -n "$img" ]]; then
         echo " - Removing image ${img}"

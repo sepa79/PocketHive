@@ -20,6 +20,8 @@ pockethive:
     manager:
       enabled: true
       role: scenario-manager
+  network:
+    profiles-path: network/network-profiles.yaml
   sut:
     environments-path: sut/sut-environments.yaml
   logs:

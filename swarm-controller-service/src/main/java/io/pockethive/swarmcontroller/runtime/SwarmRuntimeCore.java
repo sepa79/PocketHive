@@ -450,6 +450,23 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
   }
 
   @Override
+  public String sutId() {
+    SwarmRuntimeContext ctx = runtimeContext;
+    if (ctx == null) {
+      return null;
+    }
+    SwarmPlan plan = ctx.plan();
+    if (plan != null && plan.sutId() != null && !plan.sutId().isBlank()) {
+      return plan.sutId().trim();
+    }
+    SutEnvironment sutEnvironment = ctx.sutEnvironment();
+    if (sutEnvironment != null && sutEnvironment.id() != null && !sutEnvironment.id().isBlank()) {
+      return sutEnvironment.id().trim();
+    }
+    return null;
+  }
+
+  @Override
   public void remove() {
     log.info("Removing swarm {}", swarmId);
     managerCore.remove();

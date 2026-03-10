@@ -20,12 +20,19 @@ type VariablesProfile = {
   name: string | null
 }
 
+type NetworkProfileOption = {
+  id: string
+  name: string | null
+}
+
 type VariablesMeta = {
   exists: boolean
   hasGlobalVars: boolean
   hasSutVars: boolean
   profiles: VariablesProfile[]
 }
+
+type NetworkMode = 'DIRECT' | 'PROXIED'
 
 const ORCHESTRATOR_BASE = '/orchestrator/api'
 const TEMPLATES_ENDPOINT = '/scenario-manager/api/templates'
@@ -208,6 +215,9 @@ export function CreateSwarmModal({
 
   const [sutIds, setSutIds] = useState<string[]>([])
   const [sutId, setSutId] = useState('')
+  const [networkProfiles, setNetworkProfiles] = useState<NetworkProfileOption[]>([])
+  const [networkMode, setNetworkMode] = useState<NetworkMode>('DIRECT')
+  const [networkProfileId, setNetworkProfileId] = useState('')
 
   const [variablesMeta, setVariablesMeta] = useState<VariablesMeta>({
     exists: false,
@@ -224,17 +234,46 @@ export function CreateSwarmModal({
   const loadTemplates = useCallback(async () => {
     if (templatesLoaded) return
     try {
-      const response = await fetch(TEMPLATES_ENDPOINT, { headers: { Accept: 'application/json' } })
-      if (!response.ok) {
+      const [templatesResponse, profilesResponse] = await Promise.all([
+        fetch(TEMPLATES_ENDPOINT, { headers: { Accept: 'application/json' } }),
+        fetch('/scenario-manager/network-profiles', { headers: { Accept: 'application/json' } }),
+      ])
+      if (!templatesResponse.ok) {
         setTemplates([])
         setTemplatesLoaded(true)
         return
       }
-      const payload = await response.json()
+      const payload = await templatesResponse.json()
       setTemplates(normalizeTemplates(payload))
+      if (profilesResponse.ok) {
+        const profilesPayload = (await profilesResponse.json()) as unknown
+        const profiles = Array.isArray(profilesPayload)
+          ? profilesPayload
+              .map((entry) => {
+                if (!entry || typeof entry !== 'object') return null
+                const value = entry as Record<string, unknown>
+                const id = typeof value.id === 'string' ? value.id.trim() : ''
+                if (!id) return null
+                const name = typeof value.name === 'string' && value.name.trim().length > 0 ? value.name.trim() : null
+                return { id, name }
+              })
+              .filter((entry): entry is NetworkProfileOption => entry !== null)
+          : []
+        setNetworkProfiles(profiles)
+        setNetworkProfileId((current) => {
+          if (profiles.length === 1) {
+            return profiles[0].id
+          }
+          return profiles.some((profile) => profile.id === current) ? current : ''
+        })
+      } else {
+        setNetworkProfiles([])
+        setNetworkProfileId('')
+      }
       setTemplatesLoaded(true)
     } catch {
       setTemplates([])
+      setNetworkProfiles([])
       setTemplatesLoaded(true)
     }
   }, [templatesLoaded])
@@ -399,6 +438,7 @@ export function CreateSwarmModal({
       const trimmedTemplateId = templateId.trim()
       const trimmedSutId = sutId.trim()
       const trimmedProfileId = variablesProfileId.trim()
+      const trimmedNetworkProfileId = networkProfileId.trim()
 
       if (!trimmedSwarmId || !trimmedTemplateId) {
         setError('Swarm ID and template are required.')
@@ -414,6 +454,14 @@ export function CreateSwarmModal({
         setError('SUT is required for this scenario (SUT-scoped variables).')
         return
       }
+      if (networkMode === 'PROXIED' && networkProfiles.length === 0) {
+        setError('No network profiles are available.')
+        return
+      }
+      if (networkMode === 'PROXIED' && !trimmedNetworkProfileId) {
+        setError('Network profile is required when proxy mode is enabled.')
+        return
+      }
 
       setBusy(true)
       try {
@@ -426,6 +474,8 @@ export function CreateSwarmModal({
             autoPullImages,
             sutId: trimmedSutId ? trimmedSutId : null,
             variablesProfileId: trimmedProfileId ? trimmedProfileId : null,
+            networkMode,
+            networkProfileId: networkMode === 'PROXIED' ? trimmedNetworkProfileId : null,
           }),
         })
         if (!response.ok) {
@@ -438,6 +488,8 @@ export function CreateSwarmModal({
         setAutoPullImages(false)
         setSutIds([])
         setSutId('')
+        setNetworkMode('DIRECT')
+        setNetworkProfileId('')
         setVariablesMeta({ exists: false, hasGlobalVars: false, hasSutVars: false, profiles: [] })
         setVariablesProfileId('')
         onCreated()
@@ -448,7 +500,7 @@ export function CreateSwarmModal({
         setBusy(false)
       }
     },
-    [autoPullImages, busy, onClose, onCreated, requiresProfile, requiresSut, swarmId, sutId, templateId, variablesProfileId],
+    [autoPullImages, busy, networkMode, networkProfileId, networkProfiles.length, onClose, onCreated, requiresProfile, requiresSut, swarmId, sutId, templateId, variablesProfileId],
   )
 
   if (!open) return null
@@ -476,6 +528,26 @@ export function CreateSwarmModal({
               <input className="textInput" value={swarmId} onChange={(event) => setSwarmId(event.target.value)} placeholder="demo" />
             </label>
 
+            <label className="field">
+              <span className="fieldLabel">Network mode</span>
+              <select
+                className="textInput"
+                value={networkMode}
+                onChange={(event) => {
+                  const nextMode: NetworkMode = event.target.value === 'PROXIED' ? 'PROXIED' : 'DIRECT'
+                  setNetworkMode(nextMode)
+                  if (nextMode === 'DIRECT') {
+                    setNetworkProfileId('')
+                  } else if (networkProfiles.length === 1) {
+                    setNetworkProfileId(networkProfiles[0].id)
+                  }
+                }}
+              >
+                <option value="DIRECT">Direct</option>
+                <option value="PROXIED">Proxied</option>
+              </select>
+            </label>
+
             {hasBundleSuts || requiresSut ? (
               <label className="field">
                 <span className="fieldLabel">Bundle SUT{requiresSut ? ' (required)' : ''}</span>
@@ -484,6 +556,27 @@ export function CreateSwarmModal({
                   {sutIds.map((id) => (
                     <option key={id} value={id}>
                       {id}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : (
+              <div />
+            )}
+
+            {networkMode === 'PROXIED' ? (
+              <label className="field">
+                <span className="fieldLabel">Network profile (required)</span>
+                <select
+                  className="textInput"
+                  value={networkProfileId}
+                  onChange={(event) => setNetworkProfileId(event.target.value)}
+                  disabled={networkProfiles.length === 0}
+                >
+                  <option value="">{networkProfiles.length === 0 ? '(no profiles available)' : '(select)'}</option>
+                  {networkProfiles.map((profile) => (
+                    <option key={profile.id} value={profile.id}>
+                      {profile.name ? `${profile.name} (${profile.id})` : profile.id}
                     </option>
                   ))}
                 </select>

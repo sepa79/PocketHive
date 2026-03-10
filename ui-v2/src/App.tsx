@@ -7,6 +7,7 @@ import { HomePage } from './pages/HomePage'
 import { JournalPage } from './pages/JournalPage'
 import { LoginPage } from './pages/LoginPage'
 import { OtherPage } from './pages/OtherPage'
+import { ProxyPage } from './pages/ProxyPage'
 import { ScenariosPage } from './pages/ScenariosPage'
 import { SwarmViewPage } from './pages/SwarmViewPage'
 import { WireLogPage } from './pages/WireLogPage'
@@ -23,6 +24,7 @@ export default function App() {
         <Route path="/hive" element={<HivePage />} />
         <Route path="/hive/:swarmId" element={<HivePage />} />
         <Route path="/hive/:swarmId/view" element={<SwarmViewPage />} />
+        <Route path="/proxy" element={<ProxyPage />} />
         <Route path="/debug/taps/:tapId" element={<DebugTapViewerPage />} />
         <Route path="/journal/*" element={<JournalPage />} />
         <Route path="/other/*" element={<OtherPage />} />
