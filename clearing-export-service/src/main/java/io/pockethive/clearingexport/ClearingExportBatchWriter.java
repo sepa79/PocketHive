@@ -18,6 +18,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.LongSupplier;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -48,6 +49,7 @@ class ClearingExportBatchWriter {
   /**
    * Production constructor: uses the system clock and starts the background streaming ticker.
    */
+  @Autowired
   ClearingExportBatchWriter(ClearingExportFileAssembler assembler, ClearingExportSink sink) {
     this(assembler, sink, System::currentTimeMillis, true);
   }
