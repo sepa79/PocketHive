@@ -49,12 +49,42 @@ Review these 0.14 follow-up fixes and port only the parts still missing on
 
 ## Suggested Order
 
-1. Merge the other pending feature branches into `main` first.
-2. Port template layout/API changes.
-3. Port the TCP template/UI follow-up.
-4. Port the scenario editor height fix.
-5. Audit the scenario variables / bundle-local SUT follow-up commits.
-6. Handle ISO8583 separately after the above is stable.
+1. Merge all pending docs-only branches first.
+2. Merge `origin/feat/network-proxy-plan`.
+3. Merge `origin/feature/processor-iso8583-v1-v2-plan`.
+4. Port template layout/API changes that still need explicit follow-up on top of
+   `main`.
+5. Port the TCP template/UI follow-up.
+6. Port the scenario editor height fix.
+7. Audit the scenario variables / bundle-local SUT follow-up commits.
+8. Handle ISO8583 follow-up separately after the above is stable.
+
+## Merge Notes
+
+- Recommended docs-first order:
+  - `origin/docs/inprogress-archive-cleanup`
+  - `origin/docs/sut-dataset-simulation-model`
+  - `origin/postman-setup-teardown`
+- Recommended feature order:
+  - `origin/feat/network-proxy-plan`
+  - `origin/feature/processor-iso8583-v1-v2-plan`
+- `network-proxy-plan` should land before `processor-iso8583-v1-v2-plan`
+  because it is more infrastructure-oriented and has much smaller overlap with
+  the template/API churn from the ISO branch.
+- Known overlap between `network-proxy-plan` and `processor-iso8583-v1-v2-plan`
+  is limited to a few files in processor tests/runtime and two TCP SSL scenario
+  files, so either order should be workable, but proxy-first is the cleaner
+  sequence.
+
+## Merge Workflow
+
+- Create one temporary integration branch from current `main`.
+- Merge the docs branches there first.
+- Merge `origin/feat/network-proxy-plan` next.
+- Merge `origin/feature/processor-iso8583-v1-v2-plan` after that.
+- Apply any explicit follow-up ports/fixes on the same integration branch.
+- Run validation there and merge that branch back into `main` only after the
+  full stack is known-good.
 
 ## Done When
 
