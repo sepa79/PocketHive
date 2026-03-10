@@ -1,7 +1,9 @@
 # Scenario Plan — Architecture (Concise)
 
-> Status: **in progress**.  
-> Environment/SUT profiles and scenario engine behaviour are evolving; this is the authoritative plan.
+> Status: **to be reviewed**.  
+> Scenario engine direction is stable, but this doc requires review before archival.
+>
+> Review note: SUT plan exists on a branch and should be reviewed against this document for consistency.
 
 ### Status tracker (v1 engine)
 - [x] Foundations (YAML load, time normalisation, required stepId)

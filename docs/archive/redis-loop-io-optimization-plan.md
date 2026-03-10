@@ -1,6 +1,6 @@
 # Redis Loop IO Optimization Plan
 
-> Status: **in progress**
+> Status: **implemented / archived**.
 
 Goal: reduce worker count for loop-style scenarios (WebAuth/VISA/MC/ISO8583 patterns) by extending Redis input/output routing capabilities in the SDK.
 

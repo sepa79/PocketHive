@@ -2,10 +2,13 @@
 
 > **Scenario editor: superseded**  
 > The Scenario editor portion of this plan is superseded by `docs/scenarios/SCENARIO_EDITOR_STATUS.md`.
-> This file remains as an in-progress plan for the **SUT editor** and for historical context.
+> This file remains as a to-be-reviewed plan for the **SUT editor** and for historical context.
 
-> Status: in progress  
+> Status: **to be reviewed**  
 > Scope: UI, Scenario Manager, docs (no changes to workers or control‑plane contracts)
+>
+> Review note: related SUT plan exists in `docs/toBeReviewed/sut-environments-plan.md`
+> and should be reviewed together with this document for consistency.
 
 This plan introduces two complementary editors:
 
@@ -148,7 +151,7 @@ intended to be edited by humans and AI directly when needed.
 
 ## 4. Next steps
 
-- [ ] Add both this plan and `sut-environments-plan.md` to `docs/index.md` so they are discoverable.  
+- [x] Add both this plan and `docs/toBeReviewed/sut-environments-plan.md` to `docs/index.md` so they are discoverable.  
 - [ ] Implement schemas + VS Code wiring first (gives immediate value without UI work).  
 - [ ] Introduce Monaco‑based text editing in UI for SUTs and scenarios.  
 - [ ] Then layer React Flow‑based SUT and Scenario editors on top, starting with read‑only visualisation and moving to editing once the patching logic is well‑tested.

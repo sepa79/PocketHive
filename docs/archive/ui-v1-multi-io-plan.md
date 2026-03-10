@@ -1,5 +1,7 @@
 # UI v1 Multi-IO Upgrade Plan (In Progress)
 
+> Status: **implemented / archived**.
+
 Goal: keep UI v1 working while adopting port-map `work` + topology + runtime bindings.
 
 1) Scenario Manager API parsing (done)

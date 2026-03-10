@@ -1,9 +1,27 @@
 # UI v2 Control-Plane Adoption Plan
 
+> Status: **to be reviewed**.
+> This document needs alignment after implementation review against `docs/ARCHITECTURE.md`.
+
 Scope: UI-v2 consumption of control-plane status/outcomes and topology join after the
 envelope refactor. This consolidates remaining UI items from:
 - `docs/inProgress/control-plane-status-metrics-cleanup.md`
 - `docs/todo/control-plane-envelopes-refactor.md`
+
+## Review findings (2026-02-25)
+
+- Checklist mismatch: STOMP filters are marked done, but the UI subscribes to `/exchange/ph.control/#` instead of the three explicit topic families from architecture.
+- Direction drift vs architecture: this plan section says UI should read topology from `status-full`; architecture now defines `template + topology` from Scenario Manager, with `status-full` used for `workers[]`, bindings, and queue stats.
+- Some unchecked items appear implemented:
+  - `SCENARIO_CONTRACT` already documents `template.bees[].id`, `ports`, and `topology.edges`.
+  - `Bee` model already includes `id`.
+  - Swarm Controller `status-full` already emits `context.bindings` and runtime metadata includes `templateId` as stable scenario identifier.
+  - Raw work exchange debug capture is available via Debug Tap flow (UI + Orchestrator).
+- Open items still look valid:
+  - unify UI hydration around Orchestrator REST snapshot baseline (`RestGateway`/snapshot source consolidation),
+  - remove per-worker fan-out dependency in `SwarmViewPage`,
+  - runtime join by `beeId` for repeated roles,
+  - keyboard navigation in Wire Log.
 
 ## Architecture decisions (current)
 

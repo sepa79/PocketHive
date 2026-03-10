@@ -1,5 +1,7 @@
 # Control-plane Docs Migration Checklist
 
+> Status: **implemented / archived**.
+
 Source of truth (current):  
 - `docs/todo/control-plane-envelopes-refactor.md`  
 - `docs/inProgress/control-plane-status-metrics-cleanup.md`

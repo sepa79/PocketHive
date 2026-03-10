@@ -1,6 +1,6 @@
 # Scenario Bundle Runtime — Plan
 
-> Status: in progress  
+> Status: **implemented / archived**.  
 > Scope: Scenario Manager, Swarm Controller, Request Builder, Hive UI (no changes to worker JSON contracts).
 
 This plan introduces a **directory‑based scenario bundle** that keeps all
