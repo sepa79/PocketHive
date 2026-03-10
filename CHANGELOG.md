@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.14.40] - 2026-03-10
+Timestamp: 2026-03-10T16:00:00Z
+
+- Clearing Export: annotated `ClearingExportBatchWriter`'s production constructor with `@Autowired` so Spring resolves the intended bean constructor during startup.
+
 ## [0.14.39] - 2026-03-05
 Timestamp: 2026-03-05T18:11:16Z
 
