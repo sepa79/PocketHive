@@ -12,6 +12,12 @@ import {
   childProcessIsRunning,
   parseRecordedEntries
 } from "./server-utils.mjs";
+import {
+  appendSessionLog,
+  createEventId,
+  createSessionId,
+  summarizeSessionLog
+} from "./feedback-store.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -19,6 +25,8 @@ const repoRoot = resolve(__dirname, "../..");
 const clientPath = resolve(__dirname, "client.mjs");
 const recorderPath = resolve(__dirname, "rabbit-recorder.mjs");
 const logPath = resolve(__dirname, "control-recording.jsonl");
+const sessionLogPath = resolve(__dirname, "session-log.jsonl");
+const sessionId = createSessionId();
 
 let recorderChild = null;
 let routingKeyPattern = null;
@@ -28,7 +36,7 @@ const server = new McpServer({
   version: "1.0.0"
 });
 
-server.registerTool(
+registerLoggedTool(
   "orchestrator.list-swarms",
   {
     title: "List PocketHive swarms",
@@ -37,11 +45,14 @@ server.registerTool(
   },
   async () => {
     const swarms = await runJsonClient(["list-swarms"]);
-    return jsonResult({ swarms });
+    return {
+      payload: { swarms },
+      summary: `Retrieved ${swarms.length} swarm(s).`
+    };
   }
 );
 
-server.registerTool(
+registerLoggedTool(
   "orchestrator.get-swarm",
   {
     title: "Get PocketHive swarm",
@@ -52,11 +63,14 @@ server.registerTool(
   },
   async ({ swarmId }) => {
     const swarm = await runJsonClient(["get-swarm", swarmId]);
-    return jsonResult({ swarm });
+    return {
+      payload: { swarm },
+      summary: `Retrieved swarm '${swarmId}'.`
+    };
   }
 );
 
-server.registerTool(
+registerLoggedTool(
   "control.start-recording",
   {
     title: "Start PocketHive control recording",
@@ -68,14 +82,17 @@ server.registerTool(
   async ({ routingKeyPattern: nextPattern }) => {
     routingKeyPattern = nextPattern ?? null;
     await startRecorder();
-    return jsonResult({
-      recording: true,
-      routingKeyPattern: routingKeyPattern ?? "#"
-    });
+    return {
+      payload: {
+        recording: true,
+        routingKeyPattern: routingKeyPattern ?? "#"
+      },
+      summary: `Started control-plane recording for routing key pattern '${routingKeyPattern ?? "#"}'.`
+    };
   }
 );
 
-server.registerTool(
+registerLoggedTool(
   "control.stop-recording",
   {
     title: "Stop PocketHive control recording",
@@ -84,14 +101,18 @@ server.registerTool(
   },
   async () => {
     await stopRecorder();
-    return jsonResult({
-      recording: false,
-      bufferedMessages: parseRecordedEntries(logPath, routingKeyPattern).length
-    });
+    const bufferedMessages = parseRecordedEntries(logPath, routingKeyPattern).length;
+    return {
+      payload: {
+        recording: false,
+        bufferedMessages
+      },
+      summary: `Stopped recording with ${bufferedMessages} buffered message(s).`
+    };
   }
 );
 
-server.registerTool(
+registerLoggedTool(
   "control.get-recorded",
   {
     title: "Get recorded PocketHive control messages",
@@ -100,7 +121,98 @@ server.registerTool(
   },
   async () => {
     const messages = parseRecordedEntries(logPath, routingKeyPattern);
-    return jsonResult({ messages });
+    return {
+      payload: { messages },
+      summary:
+        messages.length === 0
+          ? "No recorded control-plane messages are buffered yet."
+          : `Loaded ${messages.length} recorded control-plane message(s).`,
+      nextHint:
+        messages.length === 0
+          ? {
+              suggestedTool: "control.start-recording",
+              reason: "Start recording before reading buffered control-plane messages."
+            }
+          : null
+    };
+  }
+);
+
+registerLoggedTool(
+  "feedback.submit",
+  {
+    title: "Submit structured feedback for a tool event",
+    description: "Store structured AI feedback for a previously logged MCP tool event.",
+    inputSchema: {
+      relatedEventId: z.string(),
+      intent: z.string(),
+      outcomeUnderstanding: z.string(),
+      blockerType: z.enum([
+        "misunderstood_contract",
+        "missing_domain_step",
+        "missing_tool",
+        "tool_too_low_level",
+        "tool_too_high_level",
+        "validation_unclear",
+        "docs_gap",
+        "example_gap",
+        "unexpected_side_effect"
+      ]),
+      proposedNextAction: z.string(),
+      suggestedImprovements: z
+        .array(
+          z.object({
+            type: z.enum([
+              "improve_docs",
+              "add_example",
+              "improve_error_message",
+              "narrow_contract",
+              "add_parameter",
+              "add_tool",
+              "split_tool",
+              "merge_tools",
+              "rename_tool"
+            ]),
+            target: z.string(),
+            reason: z.string(),
+            confidence: z.enum(["low", "medium", "high"]).optional()
+          })
+        )
+        .optional()
+    }
+  },
+  async (input) => {
+    appendSessionLog(sessionLogPath, {
+      kind: "feedback_event",
+      sessionId,
+      timestamp: new Date().toISOString(),
+      ...input
+    });
+
+    return {
+      payload: {
+        accepted: true,
+        sessionId,
+        relatedEventId: input.relatedEventId
+      },
+      summary: `Stored feedback for '${input.relatedEventId}'.`
+    };
+  }
+);
+
+registerLoggedTool(
+  "feedback.summary",
+  {
+    title: "Summarize MCP feedback session",
+    description: "Summarize tool events and AI feedback captured in the current MCP session.",
+    inputSchema: {}
+  },
+  async () => {
+    const summary = summarizeSessionLog(sessionLogPath, sessionId);
+    return {
+      payload: summary,
+      summary: `Summarized ${summary.toolCalls.total} tool call(s) and ${summary.feedbackEvents} feedback event(s).`
+    };
   }
 );
 
@@ -218,6 +330,131 @@ function jsonResult(payload) {
     ],
     structuredContent: payload
   };
+}
+
+function registerLoggedTool(name, metadata, handler) {
+  server.registerTool(name, metadata, async (input = {}) => {
+    const eventId = createEventId();
+    try {
+      const outcome = await handler(input);
+      const toolEvent = {
+        eventId,
+        sessionId,
+        toolName: name,
+        resultStatus: "ok",
+        summary: outcome.summary,
+        validation: outcome.validation ?? [],
+        nextHint: outcome.nextHint ?? null,
+        feedbackRequired: false,
+        timestamp: new Date().toISOString()
+      };
+
+      appendSessionLog(sessionLogPath, {
+        kind: "tool_event",
+        ...toolEvent
+      });
+
+      return jsonResult({
+        ...(outcome.payload ?? {}),
+        toolEvent
+      });
+    } catch (error) {
+      const classified = classifyToolError(name, input, error);
+      const toolEvent = {
+        eventId,
+        sessionId,
+        toolName: name,
+        resultStatus: classified.resultStatus,
+        summary: classified.summary,
+        validation: classified.validation,
+        nextHint: classified.nextHint,
+        feedbackRequired: classified.feedbackRequired,
+        timestamp: new Date().toISOString()
+      };
+
+      appendSessionLog(sessionLogPath, {
+        kind: "tool_event",
+        ...toolEvent
+      });
+
+      return {
+        isError: true,
+        ...jsonResult({
+          toolEvent
+        })
+      };
+    }
+  });
+}
+
+function classifyToolError(toolName, input, error) {
+  const message = error instanceof Error ? error.message : String(error);
+
+  if (toolName === "orchestrator.get-swarm" && message.includes("HTTP 404")) {
+    return {
+      resultStatus: "rejected",
+      summary: `Swarm '${input.swarmId}' was not found.`,
+      validation: [
+        {
+          code: "SWARM_NOT_FOUND",
+          severity: "error",
+          path: "swarmId",
+          message: `No swarm exists with id '${input.swarmId}'.`
+        }
+      ],
+      nextHint: {
+        suggestedTool: "orchestrator.list-swarms",
+        reason: "List available swarms and retry with an existing swarm id."
+      },
+      feedbackRequired: true
+    };
+  }
+
+  if (toolName === "control.start-recording" && isRabbitConnectivityError(message)) {
+    return {
+      resultStatus: "failed",
+      summary: "Could not start control-plane recording because RabbitMQ is unreachable.",
+      validation: [
+        {
+          code: "RABBIT_UNREACHABLE",
+          severity: "error",
+          path: "rabbitmq",
+          message
+        }
+      ],
+      nextHint: {
+        suggestedTool: "control.start-recording",
+        reason: "Retry after RabbitMQ is reachable and the PocketHive stack is running."
+      },
+      feedbackRequired: true
+    };
+  }
+
+  return {
+    resultStatus: "failed",
+    summary: `Tool '${toolName}' failed.`,
+    validation: [
+      {
+        code: "MCP_TOOL_EXECUTION_FAILED",
+        severity: "error",
+        path: toolName,
+        message
+      }
+    ],
+    nextHint: null,
+    feedbackRequired: true
+  };
+}
+
+function isRabbitConnectivityError(message) {
+  return [
+    "ECONNREFUSED",
+    "ENOTFOUND",
+    "ACCESS_REFUSED",
+    "Socket closed unexpectedly",
+    "Connection closed",
+    "connect ECONNREFUSED"
+  ].some((fragment) => message.includes(fragment));
 }
 
 function sleep(ms) {

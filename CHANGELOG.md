@@ -16,6 +16,7 @@ Timestamp: 2026-03-12T14:13:12Z
 - Clearing Export docs sync: restore and refresh the structured mode playbook/contract docs so documentation matches the stricter XML schema contract, fatal preflight behavior, and wrapperless element rules now enforced in runtime.
 - Postprocessor AMQP output: carry forward the explicit routing-key default/config support that landed on `release/0.14`, so postprocessor output routing remains configurable and does not rely on implicit broker behaviour.
 - Tooling/dev UX: update `start-e2e-tests.sh`, `build-hive.sh`, add the file-backed `tools/mcp-orchestrator-debug/server.mjs` MCP wrapper plus shared recorder helpers/tests, refresh `tools/mcp-orchestrator-debug/client.mjs`, and update the VS Code helper commands/providers to match targeted E2E runs, proxy-aware scenario flows, and the new template layout.
+- MCP feedback loop POC: extend the debug MCP server with per-session tool-event logging, structured `toolEvent` results, `feedback.submit` / `feedback.summary` tools, local JSONL aggregation, and concept notes for improving MCP ergonomics from agent feedback.
 - Docs: add and refresh architecture, rollout, and RFC material for network proxying, SUT dataset simulation, tenancy foundations, and Postman setup/teardown; archive completed in-progress plans and refresh docs navigation/index pages.
 
 ## [0.15.9]

@@ -55,6 +55,10 @@ The server reads the same environment variables you already use in E2E tests / t
 If you run PocketHive via the provided `docker-compose.yml` and port‑forward RabbitMQ / Orchestrator to localhost,
 the defaults should be correct.
 
+The server also writes a local feedback/event log to:
+
+- `tools/mcp-orchestrator-debug/session-log.jsonl`
+
 ## 3. Running the MCP server
 
 From the repo root:
@@ -141,6 +145,38 @@ Once connected, the server exposes a focused subset of the existing debug capabi
     `tools/mcp-orchestrator-debug/control-recording.jsonl`:
     - Each entry: `{ routingKey, body, headers, timestamp }`.
   - Also returns a text block with the same array pretty‑printed.
+
+- `feedback.submit`
+  - Input:
+    - `relatedEventId: string`
+    - `intent: string`
+    - `outcomeUnderstanding: string`
+    - `blockerType: string`
+    - `proposedNextAction: string`
+    - `suggestedImprovements[]`
+  - Stores structured AI feedback in `tools/mcp-orchestrator-debug/session-log.jsonl`.
+
+- `feedback.summary`
+  - No input.
+  - Returns a small summary for the current MCP server session:
+    - tool calls by status
+    - feedback event count
+    - most used tools
+    - most common validation codes / blocker types / suggestion types
+
+Every tool result now also includes `structuredContent.toolEvent` with:
+
+- `eventId`
+- `sessionId`
+- `toolName`
+- `resultStatus`
+- `summary`
+- `validation[]`
+- `nextHint`
+- `feedbackRequired`
+- `timestamp`
+
+That `eventId` can be passed back into `feedback.submit` as `relatedEventId`.
 
 You can use these tools to answer questions like:
 
