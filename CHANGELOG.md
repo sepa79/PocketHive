@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.14.41] - 2026-03-12
+Timestamp: 2026-03-12T14:32:00Z
+
+- Clearing Export (structured XML): removed service-owned default element names (`Document`, `FileHeader`, `Transactions`, `Transaction`, `FileTrailer`) so XML shape is defined explicitly by the schema; only `recordsElement: ""` and `recordElement: ""` are treated as wrapper suppression.
+- Clearing Export runtime: added fatal preflight validation for invalid structured schema/config, with schema context propagated to logs/status and one journal alert for the major failure event.
+- Clearing Export batching: reset the flush window when a new batch starts so stale timers do not split a 20-record run into `1 + 10 + 9` files after an idle period.
+- Clearing Export docs/scenarios: updated schema contract, worker playbook, and clearing demo bundles so required structured XML fields and explicit record-source settings are documented and configured.
+- MCP debug tooling: added an MCP stdio wrapper for the existing orchestrator debug CLI/recorder, with shared helper tests and README guidance.
+
 ## [0.14.40] - 2026-03-10
 Timestamp: 2026-03-10T16:00:00Z
 
