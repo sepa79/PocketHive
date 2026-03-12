@@ -40,22 +40,45 @@ class ClearingStructuredSchemaRegistry {
     Path jsonPath = base.resolve("schema.json");
     Path yamlPath = base.resolve("schema.yaml");
     Path ymlPath = base.resolve("schema.yml");
+    Path selectedPath = null;
 
     try {
       if (Files.exists(jsonPath)) {
+        selectedPath = jsonPath;
         return jsonMapper.readValue(jsonPath.toFile(), ClearingStructuredSchema.class);
       }
       if (Files.exists(yamlPath)) {
+        selectedPath = yamlPath;
         return yamlMapper.readValue(yamlPath.toFile(), ClearingStructuredSchema.class);
       }
       if (Files.exists(ymlPath)) {
+        selectedPath = ymlPath;
         return yamlMapper.readValue(ymlPath.toFile(), ClearingStructuredSchema.class);
       }
-    } catch (IOException ex) {
-      throw new IllegalStateException("Failed to load clearing schema " + schemaId + ":" + schemaVersion, ex);
+    } catch (IOException | RuntimeException ex) {
+      String location = selectedPath == null ? base.toString() : selectedPath.toString();
+      throw new IllegalStateException(
+          "Failed to load clearing schema "
+              + schemaId
+              + ":"
+              + schemaVersion
+              + " from "
+              + location
+              + " (registryRoot="
+              + root
+              + ")",
+          ex);
     }
     throw new IllegalStateException(
-        "Schema not found under " + base + " (expected schema.json/schema.yaml/schema.yml)");
+        "Schema not found for "
+            + schemaId
+            + ":"
+            + schemaVersion
+            + " under "
+            + base
+            + " (registryRoot="
+            + root
+            + ", expected schema.json/schema.yaml/schema.yml)");
   }
 
   private static String requireText(String value, String name) {
@@ -65,4 +88,3 @@ class ClearingStructuredSchemaRegistry {
     return value.trim();
   }
 }
-

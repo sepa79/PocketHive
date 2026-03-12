@@ -98,10 +98,13 @@ class ClearingExportBatchWriter {
     }
 
     bufferedLines.add(renderedRecordLine);
-    bufferedCount.incrementAndGet();
+    int buffered = bufferedCount.incrementAndGet();
     recordsAccepted.incrementAndGet();
 
     long now = nowMs();
+    if (buffered == 1) {
+      lastFlushAtMs.set(now);
+    }
     if (shouldFlush(config, now)) {
       flush(config, now);
     }
@@ -128,10 +131,13 @@ class ClearingExportBatchWriter {
           "Clearing export buffer is full: maxBufferedRecords=" + maxBuffered);
     }
     bufferedStructured.add(projectedRecord);
-    bufferedCount.incrementAndGet();
+    int buffered = bufferedCount.incrementAndGet();
     recordsAccepted.incrementAndGet();
 
     long now = nowMs();
+    if (buffered == 1) {
+      lastFlushAtMs.set(now);
+    }
     if (shouldFlush(config, now)) {
       flush(config, now);
     }

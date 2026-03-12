@@ -66,19 +66,28 @@ class ClearingExportFileAssembler {
       List<Map<String, String>> records,
       Map<String, Object> totals
   ) {
-    Instant now = clock.instant();
-    int recordCount = records.size();
+    try {
+      Instant now = clock.instant();
+      int recordCount = records.size();
 
-    Map<String, Object> baseContext = new LinkedHashMap<>();
-    baseContext.put("now", now.toString());
-    baseContext.put("recordCount", recordCount);
-    baseContext.put("totals", totals);
+      Map<String, Object> baseContext = new LinkedHashMap<>();
+      baseContext.put("now", now.toString());
+      baseContext.put("recordCount", recordCount);
+      baseContext.put("totals", totals);
 
-    Map<String, String> header = renderMapping(schema.headerMapping(), baseContext);
-    Map<String, String> footer = renderMapping(schema.footerMapping(), baseContext);
-    String fileName = templateRenderer.render(schema.fileNameTemplate(), baseContext);
-    String payload = xmlOutputFormatter.format(schema, header, records, footer);
-    return new ClearingRenderedFile(fileName, payload, recordCount, now);
+      Map<String, String> header = renderMapping(schema.headerMapping(), baseContext);
+      Map<String, String> footer = renderMapping(schema.footerMapping(), baseContext);
+      String fileName = templateRenderer.render(schema.fileNameTemplate(), baseContext);
+      String payload = xmlOutputFormatter.format(schema, header, records, footer);
+      return new ClearingRenderedFile(fileName, payload, recordCount, now);
+    } catch (RuntimeException ex) {
+      throw new IllegalStateException(
+          "Failed to assemble structured clearing file for schema "
+              + schema.schemaId()
+              + ":"
+              + schema.schemaVersion(),
+          ex);
+    }
   }
 
   private Map<String, String> renderMapping(Map<String, String> mapping, Map<String, Object> context) {

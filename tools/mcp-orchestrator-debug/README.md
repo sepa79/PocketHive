@@ -8,6 +8,24 @@ talk directly to:
 
 It is designed for **debugging** and **inspection**, not for production use.
 
+It is additive to the existing debug CLI in `tools/mcp-orchestrator-debug/client.mjs` and the
+Rabbit recorder in `tools/mcp-orchestrator-debug/rabbit-recorder.mjs`. It does not replace those
+tools or change PocketHive runtime behavior.
+
+## 0. Relationship to the existing debug tooling
+
+This folder now contains three layers:
+
+- `client.mjs`
+  - Existing shell-oriented debug CLI for orchestrator, queue, and journal inspection.
+- `rabbit-recorder.mjs`
+  - Existing RabbitMQ control-plane recorder that writes JSONL entries to disk.
+- `server.mjs`
+  - Thin MCP stdio wrapper that reuses the existing CLI and recorder so MCP clients can call them.
+
+Use the MCP server when you want editor/agent integration. Use the CLI directly when you want the
+full command surface from the terminal.
+
 ## 1. Prerequisites
 
 - Node.js 18+ available on your `PATH`
@@ -49,6 +67,7 @@ The process will:
 
 - speak MCP over **stdio** (as expected by MCP clients)
 - auto‑discover the MCP protocol once a client connects
+- reuse the existing `client.mjs` and `rabbit-recorder.mjs` scripts under the same repo folder
 
 You usually do **not** talk to this directly; instead you configure your MCP client (editor / CLI) to spawn it.
 
@@ -89,7 +108,7 @@ and pass the environment through.
 
 ## 5. Exposed tools
 
-Once connected, the server exposes these MCP tools:
+Once connected, the server exposes a focused subset of the existing debug capabilities:
 
 - `orchestrator.list-swarms`
   - No input.
@@ -108,16 +127,18 @@ Once connected, the server exposes these MCP tools:
   - Connects to RabbitMQ using `RABBITMQ_*` and `POCKETHIVE_CONTROL_PLANE_EXCHANGE`.
   - Asserts the control exchange and an exclusive auto‑delete queue.
   - Binds `signal.#` and `event.#` to the queue and starts consuming.
+  - Clears any previous `control-recording.jsonl` file before starting a new recording session.
   - Each message is recorded as:
     - `routingKey`, `body` (UTF‑8 text), `headers` and `timestamp`.
 
 - `control.stop-recording`
   - Stops the consumer, closes the channel/connection.
-  - Does **not** clear the in‑memory buffer; it only stops new messages from being recorded.
+  - Does **not** delete the buffered recording file; it only stops new messages from being recorded.
 
 - `control.get-recorded`
   - No input.
-  - Returns `structuredContent.messages` with the current in‑memory recording:
+  - Returns `structuredContent.messages` with the current file-backed recording from
+    `tools/mcp-orchestrator-debug/control-recording.jsonl`:
     - Each entry: `{ routingKey, body, headers, timestamp }`.
   - Also returns a text block with the same array pretty‑printed.
 
@@ -127,4 +148,22 @@ You can use these tools to answer questions like:
 - “Which `status-full` events were emitted for swarm `foo`?”
 - “What exactly was in the `ready.swarm-remove` confirmation payload?”
 
-Because everything is in memory, restart the server (or call `control.start-recording` again) to clear the buffer. 
+To clear the buffered recording, call `control.start-recording` again or delete
+`tools/mcp-orchestrator-debug/control-recording.jsonl`.
+
+## 6. What this does not change
+
+- Existing CLI commands in `client.mjs` remain supported and unchanged.
+- Existing recorder usage via `node tools/mcp-orchestrator-debug/rabbit-recorder.mjs` remains supported.
+- PocketHive services, swarm behavior, and control-plane contracts are unchanged.
+
+## 7. Validation
+
+The MCP helper logic is covered by:
+
+```bash
+npx vitest run tools/mcp-orchestrator-debug/server-utils.test.mjs
+```
+
+If you add new MCP tools, keep the README aligned with the exposed tool names and whether the
+implementation is file-backed or process-local.

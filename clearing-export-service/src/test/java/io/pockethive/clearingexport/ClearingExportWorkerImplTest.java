@@ -20,6 +20,7 @@ import java.lang.reflect.Method;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -27,6 +28,7 @@ import java.util.function.Consumer;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.ConfigurableApplicationContext;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -41,6 +43,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class ClearingExportWorkerImplTest {
+
+  private static final String TEST_SCHEMA_ID = "test-schema";
+  private static final String TEST_SCHEMA_VERSION = "1.0.0";
 
   @Test
   void stateListenerPreflightFailurePublishesJournalAndStopsWorker() throws Exception {
@@ -63,6 +68,8 @@ class ClearingExportWorkerImplTest {
     when(batchWriter.lastFileBytes()).thenReturn(0L);
     when(batchWriter.lastFlushAt()).thenReturn(null);
     when(batchWriter.lastError()).thenReturn("");
+    RecordingStatusPublisher statusPublisher = new RecordingStatusPublisher();
+    when(controlPlaneRuntime.statusPublisher("clearingExportWorker")).thenReturn(statusPublisher);
     org.mockito.Mockito.doThrow(new IllegalStateException("sink does not support streaming"))
         .when(batchWriter).preflight(config);
 
@@ -90,6 +97,11 @@ class ClearingExportWorkerImplTest {
         eq("clearingExportWorker"),
         argThat(item -> "clearing-export-preflight".equals(String.valueOf(item.headers().get("x-ph-call-id")))),
         any(Exception.class));
+    assertThat(statusPublisher.fullEmitted()).isTrue();
+    assertThat(statusPublisher.data()).containsEntry("fatalError", "Preflight failed: sink does not support streaming")
+        .containsEntry("failurePhase", "preflight")
+        .containsEntry("schemaId", "")
+        .containsEntry("schemaVersion", "");
     verify(applicationContext, timeout(500)).close();
   }
 
@@ -298,14 +310,14 @@ class ClearingExportWorkerImplTest {
     WorkerContext context = mock(WorkerContext.class);
     ClearingExportWorkerConfig config = structuredConfigWith("latest", -1, "log_error");
     ClearingStructuredSchema schema = new ClearingStructuredSchema(
-        "pcs",
-        "1.0.0",
+        TEST_SCHEMA_ID,
+        TEST_SCHEMA_VERSION,
         "xml",
         "out.xml",
         Map.of("payload", new ClearingStructuredSchema.StructuredFieldRule("{{ steps.selected.payload }}", true, "string")),
         Map.of(),
         Map.of(),
-        ClearingStructuredSchema.XmlOutputConfig.defaults()
+        xmlConfig()
     );
     StructuredProjectedRecord projected = new StructuredProjectedRecord(Map.of("payload", "x"), Map.of());
 
@@ -531,6 +543,110 @@ class ClearingExportWorkerImplTest {
     verify(batchWriter, never()).append(anyString(), any(ClearingExportWorkerConfig.class));
     verify(controlPlaneRuntime).publishWorkError(anyString(), any(WorkItem.class), any(Exception.class));
     verify(applicationContext, timeout(500)).close();
+  }
+
+  @Test
+  void invalidStructuredSchemaDuringPreflightPublishesFatalStatusAndStopsWorker() throws Exception {
+    ClearingExportWorkerProperties properties = mock(ClearingExportWorkerProperties.class);
+    ClearingExportBatchWriter batchWriter = mock(ClearingExportBatchWriter.class);
+    ClearingStructuredSchemaRegistry schemaRegistry = mock(ClearingStructuredSchemaRegistry.class);
+    StructuredRecordProjector projector = mock(StructuredRecordProjector.class);
+    TemplateRenderer templateRenderer = mock(TemplateRenderer.class);
+    WorkerControlPlaneRuntime controlPlaneRuntime = mock(WorkerControlPlaneRuntime.class);
+    ConfigurableApplicationContext applicationContext = mock(ConfigurableApplicationContext.class);
+    ClearingExportWorkerConfig config = structuredConfigWith("latest", -1, "log_error");
+    RecordingStatusPublisher statusPublisher = new RecordingStatusPublisher();
+
+    when(controlPlaneRuntime.statusPublisher("clearingExportWorker")).thenReturn(statusPublisher);
+    when(batchWriter.bufferedRecords()).thenReturn(0L);
+    when(batchWriter.recordsAccepted()).thenReturn(0L);
+    when(batchWriter.filesWritten()).thenReturn(0L);
+    when(batchWriter.filesFailed()).thenReturn(0L);
+    when(batchWriter.lastFileName()).thenReturn("");
+    when(batchWriter.lastFileRecordCount()).thenReturn(0L);
+    when(batchWriter.lastFileBytes()).thenReturn(0L);
+    when(batchWriter.lastFlushAt()).thenReturn(null);
+    when(batchWriter.lastError()).thenReturn("");
+    when(schemaRegistry.resolve(config))
+        .thenThrow(new IllegalStateException("xml.rootElement must be configured"));
+
+    ClearingExportWorkerImpl worker = new ClearingExportWorkerImpl(
+        properties,
+        batchWriter,
+        schemaRegistry,
+        projector,
+        templateRenderer,
+        controlPlaneRuntime,
+        applicationContext,
+        new ObjectMapper().findAndRegisterModules(),
+        Clock.fixed(Instant.parse("2026-02-21T00:00:00Z"), ZoneOffset.UTC));
+
+    @SuppressWarnings("unchecked")
+    org.mockito.ArgumentCaptor<Consumer<WorkerStateSnapshot>> listenerCaptor =
+        org.mockito.ArgumentCaptor.forClass(Consumer.class);
+    worker.registerPreflightStateListener();
+    verify(controlPlaneRuntime).registerStateListener(eq("clearingExportWorker"), listenerCaptor.capture());
+
+    listenerCaptor.getValue().accept(buildSnapshot(config, true));
+
+    verify(batchWriter, never()).preflight(any(ClearingExportWorkerConfig.class));
+    verify(controlPlaneRuntime, times(1)).publishWorkError(
+        eq("clearingExportWorker"),
+        argThat(item -> "clearing-export-preflight".equals(String.valueOf(item.headers().get("x-ph-call-id")))),
+        any(Exception.class));
+    assertThat(statusPublisher.fullEmitted()).isTrue();
+    assertThat(statusPublisher.data()).containsEntry("failurePhase", "preflight")
+        .containsEntry("schemaId", TEST_SCHEMA_ID)
+        .containsEntry("schemaVersion", TEST_SCHEMA_VERSION);
+    assertThat(String.valueOf(statusPublisher.data().get("fatalError")))
+        .contains("xml.rootElement must be configured");
+    verify(applicationContext, timeout(500)).close();
+  }
+
+  @Test
+  void structuredRecordFailuresStillObeyRecordBuildFailurePolicy() throws Exception {
+    ClearingExportWorkerProperties properties = mock(ClearingExportWorkerProperties.class);
+    ClearingExportBatchWriter batchWriter = mock(ClearingExportBatchWriter.class);
+    ClearingStructuredSchemaRegistry schemaRegistry = mock(ClearingStructuredSchemaRegistry.class);
+    StructuredRecordProjector projector = mock(StructuredRecordProjector.class);
+    TemplateRenderer templateRenderer = mock(TemplateRenderer.class);
+    WorkerControlPlaneRuntime controlPlaneRuntime = mock(WorkerControlPlaneRuntime.class);
+    ConfigurableApplicationContext applicationContext = mock(ConfigurableApplicationContext.class);
+    WorkerContext context = mock(WorkerContext.class);
+    ClearingExportWorkerConfig config = structuredConfigWith("latest", -1, "log_error");
+    ClearingStructuredSchema schema = new ClearingStructuredSchema(
+        TEST_SCHEMA_ID,
+        TEST_SCHEMA_VERSION,
+        "xml",
+        "out.xml",
+        Map.of("payload", new ClearingStructuredSchema.StructuredFieldRule("{{ steps.selected.payload }}", true, "string")),
+        Map.of(),
+        Map.of(),
+        xmlConfig()
+    );
+
+    when(context.enabled()).thenReturn(true);
+    when(context.statusPublisher()).thenReturn(StatusPublisher.NO_OP);
+    when(context.config(ClearingExportWorkerConfig.class)).thenReturn(config);
+    when(schemaRegistry.resolve(config)).thenReturn(schema);
+    when(projector.project(eq(schema), anyMap())).thenThrow(new IllegalStateException("projection failed"));
+
+    ClearingExportWorkerImpl worker = new ClearingExportWorkerImpl(
+        properties,
+        batchWriter,
+        schemaRegistry,
+        projector,
+        templateRenderer,
+        controlPlaneRuntime,
+        applicationContext,
+        new ObjectMapper().findAndRegisterModules(),
+        Clock.fixed(Instant.parse("2026-02-21T00:00:00Z"), ZoneOffset.UTC));
+
+    worker.onMessage(WorkItem.text("{\"id\":1}").build(), context);
+
+    verify(controlPlaneRuntime, never()).publishWorkError(anyString(), any(WorkItem.class), any(Throwable.class));
+    verify(applicationContext, never()).close();
+    verify(batchWriter, never()).appendStructured(any(StructuredProjectedRecord.class), any(), any());
   }
 
   @Test
@@ -800,11 +916,28 @@ class ClearingExportWorkerImplTest {
         false,
         "reports/clearing/manifest.jsonl",
         "/tmp/schemas",
-        "pcs",
-        "1.0.0",
+        TEST_SCHEMA_ID,
+        TEST_SCHEMA_VERSION,
         recordSourceStep,
         recordSourceStepIndex,
         recordBuildFailurePolicy
+    );
+  }
+
+  private static ClearingStructuredSchema.XmlOutputConfig xmlConfig() {
+    return new ClearingStructuredSchema.XmlOutputConfig(
+        true,
+        "UTF-8",
+        "Document",
+        "Header",
+        "Transactions",
+        "Transaction",
+        "Footer",
+        "",
+        "",
+        "",
+        "",
+        false
     );
   }
 
@@ -841,5 +974,36 @@ class ClearingExportWorkerImplTest {
         sourceStep,
         sourceStepIndex
     );
+  }
+
+  private static final class RecordingStatusPublisher
+      implements StatusPublisher, StatusPublisher.MutableStatus {
+
+    private final Map<String, Object> data = new LinkedHashMap<>();
+    private boolean fullEmitted;
+
+    @Override
+    public void update(Consumer<MutableStatus> consumer) {
+      consumer.accept(this);
+    }
+
+    @Override
+    public MutableStatus data(String key, Object value) {
+      data.put(key, value);
+      return this;
+    }
+
+    @Override
+    public void emitFull() {
+      fullEmitted = true;
+    }
+
+    Map<String, Object> data() {
+      return Map.copyOf(data);
+    }
+
+    boolean fullEmitted() {
+      return fullEmitted;
+    }
   }
 }
