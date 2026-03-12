@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.15.10]
+Timestamp: 2026-03-12T14:13:12Z
+
+- Network proxy control plane: add `network-proxy-manager-service`, shared network binding/profile DTOs in `swarm-model`, Orchestrator create-swarm support for `networkMode` and `networkProfileId`, and Scenario Manager `/network-profiles` APIs with bundled profile definitions.
+- Proxy infrastructure: add the local HAProxy/Toxiproxy stack (`network-proxy-haproxy`, compose/runtime wiring, local bee image updates) plus manual proxy override actions and additional toxics such as `slow-close` and `limit-data`.
+- UI v2: add a dedicated Proxy page and client library for proxy/binding operations; Hive swarm creation flows now surface proxied network selection through the updated Orchestrator API.
+- E2E lifecycle coverage: add proxied HTTP, HTTPS, and TCPS swarm scenarios plus Network Proxy Manager test clients/assertions; harden queue tapping so scenarios that emit their only message on swarm start can still observe `post`/`final` traffic, including the `local-rest-plan-demo` resolution fix.
+- TCP/TLS mock hardening: load file-based mappings at bean initialisation in `tcp-mock-server` and fix the secure TLS request/response templates and mapping extraction so the TCPS proxy scenario receives a complete secure response instead of timing out on split line frames.
+- ISO8583 end-to-end support: add canonical `iso8583.request` / `iso8583.result` envelopes, request-template schema support, request-builder ISO8583 schema-pack/XML codecs, processor-side ISO8583 protocol handling, and matching worker-level tests.
+- Template/layout normalization: move bundled and baked templates to explicit protocol roots (`templates/http`, `templates/tcp`), update scenario/template roots accordingly, and rename Scenario Manager template endpoints from HTTP-specific paths to generic bundle template APIs.
+- Clearing Export follow-up hardening from `release/0.14`: fix structured clearing config validation/wiring, reset flush windows correctly when opening a new batch, and keep the 0.15 line aligned with the latest batch-writer stability fixes.
+- Postprocessor AMQP output: carry forward the explicit routing-key default/config support that landed on `release/0.14`, so postprocessor output routing remains configurable and does not rely on implicit broker behaviour.
+- Tooling/dev UX: update `start-e2e-tests.sh`, `build-hive.sh`, `tools/mcp-orchestrator-debug/client.mjs`, and the VS Code helper commands/providers to match targeted E2E runs, proxy-aware scenario flows, and the new template layout.
+- Docs: add and refresh architecture, rollout, and RFC material for network proxying, SUT dataset simulation, tenancy foundations, and Postman setup/teardown; archive completed in-progress plans and refresh docs navigation/index pages.
+
 ## [0.15.9]
 Timestamp: 2026-03-03T21:31:04Z
 
