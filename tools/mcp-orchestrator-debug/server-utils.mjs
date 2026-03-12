@@ -54,3 +54,11 @@ export function parseRecordedEntries(logPath, pattern) {
     })
     .filter((entry) => !pattern || topicMatchesPattern(pattern, entry.routingKey));
 }
+
+export function childProcessIsRunning(child) {
+  return child != null && child.exitCode === null && !child.killed;
+}
+
+export function childProcessExited(child) {
+  return child != null && child.exitCode !== null;
+}

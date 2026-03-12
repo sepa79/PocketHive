@@ -151,6 +151,117 @@ class NetworkBindingServiceTest {
     }
 
     @Test
+    void clearRejectsMismatchedSutIdAndKeepsBinding() throws Exception {
+        FakeNetworkProfileClient profileClient = new FakeNetworkProfileClient(Map.of(
+            "passthrough", new NetworkProfile("passthrough", "Passthrough", List.of(), List.of("payments"))));
+        FakeToxiproxyAdminClient toxiproxy = new FakeToxiproxyAdminClient();
+        FakeHaproxyAdminClient haproxy = new FakeHaproxyAdminClient();
+        NetworkBindingService service = new NetworkBindingService(profileClient, toxiproxy, haproxy, properties());
+
+        service.bind("swarm-a", new NetworkBindingRequest(
+            "sut-a",
+            NetworkMode.PROXIED,
+            "passthrough",
+            "orchestrator",
+            null,
+            resolvedSut("sut-a", Map.of(
+                "payments", new ResolvedSutEndpoint("payments", "HTTPS", "https://proxy.local:9443", "proxy.local:9443", "internal-a:443")))));
+
+        assertThatThrownBy(() -> service.clear("swarm-a", new NetworkBindingClearRequest("sut-b", "ui", "manual clear")))
+            .isInstanceOf(InvalidNetworkBindingRequestException.class)
+            .hasMessageContaining("request.sutId must match existing binding sutId");
+
+        assertThat(service.findBinding("swarm-a")).isNotNull();
+        assertThat(toxiproxy.proxies()).containsKey("sut-a__payments");
+        assertThat(haproxy.routes()).containsExactly(
+            new HaproxyAdminClient.RouteRecord("sut-a__payments", "0.0.0.0:9443", "toxiproxy:19443"));
+    }
+
+    @Test
+    void clearRejectsMissingBinding() {
+        FakeNetworkProfileClient profileClient = new FakeNetworkProfileClient(Map.of());
+        FakeToxiproxyAdminClient toxiproxy = new FakeToxiproxyAdminClient();
+        FakeHaproxyAdminClient haproxy = new FakeHaproxyAdminClient();
+        NetworkBindingService service = new NetworkBindingService(profileClient, toxiproxy, haproxy, properties());
+
+        assertThatThrownBy(() -> service.clear("missing-swarm", new NetworkBindingClearRequest("sut-a", "ui", "manual clear")))
+            .isInstanceOf(NetworkBindingNotFoundException.class)
+            .hasMessageContaining("No network binding found for swarmId 'missing-swarm'");
+    }
+
+    @Test
+    void bindAllowsUpdatingProfileForSameSut() throws Exception {
+        FakeNetworkProfileClient profileClient = new FakeNetworkProfileClient(Map.of(
+            "passthrough", new NetworkProfile("passthrough", "Passthrough", List.of(), List.of("payments")),
+            "latency-250ms", new NetworkProfile(
+                "latency-250ms",
+                "Latency 250ms",
+                List.of(new NetworkFault("latency", Map.of("latency", 250, "jitter", 25))),
+                List.of("payments"))));
+        FakeToxiproxyAdminClient toxiproxy = new FakeToxiproxyAdminClient();
+        FakeHaproxyAdminClient haproxy = new FakeHaproxyAdminClient();
+        NetworkBindingService service = new NetworkBindingService(profileClient, toxiproxy, haproxy, properties());
+
+        service.bind("swarm-a", new NetworkBindingRequest(
+            "sut-a",
+            NetworkMode.PROXIED,
+            "passthrough",
+            "orchestrator",
+            null,
+            resolvedSut("sut-a", Map.of(
+                "payments", new ResolvedSutEndpoint("payments", "HTTPS", "https://proxy.local:9443", "proxy.local:9443", "internal-a:443")))));
+
+        NetworkBinding updated = service.bind("swarm-a", new NetworkBindingRequest(
+            "sut-a",
+            NetworkMode.PROXIED,
+            "latency-250ms",
+            "orchestrator",
+            null,
+            resolvedSut("sut-a", Map.of(
+                "payments", new ResolvedSutEndpoint("payments", "HTTPS", "https://proxy.local:9443", "proxy.local:9443", "internal-a:443")))));
+
+        assertThat(updated.sutId()).isEqualTo("sut-a");
+        assertThat(updated.networkProfileId()).isEqualTo("latency-250ms");
+        assertThat(toxiproxy.toxics("sut-a__payments")).hasSize(1);
+        assertThat(toxiproxy.toxics("sut-a__payments").getFirst().type()).isEqualTo("latency");
+    }
+
+    @Test
+    void bindRejectsChangingSutForExistingSwarm() throws Exception {
+        FakeNetworkProfileClient profileClient = new FakeNetworkProfileClient(Map.of(
+            "passthrough", new NetworkProfile("passthrough", "Passthrough", List.of(), List.of("payments"))));
+        FakeToxiproxyAdminClient toxiproxy = new FakeToxiproxyAdminClient();
+        FakeHaproxyAdminClient haproxy = new FakeHaproxyAdminClient();
+        NetworkBindingService service = new NetworkBindingService(profileClient, toxiproxy, haproxy, properties());
+
+        service.bind("swarm-a", new NetworkBindingRequest(
+            "sut-a",
+            NetworkMode.PROXIED,
+            "passthrough",
+            "orchestrator",
+            null,
+            resolvedSut("sut-a", Map.of(
+                "payments", new ResolvedSutEndpoint("payments", "HTTPS", "https://proxy.local:9443", "proxy.local:9443", "internal-a:443")))));
+
+        assertThatThrownBy(() -> service.bind("swarm-a", new NetworkBindingRequest(
+            "sut-b",
+            NetworkMode.PROXIED,
+            "passthrough",
+            "orchestrator",
+            null,
+            resolvedSut("sut-b", Map.of(
+                "payments", new ResolvedSutEndpoint("payments", "HTTPS", "https://proxy.local:9443", "proxy.local:9443", "internal-b:443"))))))
+            .isInstanceOf(InvalidNetworkBindingRequestException.class)
+            .hasMessageContaining("changing SUT at runtime is not supported");
+
+        assertThat(service.findBinding("swarm-a")).isNotNull();
+        assertThat(service.findBinding("swarm-a").sutId()).isEqualTo("sut-a");
+        assertThat(toxiproxy.proxies()).containsOnlyKeys("sut-a__payments");
+        assertThat(haproxy.routes()).containsExactly(
+            new HaproxyAdminClient.RouteRecord("sut-a__payments", "0.0.0.0:9443", "toxiproxy:19443"));
+    }
+
+    @Test
     void manualOverrideReconcilesWinningBindingsImmediately() throws Exception {
         FakeNetworkProfileClient profileClient = new FakeNetworkProfileClient(Map.of(
             "passthrough", new NetworkProfile("passthrough", "Passthrough", List.of(), List.of("payments"))));
@@ -271,6 +382,88 @@ class NetworkBindingServiceTest {
         assertThat(service.findBinding("swarm-a")).isNull();
     }
 
+    @Test
+    void bindRestoresPreviousLiveProxyStateWhenUpdatedBindingFails() throws Exception {
+        FakeNetworkProfileClient profileClient = new FakeNetworkProfileClient(Map.of(
+            "passthrough", new NetworkProfile("passthrough", "Passthrough", List.of(), List.of("payments")),
+            "latency-250ms", new NetworkProfile(
+                "latency-250ms",
+                "Latency 250ms",
+                List.of(new NetworkFault("latency", Map.of("latency", 250, "jitter", 25))),
+                List.of("payments"))));
+        FakeToxiproxyAdminClient toxiproxy = new FakeToxiproxyAdminClient();
+        FailOnceHaproxyAdminClient haproxy = new FailOnceHaproxyAdminClient();
+        NetworkBindingService service = new NetworkBindingService(profileClient, toxiproxy, haproxy, properties());
+
+        service.bind("swarm-a", new NetworkBindingRequest(
+            "sut-a",
+            NetworkMode.PROXIED,
+            "passthrough",
+            "orchestrator",
+            null,
+            resolvedSut("sut-a", Map.of(
+                "payments", new ResolvedSutEndpoint("payments", "HTTPS", "https://proxy.local:9443", "proxy.local:9443", "internal-a:443")))));
+
+        haproxy.failNextApply();
+
+        assertThatThrownBy(() -> service.bind("swarm-b", new NetworkBindingRequest(
+            "sut-a",
+            NetworkMode.PROXIED,
+            "latency-250ms",
+            "orchestrator",
+            null,
+            resolvedSut("sut-a", Map.of(
+                "payments", new ResolvedSutEndpoint("payments", "HTTPS", "https://proxy.local:9443", "proxy.local:9443", "internal-a:443"))))))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("haproxy apply failed");
+
+        assertThat(service.findBinding("swarm-a")).isNotNull();
+        assertThat(service.findBinding("swarm-b")).isNull();
+        assertThat(toxiproxy.proxies()).containsOnlyKeys("sut-a__payments");
+        assertThat(toxiproxy.toxics("sut-a__payments")).isEmpty();
+        assertThat(haproxy.routes()).containsExactly(
+            new HaproxyAdminClient.RouteRecord("sut-a__payments", "0.0.0.0:9443", "toxiproxy:19443"));
+    }
+
+    @Test
+    void manualOverrideRestoresPreviousStateWhenReconcileFails() throws Exception {
+        FakeNetworkProfileClient profileClient = new FakeNetworkProfileClient(Map.of(
+            "passthrough", new NetworkProfile("passthrough", "Passthrough", List.of(), List.of("payments"))));
+        FakeToxiproxyAdminClient toxiproxy = new FakeToxiproxyAdminClient();
+        FailOnceHaproxyAdminClient haproxy = new FailOnceHaproxyAdminClient();
+        NetworkBindingService service = new NetworkBindingService(profileClient, toxiproxy, haproxy, properties());
+
+        service.bind("swarm-a", new NetworkBindingRequest(
+            "sut-a",
+            NetworkMode.PROXIED,
+            "passthrough",
+            "orchestrator",
+            null,
+            resolvedSut("sut-a", Map.of(
+                "payments", new ResolvedSutEndpoint("payments", "HTTPS", "https://proxy.local:9443", "proxy.local:9443", "internal-a:443")))));
+
+        haproxy.failNextApply();
+
+        assertThatThrownBy(() -> service.applyManualOverride(new ManualNetworkOverrideRequest(
+            true,
+            400,
+            40,
+            2048,
+            1200,
+            65_536,
+            null,
+            "hive",
+            "live tuning")))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("haproxy apply failed");
+
+        assertThat(service.manualOverride().enabled()).isFalse();
+        assertThat(toxiproxy.proxies()).containsOnlyKeys("sut-a__payments");
+        assertThat(toxiproxy.toxics("sut-a__payments")).isEmpty();
+        assertThat(haproxy.routes()).containsExactly(
+            new HaproxyAdminClient.RouteRecord("sut-a__payments", "0.0.0.0:9443", "toxiproxy:19443"));
+    }
+
     private static NetworkProxyManagerProperties properties() {
         NetworkProxyManagerProperties properties = new NetworkProxyManagerProperties();
         properties.getToxiproxy().setListenHost("0.0.0.0");
@@ -359,7 +552,7 @@ class NetworkBindingServiceTest {
             this.routes = routes == null ? List.of() : List.copyOf(routes);
         }
 
-        private List<RouteRecord> routes() {
+        protected List<RouteRecord> routes() {
             return routes;
         }
     }
@@ -368,6 +561,23 @@ class NetworkBindingServiceTest {
         @Override
         public void applyRoutes(List<RouteRecord> routes) {
             throw new IllegalStateException("haproxy apply failed");
+        }
+    }
+
+    private static final class FailOnceHaproxyAdminClient extends FakeHaproxyAdminClient {
+        private boolean failNextApply;
+
+        private void failNextApply() {
+            failNextApply = true;
+        }
+
+        @Override
+        public void applyRoutes(List<RouteRecord> routes) {
+            if (failNextApply) {
+                failNextApply = false;
+                throw new IllegalStateException("haproxy apply failed");
+            }
+            super.applyRoutes(routes);
         }
     }
 }

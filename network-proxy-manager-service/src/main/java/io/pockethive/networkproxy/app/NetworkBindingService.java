@@ -74,36 +74,54 @@ public class NetworkBindingService {
         if (request.networkMode() != NetworkMode.PROXIED) {
             throw new IllegalArgumentException("bind endpoint requires networkMode=PROXIED; use /clear for DIRECT");
         }
+        Map<String, NetworkBinding> previousBindings = new LinkedHashMap<>(bindings);
+        String boundSutId = bindSutId(id, request.sutId(), previousBindings);
         ResolvedSutEnvironment resolvedSut = Objects.requireNonNull(request.resolvedSut(),
             "resolvedSut must be provided when networkMode=PROXIED");
         NetworkProfile profile = profileClient.fetch(request.networkProfileId());
         List<ResolvedSutEndpoint> affectedEndpoints = selectAffectedEndpoints(profile, resolvedSut);
         NetworkBinding binding = new NetworkBinding(
             id,
-            request.sutId(),
+            boundSutId,
             request.networkMode(),
             request.networkProfileId(),
             request.networkMode(),
             request.requestedBy(),
             Instant.now(),
             affectedEndpoints);
-        Map<String, NetworkBinding> candidateBindings = new LinkedHashMap<>(bindings);
+        Map<String, NetworkBinding> candidateBindings = new LinkedHashMap<>(previousBindings);
         candidateBindings.put(id, binding);
-        reconcileSut(request.sutId(), candidateBindings);
-        bindings.put(id, binding);
+        try {
+            reconcileSut(boundSutId, candidateBindings, manualOverrideState);
+            replaceBindings(candidateBindings);
+        } catch (Exception ex) {
+            rollbackSut(boundSutId, previousBindings, manualOverrideState, ex);
+        }
         return binding;
     }
 
     public synchronized NetworkBinding clear(String swarmId, NetworkBindingClearRequest request) throws Exception {
         String id = trimmedSwarmId(swarmId);
         Objects.requireNonNull(request, "request");
-        Map<String, NetworkBinding> candidateBindings = new LinkedHashMap<>(bindings);
+        Map<String, NetworkBinding> previousBindings = new LinkedHashMap<>(bindings);
+        NetworkBinding existingBinding = previousBindings.get(id);
+        if (existingBinding == null) {
+            throw new NetworkBindingNotFoundException("No network binding found for swarmId '" + id + "'");
+        }
+        if (!existingBinding.sutId().equals(request.sutId())) {
+            throw new InvalidNetworkBindingRequestException("request.sutId must match existing binding sutId");
+        }
+        Map<String, NetworkBinding> candidateBindings = new LinkedHashMap<>(previousBindings);
         candidateBindings.remove(id);
-        reconcileSut(request.sutId(), candidateBindings);
-        bindings.remove(id);
+        try {
+            reconcileSut(existingBinding.sutId(), candidateBindings, manualOverrideState);
+            replaceBindings(candidateBindings);
+        } catch (Exception ex) {
+            rollbackSut(existingBinding.sutId(), previousBindings, manualOverrideState, ex);
+        }
         return new NetworkBinding(
             id,
-            request.sutId(),
+            existingBinding.sutId(),
             NetworkMode.DIRECT,
             null,
             NetworkMode.DIRECT,
@@ -118,8 +136,14 @@ public class NetworkBindingService {
 
     public synchronized ManualNetworkOverrideStatus applyManualOverride(ManualNetworkOverrideRequest request) throws Exception {
         Objects.requireNonNull(request, "request");
-        manualOverrideState = ManualOverrideState.from(request);
-        reconcileAllSuts();
+        ManualOverrideState previousOverrideState = manualOverrideState;
+        ManualOverrideState candidateOverrideState = ManualOverrideState.from(request);
+        try {
+            reconcileAllSuts(bindings, candidateOverrideState);
+            manualOverrideState = candidateOverrideState;
+        } catch (Exception ex) {
+            rollbackAllSuts(bindings, previousOverrideState, ex);
+        }
         log.info("applied manual network override enabled={} requestedBy={} latencyMs={} jitterMs={} bandwidthKbps={} slowCloseDelayMs={} limitDataBytes={} timeoutMs={}",
             manualOverrideState.enabled(),
             manualOverrideState.requestedBy(),
@@ -169,27 +193,35 @@ public class NetworkBindingService {
     }
 
     private void reconcileSut(String sutId) throws Exception {
-        reconcileSut(sutId, bindings);
+        reconcileSut(sutId, bindings, manualOverrideState);
     }
 
-    private void reconcileSut(String sutId, Map<String, NetworkBinding> bindingSnapshot) throws Exception {
+    private void reconcileSut(String sutId,
+                              Map<String, NetworkBinding> bindingSnapshot,
+                              ManualOverrideState overrideState) throws Exception {
         String trimmedSutId = requireText(sutId, "sutId");
+        List<HaproxyAdminClient.RouteRecord> desiredRoutes = routesForWinningBindings(bindingSnapshot);
         List<NetworkBinding> activeBindings = bindingSnapshot.values().stream()
             .filter(binding -> binding.sutId().equals(trimmedSutId))
             .filter(binding -> binding.networkMode() == NetworkMode.PROXIED)
             .sorted(Comparator.comparing(NetworkBinding::appliedAt))
             .toList();
         Map<String, ToxiproxyAdminClient.ProxyRecord> existingProxies = toxiproxy.listProxies();
-        deleteManagedProxies(trimmedSutId, existingProxies);
         if (activeBindings.isEmpty()) {
-            haproxy.applyRoutes(routesForWinningBindings(bindingSnapshot));
+            deleteManagedProxies(trimmedSutId, existingProxies);
+            haproxy.applyRoutes(desiredRoutes);
             log.info("cleared all proxied listeners for sut={}", trimmedSutId);
             return;
         }
         NetworkBinding winner = activeBindings.get(activeBindings.size() - 1);
-        NetworkProfile profile = effectiveProfile(profileClient.fetch(winner.networkProfileId()));
-        Map<String, ToxiproxyAdminClient.ProxyRecord> remainingProxies = toxiproxy.listProxies();
+        NetworkProfile profile = effectiveProfile(profileClient.fetch(winner.networkProfileId()), overrideState);
+        Map<String, ToxiproxyAdminClient.ProxyRecord> remainingProxies = withoutManagedProxies(trimmedSutId, existingProxies);
         validatePortConflicts(trimmedSutId, winner.affectedEndpoints(), remainingProxies);
+        Map<String, List<ToxiproxyAdminClient.ToxicRecord>> desiredToxics = new LinkedHashMap<>();
+        for (ResolvedSutEndpoint endpoint : winner.affectedEndpoints()) {
+            desiredToxics.put(endpoint.endpointId(), mapFaults(profile, endpoint));
+        }
+        deleteManagedProxies(trimmedSutId, existingProxies);
         for (ResolvedSutEndpoint endpoint : winner.affectedEndpoints()) {
             String proxyName = proxyName(trimmedSutId, endpoint.endpointId());
             ToxiproxyAdminClient.ProxyRecord proxy = new ToxiproxyAdminClient.ProxyRecord(
@@ -198,22 +230,27 @@ public class NetworkBindingService {
                 endpoint.upstreamAuthority(),
                 true);
             toxiproxy.createProxy(proxy);
-            for (ToxiproxyAdminClient.ToxicRecord toxic : mapFaults(profile, endpoint)) {
+            for (ToxiproxyAdminClient.ToxicRecord toxic : desiredToxics.get(endpoint.endpointId())) {
                 toxiproxy.createToxic(proxyName, toxic);
             }
         }
-        haproxy.applyRoutes(routesForWinningBindings(bindingSnapshot));
+        haproxy.applyRoutes(desiredRoutes);
         log.info("reconciled proxied listeners for sut={} using swarm={} profile={} endpoints={}",
             trimmedSutId, winner.swarmId(), winner.networkProfileId(), winner.affectedEndpoints().size());
     }
 
     private void reconcileAllSuts() throws Exception {
-        Set<String> sutIds = bindings.values().stream()
+        reconcileAllSuts(bindings, manualOverrideState);
+    }
+
+    private void reconcileAllSuts(Map<String, NetworkBinding> bindingSnapshot,
+                                  ManualOverrideState overrideState) throws Exception {
+        Set<String> sutIds = bindingSnapshot.values().stream()
             .map(NetworkBinding::sutId)
             .filter(Objects::nonNull)
             .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
         for (String sutId : sutIds) {
-            reconcileSut(sutId);
+            reconcileSut(sutId, bindingSnapshot, overrideState);
         }
     }
 
@@ -243,6 +280,63 @@ public class NetworkBindingService {
                     + "' conflicts with active proxy '" + conflictingProxy + "'");
             }
         }
+    }
+
+    private Map<String, ToxiproxyAdminClient.ProxyRecord> withoutManagedProxies(
+        String sutId,
+        Map<String, ToxiproxyAdminClient.ProxyRecord> existingProxies
+    ) {
+        String prefix = proxyNamePrefix(sutId);
+        Map<String, ToxiproxyAdminClient.ProxyRecord> filtered = new LinkedHashMap<>();
+        for (Map.Entry<String, ToxiproxyAdminClient.ProxyRecord> entry : existingProxies.entrySet()) {
+            if (!entry.getKey().startsWith(prefix)) {
+                filtered.put(entry.getKey(), entry.getValue());
+            }
+        }
+        return filtered;
+    }
+
+    private void replaceBindings(Map<String, NetworkBinding> nextBindings) {
+        bindings.clear();
+        bindings.putAll(nextBindings);
+    }
+
+    private void rollbackSut(String sutId,
+                             Map<String, NetworkBinding> previousBindings,
+                             ManualOverrideState previousOverrideState,
+                             Exception cause) throws Exception {
+        try {
+            reconcileSut(sutId, previousBindings, previousOverrideState);
+        } catch (Exception rollbackEx) {
+            cause.addSuppressed(rollbackEx);
+        }
+        throw cause;
+    }
+
+    private String bindSutId(String swarmId,
+                             String requestedSutId,
+                             Map<String, NetworkBinding> bindingSnapshot) {
+        String normalizedRequestedSutId = requireText(requestedSutId, "sutId");
+        NetworkBinding existingBinding = bindingSnapshot.get(swarmId);
+        if (existingBinding == null) {
+            return normalizedRequestedSutId;
+        }
+        if (!existingBinding.sutId().equals(normalizedRequestedSutId)) {
+            throw new InvalidNetworkBindingRequestException(
+                "request.sutId must match existing binding sutId; changing SUT at runtime is not supported");
+        }
+        return existingBinding.sutId();
+    }
+
+    private void rollbackAllSuts(Map<String, NetworkBinding> bindingSnapshot,
+                                 ManualOverrideState previousOverrideState,
+                                 Exception cause) throws Exception {
+        try {
+            reconcileAllSuts(bindingSnapshot, previousOverrideState);
+        } catch (Exception rollbackEx) {
+            cause.addSuppressed(rollbackEx);
+        }
+        throw cause;
     }
 
     private List<NetworkBinding> winningBindings() {
@@ -374,11 +468,11 @@ public class NetworkBindingService {
         return List.copyOf(toxics);
     }
 
-    private NetworkProfile effectiveProfile(NetworkProfile baseProfile) {
-        if (!manualOverrideState.enabled()) {
+    private NetworkProfile effectiveProfile(NetworkProfile baseProfile, ManualOverrideState overrideState) {
+        if (!overrideState.enabled()) {
             return baseProfile;
         }
-        Set<String> overriddenTypes = manualOverrideState.faults().stream()
+        Set<String> overriddenTypes = overrideState.faults().stream()
             .map(NetworkFault::type)
             .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
         List<NetworkFault> effectiveFaults = new ArrayList<>();
@@ -387,7 +481,7 @@ public class NetworkBindingService {
                 effectiveFaults.add(fault);
             }
         }
-        effectiveFaults.addAll(manualOverrideState.faults());
+        effectiveFaults.addAll(overrideState.faults());
         return new NetworkProfile(baseProfile.id(), baseProfile.name(), effectiveFaults, baseProfile.targets());
     }
 

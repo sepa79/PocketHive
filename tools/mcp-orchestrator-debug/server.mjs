@@ -7,7 +7,11 @@ import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { parseRecordedEntries } from "./server-utils.mjs";
+import {
+  childProcessExited,
+  childProcessIsRunning,
+  parseRecordedEntries
+} from "./server-utils.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -125,7 +129,7 @@ async function runJsonClient(args) {
 }
 
 async function startRecorder() {
-  if (recorderChild && !recorderChild.killed) {
+  if (childProcessIsRunning(recorderChild)) {
     return;
   }
 
@@ -138,15 +142,25 @@ async function startRecorder() {
     env: process.env,
     stdio: ["ignore", "ignore", "pipe"]
   });
+  const child = recorderChild;
+  child.once("close", () => {
+    if (recorderChild === child) {
+      recorderChild = null;
+    }
+  });
 
   let startupError = "";
-  recorderChild.stderr?.on("data", (chunk) => {
+  child.stderr?.on("data", (chunk) => {
     startupError += chunk.toString();
   });
 
   await sleep(400);
-  if (recorderChild.exitCode && recorderChild.exitCode !== 0) {
-    throw new Error(startupError || "Rabbit recorder exited before startup completed.");
+  if (childProcessExited(child)) {
+    const exitCode = child.exitCode;
+    recorderChild = null;
+    throw new Error(
+      startupError || `Rabbit recorder exited before startup completed with code ${exitCode}.`
+    );
   }
 }
 

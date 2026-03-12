@@ -137,4 +137,108 @@ class NetworkBindingControllerTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.enabled").value(true));
     }
+
+    @Test
+    void clearReturnsBadRequestForMismatchedSutId() throws Exception {
+        mvc.perform(post("/api/network/bindings/swarm-a")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "sutId": "sut-a",
+                      "networkMode": "PROXIED",
+                      "networkProfileId": "passthrough",
+                      "requestedBy": "orchestrator",
+                      "resolvedSut": {
+                        "sutId": "sut-a",
+                        "name": "SUT A",
+                        "endpoints": {
+                          "payments": {
+                            "endpointId": "payments",
+                            "kind": "HTTPS",
+                            "clientBaseUrl": "https://proxy.local:9443",
+                            "clientAuthority": "proxy.local:9443",
+                            "upstreamAuthority": "internal-alb:443"
+                          }
+                        }
+                      }
+                    }
+                    """))
+            .andExpect(status().isOk());
+
+        mvc.perform(post("/api/network/bindings/swarm-a/clear")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "sutId": "sut-b",
+                      "requestedBy": "ui"
+                    }
+                    """))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void clearReturnsNotFoundForMissingBinding() throws Exception {
+        mvc.perform(post("/api/network/bindings/missing-swarm/clear")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "sutId": "sut-a",
+                      "requestedBy": "ui"
+                    }
+                    """))
+            .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void bindReturnsBadRequestWhenChangingSutForExistingSwarm() throws Exception {
+        mvc.perform(post("/api/network/bindings/swarm-a")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "sutId": "sut-a",
+                      "networkMode": "PROXIED",
+                      "networkProfileId": "passthrough",
+                      "requestedBy": "orchestrator",
+                      "resolvedSut": {
+                        "sutId": "sut-a",
+                        "name": "SUT A",
+                        "endpoints": {
+                          "payments": {
+                            "endpointId": "payments",
+                            "kind": "HTTPS",
+                            "clientBaseUrl": "https://proxy.local:9443",
+                            "clientAuthority": "proxy.local:9443",
+                            "upstreamAuthority": "internal-alb:443"
+                          }
+                        }
+                      }
+                    }
+                    """))
+            .andExpect(status().isOk());
+
+        mvc.perform(post("/api/network/bindings/swarm-a")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "sutId": "sut-b",
+                      "networkMode": "PROXIED",
+                      "networkProfileId": "passthrough",
+                      "requestedBy": "orchestrator",
+                      "resolvedSut": {
+                        "sutId": "sut-b",
+                        "name": "SUT B",
+                        "endpoints": {
+                          "payments": {
+                            "endpointId": "payments",
+                            "kind": "HTTPS",
+                            "clientBaseUrl": "https://proxy.local:9443",
+                            "clientAuthority": "proxy.local:9443",
+                            "upstreamAuthority": "internal-alb-b:443"
+                          }
+                        }
+                      }
+                    }
+                    """))
+            .andExpect(status().isBadRequest());
+    }
 }
