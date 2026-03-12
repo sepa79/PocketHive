@@ -2,8 +2,17 @@
 
 This playbook defines the exact way to configure and use `clearing-export-service`.
 
+Unless `mode: structured` is set explicitly, the worker remains in template mode.
+
 Canonical schema contract (structured mode SSOT):
 - `docs/clearing/CLEARING_STRUCTURED_SCHEMA_CONTRACT.md`
+
+Current branch changes:
+- Template mode still exists, remains the default when `mode` is omitted, and still uses `headerTemplate`, `recordTemplate`, `footerTemplate`, and `fileNameTemplate`.
+- Structured XML file shape now comes only from the schema file; the worker no longer invents XML element names.
+- Structured schema examples must include `xml.rootElement`, `xml.headerElement`, `xml.recordsElement`, `xml.recordElement`, and `xml.footerElement`.
+- Only `recordsElement` and `recordElement` may be blank, and blank must be explicit.
+- Invalid structured schema/config is a fatal preflight error surfaced through logs, worker status, and one major-event journal alert.
 
 ## 1. Scope guardrails
 
@@ -13,6 +22,8 @@ Canonical schema contract (structured mode SSOT):
 - Keep matching/reconciliation logic upstream.
 
 ## 2. Runtime model (how worker behaves)
+
+This section describes template mode, which remains supported and is unchanged by the structured XML schema hardening.
 
 1. Worker receives a `WorkItem`.
 2. Worker renders one record line using `recordTemplate`.
@@ -83,6 +94,12 @@ Path: `pockethive.worker.config.*`
 | `schemaId` | string | structured only | `""` | Structured schema id to load from registry. |
 | `schemaVersion` | string | structured only | `""` | Structured schema version to load from registry. |
 
+Structured schema note:
+
+- XML schema files must explicitly define `xml.rootElement`, `xml.headerElement`, `xml.recordsElement`, `xml.recordElement`, and `xml.footerElement`.
+- `recordsElement` and `recordElement` may be `""` to suppress those wrappers.
+- `headerElement` and `footerElement` must stay non-blank.
+
 Streaming notes:
 
 - `streamingAppendEnabled=true` is supported only in `mode=template`.
@@ -148,6 +165,9 @@ pockethive:
       schemaRegistryRoot: /app/scenario/clearing-schemas
       schemaId: pcs-clearing
       schemaVersion: "1.0.0"
+      recordSourceStep: latest
+      recordSourceStepIndex: -1
+      recordBuildFailurePolicy: stop
       maxRecordsPerFile: 10
       flushIntervalMs: 1000
       maxBufferedRecords: 50000
@@ -165,17 +185,63 @@ pockethive:
 Example:
 - `scenarios/bundles/clearing-export-structured-demo/clearing-schemas/pcs-clearing/1.0.0/schema.yaml`
 
-### 6.3 Runtime behavior
+### 6.3 Required schema example
+
+```yaml
+schemaId: pcs-clearing
+schemaVersion: "1.0.0"
+outputFormat: xml
+fileNameTemplate: "CLEARING_{{ now }}.xml"
+
+recordMapping:
+  payload:
+    expression: "{{ steps.selected.payload }}"
+    required: true
+    type: string
+  unitAmount:
+    expression: "1"
+    required: true
+    type: long
+
+headerMapping:
+  creationDateTime: "{{ now }}"
+  issuerCode: "ISSUER-PL"
+  schemeCode: "MASTERCARD"
+
+footerMapping:
+  recordCount: "{{ recordCount }}"
+  totalUnits: "{{ totals.sumUnitAmount }}"
+
+xml:
+  declaration: true
+  encoding: UTF-8
+  rootElement: Document
+  headerElement: FileHeader
+  recordsElement: Transactions
+  recordElement: Transaction
+  footerElement: FileTrailer
+  namespaceUri: ""
+  namespacePrefix: ""
+  recordNamespaceUri: ""
+  recordNamespacePrefix: ""
+  indent: false
+```
+
+If wrapper elements are not needed, keep `recordsElement` and `recordElement` present and set them to `""`.
+
+### 6.4 Runtime behavior
 
 1. Worker loads schema by `schemaRegistryRoot + schemaId + schemaVersion`.
 2. Record values are projected with `recordMapping` using the same context as template mode (`steps.*`, `now`).
 3. Header/footer and file name use `now`, `recordCount`, `totals.*`.
 4. XML file is generated and written through standard sink (`.tmp` + atomic rename).
+5. Structured config/schema is preflighted before the worker is enabled. Invalid schema/config halts the worker and emits one major-event journal alert.
 
-### 6.4 Current limits
+### 6.5 Current limits
 
 - `outputFormat` currently supports only `xml`.
 - `streamingAppendEnabled` is template-only and rejected in structured mode.
+- `headerElement` and `footerElement` are required and cannot be blank.
 
 ## 7. Example input payloads
 
@@ -231,8 +297,11 @@ If `writeManifest=true`, a manifest line is appended:
 | `Schema not found under ...` | wrong path/id/version | Validate `schemaRegistryRoot`, `schemaId`, `schemaVersion`, and file exists as `schema.yaml/json/yml`. |
 | `recordMapping must be configured for structured mode` | missing/empty mapping | Add non-empty `recordMapping` in schema file. |
 | `Only xml outputFormat is currently supported` | schema has unsupported `outputFormat` | Set `outputFormat: xml`. |
+| `xml.rootElement must be configured` / `xml.headerElement must be configured` / `xml.footerElement must be configured` | missing required structural XML field | Add the missing required field to the schema file; do not rely on service defaults. |
+| `xml.recordsElement must be configured` / `xml.recordElement must be configured` | wrapper key omitted | Keep the field present; use `""` only when intentionally disabling that wrapper. |
 | `Unsupported field type: ...` | invalid `recordMapping.<field>.type` | Use only `string`, `long`, or `decimal`. |
 | `streamingAppendEnabled is supported only in template mode` | structured + streaming enabled | Remove streaming flag for structured worker. |
+| `Preflight failed: ...` | invalid structured schema/config at enablement time | Check worker status `failurePhase`, `schemaId`, `schemaVersion` and fix the referenced schema/config error. |
 
 ## 11. Common mistakes to avoid
 
