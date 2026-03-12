@@ -48,38 +48,16 @@ public class NetworkProfileService {
             profiles.clear();
             return;
         }
+        requireRegularProfilesFile();
 
         Map<String, NetworkProfile> byId = new ConcurrentHashMap<>();
 
-        if (Files.isDirectory(configPath)) {
-            try (java.nio.file.DirectoryStream<Path> stream =
-                     java.nio.file.Files.newDirectoryStream(configPath, "*.{yaml,yml}")) {
-                for (Path path : stream) {
-                    try {
-                        List<NetworkProfile> loaded = yamlMapper.readValue(path.toFile(), LIST_TYPE);
-                        for (NetworkProfile profile : loaded) {
-                            if (profile == null || profile.id() == null || profile.id().isBlank()) {
-                                continue;
-                            }
-                            NetworkProfile previous = byId.put(profile.id(), profile);
-                            if (previous != null && !previous.equals(profile)) {
-                                log.warn("Duplicate network profile id '{}' while loading {}; keeping latest",
-                                    profile.id(), path);
-                            }
-                        }
-                    } catch (Exception ex) {
-                        log.warn("Failed to load network profiles from {}: {}", path, ex.getMessage());
-                    }
-                }
+        List<NetworkProfile> loaded = yamlMapper.readValue(configPath.toFile(), LIST_TYPE);
+        for (NetworkProfile profile : loaded) {
+            if (profile == null || profile.id() == null || profile.id().isBlank()) {
+                continue;
             }
-        } else {
-            List<NetworkProfile> loaded = yamlMapper.readValue(configPath.toFile(), LIST_TYPE);
-            for (NetworkProfile profile : loaded) {
-                if (profile == null || profile.id() == null || profile.id().isBlank()) {
-                    continue;
-                }
-                byId.put(profile.id(), profile);
-            }
+            byId.put(profile.id(), profile);
         }
 
         profiles.clear();
@@ -107,11 +85,15 @@ public class NetworkProfileService {
         if (!Files.exists(configPath)) {
             return "";
         }
+        requireRegularProfilesFile();
         return Files.readString(configPath);
     }
 
     public synchronized void updateFromRaw(String yaml) throws IOException {
         Objects.requireNonNull(yaml, "yaml");
+        if (Files.exists(configPath)) {
+            requireRegularProfilesFile();
+        }
         try (StringReader reader = new StringReader(yaml)) {
             List<NetworkProfile> parsed = yamlMapper.readValue(reader, LIST_TYPE);
             if (parsed == null) {
@@ -132,5 +114,11 @@ public class NetworkProfileService {
         }
 
         reload();
+    }
+
+    private void requireRegularProfilesFile() throws IOException {
+        if (Files.isDirectory(configPath)) {
+            throw new IOException("pockethive.network.profiles-path must point to a single YAML file, not a directory: " + configPath);
+        }
     }
 }

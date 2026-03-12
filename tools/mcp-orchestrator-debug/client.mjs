@@ -41,14 +41,14 @@ const RABBIT_MGMT_BASE_URL =
 
 function printUsage() {
   console.error(
-      "Usage:\n" +
+    "Usage:\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs list-swarms\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs get-swarm <swarmId>\n" +
+      "  node tools/mcp-orchestrator-debug/client.mjs swarm-snapshot <swarmId>\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs worker-configs <swarmId>\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs list-scenarios\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs get-scenario <scenarioId>\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs create-swarm <swarmId> <templateId> [notes]\n" +
-      "  node tools/mcp-orchestrator-debug/client.mjs swarm-plan <swarmId> <scenarioId> <instanceId>\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs start-swarm <swarmId> [notes]\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs stop-swarm <swarmId> [notes]\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs remove-swarm <swarmId> [notes]\n" +
@@ -62,14 +62,13 @@ function printUsage() {
       "  node tools/mcp-orchestrator-debug/client.mjs hive-journal [--swarmId <swarmId>] [--runId <runId>] [--correlationId <id>] [--limit <n>] [--pages <n>|--all]\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs commands\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs get-recorded\n" +
-      "  (append --record to create/plan/start/stop/remove to capture control-plane messages)\n\n" +
+      "  (append --record to create/start/stop/remove to capture control-plane messages)\n\n" +
       "Examples:\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs list-swarms\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs get-swarm foo\n" +
+      "  node tools/mcp-orchestrator-debug/client.mjs swarm-snapshot foo\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs worker-configs foo\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs create-swarm foo local-rest-defaults\n" +
-      "  node tools/mcp-orchestrator-debug/client.mjs create-swarm proxy-http-smoke http-proxy-demo --sutId wiremock-proxy-local --networkMode PROXIED --networkProfileId passthrough\n" +
-      "  node tools/mcp-orchestrator-debug/client.mjs swarm-plan foo local-rest-plan-demo swarm-controller-1 --record\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs start-swarm foo --record\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs remove-swarm foo --record\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs status-request foo processor foo-worker-bee-1234\n" +
@@ -110,6 +109,12 @@ const COMMANDS = [
     params: ["swarmId"],
   },
   {
+    name: "swarm-snapshot",
+    description:
+      "Aggregate view for a swarm: REST status, work/control queues, recent control-plane messages",
+    params: ["swarmId"],
+  },
+  {
     name: "worker-configs",
     description:
       "Dump latest worker config snapshot for a swarm by listening to status events on the control exchange",
@@ -133,15 +138,8 @@ const COMMANDS = [
       "[notes]",
       "[--sutId <sutId>]",
       "[--variablesProfileId <profileId>]",
-      "[--networkMode DIRECT|PROXIED]",
-      "[--networkProfileId <profileId>]",
       "[--record]",
     ],
-  },
-  {
-    name: "swarm-plan",
-    description: "Send a swarm-plan signal via AMQP from a Scenario Manager plan",
-    params: ["swarmId", "scenarioId", "instanceId", "[--record]"],
   },
   {
     name: "start-swarm",
@@ -253,6 +251,17 @@ async function main() {
       return;
     }
 
+    if (subcommand === "swarm-snapshot") {
+      const swarmId = args[1];
+      if (!swarmId) {
+        console.error("swarm-snapshot requires a swarm id");
+        process.exit(1);
+      }
+      const snapshot = await buildSwarmSnapshot(swarmId);
+      console.log(JSON.stringify(snapshot, null, 2));
+      return;
+    }
+
     if (subcommand === "worker-configs") {
       const swarmId = args[1];
       if (!swarmId) {
@@ -352,12 +361,6 @@ async function main() {
           console.error("create-swarm requires <swarmId> and <templateId>");
           process.exit(1);
         }
-        if (!flags.sutId || !flags.variablesProfileId) {
-          console.error(
-            "Hint: some scenarios require both --sutId and --variablesProfileId for variable resolution.\n" +
-              "Example: node tools/mcp-orchestrator-debug/client.mjs create-swarm <swarmId> <templateId> --sutId webauth-local --variablesProfileId default"
-          );
-        }
         const body = {
           templateId,
           idempotencyKey: randomIdempotencyKey(),
@@ -366,57 +369,12 @@ async function main() {
           ...(flags.variablesProfileId
             ? { variablesProfileId: String(flags.variablesProfileId) }
             : {}),
-          ...(flags.networkMode ? { networkMode: String(flags.networkMode) } : {}),
-          ...(flags.networkProfileId
-            ? { networkProfileId: String(flags.networkProfileId) }
-            : {}),
         };
-        try {
-          const resp = await httpJson(
-            `/api/swarms/${encodeURIComponent(swarmId)}/create`,
-            { method: "POST", body }
-          );
-          console.log(JSON.stringify(resp ?? null, null, 2));
-        } catch (err) {
-          const message = String(err?.message ?? err);
-          if (message.includes("Failed to resolve scenario variables")) {
-            console.error(
-              "Create failed while resolving scenario variables. Provide --sutId and --variablesProfileId.\n" +
-                "Example: node tools/mcp-orchestrator-debug/client.mjs create-swarm <swarmId> <templateId> --sutId webauth-local --variablesProfileId default"
-            );
-          }
-          throw err;
-        }
-      });
-      if (recordEnabled) {
-        await printRecorded();
-      }
-      return;
-    }
-
-    if (subcommand === "swarm-plan") {
-      await withOptionalRecording(async () => {
-        const swarmId = args[1];
-        const scenarioId = args[2];
-        const instanceId = args[3];
-        if (!swarmId || !scenarioId || !instanceId) {
-          console.error("swarm-plan requires <swarmId> <scenarioId> <instanceId>");
-          process.exit(1);
-        }
-        const plan = await fetchScenarioPlan(scenarioId);
-        await sendSwarmPlan(swarmId, instanceId, plan);
-        console.log(
-          JSON.stringify(
-            {
-              swarmId,
-              scenarioId,
-              instanceId,
-              routingKey: `signal.swarm-plan.${swarmId}.swarm-controller.${instanceId}`,
-            },
-            null,
-            2
-          )
+        const resp = await httpJson(
+          `/api/swarms/${encodeURIComponent(swarmId)}/create`,
+          { method: "POST", body }
         );
+        console.log(JSON.stringify(resp ?? null, null, 2));
       });
       if (recordEnabled) {
         await printRecorded();
@@ -669,24 +627,6 @@ async function httpJson(path, options = {}) {
   }
 }
 
-async function fetchScenarioPlan(scenarioId) {
-  const trimmed = String(scenarioId ?? "").trim();
-  if (!trimmed) {
-    throw new Error("scenarioId must not be blank");
-  }
-  const base = SCENARIO_MANAGER_BASE_URL.replace(/\/+$/, "");
-  const url = `${base}/scenarios/${encodeURIComponent(trimmed)}`;
-  const scenario = await httpJson(url);
-  const plan = scenario?.plan;
-  if (!plan || typeof plan !== "object" || Array.isArray(plan)) {
-    throw new Error(`Scenario '${trimmed}' has no plan to send`);
-  }
-  if (Object.keys(plan).length === 0) {
-    throw new Error(`Scenario '${trimmed}' has an empty plan`);
-  }
-  return plan;
-}
-
 function randomIdempotencyKey() {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
     return crypto.randomUUID();
@@ -770,6 +710,85 @@ function readRecordedEntries() {
   return entries;
 }
 
+async function buildSwarmSnapshot(swarmId) {
+  const trimmed = String(swarmId).trim();
+
+  // Swarm status from orchestrator
+  let swarm = null;
+  try {
+    swarm = await httpJson(`/api/swarms/${encodeURIComponent(trimmed)}`);
+  } catch (err) {
+    swarm = { error: String(err) };
+  }
+
+  // Queues from Rabbit management API
+  let queues = [];
+  try {
+    queues = await listQueues();
+  } catch (err) {
+    queues = { error: String(err) };
+  }
+
+  const workQueues = Array.isArray(queues)
+    ? queues
+        .filter(
+          (q) =>
+            typeof q?.name === "string" &&
+            q.name.startsWith(`ph.${trimmed}.`)
+        )
+        .map((q) => q.name)
+        .sort()
+    : [];
+
+  const controlQueues = Array.isArray(queues)
+    ? queues
+        .filter(
+          (q) =>
+            typeof q?.name === "string" &&
+            q.name.startsWith(`ph.control.${trimmed}.`)
+        )
+        .map((q) => q.name)
+        .sort()
+    : [];
+
+  // Control-plane messages from recording (if present)
+  const recorded = readRecordedEntries();
+  const controlMessages = recorded.filter((entry) => {
+    if (!entry || typeof entry !== "object") {
+      return false;
+    }
+    const rk = entry.routingKey || "";
+    if (typeof rk === "string" && rk.includes(`.${trimmed}.`)) {
+      return true;
+    }
+    // Try to inspect JSON body for swarmId hints
+    if (typeof entry.body === "string") {
+      try {
+        const parsed = JSON.parse(entry.body);
+        if (
+          parsed &&
+          typeof parsed === "object" &&
+          parsed.swarmId === trimmed
+        ) {
+          return true;
+        }
+      } catch {
+        // ignore parse errors
+      }
+    }
+    return false;
+  });
+
+  return {
+    swarmId: trimmed,
+    orchestrator: swarm,
+    queues: {
+      work: workQueues,
+      control: controlQueues,
+    },
+    controlMessages,
+  };
+}
 
 /**
  * Collects the latest worker config snapshot for a given swarm by listening to
@@ -1018,18 +1037,7 @@ async function sendStatusRequest(swarmId, role, instanceId) {
   try {
     const exchange = controlExchange();
     const rk = `signal.status-request.${swarmId}.${role}.${instanceId}`;
-    const correlationId = randomCorrelationId();
-    const payload = JSON.stringify({
-      timestamp: new Date().toISOString(),
-      version: "1",
-      kind: "signal",
-      type: "status-request",
-      origin: "mcp-orchestrator-debug-client",
-      scope: { swarmId, role, instance: instanceId },
-      correlationId,
-      idempotencyKey: null,
-      data: null,
-    });
+    const payload = JSON.stringify({});
     await ch.assertExchange(exchange, "topic", { durable: true });
     ch.publish(exchange, rk, Buffer.from(payload, "utf8"), {
       contentType: "application/json",
@@ -1046,56 +1054,6 @@ async function sendStatusRequest(swarmId, role, instanceId) {
       // ignore
     }
   }
-}
-
-async function sendSwarmPlan(swarmId, instanceId, plan) {
-  const url = rabbitUrl();
-  const conn = await amqplib.connect(url);
-  const ch = await conn.createChannel();
-  try {
-    const exchange = controlExchange();
-    const rk = `signal.swarm-plan.${swarmId}.swarm-controller.${instanceId}`;
-    const correlationId = randomCorrelationId();
-    const idempotencyKey = randomIdempotencyKey();
-    const payload = JSON.stringify({
-      timestamp: new Date().toISOString(),
-      version: "1",
-      kind: "signal",
-      type: "swarm-plan",
-      origin: "mcp-orchestrator-debug-client",
-      scope: { swarmId, role: "swarm-controller", instance: instanceId },
-      correlationId,
-      idempotencyKey,
-      data: plan,
-    });
-    await ch.assertExchange(exchange, "topic", { durable: true });
-    ch.publish(exchange, rk, Buffer.from(payload, "utf8"), {
-      contentType: "application/json",
-    });
-  } finally {
-    try {
-      await ch.close();
-    } catch {
-      // ignore
-    }
-    try {
-      await conn.close();
-    } catch {
-      // ignore
-    }
-  }
-}
-
-function randomCorrelationId() {
-  if (typeof crypto !== "undefined" && crypto.randomUUID) {
-    return crypto.randomUUID();
-  }
-  return (
-    "corr-" +
-    Date.now().toString(36) +
-    "-" +
-    Math.floor(Math.random() * 1e9).toString(36)
-  );
 }
 
 main().catch((err) => {

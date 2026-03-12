@@ -1,7 +1,8 @@
 # Network Proxy Plan
 
-> Status: in progress
+> Status: v1 done
 > Scope: Scenario Manager, Orchestrator, Swarm Controller, UI V2, external proxy control plane
+> Note: remaining unchecked items below are post-v1 follow-up, not blockers for the delivered v1 scope.
 
 This plan introduces a controlled network-fault layer for PocketHive runs so swarms can route SUT traffic through a proxy stack and apply fault profiles without hand-editing existing scenarios.
 
@@ -310,10 +311,10 @@ The exact DTOs must be defined once in a canonical contract module or schema, no
 
 ### M0 - Architecture and contracts
 
-- [ ] Finalize `NetworkProfile` contract and registry location.
-- [ ] Finalize runtime boundary with the future SUT redesign.
-- [ ] Define canonical REST DTOs for proxy manager integration.
-- [ ] Define journal/status fields for network profile state.
+- [x] Finalize `NetworkProfile` contract and registry location.
+- [x] Finalize runtime boundary with the future SUT redesign.
+- [x] Define canonical REST DTOs for proxy manager integration.
+- [x] Define journal/status fields for network profile state.
 
 Exit criteria:
 
@@ -322,11 +323,11 @@ Exit criteria:
 
 ### M1 - Shared-per-SUT secure proxy foundation
 
-- [ ] Stand up `network-proxy-manager-service`.
-- [ ] Add HAProxy + Toxiproxy deployment for local/runtime environments.
-- [ ] Support `HTTPS` and `TCPS` through the proxy stack.
-- [ ] Implement create/remove binding flow from orchestrator.
-- [ ] Persist `networkMode` and `networkProfileId` in swarm state and journal.
+- [x] Stand up `network-proxy-manager-service`.
+- [x] Add HAProxy + Toxiproxy deployment for local/runtime environments.
+- [x] Support `HTTPS` and `TCPS` through the proxy stack.
+- [x] Implement create/remove binding flow from orchestrator.
+- [x] Persist `networkMode` and `networkProfileId` in swarm state and journal.
 
 Exit criteria:
 
@@ -336,17 +337,17 @@ Exit criteria:
 
 ### M2 - UI control surface
 
-- [ ] Add profile selector to Create Swarm modal.
-- [ ] Add swarm network panel in UI V2.
-- [ ] Add runtime actions: apply profile, clear profile, refresh state.
-- [ ] Add blast-radius warning for v1 shared-per-SUT behavior.
+- [x] Add profile selector to Create Swarm modal.
+- [x] Add swarm network panel in UI V2.
+- [x] Add runtime actions: apply profile, clear profile, refresh state.
+- [x] Add blast-radius warning for v1 shared-per-SUT behavior.
 
 Exit criteria:
 
 - operator can create a swarm with proxy enabled from UI only
 - operator can inspect and switch profile at runtime from UI only
 
-### M3 - Scenario plan integration
+### M3 - Scenario plan integration (parked post-v1)
 
 - [ ] Extend Scenario Plan contract with `network-profile`.
 - [ ] Implement controller-side execution for `network-profile`.
@@ -371,32 +372,32 @@ Exit criteria:
 
 ### Contracts
 
-- [ ] `NetworkProfile` schema
-- [ ] `NetworkBinding` schema
-- [ ] Orchestrator create/update request changes
-- [ ] Status/journal payload updates
+- [x] `NetworkProfile` schema
+- [x] `NetworkBinding` schema
+- [x] Orchestrator create/update request changes
+- [x] Status/journal payload updates
 
 ### Services
 
-- [ ] Scenario Manager profile registry
-- [ ] Orchestrator proxy-manager client
+- [x] Scenario Manager profile registry
+- [x] Orchestrator proxy-manager client
 - [ ] Swarm Controller runtime profile client
-- [ ] New proxy manager service
+- [x] New proxy manager service
 
 ### UI
 
-- [ ] Create Swarm selector
-- [ ] Swarm network status panel
-- [ ] Proxy console
-- [ ] Runtime apply/clear actions
+- [x] Create Swarm selector
+- [x] Swarm network status panel
+- [x] Proxy console
+- [x] Runtime apply/clear actions
 
 ### Testing
 
-- [ ] Local compose path for proxy stack
-- [ ] Integration tests for binding/apply/clear lifecycle
-- [ ] `HTTPS` verification path
-- [ ] `TCPS` verification path
-- [ ] Failure tests for missing profile / unsupported endpoint / broken upstream
+- [x] Local compose path for proxy stack
+- [x] Integration tests for binding/apply/clear lifecycle
+- [x] `HTTPS` verification path
+- [x] `TCPS` verification path
+- [x] Failure tests for missing profile / unsupported endpoint / broken upstream
 
 ## 11. Open questions
 

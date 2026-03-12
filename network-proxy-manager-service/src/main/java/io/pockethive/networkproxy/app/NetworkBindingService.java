@@ -87,16 +87,20 @@ public class NetworkBindingService {
             request.requestedBy(),
             Instant.now(),
             affectedEndpoints);
+        Map<String, NetworkBinding> candidateBindings = new LinkedHashMap<>(bindings);
+        candidateBindings.put(id, binding);
+        reconcileSut(request.sutId(), candidateBindings);
         bindings.put(id, binding);
-        reconcileSut(request.sutId());
         return binding;
     }
 
     public synchronized NetworkBinding clear(String swarmId, NetworkBindingClearRequest request) throws Exception {
         String id = trimmedSwarmId(swarmId);
         Objects.requireNonNull(request, "request");
+        Map<String, NetworkBinding> candidateBindings = new LinkedHashMap<>(bindings);
+        candidateBindings.remove(id);
+        reconcileSut(request.sutId(), candidateBindings);
         bindings.remove(id);
-        reconcileSut(request.sutId());
         return new NetworkBinding(
             id,
             request.sutId(),
@@ -165,8 +169,12 @@ public class NetworkBindingService {
     }
 
     private void reconcileSut(String sutId) throws Exception {
+        reconcileSut(sutId, bindings);
+    }
+
+    private void reconcileSut(String sutId, Map<String, NetworkBinding> bindingSnapshot) throws Exception {
         String trimmedSutId = requireText(sutId, "sutId");
-        List<NetworkBinding> activeBindings = bindings.values().stream()
+        List<NetworkBinding> activeBindings = bindingSnapshot.values().stream()
             .filter(binding -> binding.sutId().equals(trimmedSutId))
             .filter(binding -> binding.networkMode() == NetworkMode.PROXIED)
             .sorted(Comparator.comparing(NetworkBinding::appliedAt))
@@ -174,7 +182,7 @@ public class NetworkBindingService {
         Map<String, ToxiproxyAdminClient.ProxyRecord> existingProxies = toxiproxy.listProxies();
         deleteManagedProxies(trimmedSutId, existingProxies);
         if (activeBindings.isEmpty()) {
-            haproxy.applyRoutes(routesForWinningBindings());
+            haproxy.applyRoutes(routesForWinningBindings(bindingSnapshot));
             log.info("cleared all proxied listeners for sut={}", trimmedSutId);
             return;
         }
@@ -194,7 +202,7 @@ public class NetworkBindingService {
                 toxiproxy.createToxic(proxyName, toxic);
             }
         }
-        haproxy.applyRoutes(routesForWinningBindings());
+        haproxy.applyRoutes(routesForWinningBindings(bindingSnapshot));
         log.info("reconciled proxied listeners for sut={} using swarm={} profile={} endpoints={}",
             trimmedSutId, winner.swarmId(), winner.networkProfileId(), winner.affectedEndpoints().size());
     }
@@ -238,7 +246,11 @@ public class NetworkBindingService {
     }
 
     private List<NetworkBinding> winningBindings() {
-        return bindings.values().stream()
+        return winningBindings(bindings);
+    }
+
+    private List<NetworkBinding> winningBindings(Map<String, NetworkBinding> bindingSnapshot) {
+        return bindingSnapshot.values().stream()
             .filter(binding -> binding.networkMode() == NetworkMode.PROXIED)
             .collect(java.util.stream.Collectors.groupingBy(
                 NetworkBinding::sutId,
@@ -251,8 +263,12 @@ public class NetworkBindingService {
     }
 
     private List<HaproxyAdminClient.RouteRecord> routesForWinningBindings() {
+        return routesForWinningBindings(bindings);
+    }
+
+    private List<HaproxyAdminClient.RouteRecord> routesForWinningBindings(Map<String, NetworkBinding> bindingSnapshot) {
         Map<Integer, String> occupiedFrontendPorts = new LinkedHashMap<>();
-        return winningBindings().stream()
+        return winningBindings(bindingSnapshot).stream()
             .flatMap(binding -> binding.affectedEndpoints().stream()
                 .sorted(Comparator.comparing(ResolvedSutEndpoint::endpointId))
                 .map(endpoint -> toHaproxyRoute(binding.sutId(), endpoint, occupiedFrontendPorts)))

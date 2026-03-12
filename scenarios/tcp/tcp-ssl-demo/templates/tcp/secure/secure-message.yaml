@@ -4,14 +4,10 @@ protocol: TCP
 behavior: REQUEST_RESPONSE
 transport: socket
 bodyTemplate: |
-  -----BEGIN SECURE MESSAGE-----
-  Session-ID: {{ payloadAsJson.sessionId }}
-  Timestamp: {{ payloadAsJson.timestamp }}
-  Data: {{ payloadAsJson.encryptedData }}
-  Signature: {{ payloadAsJson.signature }}
-  -----END SECURE MESSAGE-----
+  -----BEGIN SECURE MESSAGE----- Session-ID: {{ payloadAsJson.sessionId }} Timestamp: {{ payloadAsJson.timestamp }} Data: {{ payloadAsJson.encryptedData }} Signature: {{ payloadAsJson.signature }} -----END SECURE MESSAGE-----
+
 headersTemplate:
   Session-ID: "{{ payloadAsJson.sessionId }}"
   Security-Level: "high"
-endTag: "-----END SECURE MESSAGE-----"
+endTag: "-----END SECURE RESPONSE-----"
 maxBytes: 8192

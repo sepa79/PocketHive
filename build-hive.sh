@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}"
 
-ALL_SERVICES=(rabbitmq log-aggregator scenario-manager network-proxy-manager haproxy orchestrator tcp-mock-server ui ui-v2 prometheus grafana loki wiremock pushgateway redis redis-commander swarm-controller generator request-builder http-sequence moderator processor postprocessor clearing-export trigger)
+ALL_SERVICES=(rabbitmq log-aggregator scenario-manager network-proxy-manager haproxy orchestrator tcp-mock-server tcp-mock-server-tls toxiproxy ui ui-v2 prometheus grafana loki wiremock pushgateway redis redis-commander swarm-controller generator request-builder http-sequence moderator processor postprocessor clearing-export trigger)
 declare -A DURATIONS=()
 TIMING_ORDER=(clean build_base maven_package stage_artifacts docker_build_workers docker_build compose_up restart)
 BUILD_START_TIME=0
@@ -80,7 +80,7 @@ usage() {
 Usage: $(basename "$0") [options]
 
 Options:
-  --quick                 Skip tests during the Maven build (-DskipTests).
+  --quick                 Skip tests and Maven clean/cache purge for faster iterations.
   --module <name>         Rebuild a given module (repeatable).
   --service <name>        Rebuild a docker-compose service (repeatable).
   --clean                 Stop the stack and remove stale containers before building.
@@ -91,8 +91,8 @@ Options:
   --help                  Show this help.
 
 Behaviour:
-  • No flags → local Maven build with tests, rebuild all services, start the full stack (does NOT run 'mvn clean').
-  • --quick  → skips tests for faster iterations.
+  • No flags → local Maven clean package with tests, clears PocketHive local Maven cache, rebuilds all services, starts the full stack.
+  • --quick  → skips tests and keeps existing Maven/target state for faster iterations.
   • --service generator --module orchestrator-service → rebuild specific services.
 
 Environment:
@@ -311,7 +311,12 @@ run_maven_package() {
   (( ${#modules[@]} == 0 )) && return
   local csv
   csv=$(IFS=,; echo "${modules[*]}")
-  local mvn_cmd=(mvn -B -pl "$csv" -am package)
+  local mvn_goals=(package)
+  if ! $SKIP_TESTS; then
+    mvn_goals=(clean package)
+    reset_local_build_state
+  fi
+  local mvn_cmd=(mvn -B -pl "$csv" -am "${mvn_goals[@]}")
   if $SKIP_TESTS; then
     mvn_cmd+=("-DskipTests")
   fi
@@ -322,6 +327,17 @@ run_maven_package() {
 
   echo "Packaging modules (${csv}) via local Maven"
   "${mvn_cmd[@]}"
+}
+
+reset_local_build_state() {
+  echo "Resetting local staged jars (${LOCAL_ARTIFACTS_DIR})"
+  rm -rf "${LOCAL_ARTIFACTS_DIR}"
+
+  local repo_group_dir="${HOME}/.m2/repository/io/pockethive"
+  if [[ -d "${repo_group_dir}" ]]; then
+    echo "Removing local Maven cache (${repo_group_dir})"
+    rm -rf "${repo_group_dir}"
+  fi
 }
 
 stage_artifacts() {

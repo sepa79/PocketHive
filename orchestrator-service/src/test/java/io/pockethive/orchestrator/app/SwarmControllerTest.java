@@ -356,6 +356,114 @@ class SwarmControllerTest {
     }
 
     @Test
+    void createFailsWhenNetworkProfileLookupFails() throws Exception {
+        SwarmCreateTracker tracker = new SwarmCreateTracker();
+        SwarmPlanRegistry plans = new SwarmPlanRegistry();
+        SwarmTemplate template = new SwarmTemplate("ctrl-image", List.of(
+            new Bee("generator", "img", Work.ofDefaults(null, "out"), java.util.Map.of())
+        ));
+        when(scenarioClient.fetchScenario("tpl-1")).thenReturn(new ScenarioPlan(template, null, null, null));
+        when(scenarioClient.prepareScenarioRuntime("tpl-1", "sw1")).thenReturn("/tmp/runtime/sw1");
+        when(scenarioClient.fetchNetworkProfile(eq("missing-profile"), anyString(), eq("idem")))
+            .thenThrow(new IllegalStateException("missing profile missing-profile"));
+        SwarmController ctrl = controller(tracker, new SwarmStore(), plans);
+
+        assertThatThrownBy(() -> ctrl.create("sw1", new SwarmCreateRequest(
+            "tpl-1",
+            "idem",
+            null,
+            false,
+            "sut-A",
+            null,
+            NetworkMode.PROXIED,
+            "missing-profile")))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("Failed to resolve network profile 'missing-profile'");
+
+        verify(scenarioClient).fetchNetworkProfile(eq("missing-profile"), anyString(), eq("idem"));
+        verifyNoInteractions(networkProxyClient);
+        verifyNoInteractions(lifecycle);
+    }
+
+    @Test
+    void createFailsWhenProxiedSutUsesUnsupportedEndpointScheme() throws Exception {
+        SwarmCreateTracker tracker = new SwarmCreateTracker();
+        SwarmPlanRegistry plans = new SwarmPlanRegistry();
+        SwarmTemplate template = new SwarmTemplate("ctrl-image", List.of(
+            new Bee("processor", "img", Work.ofDefaults("in", "out"), java.util.Map.of())
+        ));
+        when(scenarioClient.fetchScenario("tpl-1")).thenReturn(new ScenarioPlan(template, null, null, null));
+        when(scenarioClient.prepareScenarioRuntime("tpl-1", "sw1")).thenReturn("/tmp/runtime/sw1");
+        when(scenarioClient.fetchNetworkProfile(eq("passthrough"), anyString(), eq("idem")))
+            .thenReturn(new NetworkProfile("passthrough", "Passthrough", List.of(), List.of("default")));
+        when(scenarioClient.fetchScenarioSut(eq("tpl-1"), eq("sut-A"), anyString(), eq("idem")))
+            .thenReturn(new SutEnvironment(
+                "sut-A",
+                "SUT A",
+                null,
+                Map.of("default", new io.pockethive.swarm.model.SutEndpoint(
+                    "default",
+                    "SMTP",
+                    "smtp://mail.testenv.company.com",
+                    "smtp://smtp-upstream.internal"))));
+        SwarmController ctrl = controller(tracker, new SwarmStore(), plans);
+
+        assertThatThrownBy(() -> ctrl.create("sw1", new SwarmCreateRequest(
+            "tpl-1",
+            "idem",
+            null,
+            false,
+            "sut-A",
+            null,
+            NetworkMode.PROXIED,
+            "passthrough")))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("Unsupported SUT endpoint scheme 'smtp'");
+
+        verifyNoInteractions(networkProxyClient);
+        verifyNoInteractions(lifecycle);
+    }
+
+    @Test
+    void createFailsWhenProxiedSutIsMissingUpstreamBaseUrl() throws Exception {
+        SwarmCreateTracker tracker = new SwarmCreateTracker();
+        SwarmPlanRegistry plans = new SwarmPlanRegistry();
+        SwarmTemplate template = new SwarmTemplate("ctrl-image", List.of(
+            new Bee("processor", "img", Work.ofDefaults("in", "out"), java.util.Map.of())
+        ));
+        when(scenarioClient.fetchScenario("tpl-1")).thenReturn(new ScenarioPlan(template, null, null, null));
+        when(scenarioClient.prepareScenarioRuntime("tpl-1", "sw1")).thenReturn("/tmp/runtime/sw1");
+        when(scenarioClient.fetchNetworkProfile(eq("passthrough"), anyString(), eq("idem")))
+            .thenReturn(new NetworkProfile("passthrough", "Passthrough", List.of(), List.of("default")));
+        when(scenarioClient.fetchScenarioSut(eq("tpl-1"), eq("sut-A"), anyString(), eq("idem")))
+            .thenReturn(new SutEnvironment(
+                "sut-A",
+                "SUT A",
+                null,
+                Map.of("default", new io.pockethive.swarm.model.SutEndpoint(
+                    "default",
+                    "HTTPS",
+                    "https://proxy.testenv.company.com:9443",
+                    null))));
+        SwarmController ctrl = controller(tracker, new SwarmStore(), plans);
+
+        assertThatThrownBy(() -> ctrl.create("sw1", new SwarmCreateRequest(
+            "tpl-1",
+            "idem",
+            null,
+            false,
+            "sut-A",
+            null,
+            NetworkMode.PROXIED,
+            "passthrough")))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("endpoint.upstreamBaseUrl must be provided when networkMode=PROXIED");
+
+        verifyNoInteractions(networkProxyClient);
+        verifyNoInteractions(lifecycle);
+    }
+
+    @Test
     void updateNetworkAppliesProxiedBindingForExistingSwarm() throws Exception {
         SwarmStore registry = new SwarmStore();
         Swarm swarm = new Swarm("sw1", "inst", "c1", "run-1");

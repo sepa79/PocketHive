@@ -2,6 +2,9 @@
 
 This document is the single source of truth for `mode: structured` schema files used by `clearing-export-service`.
 
+It applies only to structured mode. Template mode remains supported separately and continues to use
+`headerTemplate`, `recordTemplate`, `footerTemplate`, and `fileNameTemplate`.
+
 Implementation source:
 - `clearing-export-service/src/main/java/io/pockethive/clearingexport/ClearingStructuredSchema.java`
 - `clearing-export-service/src/main/java/io/pockethive/clearingexport/ClearingStructuredSchemaRegistry.java`
@@ -39,12 +42,12 @@ Required top-level fields:
 - `schemaVersion` (string, non-blank)
 - `fileNameTemplate` (string, non-blank)
 - `recordMapping` (map, non-empty)
+- `xml` (object, required for `outputFormat: xml`; see section 4)
 
 Optional top-level fields:
 - `outputFormat` (string, default: `xml`)
 - `headerMapping` (map string->string, default: empty map)
 - `footerMapping` (map string->string, default: empty map)
-- `xml` (object, default values applied; see section 4)
 
 Current formatter support:
 - only `outputFormat: xml` is accepted
@@ -76,19 +79,34 @@ Runtime meaning:
 
 ## 4. `xml` contract
 
-Supported fields:
+`xml` is required because the schema is the single source of truth for XML document shape.
+
+Required structural fields:
+- `rootElement` (string, required, non-blank)
+- `headerElement` (string, required, non-blank)
+- `recordsElement` (string, required, blank allowed to mean no records wrapper)
+- `recordElement` (string, required, blank allowed to mean no per-record wrapper)
+- `footerElement` (string, required, non-blank)
+
+Serializer/mechanics fields:
 - `declaration` (bool, default: `true`)
 - `encoding` (string, default: `UTF-8`)
-- `rootElement` (string, default: `Document`)
-- `headerElement` (string, default: `FileHeader`)
-- `recordsElement` (string, default: `Transactions`)
-- `recordElement` (string, default: `Transaction`)
-- `footerElement` (string, default: `FileTrailer`)
 - `namespaceUri` (string, default: empty)
 - `namespacePrefix` (string, default: empty)
 - `recordNamespaceUri` (string, default: empty)
 - `recordNamespacePrefix` (string, default: empty)
 - `indent` (bool, default: `false`)
+
+Rules:
+- The service does not invent structural XML element names.
+- Schema examples in this repo must include all structural `xml.*Element` fields explicitly.
+- `headerElement` and `footerElement` are not disableable.
+- `recordsElement=""` skips the collection wrapper.
+- `recordElement=""` writes each record's fields directly under the current parent.
+
+Compatibility:
+- This is a breaking contract change for schemas that previously omitted structural XML fields and relied on service defaults.
+- Schemas that already set all structural XML fields explicitly continue to work unchanged.
 
 ## 5. Header/footer template context
 
@@ -139,3 +157,25 @@ xml:
 
 Reference sample in repo:
 - `scenarios/bundles/clearing-export-structured-demo/clearing-schemas/pcs-clearing/1.0.0/schema.yaml`
+
+## 6.1 Wrapperless variant
+
+If a protocol does not need collection or per-record wrapper elements, keep the required keys
+present and set only the wrapper fields blank explicitly:
+
+```yaml
+xml:
+  rootElement: Document
+  headerElement: FileHeader
+  recordsElement: ""
+  recordElement: ""
+  footerElement: FileTrailer
+```
+
+`headerElement` and `footerElement` remain required and must stay non-blank.
+
+## 7. Runtime validation and observability
+
+- Invalid structured schema/config is treated as a fatal preflight error.
+- The worker emits one control-plane alert for that major event and then halts.
+- Ongoing diagnostics belong in worker status data (`fatalError`, `failurePhase`, `schemaId`, `schemaVersion`), not repeated journal events.

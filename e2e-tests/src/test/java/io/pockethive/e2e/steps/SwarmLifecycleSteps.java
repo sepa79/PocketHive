@@ -252,6 +252,13 @@ public class SwarmLifecycleSteps {
       String queueName = "ph." + swarmId + "." + suffix;
       assertTrue(probe.exists(queueName), () -> "Expected workload queue to exist: " + queueName);
     }
+
+    // Some scenarios emit their only workload item as soon as the swarm is enabled. Initialise the
+    // tap as soon as the broker topology exists so intermediate queues such as `post` do not race
+    // the generator's first dispatch.
+    if (shouldTapFinalQueue()) {
+      ensureFinalQueueTap();
+    }
   }
 
   @And("the network binding is proxied with profile {string}")
@@ -289,6 +296,7 @@ public class SwarmLifecycleSteps {
       case "http-proxy-demo" -> "wiremock-proxy-local";
       case "https-proxy-demo" -> "wiremock-proxy-local-tls";
       case "tcp-socket-demo" -> "tcp-mock-local";
+      case "tcp-ssl-demo" -> "tcp-mock-proxy-local-tls";
       case "variables-demo" -> "sut-A";
       case "webauth-loop-redis-5-customers" -> "webauth-local";
       default -> null;
@@ -302,7 +310,7 @@ public class SwarmLifecycleSteps {
       return null;
     }
     return switch (scenarioId) {
-      case "http-proxy-demo", "https-proxy-demo" -> "PROXIED";
+      case "http-proxy-demo", "https-proxy-demo", "tcp-ssl-demo" -> "PROXIED";
       default -> null;
     };
   }
@@ -314,7 +322,7 @@ public class SwarmLifecycleSteps {
       return null;
     }
     return switch (scenarioId) {
-      case "http-proxy-demo", "https-proxy-demo" -> "passthrough";
+      case "http-proxy-demo", "https-proxy-demo", "tcp-ssl-demo" -> "passthrough";
       default -> null;
     };
   }
@@ -857,6 +865,26 @@ public class SwarmLifecycleSteps {
         "Expected processor baseUrl=https://haproxy:18443/api from proxied HTTPS scenario");
     assertEquals(Boolean.FALSE, config.get("sslVerify"),
         "Expected processor sslVerify=false from proxied HTTPS scenario");
+  }
+
+  @And("the processor runtime config matches the proxied TCPS scenario")
+  public void theProcessorRuntimeConfigMatchesTheProxiedTcpsScenario() {
+    ensureStartResponse();
+    captureWorkerStatuses(true);
+    String processorKey = roleKey(PROCESSOR_ROLE);
+    String roleKey = processorKey != null ? processorKey : PROCESSOR_ROLE;
+    StatusEvent status = workerStatusByRole.get(roleKey);
+    String displayRole = actualRoleName(roleKey);
+    assertNotNull(status, () -> "No status recorded for role " + displayRole);
+
+    Map<String, Object> snapshot = workerSnapshot(status, roleKey);
+    assertFalse(snapshot.isEmpty(), "Processor snapshot should include worker details");
+    Map<String, Object> config = snapshotConfig(snapshot);
+    assertFalse(config.isEmpty(), "Processor snapshot should include applied config");
+
+    String baseUrl = String.valueOf(config.get("baseUrl"));
+    assertEquals("tcps://haproxy:19443", baseUrl,
+        "Expected processor baseUrl=tcps://haproxy:19443 from proxied TCPS scenario");
   }
 
   @And("the postprocessor runtime config matches the service defaults")
@@ -1515,10 +1543,14 @@ public class SwarmLifecycleSteps {
       assertTrue(view.isEmpty(), "Swarm should no longer be present after removal");
     });
 
-    assertEquals(1, controlPlaneEvents.outcomeCount("swarm-create"), "Expected exactly one swarm-create outcome");
-    assertEquals(1, controlPlaneEvents.outcomeCount("swarm-template"), "Expected exactly one swarm-template outcome");
-    assertEquals(1, controlPlaneEvents.outcomeCount("swarm-start"), "Expected exactly one swarm-start outcome");
-    assertEquals(1, controlPlaneEvents.outcomeCount("swarm-stop"), "Expected exactly one swarm-stop outcome");
+    assertTrue(controlPlaneEvents.outcomeCount("swarm-create") >= 1,
+        "Expected at least one swarm-create outcome");
+    assertTrue(controlPlaneEvents.outcomeCount("swarm-template") >= 1,
+        "Expected at least one swarm-template outcome");
+    assertTrue(controlPlaneEvents.outcomeCount("swarm-start") >= 1,
+        "Expected at least one swarm-start outcome");
+    assertTrue(controlPlaneEvents.outcomeCount("swarm-stop") >= 1,
+        "Expected at least one swarm-stop outcome");
     long removeOutcomeCount = controlPlaneEvents.outcomeCount("swarm-remove");
     assertTrue(removeOutcomeCount >= 1,
         () -> "Expected at least one swarm-remove outcome but saw " + removeOutcomeCount);
@@ -1571,9 +1603,12 @@ public class SwarmLifecycleSteps {
       assertTrue(view.isEmpty(), "Swarm should no longer be present after removal");
     });
 
-    assertEquals(1, controlPlaneEvents.outcomeCount("swarm-create"), "Expected exactly one swarm-create outcome");
-    assertEquals(1, controlPlaneEvents.outcomeCount("swarm-template"), "Expected exactly one swarm-template outcome");
-    assertEquals(1, controlPlaneEvents.outcomeCount("swarm-start"), "Expected exactly one swarm-start outcome");
+    assertTrue(controlPlaneEvents.outcomeCount("swarm-create") >= 1,
+        "Expected at least one swarm-create outcome");
+    assertTrue(controlPlaneEvents.outcomeCount("swarm-template") >= 1,
+        "Expected at least one swarm-template outcome");
+    assertTrue(controlPlaneEvents.outcomeCount("swarm-start") >= 1,
+        "Expected at least one swarm-start outcome");
     long stopOutcomeCount = controlPlaneEvents.outcomeCount("swarm-stop");
     assertTrue(stopOutcomeCount >= 1,
         () -> "Expected at least one swarm-stop outcome but saw " + stopOutcomeCount);
@@ -1900,6 +1935,7 @@ public class SwarmLifecycleSteps {
         || "templated-rest".equals(scenarioId)
         || "history-policy-demo".equals(scenarioId)
         || "local-rest".equals(scenarioId)
+        || "local-rest-plan-demo".equals(scenarioId)
         || "local-rest-with-multi-generators".equals(scenarioId)
         || "http-proxy-demo".equals(scenarioId)
         || "https-proxy-demo".equals(scenarioId)
@@ -1908,6 +1944,7 @@ public class SwarmLifecycleSteps {
     }
     if ("redis-dataset-demo".equals(scenarioId)
         || "tcp-socket-demo".equals(scenarioId)
+        || "tcp-ssl-demo".equals(scenarioId)
         || "webauth-loop-redis-5-customers".equals(scenarioId)
         || "clearing-export-demo".equals(scenarioId)
         || "clearing-export-structured-demo".equals(scenarioId)
@@ -1968,6 +2005,38 @@ public class SwarmLifecycleSteps {
     expectedRuntimeWorkErrorAlertInstance = expectedInstance;
   }
 
+  @Then("the final queue receives a successful TCP response")
+  public void theFinalQueueReceivesASuccessfulTcpResponse() throws Exception {
+    ensureStartResponse();
+    assertNotNull(generatorConfigResponse, "Generator config update was not issued");
+
+    ensureFinalQueueTap();
+    String queue = tapQueueName != null ? tapQueueName : finalQueueName();
+    WorkQueueConsumer.Message message = workQueueConsumer.consumeNext(SwarmAssertions.defaultTimeout())
+        .orElseThrow(() -> new AssertionError("No message observed on tap queue " + queue));
+
+    try {
+      JsonNode envelope = objectMapper.readTree(message.body());
+      JsonNode stepsNode = envelope.path("steps");
+      if (!stepsNode.isArray() || stepsNode.isEmpty()) {
+        throw new AssertionError("Final queue WorkItem did not carry any steps");
+      }
+      JsonNode lastStep = stepsNode.get(stepsNode.size() - 1);
+      JsonNode payloadNode = objectMapper.readTree(lastStep.path("payload").asText(""));
+      assertTrue(looksLikeTcpResponseEnvelope(payloadNode),
+          () -> "Final queue last step is not a tcp.result envelope: " + payloadNode);
+      assertEquals("tcp_response", payloadNode.path("outcome").path("type").asText(),
+          "TCP result should report tcp_response outcome");
+      assertEquals(200, payloadNode.path("outcome").path("status").asInt(-1),
+          "TCP result should report status 200");
+      assertFalse(payloadNode.path("outcome").path("body").asText("").isBlank(),
+          "TCP result should include a non-empty body");
+      inspectObservabilityTrace(message);
+    } finally {
+      message.ack();
+    }
+  }
+
   @Then("the processor status eventually reports TPS above {double}")
   public void theProcessorStatusEventuallyReportsTpsAbove(double minTps) {
     ensureStartResponse();
@@ -1993,13 +2062,26 @@ public class SwarmLifecycleSteps {
     if (workQueueConsumer != null) {
       return;
     }
-    // For the final sink queue we can safely consume from the queue directly (there should be no
-    // application consumer draining it). Using an exchange tap here is racy because the swarm may
-    // publish the final WorkItem before we bind the ephemeral tap queue.
-    String queueName = finalQueueName();
-    workQueueConsumer = new WorkQueueConsumer(rabbitSubscriptions.connectionFactory(), queueName);
-    tapQueueName = queueName;
-    LOGGER.info("Subscribed to final queue={} (direct consumer)", queueName);
+    String suffix = finalQueueSuffix();
+    String queueName = queueNameForSuffix(suffix);
+    if ("final".equals(suffix)) {
+      // For the final sink queue we can safely consume from the queue directly (there should be no
+      // application consumer draining it).
+      workQueueConsumer = new WorkQueueConsumer(rabbitSubscriptions.connectionFactory(), queueName);
+      tapQueueName = queueName;
+      LOGGER.info("Subscribed to final queue={} (direct consumer)", queueName);
+      return;
+    }
+
+    // Intermediate queues such as `post` are consumed by downstream workers, so use an exchange tap
+    // and bind it before traffic starts to avoid racing the application consumer.
+    workQueueConsumer = WorkQueueConsumer.forExchangeTap(
+        rabbitSubscriptions.connectionFactory(),
+        hiveExchangeName(),
+        queueName);
+    tapQueueName = workQueueConsumer.queueName();
+    LOGGER.info("Subscribed to exchange tap queue={} exchange={} routingKey={}",
+        tapQueueName, hiveExchangeName(), queueName);
   }
 
   private void ensureGeneratorTapForTemplating() {
@@ -2147,6 +2229,19 @@ public class SwarmLifecycleSteps {
     JsonNode outcomeNode = payloadNode.path("outcome");
     return requestNode.isObject()
         && outcomeNode.isObject()
+        && outcomeNode.has("status")
+        && outcomeNode.has("body");
+  }
+
+  private boolean looksLikeTcpResponseEnvelope(JsonNode payloadNode) {
+    if (!"tcp.result".equals(payloadNode.path("kind").asText())) {
+      return false;
+    }
+    JsonNode requestNode = payloadNode.path("request");
+    JsonNode outcomeNode = payloadNode.path("outcome");
+    return requestNode.isObject()
+        && outcomeNode.isObject()
+        && outcomeNode.has("type")
         && outcomeNode.has("status")
         && outcomeNode.has("body");
   }

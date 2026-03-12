@@ -26,7 +26,7 @@ const HELP_CONTENT: Record<HelpTopic, HelpContent> = {
   },
   scenario: {
     title: 'PocketHive: Scenario panel',
-    body: `# Scenario panel\n\nLists scenarios from Scenario Manager.\n\n- Expand a scenario to browse its files (scenario.yaml, schemas, http-templates).\n- Click a file to open it (raw YAML for scenario, read-only preview for others).\n- Use Preview to see a quick summary of bees and images.\n\nUse this panel to browse and edit scenarios directly from VS Code.\n`
+    body: `# Scenario panel\n\nLists scenarios from Scenario Manager.\n\n- Expand a scenario to browse its files (scenario.yaml, schemas, templates).\n- Click a file to open it (raw YAML for scenario, read-only preview for others).\n- Use Preview to see a quick summary of bees and images.\n\nUse this panel to browse and edit scenarios directly from VS Code.\n`
   }
 };
 

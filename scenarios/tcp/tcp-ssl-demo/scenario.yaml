@@ -11,7 +11,7 @@ template:
           type: SCHEDULER
           scheduler:
             ratePerSec: 2
-            maxMessages: 10
+            maxMessages: 1
         worker:
           message:
             bodyType: SIMPLE
@@ -45,7 +45,7 @@ template:
         worker:
           tcpTransport:
             type: socket
-            connectionReuse: PER_THREAD
+            connectionReuse: NONE
             maxRetries: 2
             connectTimeoutMs: 5000
             readTimeoutMs: 8000

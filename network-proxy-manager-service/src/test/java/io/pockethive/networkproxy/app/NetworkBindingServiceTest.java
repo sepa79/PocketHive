@@ -57,6 +57,37 @@ class NetworkBindingServiceTest {
     }
 
     @Test
+    void bindCreatesDedicatedProxyRouteForTcpsEndpoint() throws Exception {
+        FakeNetworkProfileClient profileClient = new FakeNetworkProfileClient(Map.of(
+            "passthrough", new NetworkProfile("passthrough", "Passthrough", List.of(), List.of("tcps-server"))));
+        FakeToxiproxyAdminClient toxiproxy = new FakeToxiproxyAdminClient();
+        FakeHaproxyAdminClient haproxy = new FakeHaproxyAdminClient();
+        NetworkBindingService service = new NetworkBindingService(profileClient, toxiproxy, haproxy, properties());
+
+        NetworkBinding binding = service.bind("swarm-a", new NetworkBindingRequest(
+            "sut-a",
+            NetworkMode.PROXIED,
+            "passthrough",
+            "orchestrator",
+            null,
+            resolvedSut("sut-a", Map.of(
+                "tcps-server", new ResolvedSutEndpoint(
+                    "tcps-server",
+                    "TCPS",
+                    "tcps://proxy.local:9443",
+                    "proxy.local:9443",
+                    "tls-upstream:9090")))));
+
+        assertThat(binding.affectedEndpoints()).extracting(ResolvedSutEndpoint::endpointId)
+            .containsExactly("tcps-server");
+        assertThat(toxiproxy.proxies()).containsKey("sut-a__tcps-server");
+        assertThat(toxiproxy.proxies().get("sut-a__tcps-server").listen()).isEqualTo("0.0.0.0:19443");
+        assertThat(toxiproxy.proxies().get("sut-a__tcps-server").upstream()).isEqualTo("tls-upstream:9090");
+        assertThat(haproxy.routes()).containsExactly(
+            new HaproxyAdminClient.RouteRecord("sut-a__tcps-server", "0.0.0.0:9443", "toxiproxy:19443"));
+    }
+
+    @Test
     void clearReconcilesSharedSutBackToPreviousBinding() throws Exception {
         FakeNetworkProfileClient profileClient = new FakeNetworkProfileClient(Map.of(
             "passthrough", new NetworkProfile("passthrough", "Passthrough", List.of(), List.of("payments")),
@@ -218,6 +249,28 @@ class NetworkBindingServiceTest {
         assertThat(toxiproxy.toxics("sut-a__payments").get(1).attributes()).containsEntry("bytes", 4096);
     }
 
+    @Test
+    void bindDoesNotCommitStateWhenReconcileFails() {
+        FakeNetworkProfileClient profileClient = new FakeNetworkProfileClient(Map.of(
+            "passthrough", new NetworkProfile("passthrough", "Passthrough", List.of(), List.of("payments"))));
+        FakeToxiproxyAdminClient toxiproxy = new FakeToxiproxyAdminClient();
+        FailingHaproxyAdminClient haproxy = new FailingHaproxyAdminClient();
+        NetworkBindingService service = new NetworkBindingService(profileClient, toxiproxy, haproxy, properties());
+
+        assertThatThrownBy(() -> service.bind("swarm-a", new NetworkBindingRequest(
+            "sut-a",
+            NetworkMode.PROXIED,
+            "passthrough",
+            "orchestrator",
+            null,
+            resolvedSut("sut-a", Map.of(
+                "payments", new ResolvedSutEndpoint("payments", "HTTPS", "https://proxy.local:9443", "proxy.local:9443", "internal-a:443"))))))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("haproxy apply failed");
+
+        assertThat(service.findBinding("swarm-a")).isNull();
+    }
+
     private static NetworkProxyManagerProperties properties() {
         NetworkProxyManagerProperties properties = new NetworkProxyManagerProperties();
         properties.getToxiproxy().setListenHost("0.0.0.0");
@@ -298,7 +351,7 @@ class NetworkBindingServiceTest {
         }
     }
 
-    private static final class FakeHaproxyAdminClient implements HaproxyAdminClient {
+    private static class FakeHaproxyAdminClient implements HaproxyAdminClient {
         private List<RouteRecord> routes = List.of();
 
         @Override
@@ -308,6 +361,13 @@ class NetworkBindingServiceTest {
 
         private List<RouteRecord> routes() {
             return routes;
+        }
+    }
+
+    private static final class FailingHaproxyAdminClient extends FakeHaproxyAdminClient {
+        @Override
+        public void applyRoutes(List<RouteRecord> routes) {
+            throw new IllegalStateException("haproxy apply failed");
         }
     }
 }

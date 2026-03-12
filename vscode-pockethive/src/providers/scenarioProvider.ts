@@ -7,8 +7,8 @@ import { ScenarioSummary } from '../types';
 
 type ScenarioNode =
   | { kind: 'scenario'; scenario: ScenarioSummary }
-  | { kind: 'folder'; scenarioId: string; label: string; folder: 'schemas' | 'http-templates' }
-  | { kind: 'file'; scenarioId: string; label: string; fileType: 'scenario' | 'schema' | 'http-template'; path?: string }
+  | { kind: 'folder'; scenarioId: string; label: string; folder: 'schemas' | 'templates' }
+  | { kind: 'file'; scenarioId: string; label: string; fileType: 'scenario' | 'schema' | 'template'; path?: string }
   | { kind: 'message'; message: string };
 
 export class ScenarioProvider implements vscode.TreeDataProvider<ScenarioNode> {
@@ -60,7 +60,7 @@ export class ScenarioProvider implements vscode.TreeDataProvider<ScenarioNode> {
       return [
         { kind: 'file', scenarioId: element.scenario.id, label: 'scenario.yaml', fileType: 'scenario' },
         { kind: 'folder', scenarioId: element.scenario.id, label: 'schemas', folder: 'schemas' },
-        { kind: 'folder', scenarioId: element.scenario.id, label: 'http-templates', folder: 'http-templates' }
+        { kind: 'folder', scenarioId: element.scenario.id, label: 'templates', folder: 'templates' }
       ];
     }
 
@@ -89,16 +89,16 @@ export class ScenarioProvider implements vscode.TreeDataProvider<ScenarioNode> {
           config.baseUrl,
           config.authToken,
           'GET',
-          `/scenarios/${encodeURIComponent(element.scenarioId)}/http-templates`
+          `/scenarios/${encodeURIComponent(element.scenarioId)}/templates`
         );
         if (!files.length) {
-          return [{ kind: 'message', message: 'No HTTP templates.' }];
+          return [{ kind: 'message', message: 'No templates.' }];
         }
         return files.map((path) => ({
           kind: 'file',
           scenarioId: element.scenarioId,
           label: path,
-          fileType: 'http-template',
+          fileType: 'template',
           path
         }));
       } catch (error) {

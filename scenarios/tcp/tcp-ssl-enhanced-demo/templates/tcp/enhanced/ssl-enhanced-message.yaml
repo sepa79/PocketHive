@@ -15,5 +15,5 @@ bodyTemplate: |
 headersTemplate:
   Session-ID: "{{ payloadAsJson.sessionId }}"
   Security-Level: "enhanced"
-endTag: "-----END ENHANCED SECURE MESSAGE-----"
+endTag: "-----END ENHANCED SECURE RESPONSE-----"
 maxBytes: 8192
