@@ -2,6 +2,7 @@ package io.pockethive.requestbuilder;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.worker.sdk.api.HttpRequestEnvelope;
+import io.pockethive.worker.sdk.api.Iso8583RequestEnvelope;
 import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
 import io.pockethive.worker.sdk.api.TcpRequestEnvelope;
 import io.pockethive.worker.sdk.api.WorkItem;
@@ -16,10 +17,12 @@ import io.pockethive.worker.sdk.templating.MessageTemplate;
 import io.pockethive.worker.sdk.templating.MessageTemplateRenderer;
 import io.pockethive.worker.sdk.templating.TemplateRenderer;
 import io.pockethive.requesttemplates.HttpTemplateDefinition;
+import io.pockethive.requesttemplates.Iso8583TemplateDefinition;
 import io.pockethive.requesttemplates.TcpTemplateDefinition;
 import io.pockethive.requesttemplates.TemplateDefinition;
 import io.pockethive.requesttemplates.TemplateLoader;
 import java.util.HashMap;
+import java.util.HexFormat;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -42,6 +45,8 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
   private final MessageTemplateRenderer messageTemplateRenderer;
   private final TemplateLoader templateLoader;
   private final AuthHeaderGenerator authHeaderGenerator;
+  private final J8583FieldListXmlCodec fieldListXmlCodec =
+      new J8583FieldListXmlCodec(new Iso8583SchemaPackRegistry());
   private volatile Map<String, TemplateDefinition> templates;
   private volatile String lastTemplateConfigKey;
   private final LongAdder errorCount = new LongAdder();
@@ -90,14 +95,13 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
     TemplateDefinition definition =
         templates.get(TemplateLoader.key(serviceId, callId));
     if (definition == null) {
-      context.logger().warn("No HTTP template found for serviceId={} callId={}; {}", serviceId, callId, missingBehavior(config));
+      context.logger().warn("No request template found for serviceId={} callId={}; {}", serviceId, callId, missingBehavior(config));
       return handleMissing(config, seed, context);
     }
 
     try {
       Object envelope;
-      String protocol = definition.protocol() == null ? "HTTP" : definition.protocol().toUpperCase(Locale.ROOT);
-
+      String protocol = definition.protocol();
       if ("TCP".equals(protocol) && definition instanceof TcpTemplateDefinition tcpDef) {
         MessageTemplate template = MessageTemplate.builder()
             .bodyType(MessageBodyType.SIMPLE)
@@ -130,7 +134,7 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
                 tcpDef.maxBytes()
             )
         );
-      } else if (definition instanceof HttpTemplateDefinition httpDef) {
+      } else if ("HTTP".equals(protocol) && definition instanceof HttpTemplateDefinition httpDef) {
         MessageTemplate template = MessageTemplate.builder()
             .bodyType(MessageBodyType.HTTP)
             .pathTemplate(httpDef.pathTemplate())
@@ -167,8 +171,10 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
                 resolveBodyValue(rendered.body(), isJson)
             )
         );
+      } else if ("ISO8583".equals(protocol) && definition instanceof Iso8583TemplateDefinition isoDef) {
+        envelope = buildIso8583Envelope(isoDef, effectiveSeed, context, serviceId, callId);
       } else {
-        throw new IllegalStateException("Unknown template type: " + definition.getClass());
+        throw new IllegalStateException("Unsupported template protocol: " + protocol);
       }
 
       WorkItem httpItem = WorkItem.json(context.info(), envelope)
@@ -269,6 +275,75 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
     if (body == null || body.isBlank()) return false;
     char first = body.trim().charAt(0);
     return first == '{' || first == '[';
+  }
+
+  private Iso8583RequestEnvelope buildIso8583Envelope(Iso8583TemplateDefinition isoDef,
+                                                      WorkItem effectiveSeed,
+                                                      WorkerContext context,
+                                                      String serviceId,
+                                                      String callId) {
+    MessageTemplate template = MessageTemplate.builder()
+        .bodyType(MessageBodyType.SIMPLE)
+        .bodyTemplate(isoDef.bodyTemplate())
+        .headerTemplates(isoDef.headersTemplate() == null ? Map.of() : isoDef.headersTemplate())
+        .build();
+    MessageTemplateRenderer.RenderedMessage rendered = messageTemplateRenderer.render(template, effectiveSeed);
+
+    Map<String, String> headers = new HashMap<>(rendered.headers());
+    if (isoDef.auth() != null && authHeaderGenerator != null) {
+      try {
+        AuthConfig authConfig = AuthConfig.fromTemplate(isoDef.auth(), serviceId, callId);
+        Map<String, String> authHeaders = authHeaderGenerator.generate(context, authConfig, effectiveSeed);
+        headers.putAll(authHeaders);
+      } catch (Exception ex) {
+        context.logger().warn("Failed to generate auth headers for serviceId={} callId={}", serviceId, callId, ex);
+      }
+    }
+
+    String payloadAdapter = requireNonBlank(isoDef.payloadAdapter(), "payloadAdapter").toUpperCase(Locale.ROOT);
+    String wireProfileId = requireNonBlank(isoDef.wireProfileId(), "wireProfileId");
+
+    if ("RAW_HEX".equals(payloadAdapter)) {
+      return Iso8583RequestEnvelope.of(new Iso8583RequestEnvelope.Iso8583Request(
+          wireProfileId,
+          "RAW_HEX",
+          requireNonBlank(rendered.body(), "payload"),
+          headers,
+          null
+      ));
+    }
+
+    if ("FIELD_LIST_XML".equals(payloadAdapter)) {
+      Iso8583TemplateDefinition.IsoSchemaRef templateSchema = isoDef.schemaRef();
+      if (templateSchema == null) {
+        throw new IllegalArgumentException("schemaRef must not be null for FIELD_LIST_XML");
+      }
+      Iso8583RequestEnvelope.IsoSchemaRef schemaRef = new Iso8583RequestEnvelope.IsoSchemaRef(
+          templateSchema.schemaRegistryRoot(),
+          templateSchema.schemaId(),
+          templateSchema.schemaVersion(),
+          templateSchema.schemaAdapter(),
+          templateSchema.schemaFile()
+      );
+      byte[] encoded = fieldListXmlCodec.encodePayload(rendered.body(), schemaRef);
+      String hexPayload = HexFormat.of().withUpperCase().formatHex(encoded);
+      return Iso8583RequestEnvelope.of(new Iso8583RequestEnvelope.Iso8583Request(
+          wireProfileId,
+          "RAW_HEX",
+          hexPayload,
+          headers,
+          null
+      ));
+    }
+
+    throw new IllegalArgumentException("Unsupported ISO8583 payloadAdapter in template: " + payloadAdapter);
+  }
+
+  private static String requireNonBlank(String value, String field) {
+    if (value == null || value.isBlank()) {
+      throw new IllegalArgumentException(field + " must not be blank");
+    }
+    return value.trim();
   }
 
   private void recordError() {

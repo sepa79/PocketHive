@@ -97,4 +97,50 @@ class TransportEnvelopeDtosTest {
         assertThat(result.outcome().status()).isEqualTo(200);
         assertThat(result.metrics().durationMs()).isEqualTo(21L);
     }
+
+    @Test
+    void iso8583RequestEnvelopeNormalizesAndValidates() {
+        Iso8583RequestEnvelope envelope = Iso8583RequestEnvelope.of(
+            new Iso8583RequestEnvelope.Iso8583Request(
+                "MC_2BYTE_LEN_BIN_BITMAP",
+                " raw_hex ",
+                "00AA11FF",
+                Map.of("x-test", "true"),
+                null
+            )
+        );
+
+        assertThat(envelope.kind()).isEqualTo(Iso8583RequestEnvelope.KIND);
+        assertThat(envelope.request().wireProfileId()).isEqualTo("MC_2BYTE_LEN_BIN_BITMAP");
+        assertThat(envelope.request().payloadAdapter()).isEqualTo("RAW_HEX");
+    }
+
+    @Test
+    void iso8583ResultEnvelopeCarriesRequestOutcomeAndMetrics() {
+        Iso8583ResultEnvelope result = Iso8583ResultEnvelope.of(
+            new Iso8583ResultEnvelope.Iso8583RequestInfo(
+                "iso8583",
+                "tcp",
+                "send",
+                "tcp://sut:6036",
+                "MC_2BYTE_LEN_BIN_BITMAP",
+                "raw_hex",
+                48
+            ),
+            new Iso8583ResultEnvelope.Iso8583Outcome(
+                Iso8583ResultEnvelope.OUTCOME_ISO8583_RESPONSE,
+                200,
+                "0210AABB",
+                null
+            ),
+            new Iso8583ResultEnvelope.Iso8583Metrics(15, 0)
+        );
+
+        assertThat(result.kind()).isEqualTo(Iso8583ResultEnvelope.KIND);
+        assertThat(result.request().method()).isEqualTo("SEND");
+        assertThat(result.request().payloadAdapter()).isEqualTo("RAW_HEX");
+        assertThat(result.outcome().responseHex()).isEqualTo("0210AABB");
+        assertThat(result.metrics().durationMs()).isEqualTo(15L);
+    }
+
 }

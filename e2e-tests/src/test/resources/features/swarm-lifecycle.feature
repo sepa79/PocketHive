@@ -42,6 +42,57 @@ Feature: Swarm lifecycle golden path
     And I start generator traffic
     Then the final queue receives the default generator response
 
+  @http-proxy
+  Scenario: HTTP processor traffic can be routed through the managed proxy
+    And the "http-proxy-demo" scenario template is requested
+    When I create the swarm from that template
+    Then the swarm is registered and queues are declared
+    And the network binding is proxied with profile "passthrough"
+    When I start the swarm
+    Then the swarm reports running
+    And the processor runtime config matches the proxied HTTP scenario
+    And I start generator traffic
+    Then the final queue receives the default generator response
+    When I stop the swarm
+    Then the swarm reports stopped
+    When I remove the swarm
+    Then the swarm is removed and lifecycle confirmations are recorded
+    And the network binding is cleared
+
+  @https-proxy
+  Scenario: HTTPS processor traffic can be routed through the managed proxy
+    And the "https-proxy-demo" scenario template is requested
+    When I create the swarm from that template
+    Then the swarm is registered and queues are declared
+    And the network binding is proxied with profile "passthrough"
+    When I start the swarm
+    Then the swarm reports running
+    And the processor runtime config matches the proxied HTTPS scenario
+    And I start generator traffic
+    Then the final queue receives the default generator response
+    When I stop the swarm
+    Then the swarm reports stopped
+    When I remove the swarm
+    Then the swarm is removed and lifecycle confirmations are recorded
+    And the network binding is cleared
+
+  @tcps-proxy
+  Scenario: TCPS processor traffic can be routed through the managed proxy
+    And the "tcp-ssl-demo" scenario template is requested
+    When I create the swarm from that template
+    Then the swarm is registered and queues are declared
+    And the network binding is proxied with profile "passthrough"
+    When I start the swarm
+    Then the swarm reports running
+    And the processor runtime config matches the proxied TCPS scenario
+    And I start generator traffic
+    Then the final queue receives a successful TCP response
+    When I stop the swarm
+    Then the swarm reports stopped
+    When I remove the swarm
+    Then the swarm is removed and lifecycle confirmations are recorded
+    And the network binding is cleared
+
   @scenario-variables
   Scenario: Scenario variables are resolved and visible in template rendering
     And the "variables-demo" scenario template is requested

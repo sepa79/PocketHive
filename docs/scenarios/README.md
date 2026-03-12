@@ -99,7 +99,7 @@ scenarios/
   are introduced.  
 - `sut/` and `datasets/` are optional and may contain SUT configs or input
   data; exact conventions are described in the in‑progress
-  `docs/inProgress/scenario-bundle-runtime-plan.md`.
+  `docs/archive/scenario-bundle-runtime-plan.md`.
 
 Example bundles in this repo:
 - `scenarios/e2e/variables-demo/` – demonstrates `variables.yaml` + `vars.*` + `eval(...)`.

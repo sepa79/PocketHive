@@ -261,7 +261,7 @@ class ScenarioControllerTest {
     }
 
     @Test
-    void httpTemplateListingAndUpdateAreScopedToBundle() throws Exception {
+    void templateListingAndUpdateAreScopedToBundle() throws Exception {
         String body = """
                 {
                   "id": "http-demo",
@@ -276,46 +276,46 @@ class ScenarioControllerTest {
 	                .andExpect(status().isCreated());
 
 	        Path bundleDir = ScenarioControllerTest.scenariosDir.resolve("http-demo");
-	        Files.createDirectories(bundleDir.resolve("http-templates"));
-	        Path templateFile = bundleDir.resolve("http-templates").resolve("example.yaml");
-	        Files.writeString(templateFile, "serviceId: default\ncallId: demo\nbodyTemplate: \"{}\"\n");
+	        Files.createDirectories(bundleDir.resolve("templates").resolve("http"));
+	        Path templateFile = bundleDir.resolve("templates").resolve("http").resolve("example.yaml");
+	        Files.writeString(templateFile, "protocol: HTTP\nserviceId: default\ncallId: demo\nbodyTemplate: \"{}\"\n");
 
-        mvc.perform(get("/scenarios/http-demo/http-templates").accept(MediaType.APPLICATION_JSON))
+        mvc.perform(get("/scenarios/http-demo/templates").accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0]").value("http-templates/example.yaml"));
+                .andExpect(jsonPath("$[0]").value("templates/http/example.yaml"));
 
-        mvc.perform(get("/scenarios/http-demo/http-template")
-                        .param("path", "http-templates/example.yaml")
+        mvc.perform(get("/scenarios/http-demo/template")
+                        .param("path", "templates/http/example.yaml")
                         .accept(MediaType.TEXT_PLAIN))
                 .andExpect(status().isOk())
-                .andExpect(content().string("serviceId: default\ncallId: demo\nbodyTemplate: \"{}\"\n"));
+                .andExpect(content().string("protocol: HTTP\nserviceId: default\ncallId: demo\nbodyTemplate: \"{}\"\n"));
 
-        mvc.perform(put("/scenarios/http-demo/http-template")
-                        .param("path", "http-templates/example.yaml")
+        mvc.perform(put("/scenarios/http-demo/template")
+                        .param("path", "templates/http/example.yaml")
                         .contentType(MediaType.TEXT_PLAIN)
-                        .content("serviceId: default\ncallId: demo\nbodyTemplate: \"{\\\"updated\\\":true}\"\n"))
+                        .content("protocol: HTTP\nserviceId: default\ncallId: demo\nbodyTemplate: \"{\\\"updated\\\":true}\"\n"))
                 .andExpect(status().isNoContent());
 
-        mvc.perform(post("/scenarios/http-demo/http-template/rename")
-                        .param("from", "http-templates/example.yaml")
-                        .param("to", "http-templates/renamed.yaml"))
+        mvc.perform(post("/scenarios/http-demo/template/rename")
+                        .param("from", "templates/http/example.yaml")
+                        .param("to", "templates/http/renamed.yaml"))
                 .andExpect(status().isNoContent());
 
-        mvc.perform(get("/scenarios/http-demo/http-templates").accept(MediaType.APPLICATION_JSON))
+        mvc.perform(get("/scenarios/http-demo/templates").accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0]").value("http-templates/renamed.yaml"));
+                .andExpect(jsonPath("$[0]").value("templates/http/renamed.yaml"));
 
-        mvc.perform(get("/scenarios/http-demo/http-template")
-                        .param("path", "http-templates/renamed.yaml")
+        mvc.perform(get("/scenarios/http-demo/template")
+                        .param("path", "templates/http/renamed.yaml")
                         .accept(MediaType.TEXT_PLAIN))
                 .andExpect(status().isOk())
-                .andExpect(content().string("serviceId: default\ncallId: demo\nbodyTemplate: \"{\\\"updated\\\":true}\"\n"));
+                .andExpect(content().string("protocol: HTTP\nserviceId: default\ncallId: demo\nbodyTemplate: \"{\\\"updated\\\":true}\"\n"));
 
-        mvc.perform(delete("/scenarios/http-demo/http-template")
-                        .param("path", "http-templates/renamed.yaml"))
+        mvc.perform(delete("/scenarios/http-demo/template")
+                        .param("path", "templates/http/renamed.yaml"))
                 .andExpect(status().isNoContent());
 
-        mvc.perform(get("/scenarios/http-demo/http-templates").accept(MediaType.APPLICATION_JSON))
+        mvc.perform(get("/scenarios/http-demo/templates").accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isEmpty());
     }

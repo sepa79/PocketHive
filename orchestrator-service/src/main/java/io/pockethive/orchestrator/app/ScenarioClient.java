@@ -1,6 +1,7 @@
 package io.pockethive.orchestrator.app;
 
 import io.pockethive.orchestrator.domain.ScenarioPlan;
+import io.pockethive.swarm.model.NetworkProfile;
 import io.pockethive.swarm.model.SutEnvironment;
 import java.util.Map;
 import java.util.List;
@@ -36,6 +37,10 @@ public interface ScenarioClient {
                                                String sutId,
                                                String correlationId,
                                                String idempotencyKey) throws Exception;
+
+    NetworkProfile fetchNetworkProfile(String profileId,
+                                       String correlationId,
+                                       String idempotencyKey) throws Exception;
 
     record ResolvedVariables(String profileId, String sutId, Map<String, Object> vars, List<String> warnings) {
     }

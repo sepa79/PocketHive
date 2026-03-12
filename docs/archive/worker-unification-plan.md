@@ -1,7 +1,7 @@
 # PocketHive Worker Interface Unification Plan
 
 > Status: **implemented / archived**.  
-> Superseded by: `docs/sdk/worker-configurable-io-plan.md` and the current Worker SDK docs.
+> Superseded by: `docs/toBeReviewed/worker-configurable-io-plan.md` and the current Worker SDK docs.
 
 ## Context
 

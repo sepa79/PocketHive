@@ -3,32 +3,38 @@ package io.pockethive.tcpmock.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import io.pockethive.tcpmock.model.MessageTypeMapping;
-import org.springframework.boot.context.event.ApplicationReadyEvent;
-import org.springframework.context.event.EventListener;
-import org.springframework.stereotype.Component;
-
+import jakarta.annotation.PostConstruct;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.stream.Stream;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 
 @Component
 public class FileBasedMappingLoader {
     private final MessageTypeRegistry registry;
     private final ObjectMapper jsonMapper = new ObjectMapper();
     private final ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
-    private final String mappingsDir = "/app/mappings";
-    private final String dataDir = "/app/data";
+    private final String mappingsDir;
+    private final String dataDir;
 
+    @Autowired
     public FileBasedMappingLoader(MessageTypeRegistry registry) {
+        this(registry, "/app/mappings", "/app/data");
+    }
+
+    FileBasedMappingLoader(MessageTypeRegistry registry, String mappingsDir, String dataDir) {
         this.registry = registry;
+        this.mappingsDir = mappingsDir;
+        this.dataDir = dataDir;
         System.out.println("=== FileBasedMappingLoader constructed ===");
     }
 
-    @EventListener(ApplicationReadyEvent.class)
+    @PostConstruct
     public void loadMappingsOnStartup() {
-        System.out.println("=== ApplicationReadyEvent triggered, loading mappings ===");
+        System.out.println("=== PostConstruct triggered, loading mappings ===");
         loadMappingsFromDirectory();
     }
 

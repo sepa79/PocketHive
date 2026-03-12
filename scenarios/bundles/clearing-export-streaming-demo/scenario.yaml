@@ -51,10 +51,14 @@ template:
           maxRecordsPerFile: 1000000
           flushIntervalMs: 1000
           maxBufferedRecords: 5000000
+          strictTemplate: true
+          recordSourceStep: latest
+          recordSourceStepIndex: -1
+          recordBuildFailurePolicy: stop
           lineSeparator: "\n"
           fileNameTemplate: "STREAM_{{ now }}.dat"
           headerTemplate: "H|{{ now }}"
-          recordTemplate: "D|{{ record.payload }}"
+          recordTemplate: "D|{{ steps.selected.payload }}"
           footerTemplate: "T|{{ recordCount }}"
           localTargetDir: "/tmp/pockethive/clearing-out"
           localTempSuffix: ".tmp"

@@ -1,4 +1,4 @@
-export function Icon({ name }: { name: 'home' | 'hive' | 'journal' | 'scenarios' | 'other' | 'user' | 'buzz' }) {
+export function Icon({ name }: { name: 'home' | 'hive' | 'proxy' | 'journal' | 'scenarios' | 'other' | 'user' | 'buzz' }) {
   const common = { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', xmlns: 'http://www.w3.org/2000/svg' }
   switch (name) {
     case 'home':
@@ -20,6 +20,15 @@ export function Icon({ name }: { name: 'home' | 'hive' | 'journal' | 'scenarios'
         <svg {...common}>
           <path d="M7 4h10a2 2 0 0 1 2 2v14H7a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z" stroke="currentColor" strokeWidth="1.6" />
           <path d="M9 8h8M9 12h8M9 16h6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        </svg>
+      )
+    case 'proxy':
+      return (
+        <svg {...common}>
+          <rect x="4" y="6" width="6" height="5" rx="1.4" stroke="currentColor" strokeWidth="1.6" />
+          <rect x="14" y="13" width="6" height="5" rx="1.4" stroke="currentColor" strokeWidth="1.6" />
+          <path d="M10 8.5h4a2 2 0 0 1 2 2v2.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          <path d="M14 15.5h-4a2 2 0 0 1-2-2V11" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
         </svg>
       )
     case 'scenarios':

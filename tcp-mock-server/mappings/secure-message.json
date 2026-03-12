@@ -1,7 +1,7 @@
 {
   "id": "secure-message",
   "requestPattern": "^-----BEGIN SECURE MESSAGE-----.*-----END SECURE MESSAGE-----$",
-  "responseTemplate": "-----BEGIN SECURE RESPONSE-----\nStatus: APPROVED\nSession-ID: {{session_id}}\nTimestamp: {{timestamp}}\nResponse-Code: 00\n-----END SECURE RESPONSE-----",
+  "responseTemplate": "-----BEGIN SECURE RESPONSE-----\nStatus: APPROVED\nSession-ID: {{request.regex 'Session-ID: ([^ ]+)' group 1}}\nTimestamp: {{request.regex 'Timestamp: ([^ ]+)' group 1}}\nResponse-Code: 00\n-----END SECURE RESPONSE-----",
   "responseDelimiter": "\n",
   "description": "Secure message handler for SSL/TLS scenarios",
   "priority": 20,

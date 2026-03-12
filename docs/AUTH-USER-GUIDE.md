@@ -42,7 +42,7 @@ Auth is automatically enabled **globally** when the worker-sdk is present. It re
 ### 2. Create Template with Auth
 
 ```yaml
-# http-templates/GetUser.yaml
+# templates/GetUser.yaml
 serviceId: api
 callId: GetUser
 protocol: HTTP
@@ -176,7 +176,7 @@ auth:
 Auth in template file - request builder fetches token.
 
 ```yaml
-# http-templates/CreateOrder.yaml
+# templates/CreateOrder.yaml
 auth:
   type: oauth2-client-credentials
   tokenKey: orders:auth
@@ -243,7 +243,7 @@ Generator fetches token and passes in message body.
 
 Template extracts token:
 ```yaml
-# http-templates/CreateOrder.yaml
+# templates/CreateOrder.yaml
 headersTemplate:
   Authorization: "Bearer {{ payloadAsJson.token }}"
 ```
@@ -285,7 +285,7 @@ template:
       image: request-builder:latest
       config:
         worker:
-          templateRoot: /app/scenario/http-templates
+          templateRoot: /app/scenario/templates/http
           serviceId: api
       work:
         in:
@@ -311,7 +311,7 @@ template:
 ```
 
 ```yaml
-# http-templates/GetUser.yaml
+# templates/http/GetUser.yaml
 serviceId: api
 callId: GetUser
 protocol: HTTP
@@ -331,7 +331,7 @@ headersTemplate:
 ### Example 2: AWS API Gateway
 
 ```yaml
-# http-templates/InvokeLambda.yaml
+# templates/InvokeLambda.yaml
 serviceId: aws
 callId: InvokeLambda
 protocol: HTTP

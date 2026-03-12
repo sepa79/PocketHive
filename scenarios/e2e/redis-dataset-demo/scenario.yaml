@@ -84,7 +84,7 @@ template:
     - role: request-builder
       image: request-builder:latest
       config:
-        templateRoot: /app/scenario/http-templates
+        templateRoot: /app/scenario/templates/http
         serviceId: default
       work:
         in:

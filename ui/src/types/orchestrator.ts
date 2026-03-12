@@ -14,6 +14,8 @@ export interface SwarmSummary {
   templateId: string | null
   controllerImage: string | null
   sutId?: string | null
+  networkMode?: 'DIRECT' | 'PROXIED'
+  networkProfileId?: string | null
   stackName: string | null
   bees: BeeSummary[]
 }

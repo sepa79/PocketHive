@@ -11,7 +11,7 @@ template:
           type: SCHEDULER
           scheduler:
             ratePerSec: 2
-            maxMessages: 10
+            maxMessages: 1
         worker:
           message:
             bodyType: SIMPLE
@@ -19,7 +19,7 @@ template:
               {
                 "sessionId": "SEC_{{ eval('#uuid()') }}",
                 "encryptedData": "{{ eval("#base64_encode('Sensitive data: ' + #randInt(1000, 9999))") }}",
-                "signature": "{{ eval("#hmac_sha256_hex('secretkey', payload.sessionId)") }}",
+                "signature": "{{ eval("#hmac_sha256_hex('secretkey', #uuid())") }}",
                 "timestamp": "{{ eval("#date_format(now, 'yyyy-MM-dd''T''HH:mm:ss.SSS''Z''')") }}"
               }
             headers:
@@ -31,7 +31,7 @@ template:
       image: request-builder:latest
       config:
         worker:
-          templateRoot: /app/scenario/templates
+          templateRoot: /app/scenario/templates/tcp
           serviceId: secure
       work:
         in:
@@ -45,10 +45,11 @@ template:
         worker:
           tcpTransport:
             type: socket
-            connectionReuse: PER_THREAD
+            connectionReuse: NONE
             maxRetries: 2
             connectTimeoutMs: 5000
             readTimeoutMs: 8000
+            sslVerify: false
       work:
         in:
           in: proc

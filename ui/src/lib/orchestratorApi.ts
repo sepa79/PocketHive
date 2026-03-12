@@ -22,6 +22,8 @@ export interface JournalRunSummary {
   pinned?: boolean
 }
 
+export type NetworkMode = 'DIRECT' | 'PROXIED'
+
 interface SwarmManagersTogglePayload {
   idempotencyKey: string
   enabled: boolean
@@ -58,11 +60,29 @@ async function ensureOk(response: Response, fallback: string) {
 export async function createSwarm(
   id: string,
   templateId: string,
-  options?: { autoPullImages?: boolean; sutId?: string | null; variablesProfileId?: string | null },
+  options?: {
+    autoPullImages?: boolean
+    sutId?: string | null
+    variablesProfileId?: string | null
+    networkMode?: NetworkMode | null
+    networkProfileId?: string | null
+  },
 ) {
+  const networkMode: NetworkMode = options?.networkMode === 'PROXIED' ? 'PROXIED' : 'DIRECT'
+  const networkProfileId =
+    options && typeof options.networkProfileId === 'string' && options.networkProfileId.trim()
+      ? options.networkProfileId.trim()
+      : null
+  if (networkMode === 'DIRECT' && networkProfileId) {
+    throw new Error('networkProfileId requires networkMode=PROXIED')
+  }
+  if (networkMode === 'PROXIED' && !networkProfileId) {
+    throw new Error('networkProfileId is required when networkMode=PROXIED')
+  }
   const payload: Record<string, unknown> = {
     templateId,
     idempotencyKey: randomId(),
+    networkMode,
   }
   if (options && typeof options.autoPullImages === 'boolean') {
     payload.autoPullImages = options.autoPullImages
@@ -72,6 +92,9 @@ export async function createSwarm(
   }
   if (options && typeof options.variablesProfileId === 'string' && options.variablesProfileId.trim()) {
     payload.variablesProfileId = options.variablesProfileId.trim()
+  }
+  if (networkProfileId) {
+    payload.networkProfileId = networkProfileId
   }
 
   const body = JSON.stringify(payload)
@@ -199,6 +222,9 @@ function normalizeSwarmSummary(input: unknown): SwarmSummary | null {
     .filter((entry): entry is BeeSummary => Boolean(entry))
 
   const sutId = asString(record['sutId'])
+  const rawNetworkMode = asString(record['networkMode'])
+  const networkMode: NetworkMode = rawNetworkMode === 'PROXIED' ? 'PROXIED' : 'DIRECT'
+  const networkProfileId = asString(record['networkProfileId'])
 
   return {
     id,
@@ -210,6 +236,8 @@ function normalizeSwarmSummary(input: unknown): SwarmSummary | null {
     templateId: asString(record['templateId']),
     controllerImage: asString(record['controllerImage']),
     sutId,
+    networkMode,
+    networkProfileId,
     stackName: asString(record['stackName']),
     bees,
   }

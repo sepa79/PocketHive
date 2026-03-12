@@ -21,6 +21,7 @@ public final class EnvironmentConfig {
   public static final String RABBITMQ_MANAGEMENT_PORT = "RABBITMQ_MANAGEMENT_PORT";
   public static final String UI_WEBSOCKET_URI = "UI_WEBSOCKET_URI";
   public static final String UI_BASE_URL = "UI_BASE_URL";
+  public static final String NETWORK_PROXY_MANAGER_BASE_URL = "NETWORK_PROXY_MANAGER_BASE_URL";
   public static final String SWARM_ID = "SWARM_ID";
   public static final String IDEMPOTENCY_KEY_PREFIX = "IDEMPOTENCY_KEY_PREFIX";
   public static final String CONTROL_PLANE_EXCHANGE = "POCKETHIVE_CONTROL_PLANE_EXCHANGE";
@@ -74,6 +75,7 @@ public final class EnvironmentConfig {
     return new ServiceEndpoints(
         requiredUri(ORCHESTRATOR_BASE_URL),
         requiredUri(SCENARIO_MANAGER_BASE_URL),
+        requiredUri(NETWORK_PROXY_MANAGER_BASE_URL),
         loadRabbitMqSettings(),
         env(UI_WEBSOCKET_URI).map(EnvironmentConfig::toUri),
         resolveUiBaseUrl(),
@@ -146,6 +148,7 @@ public final class EnvironmentConfig {
   public record ServiceEndpoints(
       URI orchestratorBaseUrl,
       URI scenarioManagerBaseUrl,
+      URI networkProxyManagerBaseUrl,
       RabbitMqSettings rabbitMq,
       Optional<URI> uiWebsocketUri,
       Optional<URI> uiBaseUrl,
@@ -162,6 +165,7 @@ public final class EnvironmentConfig {
       return Map.ofEntries(
           Map.entry("orchestratorBaseUrl", orchestratorBaseUrl.toString()),
           Map.entry("scenarioManagerBaseUrl", scenarioManagerBaseUrl.toString()),
+          Map.entry("networkProxyManagerBaseUrl", networkProxyManagerBaseUrl.toString()),
           Map.entry("rabbitMqHost", rabbitMq.host()),
           Map.entry("rabbitMqPort", Integer.toString(rabbitMq.port())),
           Map.entry("rabbitMqUsername", rabbitMq.username()),

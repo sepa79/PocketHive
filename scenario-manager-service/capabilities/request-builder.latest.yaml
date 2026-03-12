@@ -12,7 +12,7 @@ ui:
 config:
   - name: templateRoot
     type: string
-    default: "/app/http-templates"
+    default: "/app/templates/http"
   - name: serviceId
     type: string
     default: "default"

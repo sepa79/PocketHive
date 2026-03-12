@@ -77,7 +77,7 @@ References:
 
 ### 4) UI-v2 consumption (no per-worker fan-out)
 
-Moved to `docs/inProgress/ui-v2-control-plane-adoption.md`.
+Moved to `docs/toBeReviewed/ui-v2-control-plane-adoption.md`.
 
 ### 5) Contract enforcement
 
@@ -91,7 +91,7 @@ Moved to `docs/inProgress/ui-v2-control-plane-adoption.md`.
 
 - [x] Start a swarm; verify SC emits `status-delta` watermark and `status-full` on request
 - [x] Inject broken control message; verify it is rejected without requeue (no storm)
-- UI-v2 verification moved to `docs/inProgress/ui-v2-control-plane-adoption.md`.
+- UI-v2 verification moved to `docs/toBeReviewed/ui-v2-control-plane-adoption.md`.
 
 ### 7) SSOT for control-plane wire format (serializer + publisher)
 

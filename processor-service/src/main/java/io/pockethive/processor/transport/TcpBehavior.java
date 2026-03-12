@@ -4,5 +4,6 @@ public enum TcpBehavior {
     ECHO,
     REQUEST_RESPONSE,
     FIRE_FORGET,
-    STREAMING
+    STREAMING,
+    LENGTH_PREFIX_2B
 }

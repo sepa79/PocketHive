@@ -1244,6 +1244,430 @@ textarea,
   box-shadow: 0 0 0 2px rgba(51, 225, 255, 0.12);
 }
 
+.proxyPage {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.proxyHero {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.proxyHeroHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.proxyHeroBadges {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.proxyOverviewGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.proxyMetric {
+  border: 1px solid var(--border2);
+  background: var(--panel2);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.proxyMetricLabel {
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 12px;
+}
+
+.proxyMetricValue {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.05;
+  margin-top: 8px;
+  margin-bottom: 4px;
+}
+
+.proxySectionGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.proxyList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.proxyRuntimeRow,
+.proxyProfileRow {
+  border: 1px solid var(--border2);
+  background: var(--panel2);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.proxyRuntimeHead,
+.proxyProfileHead {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.proxyRuntimeTitle {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.proxyRuntimeMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.proxyEndpointList,
+.proxyFaultList {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.proxyEndpointItem {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.proxyEndpointTitle {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.proxyFaultChip {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.proxyManualPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.proxyEditorToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.proxyTabStrip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  border: 1px solid var(--border2);
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 16px;
+}
+
+.proxyTabButton {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 700;
+  padding: 10px 16px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease, box-shadow 140ms ease;
+}
+
+.proxyTabButton:hover:not(:disabled) {
+  color: rgba(255, 255, 255, 0.96);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.proxyTabButtonActive {
+  color: white;
+  background: rgba(51, 225, 255, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(51, 225, 255, 0.24);
+}
+
+.proxyTabButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.proxyManualHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.proxyToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+  user-select: none;
+}
+
+.proxyToggleRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.proxyToggle input[type='checkbox'],
+.proxyToggle span {
+  cursor: pointer;
+}
+
+.proxyDocLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 1px solid rgba(51, 225, 255, 0.28);
+  color: rgba(51, 225, 255, 0.92);
+  text-decoration: none;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.proxyDocLink:hover {
+  border-color: rgba(51, 225, 255, 0.48);
+  background: rgba(51, 225, 255, 0.1);
+}
+
+.proxyInlineHead {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.proxyOverrideSwitch {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
+  color: rgba(255, 255, 255, 0.94);
+  border-radius: 18px;
+  padding: 12px 14px;
+  min-width: 310px;
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease, transform 140ms ease, box-shadow 140ms ease;
+}
+
+.proxyOverrideSwitch:hover:not(:disabled) {
+  border-color: rgba(51, 225, 255, 0.24);
+  box-shadow: 0 0 0 1px rgba(51, 225, 255, 0.08);
+}
+
+.proxyOverrideSwitchEnabled {
+  border-color: rgba(51, 225, 255, 0.3);
+  background: linear-gradient(180deg, rgba(14, 88, 104, 0.36), rgba(8, 32, 40, 0.46));
+}
+
+.proxyOverrideSwitch:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.proxyOverrideSwitchKnob {
+  position: relative;
+  flex: 0 0 auto;
+  width: 54px;
+  height: 30px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.proxyOverrideSwitchKnob::after {
+  content: '';
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.88);
+  transition: transform 160ms ease, background 160ms ease;
+}
+
+.proxyOverrideSwitchEnabled .proxyOverrideSwitchKnob {
+  background: rgba(51, 225, 255, 0.26);
+}
+
+.proxyOverrideSwitchEnabled .proxyOverrideSwitchKnob::after {
+  transform: translateX(24px);
+  background: rgb(51, 225, 255);
+}
+
+.proxyOverrideSwitchText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.proxyOverrideSwitchText strong {
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.proxyOverrideSwitchText span:last-child {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.proxyOverrideControls {
+  display: grid;
+  gap: 10px;
+}
+
+.proxyOverrideControlsDisabled {
+  opacity: 0.42;
+}
+
+.proxyOverrideControlsDisabled .proxyToggle,
+.proxyOverrideControlsDisabled .proxyToggle input[type='checkbox'],
+.proxyOverrideControlsDisabled .proxyToggle span,
+.proxyOverrideControlsDisabled .proxyDocLink {
+  cursor: not-allowed;
+}
+
+.proxyOverrideGroup {
+  border: 1px solid var(--border2);
+  background: var(--panel2);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.proxyOverrideGroupHead {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.proxySliderGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.proxyManualPanel input[type='range'] {
+  cursor: pointer;
+}
+
+.proxyManualPanel input[type='range']:disabled {
+  cursor: not-allowed;
+}
+
+.proxyManualSummary {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 12px;
+}
+
+.proxyYamlEditor {
+  min-height: 360px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+}
+
+@media (max-width: 1280px) {
+  .proxyOverviewGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1100px) {
+  .proxyHeroHeader {
+    flex-direction: column;
+  }
+
+  .proxyHeroBadges {
+    justify-content: flex-start;
+  }
+
+  .proxySectionGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .proxyEditorToolbar {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .proxyManualHeader,
+  .proxyOverrideGroupHead {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .proxySliderGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .proxyOverviewGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .proxyRuntimeHead,
+  .proxyProfileHead,
+  .proxyEndpointTitle,
+  .proxyFaultChip {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
 .swarmWorkerTitle {
   min-width: 0;
 }

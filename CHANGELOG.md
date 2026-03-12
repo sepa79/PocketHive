@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.15.10]
+Timestamp: 2026-03-12T14:13:12Z
+
+- Network proxy control plane: add `network-proxy-manager-service`, shared network binding/profile DTOs in `swarm-model`, Orchestrator create-swarm support for `networkMode` and `networkProfileId`, and Scenario Manager `/network-profiles` APIs with bundled profile definitions.
+- Proxy infrastructure: add the local HAProxy/Toxiproxy stack (`network-proxy-haproxy`, compose/runtime wiring, local bee image updates) plus manual proxy override actions and additional toxics such as `slow-close` and `limit-data`.
+- UI v2: add a dedicated Proxy page and client library for proxy/binding operations; Hive swarm creation flows now surface proxied network selection through the updated Orchestrator API.
+- E2E lifecycle coverage: add proxied HTTP, HTTPS, and TCPS swarm scenarios plus Network Proxy Manager test clients/assertions; harden queue tapping so scenarios that emit their only message on swarm start can still observe `post`/`final` traffic, including the `local-rest-plan-demo` resolution fix.
+- TCP/TLS mock hardening: load file-based mappings at bean initialisation in `tcp-mock-server` and fix the secure TLS request/response templates and mapping extraction so the TCPS proxy scenario receives a complete secure response instead of timing out on split line frames.
+- ISO8583 end-to-end support: add canonical `iso8583.request` / `iso8583.result` envelopes, request-template schema support, request-builder ISO8583 schema-pack/XML codecs, processor-side ISO8583 protocol handling, and matching worker-level tests.
+- Template/layout normalization: move bundled and baked templates to explicit protocol roots (`templates/http`, `templates/tcp`), update scenario/template roots accordingly, and rename Scenario Manager template endpoints from HTTP-specific paths to generic bundle template APIs.
+- Clearing Export follow-up hardening from `release/0.14`: fix structured clearing config validation/wiring, reset flush windows correctly when opening a new batch, and keep the 0.15 line aligned with the latest batch-writer stability fixes.
+- Clearing Export docs sync: restore and refresh the structured mode playbook/contract docs so documentation matches the stricter XML schema contract, fatal preflight behavior, and wrapperless element rules now enforced in runtime.
+- Postprocessor AMQP output: carry forward the explicit routing-key default/config support that landed on `release/0.14`, so postprocessor output routing remains configurable and does not rely on implicit broker behaviour.
+- Tooling/dev UX: update `start-e2e-tests.sh`, `build-hive.sh`, add the file-backed `tools/mcp-orchestrator-debug/server.mjs` MCP wrapper plus shared recorder helpers/tests, refresh `tools/mcp-orchestrator-debug/client.mjs`, and update the VS Code helper commands/providers to match targeted E2E runs, proxy-aware scenario flows, and the new template layout.
+- MCP feedback loop POC: extend the debug MCP server with per-session tool-event logging, structured `toolEvent` results, `feedback.submit` / `feedback.summary` tools, local JSONL aggregation, and concept notes for improving MCP ergonomics from agent feedback.
+- Docs: add and refresh architecture, rollout, and RFC material for network proxying, SUT dataset simulation, tenancy foundations, and Postman setup/teardown; archive completed in-progress plans and refresh docs navigation/index pages.
+
 ## [0.15.9]
 Timestamp: 2026-03-03T21:31:04Z
 
@@ -16,6 +33,10 @@ Timestamp: 2026-03-03T21:31:04Z
 ## [0.15.8]
 Timestamp: 2026-02-24T00:00:00Z
 
+- Scenario template storage normalized to protocol-scoped layout (`templates/<protocol>/...`) across bundled/e2e scenarios and baked request-builder templates; scenario `templateRoot` paths now point to explicit protocol roots (for example `/app/scenario/templates/http` or `/app/scenario/templates/tcp`).
+- Scenario Manager template API renamed from HTTP-specific paths to generic bundle template paths (`/scenarios/{id}/templates`, `/scenarios/{id}/template`, `/template/rename`) with matching service/UI updates.
+- Request template loading now requires explicit `protocol` in every template definition; fixtures and examples were updated accordingly.
+- Request Builder and HTTP Sequence default template roots aligned to `/app/templates/http` (replacing legacy `/app/http-templates` usage).
 - Processor service: added proxy-awareness for outbound HTTP by exposing both runtime HTTP clients to JVM system properties sourced from worker environment configuration.
 - UI (Scenario Editor): increased available vertical workspace across Plan/YAML/Swarm/HTTP templates views (larger fixed-height panes, internal scroll regions), so editors no longer render at ~1/3 screen height.
 - Clearing Export lifecycle journal: file lifecycle events (`created`, `write-failed`, `finalize-failed`, `flush-summary`) are now published as normal control-plane outcomes (`work-journal`) instead of alerts.

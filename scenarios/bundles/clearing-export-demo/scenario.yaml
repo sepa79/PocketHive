@@ -45,14 +45,18 @@ template:
       image: clearing-export:latest
       config:
         worker:
+          mode: template
           maxRecordsPerFile: 10
           flushIntervalMs: 60000
           maxBufferedRecords: 5000
           strictTemplate: true
+          recordSourceStep: latest
+          recordSourceStepIndex: -1
+          recordBuildFailurePolicy: stop
           lineSeparator: "\n"
           fileNameTemplate: "CLEARING_{{ now }}.txt"
           headerTemplate: "H|{{ now }}"
-          recordTemplate: "D|{{ record.payload }}"
+          recordTemplate: "D|{{ steps.selected.payload }}"
           footerTemplate: "T|{{ recordCount }}"
           localTargetDir: "/tmp/pockethive/clearing-out"
           localTempSuffix: ".tmp"
