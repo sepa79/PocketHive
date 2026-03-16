@@ -1114,7 +1114,11 @@ class SwarmControllerTest {
             stateStore,
             mapper,
             scenarioClient,
-            networkProxyClient,
+            new SwarmNetworkBindingService(
+                networkProxyClient,
+                HiveJournal.noop(),
+                publisher,
+                controlPlaneProperties()),
             HiveJournal.noop(),
             plans,
             new ScenarioTimelineRegistry(),

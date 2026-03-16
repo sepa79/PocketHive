@@ -108,7 +108,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 	        lenient().when(controlPlane.publisher()).thenReturn(publisher);
 	        lenient().doNothing().when(controlEmitter).emitStatusSnapshot(any());
 	        lenient().doNothing().when(controlEmitter).emitStatusDelta(any());
-	        listener = new SwarmSignalListener(plans, timelines, tracker, registry, lifecycle, networkProxyClient, mapper,
+	        listener = new SwarmSignalListener(plans, timelines, tracker, registry, lifecycle, networkBindings(), mapper,
 	            HiveJournal.noop(),
 	            controlPlane, controlEmitter, identity, descriptor, controlQueueName);
 	        clearInvocations(controlPlane, controlEmitter, publisher, lifecycle, networkProxyClient);
@@ -236,7 +236,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 
 		    @Test
 		    void statusSnapshotIncludesControlRoutes() {
-		        new SwarmSignalListener(plans, timelines, tracker, registry, lifecycle, networkProxyClient, mapper,
+		        new SwarmSignalListener(plans, timelines, tracker, registry, lifecycle, networkBindings(), mapper,
 		            HiveJournal.noop(),
 		            controlPlane, controlEmitter, identity, descriptor, controlQueueName);
 
@@ -313,5 +313,24 @@ import static org.mockito.Mockito.verifyNoInteractions;
         } catch (Exception e) {
             throw new IllegalStateException(e);
         }
+    }
+
+    private SwarmNetworkBindingService networkBindings() {
+        return new SwarmNetworkBindingService(
+            networkProxyClient,
+            HiveJournal.noop(),
+            publisher,
+            controlPlaneProperties());
+    }
+
+    private static io.pockethive.controlplane.spring.ControlPlaneProperties controlPlaneProperties() {
+        io.pockethive.controlplane.spring.ControlPlaneProperties properties =
+            new io.pockethive.controlplane.spring.ControlPlaneProperties();
+        properties.setExchange("ph.control");
+        properties.setControlQueuePrefix("ph.control.manager");
+        properties.setSwarmId("default");
+        properties.setInstanceId(ORCHESTRATOR_INSTANCE);
+        properties.getManager().setRole("orchestrator");
+        return properties;
     }
 }

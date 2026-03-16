@@ -15,8 +15,6 @@ import io.pockethive.orchestrator.domain.SwarmLifecycleStatus;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.HiveJournal;
 import io.pockethive.orchestrator.domain.HiveJournal.HiveJournalEntry;
-import io.pockethive.swarm.model.NetworkBinding;
-import io.pockethive.swarm.model.NetworkBindingClearRequest;
 import io.pockethive.swarm.model.NetworkMode;
 import io.pockethive.swarm.model.SwarmPlan;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -69,7 +67,7 @@ public class SwarmSignalListener {
     private final SwarmStore store;
     private final SwarmCreateTracker creates;
     private final ContainerLifecycleManager lifecycle;
-    private final NetworkProxyClient networkProxy;
+    private final SwarmNetworkBindingService networkBindings;
     private final ObjectMapper json;
     private final HiveJournal hiveJournal;
     private final ControlPlaneJournalErrors journalErrors;
@@ -87,7 +85,7 @@ public class SwarmSignalListener {
                                SwarmCreateTracker creates,
                                SwarmStore store,
                                ContainerLifecycleManager lifecycle,
-                               NetworkProxyClient networkProxy,
+                               SwarmNetworkBindingService networkBindings,
                                ObjectMapper json,
                                HiveJournal hiveJournal,
                                ManagerControlPlane controlPlane,
@@ -100,7 +98,7 @@ public class SwarmSignalListener {
         this.creates = creates;
         this.store = store;
         this.lifecycle = lifecycle;
-        this.networkProxy = Objects.requireNonNull(networkProxy, "networkProxy");
+        this.networkBindings = Objects.requireNonNull(networkBindings, "networkBindings");
         this.json = json.findAndRegisterModules();
         this.hiveJournal = Objects.requireNonNull(hiveJournal, "hiveJournal");
         this.controlPlane = Objects.requireNonNull(controlPlane, "controlPlane");
@@ -431,44 +429,16 @@ public class SwarmSignalListener {
                 throw new IllegalStateException(
                     "Swarm '%s' is PROXIED but has no sutId for network binding cleanup".formatted(swarmId));
             }
-            clearNetworkBinding(swarmId, sutId, correlationId, idempotencyKey);
+            networkBindings.clearBinding(
+                swarmId,
+                sutId,
+                correlationId,
+                idempotencyKey,
+                ROLE,
+                "swarm-remove",
+                ROLE);
         }
         lifecycle.removeSwarm(swarmId);
-    }
-
-    private void clearNetworkBinding(String swarmId,
-                                     String sutId,
-                                     String correlationId,
-                                     String idempotencyKey) {
-        try {
-            NetworkBinding binding = networkProxy.clearSwarm(
-                swarmId,
-                new NetworkBindingClearRequest(sutId, ROLE, "swarm-remove"),
-                correlationId,
-                idempotencyKey);
-            try {
-                hiveJournal.append(HiveJournalEntry.info(
-                    swarmId,
-                    HiveJournal.Direction.LOCAL,
-                    "network",
-                    "network-binding-clear",
-                    ROLE,
-                    ControlScope.forSwarm(swarmId),
-                    correlationId,
-                    idempotencyKey,
-                    null,
-                    Map.of(
-                        "effectiveMode", binding.effectiveMode().name(),
-                        "requestedBy", binding.requestedBy()),
-                    null,
-                    null));
-            } catch (Exception ignore) {
-                // best-effort
-            }
-        } catch (Exception ex) {
-            throw new IllegalStateException(
-                "Failed to clear network proxy binding for swarm '%s'".formatted(swarmId), ex);
-        }
     }
 
     private void onSwarmTemplateError(RoutingKey key) {

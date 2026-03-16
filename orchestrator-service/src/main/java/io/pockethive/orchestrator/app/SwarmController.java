@@ -31,17 +31,13 @@ import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
 import io.pockethive.swarm.model.NetworkMode;
 import io.pockethive.swarm.model.NetworkBinding;
-import io.pockethive.swarm.model.NetworkBindingClearRequest;
-import io.pockethive.swarm.model.NetworkBindingRequest;
 import io.pockethive.swarm.model.NetworkProfile;
-import io.pockethive.swarm.model.ResolvedSutEndpoint;
 import io.pockethive.swarm.model.ResolvedSutEnvironment;
 import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.SwarmTemplate;
 import io.pockethive.swarm.model.SutEndpoint;
 import io.pockethive.swarm.model.SutEnvironment;
 import io.pockethive.util.BeeNameGenerator;
-import java.net.URI;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -89,7 +85,7 @@ public class SwarmController {
     private final SwarmPlanRegistry plans;
     private final ScenarioTimelineRegistry timelines;
     private final ScenarioClient scenarios;
-    private final NetworkProxyClient networkProxy;
+    private final SwarmNetworkBindingService networkBindings;
     private final HiveJournal hiveJournal;
     private final ObjectMapper json;
     private final String originInstanceId;
@@ -107,7 +103,7 @@ public class SwarmController {
                            SwarmStateStore stateStore,
                            ObjectMapper json,
                            ScenarioClient scenarios,
-                           NetworkProxyClient networkProxy,
+                           SwarmNetworkBindingService networkBindings,
                            HiveJournal hiveJournal,
                            SwarmPlanRegistry plans,
                            ScenarioTimelineRegistry timelines,
@@ -120,7 +116,7 @@ public class SwarmController {
         this.stateStore = stateStore;
         this.json = json;
         this.scenarios = scenarios;
-        this.networkProxy = Objects.requireNonNull(networkProxy, "networkProxy");
+        this.networkBindings = Objects.requireNonNull(networkBindings, "networkBindings");
         this.hiveJournal = Objects.requireNonNull(hiveJournal, "hiveJournal");
         this.plans = plans;
         this.timelines = timelines;
@@ -254,7 +250,7 @@ public class SwarmController {
                 final io.pockethive.swarm.model.SutEnvironment finalSutEnvironment = sutEnvironment;
                 ResolvedSutEnvironment resolvedSutEnvironment =
                     networkMode == NetworkMode.PROXIED && finalSutEnvironment != null
-                        ? resolveSutEnvironment(finalSutEnvironment, true)
+                        ? networkBindings.resolveSutEnvironment(finalSutEnvironment, true)
                         : null;
                 ScenarioClient.ResolvedVariables resolvedVariables;
                 try {
@@ -331,7 +327,7 @@ public class SwarmController {
                         throw new IllegalStateException(
                             "networkMode=PROXIED requires resolved SUT environment for swarm '%s'".formatted(swarmId));
                     }
-                    applyNetworkBinding(
+                    networkBindings.applyBinding(
                         swarmId,
                         sutId,
                         networkProfileId,
@@ -356,7 +352,15 @@ public class SwarmController {
                         networkProfileId);
                 } catch (RuntimeException ex) {
                     if (networkBindingApplied) {
-                        rollbackNetworkBinding(swarmId, sutId, corr, req.idempotencyKey(), ex);
+                        networkBindings.rollbackBinding(
+                            swarmId,
+                            sutId,
+                            corr,
+                            req.idempotencyKey(),
+                            "orchestrator",
+                            "swarm-create-rollback",
+                            "orchestrator",
+                            ex);
                     }
                     throw ex;
                 }
@@ -489,7 +493,7 @@ public class SwarmController {
         String idempotencyKey = normalize(req.idempotencyKey());
         String reason = normalize(req.notes()) == null ? "swarm-network-update" : req.notes().trim();
         if (req.networkMode() == NetworkMode.DIRECT) {
-            NetworkBinding cleared = clearNetworkBinding(
+            NetworkBinding cleared = networkBindings.clearBinding(
                 swarmId,
                 sutId,
                 correlationId,
@@ -499,7 +503,13 @@ public class SwarmController {
                 "hive");
             swarm.setNetworkMode(NetworkMode.DIRECT);
             swarm.setNetworkProfileId(null);
-            publishControllerNetworkContext(swarm, sutId, NetworkMode.DIRECT, null, correlationId, idempotencyKey);
+            networkBindings.publishControllerNetworkContext(
+                swarm,
+                sutId,
+                NetworkMode.DIRECT,
+                null,
+                correlationId,
+                idempotencyKey);
             response = ResponseEntity.ok(cleared);
             logRestResponse("POST", path, response);
             return response;
@@ -516,8 +526,8 @@ public class SwarmController {
         String networkProfileId = normalize(req.networkProfileId());
         fetchNetworkProfile(networkProfileId, templateId, swarmId, correlationId, idempotencyKey);
         SutEnvironment sutEnvironment = fetchSutEnvironment(templateId, sutId, swarmId, correlationId, idempotencyKey);
-        ResolvedSutEnvironment resolvedSutEnvironment = resolveSutEnvironment(sutEnvironment, true);
-        NetworkBinding binding = applyNetworkBinding(
+        ResolvedSutEnvironment resolvedSutEnvironment = networkBindings.resolveSutEnvironment(sutEnvironment, true);
+        NetworkBinding binding = networkBindings.applyBinding(
             swarmId,
             sutId,
             networkProfileId,
@@ -529,7 +539,13 @@ public class SwarmController {
             "hive");
         swarm.setNetworkMode(NetworkMode.PROXIED);
         swarm.setNetworkProfileId(networkProfileId);
-        publishControllerNetworkContext(swarm, sutId, NetworkMode.PROXIED, networkProfileId, correlationId, idempotencyKey);
+        networkBindings.publishControllerNetworkContext(
+            swarm,
+            sutId,
+            NetworkMode.PROXIED,
+            networkProfileId,
+            correlationId,
+            idempotencyKey);
         response = ResponseEntity.ok(binding);
         logRestResponse("POST", path, response);
         return response;
@@ -701,264 +717,6 @@ public class SwarmController {
             throw new IllegalStateException("Template %s missing swarm-controller image".formatted(templateId));
         }
         return image;
-    }
-
-    private NetworkBinding applyNetworkBinding(String swarmId,
-                                               String sutId,
-                                               String networkProfileId,
-                                               ResolvedSutEnvironment resolvedSutEnvironment,
-                                               String correlationId,
-                                               String idempotencyKey,
-                                               String requestedBy,
-                                               String reason,
-                                               String journalOrigin) {
-        try {
-            NetworkBinding binding = networkProxy.bindSwarm(
-                swarmId,
-                new NetworkBindingRequest(
-                    sutId,
-                    NetworkMode.PROXIED,
-                    networkProfileId,
-                    requestedBy,
-                    reason,
-                    resolvedSutEnvironment),
-                correlationId,
-                idempotencyKey);
-            appendNetworkBindingJournal(
-                swarmId,
-                "network-binding-apply",
-                correlationId,
-                idempotencyKey,
-                binding.networkMode(),
-                binding.networkProfileId(),
-                binding.affectedEndpoints().size(),
-                journalOrigin);
-            return binding;
-        } catch (Exception ex) {
-            throw new IllegalStateException(
-                "Failed to bind network proxy for swarm '%s'".formatted(swarmId), ex);
-        }
-    }
-
-    private void rollbackNetworkBinding(String swarmId,
-                                        String sutId,
-                                        String correlationId,
-                                        String idempotencyKey,
-                                        RuntimeException createFailure) {
-        try {
-            clearNetworkBinding(
-                swarmId,
-                sutId,
-                correlationId,
-                idempotencyKey,
-                "orchestrator",
-                "swarm-create-rollback",
-                "orchestrator");
-        } catch (Exception clearEx) {
-            createFailure.addSuppressed(clearEx);
-            log.warn("[CTRL] swarm-create rollback network binding FAILED swarm={} correlation={} idempotencyKey={}",
-                swarmId, correlationId, idempotencyKey, clearEx);
-        }
-    }
-
-    private NetworkBinding clearNetworkBinding(String swarmId,
-                                               String sutId,
-                                               String correlationId,
-                                               String idempotencyKey,
-                                               String requestedBy,
-                                               String reason,
-                                               String journalOrigin) {
-        try {
-            NetworkBinding cleared = networkProxy.clearSwarm(
-                swarmId,
-                new NetworkBindingClearRequest(sutId, requestedBy, reason),
-                correlationId,
-                idempotencyKey);
-            appendNetworkBindingJournal(
-                swarmId,
-                "network-binding-clear",
-                correlationId,
-                idempotencyKey,
-                cleared.effectiveMode(),
-                null,
-                0,
-                journalOrigin);
-            return cleared;
-        } catch (Exception ex) {
-            throw new IllegalStateException(
-                "Failed to clear network proxy binding for swarm '%s'".formatted(swarmId), ex);
-        }
-    }
-
-    private void appendNetworkBindingJournal(String swarmId,
-                                             String action,
-                                             String correlationId,
-                                             String idempotencyKey,
-                                             NetworkMode effectiveMode,
-                                             String networkProfileId,
-                                             int affectedEndpointCount,
-                                             String origin) {
-        try {
-            var data = new LinkedHashMap<String, Object>();
-            data.put("effectiveMode", effectiveMode.name());
-            data.put("networkProfileId", networkProfileId);
-            data.put("affectedEndpointCount", affectedEndpointCount);
-            hiveJournal.append(HiveJournalEntry.info(
-                swarmId,
-                HiveJournal.Direction.LOCAL,
-                "network",
-                action,
-                normalize(origin) == null ? "orchestrator" : origin.trim(),
-                ControlScope.forSwarm(swarmId),
-                correlationId,
-                idempotencyKey,
-                null,
-                data,
-                null,
-                null));
-        } catch (Exception ignore) {
-            // best-effort
-        }
-    }
-
-    private void publishControllerNetworkContext(Swarm swarm,
-                                                 String sutId,
-                                                 NetworkMode networkMode,
-                                                 String networkProfileId,
-                                                 String correlationId,
-                                                 String idempotencyKey) {
-        if (swarm == null) {
-            return;
-        }
-        String controllerInstance = normalize(swarm.getInstanceId());
-        if (controllerInstance == null) {
-            return;
-        }
-        ControlScope target = ControlScope.forInstance(swarm.getId(), "swarm-controller", controllerInstance);
-        Map<String, Object> data = new LinkedHashMap<>();
-        data.put("sutId", normalize(sutId));
-        data.put("networkMode", NetworkMode.directIfNull(networkMode).name());
-        data.put("networkProfileId", normalize(networkProfileId));
-        ControlSignal payload = ControlSignals.configUpdate(
-            originInstanceId,
-            target,
-            correlationId,
-            idempotencyKey,
-            data);
-        String routingKey = ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, swarm.getId(), "swarm-controller", controllerInstance);
-        sendControl(routingKey, toJson(payload), "signal.config-update.network-context");
-    }
-
-    private static ResolvedSutEnvironment resolveSutEnvironment(SutEnvironment sutEnvironment, boolean proxied) {
-        Map<String, ResolvedSutEndpoint> endpoints = new LinkedHashMap<>();
-        for (Map.Entry<String, SutEndpoint> entry : sutEnvironment.endpoints().entrySet()) {
-            SutEndpoint endpoint = Objects.requireNonNull(entry.getValue(), "sutEndpoint");
-            String endpointKey = entry.getKey();
-            ResolvedSutEndpoint resolvedEndpoint = resolveSutEndpoint(endpointKey, endpoint, proxied);
-            endpoints.put(endpointKey, resolvedEndpoint);
-        }
-        return new ResolvedSutEnvironment(
-            sutEnvironment.id(),
-            sutEnvironment.name(),
-            sutEnvironment.type(),
-            endpoints);
-    }
-
-    private static ResolvedSutEndpoint resolveSutEndpoint(String endpointKey, SutEndpoint endpoint, boolean proxied) {
-        String endpointId = endpoint.id() == null || endpoint.id().isBlank() ? endpointKey : endpoint.id().trim();
-        String kind = requireText(endpoint.kind(), "endpoint.kind");
-        EndpointTarget clientTarget = parseEndpointTarget(endpointId, kind, endpoint.baseUrl(), "baseUrl");
-        EndpointTarget upstreamTarget = proxied
-            ? parseEndpointTarget(
-                endpointId,
-                kind,
-                requireText(endpoint.upstreamBaseUrl(),
-                    "endpoint.upstreamBaseUrl must be provided when networkMode=PROXIED"),
-                "upstreamBaseUrl")
-            : clientTarget;
-        URI uri = clientTarget.uri();
-        String scheme = clientTarget.scheme();
-        String host = uri.getHost();
-        if (host == null || host.isBlank()) {
-            throw new IllegalStateException(
-                "SUT endpoint '%s' baseUrl must include host".formatted(endpointId));
-        }
-        int port = resolveAuthorityPort(endpointId, scheme, uri.getPort());
-        String clientAuthority = host + ":" + port;
-        URI upstreamUri = upstreamTarget.uri();
-        String upstreamHost = upstreamUri.getHost();
-        if (upstreamHost == null || upstreamHost.isBlank()) {
-            throw new IllegalStateException(
-                "SUT endpoint '%s' upstreamBaseUrl must include host".formatted(endpointId));
-        }
-        int upstreamPort = resolveAuthorityPort(endpointId, upstreamTarget.scheme(), upstreamUri.getPort());
-        String upstreamAuthority = upstreamHost + ":" + upstreamPort;
-        return new ResolvedSutEndpoint(
-            endpointId,
-            kind,
-            clientTarget.clientBaseUrl(),
-            clientAuthority,
-            upstreamAuthority);
-    }
-
-    private static EndpointTarget parseEndpointTarget(String endpointId,
-                                                      String kind,
-                                                      String baseUrl,
-                                                      String fieldName) {
-        String value = requireText(baseUrl, "endpoint." + fieldName);
-        String normalizedKind = kind.trim().toLowerCase();
-        if (!value.contains("://")) {
-            if ("tcp".equals(normalizedKind) || "tcps".equals(normalizedKind)) {
-                URI uri = parseUri(endpointId, normalizedKind + "://" + value);
-                return new EndpointTarget(value, normalizedKind, uri);
-            }
-            throw new IllegalStateException(
-                "SUT endpoint '%s' %s must include scheme".formatted(endpointId, fieldName));
-        }
-        URI uri = parseUri(endpointId, value);
-        return new EndpointTarget(value, requireScheme(endpointId, uri), uri);
-    }
-
-    private static URI parseUri(String endpointId, String candidate) {
-        try {
-            return URI.create(candidate);
-        } catch (IllegalArgumentException ex) {
-            throw new IllegalStateException(
-                "Invalid baseUrl for SUT endpoint '%s': %s".formatted(endpointId, candidate), ex);
-        }
-    }
-
-    private static String requireScheme(String endpointId, URI uri) {
-        String scheme = uri.getScheme();
-        if (scheme == null || scheme.isBlank()) {
-            throw new IllegalStateException(
-                "SUT endpoint '%s' baseUrl must include scheme".formatted(endpointId));
-        }
-        return scheme.trim().toLowerCase();
-    }
-
-    private static int resolveAuthorityPort(String endpointId, String scheme, int configuredPort) {
-        if (configuredPort > 0) {
-            return configuredPort;
-        }
-        return switch (scheme) {
-            case "http" -> 80;
-            case "https" -> 443;
-            case "tcp", "tcps" -> throw new IllegalStateException(
-                "SUT endpoint '%s' baseUrl must include explicit port for %s".formatted(endpointId, scheme));
-            default -> throw new IllegalStateException(
-                "Unsupported SUT endpoint scheme '%s' for endpoint '%s'".formatted(scheme, endpointId));
-        };
-    }
-
-    private static String requireText(String value, String field) {
-        if (value == null || value.isBlank()) {
-            throw new IllegalStateException(field + " must not be blank");
-        }
-        return value.trim();
-    }
-
-    private record EndpointTarget(String clientBaseUrl, String scheme, URI uri) {
     }
 
     private static Map<String, Object> addScenarioVolume(Map<String, Object> config, String volumeSpec) {

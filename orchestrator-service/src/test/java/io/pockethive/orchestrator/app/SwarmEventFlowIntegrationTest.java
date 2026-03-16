@@ -103,13 +103,18 @@ class SwarmEventFlowIntegrationTest {
         HiveJournal journal = HiveJournal.noop();
         tracker = new SwarmCreateTracker();
         registry = new SwarmStore();
+        SwarmNetworkBindingService networkBindings = new SwarmNetworkBindingService(
+            networkProxyClient,
+            journal,
+            publisher,
+            controlPlaneProperties());
         signalListener = new SwarmSignalListener(
             plans,
             timelines,
             tracker,
             registry,
             lifecycle,
-            networkProxyClient,
+            networkBindings,
             mapper,
             journal,
             controlPlane,
@@ -244,5 +249,16 @@ class SwarmEventFlowIntegrationTest {
             org.mockito.ArgumentMatchers.isNull(),
             org.mockito.ArgumentMatchers.isNull());
         verify(lifecycle).removeSwarm(SWARM_ID);
+    }
+
+    private static io.pockethive.controlplane.spring.ControlPlaneProperties controlPlaneProperties() {
+        io.pockethive.controlplane.spring.ControlPlaneProperties properties =
+            new io.pockethive.controlplane.spring.ControlPlaneProperties();
+        properties.setExchange("ph.control");
+        properties.setControlQueuePrefix("ph.control.manager");
+        properties.setSwarmId(SWARM_ID);
+        properties.setInstanceId(ORCHESTRATOR_INSTANCE);
+        properties.getManager().setRole("orchestrator");
+        return properties;
     }
 }
