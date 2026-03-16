@@ -5,16 +5,18 @@
 The VS Code plugin should enable AI-assisted creation and modification of PocketHive scenarios **without allowing the AI to directly edit final YAML files**.
 
 The AI should interact with a **Scenario Builder MCP Server**, which:
-- maintains a working scenario model,
-- performs domain operations,
-- validates state,
-- generates final bundle artifacts,
+- maintains an in-session working copy of a canonical PocketHive scenario bundle,
+- performs domain operations that map to the existing scenario contract,
+- validates the bundle against the current PocketHive docs/spec,
+- generates canonical bundle artifacts,
 - returns execution logs and quality feedback.
 
 ## 2. Core Principles
 
 - **AI must not write final PocketHive YAML directly**
 - **All scenario changes must go through MCP tools**
+- **MCP is not a separate scenario SSOT**
+- **The canonical scenario contract remains the existing PocketHive docs/spec**
 - The plugin should surface:
   - action log,
   - validation log,
@@ -36,7 +38,7 @@ MVP should support:
 - setting config / env / ports / topology in a basic safe scope
 - adding a simple `plan`
 - adding HTTP templates
-- validating the working model
+- validating the working bundle copy
 - generating output bundle artifacts
 - producing a session feedback report
 
@@ -47,6 +49,24 @@ MVP should **not** support initially:
 - global platform refactors
 - unrestricted free-form file system access
 
+## 3.1 Contract Alignment
+
+The builder MCP must be a **safe authoring facade** over the existing PocketHive
+scenario contract and bundle layout.
+
+It must not define an alternative scenario model.
+
+Authoritative references remain:
+- `docs/scenarios/README.md`
+- `docs/scenarios/SCENARIO_CONTRACT.md`
+- worker capability manifests under `scenario-manager-service/capabilities/*.latest.yaml`
+
+Implications:
+- session state is a working copy of a canonical scenario bundle,
+- generated output must match the standard PocketHive bundle layout,
+- every MCP tool must have an explicit mapping to existing bundle/YAML fields,
+- validation errors must describe violations of the canonical contract, not MCP-only rules.
+
 ## 4. Session Model
 
 Each authoring session should contain:
@@ -54,6 +74,7 @@ Each authoring session should contain:
 - `workspace_path`
 - `mode`: `create` | `modify`
 - `scenario_ref` (optional)
+- `working_bundle_path`
 - `input_artifacts` (optional)
 - `action_log`
 - `validation_log`
@@ -110,10 +131,10 @@ Input:
 ```
 
 #### `close_session`
-Close session and finalize outputs.
+Close session and finalize outputs derived from the working bundle copy.
 
 #### `discard_session`
-Discard working state without exporting artifacts.
+Discard working state without exporting bundle artifacts.
 
 ---
 
@@ -122,7 +143,7 @@ Discard working state without exporting artifacts.
 These tools are preferred where possible, because they reduce the number of low-level calls AI must make.
 
 #### `create_scenario`
-Create an empty scenario or scaffold.
+Create a canonical scenario bundle scaffold.
 
 Input:
 
@@ -136,7 +157,7 @@ Input:
 ```
 
 #### `create_rest_pipeline`
-Create a typical REST-oriented pipeline.
+Create a typical REST-oriented pipeline by updating canonical scenario fields.
 
 Example output structure may include:
 - generator
@@ -168,10 +189,10 @@ Input:
 ```
 
 #### `bind_sut_endpoint`
-Bind scenario to an existing SUT / endpoint mapping.
+Bind the scenario bundle to an existing SUT / endpoint mapping supported by the current contract.
 
 #### `add_plan_stage`
-Add a stage to `plan`.
+Add a stage to canonical `plan`.
 
 Input:
 
@@ -190,13 +211,15 @@ Input:
 ### 5.3 Mid-level domain tools
 
 #### `add_bee`
-Add a bee to the current scenario.
+Add a bee to `template.bees[]`.
 
 #### `remove_bee`
-Remove a bee from the current scenario.
+Remove a bee from `template.bees[]`.
 
 #### `connect_bees`
-Create a connection between two bees.
+Create or update a logical topology edge in `topology.edges[]`.
+This tool must only operate on the canonical topology/ports/work contract.
+It must not invent a separate graph model.
 
 #### `set_bee_config`
 Set or merge a safe subset of bee config.
@@ -204,11 +227,14 @@ Set or merge a safe subset of bee config.
 #### `set_env_var`
 Set a scenario or bee environment variable.
 
-#### `set_port_binding`
-Add or update a port definition.
+#### `set_bee_ports`
+Add or update logical `ports[]` for a bee as defined by the scenario contract.
+
+#### `set_bee_work_io`
+Add or update canonical `template.bees[].work.in/out` mappings.
 
 #### `set_topology`
-Set topology-related fields in a constrained way.
+Set `topology` fields in a constrained way that remains consistent with `ports[]` and `work`.
 
 #### `set_traffic_policy`
 Set a basic traffic policy.
@@ -230,22 +256,23 @@ Map template assets to request-builder config.
 ### 5.4 Validation and output tools
 
 #### `validate_session`
-Run validation against the working model.
+Run validation against the working bundle copy and canonical scenario contract.
 
 Validation should return:
 - structural issues
 - missing references
 - invalid bee types
-- invalid connections
+- invalid topology edges
+- invalid `work` / `ports` alignment
 - missing templates
 - incomplete plan definitions
 - unsupported config fragments
 
 #### `preview_diff`
-Return a diff between source and generated output.
+Return a diff between the source bundle and the generated canonical bundle output.
 
 #### `generate_bundle`
-Generate final output artifacts in a temporary or target location.
+Generate final canonical bundle artifacts in a temporary or target location.
 
 #### `export_bundle`
 Write final bundle to output path or ZIP.
@@ -317,7 +344,7 @@ System-generated. Records actual tool calls and results.
 Examples:
 - session started
 - bee added
-- connection created
+- topology edge created
 - template imported
 - bundle generated
 
@@ -326,7 +353,8 @@ System-generated. Records validation results.
 
 Examples:
 - missing template root
-- invalid connection target
+- invalid topology edge target
+- missing bee port declaration
 - missing required config
 - unresolved endpoint binding
 
@@ -386,6 +414,8 @@ Preferred direction:
 - `create_rest_pipeline`
 - `add_bee`
 - `connect_bees`
+- `set_bee_ports`
+- `set_bee_work_io`
 - `add_plan_stage`
 - `attach_template_to_request_builder`
 - `validate_session`
@@ -411,7 +441,7 @@ Later phases may add:
 Recommended implementation priorities:
 
 1. Session lifecycle
-2. Core scenario model in memory / workspace
+2. In-session working copy of the canonical scenario bundle
 3. High-level MCP tools
 4. Validation pipeline
 5. Action / validation logs

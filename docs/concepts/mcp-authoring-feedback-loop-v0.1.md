@@ -20,6 +20,8 @@ This is product telemetry, not automatic architecture governance.
 - Feedback is required after meaningful failure states.
 - AI may suggest improvements, but decisions stay with the PocketHive team.
 - Session feedback and product improvement suggestions are separate concerns.
+- The authoring target remains the canonical PocketHive scenario bundle contract.
+- MCP session state is only a working copy of that canonical bundle, not a separate SSOT.
 
 ## Two Feedback Loops
 
@@ -51,6 +53,11 @@ Used across many sessions:
 - `workingBundlePath`
 - `status`: `active | needs_feedback | valid | exported | discarded | failed`
 - `currentGoal`
+
+`workingBundlePath` refers to an in-session working copy of a canonical
+PocketHive scenario bundle that must remain compatible with:
+- `docs/scenarios/README.md`
+- `docs/scenarios/SCENARIO_CONTRACT.md`
 
 ### Tool event
 
@@ -90,7 +97,7 @@ Optional feedback is still useful after successful milestones, but it should not
 {
   "status": "rejected",
   "stateVersion": 7,
-  "summary": "Cannot connect bees because target bee has no input port 'in'.",
+  "summary": "Cannot create topology edge because target bee has no declared input port 'in'.",
   "validation": [
     {
       "code": "TOPOLOGY_PORT_MISSING",
@@ -100,8 +107,8 @@ Optional feedback is still useful after successful milestones, but it should not
     }
   ],
   "nextHint": {
-    "suggestedTool": "set_port_binding",
-    "reason": "Declare the missing input port before connecting bees."
+    "suggestedTool": "set_bee_ports",
+    "reason": "Declare the missing logical port before creating the topology edge."
   },
   "feedbackRequired": true
 }
@@ -112,15 +119,15 @@ Optional feedback is still useful after successful milestones, but it should not
 ```json
 {
   "relatedEventId": "evt-17",
-  "intent": "Connect generator-a to processor-a.",
-  "outcomeUnderstanding": "Processor is missing a declared input port, so connect_bees cannot proceed.",
+  "intent": "Create a logical topology edge from generator-a.out to processor-a.in.",
+  "outcomeUnderstanding": "Processor is missing a declared input port, so the topology edge cannot be created yet.",
   "blockerType": "missing_domain_step",
-  "proposedNextAction": "Add input port 'in' to processor-a and retry connect_bees.",
+  "proposedNextAction": "Add input port 'in' to processor-a with set_bee_ports and retry connect_bees.",
   "suggestedImprovements": [
     {
       "type": "improve_docs",
       "target": "connect_bees",
-      "reason": "It was not obvious that ports must exist before topology edges are created.",
+      "reason": "It was not obvious that topology edges must match the canonical ports/work contract.",
       "confidence": "medium"
     }
   ]
@@ -187,6 +194,14 @@ Usually add or reshape MCP tools when:
 3. Mark sessions as `needs_feedback` after rejected/error states.
 4. Add a simple `session-summary.json` with aggregated counters.
 5. Review real sessions before adding new MCP endpoints.
+
+## Contract Guardrail
+
+This feedback loop must evaluate MCP usability against the existing
+PocketHive scenario contract.
+
+It must not normalize failures by introducing MCP-only authoring rules or a
+parallel scenario representation.
 
 ## Scope Note
 
