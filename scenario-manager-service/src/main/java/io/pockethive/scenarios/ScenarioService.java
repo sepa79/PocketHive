@@ -870,9 +870,9 @@ public class ScenarioService {
         return Files.readString(file);
     }
 
-    public List<String> listHttpTemplateFiles(String id) throws IOException {
+    public List<String> listTemplateFiles(String id) throws IOException {
         Path bundle = bundleDirFor(id);
-        Path templatesDir = bundle.resolve("http-templates").normalize();
+        Path templatesDir = bundle.resolve("templates").normalize();
         if (!templatesDir.startsWith(bundle) || !Files.isDirectory(templatesDir)) {
             return List.of();
         }
@@ -890,7 +890,7 @@ public class ScenarioService {
         return files;
     }
 
-    public void writeHttpTemplate(String id, String relativePath, String content) throws IOException {
+    public void writeTemplate(String id, String relativePath, String content) throws IOException {
         if (relativePath == null || relativePath.isBlank()) {
             throw new IllegalArgumentException("Template path must not be null or blank");
         }
@@ -910,19 +910,19 @@ public class ScenarioService {
         Files.writeString(file, content);
     }
 
-    public void renameHttpTemplate(String id, String fromPath, String toPath) throws IOException {
+    public void renameTemplate(String id, String fromPath, String toPath) throws IOException {
         if (fromPath == null || fromPath.isBlank() || toPath == null || toPath.isBlank()) {
             throw new IllegalArgumentException("Template paths must not be null or blank");
         }
         Path bundle = bundleDirFor(id);
-        Path templatesDir = bundle.resolve("http-templates").normalize();
+        Path templatesDir = bundle.resolve("templates").normalize();
         Path source = bundle.resolve(fromPath).normalize();
         Path target = bundle.resolve(toPath).normalize();
         if (!source.startsWith(bundle) || !target.startsWith(bundle)) {
             throw new IllegalArgumentException("Invalid template path");
         }
         if (!source.startsWith(templatesDir) || !target.startsWith(templatesDir)) {
-            throw new IllegalArgumentException("Template paths must live under http-templates/");
+            throw new IllegalArgumentException("Template paths must live under templates/");
         }
         if (source.equals(target)) {
             throw new IllegalArgumentException("Template paths must differ");
@@ -942,18 +942,18 @@ public class ScenarioService {
         Files.move(source, target);
     }
 
-    public void deleteHttpTemplate(String id, String relativePath) throws IOException {
+    public void deleteTemplate(String id, String relativePath) throws IOException {
         if (relativePath == null || relativePath.isBlank()) {
             throw new IllegalArgumentException("Template path must not be null or blank");
         }
         Path bundle = bundleDirFor(id);
-        Path templatesDir = bundle.resolve("http-templates").normalize();
+        Path templatesDir = bundle.resolve("templates").normalize();
         Path file = bundle.resolve(relativePath).normalize();
         if (!file.startsWith(bundle)) {
             throw new IllegalArgumentException("Invalid template path");
         }
         if (!file.startsWith(templatesDir)) {
-            throw new IllegalArgumentException("Template paths must live under http-templates/");
+            throw new IllegalArgumentException("Template paths must live under templates/");
         }
         if (!Files.isRegularFile(file)) {
             throw new IllegalArgumentException(

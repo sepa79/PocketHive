@@ -31,7 +31,7 @@ template:
       image: request-builder:latest
       config:
         worker:
-          templateRoot: /app/scenario/templates
+          templateRoot: /app/scenario/templates/tcp
           serviceId: default
       work:
         in:

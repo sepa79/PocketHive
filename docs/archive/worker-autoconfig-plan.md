@@ -1,7 +1,7 @@
 # PocketHive Worker SDK — v2 Autoflight Plan
 
 > Status: **implemented / archived**.  
-> Superseded by: `docs/sdk/worker-configurable-io-plan.md` and `docs/sdk/worker-sdk-quickstart.md`.
+> Superseded by: `docs/toBeReviewed/worker-configurable-io-plan.md` and `docs/sdk/worker-sdk-quickstart.md`.
 
 > Scope: eliminate per-service runtime adapters by promoting input/output wiring,
 > configuration, and worker metadata into the SDK. This doc captures the next stage

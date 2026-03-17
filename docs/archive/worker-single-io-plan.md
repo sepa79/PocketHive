@@ -1,7 +1,7 @@
 # PocketHive Worker SDK — Single-Worker IO Refactor Plan
 
 > Status: **implemented / archived**.  
-> Superseded by: `docs/sdk/worker-configurable-io-plan.md` and current IO configuration docs.
+> Superseded by: `docs/toBeReviewed/worker-configurable-io-plan.md` and current IO configuration docs.
 
 > Scope: drop the role-based input/output config namespaces, enforce one worker per JVM, and shift queue/exchange binding into the input/output sections so the control-plane block only carries control metadata.
 

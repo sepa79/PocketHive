@@ -389,52 +389,52 @@ public class ScenarioController {
         return ResponseEntity.noContent().build();
     }
 
-    @GetMapping(value = "/{id}/http-templates", produces = MediaType.APPLICATION_JSON_VALUE)
-    public List<String> listHttpTemplates(@PathVariable("id") String id) throws IOException {
-        log.info("[REST] GET /scenarios/{}/http-templates", id);
-        List<String> files = service.listHttpTemplateFiles(id);
-        log.info("[REST] GET /scenarios/{}/http-templates -> status=200 body={}", id, safeJson(files));
+    @GetMapping(value = "/{id}/templates", produces = MediaType.APPLICATION_JSON_VALUE)
+    public List<String> listTemplates(@PathVariable("id") String id) throws IOException {
+        log.info("[REST] GET /scenarios/{}/templates", id);
+        List<String> files = service.listTemplateFiles(id);
+        log.info("[REST] GET /scenarios/{}/templates -> status=200 body={}", id, safeJson(files));
         return files;
     }
 
-    @GetMapping(value = "/{id}/http-template", produces = MediaType.TEXT_PLAIN_VALUE)
-    public ResponseEntity<String> readHttpTemplate(@PathVariable("id") String id,
-                                                   @RequestParam("path") String path) throws IOException {
-        log.info("[REST] GET /scenarios/{}/http-template path={}", id, path);
+    @GetMapping(value = "/{id}/template", produces = MediaType.TEXT_PLAIN_VALUE)
+    public ResponseEntity<String> readTemplate(@PathVariable("id") String id,
+                                               @RequestParam("path") String path) throws IOException {
+        log.info("[REST] GET /scenarios/{}/template path={}", id, path);
         String text = service.readBundleFile(id, path);
-        log.info("[REST] GET /scenarios/{}/http-template -> status=200 ({} chars)", id, text != null ? text.length() : 0);
+        log.info("[REST] GET /scenarios/{}/template -> status=200 ({} chars)", id, text != null ? text.length() : 0);
         return ResponseEntity.ok()
                 .contentType(MediaType.TEXT_PLAIN)
                 .body(text);
     }
 
-    @PutMapping(value = "/{id}/http-template", consumes = MediaType.TEXT_PLAIN_VALUE)
-    public ResponseEntity<Void> writeHttpTemplate(@PathVariable("id") String id,
-                                                  @RequestParam("path") String path,
-                                                  @RequestBody String body) throws IOException {
+    @PutMapping(value = "/{id}/template", consumes = MediaType.TEXT_PLAIN_VALUE)
+    public ResponseEntity<Void> writeTemplate(@PathVariable("id") String id,
+                                              @RequestParam("path") String path,
+                                              @RequestBody String body) throws IOException {
         int size = body != null ? body.length() : 0;
-        log.info("[REST] PUT /scenarios/{}/http-template path={} ({} chars)", id, path, size);
-        service.writeHttpTemplate(id, path, body != null ? body : "");
-        log.info("[REST] PUT /scenarios/{}/http-template -> status=204", id);
+        log.info("[REST] PUT /scenarios/{}/template path={} ({} chars)", id, path, size);
+        service.writeTemplate(id, path, body != null ? body : "");
+        log.info("[REST] PUT /scenarios/{}/template -> status=204", id);
         return ResponseEntity.noContent().build();
     }
 
-    @PostMapping(value = "/{id}/http-template/rename")
-    public ResponseEntity<Void> renameHttpTemplate(@PathVariable("id") String id,
-                                                   @RequestParam("from") String fromPath,
-                                                   @RequestParam("to") String toPath) throws IOException {
-        log.info("[REST] POST /scenarios/{}/http-template/rename from={} to={}", id, fromPath, toPath);
-        service.renameHttpTemplate(id, fromPath, toPath);
-        log.info("[REST] POST /scenarios/{}/http-template/rename -> status=204", id);
+    @PostMapping(value = "/{id}/template/rename")
+    public ResponseEntity<Void> renameTemplate(@PathVariable("id") String id,
+                                               @RequestParam("from") String fromPath,
+                                               @RequestParam("to") String toPath) throws IOException {
+        log.info("[REST] POST /scenarios/{}/template/rename from={} to={}", id, fromPath, toPath);
+        service.renameTemplate(id, fromPath, toPath);
+        log.info("[REST] POST /scenarios/{}/template/rename -> status=204", id);
         return ResponseEntity.noContent().build();
     }
 
-    @DeleteMapping(value = "/{id}/http-template")
-    public ResponseEntity<Void> deleteHttpTemplate(@PathVariable("id") String id,
-                                                   @RequestParam("path") String path) throws IOException {
-        log.info("[REST] DELETE /scenarios/{}/http-template path={}", id, path);
-        service.deleteHttpTemplate(id, path);
-        log.info("[REST] DELETE /scenarios/{}/http-template -> status=204", id);
+    @DeleteMapping(value = "/{id}/template")
+    public ResponseEntity<Void> deleteTemplate(@PathVariable("id") String id,
+                                               @RequestParam("path") String path) throws IOException {
+        log.info("[REST] DELETE /scenarios/{}/template path={}", id, path);
+        service.deleteTemplate(id, path);
+        log.info("[REST] DELETE /scenarios/{}/template -> status=204", id);
         return ResponseEntity.noContent().build();
     }
 

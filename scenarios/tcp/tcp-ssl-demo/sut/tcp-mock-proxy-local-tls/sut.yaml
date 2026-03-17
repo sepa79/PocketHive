@@ -1,0 +1,14 @@
+id: tcp-mock-proxy-local-tls
+name: TCP Mock via Proxy TLS (local docker-compose)
+type: tcp
+endpoints:
+  default:
+    id: default
+    kind: tcp
+    baseUrl: tcps://haproxy:19443
+    upstreamBaseUrl: tcps://tcp-mock-server-tls:9090
+  tcps-server:
+    id: tcps-server
+    kind: tcp
+    baseUrl: tcps://haproxy:19443
+    upstreamBaseUrl: tcps://tcp-mock-server-tls:9090

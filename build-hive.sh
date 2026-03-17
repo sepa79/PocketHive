@@ -4,13 +4,14 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}"
 
-ALL_SERVICES=(rabbitmq log-aggregator scenario-manager orchestrator tcp-mock-server ui ui-v2 prometheus grafana loki wiremock pushgateway redis redis-commander swarm-controller generator request-builder http-sequence moderator processor postprocessor clearing-export trigger)
+ALL_SERVICES=(rabbitmq log-aggregator scenario-manager network-proxy-manager haproxy orchestrator tcp-mock-server tcp-mock-server-tls toxiproxy ui ui-v2 prometheus grafana loki wiremock pushgateway redis redis-commander swarm-controller generator request-builder http-sequence moderator processor postprocessor clearing-export trigger)
 declare -A DURATIONS=()
 TIMING_ORDER=(clean build_base maven_package stage_artifacts docker_build_workers docker_build compose_up restart)
 BUILD_START_TIME=0
 JAR_MODULES=(
   log-aggregator-service
   scenario-manager-service
+  network-proxy-manager-service
   orchestrator-service
   tcp-mock-server
   swarm-controller-service
@@ -27,6 +28,7 @@ JAR_MODULES=(
 declare -A MODULE_TO_SERVICE=(
   ["log-aggregator-service"]="log-aggregator"
   ["scenario-manager-service"]="scenario-manager"
+  ["network-proxy-manager-service"]="network-proxy-manager"
   ["orchestrator-service"]="orchestrator"
   ["tcp-mock-server"]="tcp-mock-server"
   ["swarm-controller-service"]="swarm-controller"
@@ -43,6 +45,7 @@ declare -A MODULE_TO_SERVICE=(
 declare -A SERVICE_TO_MODULE=(
   ["log-aggregator"]="log-aggregator-service"
   ["scenario-manager"]="scenario-manager-service"
+  ["network-proxy-manager"]="network-proxy-manager-service"
   ["orchestrator"]="orchestrator-service"
   ["tcp-mock-server"]="tcp-mock-server"
   ["swarm-controller"]="swarm-controller-service"
@@ -77,7 +80,7 @@ usage() {
 Usage: $(basename "$0") [options]
 
 Options:
-  --quick                 Skip tests during the Maven build (-DskipTests).
+  --quick                 Skip tests and Maven clean/cache purge for faster iterations.
   --module <name>         Rebuild a given module (repeatable).
   --service <name>        Rebuild a docker-compose service (repeatable).
   --clean                 Stop the stack and remove stale containers before building.
@@ -88,8 +91,8 @@ Options:
   --help                  Show this help.
 
 Behaviour:
-  • No flags → local Maven build with tests, rebuild all services, start the full stack (does NOT run 'mvn clean').
-  • --quick  → skips tests for faster iterations.
+  • No flags → local Maven clean package with tests, clears PocketHive local Maven cache, rebuilds all services, starts the full stack.
+  • --quick  → skips tests and keeps existing Maven/target state for faster iterations.
   • --service generator --module orchestrator-service → rebuild specific services.
 
 Environment:
@@ -124,6 +127,21 @@ compose_build_services() {
           -f scenario-manager-service/Dockerfile.runtime \
           --build-arg RUNTIME_IMAGE="${RUNTIME_IMAGE}" \
           -t scenario-manager:latest .
+        built_any=true
+        ;;
+      network-proxy-manager)
+        echo "Building network-proxy-manager image from network-proxy-manager-service/Dockerfile.runtime"
+        docker build \
+          -f network-proxy-manager-service/Dockerfile.runtime \
+          --build-arg RUNTIME_IMAGE="${RUNTIME_IMAGE}" \
+          -t network-proxy-manager:latest .
+        built_any=true
+        ;;
+      haproxy)
+        echo "Building network-proxy-haproxy image from network-proxy-haproxy/Dockerfile"
+        docker build \
+          -f network-proxy-haproxy/Dockerfile \
+          -t network-proxy-haproxy:latest network-proxy-haproxy
         built_any=true
         ;;
       orchestrator)
@@ -210,7 +228,7 @@ clean_stack() {
     echo "Pruning local PocketHive images..."
     # Target only images built by this repo: core services and bees.
     mapfile -t ph_images < <(docker images --format '{{.Repository}} {{.ID}}' | awk '
-      $1 ~ /^(orchestrator|scenario-manager|log-aggregator|tcp-mock-server|ui|swarm-controller|generator|request-builder|http-sequence|moderator|processor|postprocessor|clearing-export|trigger|pockethive-)/ { print $2 }')
+      $1 ~ /^(orchestrator|scenario-manager|log-aggregator|network-proxy-manager|network-proxy-haproxy|tcp-mock-server|ui|swarm-controller|generator|request-builder|http-sequence|moderator|processor|postprocessor|clearing-export|trigger|pockethive-)/ { print $2 }')
     for img in "${ph_images[@]}"; do
       if [[ -n "$img" ]]; then
         echo " - Removing image ${img}"
@@ -293,7 +311,12 @@ run_maven_package() {
   (( ${#modules[@]} == 0 )) && return
   local csv
   csv=$(IFS=,; echo "${modules[*]}")
-  local mvn_cmd=(mvn -B -pl "$csv" -am package)
+  local mvn_goals=(package)
+  if ! $SKIP_TESTS; then
+    mvn_goals=(clean package)
+    reset_local_build_state
+  fi
+  local mvn_cmd=(mvn -B -pl "$csv" -am "${mvn_goals[@]}")
   if $SKIP_TESTS; then
     mvn_cmd+=("-DskipTests")
   fi
@@ -304,6 +327,17 @@ run_maven_package() {
 
   echo "Packaging modules (${csv}) via local Maven"
   "${mvn_cmd[@]}"
+}
+
+reset_local_build_state() {
+  echo "Resetting local staged jars (${LOCAL_ARTIFACTS_DIR})"
+  rm -rf "${LOCAL_ARTIFACTS_DIR}"
+
+  local repo_group_dir="${HOME}/.m2/repository/io/pockethive"
+  if [[ -d "${repo_group_dir}" ]]; then
+    echo "Removing local Maven cache (${repo_group_dir})"
+    rm -rf "${repo_group_dir}"
+  fi
 }
 
 stage_artifacts() {

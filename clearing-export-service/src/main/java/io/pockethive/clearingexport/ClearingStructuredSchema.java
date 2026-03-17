@@ -26,7 +26,7 @@ record ClearingStructuredSchema(
     recordMapping = normalizeRecordMapping(recordMapping);
     headerMapping = normalizeStringMapping(headerMapping);
     footerMapping = normalizeStringMapping(footerMapping);
-    xml = xml == null ? XmlOutputConfig.defaults() : xml.normalize();
+    xml = requireXmlConfig(xml);
   }
 
   private static Map<String, StructuredFieldRule> normalizeRecordMapping(
@@ -71,6 +71,20 @@ record ClearingStructuredSchema(
     return value.trim();
   }
 
+  private static String requireConfiguredText(String value, String name) {
+    if (value == null) {
+      throw new IllegalArgumentException(name + " must be configured");
+    }
+    return value.trim();
+  }
+
+  private static XmlOutputConfig requireXmlConfig(XmlOutputConfig xml) {
+    if (xml == null) {
+      throw new IllegalArgumentException("xml must be configured for structured xml output");
+    }
+    return xml.normalize();
+  }
+
   record StructuredFieldRule(String expression, Boolean required, String type) {
 
     StructuredFieldRule normalize() {
@@ -106,32 +120,15 @@ record ClearingStructuredSchema(
       Boolean indent
   ) {
 
-    static XmlOutputConfig defaults() {
-      return new XmlOutputConfig(
-          true,
-          "UTF-8",
-          "Document",
-          "FileHeader",
-          "Transactions",
-          "Transaction",
-          "FileTrailer",
-          "",
-          "",
-          "",
-          "",
-          false
-      );
-    }
-
     XmlOutputConfig normalize() {
       return new XmlOutputConfig(
           declaration == null ? true : declaration,
           defaultIfBlank(encoding, "UTF-8"),
-          defaultIfBlank(rootElement, "Document"),
-          defaultIfBlank(headerElement, "FileHeader"),
-          defaultIfBlank(recordsElement, "Transactions"),
-          defaultIfBlank(recordElement, "Transaction"),
-          defaultIfBlank(footerElement, "FileTrailer"),
+          requireText(rootElement, "xml.rootElement"),
+          requireText(headerElement, "xml.headerElement"),
+          requireConfiguredText(recordsElement, "xml.recordsElement"),
+          requireConfiguredText(recordElement, "xml.recordElement"),
+          requireText(footerElement, "xml.footerElement"),
           namespaceUri == null ? "" : namespaceUri.trim(),
           namespacePrefix == null ? "" : namespacePrefix.trim(),
           recordNamespaceUri == null ? "" : recordNamespaceUri.trim(),
@@ -141,4 +138,3 @@ record ClearingStructuredSchema(
     }
   }
 }
-

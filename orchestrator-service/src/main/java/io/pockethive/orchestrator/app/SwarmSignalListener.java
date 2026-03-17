@@ -12,8 +12,10 @@ import io.pockethive.orchestrator.domain.SwarmCreateTracker;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker.Pending;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker.Phase;
 import io.pockethive.orchestrator.domain.SwarmLifecycleStatus;
+import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.HiveJournal;
 import io.pockethive.orchestrator.domain.HiveJournal.HiveJournalEntry;
+import io.pockethive.swarm.model.NetworkMode;
 import io.pockethive.swarm.model.SwarmPlan;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -65,6 +67,7 @@ public class SwarmSignalListener {
     private final SwarmStore store;
     private final SwarmCreateTracker creates;
     private final ContainerLifecycleManager lifecycle;
+    private final SwarmNetworkBindingService networkBindings;
     private final ObjectMapper json;
     private final HiveJournal hiveJournal;
     private final ControlPlaneJournalErrors journalErrors;
@@ -82,6 +85,7 @@ public class SwarmSignalListener {
                                SwarmCreateTracker creates,
                                SwarmStore store,
                                ContainerLifecycleManager lifecycle,
+                               SwarmNetworkBindingService networkBindings,
                                ObjectMapper json,
                                HiveJournal hiveJournal,
                                ManagerControlPlane controlPlane,
@@ -94,6 +98,7 @@ public class SwarmSignalListener {
         this.creates = creates;
         this.store = store;
         this.lifecycle = lifecycle;
+        this.networkBindings = Objects.requireNonNull(networkBindings, "networkBindings");
         this.json = json.findAndRegisterModules();
         this.hiveJournal = Objects.requireNonNull(hiveJournal, "hiveJournal");
         this.controlPlane = Objects.requireNonNull(controlPlane, "controlPlane");
@@ -254,7 +259,7 @@ public class SwarmSignalListener {
                 else onSwarmStopError(key);
             }
             case "swarm-remove" -> {
-                if (isStatus(status, "Removed")) onSwarmRemoveReady(key);
+                if (isStatus(status, "Removed")) onSwarmRemoveReady(key, correlationId, idempotencyKey);
                 else store.updateStatus(key.swarmId(), SwarmLifecycleStatus.FAILED);
             }
             default -> log.debug("[CTRL] Ignoring outcome type {}", key.type());
@@ -411,11 +416,27 @@ public class SwarmSignalListener {
         lifecycle.stopSwarm(swarmId);
     }
 
-    private void onSwarmRemoveReady(RoutingKey key) {
+    private void onSwarmRemoveReady(RoutingKey key, String correlationId, String idempotencyKey) {
         String swarmId = key.swarmId();
         if (swarmId == null || swarmId.isBlank()) {
             log.warn("swarm-remove ready event missing swarm id: {}", key);
             return;
+        }
+        Swarm swarm = store.find(swarmId).orElse(null);
+        if (swarm != null && swarm.getNetworkMode() == NetworkMode.PROXIED) {
+            String sutId = swarm.getSutId();
+            if (sutId == null || sutId.isBlank()) {
+                throw new IllegalStateException(
+                    "Swarm '%s' is PROXIED but has no sutId for network binding cleanup".formatted(swarmId));
+            }
+            networkBindings.clearBinding(
+                swarmId,
+                sutId,
+                correlationId,
+                idempotencyKey,
+                ROLE,
+                "swarm-remove",
+                ROLE);
         }
         lifecycle.removeSwarm(swarmId);
     }

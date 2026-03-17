@@ -23,6 +23,8 @@ import io.pockethive.orchestrator.domain.SwarmCreateTracker.Phase;
 import io.pockethive.orchestrator.domain.SwarmLifecycleStatus;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
 import io.pockethive.orchestrator.domain.SwarmStore;
+import io.pockethive.swarm.model.NetworkBinding;
+import io.pockethive.swarm.model.NetworkMode;
 import io.pockethive.swarm.model.SwarmPlan;
 import java.time.Instant;
 import java.util.List;
@@ -63,6 +65,9 @@ class SwarmEventFlowIntegrationTest {
     @Mock
     private ControlPlaneStatusRequestPublisher statusRequests;
 
+    @Mock
+    private NetworkProxyClient networkProxyClient;
+
     @Captor
     private ArgumentCaptor<SignalMessage> signalCaptor;
 
@@ -98,12 +103,18 @@ class SwarmEventFlowIntegrationTest {
         HiveJournal journal = HiveJournal.noop();
         tracker = new SwarmCreateTracker();
         registry = new SwarmStore();
+        SwarmNetworkBindingService networkBindings = new SwarmNetworkBindingService(
+            networkProxyClient,
+            journal,
+            publisher,
+            controlPlaneProperties());
         signalListener = new SwarmSignalListener(
             plans,
             timelines,
             tracker,
             registry,
             lifecycle,
+            networkBindings,
             mapper,
             journal,
             controlPlane,
@@ -112,7 +123,7 @@ class SwarmEventFlowIntegrationTest {
             descriptor,
             controlQueueName);
         statusListener = new ControllerStatusListener(registry, mapper, statusRequests, signalListener, journal);
-        clearInvocations(controlPlane, controlEmitter, publisher, lifecycle);
+        clearInvocations(controlPlane, controlEmitter, publisher, lifecycle, networkProxyClient);
     }
 
     @Test
@@ -213,8 +224,41 @@ class SwarmEventFlowIntegrationTest {
             new ConfirmationScope(SWARM_ID, "swarm-controller", CONTROLLER_INSTANCE)));
         verify(lifecycle).stopSwarm(SWARM_ID);
 
+        storedSwarm.setSutId("sut-a");
+        storedSwarm.setNetworkMode(NetworkMode.PROXIED);
+        storedSwarm.setNetworkProfileId("passthrough");
+        org.mockito.Mockito.when(networkProxyClient.clearSwarm(
+                org.mockito.ArgumentMatchers.eq(SWARM_ID),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.isNull(),
+                org.mockito.ArgumentMatchers.isNull()))
+            .thenReturn(new NetworkBinding(
+                SWARM_ID,
+                "sut-a",
+                NetworkMode.DIRECT,
+                null,
+                NetworkMode.DIRECT,
+                "orchestrator",
+                Instant.now(),
+                List.of()));
         signalListener.handle("{\"data\":{\"status\":\"Removed\"}}", ControlPlaneRouting.event("outcome", "swarm-remove",
             new ConfirmationScope(SWARM_ID, "swarm-controller", CONTROLLER_INSTANCE)));
+        verify(networkProxyClient).clearSwarm(
+            org.mockito.ArgumentMatchers.eq(SWARM_ID),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.isNull(),
+            org.mockito.ArgumentMatchers.isNull());
         verify(lifecycle).removeSwarm(SWARM_ID);
+    }
+
+    private static io.pockethive.controlplane.spring.ControlPlaneProperties controlPlaneProperties() {
+        io.pockethive.controlplane.spring.ControlPlaneProperties properties =
+            new io.pockethive.controlplane.spring.ControlPlaneProperties();
+        properties.setExchange("ph.control");
+        properties.setControlQueuePrefix("ph.control.manager");
+        properties.setSwarmId(SWARM_ID);
+        properties.setInstanceId(ORCHESTRATOR_INSTANCE);
+        properties.getManager().setRole("orchestrator");
+        return properties;
     }
 }

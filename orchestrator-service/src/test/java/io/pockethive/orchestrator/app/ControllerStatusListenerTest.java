@@ -7,6 +7,7 @@ import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmLifecycleStatus;
 import io.pockethive.orchestrator.domain.HiveJournal;
+import io.pockethive.swarm.model.NetworkMode;
 import java.time.Instant;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -88,6 +89,43 @@ class ControllerStatusListenerTest {
         // STOPPED + workloadsEnabled=false should map to STOPPING -> STOPPED
         verify(store).updateStatus("sw1", SwarmLifecycleStatus.STOPPING);
         verify(store).updateStatus("sw1", SwarmLifecycleStatus.STOPPED);
+    }
+
+    @Test
+    void hydratesNetworkMetadataFromControllerStatus() throws Exception {
+        Swarm swarm = new Swarm("sw1", "inst1", "c1", "run-1");
+        swarm.updateControllerStatusFull(new ObjectMapper().readTree("{\"data\":{}}"), Instant.now());
+        when(store.find("sw1")).thenReturn(Optional.of(swarm));
+        ControllerStatusListener listener =
+            new ControllerStatusListener(store, new ObjectMapper(), statusRequests, swarmSignals, HiveJournal.noop());
+        String json = """
+            {
+              "timestamp": "2024-01-01T00:00:00Z",
+              "version": "1",
+              "kind": "metric",
+              "type": "status-full",
+              "origin": "inst1",
+              "scope": {"swarmId":"sw1","role":"swarm-controller","instance":"inst1"},
+              "runtime": {"runId":"run-1"},
+              "correlationId": null,
+              "idempotencyKey": null,
+              "data": {
+                "enabled": false,
+                "context": {
+                  "swarmStatus": "READY",
+                  "sutId": "wiremock-proxy-local",
+                  "networkMode": "DIRECT",
+                  "networkProfileId": null
+                }
+              }
+            }
+            """;
+
+        listener.handle(json, "event.metric.status-full.sw1.swarm-controller.inst1");
+
+        assertThat(swarm.getSutId()).isEqualTo("wiremock-proxy-local");
+        assertThat(swarm.getNetworkMode()).isEqualTo(NetworkMode.DIRECT);
+        assertThat(swarm.getNetworkProfileId()).isNull();
     }
 
     @Test

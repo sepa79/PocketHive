@@ -55,6 +55,10 @@ public class OrchestratorProperties {
         return orchestrator.scenarioManager();
     }
 
+    public NetworkProxyManager getNetworkProxyManager() {
+        return orchestrator.networkProxyManager();
+    }
+
     @Validated
     public static final class Orchestrator {
 
@@ -65,6 +69,7 @@ public class OrchestratorProperties {
         private final @Valid Docker docker;
         private final @Valid Images images;
         private final @Valid ScenarioManager scenarioManager;
+        private final @Valid NetworkProxyManager networkProxyManager;
 
         public Orchestrator(@NotBlank String controlQueuePrefix,
                              @NotBlank String statusQueuePrefix,
@@ -72,7 +77,8 @@ public class OrchestratorProperties {
                              @Valid Metrics metrics,
                              @Valid Docker docker,
                              @Valid Images images,
-                             @Valid ScenarioManager scenarioManager) {
+                             @Valid ScenarioManager scenarioManager,
+                             @Valid NetworkProxyManager networkProxyManager) {
             this.controlQueuePrefix = requireNonBlank(controlQueuePrefix, "controlQueuePrefix");
             this.statusQueuePrefix = requireNonBlank(statusQueuePrefix, "statusQueuePrefix");
             this.rabbit = Objects.requireNonNull(rabbit, "rabbit");
@@ -80,6 +86,7 @@ public class OrchestratorProperties {
             this.docker = Objects.requireNonNull(docker, "docker");
             this.images = Objects.requireNonNull(images, "images");
             this.scenarioManager = Objects.requireNonNull(scenarioManager, "scenarioManager");
+            this.networkProxyManager = Objects.requireNonNull(networkProxyManager, "networkProxyManager");
         }
 
         public String controlQueuePrefix() {
@@ -108,6 +115,10 @@ public class OrchestratorProperties {
 
         public ScenarioManager scenarioManager() {
             return scenarioManager;
+        }
+
+        public NetworkProxyManager networkProxyManager() {
+            return networkProxyManager;
         }
     }
 
@@ -275,6 +286,26 @@ public class OrchestratorProperties {
         private final @Valid Http http;
 
         public ScenarioManager(@NotBlank String url, @Valid Http http) {
+            this.url = requireNonBlank(url, "url");
+            this.http = Objects.requireNonNull(http, "http");
+        }
+
+        public String getUrl() {
+            return url;
+        }
+
+        public Http getHttp() {
+            return http;
+        }
+    }
+
+    @Validated
+    public static final class NetworkProxyManager {
+
+        private final String url;
+        private final @Valid Http http;
+
+        public NetworkProxyManager(@NotBlank String url, @Valid Http http) {
             this.url = requireNonBlank(url, "url");
             this.http = Objects.requireNonNull(http, "http");
         }

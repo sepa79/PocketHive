@@ -68,28 +68,57 @@ Add `mode: structured` alongside existing `mode: template`, where file structure
 - Strict/fail-fast behavior by default for schema errors and missing required fields.
 - Deterministic output (field ordering, encoding, separators, numeric/date formatting).
 
-### User-facing scenario shape (target)
+### Current branch behavior
+
+- Template mode remains supported and is still the default when `mode` is omitted.
+- Structured XML file shape is now defined only by the schema file; the worker does not invent `Document`, `FileHeader`, `Transactions`, `Transaction`, or `FileTrailer`.
+- Structured schemas must explicitly set `xml.rootElement`, `xml.headerElement`, `xml.recordsElement`, `xml.recordElement`, and `xml.footerElement`.
+- `recordsElement=""` and `recordElement=""` are the only supported blank special cases.
+- Invalid structured schema/config fails during preflight, publishes one major-event journal alert, and surfaces schema context in worker status/logging.
+
+### User-facing worker config shape
 
 ```yaml
 worker:
   mode: structured
-  schema:
-    id: pcs-clearing
-    version: "1.0.0"
-  outputFormat: xml
-  fileNameTemplate: "CLEARING_{{ now }}.xml"
+  schemaRegistryRoot: /app/scenario/clearing-schemas
+  schemaId: pcs-clearing
+  schemaVersion: "1.0.0"
+  recordSourceStep: latest
+  recordSourceStepIndex: -1
+  recordBuildFailurePolicy: stop
   maxRecordsPerFile: 1000
   flushIntervalMs: 60000
   maxBufferedRecords: 50000
   localTargetDir: "/tmp/pockethive/clearing-out"
 ```
 
-### Engine capabilities required in V2
+### Required schema shape
+
+```yaml
+  outputFormat: xml
+  fileNameTemplate: "CLEARING_{{ now }}.xml"
+  recordMapping:
+    payload:
+      expression: "{{ steps.selected.payload }}"
+      required: true
+      type: string
+  xml:
+    rootElement: Document
+    headerElement: FileHeader
+    recordsElement: Transactions
+    recordElement: Transaction
+    footerElement: FileTrailer
+```
+
+See `docs/clearing/CLEARING_STRUCTURED_SCHEMA_CONTRACT.md` for the full contract and required fields.
+
+### Engine capabilities implemented in V2
 
 - record projection via field mapping expressions,
 - typed validation/transforms per mapped field,
 - aggregate computation (`totals.*`) for footer/header,
-- formatter abstraction (`OutputFormatter`) with XML implementation,
+- XML formatting with `XmlOutputFormatter`,
 - schema preflight validation at config load/start,
 - clear runtime errors referencing schema field/rule.
 
@@ -109,15 +138,16 @@ worker:
 
 ### Phase 3: Formatter layer
 
-- Add `OutputFormatter` interface + factory.
 - Implement `XmlOutputFormatter` (`XMLStreamWriter`).
-- Wire `StructuredFileAssembler` into existing flush path.
+- Wire structured XML assembly into the existing flush path.
+- Defer generic formatter abstraction (`OutputFormatter` / JSON / CSV) until a real second formatter is needed.
 
 ### Phase 4: Schema-driven validation contract
 
 - Define canonical schema contract for structured mode (`schemaId`, `schemaVersion`, mappings, validation rules, output rules).
 - Add strict validation rules (required/type/enum/length/regex/number/date constraints).
 - Enforce deterministic ordering and null policy.
+- Treat invalid structured schema/config as fatal during preflight and surface it through one major-event journal alert plus worker status/logging.
 
 ### Phase 5: Tests, docs, examples
 
@@ -189,10 +219,11 @@ Known runtime limitation (documented, no behavior change in this iteration):
 - [x] `StructuredRecordProjector` implemented + tests.
 - [x] `StructuredAggregates` implemented in batch flush path (`totals.sum*`/`totals.min*`/`totals.max*`) + tests.
 - [x] Structured buffer support in `ClearingExportBatchWriter`.
-- [ ] `OutputFormatter` interface + factory implemented. (out of scope for this iteration)
+- [x] Structured schema now owns XML shape; no structural XML defaults are injected by the worker.
 - [x] `XmlOutputFormatter` implemented + tests.
 - [x] `StructuredFileAssembler` wired into flush pipeline (`ClearingExportFileAssembler.assembleStructured`).
 - [x] Canonical schema contract documented (SSOT) and linked from playbook.
+- [x] Fatal structured preflight validation now emits one major-event journal alert and schema context in worker status/logs.
 - [x] Example schema added (non-NDA sample) and runnable demo scenario (`clearing-export-structured-demo`).
 - [x] E2E scenario added for structured XML export (`@clearing-export-structured-demo`).
 - [x] Playbook updated with structured/schema-driven usage and troubleshooting.

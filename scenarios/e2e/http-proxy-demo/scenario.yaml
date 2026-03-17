@@ -1,0 +1,44 @@
+id: http-proxy-demo
+name: HTTP Proxy Demo
+description: Routes processor HTTP traffic through the managed proxy authority.
+template:
+  image: swarm-controller:latest
+  bees:
+    - role: generator
+      image: generator:latest
+      config:
+        inputs:
+          scheduler:
+            ratePerSec: 5
+        worker:
+          message:
+            bodyType: HTTP
+            path: /test
+            method: POST
+            body: '{"event":"http-proxy-demo"}'
+            headers:
+              content-type: application/json
+      work:
+        out:
+          out: gen
+    - role: moderator
+      image: moderator:latest
+      work:
+        in:
+          in: gen
+        out:
+          out: mod
+    - role: processor
+      image: processor:latest
+      config:
+        baseUrl: "{{ sut.endpoints['default'].baseUrl }}/api"
+      work:
+        in:
+          in: mod
+        out:
+          out: final
+    - role: postprocessor
+      image: postprocessor:latest
+      work:
+        in:
+          in: final

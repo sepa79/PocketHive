@@ -1,0 +1,9 @@
+id: wiremock-proxy-local
+name: WireMock via Toxiproxy (local docker-compose)
+type: http
+endpoints:
+  default:
+    id: default
+    kind: http
+    baseUrl: http://haproxy:18080
+    upstreamBaseUrl: http://wiremock:8080

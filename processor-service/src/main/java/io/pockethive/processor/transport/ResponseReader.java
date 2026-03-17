@@ -18,6 +18,7 @@ public interface ResponseReader {
             case ECHO -> new EchoResponseReader();
             case STREAMING -> new StreamingResponseReader();
             case REQUEST_RESPONSE -> new RequestResponseReader();
+            case LENGTH_PREFIX_2B -> new LengthPrefix2BResponseReader();
             case FIRE_FORGET -> (in, req) -> new byte[0];
         };
     }
@@ -85,6 +86,19 @@ public interface ResponseReader {
             return baos.toByteArray();
         }
     }
+
+    class LengthPrefix2BResponseReader implements ResponseReader {
+        @Override
+        public byte[] read(InputStream in, TcpRequest request) throws IOException {
+            int maxBytes = (Integer) request.options().getOrDefault("maxBytes", 8192);
+            byte[] lengthBytes = readFully(in, 2);
+            int payloadLength = ((lengthBytes[0] & 0xFF) << 8) | (lengthBytes[1] & 0xFF);
+            if (payloadLength > maxBytes) {
+                throw new IOException("Length-prefixed response exceeds maxBytes: " + payloadLength);
+            }
+            return readFully(in, payloadLength);
+        }
+    }
     
     static byte[] readUntilDelimiter(InputStream in, String delimiter, boolean stripDelimiter) throws IOException {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -109,5 +123,18 @@ public interface ResponseReader {
             }
         }
         return baos.toByteArray();
+    }
+
+    static byte[] readFully(InputStream in, int length) throws IOException {
+        byte[] bytes = new byte[length];
+        int offset = 0;
+        while (offset < length) {
+            int read = in.read(bytes, offset, length - offset);
+            if (read < 0) {
+                throw new IOException("Unexpected end of stream");
+            }
+            offset += read;
+        }
+        return bytes;
     }
 }

@@ -21,7 +21,7 @@ import { ScenarioDetail, ScenarioSummary, SwarmSummary } from './types';
 
 type ScenarioFileTarget = {
   scenarioId: string;
-  kind: 'scenario' | 'schema' | 'http-template';
+  kind: 'scenario' | 'schema' | 'template';
   path?: string;
 };
 
@@ -267,7 +267,7 @@ export async function openScenarioFile(target: ScenarioFileTarget): Promise<void
     const endpoint =
       target.kind === 'schema'
         ? `/scenarios/${encodeURIComponent(target.scenarioId)}/schema?path=${encodeURIComponent(filePath)}`
-        : `/scenarios/${encodeURIComponent(target.scenarioId)}/http-template?path=${encodeURIComponent(filePath)}`;
+        : `/scenarios/${encodeURIComponent(target.scenarioId)}/template?path=${encodeURIComponent(filePath)}`;
     outputChannel.appendLine(`[${new Date().toISOString()}] OPEN scenario file ${endpoint}`);
     const text = await requestText(baseUrl, authToken, 'GET', endpoint);
     const title = `${target.scenarioId}/${filePath}`;

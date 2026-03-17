@@ -13,6 +13,6 @@ import jakarta.validation.constraints.NotBlank;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record SutEndpoint(@NotBlank String id,
                           @NotBlank String kind,
-                          @NotBlank String baseUrl) {
+                          @NotBlank String baseUrl,
+                          String upstreamBaseUrl) {
 }
-

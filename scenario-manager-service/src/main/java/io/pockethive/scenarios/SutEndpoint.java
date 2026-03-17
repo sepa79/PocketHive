@@ -15,14 +15,17 @@ public final class SutEndpoint {
     private final String id;
     private final String kind;
     private final String baseUrl;
+    private final String upstreamBaseUrl;
 
     @JsonCreator
     public SutEndpoint(@JsonProperty("id") String id,
                        @JsonProperty("kind") String kind,
-                       @JsonProperty("baseUrl") String baseUrl) {
+                       @JsonProperty("baseUrl") String baseUrl,
+                       @JsonProperty("upstreamBaseUrl") String upstreamBaseUrl) {
         this.id = id;
         this.kind = kind;
         this.baseUrl = baseUrl;
+        this.upstreamBaseUrl = upstreamBaseUrl;
     }
 
     /**
@@ -46,5 +49,12 @@ public final class SutEndpoint {
     public String getBaseUrl() {
         return baseUrl;
     }
-}
 
+    /**
+     * Optional upstream base URL used by the proxy layer when the client-facing
+     * base URL already points at a proxy authority.
+     */
+    public String getUpstreamBaseUrl() {
+        return upstreamBaseUrl;
+    }
+}
