@@ -188,11 +188,14 @@ Input:
 }
 ```
 
-#### `bind_sut_endpoint`
-Bind the scenario bundle to an existing SUT / endpoint mapping supported by the current contract.
+#### `processor.set_config`
+Set canonical `template.bees[role=processor].config`.
 
-#### `add_plan_stage`
-Add a stage to canonical `plan`.
+#### `generator.set_inputs`
+Set canonical `template.bees[role=generator].config.inputs`.
+
+#### `plan.set_swarm`
+Set canonical `plan.swarm[]`.
 
 Input:
 
@@ -222,7 +225,7 @@ This tool must only operate on the canonical topology/ports/work contract.
 It must not invent a separate graph model.
 
 #### `set_bee_config`
-Set or merge a safe subset of bee config.
+Set or merge a safe subset of canonical bee `config`.
 
 #### `set_env_var`
 Set a scenario or bee environment variable.
@@ -242,11 +245,14 @@ Set a basic traffic policy.
 #### `set_variables`
 Create or update scenario variables.
 
-#### `add_http_template`
-Create a HTTP template entry.
+#### `generator.set_worker_message`
+Set canonical `template.bees[role=generator].config.worker.message`.
 
-#### `update_http_template`
-Update a HTTP template entry.
+#### `request_builder.set_config`
+Set canonical `template.bees[role=request-builder].config`.
+
+#### `template_http.put`
+Create or replace a canonical `templates/http/*.yaml` entry.
 
 #### `attach_template_to_request_builder`
 Map template assets to request-builder config.

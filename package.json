@@ -6,11 +6,15 @@
   "scripts": {
     "build": "echo \"no build step\"",
     "lint": "eslint -c ui/eslint.config.js \"ui/src/**/*.{ts,tsx}\"",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "vscode:build": "npm --prefix vscode-pockethive run build",
+    "vscode:package": "npm --prefix vscode-pockethive run package",
+    "vscode:watch": "npm --prefix vscode-pockethive run watch"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.1",
     "amqplib": "^0.10.4",
+    "yaml": "^2.8.1",
     "zod": "^3.24.1"
   },
   "devDependencies": {

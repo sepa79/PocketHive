@@ -2,7 +2,7 @@
   "name": "pockethive-vscode",
   "displayName": "PocketHive",
   "description": "Basic PocketHive commands for the Orchestrator API.",
-  "version": "0.0.7",
+  "version": "0.0.12",
   "publisher": "pockethive",
   "license": "GPL-3.0-only",
   "repository": {
@@ -12,10 +12,14 @@
   "engines": {
     "vscode": "^1.85.0"
   },
+  "extensionKind": [
+    "workspace"
+  ],
   "categories": [
     "Other"
   ],
   "activationEvents": [
+    "onChatParticipant:pockethive-vscode.scenario-wizard",
     "onCommand:pockethive.addHiveUrl",
     "onCommand:pockethive.setActiveHiveUrl",
     "onCommand:pockethive.removeHiveUrl",
@@ -43,6 +47,41 @@
   ],
   "main": "./out/extension.js",
   "contributes": {
+    "chatParticipants": [
+      {
+        "id": "pockethive-vscode.scenario-wizard",
+        "fullName": "PocketHive Wizard",
+        "name": "pockethive",
+        "description": "Create PocketHive scenarios in a guided wizard flow.",
+        "isSticky": true,
+        "commands": [
+          {
+            "name": "wizard",
+            "description": "Start the guided PocketHive scenario wizard."
+          },
+          {
+            "name": "restBasic",
+            "description": "Create a direct REST scenario scaffold."
+          },
+          {
+            "name": "requestBuilder",
+            "description": "Create a REST + request-builder scenario scaffold."
+          },
+          {
+            "name": "tutorial",
+            "description": "Show the PocketHive scenario wizard tutorial."
+          },
+          {
+            "name": "fromEvidence",
+            "description": "Start evidence-driven scenario analysis from Cucumber, Java, Postman, or notes."
+          },
+          {
+            "name": "addEvidence",
+            "description": "Add more evidence to the active evidence session and re-analyze."
+          }
+        ]
+      }
+    ],
     "viewsContainers": {
       "activitybar": [
         {
@@ -234,6 +273,22 @@
         "title": "Help: Settings",
         "category": "PocketHive",
         "icon": "$(question)"
+      },
+      {
+        "command": "pockethive.createScenarioWizard",
+        "title": "Create Scenario Wizard",
+        "category": "PocketHive",
+        "icon": "$(sparkle)"
+      },
+      {
+        "command": "pockethive.openScenarioBuilderPocDoc",
+        "title": "Open Scenario Builder Architecture Doc",
+        "category": "PocketHive"
+      },
+      {
+        "command": "pockethive.openActiveEvidenceSession",
+        "title": "Open Active Evidence Session",
+        "category": "PocketHive"
       }
     ],
     "menus": {

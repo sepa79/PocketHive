@@ -14,7 +14,9 @@ import {
   setActiveHiveUrl,
   showEntry
 } from './commands';
+import { registerScenarioChatParticipant } from './chatParticipant';
 import { PREVIEW_SCHEME, SCENARIO_SCHEME } from './constants';
+import { openActiveEvidenceSession, openChatWizardArchitectureDoc } from './evidenceCommands';
 import { ScenarioEditorProvider } from './editors/scenarioEditor';
 import { configureTimeWindow, loadTimeWindow } from './filterState';
 import { ScenarioFileSystemProvider } from './fs/scenarioFileSystemProvider';
@@ -26,6 +28,7 @@ import { HiveProvider } from './providers/hiveProvider';
 import { JournalProvider } from './providers/journalProvider';
 import { ScenarioProvider } from './providers/scenarioProvider';
 import { SettingsProvider } from './providers/settingsProvider';
+import { createScenarioWizard } from './scenarioWizard';
 
 export function activate(context: vscode.ExtensionContext): void {
   const outputChannel = initOutputChannel();
@@ -71,13 +74,19 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('pockethive.helpBuzz', () => openHelp('buzz')),
     vscode.commands.registerCommand('pockethive.helpJournal', () => openHelp('journal')),
     vscode.commands.registerCommand('pockethive.helpScenario', () => openHelp('scenario')),
+    vscode.commands.registerCommand('pockethive.createScenarioWizard', (templateType?: 'rest-basic' | 'rest-request-builder') =>
+      createScenarioWizard(templateType)
+    ),
+    vscode.commands.registerCommand('pockethive.openScenarioBuilderPocDoc', openChatWizardArchitectureDoc),
+    vscode.commands.registerCommand('pockethive.openActiveEvidenceSession', openActiveEvidenceSession),
     vscode.window.registerTreeDataProvider('pockethive.hive', hiveProvider),
     vscode.window.registerTreeDataProvider('pockethive.buzz', buzzProvider),
     vscode.window.registerTreeDataProvider('pockethive.journal', journalProvider),
     vscode.window.registerTreeDataProvider('pockethive.scenario', scenarioProvider),
     vscode.window.registerTreeDataProvider('pockethive.settings', settingsProvider),
     vscode.workspace.registerTextDocumentContentProvider(PREVIEW_SCHEME, previewProvider),
-    vscode.workspace.registerFileSystemProvider(SCENARIO_SCHEME, scenarioFsProvider, { isCaseSensitive: true })
+    vscode.workspace.registerFileSystemProvider(SCENARIO_SCHEME, scenarioFsProvider, { isCaseSensitive: true }),
+    registerScenarioChatParticipant(context)
   );
 
   context.subscriptions.push(

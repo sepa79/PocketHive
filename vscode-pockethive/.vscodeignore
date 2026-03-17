@@ -1,4 +1,6 @@
 **/*.ts
 **/*.map
 node_modules/**
+!node_modules/
+!node_modules/yaml/**
 .vscode/**
