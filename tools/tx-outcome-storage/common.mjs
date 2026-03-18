@@ -158,14 +158,6 @@ export function formatUtcTimestamp(millis) {
   return new Date(millis).toISOString().replace("T", " ").replace("Z", "").slice(0, 23);
 }
 
-export function toIsoInstant(value) {
-  const date = new Date(normalizeTimestamp(value));
-  if (Number.isNaN(date.getTime())) {
-    throw new Error(`Invalid eventTime: ${value}`);
-  }
-  return date.toISOString();
-}
-
 export function toClickHouseDateTime64(value) {
   const date = new Date(normalizeTimestamp(value));
   if (Number.isNaN(date.getTime())) {
@@ -174,86 +166,10 @@ export function toClickHouseDateTime64(value) {
   return date.toISOString().replace("T", " ").replace("Z", "").slice(0, 23);
 }
 
-export function toEpochMillis(value) {
-  const millis = Date.parse(normalizeTimestamp(value));
-  if (Number.isNaN(millis)) {
-    throw new Error(`Invalid eventTime: ${value}`);
-  }
-  return millis;
-}
-
 function normalizeTimestamp(value) {
   const text = String(value).trim();
   if (text.includes("T")) {
     return text;
   }
   return `${text.replace(" ", "T")}Z`;
-}
-
-export function normalizedCallIdKey(value) {
-  return value == null || String(value).trim() === "" ? "unknown" : String(value).trim();
-}
-
-export function normalizedBusinessCodeKey(value) {
-  return value == null || String(value).trim() === "" ? "n/a" : String(value).trim();
-}
-
-export function processorStatusClass(status) {
-  const code = Number.parseInt(String(status), 10);
-  if (code >= 200 && code < 300) {
-    return "2xx";
-  }
-  if (code >= 400 && code < 500) {
-    return "4xx";
-  }
-  if (code >= 500 && code < 600) {
-    return "5xx";
-  }
-  return "other";
-}
-
-function escapeMeasurement(value) {
-  return String(value).replaceAll(",", "\\,").replaceAll(" ", "\\ ");
-}
-
-function escapeTag(value) {
-  return String(value)
-    .replaceAll("\\", "\\\\")
-    .replaceAll(",", "\\,")
-    .replaceAll(" ", "\\ ")
-    .replaceAll("=", "\\=");
-}
-
-function escapeFieldString(value) {
-  return String(value)
-    .replaceAll("\\", "\\\\")
-    .replaceAll("\"", "\\\"");
-}
-
-export function toInfluxLine(record, measurement) {
-  const tags = [
-    ["swarmId", record.swarmId],
-    ["sinkRole", record.sinkRole],
-    ["sinkInstance", record.sinkInstance],
-    ["callIdKey", normalizedCallIdKey(record.callId)],
-    ["businessCodeKey", normalizedBusinessCodeKey(record.businessCode)],
-    ["processorStatusClass", processorStatusClass(record.processorStatus)]
-  ];
-
-  const fields = [
-    `processorStatus=${Number.parseInt(String(record.processorStatus), 10)}i`,
-    `processorSuccess=${Number.parseInt(String(record.processorSuccess), 10) === 1 ? "1i" : "0i"}`,
-    `processorDurationMs=${Number.parseInt(String(record.processorDurationMs), 10)}i`,
-    `businessSuccess=${Number.parseInt(String(record.businessSuccess), 10) === 1 ? "1i" : "0i"}`,
-    `traceId="${escapeFieldString(record.traceId ?? "")}"`,
-    `callId="${escapeFieldString(record.callId ?? "")}"`,
-    `businessCode="${escapeFieldString(record.businessCode ?? "")}"`,
-    `dimensionsJson="${escapeFieldString(JSON.stringify(record.dimensions ?? {}))}"`
-  ];
-
-  const tagSet = tags
-    .map(([key, value]) => `${escapeTag(key)}=${escapeTag(value ?? "")}`)
-    .join(",");
-
-  return `${escapeMeasurement(measurement)},${tagSet} ${fields.join(",")} ${toEpochMillis(record.eventTime)}`;
 }

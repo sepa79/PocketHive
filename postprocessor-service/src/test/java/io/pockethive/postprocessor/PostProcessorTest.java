@@ -369,8 +369,7 @@ class PostProcessorTest {
         private FixedTxOutcomeSinkRegistry() {
             super(List.of(
                 new NoOpTxOutcomeSink(),
-                new StubClickHouseTxOutcomeSink(),
-                new StubInfluxTxOutcomeSink()
+                new StubClickHouseTxOutcomeSink()
             ));
         }
     }
@@ -379,17 +378,6 @@ class PostProcessorTest {
         @Override
         public TxOutcomeSinkMode mode() {
             return TxOutcomeSinkMode.CLICKHOUSE_V2;
-        }
-
-        @Override
-        public void write(TxOutcomeEvent event) {
-        }
-    }
-
-    private static final class StubInfluxTxOutcomeSink implements TxOutcomeSink {
-        @Override
-        public TxOutcomeSinkMode mode() {
-            return TxOutcomeSinkMode.INFLUXDB3;
         }
 
         @Override

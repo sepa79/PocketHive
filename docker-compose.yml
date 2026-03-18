@@ -85,9 +85,6 @@ services:
       GF_SECURITY_ADMIN_USER: pockethive
       GF_SECURITY_ADMIN_PASSWORD: pockethive
       GF_INSTALL_PLUGINS: grafana-clickhouse-datasource
-      POCKETHIVE_INFLUXDB3_URL: http://influxdb3:8181
-      POCKETHIVE_INFLUXDB3_DATABASE: pockethive
-      POCKETHIVE_INFLUXDB3_TOKEN: apiv3_local_dev_replace_me
     volumes:
       - ./grafana/grafana.ini:/etc/grafana/grafana.ini:ro
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
@@ -97,8 +94,6 @@ services:
     depends_on:
       - prometheus
       - loki
-      - influxdb3
-      - influxdb3-init
 
   loki:
     # Pin Loki: newer tags dropped /bin/sh which breaks our shell-based entrypoint below.
@@ -187,36 +182,6 @@ services:
     volumes:
       - clickhouse-data:/var/lib/clickhouse
       - ./clickhouse/init:/docker-entrypoint-initdb.d:ro
-
-  influxdb3:
-    image: influxdb:3-core
-    entrypoint:
-      - /bin/sh
-      - -c
-      - /work/start-influxdb3.sh
-    environment:
-      POCKETHIVE_INFLUXDB3_QUERY_FILE_LIMIT: ${POCKETHIVE_INFLUXDB3_QUERY_FILE_LIMIT:-}
-    ports:
-      - "8181:8181"
-    volumes:
-      - influxdb3-data:/var/lib/influxdb3
-      - ./influxdb3/admin-token.json:/etc/influxdb3/admin-token.json:ro
-      - ./influxdb3/start-influxdb3.sh:/work/start-influxdb3.sh:ro
-
-  influxdb3-init:
-    image: influxdb:3-core
-    entrypoint:
-      - /bin/sh
-      - -c
-      - /work/init-influxdb3.sh
-    environment:
-      INFLUXDB3_HOST_URL: http://influxdb3:8181
-      INFLUXDB3_AUTH_TOKEN: apiv3_local_dev_replace_me
-      INFLUXDB3_DATABASE_NAME: pockethive
-    volumes:
-      - ./influxdb3/init-influxdb3.sh:/work/init-influxdb3.sh:ro
-    depends_on:
-      - influxdb3
 
   tcp-mock-server:
     image: ${DOCKER_REGISTRY:-}tcp-mock-server:${POCKETHIVE_VERSION:-latest}
@@ -472,7 +437,6 @@ volumes:
   redis-data:
   postgres-data:
   clickhouse-data:
-  influxdb3-data:
   tcp-mock-data:
   tcp-mock-tls-data:
   haproxy-runtime:

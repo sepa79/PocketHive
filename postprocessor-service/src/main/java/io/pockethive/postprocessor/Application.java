@@ -14,8 +14,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @SpringBootApplication
 @EnableConfigurationProperties({
     PrometheusPushGatewayProperties.class,
-    ClickHouseSinkProperties.class,
-    InfluxDb3SinkProperties.class
+    ClickHouseSinkProperties.class
 })
 public class Application {
 
