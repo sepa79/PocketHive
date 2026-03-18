@@ -21,10 +21,10 @@
   "panels": [
     {
       "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "clickhouse"
+        "type": "influxdb",
+        "uid": "influxdb3"
       },
-      "description": "Client transaction volume over time grouped by swarmId, callId, and businessCode.",
+      "description": "Business success rate over time grouped by swarmId, callId, and businessCode.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -43,12 +43,20 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "red",
                 "value": null
+              },
+              {
+                "color": "orange",
+                "value": 90
+              },
+              {
+                "color": "green",
+                "value": 99
               }
             ]
           },
-          "unit": "ops"
+          "unit": "percent"
         },
         "overrides": []
       },
@@ -73,10 +81,14 @@
       "targets": [
         {
           "editorType": "sql",
-          "format": 2,
+          "format": "time_series",
           "queryType": "sql",
-          "rawSql": "SELECT\n  toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n  concat(swarmId, ' | ', callIdKey, ' | ', businessCodeKey) AS series,\n  count() AS txns\nFROM ph_tx_outcome_v2\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callIdKey, '${callId:regex}')\n  AND match(businessCodeKey, '${businessCode:regex}')\nGROUP BY time, swarmId, callIdKey, businessCodeKey\nORDER BY time, series",
-          "refId": "A"
+          "rawSql": "SELECT\n  $__dateBin(\"time\") AS \"time\",\n  concat(\"swarmId\", ' | ', \"callIdKey\", ' | ', \"businessCodeKey\") AS \"series\",\n  avg(\"businessSuccess\") * 100 AS \"business_success_pct\"\nFROM \"ph_tx_outcome\"\nWHERE $__timeFilter(\"time\")\n  AND ('${swarm:csv}' = '__all' OR contains(concat(',', '${swarm:csv}', ','), concat(',', \"swarmId\", ',')))\n  AND ('${callId:csv}' = '__all' OR contains(concat(',', '${callId:csv}', ','), concat(',', \"callIdKey\", ',')))\n  AND ('${businessCode:csv}' = '__all' OR contains(concat(',', '${businessCode:csv}', ','), concat(',', \"businessCodeKey\", ',')))\nGROUP BY 1, \"swarmId\", \"callIdKey\", \"businessCodeKey\"\nORDER BY 1, 2",
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb3"
+          }
         }
       ],
       "transformations": [
@@ -87,15 +99,15 @@
           }
         }
       ],
-      "title": "Tx volume by swarm/call/businessCode",
+      "title": "Business success by swarm/call/businessCode",
       "type": "timeseries"
     },
     {
       "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "clickhouse"
+        "type": "influxdb",
+        "uid": "influxdb3"
       },
-      "description": "Average RTT over time grouped by swarmId, callId, and businessCode.",
+      "description": "Processor status class distribution over time grouped by swarmId, callId, and businessCode.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -144,10 +156,14 @@
       "targets": [
         {
           "editorType": "sql",
-          "format": 2,
+          "format": "time_series",
           "queryType": "sql",
-          "rawSql": "SELECT\n  toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n  concat(swarmId, ' | ', callIdKey, ' | ', businessCodeKey) AS series,\n  avg(processorDurationMs) AS avg_rtt_ms\nFROM ph_tx_outcome_v2\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callIdKey, '${callId:regex}')\n  AND match(businessCodeKey, '${businessCode:regex}')\nGROUP BY time, swarmId, callIdKey, businessCodeKey\nORDER BY time, series",
-          "refId": "A"
+          "rawSql": "SELECT\n  $__dateBin(\"time\") AS \"time\",\n  concat(\n    \"swarmId\",\n    ' | ',\n    \"callIdKey\",\n    ' | ',\n    \"businessCodeKey\",\n    ' | ',\n    \"processorStatusClass\"\n  ) AS \"series\",\n  count(*) AS \"txns\"\nFROM \"ph_tx_outcome\"\nWHERE $__timeFilter(\"time\")\n  AND ('${swarm:csv}' = '__all' OR contains(concat(',', '${swarm:csv}', ','), concat(',', \"swarmId\", ',')))\n  AND ('${callId:csv}' = '__all' OR contains(concat(',', '${callId:csv}', ','), concat(',', \"callIdKey\", ',')))\n  AND ('${businessCode:csv}' = '__all' OR contains(concat(',', '${businessCode:csv}', ','), concat(',', \"businessCodeKey\", ',')))\nGROUP BY 1, \"swarmId\", \"callIdKey\", \"businessCodeKey\", \"processorStatusClass\"\nORDER BY 1, 2",
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb3"
+          }
         }
       ],
       "transformations": [
@@ -158,15 +174,15 @@
           }
         }
       ],
-      "title": "Average RTT by swarm/call/businessCode",
+      "title": "Processor status classes over time",
       "type": "timeseries"
     },
     {
       "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "clickhouse"
+        "type": "influxdb",
+        "uid": "influxdb3"
       },
-      "description": "Business success rate over time grouped by swarmId, callId, and businessCode.",
+      "description": "Processor success rate over time grouped by swarmId, callId, and businessCode.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -185,20 +201,12 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "orange",
-                "value": 90
-              },
-              {
                 "color": "green",
-                "value": 99
+                "value": null
               }
             ]
           },
-          "unit": "percent"
+          "unit": "ops"
         },
         "overrides": []
       },
@@ -223,10 +231,14 @@
       "targets": [
         {
           "editorType": "sql",
-          "format": 2,
+          "format": "time_series",
           "queryType": "sql",
-          "rawSql": "SELECT\n  toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n  concat(swarmId, ' | ', callIdKey, ' | ', businessCodeKey) AS series,\n  avg(businessSuccess) * 100 AS success_pct\nFROM ph_tx_outcome_v2\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callIdKey, '${callId:regex}')\n  AND match(businessCodeKey, '${businessCode:regex}')\nGROUP BY time, swarmId, callIdKey, businessCodeKey\nORDER BY time, series",
-          "refId": "A"
+          "rawSql": "SELECT\n  $__dateBin(\"time\") AS \"time\",\n  concat(\"swarmId\", ' | ', \"callIdKey\", ' | ', \"businessCodeKey\") AS \"series\",\n  avg(\"processorSuccess\") * 100 AS \"processor_success_pct\"\nFROM \"ph_tx_outcome\"\nWHERE $__timeFilter(\"time\")\n  AND ('${swarm:csv}' = '__all' OR contains(concat(',', '${swarm:csv}', ','), concat(',', \"swarmId\", ',')))\n  AND ('${callId:csv}' = '__all' OR contains(concat(',', '${callId:csv}', ','), concat(',', \"callIdKey\", ',')))\n  AND ('${businessCode:csv}' = '__all' OR contains(concat(',', '${businessCode:csv}', ','), concat(',', \"businessCodeKey\", ',')))\nGROUP BY 1, \"swarmId\", \"callIdKey\", \"businessCodeKey\"\nORDER BY 1, 2",
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb3"
+          }
         }
       ],
       "transformations": [
@@ -237,15 +249,15 @@
           }
         }
       ],
-      "title": "Business success by swarm/call/businessCode",
+      "title": "Processor success by swarm/call/businessCode",
       "type": "timeseries"
     },
     {
       "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "clickhouse"
+        "type": "influxdb",
+        "uid": "influxdb3"
       },
-      "description": "Top transaction groups by volume and quality metrics, grouped by swarmId, callId, and businessCode.",
+      "description": "Worst quality groups in the selected range, grouped by swarmId, callId, and businessCode.",
       "fieldConfig": {
         "defaults": {
           "thresholds": {
@@ -272,20 +284,24 @@
         "sortBy": [
           {
             "desc": true,
-            "displayName": "txns"
+            "displayName": "fail_pct"
           }
         ]
       },
       "targets": [
         {
           "editorType": "sql",
-          "format": 1,
+          "format": "table",
           "queryType": "sql",
-          "rawSql": "SELECT\n  swarmId,\n  callIdKey AS callId,\n  businessCodeKey AS businessCode,\n  count() AS txns,\n  avg(processorDurationMs) AS avg_rtt_ms,\n  quantileTDigest(0.95)(processorDurationMs) AS p95_rtt_ms,\n  max(processorDurationMs) AS max_rtt_ms,\n  avg(processorSuccess) * 100 AS processor_success_pct,\n  avg(businessSuccess) * 100 AS business_success_pct\nFROM ph_tx_outcome_v2\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callIdKey, '${callId:regex}')\n  AND match(businessCodeKey, '${businessCode:regex}')\nGROUP BY swarmId, callIdKey, businessCodeKey\nORDER BY txns DESC\nLIMIT 50",
-          "refId": "A"
+          "rawSql": "SELECT\n  \"swarmId\",\n  \"callIdKey\" AS \"callId\",\n  \"businessCodeKey\" AS \"businessCode\",\n  count(*) AS \"txns\",\n  (1 - avg(\"businessSuccess\")) * 100 AS \"business_fail_pct\",\n  (1 - avg(\"processorSuccess\")) * 100 AS \"processor_fail_pct\",\n  approx_percentile_cont(0.95) WITHIN GROUP (ORDER BY \"processorDurationMs\") AS \"p95_rtt_ms\",\n  max(\"processorDurationMs\") AS \"max_rtt_ms\"\nFROM \"ph_tx_outcome\"\nWHERE $__timeFilter(\"time\")\n  AND ('${swarm:csv}' = '__all' OR contains(concat(',', '${swarm:csv}', ','), concat(',', \"swarmId\", ',')))\n  AND ('${callId:csv}' = '__all' OR contains(concat(',', '${callId:csv}', ','), concat(',', \"callIdKey\", ',')))\n  AND ('${businessCode:csv}' = '__all' OR contains(concat(',', '${businessCode:csv}', ','), concat(',', \"businessCodeKey\", ',')))\nGROUP BY \"swarmId\", \"callIdKey\", \"businessCodeKey\"\nHAVING count(*) >= 20\nORDER BY \"business_fail_pct\" DESC, \"txns\" DESC\nLIMIT 100",
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb3"
+          }
         }
       ],
-      "title": "Top groups by swarm/call/businessCode",
+      "title": "Worst groups by swarm/call/businessCode",
       "type": "table"
     }
   ],
@@ -294,9 +310,10 @@
   "style": "dark",
   "tags": [
     "pockethive",
-    "clickhouse",
+    "influxdb3",
     "tx-outcome",
-    "client-rtt"
+    "client-rtt",
+    "quality"
   ],
   "templating": {
     "list": [
@@ -306,19 +323,19 @@
           "text": "All",
           "value": "$__all"
         },
-        "allValue": ".*",
+        "allValue": "__all",
         "datasource": {
-          "type": "grafana-clickhouse-datasource",
-          "uid": "clickhouse"
+          "type": "influxdb",
+          "uid": "influxdb3"
         },
-        "definition": "SELECT DISTINCT swarmId FROM ph_tx_outcome_v2 WHERE $__timeFilter(eventTime) ORDER BY swarmId",
+        "definition": "SELECT DISTINCT \"swarmId\" FROM \"ph_tx_outcome\" WHERE $__timeFilter(\"time\") ORDER BY \"swarmId\"",
         "hide": 0,
         "includeAll": true,
         "label": "Swarm",
         "multi": true,
         "name": "swarm",
         "options": [],
-        "query": "SELECT DISTINCT swarmId FROM ph_tx_outcome_v2 WHERE $__timeFilter(eventTime) ORDER BY swarmId",
+        "query": "SELECT DISTINCT \"swarmId\" FROM \"ph_tx_outcome\" WHERE $__timeFilter(\"time\") ORDER BY \"swarmId\"",
         "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
@@ -331,19 +348,19 @@
           "text": "All",
           "value": "$__all"
         },
-        "allValue": ".*",
+        "allValue": "__all",
         "datasource": {
-          "type": "grafana-clickhouse-datasource",
-          "uid": "clickhouse"
+          "type": "influxdb",
+          "uid": "influxdb3"
         },
-        "definition": "SELECT DISTINCT callIdKey FROM ph_tx_outcome_v2 WHERE $__timeFilter(eventTime) AND callId != '' ORDER BY callIdKey LIMIT 500",
+        "definition": "SELECT DISTINCT \"callIdKey\" FROM \"ph_tx_outcome\" WHERE $__timeFilter(\"time\") AND \"callIdKey\" <> 'unknown' ORDER BY \"callIdKey\" LIMIT 500",
         "hide": 0,
         "includeAll": true,
         "label": "Call ID",
         "multi": true,
         "name": "callId",
         "options": [],
-        "query": "SELECT DISTINCT callIdKey FROM ph_tx_outcome_v2 WHERE $__timeFilter(eventTime) AND callId != '' ORDER BY callIdKey LIMIT 500",
+        "query": "SELECT DISTINCT \"callIdKey\" FROM \"ph_tx_outcome\" WHERE $__timeFilter(\"time\") AND \"callIdKey\" <> 'unknown' ORDER BY \"callIdKey\" LIMIT 500",
         "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
@@ -356,19 +373,19 @@
           "text": "All",
           "value": "$__all"
         },
-        "allValue": ".*",
+        "allValue": "__all",
         "datasource": {
-          "type": "grafana-clickhouse-datasource",
-          "uid": "clickhouse"
+          "type": "influxdb",
+          "uid": "influxdb3"
         },
-        "definition": "SELECT DISTINCT businessCodeKey FROM ph_tx_outcome_v2 WHERE $__timeFilter(eventTime) ORDER BY 1 LIMIT 500",
+        "definition": "SELECT DISTINCT \"businessCodeKey\" FROM \"ph_tx_outcome\" WHERE $__timeFilter(\"time\") AND \"businessCodeKey\" <> 'n/a' ORDER BY \"businessCodeKey\" LIMIT 500",
         "hide": 0,
         "includeAll": true,
         "label": "Business Code",
         "multi": true,
         "name": "businessCode",
         "options": [],
-        "query": "SELECT DISTINCT businessCodeKey FROM ph_tx_outcome_v2 WHERE $__timeFilter(eventTime) ORDER BY 1 LIMIT 500",
+        "query": "SELECT DISTINCT \"businessCodeKey\" FROM \"ph_tx_outcome\" WHERE $__timeFilter(\"time\") AND \"businessCodeKey\" <> 'n/a' ORDER BY \"businessCodeKey\" LIMIT 500",
         "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
@@ -383,8 +400,8 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "Tx RTT Overview (ClickHouse)",
-  "uid": "ph-tx-rtt-overview-ch",
+  "title": "Tx Quality & Failure Mix (InfluxDB 3)",
+  "uid": "ph-tx-quality-influxdb3",
   "version": 1,
   "weekStart": ""
 }

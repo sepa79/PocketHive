@@ -449,7 +449,7 @@ public class SwarmLifecycleSteps {
 
     Map<String, Object> patch = new LinkedHashMap<>();
     patch.put("enabled", true);
-    patch.put("writeTxOutcomeToClickHouse", true);
+    patch.put("txOutcomeSinkMode", "CLICKHOUSE_V2");
     patch.put("dropTxOutcomeWithoutCallId", false);
 
     ControlResponse response = orchestratorClient.updateComponentConfig(
@@ -461,7 +461,7 @@ public class SwarmLifecycleSteps {
             "e2e enable postprocessor tx-outcome sink",
             swarmId));
 
-    LOGGER.info("Postprocessor ClickHouse config-update requested for instance={} correlation={}",
+    LOGGER.info("Postprocessor tx-outcome sink config-update requested for instance={} correlation={}",
         postprocessorInstance, response.correlationId());
     awaitReady("config-update", response);
     assertNoErrors(response.correlationId(), "postprocessor config-update");
@@ -472,7 +472,7 @@ public class SwarmLifecycleSteps {
   public void clickHouseStoresTxOutcomesForTheSwarm() {
     ensureStartResponse();
     String escapedSwarmId = swarmId.replace("'", "''");
-    String query = "SELECT count() FROM ph_tx_outcome_v1 WHERE swarmId = '" + escapedSwarmId + "'";
+    String query = "SELECT count() FROM ph_tx_outcome_v2 WHERE swarmId = '" + escapedSwarmId + "'";
 
     SwarmAssertions.await("clickhouse tx-outcomes stored", () -> {
       long count = queryClickHouseCount(query);

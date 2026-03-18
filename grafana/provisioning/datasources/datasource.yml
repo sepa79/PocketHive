@@ -36,3 +36,14 @@ datasources:
       tlsSkipVerify: false
     secureJsonData:
       password: pockethive
+  - name: InfluxDB 3
+    uid: influxdb3
+    type: influxdb
+    access: proxy
+    url: ${POCKETHIVE_INFLUXDB3_URL}
+    jsonData:
+      version: SQL
+      dbName: ${POCKETHIVE_INFLUXDB3_DATABASE}
+      insecureGrpc: true
+    secureJsonData:
+      token: ${POCKETHIVE_INFLUXDB3_TOKEN}

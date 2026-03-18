@@ -20,7 +20,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import org.springframework.stereotype.Component;
 
 @Component
-class PostProcessorTxOutcomeWriter {
+class ClickHouseTxOutcomeSink implements TxOutcomeSink {
 
   private final ClickHouseSinkProperties properties;
   private final ObjectMapper objectMapper;
@@ -30,7 +30,7 @@ class PostProcessorTxOutcomeWriter {
   private final AtomicLong lastFlushAtMs = new AtomicLong();
   private final ReentrantLock flushLock = new ReentrantLock();
 
-  PostProcessorTxOutcomeWriter(ClickHouseSinkProperties properties, ObjectMapper objectMapper) {
+  ClickHouseTxOutcomeSink(ClickHouseSinkProperties properties, ObjectMapper objectMapper) {
     this.properties = Objects.requireNonNull(properties, "properties");
     this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
     this.client = HttpClient.newBuilder()
@@ -38,7 +38,13 @@ class PostProcessorTxOutcomeWriter {
         .build();
   }
 
-  void write(TxOutcomeEvent event) throws Exception {
+  @Override
+  public TxOutcomeSinkMode mode() {
+    return TxOutcomeSinkMode.CLICKHOUSE_V2;
+  }
+
+  @Override
+  public void write(TxOutcomeEvent event) throws Exception {
     if (!properties.configured()) {
       throw new IllegalStateException("ClickHouse sink is enabled but endpoint/table is not configured");
     }
