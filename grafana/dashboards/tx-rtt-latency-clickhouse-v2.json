@@ -24,7 +24,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Business success rate over time grouped by swarmId, callId, and businessCode.",
+      "description": "RTT percentiles over time grouped by swarmId, callId, and businessCode.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -43,20 +43,12 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "orange",
-                "value": 90
-              },
-              {
                 "color": "green",
-                "value": 99
+                "value": null
               }
             ]
           },
-          "unit": "percent"
+          "unit": "ms"
         },
         "overrides": []
       },
@@ -83,7 +75,7 @@
           "editorType": "sql",
           "format": 2,
           "queryType": "sql",
-          "rawSql": "SELECT\n  toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n  concat(swarmId, ' | ', if(callId = '', 'unknown', callId), ' | ', if(businessCode = '', 'n/a', businessCode)) AS series,\n  avg(businessSuccess) * 100 AS business_success_pct\nFROM ph_tx_outcome_v1\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callId, '${callId:regex}')\n  AND match(if(businessCode = '', 'n/a', businessCode), '${businessCode:regex}')\nGROUP BY time, swarmId, callId, businessCode\nORDER BY time, series",
+          "rawSql": "SELECT\n  time,\n  series,\n  value_ms\nFROM (\n  SELECT\n    toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n    concat(swarmId, ' | ', callIdKey, ' | ', businessCodeKey, ' | p50') AS series,\n    quantileTDigest(0.50)(processorDurationMs) AS value_ms\n  FROM ph_tx_outcome_v2\n  WHERE $__timeFilter(eventTime)\n    AND match(swarmId, '${swarm:regex}')\n    AND match(callIdKey, '${callId:regex}')\n    AND match(businessCodeKey, '${businessCode:regex}')\n  GROUP BY time, swarmId, callIdKey, businessCodeKey\n\n  UNION ALL\n\n  SELECT\n    toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n    concat(swarmId, ' | ', callIdKey, ' | ', businessCodeKey, ' | p95') AS series,\n    quantileTDigest(0.95)(processorDurationMs) AS value_ms\n  FROM ph_tx_outcome_v2\n  WHERE $__timeFilter(eventTime)\n    AND match(swarmId, '${swarm:regex}')\n    AND match(callIdKey, '${callId:regex}')\n    AND match(businessCodeKey, '${businessCode:regex}')\n  GROUP BY time, swarmId, callIdKey, businessCodeKey\n\n  UNION ALL\n\n  SELECT\n    toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n    concat(swarmId, ' | ', callIdKey, ' | ', businessCodeKey, ' | p99') AS series,\n    quantileTDigest(0.99)(processorDurationMs) AS value_ms\n  FROM ph_tx_outcome_v2\n  WHERE $__timeFilter(eventTime)\n    AND match(swarmId, '${swarm:regex}')\n    AND match(callIdKey, '${callId:regex}')\n    AND match(businessCodeKey, '${businessCode:regex}')\n  GROUP BY time, swarmId, callIdKey, businessCodeKey\n)\nORDER BY time, series",
           "refId": "A"
         }
       ],
@@ -95,7 +87,7 @@
           }
         }
       ],
-      "title": "Business success by swarm/call/businessCode",
+      "title": "RTT percentiles (p50/p95/p99)",
       "type": "timeseries"
     },
     {
@@ -103,7 +95,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Processor status class distribution over time grouped by swarmId, callId, and businessCode.",
+      "description": "SLO threshold breach rate over time grouped by swarmId, callId, and businessCode.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -127,7 +119,7 @@
               }
             ]
           },
-          "unit": "ops"
+          "unit": "percent"
         },
         "overrides": []
       },
@@ -154,7 +146,7 @@
           "editorType": "sql",
           "format": 2,
           "queryType": "sql",
-          "rawSql": "SELECT\n  toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n  concat(\n    swarmId,\n    ' | ',\n    if(callId = '', 'unknown', callId),\n    ' | ',\n    if(businessCode = '', 'n/a', businessCode),\n    ' | ',\n    multiIf(\n      processorStatus >= 200 AND processorStatus < 300, '2xx',\n      processorStatus >= 400 AND processorStatus < 500, '4xx',\n      processorStatus >= 500 AND processorStatus < 600, '5xx',\n      'other'\n    )\n  ) AS series,\n  count() AS txns\nFROM ph_tx_outcome_v1\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callId, '${callId:regex}')\n  AND match(if(businessCode = '', 'n/a', businessCode), '${businessCode:regex}')\nGROUP BY time, swarmId, callId, businessCode, series\nORDER BY time, series",
+          "rawSql": "SELECT\n  time,\n  series,\n  pct\nFROM (\n  SELECT\n    toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n    concat(swarmId, ' | ', callIdKey, ' | ', businessCodeKey, ' | >1s') AS series,\n    avg(if(processorDurationMs > 1000, 1, 0)) * 100 AS pct\n  FROM ph_tx_outcome_v2\n  WHERE $__timeFilter(eventTime)\n    AND match(swarmId, '${swarm:regex}')\n    AND match(callIdKey, '${callId:regex}')\n    AND match(businessCodeKey, '${businessCode:regex}')\n  GROUP BY time, swarmId, callIdKey, businessCodeKey\n\n  UNION ALL\n\n  SELECT\n    toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n    concat(swarmId, ' | ', callIdKey, ' | ', businessCodeKey, ' | >2s') AS series,\n    avg(if(processorDurationMs > 2000, 1, 0)) * 100 AS pct\n  FROM ph_tx_outcome_v2\n  WHERE $__timeFilter(eventTime)\n    AND match(swarmId, '${swarm:regex}')\n    AND match(callIdKey, '${callId:regex}')\n    AND match(businessCodeKey, '${businessCode:regex}')\n  GROUP BY time, swarmId, callIdKey, businessCodeKey\n\n  UNION ALL\n\n  SELECT\n    toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n    concat(swarmId, ' | ', callIdKey, ' | ', businessCodeKey, ' | >5s') AS series,\n    avg(if(processorDurationMs > 5000, 1, 0)) * 100 AS pct\n  FROM ph_tx_outcome_v2\n  WHERE $__timeFilter(eventTime)\n    AND match(swarmId, '${swarm:regex}')\n    AND match(callIdKey, '${callId:regex}')\n    AND match(businessCodeKey, '${businessCode:regex}')\n  GROUP BY time, swarmId, callIdKey, businessCodeKey\n)\nORDER BY time, series",
           "refId": "A"
         }
       ],
@@ -166,7 +158,7 @@
           }
         }
       ],
-      "title": "Processor status classes over time",
+      "title": "Tail breach rate by SLO threshold",
       "type": "timeseries"
     },
     {
@@ -174,20 +166,20 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Processor success rate over time grouped by swarmId, callId, and businessCode.",
+      "description": "Maximum RTT anomaly view grouped by swarmId, callId, and businessCode.",
       "fieldConfig": {
         "defaults": {
           "color": {
             "mode": "palette-classic"
           },
           "custom": {
-            "drawStyle": "line",
-            "fillOpacity": 10,
+            "drawStyle": "points",
+            "fillOpacity": 0,
             "lineInterpolation": "linear",
-            "lineWidth": 1,
+            "lineWidth": 0,
             "pointSize": 4,
-            "showPoints": "never",
-            "spanNulls": true
+            "showPoints": "always",
+            "spanNulls": false
           },
           "thresholds": {
             "mode": "absolute",
@@ -198,13 +190,13 @@
               }
             ]
           },
-          "unit": "ops"
+          "unit": "ms"
         },
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
-        "w": 12,
+        "h": 9,
+        "w": 24,
         "x": 0,
         "y": 8
       },
@@ -225,10 +217,11 @@
           "editorType": "sql",
           "format": 2,
           "queryType": "sql",
-          "rawSql": "SELECT\n  toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n  concat(swarmId, ' | ', if(callId = '', 'unknown', callId), ' | ', if(businessCode = '', 'n/a', businessCode)) AS series,\n  avg(processorSuccess) * 100 AS processor_success_pct\nFROM ph_tx_outcome_v1\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callId, '${callId:regex}')\n  AND match(if(businessCode = '', 'n/a', businessCode), '${businessCode:regex}')\nGROUP BY time, swarmId, callId, businessCode\nORDER BY time, series",
+          "rawSql": "SELECT\n  toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n  concat(swarmId, ' | ', callIdKey, ' | ', businessCodeKey) AS segment,\n  max(processorDurationMs) AS max_rtt_ms\nFROM ph_tx_outcome_v2\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callIdKey, '${callId:regex}')\n  AND match(businessCodeKey, '${businessCode:regex}')\nGROUP BY time, swarmId, callIdKey, businessCodeKey\nORDER BY time, segment",
           "refId": "A"
         }
       ],
+      "title": "Max RTT by transaction segment (anomaly view)",
       "transformations": [
         {
           "id": "prepareTimeSeries",
@@ -237,7 +230,6 @@
           }
         }
       ],
-      "title": "Processor success by swarm/call/businessCode",
       "type": "timeseries"
     },
     {
@@ -245,7 +237,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Worst quality groups in the selected range, grouped by swarmId, callId, and businessCode.",
+      "description": "Worst latency groups in the selected time range, grouped by swarmId, callId, and businessCode.",
       "fieldConfig": {
         "defaults": {
           "thresholds": {
@@ -262,9 +254,9 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 8
+        "w": 24,
+        "x": 0,
+        "y": 17
       },
       "id": 4,
       "options": {
@@ -272,7 +264,7 @@
         "sortBy": [
           {
             "desc": true,
-            "displayName": "fail_pct"
+            "displayName": "max_rtt_ms"
           }
         ]
       },
@@ -281,11 +273,11 @@
           "editorType": "sql",
           "format": 1,
           "queryType": "sql",
-          "rawSql": "SELECT\n  swarmId,\n  if(callId = '', 'unknown', callId) AS callId,\n  if(businessCode = '', 'n/a', businessCode) AS businessCode,\n  count() AS txns,\n  (1 - avg(businessSuccess)) * 100 AS business_fail_pct,\n  (1 - avg(processorSuccess)) * 100 AS processor_fail_pct,\n  quantileTDigest(0.95)(processorDurationMs) AS p95_rtt_ms,\n  max(processorDurationMs) AS max_rtt_ms\nFROM ph_tx_outcome_v1\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callId, '${callId:regex}')\n  AND match(if(businessCode = '', 'n/a', businessCode), '${businessCode:regex}')\nGROUP BY swarmId, callId, businessCode\nHAVING txns >= 20\nORDER BY business_fail_pct DESC, txns DESC\nLIMIT 100",
+          "rawSql": "SELECT\n  swarmId,\n  callIdKey AS call_id,\n  businessCodeKey AS business_code,\n  count() AS txns,\n  quantileTDigest(0.95)(processorDurationMs) AS p95_rtt_ms,\n  quantileTDigest(0.99)(processorDurationMs) AS p99_rtt_ms,\n  max(processorDurationMs) AS max_rtt_ms,\n  avg(processorSuccess) * 100 AS processor_success_pct,\n  avg(businessSuccess) * 100 AS business_success_pct\nFROM ph_tx_outcome_v2\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callIdKey, '${callId:regex}')\n  AND match(businessCodeKey, '${businessCode:regex}')\nGROUP BY swarmId, callIdKey, businessCodeKey\nORDER BY max_rtt_ms DESC\nLIMIT 100",
           "refId": "A"
         }
       ],
-      "title": "Worst groups by swarm/call/businessCode",
+      "title": "Worst callId/businessCode by RTT",
       "type": "table"
     }
   ],
@@ -297,7 +289,7 @@
     "clickhouse",
     "tx-outcome",
     "client-rtt",
-    "quality"
+    "latency"
   ],
   "templating": {
     "list": [
@@ -312,14 +304,14 @@
           "type": "grafana-clickhouse-datasource",
           "uid": "clickhouse"
         },
-        "definition": "SELECT DISTINCT swarmId FROM ph_tx_outcome_v1 WHERE $__timeFilter(eventTime) ORDER BY swarmId",
+        "definition": "SELECT DISTINCT swarmId FROM ph_tx_outcome_v2 WHERE $__timeFilter(eventTime) ORDER BY swarmId",
         "hide": 0,
         "includeAll": true,
         "label": "Swarm",
         "multi": true,
         "name": "swarm",
         "options": [],
-        "query": "SELECT DISTINCT swarmId FROM ph_tx_outcome_v1 WHERE $__timeFilter(eventTime) ORDER BY swarmId",
+        "query": "SELECT DISTINCT swarmId FROM ph_tx_outcome_v2 WHERE $__timeFilter(eventTime) ORDER BY swarmId",
         "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
@@ -337,14 +329,14 @@
           "type": "grafana-clickhouse-datasource",
           "uid": "clickhouse"
         },
-        "definition": "SELECT DISTINCT callId FROM ph_tx_outcome_v1 WHERE $__timeFilter(eventTime) AND callId != '' ORDER BY callId LIMIT 500",
+        "definition": "SELECT DISTINCT callIdKey FROM ph_tx_outcome_v2 WHERE $__timeFilter(eventTime) AND callId != '' ORDER BY callIdKey LIMIT 500",
         "hide": 0,
         "includeAll": true,
         "label": "Call ID",
         "multi": true,
         "name": "callId",
         "options": [],
-        "query": "SELECT DISTINCT callId FROM ph_tx_outcome_v1 WHERE $__timeFilter(eventTime) AND callId != '' ORDER BY callId LIMIT 500",
+        "query": "SELECT DISTINCT callIdKey FROM ph_tx_outcome_v2 WHERE $__timeFilter(eventTime) AND callId != '' ORDER BY callIdKey LIMIT 500",
         "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
@@ -362,14 +354,14 @@
           "type": "grafana-clickhouse-datasource",
           "uid": "clickhouse"
         },
-        "definition": "SELECT DISTINCT if(businessCode = '', 'n/a', businessCode) FROM ph_tx_outcome_v1 WHERE $__timeFilter(eventTime) ORDER BY 1 LIMIT 500",
+        "definition": "SELECT DISTINCT businessCodeKey FROM ph_tx_outcome_v2 WHERE $__timeFilter(eventTime) ORDER BY 1 LIMIT 500",
         "hide": 0,
         "includeAll": true,
         "label": "Business Code",
         "multi": true,
         "name": "businessCode",
         "options": [],
-        "query": "SELECT DISTINCT if(businessCode = '', 'n/a', businessCode) FROM ph_tx_outcome_v1 WHERE $__timeFilter(eventTime) ORDER BY 1 LIMIT 500",
+        "query": "SELECT DISTINCT businessCodeKey FROM ph_tx_outcome_v2 WHERE $__timeFilter(eventTime) ORDER BY 1 LIMIT 500",
         "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
@@ -384,8 +376,8 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "Tx Quality & Failure Mix (ClickHouse)",
-  "uid": "ph-tx-quality-ch",
+  "title": "Tx RTT Latency & Tail (ClickHouse v2)",
+  "uid": "ph-tx-rtt-latency-ch-v2",
   "version": 1,
   "weekStart": ""
 }

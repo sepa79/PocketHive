@@ -77,7 +77,7 @@
           "editorType": "sql",
           "format": 2,
           "queryType": "sql",
-          "rawSql": "SELECT\n  toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n  concat(\n    swarmId,\n    ' | ',\n    if(callId = '', 'unknown', callId),\n    ' | ',\n    if(businessCode = '', 'n/a', businessCode)\n  ) AS series,\n  count() AS txns\nFROM ph_tx_outcome_v1\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callId, '${callId:regex}')\n  AND match(if(businessCode = '', 'n/a', businessCode), '${businessCode:regex}')\nGROUP BY time, swarmId, callId, businessCode\nORDER BY time, series",
+          "rawSql": "SELECT\n  toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n  concat(\n    swarmId,\n    ' | ',\n    callIdKey,\n    ' | ',\n    businessCodeKey\n  ) AS series,\n  count() AS txns\nFROM ph_tx_outcome_v2\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callIdKey, '${callId:regex}')\n  AND match(businessCodeKey, '${businessCode:regex}')\nGROUP BY time, swarmId, callIdKey, businessCodeKey\nORDER BY time, series",
           "refId": "A"
         }
       ],
@@ -147,7 +147,7 @@
           "editorType": "sql",
           "format": 2,
           "queryType": "sql",
-          "rawSql": "SELECT\n  toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n  concat(\n    swarmId,\n    ' | ',\n    if(callId = '', 'unknown', callId),\n    ' | ',\n    if(businessCode = '', 'n/a', businessCode)\n  ) AS series,\n  quantileTDigest(0.95)(processorDurationMs) AS p95_duration_ms\nFROM ph_tx_outcome_v1\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callId, '${callId:regex}')\n  AND match(if(businessCode = '', 'n/a', businessCode), '${businessCode:regex}')\nGROUP BY time, swarmId, callId, businessCode\nORDER BY time, series",
+          "rawSql": "SELECT\n  toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n  concat(\n    swarmId,\n    ' | ',\n    callIdKey,\n    ' | ',\n    businessCodeKey\n  ) AS series,\n  quantileTDigest(0.95)(processorDurationMs) AS p95_duration_ms\nFROM ph_tx_outcome_v2\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callIdKey, '${callId:regex}')\n  AND match(businessCodeKey, '${businessCode:regex}')\nGROUP BY time, swarmId, callIdKey, businessCodeKey\nORDER BY time, series",
           "refId": "A"
         }
       ],
@@ -213,7 +213,7 @@
           "editorType": "sql",
           "format": 2,
           "queryType": "sql",
-          "rawSql": "SELECT\n  toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n  concat(swarmId, ' | ', if(callId = '', 'unknown', callId), ' | ', if(businessCode = '', 'n/a', businessCode)) AS series,\n  avg(processorSuccess) * 100 AS success_pct\nFROM ph_tx_outcome_v1\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callId, '${callId:regex}')\n  AND match(if(businessCode = '', 'n/a', businessCode), '${businessCode:regex}')\nGROUP BY time, swarmId, callId, businessCode\nORDER BY time, series",
+          "rawSql": "SELECT\n  toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n  concat(swarmId, ' | ', callIdKey, ' | ', businessCodeKey) AS series,\n  avg(processorSuccess) * 100 AS success_pct\nFROM ph_tx_outcome_v2\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callIdKey, '${callId:regex}')\n  AND match(businessCodeKey, '${businessCode:regex}')\nGROUP BY time, swarmId, callIdKey, businessCodeKey\nORDER BY time, series",
           "refId": "A"
         }
       ],
@@ -279,7 +279,7 @@
           "editorType": "sql",
           "format": 2,
           "queryType": "sql",
-          "rawSql": "SELECT\n  toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n  concat(swarmId, ' | ', if(callId = '', 'unknown', callId), ' | ', if(businessCode = '', 'n/a', businessCode)) AS series,\n  avg(businessSuccess) * 100 AS success_pct\nFROM ph_tx_outcome_v1\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callId, '${callId:regex}')\n  AND match(if(businessCode = '', 'n/a', businessCode), '${businessCode:regex}')\nGROUP BY time, swarmId, callId, businessCode\nORDER BY time, series",
+          "rawSql": "SELECT\n  toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n  concat(swarmId, ' | ', callIdKey, ' | ', businessCodeKey) AS series,\n  avg(businessSuccess) * 100 AS success_pct\nFROM ph_tx_outcome_v2\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callIdKey, '${callId:regex}')\n  AND match(businessCodeKey, '${businessCode:regex}')\nGROUP BY time, swarmId, callIdKey, businessCodeKey\nORDER BY time, series",
           "refId": "A"
         }
       ],
@@ -334,7 +334,7 @@
           "editorType": "sql",
           "format": 1,
           "queryType": "sql",
-          "rawSql": "SELECT\n  swarmId,\n  if(callId = '', 'unknown', callId) AS callId,\n  if(businessCode = '', 'n/a', businessCode) AS businessCode,\n  count() AS txns,\n  avg(processorDurationMs) AS avg_duration_ms,\n  quantileTDigest(0.95)(processorDurationMs) AS p95_duration_ms,\n  avg(processorSuccess) * 100 AS processor_success_pct,\n  avg(businessSuccess) * 100 AS business_success_pct\nFROM ph_tx_outcome_v1\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callId, '${callId:regex}')\n  AND match(if(businessCode = '', 'n/a', businessCode), '${businessCode:regex}')\nGROUP BY swarmId, callId, businessCode\nORDER BY txns DESC\nLIMIT 50",
+          "rawSql": "SELECT\n  swarmId,\n  callIdKey AS callId,\n  businessCodeKey AS businessCode,\n  count() AS txns,\n  avg(processorDurationMs) AS avg_duration_ms,\n  quantileTDigest(0.95)(processorDurationMs) AS p95_duration_ms,\n  avg(processorSuccess) * 100 AS processor_success_pct,\n  avg(businessSuccess) * 100 AS business_success_pct\nFROM ph_tx_outcome_v2\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callIdKey, '${callId:regex}')\n  AND match(businessCodeKey, '${businessCode:regex}')\nGROUP BY swarmId, callIdKey, businessCodeKey\nORDER BY txns DESC\nLIMIT 50",
           "refId": "A"
         }
       ],
@@ -412,7 +412,7 @@
             }
           },
           "queryType": "sql",
-          "rawSql": "SELECT\n  toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n  concat(\n    swarmId,\n    ' | ',\n    if(callId = '', 'unknown', callId),\n    ' | ',\n    if(businessCode = '', 'n/a', businessCode)\n  ) AS call,\n  max(processorDurationMs) AS latency_max_ms\nFROM ph_tx_outcome_v1\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callId, '${callId:regex}')\n  AND match(if(businessCode = '', 'n/a', businessCode), '${businessCode:regex}')\nGROUP BY time, swarmId, callId, businessCode\nORDER BY time, call",
+          "rawSql": "SELECT\n  toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n  concat(\n    swarmId,\n    ' | ',\n    callIdKey,\n    ' | ',\n    businessCodeKey\n  ) AS call,\n  max(processorDurationMs) AS latency_max_ms\nFROM ph_tx_outcome_v2\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callIdKey, '${callId:regex}')\n  AND match(businessCodeKey, '${businessCode:regex}')\nGROUP BY time, swarmId, callIdKey, businessCodeKey\nORDER BY time, call",
           "refId": "A"
         }
       ],
@@ -446,14 +446,14 @@
         },
         "allValue": ".*",
         "datasource": "ClickHouse",
-        "definition": "SELECT DISTINCT swarmId FROM ph_tx_outcome_v1 WHERE $__timeFilter(eventTime) ORDER BY swarmId",
+        "definition": "SELECT DISTINCT swarmId FROM ph_tx_outcome_v2 WHERE $__timeFilter(eventTime) ORDER BY swarmId",
         "hide": 0,
         "includeAll": true,
         "label": "Swarm",
         "multi": true,
         "name": "swarm",
         "options": [],
-        "query": "SELECT DISTINCT swarmId FROM ph_tx_outcome_v1 WHERE $__timeFilter(eventTime) ORDER BY swarmId",
+        "query": "SELECT DISTINCT swarmId FROM ph_tx_outcome_v2 WHERE $__timeFilter(eventTime) ORDER BY swarmId",
         "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
@@ -468,14 +468,14 @@
         },
         "allValue": ".*",
         "datasource": "ClickHouse",
-        "definition": "SELECT DISTINCT callId FROM ph_tx_outcome_v1 WHERE $__timeFilter(eventTime) AND callId != '' ORDER BY callId LIMIT 200",
+        "definition": "SELECT DISTINCT callIdKey FROM ph_tx_outcome_v2 WHERE $__timeFilter(eventTime) AND callId != '' ORDER BY callIdKey LIMIT 200",
         "hide": 0,
         "includeAll": true,
         "label": "Call ID",
         "multi": true,
         "name": "callId",
         "options": [],
-        "query": "SELECT DISTINCT callId FROM ph_tx_outcome_v1 WHERE $__timeFilter(eventTime) AND callId != '' ORDER BY callId LIMIT 200",
+        "query": "SELECT DISTINCT callIdKey FROM ph_tx_outcome_v2 WHERE $__timeFilter(eventTime) AND callId != '' ORDER BY callIdKey LIMIT 200",
         "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
@@ -490,14 +490,14 @@
         },
         "allValue": ".*",
         "datasource": "ClickHouse",
-        "definition": "SELECT DISTINCT if(businessCode = '', 'n/a', businessCode) FROM ph_tx_outcome_v1 WHERE $__timeFilter(eventTime) ORDER BY 1 LIMIT 200",
+        "definition": "SELECT DISTINCT businessCodeKey FROM ph_tx_outcome_v2 WHERE $__timeFilter(eventTime) ORDER BY 1 LIMIT 200",
         "hide": 0,
         "includeAll": true,
         "label": "Business Code",
         "multi": true,
         "name": "businessCode",
         "options": [],
-        "query": "SELECT DISTINCT if(businessCode = '', 'n/a', businessCode) FROM ph_tx_outcome_v1 WHERE $__timeFilter(eventTime) ORDER BY 1 LIMIT 200",
+        "query": "SELECT DISTINCT businessCodeKey FROM ph_tx_outcome_v2 WHERE $__timeFilter(eventTime) ORDER BY 1 LIMIT 200",
         "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
@@ -512,8 +512,8 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "Tx outcomes (ClickHouse)",
-  "uid": "ph-tx-outcomes-ch",
+  "title": "Tx outcomes (ClickHouse v2)",
+  "uid": "ph-tx-outcomes-ch-v2",
   "version": 1,
   "weekStart": ""
 }
