@@ -1,0 +1,132 @@
+# Tx Outcome Benchmark Report
+
+- Generated: 2026-03-17T23:01:24.113Z
+- Rows: 300
+- Baseline throughput: 250/s for 30m
+- Timestamp history window: 2d
+- ClickHouse table: ph_tx_outcome_bench
+- InfluxDB measurement: ph_tx_outcome_bench_1773788479043
+
+| Storage | Window | Scenario | Query | Cold ms | Warm avg ms | Warm p50 ms | Warm p95 ms | Rows |
+|---|---|---|---|---:|---:|---:|---:|---:|
+| clickhouse | 3h | all-swarms | variable-swarms | 5.79 | 3.66 | 3.66 | 3.66 | 6 |
+| influxdb3 | 3h | all-swarms | variable-swarms | 11.61 | 14.13 | 14.13 | 14.13 | 6 |
+| clickhouse | 3h | all-swarms | variable-call-ids | 4.96 | 4.97 | 4.97 | 4.97 | 10 |
+| influxdb3 | 3h | all-swarms | variable-call-ids | 20.55 | 19.88 | 19.88 | 19.88 | 10 |
+| clickhouse | 3h | all-swarms | variable-business-codes | 3.75 | 3.38 | 3.38 | 3.38 | 6 |
+| influxdb3 | 3h | all-swarms | variable-business-codes | 10.51 | 10.49 | 10.49 | 10.49 | 6 |
+| clickhouse | 3h | all-swarms | tx-volume-timeseries | 5.79 | 5.13 | 5.13 | 5.13 | 17 |
+| influxdb3 | 3h | all-swarms | tx-volume-timeseries | 12.01 | 15.73 | 15.73 | 15.73 | 17 |
+| clickhouse | 3h | all-swarms | processor-p95-timeseries | 5.47 | 5.76 | 5.76 | 5.76 | 17 |
+| influxdb3 | 3h | all-swarms | processor-p95-timeseries | 13.66 | 13.87 | 13.87 | 13.87 | 17 |
+| clickhouse | 3h | all-swarms | latency-percentiles | 9.22 | 11.32 | 11.32 | 11.32 | 51 |
+| influxdb3 | 3h | all-swarms | latency-percentiles | 37.6 | 39.82 | 39.82 | 39.82 | 51 |
+| clickhouse | 3h | all-swarms | tail-breach-rate | 9.78 | 8.82 | 8.82 | 8.82 | 51 |
+| influxdb3 | 3h | all-swarms | tail-breach-rate | 36.57 | 33.07 | 33.07 | 33.07 | 51 |
+| clickhouse | 3h | all-swarms | status-mix | 5.18 | 5.4 | 5.4 | 5.4 | 17 |
+| influxdb3 | 3h | all-swarms | status-mix | 12.3 | 11.86 | 11.86 | 11.86 | 17 |
+| clickhouse | 3h | all-swarms | top-groups | 6.54 | 5.68 | 5.68 | 5.68 | 17 |
+| influxdb3 | 3h | all-swarms | top-groups | 13.18 | 12.79 | 12.79 | 12.79 | 17 |
+| clickhouse | 3h | all-swarms | worst-groups | 7.79 | 8.33 | 8.33 | 8.33 | 0 |
+| influxdb3 | 3h | all-swarms | worst-groups | 43.78 | 19.27 | 19.27 | 19.27 | 0 |
+| clickhouse | 3h | single-swarm | variable-swarms | 2.83 | 2.63 | 2.63 | 2.63 | 6 |
+| influxdb3 | 3h | single-swarm | variable-swarms | 8.68 | 11.24 | 11.24 | 11.24 | 6 |
+| clickhouse | 3h | single-swarm | variable-call-ids | 3.76 | 3.09 | 3.09 | 3.09 | 8 |
+| influxdb3 | 3h | single-swarm | variable-call-ids | 18.66 | 15.97 | 15.97 | 15.97 | 8 |
+| clickhouse | 3h | single-swarm | variable-business-codes | 3.45 | 3.02 | 3.02 | 3.02 | 4 |
+| influxdb3 | 3h | single-swarm | variable-business-codes | 10.22 | 9.79 | 9.79 | 9.79 | 4 |
+| clickhouse | 3h | single-swarm | tx-volume-timeseries | 5.39 | 4.82 | 4.82 | 4.82 | 8 |
+| influxdb3 | 3h | single-swarm | tx-volume-timeseries | 14.58 | 15.09 | 15.09 | 15.09 | 8 |
+| clickhouse | 3h | single-swarm | processor-p95-timeseries | 5.14 | 5.18 | 5.18 | 5.18 | 8 |
+| influxdb3 | 3h | single-swarm | processor-p95-timeseries | 11.51 | 11.34 | 11.34 | 11.34 | 8 |
+| clickhouse | 3h | single-swarm | latency-percentiles | 9.78 | 8.56 | 8.56 | 8.56 | 24 |
+| influxdb3 | 3h | single-swarm | latency-percentiles | 34.81 | 30.86 | 30.86 | 30.86 | 24 |
+| clickhouse | 3h | single-swarm | tail-breach-rate | 12.26 | 11.52 | 11.52 | 11.52 | 24 |
+| influxdb3 | 3h | single-swarm | tail-breach-rate | 33.2 | 44.76 | 44.76 | 44.76 | 24 |
+| clickhouse | 3h | single-swarm | status-mix | 5.23 | 5.29 | 5.29 | 5.29 | 8 |
+| influxdb3 | 3h | single-swarm | status-mix | 15.22 | 11.33 | 11.33 | 11.33 | 8 |
+| clickhouse | 3h | single-swarm | top-groups | 5.6 | 6.01 | 6.01 | 6.01 | 8 |
+| influxdb3 | 3h | single-swarm | top-groups | 15.59 | 11.78 | 11.78 | 11.78 | 8 |
+| clickhouse | 3h | single-swarm | worst-groups | 6.02 | 5.9 | 5.9 | 5.9 | 0 |
+| influxdb3 | 3h | single-swarm | worst-groups | 14.16 | 17.61 | 17.61 | 17.61 | 0 |
+| clickhouse | 3h | focused-segment | variable-swarms | 2.53 | 2.37 | 2.37 | 2.37 | 6 |
+| influxdb3 | 3h | focused-segment | variable-swarms | 10.46 | 8.29 | 8.29 | 8.29 | 6 |
+| clickhouse | 3h | focused-segment | variable-call-ids | 2.69 | 3.26 | 3.26 | 3.26 | 0 |
+| influxdb3 | 3h | focused-segment | variable-call-ids | 15.24 | 18.67 | 18.67 | 18.67 | 0 |
+| clickhouse | 3h | focused-segment | variable-business-codes | 3.63 | 3.11 | 3.11 | 3.11 | 0 |
+| influxdb3 | 3h | focused-segment | variable-business-codes | 9.82 | 8.75 | 8.75 | 8.75 | 0 |
+| clickhouse | 3h | focused-segment | tx-volume-timeseries | 5.13 | 4.25 | 4.25 | 4.25 | 0 |
+| influxdb3 | 3h | focused-segment | tx-volume-timeseries | 11.87 | 10.81 | 10.81 | 10.81 | 0 |
+| clickhouse | 3h | focused-segment | processor-p95-timeseries | 4.75 | 4.35 | 4.35 | 4.35 | 0 |
+| influxdb3 | 3h | focused-segment | processor-p95-timeseries | 10.53 | 12.38 | 12.38 | 12.38 | 0 |
+| clickhouse | 3h | focused-segment | latency-percentiles | 8.55 | 10.06 | 10.06 | 10.06 | 0 |
+| influxdb3 | 3h | focused-segment | latency-percentiles | 31.21 | 31.39 | 31.39 | 31.39 | 0 |
+| clickhouse | 3h | focused-segment | tail-breach-rate | 11.89 | 8.69 | 8.69 | 8.69 | 0 |
+| influxdb3 | 3h | focused-segment | tail-breach-rate | 38.25 | 31.7 | 31.7 | 31.7 | 0 |
+| clickhouse | 3h | focused-segment | status-mix | 4.96 | 4.71 | 4.71 | 4.71 | 0 |
+| influxdb3 | 3h | focused-segment | status-mix | 14.23 | 10.88 | 10.88 | 10.88 | 0 |
+| clickhouse | 3h | focused-segment | top-groups | 4.83 | 5.22 | 5.22 | 5.22 | 0 |
+| influxdb3 | 3h | focused-segment | top-groups | 11.68 | 11.49 | 11.49 | 11.49 | 0 |
+| clickhouse | 3h | focused-segment | worst-groups | 5.08 | 5.59 | 5.59 | 5.59 | 0 |
+| influxdb3 | 3h | focused-segment | worst-groups | 16.94 | 15.56 | 15.56 | 15.56 | 0 |
+| clickhouse | 2d | all-swarms | variable-swarms | 4.28 | 3.61 | 3.61 | 3.61 | 8 |
+| influxdb3 | 2d | all-swarms | variable-swarms | 12.13 | 12.8 | 12.8 | 12.8 | 8 |
+| clickhouse | 2d | all-swarms | variable-call-ids | 4.67 | 4.47 | 4.47 | 4.47 | 24 |
+| influxdb3 | 2d | all-swarms | variable-call-ids | 16.09 | 17.75 | 17.75 | 17.75 | 24 |
+| clickhouse | 2d | all-swarms | variable-business-codes | 4.97 | 4.5 | 4.5 | 4.5 | 12 |
+| influxdb3 | 2d | all-swarms | variable-business-codes | 16.06 | 19.14 | 19.14 | 19.14 | 12 |
+| clickhouse | 2d | all-swarms | tx-volume-timeseries | 6.71 | 6.38 | 6.38 | 6.38 | 233 |
+| influxdb3 | 2d | all-swarms | tx-volume-timeseries | 17.01 | 14.93 | 14.93 | 14.93 | 233 |
+| clickhouse | 2d | all-swarms | processor-p95-timeseries | 6.91 | 6.52 | 6.52 | 6.52 | 233 |
+| influxdb3 | 2d | all-swarms | processor-p95-timeseries | 18.24 | 13.83 | 13.83 | 13.83 | 233 |
+| clickhouse | 2d | all-swarms | latency-percentiles | 12.56 | 11.85 | 11.85 | 11.85 | 699 |
+| influxdb3 | 2d | all-swarms | latency-percentiles | 47.24 | 42.84 | 42.84 | 42.84 | 699 |
+| clickhouse | 2d | all-swarms | tail-breach-rate | 12.02 | 13.06 | 13.06 | 13.06 | 699 |
+| influxdb3 | 2d | all-swarms | tail-breach-rate | 44.53 | 45.32 | 45.32 | 45.32 | 699 |
+| clickhouse | 2d | all-swarms | status-mix | 6 | 6.14 | 6.14 | 6.14 | 251 |
+| influxdb3 | 2d | all-swarms | status-mix | 19.33 | 13.45 | 13.45 | 13.45 | 251 |
+| clickhouse | 2d | all-swarms | top-groups | 5.74 | 6.07 | 6.07 | 6.07 | 50 |
+| influxdb3 | 2d | all-swarms | top-groups | 16.75 | 17.73 | 17.73 | 17.73 | 50 |
+| clickhouse | 2d | all-swarms | worst-groups | 6.26 | 6.74 | 6.74 | 6.74 | 0 |
+| influxdb3 | 2d | all-swarms | worst-groups | 15.55 | 15.26 | 15.26 | 15.26 | 0 |
+| clickhouse | 2d | single-swarm | variable-swarms | 3.5 | 3.16 | 3.16 | 3.16 | 8 |
+| influxdb3 | 2d | single-swarm | variable-swarms | 10.14 | 13.38 | 13.38 | 13.38 | 8 |
+| clickhouse | 2d | single-swarm | variable-call-ids | 4.32 | 4.08 | 4.08 | 4.08 | 23 |
+| influxdb3 | 2d | single-swarm | variable-call-ids | 13.85 | 11.79 | 11.79 | 11.79 | 23 |
+| clickhouse | 2d | single-swarm | variable-business-codes | 4.34 | 4.08 | 4.08 | 4.08 | 12 |
+| influxdb3 | 2d | single-swarm | variable-business-codes | 11.61 | 10.51 | 10.51 | 10.51 | 12 |
+| clickhouse | 2d | single-swarm | tx-volume-timeseries | 5.47 | 5.31 | 5.31 | 5.31 | 89 |
+| influxdb3 | 2d | single-swarm | tx-volume-timeseries | 12.7 | 14.49 | 14.49 | 14.49 | 89 |
+| clickhouse | 2d | single-swarm | processor-p95-timeseries | 6.16 | 5.54 | 5.54 | 5.54 | 89 |
+| influxdb3 | 2d | single-swarm | processor-p95-timeseries | 20.55 | 21.47 | 21.47 | 21.47 | 89 |
+| clickhouse | 2d | single-swarm | latency-percentiles | 10.67 | 14.04 | 14.04 | 14.04 | 267 |
+| influxdb3 | 2d | single-swarm | latency-percentiles | 40.35 | 39.7 | 39.7 | 39.7 | 267 |
+| clickhouse | 2d | single-swarm | tail-breach-rate | 12.38 | 11.15 | 11.15 | 11.15 | 267 |
+| influxdb3 | 2d | single-swarm | tail-breach-rate | 37.72 | 40.39 | 40.39 | 40.39 | 267 |
+| clickhouse | 2d | single-swarm | status-mix | 6.06 | 6.17 | 6.17 | 6.17 | 102 |
+| influxdb3 | 2d | single-swarm | status-mix | 11.74 | 12.59 | 12.59 | 12.59 | 102 |
+| clickhouse | 2d | single-swarm | top-groups | 5.43 | 6.14 | 6.14 | 6.14 | 50 |
+| influxdb3 | 2d | single-swarm | top-groups | 13.16 | 12.65 | 12.65 | 12.65 | 50 |
+| clickhouse | 2d | single-swarm | worst-groups | 6.3 | 6.31 | 6.31 | 6.31 | 0 |
+| influxdb3 | 2d | single-swarm | worst-groups | 13.53 | 12.46 | 12.46 | 12.46 | 0 |
+| clickhouse | 2d | focused-segment | variable-swarms | 3.67 | 3.16 | 3.16 | 3.16 | 8 |
+| influxdb3 | 2d | focused-segment | variable-swarms | 11.98 | 10.86 | 10.86 | 10.86 | 8 |
+| clickhouse | 2d | focused-segment | variable-call-ids | 4.36 | 3.86 | 3.86 | 3.86 | 1 |
+| influxdb3 | 2d | focused-segment | variable-call-ids | 9.75 | 9.16 | 9.16 | 9.16 | 1 |
+| clickhouse | 2d | focused-segment | variable-business-codes | 4.2 | 4.16 | 4.16 | 4.16 | 1 |
+| influxdb3 | 2d | focused-segment | variable-business-codes | 11 | 10.11 | 10.11 | 10.11 | 1 |
+| clickhouse | 2d | focused-segment | tx-volume-timeseries | 5.19 | 5.19 | 5.19 | 5.19 | 2 |
+| influxdb3 | 2d | focused-segment | tx-volume-timeseries | 10.62 | 10.09 | 10.09 | 10.09 | 2 |
+| clickhouse | 2d | focused-segment | processor-p95-timeseries | 5.57 | 5.11 | 5.11 | 5.11 | 2 |
+| influxdb3 | 2d | focused-segment | processor-p95-timeseries | 13.13 | 13.89 | 13.89 | 13.89 | 2 |
+| clickhouse | 2d | focused-segment | latency-percentiles | 9.92 | 9.6 | 9.6 | 9.6 | 6 |
+| influxdb3 | 2d | focused-segment | latency-percentiles | 29.01 | 30.46 | 30.46 | 30.46 | 6 |
+| clickhouse | 2d | focused-segment | tail-breach-rate | 10.49 | 12.32 | 12.32 | 12.32 | 6 |
+| influxdb3 | 2d | focused-segment | tail-breach-rate | 36.78 | 28.38 | 28.38 | 28.38 | 6 |
+| clickhouse | 2d | focused-segment | status-mix | 6.56 | 5.08 | 5.08 | 5.08 | 2 |
+| influxdb3 | 2d | focused-segment | status-mix | 11.57 | 10.36 | 10.36 | 10.36 | 2 |
+| clickhouse | 2d | focused-segment | top-groups | 5.92 | 5.35 | 5.35 | 5.35 | 1 |
+| influxdb3 | 2d | focused-segment | top-groups | 14.42 | 14.37 | 14.37 | 14.37 | 1 |
+| clickhouse | 2d | focused-segment | worst-groups | 6.68 | 6.33 | 6.33 | 6.33 | 0 |
+| influxdb3 | 2d | focused-segment | worst-groups | 11.37 | 11.09 | 11.09 | 11.09 | 0 |
+

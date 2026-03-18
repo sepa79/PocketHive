@@ -1,0 +1,86 @@
+{
+  "generatedAt": "2026-03-18T01:21:30.002Z",
+  "dataset": {
+    "rows": 1800000,
+    "ratePerSec": 1000,
+    "durationMinutes": 30,
+    "historyWindow": "30d",
+    "measurement": "ph_tx_outcome_bench_1773795305434",
+    "clickhouseTable": "ph_tx_outcome_bench",
+    "manifest": {
+      "seedText": "bench-30d",
+      "totalRows": 1800000,
+      "historyWindow": "30d",
+      "durationMinutes": 30,
+      "ratePerSec": 1000,
+      "swarms": 8,
+      "callIdsCount": 24,
+      "businessCodesCount": 12,
+      "sinkInstancesCount": 3,
+      "referenceTime": "2026-03-18T00:55:05.694Z",
+      "startTime": "2026-02-16T00:55:05.694Z",
+      "swarmIds": [
+        "swarm-01",
+        "swarm-02",
+        "swarm-03",
+        "swarm-04",
+        "swarm-05",
+        "swarm-06",
+        "swarm-07",
+        "swarm-08"
+      ],
+      "callIds": [
+        "http-payments-01",
+        "http-status-02",
+        "mq-clearing-03",
+        "http-payments-04",
+        "http-status-05",
+        "mq-clearing-06",
+        "http-payments-07",
+        "http-status-08",
+        "mq-clearing-09",
+        "http-payments-10",
+        "http-status-11",
+        "mq-clearing-12",
+        "http-payments-13",
+        "http-status-14",
+        "mq-clearing-15",
+        "http-payments-16",
+        "http-status-17",
+        "mq-clearing-18",
+        "http-payments-19",
+        "http-status-20",
+        "mq-clearing-21",
+        "http-payments-22",
+        "http-status-23",
+        "mq-clearing-24"
+      ],
+      "businessCodes": [
+        "approved",
+        "captured",
+        "settled",
+        "queued",
+        "retry_scheduled",
+        "timeout_upstream",
+        "validation_error",
+        "rejected",
+        "duplicate",
+        "downstream_unavailable",
+        "limit_exceeded",
+        "pending_review"
+      ],
+      "hotCallIds": [
+        "http-payments-01",
+        "http-status-02",
+        "mq-clearing-03"
+      ],
+      "hotBusinessCodes": [
+        "approved",
+        "captured",
+        "settled"
+      ]
+    }
+  },
+  "benchmarkEntries": 180,
+  "note": "Synthetic read benchmark generated from PocketHive tx_outcome harness."
+}

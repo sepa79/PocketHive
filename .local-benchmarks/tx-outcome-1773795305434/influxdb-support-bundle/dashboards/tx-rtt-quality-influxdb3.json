@@ -1,0 +1,407 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": false,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb3"
+      },
+      "description": "Business success rate over time grouped by swarmId, callId, and businessCode.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 4,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 90
+              },
+              {
+                "color": "green",
+                "value": 99
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "editorType": "sql",
+          "format": "time_series",
+          "queryType": "sql",
+          "rawSql": "SELECT\n  $__dateBin(\"time\") AS \"time\",\n  concat(\"swarmId\", ' | ', \"callIdKey\", ' | ', \"businessCodeKey\") AS \"series\",\n  avg(\"businessSuccess\") * 100 AS \"business_success_pct\"\nFROM \"ph_tx_outcome\"\nWHERE $__timeFilter(\"time\")\n  AND ('${swarm:csv}' = '__all' OR contains(concat(',', '${swarm:csv}', ','), concat(',', \"swarmId\", ',')))\n  AND ('${callId:csv}' = '__all' OR contains(concat(',', '${callId:csv}', ','), concat(',', \"callIdKey\", ',')))\n  AND ('${businessCode:csv}' = '__all' OR contains(concat(',', '${businessCode:csv}', ','), concat(',', \"businessCodeKey\", ',')))\nGROUP BY 1, \"swarmId\", \"callIdKey\", \"businessCodeKey\"\nORDER BY 1, 2",
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb3"
+          }
+        }
+      ],
+      "transformations": [
+        {
+          "id": "prepareTimeSeries",
+          "options": {
+            "format": "many"
+          }
+        }
+      ],
+      "title": "Business success by swarm/call/businessCode",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb3"
+      },
+      "description": "Processor status class distribution over time grouped by swarmId, callId, and businessCode.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 4,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "editorType": "sql",
+          "format": "time_series",
+          "queryType": "sql",
+          "rawSql": "SELECT\n  $__dateBin(\"time\") AS \"time\",\n  concat(\n    \"swarmId\",\n    ' | ',\n    \"callIdKey\",\n    ' | ',\n    \"businessCodeKey\",\n    ' | ',\n    \"processorStatusClass\"\n  ) AS \"series\",\n  count(*) AS \"txns\"\nFROM \"ph_tx_outcome\"\nWHERE $__timeFilter(\"time\")\n  AND ('${swarm:csv}' = '__all' OR contains(concat(',', '${swarm:csv}', ','), concat(',', \"swarmId\", ',')))\n  AND ('${callId:csv}' = '__all' OR contains(concat(',', '${callId:csv}', ','), concat(',', \"callIdKey\", ',')))\n  AND ('${businessCode:csv}' = '__all' OR contains(concat(',', '${businessCode:csv}', ','), concat(',', \"businessCodeKey\", ',')))\nGROUP BY 1, \"swarmId\", \"callIdKey\", \"businessCodeKey\", \"processorStatusClass\"\nORDER BY 1, 2",
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb3"
+          }
+        }
+      ],
+      "transformations": [
+        {
+          "id": "prepareTimeSeries",
+          "options": {
+            "format": "many"
+          }
+        }
+      ],
+      "title": "Processor status classes over time",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb3"
+      },
+      "description": "Processor success rate over time grouped by swarmId, callId, and businessCode.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 4,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "id": 3,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "editorType": "sql",
+          "format": "time_series",
+          "queryType": "sql",
+          "rawSql": "SELECT\n  $__dateBin(\"time\") AS \"time\",\n  concat(\"swarmId\", ' | ', \"callIdKey\", ' | ', \"businessCodeKey\") AS \"series\",\n  avg(\"processorSuccess\") * 100 AS \"processor_success_pct\"\nFROM \"ph_tx_outcome\"\nWHERE $__timeFilter(\"time\")\n  AND ('${swarm:csv}' = '__all' OR contains(concat(',', '${swarm:csv}', ','), concat(',', \"swarmId\", ',')))\n  AND ('${callId:csv}' = '__all' OR contains(concat(',', '${callId:csv}', ','), concat(',', \"callIdKey\", ',')))\n  AND ('${businessCode:csv}' = '__all' OR contains(concat(',', '${businessCode:csv}', ','), concat(',', \"businessCodeKey\", ',')))\nGROUP BY 1, \"swarmId\", \"callIdKey\", \"businessCodeKey\"\nORDER BY 1, 2",
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb3"
+          }
+        }
+      ],
+      "transformations": [
+        {
+          "id": "prepareTimeSeries",
+          "options": {
+            "format": "many"
+          }
+        }
+      ],
+      "title": "Processor success by swarm/call/businessCode",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb3"
+      },
+      "description": "Worst quality groups in the selected range, grouped by swarmId, callId, and businessCode.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "id": 4,
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "fail_pct"
+          }
+        ]
+      },
+      "targets": [
+        {
+          "editorType": "sql",
+          "format": "table",
+          "queryType": "sql",
+          "rawSql": "SELECT\n  \"swarmId\",\n  \"callIdKey\" AS \"callId\",\n  \"businessCodeKey\" AS \"businessCode\",\n  count(*) AS \"txns\",\n  (1 - avg(\"businessSuccess\")) * 100 AS \"business_fail_pct\",\n  (1 - avg(\"processorSuccess\")) * 100 AS \"processor_fail_pct\",\n  approx_percentile_cont(0.95) WITHIN GROUP (ORDER BY \"processorDurationMs\") AS \"p95_rtt_ms\",\n  max(\"processorDurationMs\") AS \"max_rtt_ms\"\nFROM \"ph_tx_outcome\"\nWHERE $__timeFilter(\"time\")\n  AND ('${swarm:csv}' = '__all' OR contains(concat(',', '${swarm:csv}', ','), concat(',', \"swarmId\", ',')))\n  AND ('${callId:csv}' = '__all' OR contains(concat(',', '${callId:csv}', ','), concat(',', \"callIdKey\", ',')))\n  AND ('${businessCode:csv}' = '__all' OR contains(concat(',', '${businessCode:csv}', ','), concat(',', \"businessCodeKey\", ',')))\nGROUP BY \"swarmId\", \"callIdKey\", \"businessCodeKey\"\nHAVING count(*) >= 20\nORDER BY \"business_fail_pct\" DESC, \"txns\" DESC\nLIMIT 100",
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb3"
+          }
+        }
+      ],
+      "title": "Worst groups by swarm/call/businessCode",
+      "type": "table"
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": [
+    "pockethive",
+    "influxdb3",
+    "tx-outcome",
+    "client-rtt",
+    "quality"
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "allValue": "__all",
+        "datasource": {
+          "type": "influxdb",
+          "uid": "influxdb3"
+        },
+        "definition": "SELECT DISTINCT \"swarmId\" FROM \"ph_tx_outcome\" WHERE $__timeFilter(\"time\") ORDER BY \"swarmId\"",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Swarm",
+        "multi": true,
+        "name": "swarm",
+        "options": [],
+        "query": "SELECT DISTINCT \"swarmId\" FROM \"ph_tx_outcome\" WHERE $__timeFilter(\"time\") ORDER BY \"swarmId\"",
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "allValue": "__all",
+        "datasource": {
+          "type": "influxdb",
+          "uid": "influxdb3"
+        },
+        "definition": "SELECT DISTINCT \"callIdKey\" FROM \"ph_tx_outcome\" WHERE $__timeFilter(\"time\") AND \"callIdKey\" <> 'unknown' ORDER BY \"callIdKey\" LIMIT 500",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Call ID",
+        "multi": true,
+        "name": "callId",
+        "options": [],
+        "query": "SELECT DISTINCT \"callIdKey\" FROM \"ph_tx_outcome\" WHERE $__timeFilter(\"time\") AND \"callIdKey\" <> 'unknown' ORDER BY \"callIdKey\" LIMIT 500",
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "allValue": "__all",
+        "datasource": {
+          "type": "influxdb",
+          "uid": "influxdb3"
+        },
+        "definition": "SELECT DISTINCT \"businessCodeKey\" FROM \"ph_tx_outcome\" WHERE $__timeFilter(\"time\") AND \"businessCodeKey\" <> 'n/a' ORDER BY \"businessCodeKey\" LIMIT 500",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Business Code",
+        "multi": true,
+        "name": "businessCode",
+        "options": [],
+        "query": "SELECT DISTINCT \"businessCodeKey\" FROM \"ph_tx_outcome\" WHERE $__timeFilter(\"time\") AND \"businessCodeKey\" <> 'n/a' ORDER BY \"businessCodeKey\" LIMIT 500",
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "Tx Quality & Failure Mix (InfluxDB 3)",
+  "uid": "ph-tx-quality-influxdb3",
+  "version": 1,
+  "weekStart": ""
+}
