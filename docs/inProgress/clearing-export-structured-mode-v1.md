@@ -1,222 +1,159 @@
 # Clearing Export — Structured Mode (V1)
 
-> Status: planned
-> Scope: add `mode: structured` to `clearing-export-service` alongside existing `mode: template`
+> Status: implemented for XML output
+> Scope: `mode: structured` in `clearing-export-service`
 
----
+Authoritative current contract:
+- `docs/clearing/CLEARING_STRUCTURED_SCHEMA_CONTRACT.md`
+- `docs/ai/CLEARING_EXPORT_WORKER_PLAYBOOK.md`
+
+This document now describes the implemented XML-only structured mode. Earlier design ideas about
+generic JSON/CSV formatters are deferred; the current branch ships the XML path only.
+
+It does not remove or replace template mode. Template mode remains supported as the default worker
+behavior when `mode` is omitted.
 
 ## Goal
 
-Add a second assembly mode where each record is built as a field map (via field mappings + Pebble
-expressions), and the final file is serialized by a pluggable formatter (`xml`, `json`, `csv`).
-This avoids manual XML escaping, supports nested source payloads cleanly, and enables automatic
-aggregate computation (e.g. sum of amounts in footer).
+Structured mode builds each record as a typed field map using schema-driven mappings, computes
+aggregates during batching, and serializes the batch with `XmlOutputFormatter`. Template mode
+remains available and unchanged in purpose.
 
-Existing `mode: template` must remain unchanged.
+## Worker config contract
 
----
-
-## Config contract
-
-### New top-level field
+Structured mode is selected in worker config and points to a schema registry entry:
 
 ```yaml
 pockethive:
   worker:
     config:
-      mode: structured          # NEW — "template" (default, existing) | "structured" (new)
+      mode: structured
+      schemaRegistryRoot: /app/scenario/clearing-schemas
+      schemaId: pcs-clearing
+      schemaVersion: "1.0.0"
+      recordSourceStep: latest
+      recordSourceStepIndex: -1
+      recordBuildFailurePolicy: stop
+      maxRecordsPerFile: 10
+      flushIntervalMs: 60000
+      maxBufferedRecords: 5000
+      localTargetDir: /tmp/pockethive/clearing-out
+      localTempSuffix: .tmp
+      writeManifest: false
 ```
 
-When `mode` is absent, behaviour is identical to today (`template`).
+## Schema contract
 
-### Structured-mode fields (only read when `mode: structured`)
+The schema file is the single source of truth for XML file shape. A minimal valid example is:
 
 ```yaml
-outputFormat: xml               # "xml" | "json" | "csv"
-
-# Field mappings — Pebble expressions evaluated per record.
-# Keys become element/field names in output. Nested keys use dot notation.
-recordMapping:
-  clearingId:        "{{ steps.selected.json.id }}"
-  pan:               "{{ steps.selected.json.panMasked }}"
-  amount:            "{{ steps.selected.json.amount }}"
-  currency:          "{{ steps.selected.json.currency }}"
-  responseCode:      "{{ steps.selected.json.responseCode }}"
-  acceptorName:      "{{ steps.selected.json.acceptor.commonName }}"
-  acceptorId:        "{{ steps.selected.json.acceptor.identification }}"
-
-# Header mapping — evaluated once at flush time.
-# Context: now, recordCount, totals.*
-headerMapping:
-  creationDateTime:  "{{ now }}"
-  issuerCode:        "ISSUER-PL"
-  schemeCode:        "MASTERCARD"
-
-# Footer mapping — evaluated once at flush time.
-# Context: now, recordCount, totals.*
-footerMapping:
-  recordCount:       "{{ recordCount }}"
-  totalAmount:       "{{ totals.sumAmount }}"
-
-# fileNameTemplate remains a Pebble string template (same as template mode).
+schemaId: pcs-clearing
+schemaVersion: "1.0.0"
+outputFormat: xml
 fileNameTemplate: "CLEARING_{{ now }}.xml"
-```
 
-### XML-specific fields (only when `outputFormat: xml`)
+recordMapping:
+  payload:
+    expression: "{{ steps.selected.payload }}"
+    required: true
+    type: string
+  unitAmount:
+    expression: "1"
+    required: true
+    type: long
 
-```yaml
+headerMapping:
+  creationDateTime: "{{ now }}"
+  issuerCode: "ISSUER-PL"
+  schemeCode: "MASTERCARD"
+
+footerMapping:
+  recordCount: "{{ recordCount }}"
+  totalUnits: "{{ totals.sumUnitAmount }}"
+
 xml:
-  declaration: true             # emit <?xml version="1.0" encoding="UTF-8"?>
+  declaration: true
   encoding: UTF-8
   rootElement: Document
   headerElement: FileHeader
-  recordsElement: Transactions  # wrapper element; omit or leave blank to skip wrapper
+  recordsElement: Transactions
   recordElement: Transaction
   footerElement: FileTrailer
-  namespaceUri: ""              # optional; empty = no namespace
-  namespacePrefix: ""           # optional
-  indent: false                 # pretty-print (false for production files)
+  namespaceUri: ""
+  namespacePrefix: ""
+  recordNamespaceUri: ""
+  recordNamespacePrefix: ""
+  indent: false
 ```
 
-### Aggregates (`totals.*`)
+Required structural XML fields:
+- `xml.rootElement`
+- `xml.headerElement`
+- `xml.recordsElement`
+- `xml.recordElement`
+- `xml.footerElement`
 
-Aggregates are computed automatically during batch accumulation from numeric fields in
-`recordMapping`. Available in `headerMapping`, `footerMapping`, and `fileNameTemplate`.
+Blank semantics:
+- `recordsElement=""` skips the collection wrapper.
+- `recordElement=""` writes record fields inline under the current parent.
+- `headerElement` and `footerElement` remain required and non-blank.
 
-Built-in aggregates (computed for every numeric field `<field>` in `recordMapping`):
+## Aggregates (`totals.*`)
+
+Aggregates are computed from numeric `recordMapping` fields that project successfully:
 
 | Key | Description |
 |-----|-------------|
 | `totals.recordCount` | same as `recordCount` |
-| `totals.sum<Field>` | sum of `<field>` across all records (camelCase, e.g. `totals.sumAmount`) |
-| `totals.min<Field>` | minimum value |
-| `totals.max<Field>` | maximum value |
+| `totals.sum<Field>` | numeric sum for `<field>` |
+| `totals.min<Field>` | minimum numeric value |
+| `totals.max<Field>` | maximum numeric value |
 
-Non-numeric fields are skipped silently. If a field is missing in a record, it contributes `0`
-to numeric aggregates.
+Numeric projection is strict:
+- `type: long` and `type: decimal` fail fast if the rendered value cannot be parsed.
+- optional fields may be omitted only when the rendered value is blank.
 
----
+## Processing flow
 
-## Processing flow (structured mode)
+1. Worker receives a `WorkItem` and selects the source step via `recordSourceStep`.
+2. `StructuredRecordProjector` evaluates `recordMapping` expressions into a typed field map.
+3. `ClearingExportBatchWriter` buffers projected records and accumulates numeric totals.
+4. On flush, `ClearingExportFileAssembler` renders header/footer mappings and file name from `{now, recordCount, totals}`.
+5. `XmlOutputFormatter` serializes the structured payload to XML.
+6. The sink writes `<file>.tmp` and renames to the final file.
 
-1. `onMessage` — same entry point as template mode.
-2. Step context build — same as current implementation (produces `steps.first/latest/previous/selected/byIndex/all`).
-3. **NEW** `StructuredRecordProjector.project(recordMapping, renderContext)`:
-   - evaluates each Pebble expression in `recordMapping`,
-   - returns `Map<String, String>` (field name → rendered value).
-4. Projected map is appended to `ClearingExportBatchWriter` as `Map<String, String>` (not a
-   pre-rendered string).
-5. Numeric fields are accumulated into running aggregates.
-6. On flush, `ClearingExportFileAssembler` delegates to `StructuredFileAssembler`:
-   - evaluates `headerMapping` with `{now, recordCount, totals}`,
-   - evaluates `footerMapping` with same context,
-   - passes header map + record maps + footer map to `OutputFormatter`.
-7. `OutputFormatter` serializes to final string.
-8. Rest of flush pipeline (sink, manifest) unchanged.
+## Preflight and observability
 
----
+- Structured config/schema is preflighted before the worker is enabled.
+- `ClearingStructuredSchemaRegistry` resolves and validates the schema from
+  `<schemaRegistryRoot>/<schemaId>/<schemaVersion>/schema.(json|yaml|yml)`.
+- Invalid structured schema/config is treated as a fatal preflight error.
+- The worker emits one major-event journal alert for that failure and exposes
+  `fatalError`, `failurePhase`, `schemaId`, and `schemaVersion` in status/logging.
 
-## New classes
+## Implemented classes
 
 | Class | Responsibility |
 |-------|---------------|
-| `StructuredRecordProjector` | evaluates `recordMapping` Pebble expressions → `Map<String, String>` |
-| `StructuredAggregates` | accumulates numeric totals across records in a batch |
-| `StructuredFileAssembler` | evaluates header/footer mappings, delegates to formatter |
-| `OutputFormatter` (interface) | `String format(Map header, List<Map> records, Map footer, config)` |
-| `XmlOutputFormatter` | XML serialization via `javax.xml.stream.XMLStreamWriter` |
-| `JsonOutputFormatter` | JSON serialization via Jackson |
-| `CsvOutputFormatter` | CSV serialization (header row = field names, one row per record) |
-| `OutputFormatterFactory` | selects formatter by `outputFormat` config value |
+| `ClearingStructuredSchema` | SSOT DTO + validation for structured schema files |
+| `ClearingStructuredSchemaRegistry` | load/cached schema lookup with schema-path context in failures |
+| `StructuredRecordProjector` | evaluate `recordMapping` expressions and parse typed numeric fields |
+| `ClearingExportBatchWriter` | buffer structured records and compute `totals.*` during flush |
+| `ClearingExportFileAssembler` | render file name/header/footer and delegate XML serialization |
+| `XmlOutputFormatter` | serialize header, records, and footer with `XMLStreamWriter` |
 
-`ClearingExportBatchWriter` needs a second buffer type: `ConcurrentLinkedQueue<Map<String,String>>`
-used when `mode=structured`. Existing `ConcurrentLinkedQueue<String>` stays for `mode=template`.
+## Current constraints
 
-`ClearingExportWorkerConfig` record gains new optional fields (all nullable/defaulted so existing
-configs remain valid):
-- `mode` (String, default `"template"`)
-- `outputFormat` (String, nullable)
-- `recordMapping` (Map<String,String>, nullable)
-- `headerMapping` (Map<String,String>, nullable)
-- `footerMapping` (Map<String,String>, nullable)
-- `xml` (nested record `XmlOutputConfig`, nullable)
+- `outputFormat` currently supports only `xml`.
+- `xml` is required for structured XML schemas.
+- Structural XML element names are not defaulted by the worker.
+- `streamingAppendEnabled` is rejected in `mode: structured`.
+- Generic formatter abstraction (`OutputFormatter` / JSON / CSV) is deferred.
 
----
+## What does not change
 
-## XML output contract
-
-For the config example above, output must be:
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<Document>
-  <FileHeader>
-    <creationDateTime>2026-02-18T12:00:00Z</creationDateTime>
-    <issuerCode>ISSUER-PL</issuerCode>
-    <schemeCode>MASTERCARD</schemeCode>
-  </FileHeader>
-  <Transactions>
-    <Transaction>
-      <clearingId>CLR-001</clearingId>
-      <pan>5412******9876</pan>
-      <amount>1250</amount>
-      <currency>PLN</currency>
-      <responseCode>00</responseCode>
-      <acceptorName>FERRERO DE MEXICO</acceptorName>
-      <acceptorId>12345678</acceptorId>
-    </Transaction>
-  </Transactions>
-  <FileTrailer>
-    <recordCount>1</recordCount>
-    <totalAmount>1250</totalAmount>
-  </FileTrailer>
-</Document>
-```
-
-Rules:
-- All values are XML-escaped automatically by `XMLStreamWriter` — no manual escaping in mappings.
-- Dot-notation keys in mapping (`acceptor.name`) produce nested elements:
-  `<acceptor><name>...</name></acceptor>`.
-- `indent: false` produces single-line output (production default).
-- Namespace applied to root element only when `namespaceUri` is non-empty.
-
----
-
-## Constraints
-
-- `mode: template` path must not be touched — zero regression risk.
-- `StructuredRecordProjector` must reuse existing `TemplateRenderer` (no new template engine).
-- `XmlOutputFormatter` must use `javax.xml.stream.XMLStreamWriter` (already on classpath via JDK) —
-  no additional XML library dependency.
-- Aggregates are computed only for fields present in `recordMapping` whose rendered value parses
-  as `Long` or `Double`. Silent skip otherwise.
-- If `mode: structured` is set but `recordMapping` is null/empty → fail fast at config load time
-  with a clear error message.
-- `outputFormat` defaults to `xml` when `mode: structured` and `outputFormat` is absent.
-
----
-
-## What does NOT change
-
-- `ClearingExportSink` interface and `LocalDirectoryClearingExportSink` — unchanged.
-- `ClearingRenderedFile` — unchanged (still carries final string payload).
-- Manifest format — unchanged.
-- `flushIntervalMs`, `maxRecordsPerFile`, `maxBufferedRecords`, buffer-full guard — unchanged.
-- Shutdown flush hook — unchanged.
-- Status fields published to `WorkerContext` — unchanged.
-
----
-
-## Implementation tracking
-
-- [ ] `ClearingExportWorkerConfig` extended with structured-mode fields
-- [ ] `StructuredRecordProjector` implemented and unit-tested
-- [ ] `StructuredAggregates` implemented and unit-tested
-- [ ] `XmlOutputFormatter` implemented and unit-tested
-- [ ] `JsonOutputFormatter` implemented and unit-tested
-- [ ] `CsvOutputFormatter` implemented and unit-tested
-- [ ] `StructuredFileAssembler` wired into `ClearingExportFileAssembler` dispatch
-- [ ] `ClearingExportBatchWriter` extended with structured record buffer
-- [ ] `ClearingExportWorkerImpl` dispatches to structured path when `mode=structured`
-- [ ] Example config added: `clearing-export-service/examples/clearing-template-xml.yaml`
-- [ ] Playbook (`docs/ai/CLEARING_EXPORT_WORKER_PLAYBOOK.md`) updated with structured mode section
+- `ClearingExportSink` and `LocalDirectoryClearingExportSink` contract
+- `ClearingRenderedFile` payload handoff
+- manifest format
+- batch controls (`flushIntervalMs`, `maxRecordsPerFile`, `maxBufferedRecords`)
+- template mode behavior and business-only output rule

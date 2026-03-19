@@ -26,7 +26,7 @@ record ClearingStructuredSchema(
     recordMapping = normalizeRecordMapping(recordMapping);
     headerMapping = normalizeStringMapping(headerMapping);
     footerMapping = normalizeStringMapping(footerMapping);
-    xml = xml == null ? XmlOutputConfig.defaults() : xml.normalize();
+    xml = requireXmlConfig(xml);
   }
 
   private static Map<String, StructuredFieldRule> normalizeRecordMapping(
@@ -71,6 +71,20 @@ record ClearingStructuredSchema(
     return value.trim();
   }
 
+  private static String requireConfiguredText(String value, String name) {
+    if (value == null) {
+      throw new IllegalArgumentException(name + " must be configured");
+    }
+    return value.trim();
+  }
+
+  private static XmlOutputConfig requireXmlConfig(XmlOutputConfig xml) {
+    if (xml == null) {
+      throw new IllegalArgumentException("xml must be configured for structured xml output");
+    }
+    return xml.normalize();
+  }
+
   record StructuredFieldRule(String expression, Boolean required, String type) {
 
     StructuredFieldRule normalize() {
@@ -106,33 +120,16 @@ record ClearingStructuredSchema(
       String recordNamespacePrefix
   ) {
 
-    static XmlOutputConfig defaults() {
-      return new XmlOutputConfig(
-          true,
-          "UTF-8",
-          "Document",
-          "",
-          "FileHeader",
-          "Transactions",
-          "Transaction",
-          "FileTrailer",
-          "",
-          "",
-          "",
-          ""
-      );
-    }
-
     XmlOutputConfig normalize() {
       return new XmlOutputConfig(
           declaration == null ? true : declaration,
-          encoding == null ? "UTF-8" : encoding.trim(),
-          rootElement == null ? "Document" : rootElement.trim(),
+          defaultIfBlank(encoding, "UTF-8"),
+          requireText(rootElement, "xml.rootElement"),
           wrapperElement == null ? "" : wrapperElement.trim(),
-          headerElement == null ? "FileHeader" : headerElement.trim(),
-          recordsElement == null ? "Transactions" : recordsElement.trim(),
-          recordElement == null ? "Transaction" : recordElement.trim(),
-          footerElement == null ? "FileTrailer" : footerElement.trim(),
+          requireText(headerElement, "xml.headerElement"),
+          requireConfiguredText(recordsElement, "xml.recordsElement"),
+          requireConfiguredText(recordElement, "xml.recordElement"),
+          requireText(footerElement, "xml.footerElement"),
           namespaceUri == null ? "" : namespaceUri.trim(),
           namespacePrefix == null ? "" : namespacePrefix.trim(),
           recordNamespaceUri == null ? "" : recordNamespaceUri.trim(),

@@ -43,6 +43,7 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
   private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
   private static final String WORKER_BEAN_NAME = "clearingExportWorker";
   private static final String HEADER_BUSINESS_CODE = "x-ph-business-code";
+  private static final String FAILURE_PHASE_PREFLIGHT = "preflight";
 
   private final ClearingExportWorkerProperties properties;
   private final ClearingExportBatchWriter batchWriter;
@@ -173,7 +174,6 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
       publishStatusFromRuntime();
     } catch (Exception ex) {
       publishRuntimeFailure(ex, "flush");
-      log.warn("Periodic clearing-export flush failed: {}", ex.getMessage(), ex);
     }
   }
 
@@ -181,16 +181,15 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
     if (snapshot == null || !snapshot.enabled() || fatalReason.get() != null) {
       return;
     }
+    ClearingExportWorkerConfig config = null;
     try {
-      batchWriter.preflight(resolveConfig(snapshot));
+      config = resolveConfig(snapshot);
+      if (config.structuredMode()) {
+        schemaRegistry.resolve(config);
+      }
+      batchWriter.preflight(config);
     } catch (Exception ex) {
-      String message = "Streaming preflight failed: " + ex.getMessage();
-      publishStatusFromRuntimeFailure(message);
-      WorkItem synthetic = WorkItem.text("")
-          .header("x-ph-call-id", "clearing-export-preflight")
-          .build();
-      publishJournalAlert(synthetic, ex);
-      requestWorkerStop(message);
+      handleFatalPreflightFailure(config, snapshot.enabled(), ex);
     }
   }
 
@@ -209,20 +208,13 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
         });
   }
 
-  private void publishStatusFromRuntimeFailure(String message) {
-    StatusPublisher statusPublisher = lastStatusPublisher.get();
-    if (statusPublisher == null) {
-      return;
-    }
-    publishStatus(statusPublisher, Boolean.TRUE.equals(lastEnabled.get()), message);
-  }
-
   private void publishRuntimeFailure(Exception ex, String phase) {
     String message = "Runtime " + phase + " failure: " + ex.getMessage();
     StatusPublisher statusPublisher = lastStatusPublisher.get();
     if (statusPublisher != null) {
-      publishStatus(statusPublisher, Boolean.TRUE.equals(lastEnabled.get()), message);
+      publishStatus(statusPublisher, Boolean.TRUE.equals(lastEnabled.get()), message, "", "", "");
     }
+    log.error("Clearing-export runtime failure: failurePhase={} message={}", phase, ex.getMessage(), ex);
     WorkItem synthetic = WorkItem.text("")
         .header("x-ph-call-id", "clearing-export-" + phase)
         .build();
@@ -249,10 +241,17 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
   }
 
   private void publishStatus(StatusPublisher statusPublisher, boolean enabled) {
-    publishStatus(statusPublisher, enabled, null);
+    publishStatus(statusPublisher, enabled, "", "", "", "");
   }
 
-  private void publishStatus(StatusPublisher statusPublisher, boolean enabled, String fatalMessage) {
+  private void publishStatus(
+      StatusPublisher statusPublisher,
+      boolean enabled,
+      String fatalMessage,
+      String failurePhase,
+      String schemaId,
+      String schemaVersion
+  ) {
     statusPublisher.update(status -> status
         .data("enabled", enabled)
         .data("bufferedRecords", batchWriter.bufferedRecords())
@@ -265,7 +264,10 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
         .data("lastFlushAt", batchWriter.lastFlushAt() == null ? "" : batchWriter.lastFlushAt().toString())
         .data("lastError", batchWriter.lastError())
         .data("recordsFilteredByBusinessCode", recordsFilteredByBusinessCode.get())
-        .data("fatalError", fatalMessage == null ? "" : fatalMessage));
+        .data("fatalError", statusValue(fatalMessage))
+        .data("failurePhase", statusValue(failurePhase))
+        .data("schemaId", statusValue(schemaId))
+        .data("schemaVersion", statusValue(schemaVersion)));
   }
 
   private void publishJournalAlert(WorkItem item, Exception ex) {
@@ -336,7 +338,7 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
       ClearingExportWorkerConfig config,
       Exception ex
   ) {
-    String message = "Failed to append clearing export record (recordSourceStep=" + config.recordSourceStep() + ")";
+    String message = recordBuildFailureMessage(config);
     switch (config.recordBuildFailurePolicyMode()) {
       case SILENT_DROP -> publishStatus(context);
       case JOURNAL_AND_LOG_ERROR -> {
@@ -351,10 +353,74 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
       case STOP -> {
         log.error(message, ex);
         publishJournalAlert(item, ex);
-        publishStatus(context.statusPublisher(), context.enabled(), message);
+        publishStatus(
+            context.statusPublisher(),
+            context.enabled(),
+            message,
+            "",
+            structuredSchemaId(config),
+            structuredSchemaVersion(config));
         requestWorkerStop(message);
       }
     }
+  }
+
+  private void handleFatalPreflightFailure(
+      ClearingExportWorkerConfig config,
+      boolean enabled,
+      Exception ex
+  ) {
+    String schemaId = structuredSchemaId(config);
+    String schemaVersion = structuredSchemaVersion(config);
+    String schemaRegistryRoot = config == null ? "" : statusValue(config.schemaRegistryRoot());
+    String message = "Preflight failed: " + ex.getMessage();
+    log.error(
+        "Clearing-export preflight failed: failurePhase={} schemaId={} schemaVersion={} schemaRegistryRoot={} message={}",
+        FAILURE_PHASE_PREFLIGHT,
+        schemaId,
+        schemaVersion,
+        schemaRegistryRoot,
+        ex.getMessage(),
+        ex);
+    StatusPublisher statusPublisher = controlPlaneRuntime.statusPublisher(WORKER_BEAN_NAME);
+    lastStatusPublisher.set(statusPublisher);
+    lastEnabled.set(enabled);
+    publishStatus(statusPublisher, enabled, message, FAILURE_PHASE_PREFLIGHT, schemaId, schemaVersion);
+    statusPublisher.emitFull();
+    WorkItem synthetic = WorkItem.text("")
+        .header("x-ph-call-id", "clearing-export-preflight")
+        .build();
+    publishJournalAlert(synthetic, ex);
+    requestWorkerStop(message);
+  }
+
+  private String recordBuildFailureMessage(ClearingExportWorkerConfig config) {
+    StringBuilder message = new StringBuilder(
+        "Failed to append clearing export record (recordSourceStep=" + config.recordSourceStep());
+    if (config.structuredMode()) {
+      message
+          .append(", schemaId=").append(structuredSchemaId(config))
+          .append(", schemaVersion=").append(structuredSchemaVersion(config));
+    }
+    return message.append(')').toString();
+  }
+
+  private String structuredSchemaId(ClearingExportWorkerConfig config) {
+    if (config == null || !config.structuredMode()) {
+      return "";
+    }
+    return statusValue(config.schemaId());
+  }
+
+  private String structuredSchemaVersion(ClearingExportWorkerConfig config) {
+    if (config == null || !config.structuredMode()) {
+      return "";
+    }
+    return statusValue(config.schemaVersion());
+  }
+
+  private String statusValue(String value) {
+    return value == null ? "" : value;
   }
 
   private Map<String, Object> projectStep(WorkStep step) {

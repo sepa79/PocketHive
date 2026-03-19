@@ -45,9 +45,10 @@ class XmlOutputFormatter {
       for (Map<String, String> record : records) {
         String recNs = xml.recordNamespaceUri().isBlank() ? xml.namespaceUri() : xml.recordNamespaceUri();
         String recPrefix = xml.recordNamespaceUri().isBlank() ? xml.namespacePrefix() : xml.recordNamespacePrefix();
-        writeMapAsElement(xw, recNs, recPrefix, xml.recordElement(), record);
-        if (!xml.recordNamespaceUri().isBlank()) {
-          // namespace already written via writeStartElement; declare it on the element
+        if (xml.recordElement().isBlank()) {
+          writeInlineMapContent(xw, recNs, recPrefix, record);
+        } else {
+          writeMapAsElement(xw, recNs, recPrefix, xml.recordElement(), record);
         }
       }
       if (hasRecordsWrapper) {
@@ -74,18 +75,26 @@ class XmlOutputFormatter {
   ) throws XMLStreamException {
     Map<String, Object> tree = toTree(values);
     writeStartElement(xw, namespaceUri, namespacePrefix, elementName);
-    // write attributes first (@key entries at top level)
-    for (Map.Entry<String, Object> entry : tree.entrySet()) {
-      if (entry.getKey().startsWith("@") && entry.getValue() instanceof String s) {
-        xw.writeAttribute(entry.getKey().substring(1), s);
-      }
-    }
-    for (Map.Entry<String, Object> entry : tree.entrySet()) {
-      if (!entry.getKey().startsWith("@")) {
-        writeTreeEntry(xw, namespaceUri, namespacePrefix, entry.getKey(), entry.getValue());
-      }
-    }
+    writeAttributes(xw, tree);
+    writeTreeContent(xw, namespaceUri, namespacePrefix, tree);
     xw.writeEndElement();
+  }
+
+  private void writeInlineMapContent(
+      XMLStreamWriter xw,
+      String namespaceUri,
+      String namespacePrefix,
+      Map<String, String> values
+  ) throws XMLStreamException {
+    Map<String, Object> tree = toTree(values);
+    for (Map.Entry<String, Object> entry : tree.entrySet()) {
+      String key = entry.getKey();
+      if (key.startsWith("@") || "#text".equals(key)) {
+        throw new IllegalStateException(
+            "Inline record content does not support top-level attributes or #text entries: " + key);
+      }
+      writeTreeEntry(xw, namespaceUri, namespacePrefix, key, entry.getValue());
+    }
   }
 
   @SuppressWarnings("unchecked")
@@ -99,22 +108,13 @@ class XmlOutputFormatter {
     if (value instanceof Map<?, ?> map) {
       Map<String, Object> nested = (Map<String, Object>) map;
       writeStartElement(xw, namespaceUri, namespacePrefix, key);
-      // write attributes on this element
-      for (Map.Entry<String, Object> entry : nested.entrySet()) {
-        if (entry.getKey().startsWith("@") && entry.getValue() instanceof String s) {
-          xw.writeAttribute(entry.getKey().substring(1), s);
-        }
-      }
+      writeAttributes(xw, nested);
       // #text = text content alongside attributes
       Object textContent = nested.get("#text");
       if (textContent != null) {
         xw.writeCharacters(textContent.toString());
       } else {
-        for (Map.Entry<String, Object> entry : nested.entrySet()) {
-          if (!entry.getKey().startsWith("@")) {
-            writeTreeEntry(xw, namespaceUri, namespacePrefix, entry.getKey(), entry.getValue());
-          }
-        }
+        writeTreeContent(xw, namespaceUri, namespacePrefix, nested);
       }
       xw.writeEndElement();
     } else {
@@ -153,6 +153,28 @@ class XmlOutputFormatter {
       current.put(lastSegment, entry.getValue());
     }
     return root;
+  }
+
+  private void writeAttributes(XMLStreamWriter xw, Map<String, Object> tree) throws XMLStreamException {
+    for (Map.Entry<String, Object> entry : tree.entrySet()) {
+      if (entry.getKey().startsWith("@") && entry.getValue() instanceof String s) {
+        xw.writeAttribute(entry.getKey().substring(1), s);
+      }
+    }
+  }
+
+  private void writeTreeContent(
+      XMLStreamWriter xw,
+      String namespaceUri,
+      String namespacePrefix,
+      Map<String, Object> tree
+  ) throws XMLStreamException {
+    for (Map.Entry<String, Object> entry : tree.entrySet()) {
+      String key = entry.getKey();
+      if (!key.startsWith("@") && !"#text".equals(key)) {
+        writeTreeEntry(xw, namespaceUri, namespacePrefix, key, entry.getValue());
+      }
+    }
   }
 
   private void writeStartElement(
