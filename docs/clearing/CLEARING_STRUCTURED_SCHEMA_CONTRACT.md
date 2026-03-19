@@ -80,15 +80,15 @@ Supported fields:
 - `declaration` (bool, default: `true`)
 - `encoding` (string, default: `UTF-8`)
 - `rootElement` (string, default: `Document`)
+- `wrapperElement` (string, default: empty) — optional element wrapping header/records/footer inside the root
 - `headerElement` (string, default: `FileHeader`)
-- `recordsElement` (string, default: `Transactions`)
+- `recordsElement` (string, default: `Transactions`) — set to `""` to omit the records wrapper
 - `recordElement` (string, default: `Transaction`)
 - `footerElement` (string, default: `FileTrailer`)
 - `namespaceUri` (string, default: empty)
 - `namespacePrefix` (string, default: empty)
-- `recordNamespaceUri` (string, default: empty)
+- `recordNamespaceUri` (string, default: empty) — when set, overrides namespace for record elements only
 - `recordNamespacePrefix` (string, default: empty)
-- `indent` (bool, default: `false`)
 
 ## 5. Header/footer template context
 
@@ -128,13 +128,15 @@ xml:
   declaration: true
   encoding: UTF-8
   rootElement: Document
+  wrapperElement: ""         # optional; wraps header/records/footer inside root
   headerElement: FileHeader
   recordsElement: Transactions
   recordElement: Transaction
   footerElement: FileTrailer
   namespaceUri: ""
   namespacePrefix: ""
-  indent: false
+  recordNamespaceUri: ""
+  recordNamespacePrefix: ""
 ```
 
 Reference sample in repo:

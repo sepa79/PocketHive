@@ -172,7 +172,13 @@ Example:
 3. Header/footer and file name use `now`, `recordCount`, `totals.*`.
 4. XML file is generated and written through standard sink (`.tmp` + atomic rename).
 
-### 6.4 Current limits
+### 6.4 XML structure options
+
+- `wrapperElement`: optional element inserted between `rootElement` and header/records/footer. Leave blank to omit.
+- `recordsElement`: set to `""` to write record elements directly without a wrapper (required for formats like PCS where each record is a peer of the header/footer).
+- `recordNamespaceUri` / `recordNamespacePrefix`: scopes a namespace to record elements only, leaving root/wrapper/header/footer elements namespace-free.
+
+### 6.5 Current limits
 
 - `outputFormat` currently supports only `xml`.
 - `streamingAppendEnabled` is template-only and rejected in structured mode.

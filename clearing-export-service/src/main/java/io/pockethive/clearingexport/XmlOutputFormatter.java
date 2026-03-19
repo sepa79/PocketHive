@@ -33,7 +33,6 @@ class XmlOutputFormatter {
       }
       writeStartElement(xw, xml.namespaceUri(), xml.namespacePrefix(), xml.rootElement());
       if (!xml.namespaceUri().isBlank()) {
-        String prefix = xml.namespacePrefix().isBlank() ? "xmlns" : "xmlns:" + xml.namespacePrefix();
         xw.writeNamespace(xml.namespacePrefix().isBlank() ? "" : xml.namespacePrefix(), xml.namespaceUri());
       }
 

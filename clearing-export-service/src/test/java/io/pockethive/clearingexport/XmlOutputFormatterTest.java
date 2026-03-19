@@ -23,6 +23,7 @@ class XmlOutputFormatterTest {
             true,
             "UTF-8",
             "Document",
+            "",
             "Header",
             "Transactions",
             "Transaction",
@@ -30,8 +31,7 @@ class XmlOutputFormatterTest {
             "",
             "",
             "",
-            "",
-            false
+            ""
         )
     );
 

@@ -95,6 +95,7 @@ record ClearingStructuredSchema(
       Boolean declaration,
       String encoding,
       String rootElement,
+      String wrapperElement,
       String headerElement,
       String recordsElement,
       String recordElement,
@@ -102,8 +103,7 @@ record ClearingStructuredSchema(
       String namespaceUri,
       String namespacePrefix,
       String recordNamespaceUri,
-      String recordNamespacePrefix,
-      Boolean indent
+      String recordNamespacePrefix
   ) {
 
     static XmlOutputConfig defaults() {
@@ -111,6 +111,7 @@ record ClearingStructuredSchema(
           true,
           "UTF-8",
           "Document",
+          "",
           "FileHeader",
           "Transactions",
           "Transaction",
@@ -118,25 +119,24 @@ record ClearingStructuredSchema(
           "",
           "",
           "",
-          "",
-          false
+          ""
       );
     }
 
     XmlOutputConfig normalize() {
       return new XmlOutputConfig(
           declaration == null ? true : declaration,
-          defaultIfBlank(encoding, "UTF-8"),
-          defaultIfBlank(rootElement, "Document"),
-          defaultIfBlank(headerElement, "FileHeader"),
-          defaultIfBlank(recordsElement, "Transactions"),
-          defaultIfBlank(recordElement, "Transaction"),
-          defaultIfBlank(footerElement, "FileTrailer"),
+          encoding == null ? "UTF-8" : encoding.trim(),
+          rootElement == null ? "Document" : rootElement.trim(),
+          wrapperElement == null ? "" : wrapperElement.trim(),
+          headerElement == null ? "FileHeader" : headerElement.trim(),
+          recordsElement == null ? "Transactions" : recordsElement.trim(),
+          recordElement == null ? "Transaction" : recordElement.trim(),
+          footerElement == null ? "FileTrailer" : footerElement.trim(),
           namespaceUri == null ? "" : namespaceUri.trim(),
           namespacePrefix == null ? "" : namespacePrefix.trim(),
           recordNamespaceUri == null ? "" : recordNamespaceUri.trim(),
-          recordNamespacePrefix == null ? "" : recordNamespacePrefix.trim(),
-          indent == null ? false : indent
+          recordNamespacePrefix == null ? "" : recordNamespacePrefix.trim()
       );
     }
   }
