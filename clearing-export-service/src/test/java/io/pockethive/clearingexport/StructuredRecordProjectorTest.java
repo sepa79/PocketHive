@@ -62,6 +62,7 @@ class StructuredRecordProjectorTest {
         true,
         "UTF-8",
         "Document",
+        null,
         "Header",
         "Transactions",
         "Transaction",
@@ -69,8 +70,7 @@ class StructuredRecordProjectorTest {
         "",
         "",
         "",
-        "",
-        false
+        ""
     );
   }
 }

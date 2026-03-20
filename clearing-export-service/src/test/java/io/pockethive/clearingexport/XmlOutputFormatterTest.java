@@ -101,6 +101,7 @@ class XmlOutputFormatterTest {
         true,
         "UTF-8",
         "Document",
+        "",
         "Header",
         recordsElement,
         recordElement,
@@ -108,8 +109,7 @@ class XmlOutputFormatterTest {
         "",
         "",
         "",
-        "",
-        false
+        ""
     );
   }
 }

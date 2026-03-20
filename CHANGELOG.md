@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.14.42] - 2026-03-19
+Timestamp: 2026-03-19T12:00:00Z
+
+- Clearing Export (structured mode): removed `indent` field from `XmlOutputConfig` — the field existed in schema YAML and the Java record but was never implemented; removing it avoids silent no-ops in schema files.
+- Clearing Export (structured mode): added `wrapperElement` support to `XmlOutputConfig`, allowing an optional element to wrap header/records/footer inside the root element (e.g. `PPSCmnClrFile` inside `Document`).
+- Clearing Export (structured mode): `recordsElement: ""` (explicitly blank) now correctly suppresses the records wrapper element; previously `defaultIfBlank` was overriding blank values back to `"Transactions"`.
+- Docs: updated `CLEARING_STRUCTURED_SCHEMA_CONTRACT.md` — removed `indent`, documented `wrapperElement`, `recordsElement: ""` behaviour, and `recordNamespaceUri`/`recordNamespacePrefix` scoping.
+- Docs: updated `CLEARING_EXPORT_WORKER_PLAYBOOK.md` — added section 6.4 covering `wrapperElement`, `recordsElement`, and record namespace configuration options.
+
 ## [0.14.41] - 2026-03-12
 Timestamp: 2026-03-12T14:32:00Z
 

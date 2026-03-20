@@ -237,7 +237,13 @@ If wrapper elements are not needed, keep `recordsElement` and `recordElement` pr
 4. XML file is generated and written through standard sink (`.tmp` + atomic rename).
 5. Structured config/schema is preflighted before the worker is enabled. Invalid schema/config halts the worker and emits one major-event journal alert.
 
-### 6.5 Current limits
+### 6.5 XML structure options
+
+- `wrapperElement`: optional element inserted between `rootElement` and header/records/footer. Leave blank to omit.
+- `recordsElement`: set to `""` to write record elements directly without a wrapper (required for formats like PCS where each record is a peer of the header/footer).
+- `recordNamespaceUri` / `recordNamespacePrefix`: scopes a namespace to record elements only, leaving root/wrapper/header/footer elements namespace-free.
+
+### 6.6 Current limits
 
 - `outputFormat` currently supports only `xml`.
 - `streamingAppendEnabled` is template-only and rejected in structured mode.
