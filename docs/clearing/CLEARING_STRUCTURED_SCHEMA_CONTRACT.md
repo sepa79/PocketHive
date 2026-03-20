@@ -91,16 +91,17 @@ Required structural fields:
 Serializer/mechanics fields:
 - `declaration` (bool, default: `true`)
 - `encoding` (string, default: `UTF-8`)
+- `wrapperElement` (string, default: empty) — optional element wrapping header/records/footer inside the root
 - `namespaceUri` (string, default: empty)
 - `namespacePrefix` (string, default: empty)
-- `recordNamespaceUri` (string, default: empty)
+- `recordNamespaceUri` (string, default: empty) — when set, overrides namespace for record elements only
 - `recordNamespacePrefix` (string, default: empty)
-- `indent` (bool, default: `false`)
 
 Rules:
 - The service does not invent structural XML element names.
 - Schema examples in this repo must include all structural `xml.*Element` fields explicitly.
 - `headerElement` and `footerElement` are not disableable.
+- `wrapperElement=""` skips the optional outer body wrapper.
 - `recordsElement=""` skips the collection wrapper.
 - `recordElement=""` writes each record's fields directly under the current parent.
 
@@ -146,13 +147,15 @@ xml:
   declaration: true
   encoding: UTF-8
   rootElement: Document
+  wrapperElement: ""
   headerElement: FileHeader
   recordsElement: Transactions
   recordElement: Transaction
   footerElement: FileTrailer
   namespaceUri: ""
   namespacePrefix: ""
-  indent: false
+  recordNamespaceUri: ""
+  recordNamespacePrefix: ""
 ```
 
 Reference sample in repo:
@@ -166,6 +169,7 @@ present and set only the wrapper fields blank explicitly:
 ```yaml
 xml:
   rootElement: Document
+  wrapperElement: ""
   headerElement: FileHeader
   recordsElement: ""
   recordElement: ""

@@ -36,6 +36,11 @@ class XmlOutputFormatter {
         xw.writeNamespace(xml.namespacePrefix().isBlank() ? "" : xml.namespacePrefix(), xml.namespaceUri());
       }
 
+      boolean hasWrapper = xml.wrapperElement() != null && !xml.wrapperElement().isBlank();
+      if (hasWrapper) {
+        writeStartElement(xw, xml.namespaceUri(), xml.namespacePrefix(), xml.wrapperElement());
+      }
+
       writeMapAsElement(xw, xml.namespaceUri(), xml.namespacePrefix(), xml.headerElement(), headerValues);
 
       boolean hasRecordsWrapper = xml.recordsElement() != null && !xml.recordsElement().isBlank();
@@ -56,6 +61,9 @@ class XmlOutputFormatter {
       }
 
       writeMapAsElement(xw, xml.namespaceUri(), xml.namespacePrefix(), xml.footerElement(), footerValues);
+      if (hasWrapper) {
+        xw.writeEndElement();
+      }
       xw.writeEndElement();
       xw.writeEndDocument();
       xw.flush();

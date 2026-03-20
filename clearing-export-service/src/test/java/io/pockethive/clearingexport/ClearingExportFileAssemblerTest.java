@@ -119,6 +119,7 @@ class ClearingExportFileAssemblerTest {
             true,
             "UTF-8",
             "Document",
+            null,
             "Header",
             "Transactions",
             "Transaction",
@@ -126,8 +127,7 @@ class ClearingExportFileAssemblerTest {
             "",
             "",
             "",
-            "",
-            false
+            ""
         )
     );
   }

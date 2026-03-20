@@ -26,10 +26,12 @@ xml:
   declaration: true
   encoding: UTF-8
   rootElement: Document
+  wrapperElement: ""
   headerElement: FileHeader
   recordsElement: Transactions
   recordElement: Transaction
   footerElement: FileTrailer
   namespaceUri: ""
   namespacePrefix: ""
-  indent: false
+  recordNamespaceUri: ""
+  recordNamespacePrefix: ""

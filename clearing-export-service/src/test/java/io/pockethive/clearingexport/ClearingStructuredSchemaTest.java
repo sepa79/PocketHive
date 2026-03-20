@@ -64,11 +64,11 @@ class ClearingStructuredSchemaTest {
         null,
         null,
         "Document",
+        null,
         "Header",
         "Transactions",
         "Transaction",
         "Footer",
-        null,
         null,
         null,
         null,
@@ -77,7 +77,7 @@ class ClearingStructuredSchemaTest {
 
     assertThat(schema.xml().declaration()).isTrue();
     assertThat(schema.xml().encoding()).isEqualTo("UTF-8");
-    assertThat(schema.xml().indent()).isFalse();
+    assertThat(schema.xml().wrapperElement()).isEmpty();
     assertThat(schema.xml().namespaceUri()).isEmpty();
     assertThat(schema.xml().namespacePrefix()).isEmpty();
     assertThat(schema.xml().recordNamespaceUri()).isEmpty();
@@ -110,6 +110,7 @@ class ClearingStructuredSchemaTest {
         declaration,
         encoding,
         rootElement,
+        "",
         headerElement,
         recordsElement,
         recordElement,
@@ -117,8 +118,7 @@ class ClearingStructuredSchemaTest {
         "",
         "",
         "",
-        "",
-        false
+        ""
     );
   }
 }

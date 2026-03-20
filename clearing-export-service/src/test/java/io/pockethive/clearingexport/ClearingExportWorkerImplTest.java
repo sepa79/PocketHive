@@ -932,6 +932,7 @@ class ClearingExportWorkerImplTest {
         true,
         "UTF-8",
         "Document",
+        null,
         "Header",
         "Transactions",
         "Transaction",
@@ -939,8 +940,7 @@ class ClearingExportWorkerImplTest {
         "",
         "",
         "",
-        "",
-        false
+        ""
     );
   }
 

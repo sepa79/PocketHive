@@ -147,6 +147,7 @@ class ClearingExportBatchWriterTest {
             true,
             "UTF-8",
             "Document",
+            null,
             "Header",
             "Transactions",
             "Transaction",
@@ -154,8 +155,7 @@ class ClearingExportBatchWriterTest {
             "",
             "",
             "",
-            "",
-            false));
+            ""));
   }
 
   private static ClearingExportSinkWriteResult sinkResult(ClearingRenderedFile file) {

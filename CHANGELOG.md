@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.15.11]
+Timestamp: 2026-03-20T19:14:55Z
+
+- Clearing Export XML contract: add explicit `wrapperElement` support to the structured schema/runtime path, remove the redundant `indent` flag, and keep formatter/test coverage aligned with the stricter XML contract.
+- Clearing Export docs/examples: sync the structured mode playbook, canonical schema contract, in-progress notes, and bundled structured demo schema with the current XML wrapper and record-namespace options.
+
 ## [0.15.10]
 Timestamp: 2026-03-12T14:13:12Z
 

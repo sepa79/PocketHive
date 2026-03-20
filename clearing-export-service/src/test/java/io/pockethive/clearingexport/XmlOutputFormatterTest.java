@@ -14,7 +14,7 @@ class XmlOutputFormatterTest {
   @Test
   void formatsNestedFieldsFromDotNotation() {
     XmlOutputFormatter formatter = new XmlOutputFormatter();
-    ClearingStructuredSchema schema = schema(xmlConfig("Transactions", "Transaction"));
+    ClearingStructuredSchema schema = schema(xmlConfig("", "Transactions", "Transaction"));
 
     String xml = formatter.format(
         schema,
@@ -36,7 +36,7 @@ class XmlOutputFormatterTest {
     XmlOutputFormatter formatter = new XmlOutputFormatter();
 
     String xml = formatter.format(
-        schema(xmlConfig("", "Transaction")),
+        schema(xmlConfig("", "", "Transaction")),
         Map.of("creationDateTime", "2026-02-20T00:00:00Z"),
         List.of(Map.of("seq", "1")),
         Map.of("recordCount", "1")
@@ -52,7 +52,7 @@ class XmlOutputFormatterTest {
     XmlOutputFormatter formatter = new XmlOutputFormatter();
 
     String xml = formatter.format(
-        schema(xmlConfig("Transactions", "")),
+        schema(xmlConfig("", "Transactions", "")),
         Map.of("creationDateTime", "2026-02-20T00:00:00Z"),
         List.of(Map.of("acceptor.name", "SHOP", "amount", "1250")),
         Map.of("recordCount", "1")
@@ -69,7 +69,7 @@ class XmlOutputFormatterTest {
     XmlOutputFormatter formatter = new XmlOutputFormatter();
 
     String xml = formatter.format(
-        schema(xmlConfig("Transactions", "")),
+        schema(xmlConfig("", "Transactions", "")),
         Map.of(),
         List.of(
             Map.of("seq", "first"),
@@ -78,6 +78,22 @@ class XmlOutputFormatterTest {
     );
 
     assertThat(xml.indexOf("<seq>first</seq>")).isLessThan(xml.indexOf("<seq>second</seq>"));
+  }
+
+  @Test
+  void wrapsHeaderRecordsAndFooterWhenWrapperElementIsConfigured() {
+    XmlOutputFormatter formatter = new XmlOutputFormatter();
+
+    String xml = formatter.format(
+        schema(xmlConfig("Batch", "Transactions", "Transaction")),
+        Map.of("creationDateTime", "2026-02-20T00:00:00Z"),
+        List.of(Map.of("seq", "1")),
+        Map.of("recordCount", "1")
+    );
+
+    assertThat(xml).contains("<Document><Batch><Header>");
+    assertThat(xml).contains("<Transactions><Transaction><seq>1</seq></Transaction></Transactions>");
+    assertThat(xml).contains("</Footer></Batch></Document>");
   }
 
   private static ClearingStructuredSchema schema(ClearingStructuredSchema.XmlOutputConfig xmlConfig) {
@@ -94,6 +110,7 @@ class XmlOutputFormatterTest {
   }
 
   private static ClearingStructuredSchema.XmlOutputConfig xmlConfig(
+      String wrapperElement,
       String recordsElement,
       String recordElement
   ) {
@@ -101,6 +118,7 @@ class XmlOutputFormatterTest {
         true,
         "UTF-8",
         "Document",
+        wrapperElement,
         "Header",
         recordsElement,
         recordElement,
@@ -108,8 +126,7 @@ class XmlOutputFormatterTest {
         "",
         "",
         "",
-        "",
-        false
+        ""
     );
   }
 }

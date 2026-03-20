@@ -75,6 +75,7 @@ xml:
   declaration: true
   encoding: UTF-8
   rootElement: Document
+  wrapperElement: ""
   headerElement: FileHeader
   recordsElement: Transactions
   recordElement: Transaction
@@ -83,7 +84,6 @@ xml:
   namespacePrefix: ""
   recordNamespaceUri: ""
   recordNamespacePrefix: ""
-  indent: false
 ```
 
 Required structural XML fields:
@@ -94,6 +94,7 @@ Required structural XML fields:
 - `xml.footerElement`
 
 Blank semantics:
+- `wrapperElement=""` skips the optional body wrapper under the root.
 - `recordsElement=""` skips the collection wrapper.
 - `recordElement=""` writes record fields inline under the current parent.
 - `headerElement` and `footerElement` remain required and non-blank.
