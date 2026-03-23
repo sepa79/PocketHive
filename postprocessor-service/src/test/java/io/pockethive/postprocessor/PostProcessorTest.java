@@ -6,7 +6,6 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.observability.Hop;
 import io.pockethive.observability.ObservabilityContext;
-import io.pockethive.sink.clickhouse.ClickHouseSinkProperties;
 import io.pockethive.worker.sdk.api.StatusPublisher;
 import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerContext;
@@ -56,7 +55,7 @@ class PostProcessorTest {
                 .build();
 
         TestWorkerContext workerContext =
-                new TestWorkerContext(new PostProcessorWorkerConfig(false), context);
+                new TestWorkerContext(new PostProcessorWorkerConfig(false, TxOutcomeSinkMode.NONE, true), context);
 
         WorkItem result = worker.onMessage(message, workerContext);
 
@@ -130,13 +129,14 @@ class PostProcessorTest {
                 .build();
 
         TestWorkerContext workerContext =
-                new TestWorkerContext(new PostProcessorWorkerConfig(false), context);
+                new TestWorkerContext(new PostProcessorWorkerConfig(false, TxOutcomeSinkMode.NONE, true), context);
 
         worker.onMessage(message, workerContext);
 
         assertThat(workerContext.statusData().get("processorTransactions")).isEqualTo(1L);
         assertThat(workerContext.statusData().get("processorSuccessRatio")).isEqualTo(0.0d);
         assertThat(workerContext.statusData().get("processorAvgLatencyMs")).isEqualTo(30.0d);
+        assertThat(workerContext.statusData().get("txOutcomeSinkMode")).isEqualTo("NONE");
 
         MeterRegistry registry = workerContext.meterRegistry();
         var processorLatency = registry.find("ph_processor_latency_ms").summary();
@@ -177,7 +177,7 @@ class PostProcessorTest {
                 .build();
 
         TestWorkerContext workerContext =
-                new TestWorkerContext(new PostProcessorWorkerConfig(false), context);
+                new TestWorkerContext(new PostProcessorWorkerConfig(false, TxOutcomeSinkMode.NONE, true), context);
 
         worker.onMessage(message, workerContext);
 
@@ -234,7 +234,7 @@ class PostProcessorTest {
                 .build();
 
         TestWorkerContext workerContext =
-                new TestWorkerContext(new PostProcessorWorkerConfig(false), context);
+                new TestWorkerContext(new PostProcessorWorkerConfig(false, TxOutcomeSinkMode.NONE, true), context);
 
         worker.onMessage(message, workerContext);
 
@@ -362,16 +362,26 @@ class PostProcessorTest {
     }
 
     private static PostProcessorWorkerImpl newWorker(PostProcessorWorkerProperties properties) {
-        return new PostProcessorWorkerImpl(properties, new NoopTxOutcomeWriter(), Clock.systemUTC());
+        return new PostProcessorWorkerImpl(properties, new FixedTxOutcomeSinkRegistry(), Clock.systemUTC());
     }
 
-    private static final class NoopTxOutcomeWriter extends PostProcessorTxOutcomeWriter {
-        private NoopTxOutcomeWriter() {
-            super(new ClickHouseSinkProperties(), new ObjectMapper());
+    private static final class FixedTxOutcomeSinkRegistry extends TxOutcomeSinkRegistry {
+        private FixedTxOutcomeSinkRegistry() {
+            super(List.of(
+                new NoOpTxOutcomeSink(),
+                new StubClickHouseTxOutcomeSink()
+            ));
+        }
+    }
+
+    private static final class StubClickHouseTxOutcomeSink implements TxOutcomeSink {
+        @Override
+        public TxOutcomeSinkMode mode() {
+            return TxOutcomeSinkMode.CLICKHOUSE_V2;
         }
 
         @Override
-        void write(TxOutcomeEvent event) {
+        public void write(TxOutcomeEvent event) {
         }
     }
 
@@ -379,7 +389,7 @@ class PostProcessorTest {
         PostProcessorWorkerProperties properties = new PostProcessorWorkerProperties(new ObjectMapper(), WORKER_PROPERTIES);
         Map<String, Object> config = new LinkedHashMap<>();
         config.put("forwardToOutput", false);
-        config.put("writeTxOutcomeToClickHouse", false);
+        config.put("txOutcomeSinkMode", "NONE");
         config.put("dropTxOutcomeWithoutCallId", true);
         properties.setConfig(config);
         return properties;

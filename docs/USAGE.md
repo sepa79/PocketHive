@@ -69,6 +69,43 @@ Then restart the stack via `./build-hive.sh` (or `docker compose down && docker 
   - `PocketHive Journal` (`uid=pockethive-journal`) — Postgres-backed timeline + annotations (WARN/ERROR, lifecycle outcomes, journal backpressure).
   - `Pipeline observability` (`uid=pockethive-pipeline`) — Prometheus panels with Journal annotations overlaid.
 
+## ClickHouse tx_outcome v1 -> v2 migration
+
+For existing ClickHouse volumes, `ph_tx_outcome_v2` is not created retroactively by Docker init scripts. To migrate historical data, use:
+
+- script: [migrate-tx-outcome-v1-to-v2.sh](/home/sepa/PocketHive/clickhouse/migrate-tx-outcome-v1-to-v2.sh)
+- expected runtime: inside the running ClickHouse container
+- required tooling: `bash` and `clickhouse-client` only
+
+Recommended operator flow:
+
+1. Upload the script into a path already mounted into the ClickHouse container.
+2. Open a shell in the running ClickHouse container.
+   This can be done either with `docker exec` on the node that hosts the task, or via Portainer `Exec Console`.
+3. Run the script from inside that shell.
+
+Examples:
+
+```bash
+bash /mounted/path/migrate-tx-outcome-v1-to-v2.sh
+```
+
+```bash
+bash /mounted/path/migrate-tx-outcome-v1-to-v2.sh --from 2026-02-01 --to 2026-02-22
+```
+
+```bash
+bash /mounted/path/migrate-tx-outcome-v1-to-v2.sh --truncate-v2
+```
+
+Operational behavior:
+
+- the script checks that `ph_tx_outcome_v1` exists
+- it creates `ph_tx_outcome_v2` if missing, using the repo v2 schema
+- it fails if `ph_tx_outcome_v2` is already non-empty, unless `--truncate-v2` is passed explicitly
+- it migrates day by day
+- after each day it compares `v1` and `v2` row counts and exits non-zero on mismatch
+
 ## Scenario Manager API
 - nginx proxies `/scenario-manager/*` to the Scenario Manager service.
 - The service also exposes port `1081` on the host for direct API access.

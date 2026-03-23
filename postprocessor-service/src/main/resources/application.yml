@@ -27,7 +27,7 @@ pockethive:
   worker:
     config:
       forwardToOutput: false
-      writeTxOutcomeToClickHouse: false
+      txOutcomeSinkMode: NONE
       dropTxOutcomeWithoutCallId: true
   sink:
     clickhouse:

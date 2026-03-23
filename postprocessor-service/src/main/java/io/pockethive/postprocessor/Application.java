@@ -12,7 +12,10 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableRabbit
 @EnableScheduling
 @SpringBootApplication
-@EnableConfigurationProperties({PrometheusPushGatewayProperties.class, ClickHouseSinkProperties.class})
+@EnableConfigurationProperties({
+    PrometheusPushGatewayProperties.class,
+    ClickHouseSinkProperties.class
+})
 public class Application {
 
   public static void main(String[] args) {

@@ -1,0 +1,391 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": false,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "description": "Business success rate over time grouped by swarmId, callId, and businessCode.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 4,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 90
+              },
+              {
+                "color": "green",
+                "value": 99
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "editorType": "sql",
+          "format": 2,
+          "queryType": "sql",
+          "rawSql": "SELECT\n  toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n  concat(swarmId, ' | ', callIdKey, ' | ', businessCodeKey) AS series,\n  avg(businessSuccess) * 100 AS business_success_pct\nFROM ph_tx_outcome_v2\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callIdKey, '${callId:regex}')\n  AND match(businessCodeKey, '${businessCode:regex}')\nGROUP BY time, swarmId, callIdKey, businessCodeKey\nORDER BY time, series",
+          "refId": "A"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "prepareTimeSeries",
+          "options": {
+            "format": "many"
+          }
+        }
+      ],
+      "title": "Business success by swarm/call/businessCode",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "description": "Processor status class distribution over time grouped by swarmId, callId, and businessCode.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 4,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "editorType": "sql",
+          "format": 2,
+          "queryType": "sql",
+          "rawSql": "SELECT\n  toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n  concat(\n    swarmId,\n    ' | ',\n    callIdKey,\n    ' | ',\n    businessCodeKey,\n    ' | ',\n    processorStatusClass\n  ) AS series,\n  count() AS txns\nFROM ph_tx_outcome_v2\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callIdKey, '${callId:regex}')\n  AND match(businessCodeKey, '${businessCode:regex}')\nGROUP BY time, swarmId, callIdKey, businessCodeKey, processorStatusClass\nORDER BY time, series",
+          "refId": "A"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "prepareTimeSeries",
+          "options": {
+            "format": "many"
+          }
+        }
+      ],
+      "title": "Processor status classes over time",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "description": "Processor success rate over time grouped by swarmId, callId, and businessCode.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 4,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "id": 3,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "editorType": "sql",
+          "format": 2,
+          "queryType": "sql",
+          "rawSql": "SELECT\n  toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n  concat(swarmId, ' | ', callIdKey, ' | ', businessCodeKey) AS series,\n  avg(processorSuccess) * 100 AS processor_success_pct\nFROM ph_tx_outcome_v2\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callIdKey, '${callId:regex}')\n  AND match(businessCodeKey, '${businessCode:regex}')\nGROUP BY time, swarmId, callIdKey, businessCodeKey\nORDER BY time, series",
+          "refId": "A"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "prepareTimeSeries",
+          "options": {
+            "format": "many"
+          }
+        }
+      ],
+      "title": "Processor success by swarm/call/businessCode",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "description": "Worst quality groups in the selected range, grouped by swarmId, callId, and businessCode.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "id": 4,
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "fail_pct"
+          }
+        ]
+      },
+      "targets": [
+        {
+          "editorType": "sql",
+          "format": 1,
+          "queryType": "sql",
+          "rawSql": "SELECT\n  swarmId,\n  callIdKey AS callId,\n  businessCodeKey AS businessCode,\n  count() AS txns,\n  (1 - avg(businessSuccess)) * 100 AS business_fail_pct,\n  (1 - avg(processorSuccess)) * 100 AS processor_fail_pct,\n  quantileTDigest(0.95)(processorDurationMs) AS p95_rtt_ms,\n  max(processorDurationMs) AS max_rtt_ms\nFROM ph_tx_outcome_v2\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callIdKey, '${callId:regex}')\n  AND match(businessCodeKey, '${businessCode:regex}')\nGROUP BY swarmId, callIdKey, businessCodeKey\nHAVING txns >= 20\nORDER BY business_fail_pct DESC, txns DESC\nLIMIT 100",
+          "refId": "A"
+        }
+      ],
+      "title": "Worst groups by swarm/call/businessCode",
+      "type": "table"
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": [
+    "pockethive",
+    "clickhouse",
+    "tx-outcome",
+    "client-rtt",
+    "quality"
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "allValue": ".*",
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "clickhouse"
+        },
+        "definition": "SELECT DISTINCT swarmId FROM ph_tx_outcome_v2 WHERE $__timeFilter(eventTime) ORDER BY swarmId",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Swarm",
+        "multi": true,
+        "name": "swarm",
+        "options": [],
+        "query": "SELECT DISTINCT swarmId FROM ph_tx_outcome_v2 WHERE $__timeFilter(eventTime) ORDER BY swarmId",
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "allValue": ".*",
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "clickhouse"
+        },
+        "definition": "SELECT DISTINCT callIdKey FROM ph_tx_outcome_v2 WHERE $__timeFilter(eventTime) AND callId != '' ORDER BY callIdKey LIMIT 500",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Call ID",
+        "multi": true,
+        "name": "callId",
+        "options": [],
+        "query": "SELECT DISTINCT callIdKey FROM ph_tx_outcome_v2 WHERE $__timeFilter(eventTime) AND callId != '' ORDER BY callIdKey LIMIT 500",
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "allValue": ".*",
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "clickhouse"
+        },
+        "definition": "SELECT DISTINCT businessCodeKey FROM ph_tx_outcome_v2 WHERE $__timeFilter(eventTime) ORDER BY 1 LIMIT 500",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Business Code",
+        "multi": true,
+        "name": "businessCode",
+        "options": [],
+        "query": "SELECT DISTINCT businessCodeKey FROM ph_tx_outcome_v2 WHERE $__timeFilter(eventTime) ORDER BY 1 LIMIT 500",
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "Tx Quality & Failure Mix (ClickHouse v2)",
+  "uid": "ph-tx-quality-ch-v2",
+  "version": 1,
+  "weekStart": ""
+}

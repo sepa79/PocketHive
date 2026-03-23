@@ -63,7 +63,7 @@ class PostProcessorWorkerImpl implements PocketHiveWorkerFunction {
   private static final String PROCESSOR_STATUS_HEADER = "x-ph-processor-status";
 
   private final PostProcessorWorkerProperties properties;
-  private final PostProcessorTxOutcomeWriter txOutcomeWriter;
+  private final TxOutcomeSinkRegistry txOutcomeSinkRegistry;
   private final Clock clock;
   private final AtomicReference<PostProcessorMetrics> metricsRef = new AtomicReference<>();
   private final LongAdder txOutcomeInserted = new LongAdder();
@@ -77,18 +77,18 @@ class PostProcessorWorkerImpl implements PocketHiveWorkerFunction {
   @Autowired
   PostProcessorWorkerImpl(
       PostProcessorWorkerProperties properties,
-      PostProcessorTxOutcomeWriter txOutcomeWriter
+      TxOutcomeSinkRegistry txOutcomeSinkRegistry
   ) {
-    this(properties, txOutcomeWriter, Clock.systemUTC());
+    this(properties, txOutcomeSinkRegistry, Clock.systemUTC());
   }
 
   PostProcessorWorkerImpl(
       PostProcessorWorkerProperties properties,
-      PostProcessorTxOutcomeWriter txOutcomeWriter,
+      TxOutcomeSinkRegistry txOutcomeSinkRegistry,
       Clock clock
   ) {
     this.properties = Objects.requireNonNull(properties, "properties");
-    this.txOutcomeWriter = Objects.requireNonNull(txOutcomeWriter, "txOutcomeWriter");
+    this.txOutcomeSinkRegistry = Objects.requireNonNull(txOutcomeSinkRegistry, "txOutcomeSinkRegistry");
     this.clock = Objects.requireNonNull(clock, "clock");
   }
 
@@ -134,7 +134,8 @@ class PostProcessorWorkerImpl implements PocketHiveWorkerFunction {
     metrics.record(measurements, error, processorStats);
     RuntimeException txOutcomeFailure = null;
     String txOutcomeLastCallId = "";
-    if (config.writeTxOutcomeToClickHouse()) {
+    TxOutcomeSinkMode sinkMode = Objects.requireNonNull(config.txOutcomeSinkMode(), "txOutcomeSinkMode");
+    if (sinkMode != TxOutcomeSinkMode.NONE) {
       TxOutcomeEvent event = TxOutcomeProjector
           .project(in, context, clock.instant(), config.dropTxOutcomeWithoutCallId())
           .orElse(null);
@@ -143,7 +144,7 @@ class PostProcessorWorkerImpl implements PocketHiveWorkerFunction {
       } else {
         txOutcomeLastCallId = event.callId();
         try {
-          txOutcomeWriter.write(event);
+          txOutcomeSinkRegistry.sinkFor(sinkMode).write(event);
           txOutcomeInserted.increment();
           txOutcomeLastError.set("");
         } catch (Exception ex) {
@@ -154,7 +155,9 @@ class PostProcessorWorkerImpl implements PocketHiveWorkerFunction {
           String message = ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage();
           txOutcomeLastError.set(message);
           txOutcomeFailure =
-              new IllegalStateException("Postprocessor ClickHouse sink failed for callId=" + event.callId(), ex);
+              new IllegalStateException(
+                  "Postprocessor tx-outcome sink failed mode=" + sinkMode + " callId=" + event.callId(),
+                  ex);
         }
       }
     }
@@ -171,7 +174,8 @@ class PostProcessorWorkerImpl implements PocketHiveWorkerFunction {
           .data("processorTransactions", metrics.processorTransactions())
           .data("processorSuccessRatio", metrics.processorSuccessRatio())
           .data("processorAvgLatencyMs", metrics.processorAverageLatencyMs())
-          .data("txOutcomeSinkEnabled", config.writeTxOutcomeToClickHouse())
+          .data("txOutcomeSinkMode", sinkMode.name())
+          .data("txOutcomeSinkEnabled", sinkMode != TxOutcomeSinkMode.NONE)
           .data("txOutcomeInserted", txOutcomeInserted.sum())
           .data("txOutcomeDropped", txOutcomeDropped.sum())
           .data("txOutcomeFailed", txOutcomeFailed.sum())
