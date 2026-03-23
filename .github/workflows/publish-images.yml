@@ -126,11 +126,17 @@ jobs:
           - name: scenario-manager
             dockerfile: scenario-manager-service/Dockerfile.runtime
             target: ""
+          - name: network-proxy-manager
+            dockerfile: network-proxy-manager-service/Dockerfile.runtime
+            target: ""
           - name: orchestrator
             dockerfile: orchestrator-service/Dockerfile.runtime
             target: ""
           - name: tcp-mock-server
             dockerfile: tcp-mock-server/Dockerfile.runtime
+            target: ""
+          - name: network-proxy-haproxy
+            dockerfile: network-proxy-haproxy/Dockerfile
             target: ""
           - name: swarm-controller
             dockerfile: Dockerfile.bees.local
@@ -138,12 +144,12 @@ jobs:
           - name: generator
             dockerfile: Dockerfile.bees.local
             target: generator
-          - name: http-builder
-            dockerfile: Dockerfile.bees.local
-            target: http-builder
           - name: request-builder
             dockerfile: Dockerfile.bees.local
             target: request-builder
+          - name: http-sequence
+            dockerfile: Dockerfile.bees.local
+            target: http-sequence
           - name: moderator
             dockerfile: Dockerfile.bees.local
             target: moderator
@@ -161,6 +167,9 @@ jobs:
             target: trigger
           - name: ui
             dockerfile: ui/Dockerfile
+            target: ""
+          - name: ui-v2
+            dockerfile: ui-v2/Dockerfile
             target: ""
 
     steps:
@@ -181,12 +190,13 @@ jobs:
           for module in \
             log-aggregator-service \
             scenario-manager-service \
+            network-proxy-manager-service \
             orchestrator-service \
             tcp-mock-server \
             swarm-controller-service \
             generator-service \
-            http-builder-service \
             request-builder-service \
+            http-sequence-service \
             moderator-service \
             processor-service \
             postprocessor-service \
