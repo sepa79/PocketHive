@@ -73,7 +73,7 @@ Then restart the stack via `./build-hive.sh` (or `docker compose down && docker 
 
 For existing ClickHouse volumes, `ph_tx_outcome_v2` is not created retroactively by Docker init scripts. To migrate historical data, use:
 
-- script: [migrate-tx-outcome-v1-to-v2.sh](/home/sepa/PocketHive/clickhouse/migrate-tx-outcome-v1-to-v2.sh)
+- script: `clickhouse/migrate-tx-outcome-v1-to-v2.sh`
 - expected runtime: inside the running ClickHouse container
 - required tooling: `bash` and `clickhouse-client` only
 

@@ -3,7 +3,7 @@
 This guide explains how to wire a new worker or manager service against the refactored control-plane APIs.
 It covers the topology descriptors, emitters, and Spring Boot starters introduced in the refactor so teams can
 bootstrap participants without copying configuration boilerplate. For an end-to-end walkthrough of the Stage 1–3
-Worker SDK runtime, see the [Worker SDK quick start](../sdk/worker-sdk-quickstart.md).
+Worker SDK runtime, see the [Worker SDK quick start](/sdk/worker-sdk-quickstart).
 
 ## 1. Choose the right topology descriptor
 
@@ -208,7 +208,7 @@ business logic rather than wiring.
 ## 5. Migration checklist
 
 1. Add the `worker-sdk` dependency to your worker/manager service.
-2. Rely on the RabbitMQ topology that the control-plane auto-configuration supplies—no bespoke queue declarations are required. **Do not declare the hive traffic exchange (`ph.{swarmId}.hive`) or its work queues**; the Swarm Controller is the sole owner of those bindings (see [Architecture §2.1](../ARCHITECTURE.md#21-managers) and the [AsyncAPI spec](../spec/asyncapi.yaml)).
+2. Rely on the RabbitMQ topology that the control-plane auto-configuration supplies—no bespoke queue declarations are required. **Do not declare the hive traffic exchange (`ph.{swarmId}.hive`) or its work queues**; the Swarm Controller is the sole owner of those bindings (see [Architecture §2.1](/ARCHITECTURE) and the [AsyncAPI spec](../spec/asyncapi.yaml)).
 3. Replace manual JSON payload builders with `ControlPlaneEmitter` helpers.
 4. Configure `pockethive.control-plane.*` properties for your service roles.
 5. Update unit tests to use `ControlPlaneTestFixtures` for canonical descriptors and identities.

@@ -38,7 +38,7 @@ pockethive:
       routing-key: ph.swarm-1.final
 ```
 
-See the [control-plane worker guide](../control-plane/worker-guide.md#configuration-properties) for the full
+See the [control-plane worker guide](/control-plane/worker-guide#configuration-properties) for the full
 `WorkerControlPlaneProperties` reference, including the environment variables that mirror the IO configuration.
 
 ## 2. Annotate worker beans
