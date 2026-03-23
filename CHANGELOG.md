@@ -7,6 +7,10 @@ Timestamp: 2026-03-20T19:14:55Z
 
 - Clearing Export XML contract: add explicit `wrapperElement` support to the structured schema/runtime path, remove the redundant `indent` flag, and keep formatter/test coverage aligned with the stricter XML contract.
 - Clearing Export docs/examples: sync the structured mode playbook, canonical schema contract, in-progress notes, and bundled structured demo schema with the current XML wrapper and record-namespace options.
+- Postprocessor / ClickHouse tx-outcomes: replace the old boolean sink toggle with explicit `txOutcomeSinkMode`, introduce a `TxOutcomeSink` registry with dedicated `ClickHouse` / `NoOp` adapters, and keep the local stack writing to `ph_tx_outcome_v2`.
+- ClickHouse observability: add the `ph_tx_outcome_v2` schema plus a container-friendly `v1 -> v2` migration script that can be run from inside the ClickHouse container or via Portainer `Exec Console`.
+- Grafana / ClickHouse dashboards: keep the legacy `v1` dashboards and add parallel `v2` dashboard variants for tx outcomes, RTT overview, latency/tail, and quality/failure analysis so operators can compare old vs new layouts side by side.
+- Tooling: add lightweight `tx-outcome-storage` extract/import utilities for `ClickHouse v1 -> NDJSON -> ClickHouse v2` migration and replay workflows.
 
 ## [0.15.10]
 Timestamp: 2026-03-12T14:13:12Z
