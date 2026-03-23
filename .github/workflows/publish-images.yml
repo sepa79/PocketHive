@@ -247,7 +247,7 @@ jobs:
       - name: Build and push ${{ matrix.service.name }}
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: ${{ matrix.service.name == 'network-proxy-haproxy' && 'network-proxy-haproxy' || '.' }}
           file: ${{ matrix.service.dockerfile }}
           target: ${{ matrix.service.target }}
           push: true
