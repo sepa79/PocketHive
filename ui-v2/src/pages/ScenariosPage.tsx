@@ -9,9 +9,74 @@ import {
 } from '../lib/scenariosApi'
 
 type FolderFilter = { kind: 'all' } | { kind: 'root' } | { kind: 'folder'; path: string }
+type ScenarioFolderNode = {
+  name: string
+  path: string
+  children: ScenarioFolderNode[]
+  scenarios: ScenarioSummary[]
+}
 
 function folderLabel(summary: ScenarioSummary): string {
   return summary.folderPath && summary.folderPath.trim().length > 0 ? summary.folderPath.trim() : 'root'
+}
+
+function buildScenarioFolderTree(items: ScenarioSummary[]): { folders: ScenarioFolderNode[]; rootScenarios: ScenarioSummary[] } {
+  const rootScenarios: ScenarioSummary[] = []
+  type MutableNode = { name: string; path: string; children: Map<string, MutableNode>; scenarios: ScenarioSummary[] }
+  type RootNode = { children: Map<string, MutableNode>; scenarios: ScenarioSummary[] }
+  const root: RootNode = { children: new Map(), scenarios: [] }
+
+  const ensureNode = (parent: RootNode | MutableNode, name: string, path: string): MutableNode => {
+    const existing = parent.children.get(name)
+    if (existing) return existing
+    const created: MutableNode = { name, path, children: new Map<string, MutableNode>(), scenarios: [] }
+    parent.children.set(name, created)
+    return created
+  }
+
+  for (const item of items) {
+    const folderPath = item.folderPath?.trim() ?? ''
+    if (!folderPath) {
+      rootScenarios.push(item)
+      continue
+    }
+    const segments = folderPath.split('/').map((segment) => segment.trim()).filter((segment) => segment.length > 0)
+    if (segments.length === 0) {
+      rootScenarios.push(item)
+      continue
+    }
+    let current: RootNode | MutableNode = root
+    let currentPath = ''
+    for (const segment of segments) {
+      currentPath = currentPath ? `${currentPath}/${segment}` : segment
+      current = ensureNode(current, segment, currentPath)
+    }
+    current.scenarios.push(item)
+  }
+
+  const finalize = (node: MutableNode): ScenarioFolderNode => ({
+    name: node.name,
+    path: node.path,
+    children: Array.from(node.children.values())
+      .map(finalize)
+      .sort((a, b) => a.name.localeCompare(b.name)),
+    scenarios: [...node.scenarios].sort((a, b) => a.name.localeCompare(b.name)),
+  })
+
+  return {
+    folders: Array.from(root.children.values())
+      .map(finalize)
+      .sort((a, b) => a.name.localeCompare(b.name)),
+    rootScenarios: [...rootScenarios].sort((a, b) => a.name.localeCompare(b.name)),
+  }
+}
+
+function countScenarios(node: ScenarioFolderNode): number {
+  let count = node.scenarios.length
+  for (const child of node.children) {
+    count += countScenarios(child)
+  }
+  return count
 }
 
 export function ScenariosPage() {
@@ -66,6 +131,31 @@ export function ScenariosPage() {
     return items.filter((entry) => (entry.folderPath ?? '').trim() === target)
   }, [filter, items])
 
+  const tree = useMemo(() => buildScenarioFolderTree(visibleItems), [visibleItems])
+
+  const openFolderPaths = useMemo(() => {
+    if (filter.kind === 'folder') {
+      return new Set<string>([filter.path.trim()])
+    }
+    if (filter.kind === 'root') {
+      return new Set<string>()
+    }
+    if (!selected?.folderPath) {
+      return new Set<string>()
+    }
+    const segments = selected.folderPath
+      .split('/')
+      .map((segment) => segment.trim())
+      .filter((segment) => segment.length > 0)
+    const result = new Set<string>()
+    let currentPath = ''
+    for (const segment of segments) {
+      currentPath = currentPath ? `${currentPath}/${segment}` : segment
+      result.add(currentPath)
+    }
+    return result
+  }, [filter, selected?.folderPath])
+
   const handleCreateFolder = useCallback(async () => {
     const path = newFolderPath.trim()
     if (!path) return
@@ -112,6 +202,45 @@ export function ScenariosPage() {
       setBusy(false)
     }
   }, [movePath, reload, selected])
+
+  const renderScenarioButton = useCallback(
+    (entry: ScenarioSummary) => {
+      const active = entry.id === selectedId
+      return (
+        <button
+          key={entry.id}
+          type="button"
+          className={active ? 'swarmCard swarmCardSelected' : 'swarmCard'}
+          onClick={() => setSelectedId(entry.id)}
+          style={{ textAlign: 'left' }}
+        >
+          <div className="row between">
+            <div className="h2">{entry.name}</div>
+            <div className="pill pillInfo">{folderLabel(entry)}</div>
+          </div>
+          <div className="muted" style={{ marginTop: 6 }}>
+            {entry.id}
+          </div>
+        </button>
+      )
+    },
+    [selectedId],
+  )
+
+  const renderFolderNode = useCallback(
+    (node: ScenarioFolderNode) => (
+      <details key={node.path} open={filter.kind === 'all' ? openFolderPaths.has(node.path) : true}>
+        <summary className="muted" style={{ cursor: 'pointer', padding: '6px 8px' }}>
+          {node.name} <span className="muted">({countScenarios(node)})</span>
+        </summary>
+        <div style={{ marginLeft: 12 }}>
+          {node.children.map((child) => renderFolderNode(child))}
+          {node.scenarios.map((entry) => renderScenarioButton(entry))}
+        </div>
+      </details>
+    ),
+    [filter.kind, openFolderPaths, renderScenarioButton],
+  )
 
   return (
     <div className="page">
@@ -191,26 +320,15 @@ export function ScenariosPage() {
             </div>
 
             <div className="swarmCardList" style={{ maxHeight: 'min(70vh, 820px)' }}>
-              {visibleItems.map((entry) => {
-                const active = entry.id === selectedId
-                return (
-                  <button
-                    key={entry.id}
-                    type="button"
-                    className={active ? 'swarmCard swarmCardSelected' : 'swarmCard'}
-                    onClick={() => setSelectedId(entry.id)}
-                    style={{ textAlign: 'left' }}
-                  >
-                    <div className="row between">
-                      <div className="h2">{entry.name}</div>
-                      <div className="pill pillInfo">{folderLabel(entry)}</div>
-                    </div>
-                    <div className="muted" style={{ marginTop: 6 }}>
-                      {entry.id}
-                    </div>
-                  </button>
-                )
-              })}
+              {tree.folders.map((folder) => renderFolderNode(folder))}
+              {tree.rootScenarios.length > 0 ? (
+                <details open={filter.kind !== 'folder'}>
+                  <summary className="muted" style={{ cursor: 'pointer', padding: '6px 8px' }}>
+                    (root) <span className="muted">({tree.rootScenarios.length})</span>
+                  </summary>
+                  <div style={{ marginLeft: 12 }}>{tree.rootScenarios.map((entry) => renderScenarioButton(entry))}</div>
+                </details>
+              ) : null}
               {!loading && visibleItems.length === 0 ? <div className="muted">No scenarios.</div> : null}
             </div>
           </div>

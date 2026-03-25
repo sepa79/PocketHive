@@ -1151,6 +1151,28 @@ textarea,
   font-size: 12px;
 }
 
+select.textInput,
+select.textInputCompact {
+  background-color: var(--panel2);
+  color: inherit;
+}
+
+:root:not([data-theme='light']) select.textInput,
+:root:not([data-theme='light']) select.textInputCompact {
+  color-scheme: dark;
+}
+
+:root[data-theme='light'] select.textInput,
+:root[data-theme='light'] select.textInputCompact {
+  color-scheme: light;
+}
+
+select.textInput option,
+select.textInputCompact option {
+  background-color: var(--panel);
+  color: inherit;
+}
+
 .textInputCompact {
   padding: 6px 8px;
   font-size: 11px;
