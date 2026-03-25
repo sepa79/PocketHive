@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { ConfirmModal } from '../components/ConfirmModal'
 import { useToolsBar } from '../components/ToolsBarContext'
 import { useNavigate, useParams } from 'react-router-dom'
 import { CreateSwarmModal } from './hive/CreateSwarmModal'
@@ -426,6 +427,7 @@ export function HivePage() {
   const [scenarioError, setScenarioError] = useState<string | null>(null)
   const [scenarioLoading, setScenarioLoading] = useState(false)
   const [showHelp, setShowHelp] = useState(false)
+  const [removeTarget, setRemoveTarget] = useState<SwarmSummary | null>(null)
   const [explainMode, setExplainMode] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false
     try {
@@ -829,6 +831,23 @@ export function HivePage() {
 
   return (
     <div className="page hivePage">
+      <ConfirmModal
+        open={removeTarget !== null}
+        title="Remove swarm"
+        message={removeTarget ? `Remove swarm '${removeTarget.id}'? This tears down its stack and runtime state.` : ''}
+        confirmLabel="Remove"
+        danger
+        busy={busySwarm === removeTarget?.id && busyAction === 'remove'}
+        onConfirm={async () => {
+          if (!removeTarget) return
+          await runSwarmAction(removeTarget, 'remove')
+          setRemoveTarget(null)
+        }}
+        onClose={() => {
+          if (!(busySwarm === removeTarget?.id && busyAction === 'remove')) setRemoveTarget(null)
+        }}
+      />
+
       {showHelp ? (
         <div className="modalBackdrop" role="presentation" onClick={() => setShowHelp(false)}>
           <div className="modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
@@ -987,7 +1006,7 @@ export function HivePage() {
                       type="button"
                       className="actionButton actionButtonDanger"
                       disabled={isBusy}
-                      onClick={() => runSwarmAction(swarm, 'remove')}
+                      onClick={() => setRemoveTarget(swarm)}
                     >
                       <span className="actionButtonContent">
                         <span>Remove</span>
