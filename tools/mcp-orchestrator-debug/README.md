@@ -125,6 +125,11 @@ Once connected, the server exposes a focused subset of the existing debug capabi
   - Calls `GET {ORCHESTRATOR_BASE_URL}/api/swarms/{swarmId}`.
   - Returns `structuredContent.swarm` plus text.
 
+- `scenario.reload-scenarios`
+  - No input.
+  - Calls `POST {SCENARIO_MANAGER_BASE_URL}/scenarios/reload`.
+  - Returns the reload acknowledgement from Scenario Manager plus text.
+
 - `control.start-recording`
   - Input (optional):
     - `routingKeyPattern?: string` — simple `*`/`#` style glob applied to the routing key (defaults to all).

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ConfirmModal } from '../components/ConfirmModal'
+import { SwarmIssueBox } from '../components/hive/SwarmIssueBox'
 import { useToolsBar } from '../components/ToolsBarContext'
 import { useNavigate, useParams } from 'react-router-dom'
 import { CreateSwarmModal } from './hive/CreateSwarmModal'
@@ -19,6 +20,8 @@ import {
   type NetworkMode,
   type NetworkProfile,
 } from '../lib/networkProxy'
+import { latestJournalIssue, type SwarmJournalEntry } from '../lib/journal'
+import { getSwarmJournalPage } from '../lib/journalApi'
 
 const HIVE_EXPLAIN_KEY = 'PH_UI_HIVE_EXPLAIN'
 
@@ -395,6 +398,26 @@ function halEyeTitle(status: string | null | undefined, health: string | null | 
   return `Status: ${statusLabel}\nHealth: ${healthLabel}`
 }
 
+function workerHalEyeState(worker: SwarmWorkerSummary | null): HalEyeState {
+  if (!worker) return 'missing'
+  if (worker.enabled === false) return 'alert'
+  if (worker.stale === true) return 'warn'
+  if (worker.instance || worker.lastSeenAt || worker.runtime) return 'ok'
+  return 'missing'
+}
+
+function workerHalEyeTitle(worker: SwarmWorkerSummary | null): string {
+  if (!worker) {
+    return 'Worker runtime: missing'
+  }
+  const state = workerHalEyeState(worker)
+  const stateLabel =
+    state === 'ok' ? 'OK' : state === 'warn' ? 'STALE' : state === 'alert' ? 'DISABLED / FAILED' : 'MISSING'
+  return `Worker runtime: ${stateLabel}\nEnabled: ${worker.enabled === null ? 'UNKNOWN' : worker.enabled ? 'true' : 'false'}\nLast seen: ${
+    worker.lastSeenAt ?? '—'
+  }`
+}
+
 function formatAge(iso: string | null | undefined): string {
   if (!iso) return '—'
   const ts = Date.parse(iso)
@@ -451,6 +474,9 @@ export function HivePage() {
   const [networkBusy, setNetworkBusy] = useState(false)
   const [networkError, setNetworkError] = useState<string | null>(null)
   const [networkProfileDraft, setNetworkProfileDraft] = useState('')
+  const [swarmJournalEntries, setSwarmJournalEntries] = useState<SwarmJournalEntry[]>([])
+  const [swarmJournalLoading, setSwarmJournalLoading] = useState(false)
+  const [swarmJournalError, setSwarmJournalError] = useState<string | null>(null)
 
   const tapBusyKey = useCallback((role: string, direction: 'IN' | 'OUT', ioName: string | null) => {
     return `${role}::${direction}::${ioName ?? ''}`
@@ -540,6 +566,26 @@ export function HivePage() {
       setSnapshotError(err instanceof Error ? err.message : 'Failed to load status-full snapshot')
     } finally {
       setSnapshotLoading(false)
+    }
+  }, [selectedSwarmId])
+
+  const loadSwarmJournal = useCallback(async () => {
+    if (!selectedSwarmId) {
+      setSwarmJournalEntries([])
+      setSwarmJournalError(null)
+      setSwarmJournalLoading(false)
+      return
+    }
+    setSwarmJournalLoading(true)
+    try {
+      const page = await getSwarmJournalPage(selectedSwarmId, { limit: 50 })
+      setSwarmJournalEntries(page?.items ?? [])
+      setSwarmJournalError(null)
+    } catch (err) {
+      setSwarmJournalEntries([])
+      setSwarmJournalError(err instanceof Error ? err.message : 'Failed to load swarm journal')
+    } finally {
+      setSwarmJournalLoading(false)
     }
   }, [selectedSwarmId])
 
@@ -721,6 +767,17 @@ export function HivePage() {
     return () => window.clearInterval(handle)
   }, [loadSnapshot, selectedSwarmId])
 
+  useEffect(() => {
+    void loadSwarmJournal()
+    if (!selectedSwarmId) {
+      return
+    }
+    const handle = window.setInterval(() => {
+      void loadSwarmJournal()
+    }, 5000)
+    return () => window.clearInterval(handle)
+  }, [loadSwarmJournal, selectedSwarmId])
+
   const loadScenarioDetail = useCallback(
     async (scenarioId: string | null) => {
       if (!scenarioId) {
@@ -754,8 +811,33 @@ export function HivePage() {
   )
 
   const snapshotView = useMemo(() => extractSnapshotView(snapshot), [snapshot])
+  const selectedSwarmIssue = useMemo(() => latestJournalIssue(swarmJournalEntries), [swarmJournalEntries])
   const scenarioIdFromSnapshot = snapshotView?.runtime?.templateId ?? null
   const manifestIndex = useMemo(() => buildManifestIndex(capabilities), [capabilities])
+  const selectedRunId = snapshotView?.runtime?.runId ?? null
+  const runtimeWorkersByRole = useMemo(() => {
+    const index = new Map<string, SwarmWorkerSummary>()
+    for (const worker of snapshotView?.workers ?? []) {
+      const role = (worker.role ?? '').trim().toLowerCase()
+      if (role) index.set(role, worker)
+    }
+    return index
+  }, [snapshotView])
+
+  const openSwarmJournal = useCallback(
+    (swarmId: string, runId?: string | null) => {
+      const params = new URLSearchParams()
+      const normalizedRunId = typeof runId === 'string' && runId.trim().length > 0 ? runId.trim() : null
+      if (normalizedRunId) params.set('runId', normalizedRunId)
+      navigate(`/journal/swarms/${encodeURIComponent(swarmId)}${params.toString() ? `?${params.toString()}` : ''}`)
+    },
+    [navigate],
+  )
+
+  const openSelectedSwarmJournal = useCallback(() => {
+    if (!selectedSwarmId) return
+    openSwarmJournal(selectedSwarmId, selectedRunId)
+  }, [openSwarmJournal, selectedRunId, selectedSwarmId])
 
   useEffect(() => {
     if (!selectedSwarmId) {
@@ -973,6 +1055,13 @@ export function HivePage() {
 	                    >
 	                      View
 	                    </button>
+	                    <button
+	                      type="button"
+	                      className="actionButton actionButtonGhost"
+	                      onClick={() => openSwarmJournal(swarm.id)}
+	                    >
+	                      Journal
+	                    </button>
 	                    {selectedSwarmId === swarm.id ? (
 	                      <button
 	                        type="button"
@@ -1026,10 +1115,24 @@ export function HivePage() {
                         {snapshotError}
                       </div>
                     )}
+	                    <SwarmIssueBox
+	                      issue={selectedSwarmIssue}
+	                      loading={swarmJournalLoading}
+	                      error={swarmJournalError}
+	                      onOpenJournal={openSelectedSwarmJournal}
+	                    />
 	                    {snapshotView && (
 	                      <div className="card" style={{ marginTop: 10 }}>
 	                        <div className="row between">
 	                          <div className="h2">Runtime snapshot</div>
+                              <div className="row">
+                                <button
+                                  type="button"
+                                  className="actionButton actionButtonGhost actionButtonTiny"
+                                  onClick={openSelectedSwarmJournal}
+                                >
+                                  Open journal
+                                </button>
 	                          <div
 	                            className="muted"
 	                            title={
@@ -1041,6 +1144,7 @@ export function HivePage() {
 	                            receivedAt: {snapshotView.receivedAt || '—'} · staleAfterSec:{' '}
 	                            {Number.isFinite(snapshotView.staleAfterSec) ? snapshotView.staleAfterSec : '—'}
 	                          </div>
+                              </div>
 	                        </div>
                         <div className="kvGrid" style={{ marginTop: 10 }}>
                           <div className="kv">
@@ -1258,6 +1362,8 @@ export function HivePage() {
                                 {selectedScenario.template.bees.map((bee, idx) => {
                                   const label = bee.role ?? bee.id ?? `bee-${idx + 1}`
                                   const key = bee.id ?? bee.role ?? `bee-${idx + 1}`
+                                  const runtimeWorker =
+                                    runtimeWorkersByRole.get((bee.role ?? '').trim().toLowerCase()) ?? null
                                   const isActive = (selectedBeeKey ?? (selectedScenario.template?.bees?.[0]
                                     ? selectedScenario.template.bees[0].id ??
                                       selectedScenario.template.bees[0].role ??
@@ -1275,7 +1381,15 @@ export function HivePage() {
                                       onClick={() => setSelectedBeeKey(key)}
                                     >
                                       <div className="swarmBeeHeader">
-                                        <span className="swarmBeeRole">{label}</span>
+                                        <span className="swarmBeeRole">
+                                          <span
+                                            className="hal-eye hal-eye-mini"
+                                            data-state={workerHalEyeState(runtimeWorker)}
+                                            title={workerHalEyeTitle(runtimeWorker)}
+                                            aria-hidden="true"
+                                          />
+                                          <span>{label}</span>
+                                        </span>
                                         <span className="swarmBeeImage">{bee.image ?? '—'}</span>
 	                                      </div>
 	                                      <div className="swarmBeeMeta">
@@ -1310,12 +1424,7 @@ export function HivePage() {
 	                              if (!activeBee) return <div className="muted">No bee selected.</div>
 	                              const roleKey = (activeBee.role ?? '').trim().toLowerCase()
 	                              const runtimeWorker =
-	                                roleKey && snapshotView
-	                                  ? snapshotView.workers.find(
-	                                      (worker) =>
-	                                        (worker.role ?? '').trim().toLowerCase() === roleKey,
-	                                    ) ?? null
-	                                  : null
+	                                roleKey ? runtimeWorkersByRole.get(roleKey) ?? null : null
 	                              const runtimeImage = runtimeWorker?.runtime?.image ?? null
 	                              const manifest = runtimeImage
 	                                ? findManifestForImage(runtimeImage, manifestIndex)
@@ -1349,6 +1458,12 @@ export function HivePage() {
 		                                <div className="swarmWorkerDetail">
 		                                  <div className="swarmBeeHeader">
 		                                    <span className="swarmBeeRole">
+		                                      <span
+		                                        className="hal-eye hal-eye-mini"
+		                                        data-state={workerHalEyeState(runtimeWorker)}
+		                                        title={workerHalEyeTitle(runtimeWorker)}
+		                                        aria-hidden="true"
+		                                      />
 		                                      {activeBee.role ?? activeBee.id ?? 'worker'}
 		                                      {runtimeWorker?.instance ? (
 		                                        <span
@@ -1412,7 +1527,7 @@ export function HivePage() {
 		                                              : !hasOut
 		                                                ? 'No outputs configured for this worker (work.out is empty).'
 		                                                : `Open Debug Tap Viewer (OUT, ioName=${ioNameOut}). Creates an ephemeral tap queue and opens the viewer in a new tab.`
-		                                          }
+	                              }
 		                                          disabled={!canTapOut || (tapOutKey ? tapBusy[tapOutKey] === true : false)}
 		                                          onClick={() => {
 		                                            if (!role || !ioNameOut) return
