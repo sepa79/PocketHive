@@ -1,4 +1,8 @@
-# Swarm Start Failure UI Notes
+# Swarm Start Failure UI Notes (Archived)
+
+## Status
+- Archived as reference notes for the first round of swarm startup/runtime failure analysis.
+- The observations here informed the implemented UI v2 Journal/Hive surfacing work and the follow-up lifecycle/health model plan.
 
 ## Reproducer
 - Scenario: `local-rest-worker-crash`
