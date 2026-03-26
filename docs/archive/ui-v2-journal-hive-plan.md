@@ -1,4 +1,8 @@
-# UI v2 Journal + Hive Error Surfacing Plan
+# UI v2 Journal + Hive Error Surfacing Plan (Archived)
+
+## Status
+- Archived after the first usable cut was implemented.
+- The remaining Hive list failure marker was intentionally dropped from scope for this branch.
 
 ## Scope
 - Goal: bring the minimum useful Journal functionality into UI v2 and use it to surface failures on the Hive page.
@@ -48,9 +52,9 @@
     - code
     - brief message
 
-- [ ] Add basic failure surfacing to Hive swarm list.
-  - show a compact failure marker if the swarm has a recent journal alert
-  - avoid large inline logs on the list page
+- [x] Add basic failure surfacing to Hive swarm list.
+  - intentionally not implemented in this cut
+  - left out to keep the first Journal/Hive integration narrow
 
 - [x] Add simple mapping rules from journal entries to UI diagnostics.
   - template failure
