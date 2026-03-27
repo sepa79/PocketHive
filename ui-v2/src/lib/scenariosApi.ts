@@ -30,6 +30,11 @@ export type ScenarioSummary = {
   folderPath: string | null
 }
 
+export type BundleDownload = {
+  blob: Blob
+  fileName: string
+}
+
 function normalizeScenarioSummary(input: unknown): ScenarioSummary | null {
   if (!isRecord(input)) return null
   const id = asString(input['id'])
@@ -99,3 +104,50 @@ export async function moveScenarioToFolder(scenarioId: string, path: string | nu
   await ensureOk(response, 'Failed to move scenario')
 }
 
+export async function uploadScenarioBundle(file: File | Blob): Promise<ScenarioSummary | null> {
+  const response = await fetch('/scenario-manager/scenarios/bundles', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/zip' },
+    body: file,
+  })
+  await ensureOk(response, 'Failed to upload scenario bundle')
+  try {
+    const payload = (await response.json()) as unknown
+    return normalizeScenarioSummary(payload)
+  } catch {
+    return null
+  }
+}
+
+function parseDownloadFileName(response: Response, fallback: string): string {
+  const contentDisposition = response.headers.get('content-disposition') ?? ''
+  const encoded = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i)
+  if (encoded && encoded[1]) {
+    try {
+      return decodeURIComponent(encoded[1])
+    } catch {
+      return encoded[1]
+    }
+  }
+  const plain = contentDisposition.match(/filename="?([^"]+)"?/i)
+  if (plain && plain[1]) return plain[1]
+  return fallback
+}
+
+export async function downloadScenarioBundle(scenarioId: string): Promise<BundleDownload> {
+  const response = await fetch(`/scenario-manager/scenarios/${encodeURIComponent(scenarioId)}/bundle`, {
+    headers: { Accept: 'application/zip' },
+  })
+  await ensureOk(response, 'Failed to download scenario bundle')
+  return {
+    blob: await response.blob(),
+    fileName: parseDownloadFileName(response, `${scenarioId}-bundle.zip`),
+  }
+}
+
+export async function deleteScenarioBundle(scenarioId: string): Promise<void> {
+  const response = await fetch(`/scenario-manager/scenarios/${encodeURIComponent(scenarioId)}`, {
+    method: 'DELETE',
+  })
+  await ensureOk(response, 'Failed to delete scenario bundle')
+}

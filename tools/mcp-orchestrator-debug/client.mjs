@@ -48,6 +48,7 @@ function printUsage() {
       "  node tools/mcp-orchestrator-debug/client.mjs worker-configs <swarmId>\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs list-scenarios\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs get-scenario <scenarioId>\n" +
+      "  node tools/mcp-orchestrator-debug/client.mjs reload-scenarios\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs create-swarm <swarmId> <templateId> [notes]\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs start-swarm <swarmId> [notes]\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs stop-swarm <swarmId> [notes]\n" +
@@ -69,6 +70,7 @@ function printUsage() {
       "  node tools/mcp-orchestrator-debug/client.mjs swarm-snapshot foo\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs worker-configs foo\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs create-swarm foo local-rest-defaults\n" +
+      "  node tools/mcp-orchestrator-debug/client.mjs reload-scenarios\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs start-swarm foo --record\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs remove-swarm foo --record\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs status-request foo processor foo-worker-bee-1234\n" +
@@ -128,6 +130,10 @@ const COMMANDS = [
     name: "get-scenario",
     description: "Fetch scenario by id via GET /scenarios/{id} from Scenario Manager",
     params: ["scenarioId"],
+  },
+  {
+    name: "reload-scenarios",
+    description: "Reload scenarios via POST /scenarios/reload on Scenario Manager",
   },
   {
     name: "create-swarm",
@@ -248,6 +254,17 @@ async function main() {
       const url = `${base}/scenarios/${encodeURIComponent(id)}`;
       const scenario = await httpJson(url);
       console.log(JSON.stringify(scenario ?? null, null, 2));
+      return;
+    }
+
+    if (subcommand === "reload-scenarios") {
+      const base = SCENARIO_MANAGER_BASE_URL.replace(/\/+$/, "");
+      const url = `${base}/scenarios/reload`;
+      await httpJson(url, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+      });
+      console.log(JSON.stringify({ status: "ok", action: "reload-scenarios" }, null, 2));
       return;
     }
 

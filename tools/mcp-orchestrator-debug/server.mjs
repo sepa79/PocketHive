@@ -71,6 +71,22 @@ registerLoggedTool(
 );
 
 registerLoggedTool(
+  "scenario.reload-scenarios",
+  {
+    title: "Reload PocketHive scenarios",
+    description: "Trigger Scenario Manager to reload scenarios from disk.",
+    inputSchema: {}
+  },
+  async () => {
+    const result = await runJsonClient(["reload-scenarios"]);
+    return {
+      payload: result,
+      summary: "Triggered Scenario Manager scenario reload."
+    };
+  }
+);
+
+registerLoggedTool(
   "control.start-recording",
   {
     title: "Start PocketHive control recording",

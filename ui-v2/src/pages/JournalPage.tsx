@@ -1,9 +1,14 @@
+import { Navigate, Route, Routes } from 'react-router-dom'
+import { HiveJournalPage } from './journal/HiveJournalPage'
+import { SwarmJournalPage } from './journal/SwarmJournalPage'
+
 export function JournalPage() {
   return (
-    <div className="page">
-      <h1 className="h1">Journal</h1>
-      <div className="muted">Placeholder. History + current runs will live here.</div>
-    </div>
+    <Routes>
+      <Route index element={<Navigate to="hive" replace />} />
+      <Route path="hive" element={<HiveJournalPage />} />
+      <Route path="swarms/:swarmId" element={<SwarmJournalPage />} />
+      <Route path="*" element={<Navigate to="hive" replace />} />
+    </Routes>
   )
 }
-

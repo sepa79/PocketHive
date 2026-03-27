@@ -1,11 +1,15 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ConfirmModal } from '../components/ConfirmModal'
 import {
   createScenarioFolder,
+  deleteScenarioBundle,
   deleteScenarioFolder,
+  downloadScenarioBundle,
   listScenarioFolders,
   listScenarios,
   moveScenarioToFolder,
   type ScenarioSummary,
+  uploadScenarioBundle,
 } from '../lib/scenariosApi'
 
 type FolderFilter = { kind: 'all' } | { kind: 'root' } | { kind: 'folder'; path: string }
@@ -89,6 +93,8 @@ export function ScenariosPage() {
 
   const [newFolderPath, setNewFolderPath] = useState('')
   const [busy, setBusy] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<ScenarioSummary | null>(null)
+  const uploadInputRef = useRef<HTMLInputElement | null>(null)
 
   const selected = useMemo(
     () => (selectedId ? items.find((entry) => entry.id === selectedId) ?? null : null),
@@ -203,6 +209,68 @@ export function ScenariosPage() {
     }
   }, [movePath, reload, selected])
 
+  const triggerUpload = useCallback(() => {
+    uploadInputRef.current?.click()
+  }, [])
+
+  const handleUploadChange = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0] ?? null
+      event.target.value = ''
+      if (!file) return
+      setBusy(true)
+      setError(null)
+      try {
+        const created = await uploadScenarioBundle(file)
+        await reload()
+        if (created?.id) {
+          setSelectedId(created.id)
+        }
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Upload failed')
+      } finally {
+        setBusy(false)
+      }
+    },
+    [reload],
+  )
+
+  const handleDownloadSelected = useCallback(async () => {
+    if (!selected) return
+    setBusy(true)
+    setError(null)
+    try {
+      const downloaded = await downloadScenarioBundle(selected.id)
+      const url = URL.createObjectURL(downloaded.blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = downloaded.fileName
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Download failed')
+    } finally {
+      setBusy(false)
+    }
+  }, [selected])
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!deleteTarget) return
+    setBusy(true)
+    setError(null)
+    try {
+      await deleteScenarioBundle(deleteTarget.id)
+      setDeleteTarget(null)
+      await reload()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Delete failed')
+    } finally {
+      setBusy(false)
+    }
+  }, [deleteTarget, reload])
+
   const renderScenarioButton = useCallback(
     (entry: ScenarioSummary) => {
       const active = entry.id === selectedId
@@ -244,9 +312,34 @@ export function ScenariosPage() {
 
   return (
     <div className="page">
+      <ConfirmModal
+        open={deleteTarget !== null}
+        title="Delete bundle"
+        message={deleteTarget ? `Delete scenario bundle '${deleteTarget.id}'? This removes the bundle from Scenario Manager.` : ''}
+        confirmLabel="Delete"
+        danger
+        busy={busy}
+        onConfirm={handleConfirmDelete}
+        onClose={() => {
+          if (!busy) setDeleteTarget(null)
+        }}
+      />
+
       <div className="row between">
         <h1 className="h1">Scenarios</h1>
-        <div className="muted">Bundles can live anywhere under `scenarios/**`.</div>
+        <div className="row" style={{ gap: 10 }}>
+          <input
+            ref={uploadInputRef}
+            type="file"
+            accept=".zip,application/zip"
+            style={{ display: 'none' }}
+            onChange={(event) => void handleUploadChange(event)}
+          />
+          <button type="button" className="actionButton" onClick={triggerUpload} disabled={busy}>
+            Upload bundle
+          </button>
+          <div className="muted">Bundles can live anywhere under `scenarios/**`.</div>
+        </div>
       </div>
 
       {error ? (
@@ -372,14 +465,22 @@ export function ScenariosPage() {
                 </label>
                 <div className="field">
                   <span className="fieldLabel">Action</span>
-                  <button
-                    type="button"
-                    className="actionButton"
-                    onClick={() => void handleMoveSelected()}
-                    disabled={busy || movePath.trim() === (selected.folderPath ? selected.folderPath.trim() : '')}
-                  >
-                    Move
-                  </button>
+                  <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className="actionButton"
+                      onClick={() => void handleMoveSelected()}
+                      disabled={busy || movePath.trim() === (selected.folderPath ? selected.folderPath.trim() : '')}
+                    >
+                      Move
+                    </button>
+                    <button type="button" className="actionButton actionButtonGhost" onClick={() => void handleDownloadSelected()} disabled={busy}>
+                      Download bundle
+                    </button>
+                    <button type="button" className="actionButton actionButtonDanger" onClick={() => setDeleteTarget(selected)} disabled={busy}>
+                      Delete bundle
+                    </button>
+                  </div>
                   <div className="muted" style={{ marginTop: 6 }}>
                     Folder delete requires the folder to be empty.
                   </div>

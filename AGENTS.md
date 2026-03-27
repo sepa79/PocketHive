@@ -121,11 +121,16 @@ This file is a **navigation and guardrails** page for both human and AI contribu
 ## 6) Local orchestration tools (for AIs)
 
 - `build-hive.sh` in the repo root is the **canonical entrypoint** for building worker images and standing up the local PocketHive stack with `docker-compose`. Prefer using it over ad‑hoc `docker`/`mvn` commands.
-- `tools/mcp-orchestrator-debug/` contains a **debug CLI** for Orchestrator + RabbitMQ:
-  - `client.mjs` talks directly to the Orchestrator REST API and control‑plane via AMQP (no MCP needed).
+- `tools/mcp-orchestrator-debug/` contains both a **debug CLI** and the **actual MCP server** for Orchestrator / Scenario Manager / RabbitMQ:
+  - `client.mjs` talks directly to the Orchestrator REST API, Scenario Manager API, and control‑plane via AMQP (no MCP needed).
+  - `server.mjs` is the stdio MCP server wrapper for editor/agent integration. Prefer using it when the client supports MCP tools.
   - Typical usage from repo root:
     - `node tools/mcp-orchestrator-debug/client.mjs list-swarms`
     - `node tools/mcp-orchestrator-debug/client.mjs get-swarm <swarmId>`
     - `node tools/mcp-orchestrator-debug/client.mjs swarm-snapshot <swarmId>`
     - `node tools/mcp-orchestrator-debug/client.mjs worker-configs <swarmId>`
-  - Use this CLI to inspect **running swarms, worker configs, queues, and control‑plane traffic** instead of hand‑crafting `curl`/`rabbitmqctl` calls.
+    - `node tools/mcp-orchestrator-debug/client.mjs reload-scenarios`
+  - MCP server notes:
+    - start with `node tools/mcp-orchestrator-debug/server.mjs`
+    - includes `scenario.reload-scenarios` for Scenario Manager refresh
+  - Use these tools to inspect **running swarms, worker configs, queues, control‑plane traffic, and scenario reloads** instead of hand‑crafting `curl`/`rabbitmqctl` calls.

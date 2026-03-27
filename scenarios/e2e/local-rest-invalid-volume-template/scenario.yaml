@@ -1,0 +1,48 @@
+id: local-rest-invalid-volume-template
+name: Local REST - Invalid Volume Template
+description: Intentionally broken e2e scenario. Generator declares an invalid docker volume spec so swarm provisioning should fail before the worker starts.
+template:
+  image: swarm-controller:latest
+  bees:
+    - role: generator
+      image: generator:latest
+      config:
+        docker:
+          volumes:
+            - ":/app/invalid"
+        inputs:
+          scheduler:
+            ratePerSec: 50
+        worker:
+          message:
+            bodyType: HTTP
+            path: /test
+            method: POST
+            body: '{"event":"local-rest-invalid-volume-template"}'
+            headers:
+              content-type: application/json
+      work:
+        out:
+          out: genQ
+    - role: moderator
+      image: moderator:latest
+      work:
+        in:
+          in: genQ
+        out:
+          out: modQ
+    - role: processor
+      image: processor:latest
+      config:
+        worker:
+          baseUrl: "{{ sut.endpoints['default'].baseUrl }}/api"
+      work:
+        in:
+          in: modQ
+        out:
+          out: finalQ
+    - role: postprocessor
+      image: postprocessor:latest
+      work:
+        in:
+          in: finalQ
