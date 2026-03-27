@@ -4,9 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import org.mockito.ArgumentCaptor;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.ControlSignal;
@@ -15,6 +15,8 @@ import io.pockethive.control.CommandOutcome;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.docker.DockerContainerClient;
+import io.pockethive.manager.ports.ComputeAdapter;
+import io.pockethive.manager.runtime.ManagerSpec;
 import io.pockethive.orchestrator.OrchestratorApplication;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
@@ -86,6 +88,9 @@ class SwarmCreationMock1E2ETest {
 
     @MockBean
     DockerContainerClient docker;
+
+    @MockBean
+    ComputeAdapter computeAdapter;
 
     @MockBean
     AmqpAdmin amqpAdmin;
@@ -231,6 +236,8 @@ class SwarmCreationMock1E2ETest {
         when(docker.resolveControlNetwork()).thenReturn("ph-test-net");
         when(docker.createAndStartContainer(anyString(), anyMap(), anyString(), any()))
             .thenReturn("container-123");
+        when(computeAdapter.startManager(any(ManagerSpec.class)))
+            .thenReturn("container-123");
 
         RabbitAdmin admin = new RabbitAdmin(connectionFactory);
         declareOrchestratorBindings(admin);
@@ -264,7 +271,15 @@ class SwarmCreationMock1E2ETest {
 
         assertThat(swarmPlanRegistry.find(instanceId)).isPresent();
 
-        verify(docker).createAndStartContainer(eq("swarm-controller:latest"), anyMap(), eq(instanceId), any());
+        ArgumentCaptor<ManagerSpec> specCaptor = ArgumentCaptor.forClass(ManagerSpec.class);
+        verify(computeAdapter).startManager(specCaptor.capture());
+        ManagerSpec spec = specCaptor.getValue();
+        assertThat(spec.id()).isEqualTo(instanceId);
+        assertThat(spec.image()).isEqualTo("swarm-controller:latest");
+        assertThat(spec.environment()).containsEntry("POCKETHIVE_CONTROL_PLANE_SWARM_ID", swarmId);
+        assertThat(spec.environment()).containsEntry("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID", instanceId);
+        assertThat(spec.environment()).containsKey("SPRING_RABBITMQ_HOST");
+        assertThat(spec.environment()).containsKey("POCKETHIVE_CONTROL_PLANE_EXCHANGE");
 
         AnonymousQueue captureQueue = new AnonymousQueue();
         String captureName = admin.declareQueue(captureQueue);
