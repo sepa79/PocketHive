@@ -1,0 +1,351 @@
+package io.pockethive.tools.sqltocsv;
+
+import io.pockethive.tools.sqltocsv.security.*;
+import picocli.CommandLine;
+import picocli.CommandLine.Command;
+import picocli.CommandLine.Option;
+
+import java.io.File;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.concurrent.Callable;
+
+/**
+ * SQL to CSV Command-Line Tool
+ * 
+ * Exports SQL query results to CSV format for PocketHive scenario datasets.
+ * Supports PostgreSQL, MySQL, SQL Server, and Oracle databases.
+ */
+@Command(
+    name = "sql-to-csv",
+    version = "1.0.0",
+    description = "Export SQL query results to CSV for PocketHive scenario datasets",
+    mixinStandardHelpOptions = true,
+    headerHeading = "%n@|bold,underline PocketHive SQL-to-CSV Tool|@%n%n",
+    descriptionHeading = "%n@|bold Description:|@%n",
+    parameterListHeading = "%n@|bold Parameters:|@%n",
+    optionListHeading = "%n@|bold Options:|@%n",
+    footerHeading = "%n@|bold Examples:|@%n",
+    footer = {
+        "",
+        "  PostgreSQL:",
+        "    sql-to-csv -u jdbc:postgresql://localhost:5432/db -U admin -P secret \\",
+        "      -q \"SELECT * FROM accounts\" -o datasets/accounts.csv",
+        "",
+        "  MySQL:",
+        "    sql-to-csv -u jdbc:mysql://localhost:3306/db -U root -P secret \\",
+        "      -q \"SELECT * FROM users LIMIT 1000\" -o datasets/users.csv",
+        "",
+        "  With query file:",
+        "    sql-to-csv -u jdbc:postgresql://localhost/db -U admin -P secret \\",
+        "      -f query.sql -o output.csv",
+        "",
+        "  Skip header row:",
+        "    sql-to-csv -u jdbc:postgresql://localhost/db -U admin -P secret \\",
+        "      -q \"SELECT * FROM data\" -o data.csv --no-header",
+        ""
+    }
+)
+public class SqlToCsvCommand implements Callable<Integer> {
+
+    @Option(
+        names = {"-u", "--jdbc-url"},
+        description = "JDBC connection URL (e.g., jdbc:postgresql://host:5432/database)",
+        required = true
+    )
+    private String jdbcUrl;
+
+    @Option(
+        names = {"-U", "--username"},
+        description = "Database username"
+    )
+    private String username;
+
+    @Option(
+        names = {"-P", "--password"},
+        description = "Database password (INSECURE - use --password-stdin, --password-file, or env vars instead)",
+        interactive = true,
+        arity = "0..1"
+    )
+    private String password;
+
+    @Option(
+        names = {"--password-stdin"},
+        description = "Read password from stdin (secure for scripts)"
+    )
+    private boolean passwordStdin;
+
+    @Option(
+        names = {"--password-file"},
+        description = "Read password from file (must have 0600 permissions on Unix)"
+    )
+    private Path passwordFile;
+
+    @Option(
+        names = {"--password-env"},
+        description = "Environment variable name containing password (default: ${DEFAULT-VALUE})",
+        defaultValue = "SQL_TO_CSV_PASSWORD"
+    )
+    private String passwordEnv;
+
+    @Option(
+        names = {"-q", "--query"},
+        description = "SQL query to execute"
+    )
+    private String query;
+
+    @Option(
+        names = {"-f", "--query-file"},
+        description = "File containing SQL query"
+    )
+    private File queryFile;
+
+    @Option(
+        names = {"-o", "--output"},
+        description = "Output CSV file path",
+        required = true
+    )
+    private File outputFile;
+
+    @Option(
+        names = {"-d", "--delimiter"},
+        description = "CSV delimiter (default: ${DEFAULT-VALUE})",
+        defaultValue = ","
+    )
+    private String delimiter;
+
+    @Option(
+        names = {"--no-header"},
+        description = "Skip CSV header row"
+    )
+    private boolean noHeader;
+
+    @Option(
+        names = {"--null-value"},
+        description = "String to use for NULL values (default: empty string)",
+        defaultValue = ""
+    )
+    private String nullValue;
+
+    @Option(
+        names = {"--fetch-size"},
+        description = "JDBC fetch size for streaming large result sets (default: ${DEFAULT-VALUE})",
+        defaultValue = "1000"
+    )
+    private int fetchSize;
+
+    @Option(
+        names = {"--buffer-size"},
+        description = "File write buffer size in KB (default: ${DEFAULT-VALUE})",
+        defaultValue = "64"
+    )
+    private int bufferSizeKb;
+
+    @Option(
+        names = {"--allow-absolute-paths"},
+        description = "Allow writing to absolute paths outside current directory"
+    )
+    private boolean allowAbsolutePaths;
+
+    @Option(
+        names = {"--audit-log"},
+        description = "Path to audit log file (default: ${DEFAULT-VALUE})",
+        defaultValue = "${user.home}/.sql-to-csv-audit.log"
+    )
+    private String auditLogPath;
+
+    @Option(
+        names = {"--no-audit"},
+        description = "Disable audit logging (not recommended)"
+    )
+    private boolean noAudit;
+
+    @Option(
+        names = {"-v", "--verbose"},
+        description = "Enable verbose output"
+    )
+    private boolean verbose;
+
+    @CommandLine.Spec
+    private CommandLine.Model.CommandSpec spec;
+    
+    private PrintWriter out;
+    private PrintWriter err;
+    
+    @Override
+    public Integer call() {
+        out = spec.commandLine().getOut();
+        err = spec.commandLine().getErr();
+        
+        try {
+            validateInputs();
+            
+            String resolvedQuery = resolveQuery();
+            new QueryValidator().validate(resolvedQuery);
+            
+            // Validate JDBC URL
+            new JdbcUrlValidator().validateJdbcUrl(jdbcUrl);
+            
+            CredentialProvider credProvider = new CredentialProvider(password, passwordEnv, passwordFile, passwordStdin);
+            String resolvedPassword = credProvider.resolvePassword();
+            
+            PathValidator pathValidator = new PathValidator();
+            Path validatedOutputPath = pathValidator.validateOutputPath(outputFile.toPath(), allowAbsolutePaths);
+            
+            SqlExportConfig config = SqlExportConfig.builder()
+                .jdbcUrl(jdbcUrl)
+                .username(username)
+                .password(resolvedPassword)
+                .query(resolvedQuery)
+                .outputFile(validatedOutputPath.toFile())
+                .delimiter(delimiter)
+                .includeHeader(!noHeader)
+                .nullValue(nullValue)
+                .verbose(verbose)
+                .fetchSize(fetchSize)
+                .bufferSizeKb(bufferSizeKb)
+                .build();
+
+            SqlCsvExporter exporter = new SqlCsvExporter(config);
+            ExportResult result = exporter.export();
+            
+            auditExport(resolvedQuery, result, validatedOutputPath);
+            printSuccess(result, validatedOutputPath);
+            
+            return 0;
+            
+        } catch (ValidationException e) {
+            err.println("✗ Validation error: " + e.getMessage());
+            return 1;
+        } catch (SecurityException e) {
+            err.println("✗ Security error: " + e.getMessage());
+            return 1;
+        } catch (ExportException e) {
+            err.println("✗ Export failed: " + e.getMessage());
+            if (verbose) {
+                err.println("\nDetails:");
+                e.printStackTrace(err);
+            } else {
+                err.println("(Use -v for detailed error information)");
+            }
+            return 2;
+        } catch (Exception e) {
+            err.println("✗ Unexpected error: " + e.getMessage());
+            if (verbose) {
+                e.printStackTrace(err);
+            }
+            return 3;
+        }
+    }
+    
+    private void auditExport(String query, ExportResult result, Path outputPath) {
+        if (noAudit) {
+            return;
+        }
+        
+        try {
+            AuditLogger auditLogger = new AuditLogger(Paths.get(auditLogPath));
+            auditLogger.logExport(jdbcUrl, query, result.rowCount(), outputPath.toString());
+        } catch (Exception e) {
+            err.println("WARNING: Audit logging failed: " + e.getMessage());
+            if (verbose) {
+                e.printStackTrace(err);
+            }
+        }
+    }
+    
+    private void printSuccess(ExportResult result, Path outputPath) {
+        out.println("✓ Export completed successfully");
+        out.println("  Rows exported: " + result.rowCount());
+        out.println("  Columns: " + result.columnCount());
+        out.println("  Output file: " + outputPath.toAbsolutePath());
+        out.println("  Total time: " + formatTime(result.totalTimeMs()));
+        out.println("  Throughput: " + String.format("%.1f", result.throughputRowsPerSec()) + " rows/sec");
+        
+        if (verbose) {
+            out.println("\nTiming breakdown:");
+            out.println("  Connection: " + formatTime(result.connectTimeMs()));
+            out.println("  Query execution: " + formatTime(result.queryTimeMs()));
+            out.println("  File writing: " + formatTime(result.writeTimeMs()));
+        }
+    }
+
+    private void validateInputs() {
+        // Query validation
+        if (query == null && queryFile == null) {
+            throw new ValidationException("Either --query or --query-file must be specified");
+        }
+        if (query != null && queryFile != null) {
+            throw new ValidationException("Cannot specify both --query and --query-file");
+        }
+        if (queryFile != null && !queryFile.exists()) {
+            throw new ValidationException("Query file not found: " + queryFile.getAbsolutePath());
+        }
+        if (queryFile != null && !queryFile.canRead()) {
+            throw new ValidationException("Cannot read query file: " + queryFile.getAbsolutePath());
+        }
+        if (query != null && query.trim().isEmpty()) {
+            throw new ValidationException("Query cannot be empty");
+        }
+        
+        // JDBC URL validation
+        if (!jdbcUrl.startsWith("jdbc:")) {
+            throw new ValidationException("Invalid JDBC URL. Must start with 'jdbc:' (e.g., jdbc:postgresql://host:5432/db)");
+        }
+        
+        // Output file validation
+        if (outputFile.exists() && outputFile.isDirectory()) {
+            throw new ValidationException("Output path is a directory: " + outputFile.getAbsolutePath());
+        }
+        var parentDir = outputFile.getParentFile();
+        if (parentDir != null && parentDir.exists() && !parentDir.canWrite()) {
+            throw new ValidationException("Cannot write to output directory: " + parentDir.getAbsolutePath());
+        }
+        
+        // Delimiter validation
+        if (delimiter == null || delimiter.isEmpty()) {
+            throw new ValidationException("Delimiter cannot be empty");
+        }
+        
+        // Performance parameter validation
+        if (fetchSize < 1) {
+            throw new ValidationException("Fetch size must be positive (got: " + fetchSize + ")");
+        }
+        if (bufferSizeKb < 1) {
+            throw new ValidationException("Buffer size must be positive (got: " + bufferSizeKb + ")");
+        }
+    }
+
+    private String buildJdbcUrl() {
+        // Deprecated - credentials now handled separately
+        return jdbcUrl;
+    }
+
+    private String resolveQuery() throws IOException {
+        if (query != null) {
+            return query;
+        }
+        return java.nio.file.Files.readString(queryFile.toPath(), java.nio.charset.StandardCharsets.UTF_8);
+    }
+    
+    private String formatTime(long ms) {
+        if (ms < 1000) {
+            return ms + "ms";
+        } else if (ms < 60000) {
+            return String.format("%.2fs", ms / 1000.0);
+        } else {
+            var minutes = ms / 60000;
+            var seconds = (ms % 60000) / 1000.0;
+            return String.format("%dm %.1fs", minutes, seconds);
+        }
+    }
+
+    public static void main(String[] args) {
+        int exitCode = new CommandLine(new SqlToCsvCommand())
+            .setColorScheme(CommandLine.Help.defaultColorScheme(CommandLine.Help.Ansi.AUTO))
+            .execute(args);
+        System.exit(exitCode);
+    }
+}
