@@ -153,13 +153,13 @@ Mock REST/SOAP APIs for testing:
 ```
 
 ### 2. Financial Systems
-Mock ISO-8583 payment switches:
+Mock binary protocol switches:
 ```json
 {
   "pattern": "^0200.*",
   "response": "0210{{message:4}}00",
   "priority": 50,
-  "description": "Authorization response"
+  "description": "Request/response"
 }
 ```
 
@@ -179,10 +179,10 @@ Mock mainframe or legacy TCP services:
 Accumulate the full XML document before matching:
 ```json
 {
-  "id": "pcs-xml-auth",
+  "id": "xml-doc-handler",
   "requestDelimiter": "</Document>",
-  "requestPattern": ".*<AcqrrAuthstnInitn>.*",
-  "responseTemplate": "<?xml version=\"1.0\"?>...<AcqrrAuthstnRspn>...</AcqrrAuthstnRspn></Document>",
+  "requestPattern": ".*<RequestBody>.*",
+  "responseTemplate": "<?xml version=\"1.0\"?>...<ResponseBody>...</ResponseBody></Document>",
   "responseDelimiter": "",
   "priority": 10
 }
