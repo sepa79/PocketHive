@@ -7,7 +7,8 @@ public class MessageTypeMapping {
     private String requestPattern;
     private Map<String, Object> advancedMatching; // For JSON/XML/header matching
     private String responseTemplate;
-    private String responseDelimiter = "\n"; // Default to newline
+    private String requestDelimiter = "\n";  // How to frame the inbound request; "\n" = line-delimited
+    private String responseDelimiter = "\n"; // Appended after the response body; "" = nothing appended
     private Integer fixedDelayMs; // Per-mapping delay
     private String description;
     private int priority = 1;
@@ -35,6 +36,8 @@ public class MessageTypeMapping {
     public void setAdvancedMatching(Map<String, Object> advancedMatching) { this.advancedMatching = advancedMatching; }
     public String getResponseTemplate() { return responseTemplate; }
     public void setResponseTemplate(String responseTemplate) { this.responseTemplate = responseTemplate; }
+    public String getRequestDelimiter() { return requestDelimiter; }
+    public void setRequestDelimiter(String requestDelimiter) { this.requestDelimiter = requestDelimiter; }
     public String getResponseDelimiter() { return responseDelimiter; }
     public void setResponseDelimiter(String responseDelimiter) { this.responseDelimiter = responseDelimiter; }
     public Integer getFixedDelayMs() { return fixedDelayMs; }

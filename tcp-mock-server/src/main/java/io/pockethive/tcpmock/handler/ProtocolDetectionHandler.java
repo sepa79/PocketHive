@@ -1,11 +1,10 @@
 package io.pockethive.tcpmock.handler;
 
 import io.pockethive.tcpmock.config.TcpMockConfig;
+import io.pockethive.tcpmock.service.MessageTypeRegistry;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.ByteToMessageDecoder;
-import io.netty.handler.codec.DelimiterBasedFrameDecoder;
-import io.netty.handler.codec.Delimiters;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.string.StringDecoder;
 import io.netty.handler.codec.string.StringEncoder;
@@ -13,10 +12,12 @@ import java.util.List;
 
 public class ProtocolDetectionHandler extends ByteToMessageDecoder {
     private final TcpMockConfig config;
+    private final MessageTypeRegistry registry;
     private boolean protocolDetected = false;
 
-    public ProtocolDetectionHandler(TcpMockConfig config) {
+    public ProtocolDetectionHandler(TcpMockConfig config, MessageTypeRegistry registry) {
         this.config = config;
+        this.registry = registry;
     }
 
     @Override
@@ -90,9 +91,9 @@ public class ProtocolDetectionHandler extends ByteToMessageDecoder {
                 // Binary handler will be added by TcpMockServer
                 break;
 
-            default: // LINE_DELIMITED
+            default: // TEXT — mapping-driven framing
                 ctx.pipeline().addAfter(ctx.name(), "frameDecoder",
-                    new DelimiterBasedFrameDecoder(8192, Delimiters.lineDelimiter()));
+                    new MappingAwareFrameDecoder(registry, config.getValidation().getMaxMessageSize()));
                 ctx.pipeline().addAfter("frameDecoder", "stringDecoder", new StringDecoder());
                 ctx.pipeline().addAfter("stringDecoder", "stringEncoder", new StringEncoder());
                 break;
