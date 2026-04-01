@@ -105,11 +105,17 @@
 
 ```json
 {
-  "responseDelimiter": "\n"       // Newline (default)
-  "responseDelimiter": "\u0003"   // ETX character
-  "responseDelimiter": ""         // No delimiter (binary)
+  "requestDelimiter": "\n",        // How to frame the inbound request (default: \n)
+  "requestDelimiter": "</Document>", // Accumulate until tag seen (multi-line XML)
+  "responseDelimiter": "\n",       // Appended after response body (default: \n)
+  "responseDelimiter": "",          // Nothing appended (body already self-terminated)
+  "responseDelimiter": "\u0003"    // ETX character
 }
 ```
+
+> `requestDelimiter` controls when the server considers a request complete.
+> `responseDelimiter` controls what is appended after the response body.
+> Both default to `\n` when omitted.
 
 ## 🔍 Admin API
 
@@ -139,6 +145,7 @@ GET /__admin/health
 {
   "id": "payment-processing",
   "requestPattern": "^\\{.*\\}$",
+  "requestDelimiter": "\n",
   "advancedMatching": {
     "jsonPath": {
       "expression": "$.type",

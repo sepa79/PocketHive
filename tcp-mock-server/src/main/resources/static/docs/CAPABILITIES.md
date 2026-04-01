@@ -9,7 +9,7 @@ Complete overview of TCP Mock Server capabilities, features, and use cases.
 - **TLS/SSL** - Secure TCP connections (tcps://)
 - **Multiple Transports** - Socket, NIO, Netty
 - **Binary & Text** - Handle any data format
-- **Custom Delimiters** - Configurable message boundaries
+- **Custom Delimiters** - Per-mapping request and response framing
 
 ### 2. Request/Response Mocking
 - **Pattern Matching** - Regex-based request matching
@@ -36,7 +36,7 @@ Complete overview of TCP Mock Server capabilities, features, and use cases.
 - **Template Variables** - Dynamic content generation
 - **SpEL Expressions** - Evaluate expressions
 - **Delays** - Simulate latency
-- **Custom Delimiters** - Control message framing
+- **Custom Delimiters** - Per-mapping request and response framing
 - **Proxy Mode** - Forward to real backend
 
 ---
@@ -169,10 +169,27 @@ Mock mainframe or legacy TCP services:
 {
   "pattern": "^STX.*ETX$",
   "response": "STX{{eval(#md5_hex(message))}}ETX",
-  "delimiter": "ETX",
+  "requestDelimiter": "ETX",
+  "responseDelimiter": "",
   "priority": 30
 }
 ```
+
+### 7. Multi-Line XML / Document Protocols
+Accumulate the full XML document before matching:
+```json
+{
+  "id": "pcs-xml-auth",
+  "requestDelimiter": "</Document>",
+  "requestPattern": ".*<AcqrrAuthstnInitn>.*",
+  "responseTemplate": "<?xml version=\"1.0\"?>...<AcqrrAuthstnRspn>...</AcqrrAuthstnRspn></Document>",
+  "responseDelimiter": "",
+  "priority": 10
+}
+```
+`requestDelimiter` tells the server to buffer bytes until `</Document>` is seen before
+attempting to match. `responseDelimiter: ""` means the response body is written as-is
+(it already ends with `</Document>`).
 
 ### 4. Load Testing
 Generate realistic responses under load:
