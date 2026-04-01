@@ -335,7 +335,6 @@ class TcpMockUIUltimate {
             document.getElementById('mappingPattern').value = mapping.requestPattern;
             document.getElementById('mappingPriority').value = mapping.priority;
             document.getElementById('mappingResponse').value = mapping.responseTemplate;
-            document.getElementById('requestDelimiter').value = mapping.requestDelimiter || '\\n';
             document.getElementById('responseDelimiter').value = mapping.responseDelimiter || '\\n';
             document.getElementById('fixedDelayMs').value = mapping.fixedDelayMs || 0;
             document.getElementById('scenarioName').value = mapping.scenarioName || '';
@@ -347,7 +346,6 @@ class TcpMockUIUltimate {
             document.getElementById('mappingPattern').value = '';
             document.getElementById('mappingPriority').value = '10';
             document.getElementById('mappingResponse').value = '';
-            document.getElementById('requestDelimiter').value = '\\n';
             document.getElementById('responseDelimiter').value = '\\n';
             document.getElementById('fixedDelayMs').value = '0';
             document.getElementById('scenarioName').value = '';
@@ -389,7 +387,6 @@ class TcpMockUIUltimate {
             requestPattern: document.getElementById('mappingPattern').value,
             responseTemplate: responseTemplate,
             priority: parseInt(document.getElementById('mappingPriority').value),
-            requestDelimiter: document.getElementById('requestDelimiter').value,
             responseDelimiter: document.getElementById('responseDelimiter').value,
             fixedDelayMs: parseInt(document.getElementById('fixedDelayMs').value) || null,
             scenarioName: document.getElementById('scenarioName').value || null,

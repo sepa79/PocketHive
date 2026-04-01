@@ -679,14 +679,10 @@
                             <div id="proxyResponseFields" class="hidden">
                                 <input type="text" id="proxyTarget" placeholder="host:port" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white font-mono">
                             </div>
-                            <div class="grid grid-cols-3 gap-4">
+                            <div class="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2" title="Bytes that terminate the inbound request (e.g. \n or &lt;/Document&gt;)">Request Delimiter</label>
-                                    <input type="text" id="requestDelimiter" value="\n" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white font-mono" placeholder="\n">
-                                </div>
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2" title="Appended after the response body (empty = nothing appended)">Response Delimiter</label>
-                                    <input type="text" id="responseDelimiter" value="\n" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white font-mono" placeholder="\n">
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Delimiter</label>
+                                    <input type="text" id="responseDelimiter" value="\n" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white font-mono">
                                 </div>
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Delay (ms)</label>
