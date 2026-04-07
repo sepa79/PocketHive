@@ -13,6 +13,13 @@ export interface ManifestIndex {
   byNameAndTag: Map<string, CapabilityManifest>
 }
 
+export interface ManifestResolution {
+  manifest: CapabilityManifest | null
+  kind: 'exact' | 'fallback_tag' | 'none'
+  requestedTag: string | null
+  resolvedTag: string | null
+}
+
 export interface RoleAppearance {
   role: string
   label?: string
@@ -196,35 +203,63 @@ export function buildManifestIndex(list: CapabilityManifest[]): ManifestIndex {
 }
 
 export function findManifestForImage(image: string, index: ManifestIndex): CapabilityManifest | null {
+  return resolveManifestForImage(image, index).manifest
+}
+
+export function resolveManifestForImage(
+  image: string,
+  index: ManifestIndex,
+  fallbackTag?: string | null,
+): ManifestResolution {
   const reference = parseImageReference(image)
-  if (!reference) return null
+  if (!reference) {
+    return { manifest: null, kind: 'none', requestedTag: null, resolvedTag: null }
+  }
 
   if (reference.digest) {
     const manifest = index.byDigest.get(reference.digest)
-    if (manifest) return manifest
-  }
-
-  if (reference.name && reference.tag) {
-    const name = reference.name
-    const tag = reference.tag
-    // First try the full image name as-is.
-    const directKey = `${name}:::${tag}`
-    const direct = index.byNameAndTag.get(directKey)
-    if (direct) return direct
-
-    // If the image name includes a registry/repository prefix, also try the last path
-    // segment so manifests can declare short names like "generator" while runtime
-    // images use fully-qualified references such as "ghcr.io/org/generator".
-    const lastSlash = name.lastIndexOf('/')
-    if (lastSlash >= 0 && lastSlash < name.length - 1) {
-      const simpleName = name.slice(lastSlash + 1)
-      const simpleKey = `${simpleName}:::${tag}`
-      const simple = index.byNameAndTag.get(simpleKey)
-      if (simple) return simple
+    if (manifest) {
+      return {
+        manifest,
+        kind: 'exact',
+        requestedTag: reference.tag,
+        resolvedTag: manifest.image?.tag?.trim() ?? null,
+      }
     }
   }
 
-  return null
+  if (reference.name && reference.tag) {
+    const exact = lookupManifestByNameAndTag(reference.name, reference.tag, index)
+    if (exact) {
+      return {
+        manifest: exact,
+        kind: 'exact',
+        requestedTag: reference.tag,
+        resolvedTag: exact.image?.tag?.trim() ?? null,
+      }
+    }
+
+    const normalizedFallbackTag =
+      typeof fallbackTag === 'string' && fallbackTag.trim().length > 0 ? fallbackTag.trim() : null
+    if (normalizedFallbackTag && normalizedFallbackTag !== reference.tag) {
+      const fallback = lookupManifestByNameAndTag(reference.name, normalizedFallbackTag, index)
+      if (fallback) {
+        return {
+          manifest: fallback,
+          kind: 'fallback_tag',
+          requestedTag: reference.tag,
+          resolvedTag: fallback.image?.tag?.trim() ?? normalizedFallbackTag,
+        }
+      }
+    }
+  }
+
+  return {
+    manifest: null,
+    kind: 'none',
+    requestedTag: reference.tag,
+    resolvedTag: null,
+  }
 }
 
 interface ImageReference {
@@ -266,6 +301,26 @@ function parseImageReference(image: string): ImageReference | null {
   const name = namePart ? namePart.trim().toLowerCase() : null
 
   return { name, tag, digest }
+}
+
+function lookupManifestByNameAndTag(
+  name: string,
+  tag: string,
+  index: ManifestIndex,
+): CapabilityManifest | null {
+  const directKey = `${name}:::${tag}`
+  const direct = index.byNameAndTag.get(directKey)
+  if (direct) return direct
+
+  const lastSlash = name.lastIndexOf('/')
+  if (lastSlash >= 0 && lastSlash < name.length - 1) {
+    const simpleName = name.slice(lastSlash + 1)
+    const simpleKey = `${simpleName}:::${tag}`
+    const simple = index.byNameAndTag.get(simpleKey)
+    if (simple) return simple
+  }
+
+  return null
 }
 
 export function formatCapabilityValue(value: unknown): string {

@@ -508,6 +508,22 @@ public class ScenarioService {
             return;
         }
 
+        Optional<io.pockethive.capabilities.CapabilityCatalogueService.CapabilityResolution> resolution =
+                capabilities.resolveByImageReference(imageReference);
+        if (resolution.isPresent()) {
+            io.pockethive.capabilities.CapabilityCatalogueService.CapabilityResolution matched = resolution.get();
+            if (matched.fallbackUsed()) {
+                logger.warn(
+                        "Scenario '{}' {} image '{}' is using fallback capability manifest tag '{}' instead of requested tag '{}'",
+                        scenarioId,
+                        component,
+                        imageReference,
+                        matched.resolvedTag(),
+                        matched.requestedTag());
+            }
+            return;
+        }
+
         if (capabilities.findByImageReference(imageReference).isEmpty()) {
             logger.warn("Scenario '{}' missing capability manifest for {} image '{}'", scenarioId, component, imageReference);
             missingReferences.add(component + " -> " + imageReference);

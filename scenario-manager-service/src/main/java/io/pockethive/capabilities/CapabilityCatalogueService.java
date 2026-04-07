@@ -7,6 +7,7 @@ import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -23,6 +24,7 @@ public class CapabilityCatalogueService {
     private static final Logger logger = LoggerFactory.getLogger(CapabilityCatalogueService.class);
 
     private final Path capabilitiesDir;
+    private final String fallbackTag;
     private final ObjectMapper jsonMapper;
     private final ObjectMapper yamlMapper;
 
@@ -30,8 +32,19 @@ public class CapabilityCatalogueService {
     private volatile Map<ImageCoordinate, CapabilityManifest> manifestsByNameAndTag = Map.of();
     private volatile List<CapabilityManifest> manifests = List.of();
 
-    public CapabilityCatalogueService(@Value("${capabilities.dir:capabilities}") String directory) throws IOException {
-        this.capabilitiesDir = Paths.get(directory).toAbsolutePath().normalize();
+    @Autowired
+    public CapabilityCatalogueService(@Value("${capabilities.dir:capabilities}") String directory,
+                                      @Value("${pockethive.capabilities.fallback-tag:}") String fallbackTag) throws IOException {
+        this(Paths.get(directory), fallbackTag);
+    }
+
+    public CapabilityCatalogueService(String directory) throws IOException {
+        this(Paths.get(directory), null);
+    }
+
+    public CapabilityCatalogueService(Path directory, String fallbackTag) throws IOException {
+        this.capabilitiesDir = directory.toAbsolutePath().normalize();
+        this.fallbackTag = normalizeTag(fallbackTag);
         Files.createDirectories(this.capabilitiesDir);
         this.jsonMapper = configuredMapper(new ObjectMapper());
         this.yamlMapper = configuredMapper(new ObjectMapper(new YAMLFactory()));
@@ -111,7 +124,15 @@ public class CapabilityCatalogueService {
         return manifests;
     }
 
+    public String capabilityFallbackTag() {
+        return fallbackTag;
+    }
+
     public Optional<CapabilityManifest> findByImageReference(String imageReference) {
+        return resolveByImageReference(imageReference).map(CapabilityResolution::manifest);
+    }
+
+    public Optional<CapabilityResolution> resolveByImageReference(String imageReference) {
         ImageReference reference = parseImageReference(imageReference);
         if (reference == null) {
             return Optional.empty();
@@ -120,12 +141,21 @@ public class CapabilityCatalogueService {
         if (reference.digest() != null) {
             Optional<CapabilityManifest> byDigest = findByDigest(reference.digest());
             if (byDigest.isPresent()) {
-                return byDigest;
+                return byDigest.map(manifest -> new CapabilityResolution(manifest, imageReference, reference.tag(), manifest.image().tag(), false));
             }
         }
 
         if (reference.name() != null && reference.tag() != null) {
-            return findByNameAndTag(reference.name(), reference.tag());
+            Optional<CapabilityManifest> exact = findByNameAndTag(reference.name(), reference.tag());
+            if (exact.isPresent()) {
+                return exact.map(manifest -> new CapabilityResolution(manifest, imageReference, reference.tag(), manifest.image().tag(), false));
+            }
+            if (fallbackTag != null && !fallbackTag.equals(reference.tag())) {
+                Optional<CapabilityManifest> fallback = findByNameAndTag(reference.name(), fallbackTag);
+                if (fallback.isPresent()) {
+                    return fallback.map(manifest -> new CapabilityResolution(manifest, imageReference, reference.tag(), manifest.image().tag(), true));
+                }
+            }
         }
 
         return Optional.empty();
@@ -257,4 +287,10 @@ public class CapabilityCatalogueService {
     private record ImageCoordinate(String name, String tag) { }
 
     private record ImageReference(String name, String tag, String digest) { }
+
+    public record CapabilityResolution(CapabilityManifest manifest,
+                                       String imageReference,
+                                       String requestedTag,
+                                       String resolvedTag,
+                                       boolean fallbackUsed) { }
 }

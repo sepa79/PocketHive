@@ -265,6 +265,39 @@ class ScenarioServiceTest {
     }
 
     @Test
+    void fallbackCapabilityTagAllowsExplicitImageTagsWhenConfigured() throws IOException {
+        writeManifest("ctrl", "ctrl-image", "latest");
+        writeManifest("worker", "worker-image", "latest");
+        capabilities = new CapabilityCatalogueService(capabilitiesDir, "latest");
+        capabilities.reload();
+        service = new ScenarioService(scenariosDir.toString(), capabilities);
+
+        writeScenario("experimental.yaml", """
+                id: experimental
+                name: Experimental Scenario
+                template:
+                  image: ctrl-image:experimental
+                  bees:
+                    - role: worker
+                      image: worker-image:experimental
+                      work:
+                        in:
+                          in: a
+                        out:
+                          out: b
+                """);
+
+        service.reload();
+
+        assertThat(service.findAvailable("experimental")).isPresent();
+        Scenario scenario = service.findAvailable("experimental").orElseThrow();
+        assertThat(scenario.getTemplate().image()).isEqualTo("ctrl-image:experimental");
+        assertThat(scenario.getTemplate().bees())
+                .extracting(Bee::image)
+                .containsExactly("worker-image:experimental");
+    }
+
+    @Test
     void createBundleFromZipStoresNewBundlesUnderBundlesFolder() throws IOException {
         byte[] zipBytes = scenarioBundleZip("""
                 id: uploaded-demo

@@ -6,8 +6,8 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { CreateSwarmModal } from './hive/CreateSwarmModal'
 import {
   buildManifestIndex,
-  findManifestForImage,
   normalizeManifests,
+  resolveManifestForImage,
   type CapabilityManifest,
 } from '../lib/capabilities'
 import { detectUiBasename } from '../lib/routing/basename'
@@ -464,6 +464,7 @@ export function HivePage() {
   const [snapshotError, setSnapshotError] = useState<string | null>(null)
   const [snapshotLoading, setSnapshotLoading] = useState(false)
   const [capabilities, setCapabilities] = useState<CapabilityManifest[]>([])
+  const [capabilityFallbackTag, setCapabilityFallbackTag] = useState<string | null>(null)
   const [capabilitiesLoaded, setCapabilitiesLoaded] = useState(false)
   const [capabilitiesError, setCapabilitiesError] = useState<string | null>(null)
   const [tapBusy, setTapBusy] = useState<Record<string, boolean>>({})
@@ -598,16 +599,24 @@ export function HivePage() {
       })
       if (!response.ok) {
         setCapabilities([])
+        setCapabilityFallbackTag(null)
         setCapabilitiesLoaded(true)
         setCapabilitiesError('Failed to load capabilities')
         return
       }
       const payload = await response.json()
       const normalized = normalizeManifests(payload)
+      const fallbackTagHeader = response.headers.get('X-Pockethive-Capability-Fallback-Tag')
+      setCapabilityFallbackTag(
+        typeof fallbackTagHeader === 'string' && fallbackTagHeader.trim().length > 0
+          ? fallbackTagHeader.trim()
+          : null,
+      )
       setCapabilities(normalized)
       setCapabilitiesLoaded(true)
     } catch (err) {
       setCapabilities([])
+      setCapabilityFallbackTag(null)
       setCapabilitiesLoaded(true)
       setCapabilitiesError(err instanceof Error ? err.message : 'Failed to load capabilities')
     }
@@ -1426,9 +1435,10 @@ export function HivePage() {
 	                              const runtimeWorker =
 	                                roleKey ? runtimeWorkersByRole.get(roleKey) ?? null : null
 	                              const runtimeImage = runtimeWorker?.runtime?.image ?? null
-	                              const manifest = runtimeImage
-	                                ? findManifestForImage(runtimeImage, manifestIndex)
-	                                : null
+	                              const manifestResolution = runtimeImage
+	                                ? resolveManifestForImage(runtimeImage, manifestIndex, capabilityFallbackTag)
+	                                : { manifest: null, kind: 'none' as const, requestedTag: null, resolvedTag: null }
+	                              const manifest = manifestResolution.manifest
 	                              const ports = activeBee.ports
 	                                ? activeBee.ports
 	                                    .map((port) => `${port.id}:${port.direction}`)
@@ -1782,6 +1792,11 @@ export function HivePage() {
 	                                          </span>
 		                                        ) : (
 		                                          <span className="muted">config fields: —</span>
+		                                        )}
+		                                        {manifestResolution.kind === 'fallback_tag' && (
+		                                          <span className="warningText">
+		                                            capability fallback: runtime tag {manifestResolution.requestedTag ?? 'unknown'} uses manifest tag {manifestResolution.resolvedTag ?? 'unknown'}
+		                                          </span>
 		                                        )}
 	                                      </>
 	                                    )}

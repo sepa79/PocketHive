@@ -774,6 +774,12 @@ textarea,
   line-height: 1.35;
 }
 
+.warningText {
+  color: #f8c15c;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .card {
   border: 1px solid var(--border);
   background: var(--panel);

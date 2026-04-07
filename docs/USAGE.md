@@ -114,6 +114,7 @@ Operational behavior:
 ### Scenario image tags
 - Scenario images must include a tag or digest. If a tag is omitted, scenario-manager can apply a default tag via `POCKETHIVE_IMAGES_DEFAULT_TAG` (see `docker-compose.yml`).
 - This default is only used when a scenario image has no tag; manually specified tags are respected.
+- Local `docker-compose.yml` also enables capability fallback via `POCKETHIVE_CAPABILITIES_FALLBACK_TAG=latest`. This affects only capability manifest lookup; it does not rewrite the runtime image tag used by the scenario.
 
 Example listings:
 
