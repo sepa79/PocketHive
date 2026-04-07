@@ -12,9 +12,12 @@ import org.junit.jupiter.api.io.TempDir;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.io.ByteArrayOutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -262,6 +265,69 @@ class ScenarioServiceTest {
     }
 
     @Test
+    void fallbackCapabilityTagAllowsExplicitImageTagsWhenConfigured() throws IOException {
+        writeManifest("ctrl", "ctrl-image", "latest");
+        writeManifest("worker", "worker-image", "latest");
+        capabilities = new CapabilityCatalogueService(capabilitiesDir, "latest");
+        capabilities.reload();
+        service = new ScenarioService(scenariosDir.toString(), capabilities);
+
+        writeScenario("experimental.yaml", """
+                id: experimental
+                name: Experimental Scenario
+                template:
+                  image: ctrl-image:experimental
+                  bees:
+                    - role: worker
+                      image: worker-image:experimental
+                      work:
+                        in:
+                          in: a
+                        out:
+                          out: b
+                """);
+
+        service.reload();
+
+        assertThat(service.findAvailable("experimental")).isPresent();
+        Scenario scenario = service.findAvailable("experimental").orElseThrow();
+        assertThat(scenario.getTemplate().image()).isEqualTo("ctrl-image:experimental");
+        assertThat(scenario.getTemplate().bees())
+                .extracting(Bee::image)
+                .containsExactly("worker-image:experimental");
+    }
+
+    @Test
+    void createBundleFromZipStoresNewBundlesUnderBundlesFolder() throws IOException {
+        byte[] zipBytes = scenarioBundleZip("""
+                id: uploaded-demo
+                name: Uploaded Demo
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - role: worker
+                      image: worker-image:latest
+                      work:
+                        in:
+                          in: a
+                        out:
+                          out: b
+                """);
+
+        Scenario created = service.createBundleFromZip(zipBytes);
+
+        assertThat(created.getId()).isEqualTo("uploaded-demo");
+        assertThat(service.bundleDirFor("uploaded-demo"))
+                .isEqualTo(scenariosDir.resolve("bundles").resolve("uploaded-demo").toAbsolutePath().normalize());
+        assertThat(service.listAllSummaries())
+                .extracting(ScenarioSummary::id, ScenarioSummary::folderPath)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("uploaded-demo", "bundles"));
+        Path uploadedDescriptor = scenariosDir.resolve("bundles").resolve("uploaded-demo").resolve("scenario.yaml");
+        assertThat(uploadedDescriptor).exists();
+        assertThat(Files.readString(uploadedDescriptor)).contains("uploaded-demo");
+    }
+
+    @Test
     void variablesValidationEmitsCoverageWarningsForRequiredVariables() throws IOException {
         writeBundleScenario("scenario-1");
         Path bundle = service.bundleDir("scenario-1");
@@ -443,5 +509,15 @@ class ScenarioServiceTest {
                   image: ctrl-image:latest
                   bees: []
                 """.formatted(scenarioId, scenarioId));
+    }
+
+    private byte[] scenarioBundleZip(String scenarioYaml) throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try (ZipOutputStream zip = new ZipOutputStream(out)) {
+            zip.putNextEntry(new ZipEntry("scenario.yaml"));
+            zip.write(scenarioYaml.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            zip.closeEntry();
+        }
+        return out.toByteArray();
     }
 }

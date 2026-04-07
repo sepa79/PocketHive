@@ -28,6 +28,8 @@ public class ScenarioService {
 
     private static final Logger logger = LoggerFactory.getLogger(ScenarioService.class);
     private static final String SCENARIOS_RUNTIME_ROOT = "scenarios-runtime";
+    private static final String DEFAULT_UPLOAD_FOLDER = "bundles";
+    private static final String UPLOAD_TEMP_PREFIX = "pockethive-scenario-upload-";
 
     private final Path storageDir;
     private final Path testStorageDir;
@@ -503,6 +505,22 @@ public class ScenarioService {
         if (imageReference == null || imageReference.isBlank()) {
             logger.warn("Scenario '{}' {} image reference is missing", scenarioId, component);
             missingReferences.add(component + " (missing image)");
+            return;
+        }
+
+        Optional<io.pockethive.capabilities.CapabilityCatalogueService.CapabilityResolution> resolution =
+                capabilities.resolveByImageReference(imageReference);
+        if (resolution.isPresent()) {
+            io.pockethive.capabilities.CapabilityCatalogueService.CapabilityResolution matched = resolution.get();
+            if (matched.fallbackUsed()) {
+                logger.warn(
+                        "Scenario '{}' {} image '{}' is using fallback capability manifest tag '{}' instead of requested tag '{}'",
+                        scenarioId,
+                        component,
+                        imageReference,
+                        matched.resolvedTag(),
+                        matched.requestedTag());
+            }
             return;
         }
 
@@ -1481,7 +1499,7 @@ public class ScenarioService {
             if (scenarios.containsKey(id)) {
                 throw new IllegalArgumentException("Scenario '%s' already exists".formatted(id));
             }
-            writeBundle(uploaded, bundleDir(id));
+            writeBundle(uploaded, defaultUploadBundleDir(id));
             reload();
             ScenarioRecord record = scenarios.get(id);
             return record != null ? record.scenario() : uploaded.scenario();
@@ -1531,7 +1549,7 @@ public class ScenarioService {
         if (zipBytes == null || zipBytes.length == 0) {
             throw new IllegalArgumentException("Zip payload must not be empty");
         }
-        Path tempRoot = Files.createTempDirectory(bundleRootDir, "upload-");
+        Path tempRoot = Files.createTempDirectory(UPLOAD_TEMP_PREFIX);
         try (ZipInputStream zis = new ZipInputStream(new ByteArrayInputStream(zipBytes))) {
             ZipEntry entry;
             while ((entry = zis.getNextEntry()) != null) {
@@ -1694,6 +1712,15 @@ public class ScenarioService {
         }
         Files.createDirectories(targetDir);
         copyDirectory(sourceDir, targetDir);
+    }
+
+    private Path defaultUploadBundleDir(String id) {
+        Path parent = resolveBundleFolder(DEFAULT_UPLOAD_FOLDER, false);
+        Path targetDir = parent.resolve(sanitize(id)).normalize();
+        if (!targetDir.startsWith(bundleRootDir)) {
+            throw new IllegalArgumentException("Invalid scenario id");
+        }
+        return targetDir;
     }
 
     private void cleanupUploaded(UploadedBundle uploaded) throws IOException {

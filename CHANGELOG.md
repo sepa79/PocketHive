@@ -2,9 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.15.12]
+## [0.15.13]
 Timestamp: 2026-03-26T01:05:36Z
 
+- Scenario Manager: store uploaded scenario ZIP bundles under `scenarios/bundles/<scenarioId>` again, and move temporary upload extraction outside the scenarios authoring root so reloads do not see transient upload directories.
+- Scenario Manager / capabilities: add explicit image-tag capability fallback controlled by `POCKETHIVE_CAPABILITIES_FALLBACK_TAG`, expose the active fallback tag via API metadata, keep runtime images on their requested tags, and fix Spring bean wiring so Scenario Manager / Orchestrator test contexts still boot with the new constructor overloads.
+- UI v1 + v2 (Hive): detect fallback manifest resolution, surface a warning when the runtime image tag differs from the capability manifest tag, and consume the fallback-tag metadata from Scenario Manager instead of hardcoding `latest`.
+- Compose / docs: enable `POCKETHIVE_CAPABILITIES_FALLBACK_TAG=latest` by default for the local `scenario-manager` service and document that capability fallback changes manifest lookup only, not the runtime image reference.
 - UI v2 (Scenarios / Hive): restore scenario bundle upload/download/delete actions, add confirmation dialogs for bundle deletion and swarm removal, and improve the Hive worker cards with mini HAL-style runtime status markers.
 - UI v2 (Journal): add paged Hive and Swarm journal views, compact v1-style journal rendering with grouped rows/expandable details, and basic Hive diagnostics surfacing (`Latest issue` + journal navigation) for startup/template/runtime failures.
 - Debug / tooling: extend `tools/mcp-orchestrator-debug` with Scenario Manager reload support in both the CLI and the real MCP server, document the workflow in `AGENTS.md`, and add E2E repro scenarios plus notes/plans for startup-failure and lifecycle/health follow-up work.

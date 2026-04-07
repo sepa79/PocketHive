@@ -11,8 +11,9 @@ import {
 import { apiFetch } from '../lib/api'
 import {
   buildManifestIndex,
-  findManifestForImage,
   normalizeManifests,
+  resolveManifestForImage,
+  type ManifestResolution,
   type ManifestIndex,
 } from '../lib/capabilities'
 import type { CapabilityManifest } from '../types/capabilities'
@@ -20,9 +21,11 @@ import type { CapabilityManifest } from '../types/capabilities'
 export interface CapabilitiesContextValue {
   manifests: CapabilityManifest[]
   manifestIndex: ManifestIndex
+  capabilityFallbackTag: string | null
   ensureCapabilities: () => Promise<CapabilityManifest[]>
   refreshCapabilities: () => Promise<CapabilityManifest[]>
   getManifestForImage: (image: string | null | undefined) => CapabilityManifest | null
+  resolveManifestForImage: (image: string | null | undefined) => ManifestResolution
 }
 
 const defaultManifestIndex = buildManifestIndex([])
@@ -30,9 +33,16 @@ const defaultManifestIndex = buildManifestIndex([])
 const defaultValue: CapabilitiesContextValue = {
   manifests: [],
   manifestIndex: defaultManifestIndex,
+  capabilityFallbackTag: null,
   ensureCapabilities: async () => [],
   refreshCapabilities: async () => [],
   getManifestForImage: () => null,
+  resolveManifestForImage: () => ({
+    manifest: null,
+    kind: 'none',
+    requestedTag: null,
+    resolvedTag: null,
+  }),
 }
 
 export const CapabilitiesContext = createContext<CapabilitiesContextValue>(defaultValue)
@@ -47,6 +57,7 @@ interface Props {
 
 export function CapabilitiesProvider({ children }: Props) {
   const [manifests, setManifests] = useState<CapabilityManifest[]>([])
+  const [capabilityFallbackTag, setCapabilityFallbackTag] = useState<string | null>(null)
   const [hasLoaded, setHasLoaded] = useState(false)
   const hasLoadedRef = useRef(false)
   const inFlightRef = useRef<Promise<CapabilityManifest[]> | null>(null)
@@ -69,6 +80,12 @@ export function CapabilitiesProvider({ children }: Props) {
       }
       const payload = await response.json()
       const normalized = normalizeManifests(payload)
+      const fallbackTagHeader = response.headers.get('X-Pockethive-Capability-Fallback-Tag')
+      setCapabilityFallbackTag(
+        typeof fallbackTagHeader === 'string' && fallbackTagHeader.trim().length > 0
+          ? fallbackTagHeader.trim()
+          : null,
+      )
       setManifests(normalized)
       setHasLoaded(true)
       return normalized
@@ -78,6 +95,7 @@ export function CapabilitiesProvider({ children }: Props) {
       .catch((error) => {
         if (!hasLoadedRef.current) {
           setManifests([])
+          setCapabilityFallbackTag(null)
         }
         console.error('Failed to load capabilities', error)
         return [] as CapabilityManifest[]
@@ -108,20 +126,45 @@ export function CapabilitiesProvider({ children }: Props) {
   const getManifestForImage = useCallback(
     (image: string | null | undefined) => {
       if (!image) return null
-      return findManifestForImage(image, manifestIndex)
+      return resolveManifestForImage(image, manifestIndex, capabilityFallbackTag).manifest
     },
-    [manifestIndex],
+    [capabilityFallbackTag, manifestIndex],
+  )
+
+  const resolveManifestForImageFromContext = useCallback(
+    (image: string | null | undefined) => {
+      if (!image) {
+        return {
+          manifest: null,
+          kind: 'none',
+          requestedTag: null,
+          resolvedTag: null,
+        } satisfies ManifestResolution
+      }
+      return resolveManifestForImage(image, manifestIndex, capabilityFallbackTag)
+    },
+    [capabilityFallbackTag, manifestIndex],
   )
 
   const value = useMemo<CapabilitiesContextValue>(
     () => ({
       manifests,
       manifestIndex,
+      capabilityFallbackTag,
       ensureCapabilities,
       refreshCapabilities,
       getManifestForImage,
+      resolveManifestForImage: resolveManifestForImageFromContext,
     }),
-    [manifests, manifestIndex, ensureCapabilities, refreshCapabilities, getManifestForImage],
+    [
+      manifests,
+      manifestIndex,
+      capabilityFallbackTag,
+      ensureCapabilities,
+      refreshCapabilities,
+      getManifestForImage,
+      resolveManifestForImageFromContext,
+    ],
   )
 
   return <CapabilitiesContext.Provider value={value}>{children}</CapabilitiesContext.Provider>
