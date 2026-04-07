@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ## [0.15.12]
 Timestamp: 2026-03-26T01:05:36Z
 
+- Scenario Manager: store uploaded scenario ZIP bundles under `scenarios/bundles/<scenarioId>` again, and move temporary upload extraction outside the scenarios authoring root so reloads do not see transient upload directories.
 - UI v2 (Scenarios / Hive): restore scenario bundle upload/download/delete actions, add confirmation dialogs for bundle deletion and swarm removal, and improve the Hive worker cards with mini HAL-style runtime status markers.
 - UI v2 (Journal): add paged Hive and Swarm journal views, compact v1-style journal rendering with grouped rows/expandable details, and basic Hive diagnostics surfacing (`Latest issue` + journal navigation) for startup/template/runtime failures.
 - Debug / tooling: extend `tools/mcp-orchestrator-debug` with Scenario Manager reload support in both the CLI and the real MCP server, document the workflow in `AGENTS.md`, and add E2E repro scenarios plus notes/plans for startup-failure and lifecycle/health follow-up work.
