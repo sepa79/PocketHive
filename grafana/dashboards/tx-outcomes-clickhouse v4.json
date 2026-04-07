@@ -1,0 +1,1409 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "enable": true,
+        "hide": false,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      },
+      {
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "clickhouse"
+        },
+        "enable": true,
+        "hide": false,
+        "iconColor": "rgba(255, 0, 0, 1)",
+        "name": "Latency spike annotations",
+        "query": "SELECT toUnixTimestamp(toStartOfInterval(eventTime, INTERVAL 10 SECOND)) * 1000 AS time, concat('Latency spike — p95 = ', toString(quantileTDigest(0.95)(processorDurationMs)), ' ms') AS text FROM ph_tx_outcome_v1 WHERE $__timeFilter(eventTime) AND ('${swarm:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${swarm:csv}'), swarmId)) AND ('${callId:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${callId:csv}'), callId)) AND ('${businessCode:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${businessCode:csv}'), if(businessCode = '', 'n/a', businessCode))) GROUP BY time HAVING quantileTDigest(0.95)(processorDurationMs) >= 2000 ORDER BY time DESC LIMIT 100",
+        "rawQuery": true,
+        "type": "tags"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "description": "Shows the p95 processor latency for the most recent Grafana time bucket in the selected range. It uses quantileTDigest(0.95) on processorDurationMs, so it reflects recent latency rather than a single p95 for the full selected window.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "yellow",
+                "value": 200
+              },
+              {
+                "color": "red",
+                "value": 300
+              }
+            ]
+          },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 10,
+        "x": 0,
+        "y": 0
+      },
+      "id": 10,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "inverted",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/^value$/",
+          "values": false
+        },
+        "showPercentChange": true,
+        "text": {
+          "percentSize": 28,
+          "titleSize": 16,
+          "valueSize": 64
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.1",
+      "targets": [
+        {
+          "editorType": "sql",
+          "format": 2,
+          "queryType": "sql",
+          "rawSql": "SELECT toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time, quantileTDigest(0.95)(processorDurationMs) AS value FROM ph_tx_outcome_v1 WHERE $__timeFilter(eventTime) AND ('${swarm:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${swarm:csv}'), swarmId)) AND ('${callId:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${callId:csv}'), callId)) AND ('${businessCode:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${businessCode:csv}'), if(businessCode = '', 'n/a', businessCode))) GROUP BY time ORDER BY time",
+          "refId": "A"
+        }
+      ],
+      "title": "Latest Processor Latency p95 (ms)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "description": "Shows the percentage of filtered transactions in the selected time range whose processor duration is at least 2000 ms. Unlike the latest stat cards, this panel calculates one value over the full selected window.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 10,
+        "y": 0
+      },
+      "id": 14,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 16,
+          "valueSize": 64
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.1",
+      "targets": [
+        {
+          "editorType": "sql",
+          "format": 2,
+          "queryType": "sql",
+          "rawSql": "SELECT now() AS time, avg(if(processorDurationMs >= 2000, 1, 0)) * 100 AS value FROM ph_tx_outcome_v1 WHERE $__timeFilter(eventTime) AND ('${swarm:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${swarm:csv}'), swarmId)) AND ('${callId:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${callId:csv}'), callId)) AND ('${businessCode:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${businessCode:csv}'), if(businessCode = '', 'n/a', businessCode)))",
+          "refId": "A"
+        }
+      ],
+      "title": "Transactions Over 2000 ms (%)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "description": "Shows the latest throughput in transactions per second for the most recent Grafana time bucket. It is calculated as count() divided by $__interval_s, so it reflects recent throughput rather than an average for the full selected range.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 16,
+        "y": 0
+      },
+      "id": 12,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "percentChangeColorMode": "inverted",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": true,
+        "text": {
+          "percentSize": 28,
+          "titleSize": 16,
+          "valueSize": 64
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.1",
+      "targets": [
+        {
+          "editorType": "sql",
+          "format": 2,
+          "queryType": "sql",
+          "rawSql": "SELECT toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time, count() / $__interval_s AS txns FROM ph_tx_outcome_v1 WHERE $__timeFilter(eventTime) AND ('${swarm:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${swarm:csv}'), swarmId)) AND ('${callId:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${callId:csv}'), callId)) AND ('${businessCode:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${businessCode:csv}'), if(businessCode = '', 'n/a', businessCode))) GROUP BY time ORDER BY time",
+          "refId": "A"
+        }
+      ],
+      "title": "Latest Throughput (TPS)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "description": "Shows the share of transactions in each Grafana time bucket split into ok, over-2000-ms breaches, and technical failures by processorStatus code. Statuses 200, 201, 422, and -1 are treated as accepted for this panel. All technical failure status codes are shown individually and are not grouped into a top-3 or other bucket. Green means ok, amber means over 2000 ms, and red shades indicate technical failures.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            }
+          },
+          "mappings": [],
+          "unit": "percent"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^technical-failure \\| status .*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#E02F44",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "breach-over-2000ms"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#EAB839",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ok"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#73BF69",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 10,
+        "x": 0,
+        "y": 4
+      },
+      "id": 16,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "pieType": "pie",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "sort": "desc",
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.4.1",
+      "targets": [
+        {
+          "editorType": "sql",
+          "format": 2,
+          "queryType": "sql",
+          "rawSql": "SELECT\n  toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n  multiIf(\n    processorStatus NOT IN (200, 201, 422, -1), concat('technical-failure | status ', toString(processorStatus)),\n    processorDurationMs >= 2000, 'breach-over-2000ms',\n    'ok'\n  ) AS series,\n  count() AS events\nFROM ph_tx_outcome_v1\nWHERE $__timeFilter(eventTime)\n  AND ('${swarm:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${swarm:csv}'), swarmId))\n  AND ('${callId:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${callId:csv}'), callId))\n  AND ('${businessCode:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${businessCode:csv}'), if(businessCode = '', 'n/a', businessCode)))\nGROUP BY time, series\nORDER BY time, series",
+          "refId": "A"
+        }
+      ],
+      "title": "Transaction Health Over Time",
+      "transformations": [
+        {
+          "id": "prepareTimeSeries",
+          "options": {
+            "format": "many"
+          }
+        }
+      ],
+      "type": "piechart"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "description": "Shows the overall share of filtered transactions in the selected time range that were technical failures. A transaction counts as a technical failure when processorStatus is not 200, 201, 422, or -1. This is easier to read than a peak bucket metric because it does not depend on Grafana bucket size.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "decimals": 2,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "yellow",
+                "value": 0.01
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 10,
+        "y": 4
+      },
+      "id": 11,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "percentChangeColorMode": "inverted",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "text": {
+          "percentSize": 28,
+          "titleSize": 16,
+          "valueSize": 64
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.1",
+      "targets": [
+        {
+          "editorType": "sql",
+          "format": 2,
+          "queryType": "sql",
+          "rawSql": "SELECT now() AS time, countIf(processorStatus NOT IN (200, 201, 422, -1)) * 100.0 / count() AS technical_failure_rate_pct FROM ph_tx_outcome_v1 WHERE $__timeFilter(eventTime) AND ('${swarm:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${swarm:csv}'), swarmId)) AND ('${callId:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${callId:csv}'), callId)) AND ('${businessCode:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${businessCode:csv}'), if(businessCode = '', 'n/a', businessCode)))",
+          "refId": "A"
+        }
+      ],
+      "title": "Technical Failure Share (%)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "description": "Shows the highest transactions-per-second rate seen in any fixed 10-second bucket within the selected time range. This is useful for comparing peak load across test runs without depending on Grafana's adaptive bucket size.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 16,
+        "y": 4
+      },
+      "id": 15,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 16,
+          "valueSize": 64
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.1",
+      "targets": [
+        {
+          "editorType": "sql",
+          "format": 2,
+          "queryType": "sql",
+          "rawSql": "SELECT now() AS time, max(txns_per_sec) AS value FROM (SELECT toStartOfInterval(eventTime, INTERVAL 10 SECOND) AS bucket_time, count() / 10.0 AS txns_per_sec FROM ph_tx_outcome_v1 WHERE $__timeFilter(eventTime) AND ('${swarm:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${swarm:csv}'), swarmId)) AND ('${callId:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${callId:csv}'), callId)) AND ('${businessCode:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${businessCode:csv}'), if(businessCode = '', 'n/a', businessCode))) GROUP BY bucket_time)",
+          "refId": "A"
+        }
+      ],
+      "title": "Peak Throughput (TPS, 10s window)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "description": "Shows the maximum processor latency in each Grafana time bucket across all returned group series. The visible legend label is built from callId and businessCode, and each point is the maximum processorDurationMs returned for that displayed series in that bucket.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": true,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "points",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "showValues": false,
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 11,
+        "w": 24,
+        "x": 0,
+        "y": 8
+      },
+      "id": 7,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true,
+          "width": 200
+        },
+        "timezone": [
+          "utc"
+        ],
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.4.1",
+      "targets": [
+        {
+          "editorType": "sql",
+          "format": 2,
+          "meta": {},
+          "pluginVersion": "4.13.0",
+          "queryType": "logs",
+          "rawSql": "SELECT\n  toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n  concat(\n    if(callId = '', 'unknown', callId),\n    ' | ',\n    if(businessCode = '', 'n/a', businessCode)\n  ) AS series,\n  max(processorDurationMs) AS value\nFROM ph_tx_outcome_v1\nWHERE $__timeFilter(eventTime)\n  AND ('${swarm:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${swarm:csv}'), swarmId))\n  AND ('${callId:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${callId:csv}'), callId))\n  AND ('${businessCode:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${businessCode:csv}'), if(businessCode = '', 'n/a', businessCode)))\nGROUP BY time, swarmId, callId, businessCode\nORDER BY time, series",
+          "refId": "A"
+        }
+      ],
+      "title": "All Groups: Processor Latency Max (ms)",
+      "transformations": [
+        {
+          "id": "prepareTimeSeries",
+          "options": {
+            "format": "many"
+          }
+        }
+      ],
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "description": "Shows business success rate by Grafana time bucket for each swarmId, callId, and businessCode combination in the selected range. Each line is the average of businessSuccess multiplied by 100 for that combination in each bucket.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": true,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": [
+          {
+            "__systemRef": "hideSeriesFrom",
+            "matcher": {
+              "id": "byNames",
+              "options": {
+                "mode": "exclude",
+                "names": [
+                  "success_pct pcs | pcs-topup | n/a"
+                ],
+                "prefix": "All except:",
+                "readOnly": true
+              }
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": false,
+                  "tooltip": true,
+                  "viz": true
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 11,
+        "x": 0,
+        "y": 19
+      },
+      "id": 6,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true,
+          "width": 150
+        },
+        "timezone": [
+          "utc"
+        ],
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.4.1",
+      "targets": [
+        {
+          "editorType": "sql",
+          "format": 2,
+          "meta": {},
+          "pluginVersion": "4.14.0",
+          "queryType": "logs",
+          "rawSql": "SELECT\n  toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n  concat(swarmId, ' | ', if(callId = '', 'unknown', callId), ' | ', if(businessCode = '', 'n/a', businessCode)) AS series,\n  avg(businessSuccess) * 100 AS success_pct\nFROM ph_tx_outcome_v1\nWHERE $__timeFilter(eventTime)\n  AND ('${swarm:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${swarm:csv}'), swarmId))\n  AND ('${callId:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${callId:csv}'), callId))\n  AND ('${businessCode:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${businessCode:csv}'), if(businessCode = '', 'n/a', businessCode)))\nGROUP BY time, swarmId, callId, businessCode\nORDER BY time, series",
+          "refId": "A"
+        }
+      ],
+      "title": "Business Success Rate by Swarm / Call / Business Code",
+      "transformations": [
+        {
+          "id": "prepareTimeSeries",
+          "options": {
+            "format": "many"
+          }
+        }
+      ],
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "description": "Shows processor success rate by Grafana time bucket for each swarmId, callId, and businessCode combination in the selected range. Each line is the average of processorSuccess multiplied by 100 for that combination in each bucket.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": true,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "fieldMinMax": false,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": 0
+              },
+              {
+                "color": "orange",
+                "value": 90
+              },
+              {
+                "color": "#EAB839",
+                "value": 95
+              },
+              {
+                "color": "green",
+                "value": 99
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": [
+          {
+            "__systemRef": "hideSeriesFrom",
+            "matcher": {
+              "id": "byNames",
+              "options": {
+                "mode": "exclude",
+                "names": [
+                  "success_pct ch12h319 | chopin-acceptCardTransferQuote | n/a"
+                ],
+                "prefix": "All except:",
+                "readOnly": true
+              }
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": false,
+                  "tooltip": true,
+                  "viz": true
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 13,
+        "x": 11,
+        "y": 19
+      },
+      "id": 3,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true,
+          "width": 150
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.4.1",
+      "targets": [
+        {
+          "editorType": "sql",
+          "format": 2,
+          "meta": {},
+          "pluginVersion": "4.14.0",
+          "queryType": "logs",
+          "rawSql": "SELECT\n  toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n  concat(swarmId, ' | ', if(callId = '', 'unknown', callId), ' | ', if(businessCode = '', 'n/a', businessCode)) AS series,\n  avg(processorSuccess) * 100 AS success_pct\nFROM ph_tx_outcome_v1\nWHERE $__timeFilter(eventTime)\n  AND ('${swarm:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${swarm:csv}'), swarmId))\n  AND ('${callId:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${callId:csv}'), callId))\n  AND ('${businessCode:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${businessCode:csv}'), if(businessCode = '', 'n/a', businessCode)))\nGROUP BY time, swarmId, callId, businessCode\nORDER BY time, series",
+          "refId": "A"
+        }
+      ],
+      "title": "Processor Success Rate by Swarm / Call / Business Code",
+      "transformations": [
+        {
+          "id": "prepareTimeSeries",
+          "options": {
+            "format": "many"
+          }
+        }
+      ],
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "description": "Shows the 8 group combinations with the highest peak processor latency in the selected range. The base series plot maximum latency per Grafana time bucket for each selected group, and the highlighted overlay marks only the points above 1000 ms.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "left",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "points",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "stepAfter",
+            "lineWidth": 1,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "decimals": 0,
+          "fieldMinMax": true,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "ms"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "custom.pointSize",
+                "value": 8
+              },
+              {
+                "id": "custom.showPoints",
+                "value": "always"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 28
+      },
+      "id": 5,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true,
+          "width": 200
+        },
+        "timezone": [
+          "utc"
+        ],
+        "tooltip": {
+          "hideZeros": true,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.3.3",
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "editorType": "sql",
+          "format": 2,
+          "meta": {
+            "builderOptions": {
+              "columns": [],
+              "database": "",
+              "limit": 100,
+              "mode": "list",
+              "queryType": "table",
+              "table": ""
+            }
+          },
+          "pluginVersion": "4.14.0",
+          "queryType": "logs",
+          "rawSql": "SELECT\n  toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n  concat(\n    swarmId,\n    ' | ',\n    if(callId = '', 'unknown', callId),\n    ' | ',\n    if(businessCode = '', 'n/a', businessCode)\n  ) AS call,\n  max(processorDurationMs) AS latency_max_ms\nFROM ph_tx_outcome_v1\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callId, '${callId:regex}')\n  AND match(if(businessCode = '', 'n/a', businessCode), '${businessCode:regex}')\n  AND concat(\n    swarmId,\n    ' | ',\n    if(callId = '', 'unknown', callId),\n    ' | ',\n    if(businessCode = '', 'n/a', businessCode)\n  ) IN (\n    SELECT call\n    FROM (\n      SELECT\n        concat(\n          swarmId,\n          ' | ',\n          if(callId = '', 'unknown', callId),\n          ' | ',\n          if(businessCode = '', 'n/a', businessCode)\n        ) AS call,\n        max(processorDurationMs) AS peak_latency_ms\n      FROM ph_tx_outcome_v1\n      WHERE $__timeFilter(eventTime)\n        AND match(swarmId, '${swarm:regex}')\n        AND match(callId, '${callId:regex}')\n        AND match(if(businessCode = '', 'n/a', businessCode), '${businessCode:regex}')\n      GROUP BY swarmId, callId, businessCode\n      ORDER BY peak_latency_ms DESC\n      LIMIT 8\n    )\n  )\nGROUP BY time, swarmId, callId, businessCode\nORDER BY time, call",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "editorType": "sql",
+          "format": 2,
+          "queryType": "sql",
+          "rawSql": "SELECT\n  toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n  concat(\n    swarmId,\n    ' | ',\n    if(callId = '', 'unknown', callId),\n    ' | ',\n    if(businessCode = '', 'n/a', businessCode)\n  ) AS call,\n  max(processorDurationMs) AS latency_max_ms\nFROM ph_tx_outcome_v1\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callId, '${callId:regex}')\n  AND match(if(businessCode = '', 'n/a', businessCode), '${businessCode:regex}')\n  AND concat(\n    swarmId,\n    ' | ',\n    if(callId = '', 'unknown', callId),\n    ' | ',\n    if(businessCode = '', 'n/a', businessCode)\n  ) IN (\n    SELECT call\n    FROM (\n      SELECT\n        concat(\n          swarmId,\n          ' | ',\n          if(callId = '', 'unknown', callId),\n          ' | ',\n          if(businessCode = '', 'n/a', businessCode)\n        ) AS call,\n        max(processorDurationMs) AS peak_latency_ms\n      FROM ph_tx_outcome_v1\n      WHERE $__timeFilter(eventTime)\n        AND match(swarmId, '${swarm:regex}')\n        AND match(callId, '${callId:regex}')\n        AND match(if(businessCode = '', 'n/a', businessCode), '${businessCode:regex}')\n      GROUP BY swarmId, callId, businessCode\n      ORDER BY peak_latency_ms DESC\n      LIMIT 8\n    )\n  )\nGROUP BY time, swarmId, callId, businessCode\nHAVING latency_max_ms > 1000\nORDER BY time, call",
+          "refId": "B"
+        }
+      ],
+      "title": "Top 8 Highest-Latency Groups",
+      "transformations": [
+        {
+          "id": "prepareTimeSeries",
+          "options": {
+            "format": "many"
+          }
+        }
+      ],
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "description": "Latency drill-down table for the selected range. Adapted from the RTT-style percentile view, but this dashboard's dataset exposes processorDurationMs, so the p50/p95/p99 and max columns represent processor latency percentiles for each swarm / call / business-code group.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "fieldMinMax": true,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "callId"
+            },
+            "properties": []
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "businessCode"
+            },
+            "properties": []
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 14,
+        "w": 24,
+        "x": 0,
+        "y": 38
+      },
+      "id": 17,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "inverted",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": true,
+        "text": {
+          "titleSize": 20,
+          "valueSize": 25
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.3.3",
+      "targets": [
+        {
+          "editorType": "sql",
+          "format": 1,
+          "meta": {},
+          "pluginVersion": "4.14.0",
+          "queryType": "table",
+          "rawSql": "SELECT\n  swarmId,\n  callIdLabel AS callId,\n  businessCodeLabel AS businessCode,\n  txns,\n  avg_duration_ms,\n  p50_duration_ms,\n  p95_duration_ms,\n  p99_duration_ms,\n  max_duration_ms\nFROM (\n  SELECT\n    swarmId,\n    if(callId = '', 'unknown', callId) AS callIdLabel,\n    if(businessCode = '', 'n/a', businessCode) AS businessCodeLabel,\n    count() AS txns,\n    round(avg(processorDurationMs), 1) AS avg_duration_ms,\n    round(quantileTDigest(0.50)(processorDurationMs), 1) AS p50_duration_ms,\n    round(quantileTDigest(0.95)(processorDurationMs), 1) AS p95_duration_ms,\n    round(quantileTDigest(0.99)(processorDurationMs), 1) AS p99_duration_ms,\n    round(max(processorDurationMs), 1) AS max_duration_ms\n  FROM ph_tx_outcome_v1\n  WHERE $__timeFilter(eventTime)\n    AND match(swarmId, '${swarm:regex}')\n    AND match(callId, '${callId:regex}')\n    AND match(if(businessCode = '', 'n/a', businessCode), '${businessCode:regex}')\n  GROUP BY swarmId, callIdLabel, businessCodeLabel\n)\nORDER BY p99_duration_ms DESC, max_duration_ms DESC\nLIMIT 50",
+          "refId": "A"
+        }
+      ],
+      "title": "Latency Percentiles by Group (p50 / p95 / p99)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "description": "Shows the 50 highest-volume transaction groups in the selected range, ranked by transaction count. Each row summarizes one swarmId, callId, and businessCode combination with processor statuses, count, latency percentiles, and processor and business success rates.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "gauge"
+            },
+            "filterable": true,
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false,
+            "wrapHeaderText": true
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "callId"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 221
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 16,
+        "w": 24,
+        "x": 0,
+        "y": 52
+      },
+      "id": 4,
+      "options": {
+        "cellHeight": "sm",
+        "enablePagination": true,
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "txns"
+          }
+        ]
+      },
+      "pluginVersion": "12.3.3",
+      "targets": [
+        {
+          "editorType": "sql",
+          "format": 1,
+          "queryType": "sql",
+          "rawSql": "SELECT\n  swarmId,\n  callIdLabel AS callId,\n  businessCodeLabel AS businessCode,\n  processorStatuses,\n  txns,\n  avg_duration_ms,\n  p50_duration_ms,\n  p95_duration_ms,\n  p99_duration_ms,\n  processor_success_pct,\n  business_success_pct\nFROM (\n  SELECT\n    swarmId,\n    if(callId = '', 'unknown', callId) AS callIdLabel,\n    if(businessCode = '', 'n/a', businessCode) AS businessCodeLabel,\n    arrayStringConcat(arraySort(groupUniqArray(toString(processorStatus))), ', ') AS processorStatuses,\n    count() AS txns,\n    round(avg(processorDurationMs), 1) AS avg_duration_ms,\n    round(quantileTDigest(0.50)(processorDurationMs), 1) AS p50_duration_ms,\n    round(quantileTDigest(0.95)(processorDurationMs), 1) AS p95_duration_ms,\n    round(quantileTDigest(0.99)(processorDurationMs), 1) AS p99_duration_ms,\n    round(avg(processorSuccess) * 100, 2) AS processor_success_pct,\n    round(avg(businessSuccess) * 100, 2) AS business_success_pct\n  FROM ph_tx_outcome_v1\n  WHERE $__timeFilter(eventTime)\n    AND match(swarmId, '${swarm:regex}')\n    AND match(callId, '${callId:regex}')\n    AND match(if(businessCode = '', 'n/a', businessCode), '${businessCode:regex}')\n  GROUP BY swarmId, callIdLabel, businessCodeLabel\n)\nORDER BY txns DESC\nLIMIT 50",
+          "refId": "A"
+        }
+      ],
+      "title": "Top Transaction Groups by Volume",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "description": "Shows total transaction count per hour for the selected range. Each bar is the exact count of filtered transactions whose eventTime falls into that hour.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 68
+      },
+      "id": 13,
+      "options": {
+        "legend": {
+          "calcs": [
+            "sum",
+            "mean"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.3.3",
+      "targets": [
+        {
+          "editorType": "sql",
+          "format": 2,
+          "queryType": "sql",
+          "rawSql": "SELECT toStartOfHour(eventTime) AS time, count() AS total_transactions FROM ph_tx_outcome_v1 WHERE $__timeFilter(eventTime) AND match(swarmId, '${swarm:regex}') AND match(callId, '${callId:regex}') AND match(if(businessCode = '', 'n/a', businessCode), '${businessCode:regex}') GROUP BY time ORDER BY time",
+          "refId": "A"
+        }
+      ],
+      "title": "Total Transactions per Hour",
+      "type": "timeseries"
+    }
+  ],
+  "preload": false,
+  "refresh": "5m",
+  "schemaVersion": 42,
+  "tags": [
+    "pockethive",
+    "transactions",
+    "overview",
+    "clickhouse",
+    "tx-outcome",
+    "latency"
+  ],
+  "templating": {
+    "list": [
+      {
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "clickhouse"
+        },
+        "definition": "SELECT swarmId FROM ph_tx_outcome_v1 GROUP BY swarmId ORDER BY swarmId LIMIT 200",
+        "includeAll": true,
+        "label": "Swarm",
+        "multi": true,
+        "name": "swarm",
+        "options": [],
+        "query": "SELECT swarmId FROM ph_tx_outcome_v1 GROUP BY swarmId ORDER BY swarmId LIMIT 200",
+        "refresh": 1,
+        "regex": "",
+        "regexApplyTo": "value",
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "clickhouse"
+        },
+        "definition": "SELECT callId FROM ph_tx_outcome_v1 WHERE callId != '' GROUP BY callId ORDER BY callId LIMIT 200",
+        "includeAll": true,
+        "label": "Call ID",
+        "multi": true,
+        "name": "callId",
+        "options": [],
+        "query": "SELECT callId FROM ph_tx_outcome_v1 WHERE callId != '' GROUP BY callId ORDER BY callId LIMIT 200",
+        "refresh": 1,
+        "regex": "",
+        "regexApplyTo": "value",
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "clickhouse"
+        },
+        "definition": "SELECT if(businessCode = '', 'n/a', businessCode) AS businessCodeLabel FROM ph_tx_outcome_v1 GROUP BY businessCodeLabel ORDER BY businessCodeLabel LIMIT 200",
+        "includeAll": true,
+        "label": "Business Code",
+        "multi": true,
+        "name": "businessCode",
+        "options": [],
+        "query": "SELECT if(businessCode = '', 'n/a', businessCode) AS businessCodeLabel FROM ph_tx_outcome_v1 GROUP BY businessCodeLabel ORDER BY businessCodeLabel LIMIT 200",
+        "refresh": 1,
+        "regex": "",
+        "regexApplyTo": "value",
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "p95",
+          "value": "p95"
+        },
+        "label": "Latency Percentile",
+        "name": "latency_percentile",
+        "options": [],
+        "query": "p50,p95,p99",
+        "type": "custom",
+        "valuesFormat": "csv"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Tx Outcomes Overview v4",
+  "uid": "ph-tx-outcomes-v4",
+  "version": 6,
+  "weekStart": ""
+}
