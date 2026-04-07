@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.15.12]
+## [0.15.13]
 Timestamp: 2026-03-26T01:05:36Z
 
 - Scenario Manager: store uploaded scenario ZIP bundles under `scenarios/bundles/<scenarioId>` again, and move temporary upload extraction outside the scenarios authoring root so reloads do not see transient upload directories.
