@@ -83,9 +83,9 @@ LOG_LEVEL=INFO
 
 ## 🎯 Use Cases
 
-### Binary Protocol Testing
+### Payment Processing
 ```bash
-# Fixed-length binary request/response
+# ISO-8583 authorization
 echo "0100..." | nc localhost 8080
 ```
 

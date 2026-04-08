@@ -86,8 +86,25 @@ Create and manage request/response mappings.
    - **Priority** - Higher numbers match first (1-100)
    - **Request Pattern** - Regex pattern to match requests
    - **Response Template** - Response to send back
+   - **Wire Profile** - Binary framing mode (see below)
 
 3. Click **Save**
+
+### Wire Profile
+Controls how the server frames inbound and outbound messages:
+
+| Profile | Use when |
+|---|---|
+| `AUTO` | Unknown protocol — server detects from first bytes |
+| `LINE` | Newline-delimited text (default) |
+| `DELIMITER` | Custom text delimiter (set Request Delimiter field) |
+| `LENGTH_PREFIX_2B` | 2-byte length header (ISO-8583 MC wire profile) |
+| `LENGTH_PREFIX_4B` | 4-byte length header |
+| `FIXED_LENGTH` | Fixed N bytes per frame (set Fixed Frame Length field) |
+| `STX_ETX` | Binary STX (0x02) ... ETX (0x03) framing |
+| `FIRE_FORGET` | No response sent |
+
+> Set `wireProfile` on the **highest-priority** mapping. It applies to the whole connection.
 
 ### Quick Start Templates
 Use the template dropdown to load pre-configured mappings:
@@ -166,7 +183,9 @@ Proxy Target: backend-server:9090
 ```
 
 ### Response Configuration
-- **Delimiter** - Message terminator (default `\n`)
+- **Wire Profile** - Binary framing mode (see Wire Profile section above)
+- **Delimiter** - Response terminator appended after body (default `\n`; use `""` for binary profiles)
+- **Fixed Frame Length** - Frame size in bytes (only for `FIXED_LENGTH` profile)
 - **Delay (ms)** - Add artificial latency
 
 ### Scenarios (Optional)
@@ -403,8 +422,10 @@ Priority: 20
 #### ISO-8583
 ```
 Pattern: ^0200.*
+Wire Profile: LENGTH_PREFIX_2B
 Response: 0210{{message:4}}00
-Priority: 50
+Response Delimiter: (empty)
+Priority: 100
 ```
 
 ### Troubleshooting

@@ -1,3 +1,9 @@
+/** Convert actual control characters in a delimiter to display-safe escaped form (e.g. \n → \\n). */
+function escapeDelimiter(s) {
+    if (!s) return s;
+    return s.replace(/\r/g, '\\r').replace(/\n/g, '\\n').replace(/\t/g, '\\t');
+}
+
 class TcpMockUIUltimate {
     constructor() {
         this.requests = [];
@@ -300,6 +306,12 @@ class TcpMockUIUltimate {
             document.getElementById('responseDelimiter').value = template.delimiter;
             document.getElementById('fixedDelayMs').value = template.fixedDelayMs || 0;
             document.getElementById('mappingDescription').value = template.description;
+            document.getElementById('wireProfile').value = template.wireProfile || '';
+            document.getElementById('fixedFrameLength').value = template.fixedFrameLength || 128;
+            if (template.requestDelimiter) {
+                document.getElementById('requestDelimiter').value = template.requestDelimiter;
+            }
+            this.onWireProfileChange(template.wireProfile || '');
             if (template.advancedMatching) {
                 const type = Object.keys(template.advancedMatching)[0];
                 document.getElementById('advancedMatchType').value = type;
@@ -335,9 +347,12 @@ class TcpMockUIUltimate {
             document.getElementById('mappingPattern').value = mapping.requestPattern;
             document.getElementById('mappingPriority').value = mapping.priority;
             document.getElementById('mappingResponse').value = mapping.responseTemplate;
-            document.getElementById('requestDelimiter').value = mapping.requestDelimiter || '\\n';
-            document.getElementById('responseDelimiter').value = mapping.responseDelimiter || '\\n';
+            document.getElementById('requestDelimiter').value = escapeDelimiter(mapping.requestDelimiter || '\n');
+            document.getElementById('responseDelimiter').value = escapeDelimiter(mapping.responseDelimiter || '\n');
             document.getElementById('fixedDelayMs').value = mapping.fixedDelayMs || 0;
+            document.getElementById('wireProfile').value = mapping.wireProfile || '';
+            document.getElementById('fixedFrameLength').value = mapping.fixedFrameLength || 128;
+            this.onWireProfileChange(mapping.wireProfile || '');
             document.getElementById('scenarioName').value = mapping.scenarioName || '';
             document.getElementById('requiredState').value = mapping.requiredScenarioState || '';
             document.getElementById('newState').value = mapping.newScenarioState || '';
@@ -350,6 +365,9 @@ class TcpMockUIUltimate {
             document.getElementById('requestDelimiter').value = '\\n';
             document.getElementById('responseDelimiter').value = '\\n';
             document.getElementById('fixedDelayMs').value = '0';
+            document.getElementById('wireProfile').value = '';
+            document.getElementById('fixedFrameLength').value = '128';
+            this.onWireProfileChange('');
             document.getElementById('scenarioName').value = '';
             document.getElementById('requiredState').value = '';
             document.getElementById('newState').value = '';
@@ -373,6 +391,24 @@ class TcpMockUIUltimate {
         document.getElementById('proxyResponseFields').classList.toggle('hidden', type !== 'proxy');
     }
 
+    onWireProfileChange(profile) {
+        const isBinary = ['LENGTH_PREFIX_2B', 'LENGTH_PREFIX_4B', 'STX_ETX', 'FIXED_LENGTH', 'FIRE_FORGET'].includes(profile);
+        const isFixed = profile === 'FIXED_LENGTH';
+        // Show/hide fixedFrameLength
+        document.getElementById('fixedFrameLengthField').classList.toggle('hidden', !isFixed);
+        // Dim delimiter fields for binary profiles (they're ignored by the server)
+        document.getElementById('requestDelimiterField').style.opacity = isBinary ? '0.4' : '1';
+        document.getElementById('responseDelimiterField').style.opacity = isBinary ? '0.4' : '1';
+        // Auto-set sensible defaults for binary profiles
+        if (profile === 'LENGTH_PREFIX_2B' || profile === 'LENGTH_PREFIX_4B' || profile === 'FIXED_LENGTH' || profile === 'STX_ETX') {
+            document.getElementById('responseDelimiter').value = '';
+        } else if (profile === '' || profile === 'LINE' || profile === 'DELIMITER' || profile === 'FIRE_FORGET') {
+            if (!document.getElementById('responseDelimiter').value) {
+                document.getElementById('responseDelimiter').value = '\\n';
+            }
+        }
+    }
+
     async saveMapping() {
         const responseType = document.getElementById('responseType').value;
         let responseTemplate = '';
@@ -392,6 +428,11 @@ class TcpMockUIUltimate {
             requestDelimiter: document.getElementById('requestDelimiter').value,
             responseDelimiter: document.getElementById('responseDelimiter').value,
             fixedDelayMs: parseInt(document.getElementById('fixedDelayMs').value) || null,
+            wireProfile: document.getElementById('wireProfile').value || null,
+            fixedFrameLength: document.getElementById('wireProfile').value === 'FIXED_LENGTH'
+                ? parseInt(document.getElementById('fixedFrameLength').value) || 128
+                : null,
+            enabled: this.editingMapping ? this.editingMapping.enabled !== false : true,
             scenarioName: document.getElementById('scenarioName').value || null,
             requiredScenarioState: document.getElementById('requiredState').value || null,
             newScenarioState: document.getElementById('newState').value || null,

@@ -679,12 +679,32 @@
                             <div id="proxyResponseFields" class="hidden">
                                 <input type="text" id="proxyTarget" placeholder="host:port" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white font-mono">
                             </div>
-                            <div class="grid grid-cols-3 gap-4">
+                            <!-- Wire Profile -->
+                            <div class="grid grid-cols-2 gap-4">
                                 <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2" title="Binary framing contract for this connection. Set on the highest-priority mapping.">Wire Profile</label>
+                                    <select id="wireProfile" onchange="tcpMockUI.onWireProfileChange(this.value)" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                                        <option value="">AUTO (detect from first bytes)</option>
+                                        <option value="LINE">LINE — newline-delimited text</option>
+                                        <option value="DELIMITER">DELIMITER — custom text delimiter</option>
+                                        <option value="LENGTH_PREFIX_2B">LENGTH_PREFIX_2B — 2-byte length header</option>
+                                        <option value="LENGTH_PREFIX_4B">LENGTH_PREFIX_4B — 4-byte length header</option>
+                                        <option value="FIXED_LENGTH">FIXED_LENGTH — fixed N bytes</option>
+                                        <option value="STX_ETX">STX_ETX — 0x02...0x03 binary</option>
+                                        <option value="FIRE_FORGET">FIRE_FORGET — no response</option>
+                                    </select>
+                                </div>
+                                <div id="fixedFrameLengthField" class="hidden">
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2" title="Frame size in bytes (FIXED_LENGTH profile only)">Fixed Frame Length (bytes)</label>
+                                    <input type="number" id="fixedFrameLength" value="128" min="1" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-3 gap-4">
+                                <div id="requestDelimiterField">
                                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2" title="Bytes that terminate the inbound request (e.g. \n or &lt;/Document&gt;)">Request Delimiter</label>
                                     <input type="text" id="requestDelimiter" value="\n" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white font-mono" placeholder="\n">
                                 </div>
-                                <div>
+                                <div id="responseDelimiterField">
                                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2" title="Appended after the response body (empty = nothing appended)">Response Delimiter</label>
                                     <input type="text" id="responseDelimiter" value="\n" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white font-mono" placeholder="\n">
                                 </div>

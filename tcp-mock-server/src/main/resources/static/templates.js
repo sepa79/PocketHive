@@ -5,6 +5,7 @@ const MappingTemplates = {
         pattern: '^ECHO.*',
         response: '{{message}}',
         priority: 10,
+        wireProfile: 'LINE',
         delimiter: '\\n',
         description: 'Echo back the received message'
     },
@@ -13,6 +14,7 @@ const MappingTemplates = {
         pattern: '^\\{.*\\}$',
         response: '{"status":"success","timestamp":"{{now}}","data":{{message}}}',
         priority: 20,
+        wireProfile: 'LINE',
         delimiter: '\\n',
         description: 'JSON API mock response',
         advancedMatching: {
@@ -24,6 +26,7 @@ const MappingTemplates = {
         pattern: '^<.*>.*</.*>$',
         response: '<response><status>success</status><data>{{request.xmlPath \'data\'}}</data></response>',
         priority: 20,
+        wireProfile: 'LINE',
         delimiter: '\\n',
         description: 'SOAP service mock',
         advancedMatching: {
@@ -32,17 +35,38 @@ const MappingTemplates = {
     },
     iso8583: {
         id: 'iso8583-',
-        pattern: '^(0100|0200|0400|0800)[0-9A-Fa-f]+$',
-        response: '0110{{transaction_data}}00',
-        priority: 25,
+        pattern: '^0200.*',
+        response: '0210{{message:4}}00',
+        priority: 100,
+        wireProfile: 'LENGTH_PREFIX_2B',
         delimiter: '',
-        description: 'ISO-8583 payment message'
+        description: 'ISO-8583 financial message (2-byte length prefix)'
+    },
+    stxEtx: {
+        id: 'stx-etx-',
+        pattern: '.*',
+        response: '\u0002RESPONSE\u0003',
+        priority: 50,
+        wireProfile: 'STX_ETX',
+        delimiter: '',
+        description: 'STX/ETX binary framing (0x02...0x03)'
+    },
+    xmlDocument: {
+        id: 'xml-doc-',
+        pattern: '.*<RequestBody>.*',
+        response: '<?xml version="1.0"?><Document><ResponseBody>OK</ResponseBody></Document>',
+        priority: 50,
+        wireProfile: 'DELIMITER',
+        requestDelimiter: '</Document>',
+        delimiter: '',
+        description: 'Multi-line XML document protocol'
     },
     faultReset: {
         id: 'fault-reset-',
         pattern: '^FAULT_RESET.*',
         response: '{{fault:CONNECTION_RESET}}',
         priority: 15,
+        wireProfile: 'LINE',
         delimiter: '\\n',
         description: 'Connection reset fault injection'
     },
@@ -51,6 +75,7 @@ const MappingTemplates = {
         pattern: '^FAULT_EMPTY.*',
         response: '{{fault:EMPTY_RESPONSE}}',
         priority: 15,
+        wireProfile: 'LINE',
         delimiter: '\\n',
         description: 'Empty response fault injection'
     },
@@ -59,6 +84,7 @@ const MappingTemplates = {
         pattern: '^PROXY_.*',
         response: '{{proxy:backend-server:8080}}',
         priority: 5,
+        wireProfile: 'LINE',
         delimiter: '\\n',
         description: 'Proxy to real backend system'
     },
@@ -67,6 +93,7 @@ const MappingTemplates = {
         pattern: '^SLOW_.*',
         response: 'DELAYED_RESPONSE',
         priority: 10,
+        wireProfile: 'LINE',
         delimiter: '\\n',
         fixedDelayMs: 1000,
         description: 'Simulated slow response (1 second)'
@@ -76,6 +103,7 @@ const MappingTemplates = {
         pattern: '^AUTH_.*',
         response: '{"status":"authorized","token":"{{uuid}}"}',
         priority: 20,
+        wireProfile: 'LINE',
         delimiter: '\\n',
         scenarioName: 'auth-flow',
         requiredState: 'Started',
@@ -86,8 +114,9 @@ const MappingTemplates = {
 
 const TemplateCategories = {
     basic: ['echo'],
-    api: ['jsonApi', 'soap'],
+    api: ['jsonApi', 'soap', 'xmlDocument'],
     financial: ['iso8583'],
+    binary: ['stxEtx'],
     testing: ['faultReset', 'faultEmpty', 'delayed'],
     advanced: ['proxy', 'scenario']
 };

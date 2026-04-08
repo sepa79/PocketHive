@@ -12,6 +12,7 @@
    - Pre-configured patterns for common protocols
    - Auto-loaded on server startup
    - Covers: ECHO, JSON, STX/ETX, ISO-8583, secure messages
+   - Wire profiles: `LINE`, `DELIMITER`, `STX_ETX`, `LENGTH_PREFIX_2B`
 
 3. **Default Delimiters**
    - Newline (`\n`) for most protocols
@@ -47,15 +48,42 @@ Add ONE mapping file to `tcp-mock-server/mappings/`:
 ```json
 {
   "id": "my-custom-protocol",
+  "wireProfile": "LINE",
   "requestPattern": "^CUSTOM:.*",
-  "responseTemplate": "RESPONSE:{{data}}",
+  "responseTemplate": "RESPONSE:{{message}}",
   "responseDelimiter": "\n",
   "priority": 15,
   "enabled": true
 }
 ```
 
-That's it. No per-scenario configuration.
+For binary length-prefixed protocols:
+```json
+{
+  "id": "my-binary-protocol",
+  "wireProfile": "LENGTH_PREFIX_2B",
+  "requestPattern": ".*",
+  "responseTemplate": "{{message}}",
+  "responseDelimiter": "",
+  "priority": 100,
+  "enabled": true
+}
+```
+
+For STX/ETX binary framing:
+```json
+{
+  "id": "my-stx-etx-protocol",
+  "wireProfile": "STX_ETX",
+  "requestPattern": ".*",
+  "responseTemplate": "\u0002RESPONSE\u0003",
+  "responseDelimiter": "",
+  "priority": 100,
+  "enabled": true
+}
+```
+
+See [CAPABILITIES.md](CAPABILITIES.md#wire-profiles) for the full `wireProfile` reference.
 
 ## Anti-Patterns (DO NOT DO)
 

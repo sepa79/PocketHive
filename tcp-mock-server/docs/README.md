@@ -134,10 +134,10 @@ services:
 }
 ```
 
-### Binary Protocol
+### ISO-8583 Payment
 ```json
 {
-  "id": "binary-protocol",
+  "id": "iso8583-auth",
   "requestPattern": "^0200.*",
   "responseTemplate": "0210{{message:4}}00",
   "priority": 50

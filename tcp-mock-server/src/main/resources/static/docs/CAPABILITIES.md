@@ -10,6 +10,7 @@ Complete overview of TCP Mock Server capabilities, features, and use cases.
 - **Multiple Transports** - Socket, NIO, Netty
 - **Binary & Text** - Handle any data format
 - **Custom Delimiters** - Per-mapping request and response framing
+- **Wire Profiles** - Explicit binary framing modes (see [Wire Profiles](#wire-profiles))
 
 ### 2. Request/Response Mocking
 - **Pattern Matching** - Regex-based request matching
@@ -169,7 +170,7 @@ Mock mainframe or legacy TCP services:
 {
   "pattern": "^STX.*ETX$",
   "response": "STX{{eval(#md5_hex(message))}}ETX",
-  "requestDelimiter": "ETX",
+  "wireProfile": "STX_ETX",
   "responseDelimiter": "",
   "priority": 30
 }
@@ -179,17 +180,46 @@ Mock mainframe or legacy TCP services:
 Accumulate the full XML document before matching:
 ```json
 {
-  "id": "pcs-xml-auth",
+  "id": "xml-doc-handler",
+  "wireProfile": "DELIMITER",
   "requestDelimiter": "</Document>",
-  "requestPattern": ".*<AcqrrAuthstnInitn>.*",
-  "responseTemplate": "<?xml version=\"1.0\"?>...<AcqrrAuthstnRspn>...</AcqrrAuthstnRspn></Document>",
+  "requestPattern": ".*<RequestBody>.*",
+  "responseTemplate": "<?xml version=\"1.0\"?>...<ResponseBody>...</ResponseBody></Document>",
   "responseDelimiter": "",
   "priority": 10
 }
 ```
-`requestDelimiter` tells the server to buffer bytes until `</Document>` is seen before
-attempting to match. `responseDelimiter: ""` means the response body is written as-is
-(it already ends with `</Document>`).
+`wireProfile: DELIMITER` tells the server to buffer bytes until `requestDelimiter` is seen
+before attempting to match. `responseDelimiter: ""` means the response body is written as-is.
+
+### 8. Binary Length-Prefixed Protocols
+Handle protocols with a 2-byte or 4-byte length header:
+```json
+{
+  "id": "iso8583-2byte-len",
+  "wireProfile": "LENGTH_PREFIX_2B",
+  "requestPattern": "^0200.*",
+  "responseTemplate": "0210{{message:4}}00",
+  "responseDelimiter": "",
+  "priority": 100
+}
+```
+The server strips the inbound length header before matching and automatically prepends
+a 2-byte length header on the response — matching what `LengthPrefix2BResponseReader` expects.
+
+### 9. Fixed-Length Frames
+Handle protocols where every message is exactly N bytes:
+```json
+{
+  "id": "fixed-256",
+  "wireProfile": "FIXED_LENGTH",
+  "fixedFrameLength": 256,
+  "requestPattern": ".*",
+  "responseTemplate": "{{message}}",
+  "responseDelimiter": "",
+  "priority": 50
+}
+```
 
 ### 4. Load Testing
 Generate realistic responses under load:
@@ -465,8 +495,36 @@ curl http://localhost:8080/api/metrics
 
 ---
 
-## Roadmap
+## Wire Profiles
 
+The `wireProfile` field on a mapping declares the binary framing contract for the TCP
+connection. When set on the highest-priority enabled mapping, it overrides auto-detection.
+
+| `wireProfile` | Inbound framing | Outbound framing | Use case |
+|---|---|---|---|
+| `AUTO` *(default)* | Auto-detected from first bytes | Matches detected profile | Unknown or mixed protocols |
+| `LINE` | Newline (`\n`) delimited | Append `responseDelimiter` | Plain text protocols |
+| `DELIMITER` | Buffer until `requestDelimiter` | Append `responseDelimiter` | XML documents, custom text |
+| `LENGTH_PREFIX_2B` | Strip 2-byte big-endian length header | Prepend 2-byte length header | ISO-8583 MC wire profile, financial |
+| `LENGTH_PREFIX_4B` | Strip 4-byte big-endian length header | Prepend 4-byte length header | Generic binary protocols |
+| `FIXED_LENGTH` | Read exactly `fixedFrameLength` bytes | No delimiter added | Mainframe, fixed-record systems |
+| `STX_ETX` | Buffer between `0x02` and `0x03` bytes | No delimiter added | Legacy binary, POS terminals |
+| `FIRE_FORGET` | Line-delimited (no response sent) | None | One-way notifications |
+
+### Notes
+- `wireProfile` is resolved from the **highest-priority enabled mapping**. All connections
+  on the port share the same framing — design mappings so the highest-priority one declares
+  the correct profile for the protocol in use.
+- `FIXED_LENGTH` requires `fixedFrameLength` to be set. If omitted, defaults to 128 bytes.
+- `LENGTH_PREFIX_2B` and `LENGTH_PREFIX_4B` automatically handle both inbound stripping
+  and outbound prepending — the `responseTemplate` should contain only the payload body.
+- `STX_ETX` passes the full frame including STX/ETX bytes to the matcher and template engine.
+- When `wireProfile` is absent or `AUTO`, the server inspects the first 4 bytes to detect
+  the protocol. Explicit declaration is always preferred for production mappings.
+
+---
+
+## Roadmap
 ### Planned Features
 - GraphQL support
 - WebSocket mocking
