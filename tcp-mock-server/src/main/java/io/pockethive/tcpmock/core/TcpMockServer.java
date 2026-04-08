@@ -88,7 +88,7 @@ public class TcpMockServer implements CommandLineRunner {
                         pipeline.addLast(new IdleStateHandler(config.getConnection().getIdleTimeout(), 0, 0));
 
                         // Protocol detection and framing
-                        pipeline.addLast(new ProtocolDetectionHandler(config));
+                        pipeline.addLast(new ProtocolDetectionHandler(config, messageTypeRegistry));
 
                         // Dual handler: String for text, ByteBuf for binary
                         pipeline.addLast("textHandler", requestHandler);

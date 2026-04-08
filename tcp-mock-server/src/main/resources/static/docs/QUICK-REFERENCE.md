@@ -101,15 +101,38 @@
 }
 ```
 
+## 🔌 Wire Profiles
+
+```json
+{
+  "wireProfile": "AUTO"             // Auto-detect from first bytes (default)
+  "wireProfile": "LINE"             // Newline-delimited text
+  "wireProfile": "DELIMITER"        // Custom delimiter (set requestDelimiter)
+  "wireProfile": "LENGTH_PREFIX_2B" // 2-byte big-endian length header (ISO-8583 MC)
+  "wireProfile": "LENGTH_PREFIX_4B" // 4-byte big-endian length header
+  "wireProfile": "FIXED_LENGTH"     // Fixed N bytes (set fixedFrameLength)
+  "wireProfile": "STX_ETX"          // 0x02...0x03 binary framing
+  "wireProfile": "FIRE_FORGET"      // No response sent
+}
+```
+
+> `wireProfile` is resolved from the highest-priority enabled mapping and applies to
+> the entire connection. Explicit declaration is always preferred over `AUTO`.
+
 ## 📊 Delimiters
 
 ```json
 {
-  "responseDelimiter": "\n"       // Newline (default)
-  "responseDelimiter": "\u0003"   // ETX character
-  "responseDelimiter": ""         // No delimiter (binary)
+  "requestDelimiter": "\n",          // Buffer until newline (default; used with LINE/DELIMITER)
+  "requestDelimiter": "</Document>", // Buffer until closing tag (use with DELIMITER)
+  "responseDelimiter": "\n",         // Append newline after response (default)
+  "responseDelimiter": "",           // Nothing appended (LENGTH_PREFIX_*, STX_ETX, FIXED_LENGTH)
+  "fixedFrameLength": 256            // Frame size in bytes (FIXED_LENGTH only)
 }
 ```
+
+> `requestDelimiter` and `responseDelimiter` are only used by `LINE`, `DELIMITER`, and
+> `FIRE_FORGET` profiles. Length-prefix and fixed-length profiles ignore them.
 
 ## 🔍 Admin API
 
@@ -139,6 +162,8 @@ GET /__admin/health
 {
   "id": "payment-processing",
   "requestPattern": "^\\{.*\\}$",
+  "wireProfile": "LINE",
+  "requestDelimiter": "\n",
   "advancedMatching": {
     "jsonPath": {
       "expression": "$.type",
@@ -148,7 +173,7 @@ GET /__admin/health
       "greaterThan": 50
     }
   },
-  "responseTemplate": "{\"status\":\"approved\",\"transactionId\":\"{{uuid}}\",\"amount\":\"{{request.jsonPath '$.amount'}}\",\"timestamp\":\"{{now}}\"}",
+  "responseTemplate": "{\"status\":\"approved\",\"transactionId\":\"{{uuid}}\",\"timestamp\":\"{{now}}\"}",
   "responseDelimiter": "\n",
   "fixedDelayMs": 100,
   "description": "Payment processing with validation",
@@ -157,6 +182,18 @@ GET /__admin/health
   "scenarioName": "payment-flow",
   "requiredScenarioState": "Started",
   "newScenarioState": "Authorized"
+}
+```
+
+### Binary length-prefix example
+```json
+{
+  "id": "iso8583-auth",
+  "wireProfile": "LENGTH_PREFIX_2B",
+  "requestPattern": "^0200.*",
+  "responseTemplate": "0210{{message:4}}00",
+  "responseDelimiter": "",
+  "priority": 100
 }
 ```
 

@@ -78,6 +78,8 @@ public class MessageTypeRegistry {
             if (patternMatch && advancedMatch) {
                 // Check scenario state if required
                 if (mapping.getScenarioName() != null && mapping.getRequiredScenarioState() != null) {
+                    // Ensure state exists before checking — initialises to "Started" if first access
+                    stateManager.getOrCreateScenarioState(mapping.getScenarioName());
                     if (!stateManager.isInState(mapping.getScenarioName(), mapping.getRequiredScenarioState())) {
                         continue;
                     }

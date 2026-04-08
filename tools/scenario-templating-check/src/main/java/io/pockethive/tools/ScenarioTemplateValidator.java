@@ -3,7 +3,7 @@ package io.pockethive.tools;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
-import io.pockethive.httpbuilder.HttpTemplateDefinition;
+import io.pockethive.requesttemplates.HttpTemplateDefinition;
 import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerInfo;
 import io.pockethive.worker.sdk.templating.PebbleTemplateRenderer;
@@ -77,13 +77,22 @@ public final class ScenarioTemplateValidator {
             ex.printStackTrace(System.err);
             System.exit(2);
         }
+        System.exit(0);
     }
 
     private static void renderGenerator(TemplateRenderer renderer, Map<String, Object> scenario, Map<String, Object> context) {
         Map<String, Object> template = asMap(scenario.get("template"), "template");
         List<?> bees = asList(template.get("bees"), "template.bees");
         Map<String, Object> generator = bees.stream()
-            .filter(o -> "generator".equalsIgnoreCase(String.valueOf(asMap(o, "bee").get("role"))))
+            .filter(o -> {
+                Map<String, Object> bee = asMap(o, "bee");
+                String role = String.valueOf(bee.get("role"));
+                if ("generator".equalsIgnoreCase(role)) return true;
+                // Also match custom-named bees that have generator config shape (inputs + worker.message)
+                Object cfg = bee.get("config");
+                if (!(cfg instanceof Map<?, ?> cfgMap)) return false;
+                return cfgMap.containsKey("inputs");
+            })
             .map(o -> asMap(o, "bee"))
             .findFirst()
             .orElseThrow(() -> new IllegalArgumentException("No generator bee found in scenario"));
@@ -377,11 +386,12 @@ public final class ScenarioTemplateValidator {
             return new HttpTemplateDefinition(
                 serviceId,
                 raw.callId(),
+                raw.protocol(),
                 raw.method(),
                 raw.pathTemplate(),
                 raw.bodyTemplate(),
                 raw.headersTemplate(),
-                raw.schemaRef()
+                raw.auth()
             );
         } catch (Exception ex) {
             throw new IllegalStateException("Failed to parse HTTP template " + path, ex);

@@ -13,6 +13,7 @@ public class ProcessedResponse {
     
     public ProcessedResponse(String response, String delimiter, Integer delayMs, FaultType fault, String proxyTarget) {
         this.response = response;
+        // null means "use default newline"; empty string means "no delimiter" (caller is explicit)
         this.delimiter = delimiter != null ? delimiter : "\n";
         this.delayMs = delayMs;
         this.fault = fault;

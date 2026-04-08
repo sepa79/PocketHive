@@ -23,14 +23,14 @@ public class EnhancedTemplateEngine {
     
     public ProcessedResponse processTemplate(String template, String originalMessage, MockState state, Integer delayMs) {
         if (template == null) {
-            return new ProcessedResponse("", "\n");
+            return new ProcessedResponse("", null);
         }
         
         // Check for fault injection
         Matcher faultMatcher = faultPattern.matcher(template);
         if (faultMatcher.find()) {
             String faultType = faultMatcher.group(1);
-            return new ProcessedResponse("", "\n", delayMs, ProcessedResponse.FaultType.valueOf(faultType), null);
+            return new ProcessedResponse("", null, delayMs, ProcessedResponse.FaultType.valueOf(faultType), null);
         }
         
         // Check for proxy
@@ -38,7 +38,7 @@ public class EnhancedTemplateEngine {
         if (proxyMatcher.find()) {
             String host = proxyMatcher.group(1);
             String port = proxyMatcher.group(2);
-            return new ProcessedResponse("", "\n", delayMs, null, host + ":" + port);
+            return new ProcessedResponse("", null, delayMs, null, host + ":" + port);
         }
         
         // Process normal template
@@ -52,7 +52,7 @@ public class EnhancedTemplateEngine {
         }
         matcher.appendTail(result);
         
-        return new ProcessedResponse(result.toString(), "\n", delayMs, null, null);
+        return new ProcessedResponse(result.toString(), null, delayMs, null, null);
     }
     
     private String evaluateExpression(String expression, String message, MockState state) {
