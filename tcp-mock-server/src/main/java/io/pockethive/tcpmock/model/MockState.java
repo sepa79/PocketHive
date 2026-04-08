@@ -34,6 +34,12 @@ public class MockState {
         this.stepCount++;
     }
 
+    /** Sync the state string without incrementing stepCount (used by StateManager cache sync). */
+    public void setCurrentStateQuiet(String currentState) {
+        this.currentState = currentState;
+        this.lastUpdated = Instant.now();
+    }
+
     public String getNextState() { return nextState; }
     public void setNextState(String nextState) { this.nextState = nextState; }
 
@@ -56,7 +62,7 @@ public class MockState {
     }
 
     public void reset() {
-        this.currentState = null;
+        this.currentState = "Started";
         this.nextState = null;
         this.variables.clear();
         this.stepCount = 0;

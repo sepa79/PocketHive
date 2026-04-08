@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.15.14]
+Timestamp: 2026-03-30T00:00:00Z
+
+- TCP Mock Server / wire profiles: add `wireProfile` field (`AUTO`, `LINE`, `DELIMITER`, `LENGTH_PREFIX_2B`, `LENGTH_PREFIX_4B`, `FIXED_LENGTH`, `STX_ETX`, `FIRE_FORGET`) and `fixedFrameLength` to `MessageTypeMapping` so mapping authors declare the binary framing contract explicitly instead of relying on auto-detection.
+- TCP Mock Server / `ProtocolDetectionHandler`: rewrite to honour `wireProfile` from the highest-priority mapping before byte inspection; add `TwoByteLengthPrepender` and `FourByteLengthPrepender` outbound handlers so length-prefixed responses are correctly framed for `LengthPrefix2BResponseReader` / `LengthPrefix4BResponseReader` on the processor side.
+- TCP Mock Server / `MappingAwareFrameDecoder`: rewrite to re-evaluate delimiters on every decode pass and use custom delimiters exclusively when present, preventing `\n` from splitting multi-line XML or binary payloads prematurely.
+- TCP Mock Server / `StxEtxFrameDecoder`: new handler for `STX (0x02) ... ETX (0x03)` binary framing.
+- TCP Mock Server / scenario state: fix three bugs — (1) first request to a scenario mapping never matched because `isInState` was called before the state was initialised; (2) `MockState.reset()` set `currentState` to `null` instead of `"Started"` breaking post-reset matching; (3) `StateManager` and `ScenarioManager` maintained separate state maps so the REST API and matching logic saw different state — unified by making `StateManager` delegate to `ScenarioManager` as the single source of truth.
+- TCP Mock Server / UI: add `wireProfile` dropdown and `fixedFrameLength` input to the mapping edit form; show/hide `fixedFrameLength` based on profile; dim delimiter fields for binary profiles; preserve `enabled` flag when editing a mapping; add `escapeDelimiter()` so actual `\n` bytes display correctly in the form; update all quick-start templates with correct `wireProfile`; add `STX_ETX` and `DELIMITER/XML` templates.
+- TCP Mock Server / docs: add Wire Profiles reference table to `CAPABILITIES.md` and `QUICK-REFERENCE.md`; update use-case examples and `SCENARIO-SETUP.md` with `wireProfile` examples; update `UI-USER-GUIDE.md` with Wire Profile field documentation.
+- `ScenarioTemplateValidator`: add `System.exit(0)` after successful validation so the JVM terminates immediately in non-interactive environments (Pebble non-daemon threads previously kept the process alive indefinitely).
+
 ## [0.15.13]
 Timestamp: 2026-03-26T01:05:36Z
 
