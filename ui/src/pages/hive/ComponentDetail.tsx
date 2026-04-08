@@ -32,7 +32,7 @@ export default function ComponentDetail({ component, onClose }: Props) {
   const [showRefreshTooltip, setShowRefreshTooltip] = useState(false)
   const [sutLookup, setSutLookup] = useState<Record<string, { name: string; type: string | null }>>({})
   const [scenarioRunsInput, setScenarioRunsInput] = useState('')
-  const { ensureCapabilities, getManifestForImage, manifests } = useCapabilities()
+  const { ensureCapabilities, manifests, resolveManifestForImage } = useCapabilities()
   const { ensureSwarms, refreshSwarms, getBeeImage, getControllerImage, findSwarm } =
     useSwarmMetadata()
   const resolvedImage = useMemo(() => {
@@ -68,10 +68,11 @@ export default function ComponentDetail({ component, onClose }: Props) {
       ? (componentConfig.scenario as Record<string, unknown>)
       : undefined
 
-  const manifest = useMemo(
-    () => getManifestForImage(resolvedImage),
-    [resolvedImage, getManifestForImage],
+  const manifestResolution = useMemo(
+    () => resolveManifestForImage(resolvedImage),
+    [resolvedImage, resolveManifestForImage],
   )
+  const manifest = manifestResolution.manifest
   const refreshTooltipTimer = useRef<number | null>(null)
 
   useEffect(() => {
@@ -866,6 +867,18 @@ export default function ComponentDetail({ component, onClose }: Props) {
               <span className="text-white/90">{entry.value}</span>
             </div>
           ))}
+        </div>
+      )}
+      {manifestResolution.kind === 'fallback_tag' && manifest && (
+        <div className="mb-4 rounded border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+          Capability fallback active: runtime image tag
+          {' '}
+          <code>{manifestResolution.requestedTag ?? 'unknown'}</code>
+          {' '}
+          is using capability manifest tag
+          {' '}
+          <code>{manifestResolution.resolvedTag ?? manifest.image.tag ?? 'unknown'}</code>.
+          Update the capability manifest for this component version if the config surface changed.
         </div>
       )}
       {normalizedRole === 'swarm-controller' && (

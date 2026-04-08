@@ -21,6 +21,7 @@ import java.util.Optional;
 @RestController
 @RequestMapping("/api")
 public class CapabilityCatalogueController {
+    static final String CAPABILITY_FALLBACK_TAG_HEADER = "X-Pockethive-Capability-Fallback-Tag";
 
     private final AvailableScenarioRegistry availableScenarios;
     private final CapabilityCatalogueService catalogue;
@@ -44,18 +45,18 @@ public class CapabilityCatalogueController {
                                         @RequestParam(name = "tag", required = false) String tag,
                                         @RequestParam(name = "all", defaultValue = "false") boolean all) {
         if (all) {
-            return ResponseEntity.ok(catalogue.allManifests());
+            return applyCapabilityMetadata(ResponseEntity.ok()).body(catalogue.allManifests());
         }
 
         if (hasText(imageDigest)) {
             Optional<CapabilityManifest> manifest = catalogue.findByDigest(imageDigest);
-            return manifest.<ResponseEntity<?>>map(ResponseEntity::ok)
+            return manifest.<ResponseEntity<?>>map(value -> applyCapabilityMetadata(ResponseEntity.ok()).body(value))
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         }
 
         if (hasText(imageName) && hasText(tag)) {
             Optional<CapabilityManifest> manifest = catalogue.findByNameAndTag(imageName, tag);
-            return manifest.<ResponseEntity<?>>map(ResponseEntity::ok)
+            return manifest.<ResponseEntity<?>>map(value -> applyCapabilityMetadata(ResponseEntity.ok()).body(value))
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         }
 
@@ -75,6 +76,14 @@ public class CapabilityCatalogueController {
 
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private ResponseEntity.BodyBuilder applyCapabilityMetadata(ResponseEntity.BodyBuilder builder) {
+        String fallbackTag = catalogue.capabilityFallbackTag();
+        if (hasText(fallbackTag)) {
+            builder.header(CAPABILITY_FALLBACK_TAG_HEADER, fallbackTag.trim());
+        }
+        return builder;
     }
 
     public record ScenarioTemplateView(String id,
