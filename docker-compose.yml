@@ -80,14 +80,11 @@ services:
     #   - "9090:9090"
 
   grafana:
-    build:
-      context: ./grafana
-      dockerfile: Dockerfile
-    image: grafana-pockethive:local
+    image: grafana/grafana
     environment:
       GF_SECURITY_ADMIN_USER: pockethive
       GF_SECURITY_ADMIN_PASSWORD: pockethive
-      # GF_INSTALL_PLUGINS removed — plugin is baked into the image via grafana/Dockerfile
+      GF_INSTALL_PLUGINS: grafana-clickhouse-datasource
     volumes:
       - ./grafana/grafana.ini:/etc/grafana/grafana.ini:ro
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
@@ -250,14 +247,13 @@ services:
     depends_on:
       - prometheus
 
-  # toxiproxy: built locally from toxiproxy/Dockerfile (ghcr.io blocked by corporate proxy)
   toxiproxy:
-    image: toxiproxy:2.11.0
+    image: ghcr.io/shopify/toxiproxy:2.11.0
     command: ["-host", "0.0.0.0"]
     ports:
       - "18474:8474"
     healthcheck:
-      test: ["CMD", "/usr/local/bin/toxiproxy-cli", "-host", "localhost", "-port", "8474", "list"]
+      test: ["CMD", "/toxiproxy-cli", "list"]
       interval: 5s
       timeout: 5s
       retries: 10

@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.15.15]
+Timestamp: 2026-04-09T15:46:49Z
+
+- Local compose stack: revert the incomplete image changes introduced in the previous merge so `grafana` again uses `grafana/grafana` with `GF_INSTALL_PLUGINS=grafana-clickhouse-datasource`, instead of a missing local `grafana/Dockerfile` build target.
+- Local compose stack: restore `toxiproxy` to `ghcr.io/shopify/toxiproxy:2.11.0` and revert its healthcheck path to `/toxiproxy-cli`, fixing `build-hive.sh --quick` failures caused by `docker compose up` trying to pull the nonexistent `toxiproxy:2.11.0` image.
+
 ## [0.15.14]
 Timestamp: 2026-03-30T00:00:00Z
 
