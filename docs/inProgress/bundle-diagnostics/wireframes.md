@@ -18,32 +18,31 @@ ASCII wireframes for all affected UI surfaces. Uses existing CSS classes from `u
 │ │ Could not read scenario file: mapping values are not allowed here        │ │
 │ │ at line 5, column 8                                                      │ │
 │ │ ─────────────────────────────────────────────────────────────────────── │ │
-│ │ bundles/old-duplicate                                                    │ │
-│ │ Duplicate scenario id 'local-rest' — another bundle at                   │ │
-│ │ 'bundles/local-rest' was loaded instead                                  │ │
+│ │ bundles/my-scenario-copy                                                 │ │
+│ │ Duplicate scenario id 'my-scenario' — another bundle at                  │ │
+│ │ 'bundles/my-scenario' was loaded instead                                 │ │
 │ └─────────────────────────────────────────────────────────────────────────┘ │
 │                                                                               │
 │ ┌──────────────────────────────┐  ┌──────────────────────────────────────┐  │
 │ │ Folders          [Refresh]   │  │ Details                  [SELECTED]  │  │
 │ │                              │  │                                      │  │
-│ │ Filter: [All folders    ▼]   │  │ ID      ctap-iso8583-request-builder │  │
+│ │ Filter: [All folders    ▼]   │  │ ID      my-broken-scenario           │  │
 │ │ New folder: [          ]     │  │ Folder  bundles                      │  │
 │ │ [Add] [Delete (empty only)]  │  │                                      │  │
 │ │                              │  │ ┌──────────────────────────────────┐ │  │
 │ ├──────────────────────────────┤  │ │ DEFUNCT  This bundle cannot be   │ │  │  ← pillBad card
-│ │ Scenarios              [16]  │  │ │          used to create a swarm  │ │  │    pillBad border
+│ │ Scenarios              [8]   │  │ │          used to create a swarm  │ │  │    pillBad border
 │ │                              │  │ │                                  │ │  │
-│ │ ▶ bundles (12)               │  │ │ No capability manifest found for │ │  │
-│ │   ▶ ctap (1)                 │  │ │ image 'io.pockethive/generator:  │ │  │
-│ │   │  [ctap-iso8583] [DEFUNCT]│  │ │ 0.15.11' (bee: generator).      │ │  │
-│ │   ▶ webauth (4)              │  │ │ Check that this image version    │ │  │
-│ │   │  [webauth-balance-redis] │  │ │ is installed.                    │ │  │
-│ │   │  [webauth-loop-redis]    │  │ └──────────────────────────────────┘ │  │
-│ │   │  ...                     │  │                                      │  │
-│ │ ▶ (root) (4)                 │  │ Move to folder: [root          ▼]   │  │
-│ │   [local-rest]               │  │                                      │  │
-│ │   [local-rest-topology]      │  │ [Move] [Download bundle]             │  │
-│ │   ...                        │  │ [Delete bundle]                      │  │
+│ │ ▶ bundles (4)                │  │ │ No capability manifest found for │ │  │
+│ │   ▶ demo (1)                 │  │ │ image 'io.pockethive/generator:0.15.11'           │ │  │
+│ │   │  [my-broken] [DEFUNCT]   │  │ │ (bee: generator). Check that     │ │  │
+│ │   ▶ perf (2)                 │  │ │ this image version is installed. │ │  │
+│ │   │  [perf-scenario-a]       │  │ └──────────────────────────────────┘ │  │
+│ │   │  [perf-scenario-b]       │  │                                      │  │
+│ │ ▶ (root) (2)                 │  │ Move to folder: [root          ▼]   │  │
+│ │   [my-scenario]              │  │                                      │  │
+│ │   [my-scenario-2]            │  │ [Move] [Download bundle]             │  │
+│ │                              │  │ [Delete bundle]                      │  │
 │ └──────────────────────────────┘  └──────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -90,19 +89,19 @@ ASCII wireframes for all affected UI surfaces. Uses existing CSS classes from `u
 │ │ 1 template(s) unavailable —      │  │                                  │  │
 │ │ hover for details                │  │                                  │  │
 │ │ ─────────────────────────────── │  │                                  │  │
-│ │ ▶ bundles (12)                   │  │                                  │  │
-│ │   ▶ ctap (1)                     │  │                                  │  │
+│ │ ▶ bundles (4)                    │  │                                  │  │
+│ │   ▶ demo (1)                     │  │                                  │  │
 │ │   │                              │  │                                  │  │
 │ │   │  ┌───────────────────────┐   │  │                                  │  │
-│ │   │  │ CTAP ISO8583   DEFUNCT│   │  │  ← opacity 0.45, cursor:not-    │  │
-│ │   │  │ bundles/ctap/ctap-... │   │  │    allowed, title=reason        │  │
+│ │   │  │ My Broken   DEFUNCT   │   │  │  ← opacity 0.45, cursor:not-    │  │
+│ │   │  │ bundles/demo/my-bro.. │   │  │    allowed, title=reason        │  │
 │ │   │  │ No capability manifest│   │  │                                  │  │
 │ │   │  │ found for image...    │   │  │                                  │  │
 │ │   │  └───────────────────────┘   │  │                                  │  │
-│ │   ▶ webauth (4)                  │  │                                  │  │
+│ │   ▶ perf (2)                     │  │                                  │  │
 │ │   │  ┌───────────────────────┐   │  │                                  │  │
-│ │   │  │ WebAuth Balance Redis │   │  │                                  │  │
-│ │   │  │ bundles/webauth/...   │   │  │                                  │  │
+│ │   │  │ Perf Scenario A       │   │  │                                  │  │
+│ │   │  │ bundles/perf/...      │   │  │                                  │  │
 │ │   │  │ No description        │   │  │                                  │  │
 │ │   │  └───────────────────────┘   │  │                                  │  │
 │ └──────────────────────────────────┘  └──────────────────────────────────┘  │

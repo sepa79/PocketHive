@@ -12,16 +12,16 @@ Query param `includeDefunct` (default `false`) behaviour unchanged. Response sha
 ```json
 [
   {
-    "id": "local-rest",
-    "name": "Local REST",
+    "id": "my-scenario",
+    "name": "My Scenario",
     "folderPath": null,
     "defunct": false,
     "defunctReason": null
   },
   {
-    "id": "ctap-iso8583-request-builder-demo",
-    "name": "CTAP ISO8583 Request Builder Demo",
-    "folderPath": "bundles/ctap-iso8583-rbuilder-scenario",
+    "id": "my-broken-scenario",
+    "name": "My Broken Scenario",
+    "folderPath": "bundles/my-broken-scenario",
     "defunct": true,
     "defunctReason": "No capability manifest found for image 'io.pockethive/generator:0.15.11' (bee: generator). Check that this image version is installed."
   }
@@ -44,10 +44,10 @@ Used by `CreateSwarmModal`. Previously only returned available (non-defunct) sce
 ```json
 [
   {
-    "id": "local-rest",
-    "name": "Local REST",
+    "id": "my-scenario",
+    "name": "My Scenario",
     "folderPath": null,
-    "description": "Simple local REST swarm",
+    "description": "A simple swarm scenario",
     "controllerImage": "swarm-controller:latest",
     "bees": [
       { "role": "generator", "image": "generator:latest" }
@@ -56,13 +56,13 @@ Used by `CreateSwarmModal`. Previously only returned available (non-defunct) sce
     "defunctReason": null
   },
   {
-    "id": "ctap-iso8583-request-builder-demo",
-    "name": "CTAP ISO8583",
-    "folderPath": "bundles/ctap-iso8583-rbuilder-scenario",
+    "id": "my-broken-scenario",
+    "name": "My Broken Scenario",
+    "folderPath": "bundles/my-broken-scenario",
     "description": null,
-    "controllerImage": "swarm-controller:0.15.11",
+    "controllerImage": "io.pockethive/swarm-controller:0.15.11",
     "bees": [
-      { "role": "generator", "image": "generator:0.15.11" }
+      { "role": "generator", "image": "io.pockethive/generator:0.15.11" }
     ],
     "defunct": true,
     "defunctReason": "No capability manifest found for image 'io.pockethive/generator:0.15.11' (bee: generator). Check that this image version is installed."
@@ -87,7 +87,7 @@ Returns bundles that could not be loaded at all during the last `reload()`. Thes
   },
   {
     "bundlePath": "bundles/old-duplicate",
-    "reason": "Duplicate scenario id 'local-rest' — another bundle at 'bundles/local-rest' was loaded instead"
+    "reason": "Duplicate scenario id 'my-scenario' — another bundle at 'bundles/my-scenario-copy' was loaded instead"
   }
 ]
 ```
