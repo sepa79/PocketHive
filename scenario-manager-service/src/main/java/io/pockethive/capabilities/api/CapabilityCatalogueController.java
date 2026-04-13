@@ -4,6 +4,7 @@ import io.pockethive.capabilities.CapabilityCatalogueService;
 import io.pockethive.capabilities.CapabilityManifest;
 import io.pockethive.scenarios.AvailableScenarioRegistry;
 import io.pockethive.scenarios.Scenario;
+import io.pockethive.scenarios.ScenarioService;
 import io.pockethive.scenarios.ScenarioSummary;
 import io.pockethive.swarm.model.SwarmTemplate;
 import org.springframework.http.HttpStatus;
@@ -25,17 +26,20 @@ public class CapabilityCatalogueController {
 
     private final AvailableScenarioRegistry availableScenarios;
     private final CapabilityCatalogueService catalogue;
+    private final ScenarioService scenarioService;
 
     public CapabilityCatalogueController(AvailableScenarioRegistry availableScenarios,
-                                         CapabilityCatalogueService catalogue) {
+                                         CapabilityCatalogueService catalogue,
+                                         ScenarioService scenarioService) {
         this.availableScenarios = availableScenarios;
         this.catalogue = catalogue;
+        this.scenarioService = scenarioService;
     }
 
     @GetMapping(value = "/templates", produces = MediaType.APPLICATION_JSON_VALUE)
     public List<ScenarioTemplateView> templates() {
-        return availableScenarios.list().stream()
-                .map(summary -> buildScenarioTemplate(summary, availableScenarios.find(summary.id()).orElse(null)))
+        return scenarioService.listAllSummaries().stream()
+                .map(summary -> buildScenarioTemplate(summary, scenarioService.find(summary.id()).orElse(null)))
                 .toList();
     }
 
@@ -71,7 +75,7 @@ public class CapabilityCatalogueController {
                 .toList();
         return new ScenarioTemplateView(summary.id(), summary.name(), summary.folderPath(),
                 scenario != null ? scenario.getDescription() : null,
-                controllerImage, bees);
+                controllerImage, bees, summary.defunct(), summary.defunctReason());
     }
 
     private boolean hasText(String value) {
@@ -91,7 +95,9 @@ public class CapabilityCatalogueController {
                                        String folderPath,
                                        String description,
                                        String controllerImage,
-                                       List<BeeImage> bees) { }
+                                       List<BeeImage> bees,
+                                       boolean defunct,
+                                       String defunctReason) { }
 
     public record BeeImage(String role, String image) { }
 }

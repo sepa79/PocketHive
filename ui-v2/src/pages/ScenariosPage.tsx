@@ -5,12 +5,15 @@ import {
   deleteScenarioBundle,
   deleteScenarioFolder,
   downloadScenarioBundle,
+  listBundleFailures,
   listScenarioFolders,
   listScenarios,
   moveScenarioToFolder,
+  type BundleLoadFailure,
   type ScenarioSummary,
   uploadScenarioBundle,
 } from '../lib/scenariosApi'
+import { BundleFailuresBanner } from '../components/scenarios/BundleFailuresBanner'
 
 type FolderFilter = { kind: 'all' } | { kind: 'root' } | { kind: 'folder'; path: string }
 type ScenarioFolderNode = {
@@ -88,6 +91,7 @@ export function ScenariosPage() {
   const [error, setError] = useState<string | null>(null)
   const [folders, setFolders] = useState<string[]>([])
   const [items, setItems] = useState<ScenarioSummary[]>([])
+  const [failures, setFailures] = useState<BundleLoadFailure[]>([])
   const [filter, setFilter] = useState<FolderFilter>({ kind: 'all' })
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
@@ -111,9 +115,14 @@ export function ScenariosPage() {
     setLoading(true)
     setError(null)
     try {
-      const [list, folderList] = await Promise.all([listScenarios({ includeDefunct: true }), listScenarioFolders()])
+      const [list, folderList, failureList] = await Promise.all([
+        listScenarios({ includeDefunct: true }),
+        listScenarioFolders(),
+        listBundleFailures(),
+      ])
       setItems(list)
       setFolders(folderList)
+      setFailures(failureList)
       setSelectedId((current) => {
         if (list.length === 0) return null
         if (current && list.some((entry) => entry.id === current)) return current
@@ -280,11 +289,14 @@ export function ScenariosPage() {
           type="button"
           className={active ? 'swarmCard swarmCardSelected' : 'swarmCard'}
           onClick={() => setSelectedId(entry.id)}
-          style={{ textAlign: 'left' }}
+          style={{ textAlign: 'left', opacity: entry.defunct ? 0.75 : 1 }}
         >
           <div className="row between">
             <div className="h2">{entry.name}</div>
-            <div className="pill pillInfo">{folderLabel(entry)}</div>
+            <div className="row" style={{ gap: 6 }}>
+              {entry.defunct && <div className="pill pillBad">DEFUNCT</div>}
+              <div className="pill pillInfo">{folderLabel(entry)}</div>
+            </div>
           </div>
           <div className="muted" style={{ marginTop: 6 }}>
             {entry.id}
@@ -350,6 +362,8 @@ export function ScenariosPage() {
           </div>
         </div>
       ) : null}
+
+      <BundleFailuresBanner failures={failures} />
 
       <div className="swarmViewGrid" style={{ marginTop: 12 }}>
         <div className="swarmViewCards">
@@ -445,6 +459,25 @@ export function ScenariosPage() {
                   <div className="v">{folderLabel(selected)}</div>
                 </div>
               </div>
+
+              {selected.defunct && (
+                <div
+                  className="card"
+                  style={{
+                    borderColor: 'rgba(255, 95, 95, 0.35)',
+                    background: 'rgba(255, 95, 95, 0.08)',
+                    marginTop: 12,
+                  }}
+                >
+                  <div className="row" style={{ gap: 8, marginBottom: 8 }}>
+                    <span className="pill pillBad">DEFUNCT</span>
+                    <span className="h2" style={{ fontSize: 13 }}>This bundle cannot be used to create a swarm</span>
+                  </div>
+                  <div className="muted">
+                    {selected.defunctReason ?? 'Reason unknown — check server logs or reload.'}
+                  </div>
+                </div>
+              )}
 
               <div className="formGrid" style={{ marginTop: 14 }}>
                 <label className="field">

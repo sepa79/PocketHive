@@ -366,6 +366,95 @@ class ScenarioControllerTest {
     }
 
     @Test
+    void listScenariosIncludesDefunctFieldAndReason() throws Exception {
+        Path bundle = Files.createDirectories(scenariosDir.resolve("defunct-bundle"));
+        Files.writeString(bundle.resolve("scenario.yaml"), """
+                id: defunct-bundle
+                name: Defunct Bundle
+                template:
+                  image: missing-ctrl:latest
+                  bees: []
+                """);
+
+        mvc.perform(post("/scenarios/reload")).andExpect(status().isNoContent());
+
+        mvc.perform(get("/scenarios").param("includeDefunct", "true").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.id=='defunct-bundle')].defunct").value(true))
+                .andExpect(jsonPath("$[?(@.id=='defunct-bundle')].defunctReason").isNotEmpty());
+    }
+
+    @Test
+    void listScenariosAvailableHasDefunctFalse() throws Exception {
+        String body = """
+                {
+                  "id": "available-check",
+                  "name": "Available Check",
+                  "template": {
+                    "image": "ctrl-image:latest",
+                    "bees": []
+                  }
+                }
+                """;
+        mvc.perform(post("/scenarios").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isCreated());
+
+        mvc.perform(get("/scenarios").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.id=='available-check')].defunct").value(false))
+                .andExpect(jsonPath("$[?(@.id=='available-check')].defunctReason").value(org.hamcrest.Matchers.contains(org.hamcrest.Matchers.nullValue())));
+    }
+
+    @Test
+    void failuresEndpointReturnsEmptyWhenAllBundlesLoad() throws Exception {
+        mvc.perform(get("/scenarios/failures").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andExpect(jsonPath("$").isEmpty());
+    }
+
+    @Test
+    void failuresEndpointReturnsMalformedBundleWithReason() throws Exception {
+        Path bundle = Files.createDirectories(scenariosDir.resolve("bad-bundle"));
+        Files.writeString(bundle.resolve("scenario.yaml"), "id: [not valid yaml");
+
+        mvc.perform(post("/scenarios/reload")).andExpect(status().isNoContent());
+
+        mvc.perform(get("/scenarios/failures").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].bundlePath").isNotEmpty())
+                .andExpect(jsonPath("$[0].reason").value(org.hamcrest.Matchers.startsWith("Could not read scenario file")));
+    }
+
+    @Test
+    void failuresEndpointReturnsDuplicateIdWithReason() throws Exception {
+        Path bundleA = Files.createDirectories(scenariosDir.resolve("folder-a").resolve("dup"));
+        Files.writeString(bundleA.resolve("scenario.yaml"), """
+                id: dup
+                name: Dup A
+                template:
+                  image: ctrl-image:latest
+                  bees: []
+                """);
+        Path bundleB = Files.createDirectories(scenariosDir.resolve("folder-b").resolve("dup"));
+        Files.writeString(bundleB.resolve("scenario.yaml"), """
+                id: dup
+                name: Dup B
+                template:
+                  image: ctrl-image:latest
+                  bees: []
+                """);
+
+        mvc.perform(post("/scenarios/reload")).andExpect(status().isNoContent());
+
+        mvc.perform(get("/scenarios/failures").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].reason").value(org.hamcrest.Matchers.containsString("Duplicate scenario id")));
+    }
+
+    @Test
     void validationFailure() throws Exception {
         mvc.perform(post("/scenarios").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"id\":\"\",\"name\":\"\"}"))

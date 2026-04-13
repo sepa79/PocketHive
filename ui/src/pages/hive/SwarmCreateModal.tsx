@@ -664,6 +664,7 @@ function normalizeTemplates(data: unknown): ScenarioTemplate[] {
 function normalizeTemplate(entry: unknown): ScenarioTemplate | null {
   if (!entry || typeof entry !== 'object') return null
   const value = entry as Record<string, unknown>
+  if (value.defunct === true) return null
   const id = typeof value.id === 'string' ? value.id : null
   const name = typeof value.name === 'string' ? value.name : null
   if (!id || !name) return null

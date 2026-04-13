@@ -476,6 +476,233 @@ class ScenarioServiceTest {
                 .hasMessageContaining("must be an object");
     }
 
+    @Test
+    void defunctSummaryIncludesReason() throws IOException {
+        writeManifest("ctrl", "ctrl-image");
+        capabilities.reload();
+
+        writeScenario("defunct.yaml", """
+                id: defunct
+                name: Defunct Scenario
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - role: worker
+                      image: missing-image:latest
+                      work:
+                        in:
+                          in: a
+                        out:
+                          out: b
+                """);
+
+        service.reload();
+
+        assertThat(service.listDefunctSummaries())
+                .extracting(ScenarioSummary::defunct)
+                .containsExactly(true);
+        assertThat(service.listDefunctSummaries())
+                .extracting(ScenarioSummary::defunctReason)
+                .first().asString()
+                .contains("missing-image:latest")
+                .contains("bee 'worker'");
+    }
+
+    @Test
+    void availableSummaryHasDefunctFalseAndNullReason() throws IOException {
+        writeManifest("ctrl", "ctrl-image");
+        writeManifest("worker", "worker-image");
+        capabilities.reload();
+
+        writeScenario("available.yaml", """
+                id: available
+                name: Available
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - role: worker
+                      image: worker-image:latest
+                      work:
+                        in:
+                          in: a
+                        out:
+                          out: b
+                """);
+
+        service.reload();
+
+        ScenarioSummary summary = service.listAvailableSummaries().get(0);
+        assertThat(summary.defunct()).isFalse();
+        assertThat(summary.defunctReason()).isNull();
+    }
+
+    @Test
+    void missingTemplateMarksDefunctWithReason() throws IOException {
+        writeScenario("no-template.yaml", """
+                id: no-template
+                name: No Template
+                """);
+
+        service.reload();
+
+        assertThat(service.listDefunctSummaries())
+                .extracting(ScenarioSummary::defunctReason)
+                .first().asString()
+                .contains("no swarm template");
+    }
+
+    @Test
+    void missingControllerImageMarksDefunctWithReason() throws IOException {
+        writeScenario("no-ctrl-image.yaml", """
+                id: no-ctrl-image
+                name: No Controller Image
+                template:
+                  image:
+                  bees: []
+                """);
+
+        service.reload();
+
+        assertThat(service.listDefunctSummaries())
+                .extracting(ScenarioSummary::defunctReason)
+                .first().asString()
+                .contains("Controller image is not defined");
+    }
+
+    @Test
+    void malformedYamlIsIsolatedAsBundleLoadFailure() throws IOException {
+        writeScenario("broken.yaml", "id: [this is: not valid yaml: [");
+        writeManifest("ctrl", "ctrl-image");
+        writeManifest("worker", "worker-image");
+        capabilities.reload();
+        writeScenario("healthy.yaml", """
+                id: healthy
+                name: Healthy
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - role: worker
+                      image: worker-image:latest
+                      work:
+                        in:
+                          in: a
+                        out:
+                          out: b
+                """);
+
+        service.reload();
+
+        // healthy bundle still loads
+        assertThat(service.listAvailableSummaries())
+                .extracting(ScenarioSummary::id)
+                .containsExactly("healthy");
+
+        // broken bundle recorded as failure
+        assertThat(service.listLoadFailures()).hasSize(1);
+        assertThat(service.listLoadFailures().get(0).reason())
+                .contains("Could not read scenario file");
+    }
+
+    @Test
+    void malformedBundleYamlIsIsolatedAndOtherBundlesLoad() throws IOException {
+        writeManifest("ctrl", "ctrl-image");
+        writeManifest("worker", "worker-image");
+        capabilities.reload();
+
+        // broken bundle
+        Path brokenBundle = Files.createDirectories(scenariosDir.resolve("broken-bundle"));
+        Files.writeString(brokenBundle.resolve("scenario.yaml"), "id: [not valid");
+
+        // healthy bundle
+        Path healthyBundle = Files.createDirectories(scenariosDir.resolve("healthy-bundle"));
+        Files.writeString(healthyBundle.resolve("scenario.yaml"), """
+                id: healthy-bundle
+                name: Healthy Bundle
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - role: worker
+                      image: worker-image:latest
+                      work:
+                        in:
+                          in: a
+                        out:
+                          out: b
+                """);
+
+        service.reload();
+
+        assertThat(service.listAvailableSummaries())
+                .extracting(ScenarioSummary::id)
+                .containsExactly("healthy-bundle");
+        assertThat(service.listLoadFailures()).hasSize(1);
+        assertThat(service.listLoadFailures().get(0).bundlePath())
+                .contains("broken-bundle");
+        assertThat(service.listLoadFailures().get(0).reason())
+                .startsWith("Could not read scenario file");
+    }
+
+    @Test
+    void duplicateBundleIdRecordsLoadFailureForLoser() throws IOException {
+        writeManifest("ctrl", "ctrl-image");
+        capabilities.reload();
+
+        Path bundleA = Files.createDirectories(scenariosDir.resolve("folder-a").resolve("dup-scenario"));
+        Files.writeString(bundleA.resolve("scenario.yaml"), """
+                id: dup-scenario
+                name: Dup A
+                template:
+                  image: ctrl-image:latest
+                  bees: []
+                """);
+
+        Path bundleB = Files.createDirectories(scenariosDir.resolve("folder-b").resolve("dup-scenario"));
+        Files.writeString(bundleB.resolve("scenario.yaml"), """
+                id: dup-scenario
+                name: Dup B
+                template:
+                  image: ctrl-image:latest
+                  bees: []
+                """);
+
+        service.reload();
+
+        // one wins, one is recorded as failure
+        assertThat(service.listAllSummaries())
+                .extracting(ScenarioSummary::id)
+                .containsExactly("dup-scenario");
+        assertThat(service.listLoadFailures()).hasSize(1);
+        assertThat(service.listLoadFailures().get(0).reason())
+                .contains("Duplicate scenario id")
+                .contains("dup-scenario");
+    }
+
+    @Test
+    void loadFailuresClearedOnReload() throws IOException {
+        writeScenario("broken.yaml", "id: [not valid");
+        service.reload();
+        assertThat(service.listLoadFailures()).hasSize(1);
+
+        // fix the file
+        writeManifest("ctrl", "ctrl-image");
+        capabilities.reload();
+        Files.delete(scenariosDir.resolve("broken.yaml"));
+        writeScenario("broken.yaml", """
+                id: fixed
+                name: Fixed
+                template:
+                  image: ctrl-image:latest
+                  bees: []
+                """);
+
+        service.reload();
+
+        assertThat(service.listLoadFailures()).isEmpty();
+        assertThat(service.listAvailableSummaries())
+                .extracting(ScenarioSummary::id)
+                .containsExactly("fixed");
+    }
+
     private void writeManifest(String prefix, String imageName) throws IOException {
         writeManifest(prefix, imageName, "latest");
     }

@@ -68,6 +68,16 @@ public class ScenarioController {
         return summaries;
     }
 
+    @GetMapping(value = "/failures", produces = MediaType.APPLICATION_JSON_VALUE)
+    public List<BundleLoadFailureView> failures() {
+        log.info("[REST] GET /scenarios/failures");
+        List<BundleLoadFailureView> result = service.listLoadFailures().stream()
+                .map(f -> new BundleLoadFailureView(f.bundlePath(), f.reason()))
+                .toList();
+        log.info("[REST] GET /scenarios/failures -> {} items", result.size());
+        return result;
+    }
+
     @GetMapping(value = "/folders", produces = MediaType.APPLICATION_JSON_VALUE)
     public List<String> listBundleFolders() throws IOException {
         log.info("[REST] GET /scenarios/folders");
@@ -566,5 +576,8 @@ public class ScenarioController {
     }
 
     public record FolderRequest(String path) {
+    }
+
+    public record BundleLoadFailureView(String bundlePath, String reason) {
     }
 }

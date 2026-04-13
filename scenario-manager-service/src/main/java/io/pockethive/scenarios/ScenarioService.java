@@ -40,6 +40,7 @@ public class ScenarioService {
     private final ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
     private final CapabilityCatalogueService capabilities;
     private final Map<String, ScenarioRecord> scenarios = new ConcurrentHashMap<>();
+    private final Map<String, BundleLoadFailure> loadFailures = new ConcurrentHashMap<>();
     private final String defaultImageTag;
     private final Object variablesLock = new Object();
 
@@ -96,20 +97,23 @@ public class ScenarioService {
         reload();
     }
 
-	    public synchronized void reload() throws IOException {
-	        Map<String, ScenarioRecord> loaded = new HashMap<>();
+    public synchronized void reload() throws IOException {
+        Map<String, ScenarioRecord> loaded = new HashMap<>();
+        Map<String, BundleLoadFailure> failures = new HashMap<>();
 
-	        loadFromDirectory(storageDir, loaded);
-	        if (showTestScenarios && Files.isDirectory(testStorageDir)) {
-	            loadFromDirectory(testStorageDir, loaded);
-	        }
-	        loadFromBundles(bundleRootDir, loaded);
-	        if (showTestScenarios && Files.isDirectory(testStorageDir)) {
-	            loadFromBundles(testStorageDir, loaded);
-	        }
+        loadFromDirectory(storageDir, loaded, failures);
+        if (showTestScenarios && Files.isDirectory(testStorageDir)) {
+            loadFromDirectory(testStorageDir, loaded, failures);
+        }
+        loadFromBundles(bundleRootDir, loaded, failures);
+        if (showTestScenarios && Files.isDirectory(testStorageDir)) {
+            loadFromBundles(testStorageDir, loaded, failures);
+        }
 
-	        scenarios.clear();
-	        scenarios.putAll(loaded);
+        scenarios.clear();
+        scenarios.putAll(loaded);
+        loadFailures.clear();
+        loadFailures.putAll(failures);
 
         long available = loaded.values().stream().filter(record -> !record.defunct()).count();
         logger.info("Loaded {} scenario(s) from {}{} ({} available)",
@@ -166,11 +170,11 @@ public class ScenarioService {
 
     public Scenario create(Scenario scenario, Format format) throws IOException {
         Scenario resolved = applyDefaultImageTag(scenario);
-        boolean defunct = determineDefunct(resolved);
+        DefunctResult defunctResult = determineDefunct(resolved);
         String id = resolved.getId();
         Path bundleDir = bundleDir(id);
         Path descriptor = descriptorFile(bundleDir, format);
-        ScenarioRecord record = new ScenarioRecord(resolved, format, defunct, descriptor, bundleDir, folderPath(bundleDir));
+        ScenarioRecord record = new ScenarioRecord(resolved, format, defunctResult.defunct(), defunctResult.reason(), descriptor, bundleDir, folderPath(bundleDir));
 
         if (scenarios.putIfAbsent(id, record) != null) {
             throw new IllegalArgumentException("Scenario already exists");
@@ -189,11 +193,11 @@ public class ScenarioService {
     public Scenario update(String id, Scenario scenario, Format format) throws IOException {
         scenario.setId(id);
         Scenario resolved = applyDefaultImageTag(scenario);
-        boolean defunct = determineDefunct(resolved);
+        DefunctResult defunctResult = determineDefunct(resolved);
         ScenarioRecord existing = scenarios.get(id);
         Path bundleDir = existing != null && existing.bundleDir() != null ? existing.bundleDir() : bundleDir(id);
         Path descriptor = descriptorFile(bundleDir, format);
-        ScenarioRecord record = new ScenarioRecord(resolved, format, defunct, descriptor, bundleDir, folderPath(bundleDir));
+        ScenarioRecord record = new ScenarioRecord(resolved, format, defunctResult.defunct(), defunctResult.reason(), descriptor, bundleDir, folderPath(bundleDir));
         ScenarioRecord previous = scenarios.put(id, record);
 
         try {
@@ -382,34 +386,33 @@ public class ScenarioService {
 	        return runtimeRoot != null && runtimeRoot.startsWith(root) && normalized.startsWith(runtimeRoot);
 	    }
 
-    private boolean determineDefunct(Scenario scenario) {
+    private DefunctResult determineDefunct(Scenario scenario) {
         String scenarioId = scenario.getId();
-        if (scenarioId == null) {
-            return true;
+        if (scenarioId == null || scenarioId.isBlank()) {
+            return DefunctResult.because("Scenario is missing a required 'id' field");
         }
 
         SwarmTemplate template = scenario.getTemplate();
         if (template == null) {
             logger.warn("Scenario '{}' has no swarm template defined; marking as defunct", scenarioId);
-            return true;
+            return DefunctResult.because("Scenario has no swarm template defined");
         }
 
-        List<String> missingReferences = new ArrayList<>();
-
-        checkImageReference(scenarioId, "swarm controller", template.image(), missingReferences);
-
+        List<String> reasons = new ArrayList<>();
+        checkImageReference(scenarioId, "controller", template.image(), reasons);
         if (template.bees() != null) {
             for (Bee bee : template.bees()) {
-                checkImageReference(scenarioId, "bee '" + bee.role() + "'", bee.image(), missingReferences);
+                checkImageReference(scenarioId, "bee '" + bee.role() + "'", bee.image(), reasons);
             }
         }
 
-        if (!missingReferences.isEmpty()) {
-            logger.warn("Scenario '{}' marked as defunct; missing capability manifests for {}", scenarioId, missingReferences);
-            return true;
+        if (!reasons.isEmpty()) {
+            String reason = String.join("; ", reasons);
+            logger.warn("Scenario '{}' marked as defunct: {}", scenarioId, reason);
+            return DefunctResult.because(reason);
         }
 
-        return false;
+        return DefunctResult.ok();
     }
 
     private Scenario applyDefaultImageTag(Scenario scenario) {
@@ -501,10 +504,11 @@ public class ScenarioService {
     private void checkImageReference(String scenarioId,
                                      String component,
                                      String imageReference,
-                                     List<String> missingReferences) {
+                                     List<String> reasons) {
         if (imageReference == null || imageReference.isBlank()) {
             logger.warn("Scenario '{}' {} image reference is missing", scenarioId, component);
-            missingReferences.add(component + " (missing image)");
+            String label = component.startsWith("bee") ? component + " has no image defined" : "Controller image is not defined";
+            reasons.add(label);
             return;
         }
 
@@ -515,18 +519,14 @@ public class ScenarioService {
             if (matched.fallbackUsed()) {
                 logger.warn(
                         "Scenario '{}' {} image '{}' is using fallback capability manifest tag '{}' instead of requested tag '{}'",
-                        scenarioId,
-                        component,
-                        imageReference,
-                        matched.resolvedTag(),
-                        matched.requestedTag());
+                        scenarioId, component, imageReference, matched.resolvedTag(), matched.requestedTag());
             }
             return;
         }
 
         if (capabilities.findByImageReference(imageReference).isEmpty()) {
             logger.warn("Scenario '{}' missing capability manifest for {} image '{}'", scenarioId, component, imageReference);
-            missingReferences.add(component + " -> " + imageReference);
+            reasons.add("No capability manifest found for image '" + imageReference + "' (" + component + "). Check that this image version is installed.");
         }
     }
 
@@ -557,9 +557,16 @@ public class ScenarioService {
             .writeValue(descriptor.toFile(), scenario);
     }
 
+    public List<BundleLoadFailure> listLoadFailures() {
+        return loadFailures.values().stream()
+                .sorted(Comparator.comparing(BundleLoadFailure::bundlePath))
+                .toList();
+    }
+
     private ScenarioSummary toSummary(ScenarioRecord record) {
         Scenario scenario = record.scenario();
-        return new ScenarioSummary(scenario.getId(), scenario.getName(), record.folderPath());
+        return new ScenarioSummary(scenario.getId(), scenario.getName(), record.folderPath(),
+                record.defunct(), record.defunctReason());
     }
 
     Path bundleDir(String id) {
@@ -607,10 +614,10 @@ public class ScenarioService {
 
     private ScenarioRecord recordForLoaded(Scenario scenario, Format format, Path descriptorFile, Path bundleDir) {
         Scenario resolved = applyDefaultImageTag(scenario);
-        boolean defunct = determineDefunct(resolved);
+        DefunctResult defunctResult = determineDefunct(resolved);
         Path descriptor = descriptorFile != null ? descriptorFile.toAbsolutePath().normalize() : null;
         Path bundle = bundleDir != null ? bundleDir.toAbsolutePath().normalize() : null;
-        return new ScenarioRecord(resolved, format, defunct, descriptor, bundle, folderPath(bundle));
+        return new ScenarioRecord(resolved, format, defunctResult.defunct(), defunctResult.reason(), descriptor, bundle, folderPath(bundle));
     }
 
     Path runtimeDir(String swarmId) {
@@ -680,61 +687,88 @@ public class ScenarioService {
         }
     }
 
-    private void loadFromDirectory(Path directory, Map<String, ScenarioRecord> target) throws IOException {
+    private void loadFromDirectory(Path directory, Map<String, ScenarioRecord> target, Map<String, BundleLoadFailure> failures) throws IOException {
         if (!Files.isDirectory(directory)) {
             return;
         }
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(directory, "*.{json,yaml,yml}")) {
             for (Path path : stream) {
-                Format format = detectFormat(path);
-                Scenario scenario = read(path, format);
-                ScenarioRecord record = recordForLoaded(scenario, format, path, null);
-                ScenarioRecord previous = target.put(scenario.getId(), record);
-                if (previous != null) {
-                    logger.warn("Duplicate scenario id '{}' found while loading {}; keeping latest", scenario.getId(), path);
+                try {
+                    Format format = detectFormat(path);
+                    Scenario scenario = read(path, format);
+                    ScenarioRecord record = recordForLoaded(scenario, format, path, null);
+                    ScenarioRecord previous = target.put(scenario.getId(), record);
+                    if (previous != null) {
+                        String loserPath = relativeBundlePath(path.getParent());
+                        String winnerPath = relativeBundlePath(previous.bundleDir());
+                        failures.put(loserPath, new BundleLoadFailure(loserPath,
+                                "Duplicate scenario id '" + scenario.getId() + "' — another bundle at '" + winnerPath + "' was loaded instead"));
+                        logger.warn("Duplicate scenario id '{}' found while loading {}; keeping latest", scenario.getId(), path);
+                    }
+                } catch (Exception e) {
+                    String relPath = relativeBundlePath(path.getParent());
+                    failures.put(relPath, new BundleLoadFailure(relPath, "Could not read scenario file: " + cleanParseError(e.getMessage())));
+                    logger.warn("Failed to load scenario at {}: {}", path, e.getMessage());
                 }
             }
         }
     }
 
-	    private void loadFromBundles(Path bundleRoot, Map<String, ScenarioRecord> target) throws IOException {
-	        if (!Files.isDirectory(bundleRoot)) {
-	            return;
-	        }
-	        Path normalizedRoot = bundleRoot.toAbsolutePath().normalize();
-	        Path normalizedStorageDir = storageDir.toAbsolutePath().normalize();
-	        Path normalizedTestDir = testStorageDir.toAbsolutePath().normalize();
-	        Path normalizedRuntimeRoot = runtimeRootDir.toAbsolutePath().normalize();
-	        boolean isMainScan = normalizedRoot.equals(normalizedStorageDir);
-	        boolean runtimeUnderRoot = normalizedRuntimeRoot.startsWith(normalizedRoot);
-	        try (Stream<Path> stream = Files.walk(bundleRoot)) {
-	            for (Path path : (Iterable<Path>) stream::iterator) {
-	                Path normalized = path.toAbsolutePath().normalize();
-	                if (runtimeUnderRoot && normalized.startsWith(normalizedRuntimeRoot)) {
-	                    continue;
-	                }
-	                if (isMainScan && normalized.startsWith(normalizedTestDir)) {
-	                    continue;
-	                }
-	                if (!Files.isRegularFile(path)) {
-	                    continue;
-	                }
-	                String name = path.getFileName().toString();
-	                if (!name.equals("scenario.yaml")
-	                    && !name.equals("scenario.yml")
-	                    && !name.equals("scenario.json")) {
-	                    continue;
-	                }
-	                Format format = detectFormat(path);
-	                Scenario scenario = read(path, format);
-	                ScenarioRecord record = recordForLoaded(scenario, format, path, path.getParent());
-	                ScenarioRecord previous = target.put(scenario.getId(), record);
-	                if (previous != null) {
-	                    logger.warn("Duplicate scenario id '{}' found while loading {}; keeping latest", scenario.getId(), path);
-	                }
-	            }
-	        }
-	    }
+    private void loadFromBundles(Path bundleRoot, Map<String, ScenarioRecord> target, Map<String, BundleLoadFailure> failures) throws IOException {
+        if (!Files.isDirectory(bundleRoot)) {
+            return;
+        }
+        Path normalizedRoot = bundleRoot.toAbsolutePath().normalize();
+        Path normalizedStorageDir = storageDir.toAbsolutePath().normalize();
+        Path normalizedTestDir = testStorageDir.toAbsolutePath().normalize();
+        Path normalizedRuntimeRoot = runtimeRootDir.toAbsolutePath().normalize();
+        boolean isMainScan = normalizedRoot.equals(normalizedStorageDir);
+        boolean runtimeUnderRoot = normalizedRuntimeRoot.startsWith(normalizedRoot);
+        try (Stream<Path> stream = Files.walk(bundleRoot)) {
+            for (Path path : (Iterable<Path>) stream::iterator) {
+                Path normalized = path.toAbsolutePath().normalize();
+                if (runtimeUnderRoot && normalized.startsWith(normalizedRuntimeRoot)) continue;
+                if (isMainScan && normalized.startsWith(normalizedTestDir)) continue;
+                if (!Files.isRegularFile(path)) continue;
+                String name = path.getFileName().toString();
+                if (!name.equals("scenario.yaml") && !name.equals("scenario.yml") && !name.equals("scenario.json")) continue;
+                try {
+                    Format format = detectFormat(path);
+                    Scenario scenario = read(path, format);
+                    ScenarioRecord record = recordForLoaded(scenario, format, path, path.getParent());
+                    ScenarioRecord previous = target.put(scenario.getId(), record);
+                    if (previous != null) {
+                        String loserPath = relativeBundlePath(path.getParent());
+                        String winnerPath = relativeBundlePath(previous.bundleDir());
+                        failures.put(loserPath, new BundleLoadFailure(loserPath,
+                                "Duplicate scenario id '" + scenario.getId() + "' — another bundle at '" + winnerPath + "' was loaded instead"));
+                        logger.warn("Duplicate scenario id '{}' found while loading {}; keeping latest", scenario.getId(), path);
+                    }
+                } catch (Exception e) {
+                    String relPath = relativeBundlePath(path.getParent());
+                    failures.put(relPath, new BundleLoadFailure(relPath, "Could not read scenario file: " + cleanParseError(e.getMessage())));
+                    logger.warn("Failed to load bundle at {}: {}", path, e.getMessage());
+                }
+            }
+        }
+    }
+
+    private String relativeBundlePath(Path dir) {
+        if (dir == null) return "unknown";
+        try {
+            return bundleRootDir.toAbsolutePath().normalize()
+                    .relativize(dir.toAbsolutePath().normalize())
+                    .toString().replace('\\', '/');
+        } catch (Exception e) {
+            return dir.toString().replace('\\', '/');
+        }
+    }
+
+    private static String cleanParseError(String message) {
+        if (message == null) return "unknown parse error";
+        String cleaned = message.replaceAll("\\(com\\.fasterxml[^)]*\\)", "").trim();
+        return cleaned.length() > 200 ? cleaned.substring(0, 200) + "…" : cleaned;
+    }
 
     private Path pathFor(String id, Format format) {
         String fileName = sanitize(id) + (format == Format.JSON ? ".json" : ".yaml");
@@ -1733,10 +1767,18 @@ public class ScenarioService {
         Scenario scenario,
         Format format,
         boolean defunct,
+        String defunctReason,
         Path descriptorFile,
         Path bundleDir,
         String folderPath
     ) { }
+
+    public record BundleLoadFailure(String bundlePath, String reason) { }
+
+    private record DefunctResult(boolean defunct, String reason) {
+        static DefunctResult ok() { return new DefunctResult(false, null); }
+        static DefunctResult because(String reason) { return new DefunctResult(true, reason); }
+    }
 
     private record ScenarioDescriptor(Scenario scenario, Path rootDir) { }
 

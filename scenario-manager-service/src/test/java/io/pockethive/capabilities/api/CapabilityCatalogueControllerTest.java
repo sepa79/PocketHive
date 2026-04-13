@@ -4,6 +4,7 @@ import io.pockethive.capabilities.CapabilityCatalogueService;
 import io.pockethive.capabilities.CapabilityManifest;
 import io.pockethive.scenarios.AvailableScenarioRegistry;
 import io.pockethive.scenarios.Scenario;
+import io.pockethive.scenarios.ScenarioService;
 import io.pockethive.scenarios.ScenarioSummary;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.SwarmTemplate;
@@ -38,20 +39,50 @@ class CapabilityCatalogueControllerTest {
     @MockBean
     CapabilityCatalogueService catalogue;
 
+    @MockBean
+    ScenarioService scenarioService;
+
     @Test
-    void templatesEndpointReturnsAvailableScenariosWithImages() throws Exception {
+    void templatesEndpointReturnsAllScenariosIncludingDefunct() throws Exception {
+        Scenario available = new Scenario("alpha", "Alpha", "A test scenario",
+                new SwarmTemplate("controller:v1", List.of(
+                        new Bee("worker", "worker:v2", Work.ofDefaults("in", "out"), Map.of()))));
+        Scenario defunct = new Scenario("broken", "Broken", null,
+                new SwarmTemplate("missing:v1", List.of()));
+
+        given(scenarioService.listAllSummaries()).willReturn(List.of(
+                new ScenarioSummary("alpha", "Alpha", null, false, null),
+                new ScenarioSummary("broken", "Broken", null, true, "No capability manifest found for image 'missing:v1' (controller)")
+        ));
+        given(scenarioService.find("alpha")).willReturn(Optional.of(available));
+        given(scenarioService.find("broken")).willReturn(Optional.of(defunct));
+
+        mvc.perform(get("/api/templates").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value("alpha"))
+                .andExpect(jsonPath("$[0].defunct").value(false))
+                .andExpect(jsonPath("$[0].defunctReason").doesNotExist())
+                .andExpect(jsonPath("$[1].id").value("broken"))
+                .andExpect(jsonPath("$[1].defunct").value(true))
+                .andExpect(jsonPath("$[1].defunctReason").value(org.hamcrest.Matchers.containsString("missing:v1")));
+    }
+
+    @Test
+    void templatesEndpointAvailableScenarioHasDefunctFalse() throws Exception {
         Scenario scenario = new Scenario("alpha", "Alpha", "A test scenario",
                 new SwarmTemplate("controller:v1", List.of(
                         new Bee("worker", "worker:v2", Work.ofDefaults("in", "out"), Map.of()))));
-        given(scenarios.list()).willReturn(List.of(new ScenarioSummary("alpha", "Alpha", null)));
-        given(scenarios.find("alpha")).willReturn(Optional.of(scenario));
+        given(scenarioService.listAllSummaries()).willReturn(
+                List.of(new ScenarioSummary("alpha", "Alpha", null, false, null)));
+        given(scenarioService.find("alpha")).willReturn(Optional.of(scenario));
 
         mvc.perform(get("/api/templates").accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value("alpha"))
                 .andExpect(jsonPath("$[0].controllerImage").value("controller:v1"))
                 .andExpect(jsonPath("$[0].bees[0].role").value("worker"))
-                .andExpect(jsonPath("$[0].bees[0].image").value("worker:v2"));
+                .andExpect(jsonPath("$[0].bees[0].image").value("worker:v2"))
+                .andExpect(jsonPath("$[0].defunct").value(false));
     }
 
     @Test

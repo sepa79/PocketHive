@@ -13,6 +13,8 @@ type ScenarioTemplate = {
   description: string | null
   controllerImage: string | null
   bees: BeeSummary[]
+  defunct: boolean
+  defunctReason: string | null
 }
 
 type VariablesProfile = {
@@ -92,7 +94,12 @@ function normalizeTemplates(data: unknown): ScenarioTemplate[] {
             })
             .filter((bee): bee is BeeSummary => bee !== null)
         : []
-      return { id, name, folderPath, description, controllerImage, bees }
+      const defunct = value.defunct === true
+      const defunctReason =
+        typeof value.defunctReason === 'string' && value.defunctReason.trim().length > 0
+          ? value.defunctReason.trim()
+          : null
+      return { id, name, folderPath, description, controllerImage, bees, defunct, defunctReason }
     })
     .filter((template): template is ScenarioTemplate => template !== null)
 }
@@ -401,14 +408,26 @@ export function CreateSwarmModal({
       key={template.id}
       type="button"
       className={template.id === templateId ? 'swarmTemplateItem swarmTemplateItemSelected' : 'swarmTemplateItem'}
-      onClick={() => setTemplateId(template.id)}
+      onClick={() => {
+        if (template.defunct) return
+        setTemplateId(template.id)
+      }}
       aria-label={template.name}
+      title={template.defunct ? (template.defunctReason ?? 'This template is unavailable') : undefined}
+      style={template.defunct ? { opacity: 0.45, cursor: 'not-allowed' } : undefined}
     >
-      <div className="swarmTemplateTitle">{template.name}</div>
+      <div className="row between">
+        <div className="swarmTemplateTitle">{template.name}</div>
+        {template.defunct && <span className="pill pillBad" style={{ fontSize: 10 }}>DEFUNCT</span>}
+      </div>
       <div className="swarmTemplateId">
         {template.folderPath ? `${template.folderPath}/${template.id}` : template.id}
       </div>
-      <div className="swarmTemplateDesc">{template.description ?? 'No description'}</div>
+      <div className="swarmTemplateDesc">
+        {template.defunct
+          ? (template.defunctReason ?? 'This template is unavailable')
+          : (template.description ?? 'No description')}
+      </div>
     </button>
   )
 
@@ -442,6 +461,12 @@ export function CreateSwarmModal({
 
       if (!trimmedSwarmId || !trimmedTemplateId) {
         setError('Swarm ID and template are required.')
+        return
+      }
+
+      const selectedTpl = templates.find((t) => t.id === trimmedTemplateId)
+      if (selectedTpl?.defunct) {
+        setError(`Template '${trimmedTemplateId}' is unavailable: ${selectedTpl.defunctReason ?? 'unknown reason'}`)
         return
       }
 
@@ -628,6 +653,11 @@ export function CreateSwarmModal({
                   <div className="muted">No templates found.</div>
                 ) : (
                   <>
+                    {templates.some((t) => t.defunct) && (
+                      <div className="muted" style={{ fontSize: 11, padding: '4px 0' }}>
+                        {templates.filter((t) => t.defunct).length} template(s) unavailable — hover for details
+                      </div>
+                    )}
                     {hasAnyFolder ? (
                       <div>
                         {tree.folders.map((folder) => renderFolderNode(folder))}

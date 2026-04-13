@@ -28,6 +28,13 @@ export type ScenarioSummary = {
   id: string
   name: string
   folderPath: string | null
+  defunct: boolean
+  defunctReason: string | null
+}
+
+export type BundleLoadFailure = {
+  bundlePath: string
+  reason: string
 }
 
 export type BundleDownload = {
@@ -41,7 +48,9 @@ function normalizeScenarioSummary(input: unknown): ScenarioSummary | null {
   if (!id) return null
   const name = asString(input['name']) ?? id
   const folderPath = asString(input['folderPath'])
-  return { id, name, folderPath }
+  const defunct = input['defunct'] === true
+  const defunctReason = asString(input['defunctReason'])
+  return { id, name, folderPath, defunct, defunctReason }
 }
 
 export async function listScenarios(opts?: { includeDefunct?: boolean }): Promise<ScenarioSummary[]> {
@@ -150,4 +159,26 @@ export async function deleteScenarioBundle(scenarioId: string): Promise<void> {
     method: 'DELETE',
   })
   await ensureOk(response, 'Failed to delete scenario bundle')
+}
+
+export async function listBundleFailures(): Promise<BundleLoadFailure[]> {
+  const response = await fetch('/scenario-manager/scenarios/failures', {
+    headers: { Accept: 'application/json' },
+  })
+  await ensureOk(response, 'Failed to load bundle failures')
+  try {
+    const payload = (await response.json()) as unknown
+    if (!Array.isArray(payload)) return []
+    return payload
+      .map((entry) => {
+        if (!isRecord(entry)) return null
+        const bundlePath = asString(entry['bundlePath'])
+        const reason = asString(entry['reason'])
+        if (!bundlePath || !reason) return null
+        return { bundlePath, reason }
+      })
+      .filter((entry): entry is BundleLoadFailure => entry !== null)
+  } catch {
+    return []
+  }
 }
