@@ -114,6 +114,12 @@ and pass the environment through.
 
 Once connected, the server exposes a focused subset of the existing debug capabilities:
 
+Important guardrail:
+
+- direct swarm creation must not bypass Scenario Manager bundle diagnostics
+- verify the selected entry through `GET /api/templates` first
+- a bundle marked `defunct=true` must be treated as non-runnable even if raw id-based REST calls still succeed
+
 - `orchestrator.list-swarms`
   - No input.
   - Calls `GET {ORCHESTRATOR_BASE_URL}/api/swarms`.

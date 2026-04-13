@@ -2,10 +2,7 @@ package io.pockethive.capabilities.api;
 
 import io.pockethive.capabilities.CapabilityCatalogueService;
 import io.pockethive.capabilities.CapabilityManifest;
-import io.pockethive.scenarios.AvailableScenarioRegistry;
-import io.pockethive.scenarios.Scenario;
-import io.pockethive.scenarios.ScenarioSummary;
-import io.pockethive.swarm.model.SwarmTemplate;
+import io.pockethive.scenarios.ScenarioService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -23,19 +20,19 @@ import java.util.Optional;
 public class CapabilityCatalogueController {
     static final String CAPABILITY_FALLBACK_TAG_HEADER = "X-Pockethive-Capability-Fallback-Tag";
 
-    private final AvailableScenarioRegistry availableScenarios;
     private final CapabilityCatalogueService catalogue;
+    private final ScenarioService scenarioService;
 
-    public CapabilityCatalogueController(AvailableScenarioRegistry availableScenarios,
-                                         CapabilityCatalogueService catalogue) {
-        this.availableScenarios = availableScenarios;
+    public CapabilityCatalogueController(CapabilityCatalogueService catalogue,
+                                         ScenarioService scenarioService) {
         this.catalogue = catalogue;
+        this.scenarioService = scenarioService;
     }
 
     @GetMapping(value = "/templates", produces = MediaType.APPLICATION_JSON_VALUE)
     public List<ScenarioTemplateView> templates() {
-        return availableScenarios.list().stream()
-                .map(summary -> buildScenarioTemplate(summary, availableScenarios.find(summary.id()).orElse(null)))
+        return scenarioService.listBundleTemplates().stream()
+                .map(this::buildScenarioTemplate)
                 .toList();
     }
 
@@ -63,15 +60,18 @@ public class CapabilityCatalogueController {
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Provide all=true, imageDigest, or imageName and tag");
     }
 
-    private ScenarioTemplateView buildScenarioTemplate(ScenarioSummary summary, Scenario scenario) {
-        SwarmTemplate template = scenario != null ? scenario.getTemplate() : null;
-        String controllerImage = template != null ? template.image() : null;
-        List<BeeImage> bees = template == null ? List.of() : template.bees().stream()
-                .map(bee -> new BeeImage(bee.role(), bee.image()))
-                .toList();
-        return new ScenarioTemplateView(summary.id(), summary.name(), summary.folderPath(),
-                scenario != null ? scenario.getDescription() : null,
-                controllerImage, bees);
+    private ScenarioTemplateView buildScenarioTemplate(ScenarioService.BundleTemplateSummary summary) {
+        return new ScenarioTemplateView(
+                summary.bundleKey(),
+                summary.bundlePath(),
+                summary.folderPath(),
+                summary.id(),
+                summary.name(),
+                summary.description(),
+                summary.controllerImage(),
+                summary.bees().stream().map(bee -> new BeeImage(bee.role(), bee.image())).toList(),
+                summary.defunct(),
+                summary.defunctReason());
     }
 
     private boolean hasText(String value) {
@@ -86,12 +86,16 @@ public class CapabilityCatalogueController {
         return builder;
     }
 
-    public record ScenarioTemplateView(String id,
-                                       String name,
+    public record ScenarioTemplateView(String bundleKey,
+                                       String bundlePath,
                                        String folderPath,
+                                       String id,
+                                       String name,
                                        String description,
                                        String controllerImage,
-                                       List<BeeImage> bees) { }
+                                       List<BeeImage> bees,
+                                       boolean defunct,
+                                       String defunctReason) { }
 
     public record BeeImage(String role, String image) { }
 }

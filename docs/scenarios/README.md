@@ -67,6 +67,8 @@ control‑plane contract; scenarios are the authoring‑time format.
   - `local-rest-schema-demo/` – example of a generator that uses a JSON Schema
     (`schemas/local-rest-body.schema.json`) to help author HTTP bodies in the
     scenario editor while still emitting a plain templated JSON string at runtime.
+- `SCENARIO_BUNDLE_DIAGNOSTICS.md` – contract for how Scenario Manager exposes
+  healthy and defunct bundle entries to the UI.
 
 These docs are designed to be embedded into the UI as help pages.
 Callers should link here rather than re‑describing the contract.
