@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.15.16]
+Timestamp: 2026-04-13T00:00:00Z
+
+- Scenario Manager: reload is now fault-isolated — a bad bundle is caught per-file and recorded as a load failure; other bundles continue loading unaffected.
+- Scenario Manager: `ScenarioSummary` gains `defunct` and `defunctReason` fields with plain-English reasons covering all failure categories (missing id, no template, missing image, unresolvable capability manifest).
+- Scenario Manager: new `GET /scenarios/failures` endpoint returns bundles that could not be parsed at all (malformed YAML/JSON, duplicate scenario id).
+- Scenario Manager: `GET /api/templates` now includes defunct scenarios with `defunct` and `defunctReason` fields so the UI can show them as unavailable rather than silently hiding them.
+- UI v2 (Scenarios page): collapsible warning banner lists all bundle load failures with plain-English reasons; defunct bundles show a red `DEFUNCT` badge; selecting a defunct bundle shows the failure reason in the details panel.
+- UI v2 (Create Swarm modal): defunct templates appear greyed out and non-selectable with the failure reason shown on hover; submitting a defunct template is blocked with a clear error message.
+- UI v1 (Create Swarm modal): defunct entries are filtered from the template list to preserve existing behaviour.
+- Tests: 8 new unit tests in `ScenarioServiceTest`, 5 new integration tests in `ScenarioControllerTest`, and 2 updated tests in `CapabilityCatalogueControllerTest` covering all failure categories, reload isolation, and the new endpoint.
+- Docs: `SCENARIO_MANAGER_BUNDLE_REST.md` and `scenario-manager-service/README.md` updated with bundle diagnostics guide, failure cause table, and new endpoint documentation.
+
 ## [0.15.15]
 Timestamp: 2026-04-09T15:46:49Z
 
