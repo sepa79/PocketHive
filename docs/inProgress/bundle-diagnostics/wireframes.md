@@ -34,7 +34,7 @@ ASCII wireframes for all affected UI surfaces. Uses existing CSS classes from `u
 │ │ Scenarios              [8]   │  │ │          used to create a swarm  │ │  │    pillBad border
 │ │                              │  │ │                                  │ │  │
 │ │ ▶ bundles (4)                │  │ │ No capability manifest found for │ │  │
-│ │   ▶ demo (1)                 │  │ │ image 'io.pockethive/generator:0.15.11'           │ │  │
+│ │   ▶ demo (1)                 │  │ │ image 'generator:0.15.11'        │ │  │
 │ │   │  [my-broken] [DEFUNCT]   │  │ │ (bee: generator). Check that     │ │  │
 │ │   ▶ perf (2)                 │  │ │ this image version is installed. │ │  │
 │ │   │  [perf-scenario-a]       │  │ └──────────────────────────────────┘ │  │
