@@ -189,6 +189,29 @@ class ScenarioControllerTest {
     }
 
     @Test
+    void reloadIsolatesMalformedBundlesWithoutHidingHealthyScenarios() throws Exception {
+        Path brokenBundle = Files.createDirectories(scenariosDir.resolve("broken-bundle"));
+        Files.writeString(brokenBundle.resolve("scenario.yaml"), "id: [not valid yaml");
+
+        Path healthyBundle = Files.createDirectories(scenariosDir.resolve("healthy-bundle"));
+        Files.writeString(healthyBundle.resolve("scenario.yaml"), """
+                id: healthy-bundle
+                name: Healthy Bundle
+                template:
+                  image: ctrl-image:latest
+                  bees: []
+                """);
+
+        mvc.perform(post("/scenarios/reload"))
+                .andExpect(status().isNoContent());
+
+        mvc.perform(get("/scenarios").param("includeDefunct", "true").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].id").value("healthy-bundle"));
+    }
+
+    @Test
     void schemaListingAndReadAreScopedToBundle() throws Exception {
         String body = """
                 {
@@ -363,6 +386,53 @@ class ScenarioControllerTest {
         }
         org.junit.jupiter.api.Assertions.assertTrue(hasScenarioYaml, "zip should contain scenario.yaml");
         org.junit.jupiter.api.Assertions.assertTrue(hasNote, "zip should contain note.txt");
+    }
+
+    @Test
+    void bundleAddressedOperationsWorkForMalformedBundlesWithoutScenarioId() throws Exception {
+        Path brokenBundleDir = scenariosDir.resolve("broken-bundle");
+        Files.createDirectories(brokenBundleDir);
+        Files.writeString(brokenBundleDir.resolve("scenario.yaml"), "id: [not valid yaml");
+        Files.writeString(brokenBundleDir.resolve("note.txt"), "broken");
+
+        mvc.perform(post("/scenarios/reload"))
+                .andExpect(status().isNoContent());
+
+        byte[] zipBytes = mvc.perform(get("/scenarios/bundles/download")
+                        .param("bundleKey", "broken-bundle")
+                        .accept("application/zip"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Disposition", "form-data; name=\"attachment\"; filename=\"broken-bundle-bundle.zip\""))
+                .andReturn()
+                .getResponse()
+                .getContentAsByteArray();
+
+        boolean hasScenarioYaml = false;
+        boolean hasNote = false;
+        try (ZipInputStream zip = new ZipInputStream(new java.io.ByteArrayInputStream(zipBytes))) {
+            for (ZipEntry entry = zip.getNextEntry(); entry != null; entry = zip.getNextEntry()) {
+                if ("scenario.yaml".equals(entry.getName())) {
+                    hasScenarioYaml = true;
+                }
+                if ("note.txt".equals(entry.getName())) {
+                    hasNote = true;
+                }
+            }
+        }
+        org.junit.jupiter.api.Assertions.assertTrue(hasScenarioYaml, "zip should contain scenario.yaml");
+        org.junit.jupiter.api.Assertions.assertTrue(hasNote, "zip should contain note.txt");
+
+        mvc.perform(post("/scenarios/bundles/move")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bundleKey\":\"broken-bundle\",\"path\":\"quarantine\"}"))
+                .andExpect(status().isNoContent());
+
+        org.junit.jupiter.api.Assertions.assertTrue(Files.isDirectory(scenariosDir.resolve("quarantine").resolve("broken-bundle")));
+
+        mvc.perform(delete("/scenarios/bundles").param("bundleKey", "quarantine/broken-bundle"))
+                .andExpect(status().isNoContent());
+
+        org.junit.jupiter.api.Assertions.assertFalse(Files.exists(scenariosDir.resolve("quarantine").resolve("broken-bundle")));
     }
 
     @Test

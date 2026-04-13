@@ -48,6 +48,9 @@ public class ScenarioManagerClient implements ScenarioClient {
 
     @Override
     public ScenarioPlan fetchScenario(String templateId) throws Exception {
+        // NOTE: This is a direct id-based lookup. It does not validate whether the template
+        // is marked defunct in /api/templates. Callers that originate outside the UI must
+        // preflight against Scenario Manager bundle diagnostics before creating a swarm.
         String url = baseUrl + "/scenarios/" + templateId;
         HttpResponse<String> resp = sendGet(url, "template " + templateId);
         return json.readValue(resp.body(), ScenarioPlan.class);
@@ -55,6 +58,8 @@ public class ScenarioManagerClient implements ScenarioClient {
 
     @Override
     public String prepareScenarioRuntime(String templateId, String swarmId) throws Exception {
+        // NOTE: This continues the direct id-based create path and does not check /api/templates.
+        // Tooling and agents should validate template usability via bundle diagnostics first.
         String trimmedTemplate = templateId == null ? null : templateId.trim();
         if (trimmedTemplate == null || trimmedTemplate.isEmpty()) {
             throw new IllegalArgumentException("templateId must not be null or blank");

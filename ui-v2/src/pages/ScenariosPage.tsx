@@ -1,33 +1,42 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ConfirmModal } from '../components/ConfirmModal'
 import {
+  type BundleTemplateEntry,
   createScenarioFolder,
-  deleteScenarioBundle,
+  deleteBundle,
   deleteScenarioFolder,
-  downloadScenarioBundle,
+  downloadBundle,
+  listBundleTemplates,
   listScenarioFolders,
-  listScenarios,
-  moveScenarioToFolder,
-  type ScenarioSummary,
+  moveBundleToFolder,
   uploadScenarioBundle,
 } from '../lib/scenariosApi'
 
 type FolderFilter = { kind: 'all' } | { kind: 'root' } | { kind: 'folder'; path: string }
+const QUARANTINE_FOLDER = 'quarantine'
 type ScenarioFolderNode = {
   name: string
   path: string
   children: ScenarioFolderNode[]
-  scenarios: ScenarioSummary[]
+  scenarios: BundleTemplateEntry[]
 }
 
-function folderLabel(summary: ScenarioSummary): string {
+function folderLabel(summary: BundleTemplateEntry): string {
   return summary.folderPath && summary.folderPath.trim().length > 0 ? summary.folderPath.trim() : 'root'
 }
 
-function buildScenarioFolderTree(items: ScenarioSummary[]): { folders: ScenarioFolderNode[]; rootScenarios: ScenarioSummary[] } {
-  const rootScenarios: ScenarioSummary[] = []
-  type MutableNode = { name: string; path: string; children: Map<string, MutableNode>; scenarios: ScenarioSummary[] }
-  type RootNode = { children: Map<string, MutableNode>; scenarios: ScenarioSummary[] }
+function bundleLabel(entry: BundleTemplateEntry): string {
+  return entry.id ?? entry.bundlePath
+}
+
+function isQuarantined(entry: BundleTemplateEntry): boolean {
+  return entry.bundlePath === QUARANTINE_FOLDER || entry.bundlePath.startsWith(`${QUARANTINE_FOLDER}/`)
+}
+
+function buildScenarioFolderTree(items: BundleTemplateEntry[]): { folders: ScenarioFolderNode[]; rootScenarios: BundleTemplateEntry[] } {
+  const rootScenarios: BundleTemplateEntry[] = []
+  type MutableNode = { name: string; path: string; children: Map<string, MutableNode>; scenarios: BundleTemplateEntry[] }
+  type RootNode = { children: Map<string, MutableNode>; scenarios: BundleTemplateEntry[] }
   const root: RootNode = { children: new Map(), scenarios: [] }
 
   const ensureNode = (parent: RootNode | MutableNode, name: string, path: string): MutableNode => {
@@ -87,37 +96,37 @@ export function ScenariosPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [folders, setFolders] = useState<string[]>([])
-  const [items, setItems] = useState<ScenarioSummary[]>([])
+  const [items, setItems] = useState<BundleTemplateEntry[]>([])
   const [filter, setFilter] = useState<FolderFilter>({ kind: 'all' })
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedKey, setSelectedKey] = useState<string | null>(null)
 
   const [newFolderPath, setNewFolderPath] = useState('')
   const [busy, setBusy] = useState(false)
-  const [deleteTarget, setDeleteTarget] = useState<ScenarioSummary | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<BundleTemplateEntry | null>(null)
   const uploadInputRef = useRef<HTMLInputElement | null>(null)
 
   const selected = useMemo(
-    () => (selectedId ? items.find((entry) => entry.id === selectedId) ?? null : null),
-    [items, selectedId],
+    () => (selectedKey ? items.find((entry) => entry.bundleKey === selectedKey) ?? null : null),
+    [items, selectedKey],
   )
 
   const [movePath, setMovePath] = useState('')
   useEffect(() => {
     const current = selected?.folderPath ? selected.folderPath.trim() : ''
     setMovePath(current)
-  }, [selected?.id, selected?.folderPath])
+  }, [selected?.bundleKey, selected?.folderPath])
 
   const reload = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const [list, folderList] = await Promise.all([listScenarios({ includeDefunct: true }), listScenarioFolders()])
+      const [list, folderList] = await Promise.all([listBundleTemplates(), listScenarioFolders()])
       setItems(list)
       setFolders(folderList)
-      setSelectedId((current) => {
+      setSelectedKey((current) => {
         if (list.length === 0) return null
-        if (current && list.some((entry) => entry.id === current)) return current
-        return list[0].id
+        if (current && list.some((entry) => entry.bundleKey === current)) return current
+        return list[0].bundleKey
       })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load scenarios')
@@ -200,7 +209,7 @@ export function ScenariosPage() {
     if (target === current) return
     setBusy(true)
     try {
-      await moveScenarioToFolder(selected.id, target.length > 0 ? target : null)
+      await moveBundleToFolder(selected.bundleKey, target.length > 0 ? target : null)
       await reload()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Move failed')
@@ -208,6 +217,20 @@ export function ScenariosPage() {
       setBusy(false)
     }
   }, [movePath, reload, selected])
+
+  const handleMoveToQuarantine = useCallback(async () => {
+    if (!selected || isQuarantined(selected)) return
+    setBusy(true)
+    setError(null)
+    try {
+      await moveBundleToFolder(selected.bundleKey, QUARANTINE_FOLDER)
+      await reload()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Move to quarantine failed')
+    } finally {
+      setBusy(false)
+    }
+  }, [reload, selected])
 
   const triggerUpload = useCallback(() => {
     uploadInputRef.current?.click()
@@ -221,11 +244,8 @@ export function ScenariosPage() {
       setBusy(true)
       setError(null)
       try {
-        const created = await uploadScenarioBundle(file)
+        await uploadScenarioBundle(file)
         await reload()
-        if (created?.id) {
-          setSelectedId(created.id)
-        }
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Upload failed')
       } finally {
@@ -240,7 +260,7 @@ export function ScenariosPage() {
     setBusy(true)
     setError(null)
     try {
-      const downloaded = await downloadScenarioBundle(selected.id)
+      const downloaded = await downloadBundle(selected.bundleKey)
       const url = URL.createObjectURL(downloaded.blob)
       const link = document.createElement('a')
       link.href = url
@@ -261,7 +281,7 @@ export function ScenariosPage() {
     setBusy(true)
     setError(null)
     try {
-      await deleteScenarioBundle(deleteTarget.id)
+      await deleteBundle(deleteTarget.bundleKey)
       setDeleteTarget(null)
       await reload()
     } catch (e) {
@@ -272,27 +292,30 @@ export function ScenariosPage() {
   }, [deleteTarget, reload])
 
   const renderScenarioButton = useCallback(
-    (entry: ScenarioSummary) => {
-      const active = entry.id === selectedId
+    (entry: BundleTemplateEntry) => {
+      const active = entry.bundleKey === selectedKey
       return (
         <button
-          key={entry.id}
+          key={entry.bundleKey}
           type="button"
           className={active ? 'swarmCard swarmCardSelected' : 'swarmCard'}
-          onClick={() => setSelectedId(entry.id)}
-          style={{ textAlign: 'left' }}
+          onClick={() => setSelectedKey(entry.bundleKey)}
+          style={{ textAlign: 'left', opacity: entry.defunct ? 0.7 : 1 }}
         >
           <div className="row between">
             <div className="h2">{entry.name}</div>
-            <div className="pill pillInfo">{folderLabel(entry)}</div>
+            <div className="row" style={{ gap: 6 }}>
+              {entry.defunct ? <div className="pill pillBad">DEFUNCT</div> : null}
+              <div className="pill pillInfo">{folderLabel(entry)}</div>
+            </div>
           </div>
           <div className="muted" style={{ marginTop: 6 }}>
-            {entry.id}
+            {bundleLabel(entry)}
           </div>
         </button>
       )
     },
-    [selectedId],
+    [selectedKey],
   )
 
   const renderFolderNode = useCallback(
@@ -315,7 +338,7 @@ export function ScenariosPage() {
       <ConfirmModal
         open={deleteTarget !== null}
         title="Delete bundle"
-        message={deleteTarget ? `Delete scenario bundle '${deleteTarget.id}'? This removes the bundle from Scenario Manager.` : ''}
+        message={deleteTarget ? `Delete scenario bundle '${bundleLabel(deleteTarget)}'? This removes the bundle from Scenario Manager.` : ''}
         confirmLabel="Delete"
         danger
         busy={busy}
@@ -438,13 +461,34 @@ export function ScenariosPage() {
               <div className="kvGrid" style={{ marginTop: 12 }}>
                 <div className="kv">
                   <div className="k">ID</div>
-                  <div className="v">{selected.id}</div>
+                  <div className="v">{selected.id ?? '—'}</div>
                 </div>
                 <div className="kv">
                   <div className="k">Folder</div>
                   <div className="v">{folderLabel(selected)}</div>
                 </div>
+                <div className="kv">
+                  <div className="k">Bundle</div>
+                  <div className="v">{selected.bundlePath}</div>
+                </div>
               </div>
+
+              {selected.defunct ? (
+                <div
+                  className="card"
+                  style={{
+                    borderColor: 'rgba(255, 95, 95, 0.45)',
+                    background: 'rgba(255, 95, 95, 0.08)',
+                    marginTop: 12,
+                  }}
+                >
+                  <div className="row" style={{ gap: 8, marginBottom: 8 }}>
+                    <span className="pill pillBad">DEFUNCT</span>
+                    <span className="h2" style={{ fontSize: 13 }}>This bundle cannot be used to create a swarm</span>
+                  </div>
+                  <div className="muted">{selected.defunctReason ?? 'Reason unavailable.'}</div>
+                </div>
+              ) : null}
 
               <div className="formGrid" style={{ marginTop: 14 }}>
                 <label className="field">
@@ -456,6 +500,9 @@ export function ScenariosPage() {
                     disabled={busy}
                   >
                     <option value="__root__">root</option>
+                    {!folders.includes(QUARANTINE_FOLDER) ? (
+                      <option value={QUARANTINE_FOLDER}>{QUARANTINE_FOLDER}</option>
+                    ) : null}
                     {folders.map((path) => (
                       <option key={path} value={path}>
                         {path}
@@ -470,10 +517,15 @@ export function ScenariosPage() {
                       type="button"
                       className="actionButton"
                       onClick={() => void handleMoveSelected()}
-                      disabled={busy || movePath.trim() === (selected.folderPath ? selected.folderPath.trim() : '')}
+                      disabled={busy || selected.defunct || movePath.trim() === (selected.folderPath ? selected.folderPath.trim() : '')}
                     >
                       Move
                     </button>
+                    {selected.defunct && !isQuarantined(selected) ? (
+                      <button type="button" className="actionButton" onClick={() => void handleMoveToQuarantine()} disabled={busy}>
+                        Move to quarantine
+                      </button>
+                    ) : null}
                     <button type="button" className="actionButton actionButtonGhost" onClick={() => void handleDownloadSelected()} disabled={busy}>
                       Download bundle
                     </button>
@@ -482,7 +534,11 @@ export function ScenariosPage() {
                     </button>
                   </div>
                   <div className="muted" style={{ marginTop: 6 }}>
-                    Folder delete requires the folder to be empty.
+                    {selected.defunct
+                      ? isQuarantined(selected)
+                        ? 'Quarantined bundles stay visible for diagnosis. Download or remove them when no longer needed.'
+                        : 'Defunct bundles can be quarantined, downloaded, or removed. Repair editing stays out of scope for broken ids.'
+                      : 'Healthy bundles can be moved between folders, downloaded, or removed.'}
                   </div>
                 </div>
               </div>

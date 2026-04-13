@@ -9,6 +9,19 @@ import { CapabilitiesProvider } from '../../contexts/CapabilitiesContext'
 
 let apiFetchSpy: MockInstance<typeof apiModule.apiFetch>
 
+function template(overrides: Record<string, unknown>) {
+  return {
+    bundleKey: 'bundles/basic',
+    bundlePath: 'bundles/basic',
+    id: 'basic',
+    name: 'Basic',
+    bees: [],
+    defunct: false,
+    defunctReason: null,
+    ...overrides,
+  }
+}
+
 beforeEach(() => {
   apiFetchSpy = vi.spyOn(apiModule, 'apiFetch')
 })
@@ -26,8 +39,8 @@ test('loads available scenarios on mount', async () => {
       return {
         ok: true,
         json: async () => [
-          { id: 'basic', name: 'Basic', bees: [] },
-          { id: 'advanced', name: 'Advanced', bees: [] },
+          template({}),
+          template({ bundleKey: 'bundles/advanced', bundlePath: 'bundles/advanced', id: 'advanced', name: 'Advanced' }),
         ],
       } as unknown as Response
     }
@@ -67,8 +80,8 @@ test('renders folder tree when scenarios include folderPath', async () => {
       return {
         ok: true,
         json: async () => [
-          { id: 'tcp-echo-demo', name: 'TCP Echo Demo', folderPath: 'tcp', bees: [] },
-          { id: 'tcp-nio-demo', name: 'TCP NIO Demo', folderPath: 'tcp', bees: [] },
+          template({ bundleKey: 'tcp/echo', bundlePath: 'tcp/echo', id: 'tcp-echo-demo', name: 'TCP Echo Demo', folderPath: 'tcp' }),
+          template({ bundleKey: 'tcp/nio', bundlePath: 'tcp/nio', id: 'tcp-nio-demo', name: 'TCP NIO Demo', folderPath: 'tcp' }),
         ],
       } as unknown as Response
     }
@@ -99,7 +112,7 @@ test('submits selected scenario', async () => {
     if (url === '/scenario-manager/api/templates') {
       return {
         ok: true,
-        json: async () => [{ id: 'basic', name: 'Basic', bees: [] }],
+        json: async () => [template({})],
       } as unknown as Response
     }
     if (url === '/scenario-manager/network-profiles') {
@@ -153,7 +166,7 @@ test('shows conflict message when swarm already exists', async () => {
     if (url === '/scenario-manager/api/templates') {
       return {
         ok: true,
-        json: async () => [{ id: 'basic', name: 'Basic', bees: [] }],
+        json: async () => [template({})],
       } as unknown as Response
     }
     if (url === '/scenario-manager/network-profiles') {
@@ -198,7 +211,7 @@ test('does not submit when scenario selection is cleared', async () => {
     if (url === '/scenario-manager/api/templates') {
       return {
         ok: true,
-        json: async () => [{ id: 'basic', name: 'Basic', bees: [] }],
+        json: async () => [template({})],
       } as unknown as Response
     }
     if (url === '/scenario-manager/network-profiles') {
@@ -227,7 +240,7 @@ test('loads scenario preview when a template is selected', async () => {
     if (url === '/scenario-manager/api/templates') {
       return {
         ok: true,
-        json: async () => [{ id: 'basic', name: 'Basic', bees: [] }],
+        json: async () => [template({})],
       } as unknown as Response
     }
     if (url === '/scenario-manager/network-profiles') {
@@ -263,4 +276,49 @@ test('loads scenario preview when a template is selected', async () => {
       headers: expect.objectContaining({ Accept: 'application/json' }),
     }),
   )
+})
+
+test('shows defunct bundle details and blocks create', async () => {
+  apiFetchSpy.mockImplementation(async (input: RequestInfo) => {
+    const url = typeof input === 'string' ? input : input.url
+    if (url === '/scenario-manager/api/templates') {
+      return {
+        ok: true,
+        json: async () => [
+          template({
+            bundleKey: 'broken/demo',
+            bundlePath: 'broken/demo',
+            id: null,
+            name: 'Broken Demo',
+            defunct: true,
+            defunctReason: 'YAML parse error: unexpected token',
+          }),
+        ],
+      } as unknown as Response
+    }
+    if (url === '/scenario-manager/network-profiles') {
+      return { ok: true, json: async () => [] } as unknown as Response
+    }
+    return { ok: true, json: async () => ({}) } as unknown as Response
+  })
+
+  render(
+    <CapabilitiesProvider>
+      <SwarmCreateModal onClose={() => {}} autoPullOnStart={false} onChangeAutoPull={() => {}} />
+    </CapabilitiesProvider>,
+  )
+
+  const brokenButton = await screen.findByRole('button', { name: 'Broken Demo' })
+  await screen.findByText('DEFUNCT')
+  await screen.findByText('YAML parse error: unexpected token')
+
+  fireEvent.click(brokenButton)
+  await screen.findAllByText('Broken Demo')
+  expect(screen.getAllByText('YAML parse error: unexpected token').length).toBeGreaterThan(0)
+  fireEvent.change(screen.getByLabelText(/swarm id/i), { target: { value: 'sw1' } })
+  fireEvent.click(screen.getByText('Create'))
+
+  await screen.findAllByText('YAML parse error: unexpected token')
+  expect(apiFetchSpy.mock.calls.some((call) => String(call[0]).includes('/scenario-manager/scenarios/'))).toBe(false)
+  expect(apiFetchSpy.mock.calls.some((call) => call[0] === '/orchestrator/swarms/sw1/create')).toBe(false)
 })
