@@ -31,15 +31,23 @@ class TemplateLoaderTest {
           "headersTemplate": {
             "X-Test": "true"
           },
-          "resultRules": {
-            "businessCode": {
-              "source": "RESPONSE_BODY",
-              "pattern": "RC=([A-Z0-9]+)"
-            },
-            "successRegex": "^(00)$"
-          }
-        }
-        """);
+	          "resultRules": {
+	            "businessCode": {
+	              "source": "RESPONSE_BODY",
+	              "pattern": "RC=([A-Z0-9]+)"
+	            },
+	            "successRegex": "^(00)$",
+	            "dimensions": [
+	              {
+	                "name": "segment",
+	                "source": "REQUEST_HEADER",
+	                "header": "X-Segment",
+	                "pattern": "(.+)"
+	              }
+	            ]
+	          }
+	        }
+	        """);
 
     TemplateLoader loader = new TemplateLoader();
     Map<String, TemplateDefinition> templates = loader.load(dir.toString(), "default");
@@ -53,11 +61,13 @@ class TemplateLoaderTest {
 
     assertThat(def).isInstanceOf(HttpTemplateDefinition.class);
     HttpTemplateDefinition httpDef = (HttpTemplateDefinition) def;
-    assertThat(httpDef.method()).isEqualTo("POST");
-    assertThat(httpDef.pathTemplate()).isEqualTo("/test");
-    assertThat(httpDef.resultRules()).isNotNull();
-    assertThat(httpDef.resultRules().successRegex()).isEqualTo("^(00)$");
-  }
+	    assertThat(httpDef.method()).isEqualTo("POST");
+	    assertThat(httpDef.pathTemplate()).isEqualTo("/test");
+	    assertThat(httpDef.resultRules()).isNotNull();
+	    assertThat(httpDef.resultRules().successRegex()).isEqualTo("^(00)$");
+	    assertThat(httpDef.resultRules().dimensions()).hasSize(1);
+	    assertThat(httpDef.resultRules().dimensions().get(0).name()).isEqualTo("segment");
+	  }
 
   @Test
   void failsWhenProtocolMissing() throws Exception {
@@ -92,15 +102,23 @@ class TemplateLoaderTest {
           "behavior": "ECHO",
           "bodyTemplate": "{{ payload }}",
           "headersTemplate": {},
-          "resultRules": {
-            "businessCode": {
-              "source": "RESPONSE_BODY",
-              "pattern": "RC=([A-Z0-9]+)"
-            },
-            "successRegex": "^(00)$"
-          }
-        }
-        """);
+	          "resultRules": {
+	            "businessCode": {
+	              "source": "RESPONSE_BODY",
+	              "pattern": "RC=([A-Z0-9]+)"
+	            },
+	            "successRegex": "^(00)$",
+	            "dimensions": [
+	              {
+	                "name": "segment",
+	                "source": "REQUEST_HEADER",
+	                "header": "X-Segment",
+	                "pattern": "(.+)"
+	              }
+	            ]
+	          }
+	        }
+	        """);
 
     TemplateLoader loader = new TemplateLoader();
     Map<String, TemplateDefinition> templates = loader.load(dir.toString(), "default");
@@ -114,10 +132,12 @@ class TemplateLoaderTest {
 
     assertThat(def).isInstanceOf(TcpTemplateDefinition.class);
     TcpTemplateDefinition tcpDef = (TcpTemplateDefinition) def;
-    assertThat(tcpDef.behavior()).isEqualTo("ECHO");
-    assertThat(tcpDef.resultRules()).isNotNull();
-    assertThat(tcpDef.resultRules().successRegex()).isEqualTo("^(00)$");
-  }
+	    assertThat(tcpDef.behavior()).isEqualTo("ECHO");
+	    assertThat(tcpDef.resultRules()).isNotNull();
+	    assertThat(tcpDef.resultRules().successRegex()).isEqualTo("^(00)$");
+	    assertThat(tcpDef.resultRules().dimensions()).hasSize(1);
+	    assertThat(tcpDef.resultRules().dimensions().get(0).name()).isEqualTo("segment");
+	  }
 
   @Test
   void loadsIso8583Template() throws Exception {
