@@ -30,6 +30,13 @@ class TemplateLoaderTest {
           "bodyTemplate": "{}",
           "headersTemplate": {
             "X-Test": "true"
+          },
+          "resultRules": {
+            "businessCode": {
+              "source": "RESPONSE_BODY",
+              "pattern": "RC=([A-Z0-9]+)"
+            },
+            "successRegex": "^(00)$"
           }
         }
         """);
@@ -48,6 +55,8 @@ class TemplateLoaderTest {
     HttpTemplateDefinition httpDef = (HttpTemplateDefinition) def;
     assertThat(httpDef.method()).isEqualTo("POST");
     assertThat(httpDef.pathTemplate()).isEqualTo("/test");
+    assertThat(httpDef.resultRules()).isNotNull();
+    assertThat(httpDef.resultRules().successRegex()).isEqualTo("^(00)$");
   }
 
   @Test
@@ -82,7 +91,14 @@ class TemplateLoaderTest {
           "protocol": "TCP",
           "behavior": "ECHO",
           "bodyTemplate": "{{ payload }}",
-          "headersTemplate": {}
+          "headersTemplate": {},
+          "resultRules": {
+            "businessCode": {
+              "source": "RESPONSE_BODY",
+              "pattern": "RC=([A-Z0-9]+)"
+            },
+            "successRegex": "^(00)$"
+          }
         }
         """);
 
@@ -99,6 +115,8 @@ class TemplateLoaderTest {
     assertThat(def).isInstanceOf(TcpTemplateDefinition.class);
     TcpTemplateDefinition tcpDef = (TcpTemplateDefinition) def;
     assertThat(tcpDef.behavior()).isEqualTo("ECHO");
+    assertThat(tcpDef.resultRules()).isNotNull();
+    assertThat(tcpDef.resultRules().successRegex()).isEqualTo("^(00)$");
   }
 
   @Test

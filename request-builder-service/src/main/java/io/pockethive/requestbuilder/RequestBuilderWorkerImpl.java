@@ -132,7 +132,8 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
                 headers,
                 tcpDef.endTag(),
                 tcpDef.maxBytes()
-            )
+            ),
+            tcpDef.resultRules()
         );
       } else if ("HTTP".equals(protocol) && definition instanceof HttpTemplateDefinition httpDef) {
         MessageTemplate template = MessageTemplate.builder()
@@ -169,7 +170,8 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
                 rendered.path(),
                 headers,
                 resolveBodyValue(rendered.body(), isJson)
-            )
+            ),
+            httpDef.resultRules()
         );
       } else if ("ISO8583".equals(protocol) && definition instanceof Iso8583TemplateDefinition isoDef) {
         envelope = buildIso8583Envelope(isoDef, effectiveSeed, context, serviceId, callId);
@@ -310,7 +312,7 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
           requireNonBlank(rendered.body(), "payload"),
           headers,
           null
-      ));
+      ), isoDef.resultRules());
     }
 
     if ("FIELD_LIST_XML".equals(payloadAdapter)) {
@@ -333,7 +335,7 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
           hexPayload,
           headers,
           null
-      ));
+      ), isoDef.resultRules());
     }
 
     throw new IllegalArgumentException("Unsupported ISO8583 payloadAdapter in template: " + payloadAdapter);

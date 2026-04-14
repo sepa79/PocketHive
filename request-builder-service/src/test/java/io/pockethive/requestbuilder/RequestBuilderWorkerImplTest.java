@@ -53,6 +53,13 @@ class RequestBuilderWorkerImplTest {
           "bodyTemplate": "{{ payload }}",
           "headersTemplate": {
             "X-Test": "yes"
+          },
+          "resultRules": {
+            "businessCode": {
+              "source": "RESPONSE_BODY",
+              "pattern": "RC=([A-Z0-9]+)"
+            },
+            "successRegex": "^(00)$"
           }
         }
         """);
@@ -81,6 +88,8 @@ class RequestBuilderWorkerImplTest {
     assertThat(envelope.get("request").get("method").asText()).isEqualTo("POST");
     assertThat(envelope.get("request").get("body").asText()).isEqualTo("body");
     assertThat(envelope.get("request").get("headers").get("X-Test").asText()).isEqualTo("yes");
+    assertThat(envelope.get("resultRules")).isNotNull();
+    assertThat(envelope.get("resultRules").get("successRegex").asText()).isEqualTo("^(00)$");
   }
 
   @Test

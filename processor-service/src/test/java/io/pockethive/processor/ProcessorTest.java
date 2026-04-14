@@ -11,6 +11,7 @@ import io.pockethive.processor.transport.TcpBehavior;
 import io.pockethive.processor.transport.TcpRequest;
 import io.pockethive.processor.transport.TcpResponse;
 import io.pockethive.processor.transport.TcpTransport;
+import io.pockethive.swarm.model.ResultRules;
 import io.pockethive.worker.sdk.api.HttpRequestEnvelope;
 import io.pockethive.worker.sdk.api.Iso8583RequestEnvelope;
 import io.pockethive.worker.sdk.api.TcpRequestEnvelope;
@@ -42,6 +43,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.StreamSupport;
@@ -140,6 +142,67 @@ class ProcessorTest {
                 .containsEntry("transactions", 1L)
                 .containsEntry("successRatio", 1.0)
                 .containsEntry("avgLatencyMs", 0.0);
+    }
+
+    @Test
+    void workerExtractsBusinessOutcomeHeadersFromResultRules() throws Exception {
+        ProcessorWorkerProperties properties = newProcessorWorkerProperties();
+        properties.setConfig(Map.of("baseUrl", "http://sut"));
+        HttpClient httpClient = mock(HttpClient.class);
+        Clock clock = Clock.fixed(Instant.parse("2024-03-01T00:00:00Z"), ZoneOffset.UTC);
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, clock);
+        ProcessorWorkerConfig config = new ProcessorWorkerConfig("http://sut", null, 0, 0.0, null, null, null, null, null);
+        TestWorkerContext context = new TestWorkerContext(config);
+
+        when(httpClient.execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class))).thenAnswer(invocation -> {
+            HttpClientResponseHandler<?> handler = invocation.getArgument(1, HttpClientResponseHandler.class);
+            BasicClassicHttpResponse response = new BasicClassicHttpResponse(200, "OK");
+            response.setEntity(new StringEntity("{\"resultCode\":\"00\"}", java.nio.charset.StandardCharsets.UTF_8));
+            return handler.handleResponse(response);
+        });
+
+        ResultRules resultRules = new ResultRules(
+            new ResultRules.ValueExtractor(
+                ResultRules.Source.RESPONSE_BODY,
+                "\"resultCode\":\"([^\"]+)\"",
+                null
+            ),
+            "^(00)$",
+            List.of(
+                new ResultRules.DimensionExtractor(
+                    "customer_code",
+                    ResultRules.Source.REQUEST_BODY,
+                    "\"customerCode\":\"([^\"]+)\"",
+                    null
+                ),
+                new ResultRules.DimensionExtractor(
+                    "segment",
+                    ResultRules.Source.REQUEST_HEADER,
+                    "(.+)",
+                    "X-Customer-Segment"
+                )
+            )
+        );
+
+        WorkerInfo info = new WorkerInfo("ingress", "swarm", "ingress-instance", null, null);
+        WorkItem inbound = WorkItem.json(info, HttpRequestEnvelope.of(
+            new HttpRequestEnvelope.HttpRequest(
+                "post",
+                "/api",
+                Map.of("X-Customer-Segment", "retail"),
+                "{\"customerCode\":\"custA\",\"amount\":100}"
+            ),
+            resultRules
+        )).build();
+
+        WorkItem outbound = worker.onMessage(inbound, context);
+
+        assertThat(outbound).isNotNull();
+        assertThat(outbound.stepHeaders())
+            .containsEntry("x-ph-business-code", "00")
+            .containsEntry("x-ph-business-success", "true")
+            .containsEntry("x-ph-dim-customer_code", "custA")
+            .containsEntry("x-ph-dim-segment", "retail");
     }
 
     @Test
@@ -435,6 +498,240 @@ class ProcessorTest {
     }
 
     @Test
+    void workerExtractsOutcomeHeadersFromIso8583ResultRules() throws Exception {
+        byte[] requestPayload = hex("0200A1B2C3D4");
+        byte[] responsePayload = hex("0210CAFEBABE");
+        try (IsoTestServer server = new IsoTestServer(responsePayload)) {
+            server.start();
+
+            ProcessorWorkerProperties properties = newProcessorWorkerProperties();
+            properties.setConfig(Map.of("baseUrl", "tcp://127.0.0.1:" + server.port()));
+            HttpClient httpClient = mock(HttpClient.class);
+            ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC());
+            ProcessorWorkerConfig config = new ProcessorWorkerConfig(
+                "tcp://127.0.0.1:" + server.port(),
+                null,
+                0,
+                0.0,
+                null,
+                null,
+                null,
+                null,
+                null
+            );
+            TestWorkerContext context = new TestWorkerContext(config);
+
+            ResultRules rules = new ResultRules(
+                new ResultRules.ValueExtractor(ResultRules.Source.RESPONSE_BODY, "0210([A-F0-9]{2})", null),
+                "^(CA)$",
+                List.of(
+                    new ResultRules.DimensionExtractor("segment", ResultRules.Source.REQUEST_HEADER, "(.+)", "X-Segment")
+                )
+            );
+
+            WorkItem inbound = WorkItem.json(context.info(), Iso8583RequestEnvelope.of(
+                new Iso8583RequestEnvelope.Iso8583Request(
+                    "MC_2BYTE_LEN_BIN_BITMAP",
+                    "RAW_HEX",
+                    "0200A1B2C3D4",
+                    Map.of("X-Segment", "retail"),
+                    null
+                ),
+                rules
+            )).build();
+
+            WorkItem result = worker.onMessage(inbound, context);
+
+            assertThat(result).isNotNull();
+            assertThat(result.stepHeaders())
+                .containsEntry("x-ph-business-code", "CA")
+                .containsEntry("x-ph-business-success", "true")
+                .containsEntry("x-ph-dim-segment", "retail");
+            assertThat(server.awaitHandled()).isTrue();
+            assertThat(server.lastRequestPayload()).containsExactly(requestPayload);
+            verify(httpClient, never()).execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class));
+        }
+    }
+
+    @Test
+    void workerExtractsOutcomeHeadersFromTcpResultRules() throws Exception {
+        ProcessorWorkerProperties properties = newProcessorWorkerProperties();
+        properties.setConfig(Map.of("baseUrl", "tcp://tcp.example:9100"));
+        HttpClient httpClient = mock(HttpClient.class);
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC());
+        injectGlobalTcpTransport(worker, new TcpTransport() {
+            @Override
+            public TcpResponse execute(TcpRequest request, TcpBehavior behavior) {
+                return new TcpResponse(200, "pong".getBytes(java.nio.charset.StandardCharsets.UTF_8), 0L);
+            }
+
+            @Override
+            public void close() {
+            }
+        });
+        ProcessorWorkerConfig config = new ProcessorWorkerConfig("tcp://tcp.example:9100", null, 0, 0.0, null, null, null, null, null);
+        TestWorkerContext context = new TestWorkerContext(config);
+
+        ResultRules rules = new ResultRules(
+            new ResultRules.ValueExtractor(ResultRules.Source.RESPONSE_BODY, "^(pong)$", null),
+            "^(pong)$",
+            List.of(
+                new ResultRules.DimensionExtractor("segment", ResultRules.Source.REQUEST_HEADER, "(.+)", "X-Segment")
+            )
+        );
+
+        WorkerInfo info = new WorkerInfo("ingress", "swarm", "ingress-instance", null, null);
+        WorkItem inbound = WorkItem.json(info, TcpRequestEnvelope.of(
+            new TcpRequestEnvelope.TcpRequest(
+                "request_response",
+                "ping",
+                Map.of("X-Segment", "retail"),
+                null,
+                1024
+            ),
+            rules
+        )).build();
+
+        WorkItem result = worker.onMessage(inbound, context);
+
+        assertThat(result).isNotNull();
+        assertThat(result.stepHeaders())
+            .containsEntry("x-ph-business-code", "pong")
+            .containsEntry("x-ph-business-success", "true")
+            .containsEntry("x-ph-dim-segment", "retail");
+        verify(httpClient, never()).execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class));
+    }
+
+    @Test
+    void workerFailsLoudOnInvalidResultRulesRegex() throws Exception {
+        ProcessorWorkerProperties properties = newProcessorWorkerProperties();
+        properties.setConfig(Map.of("baseUrl", "tcp://tcp.example:9100"));
+        HttpClient httpClient = mock(HttpClient.class);
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC());
+        injectGlobalTcpTransport(worker, new TcpTransport() {
+            @Override
+            public TcpResponse execute(TcpRequest request, TcpBehavior behavior) {
+                return new TcpResponse(200, "pong".getBytes(java.nio.charset.StandardCharsets.UTF_8), 0L);
+            }
+
+            @Override
+            public void close() {
+            }
+        });
+
+        ResultRules rules = new ResultRules(
+            new ResultRules.ValueExtractor(ResultRules.Source.RESPONSE_BODY, "(", null),
+            null,
+            List.of()
+        );
+
+        WorkerInfo info = new WorkerInfo("ingress", "swarm", "ingress-instance", null, null);
+        WorkItem inbound = WorkItem.json(info, TcpRequestEnvelope.of(
+            new TcpRequestEnvelope.TcpRequest("request_response", "ping", Map.of(), null, 1024),
+            rules
+        )).build();
+
+        assertThatThrownBy(() -> worker.onMessage(inbound, new TestWorkerContext(
+            new ProcessorWorkerConfig("tcp://tcp.example:9100", null, 0, 0.0, null, null, null, null, null)
+        )))
+            .isInstanceOf(java.util.regex.PatternSyntaxException.class);
+    }
+
+    @Test
+    void workerFailsLoudWhenHeaderSourceIsMissingHeaderName() throws Exception {
+        ProcessorWorkerProperties properties = newProcessorWorkerProperties();
+        properties.setConfig(Map.of("baseUrl", "tcp://tcp.example:9100"));
+        HttpClient httpClient = mock(HttpClient.class);
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC());
+        injectGlobalTcpTransport(worker, new TcpTransport() {
+            @Override
+            public TcpResponse execute(TcpRequest request, TcpBehavior behavior) {
+                return new TcpResponse(200, "pong".getBytes(java.nio.charset.StandardCharsets.UTF_8), 0L);
+            }
+
+            @Override
+            public void close() {
+            }
+        });
+
+        ResultRules rules = new ResultRules(
+            new ResultRules.ValueExtractor(ResultRules.Source.RESPONSE_BODY, "^(pong)$", null),
+            null,
+            List.of(
+                new ResultRules.DimensionExtractor("segment", ResultRules.Source.REQUEST_HEADER, "(.+)", null)
+            )
+        );
+
+        WorkerInfo info = new WorkerInfo("ingress", "swarm", "ingress-instance", null, null);
+        WorkItem inbound = WorkItem.json(info, TcpRequestEnvelope.of(
+            new TcpRequestEnvelope.TcpRequest("request_response", "ping", Map.of("X-Segment", "retail"), null, 1024),
+            rules
+        )).build();
+
+        assertThatThrownBy(() -> worker.onMessage(inbound, new TestWorkerContext(
+            new ProcessorWorkerConfig("tcp://tcp.example:9100", null, 0, 0.0, null, null, null, null, null)
+        )))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("header must not be blank");
+    }
+
+    @Test
+    void workerFailsLoudOnDuplicateDimensionsAfterNormalization() throws Exception {
+        ProcessorWorkerProperties properties = newProcessorWorkerProperties();
+        properties.setConfig(Map.of("baseUrl", "tcp://tcp.example:9100"));
+        HttpClient httpClient = mock(HttpClient.class);
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC());
+        injectGlobalTcpTransport(worker, new TcpTransport() {
+            @Override
+            public TcpResponse execute(TcpRequest request, TcpBehavior behavior) {
+                return new TcpResponse(200, "pong".getBytes(java.nio.charset.StandardCharsets.UTF_8), 0L);
+            }
+
+            @Override
+            public void close() {
+            }
+        });
+
+        ResultRules rules = new ResultRules(
+            new ResultRules.ValueExtractor(ResultRules.Source.RESPONSE_BODY, "^(pong)$", null),
+            null,
+            List.of(
+                new ResultRules.DimensionExtractor("a b", ResultRules.Source.REQUEST_BODY, "^(ping)$", null),
+                new ResultRules.DimensionExtractor("a-b", ResultRules.Source.REQUEST_BODY, "^(ping)$", null)
+            )
+        );
+
+        WorkerInfo info = new WorkerInfo("ingress", "swarm", "ingress-instance", null, null);
+        WorkItem inbound = WorkItem.json(info, TcpRequestEnvelope.of(
+            new TcpRequestEnvelope.TcpRequest("request_response", "ping", Map.of(), null, 1024),
+            rules
+        )).build();
+
+        assertThatThrownBy(() -> worker.onMessage(inbound, new TestWorkerContext(
+            new ProcessorWorkerConfig("tcp://tcp.example:9100", null, 0, 0.0, null, null, null, null, null)
+        )))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Duplicate ResultRules dimension after normalization");
+    }
+
+    @Test
+    void workerRejectsIso8583RawHexPayloadContainingWhitespace() throws Exception {
+        ProcessorWorkerProperties properties = newProcessorWorkerProperties();
+        properties.setConfig(Map.of("baseUrl", "tcp://127.0.0.1:6036"));
+        HttpClient httpClient = mock(HttpClient.class);
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC());
+        ProcessorWorkerConfig config = new ProcessorWorkerConfig("tcp://127.0.0.1:6036", null, 0, 0.0, null, null, null, null, null);
+        TestWorkerContext context = new TestWorkerContext(config);
+
+        WorkItem inbound = inboundIsoItem("MC_2BYTE_LEN_BIN_BITMAP", "RAW_HEX", "02 00");
+
+        assertThatThrownBy(() -> worker.onMessage(inbound, context))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("must not contain whitespace");
+        verify(httpClient, never()).execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class));
+    }
+
+    @Test
     void workerRejectsUnsupportedIso8583PayloadAdapter() throws Exception {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
         properties.setConfig(Map.of("baseUrl", "tcp://127.0.0.1:6036"));
@@ -602,6 +899,7 @@ class ProcessorTest {
             payload.get("body")
         ))).build();
     }
+
 
     private static WorkItem inboundTcpItem(String behavior, String body) {
         WorkerInfo info = new WorkerInfo("ingress", "swarm", "ingress-instance", null, null);

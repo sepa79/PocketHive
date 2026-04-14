@@ -1,12 +1,14 @@
 package io.pockethive.worker.sdk.api;
 
+import io.pockethive.swarm.model.ResultRules;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 
 public record HttpRequestEnvelope(
     String kind,
-    HttpRequest request
+    HttpRequest request,
+    ResultRules resultRules
 ) {
     public static final String KIND = "http.request";
 
@@ -18,7 +20,11 @@ public record HttpRequestEnvelope(
     }
 
     public static HttpRequestEnvelope of(HttpRequest request) {
-        return new HttpRequestEnvelope(KIND, request);
+        return new HttpRequestEnvelope(KIND, request, null);
+    }
+
+    public static HttpRequestEnvelope of(HttpRequest request, ResultRules resultRules) {
+        return new HttpRequestEnvelope(KIND, request, resultRules);
     }
 
     public record HttpRequest(

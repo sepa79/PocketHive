@@ -1,6 +1,7 @@
 package io.pockethive.requesttemplates;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import io.pockethive.swarm.model.ResultRules;
 import java.util.Map;
 
 /**
@@ -17,7 +18,7 @@ public record HttpTemplateDefinition(
     String pathTemplate,
     String bodyTemplate,
     Map<String, String> headersTemplate,
-    Map<String, Object> auth
+    Map<String, Object> auth,
+    ResultRules resultRules
 ) implements TemplateDefinition {
 }
-

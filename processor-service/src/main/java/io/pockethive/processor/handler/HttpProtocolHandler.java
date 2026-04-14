@@ -1,13 +1,16 @@
 package io.pockethive.processor.handler;
 
 import io.pockethive.processor.ProcessorWorkerConfig;
+import io.pockethive.processor.ResultRulesExtractor;
 import io.pockethive.processor.metrics.*;
 import io.pockethive.processor.exception.ProcessorCallException;
 import io.pockethive.processor.response.ResponseBuilder;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.ObjectReader;
 import io.pockethive.worker.sdk.api.HttpRequestEnvelope;
 import io.pockethive.worker.sdk.api.HttpResultEnvelope;
 import io.pockethive.worker.sdk.api.WorkItem;
@@ -31,6 +34,7 @@ import org.slf4j.Logger;
 
 public class HttpProtocolHandler implements ProtocolHandler {
   private final ObjectMapper mapper;
+  private final ObjectReader strictEnvelopeReader;
   private final Clock clock;
   private final CallMetricsRecorder metricsRecorder;
   private final HttpClient httpClient;
@@ -50,6 +54,8 @@ public class HttpProtocolHandler implements ProtocolHandler {
                              ThreadLocal<HttpClient> insecurePerThreadClient,
                              java.util.concurrent.atomic.AtomicLong nextAllowedTimeNanos) {
     this.mapper = mapper;
+    this.strictEnvelopeReader = mapper.readerFor(HttpRequestEnvelope.class)
+        .with(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
     this.clock = clock;
     this.metricsRecorder = metricsRecorder;
     this.httpClient = httpClient;
@@ -64,9 +70,15 @@ public class HttpProtocolHandler implements ProtocolHandler {
   @Override
   public WorkItem invoke(WorkItem message, JsonNode envelope, ProcessorWorkerConfig config, WorkerContext context) throws Exception {
     Logger logger = context.logger();
-    HttpRequestEnvelope.HttpRequest requestEnvelope = parseRequest(envelope);
-    String method = requestEnvelope.method();
-    String path = requestEnvelope.path();
+    HttpRequestEnvelope requestEnvelope;
+    try {
+      requestEnvelope = parseEnvelope(envelope);
+    } catch (IllegalArgumentException ex) {
+      throw new ProcessorCallException(CallMetrics.failure(0L, 0L, -1), ex, Map.of("transport", "http"));
+    }
+    HttpRequestEnvelope.HttpRequest requestInfo = requestEnvelope.request();
+    String method = requestInfo.method();
+    String path = requestInfo.path();
     String baseUrl = config.baseUrl();
     Map<String, Object> unresolvedRequest = requestMetadata(null, method, baseUrl, path);
     boolean absolutePath = isAbsoluteHttpUri(path);
@@ -82,12 +94,12 @@ public class HttpProtocolHandler implements ProtocolHandler {
       throw new ProcessorCallException(CallMetrics.failure(0L, 0L, -1),
           new IllegalArgumentException("invalid baseUrl"), unresolvedRequest);
     }
-    Map<String, Object> request = requestMetadata(target, method, baseUrl, path);
+    Map<String, Object> requestMeta = requestMetadata(target, method, baseUrl, path);
 
-    JsonNode headersNode = mapper.valueToTree(requestEnvelope.headers());
+    JsonNode headersNode = mapper.valueToTree(requestInfo.headers());
     headersNode.fields().forEachRemaining(entry -> logger.debug("header {}={}", entry.getKey(), entry.getValue().asText()));
 
-    Optional<String> body = extractBody(requestEnvelope.body());
+    Optional<String> body = extractBody(requestInfo.body());
     logger.debug("HTTP REQUEST {} {} headers={} body={}", method, target, headersNode, body.orElse(""));
 
     long start = clock.millis();
@@ -124,7 +136,7 @@ public class HttpProtocolHandler implements ProtocolHandler {
 
       CallOutcome outcome = client.execute(apacheRequest, handler);
       HttpResultEnvelope resultEnvelope = HttpResultEnvelope.of(
-          mapper.convertValue(request, HttpResultEnvelope.HttpRequestInfo.class),
+          mapper.convertValue(requestMeta, HttpResultEnvelope.HttpRequestInfo.class),
           new HttpResultEnvelope.HttpOutcome(
               HttpResultEnvelope.OUTCOME_HTTP_RESPONSE,
               outcome.statusCode(),
@@ -136,7 +148,15 @@ public class HttpProtocolHandler implements ProtocolHandler {
       );
       ObjectNode result = mapper.valueToTree(resultEnvelope);
 
-      WorkItem responseItem = ResponseBuilder.build(result, context.info(), outcome.metrics());
+      Map<String, Object> extractionHeaders = ResultRulesExtractor.extract(
+          requestEnvelope.resultRules(),
+          body.orElse(""),
+          requestInfo.headers(),
+          outcome.body(),
+          outcome.headers()
+      );
+
+      WorkItem responseItem = ResponseBuilder.build(result, context.info(), outcome.metrics(), extractionHeaders);
       WorkItem updated = message.addStep(context.info(), responseItem.asString(), responseItem.stepHeaders());
       return updated.toBuilder().contentType(responseItem.contentType()).build();
     } catch (Exception ex) {
@@ -146,15 +166,15 @@ public class HttpProtocolHandler implements ProtocolHandler {
       long connectionLatency = Math.max(0L, pacingMillis);
       CallMetrics metrics = CallMetrics.failure(callDuration, connectionLatency, -1);
       metricsRecorder.record(metrics);
-      throw new ProcessorCallException(metrics, ex, request);
+      throw new ProcessorCallException(metrics, ex, requestMeta);
     }
   }
 
-  private HttpRequestEnvelope.HttpRequest parseRequest(JsonNode envelope) {
+  private HttpRequestEnvelope parseEnvelope(JsonNode envelope) {
     try {
-      HttpRequestEnvelope parsed = mapper.treeToValue(envelope, HttpRequestEnvelope.class);
-      return parsed.request();
+      return strictEnvelopeReader.readValue(envelope);
     } catch (Exception ex) {
+      // Intentionally fail-loud: malformed envelope/resultRules must not be silently ignored.
       throw new IllegalArgumentException("Invalid HTTP request envelope", ex);
     }
   }
