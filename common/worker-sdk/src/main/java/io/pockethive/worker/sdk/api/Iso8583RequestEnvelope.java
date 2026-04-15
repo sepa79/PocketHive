@@ -1,12 +1,14 @@
 package io.pockethive.worker.sdk.api;
 
+import io.pockethive.swarm.model.ResultRules;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 
 public record Iso8583RequestEnvelope(
     String kind,
-    Iso8583Request request
+    Iso8583Request request,
+    ResultRules resultRules
 ) {
     public static final String KIND = "iso8583.request";
 
@@ -18,7 +20,11 @@ public record Iso8583RequestEnvelope(
     }
 
     public static Iso8583RequestEnvelope of(Iso8583Request request) {
-        return new Iso8583RequestEnvelope(KIND, request);
+        return new Iso8583RequestEnvelope(KIND, request, null);
+    }
+
+    public static Iso8583RequestEnvelope of(Iso8583Request request, ResultRules resultRules) {
+        return new Iso8583RequestEnvelope(KIND, request, resultRules);
     }
 
     public record Iso8583Request(

@@ -53,9 +53,24 @@ class RequestBuilderWorkerImplTest {
           "bodyTemplate": "{{ payload }}",
           "headersTemplate": {
             "X-Test": "yes"
-          }
-        }
-        """);
+          },
+	          "resultRules": {
+	            "businessCode": {
+	              "source": "RESPONSE_BODY",
+	              "pattern": "RC=([A-Z0-9]+)"
+	            },
+	            "successRegex": "^(00)$",
+	            "dimensions": [
+	              {
+	                "name": "segment",
+	                "source": "REQUEST_HEADER",
+	                "header": "X-Segment",
+	                "pattern": "(.+)"
+	              }
+	            ]
+	          }
+	        }
+	        """);
 
     properties.setConfig(Map.of(
         "templateRoot", dir.toString(),
@@ -78,10 +93,16 @@ class RequestBuilderWorkerImplTest {
     JsonNode envelope = new ObjectMapper().readTree(result.asString());
     assertThat(envelope.get("kind").asText()).isEqualTo("http.request");
     assertThat(envelope.get("request").get("path").asText()).isEqualTo("/test");
-    assertThat(envelope.get("request").get("method").asText()).isEqualTo("POST");
-    assertThat(envelope.get("request").get("body").asText()).isEqualTo("body");
-    assertThat(envelope.get("request").get("headers").get("X-Test").asText()).isEqualTo("yes");
-  }
+	    assertThat(envelope.get("request").get("method").asText()).isEqualTo("POST");
+	    assertThat(envelope.get("request").get("body").asText()).isEqualTo("body");
+	    assertThat(envelope.get("request").get("headers").get("X-Test").asText()).isEqualTo("yes");
+	    assertThat(envelope.get("resultRules")).isNotNull();
+	    assertThat(envelope.get("resultRules").get("successRegex").asText()).isEqualTo("^(00)$");
+	    assertThat(envelope.get("resultRules").get("dimensions")).isNotNull();
+	    assertThat(envelope.get("resultRules").get("dimensions").isArray()).isTrue();
+	    assertThat(envelope.get("resultRules").get("dimensions").size()).isEqualTo(1);
+	    assertThat(envelope.get("resultRules").get("dimensions").get(0).get("name").asText()).isEqualTo("segment");
+	  }
 
   @Test
   void dropsMessageWhenCallIdMissingAndPassThroughDisabled() {

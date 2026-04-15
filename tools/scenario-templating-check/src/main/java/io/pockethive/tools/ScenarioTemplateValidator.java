@@ -391,7 +391,8 @@ public final class ScenarioTemplateValidator {
                 raw.pathTemplate(),
                 raw.bodyTemplate(),
                 raw.headersTemplate(),
-                raw.auth()
+                raw.auth(),
+                raw.resultRules()
             );
         } catch (Exception ex) {
             throw new IllegalStateException("Failed to parse HTTP template " + path, ex);
