@@ -167,7 +167,10 @@ bundle.
 
 ## 13. Planned follow-up docs
 
-- [ ] Component spec for offline Monaco integration in UI v2.
-- [ ] API spec for generic bundle tree and file CRUD.
-- [ ] UI interaction spec for Scenario Workspace.
+- [x] Component spec for offline Monaco integration in UI v2:
+      `docs/ui-v2/MONACO_OFFLINE_SPEC.md`
+- [x] API spec for generic bundle tree and file CRUD:
+      `docs/scenarios/SCENARIO_BUNDLE_WORKSPACE_API_SPEC.md`
+- [x] UI interaction spec for Scenario Workspace:
+      `docs/ui-v2/SCENARIO_WORKSPACE_UI_SPEC.md`
 - [ ] Acceptance checklist for MVP release.

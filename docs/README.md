@@ -42,6 +42,13 @@ Welcome to the PocketHive documentation hub. Use these resources to understand t
 - [Scenario contract](scenarios/SCENARIO_CONTRACT.md)
 - [Scenario patterns](scenarios/SCENARIO_PATTERNS.md)
 - [Scenario templating (moved)](scenarios/SCENARIO_TEMPLATING.md)
+- [Scenario bundle workspace API spec](scenarios/SCENARIO_BUNDLE_WORKSPACE_API_SPEC.md)
+
+## UI v2
+- [UI v2 shell and flow](ui-v2/UI_V2_FLOW.md)
+- [Scenario workspace plan](ui-v2/SCENARIO_WORKSPACE_PLAN.md)
+- [Scenario workspace UI spec](ui-v2/SCENARIO_WORKSPACE_UI_SPEC.md)
+- [Monaco offline spec](ui-v2/MONACO_OFFLINE_SPEC.md)
 
 ## Contributing
 - [Contributor Guide](../CONTRIBUTING.md)
