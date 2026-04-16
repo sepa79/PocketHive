@@ -2139,8 +2139,12 @@ select.textInputCompact option {
 }
 
 .swarmTemplateTitle {
-  font-weight: 700;
+  font-weight: 600;
   font-size: 13px;
+}
+
+.swarmTemplateTitleDefunct {
+  color: var(--muted);
 }
 
 .swarmTemplateId {
@@ -2161,6 +2165,179 @@ select.textInputCompact option {
 
 .swarmTemplateValue {
   font-size: 12px;
+  color: var(--muted);
+}
+
+.swarmCreateActions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.swarmCreateToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--border2);
+  border-radius: 10px;
+  background: var(--panel2);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.swarmCreateToggle:hover {
+  border-color: var(--border);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.swarmCreateToggleChecked {
+  border-color: rgba(59, 130, 246, 0.45);
+  background: rgba(59, 130, 246, 0.12);
+}
+
+.swarmCreateToggle input[type='checkbox'] {
+  margin: 0;
+}
+
+.swarmCreateToggle input[type='checkbox']:disabled {
+  cursor: not-allowed;
+}
+
+.scenarioTreeShell {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+
+.scenarioTreeRowWrap {
+  padding: 2px 0;
+}
+
+.scenarioTreeRow {
+  min-width: 0;
+  height: 100%;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  background: transparent;
+}
+
+.scenarioTreeRow:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: var(--border2);
+}
+
+.scenarioTreeRowSelected {
+  border-color: var(--accent);
+  background: rgba(59, 130, 246, 0.12);
+}
+
+.scenarioTreeRowDefunct .scenarioTreeGlyphScenario {
+  background: rgba(148, 163, 184, 0.12);
+  border-color: rgba(148, 163, 184, 0.28);
+  color: rgba(226, 232, 240, 0.72);
+}
+
+.scenarioTreeToggle {
+  width: 18px;
+  height: 18px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.scenarioTreeToggle:disabled {
+  cursor: default;
+  opacity: 0;
+}
+
+.scenarioTreeGlyph {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.scenarioTreeGlyphFolder {
+  position: relative;
+  border-radius: 3px;
+  background: #d7a641;
+  width: 15px;
+  height: 11px;
+  margin-top: 3px;
+}
+
+.scenarioTreeGlyphFolder::before {
+  content: '';
+  position: absolute;
+  left: 1px;
+  top: -3px;
+  width: 8px;
+  height: 4px;
+  border-radius: 2px 2px 0 0;
+  background: #e5b85e;
+}
+
+.scenarioTreeGlyphFolderOpen {
+  background: #f0b94f;
+}
+
+.scenarioTreeGlyphFolderOpen::before {
+  background: #f6c972;
+}
+
+.scenarioTreeGlyphScenario {
+  border-radius: 3px;
+  background: rgba(59, 130, 246, 0.16);
+  border: 1px solid rgba(96, 165, 250, 0.42);
+  color: #7ab7ff;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.scenarioTreeText {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.scenarioTreeTitleRow {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.scenarioTreeTitle {
+  min-width: 0;
+  flex: 1;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.scenarioTreeTitleDefunct {
   color: var(--muted);
 }
 

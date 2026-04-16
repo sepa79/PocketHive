@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.15.18]
+Timestamp: 2026-04-16T00:00:00Z
+
+- UI v2 / Hive create-swarm: replace the hand-built scenario folder list with a `react-arborist` explorer-style tree for scenario selection, keeping folder/file visual distinction explicit without reusing the Scenarios admin view.
+- UI v2 / Hive create-swarm UX: stabilize scenario-tree interactions so selection no longer remounts the tree, folders stay open while browsing, defunct badges stop flickering, and parent folders open for the selected scenario without resetting the whole list.
+- UI v2 / Hive create-swarm form: keep `Bundle SUT` mounted at all times with an explicit unavailable state, rename template-oriented copy to scenario-oriented copy, surface defunct scenarios with muted titles, and move the `Pull images` toggle next to the `Create` action with stronger visual emphasis.
+
 ## [0.15.17]
 Timestamp: 2026-04-14T16:14:56Z
 
