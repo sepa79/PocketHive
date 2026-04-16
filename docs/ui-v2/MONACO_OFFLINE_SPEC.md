@@ -43,10 +43,9 @@ editor code and workers.
 
 Implementation direction:
 
-- Import Monaco from local npm dependencies.
-- Configure `@monaco-editor/react` with a **local Monaco instance** or an
-  equivalent local-only loader path.
-- Register Monaco workers through Vite-bundled worker entrypoints.
+- Keep Monaco sourced from local npm dependencies and packaged into the UI image.
+- Configure `@monaco-editor/react` with a **local-only loader path**.
+- Serve Monaco `vs/` assets from the same UI deployment.
 - Centralize Monaco setup in one shared UI v2 module.
 
 There will be **one Monaco bootstrap path** for UI v2. No alternate loader
@@ -63,7 +62,7 @@ Add a shared Monaco bootstrap module in UI v2, for example:
 Responsibilities:
 
 - configure Monaco exactly once,
-- register workers,
+- configure the local `vs/` path,
 - expose shared editor defaults,
 - expose Monaco init status for editor hosts.
 
@@ -75,21 +74,11 @@ Direct ad-hoc use of `@monaco-editor/react` without bootstrap is out of spec.
 
 ## 5. Worker model
 
-UI v2 must bundle Monaco workers locally via Vite.
+For MVP, Monaco workers are served from the local Monaco `vs/` asset tree
+packaged with UI v2.
 
-Minimum workers for MVP:
-
-- editor worker
-- JSON worker
-- CSS worker
-- HTML worker
-- TypeScript/JavaScript worker
-
-The bootstrap module must set `self.MonacoEnvironment.getWorker(...)` so Monaco
-resolves workers from local bundled URLs/workers only.
-
-If a language does not have a dedicated worker in MVP, it must fall back to the
-generic local editor worker, not to a remote source.
+This keeps worker resolution local to the UI deployment without relying on a
+remote CDN or a second runtime downloader.
 
 ---
 
@@ -97,13 +86,10 @@ generic local editor worker, not to a remote source.
 
 Preferred approach for UI v2:
 
-- provide `loader.config({ monaco })` with the imported local Monaco instance.
+- provide `loader.config({ paths: { vs: '<local-app-path>/monaco/vs' } })`
 
-This avoids relying on the default CDN-based `paths.vs` configuration and keeps
-resolution inside the bundled application.
-
-If the final implementation needs a local `paths.vs`, that local path must be
-served by the same UI deployment and versioned together with it.
+This replaces the default CDN-based configuration with a local app-served path.
+The Monaco asset tree must be versioned and shipped together with the UI image.
 
 ---
 

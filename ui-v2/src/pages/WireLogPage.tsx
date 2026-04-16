@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   clearWireLog,
   exportWireLogJsonl,
@@ -7,8 +7,7 @@ import {
 } from '../lib/controlPlane/wireLogStore'
 import type { ControlPlaneEnvelope } from '../lib/controlPlane/types'
 import { useToolsBar } from '../components/ToolsBarContext'
-
-const MonacoEditor = lazy(() => import('@monaco-editor/react'))
+import { MonacoEditorHost } from '../components/MonacoEditorHost'
 
 function resolveMonacoTheme() {
   return document.documentElement.dataset.theme === 'light' ? 'vs' : 'vs-dark'
@@ -399,29 +398,28 @@ export function WireLogPage() {
             <div className="modalSection modalSectionGrow">
               <div className="h2">Payload</div>
               <div className="modalEditor">
-                <Suspense
-                  fallback={
-                    <div className="monacoFallback">
-                      <div className="muted">Loading editor…</div>
+                <MonacoEditorHost
+                  height="100%"
+                  language="json"
+                  value={payloadText}
+                  theme={monacoTheme}
+                  options={{
+                    readOnly: true,
+                    minimap: { enabled: false },
+                    fontSize: 12,
+                    lineNumbers: 'off',
+                    scrollBeyondLastLine: false,
+                    wordWrap: 'on',
+                  }}
+                  loading={
+                    <div className="monacoFallback monacoSurface">
+                      <div className="monacoFallbackBody">
+                        <div className="muted">Loading editor…</div>
+                      </div>
                     </div>
                   }
-                >
-                  <MonacoEditor
-                    height="100%"
-                    language="json"
-                    value={payloadText}
-                    theme={monacoTheme}
-                    options={{
-                      readOnly: true,
-                      minimap: { enabled: false },
-                      fontSize: 12,
-                      lineNumbers: 'off',
-                      scrollBeyondLastLine: false,
-                      wordWrap: 'on',
-                    }}
-                    className="monacoSurface"
-                  />
-                </Suspense>
+                  className="monacoSurface"
+                />
               </div>
             </div>
           </div>

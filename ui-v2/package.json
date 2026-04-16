@@ -4,6 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "sync:monaco": "node ./scripts/sync-monaco.mjs",
+    "predev": "npm run sync:monaco",
+    "prebuild": "npm run sync:monaco",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview"

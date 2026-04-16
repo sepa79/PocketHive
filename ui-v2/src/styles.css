@@ -942,6 +942,22 @@ textarea,
   justify-content: center;
 }
 
+.monacoFallbackBody {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 18px;
+  text-align: center;
+}
+
+.monacoFallbackDetail {
+  color: var(--muted2);
+  font-size: 12px;
+  line-height: 1.4;
+  max-width: 460px;
+}
+
 :root[data-theme='light'] .codePre {
   border-color: rgba(10, 20, 30, 0.12);
   background: rgba(10, 20, 30, 0.04);
