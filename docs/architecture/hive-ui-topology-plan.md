@@ -114,7 +114,7 @@ behaviour.
   - guard semantics,
   - SUT / WireMock mappings.
 - No new features (multi‑SUT on canvas, scenario editing); those are covered by
-  `docs/toBeReviewed/scenario-sut-editor-plan.md` and related docs.
+  `docs/ui-v2/SCENARIO_WORKSPACE_PLAN.md` and related docs.
 
 ---
 

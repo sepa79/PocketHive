@@ -1,11 +1,14 @@
-# Scenario & SUT Editors — Plan
+# Scenario & SUT Editors — Historical Plan
 
-> **Scenario editor: superseded**  
-> The Scenario editor portion of this plan is superseded by `docs/scenarios/SCENARIO_EDITOR_STATUS.md`.
-> This file remains as a to-be-reviewed plan for the **SUT editor** and for historical context.
-
-> Status: **to be reviewed**  
-> Scope: UI, Scenario Manager, docs (no changes to workers or control‑plane contracts)
+> Status: **archived / superseded**  
+> This document is retained for historical context only.
+> Current UI v2 scenario workspace planning lives in
+> `docs/ui-v2/SCENARIO_WORKSPACE_PLAN.md`.
+> Current scenario editor status and gaps live in
+> `docs/scenarios/SCENARIO_EDITOR_STATUS.md`.
+> SUT environment planning still lives in `docs/toBeReviewed/sut-environments-plan.md`.
+>
+> Original scope: UI, Scenario Manager, docs (no changes to workers or control‑plane contracts)
 >
 > Review note: related SUT plan exists in `docs/toBeReviewed/sut-environments-plan.md`
 > and should be reviewed together with this document for consistency.

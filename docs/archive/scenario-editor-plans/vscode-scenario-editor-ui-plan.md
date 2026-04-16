@@ -1,4 +1,12 @@
-# Scenario Custom Editor (MVP Plan)
+# Scenario Custom Editor (MVP Plan) — Historical Archive
+
+> Status: **archived / superseded**  
+> This document is retained for historical context only.
+> It reflects an older **VS Code custom editor** direction and is no longer the
+> active plan for UI v2.
+> Current UI v2 planning lives in `docs/ui-v2/SCENARIO_WORKSPACE_PLAN.md`.
+> Current scenario editor behaviour/gaps live in
+> `docs/scenarios/SCENARIO_EDITOR_STATUS.md`.
 
 Goal: give junior users a form-first editor for `scenario.yaml` inside VS Code and avoid manual YAML edits.
 

@@ -72,6 +72,9 @@ Two-stage flow:
 
 The 2-column vs 3-column variant is a UX choice to validate in practice.
 
+Detailed implementation planning for the new bundle explorer/editor lives in
+`docs/ui-v2/SCENARIO_WORKSPACE_PLAN.md`.
+
 ### Hive
 
 Purpose:
