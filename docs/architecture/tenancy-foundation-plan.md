@@ -1,37 +1,47 @@
-# Deployment Boundary and User Permissions Foundation
+# PocketHive Access Control on Shared Auth Service
 
 > Status: proposal  
-> Scope: PocketHive deployment boundary, UI V2, Scenario Manager, Orchestrator, scoped user permissions  
+> Scope: PocketHive deployment boundary, UI V2, Scenario Manager, Orchestrator, PocketHive-specific permissions  
 > Note: legacy filename kept for now to avoid doc path churn.
 
 ## 1) Purpose
 
-Replace the earlier runtime multi-tenancy direction with a simpler and more achievable model:
+Define PocketHive-specific access control on top of the shared auth foundation.
 
-1. **one PocketHive deployment = one tenant / one environment boundary**
-2. **users inside that deployment have different permissions**
-3. **access is controlled by scoped grants**
+This document is intentionally **not** the SSOT for shared authentication
+plumbing anymore.
 
-This document defines the minimum authorization model we need now, without introducing teams, roles, or external IAM complexity yet.
+Use together with:
+
+1. `docs/architecture/AUTH_SERVICE_FOUNDATION_PLAN.md`
+2. `docs/ui-v2/SCENARIO_WORKSPACE_PLAN.md`
+
+PocketHive-specific decisions here:
+
+1. one PocketHive deployment is one hard environment boundary
+2. PocketHive consumes identity/grants from shared `auth-service`
+3. PocketHive interprets those grants into bundle/folder/deployment access
+4. bundles and SUTs remain clean domain resources, not ACL holders
 
 ---
 
 ## 2) Why this direction
 
-The current system shape does not justify hard runtime multi-tenancy:
+The current system shape still does not justify hard runtime multi-tenancy:
 
 1. AMQP/control-plane topology is currently deployment-global.
 2. Orchestrator and worker runtime assume one shared topology namespace.
 3. Forcing tenant-scoped runtime now would create disproportionate code and ops complexity.
 
-The real business need is different:
+The real PocketHive need is:
 
 1. some users should only **view**
-2. some users should be able to **do everything**
-3. some scenarios should be safe for guest/demo/test usage
-4. some scenarios should remain restricted for privileged users only
+2. some users should be able to **run only selected scenarios**
+3. some users should be able to **do everything**
+4. this must work without pushing bundle ACL logic into scenario data
 
-That is an **authentication + authorization** problem, not a runtime tenancy problem.
+That is a **product authorization** problem built on top of shared
+authentication.
 
 ---
 
@@ -53,19 +63,14 @@ Implications:
 
 ---
 
-## 4) MVP authorization model
+## 4) PocketHive MVP authorization model
 
 ### 4.1 Users
 
-Introduce users as first-class principals.
+PocketHive does not own primary user authentication anymore.
 
-Minimum user shape:
-
-1. `id`
-2. `username`
-3. `displayName`
-4. `active`
-5. `authSource`
+PocketHive consumes the authenticated user and grants resolved by shared
+`auth-service`.
 
 ### 4.2 Permissions
 
@@ -86,9 +91,9 @@ Meaning:
 3. `ALL`
    - full administrative and operational access
 
-### 4.3 Grant scopes
+### 4.3 PocketHive scopes
 
-Permissions may be granted at different scopes.
+PocketHive interprets grants at these scopes:
 
 Supported scopes:
 
@@ -105,17 +110,18 @@ Meaning:
 3. `BUNDLE`
    - applies to one exact bundle
 
-This is simpler than keeping a separate scenario policy system.
+This remains simpler than keeping a separate scenario policy system or embedding
+ACL data inside bundles.
 
 ### 4.4 Status tracking
 
-- [ ] Define user identity contract for PocketHive HTTP APIs.
+- [ ] Integrate PocketHive services with shared `auth-service`.
 - [ ] Add MVP permissions: `VIEW`, `RUN`, `ALL`.
-- [ ] Add grant scope model: `GLOBAL`, `FOLDER`, `BUNDLE`.
+- [ ] Keep PocketHive resource mapping explicit: `GLOBAL`, `FOLDER`, `BUNDLE`.
 - [ ] Enforce authorization in Orchestrator create/start/stop/remove flows.
 - [ ] Enforce authorization in Scenario Manager edit/delete flows.
-- [ ] Surface current user and effective capabilities in UI v2.
-- [ ] Add user management API/UI for local administration.
+- [ ] Surface current user and effective capabilities from shared auth in UI v2.
+- [ ] Add PocketHive-side admin UX only after shared auth admin contracts exist.
 - [ ] Later: split `ALL` into finer-grained permissions.
 - [ ] Later: add roles and teams on top of grants, not instead of grants.
 
@@ -186,7 +192,7 @@ Roles and teams should be built as aggregation layers over these permissions, no
 
 ---
 
-## 6) Where authorization is enforced
+## 6) Where PocketHive authorization is enforced
 
 ## 6.1 Scenario Manager
 
@@ -218,7 +224,7 @@ Runtime actions depend on permission:
 
 UI V2 owns:
 
-1. showing current user
+1. showing current user from shared auth
 2. showing effective capability state
 3. hiding/disabling actions for insufficient permissions
 4. showing explicit denial reasons when a bundle is out of scope
@@ -241,25 +247,26 @@ Optional later metadata:
 1. `classification = TEST | STAGING | PRODUCTION`
 2. tags or labels used by policy engines
 
-## 7.2 User grants
+## 7.2 PocketHive-side grant interpretation
 
-MVP grant model:
+PocketHive grant interpretation model:
 
-1. a user has one or more grants
-2. each grant is:
+1. shared auth provides user grants
+2. PocketHive maps those grants into:
    - `permission`
    - `scopeType`
    - `scopeValue`
-3. a local admin assigns grants directly
+3. PocketHive keeps one evaluator model:
+   - `isAllowed(user, permission, resource)`
 
-We do not need teams/roles yet.
-Keep one evaluator model: `isAllowed(user, permission, resource)`.
+Shared auth remains responsible for storing the grant record.
+PocketHive remains responsible for understanding folder/bundle semantics.
 
 ---
 
 ## 8) API contract (minimum)
 
-1. APIs must resolve the current authenticated user explicitly.
+1. APIs must resolve the current authenticated user via shared auth integration.
 2. Read-only product APIs require at least `VIEW`.
 3. Launching a scenario requires `RUN` or `ALL` within matching scope.
 4. Mutating product APIs require `ALL` in MVP unless explicitly carved out by a future finer permission.
@@ -284,18 +291,18 @@ Current anchor points:
 3. `ui-v2`
    - user/capability display
    - action gating in Hive / Scenarios / Proxy
-4. shared docs/contracts
-   - permission enum
-   - grant scope enum
+4. shared auth integration
+   - consume current user from `auth-service`
+   - do not duplicate auth plumbing in PocketHive
 
 ---
 
 ## 10) Rollout order
 
 1. **PR 1**
-   - define user identity contract
-   - define MVP permission enum
-   - define grant scope enum
+   - integrate PocketHive with shared auth current-user flow
+   - define PocketHive MVP permission enum
+   - define PocketHive scope mapping
 2. **PR 2**
    - enforce authz in Orchestrator and Scenario Manager
    - add grant-aware evaluation to launch and workspace flows
@@ -303,7 +310,7 @@ Current anchor points:
    - expose current user and capabilities in UI v2
    - disable/hide unauthorized actions
 4. **PR 4**
-   - local user administration UI/API
+   - PocketHive admin UX on top of shared auth admin contracts
 5. **Later**
    - split `ALL` into granular permissions
    - add roles/teams if needed
@@ -316,6 +323,7 @@ Decided:
 
 1. one deployment is one hard environment boundary
 2. runtime multi-tenancy is not the target for this phase
-3. `VIEW`, `RUN`, and `ALL` are sufficient as the first user permission set
-4. folder/bundle scope is sufficient to allow guest/test launch without a separate scenario policy system
-5. backend authorization is mandatory; UI-only checks are insufficient
+3. PocketHive auth must build on shared `auth-service`
+4. `VIEW`, `RUN`, and `ALL` are sufficient as the first PocketHive permission set
+5. folder/bundle scope is sufficient to allow guest/test launch without a separate scenario policy system
+6. backend authorization is mandatory; UI-only checks are insufficient

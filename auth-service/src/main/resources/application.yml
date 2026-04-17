@@ -1,0 +1,50 @@
+spring:
+  application:
+    name: auth-service
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+pockethive:
+  auth-service:
+    provider: ${POCKETHIVE_AUTH_SERVICE_PROVIDER:DEV}
+    session-ttl: ${POCKETHIVE_AUTH_SERVICE_SESSION_TTL:PT8H}
+    users:
+      - id: 11111111-1111-1111-1111-111111111111
+        username: local-admin
+        display-name: Local Admin
+        active: true
+        grants:
+          - product: AUTH_SERVICE
+            permission: ADMIN
+            resourceType: AUTH_GLOBAL
+            resourceSelector: "*"
+          - product: POCKETHIVE
+            permission: ALL
+            resourceType: PH_DEPLOYMENT
+            resourceSelector: "*"
+      - id: 22222222-2222-2222-2222-222222222222
+        username: local-runner
+        display-name: Local Runner
+        active: true
+        grants:
+          - product: POCKETHIVE
+            permission: VIEW
+            resourceType: PH_DEPLOYMENT
+            resourceSelector: "*"
+          - product: POCKETHIVE
+            permission: RUN
+            resourceType: PH_FOLDER
+            resourceSelector: demo
+      - id: 33333333-3333-3333-3333-333333333333
+        username: local-viewer
+        display-name: Local Viewer
+        active: true
+        grants:
+          - product: POCKETHIVE
+            permission: VIEW
+            resourceType: PH_DEPLOYMENT
+            resourceSelector: "*"

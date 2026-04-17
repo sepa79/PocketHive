@@ -4,12 +4,13 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}"
 
-ALL_SERVICES=(rabbitmq log-aggregator scenario-manager network-proxy-manager haproxy orchestrator tcp-mock-server tcp-mock-server-tls toxiproxy ui ui-v2 prometheus grafana loki wiremock pushgateway redis redis-commander swarm-controller generator request-builder http-sequence moderator processor postprocessor clearing-export trigger)
+ALL_SERVICES=(rabbitmq log-aggregator auth-service scenario-manager network-proxy-manager haproxy orchestrator tcp-mock-server tcp-mock-server-tls toxiproxy ui ui-v2 prometheus grafana loki wiremock pushgateway redis redis-commander swarm-controller generator request-builder http-sequence moderator processor postprocessor clearing-export trigger)
 declare -A DURATIONS=()
 TIMING_ORDER=(clean build_base maven_package stage_artifacts docker_build_workers docker_build compose_up restart)
 BUILD_START_TIME=0
 JAR_MODULES=(
   log-aggregator-service
+  auth-service
   scenario-manager-service
   network-proxy-manager-service
   orchestrator-service
@@ -28,6 +29,7 @@ JAR_MODULES=(
 
 declare -A MODULE_TO_SERVICE=(
   ["log-aggregator-service"]="log-aggregator"
+  ["auth-service"]="auth-service"
   ["scenario-manager-service"]="scenario-manager"
   ["network-proxy-manager-service"]="network-proxy-manager"
   ["orchestrator-service"]="orchestrator"
@@ -45,6 +47,7 @@ declare -A MODULE_TO_SERVICE=(
 
 declare -A SERVICE_TO_MODULE=(
   ["log-aggregator"]="log-aggregator-service"
+  ["auth-service"]="auth-service"
   ["scenario-manager"]="scenario-manager-service"
   ["network-proxy-manager"]="network-proxy-manager-service"
   ["orchestrator"]="orchestrator-service"
@@ -128,6 +131,14 @@ compose_build_services() {
           -f scenario-manager-service/Dockerfile.runtime \
           --build-arg RUNTIME_IMAGE="${RUNTIME_IMAGE}" \
           -t scenario-manager:latest .
+        built_any=true
+        ;;
+      auth-service)
+        echo "Building auth-service image from auth-service/Dockerfile.runtime"
+        docker build \
+          -f auth-service/Dockerfile.runtime \
+          --build-arg RUNTIME_IMAGE="${RUNTIME_IMAGE}" \
+          -t auth-service:latest .
         built_any=true
         ;;
       network-proxy-manager)

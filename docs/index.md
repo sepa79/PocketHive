@@ -63,8 +63,13 @@ by the UI under `/docs/...` as part of the runtime image.
   (Status: implemented / archived) – directory-based scenario bundles and
   per-swarm runtimes (historical implementation plan).
 - `docs/architecture/tenancy-foundation-plan.md` (Status: planned / proposal) –
-  deployment boundary plus `users + permissions + scoped grants`
-  direction for PocketHive authz.
+  PocketHive-specific access-control model built on shared auth.
+- `docs/architecture/AUTH_SERVICE_FOUNDATION_PLAN.md` (Status: planned / proposal) –
+  standalone shared `auth-service` direction for PocketHive + HiveWatch,
+  with `DEV` first and room for `LDAP` later.
+- `docs/architecture/AUTH_SERVICE_API_SPEC.md` (Status: planned / spec draft) –
+  MVP HTTP contract for shared `auth-service`, bearer token resolution, and
+  product integration.
 - `docs/ui-v2/SCENARIO_WORKSPACE_PLAN.md` (Status: planned) –
   UI v2 Scenarios workspace plan for bundle explorer, offline Monaco, permissions,
   and guided editors.

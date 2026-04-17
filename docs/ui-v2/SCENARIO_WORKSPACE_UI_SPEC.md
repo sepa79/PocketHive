@@ -185,6 +185,7 @@ MVP workspace must show authorization state clearly.
 Minimum rules:
 
 - current user visible in page chrome or toolbar,
+- current user identity is sourced from shared `auth-service`,
 - effective scope/permission context visible when relevant,
 - authorization errors surfaced explicitly,
 - no hidden privilege escalation or fallback actions.

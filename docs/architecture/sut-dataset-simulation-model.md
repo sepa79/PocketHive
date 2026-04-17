@@ -354,11 +354,11 @@ Authorization changes must not force runtime AMQP topology redesign in PR 1.
    - write/read artifacts under deployment-local runtime paths,
    - do not introduce tenant-first layout unless runtime tenancy becomes a real requirement later.
 
-### PR 2: Minimal user/permission boundary
+### PR 2: Shared auth integration + minimal PocketHive permission boundary
 
-1. Add user identity resolution to governed APIs.
+1. Integrate governed APIs with shared `auth-service`.
 2. Introduce MVP permissions (`VIEW`, `RUN`, `ALL`).
-3. Introduce grant scope model (`GLOBAL`, `FOLDER`, `BUNDLE`).
+3. Introduce PocketHive grant scope model (`GLOBAL`, `FOLDER`, `BUNDLE`).
 4. Enforce authorization in Scenario Manager and Orchestrator reads/writes/launch flows.
 
 ### PR 3: Core simulation model (one backend vertical slice)
@@ -417,7 +417,9 @@ After team sign-off on this model, produce a contract-focused follow-up doc:
 3. `Dataset Space` schema (draft),
 4. binding validation error model,
 5. minimal REST/API surface proposal.
-6. authorization companion doc: `docs/architecture/tenancy-foundation-plan.md`.
+6. authorization companion docs:
+   - `docs/architecture/AUTH_SERVICE_FOUNDATION_PLAN.md`
+   - `docs/architecture/tenancy-foundation-plan.md`.
 
 ---
 

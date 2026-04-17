@@ -10,6 +10,7 @@
 > - `docs/scenarios/SCENARIO_EDITOR_STATUS.md`
 > - `docs/ui-v2/UI_V2_FLOW.md`
 > - `docs/architecture/tenancy-foundation-plan.md`
+> - `docs/architecture/AUTH_SERVICE_FOUNDATION_PLAN.md`
 
 This plan defines the **new Scenarios page** in UI v2 as a **bundle workspace**
 with a file explorer, built-in editor, bundle operations, and access-control-aware
@@ -66,6 +67,8 @@ bundle.
       image and served locally.
 - [ ] **Explicit authorization**: all mutating and launch actions flow through
       explicit backend permission checks and fail-fast denials.
+- [ ] **Shared auth integration**: current user and grants come from shared
+      `auth-service`, not Scenarios-page-local auth logic.
 
 ---
 
@@ -136,13 +139,14 @@ bundle.
 
 ## 10. Track 6 — Access control
 
-- [ ] Show current user and effective permission level in UI v2.
+- [ ] Show current user and effective permission level from shared `auth-service` in UI v2.
 - [ ] Surface effective scope boundaries clearly in Scenarios workspace.
 - [ ] Disable or hide unauthorized actions without remount flicker.
 - [ ] Make `VIEW` pure read-only in the workspace.
 - [ ] Allow `RUN` only for launching bundles within granted scope.
 - [ ] Require `ALL` for move/edit/delete/upload actions in MVP.
 - [ ] Keep backend as the real enforcement boundary for all workspace mutations.
+- [ ] Avoid product-local auth plumbing that diverges from HiveWatch.
 
 ---
 

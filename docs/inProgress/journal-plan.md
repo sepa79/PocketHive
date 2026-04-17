@@ -156,7 +156,7 @@ Goal: provide a first‑class, queryable journal for swarms (control‑plane sco
 
 > Goal: prepare Journals and Scenarios for future user-based access control without forcing runtime multi-tenancy into this branch.
 
-- [ ] Capture `actor` (who triggered actions) and effective permission context on:
+- [ ] Capture `actor` (who triggered actions) and effective permission context from shared auth on:
   - swarm runs (metadata)
   - pinned captures/archives
   - relevant journal events (where appropriate)

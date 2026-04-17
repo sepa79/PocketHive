@@ -337,6 +337,20 @@ services:
       retries: 10
       start_period: 30s
 
+  auth-service:
+    image: ${DOCKER_REGISTRY:-}auth-service:${POCKETHIVE_VERSION:-latest}
+    environment:
+      POCKETHIVE_AUTH_SERVICE_PROVIDER: ${POCKETHIVE_AUTH_SERVICE_PROVIDER:-DEV}
+      POCKETHIVE_AUTH_SERVICE_SESSION_TTL: ${POCKETHIVE_AUTH_SERVICE_SESSION_TTL:-PT8H}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/actuator/health | grep -q UP"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+    ports:
+      - "1083:8080"
+
   orchestrator:
     image: ${DOCKER_REGISTRY:-}orchestrator:${POCKETHIVE_VERSION:-latest}
     volumes:

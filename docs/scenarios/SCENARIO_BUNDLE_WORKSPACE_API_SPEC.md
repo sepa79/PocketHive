@@ -5,6 +5,7 @@
 > Related:
 > - `docs/ui-v2/SCENARIO_WORKSPACE_PLAN.md`
 > - `docs/architecture/tenancy-foundation-plan.md`
+> - `docs/architecture/AUTH_SERVICE_FOUNDATION_PLAN.md`
 > - `docs/scenarios/SCENARIO_EDITOR_STATUS.md`
 
 This spec defines the **generic bundle explorer/file API** used by the new
@@ -45,7 +46,7 @@ All bundle/file operations are scoped to one explicit bundle.
 
 ## 3. Authorization rules
 
-- the server resolves the current authenticated user,
+- the server resolves the current authenticated user via shared auth integration,
 - read operations require at least `VIEW`,
 - launching a scenario requires at least `RUN` within matching scope, or `ALL`,
 - workspace mutations require `ALL` in MVP,
@@ -341,7 +342,7 @@ This spec defines the single contract the workspace should build around.
 Future extension:
 
 - if bundle/folder-specific permissions are needed, add grant scope on the
-  authorization side (`GLOBAL | FOLDER | BUNDLE`) rather than inventing a
+  PocketHive authorization side (`GLOBAL | FOLDER | BUNDLE`) rather than inventing a
   second bundle ACL format in this API.
 
 ---
