@@ -342,6 +342,7 @@ services:
     environment:
       POCKETHIVE_AUTH_SERVICE_PROVIDER: ${POCKETHIVE_AUTH_SERVICE_PROVIDER:-DEV}
       POCKETHIVE_AUTH_SERVICE_SESSION_TTL: ${POCKETHIVE_AUTH_SERVICE_SESSION_TTL:-PT8H}
+      POCKETHIVE_AUTH_SERVICE_ACCOUNT_ORCHESTRATOR_SECRET: ${POCKETHIVE_AUTH_SERVICE_ACCOUNT_ORCHESTRATOR_SECRET:-orchestrator-local-secret}
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/actuator/health | grep -q UP"]
       interval: 5s
@@ -358,6 +359,10 @@ services:
       - ${POCKETHIVE_SCENARIOS_RUNTIME_ROOT:-/opt/pockethive/scenarios-runtime}:/app/scenarios-runtime
     # all defaulted in application.yml, uncomment to override here
     environment:
+      POCKETHIVE_AUTH_ENABLED: ${POCKETHIVE_AUTH_ENABLED:-false}
+      POCKETHIVE_AUTH_SERVICE_URL: http://auth-service:8080
+      POCKETHIVE_AUTH_SERVICE_PRINCIPAL_NAME: ${POCKETHIVE_AUTH_SERVICE_PRINCIPAL_NAME:-orchestrator-service}
+      POCKETHIVE_AUTH_SERVICE_PRINCIPAL_SECRET: ${POCKETHIVE_AUTH_SERVICE_PRINCIPAL_SECRET:-orchestrator-local-secret}
       POCKETHIVE_SCENARIOS_RUNTIME_ROOT: /opt/pockethive/scenarios-runtime
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/pockethive
       SPRING_DATASOURCE_USERNAME: pockethive
@@ -391,6 +396,8 @@ services:
     environment:
       POCKETHIVE_IMAGES_DEFAULT_TAG: ${POCKETHIVE_VERSION:-latest}
       POCKETHIVE_CAPABILITIES_FALLBACK_TAG: latest
+      POCKETHIVE_AUTH_ENABLED: ${POCKETHIVE_AUTH_ENABLED:-false}
+      POCKETHIVE_AUTH_SERVICE_URL: http://auth-service:8080
       <<: *metrics-env
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_LOGGING_ENABLED: "true"

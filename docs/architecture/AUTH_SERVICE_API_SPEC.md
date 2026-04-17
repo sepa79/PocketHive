@@ -14,6 +14,7 @@ The service must support:
 - PocketHive without HiveWatch,
 - HiveWatch without PocketHive,
 - both systems together.
+- internal service-to-service authentication without product-local auth bypasses.
 
 ---
 
@@ -41,6 +42,7 @@ The service must support:
 MVP model:
 
 - `auth-service` authenticates the user,
+- `auth-service` authenticates service principals separately from human users,
 - `auth-service` issues an **opaque bearer token**,
 - UIs send `Authorization: Bearer <token>` to PocketHive / HiveWatch APIs,
 - product backends resolve the token through `auth-service`,
@@ -52,7 +54,8 @@ Reason:
   token issuance,
 - it allows changing the identity backend later without changing product API
   contracts,
-- it keeps one authoritative user/grant source.
+- it keeps one authoritative user/grant source,
+- it keeps service-to-service auth on the same foundation as UI auth.
 
 Future:
 
@@ -204,7 +207,32 @@ Rules:
 - in other modes returns `405` or `400` with explicit error,
 - unknown or inactive user returns `401`.
 
-### 6.4 Admin list users
+### 6.4 Service principal login
+
+`POST /api/auth/service/login`
+
+Request:
+
+```json
+{
+  "serviceName": "orchestrator-service",
+  "serviceSecret": "orchestrator-local-secret"
+}
+```
+
+Response:
+
+- `200` with `Session response`
+
+Rules:
+
+- service principal login is provider-independent,
+- service principals are configured explicitly in `auth-service`,
+- unknown, inactive, or secret-mismatched service principal returns `401`,
+- product services must use this endpoint for outbound service-to-service
+  authentication instead of ad-hoc bypass headers or local shared secrets.
+
+### 6.5 Admin list users
 
 `GET /api/auth/admin/users`
 
@@ -212,7 +240,7 @@ Returns:
 
 - `200` with `Authenticated user[]`
 
-### 6.5 Admin create/update user
+### 6.6 Admin create/update user
 
 `PUT /api/auth/admin/users/{userId}`
 
@@ -226,7 +254,7 @@ Request:
 }
 ```
 
-### 6.6 Admin replace grants
+### 6.7 Admin replace grants
 
 `PUT /api/auth/admin/users/{userId}/grants`
 
@@ -293,6 +321,14 @@ PocketHive and HiveWatch backends:
 - must resolve bearer tokens through `POST /api/auth/resolve`,
 - must map returned grants into local product authorization.
 
+Service-to-service callers:
+
+- must obtain bearer tokens through `POST /api/auth/service/login`,
+- must not bypass product auth filters with product-local headers or
+  unauthenticated internal allowlists,
+- may cache bearer tokens until `expiresAt`, but token renewal still goes
+  through `auth-service`.
+
 ### 8.3 Failure behavior
 
 - if `auth-service` is unavailable, product APIs fail explicitly,
@@ -310,6 +346,7 @@ MVP implementation must include:
 - `/api/auth/me`,
 - `/api/auth/resolve`,
 - `/api/auth/dev/login`,
+- `/api/auth/service/login`,
 - minimal admin user/grant API,
 - integration path for PocketHive and HiveWatch.
 

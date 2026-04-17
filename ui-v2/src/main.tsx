@@ -7,15 +7,20 @@ import { installTheme } from './lib/theme'
 import { bootstrapControlPlane } from './lib/controlPlane/bootstrap'
 import { startControlPlaneHealth } from './lib/controlPlane/healthStore'
 import { detectUiBasename } from './lib/routing/basename'
+import { AuthProvider } from './lib/authContext'
+import { installAuthenticatedFetch } from './lib/auth'
 
 installTheme()
+installAuthenticatedFetch()
 bootstrapControlPlane()
 startControlPlaneHealth()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <BrowserRouter basename={detectUiBasename(window.location.pathname) || undefined}>
-      <App />
-    </BrowserRouter>
+    <AuthProvider>
+      <BrowserRouter basename={detectUiBasename(window.location.pathname) || undefined}>
+        <App />
+      </BrowserRouter>
+    </AuthProvider>
   </StrictMode>,
 )

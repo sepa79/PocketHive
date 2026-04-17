@@ -1,6 +1,7 @@
 package io.pockethive.orchestrator.infra.scenario;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.auth.client.AuthServiceServiceTokenProvider;
 import io.pockethive.orchestrator.app.ScenarioClient;
 import io.pockethive.orchestrator.config.OrchestratorProperties;
 import io.pockethive.orchestrator.domain.ScenarioPlan;
@@ -31,8 +32,11 @@ public class ScenarioManagerClient implements ScenarioClient {
     private final ObjectMapper json;
     private final String baseUrl;
     private final Duration requestTimeout;
+    private final AuthServiceServiceTokenProvider serviceTokenProvider;
 
-    public ScenarioManagerClient(ObjectMapper json, OrchestratorProperties properties) {
+    public ScenarioManagerClient(ObjectMapper json,
+                                 OrchestratorProperties properties,
+                                 org.springframework.beans.factory.ObjectProvider<AuthServiceServiceTokenProvider> serviceTokenProvider) {
         this.json = json;
         OrchestratorProperties.ScenarioManager scenario = properties.getScenarioManager();
         Objects.requireNonNull(scenario, "scenario");
@@ -44,6 +48,7 @@ public class ScenarioManagerClient implements ScenarioClient {
         this.baseUrl = requireBaseUrl(scenario.getUrl());
         this.requestTimeout = resolveTimeout(
             scenario.getHttp().getReadTimeout(), DEFAULT_REQUEST_TIMEOUT);
+        this.serviceTokenProvider = serviceTokenProvider.getIfAvailable();
     }
 
     @Override
@@ -166,6 +171,7 @@ public class ScenarioManagerClient implements ScenarioClient {
             .header("Accept", "application/json")
             .timeout(requestTimeout)
             ;
+        applyAuthorization(builder);
         if (correlationId != null && !correlationId.isBlank()) {
             builder.header("X-Correlation-Id", correlationId);
         }
@@ -184,13 +190,14 @@ public class ScenarioManagerClient implements ScenarioClient {
 
     private HttpResponse<String> sendPost(String url, String label, String body) throws Exception {
         log.info("posting {} to {}", label, url);
-        HttpRequest req = HttpRequest.newBuilder()
+        HttpRequest.Builder builder = HttpRequest.newBuilder()
             .uri(URI.create(url))
             .header("Accept", "application/json")
             .header("Content-Type", "application/json")
             .timeout(requestTimeout)
-            .POST(HttpRequest.BodyPublishers.ofString(body))
-            .build();
+            .POST(HttpRequest.BodyPublishers.ofString(body));
+        applyAuthorization(builder);
+        HttpRequest req = builder.build();
         HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
         log.info("{} response status {} length {}", label, resp.statusCode(),
             resp.body() != null ? resp.body().length() : 0);
@@ -213,6 +220,17 @@ public class ScenarioManagerClient implements ScenarioClient {
                 "pockethive.control-plane.orchestrator.scenario-manager.url must not be null or blank");
         }
         return baseUrl;
+    }
+
+    private void applyAuthorization(HttpRequest.Builder builder) {
+        String authorizationHeader = currentAuthorizationHeader();
+        if (authorizationHeader != null) {
+            builder.header("Authorization", authorizationHeader);
+        }
+    }
+
+    private String currentAuthorizationHeader() {
+        return serviceTokenProvider == null ? null : serviceTokenProvider.getAuthorizationHeader();
     }
 
     public record RuntimeRequest(String swarmId) {

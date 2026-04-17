@@ -58,6 +58,26 @@ class AuthControllerTest {
     }
 
     @Test
+    void serviceLoginAndResolveFlowWorks() throws Exception {
+        MvcResult loginResult = mvc.perform(post("/api/auth/service/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"serviceName":"orchestrator-service","serviceSecret":"orchestrator-local-secret"}
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.tokenType").value("Bearer"))
+            .andExpect(jsonPath("$.user.username").value("orchestrator-service"))
+            .andReturn();
+
+        String token = bearer(loginResult);
+
+        mvc.perform(post("/api/auth/resolve").header(HttpHeaders.AUTHORIZATION, token))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.username").value("orchestrator-service"))
+            .andExpect(jsonPath("$.grants", hasSize(1)));
+    }
+
+    @Test
     void meRequiresBearerToken() throws Exception {
         mvc.perform(get("/api/auth/me"))
             .andExpect(status().isUnauthorized())

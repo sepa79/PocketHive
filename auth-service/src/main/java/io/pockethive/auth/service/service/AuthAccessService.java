@@ -3,7 +3,9 @@ package io.pockethive.auth.service.service;
 import io.pockethive.auth.contract.AuthProvider;
 import io.pockethive.auth.contract.AuthenticatedUserDto;
 import io.pockethive.auth.contract.DevLoginRequestDto;
+import io.pockethive.auth.contract.ServiceLoginRequestDto;
 import io.pockethive.auth.contract.SessionResponseDto;
+import io.pockethive.auth.service.domain.StoredServiceAccount;
 import io.pockethive.auth.service.domain.StoredUser;
 import io.pockethive.auth.service.support.AuthGrantChecks;
 import io.pockethive.auth.service.support.BearerTokenSupport;
@@ -15,15 +17,18 @@ import org.springframework.web.server.ResponseStatusException;
 public class AuthAccessService {
     private final AuthSessionService sessions;
     private final InMemoryUserStore users;
+    private final InMemoryServiceAccountStore serviceAccounts;
     private final BearerTokenSupport bearerTokens;
     private final AuthGrantChecks grants;
 
     public AuthAccessService(AuthSessionService sessions,
                              InMemoryUserStore users,
+                             InMemoryServiceAccountStore serviceAccounts,
                              BearerTokenSupport bearerTokens,
                              AuthGrantChecks grants) {
         this.sessions = sessions;
         this.users = users;
+        this.serviceAccounts = serviceAccounts;
         this.bearerTokens = bearerTokens;
         this.grants = grants;
     }
@@ -36,6 +41,14 @@ public class AuthAccessService {
             .filter(StoredUser::active)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Unknown or inactive user"));
         return sessions.createSession(user);
+    }
+
+    public SessionResponseDto serviceLogin(ServiceLoginRequestDto request) {
+        StoredServiceAccount account = serviceAccounts.findByServiceName(request.serviceName())
+            .filter(StoredServiceAccount::active)
+            .filter(candidate -> candidate.secret().equals(request.serviceSecret()))
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Unknown, inactive, or invalid service principal"));
+        return sessions.createSession(account);
     }
 
     public AuthenticatedUserDto requireAuthenticated(String authorizationHeader) {

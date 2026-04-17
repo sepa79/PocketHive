@@ -48,3 +48,14 @@ pockethive:
             permission: VIEW
             resourceType: PH_DEPLOYMENT
             resourceSelector: "*"
+    service-accounts:
+      - id: aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
+        service-name: orchestrator-service
+        display-name: Orchestrator Service
+        secret: ${POCKETHIVE_AUTH_SERVICE_ACCOUNT_ORCHESTRATOR_SECRET:orchestrator-local-secret}
+        active: true
+        grants:
+          - product: POCKETHIVE
+            permission: ALL
+            resourceType: PH_DEPLOYMENT
+            resourceSelector: "*"

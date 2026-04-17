@@ -2,6 +2,7 @@ package io.pockethive.auth.service.api;
 
 import io.pockethive.auth.contract.AuthenticatedUserDto;
 import io.pockethive.auth.contract.DevLoginRequestDto;
+import io.pockethive.auth.contract.ServiceLoginRequestDto;
 import io.pockethive.auth.contract.SessionResponseDto;
 import io.pockethive.auth.service.service.AuthAccessService;
 import org.springframework.http.HttpHeaders;
@@ -24,6 +25,11 @@ public class AuthController {
     @PostMapping("/dev/login")
     public SessionResponseDto devLogin(@RequestBody DevLoginRequestDto request) {
         return access.devLogin(request);
+    }
+
+    @PostMapping("/service/login")
+    public SessionResponseDto serviceLogin(@RequestBody ServiceLoginRequestDto request) {
+        return access.serviceLogin(request);
     }
 
     @GetMapping("/me")

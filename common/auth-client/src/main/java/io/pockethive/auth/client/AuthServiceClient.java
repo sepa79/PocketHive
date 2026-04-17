@@ -2,6 +2,7 @@ package io.pockethive.auth.client;
 
 import io.pockethive.auth.contract.AuthenticatedUserDto;
 import io.pockethive.auth.contract.DevLoginRequestDto;
+import io.pockethive.auth.contract.ServiceLoginRequestDto;
 import io.pockethive.auth.contract.SessionResponseDto;
 import java.net.URI;
 import java.time.Duration;
@@ -61,6 +62,21 @@ public final class AuthServiceClient {
                 .body(SessionResponseDto.class);
         } catch (RestClientResponseException e) {
             throw new AuthServiceClientException("Auth service dev login failed", e.getStatusCode().value(), e);
+        }
+    }
+
+    public SessionResponseDto serviceLogin(String serviceName, String serviceSecret) {
+        Objects.requireNonNull(serviceName, "serviceName");
+        Objects.requireNonNull(serviceSecret, "serviceSecret");
+        try {
+            return restClient.post()
+                .uri("/api/auth/service/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(new ServiceLoginRequestDto(serviceName, serviceSecret))
+                .retrieve()
+                .body(SessionResponseDto.class);
+        } catch (RestClientResponseException e) {
+            throw new AuthServiceClientException("Auth service service login failed", e.getStatusCode().value(), e);
         }
     }
 

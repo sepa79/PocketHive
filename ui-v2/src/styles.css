@@ -3283,6 +3283,21 @@ select.textInputCompact option {
   color: var(--muted);
 }
 
+.menuIdentity {
+  padding: 8px 10px 10px;
+}
+
+.menuIdentityTitle {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.menuIdentityMeta {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
 .menuSep {
   height: 1px;
   margin: 6px 6px;
@@ -3291,6 +3306,40 @@ select.textInputCompact option {
 
 :root[data-theme='light'] .menuSep {
   background: rgba(10, 20, 30, 0.12);
+}
+
+.loginCard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.loginForm {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.loginField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.loginActions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.loginError {
+  border: 1px solid rgba(255, 111, 111, 0.35);
+  background: rgba(255, 111, 111, 0.08);
+  color: #ffb8b8;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 12px;
 }
 
 :root[data-theme='light'] .menu {

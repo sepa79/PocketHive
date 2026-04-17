@@ -21,6 +21,7 @@ The target is an **independent `auth-service` container** that may run:
 - [ ] PocketHive and HiveWatch must be able to integrate with it independently.
 - [ ] Authentication foundation is shared; product authorization policy remains local.
 - [ ] `auth-service` owns user identity, provider integration, current-user resolution, and grant storage.
+- [ ] `auth-service` owns service-principal identity for internal service-to-service auth.
 - [ ] Product resource semantics stay outside `auth-service`.
 - [ ] Initial local/dev operation must work without LDAP.
 - [ ] LDAP integration must be possible later without redesigning PocketHive or HiveWatch integration.
@@ -46,6 +47,7 @@ The target is an **independent `auth-service` container** that may run:
 - [ ] exposing stable auth APIs such as `/me`,
 - [ ] providing product-neutral grant data for downstream products,
 - [ ] supporting local/dev flows for isolated deployments,
+- [ ] issuing service principal sessions for internal HTTP callers,
 - [ ] later integrating with LDAP or another enterprise identity source.
 
 `auth-service` is **not** responsible for:
@@ -168,6 +170,7 @@ MVP auth-service API should include:
 - [ ] `GET /api/auth/me`
 - [ ] `POST /api/auth/resolve`
 - [ ] local/dev login/bootstrap capability
+- [ ] service principal login capability
 - [ ] admin endpoints for user + grant management
 
 Exact token/session contract can be specified separately, but `/me` must be the

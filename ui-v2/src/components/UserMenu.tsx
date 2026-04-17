@@ -2,9 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Icon } from './Icon'
 import { getTheme, setTheme, type Theme } from '../lib/theme'
+import { useAuth } from '../lib/authContext'
 
 export function UserMenu() {
   const navigate = useNavigate()
+  const auth = useAuth()
   const [open, setOpen] = useState(false)
   const [theme, setThemeState] = useState<Theme>(() => getTheme())
   const rootRef = useRef<HTMLDivElement | null>(null)
@@ -51,6 +53,19 @@ export function UserMenu() {
 
       {open ? (
         <div className="menu" role="menu">
+          <div className="menuIdentity">
+            <div className="menuIdentityTitle">
+              {auth.status === 'authenticated' ? auth.user?.displayName ?? auth.user?.username : 'Not signed in'}
+            </div>
+            <div className="menuIdentityMeta">
+              {auth.status === 'authenticated'
+                ? `${auth.user?.authProvider ?? 'UNKNOWN'} · ${auth.user?.username ?? ''}`
+                : auth.status === 'loading'
+                  ? 'Resolving session...'
+                  : 'DEV login available'}
+            </div>
+          </div>
+          <div className="menuSep" role="separator" />
           <button type="button" className="menuItem" role="menuitem" onClick={() => applyTheme(nextTheme)}>
             Theme: <span className="menuItemValue">{theme}</span>
           </button>
@@ -64,8 +79,22 @@ export function UserMenu() {
               navigate('/login')
             }}
           >
-            Login / users…
+            {auth.status === 'authenticated' ? 'Account / switch user' : 'Login / users…'}
           </button>
+          {auth.status === 'authenticated' ? (
+            <button
+              type="button"
+              className="menuItem"
+              role="menuitem"
+              onClick={() => {
+                auth.logout()
+                setOpen(false)
+                navigate('/login')
+              }}
+            >
+              Sign out
+            </button>
+          ) : null}
         </div>
       ) : null}
     </div>
