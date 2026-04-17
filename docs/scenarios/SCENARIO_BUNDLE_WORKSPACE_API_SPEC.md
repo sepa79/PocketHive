@@ -23,7 +23,7 @@ This API covers:
 - file read/write,
 - file and folder create/rename/move/delete,
 - bundle-level metadata needed by the workspace,
-- tenancy-aware request handling.
+- authorization-aware request handling.
 
 This API does **not** remove existing specialized endpoints immediately.
 Existing endpoints may remain as helpers or validators, but the workspace must
@@ -35,7 +35,6 @@ treat this API as the primary contract.
 
 The workspace identity is:
 
-- `tenantId`
 - `bundleKey`
 
 `scenarioId` is bundle metadata, not the primary workspace locator.
@@ -44,16 +43,15 @@ All bundle/file operations are scoped to one explicit bundle.
 
 ---
 
-## 3. Tenancy rules
+## 3. Authorization rules
 
-- In `SINGLE` mode, server-side tenant resolution may inject the configured
-  tenant automatically.
-- In `MULTI` mode, `X-Tenant-Id` is required on all workspace endpoints.
-- Missing tenant context in `MULTI` returns `400`.
-- Unknown bundle within tenant scope returns `404`.
-- Cross-tenant operations are invalid by contract.
-
-Response DTOs must include `tenantId` where bundle/file identity is returned.
+- the server resolves the current authenticated user,
+- read operations require at least `VIEW`,
+- launching a scenario requires at least `RUN` within matching scope, or `ALL`,
+- workspace mutations require `ALL` in MVP,
+- unknown bundle returns `404`,
+- authentication failure returns `401`,
+- authorization failure returns `403`.
 
 ---
 
@@ -63,7 +61,6 @@ Response DTOs must include `tenantId` where bundle/file identity is returned.
 
 ```json
 {
-  "tenantId": "team-a",
   "bundleKey": "tcp/tcp-echo-demo",
   "bundlePath": "tcp/tcp-echo-demo",
   "folderPath": "tcp",
@@ -79,7 +76,6 @@ Response DTOs must include `tenantId` where bundle/file identity is returned.
 
 ```json
 {
-  "tenantId": "team-a",
   "bundleKey": "tcp/tcp-echo-demo",
   "path": "templates/http/request.yaml",
   "name": "request.yaml",
@@ -108,7 +104,6 @@ Response DTOs must include `tenantId` where bundle/file identity is returned.
 
 ```json
 {
-  "tenantId": "team-a",
   "bundleKey": "tcp/tcp-echo-demo",
   "path": "scenario.yaml",
   "name": "scenario.yaml",
@@ -153,7 +148,6 @@ Returns:
 
 ```json
 {
-  "tenantId": "team-a",
   "bundleKey": "tcp/tcp-echo-demo",
   "nodes": []
 }
@@ -317,8 +311,10 @@ UI uses `editorKind` as the canonical signal for editor selection.
 
 Minimum status codes:
 
-- `400` invalid tenant/path/request
-- `404` bundle or path not found in tenant scope
+- `400` invalid path/request
+- `401` unauthenticated
+- `403` forbidden
+- `404` bundle or path not found
 - `409` stale revision, path conflict, non-empty folder delete, or move conflict
 - `415` unsupported editable file type
 
@@ -338,9 +334,15 @@ for a bundle workspace because it fragments:
 - save flows,
 - rename/move semantics,
 - file metadata,
-- tenancy propagation.
+- authorization handling.
 
 This spec defines the single contract the workspace should build around.
+
+Future extension:
+
+- if bundle/folder-specific permissions are needed, add grant scope on the
+  authorization side (`GLOBAL | FOLDER | BUNDLE`) rather than inventing a
+  second bundle ACL format in this API.
 
 ---
 

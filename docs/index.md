@@ -62,8 +62,11 @@ by the UI under `/docs/...` as part of the runtime image.
 - `docs/archive/scenario-bundle-runtime-plan.md`
   (Status: implemented / archived) – directory-based scenario bundles and
   per-swarm runtimes (historical implementation plan).
+- `docs/architecture/tenancy-foundation-plan.md` (Status: planned / proposal) –
+  deployment boundary plus `users + permissions + scoped grants`
+  direction for PocketHive authz.
 - `docs/ui-v2/SCENARIO_WORKSPACE_PLAN.md` (Status: planned) –
-  UI v2 Scenarios workspace plan for bundle explorer, offline Monaco, tenancy,
+  UI v2 Scenarios workspace plan for bundle explorer, offline Monaco, permissions,
   and guided editors.
 - `docs/toBeReviewed/ui-v2-control-plane-adoption.md` (Status: to be reviewed) –
   UI-v2 control-plane adoption plan with review findings pending alignment.

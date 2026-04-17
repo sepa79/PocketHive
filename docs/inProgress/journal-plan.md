@@ -152,16 +152,15 @@ Goal: provide a first‑class, queryable journal for swarms (control‑plane sco
   - Show `test_plan` and `tags` (when present) and include them in search.
   - Keep `swarmId` as a secondary/tooltip field (technical stack id).
 
-## Phase 4.5 — Multi-tenant Foundations (Namespace + Actor) — planned, not implemented here
+## Phase 4.5 — User/Permission Foundations (Actor + Access) — planned, not implemented here
 
-> Goal: prepare Journals and Scenarios for future hard multi-tenancy (org/BU/team/user + custom levels) without implementing auth/RBAC in this branch.
+> Goal: prepare Journals and Scenarios for future user-based access control without forcing runtime multi-tenancy into this branch.
 
-- [ ] Define a canonical `NamespacePath` concept for ownership/routing (list of segments, default levels: org/BU/team/user; supports extension/redefinition).
-- [ ] Capture `actor` (who triggered actions) and `namespacePath` on:
+- [ ] Capture `actor` (who triggered actions) and effective permission context on:
   - swarm runs (metadata)
   - pinned captures/archives
   - relevant journal events (where appropriate)
-- [ ] Ensure scenario selection and swarm launching can later be constrained by namespace without reworking the journal data model.
+- [ ] Ensure scenario selection and swarm launching can later be constrained by permission and grant scope without reworking the journal data model.
 
 ## Phase 5 — Debug Taps & Central Logging Hooks
 

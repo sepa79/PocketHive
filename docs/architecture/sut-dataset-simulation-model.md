@@ -320,7 +320,7 @@ It does not replace scenarios; it composes validated scenario bindings into one 
 3. First migrate from heavy control payloads to `artifact-by-reference`:
    - runtime artifacts/snapshots are persisted in shared artifact storage,
    - control-plane signals carry only reference + checksum.
-4. Introduce minimal tenant boundary (`tenantId`) for all new entities/APIs (single-tenant default is allowed).
+4. Introduce minimal user/permission boundary for governed APIs and scenario usage.
 5. Move SUT references from "scenario-local implicit" to "binding-time explicit".
 6. Add `Dataset Space` registry scoped by SUT Environment.
 7. Introduce `Simulation Program` as an orchestrator-level grouping construct.
@@ -342,7 +342,7 @@ Implementation is split into small, mergeable PRs. Each PR should keep system be
 ### PR 1: Artifact-by-reference handoff
 
 Scope guard: PR 1 must not change AMQP routing/exchange contracts from `docs/ARCHITECTURE.md`.
-Tenant-scoped AMQP exchange changes are deferred to PR 2.
+Authorization changes must not force runtime AMQP topology redesign in PR 1.
 
 1. Introduce runtime artifact store abstraction:
    - local shared-dir backend first,
@@ -350,15 +350,16 @@ Tenant-scoped AMQP exchange changes are deferred to PR 2.
 2. Orchestrator persists runtime artifacts before swarm start.
 3. Control-plane carries artifact reference + checksum instead of large embedded plan payload.
 4. Swarm Controller resolves artifact by reference at startup.
-5. Use tenant-ready artifact namespace from day one with effective single-tenant id:
-   - write/read artifacts under `.../tenants/<effectiveSingleTenantId>/...` before full tenancy is implemented,
-   - default value is `defaultTenant`; keep artifact reference shape compatible with later per-request tenant ids.
+5. Keep artifact namespace deployment-scoped from day one:
+   - write/read artifacts under deployment-local runtime paths,
+   - do not introduce tenant-first layout unless runtime tenancy becomes a real requirement later.
 
-### PR 2: Minimal tenant boundary
+### PR 2: Minimal user/permission boundary
 
-1. Add `tenantId` to all new entities and APIs (`SUT`, `DatasetSpace`, `Binding`, `SimulationProgram`).
-2. Enforce tenant scoping in Scenario Manager and Orchestrator reads/writes.
-3. Keep single-tenant runtime mode (`tenantId=defaultTenant`) until full Org/Team/User/Role model is implemented.
+1. Add user identity resolution to governed APIs.
+2. Introduce MVP permissions (`VIEW`, `RUN`, `ALL`).
+3. Introduce grant scope model (`GLOBAL`, `FOLDER`, `BUNDLE`).
+4. Enforce authorization in Scenario Manager and Orchestrator reads/writes/launch flows.
 
 ### PR 3: Core simulation model (one backend vertical slice)
 
@@ -372,7 +373,7 @@ Tenant-scoped AMQP exchange changes are deferred to PR 2.
    - scenario bindings (versioned),
    - simulation programs,
    - simulation runtime state/checkpoints.
-3. Implement Scenario Manager registry APIs (tenant-aware):
+3. Implement Scenario Manager registry APIs (authorization-aware):
    - CRUD/read for `DatasetSpace`, `ScenarioBinding`, `SimulationProgram`,
    - SUT APIs aligned to the same typed model,
    - metadata-only responsibility (no data-plane operations).
@@ -397,7 +398,7 @@ Tenant-scoped AMQP exchange changes are deferred to PR 2.
 
 1. Move non-critical but heavy items from PR 3 if needed (for example export/import CLI and advanced checkpoint/recovery details).
 2. Keep PR 3 as the minimum complete backend slice required by PR 4.
-3. Keep artifact/tenant assumptions unchanged.
+3. Keep artifact/deployment assumptions unchanged.
 
 ---
 
@@ -416,7 +417,7 @@ After team sign-off on this model, produce a contract-focused follow-up doc:
 3. `Dataset Space` schema (draft),
 4. binding validation error model,
 5. minimal REST/API surface proposal.
-6. tenancy companion doc: `docs/architecture/tenancy-foundation-plan.md`.
+6. authorization companion doc: `docs/architecture/tenancy-foundation-plan.md`.
 
 ---
 

@@ -1,240 +1,321 @@
-# Tenancy Foundations for SUT/Dataset/Simulation
+# Deployment Boundary and User Permissions Foundation
 
 > Status: proposal  
-> Scope: Scenario Manager, Orchestrator, UI V2, shared runtime artifacts, Postgres metadata
+> Scope: PocketHive deployment boundary, UI V2, Scenario Manager, Orchestrator, scoped user permissions  
+> Note: legacy filename kept for now to avoid doc path churn.
 
 ## 1) Purpose
 
-Define a minimal, enforceable tenancy model for the new SUT/Dataset/Simulation capabilities, without introducing full auth/RBAC yet.
+Replace the earlier runtime multi-tenancy direction with a simpler and more achievable model:
 
-The model must answer:
+1. **one PocketHive deployment = one tenant / one environment boundary**
+2. **users inside that deployment have different permissions**
+3. **access is controlled by scoped grants**
 
-1. **What** is tenant scope in PocketHive.
-2. **Why** we need it now.
-3. **How** tenant context is propagated and validated.
-4. **Where** the boundary is enforced in code and storage.
-
----
-
-## 2) Why now
-
-Production simulator workloads are team-specific and environment-specific:
-
-1. Different teams will maintain different SUT catalogs and dataset spaces.
-2. Simulations can run for days/weeks, so accidental cross-team data sharing is expensive.
-3. We need controlled isolation before adding Org/Team/User/Role.
-
-Without tenancy, a single global registry for SUTs/datasets/bindings creates:
-
-1. naming collisions,
-2. accidental cross-usage,
-3. weak governance of "who can run what".
+This document defines the minimum authorization model we need now, without introducing teams, roles, or external IAM complexity yet.
 
 ---
 
-## 3) What is "tenant" in v1
+## 2) Why this direction
 
-`tenantId` is an opaque namespace key attached to all new control-plane metadata objects.
+The current system shape does not justify hard runtime multi-tenancy:
 
-v1 semantics:
+1. AMQP/control-plane topology is currently deployment-global.
+2. Orchestrator and worker runtime assume one shared topology namespace.
+3. Forcing tenant-scoped runtime now would create disproportionate code and ops complexity.
 
-1. No org hierarchy yet (no built-in org/team/user tree).
-2. No RBAC yet.
-3. Tenant is a hard data boundary for metadata read/write and runtime admission.
-4. Single-tenant deployments remain supported via fixed `tenantId=defaultTenant`.
+The real business need is different:
 
----
+1. some users should only **view**
+2. some users should be able to **do everything**
+3. some scenarios should be safe for guest/demo/test usage
+4. some scenarios should remain restricted for privileged users only
 
-## 4) Tenancy operating modes
-
-Use one explicit deployment mode (no cascading fallback logic):
-
-1. `SINGLE`
-   - system injects one configured tenant id (`defaultTenant` or custom),
-   - API callers do not need to provide tenant header.
-2. `MULTI`
-   - caller must provide `X-Tenant-Id` on tenant-scoped APIs,
-   - missing tenant header fails fast (`400`).
-
-Suggested config keys:
-
-```yaml
-pockethive:
-  tenancy:
-    mode: SINGLE # SINGLE | MULTI
-    singleTenantId: defaultTenant
-```
+That is an **authentication + authorization** problem, not a runtime tenancy problem.
 
 ---
 
-## 5) Where tenancy is enforced
+## 3) Deployment boundary
 
-## 5.1 Scenario Manager
+PocketHive v1 authorization model:
 
-Tenant scope applies to:
+1. one deployment is one hard environment boundary
+2. there is no per-request tenant routing inside one deployment
+3. there is no tenant-scoped AMQP topology inside one deployment
+4. there is no `X-Tenant-Id` requirement for normal product APIs
 
-1. SUT registry entries,
-2. DatasetSpace descriptors,
-3. ScenarioBinding definitions,
-4. SimulationProgram definitions.
+Implications:
 
-API layer:
+1. `swarmId` remains deployment-scoped
+2. control-plane topology remains deployment-scoped
+3. runtime artifact layout remains deployment-scoped
+4. user authorization is enforced inside that single deployment boundary
 
-1. resolve tenant context per request,
-2. require tenant-consistent references,
-3. reject cross-tenant reference graphs.
+---
 
-## 5.2 Orchestrator
+## 4) MVP authorization model
 
-Tenant scope applies to:
+### 4.1 Users
 
-1. admission checks before run creation,
-2. simulation lifecycle operations,
-3. runtime checkpoint records,
-4. swarm metadata related to Simulation Program runs.
+Introduce users as first-class principals.
 
-Orchestrator must pass tenant context on all Scenario Manager calls.
+Minimum user shape:
 
-## 5.3 Persistence (Postgres)
+1. `id`
+2. `username`
+3. `displayName`
+4. `active`
+5. `authSource`
 
-All new tables are tenant-keyed:
+### 4.2 Permissions
 
-1. `tenant_id` is mandatory,
-2. external ids are unique per tenant (`UNIQUE(tenant_id, id)`),
-3. foreign keys include `tenant_id` to enforce same-tenant relations.
+MVP permissions:
 
-## 5.4 Runtime artifact store
+1. `VIEW`
+2. `RUN`
+3. `ALL`
 
-Artifact/reference storage should be tenant-scoped in path layout:
+Meaning:
 
-`/app/scenarios-runtime/tenants/<tenantId>/swarms/<swarmId>/...`
+1. `VIEW`
+   - may browse UI and read state
+   - may not launch or mutate system state
+2. `RUN`
+   - may launch scenarios within granted scope
+   - may not edit bundles or perform privileged admin actions
+3. `ALL`
+   - full administrative and operational access
 
-This keeps runtime payload snapshots and checkpoints isolated the same way as metadata.
+### 4.3 Grant scopes
 
-## 5.5 UI V2
+Permissions may be granted at different scopes.
+
+Supported scopes:
+
+1. `GLOBAL`
+2. `FOLDER`
+3. `BUNDLE`
+
+Meaning:
+
+1. `GLOBAL`
+   - applies everywhere in the deployment
+2. `FOLDER`
+   - applies to one folder subtree by path prefix
+3. `BUNDLE`
+   - applies to one exact bundle
+
+This is simpler than keeping a separate scenario policy system.
+
+### 4.4 Status tracking
+
+- [ ] Define user identity contract for PocketHive HTTP APIs.
+- [ ] Add MVP permissions: `VIEW`, `RUN`, `ALL`.
+- [ ] Add grant scope model: `GLOBAL`, `FOLDER`, `BUNDLE`.
+- [ ] Enforce authorization in Orchestrator create/start/stop/remove flows.
+- [ ] Enforce authorization in Scenario Manager edit/delete flows.
+- [ ] Surface current user and effective capabilities in UI v2.
+- [ ] Add user management API/UI for local administration.
+- [ ] Later: split `ALL` into finer-grained permissions.
+- [ ] Later: add roles and teams on top of grants, not instead of grants.
+
+---
+
+## 5) Authorization rules
+
+### 5.1 Permission + scope model
+
+Access is decided by both:
+
+1. user permission
+2. granted scope
+
+MVP rule table:
+
+1. `VIEW + GLOBAL`
+   - allow browse everywhere
+2. `RUN + FOLDER=demo`
+   - allow launch only inside `demo/...`
+3. `RUN + BUNDLE=tcp/tcp-echo-demo`
+   - allow launch only for that bundle
+4. `ALL + GLOBAL`
+   - allow all actions everywhere
+
+### 5.2 Mutation rule
+
+In MVP:
+
+1. `VIEW` is pure read-only
+2. `RUN` may launch scenarios only inside granted scope
+3. `ALL` is required for:
+   - scenario editing
+   - bundle move/delete/upload
+   - proxy management
+   - user administration
+   - launching outside narrower `RUN` scope
+
+### 5.3 Future evolution
+
+Later we may replace coarse permissions with finer ones, for example:
+
+1. `SCENARIOS_VIEW`
+2. `SCENARIOS_EDIT`
+3. `SCENARIOS_MOVE`
+4. `SCENARIOS_DELETE`
+5. `SWARMS_START`
+6. `SWARMS_STOP`
+7. `SWARMS_REMOVE`
+8. `PROXY_MANAGE`
+9. `ADMIN_USERS`
+
+If we later need bundle-specific permissions, add **scope to grants**, not a separate ACL system.
+
+Recommended future grant shape:
+
+1. `permission`
+2. `scopeType = GLOBAL | FOLDER | BUNDLE`
+3. `scopeValue`
+
+Examples:
+
+1. `RUN` on `FOLDER=demo`
+2. `SCENARIOS_EDIT` on `FOLDER=tcp`
+3. `SWARMS_START` on `BUNDLE=payments/prod-smoke`
+
+Roles and teams should be built as aggregation layers over these permissions, not as the primary source of truth.
+
+---
+
+## 6) Where authorization is enforced
+
+## 6.1 Scenario Manager
+
+Authorization applies to:
+
+1. bundle upload/delete/move/edit
+2. file workspace write operations
+3. SUT/dataset/simulation registry changes
+4. future bundle classification/metadata changes if such metadata is introduced
+
+Read operations require at least `VIEW`.
+Write operations require `ALL` in MVP.
+
+## 6.2 Orchestrator
+
+Authorization applies to:
+
+1. create swarm
+2. start/stop/remove swarm
+3. launch access to scenario bundles
+4. future simulation lifecycle operations
+
+Runtime actions depend on permission:
+
+1. `RUN` may create/start only within granted folder/bundle scope
+2. `ALL` may create/start any scenario and perform stop/remove/admin operations
+
+## 6.3 UI V2
 
 UI V2 owns:
 
-1. tenant selection context,
-2. sending `X-Tenant-Id` on API calls in `MULTI` mode,
-3. showing active tenant in screens that edit SUTs/Datasets/Simulations.
+1. showing current user
+2. showing effective capability state
+3. hiding/disabling actions for insufficient permissions
+4. showing explicit denial reasons when a bundle is out of scope
 
-## 5.6 AMQP transport boundary
-
-Tenancy isolation in AMQP is enforced by exchange namespace per tenant.
-
-Implementation note: this is intentionally deferred to PR 2 (tenancy foundation). Until then,
-`docs/ARCHITECTURE.md` remains the SSOT for current AMQP routing/exchange contracts.
-
-1. Control-plane exchange is tenant-scoped (for example `ph.<tenantId>.control`).
-2. Work/hive exchange is tenant-scoped (for example `ph.<tenantId>.<swarmId>.hive`).
-3. A swarm is attached to exactly one tenant exchange namespace for its full runtime.
-4. Orchestrator/Swarm Controller provisioning must use tenant-scoped exchange names.
-5. Tenant context in AMQP is carried by exchange choice, not by adding tenant segment to routing keys.
+The backend remains the enforcement boundary.
+UI capability checks are advisory UX only.
 
 ---
 
-## 6) Where tenancy is NOT enforced (v1)
+## 7) Data and metadata model
 
-1. No auth/RBAC and no identity provider integration.
-2. Worker business logic stays tenant-agnostic.
+## 7.1 Scenario metadata
 
-Note: AMQP routing keys can keep current shape, because tenant isolation is enforced by tenant-scoped exchanges.
+Scenario/bundle metadata does not need its own ACL system in MVP.
 
----
+Bundle access is derived from the user's grants and the bundle path.
 
-## 7) How tenant context flows
+Optional later metadata:
 
-```mermaid
-sequenceDiagram
-  participant UI as UI V2
-  participant O as Orchestrator
-  participant SM as Scenario Manager
-  participant DB as Postgres
+1. `classification = TEST | STAGING | PRODUCTION`
+2. tags or labels used by policy engines
 
-  UI->>O: API request (+ X-Tenant-Id in MULTI mode)
-  O->>O: Resolve tenant context (mode-aware)
-  O->>SM: Tenant-scoped lookup (+ X-Tenant-Id)
-  SM->>DB: Query by tenant_id
-  DB-->>SM: Tenant-owned records
-  SM-->>O: Tenant-scoped response
-  O->>O: Admission checks (same-tenant references)
-  O-->>UI: Result / validation errors
-```
+## 7.2 User grants
 
----
+MVP grant model:
 
-## 8) Data invariants
+1. a user has one or more grants
+2. each grant is:
+   - `permission`
+   - `scopeType`
+   - `scopeValue`
+3. a local admin assigns grants directly
 
-Tenant safety rules:
-
-1. `SimulationProgram`, `ScenarioBinding`, `DatasetSpace`, and `SUT` must share the same `tenantId`.
-2. Cross-tenant references are invalid at create and update time.
-3. Runtime snapshots freeze `tenantId` at run start.
-4. Checkpoints and artifact references inherit the same `tenantId`.
-5. A running swarm uses one tenant AMQP namespace only (control + work exchanges).
-6. `swarmId` uniqueness is scoped to tenant (`UNIQUE(tenant_id, swarm_id)`), not global.
+We do not need teams/roles yet.
+Keep one evaluator model: `isAllowed(user, permission, resource)`.
 
 ---
 
-## 9) API contract (minimum)
+## 8) API contract (minimum)
 
-1. New tenant-scoped endpoints include `tenantId` in response DTOs.
-2. In `MULTI`, `X-Tenant-Id` is required on all tenant-scoped endpoints (including read-only list/get APIs).
-3. Validation failures:
-   - `400` for missing/invalid tenant context,
-   - `404` for not-found within tenant scope,
-   - `409` for cross-tenant reference conflicts.
+1. APIs must resolve the current authenticated user explicitly.
+2. Read-only product APIs require at least `VIEW`.
+3. Launching a scenario requires `RUN` or `ALL` within matching scope.
+4. Mutating product APIs require `ALL` in MVP unless explicitly carved out by a future finer permission.
+5. Authorization failures return `403`.
+6. Authentication failures return `401`.
+
+No per-request tenant header is required in this model.
 
 ---
 
-## 10) Implementation map (where in code)
+## 9) Implementation map
 
-Current anchor points for tenancy integration:
+Current anchor points:
 
 1. `scenario-manager-service`
-   - controllers under `io.pockethive.scenarios` (`ScenarioController`, `SutEnvironmentController`),
-   - new tenant context resolver/filter,
-   - tenant-aware services/repositories for new entities.
+   - scenario/bundle metadata
+   - bundle workspace endpoints
+   - edit/delete/upload authorization
 2. `orchestrator-service`
-   - REST entrypoints under `io.pockethive.orchestrator.app` (`SwarmController`, simulation endpoints),
-   - `ScenarioClient` / `ScenarioManagerClient` header propagation,
-   - admission layer for cross-tenant validation.
+   - swarm create/start/stop/remove
+   - scope checks before launch
 3. `ui-v2`
-   - API client utilities (`ui-v2/src/lib/*`) and page flows (SUTs/Datasets/Simulations),
-   - central tenant state + request header injection.
-4. shared runtime/artifacts
-   - tenant segment in artifact directory layout and checkpoint persistence.
+   - user/capability display
+   - action gating in Hive / Scenarios / Proxy
+4. shared docs/contracts
+   - permission enum
+   - grant scope enum
 
 ---
 
-## 11) Rollout aligned to planned PR train
+## 10) Rollout order
 
-1. **PR 2 (tenancy foundation)**
-   - add tenant context model + mode config (`SINGLE`/`MULTI`),
-   - header propagation contracts,
-   - tenant-scoped AMQP exchange naming convention,
-   - `tenantId` fields in new DTO/domain objects,
-   - no auth/RBAC.
-2. **PR 3 (core simulation backend slice)**
-   - tenant-aware Postgres persistence,
-   - tenant-aware SM APIs and orchestrator admission,
-   - orchestrator/controller provisioning bound to tenant-scoped exchanges,
-   - same-tenant invariant enforcement.
-3. **PR 4 (UI V2)**
-   - tenant-aware UI flows for SUT/Dataset/Simulation management,
-   - tenant context visible and consistently propagated.
+1. **PR 1**
+   - define user identity contract
+   - define MVP permission enum
+   - define grant scope enum
+2. **PR 2**
+   - enforce authz in Orchestrator and Scenario Manager
+   - add grant-aware evaluation to launch and workspace flows
+3. **PR 3**
+   - expose current user and capabilities in UI v2
+   - disable/hide unauthorized actions
+4. **PR 4**
+   - local user administration UI/API
+5. **Later**
+   - split `ALL` into granular permissions
+   - add roles/teams if needed
 
 ---
 
-## 12) Decisions
+## 11) Decisions
 
 Decided:
 
-1. `swarmId` is unique per tenant only.
-2. Storage/artifact layout follows tenant-first prefix (for example `.../<tenantId>/<swarmId>/...` and `s3://.../<tenantId>/<swarmId>/...`).
-3. `tenantId` uses a simple slug format:
-   - regex: `^[a-z0-9-]+$`,
-   - max length: 64,
-   - reserved ids blocked: `all`, `default-system`.
-4. In `MULTI`, `X-Tenant-Id` is explicit and mandatory everywhere for tenant-scoped APIs (including read-only list/get).
+1. one deployment is one hard environment boundary
+2. runtime multi-tenancy is not the target for this phase
+3. `VIEW`, `RUN`, and `ALL` are sufficient as the first user permission set
+4. folder/bundle scope is sufficient to allow guest/test launch without a separate scenario policy system
+5. backend authorization is mandatory; UI-only checks are insufficient

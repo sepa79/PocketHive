@@ -76,7 +76,7 @@ At `/v2/scenarios`:
 
 - show bundle explorer entry state,
 - allow selecting a bundle,
-- allow moving bundles between bundle folders,
+- allow moving bundles between bundle folders only for `ALL`,
 - do not auto-open files until a bundle is selected.
 
 ### 3.2 Bundle view
@@ -106,6 +106,10 @@ Saving a file:
 - updates local revision,
 - clears the dirty flag,
 - keeps tab order and selection stable.
+
+Authorization note:
+
+- save is available only to `ALL` in MVP.
 
 ---
 
@@ -174,20 +178,27 @@ If a file disappears after it was opened:
 
 ---
 
-## 8. Tenancy UX
+## 8. Authorization UX
 
-MVP workspace must show active tenant context clearly.
+MVP workspace must show authorization state clearly.
 
 Minimum rules:
 
-- active tenant visible in page chrome or toolbar,
-- tenant-aware API errors surfaced explicitly,
-- no hidden tenant switching when navigating bundles.
+- current user visible in page chrome or toolbar,
+- effective scope/permission context visible when relevant,
+- authorization errors surfaced explicitly,
+- no hidden privilege escalation or fallback actions.
 
-If tenant context is missing in `MULTI` mode:
+If a user lacks permission for an action:
 
-- workspace view shows an explicit blocking error,
-- it does not attempt “best guess” bundle loading.
+- workspace shows an explicit disabled or denied state,
+- it does not attempt the action optimistically and then silently recover.
+
+MVP behavior by permission:
+
+- `VIEW`: browse only
+- `RUN`: browse + launch bundles within granted scope
+- `ALL`: all workspace and runtime actions
 
 ---
 
@@ -217,7 +228,7 @@ Workspace errors must be explicit and local:
 - file read error,
 - save conflict,
 - unsupported file type,
-- missing tenant context,
+- authorization denied,
 - Monaco bootstrap failure.
 
 The UI must not respond to these errors by:
@@ -244,8 +255,8 @@ The UI must not respond to these errors by:
 ## 12. Acceptance criteria
 
 - A user can open a bundle and browse all files through the explorer.
-- A user can open multiple text files in tabs and edit/save them.
+- An authorized `ALL` user can open multiple text files in tabs and edit/save them.
 - A user can see non-editable files without broken editor behaviour.
 - Explorer state remains stable during selection, save, and refresh.
 - Monaco works in isolated/no-internet deployment.
-- Tenant context is explicit and fail-fast in `MULTI` mode.
+- Authorization state is explicit and fail-fast for restricted actions.

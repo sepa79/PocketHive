@@ -1,7 +1,7 @@
 # UI V2 Scenario Workspace — Plan
 
 > Status: **planned**  
-> Scope: UI v2, Scenario Manager, tenancy-aware bundle/file editing, Monaco offline packaging  
+> Scope: UI v2, Scenario Manager, permission-aware bundle/file editing, Monaco offline packaging  
 > Supersedes for UI v2 scenario editing:
 > - `docs/archive/scenario-editor-plans/scenario-sut-editor-plan.md`
 > - `docs/archive/scenario-editor-plans/vscode-scenario-editor-ui-plan.md`
@@ -12,7 +12,7 @@
 > - `docs/architecture/tenancy-foundation-plan.md`
 
 This plan defines the **new Scenarios page** in UI v2 as a **bundle workspace**
-with a file explorer, built-in editor, bundle operations, and tenancy-aware
+with a file explorer, built-in editor, bundle operations, and access-control-aware
 contracts.
 
 It replaces earlier “scenario editor” plans that were either too VS Code
@@ -27,7 +27,7 @@ bundle.
 - [ ] Keep **raw file editing** available for every text file in a bundle.
 - [ ] Treat UI-driven editors as **optional overlays** on top of raw editing,
       never as the only editing path.
-- [ ] Make tenancy an explicit part of the page contract from day one.
+- [ ] Make access control an explicit part of the page contract from day one.
 - [ ] Keep URL-driven navigation and avoid panel remount flicker.
 
 ---
@@ -50,7 +50,7 @@ bundle.
 - [ ] No silent fallback from Monaco to external CDNs or remote asset loaders.
 - [ ] No requirement to build guided editors for every file type before raw
       editing ships.
-- [ ] No hidden tenant inference in `MULTI` mode.
+- [ ] No hidden permission fallback or UI-only authorization.
 - [ ] No second source of truth outside bundle files.
 
 ---
@@ -64,8 +64,8 @@ bundle.
       generic file CRUD, not one endpoint per file type.
 - [ ] **Offline-safe editor**: Monaco assets and workers are bundled into the UI
       image and served locally.
-- [ ] **Explicit tenancy**: all tenant-scoped data flows through explicit tenant
-      context and fail-fast validation.
+- [ ] **Explicit authorization**: all mutating and launch actions flow through
+      explicit backend permission checks and fail-fast denials.
 
 ---
 
@@ -88,13 +88,13 @@ bundle.
 - [ ] Define one canonical DTO for bundle tree nodes.
 - [ ] Define one canonical DTO for bundle file descriptors:
       `path`, `mediaType`, `size`, `revision`, `editorKind`, `writable`,
-      `tenantId`.
+      without embedding a second ACL model in file metadata.
 - [ ] Define generic endpoints for:
       tree, read, write, create file, create folder, rename, move, delete.
 - [ ] Keep existing type-specific endpoints only as specialized helpers or
       validators, not as the primary explorer API.
-- [ ] Make all tenant-scoped contracts explicit in response DTOs and request
-      handling.
+- [ ] Make workspace authorization and path-scope evaluation explicit in DTOs and
+      request handling.
 - [ ] Enforce path safety and no traversal outside bundle root.
 
 ---
@@ -134,19 +134,21 @@ bundle.
 
 ---
 
-## 10. Track 6 — Tenancy
+## 10. Track 6 — Access control
 
-- [ ] Add central tenant context in UI v2.
-- [ ] Inject `X-Tenant-Id` on tenant-scoped API calls in `MULTI` mode.
-- [ ] Show active tenant clearly in Scenarios workspace chrome.
-- [ ] Fail fast on missing tenant context in `MULTI` mode.
-- [ ] Ensure bundle and file operations cannot cross tenant boundaries.
+- [ ] Show current user and effective permission level in UI v2.
+- [ ] Surface effective scope boundaries clearly in Scenarios workspace.
+- [ ] Disable or hide unauthorized actions without remount flicker.
+- [ ] Make `VIEW` pure read-only in the workspace.
+- [ ] Allow `RUN` only for launching bundles within granted scope.
+- [ ] Require `ALL` for move/edit/delete/upload actions in MVP.
+- [ ] Keep backend as the real enforcement boundary for all workspace mutations.
 
 ---
 
 ## 11. Track 7 — Verification
 
-- [ ] Backend tests for path validation and tenant enforcement.
+- [ ] Backend tests for path validation and authorization enforcement.
 - [ ] UI tests for stable explorer/editor state during refresh and selection.
 - [ ] Smoke test for Monaco in isolated/no-internet deployment.
 - [ ] Regression test for dirty tabs surviving tree refreshes.
@@ -161,7 +163,7 @@ bundle.
 - [ ] Phase 3: raw bundle workspace UI.
 - [ ] Phase 4: bundle/file operations polish.
 - [ ] Phase 5: guided editors for selected files.
-- [ ] Phase 6: tenancy polish and hardening.
+- [ ] Phase 6: authorization polish and hardening.
 
 ---
 
