@@ -95,6 +95,45 @@ class ScenarioManagerAuthFilterTest {
     }
 
     @Test
+    void listEndpointFiltersByViewFolderScope() throws Exception {
+        writeScenario("demo", "alpha", "Alpha");
+        writeScenario("prod", "omega", "Omega");
+        scenarioService.reload();
+        when(authServiceClient.resolve(anyString())).thenReturn(userWith(
+            PocketHivePermissionIds.VIEW,
+            PocketHiveResourceTypes.FOLDER,
+            "demo"));
+
+        mvc.perform(get("/scenarios")
+                .param("includeDefunct", "true")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer test-token"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[0].id").value("alpha"))
+            .andExpect(jsonPath("$[1]").doesNotExist());
+    }
+
+    @Test
+    void scenarioReadRejectsUserOutsideGrantedFolderScope() throws Exception {
+        writeScenario("demo", "alpha", "Alpha");
+        writeScenario("prod", "omega", "Omega");
+        scenarioService.reload();
+        when(authServiceClient.resolve(anyString())).thenReturn(userWith(
+            PocketHivePermissionIds.VIEW,
+            PocketHiveResourceTypes.FOLDER,
+            "demo"));
+
+        mvc.perform(get("/scenarios/alpha")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer test-token"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id").value("alpha"));
+
+        mvc.perform(get("/scenarios/omega")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer test-token"))
+            .andExpect(status().isForbidden())
+            .andExpect(status().reason("PocketHive VIEW permission required within matching scope"));
+    }
+
+    @Test
     void writeApisRejectViewOnlyUser() throws Exception {
         when(authServiceClient.resolve(anyString())).thenReturn(userWith(PocketHivePermissionIds.VIEW));
 

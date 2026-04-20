@@ -39,6 +39,19 @@ pockethive:
             permission: RUN
             resourceType: PH_FOLDER
             resourceSelector: demo
+      - id: 55555555-5555-5555-5555-555555555555
+        username: local-e2e-runner
+        display-name: Local E2E Runner
+        active: true
+        grants:
+          - product: POCKETHIVE
+            permission: VIEW
+            resourceType: PH_DEPLOYMENT
+            resourceSelector: "*"
+          - product: POCKETHIVE
+            permission: RUN
+            resourceType: PH_FOLDER
+            resourceSelector: e2e
       - id: 33333333-3333-3333-3333-333333333333
         username: local-viewer
         display-name: Local Viewer

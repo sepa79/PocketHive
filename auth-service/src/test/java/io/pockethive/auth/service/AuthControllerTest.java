@@ -141,6 +141,28 @@ class AuthControllerTest {
             .andExpect(jsonPath("$.grants[0].permission").value("RUN"));
     }
 
+    @Test
+    void devLoginSupportsScopedE2eRunner() throws Exception {
+        MvcResult loginResult = mvc.perform(post("/api/auth/dev/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"username":"local-e2e-runner"}
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.user.username").value("local-e2e-runner"))
+            .andReturn();
+
+        String token = bearer(loginResult);
+
+        mvc.perform(get("/api/auth/me").header(HttpHeaders.AUTHORIZATION, token))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.grants", hasSize(2)))
+            .andExpect(jsonPath("$.grants[0].permission").value("VIEW"))
+            .andExpect(jsonPath("$.grants[1].permission").value("RUN"))
+            .andExpect(jsonPath("$.grants[1].resourceType").value(PocketHiveResourceTypes.FOLDER))
+            .andExpect(jsonPath("$.grants[1].resourceSelector").value("e2e"));
+    }
+
     private String bearer(MvcResult result) throws Exception {
         JsonNode payload = mapper.readTree(result.getResponse().getContentAsString());
         return "Bearer " + payload.path("accessToken").asText();

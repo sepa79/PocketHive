@@ -186,6 +186,60 @@ class SwarmControllerTest {
     }
 
     @Test
+    void startRejectsRunUserOutsideGrantedFolderScope() {
+        SwarmCreateTracker tracker = new SwarmCreateTracker();
+        SwarmStore registry = new SwarmStore();
+        Swarm swarm = new Swarm("sw1", "inst", "c", "run-1");
+        swarm.attachTemplate(new SwarmTemplateMetadata("tpl-prod", "swarm-controller:latest", List.of(), "prod/tpl-prod", "prod"));
+        registry.register(swarm);
+        registry.updateStatus("sw1", SwarmLifecycleStatus.CREATING);
+        registry.updateStatus("sw1", SwarmLifecycleStatus.READY);
+        cacheStatusFull(registry, "sw1", "tpl-prod", "run-1", "inst");
+        SwarmController ctrl = controller(tracker, registry, new SwarmPlanRegistry());
+
+        try {
+            OrchestratorCurrentUserHolder.set(userWith(
+                PocketHivePermissionIds.RUN,
+                PocketHiveResourceTypes.FOLDER,
+                "demo"));
+            assertThatThrownBy(() -> ctrl.start("sw1", new SwarmController.ControlRequest("idem", null)))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("403 FORBIDDEN");
+        } finally {
+            OrchestratorCurrentUserHolder.clear();
+        }
+
+        verifyNoInteractions(publisher);
+    }
+
+    @Test
+    void stopRejectsAllUserOutsideGrantedFolderScope() {
+        SwarmCreateTracker tracker = new SwarmCreateTracker();
+        SwarmStore registry = new SwarmStore();
+        Swarm swarm = new Swarm("sw1", "inst", "c", "run-1");
+        swarm.attachTemplate(new SwarmTemplateMetadata("tpl-prod", "swarm-controller:latest", List.of(), "prod/tpl-prod", "prod"));
+        registry.register(swarm);
+        registry.updateStatus("sw1", SwarmLifecycleStatus.CREATING);
+        registry.updateStatus("sw1", SwarmLifecycleStatus.READY);
+        cacheStatusFull(registry, "sw1", "tpl-prod", "run-1", "inst");
+        SwarmController ctrl = controller(tracker, registry, new SwarmPlanRegistry());
+
+        try {
+            OrchestratorCurrentUserHolder.set(userWith(
+                PocketHivePermissionIds.ALL,
+                PocketHiveResourceTypes.FOLDER,
+                "demo"));
+            assertThatThrownBy(() -> ctrl.stop("sw1", new SwarmController.ControlRequest("idem", null)))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("403 FORBIDDEN");
+        } finally {
+            OrchestratorCurrentUserHolder.clear();
+        }
+
+        verifyNoInteractions(publisher);
+    }
+
+    @Test
     void createFetchesTemplateAndRegistersPlan() throws Exception {
         SwarmCreateTracker tracker = new SwarmCreateTracker();
         SwarmPlanRegistry plans = new SwarmPlanRegistry();

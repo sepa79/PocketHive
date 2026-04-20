@@ -83,7 +83,7 @@ const grantPresets = [
       product: AuthProducts.POCKETHIVE,
       permission: PocketHivePermissionIds.RUN,
       resourceType: PocketHiveResourceTypes.FOLDER,
-      resourceSelector: 'demo',
+      resourceSelector: 'e2e',
     },
   },
   {
