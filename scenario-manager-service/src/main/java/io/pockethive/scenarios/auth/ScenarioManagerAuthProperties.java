@@ -6,18 +6,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties(prefix = "pockethive.auth")
 public class ScenarioManagerAuthProperties {
-    private boolean enabled = false;
     private URI serviceUrl = URI.create("http://auth-service:8080");
     private Duration connectTimeout = Duration.ofSeconds(2);
     private Duration readTimeout = Duration.ofSeconds(5);
-
-    public boolean isEnabled() {
-        return enabled;
-    }
-
-    public void setEnabled(boolean enabled) {
-        this.enabled = enabled;
-    }
 
     public URI getServiceUrl() {
         return serviceUrl;

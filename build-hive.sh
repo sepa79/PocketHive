@@ -103,6 +103,9 @@ Environment:
   LOCAL_ARTIFACTS_DIR   Directory for staged jars (default: ${LOCAL_ARTIFACTS_DIR}).
   POCKETHIVE_RUNTIME_IMAGE  Tag for the shared JVM base image (default: ${RUNTIME_IMAGE}).
   MAVEN_CLI_OPTS        Extra Maven flags appended to the build command.
+  POCKETHIVE_AUTH_TOKEN Bearer token used by auth-protected local tooling (for example --sync-scenarios).
+  POCKETHIVE_AUTH_USERNAME DEV username used to obtain a bearer token from auth-service for local tooling.
+  AUTH_SERVICE_BASE_URL Base URL for auth-service token bootstrap (default: http://localhost:1083).
 USAGE
 }
 
@@ -467,12 +470,46 @@ sync_scenarios() {
     return 1
   fi
 
+  local auth_header
+  auth_header="$(resolve_local_auth_header)" || return 1
+
   echo " - Triggering scenario reload via ${reload_url}"
-  if ! curl -fsS -X POST "${reload_url}" >/dev/null; then
+  if ! curl -fsS -X POST "${reload_url}" -H "${auth_header}" >/dev/null; then
     echo "Scenario reload request to ${reload_url} failed." >&2
     return 1
   fi
   echo "Scenarios synced and reload triggered successfully."
+}
+
+resolve_local_auth_header() {
+  if [[ -n "${POCKETHIVE_AUTH_TOKEN:-}" ]]; then
+    printf 'Authorization: Bearer %s' "${POCKETHIVE_AUTH_TOKEN}"
+    return 0
+  fi
+
+  if [[ -z "${POCKETHIVE_AUTH_USERNAME:-}" ]]; then
+    echo "POCKETHIVE_AUTH_TOKEN or POCKETHIVE_AUTH_USERNAME must be set for auth-protected local tooling." >&2
+    return 1
+  fi
+
+  local auth_base_url login_url response token
+  auth_base_url="${AUTH_SERVICE_BASE_URL:-http://localhost:1083}"
+  auth_base_url="${auth_base_url%/}"
+  login_url="${auth_base_url}/api/auth/dev/login"
+  response=$(curl -fsS -X POST "${login_url}" \
+    -H "Content-Type: application/json" \
+    -d "{\"username\":\"${POCKETHIVE_AUTH_USERNAME}\"}") || {
+      echo "Failed to obtain auth token from ${login_url} for user '${POCKETHIVE_AUTH_USERNAME}'." >&2
+      return 1
+    }
+
+  token=$(printf '%s' "${response}" | sed -n 's/.*"accessToken"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+  if [[ -z "${token}" ]]; then
+    echo "Auth service response from ${login_url} did not contain accessToken." >&2
+    return 1
+  fi
+
+  printf 'Authorization: Bearer %s' "${token}"
 }
 
 parse_args() {

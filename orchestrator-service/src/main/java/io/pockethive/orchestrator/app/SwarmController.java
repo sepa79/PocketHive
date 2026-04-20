@@ -14,6 +14,7 @@ import io.pockethive.controlplane.messaging.SignalMessage;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.observability.ControlPlaneJson;
+import io.pockethive.auth.contract.AuthenticatedUserDto;
 import io.pockethive.orchestrator.domain.IdempotencyStore;
 import io.pockethive.orchestrator.domain.ScenarioPlan;
 import io.pockethive.orchestrator.domain.ScenarioTimelineRegistry;
@@ -29,6 +30,8 @@ import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
 import io.pockethive.orchestrator.domain.SwarmStateStore;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
+import io.pockethive.orchestrator.auth.OrchestratorAuthorization;
+import io.pockethive.orchestrator.auth.OrchestratorCurrentUserHolder;
 import io.pockethive.swarm.model.NetworkMode;
 import io.pockethive.swarm.model.NetworkBinding;
 import io.pockethive.swarm.model.NetworkProfile;
@@ -87,6 +90,7 @@ public class SwarmController {
     private final ScenarioClient scenarios;
     private final SwarmNetworkBindingService networkBindings;
     private final HiveJournal hiveJournal;
+    private final OrchestratorAuthorization authorization;
     private final ObjectMapper json;
     private final String originInstanceId;
     @Value("${POCKETHIVE_SCENARIOS_RUNTIME_ROOT:}")
@@ -105,6 +109,7 @@ public class SwarmController {
                            ScenarioClient scenarios,
                            SwarmNetworkBindingService networkBindings,
                            HiveJournal hiveJournal,
+                           OrchestratorAuthorization authorization,
                            SwarmPlanRegistry plans,
                            ScenarioTimelineRegistry timelines,
                            ControlPlaneProperties controlPlaneProperties) {
@@ -118,6 +123,7 @@ public class SwarmController {
         this.scenarios = scenarios;
         this.networkBindings = Objects.requireNonNull(networkBindings, "networkBindings");
         this.hiveJournal = Objects.requireNonNull(hiveJournal, "hiveJournal");
+        this.authorization = Objects.requireNonNull(authorization, "authorization");
         this.plans = plans;
         this.timelines = timelines;
         this.originInstanceId = requireOrigin(controlPlaneProperties);
@@ -143,6 +149,7 @@ public class SwarmController {
     public ResponseEntity<?> create(@PathVariable String swarmId, @RequestBody SwarmCreateRequest req) {
         String path = "/api/swarms/" + swarmId + "/create";
         logRestRequest("POST", path, req);
+        String templateId = req.templateId();
         Duration timeout = Duration.ofMillis(120_000L);
         ResponseEntity<?> response;
         Optional<String> existingCorrelation = idempotency.findCorrelation(swarmId, "swarm-create", req.idempotencyKey());
@@ -192,7 +199,8 @@ public class SwarmController {
 
         try {
             response = idempotentSend("swarm-create", swarmId, req.idempotencyKey(), timeout.toMillis(), lockCorrelation, corr -> {
-                String templateId = req.templateId();
+                ScenarioClient.ScenarioTemplateDescriptor templateDescriptor = fetchScenarioTemplate(templateId);
+                requireRunTemplate(templateDescriptor);
                 log.info("[CTRL] swarm-create start swarm={} templateId={} sutId={} variablesProfileId={} networkMode={} networkProfileId={} autoPullImages={} correlation={} idempotencyKey={}",
                     swarmId,
                     templateId,
@@ -345,7 +353,12 @@ public class SwarmController {
                         swarmId,
                         image,
                         instanceId,
-                        new SwarmTemplateMetadata(templateId, image, plan.bees()),
+                        new SwarmTemplateMetadata(
+                            templateId,
+                            image,
+                            plan.bees(),
+                            templateDescriptor.bundlePath(),
+                            templateDescriptor.folderPath()),
                         autoPull,
                         sutId,
                         networkMode,
@@ -430,6 +443,7 @@ public class SwarmController {
     public ResponseEntity<ControlResponse> start(@PathVariable String swarmId, @RequestBody ControlRequest req) {
         String path = "/api/swarms/" + swarmId + "/start";
         logRestRequest("POST", path, req);
+        requireRunSwarm(swarmId);
         ResponseEntity<ControlResponse> response = sendSignal("swarm-start", swarmId, req.idempotencyKey(), 180_000L);
         logRestResponse("POST", path, response);
         return response;
@@ -446,6 +460,7 @@ public class SwarmController {
     public ResponseEntity<ControlResponse> stop(@PathVariable String swarmId, @RequestBody ControlRequest req) {
         String path = "/api/swarms/" + swarmId + "/stop";
         logRestRequest("POST", path, req);
+        requireManageSwarm(swarmId);
         ResponseEntity<ControlResponse> response = sendSignal("swarm-stop", swarmId, req.idempotencyKey(), 90_000L);
         logRestResponse("POST", path, response);
         return response;
@@ -462,6 +477,7 @@ public class SwarmController {
     public ResponseEntity<ControlResponse> remove(@PathVariable String swarmId, @RequestBody ControlRequest req) {
         String path = "/api/swarms/" + swarmId + "/remove";
         logRestRequest("POST", path, req);
+        requireManageSwarm(swarmId);
         ResponseEntity<ControlResponse> response = sendSignal("swarm-remove", swarmId, req.idempotencyKey(), 180_000L);
         logRestResponse("POST", path, response);
         return response;
@@ -471,6 +487,7 @@ public class SwarmController {
     public ResponseEntity<?> updateNetwork(@PathVariable String swarmId, @RequestBody SwarmNetworkUpdateRequest req) {
         String path = "/api/swarms/" + swarmId + "/network";
         logRestRequest("POST", path, req);
+        requireManageSwarm(swarmId);
         ResponseEntity<?> response;
         Optional<Swarm> swarmOpt = store.find(swarmId);
         if (swarmOpt.isEmpty()) {
@@ -691,6 +708,19 @@ public class SwarmController {
         }
     }
 
+    private ScenarioClient.ScenarioTemplateDescriptor fetchScenarioTemplate(String templateId) {
+        try {
+            ScenarioClient.ScenarioTemplateDescriptor descriptor = scenarios.fetchScenarioTemplate(templateId);
+            if (descriptor == null || descriptor.id() == null || descriptor.id().isBlank()) {
+                throw new IllegalStateException("Template %s metadata was not found".formatted(templateId));
+            }
+            return descriptor;
+        } catch (Exception e) {
+            log.warn("failed to fetch template metadata {}", templateId, e);
+            throw new IllegalStateException("Failed to fetch template metadata %s".formatted(templateId), e);
+        }
+    }
+
     private String prepareScenarioRuntime(String templateId, String swarmId) {
         try {
             String runtimeDir = scenarios.prepareScenarioRuntime(templateId, swarmId);
@@ -852,6 +882,7 @@ public class SwarmController {
         String path = "/api/swarms";
         logRestRequest("GET", path, null);
         List<SwarmSummary> payload = store.all().stream()
+            .filter(this::canReadSwarm)
             .sorted(Comparator.comparing(Swarm::getId))
             .map(swarm -> toSummaryFromStatusFull(swarm, swarm.getControllerStatusFull()))
             .filter(Objects::nonNull)
@@ -874,6 +905,7 @@ public class SwarmController {
             response = ResponseEntity.notFound().build();
         } else {
             Swarm swarm = swarmOpt.get();
+            requireReadSwarm(swarm);
             JsonNode statusFull = swarm.getControllerStatusFull();
             if (statusFull == null) {
                 response = ResponseEntity.notFound().build();
@@ -887,6 +919,93 @@ public class SwarmController {
         }
         logRestResponse("GET", path, response);
         return response;
+    }
+
+    private boolean canReadSwarm(Swarm swarm) {
+        AuthenticatedUserDto user = currentUser();
+        if (user == null) {
+            return true;
+        }
+        return authorization.canRead(user, resolveTemplateMetadata(swarm));
+    }
+
+    private void requireReadSwarm(Swarm swarm) {
+        AuthenticatedUserDto user = currentUser();
+        if (user == null) {
+            return;
+        }
+        if (!authorization.canRead(user, resolveTemplateMetadata(swarm))) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                HttpStatus.FORBIDDEN,
+                authorization.readDeniedMessage());
+        }
+    }
+
+    private void requireRunSwarm(String swarmId) {
+        AuthenticatedUserDto user = currentUser();
+        if (user == null) {
+            return;
+        }
+        Swarm swarm = store.find(swarmId)
+            .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_FOUND));
+        if (!authorization.canRun(user, resolveTemplateMetadata(swarm))) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                HttpStatus.FORBIDDEN,
+                authorization.runDeniedMessage());
+        }
+    }
+
+    private void requireManageSwarm(String swarmId) {
+        AuthenticatedUserDto user = currentUser();
+        if (user == null) {
+            return;
+        }
+        Swarm swarm = store.find(swarmId)
+            .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_FOUND));
+        if (!authorization.canManage(user, resolveTemplateMetadata(swarm))) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                HttpStatus.FORBIDDEN,
+                authorization.manageDeniedMessage());
+        }
+    }
+
+    private void requireRunTemplate(ScenarioClient.ScenarioTemplateDescriptor templateDescriptor) {
+        AuthenticatedUserDto user = currentUser();
+        if (user == null) {
+            return;
+        }
+        if (!authorization.canRun(user, templateDescriptor)) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                HttpStatus.FORBIDDEN,
+                authorization.runDeniedMessage());
+        }
+    }
+
+    private SwarmTemplateMetadata resolveTemplateMetadata(Swarm swarm) {
+        SwarmTemplateMetadata metadata = swarm.templateMetadata();
+        if (metadata == null) {
+            return null;
+        }
+        if (metadata.bundlePath() != null && !metadata.bundlePath().isBlank()) {
+            return metadata;
+        }
+        String templateId = metadata.templateId();
+        if (templateId == null || templateId.isBlank()) {
+            return metadata;
+        }
+        ScenarioClient.ScenarioTemplateDescriptor descriptor = fetchScenarioTemplate(templateId);
+        SwarmTemplateMetadata resolved = new SwarmTemplateMetadata(
+            metadata.templateId(),
+            metadata.controllerImage(),
+            metadata.bees(),
+            descriptor.bundlePath(),
+            descriptor.folderPath());
+        swarm.attachTemplate(resolved);
+        return resolved;
+    }
+
+    private AuthenticatedUserDto currentUser() {
+        return OrchestratorCurrentUserHolder.get();
     }
 
     private SwarmSummary toSummaryFromStatusFull(Swarm swarm, JsonNode statusFull) {

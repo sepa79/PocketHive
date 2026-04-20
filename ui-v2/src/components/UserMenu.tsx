@@ -76,10 +76,14 @@ export function UserMenu() {
             role="menuitem"
             onClick={() => {
               setOpen(false)
-              navigate('/login')
+              navigate(auth.isAuthAdmin ? '/users' : '/login')
             }}
           >
-            {auth.status === 'authenticated' ? 'Account / switch user' : 'Login / users…'}
+            {auth.status === 'authenticated'
+              ? auth.isAuthAdmin
+                ? 'Users / account'
+                : 'Account / switch user'
+              : 'Login / users…'}
           </button>
           {auth.status === 'authenticated' ? (
             <button

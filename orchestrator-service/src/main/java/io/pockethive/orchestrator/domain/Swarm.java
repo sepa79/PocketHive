@@ -76,6 +76,14 @@ public class Swarm {
         return templateMetadata == null ? null : templateMetadata.controllerImage();
     }
 
+    public String bundlePath() {
+        return templateMetadata == null ? null : templateMetadata.bundlePath();
+    }
+
+    public String folderPath() {
+        return templateMetadata == null ? null : templateMetadata.folderPath();
+    }
+
     public List<Bee> bees() {
         return templateMetadata == null ? List.of() : templateMetadata.bees();
     }

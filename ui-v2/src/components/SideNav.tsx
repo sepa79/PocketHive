@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import { Icon } from './Icon'
+import { useAuth } from '../lib/authContext'
 
 function NavItem({
   to,
@@ -21,6 +22,8 @@ function NavItem({
 }
 
 export function SideNav({ expanded, onToggle }: { expanded: boolean; onToggle: () => void }) {
+  const auth = useAuth()
+
   return (
     <div className="navIconStack">
       <div className={expanded ? 'navHeader navHeaderExpanded' : 'navHeader'}>
@@ -41,6 +44,7 @@ export function SideNav({ expanded, onToggle }: { expanded: boolean; onToggle: (
       <NavItem to="/journal" title="Journal" icon="journal" expanded={expanded} />
       <NavItem to="/buzz" title="Buzz" icon="buzz" expanded={expanded} />
       <NavItem to="/scenarios" title="Scenarios" icon="scenarios" expanded={expanded} />
+      {auth.isAuthAdmin ? <NavItem to="/users" title="Users" icon="users" expanded={expanded} /> : null}
       <NavItem to="/other" title="Other" icon="other" expanded={expanded} />
     </div>
   )

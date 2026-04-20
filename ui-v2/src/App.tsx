@@ -10,6 +10,7 @@ import { OtherPage } from './pages/OtherPage'
 import { ProxyPage } from './pages/ProxyPage'
 import { ScenariosPage } from './pages/ScenariosPage'
 import { SwarmViewPage } from './pages/SwarmViewPage'
+import { UsersPage } from './pages/UsersPage'
 import { WireLogPage } from './pages/WireLogPage'
 import { DebugTapViewerPage } from './pages/DebugTapViewerPage'
 
@@ -33,6 +34,7 @@ export default function App() {
         <Route path="/health" element={<HealthPage />} />
         <Route path="/help" element={<HelpPage />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/users" element={<UsersPage />} />
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

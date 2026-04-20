@@ -1,6 +1,8 @@
 import { Link } from 'react-router-dom'
+import { useAuth } from '../lib/authContext'
 
 export function HomePage() {
+  const auth = useAuth()
   const fullLogoSrc = `${import.meta.env.BASE_URL}logo.svg`
   return (
     <div className="page homePage">
@@ -28,6 +30,12 @@ export function HomePage() {
           <div className="tileTitle">Connectivity</div>
           <div className="tileDesc">Backend health + connection details.</div>
         </Link>
+        {auth.isAuthAdmin ? (
+          <Link className="tile" to="/users">
+            <div className="tileTitle">Users</div>
+            <div className="tileDesc">Manage auth-service users and grant assignments.</div>
+          </Link>
+        ) : null}
       </div>
     </div>
   )

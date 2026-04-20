@@ -1,5 +1,6 @@
 package io.pockethive.orchestrator.infra.scenario;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.auth.client.AuthServiceServiceTokenProvider;
 import io.pockethive.orchestrator.app.ScenarioClient;
@@ -59,6 +60,18 @@ public class ScenarioManagerClient implements ScenarioClient {
         String url = baseUrl + "/scenarios/" + templateId;
         HttpResponse<String> resp = sendGet(url, "template " + templateId);
         return json.readValue(resp.body(), ScenarioPlan.class);
+    }
+
+    @Override
+    public ScenarioTemplateDescriptor fetchScenarioTemplate(String templateId) throws Exception {
+        String trimmedTemplate = templateId == null ? null : templateId.trim();
+        if (trimmedTemplate == null || trimmedTemplate.isEmpty()) {
+            throw new IllegalArgumentException("templateId must not be null or blank");
+        }
+        String url = baseUrl + "/api/templates/" + trimmedTemplate;
+        HttpResponse<String> resp = sendGet(url, "template-metadata " + trimmedTemplate);
+        ScenarioTemplateResponse body = json.readValue(resp.body(), ScenarioTemplateResponse.class);
+        return new ScenarioTemplateDescriptor(body.id(), body.bundlePath(), body.folderPath(), body.defunct());
     }
 
     @Override
@@ -237,6 +250,10 @@ public class ScenarioManagerClient implements ScenarioClient {
     }
 
     public record ScenarioRuntimeResponse(String scenarioId, String swarmId, String runtimeDir) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record ScenarioTemplateResponse(String id, String bundlePath, String folderPath, boolean defunct) {
     }
 
     public record ScenarioVariablesResolveResponse(String profileId, String sutId, Map<String, Object> vars, java.util.List<String> warnings) {

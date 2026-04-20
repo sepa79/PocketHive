@@ -125,12 +125,13 @@ This file is a **navigation and guardrails** page for both human and AI contribu
   - `client.mjs` talks directly to the Orchestrator REST API, Scenario Manager API, and control‑plane via AMQP (no MCP needed).
   - `server.mjs` is the stdio MCP server wrapper for editor/agent integration. Prefer using it when the client supports MCP tools.
   - Typical usage from repo root:
-    - `node tools/mcp-orchestrator-debug/client.mjs list-swarms`
-    - `node tools/mcp-orchestrator-debug/client.mjs get-swarm <swarmId>`
-    - `node tools/mcp-orchestrator-debug/client.mjs swarm-snapshot <swarmId>`
-    - `node tools/mcp-orchestrator-debug/client.mjs worker-configs <swarmId>`
-    - `node tools/mcp-orchestrator-debug/client.mjs reload-scenarios`
+    - `POCKETHIVE_AUTH_USERNAME=local-admin node tools/mcp-orchestrator-debug/client.mjs list-swarms`
+    - `POCKETHIVE_AUTH_USERNAME=local-admin node tools/mcp-orchestrator-debug/client.mjs get-swarm <swarmId>`
+    - `POCKETHIVE_AUTH_USERNAME=local-admin node tools/mcp-orchestrator-debug/client.mjs swarm-snapshot <swarmId>`
+    - `POCKETHIVE_AUTH_USERNAME=local-admin node tools/mcp-orchestrator-debug/client.mjs worker-configs <swarmId>`
+    - `POCKETHIVE_AUTH_USERNAME=local-admin node tools/mcp-orchestrator-debug/client.mjs reload-scenarios`
   - MCP server notes:
     - start with `node tools/mcp-orchestrator-debug/server.mjs`
     - includes `scenario.reload-scenarios` for Scenario Manager refresh
+    - when auth is enabled, export `POCKETHIVE_AUTH_USERNAME` or `POCKETHIVE_AUTH_TOKEN` for the spawned server/client process
   - Use these tools to inspect **running swarms, worker configs, queues, control‑plane traffic, and scenario reloads** instead of hand‑crafting `curl`/`rabbitmqctl` calls.

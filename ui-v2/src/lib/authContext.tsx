@@ -2,12 +2,19 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import {
   clearAuthSession,
   fetchCurrentUser,
+  type AuthGrantMatch,
   loginDevUser,
   readStoredAuthSession,
   replaceSessionUser,
   type AuthSession,
   type AuthenticatedUser,
+  userHasGrant,
 } from './auth'
+import {
+  AuthProducts,
+  AuthServicePermissionIds,
+  AuthServiceResourceTypes,
+} from './authContracts'
 
 type AuthStatus = 'loading' | 'anonymous' | 'authenticated'
 
@@ -20,13 +27,15 @@ type AuthContextValue = {
   logout: () => void
   refresh: () => Promise<void>
   hasPermission: (permission: string) => boolean
+  hasGrant: (match: AuthGrantMatch) => boolean
+  isAuthAdmin: boolean
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
 function hasPermission(user: AuthenticatedUser | null, permission: string): boolean {
   if (!user) return false
-  return user.grants.some((grant) => grant.product === 'POCKETHIVE' && grant.permission === permission)
+  return user.grants.some((grant) => grant.product === AuthProducts.POCKETHIVE && grant.permission === permission)
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -118,6 +127,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logout,
         refresh,
         hasPermission: (permission) => hasPermission(user, permission),
+        hasGrant: (match) => userHasGrant(user, match),
+        isAuthAdmin: userHasGrant(user, {
+          product: AuthProducts.AUTH_SERVICE,
+          permission: AuthServicePermissionIds.ADMIN,
+          resourceType: AuthServiceResourceTypes.GLOBAL,
+        }),
       }}
     >
       {children}

@@ -3,6 +3,7 @@ package io.pockethive.capabilities.api;
 import io.pockethive.capabilities.CapabilityCatalogueService;
 import io.pockethive.capabilities.CapabilityManifest;
 import io.pockethive.scenarios.ScenarioService;
+import io.pockethive.scenarios.auth.ScenarioManagerAuthorization;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -30,6 +31,9 @@ class CapabilityCatalogueControllerTest {
 
     @MockBean
     ScenarioService scenarioService;
+
+    @MockBean
+    ScenarioManagerAuthorization authorization;
 
     @Test
     void templatesEndpointReturnsHealthyAndDefunctBundles() throws Exception {

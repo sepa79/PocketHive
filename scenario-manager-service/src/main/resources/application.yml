@@ -15,7 +15,6 @@ logging:
 
 pockethive:
   auth:
-    enabled: ${POCKETHIVE_AUTH_ENABLED:false}
     service-url: ${POCKETHIVE_AUTH_SERVICE_URL:http://auth-service:8080}
     connect-timeout: ${POCKETHIVE_AUTH_CONNECT_TIMEOUT:PT2S}
     read-timeout: ${POCKETHIVE_AUTH_READ_TIMEOUT:PT5S}

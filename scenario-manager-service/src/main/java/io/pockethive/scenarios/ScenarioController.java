@@ -2,6 +2,9 @@ package io.pockethive.scenarios;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import io.pockethive.auth.contract.AuthenticatedUserDto;
+import io.pockethive.scenarios.auth.ScenarioManagerAuthorization;
+import io.pockethive.scenarios.auth.ScenarioManagerCurrentUserHolder;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,10 +34,14 @@ public class ScenarioController {
     private static final ObjectMapper YAML_MAPPER = new ObjectMapper(new YAMLFactory());
     private final ScenarioService service;
     private final AvailableScenarioRegistry availableScenarios;
+    private final ScenarioManagerAuthorization authorization;
 
-    public ScenarioController(ScenarioService service, AvailableScenarioRegistry availableScenarios) {
+    public ScenarioController(ScenarioService service,
+                              AvailableScenarioRegistry availableScenarios,
+                              ScenarioManagerAuthorization authorization) {
         this.service = service;
         this.availableScenarios = availableScenarios;
+        this.authorization = authorization;
     }
 
     @PostMapping(
@@ -53,9 +60,13 @@ public class ScenarioController {
     @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
     public List<ScenarioSummary> list(@RequestParam(name = "includeDefunct", defaultValue = "false") boolean includeDefunct) {
         log.info("[REST] GET /scenarios includeDefunct={}", includeDefunct);
+        AuthenticatedUserDto user = currentUser();
         List<ScenarioSummary> summaries = includeDefunct
                 ? service.listAllSummaries()
                 : availableScenarios.list();
+        summaries = summaries.stream()
+                .filter(summary -> canRead(user, summary.id()))
+                .toList();
         log.info("[REST] GET /scenarios -> {} items body={}", summaries.size(), safeJson(summaries));
         return summaries;
     }
@@ -63,7 +74,10 @@ public class ScenarioController {
     @GetMapping(value = "/defunct", produces = MediaType.APPLICATION_JSON_VALUE)
     public List<ScenarioSummary> defunct() {
         log.info("[REST] GET /scenarios/defunct");
-        List<ScenarioSummary> summaries = service.listDefunctSummaries();
+        AuthenticatedUserDto user = currentUser();
+        List<ScenarioSummary> summaries = service.listDefunctSummaries().stream()
+                .filter(summary -> canRead(user, summary.id()))
+                .toList();
         log.info("[REST] GET /scenarios/defunct -> {} items body={}", summaries.size(), safeJson(summaries));
         return summaries;
     }
@@ -71,6 +85,7 @@ public class ScenarioController {
     @GetMapping(value = "/folders", produces = MediaType.APPLICATION_JSON_VALUE)
     public List<String> listBundleFolders() throws IOException {
         log.info("[REST] GET /scenarios/folders");
+        requireManageAllFolders();
         List<String> folders = service.listBundleFolders();
         log.info("[REST] GET /scenarios/folders -> {} items body={}", folders.size(), safeJson(folders));
         return folders;
@@ -80,6 +95,7 @@ public class ScenarioController {
     public ResponseEntity<Void> createBundleFolder(@RequestBody FolderRequest request) throws IOException {
         String path = request != null ? request.path() : null;
         log.info("[REST] POST /scenarios/folders path={}", path);
+        requireManageAllFolders();
         try {
             service.createBundleFolder(path);
             log.info("[REST] POST /scenarios/folders -> status=204");
@@ -93,6 +109,7 @@ public class ScenarioController {
     @DeleteMapping(value = "/folders")
     public ResponseEntity<Void> deleteBundleFolder(@RequestParam(name = "path") String path) throws IOException {
         log.info("[REST] DELETE /scenarios/folders path={}", path);
+        requireManageFolder(path);
         try {
             service.deleteBundleFolder(path);
             log.info("[REST] DELETE /scenarios/folders -> status=204");
@@ -108,9 +125,8 @@ public class ScenarioController {
                                                      @RequestBody FolderRequest request) throws IOException {
         String path = request != null ? request.path() : null;
         log.info("[REST] POST /scenarios/{}/move path={}", id, path);
-        if (service.find(id).isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
-        }
+        requireManageScenario(id);
+        requireManageFolder(path);
         try {
             service.moveScenarioToFolder(id, path);
             log.info("[REST] POST /scenarios/{}/move -> status=204", id);
@@ -126,6 +142,8 @@ public class ScenarioController {
         String bundleKey = request != null ? request.bundleKey() : null;
         String path = request != null ? request.path() : null;
         log.info("[REST] POST /scenarios/bundles/move bundleKey={} path={}", bundleKey, path);
+        requireManageBundle(bundleKey);
+        requireManageFolder(path);
         try {
             service.moveBundleToFolder(bundleKey, path);
             log.info("[REST] POST /scenarios/bundles/move -> status=204 bundleKey={}", bundleKey);
@@ -142,6 +160,7 @@ public class ScenarioController {
         // That means direct callers can currently fetch defunct scenarios even though
         // UI create flows are expected to preflight against /api/templates first.
         log.info("[REST] GET /scenarios/{}", id);
+        requireReadScenario(id);
         Scenario scenario = service.find(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         log.info("[REST] GET /scenarios/{} -> status=200 scenario={}", id, safeJson(scenarioSummary(scenario)));
         return scenario;
@@ -155,6 +174,7 @@ public class ScenarioController {
                            @Valid @RequestBody Scenario scenario,
                            @RequestHeader(HttpHeaders.CONTENT_TYPE) String contentType) throws IOException {
         log.info("[REST] PUT /scenarios/{} contentType={} scenario={}", id, contentType, safeJson(scenarioSummary(scenario)));
+        requireManageScenario(id);
         Scenario updated = service.update(id, scenario, ScenarioService.formatFrom(contentType));
         log.info("[REST] PUT /scenarios/{} -> status=200 scenario={}", id, safeJson(scenarioSummary(updated)));
         return updated;
@@ -163,6 +183,7 @@ public class ScenarioController {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable("id") String id) throws IOException {
         log.info("[REST] DELETE /scenarios/{}", id);
+        requireManageScenario(id);
         service.delete(id);
         log.info("[REST] DELETE /scenarios/{} -> status=204", id);
         return ResponseEntity.noContent().build();
@@ -171,6 +192,7 @@ public class ScenarioController {
     @DeleteMapping("/bundles")
     public ResponseEntity<Void> deleteBundle(@RequestParam("bundleKey") String bundleKey) throws IOException {
         log.info("[REST] DELETE /scenarios/bundles bundleKey={}", bundleKey);
+        requireManageBundle(bundleKey);
         try {
             service.deleteBundle(bundleKey);
             log.info("[REST] DELETE /scenarios/bundles -> status=204 bundleKey={}", bundleKey);
@@ -185,6 +207,7 @@ public class ScenarioController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void reload() throws IOException {
         log.info("[REST] POST /scenarios/reload");
+        requireManageAllFolders();
         service.reload();
         log.info("[REST] POST /scenarios/reload -> status=204");
     }
@@ -192,9 +215,7 @@ public class ScenarioController {
     @GetMapping(value = "/{id}/raw", produces = MediaType.TEXT_PLAIN_VALUE)
     public ResponseEntity<String> getRaw(@PathVariable("id") String id) throws IOException {
         log.info("[REST] GET /scenarios/{}/raw", id);
-        if (service.find(id).isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
-        }
+        requireReadScenario(id);
         try {
             String text = service.readScenarioRaw(id);
             log.info("[REST] GET /scenarios/{}/raw -> status=200 ({} chars)", id, text.length());
@@ -212,9 +233,7 @@ public class ScenarioController {
                                                @RequestHeader(value = "X-Correlation-Id", required = false) String correlationId,
                                                @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKey) throws IOException {
         log.info("[REST] GET /scenarios/{}/variables correlationId={} idempotencyKey={}", id, correlationId, idempotencyKey);
-        if (service.find(id).isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
-        }
+        requireReadScenario(id);
         String text = service.readVariablesRaw(id);
         if (text == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "variables.yaml not found");
@@ -232,9 +251,7 @@ public class ScenarioController {
                                                                @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKey) throws IOException {
         int size = body != null ? body.length() : 0;
         log.info("[REST] PUT /scenarios/{}/variables ({} chars) correlationId={} idempotencyKey={}", id, size, correlationId, idempotencyKey);
-        if (service.find(id).isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
-        }
+        requireManageScenario(id);
         try {
             ScenarioService.VariablesValidationResult result = service.writeVariables(id, body != null ? body : "");
             VariablesWriteResponse resp = new VariablesWriteResponse("ok", result.warnings());
@@ -256,9 +273,7 @@ public class ScenarioController {
                                                                      @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKey) throws IOException {
         log.info("[REST] GET /scenarios/{}/variables/resolve profileId={} sutId={} correlationId={} idempotencyKey={}",
             id, profileId, sutId, correlationId, idempotencyKey);
-        if (service.find(id).isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
-        }
+        requireReadScenario(id);
         try {
             ScenarioService.VariablesResolutionResult resolved = service.resolveVariables(id, profileId, sutId);
             VariablesResolveResponse resp = new VariablesResolveResponse(
@@ -278,9 +293,7 @@ public class ScenarioController {
     @GetMapping(value = "/{id}/suts", produces = MediaType.APPLICATION_JSON_VALUE)
     public List<String> listBundleSuts(@PathVariable("id") String id) throws IOException {
         log.info("[REST] GET /scenarios/{}/suts", id);
-        if (service.find(id).isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
-        }
+        requireReadScenario(id);
         List<String> ids = service.listSutIds(id);
         log.info("[REST] GET /scenarios/{}/suts -> status=200 {} items", id, ids.size());
         return ids;
@@ -292,9 +305,7 @@ public class ScenarioController {
                                        @RequestHeader(value = "X-Correlation-Id", required = false) String correlationId,
                                        @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKey) throws IOException {
         log.info("[REST] GET /scenarios/{}/suts/{} correlationId={} idempotencyKey={}", id, sutId, correlationId, idempotencyKey);
-        if (service.find(id).isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
-        }
+        requireReadScenario(id);
         try {
             SutEnvironment env = service.readBundleSut(id, sutId);
             log.info("[REST] GET /scenarios/{}/suts/{} -> status=200", id, sutId);
@@ -311,9 +322,7 @@ public class ScenarioController {
                                                   @RequestHeader(value = "X-Correlation-Id", required = false) String correlationId,
                                                   @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKey) throws IOException {
         log.info("[REST] GET /scenarios/{}/suts/{}/raw correlationId={} idempotencyKey={}", id, sutId, correlationId, idempotencyKey);
-        if (service.find(id).isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
-        }
+        requireReadScenario(id);
         String text = service.readBundleSutRaw(id, sutId);
         if (text == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "sut.yaml not found");
@@ -333,9 +342,7 @@ public class ScenarioController {
         int size = body != null ? body.length() : 0;
         log.info("[REST] PUT /scenarios/{}/suts/{}/raw ({} chars) correlationId={} idempotencyKey={}",
             id, sutId, size, correlationId, idempotencyKey);
-        if (service.find(id).isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
-        }
+        requireManageScenario(id);
         try {
             service.writeBundleSutRaw(id, sutId, body != null ? body : "");
             log.info("[REST] PUT /scenarios/{}/suts/{}/raw -> status=204", id, sutId);
@@ -352,9 +359,7 @@ public class ScenarioController {
                                                 @RequestHeader(value = "X-Correlation-Id", required = false) String correlationId,
                                                 @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKey) throws IOException {
         log.info("[REST] DELETE /scenarios/{}/suts/{} correlationId={} idempotencyKey={}", id, sutId, correlationId, idempotencyKey);
-        if (service.find(id).isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
-        }
+        requireManageScenario(id);
         try {
             service.deleteBundleSut(id, sutId);
             log.info("[REST] DELETE /scenarios/{}/suts/{} -> status=204", id, sutId);
@@ -368,6 +373,7 @@ public class ScenarioController {
     @PutMapping(value = "/{id}/raw", consumes = MediaType.TEXT_PLAIN_VALUE)
     public ResponseEntity<?> putRaw(@PathVariable("id") String id, @RequestBody String body) {
         log.info("[REST] PUT /scenarios/{}/raw ({} chars)", id, body != null ? body.length() : 0);
+        requireManageScenario(id);
         try {
             service.updateScenarioFromRaw(id, body);
             log.info("[REST] PUT /scenarios/{}/raw -> status=204", id);
@@ -385,6 +391,7 @@ public class ScenarioController {
     public Scenario updatePlan(@PathVariable("id") String id,
                                @RequestBody(required = false) Map<String, Object> plan) throws IOException {
         log.info("[REST] PUT /scenarios/{}/plan body={}", id, safeJson(plan));
+        requireManageScenario(id);
         Scenario updated = service.updatePlan(id, plan != null ? plan : Map.of());
         log.info("[REST] PUT /scenarios/{}/plan -> status=200 body={}", id, safeJson(updated));
         return updated;
@@ -393,6 +400,7 @@ public class ScenarioController {
     @GetMapping(value = "/{id}/schemas", produces = MediaType.APPLICATION_JSON_VALUE)
     public List<String> listSchemas(@PathVariable("id") String id) throws IOException {
         log.info("[REST] GET /scenarios/{}/schemas", id);
+        requireReadScenario(id);
         List<String> files = service.listSchemaFiles(id);
         log.info("[REST] GET /scenarios/{}/schemas -> status=200 body={}", id, safeJson(files));
         return files;
@@ -402,6 +410,7 @@ public class ScenarioController {
     public ResponseEntity<String> readSchema(@PathVariable("id") String id,
                                              @RequestParam("path") String path) throws IOException {
         log.info("[REST] GET /scenarios/{}/schema path={}", id, path);
+        requireReadScenario(id);
         String text = service.readBundleFile(id, path);
         log.info("[REST] GET /scenarios/{}/schema -> status=200 ({} chars)", id, text != null ? text.length() : 0);
         return ResponseEntity.ok()
@@ -415,6 +424,7 @@ public class ScenarioController {
                                             @RequestBody String body) throws IOException {
         int size = body != null ? body.length() : 0;
         log.info("[REST] PUT /scenarios/{}/schema path={} ({} chars)", id, path, size);
+        requireManageScenario(id);
         service.writeSchemaFile(id, path, body != null ? body : "");
         log.info("[REST] PUT /scenarios/{}/schema -> status=204", id);
         return ResponseEntity.noContent().build();
@@ -423,6 +433,7 @@ public class ScenarioController {
     @GetMapping(value = "/{id}/templates", produces = MediaType.APPLICATION_JSON_VALUE)
     public List<String> listTemplates(@PathVariable("id") String id) throws IOException {
         log.info("[REST] GET /scenarios/{}/templates", id);
+        requireReadScenario(id);
         List<String> files = service.listTemplateFiles(id);
         log.info("[REST] GET /scenarios/{}/templates -> status=200 body={}", id, safeJson(files));
         return files;
@@ -432,6 +443,7 @@ public class ScenarioController {
     public ResponseEntity<String> readTemplate(@PathVariable("id") String id,
                                                @RequestParam("path") String path) throws IOException {
         log.info("[REST] GET /scenarios/{}/template path={}", id, path);
+        requireReadScenario(id);
         String text = service.readBundleFile(id, path);
         log.info("[REST] GET /scenarios/{}/template -> status=200 ({} chars)", id, text != null ? text.length() : 0);
         return ResponseEntity.ok()
@@ -445,6 +457,7 @@ public class ScenarioController {
                                               @RequestBody String body) throws IOException {
         int size = body != null ? body.length() : 0;
         log.info("[REST] PUT /scenarios/{}/template path={} ({} chars)", id, path, size);
+        requireManageScenario(id);
         service.writeTemplate(id, path, body != null ? body : "");
         log.info("[REST] PUT /scenarios/{}/template -> status=204", id);
         return ResponseEntity.noContent().build();
@@ -455,6 +468,7 @@ public class ScenarioController {
                                                @RequestParam("from") String fromPath,
                                                @RequestParam("to") String toPath) throws IOException {
         log.info("[REST] POST /scenarios/{}/template/rename from={} to={}", id, fromPath, toPath);
+        requireManageScenario(id);
         service.renameTemplate(id, fromPath, toPath);
         log.info("[REST] POST /scenarios/{}/template/rename -> status=204", id);
         return ResponseEntity.noContent().build();
@@ -464,6 +478,7 @@ public class ScenarioController {
     public ResponseEntity<Void> deleteTemplate(@PathVariable("id") String id,
                                                @RequestParam("path") String path) throws IOException {
         log.info("[REST] DELETE /scenarios/{}/template path={}", id, path);
+        requireManageScenario(id);
         service.deleteTemplate(id, path);
         log.info("[REST] DELETE /scenarios/{}/template -> status=204", id);
         return ResponseEntity.noContent().build();
@@ -472,6 +487,7 @@ public class ScenarioController {
     @GetMapping(value = "/{id}/bundle", produces = "application/zip")
     public ResponseEntity<byte[]> downloadBundle(@PathVariable("id") String id) throws IOException {
         log.info("[REST] GET /scenarios/{}/bundle", id);
+        requireReadScenario(id);
         Scenario scenario = service.find(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         Path bundleDir;
         try {
@@ -513,6 +529,7 @@ public class ScenarioController {
     @GetMapping(value = "/bundles/download", produces = "application/zip")
     public ResponseEntity<byte[]> downloadBundleByKey(@RequestParam("bundleKey") String bundleKey) throws IOException {
         log.info("[REST] GET /scenarios/bundles/download bundleKey={}", bundleKey);
+        requireReadBundle(bundleKey);
         try {
             ScenarioService.BundleDownload bundle = service.downloadBundle(bundleKey);
             HttpHeaders headers = new HttpHeaders();
@@ -535,6 +552,7 @@ public class ScenarioController {
     public ResponseEntity<Scenario> uploadBundle(@RequestBody byte[] body) throws IOException {
         int size = body != null ? body.length : 0;
         log.info("[REST] POST /scenarios/bundles contentType=application/zip size={}", size);
+        requireManageAllFolders();
         Scenario created = service.createBundleFromZip(body);
         log.info("[REST] POST /scenarios/bundles -> status=201 body={}", safeJson(created));
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -550,6 +568,7 @@ public class ScenarioController {
                                   @RequestBody byte[] body) throws IOException {
         int size = body != null ? body.length : 0;
         log.info("[REST] PUT /scenarios/{}/bundle contentType=application/zip size={}", id, size);
+        requireManageScenario(id);
         Scenario updated = service.replaceBundleFromZip(id, body);
         log.info("[REST] PUT /scenarios/{}/bundle -> status=200 body={}", id, safeJson(updated));
         return updated;
@@ -569,6 +588,7 @@ public class ScenarioController {
         // before calling Orchestrator create or this endpoint.
         String swarmId = request != null ? request.swarmId() : null;
         log.info("[REST] POST /scenarios/{}/runtime swarmId={}", id, swarmId);
+        requireRunScenario(id);
         Scenario scenario = service.find(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         Path runtimeDir = service.prepareRuntimeDirectory(scenario.getId(), swarmId);
         ScenarioRuntimeResponse body = new ScenarioRuntimeResponse(scenario.getId(), swarmId, runtimeDir.toString());
@@ -604,6 +624,83 @@ public class ScenarioController {
         summary.put("name", scenario.getName());
         summary.put("description", scenario.getDescription());
         return summary;
+    }
+
+    private AuthenticatedUserDto currentUser() {
+        return ScenarioManagerCurrentUserHolder.get();
+    }
+
+    private boolean canRead(AuthenticatedUserDto user, String scenarioId) {
+        return service.findScenarioAccess(scenarioId)
+                .map(access -> authorization.canRead(user, access))
+                .orElse(false);
+    }
+
+    private void requireReadScenario(String id) {
+        requireScenarioAccess(id, authorization::canRead, authorization.readDeniedMessage());
+    }
+
+    private void requireRunScenario(String id) {
+        requireScenarioAccess(id, authorization::canRun, authorization.runDeniedMessage());
+    }
+
+    private void requireManageScenario(String id) {
+        requireScenarioAccess(id, authorization::canManage, authorization.manageDeniedMessage());
+    }
+
+    private void requireReadBundle(String bundleKey) {
+        requireBundleAccess(bundleKey, authorization::canRead, authorization.readDeniedMessage());
+    }
+
+    private void requireManageBundle(String bundleKey) {
+        requireBundleAccess(bundleKey, authorization::canManage, authorization.manageDeniedMessage());
+    }
+
+    private void requireManageFolder(String folderPath) {
+        AuthenticatedUserDto user = currentUser();
+        if (!authorization.canManageFolder(user, folderPath)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, authorization.manageDeniedMessage());
+        }
+    }
+
+    private void requireManageAllFolders() {
+        AuthenticatedUserDto user = currentUser();
+        if (!authorization.canManageDeployment(user)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, authorization.manageDeniedMessage());
+        }
+    }
+
+    private void requireScenarioAccess(String scenarioId,
+                                       ScenarioAccessCheck accessCheck,
+                                       String deniedMessage) {
+        AuthenticatedUserDto user = currentUser();
+        if (user == null) {
+            return;
+        }
+        ScenarioService.ScenarioAccessDescriptor access = service.findScenarioAccess(scenarioId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        if (!accessCheck.isAllowed(user, access)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, deniedMessage);
+        }
+    }
+
+    private void requireBundleAccess(String bundleKey,
+                                     ScenarioAccessCheck accessCheck,
+                                     String deniedMessage) {
+        AuthenticatedUserDto user = currentUser();
+        if (user == null) {
+            return;
+        }
+        ScenarioService.ScenarioAccessDescriptor access = service.findBundleAccess(bundleKey)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Bundle not found"));
+        if (!accessCheck.isAllowed(user, access)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, deniedMessage);
+        }
+    }
+
+    @FunctionalInterface
+    private interface ScenarioAccessCheck {
+        boolean isAllowed(AuthenticatedUserDto user, ScenarioService.ScenarioAccessDescriptor access);
     }
 
     public record RuntimeRequest(String swarmId) {

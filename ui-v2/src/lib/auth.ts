@@ -5,6 +5,8 @@ export type AuthGrant = {
   resourceSelector: string
 }
 
+export type AuthGrantMatch = Partial<AuthGrant>
+
 export type AuthenticatedUser = {
   id: string
   username: string
@@ -19,6 +21,16 @@ export type AuthSession = {
   tokenType: string
   expiresAt: string | null
   user: AuthenticatedUser
+}
+
+export type UserUpsertRequest = {
+  username: string
+  displayName: string
+  active: boolean
+}
+
+export type UserGrantsReplaceRequest = {
+  grants: AuthGrant[]
 }
 
 type ApiError = Error & { status?: number }
@@ -156,6 +168,61 @@ export async function fetchCurrentUser(accessToken: string): Promise<Authenticat
     },
   })
   await ensureOk(response, 'Failed to resolve current user')
+  const user = normalizeUser(await response.json())
+  if (!user) throw new Error('Auth service returned invalid user payload')
+  return user
+}
+
+export function grantMatches(grant: AuthGrant, match: AuthGrantMatch): boolean {
+  if (match.product && grant.product !== match.product) return false
+  if (match.permission && grant.permission !== match.permission) return false
+  if (match.resourceType && grant.resourceType !== match.resourceType) return false
+  if (match.resourceSelector && grant.resourceSelector !== match.resourceSelector) return false
+  return true
+}
+
+export function userHasGrant(user: AuthenticatedUser | null, match: AuthGrantMatch): boolean {
+  if (!user) return false
+  return user.grants.some((grant) => grantMatches(grant, match))
+}
+
+export async function listAdminUsers(): Promise<AuthenticatedUser[]> {
+  const response = await fetch('/auth-service/api/auth/admin/users', {
+    headers: { Accept: 'application/json' },
+  })
+  await ensureOk(response, 'Failed to load users')
+  const payload = await response.json()
+  if (!Array.isArray(payload)) {
+    throw new Error('Auth service returned invalid users payload')
+  }
+  return payload.map((entry) => normalizeUser(entry)).filter((entry): entry is AuthenticatedUser => entry !== null)
+}
+
+export async function upsertAdminUser(userId: string, request: UserUpsertRequest): Promise<AuthenticatedUser> {
+  const response = await fetch(`/auth-service/api/auth/admin/users/${encodeURIComponent(userId)}`, {
+    method: 'PUT',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(request),
+  })
+  await ensureOk(response, 'Failed to save user')
+  const user = normalizeUser(await response.json())
+  if (!user) throw new Error('Auth service returned invalid user payload')
+  return user
+}
+
+export async function replaceAdminUserGrants(userId: string, request: UserGrantsReplaceRequest): Promise<AuthenticatedUser> {
+  const response = await fetch(`/auth-service/api/auth/admin/users/${encodeURIComponent(userId)}/grants`, {
+    method: 'PUT',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(request),
+  })
+  await ensureOk(response, 'Failed to save grants')
   const user = normalizeUser(await response.json())
   if (!user) throw new Error('Auth service returned invalid user payload')
   return user

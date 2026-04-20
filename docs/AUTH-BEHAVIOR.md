@@ -96,25 +96,16 @@ auth:
 # No configuration needed - auth is enabled globally
 ```
 
-### Explicit Enable
+### Explicit Configuration
 
 ```yaml
 pockethive:
   auth:
-    enabled: true  # default
     scheduler:
       enabled: true  # default
 ```
 
-### Global Disable
-
-```yaml
-pockethive:
-  auth:
-    enabled: false  # disables auth for ALL workers
-```
-
-**Warning:** Setting `enabled: false` disables auth globally. Workers with `auth:` blocks in templates will fail.
+Auth is always enabled at runtime. Configure providers and scheduler behavior; do not disable the auth subsystem.
 
 ## Token Lifecycle
 
@@ -153,11 +144,7 @@ No. Auth is global. However, workers without `auth:` blocks in templates have ze
 
 ### Can I disable auth for specific swarms?
 
-No. Auth is deployment-wide. To disable auth, set `pockethive.auth.enabled=false` globally.
-
-### What happens if I disable auth but templates use it?
-
-Workers will fail when trying to generate auth headers. Remove `auth:` blocks from templates or re-enable auth.
+No. Auth is deployment-wide and always enabled.
 
 ### Do all workers share the same tokens?
 

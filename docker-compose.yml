@@ -359,7 +359,6 @@ services:
       - ${POCKETHIVE_SCENARIOS_RUNTIME_ROOT:-/opt/pockethive/scenarios-runtime}:/app/scenarios-runtime
     # all defaulted in application.yml, uncomment to override here
     environment:
-      POCKETHIVE_AUTH_ENABLED: ${POCKETHIVE_AUTH_ENABLED:-false}
       POCKETHIVE_AUTH_SERVICE_URL: http://auth-service:8080
       POCKETHIVE_AUTH_SERVICE_PRINCIPAL_NAME: ${POCKETHIVE_AUTH_SERVICE_PRINCIPAL_NAME:-orchestrator-service}
       POCKETHIVE_AUTH_SERVICE_PRINCIPAL_SECRET: ${POCKETHIVE_AUTH_SERVICE_PRINCIPAL_SECRET:-orchestrator-local-secret}
@@ -396,7 +395,6 @@ services:
     environment:
       POCKETHIVE_IMAGES_DEFAULT_TAG: ${POCKETHIVE_VERSION:-latest}
       POCKETHIVE_CAPABILITIES_FALLBACK_TAG: latest
-      POCKETHIVE_AUTH_ENABLED: ${POCKETHIVE_AUTH_ENABLED:-false}
       POCKETHIVE_AUTH_SERVICE_URL: http://auth-service:8080
       <<: *metrics-env
       RABBITMQ_HOST: rabbitmq

@@ -13,7 +13,9 @@ import io.pockethive.auth.contract.AuthProduct;
 import io.pockethive.auth.contract.AuthProvider;
 import io.pockethive.auth.contract.AuthenticatedUserDto;
 import io.pockethive.auth.contract.PocketHivePermissionIds;
+import io.pockethive.auth.contract.PocketHiveResourceSelectors;
 import io.pockethive.auth.contract.PocketHiveResourceTypes;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.UUID;
@@ -29,13 +31,15 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
 @SpringBootTest(properties = {
-    "rabbitmq.logging.enabled=false",
-    "pockethive.auth.enabled=true"
+    "rabbitmq.logging.enabled=false"
 })
 @AutoConfigureMockMvc
 class ScenarioManagerAuthFilterTest {
     @Autowired
     MockMvc mvc;
+
+    @Autowired
+    ScenarioService scenarioService;
 
     @MockBean
     AuthServiceClient authServiceClient;
@@ -73,6 +77,24 @@ class ScenarioManagerAuthFilterTest {
     }
 
     @Test
+    void templatesEndpointFiltersByRunFolderScope() throws Exception {
+        writeScenario("demo", "alpha", "Alpha");
+        writeScenario("prod", "omega", "Omega");
+        scenarioService.reload();
+        when(authServiceClient.resolve(anyString())).thenReturn(userWith(
+            PocketHivePermissionIds.RUN,
+            PocketHiveResourceTypes.FOLDER,
+            "demo"));
+
+        mvc.perform(get("/api/templates")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer test-token"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[0].id").value("alpha"))
+            .andExpect(jsonPath("$[0].folderPath").value("demo"))
+            .andExpect(jsonPath("$[1]").doesNotExist());
+    }
+
+    @Test
     void writeApisRejectViewOnlyUser() throws Exception {
         when(authServiceClient.resolve(anyString())).thenReturn(userWith(PocketHivePermissionIds.VIEW));
 
@@ -92,6 +114,10 @@ class ScenarioManagerAuthFilterTest {
     }
 
     private static AuthenticatedUserDto userWith(String permission) {
+        return userWith(permission, PocketHiveResourceTypes.DEPLOYMENT, PocketHiveResourceSelectors.GLOBAL);
+    }
+
+    private static AuthenticatedUserDto userWith(String permission, String resourceType, String resourceSelector) {
         return new AuthenticatedUserDto(
             UUID.fromString("11111111-1111-1111-1111-111111111111"),
             "local-user",
@@ -101,9 +127,22 @@ class ScenarioManagerAuthFilterTest {
             List.of(new AuthGrantDto(
                 AuthProduct.POCKETHIVE,
                 permission,
-                PocketHiveResourceTypes.DEPLOYMENT,
-                "*"
+                resourceType,
+                resourceSelector
             ))
         );
+    }
+
+    private void writeScenario(String folder, String id, String name) throws Exception {
+        Path bundleDir = tempDir.resolve(folder).resolve(id);
+        Files.createDirectories(bundleDir);
+        Files.writeString(bundleDir.resolve("scenario.yaml"), """
+            ---
+            id: "%s"
+            name: "%s"
+            template:
+              image: "swarm-controller:latest"
+              bees: []
+            """.formatted(id, name));
     }
 }

@@ -1,5 +1,6 @@
 package io.pockethive.scenarios;
 
+import io.pockethive.scenarios.auth.ScenarioManagerAuthorization;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mockito;
@@ -18,7 +19,7 @@ class ScenarioControllerLoggingTest {
         ScenarioService service = Mockito.mock(ScenarioService.class);
         AvailableScenarioRegistry registry = Mockito.mock(AvailableScenarioRegistry.class);
         Mockito.when(registry.list()).thenReturn(Collections.emptyList());
-        ScenarioController controller = new ScenarioController(service, registry);
+        ScenarioController controller = new ScenarioController(service, registry, new ScenarioManagerAuthorization());
 
         controller.list(false);
 

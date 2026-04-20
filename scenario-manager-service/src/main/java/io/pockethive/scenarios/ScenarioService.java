@@ -173,9 +173,49 @@ public class ScenarioService {
                         entry.defunctReason()))
                 .sorted(Comparator
                         .comparing(BundleTemplateSummary::folderPath, Comparator.nullsFirst(String::compareTo))
-                        .thenComparing(BundleTemplateSummary::name)
-                        .thenComparing(BundleTemplateSummary::bundlePath))
+                .thenComparing(BundleTemplateSummary::name)
+                .thenComparing(BundleTemplateSummary::bundlePath))
                 .toList();
+    }
+
+    public Optional<BundleTemplateSummary> findBundleTemplate(String scenarioId) {
+        if (scenarioId == null || scenarioId.isBlank()) {
+            return Optional.empty();
+        }
+        return bundleCatalog.stream()
+                .filter(entry -> scenarioId.trim().equals(entry.scenarioId()))
+                .findFirst()
+                .map(this::toBundleTemplateSummary);
+    }
+
+    public Optional<ScenarioAccessDescriptor> findScenarioAccess(String scenarioId) {
+        if (scenarioId == null || scenarioId.isBlank()) {
+            return Optional.empty();
+        }
+        String normalizedScenarioId = scenarioId.trim();
+        Optional<ScenarioAccessDescriptor> fromBundleCatalog = bundleCatalog.stream()
+                .filter(entry -> normalizedScenarioId.equals(entry.scenarioId()))
+                .findFirst()
+                .map(this::toAccessDescriptor);
+        if (fromBundleCatalog.isPresent()) {
+            return fromBundleCatalog;
+        }
+        ScenarioRecord record = scenarios.get(normalizedScenarioId);
+        return Optional.ofNullable(record)
+                .map(value -> new ScenarioAccessDescriptor(
+                        normalizedScenarioId,
+                        normalizedScenarioId,
+                        value.folderPath()));
+    }
+
+    public Optional<ScenarioAccessDescriptor> findBundleAccess(String bundleKey) {
+        if (bundleKey == null || bundleKey.isBlank()) {
+            return Optional.empty();
+        }
+        return bundleCatalog.stream()
+                .filter(entry -> bundleKey.trim().equals(entry.bundleKey()))
+                .findFirst()
+                .map(this::toAccessDescriptor);
     }
 
     public Optional<Scenario> find(String id) {
@@ -2119,6 +2159,8 @@ public class ScenarioService {
 
     public record BundleBeeSummary(String role, String image) { }
 
+    public record ScenarioAccessDescriptor(String scenarioId, String bundlePath, String folderPath) { }
+
     public record BundleTemplateSummary(
         String bundleKey,
         String bundlePath,
@@ -2131,6 +2173,27 @@ public class ScenarioService {
         boolean defunct,
         String defunctReason
     ) { }
+
+    private BundleTemplateSummary toBundleTemplateSummary(BundleCatalogEntry entry) {
+        return new BundleTemplateSummary(
+                entry.bundleKey(),
+                entry.bundlePath(),
+                entry.folderPath(),
+                entry.scenarioId(),
+                entry.name(),
+                entry.description(),
+                entry.controllerImage(),
+                entry.bees(),
+                entry.defunct(),
+                entry.defunctReason());
+    }
+
+    private ScenarioAccessDescriptor toAccessDescriptor(BundleCatalogEntry entry) {
+        return new ScenarioAccessDescriptor(
+                entry.scenarioId(),
+                entry.bundlePath(),
+                entry.folderPath());
+    }
 
     public record BundleDownload(byte[] bytes, String fileName) { }
 
