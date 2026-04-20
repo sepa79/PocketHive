@@ -10,8 +10,10 @@ import { useAuth } from '../lib/authContext'
 import {
   AuthProducts,
   AuthServicePermissionIds,
+  AuthServiceResourceSelectors,
   AuthServiceResourceTypes,
   PocketHivePermissionIds,
+  PocketHiveResourceSelectors,
   PocketHiveResourceTypes,
 } from '../lib/authContracts'
 
@@ -49,7 +51,7 @@ function createBlankGrant(): AuthGrant {
     product: AuthProducts.POCKETHIVE,
     permission: PocketHivePermissionIds.VIEW,
     resourceType: PocketHiveResourceTypes.DEPLOYMENT,
-    resourceSelector: '*',
+    resourceSelector: PocketHiveResourceSelectors.GLOBAL,
   }
 }
 
@@ -61,7 +63,7 @@ const grantPresets = [
       product: AuthProducts.AUTH_SERVICE,
       permission: AuthServicePermissionIds.ADMIN,
       resourceType: AuthServiceResourceTypes.GLOBAL,
-      resourceSelector: '*',
+      resourceSelector: AuthServiceResourceSelectors.GLOBAL,
     },
   },
   {
@@ -71,7 +73,7 @@ const grantPresets = [
       product: AuthProducts.POCKETHIVE,
       permission: PocketHivePermissionIds.VIEW,
       resourceType: PocketHiveResourceTypes.DEPLOYMENT,
-      resourceSelector: '*',
+      resourceSelector: PocketHiveResourceSelectors.GLOBAL,
     },
   },
   {
@@ -91,7 +93,7 @@ const grantPresets = [
       product: AuthProducts.POCKETHIVE,
       permission: PocketHivePermissionIds.ALL,
       resourceType: PocketHiveResourceTypes.DEPLOYMENT,
-      resourceSelector: '*',
+      resourceSelector: PocketHiveResourceSelectors.GLOBAL,
     },
   },
 ]

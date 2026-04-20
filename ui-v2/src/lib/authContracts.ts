@@ -12,6 +12,10 @@ export const AuthServiceResourceTypes = {
   GLOBAL: 'AUTH_GLOBAL',
 } as const
 
+export const AuthServiceResourceSelectors = {
+  GLOBAL: '*',
+} as const
+
 export const PocketHivePermissionIds = {
   VIEW: 'VIEW',
   RUN: 'RUN',
@@ -24,3 +28,6 @@ export const PocketHiveResourceTypes = {
   BUNDLE: 'PH_BUNDLE',
 } as const
 
+export const PocketHiveResourceSelectors = {
+  GLOBAL: '*',
+} as const

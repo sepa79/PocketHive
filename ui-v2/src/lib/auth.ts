@@ -1,3 +1,10 @@
+import {
+  AuthProducts,
+  PocketHivePermissionIds,
+  PocketHiveResourceSelectors,
+  PocketHiveResourceTypes,
+} from './authContracts'
+
 export type AuthGrant = {
   product: string
   permission: string
@@ -31,6 +38,11 @@ export type UserUpsertRequest = {
 
 export type UserGrantsReplaceRequest = {
   grants: AuthGrant[]
+}
+
+type PocketHiveResourceAccess = {
+  bundlePath?: string | null
+  folderPath?: string | null
 }
 
 type ApiError = Error & { status?: number }
@@ -184,6 +196,91 @@ export function grantMatches(grant: AuthGrant, match: AuthGrantMatch): boolean {
 export function userHasGrant(user: AuthenticatedUser | null, match: AuthGrantMatch): boolean {
   if (!user) return false
   return user.grants.some((grant) => grantMatches(grant, match))
+}
+
+function normalizeResourcePath(value: string | null | undefined): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : null
+}
+
+function isPocketHiveGrant(grant: AuthGrant, permissions: readonly string[]): boolean {
+  return grant.product === AuthProducts.POCKETHIVE && permissions.includes(grant.permission)
+}
+
+function matchesFolderSelector(selector: string, folderPath: string | null): boolean {
+  if (!selector || !folderPath) return false
+  return folderPath === selector || folderPath.startsWith(`${selector}/`)
+}
+
+function matchesPocketHiveScope(grant: AuthGrant, access?: PocketHiveResourceAccess): boolean {
+  const bundlePath = normalizeResourcePath(access?.bundlePath)
+  const folderPath = normalizeResourcePath(access?.folderPath)
+
+  if (grant.resourceType === PocketHiveResourceTypes.DEPLOYMENT) {
+    return grant.resourceSelector === PocketHiveResourceSelectors.GLOBAL
+  }
+  if (grant.resourceType === PocketHiveResourceTypes.FOLDER) {
+    return matchesFolderSelector(grant.resourceSelector, folderPath)
+  }
+  if (grant.resourceType === PocketHiveResourceTypes.BUNDLE) {
+    return bundlePath !== null && grant.resourceSelector === bundlePath
+  }
+  return false
+}
+
+export function userHasAnyPocketHivePermission(user: AuthenticatedUser | null, permissions: readonly string[]): boolean {
+  if (!user) return false
+  return user.grants.some((grant) => isPocketHiveGrant(grant, permissions))
+}
+
+export function userHasPocketHivePermissionInScope(
+  user: AuthenticatedUser | null,
+  permissions: readonly string[],
+  access?: PocketHiveResourceAccess,
+): boolean {
+  if (!user) return false
+  return user.grants.some((grant) => isPocketHiveGrant(grant, permissions) && matchesPocketHiveScope(grant, access))
+}
+
+export function userCanViewPocketHive(user: AuthenticatedUser | null): boolean {
+  return userHasAnyPocketHivePermission(user, [
+    PocketHivePermissionIds.VIEW,
+    PocketHivePermissionIds.RUN,
+    PocketHivePermissionIds.ALL,
+  ])
+}
+
+export function userCanRunAnywhere(user: AuthenticatedUser | null): boolean {
+  return userHasAnyPocketHivePermission(user, [PocketHivePermissionIds.RUN, PocketHivePermissionIds.ALL])
+}
+
+export function userCanManagePocketHive(user: AuthenticatedUser | null): boolean {
+  return userHasAnyPocketHivePermission(user, [PocketHivePermissionIds.ALL])
+}
+
+export function userCanViewPocketHiveResource(user: AuthenticatedUser | null, access?: PocketHiveResourceAccess): boolean {
+  return userHasPocketHivePermissionInScope(
+    user,
+    [PocketHivePermissionIds.VIEW, PocketHivePermissionIds.RUN, PocketHivePermissionIds.ALL],
+    access,
+  )
+}
+
+export function userCanRunPocketHiveResource(user: AuthenticatedUser | null, access?: PocketHiveResourceAccess): boolean {
+  return userHasPocketHivePermissionInScope(
+    user,
+    [PocketHivePermissionIds.RUN, PocketHivePermissionIds.ALL],
+    access,
+  )
+}
+
+export function userCanManagePocketHiveResource(user: AuthenticatedUser | null, access?: PocketHiveResourceAccess): boolean {
+  return userHasPocketHivePermissionInScope(user, [PocketHivePermissionIds.ALL], access)
+}
+
+export function userCanManagePocketHiveFolder(user: AuthenticatedUser | null, folderPath: string | null | undefined): boolean {
+  return userCanManagePocketHiveResource(user, { folderPath })
 }
 
 export async function listAdminUsers(): Promise<AuthenticatedUser[]> {

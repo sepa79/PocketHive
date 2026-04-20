@@ -4,6 +4,7 @@ import { SwarmIssueBox } from '../components/hive/SwarmIssueBox'
 import { useToolsBar } from '../components/ToolsBarContext'
 import { useNavigate, useParams } from 'react-router-dom'
 import { CreateSwarmModal } from './hive/CreateSwarmModal'
+import { useAuth } from '../lib/authContext'
 import {
   buildManifestIndex,
   normalizeManifests,
@@ -11,6 +12,7 @@ import {
   type CapabilityManifest,
 } from '../lib/capabilities'
 import { detectUiBasename } from '../lib/routing/basename'
+import { listBundleTemplates, type BundleTemplateEntry } from '../lib/scenariosApi'
 import {
   createIdempotencyKey as createNetworkIdempotencyKey,
   formatInstant,
@@ -436,6 +438,7 @@ function formatAge(iso: string | null | undefined): string {
 }
 
 export function HivePage() {
+  const auth = useAuth()
   const navigate = useNavigate()
   const { swarmId: selectedSwarmIdParam } = useParams<{ swarmId?: string }>()
   const selectedSwarmId = selectedSwarmIdParam?.trim() ? selectedSwarmIdParam.trim() : null
@@ -467,6 +470,7 @@ export function HivePage() {
   const [capabilityFallbackTag, setCapabilityFallbackTag] = useState<string | null>(null)
   const [capabilitiesLoaded, setCapabilitiesLoaded] = useState(false)
   const [capabilitiesError, setCapabilitiesError] = useState<string | null>(null)
+  const [templateEntries, setTemplateEntries] = useState<BundleTemplateEntry[]>([])
   const [tapBusy, setTapBusy] = useState<Record<string, boolean>>({})
   const [tapIoSelection, setTapIoSelection] = useState<Record<string, { in?: string | null; out?: string | null }>>({})
   const [networkProfiles, setNetworkProfiles] = useState<NetworkProfile[]>([])
@@ -531,6 +535,14 @@ export function HivePage() {
       setError(err instanceof Error ? err.message : 'Failed to load swarms')
     } finally {
       setLoading(false)
+    }
+  }, [])
+
+  const loadTemplateEntries = useCallback(async () => {
+    try {
+      setTemplateEntries(await listBundleTemplates())
+    } catch {
+      setTemplateEntries([])
     }
   }, [])
 
@@ -627,6 +639,35 @@ export function HivePage() {
     [selectedSwarmId, swarms],
   )
 
+  const templateEntriesById = useMemo(() => {
+    const index = new Map<string, BundleTemplateEntry>()
+    for (const entry of templateEntries) {
+      const scenarioId = typeof entry.id === 'string' ? entry.id.trim() : ''
+      if (scenarioId) {
+        index.set(scenarioId, entry)
+      }
+    }
+    return index
+  }, [templateEntries])
+
+  const resolveTemplateEntry = useCallback(
+    (templateId: string | null | undefined) => {
+      const key = typeof templateId === 'string' ? templateId.trim() : ''
+      if (!key) return null
+      return templateEntriesById.get(key) ?? null
+    },
+    [templateEntriesById],
+  )
+
+  const selectedSwarmTemplateEntry = useMemo(
+    () => resolveTemplateEntry(selectedSwarm?.templateId ?? null),
+    [resolveTemplateEntry, selectedSwarm?.templateId],
+  )
+
+  const canManageSelectedSwarm = selectedSwarmTemplateEntry
+    ? auth.canManageBundle(selectedSwarmTemplateEntry.bundlePath, selectedSwarmTemplateEntry.folderPath)
+    : auth.canManagePocketHive
+
   const loadNetworkState = useCallback(async () => {
     if (!selectedSwarmId) {
       setNetworkBinding(null)
@@ -674,6 +715,10 @@ export function HivePage() {
   useEffect(() => {
     void loadSwarms()
   }, [loadSwarms])
+
+  useEffect(() => {
+    void loadTemplateEntries()
+  }, [loadTemplateEntries])
 
   useEffect(() => {
     void loadNetworkState()
@@ -893,6 +938,7 @@ export function HivePage() {
           type="button"
           className={showCreate ? 'actionButton' : 'actionButton actionButtonGhost'}
           onClick={() => setShowCreate(true)}
+          disabled={!auth.canRunPocketHive}
         >
           New swarm
         </button>
@@ -909,7 +955,7 @@ export function HivePage() {
         </span>
       </div>
     ),
-    [busySwarm, explainMode, loadSwarms, loading, showCreate],
+    [auth.canRunPocketHive, busySwarm, explainMode, loadSwarms, loading, showCreate],
   )
 
   useToolsBar(toolsBar)
@@ -919,6 +965,23 @@ export function HivePage() {
     : swarms.length === 1
       ? '1 swarm'
       : `${swarms.length} swarms`
+
+  if (!auth.canAccessPocketHive) {
+    return (
+      <div className="page hivePage">
+        <div>
+          <h1 className="h1">Hive</h1>
+          <div className="muted">Swarms and runtime controls.</div>
+        </div>
+        <div className="card" style={{ marginTop: 12 }}>
+          <div className="warningText">PocketHive access required.</div>
+          <div className="muted" style={{ marginTop: 8 }}>
+            This page requires a PocketHive VIEW, RUN, or ALL grant.
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="page hivePage">
@@ -1018,6 +1081,13 @@ export function HivePage() {
             <div className="swarmCell swarmActions">Actions</div>
           </div>
           {swarms.map((swarm) => {
+            const templateEntry = resolveTemplateEntry(swarm.templateId)
+            const canRunSwarm = templateEntry
+              ? auth.canRunBundle(templateEntry.bundlePath, templateEntry.folderPath)
+              : auth.canManagePocketHive
+            const canManageSwarm = templateEntry
+              ? auth.canManageBundle(templateEntry.bundlePath, templateEntry.folderPath)
+              : auth.canManagePocketHive
             const beeRoles =
               swarm.bees && swarm.bees.length > 0
                 ? swarm.bees.map((bee) => bee.role).filter(Boolean).join(', ')
@@ -1083,7 +1153,7 @@ export function HivePage() {
 	                    <button
 	                      type="button"
 	                      className="actionButton"
-	                      disabled={isBusy}
+	                      disabled={isBusy || !canRunSwarm}
                       onClick={() => runSwarmAction(swarm, 'start')}
                     >
                       <span className="actionButtonContent">
@@ -1093,7 +1163,7 @@ export function HivePage() {
                     <button
                       type="button"
                       className="actionButton actionButtonGhost"
-                      disabled={isBusy}
+                      disabled={isBusy || !canManageSwarm}
                       onClick={() => runSwarmAction(swarm, 'stop')}
                     >
                       <span className="actionButtonContent">
@@ -1103,7 +1173,7 @@ export function HivePage() {
                     <button
                       type="button"
                       className="actionButton actionButtonDanger"
-                      disabled={isBusy}
+                      disabled={isBusy || !canManageSwarm}
                       onClick={() => setRemoveTarget(swarm)}
                     >
                       <span className="actionButtonContent">
@@ -1265,7 +1335,13 @@ export function HivePage() {
                               className="textInput textInputCompact"
                               value={networkProfileDraft}
                               onChange={(event) => setNetworkProfileDraft(event.target.value)}
-                              disabled={networkBusy || networkLoading || networkProfiles.length === 0 || !selectedSwarm?.sutId}
+                              disabled={
+                                networkBusy ||
+                                networkLoading ||
+                                networkProfiles.length === 0 ||
+                                !selectedSwarm?.sutId ||
+                                !canManageSelectedSwarm
+                              }
                             >
                               {networkProfiles.length === 0 ? <option value="">No profiles</option> : null}
                               {networkProfiles.map((profile) => (
@@ -1286,7 +1362,8 @@ export function HivePage() {
                                   networkBusy ||
                                   networkLoading ||
                                   !selectedSwarm?.sutId ||
-                                  networkProfileDraft.trim().length === 0
+                                  networkProfileDraft.trim().length === 0 ||
+                                  !canManageSelectedSwarm
                                 }
                               >
                                 Proxy enabled
@@ -1295,7 +1372,7 @@ export function HivePage() {
                                 type="button"
                                 className="actionButton actionButtonGhost"
                                 onClick={() => void applyNetworkMode('DIRECT')}
-                                disabled={networkBusy || networkLoading || !selectedSwarm?.sutId}
+                                disabled={networkBusy || networkLoading || !selectedSwarm?.sutId || !canManageSelectedSwarm}
                               >
                                 Direct
                               </button>

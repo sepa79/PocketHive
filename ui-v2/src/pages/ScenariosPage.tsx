@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ConfirmModal } from '../components/ConfirmModal'
+import { useAuth } from '../lib/authContext'
 import {
   type BundleTemplateEntry,
   createScenarioFolder,
@@ -93,6 +94,7 @@ function countScenarios(node: ScenarioFolderNode): number {
 }
 
 export function ScenariosPage() {
+  const auth = useAuth()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [folders, setFolders] = useState<string[]>([])
@@ -110,6 +112,8 @@ export function ScenariosPage() {
     [items, selectedKey],
   )
 
+  const canManageSelected = selected ? auth.canManageBundle(selected.bundlePath, selected.folderPath) : false
+
   const [movePath, setMovePath] = useState('')
   useEffect(() => {
     const current = selected?.folderPath ? selected.folderPath.trim() : ''
@@ -120,7 +124,10 @@ export function ScenariosPage() {
     setLoading(true)
     setError(null)
     try {
-      const [list, folderList] = await Promise.all([listBundleTemplates(), listScenarioFolders()])
+      const [list, folderList] = await Promise.all([
+        listBundleTemplates(),
+        auth.canManagePocketHive ? listScenarioFolders() : Promise.resolve<string[]>([]),
+      ])
       setItems(list)
       setFolders(folderList)
       setSelectedKey((current) => {
@@ -133,20 +140,32 @@ export function ScenariosPage() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [auth.canManagePocketHive])
 
   useEffect(() => {
     void reload()
   }, [reload])
 
   const visibleItems = useMemo(() => {
-    if (filter.kind === 'all') return items
-    if (filter.kind === 'root') return items.filter((entry) => !entry.folderPath || entry.folderPath.trim().length === 0)
+    const readableItems = items.filter((entry) => auth.canViewBundle(entry.bundlePath, entry.folderPath))
+    if (filter.kind === 'all') return readableItems
+    if (filter.kind === 'root') return readableItems.filter((entry) => !entry.folderPath || entry.folderPath.trim().length === 0)
     const target = filter.path.trim()
-    return items.filter((entry) => (entry.folderPath ?? '').trim() === target)
-  }, [filter, items])
+    return readableItems.filter((entry) => (entry.folderPath ?? '').trim() === target)
+  }, [auth, filter, items])
 
   const tree = useMemo(() => buildScenarioFolderTree(visibleItems), [visibleItems])
+
+  const folderOptions = useMemo(() => {
+    const paths = new Set<string>(folders)
+    for (const entry of visibleItems) {
+      const path = entry.folderPath?.trim() ?? ''
+      if (path) {
+        paths.add(path)
+      }
+    }
+    return Array.from(paths).sort((left, right) => left.localeCompare(right))
+  }, [folders, visibleItems])
 
   const openFolderPaths = useMemo(() => {
     if (filter.kind === 'folder') {
@@ -333,6 +352,20 @@ export function ScenariosPage() {
     [filter.kind, openFolderPaths, renderScenarioButton],
   )
 
+  if (!auth.canAccessPocketHive) {
+    return (
+      <div className="page">
+        <h1 className="h1">Scenarios</h1>
+        <div className="card" style={{ marginTop: 12 }}>
+          <div className="warningText">PocketHive access required.</div>
+          <div className="muted" style={{ marginTop: 8 }}>
+            This page requires a PocketHive VIEW, RUN, or ALL grant.
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="page">
       <ConfirmModal
@@ -358,9 +391,11 @@ export function ScenariosPage() {
             style={{ display: 'none' }}
             onChange={(event) => void handleUploadChange(event)}
           />
-          <button type="button" className="actionButton" onClick={triggerUpload} disabled={busy}>
-            Upload bundle
-          </button>
+          {auth.canManagePocketHive ? (
+            <button type="button" className="actionButton" onClick={triggerUpload} disabled={busy}>
+              Upload bundle
+            </button>
+          ) : null}
           <div className="muted">Bundles can live anywhere under `scenarios/**`.</div>
         </div>
       </div>
@@ -400,7 +435,7 @@ export function ScenariosPage() {
                 >
                   <option value="__all__">All folders</option>
                   <option value="__root__">Root</option>
-                  {folders.map((path) => (
+                  {folderOptions.map((path) => (
                     <option key={path} value={path}>
                       {path}
                     </option>
@@ -408,24 +443,36 @@ export function ScenariosPage() {
                 </select>
               </label>
 
-              <label className="field">
-                <span className="fieldLabel">New folder</span>
-                <input
-                  className="textInput"
-                  value={newFolderPath}
-                  onChange={(event) => setNewFolderPath(event.target.value)}
-                  placeholder="tcp/perf"
-                  disabled={busy}
-                />
-                <div className="row" style={{ marginTop: 8 }}>
-                  <button type="button" className="actionButton" onClick={() => void handleCreateFolder()} disabled={busy || newFolderPath.trim().length === 0}>
-                    Add
-                  </button>
-                  <button type="button" className="actionButton actionButtonDanger" onClick={() => void handleDeleteFolder()} disabled={busy || filter.kind !== 'folder'}>
-                    Delete (empty only)
-                  </button>
+              {auth.canManagePocketHive ? (
+                <label className="field">
+                  <span className="fieldLabel">New folder</span>
+                  <input
+                    className="textInput"
+                    value={newFolderPath}
+                    onChange={(event) => setNewFolderPath(event.target.value)}
+                    placeholder="tcp/perf"
+                    disabled={busy}
+                  />
+                  <div className="row" style={{ marginTop: 8 }}>
+                    <button type="button" className="actionButton" onClick={() => void handleCreateFolder()} disabled={busy || newFolderPath.trim().length === 0}>
+                      Add
+                    </button>
+                    <button
+                      type="button"
+                      className="actionButton actionButtonDanger"
+                      onClick={() => void handleDeleteFolder()}
+                      disabled={busy || filter.kind !== 'folder' || !auth.canManageFolder(filter.kind === 'folder' ? filter.path : null)}
+                    >
+                      Delete (empty only)
+                    </button>
+                  </div>
+                </label>
+              ) : (
+                <div className="field">
+                  <span className="fieldLabel">Write access</span>
+                  <div className="muted">PocketHive ALL permission is required to create, move, upload, or delete bundles.</div>
                 </div>
-              </label>
+              )}
             </div>
           </div>
 
@@ -497,13 +544,13 @@ export function ScenariosPage() {
                     className="textInput"
                     value={movePath.trim().length === 0 ? '__root__' : movePath}
                     onChange={(event) => setMovePath(event.target.value === '__root__' ? '' : event.target.value)}
-                    disabled={busy}
+                    disabled={busy || !canManageSelected}
                   >
                     <option value="__root__">root</option>
                     {!folders.includes(QUARANTINE_FOLDER) ? (
                       <option value={QUARANTINE_FOLDER}>{QUARANTINE_FOLDER}</option>
                     ) : null}
-                    {folders.map((path) => (
+                    {folderOptions.map((path) => (
                       <option key={path} value={path}>
                         {path}
                       </option>
@@ -517,19 +564,34 @@ export function ScenariosPage() {
                       type="button"
                       className="actionButton"
                       onClick={() => void handleMoveSelected()}
-                      disabled={busy || selected.defunct || movePath.trim() === (selected.folderPath ? selected.folderPath.trim() : '')}
+                      disabled={
+                        busy ||
+                        !canManageSelected ||
+                        selected.defunct ||
+                        movePath.trim() === (selected.folderPath ? selected.folderPath.trim() : '')
+                      }
                     >
                       Move
                     </button>
                     {selected.defunct && !isQuarantined(selected) ? (
-                      <button type="button" className="actionButton" onClick={() => void handleMoveToQuarantine()} disabled={busy}>
+                      <button
+                        type="button"
+                        className="actionButton"
+                        onClick={() => void handleMoveToQuarantine()}
+                        disabled={busy || !canManageSelected}
+                      >
                         Move to quarantine
                       </button>
                     ) : null}
                     <button type="button" className="actionButton actionButtonGhost" onClick={() => void handleDownloadSelected()} disabled={busy}>
                       Download bundle
                     </button>
-                    <button type="button" className="actionButton actionButtonDanger" onClick={() => setDeleteTarget(selected)} disabled={busy}>
+                    <button
+                      type="button"
+                      className="actionButton actionButtonDanger"
+                      onClick={() => setDeleteTarget(selected)}
+                      disabled={busy || !canManageSelected}
+                    >
                       Delete bundle
                     </button>
                   </div>

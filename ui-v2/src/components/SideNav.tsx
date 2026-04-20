@@ -39,11 +39,11 @@ export function SideNav({ expanded, onToggle }: { expanded: boolean; onToggle: (
         {expanded ? <div className="navHeaderTitle">Navigation</div> : null}
       </div>
 
-      <NavItem to="/hive" title="Hive" icon="hive" expanded={expanded} />
-      <NavItem to="/proxy" title="Proxy" icon="proxy" expanded={expanded} />
-      <NavItem to="/journal" title="Journal" icon="journal" expanded={expanded} />
-      <NavItem to="/buzz" title="Buzz" icon="buzz" expanded={expanded} />
-      <NavItem to="/scenarios" title="Scenarios" icon="scenarios" expanded={expanded} />
+      {auth.canAccessPocketHive ? <NavItem to="/hive" title="Hive" icon="hive" expanded={expanded} /> : null}
+      {auth.canAccessPocketHive ? <NavItem to="/proxy" title="Proxy" icon="proxy" expanded={expanded} /> : null}
+      {auth.canAccessPocketHive ? <NavItem to="/journal" title="Journal" icon="journal" expanded={expanded} /> : null}
+      {auth.canAccessPocketHive ? <NavItem to="/buzz" title="Buzz" icon="buzz" expanded={expanded} /> : null}
+      {auth.canAccessPocketHive ? <NavItem to="/scenarios" title="Scenarios" icon="scenarios" expanded={expanded} /> : null}
       {auth.isAuthAdmin ? <NavItem to="/users" title="Users" icon="users" expanded={expanded} /> : null}
       <NavItem to="/other" title="Other" icon="other" expanded={expanded} />
     </div>

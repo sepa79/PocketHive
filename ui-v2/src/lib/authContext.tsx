@@ -8,11 +8,19 @@ import {
   replaceSessionUser,
   type AuthSession,
   type AuthenticatedUser,
+  userCanManagePocketHive,
+  userCanManagePocketHiveFolder,
+  userCanManagePocketHiveResource,
+  userCanRunAnywhere,
+  userCanRunPocketHiveResource,
+  userCanViewPocketHive,
+  userCanViewPocketHiveResource,
   userHasGrant,
 } from './auth'
 import {
   AuthProducts,
   AuthServicePermissionIds,
+  AuthServiceResourceSelectors,
   AuthServiceResourceTypes,
 } from './authContracts'
 
@@ -28,6 +36,13 @@ type AuthContextValue = {
   refresh: () => Promise<void>
   hasPermission: (permission: string) => boolean
   hasGrant: (match: AuthGrantMatch) => boolean
+  canAccessPocketHive: boolean
+  canRunPocketHive: boolean
+  canManagePocketHive: boolean
+  canViewBundle: (bundlePath: string | null | undefined, folderPath: string | null | undefined) => boolean
+  canRunBundle: (bundlePath: string | null | undefined, folderPath: string | null | undefined) => boolean
+  canManageBundle: (bundlePath: string | null | undefined, folderPath: string | null | undefined) => boolean
+  canManageFolder: (folderPath: string | null | undefined) => boolean
   isAuthAdmin: boolean
 }
 
@@ -128,10 +143,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         refresh,
         hasPermission: (permission) => hasPermission(user, permission),
         hasGrant: (match) => userHasGrant(user, match),
+        canAccessPocketHive: userCanViewPocketHive(user),
+        canRunPocketHive: userCanRunAnywhere(user),
+        canManagePocketHive: userCanManagePocketHive(user),
+        canViewBundle: (bundlePath, folderPath) => userCanViewPocketHiveResource(user, { bundlePath, folderPath }),
+        canRunBundle: (bundlePath, folderPath) => userCanRunPocketHiveResource(user, { bundlePath, folderPath }),
+        canManageBundle: (bundlePath, folderPath) => userCanManagePocketHiveResource(user, { bundlePath, folderPath }),
+        canManageFolder: (folderPath) => userCanManagePocketHiveFolder(user, folderPath),
         isAuthAdmin: userHasGrant(user, {
           product: AuthProducts.AUTH_SERVICE,
           permission: AuthServicePermissionIds.ADMIN,
           resourceType: AuthServiceResourceTypes.GLOBAL,
+          resourceSelector: AuthServiceResourceSelectors.GLOBAL,
         }),
       }}
     >

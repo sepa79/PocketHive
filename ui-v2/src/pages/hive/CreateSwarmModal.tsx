@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import YAML from 'yaml'
 import { ScenarioTree } from '../../components/scenarios/ScenarioTree'
+import { useAuth } from '../../lib/authContext'
 
 type BeeSummary = {
   role: string
@@ -156,6 +157,7 @@ export function CreateSwarmModal({
   onClose: () => void
   onCreated: () => void
 }) {
+  const auth = useAuth()
   const [templates, setTemplates] = useState<ScenarioTemplate[]>([])
   const [templatesLoaded, setTemplatesLoaded] = useState(false)
   const [templateFilter, setTemplateFilter] = useState('')
@@ -331,10 +333,22 @@ export function CreateSwarmModal({
     return templates.filter((template) => templateMatchesNeedle(template, needle))
   }, [templateFilter, templates])
 
-  const selectedTemplate = useMemo(
-    () => templates.find((template) => template.bundleKey === selectedBundleKey) ?? null,
-    [selectedBundleKey, templates],
+  const runnableTemplates = useMemo(
+    () =>
+      filteredTemplates.filter((template) => auth.canRunBundle(template.bundlePath, template.folderPath)),
+    [auth, filteredTemplates],
   )
+
+  const selectedTemplate = useMemo(
+    () => runnableTemplates.find((template) => template.bundleKey === selectedBundleKey) ?? null,
+    [runnableTemplates, selectedBundleKey],
+  )
+
+  useEffect(() => {
+    if (!selectedBundleKey) return
+    if (runnableTemplates.some((template) => template.bundleKey === selectedBundleKey)) return
+    setSelectedBundleKey('')
+  }, [runnableTemplates, selectedBundleKey])
 
   const openFolderPaths = useMemo(() => {
     const needle = templateFilter.trim()
@@ -362,7 +376,7 @@ export function CreateSwarmModal({
       setMessage(null)
 
       const trimmedSwarmId = swarmId.trim()
-      const selectedTemplate = templates.find((template) => template.bundleKey === selectedBundleKey) ?? null
+      const selectedTemplate = runnableTemplates.find((template) => template.bundleKey === selectedBundleKey) ?? null
       const trimmedTemplateId = selectedTemplate?.id?.trim() ?? ''
       const trimmedSutId = sutId.trim()
       const trimmedProfileId = variablesProfileId.trim()
@@ -436,7 +450,7 @@ export function CreateSwarmModal({
         setBusy(false)
       }
     },
-    [autoPullImages, busy, networkMode, networkProfileId, networkProfiles.length, onClose, onCreated, requiresProfile, requiresSut, selectedBundleKey, swarmId, sutId, templates, variablesProfileId],
+    [autoPullImages, busy, networkMode, networkProfileId, networkProfiles.length, onClose, onCreated, requiresProfile, requiresSut, runnableTemplates, selectedBundleKey, swarmId, sutId, variablesProfileId],
   )
 
   if (!open) return null
@@ -561,17 +575,19 @@ export function CreateSwarmModal({
               <div className="swarmTemplateListBody">
                 {!templatesLoaded ? (
                   <div className="muted">Loading scenarios…</div>
-                ) : filteredTemplates.length === 0 ? (
-                  <div className="muted">No scenarios found.</div>
+                ) : runnableTemplates.length === 0 ? (
+                  <div className="muted">
+                    {auth.canRunPocketHive ? 'No runnable scenarios found.' : 'PocketHive RUN permission required.'}
+                  </div>
                 ) : (
                   <>
-                    {templates.some((template) => template.defunct) ? (
+                    {runnableTemplates.some((template) => template.defunct) ? (
                       <div className="muted" style={{ fontSize: 11, padding: '4px 0' }}>
-                        {templates.filter((template) => template.defunct).length} bundle(s) are defunct and shown as non-runnable
+                        {runnableTemplates.filter((template) => template.defunct).length} bundle(s) are defunct and shown as non-runnable
                       </div>
                     ) : null}
                     <ScenarioTree
-                      items={filteredTemplates}
+                      items={runnableTemplates}
                       selectedBundleKey={selectedBundleKey}
                       onSelectBundle={setSelectedBundleKey}
                       searchTerm={templateFilter}
@@ -628,11 +644,11 @@ export function CreateSwarmModal({
                 type="checkbox"
                 checked={autoPullImages}
                 onChange={(event) => setAutoPullImages(event.target.checked)}
-                disabled={busy}
+                disabled={busy || !auth.canRunPocketHive}
               />
               <span>Pull images</span>
             </label>
-            <button type="submit" className="actionButton" disabled={busy}>
+            <button type="submit" className="actionButton" disabled={busy || !selectedTemplate || selectedTemplate.defunct}>
               {busy ? 'Creating…' : 'Create'}
             </button>
           </div>
