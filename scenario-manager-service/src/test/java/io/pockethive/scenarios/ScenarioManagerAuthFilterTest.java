@@ -95,6 +95,23 @@ class ScenarioManagerAuthFilterTest {
     }
 
     @Test
+    void templatesEndpointFiltersByRunBundleScope() throws Exception {
+        writeScenario("e2e", "local-rest", "Local Rest");
+        writeScenario("e2e", "local-rest-defaults", "Local Rest Defaults");
+        scenarioService.reload();
+        when(authServiceClient.resolve(anyString())).thenReturn(userWith(
+            PocketHivePermissionIds.RUN,
+            PocketHiveResourceTypes.BUNDLE,
+            "e2e/local-rest"));
+
+        mvc.perform(get("/api/templates")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer test-token"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[0].id").value("local-rest"))
+            .andExpect(jsonPath("$[1]").doesNotExist());
+    }
+
+    @Test
     void listEndpointFiltersByViewFolderScope() throws Exception {
         writeScenario("demo", "alpha", "Alpha");
         writeScenario("prod", "omega", "Omega");

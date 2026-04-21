@@ -60,4 +60,69 @@ class AuthServiceServiceTokenProviderTest {
         assertThat(provider.getAuthorizationHeader()).isEqualTo("Bearer phauth_service_token");
         server.verify();
     }
+
+    @Test
+    void refreshAuthorizationHeaderForcesRelogin() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        AuthServiceClient client = new AuthServiceClient(builder.baseUrl("http://auth-service:8080").build());
+        Instant now = Instant.parse("2026-04-17T12:00:00Z");
+
+        server.expect(requestTo("http://auth-service:8080/api/auth/service/login"))
+            .andExpect(method(HttpMethod.POST))
+            .andExpect(content().json("""
+                {"serviceName":"orchestrator-service","serviceSecret":"secret"}
+                """))
+            .andRespond(withStatus(HttpStatus.OK)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body("""
+                    {
+                      "accessToken": "stale_token",
+                      "tokenType": "Bearer",
+                      "expiresAt": "2026-04-17T13:00:00Z",
+                      "user": {
+                        "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                        "username": "orchestrator-service",
+                        "displayName": "Orchestrator Service",
+                        "active": true,
+                        "authProvider": "DEV",
+                        "grants": []
+                      }
+                    }
+                    """));
+        server.expect(requestTo("http://auth-service:8080/api/auth/service/login"))
+            .andExpect(method(HttpMethod.POST))
+            .andExpect(content().json("""
+                {"serviceName":"orchestrator-service","serviceSecret":"secret"}
+                """))
+            .andRespond(withStatus(HttpStatus.OK)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body("""
+                    {
+                      "accessToken": "fresh_token",
+                      "tokenType": "Bearer",
+                      "expiresAt": "2026-04-17T13:00:00Z",
+                      "user": {
+                        "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                        "username": "orchestrator-service",
+                        "displayName": "Orchestrator Service",
+                        "active": true,
+                        "authProvider": "DEV",
+                        "grants": []
+                      }
+                    }
+                    """));
+
+        AuthServiceServiceTokenProvider provider = new AuthServiceServiceTokenProvider(
+            client,
+            "orchestrator-service",
+            "secret",
+            Clock.fixed(now, ZoneOffset.UTC),
+            Duration.ofMinutes(1)
+        );
+
+        assertThat(provider.getAuthorizationHeader()).isEqualTo("Bearer stale_token");
+        assertThat(provider.refreshAuthorizationHeader()).isEqualTo("Bearer fresh_token");
+        server.verify();
+    }
 }

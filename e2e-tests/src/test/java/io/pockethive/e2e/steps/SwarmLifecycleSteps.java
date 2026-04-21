@@ -1559,17 +1559,12 @@ public class SwarmLifecycleSteps {
     long removeOutcomeCount = controlPlaneEvents.outcomeCount("swarm-remove");
     assertTrue(removeOutcomeCount >= 1,
         () -> "Expected at least one swarm-remove outcome but saw " + removeOutcomeCount);
-    if (expectsRuntimeWorkErrorAlert) {
-      List<AlertMessage> swarmAlerts = controlPlaneEvents.alerts().stream()
-          .map(ControlPlaneEvents.AlertEnvelope::alert)
-          .filter(Objects::nonNull)
-          .filter(alert -> alert.scope() != null
-              && swarmId.equalsIgnoreCase(alert.scope().swarmId()))
-          .toList();
-      List<AlertMessage> expectedAlerts = swarmAlerts.stream()
-          .filter(alert -> roleMatches(expectedRuntimeWorkErrorAlertRole, alert.scope().role()))
-          .filter(alert -> expectedRuntimeWorkErrorAlertInstance == null
-              || expectedRuntimeWorkErrorAlertInstance.equalsIgnoreCase(alert.scope().instance()))
+	    if (expectsRuntimeWorkErrorAlert) {
+	      List<AlertMessage> swarmAlerts = alertsForCurrentSwarm();
+	      List<AlertMessage> expectedAlerts = swarmAlerts.stream()
+	          .filter(alert -> roleMatches(expectedRuntimeWorkErrorAlertRole, alert.scope().role()))
+	          .filter(alert -> expectedRuntimeWorkErrorAlertInstance == null
+	              || expectedRuntimeWorkErrorAlertInstance.equalsIgnoreCase(alert.scope().instance()))
           .filter(alert -> alert.data() != null
               && Alerts.Codes.RUNTIME_EXCEPTION.equalsIgnoreCase(alert.data().code()))
           .toList();
@@ -1577,14 +1572,17 @@ public class SwarmLifecycleSteps {
           () -> "Expected at least one runtime.exception alert for role="
               + expectedRuntimeWorkErrorAlertRole + " instance=" + expectedRuntimeWorkErrorAlertInstance
               + " but got alerts=" + swarmAlerts);
-      assertEquals(expectedAlerts.size(), swarmAlerts.size(),
-          () -> "Unexpected non-matching alerts in swarm " + swarmId
-              + " expectedRuntimeAlerts=" + expectedAlerts
-              + " allSwarmAlerts=" + swarmAlerts);
-    } else {
-      assertTrue(controlPlaneEvents.alerts().isEmpty(), "No alerts should be emitted during the golden path");
-    }
-  }
+	      assertEquals(expectedAlerts.size(), swarmAlerts.size(),
+	          () -> "Unexpected non-matching alerts in swarm " + swarmId
+	              + " expectedRuntimeAlerts=" + expectedAlerts
+	              + " allSwarmAlerts=" + swarmAlerts);
+	    } else {
+	      List<AlertMessage> swarmAlerts = alertsForCurrentSwarm();
+	      assertTrue(swarmAlerts.isEmpty(),
+	          () -> "No alerts should be emitted during the golden path for swarm " + swarmId
+	              + " but got " + swarmAlerts);
+	    }
+	  }
 
   @And("the network binding is cleared")
   public void theNetworkBindingIsCleared() {
@@ -1620,8 +1618,11 @@ public class SwarmLifecycleSteps {
     long removeOutcomeCount = controlPlaneEvents.outcomeCount("swarm-remove");
     assertTrue(removeOutcomeCount >= 1,
         () -> "Expected at least one swarm-remove outcome but saw " + removeOutcomeCount);
-    assertTrue(controlPlaneEvents.alerts().isEmpty(), "No alerts should be emitted during the golden path");
-  }
+	    List<AlertMessage> swarmAlerts = alertsForCurrentSwarm();
+	    assertTrue(swarmAlerts.isEmpty(),
+	        () -> "No alerts should be emitted during the golden path for swarm " + swarmId
+	            + " but got " + swarmAlerts);
+	  }
 
   @After
   public void tearDownLifecycle() {
@@ -2741,6 +2742,17 @@ public class SwarmLifecycleSteps {
   private void assertNoErrors(String correlationId, String context) {
     List<io.pockethive.control.AlertMessage> alerts = controlPlaneEvents.alertsForCorrelation(correlationId);
     assertTrue(alerts.isEmpty(), () -> "Unexpected alerts for " + context + " correlation=" + correlationId + ": " + alerts);
+  }
+
+  private List<AlertMessage> alertsForCurrentSwarm() {
+    if (controlPlaneEvents == null || swarmId == null) {
+      return List.of();
+    }
+    return controlPlaneEvents.alerts().stream()
+        .map(ControlPlaneEvents.AlertEnvelope::alert)
+        .filter(Objects::nonNull)
+        .filter(alert -> alert.scope() != null && swarmId.equalsIgnoreCase(alert.scope().swarmId()))
+        .toList();
   }
 
   private void assertWatchMatched(ControlResponse response) {

@@ -160,6 +160,29 @@ class SwarmControllerTest {
     }
 
     @Test
+    void createRejectsRunUserOutsideGrantedBundleScope() throws Exception {
+        SwarmCreateTracker tracker = new SwarmCreateTracker();
+        SwarmStore registry = new SwarmStore();
+        SwarmController ctrl = controller(tracker, registry, new SwarmPlanRegistry());
+        when(scenarioClient.fetchScenarioTemplate("tpl-1"))
+            .thenReturn(new ScenarioClient.ScenarioTemplateDescriptor("tpl-1", "e2e/local-rest-defaults", "e2e", false));
+
+        try {
+            OrchestratorCurrentUserHolder.set(userWith(
+                PocketHivePermissionIds.RUN,
+                PocketHiveResourceTypes.BUNDLE,
+                "e2e/local-rest"));
+            assertThatThrownBy(() -> ctrl.create("sw1", new SwarmCreateRequest("tpl-1", "idem", null, null, null, null, NetworkMode.DIRECT, null)))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("403 FORBIDDEN");
+        } finally {
+            OrchestratorCurrentUserHolder.clear();
+        }
+
+        verifyNoInteractions(publisher);
+    }
+
+    @Test
     void listFiltersSwarmsOutsideGrantedFolderScope() {
         SwarmCreateTracker tracker = new SwarmCreateTracker();
         SwarmStore registry = new SwarmStore();

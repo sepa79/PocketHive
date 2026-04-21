@@ -72,3 +72,13 @@ pockethive:
             permission: ALL
             resourceType: PH_DEPLOYMENT
             resourceSelector: "*"
+      - id: bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb
+        service-name: network-proxy-manager
+        display-name: Network Proxy Manager
+        secret: ${POCKETHIVE_AUTH_SERVICE_ACCOUNT_NETWORK_PROXY_MANAGER_SECRET:network-proxy-manager-local-secret}
+        active: true
+        grants:
+          - product: POCKETHIVE
+            permission: ALL
+            resourceType: PH_DEPLOYMENT
+            resourceSelector: "*"

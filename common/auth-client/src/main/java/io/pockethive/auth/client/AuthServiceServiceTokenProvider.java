@@ -43,13 +43,13 @@ public final class AuthServiceServiceTokenProvider {
             if (snapshot != null && snapshot.expiresAt().isAfter(now.plus(refreshSkew))) {
                 return snapshot.authorizationHeader();
             }
-            SessionResponseDto session = authServiceClient.serviceLogin(serviceName, serviceSecret);
-            CachedToken refreshed = new CachedToken(
-                session.tokenType() + " " + session.accessToken(),
-                session.expiresAt()
-            );
-            cachedToken = refreshed;
-            return refreshed.authorizationHeader();
+            return refreshLocked().authorizationHeader();
+        }
+    }
+
+    public String refreshAuthorizationHeader() {
+        synchronized (this) {
+            return refreshLocked().authorizationHeader();
         }
     }
 
@@ -58,6 +58,16 @@ public final class AuthServiceServiceTokenProvider {
             throw new IllegalArgumentException(field + " must not be null or blank");
         }
         return value.trim();
+    }
+
+    private CachedToken refreshLocked() {
+        SessionResponseDto session = authServiceClient.serviceLogin(serviceName, serviceSecret);
+        CachedToken refreshed = new CachedToken(
+            session.tokenType() + " " + session.accessToken(),
+            session.expiresAt()
+        );
+        cachedToken = refreshed;
+        return refreshed;
     }
 
     private record CachedToken(String authorizationHeader, Instant expiresAt) {

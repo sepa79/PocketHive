@@ -179,20 +179,12 @@ public class ScenarioManagerClient implements ScenarioClient {
 
     private HttpResponse<String> sendGet(String url, String label, String correlationId, String idempotencyKey) throws Exception {
         log.info("fetching {} from {}", label, url);
-        HttpRequest.Builder builder = HttpRequest.newBuilder()
-            .uri(URI.create(url))
-            .header("Accept", "application/json")
-            .timeout(requestTimeout)
-            ;
-        applyAuthorization(builder);
-        if (correlationId != null && !correlationId.isBlank()) {
-            builder.header("X-Correlation-Id", correlationId);
+        String authorizationHeader = currentAuthorizationHeader(false);
+        HttpResponse<String> resp = sendGetOnce(url, authorizationHeader, correlationId, idempotencyKey);
+        if (resp.statusCode() == 401 && serviceTokenProvider != null && authorizationHeader != null) {
+            log.warn("{} returned 401; refreshing service token and retrying once", label);
+            resp = sendGetOnce(url, currentAuthorizationHeader(true), correlationId, idempotencyKey);
         }
-        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
-            builder.header("X-Idempotency-Key", idempotencyKey);
-        }
-        HttpRequest req = builder.build();
-        HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
         log.info("{} response status {} length {}", label, resp.statusCode(),
             resp.body() != null ? resp.body().length() : 0);
         if (resp.statusCode() != 200) {
@@ -203,21 +195,47 @@ public class ScenarioManagerClient implements ScenarioClient {
 
     private HttpResponse<String> sendPost(String url, String label, String body) throws Exception {
         log.info("posting {} to {}", label, url);
-        HttpRequest.Builder builder = HttpRequest.newBuilder()
-            .uri(URI.create(url))
-            .header("Accept", "application/json")
-            .header("Content-Type", "application/json")
-            .timeout(requestTimeout)
-            .POST(HttpRequest.BodyPublishers.ofString(body));
-        applyAuthorization(builder);
-        HttpRequest req = builder.build();
-        HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+        String authorizationHeader = currentAuthorizationHeader(false);
+        HttpResponse<String> resp = sendPostOnce(url, authorizationHeader, body);
+        if (resp.statusCode() == 401 && serviceTokenProvider != null && authorizationHeader != null) {
+            log.warn("{} returned 401 on POST; refreshing service token and retrying once", label);
+            resp = sendPostOnce(url, currentAuthorizationHeader(true), body);
+        }
         log.info("{} response status {} length {}", label, resp.statusCode(),
             resp.body() != null ? resp.body().length() : 0);
         if (resp.statusCode() != 200) {
             throw new IllegalStateException(label + " POST status " + resp.statusCode());
         }
         return resp;
+    }
+
+    private HttpResponse<String> sendGetOnce(String url,
+                                             String authorizationHeader,
+                                             String correlationId,
+                                             String idempotencyKey) throws Exception {
+        HttpRequest.Builder builder = HttpRequest.newBuilder()
+            .uri(URI.create(url))
+            .header("Accept", "application/json")
+            .timeout(requestTimeout);
+        applyAuthorization(builder, authorizationHeader);
+        if (correlationId != null && !correlationId.isBlank()) {
+            builder.header("X-Correlation-Id", correlationId);
+        }
+        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+            builder.header("X-Idempotency-Key", idempotencyKey);
+        }
+        return http.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    private HttpResponse<String> sendPostOnce(String url, String authorizationHeader, String body) throws Exception {
+        HttpRequest.Builder builder = HttpRequest.newBuilder()
+            .uri(URI.create(url))
+            .header("Accept", "application/json")
+            .header("Content-Type", "application/json")
+            .timeout(requestTimeout)
+            .POST(HttpRequest.BodyPublishers.ofString(body));
+        applyAuthorization(builder, authorizationHeader);
+        return http.send(builder.build(), HttpResponse.BodyHandlers.ofString());
     }
 
     private static Duration resolveTimeout(Duration candidate, Duration fallback) {
@@ -235,15 +253,19 @@ public class ScenarioManagerClient implements ScenarioClient {
         return baseUrl;
     }
 
-    private void applyAuthorization(HttpRequest.Builder builder) {
-        String authorizationHeader = currentAuthorizationHeader();
+    private void applyAuthorization(HttpRequest.Builder builder, String authorizationHeader) {
         if (authorizationHeader != null) {
             builder.header("Authorization", authorizationHeader);
         }
     }
 
-    private String currentAuthorizationHeader() {
-        return serviceTokenProvider == null ? null : serviceTokenProvider.getAuthorizationHeader();
+    private String currentAuthorizationHeader(boolean forceRefresh) {
+        if (serviceTokenProvider == null) {
+            return null;
+        }
+        return forceRefresh
+            ? serviceTokenProvider.refreshAuthorizationHeader()
+            : serviceTokenProvider.getAuthorizationHeader();
     }
 
     public record RuntimeRequest(String swarmId) {

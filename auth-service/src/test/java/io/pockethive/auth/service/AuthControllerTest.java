@@ -163,6 +163,49 @@ class AuthControllerTest {
             .andExpect(jsonPath("$.grants[1].resourceSelector").value("e2e"));
     }
 
+    @Test
+    void adminCanReplaceBundleScopedGrant() throws Exception {
+        String adminToken = bearer(mvc.perform(post("/api/auth/dev/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"username":"local-admin"}
+                    """))
+            .andExpect(status().isOk())
+            .andReturn());
+
+        mvc.perform(put("/api/auth/admin/users/66666666-6666-6666-6666-666666666666")
+                .header(HttpHeaders.AUTHORIZATION, adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"username":"local-bundle-runner","displayName":"Local Bundle Runner","active":true}
+                    """))
+            .andExpect(status().isOk());
+
+        mvc.perform(put("/api/auth/admin/users/66666666-6666-6666-6666-666666666666/grants")
+                .header(HttpHeaders.AUTHORIZATION, adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "grants": [
+                        {
+                          "product": "%s",
+                          "permission": "%s",
+                          "resourceType": "%s",
+                          "resourceSelector": "e2e/local-rest"
+                        }
+                      ]
+                    }
+                    """.formatted(
+                    AuthProduct.POCKETHIVE.name(),
+                    PocketHivePermissionIds.RUN,
+                    PocketHiveResourceTypes.BUNDLE)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.grants", hasSize(1)))
+            .andExpect(jsonPath("$.grants[0].permission").value(PocketHivePermissionIds.RUN))
+            .andExpect(jsonPath("$.grants[0].resourceType").value(PocketHiveResourceTypes.BUNDLE))
+            .andExpect(jsonPath("$.grants[0].resourceSelector").value("e2e/local-rest"));
+    }
+
     private String bearer(MvcResult result) throws Exception {
         JsonNode payload = mapper.readTree(result.getResponse().getContentAsString());
         return "Bearer " + payload.path("accessToken").asText();
