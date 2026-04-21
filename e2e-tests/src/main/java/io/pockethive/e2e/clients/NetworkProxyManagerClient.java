@@ -5,6 +5,7 @@ import java.time.Duration;
 import java.util.Objects;
 import java.util.Optional;
 
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -26,8 +27,16 @@ public final class NetworkProxyManagerClient {
   }
 
   public static NetworkProxyManagerClient create(URI baseUrl) {
+    return create(baseUrl, null);
+  }
+
+  public static NetworkProxyManagerClient create(URI baseUrl, String bearerToken) {
     Objects.requireNonNull(baseUrl, "baseUrl");
-    return new NetworkProxyManagerClient(WebClient.builder().baseUrl(baseUrl.toString()).build());
+    WebClient.Builder builder = WebClient.builder().baseUrl(baseUrl.toString());
+    if (bearerToken != null && !bearerToken.isBlank()) {
+      builder.defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + bearerToken);
+    }
+    return new NetworkProxyManagerClient(builder.build());
   }
 
   public Optional<NetworkBinding> findBinding(String swarmId) {

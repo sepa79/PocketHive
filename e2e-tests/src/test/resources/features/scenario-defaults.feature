@@ -1,3 +1,4 @@
+@group-contracts @group-smoke
 Feature: Scenario defaults ensure generator rate limits are advertised
 
   Background:

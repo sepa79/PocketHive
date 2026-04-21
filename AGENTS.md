@@ -32,6 +32,10 @@ This file is a **navigation and guardrails** page for both human and AI contribu
 - **Git safety (agents):**
   - **No pushes:** agents must not run `git push` (ever).
   - **No commits by default:** agents must not create commits unless a human makes an **EXPLICIT REQUEST TO COMMIT**.
+- **Tests must use only official ingress/API paths.**
+  - Do not point tests, E2E checks, or test diagnostics at direct service ports as a substitute for the supported entrypoint.
+  - Use the official public path/interface for the environment under test (for example the UI ingress / documented API base), not backend container ports.
+  - Direct service ports may be used only when the test explicitly exists to verify that specific service interface itself, with explicit human approval.
 
 ---
 
@@ -59,6 +63,7 @@ This file is a **navigation and guardrails** page for both human and AI contribu
 
 ### 1.5 Tests & CI
 - Follow the **control‑plane testing** strategy in `docs/ci/control-plane-testing.md` (Testcontainers, RabbitMQ, WireMock, etc.).
+- For PocketHive stack verification, treat direct container/service ports as implementation detail, not test target, unless explicitly approved.
 - For usage/dev commands, **do not copy here**—use `docs/USAGE.md`.
 
 ---

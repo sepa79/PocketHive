@@ -1,6 +1,8 @@
 package io.pockethive.scenarios;
 
 import static org.hamcrest.Matchers.hasSize;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -16,9 +18,12 @@ import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+
+import io.pockethive.auth.client.AuthServiceClient;
 
 @SpringBootTest(properties = "rabbitmq.logging.enabled=false")
 @AutoConfigureMockMvc
@@ -29,6 +34,9 @@ class NetworkProfileControllerTest {
 
     @Autowired
     NetworkProfileService networkProfileService;
+
+    @MockBean
+    AuthServiceClient authServiceClient;
 
     @TempDir
     static Path tempDir;
@@ -44,6 +52,7 @@ class NetworkProfileControllerTest {
 
     @BeforeEach
     void setUpProfiles() throws IOException {
+        when(authServiceClient.resolve(anyString())).thenReturn(AuthTestUsers.admin());
         Files.createDirectories(profilesFile.getParent());
         Files.writeString(profilesFile, """
             - id: passthrough
@@ -65,7 +74,7 @@ class NetworkProfileControllerTest {
 
     @Test
     void listsProfiles() throws Exception {
-        mvc.perform(get("/network-profiles"))
+        mvc.perform(AuthTestUsers.withAuth(get("/network-profiles")))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$", hasSize(2)))
             .andExpect(jsonPath("$[?(@.id=='passthrough')].name").value(org.hamcrest.Matchers.contains("Passthrough")));
@@ -73,7 +82,7 @@ class NetworkProfileControllerTest {
 
     @Test
     void readsSingleProfile() throws Exception {
-        mvc.perform(get("/network-profiles/latency-250ms"))
+        mvc.perform(AuthTestUsers.withAuth(get("/network-profiles/latency-250ms")))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.id").value("latency-250ms"))
             .andExpect(jsonPath("$.faults[0].type").value("latency"))
@@ -82,7 +91,7 @@ class NetworkProfileControllerTest {
 
     @Test
     void readsAndUpdatesRawYaml() throws Exception {
-        mvc.perform(get("/network-profiles/raw"))
+        mvc.perform(AuthTestUsers.withAuth(get("/network-profiles/raw")))
             .andExpect(status().isOk())
             .andExpect(content().string(org.hamcrest.Matchers.containsString("passthrough")));
 
@@ -102,19 +111,19 @@ class NetworkProfileControllerTest {
                 - payments
             """;
 
-        mvc.perform(put("/network-profiles/raw")
+        mvc.perform(AuthTestUsers.withAuth(put("/network-profiles/raw"))
                 .contentType("text/plain")
                 .content(updated))
             .andExpect(status().isNoContent());
 
-        mvc.perform(get("/network-profiles/bandwidth-1mbps"))
+        mvc.perform(AuthTestUsers.withAuth(get("/network-profiles/bandwidth-1mbps")))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.name").value("Bandwidth 1mbps"));
     }
 
     @Test
     void rejectsInvalidYaml() throws Exception {
-        mvc.perform(put("/network-profiles/raw")
+        mvc.perform(AuthTestUsers.withAuth(put("/network-profiles/raw"))
                 .contentType("text/plain")
                 .content("not: [valid"))
             .andExpect(status().isBadRequest());

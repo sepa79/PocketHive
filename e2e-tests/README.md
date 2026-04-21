@@ -51,8 +51,31 @@ start-e2e-tests.bat           # Windows
 Both wrappers accept additional Maven arguments, which are forwarded to the underlying `./mvnw verify -pl e2e-tests -am`
 command. When invoked without extra configuration, the scripts seed the environment with defaults that mirror the
 service container configuration (e.g. `http://localhost:8088/orchestrator`, `http://localhost:8088/scenario-manager`,
-`rabbitmq:5672` with the `guest/guest` account, and `ws://localhost:8088/ws`). Override any of these values by exporting
-the environment variables before launching the helper.
+`http://localhost:1083` for auth-service, `rabbitmq:5672` with the `guest/guest` account, and `ws://localhost:8088/ws`).
+Override any of these values by exporting the environment variables before launching the helper.
+
+The Unix helper also supports grouped execution so you do not need to rerun the entire 20-minute pack while iterating:
+
+```bash
+./start-e2e-tests.sh --list-groups
+./start-e2e-tests.sh --group smoke
+./start-e2e-tests.sh --group lifecycle,proxy
+./start-e2e-tests.sh --group data --tags @tcp-timeout
+```
+
+Available groups:
+
+| Group | Coverage |
+| --- | --- |
+| `smoke` | Platform health, auth smoke, and fast template/default contract checks |
+| `auth` | Authentication and scoped-access scenarios |
+| `contracts` | Template defaults, runtime-config, and contract verification |
+| `lifecycle` | Core swarm lifecycle and control-plane behaviour |
+| `proxy` | HTTP / HTTPS / TCPS proxy scenarios |
+| `data` | Timeout, Redis, ClickHouse, WebAuth, and other heavier data-plane scenarios |
+| `exports` | Clearing export scenarios |
+| `wip` | Work-in-progress scenarios only |
+| `all` | Entire pack except `@wip` |
 
 The deployment smoke feature runs automatically once the required environment variables are present; otherwise the
 scenario is skipped via JUnit assumptions so local builds without a running stack still succeed. The harness skeleton
@@ -67,6 +90,10 @@ Environment variables will be referenced by the harness once the step implementa
 | --- | --- |
 | `ORCHESTRATOR_BASE_URL` | Base URL (e.g. `http://localhost:8080`) for orchestrator REST calls. |
 | `SCENARIO_MANAGER_BASE_URL` | Base URL for querying available templates via the Scenario Manager. |
+| `NETWORK_PROXY_MANAGER_BASE_URL` | Base URL for querying proxy bindings. |
+| `AUTH_SERVICE_BASE_URL` | Base URL for the standalone auth-service used to obtain test bearer tokens. |
+| `POCKETHIVE_AUTH_USERNAME` | Default dev-login username for authenticated e2e scenarios (defaults to `local-admin`). |
+| `POCKETHIVE_AUTH_TOKEN` | Optional fixed bearer token to use instead of dev login. |
 | `RABBITMQ_HOST` | RabbitMQ hostname to probe (defaults to `rabbitmq`). |
 | `RABBITMQ_PORT` | RabbitMQ port (defaults to `5672`). |
 | `RABBITMQ_DEFAULT_USER` | Username used for AMQP connectivity checks (defaults to `guest`). |

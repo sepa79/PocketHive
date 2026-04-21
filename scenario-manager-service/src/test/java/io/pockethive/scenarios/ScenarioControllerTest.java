@@ -6,11 +6,14 @@ import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.web.context.WebApplicationContext;
 
+import io.pockethive.auth.client.AuthServiceClient;
 import io.pockethive.capabilities.CapabilityCatalogueService;
 
 import java.io.IOException;
@@ -21,8 +24,11 @@ import java.util.zip.ZipInputStream;
 import java.util.stream.Stream;
 
 import static org.hamcrest.Matchers.hasSize;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.springframework.test.web.servlet.setup.MockMvcBuilders.webAppContextSetup;
 
 @SpringBootTest(properties = "rabbitmq.logging.enabled=false")
 @AutoConfigureMockMvc
@@ -33,6 +39,12 @@ class ScenarioControllerTest {
 
     @Autowired
     CapabilityCatalogueService capabilityCatalogue;
+
+    @Autowired
+    WebApplicationContext webApplicationContext;
+
+    @MockBean
+    AuthServiceClient authServiceClient;
 
     @TempDir
     static Path tempDir;
@@ -51,6 +63,10 @@ class ScenarioControllerTest {
 
     @BeforeEach
     void setUpManifests() throws Exception {
+        when(authServiceClient.resolve(anyString())).thenReturn(AuthTestUsers.admin());
+        mvc = webAppContextSetup(webApplicationContext)
+                .defaultRequest(get("/").header(org.springframework.http.HttpHeaders.AUTHORIZATION, AuthTestUsers.TEST_BEARER))
+                .build();
         cleanDirectory(scenariosDir);
         cleanDirectory(capabilitiesDir);
         writeCapabilityManifest("ctrl", "ctrl-image");

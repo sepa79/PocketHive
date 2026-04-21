@@ -40,6 +40,7 @@ import io.cucumber.java.en.And;
 import io.cucumber.java.en.Given;
 import io.cucumber.java.en.Then;
 import io.cucumber.java.en.When;
+import io.pockethive.e2e.clients.AuthServiceClient;
 import io.pockethive.e2e.clients.OrchestratorClient;
 import io.pockethive.e2e.clients.OrchestratorClient.ComponentConfigRequest;
 import io.pockethive.e2e.clients.OrchestratorClient.ControlRequest;
@@ -99,6 +100,7 @@ public class SwarmLifecycleSteps {
   private static final String DEFAULT_CLICKHOUSE_USERNAME = "pockethive";
   private static final String DEFAULT_CLICKHOUSE_PASSWORD = "pockethive";
   private static final Duration CLICKHOUSE_HTTP_TIMEOUT = Duration.ofSeconds(5);
+  private static final Duration CLEANUP_SWARM_REGISTRATION_TIMEOUT = Duration.ofSeconds(20);
 
   private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
   private ServiceEndpoints endpoints;
@@ -142,9 +144,12 @@ public class SwarmLifecycleSteps {
       Assumptions.assumeTrue(false, () -> "Skipping lifecycle scenario: " + ex.getMessage());
     }
 
-    orchestratorClient = OrchestratorClient.create(endpoints.orchestratorBaseUrl());
-    scenarioManagerClient = ScenarioManagerClient.create(endpoints.scenarioManagerBaseUrl());
-    networkProxyManagerClient = NetworkProxyManagerClient.create(endpoints.networkProxyManagerBaseUrl());
+    AuthServiceClient authServiceClient = AuthServiceClient.create(endpoints.auth().authServiceBaseUrl());
+    String bearerToken = endpoints.auth().accessToken()
+        .orElseGet(() -> authServiceClient.devLogin(endpoints.auth().username()));
+    orchestratorClient = OrchestratorClient.create(endpoints.orchestratorBaseUrl(), bearerToken);
+    scenarioManagerClient = ScenarioManagerClient.create(endpoints.scenarioManagerBaseUrl(), bearerToken);
+    networkProxyManagerClient = NetworkProxyManagerClient.create(endpoints.networkProxyManagerBaseUrl(), bearerToken);
     controlPlane = endpoints.controlPlane();
     rabbitSubscriptions = RabbitSubscriptions.from(endpoints.rabbitMq(), controlPlane);
     rabbitManagementClient = RabbitManagementClient.create(endpoints.rabbitMq());
@@ -1645,11 +1650,30 @@ public class SwarmLifecycleSteps {
     }
     if (!swarmRemoved && orchestratorClient != null && swarmId != null) {
       try {
+        if (!awaitSwarmRegistrationForCleanup()) {
+          return;
+        }
         LOGGER.info("Attempting to remove swarm {} during cleanup", swarmId);
         orchestratorClient.removeSwarm(swarmId, new ControlRequest(idKey("cleanup"), "cleanup"));
       } catch (Exception ex) {
         LOGGER.warn("Cleanup remove failed for swarm {}", swarmId, ex);
       }
+    }
+  }
+
+  private boolean awaitSwarmRegistrationForCleanup() {
+    try {
+      // Temporary E2E workaround: wait for swarm registration before cleanup remove.
+      // Remove after the control-plane command lifecycle gains explicit receipt acknowledgement.
+      SwarmAssertions.await(
+          "swarm registration before cleanup",
+          CLEANUP_SWARM_REGISTRATION_TIMEOUT,
+          () -> assertTrue(orchestratorClient.findSwarm(swarmId).isPresent(),
+              () -> "Expected swarm " + swarmId + " to be visible before cleanup remove"));
+      return true;
+    } catch (AssertionError | org.awaitility.core.ConditionTimeoutException ex) {
+      LOGGER.warn("Skipping cleanup remove for swarm {} because it never became visible before cleanup", swarmId);
+      return false;
     }
   }
 

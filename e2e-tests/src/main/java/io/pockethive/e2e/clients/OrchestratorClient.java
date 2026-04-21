@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -27,8 +28,16 @@ public final class OrchestratorClient {
   }
 
   public static OrchestratorClient create(URI baseUrl) {
+    return create(baseUrl, null);
+  }
+
+  public static OrchestratorClient create(URI baseUrl, String bearerToken) {
     Objects.requireNonNull(baseUrl, "baseUrl");
-    return new OrchestratorClient(WebClient.builder().baseUrl(baseUrl.toString()).build());
+    WebClient.Builder builder = WebClient.builder().baseUrl(baseUrl.toString());
+    if (bearerToken != null && !bearerToken.isBlank()) {
+      builder.defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + bearerToken);
+    }
+    return new OrchestratorClient(builder.build());
   }
 
   public WebClient webClient() {

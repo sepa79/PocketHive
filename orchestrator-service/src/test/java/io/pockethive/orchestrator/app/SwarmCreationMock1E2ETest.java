@@ -9,6 +9,17 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.json.JsonMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpServer;
+import io.pockethive.auth.contract.AuthGrantDto;
+import io.pockethive.auth.contract.AuthProduct;
+import io.pockethive.auth.contract.AuthProvider;
+import io.pockethive.auth.contract.AuthenticatedUserDto;
+import io.pockethive.auth.contract.PocketHivePermissionIds;
+import io.pockethive.auth.contract.PocketHiveResourceTypes;
+import io.pockethive.auth.contract.SessionResponseDto;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.control.CommandOutcome;
@@ -26,12 +37,14 @@ import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.Work;
 import java.io.IOException;
 import java.net.ServerSocket;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
+import java.util.List;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
@@ -71,6 +84,26 @@ import io.pockethive.controlplane.routing.ControlPlaneRouting;
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT, classes = OrchestratorApplication.class)
 @Testcontainers
 class SwarmCreationMock1E2ETest {
+    private static final String TEST_AUTHORIZATION = "Bearer test-token";
+    private static final String TEST_SERVICE_PRINCIPAL = "orchestrator-service";
+    private static final String TEST_SERVICE_SECRET = "orchestrator-secret";
+    private static final String TEST_SERVICE_TOKEN = "service-token";
+    private static final ObjectMapper AUTH_OBJECT_MAPPER = JsonMapper.builder()
+        .addModule(new JavaTimeModule())
+        .build();
+    private static final AuthenticatedUserDto TEST_USER = new AuthenticatedUserDto(
+        UUID.fromString("11111111-1111-1111-1111-111111111111"),
+        "test-admin",
+        "Test Admin",
+        true,
+        AuthProvider.DEV,
+        List.of(new AuthGrantDto(
+            AuthProduct.POCKETHIVE,
+            PocketHivePermissionIds.ALL,
+            PocketHiveResourceTypes.DEPLOYMENT,
+            "*"
+        ))
+    );
 
     private static final RabbitMQContainer RABBIT =
         new RabbitMQContainer("rabbitmq:3.13.1-management");
@@ -83,6 +116,8 @@ class SwarmCreationMock1E2ETest {
     private static int scenarioManagerPort;
     private static boolean dockerAvailable = true;
     private static Path scenarioRuntimeRoot;
+    private static HttpServer authServiceServer;
+    private static int authServicePort;
 
     @MockBean
     DockerContainerClient docker;
@@ -200,6 +235,10 @@ class SwarmCreationMock1E2ETest {
         registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
         registry.add("spring.datasource.username", POSTGRES::getUsername);
         registry.add("spring.datasource.password", POSTGRES::getPassword);
+        ensureAuthServiceRunning();
+        registry.add("pockethive.auth.service-url", () -> URI.create("http://127.0.0.1:" + authServicePort));
+        registry.add("pockethive.auth.service-principal.name", () -> TEST_SERVICE_PRINCIPAL);
+        registry.add("pockethive.auth.service-principal.secret", () -> TEST_SERVICE_SECRET);
         registry.add("POCKETHIVE_JOURNAL_SINK", () -> "postgres");
         ensureScenarioManagerRunning();
         registry.add(
@@ -215,6 +254,10 @@ class SwarmCreationMock1E2ETest {
         if (scenarioManagerContext != null) {
             scenarioManagerContext.close();
             scenarioManagerContext = null;
+        }
+        if (authServiceServer != null) {
+            authServiceServer.stop(0);
+            authServiceServer = null;
         }
         if (RABBIT.isRunning()) {
             RABBIT.stop();
@@ -446,8 +489,14 @@ class SwarmCreationMock1E2ETest {
             null,
             null);
 
-        ResponseEntity<java.util.List> response =
-            rest.getForEntity("/api/swarms/{swarmId}/journal", java.util.List.class, "journal-swarm");
+        HttpHeaders headers = new HttpHeaders();
+        headers.set(HttpHeaders.AUTHORIZATION, TEST_AUTHORIZATION);
+        ResponseEntity<java.util.List> response = rest.exchange(
+            "/api/swarms/{swarmId}/journal",
+            HttpMethod.GET,
+            new HttpEntity<>(headers),
+            java.util.List.class,
+            "journal-swarm");
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody()).hasSize(1);
@@ -496,7 +545,58 @@ class SwarmCreationMock1E2ETest {
     private HttpEntity<Map<String, String>> jsonRequest(Map<String, String> body) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set(HttpHeaders.AUTHORIZATION, TEST_AUTHORIZATION);
         return new HttpEntity<>(body, headers);
+    }
+
+    private static void ensureAuthServiceRunning() {
+        if (authServiceServer != null) {
+            return;
+        }
+        try {
+            authServicePort = findFreePort();
+            authServiceServer = HttpServer.create(new java.net.InetSocketAddress("127.0.0.1", authServicePort), 0);
+            authServiceServer.createContext("/api/auth/service/login", SwarmCreationMock1E2ETest::handleServiceLogin);
+            authServiceServer.createContext("/api/auth/resolve", SwarmCreationMock1E2ETest::handleResolve);
+            authServiceServer.createContext("/api/auth/me", SwarmCreationMock1E2ETest::handleResolve);
+            authServiceServer.start();
+        } catch (IOException e) {
+            throw new IllegalStateException("Unable to start test auth service", e);
+        }
+    }
+
+    private static void handleServiceLogin(HttpExchange exchange) throws IOException {
+        if (!"POST".equals(exchange.getRequestMethod())) {
+            writeJson(exchange, 405, Map.of("message", "Method not allowed"));
+            return;
+        }
+        SessionResponseDto session = new SessionResponseDto(
+            TEST_SERVICE_TOKEN,
+            "Bearer",
+            Instant.now().plus(Duration.ofHours(1)),
+            TEST_USER
+        );
+        writeJson(exchange, 200, session);
+    }
+
+    private static void handleResolve(HttpExchange exchange) throws IOException {
+        String authorization = exchange.getRequestHeaders().getFirst(HttpHeaders.AUTHORIZATION);
+        if (authorization == null || authorization.isBlank()) {
+            writeJson(exchange, 401, Map.of("message", "Missing Authorization header"));
+            return;
+        }
+        writeJson(exchange, 200, TEST_USER);
+    }
+
+    private static void writeJson(HttpExchange exchange, int status, Object body) throws IOException {
+        byte[] payload = AUTH_OBJECT_MAPPER.writeValueAsBytes(body);
+        exchange.getResponseHeaders().set(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE);
+        exchange.sendResponseHeaders(status, payload.length);
+        try (java.io.OutputStream output = exchange.getResponseBody()) {
+            output.write(payload);
+        } finally {
+            exchange.close();
+        }
     }
 
     private Message awaitMessage(String queue, Duration timeout, String routingKey) throws InterruptedException {
@@ -564,6 +664,7 @@ class SwarmCreationMock1E2ETest {
         int port = findFreePort();
         Path scenariosDir = locateScenariosDirectory();
         Path runtimeRoot = scenariosDir.resolve("runtime");
+        Path capabilitiesDir = locateCapabilitiesDirectory();
         try {
             Files.createDirectories(runtimeRoot);
         } catch (IOException e) {
@@ -577,7 +678,9 @@ class SwarmCreationMock1E2ETest {
                 "server.port", port,
                 "server.address", "127.0.0.1",
                 "scenarios.dir", scenariosDir.toString(),
+                "capabilities.dir", capabilitiesDir.toString(),
                 "POCKETHIVE_SCENARIOS_RUNTIME_ROOT", runtimeRoot.toString(),
+                "pockethive.auth.service-url", "http://127.0.0.1:" + authServicePort,
                 "logging.level.root", "WARN"
             ))
             .run();
@@ -591,6 +694,14 @@ class SwarmCreationMock1E2ETest {
             return candidate;
         }
         throw new IllegalStateException("Unable to locate test scenarios directory at " + candidate);
+    }
+
+    private static Path locateCapabilitiesDirectory() {
+        Path candidate = Path.of("..", "scenario-manager-service", "capabilities").toAbsolutePath().normalize();
+        if (Files.isDirectory(candidate)) {
+            return candidate;
+        }
+        throw new IllegalStateException("Unable to locate capabilities directory at " + candidate);
     }
 
     private static int findFreePort() {

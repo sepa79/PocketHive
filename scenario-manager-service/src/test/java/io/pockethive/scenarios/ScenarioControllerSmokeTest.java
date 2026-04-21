@@ -1,13 +1,19 @@
 package io.pockethive.scenarios;
 
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+
+import io.pockethive.auth.client.AuthServiceClient;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -19,6 +25,8 @@ import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.when;
 
 @SpringBootTest(
     webEnvironment = SpringBootTest.WebEnvironment.DEFINED_PORT,
@@ -38,9 +46,23 @@ class ScenarioControllerSmokeTest {
     @Autowired
     TestRestTemplate rest;
 
+    @MockBean
+    AuthServiceClient authServiceClient;
+
+    @BeforeEach
+    void setUpAuth() {
+        when(authServiceClient.resolve(anyString())).thenReturn(AuthTestUsers.viewer());
+    }
+
     @Test
     void servesScenariosOnExposedPort() {
-        ResponseEntity<String> resp = rest.getForEntity("http://localhost:" + PORT + "/scenarios", String.class);
+        HttpHeaders headers = new HttpHeaders();
+        headers.set(HttpHeaders.AUTHORIZATION, AuthTestUsers.TEST_BEARER);
+        ResponseEntity<String> resp = rest.exchange(
+            "http://localhost:" + PORT + "/scenarios",
+            org.springframework.http.HttpMethod.GET,
+            new HttpEntity<>(headers),
+            String.class);
         assertThat(resp.getStatusCode().is2xxSuccessful()).isTrue();
         assertThat(resp.getBody()).contains("[]");
     }

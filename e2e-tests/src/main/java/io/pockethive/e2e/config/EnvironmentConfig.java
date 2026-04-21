@@ -22,6 +22,9 @@ public final class EnvironmentConfig {
   public static final String UI_WEBSOCKET_URI = "UI_WEBSOCKET_URI";
   public static final String UI_BASE_URL = "UI_BASE_URL";
   public static final String NETWORK_PROXY_MANAGER_BASE_URL = "NETWORK_PROXY_MANAGER_BASE_URL";
+  public static final String AUTH_SERVICE_BASE_URL = "AUTH_SERVICE_BASE_URL";
+  public static final String POCKETHIVE_AUTH_USERNAME = "POCKETHIVE_AUTH_USERNAME";
+  public static final String POCKETHIVE_AUTH_TOKEN = "POCKETHIVE_AUTH_TOKEN";
   public static final String SWARM_ID = "SWARM_ID";
   public static final String IDEMPOTENCY_KEY_PREFIX = "IDEMPOTENCY_KEY_PREFIX";
   public static final String CONTROL_PLANE_EXCHANGE = "POCKETHIVE_CONTROL_PLANE_EXCHANGE";
@@ -76,6 +79,7 @@ public final class EnvironmentConfig {
         requiredUri(ORCHESTRATOR_BASE_URL),
         requiredUri(SCENARIO_MANAGER_BASE_URL),
         requiredUri(NETWORK_PROXY_MANAGER_BASE_URL),
+        loadAuthSettings(),
         loadRabbitMqSettings(),
         env(UI_WEBSOCKET_URI).map(EnvironmentConfig::toUri),
         resolveUiBaseUrl(),
@@ -120,6 +124,15 @@ public final class EnvironmentConfig {
     return new RabbitMqSettings(host, port, username, password, virtualHost, managementBaseUrl);
   }
 
+  private static AuthSettings loadAuthSettings() {
+    URI authServiceBaseUrl = env(AUTH_SERVICE_BASE_URL)
+        .map(EnvironmentConfig::toUri)
+        .orElseGet(() -> httpUri("localhost", 1083, null));
+    String username = env(POCKETHIVE_AUTH_USERNAME).orElse("local-admin");
+    Optional<String> accessToken = env(POCKETHIVE_AUTH_TOKEN);
+    return new AuthSettings(authServiceBaseUrl, username, accessToken);
+  }
+
   private static int parsePort(String value, String field) {
     try {
       return Integer.parseInt(value);
@@ -149,6 +162,7 @@ public final class EnvironmentConfig {
       URI orchestratorBaseUrl,
       URI scenarioManagerBaseUrl,
       URI networkProxyManagerBaseUrl,
+      AuthSettings auth,
       RabbitMqSettings rabbitMq,
       Optional<URI> uiWebsocketUri,
       Optional<URI> uiBaseUrl,
@@ -166,6 +180,9 @@ public final class EnvironmentConfig {
           Map.entry("orchestratorBaseUrl", orchestratorBaseUrl.toString()),
           Map.entry("scenarioManagerBaseUrl", scenarioManagerBaseUrl.toString()),
           Map.entry("networkProxyManagerBaseUrl", networkProxyManagerBaseUrl.toString()),
+          Map.entry("authServiceBaseUrl", auth.authServiceBaseUrl().toString()),
+          Map.entry("authUsername", auth.username()),
+          Map.entry("authTokenConfigured", Boolean.toString(auth.accessToken().isPresent())),
           Map.entry("rabbitMqHost", rabbitMq.host()),
           Map.entry("rabbitMqPort", Integer.toString(rabbitMq.port())),
           Map.entry("rabbitMqUsername", rabbitMq.username()),
@@ -178,6 +195,24 @@ public final class EnvironmentConfig {
           Map.entry("controlPlaneExchange", controlPlane.exchange()),
           Map.entry("controlQueuePrefix", controlPlane.controlQueuePrefix())
       );
+    }
+  }
+
+  public record AuthSettings(URI authServiceBaseUrl,
+                             String username,
+                             Optional<String> accessToken) {
+
+    public AuthSettings {
+      authServiceBaseUrl = Objects.requireNonNull(authServiceBaseUrl, "Auth service base URL must not be null");
+      username = requireNonBlank(username, "Auth username");
+      accessToken = accessToken == null ? Optional.empty() : accessToken.filter(token -> !token.isBlank());
+    }
+
+    private static String requireNonBlank(String value, String field) {
+      if (value == null || value.isBlank()) {
+        throw new IllegalStateException(field + " must not be blank");
+      }
+      return value;
     }
   }
 
