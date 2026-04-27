@@ -1,11 +1,13 @@
 package io.pockethive.worker.sdk.api;
 
+import io.pockethive.swarm.model.ResultRules;
 import java.util.Map;
 import java.util.Objects;
 
 public record TcpRequestEnvelope(
     String kind,
-    TcpRequest request
+    TcpRequest request,
+    ResultRules resultRules
 ) {
     public static final String KIND = "tcp.request";
 
@@ -17,7 +19,11 @@ public record TcpRequestEnvelope(
     }
 
     public static TcpRequestEnvelope of(TcpRequest request) {
-        return new TcpRequestEnvelope(KIND, request);
+        return new TcpRequestEnvelope(KIND, request, null);
+    }
+
+    public static TcpRequestEnvelope of(TcpRequest request, ResultRules resultRules) {
+        return new TcpRequestEnvelope(KIND, request, resultRules);
     }
 
     public record TcpRequest(

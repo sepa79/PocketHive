@@ -121,8 +121,26 @@ public class ScenarioController {
         }
     }
 
+    @PostMapping(value = "/bundles/move", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<Void> moveBundleToFolder(@RequestBody BundleMoveRequest request) throws IOException {
+        String bundleKey = request != null ? request.bundleKey() : null;
+        String path = request != null ? request.path() : null;
+        log.info("[REST] POST /scenarios/bundles/move bundleKey={} path={}", bundleKey, path);
+        try {
+            service.moveBundleToFolder(bundleKey, path);
+            log.info("[REST] POST /scenarios/bundles/move -> status=204 bundleKey={}", bundleKey);
+            return ResponseEntity.noContent().build();
+        } catch (IllegalArgumentException e) {
+            log.warn("[REST] POST /scenarios/bundles/move -> status=400 bundleKey={} {}", bundleKey, e.getMessage());
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        }
+    }
+
     @GetMapping(value = "/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
     public Scenario one(@PathVariable("id") String id) {
+        // NOTE: This endpoint still resolves by raw scenario id via service.find(id).
+        // That means direct callers can currently fetch defunct scenarios even though
+        // UI create flows are expected to preflight against /api/templates first.
         log.info("[REST] GET /scenarios/{}", id);
         Scenario scenario = service.find(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         log.info("[REST] GET /scenarios/{} -> status=200 scenario={}", id, safeJson(scenarioSummary(scenario)));
@@ -148,6 +166,19 @@ public class ScenarioController {
         service.delete(id);
         log.info("[REST] DELETE /scenarios/{} -> status=204", id);
         return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/bundles")
+    public ResponseEntity<Void> deleteBundle(@RequestParam("bundleKey") String bundleKey) throws IOException {
+        log.info("[REST] DELETE /scenarios/bundles bundleKey={}", bundleKey);
+        try {
+            service.deleteBundle(bundleKey);
+            log.info("[REST] DELETE /scenarios/bundles -> status=204 bundleKey={}", bundleKey);
+            return ResponseEntity.noContent().build();
+        } catch (IllegalArgumentException e) {
+            log.warn("[REST] DELETE /scenarios/bundles -> status=400 bundleKey={} {}", bundleKey, e.getMessage());
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        }
     }
 
     @PostMapping("/reload")
@@ -479,6 +510,24 @@ public class ScenarioController {
         return new ResponseEntity<>(bytes, headers, HttpStatus.OK);
     }
 
+    @GetMapping(value = "/bundles/download", produces = "application/zip")
+    public ResponseEntity<byte[]> downloadBundleByKey(@RequestParam("bundleKey") String bundleKey) throws IOException {
+        log.info("[REST] GET /scenarios/bundles/download bundleKey={}", bundleKey);
+        try {
+            ScenarioService.BundleDownload bundle = service.downloadBundle(bundleKey);
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
+            headers.setContentLength(bundle.bytes().length);
+            headers.setContentDispositionFormData("attachment", bundle.fileName());
+            log.info("[REST] GET /scenarios/bundles/download -> status=200 size={} filename={}",
+                    bundle.bytes().length, bundle.fileName());
+            return new ResponseEntity<>(bundle.bytes(), headers, HttpStatus.OK);
+        } catch (IllegalArgumentException e) {
+            log.warn("[REST] GET /scenarios/bundles/download -> status=400 bundleKey={} {}", bundleKey, e.getMessage());
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        }
+    }
+
     @PostMapping(
             value = "/bundles",
             consumes = "application/zip",
@@ -514,6 +563,10 @@ public class ScenarioController {
     @PostMapping(value = "/{id}/runtime", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<ScenarioRuntimeResponse> prepareRuntime(@PathVariable("id") String id,
                                                                   @RequestBody RuntimeRequest request) throws IOException {
+        // NOTE: This path is part of the direct orchestrator create flow and still uses
+        // service.find(id), so a direct caller can currently prepare runtime for a defunct
+        // scenario. Agents/tools must verify the selected entry through /api/templates
+        // before calling Orchestrator create or this endpoint.
         String swarmId = request != null ? request.swarmId() : null;
         log.info("[REST] POST /scenarios/{}/runtime swarmId={}", id, swarmId);
         Scenario scenario = service.find(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
@@ -566,5 +619,8 @@ public class ScenarioController {
     }
 
     public record FolderRequest(String path) {
+    }
+
+    public record BundleMoveRequest(String bundleKey, String path) {
     }
 }

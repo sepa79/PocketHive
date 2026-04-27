@@ -190,6 +190,119 @@ class ScenarioServiceTest {
     }
 
     @Test
+    void malformedBundleIsReturnedInBundleCatalogAsDefunct() throws IOException {
+        writeManifest("ctrl", "ctrl-image");
+        capabilities.reload();
+
+        Path brokenBundle = Files.createDirectories(scenariosDir.resolve("broken-bundle"));
+        Files.writeString(brokenBundle.resolve("scenario.yaml"), "id: [not valid yaml");
+
+        Path healthyBundle = Files.createDirectories(scenariosDir.resolve("healthy-bundle"));
+        Files.writeString(healthyBundle.resolve("scenario.yaml"), """
+                id: healthy-bundle
+                name: Healthy Bundle
+                template:
+                  image: ctrl-image:latest
+                  bees: []
+                """);
+
+        service.reload();
+
+        assertThat(service.listBundleTemplates())
+                .extracting(ScenarioService.BundleTemplateSummary::bundlePath)
+                .contains("broken-bundle", "healthy-bundle");
+        assertThat(service.listBundleTemplates())
+                .filteredOn(entry -> "broken-bundle".equals(entry.bundlePath()))
+                .singleElement()
+                .satisfies(entry -> {
+                    assertThat(entry.id()).isNull();
+                    assertThat(entry.defunct()).isTrue();
+                    assertThat(entry.defunctReason()).contains("Could not read scenario file");
+                });
+        assertThat(service.listAvailableSummaries())
+                .extracting(ScenarioSummary::id)
+                .containsExactly("healthy-bundle");
+    }
+
+    @Test
+    void duplicateScenarioIdsMarkBothBundlesDefunctInBundleCatalog() throws IOException {
+        writeManifest("ctrl", "ctrl-image");
+        capabilities.reload();
+
+        Path firstBundle = Files.createDirectories(scenariosDir.resolve("folder-a").resolve("dup"));
+        Files.writeString(firstBundle.resolve("scenario.yaml"), """
+                id: dup
+                name: Dup A
+                template:
+                  image: ctrl-image:latest
+                  bees: []
+                """);
+
+        Path secondBundle = Files.createDirectories(scenariosDir.resolve("folder-b").resolve("dup"));
+        Files.writeString(secondBundle.resolve("scenario.yaml"), """
+                id: dup
+                name: Dup B
+                template:
+                  image: ctrl-image:latest
+                  bees: []
+                """);
+
+        service.reload();
+
+        assertThat(service.listBundleTemplates())
+                .filteredOn(entry -> "dup".equals(entry.id()))
+                .hasSize(2)
+                .allSatisfy(entry -> {
+                    assertThat(entry.defunct()).isTrue();
+                    assertThat(entry.defunctReason()).contains("Duplicate scenario id 'dup'");
+                });
+        assertThat(service.find("dup")).isEmpty();
+        assertThat(service.findAvailable("dup")).isEmpty();
+    }
+
+    @Test
+    void quarantineIgnoresDuplicateIdsForActiveBundlesButKeepsQuarantinedEntryDefunct() throws IOException {
+        writeManifest("ctrl", "ctrl-image");
+        capabilities.reload();
+
+        Path activeBundle = Files.createDirectories(scenariosDir.resolve("active-dup"));
+        Files.writeString(activeBundle.resolve("scenario.yaml"), """
+                id: dup
+                name: Active Dup
+                template:
+                  image: ctrl-image:latest
+                  bees: []
+                """);
+
+        Path quarantinedBundle = Files.createDirectories(scenariosDir.resolve("quarantine").resolve("dup-copy"));
+        Files.writeString(quarantinedBundle.resolve("scenario.yaml"), """
+                id: dup
+                name: Quarantined Dup
+                template:
+                  image: ctrl-image:latest
+                  bees: []
+                """);
+
+        service.reload();
+
+        assertThat(service.findAvailable("dup")).isPresent();
+        assertThat(service.listBundleTemplates())
+                .filteredOn(entry -> "active-dup".equals(entry.bundlePath()))
+                .singleElement()
+                .satisfies(entry -> {
+                    assertThat(entry.defunct()).isFalse();
+                    assertThat(entry.defunctReason()).isNull();
+                });
+        assertThat(service.listBundleTemplates())
+                .filteredOn(entry -> "quarantine/dup-copy".equals(entry.bundlePath()))
+                .singleElement()
+                .satisfies(entry -> {
+                    assertThat(entry.defunct()).isTrue();
+                    assertThat(entry.defunctReason()).contains("quarantined");
+                });
+    }
+
+    @Test
     void loadsTrafficPolicyWhenPresent() throws IOException {
         writeManifest("ctrl", "ctrl-image");
         writeManifest("worker", "worker-image");

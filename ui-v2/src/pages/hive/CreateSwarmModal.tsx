@@ -7,12 +7,16 @@ type BeeSummary = {
 }
 
 type ScenarioTemplate = {
-  id: string
+  bundleKey: string
+  bundlePath: string
+  id: string | null
   name: string
   folderPath: string | null
   description: string | null
   controllerImage: string | null
   bees: BeeSummary[]
+  defunct: boolean
+  defunctReason: string | null
 }
 
 type VariablesProfile = {
@@ -70,9 +74,11 @@ function normalizeTemplates(data: unknown): ScenarioTemplate[] {
     .map((entry) => {
       if (!entry || typeof entry !== 'object') return null
       const value = entry as Record<string, unknown>
-      const id = typeof value.id === 'string' ? value.id.trim() : ''
+      const bundleKey = typeof value.bundleKey === 'string' ? value.bundleKey.trim() : ''
+      const bundlePath = typeof value.bundlePath === 'string' ? value.bundlePath.trim() : ''
       const name = typeof value.name === 'string' ? value.name.trim() : ''
-      if (!id || !name) return null
+      if (!bundleKey || !bundlePath || !name) return null
+      const id = typeof value.id === 'string' && value.id.trim().length > 0 ? value.id.trim() : null
       const folderPath =
         typeof value.folderPath === 'string' && value.folderPath.trim().length > 0 ? value.folderPath.trim() : null
       const description =
@@ -92,7 +98,10 @@ function normalizeTemplates(data: unknown): ScenarioTemplate[] {
             })
             .filter((bee): bee is BeeSummary => bee !== null)
         : []
-      return { id, name, folderPath, description, controllerImage, bees }
+      const defunct = value.defunct === true
+      const defunctReason =
+        typeof value.defunctReason === 'string' && value.defunctReason.trim().length > 0 ? value.defunctReason.trim() : null
+      return { bundleKey, bundlePath, id, name, folderPath, description, controllerImage, bees, defunct, defunctReason }
     })
     .filter((template): template is ScenarioTemplate => template !== null)
 }
@@ -106,7 +115,7 @@ type TemplateFolderNode = {
 
 function templateMatchesNeedle(template: ScenarioTemplate, needle: string): boolean {
   if (!needle) return true
-  const haystack = `${template.folderPath ?? ''} ${template.id} ${template.name} ${template.description ?? ''}`.toLowerCase()
+  const haystack = `${template.folderPath ?? ''} ${template.bundlePath} ${template.id ?? ''} ${template.name} ${template.description ?? ''}`.toLowerCase()
   return haystack.includes(needle)
 }
 
@@ -209,7 +218,7 @@ export function CreateSwarmModal({
   const [templates, setTemplates] = useState<ScenarioTemplate[]>([])
   const [templatesLoaded, setTemplatesLoaded] = useState(false)
   const [templateFilter, setTemplateFilter] = useState('')
-  const [templateId, setTemplateId] = useState('')
+  const [selectedBundleKey, setSelectedBundleKey] = useState('')
   const [swarmId, setSwarmId] = useState('')
   const [autoPullImages, setAutoPullImages] = useState(false)
 
@@ -291,7 +300,15 @@ export function CreateSwarmModal({
 
   useEffect(() => {
     if (!open) return
-    if (!templateId) {
+    if (!selectedBundleKey) {
+      setSutIds([])
+      setSutId('')
+      setVariablesMeta({ exists: false, hasGlobalVars: false, hasSutVars: false, profiles: [] })
+      setVariablesProfileId('')
+      return
+    }
+    const selectedTemplate = templates.find((template) => template.bundleKey === selectedBundleKey) ?? null
+    if (!selectedTemplate?.id || selectedTemplate.defunct) {
       setSutIds([])
       setSutId('')
       setVariablesMeta({ exists: false, hasGlobalVars: false, hasSutVars: false, profiles: [] })
@@ -307,10 +324,11 @@ export function CreateSwarmModal({
     setVariablesProfileId('')
 
     const controller = new AbortController()
+    const scenarioId = selectedTemplate.id
 
     const loadSuts = async () => {
       try {
-        const response = await fetch(`/scenario-manager/scenarios/${encodeURIComponent(templateId)}/suts`, {
+        const response = await fetch(`/scenario-manager/scenarios/${encodeURIComponent(scenarioId)}/suts`, {
           headers: { Accept: 'application/json' },
           signal: controller.signal,
         })
@@ -337,7 +355,7 @@ export function CreateSwarmModal({
 
     const loadVariables = async () => {
       try {
-        const response = await fetch(`/scenario-manager/scenarios/${encodeURIComponent(templateId)}/variables`, {
+        const response = await fetch(`/scenario-manager/scenarios/${encodeURIComponent(scenarioId)}/variables`, {
           headers: { Accept: 'text/plain' },
           signal: controller.signal,
         })
@@ -364,7 +382,7 @@ export function CreateSwarmModal({
     void loadVariables()
 
     return () => controller.abort()
-  }, [open, templateId])
+  }, [open, selectedBundleKey, templates])
 
   const filteredTemplates = useMemo(() => {
     const needle = templateFilter.trim().toLowerCase()
@@ -372,7 +390,10 @@ export function CreateSwarmModal({
     return templates.filter((template) => templateMatchesNeedle(template, needle))
   }, [templateFilter, templates])
 
-  const selectedTemplate = useMemo(() => templates.find((template) => template.id === templateId) ?? null, [templateId, templates])
+  const selectedTemplate = useMemo(
+    () => templates.find((template) => template.bundleKey === selectedBundleKey) ?? null,
+    [selectedBundleKey, templates],
+  )
 
   const hasAnyFolder = useMemo(() => templates.some((template) => Boolean(template.folderPath)), [templates])
 
@@ -398,17 +419,24 @@ export function CreateSwarmModal({
 
   const renderTemplateButton = (template: ScenarioTemplate) => (
     <button
-      key={template.id}
+      key={template.bundleKey}
       type="button"
-      className={template.id === templateId ? 'swarmTemplateItem swarmTemplateItemSelected' : 'swarmTemplateItem'}
-      onClick={() => setTemplateId(template.id)}
+      className={template.bundleKey === selectedBundleKey ? 'swarmTemplateItem swarmTemplateItemSelected' : 'swarmTemplateItem'}
+      onClick={() => setSelectedBundleKey(template.bundleKey)}
       aria-label={template.name}
+      title={template.defunct ? (template.defunctReason ?? 'This bundle is defunct') : undefined}
+      style={template.defunct ? { opacity: 0.55 } : undefined}
     >
-      <div className="swarmTemplateTitle">{template.name}</div>
-      <div className="swarmTemplateId">
-        {template.folderPath ? `${template.folderPath}/${template.id}` : template.id}
+      <div className="row between">
+        <div className="swarmTemplateTitle">{template.name}</div>
+        {template.defunct ? <span className="pill pillBad" style={{ fontSize: 10 }}>DEFUNCT</span> : null}
       </div>
-      <div className="swarmTemplateDesc">{template.description ?? 'No description'}</div>
+      <div className="swarmTemplateId">
+        {template.bundlePath}
+      </div>
+      <div className="swarmTemplateDesc">
+        {template.defunct ? (template.defunctReason ?? 'This bundle is unavailable') : (template.description ?? 'No description')}
+      </div>
     </button>
   )
 
@@ -435,11 +463,20 @@ export function CreateSwarmModal({
       setMessage(null)
 
       const trimmedSwarmId = swarmId.trim()
-      const trimmedTemplateId = templateId.trim()
+      const selectedTemplate = templates.find((template) => template.bundleKey === selectedBundleKey) ?? null
+      const trimmedTemplateId = selectedTemplate?.id?.trim() ?? ''
       const trimmedSutId = sutId.trim()
       const trimmedProfileId = variablesProfileId.trim()
       const trimmedNetworkProfileId = networkProfileId.trim()
 
+      if (!selectedTemplate) {
+        setError('Swarm ID and template are required.')
+        return
+      }
+      if (selectedTemplate.defunct) {
+        setError(selectedTemplate.defunctReason ?? 'Selected bundle is defunct.')
+        return
+      }
       if (!trimmedSwarmId || !trimmedTemplateId) {
         setError('Swarm ID and template are required.')
         return
@@ -483,7 +520,7 @@ export function CreateSwarmModal({
         }
         setMessage(`Create request accepted for ${trimmedSwarmId}.`)
         setSwarmId('')
-        setTemplateId('')
+        setSelectedBundleKey('')
         setTemplateFilter('')
         setAutoPullImages(false)
         setSutIds([])
@@ -500,7 +537,7 @@ export function CreateSwarmModal({
         setBusy(false)
       }
     },
-    [autoPullImages, busy, networkMode, networkProfileId, networkProfiles.length, onClose, onCreated, requiresProfile, requiresSut, swarmId, sutId, templateId, variablesProfileId],
+    [autoPullImages, busy, networkMode, networkProfileId, networkProfiles.length, onClose, onCreated, requiresProfile, requiresSut, selectedBundleKey, swarmId, sutId, templates, variablesProfileId],
   )
 
   if (!open) return null
@@ -628,6 +665,11 @@ export function CreateSwarmModal({
                   <div className="muted">No templates found.</div>
                 ) : (
                   <>
+                    {templates.some((template) => template.defunct) ? (
+                      <div className="muted" style={{ fontSize: 11, padding: '4px 0' }}>
+                        {templates.filter((template) => template.defunct).length} bundle(s) are defunct and shown as non-runnable
+                      </div>
+                    ) : null}
                     {hasAnyFolder ? (
                       <div>
                         {tree.folders.map((folder) => renderFolderNode(folder))}
@@ -652,9 +694,19 @@ export function CreateSwarmModal({
                 <>
                   <div className="swarmTemplateTitle">{selectedTemplate.name}</div>
                   <div className="swarmTemplateId">
-                    {selectedTemplate.folderPath ? `${selectedTemplate.folderPath}/${selectedTemplate.id}` : selectedTemplate.id}
+                    {selectedTemplate.bundlePath}
                   </div>
-                  <div className="muted">{selectedTemplate.description ?? 'No description provided.'}</div>
+                  <div className="muted">
+                    {selectedTemplate.defunct
+                      ? (selectedTemplate.defunctReason ?? 'This bundle is unavailable.')
+                      : (selectedTemplate.description ?? 'No description provided.')}
+                  </div>
+                  {selectedTemplate.defunct ? (
+                    <div className="card swarmMessage" style={{ marginTop: 12 }}>
+                      <div className="pill pillBad">DEFUNCT</div>
+                      <div className="muted" style={{ marginTop: 8 }}>{selectedTemplate.defunctReason ?? 'Reason unavailable.'}</div>
+                    </div>
+                  ) : null}
                   <div className="swarmTemplateMeta">
                     <div>
                       <span className="fieldLabel">Controller image</span>

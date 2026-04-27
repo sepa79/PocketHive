@@ -10,12 +10,16 @@ interface Props {
 }
 
 interface ScenarioTemplate {
-  id: string
+  bundleKey: string
+  bundlePath: string
+  id: string | null
   name: string
   folderPath: string | null
   description: string | null
   controllerImage: string | null
   bees: ScenarioBee[]
+  defunct: boolean
+  defunctReason: string | null
 }
 
 interface ScenarioBee {
@@ -37,7 +41,8 @@ type TemplateFolderNode = {
 
 function templateMatchesNeedle(template: ScenarioTemplate, needle: string): boolean {
   if (!needle) return true
-  const haystack = `${template.folderPath ?? ''} ${template.id} ${template.name} ${template.description ?? ''}`.toLowerCase()
+  const haystack =
+    `${template.folderPath ?? ''} ${template.bundlePath} ${template.id ?? ''} ${template.name} ${template.description ?? ''}`.toLowerCase()
   return haystack.includes(needle)
 }
 
@@ -98,7 +103,7 @@ export default function SwarmCreateModal({ onClose, autoPullOnStart, onChangeAut
   const [swarmId, setSwarmId] = useState('')
   const [templates, setTemplates] = useState<ScenarioTemplate[]>([])
   const [templateFilter, setTemplateFilter] = useState('')
-  const [scenarioId, setScenarioId] = useState('')
+  const [selectedBundleKey, setSelectedBundleKey] = useState('')
   const [bundleSuts, setBundleSuts] = useState<string[]>([])
   const [sutId, setSutId] = useState<string>('')
   const [networkProfiles, setNetworkProfiles] = useState<NetworkProfileOption[]>([])
@@ -186,7 +191,17 @@ export default function SwarmCreateModal({ onClose, autoPullOnStart, onChangeAut
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!swarmId.trim() || !scenarioId) {
+    const selectedTemplate = templates.find((template) => template.bundleKey === selectedBundleKey) ?? null
+    const selectedScenarioId = selectedTemplate?.id?.trim() ?? ''
+    if (!selectedTemplate) {
+      setMessage('Swarm ID and scenario required')
+      return
+    }
+    if (selectedTemplate.defunct) {
+      setMessage(selectedTemplate.defunctReason ?? 'Selected scenario is defunct')
+      return
+    }
+    if (!swarmId.trim() || !selectedScenarioId) {
       setMessage('Swarm ID and scenario required')
       return
     }
@@ -211,7 +226,7 @@ export default function SwarmCreateModal({ onClose, autoPullOnStart, onChangeAut
       return
     }
     try {
-      await createSwarm(swarmId.trim(), scenarioId, {
+      await createSwarm(swarmId.trim(), selectedScenarioId, {
         autoPullImages: autoPullOnStart,
         sutId: sutId || null,
         variablesProfileId: variablesProfileId || null,
@@ -220,7 +235,7 @@ export default function SwarmCreateModal({ onClose, autoPullOnStart, onChangeAut
       })
       setMessage('Swarm created')
       setSwarmId('')
-      setScenarioId('')
+      setSelectedBundleKey('')
       setSutId('')
       setNetworkMode('DIRECT')
       setNetworkProfileId('')
@@ -236,8 +251,8 @@ export default function SwarmCreateModal({ onClose, autoPullOnStart, onChangeAut
   }
 
   const selectedTemplate = useMemo(
-    () => templates.find((template) => template.id === scenarioId) ?? null,
-    [templates, scenarioId],
+    () => templates.find((template) => template.bundleKey === selectedBundleKey) ?? null,
+    [templates, selectedBundleKey],
   )
 
   const filteredTemplates = useMemo(() => {
@@ -277,7 +292,7 @@ export default function SwarmCreateModal({ onClose, autoPullOnStart, onChangeAut
     setVariablesRequireSut(false)
 
     const loadScenario = async () => {
-      if (!selectedTemplate) {
+      if (!selectedTemplate?.id || selectedTemplate.defunct) {
         return
       }
       setShowRawScenario(false)
@@ -347,20 +362,30 @@ export default function SwarmCreateModal({ onClose, autoPullOnStart, onChangeAut
   }, [selectedTemplate])
 
   const renderTemplateButton = (template: ScenarioTemplate) => {
-    const selected = template.id === scenarioId
+    const selected = template.bundleKey === selectedBundleKey
     return (
       <button
-        key={template.id}
+        key={template.bundleKey}
         type="button"
-        onClick={() => setScenarioId(template.id)}
+        onClick={() => setSelectedBundleKey(template.bundleKey)}
         aria-label={template.name}
-        className={`w-full text-left px-3 py-2 hover:bg-white/10 ${selected ? 'bg-white/15 text-white' : 'text-white/80'}`}
+        title={template.defunct ? (template.defunctReason ?? 'This bundle is defunct') : undefined}
+        className={`w-full text-left px-3 py-2 hover:bg-white/10 ${template.defunct ? 'opacity-60' : ''} ${selected ? 'bg-white/15 text-white' : 'text-white/80'}`}
       >
-        <div className="font-medium leading-snug break-words">{template.name}</div>
-        <div className="text-[10px] text-white/50 break-words">
-          {template.folderPath ? `${template.folderPath}/${template.id}` : template.id}
+        <div className="flex items-center justify-between gap-2">
+          <div className="font-medium leading-snug break-words">{template.name}</div>
+          {template.defunct && (
+            <span className="rounded border border-red-500/50 bg-red-500/15 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-red-200">
+              DEFUNCT
+            </span>
+          )}
         </div>
-        {template.description && <div className="text-[11px] text-white/50 line-clamp-2">{template.description}</div>}
+        <div className="text-[10px] text-white/50 break-words">
+          {template.bundlePath}
+        </div>
+        <div className={`text-[11px] line-clamp-2 ${template.defunct ? 'text-red-200/80' : 'text-white/50'}`}>
+          {template.defunct ? (template.defunctReason ?? 'This bundle is unavailable') : (template.description ?? 'No description')}
+        </div>
       </button>
     )
   }
@@ -376,7 +401,7 @@ export default function SwarmCreateModal({ onClose, autoPullOnStart, onChangeAut
         <div className="pl-3">
           {node.children.map((child) => renderFolderNode(child))}
           {node.templates.map((template) => (
-            <div key={template.id}>{renderTemplateButton(template)}</div>
+            <div key={template.bundleKey}>{renderTemplateButton(template)}</div>
           ))}
         </div>
       </details>
@@ -539,7 +564,7 @@ export default function SwarmCreateModal({ onClose, autoPullOnStart, onChangeAut
                         </summary>
                         <div className="pl-3">
                           {tree.rootTemplates.map((template) => (
-                            <div key={template.id}>{renderTemplateButton(template)}</div>
+                            <div key={template.bundleKey}>{renderTemplateButton(template)}</div>
                           ))}
                         </div>
                       </details>
@@ -549,7 +574,7 @@ export default function SwarmCreateModal({ onClose, autoPullOnStart, onChangeAut
                   <ul className="text-sm">
                     {filteredTemplates.map((template) => {
                       return (
-                        <li key={template.id}>
+                        <li key={template.bundleKey}>
                           {renderTemplateButton(template)}
                         </li>
                       )
@@ -570,12 +595,23 @@ export default function SwarmCreateModal({ onClose, autoPullOnStart, onChangeAut
                     <div className="text-xs uppercase tracking-wide text-white/50 mb-1">
                       Scenario
                     </div>
-                    <div className="text-base font-semibold text-white leading-snug">
-                      {selectedTemplate.name}
+                    <div className="flex items-center gap-2 text-base font-semibold text-white leading-snug">
+                      <span>{selectedTemplate.name}</span>
+                      {selectedTemplate.defunct && (
+                        <span className="rounded border border-red-500/50 bg-red-500/15 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-red-200">
+                          DEFUNCT
+                        </span>
+                      )}
                     </div>
                   </div>
+                  <div className="text-[11px] text-white/50 break-words">{selectedTemplate.bundlePath}</div>
                   {selectedTemplate.description && (
                     <p className="text-white/70 text-sm">{selectedTemplate.description}</p>
+                  )}
+                  {selectedTemplate.defunct && (
+                    <div className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-[11px] text-red-100">
+                      {selectedTemplate.defunctReason ?? 'This bundle is unavailable.'}
+                    </div>
                   )}
                   <div className="space-y-3">
                     <div>
@@ -604,7 +640,7 @@ export default function SwarmCreateModal({ onClose, autoPullOnStart, onChangeAut
                         type="button"
                         className="text-[11px] text-blue-300 hover:text-blue-200 underline-offset-2 underline"
                         onClick={() => setShowRawScenario((prev) => !prev)}
-                        disabled={!scenarioPreview && !scenarioPreviewError}
+                        disabled={selectedTemplate.defunct || (!scenarioPreview && !scenarioPreviewError)}
                       >
                         {showRawScenario ? 'Hide raw scenario definition' : 'Show raw scenario definition'}
                       </button>
@@ -664,24 +700,30 @@ function normalizeTemplates(data: unknown): ScenarioTemplate[] {
 function normalizeTemplate(entry: unknown): ScenarioTemplate | null {
   if (!entry || typeof entry !== 'object') return null
   const value = entry as Record<string, unknown>
-  const id = typeof value.id === 'string' ? value.id : null
-  const name = typeof value.name === 'string' ? value.name : null
-  if (!id || !name) return null
+  const bundleKey = typeof value.bundleKey === 'string' ? value.bundleKey.trim() : ''
+  const bundlePath = typeof value.bundlePath === 'string' ? value.bundlePath.trim() : ''
+  const name = typeof value.name === 'string' ? value.name.trim() : ''
+  if (!bundleKey || !bundlePath || !name) return null
+  const id = typeof value.id === 'string' && value.id.trim().length > 0 ? value.id.trim() : null
 
   const folderPath =
     typeof value.folderPath === 'string' && value.folderPath.trim().length > 0 ? value.folderPath.trim() : null
-  const description = typeof value.description === 'string' ? value.description : null
+  const description =
+    typeof value.description === 'string' && value.description.trim().length > 0 ? value.description.trim() : null
   const controllerImage =
     typeof value.controllerImage === 'string' && value.controllerImage.trim().length > 0
       ? value.controllerImage.trim()
       : null
+  const defunct = value.defunct === true
+  const defunctReason =
+    typeof value.defunctReason === 'string' && value.defunctReason.trim().length > 0 ? value.defunctReason.trim() : null
   const bees: ScenarioBee[] = Array.isArray(value.bees)
     ? value.bees
         .map((bee) => normalizeBee(bee))
         .filter((bee): bee is ScenarioBee => bee !== null)
     : []
 
-  return { id, name, folderPath, description, controllerImage, bees }
+  return { bundleKey, bundlePath, id, name, folderPath, description, controllerImage, bees, defunct, defunctReason }
 }
 
 function normalizeBee(entry: unknown): ScenarioBee | null {

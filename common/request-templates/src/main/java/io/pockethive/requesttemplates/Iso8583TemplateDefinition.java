@@ -1,6 +1,7 @@
 package io.pockethive.requesttemplates;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import io.pockethive.swarm.model.ResultRules;
 import java.util.Map;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -13,7 +14,8 @@ public record Iso8583TemplateDefinition(
     String bodyTemplate,
     Map<String, String> headersTemplate,
     IsoSchemaRef schemaRef,
-    Map<String, Object> auth
+    Map<String, Object> auth,
+    ResultRules resultRules
 ) implements TemplateDefinition {
 
   @JsonIgnoreProperties(ignoreUnknown = true)

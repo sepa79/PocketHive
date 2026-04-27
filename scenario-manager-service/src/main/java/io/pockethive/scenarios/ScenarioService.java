@@ -14,12 +14,14 @@ import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
+import java.util.zip.ZipOutputStream;
 import io.pockethive.swarm.model.SutEnvironment;
 
 @Service
@@ -29,6 +31,7 @@ public class ScenarioService {
     private static final Logger logger = LoggerFactory.getLogger(ScenarioService.class);
     private static final String SCENARIOS_RUNTIME_ROOT = "scenarios-runtime";
     private static final String DEFAULT_UPLOAD_FOLDER = "bundles";
+    private static final String QUARANTINE_FOLDER = "quarantine";
     private static final String UPLOAD_TEMP_PREFIX = "pockethive-scenario-upload-";
 
     private final Path storageDir;
@@ -40,6 +43,7 @@ public class ScenarioService {
     private final ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
     private final CapabilityCatalogueService capabilities;
     private final Map<String, ScenarioRecord> scenarios = new ConcurrentHashMap<>();
+    private volatile List<BundleCatalogEntry> bundleCatalog = List.of();
     private final String defaultImageTag;
     private final Object variablesLock = new Object();
 
@@ -87,6 +91,7 @@ public class ScenarioService {
 	            Files.createDirectories(this.testStorageDir);
 	        }
 	        Files.createDirectories(this.bundleRootDir);
+	        Files.createDirectories(this.bundleRootDir.resolve(QUARANTINE_FOLDER));
 	        Files.createDirectories(this.runtimeRootDir);
 	        this.capabilities = capabilities;
 	    }
@@ -96,27 +101,34 @@ public class ScenarioService {
         reload();
     }
 
-	    public synchronized void reload() throws IOException {
-	        Map<String, ScenarioRecord> loaded = new HashMap<>();
+    public synchronized void reload() throws IOException {
+        Files.createDirectories(bundleRootDir.resolve(QUARANTINE_FOLDER));
+        List<ScannedBundle> discovered = new ArrayList<>();
+        Set<Path> visitedDescriptors = new HashSet<>();
 
-	        loadFromDirectory(storageDir, loaded);
-	        if (showTestScenarios && Files.isDirectory(testStorageDir)) {
-	            loadFromDirectory(testStorageDir, loaded);
-	        }
-	        loadFromBundles(bundleRootDir, loaded);
-	        if (showTestScenarios && Files.isDirectory(testStorageDir)) {
-	            loadFromBundles(testStorageDir, loaded);
-	        }
+        loadFromDirectory(storageDir, discovered, visitedDescriptors);
+        if (showTestScenarios && Files.isDirectory(testStorageDir)) {
+            loadFromDirectory(testStorageDir, discovered, visitedDescriptors);
+        }
+        loadFromBundles(bundleRootDir, discovered, visitedDescriptors);
+        if (showTestScenarios && Files.isDirectory(testStorageDir)) {
+            loadFromBundles(testStorageDir, discovered, visitedDescriptors);
+        }
 
-	        scenarios.clear();
-	        scenarios.putAll(loaded);
+        List<BundleCatalogEntry> catalog = buildBundleCatalog(discovered);
+        Map<String, ScenarioRecord> loaded = buildScenarioIndex(catalog);
+
+        scenarios.clear();
+        scenarios.putAll(loaded);
+        bundleCatalog = catalog;
 
         long available = loaded.values().stream().filter(record -> !record.defunct()).count();
-        logger.info("Loaded {} scenario(s) from {}{} ({} available)",
+        logger.info("Loaded {} scenario(s) from {}{} ({} available, {} bundle entries)",
             loaded.size(),
             storageDir,
             (showTestScenarios ? " and " + testStorageDir : ""),
-            available);
+            available,
+            catalog.size());
     }
 
     public List<ScenarioSummary> list() {
@@ -146,6 +158,26 @@ public class ScenarioService {
                 .toList();
     }
 
+    public List<BundleTemplateSummary> listBundleTemplates() {
+        return bundleCatalog.stream()
+                .map(entry -> new BundleTemplateSummary(
+                        entry.bundleKey(),
+                        entry.bundlePath(),
+                        entry.folderPath(),
+                        entry.scenarioId(),
+                        entry.name(),
+                        entry.description(),
+                        entry.controllerImage(),
+                        entry.bees(),
+                        entry.defunct(),
+                        entry.defunctReason()))
+                .sorted(Comparator
+                        .comparing(BundleTemplateSummary::folderPath, Comparator.nullsFirst(String::compareTo))
+                        .thenComparing(BundleTemplateSummary::name)
+                        .thenComparing(BundleTemplateSummary::bundlePath))
+                .toList();
+    }
+
     public Optional<Scenario> find(String id) {
         ScenarioRecord record = scenarios.get(id);
         return Optional.ofNullable(record).map(ScenarioRecord::scenario);
@@ -166,52 +198,31 @@ public class ScenarioService {
 
     public Scenario create(Scenario scenario, Format format) throws IOException {
         Scenario resolved = applyDefaultImageTag(scenario);
-        boolean defunct = determineDefunct(resolved);
         String id = resolved.getId();
         Path bundleDir = bundleDir(id);
-        Path descriptor = descriptorFile(bundleDir, format);
-        ScenarioRecord record = new ScenarioRecord(resolved, format, defunct, descriptor, bundleDir, folderPath(bundleDir));
-
-        if (scenarios.putIfAbsent(id, record) != null) {
+        if (hasDiscoveredScenarioId(id)) {
             throw new IllegalArgumentException("Scenario already exists");
         }
 
-        try {
-            writeDescriptor(resolved, format, bundleDir);
-        } catch (IOException e) {
-            scenarios.remove(id, record);
-            throw e;
-        }
-
-        return record.scenario();
+        writeDescriptor(resolved, format, bundleDir);
+        reload();
+        ScenarioRecord record = scenarios.get(id);
+        return record != null ? record.scenario() : resolved;
     }
 
     public Scenario update(String id, Scenario scenario, Format format) throws IOException {
         scenario.setId(id);
         Scenario resolved = applyDefaultImageTag(scenario);
-        boolean defunct = determineDefunct(resolved);
         ScenarioRecord existing = scenarios.get(id);
         Path bundleDir = existing != null && existing.bundleDir() != null ? existing.bundleDir() : bundleDir(id);
-        Path descriptor = descriptorFile(bundleDir, format);
-        ScenarioRecord record = new ScenarioRecord(resolved, format, defunct, descriptor, bundleDir, folderPath(bundleDir));
-        ScenarioRecord previous = scenarios.put(id, record);
-
-        try {
-            writeDescriptor(resolved, format, bundleDir);
-        } catch (IOException e) {
-            if (previous == null) {
-                scenarios.remove(id, record);
-            } else {
-                scenarios.put(id, previous);
-            }
-            throw e;
-        }
-
-        return record.scenario();
+        writeDescriptor(resolved, format, bundleDir);
+        reload();
+        ScenarioRecord record = scenarios.get(id);
+        return record != null ? record.scenario() : resolved;
     }
 
     public void delete(String id) throws IOException {
-        ScenarioRecord removed = scenarios.remove(id);
+        ScenarioRecord removed = scenarios.get(id);
         if (removed == null) {
             return;
         }
@@ -219,12 +230,13 @@ public class ScenarioService {
         if (bundleDir != null && Files.isDirectory(bundleDir)) {
             clearDirectory(bundleDir);
             Files.deleteIfExists(bundleDir);
-            return;
-        }
-        Path descriptor = removed.descriptorFile();
-        if (descriptor != null) {
+        } else {
+            Path descriptor = removed.descriptorFile();
+            if (descriptor != null) {
             Files.deleteIfExists(descriptor);
+            }
         }
+        reload();
     }
 
 	    public synchronized List<String> listBundleFolders() throws IOException {
@@ -311,6 +323,94 @@ public class ScenarioService {
         reload();
     }
 
+    public synchronized void moveBundleToFolder(String bundleKey, String folderPath) throws IOException {
+        BundleCatalogEntry entry = bundleEntry(bundleKey);
+        Path targetParent = resolveBundleFolder(folderPath, true);
+        Set<Path> scenarioRoots = scenarioBundleRoots();
+        if (isUnderAnyScenarioRoot(targetParent, scenarioRoots)) {
+            throw new IllegalArgumentException("Target folder is inside a scenario bundle");
+        }
+        Files.createDirectories(targetParent);
+
+        Path currentDir = entry.bundleDir();
+        if (currentDir != null && Files.isDirectory(currentDir)) {
+            Path targetDir = targetParent.resolve(currentDir.getFileName()).toAbsolutePath().normalize();
+            if (targetDir.equals(currentDir.toAbsolutePath().normalize())) {
+                return;
+            }
+            if (Files.exists(targetDir)) {
+                throw new IllegalArgumentException("Target already exists");
+            }
+            Files.move(currentDir, targetDir);
+            reload();
+            return;
+        }
+
+        Path descriptor = entry.descriptorFile();
+        if (descriptor == null || !Files.isRegularFile(descriptor)) {
+            throw new IllegalArgumentException("Bundle '%s' has no descriptor file".formatted(bundleKey));
+        }
+        Path targetFile = targetParent.resolve(descriptor.getFileName()).toAbsolutePath().normalize();
+        if (targetFile.equals(descriptor.toAbsolutePath().normalize())) {
+            return;
+        }
+        if (Files.exists(targetFile)) {
+            throw new IllegalArgumentException("Target already exists");
+        }
+        Files.move(descriptor, targetFile);
+        reload();
+    }
+
+    public synchronized void deleteBundle(String bundleKey) throws IOException {
+        BundleCatalogEntry entry = bundleEntry(bundleKey);
+        Path bundleDir = entry.bundleDir();
+        if (bundleDir != null && Files.isDirectory(bundleDir)) {
+            clearDirectory(bundleDir);
+            Files.deleteIfExists(bundleDir);
+            reload();
+            return;
+        }
+        Path descriptor = entry.descriptorFile();
+        if (descriptor == null || !Files.isRegularFile(descriptor)) {
+            throw new IllegalArgumentException("Bundle '%s' not found".formatted(bundleKey));
+        }
+        Files.deleteIfExists(descriptor);
+        reload();
+    }
+
+    public synchronized BundleDownload downloadBundle(String bundleKey) throws IOException {
+        BundleCatalogEntry entry = bundleEntry(bundleKey);
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        Path bundleDir = entry.bundleDir();
+        if (bundleDir != null && Files.isDirectory(bundleDir)) {
+            try (ZipOutputStream zip = new ZipOutputStream(out);
+                 Stream<Path> paths = Files.walk(bundleDir)) {
+                for (Path path : (Iterable<Path>) paths::iterator) {
+                    if (Files.isDirectory(path)) {
+                        continue;
+                    }
+                    Path relative = bundleDir.relativize(path);
+                    String entryName = relative.toString().replace('\\', '/');
+                    zip.putNextEntry(new ZipEntry(entryName));
+                    Files.copy(path, zip);
+                    zip.closeEntry();
+                }
+            }
+        } else {
+            Path descriptor = entry.descriptorFile();
+            if (descriptor == null || !Files.isRegularFile(descriptor)) {
+                throw new IllegalArgumentException("Bundle '%s' not found".formatted(bundleKey));
+            }
+            try (ZipOutputStream zip = new ZipOutputStream(out)) {
+                String entryName = descriptor.getFileName() != null ? descriptor.getFileName().toString() : "scenario.yaml";
+                zip.putNextEntry(new ZipEntry(entryName));
+                Files.copy(descriptor, zip);
+                zip.closeEntry();
+            }
+        }
+        return new BundleDownload(out.toByteArray(), fallbackBundleName(entry.bundlePath()) + "-bundle.zip");
+    }
+
 	    private Path resolveBundleFolder(String folderPath, boolean allowRoot) {
 	        String trimmed = folderPath == null ? "" : folderPath.trim();
 	        if (trimmed.isEmpty()) {
@@ -345,13 +445,23 @@ public class ScenarioService {
 
     private Set<Path> scenarioBundleRoots() {
         Set<Path> roots = new LinkedHashSet<>();
-        for (ScenarioRecord record : scenarios.values()) {
-            Path dir = record.bundleDir();
+        for (BundleCatalogEntry entry : bundleCatalog) {
+            Path dir = entry.bundleDir();
             if (dir != null) {
                 roots.add(dir.toAbsolutePath().normalize());
             }
         }
         return roots;
+    }
+
+    private BundleCatalogEntry bundleEntry(String bundleKey) {
+        if (bundleKey == null || bundleKey.isBlank()) {
+            throw new IllegalArgumentException("bundleKey must not be blank");
+        }
+        return bundleCatalog.stream()
+                .filter(entry -> bundleKey.equals(entry.bundleKey()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Bundle '%s' not found".formatted(bundleKey)));
     }
 
 	    private boolean isUnderAnyScenarioRoot(Path path, Set<Path> scenarioRoots) {
@@ -382,34 +492,34 @@ public class ScenarioService {
 	        return runtimeRoot != null && runtimeRoot.startsWith(root) && normalized.startsWith(runtimeRoot);
 	    }
 
-    private boolean determineDefunct(Scenario scenario) {
+    private DefunctResult determineDefunct(Scenario scenario) {
         String scenarioId = scenario.getId();
-        if (scenarioId == null) {
-            return true;
+        if (scenarioId == null || scenarioId.isBlank()) {
+            return DefunctResult.because("Scenario is missing a required 'id' field");
         }
 
         SwarmTemplate template = scenario.getTemplate();
         if (template == null) {
             logger.warn("Scenario '{}' has no swarm template defined; marking as defunct", scenarioId);
-            return true;
+            return DefunctResult.because("Scenario has no swarm template defined");
         }
 
-        List<String> missingReferences = new ArrayList<>();
-
-        checkImageReference(scenarioId, "swarm controller", template.image(), missingReferences);
+        List<String> reasons = new ArrayList<>();
+        checkImageReference(scenarioId, "controller", template.image(), reasons);
 
         if (template.bees() != null) {
             for (Bee bee : template.bees()) {
-                checkImageReference(scenarioId, "bee '" + bee.role() + "'", bee.image(), missingReferences);
+                checkImageReference(scenarioId, "bee '" + bee.role() + "'", bee.image(), reasons);
             }
         }
 
-        if (!missingReferences.isEmpty()) {
-            logger.warn("Scenario '{}' marked as defunct; missing capability manifests for {}", scenarioId, missingReferences);
-            return true;
+        if (!reasons.isEmpty()) {
+            String reason = String.join("; ", reasons);
+            logger.warn("Scenario '{}' marked as defunct: {}", scenarioId, reason);
+            return DefunctResult.because(reason);
         }
 
-        return false;
+        return DefunctResult.ok();
     }
 
     private Scenario applyDefaultImageTag(Scenario scenario) {
@@ -501,10 +611,11 @@ public class ScenarioService {
     private void checkImageReference(String scenarioId,
                                      String component,
                                      String imageReference,
-                                     List<String> missingReferences) {
+                                     List<String> reasons) {
         if (imageReference == null || imageReference.isBlank()) {
             logger.warn("Scenario '{}' {} image reference is missing", scenarioId, component);
-            missingReferences.add(component + " (missing image)");
+            String label = component.startsWith("bee") ? component + " has no image defined" : "Controller image is not defined";
+            reasons.add(label);
             return;
         }
 
@@ -526,7 +637,7 @@ public class ScenarioService {
 
         if (capabilities.findByImageReference(imageReference).isEmpty()) {
             logger.warn("Scenario '{}' missing capability manifest for {} image '{}'", scenarioId, component, imageReference);
-            missingReferences.add(component + " -> " + imageReference);
+            reasons.add("No capability manifest found for image '" + imageReference + "' (" + component + "). Check that this image version is installed.");
         }
     }
 
@@ -607,10 +718,10 @@ public class ScenarioService {
 
     private ScenarioRecord recordForLoaded(Scenario scenario, Format format, Path descriptorFile, Path bundleDir) {
         Scenario resolved = applyDefaultImageTag(scenario);
-        boolean defunct = determineDefunct(resolved);
+        DefunctResult defunct = determineDefunct(resolved);
         Path descriptor = descriptorFile != null ? descriptorFile.toAbsolutePath().normalize() : null;
         Path bundle = bundleDir != null ? bundleDir.toAbsolutePath().normalize() : null;
-        return new ScenarioRecord(resolved, format, defunct, descriptor, bundle, folderPath(bundle));
+        return new ScenarioRecord(resolved, format, defunct.defunct(), defunct.reason(), descriptor, bundle, folderPath(bundle));
     }
 
     Path runtimeDir(String swarmId) {
@@ -680,61 +791,258 @@ public class ScenarioService {
         }
     }
 
-    private void loadFromDirectory(Path directory, Map<String, ScenarioRecord> target) throws IOException {
+    private void loadFromDirectory(Path directory, List<ScannedBundle> target, Set<Path> visitedDescriptors) throws IOException {
         if (!Files.isDirectory(directory)) {
             return;
         }
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(directory, "*.{json,yaml,yml}")) {
             for (Path path : stream) {
-                Format format = detectFormat(path);
-                Scenario scenario = read(path, format);
-                ScenarioRecord record = recordForLoaded(scenario, format, path, null);
-                ScenarioRecord previous = target.put(scenario.getId(), record);
-                if (previous != null) {
-                    logger.warn("Duplicate scenario id '{}' found while loading {}; keeping latest", scenario.getId(), path);
+                Path normalized = path.toAbsolutePath().normalize();
+                if (!visitedDescriptors.add(normalized)) {
+                    continue;
                 }
+                scanDescriptor(path, null, target);
             }
         }
     }
 
-	    private void loadFromBundles(Path bundleRoot, Map<String, ScenarioRecord> target) throws IOException {
-	        if (!Files.isDirectory(bundleRoot)) {
-	            return;
-	        }
-	        Path normalizedRoot = bundleRoot.toAbsolutePath().normalize();
-	        Path normalizedStorageDir = storageDir.toAbsolutePath().normalize();
-	        Path normalizedTestDir = testStorageDir.toAbsolutePath().normalize();
-	        Path normalizedRuntimeRoot = runtimeRootDir.toAbsolutePath().normalize();
-	        boolean isMainScan = normalizedRoot.equals(normalizedStorageDir);
-	        boolean runtimeUnderRoot = normalizedRuntimeRoot.startsWith(normalizedRoot);
-	        try (Stream<Path> stream = Files.walk(bundleRoot)) {
-	            for (Path path : (Iterable<Path>) stream::iterator) {
-	                Path normalized = path.toAbsolutePath().normalize();
-	                if (runtimeUnderRoot && normalized.startsWith(normalizedRuntimeRoot)) {
-	                    continue;
-	                }
-	                if (isMainScan && normalized.startsWith(normalizedTestDir)) {
-	                    continue;
-	                }
-	                if (!Files.isRegularFile(path)) {
-	                    continue;
-	                }
-	                String name = path.getFileName().toString();
-	                if (!name.equals("scenario.yaml")
-	                    && !name.equals("scenario.yml")
-	                    && !name.equals("scenario.json")) {
-	                    continue;
-	                }
-	                Format format = detectFormat(path);
-	                Scenario scenario = read(path, format);
-	                ScenarioRecord record = recordForLoaded(scenario, format, path, path.getParent());
-	                ScenarioRecord previous = target.put(scenario.getId(), record);
-	                if (previous != null) {
-	                    logger.warn("Duplicate scenario id '{}' found while loading {}; keeping latest", scenario.getId(), path);
-	                }
-	            }
-	        }
-	    }
+    private void loadFromBundles(Path bundleRoot, List<ScannedBundle> target, Set<Path> visitedDescriptors) throws IOException {
+        if (!Files.isDirectory(bundleRoot)) {
+            return;
+        }
+        Path normalizedRoot = bundleRoot.toAbsolutePath().normalize();
+        Path normalizedStorageDir = storageDir.toAbsolutePath().normalize();
+        Path normalizedTestDir = testStorageDir.toAbsolutePath().normalize();
+        Path normalizedRuntimeRoot = runtimeRootDir.toAbsolutePath().normalize();
+        boolean isMainScan = normalizedRoot.equals(normalizedStorageDir);
+        boolean runtimeUnderRoot = normalizedRuntimeRoot.startsWith(normalizedRoot);
+        try (Stream<Path> stream = Files.walk(bundleRoot)) {
+            for (Path path : (Iterable<Path>) stream::iterator) {
+                Path normalized = path.toAbsolutePath().normalize();
+                if (runtimeUnderRoot && normalized.startsWith(normalizedRuntimeRoot)) {
+                    continue;
+                }
+                if (isMainScan && normalized.startsWith(normalizedTestDir)) {
+                    continue;
+                }
+                if (!Files.isRegularFile(path)) {
+                    continue;
+                }
+                String name = path.getFileName().toString();
+                if (!name.equals("scenario.yaml")
+                    && !name.equals("scenario.yml")
+                    && !name.equals("scenario.json")) {
+                    continue;
+                }
+                if (!visitedDescriptors.add(normalized)) {
+                    continue;
+                }
+                scanDescriptor(path, path.getParent(), target);
+            }
+        }
+    }
+
+    private void scanDescriptor(Path descriptorFile, Path bundleDir, List<ScannedBundle> target) {
+        String bundlePath = relativeEntryPath(bundleDir != null ? bundleDir : descriptorFile);
+        String folderPath = folderPathForBundleEntry(bundlePath, bundleDir == null);
+        String fallbackName = fallbackBundleName(bundlePath);
+        try {
+            Format format = detectFormat(descriptorFile);
+            Scenario scenario = read(descriptorFile, format);
+            target.add(new ScannedBundle(
+                    bundlePath,
+                    bundlePath,
+                    folderPath,
+                    fallbackName,
+                    format,
+                    descriptorFile.toAbsolutePath().normalize(),
+                    bundleDir != null ? bundleDir.toAbsolutePath().normalize() : null,
+                    scenario,
+                    null));
+        } catch (Exception e) {
+            logger.warn("Failed to load bundle descriptor at {}: {}", descriptorFile, e.getMessage());
+            target.add(new ScannedBundle(
+                    bundlePath,
+                    bundlePath,
+                    folderPath,
+                    fallbackName,
+                    detectFormat(descriptorFile),
+                    descriptorFile.toAbsolutePath().normalize(),
+                    bundleDir != null ? bundleDir.toAbsolutePath().normalize() : null,
+                    null,
+                    "Could not read scenario file: " + cleanError(e.getMessage())));
+        }
+    }
+
+    private List<BundleCatalogEntry> buildBundleCatalog(List<ScannedBundle> discovered) {
+        List<BundleCatalogEntry> entries = new ArrayList<>(discovered.size());
+        Map<String, List<Integer>> byScenarioId = new LinkedHashMap<>();
+
+        for (ScannedBundle scanned : discovered) {
+            boolean quarantined = isQuarantineBundlePath(scanned.bundlePath());
+            if (scanned.scenario() == null) {
+                String reason = appendReason(scanned.loadError(), quarantined ? quarantineReason() : null);
+                entries.add(new BundleCatalogEntry(
+                        scanned.bundleKey(),
+                        scanned.bundlePath(),
+                        scanned.folderPath(),
+                        null,
+                        scanned.fallbackName(),
+                        null,
+                        null,
+                        List.of(),
+                        true,
+                        reason,
+                        false,
+                        quarantined,
+                        null,
+                        scanned.descriptorFile(),
+                        scanned.bundleDir()));
+                continue;
+            }
+
+            ScenarioRecord record = recordForLoaded(scanned.scenario(), scanned.format(), scanned.descriptorFile(), scanned.bundleDir());
+            Scenario scenario = record.scenario();
+            String scenarioId = scenario.getId();
+            String name = scenario.getName() != null && !scenario.getName().isBlank() ? scenario.getName().trim() : scanned.fallbackName();
+            String description = scenario.getDescription();
+            SwarmTemplate template = scenario.getTemplate();
+            String controllerImage = template != null ? template.image() : null;
+            List<BundleBeeSummary> bees = template == null ? List.of() : template.bees().stream()
+                    .map(bee -> new BundleBeeSummary(bee.role(), bee.image()))
+                    .toList();
+            boolean defunct = record.defunct() || quarantined;
+            String reason = appendReason(record.defunctReason(), quarantined ? quarantineReason() : null);
+            entries.add(new BundleCatalogEntry(
+                    scanned.bundleKey(),
+                    scanned.bundlePath(),
+                    scanned.folderPath(),
+                    scenarioId != null && !scenarioId.isBlank() ? scenarioId : null,
+                    name,
+                    description,
+                    controllerImage,
+                    bees,
+                    defunct,
+                    reason,
+                    false,
+                    quarantined,
+                    record,
+                    scanned.descriptorFile(),
+                    scanned.bundleDir()));
+            if (!quarantined && scenarioId != null && !scenarioId.isBlank()) {
+                byScenarioId.computeIfAbsent(scenarioId, ignored -> new ArrayList<>()).add(entries.size() - 1);
+            }
+        }
+
+        for (Map.Entry<String, List<Integer>> duplicate : byScenarioId.entrySet()) {
+            List<Integer> indexes = duplicate.getValue();
+            if (indexes.size() < 2) {
+                continue;
+            }
+            List<String> paths = indexes.stream().map(index -> entries.get(index).bundlePath()).sorted().toList();
+            for (Integer index : indexes) {
+                BundleCatalogEntry entry = entries.get(index);
+                String reason = appendReason(entry.defunctReason(),
+                        "Duplicate scenario id '" + duplicate.getKey() + "' found in bundles: " + String.join(", ", paths));
+                entries.set(index, entry.withConflict(reason));
+            }
+        }
+
+        entries.sort(Comparator
+                .comparing(BundleCatalogEntry::folderPath, Comparator.nullsFirst(String::compareTo))
+                .thenComparing(BundleCatalogEntry::name)
+                .thenComparing(BundleCatalogEntry::bundlePath));
+        return List.copyOf(entries);
+    }
+
+    private Map<String, ScenarioRecord> buildScenarioIndex(List<BundleCatalogEntry> catalog) {
+        Map<String, ScenarioRecord> loaded = new HashMap<>();
+        for (BundleCatalogEntry entry : catalog) {
+            ScenarioRecord record = entry.scenarioRecord();
+            if (record == null || entry.duplicateIdConflict() || entry.quarantined()) {
+                continue;
+            }
+            String scenarioId = entry.scenarioId();
+            if (scenarioId == null || scenarioId.isBlank()) {
+                continue;
+            }
+            loaded.put(scenarioId, record);
+        }
+        return loaded;
+    }
+
+    private String relativeEntryPath(Path path) {
+        try {
+            return bundleRootDir.toAbsolutePath().normalize()
+                    .relativize(path.toAbsolutePath().normalize())
+                    .toString()
+                    .replace('\\', '/');
+        } catch (Exception e) {
+            return path.getFileName() != null ? path.getFileName().toString() : path.toString().replace('\\', '/');
+        }
+    }
+
+    private String folderPathForBundleEntry(String bundlePath, boolean descriptorOnly) {
+        if (bundlePath == null || bundlePath.isBlank()) {
+            return null;
+        }
+        int slashIndex = bundlePath.lastIndexOf('/');
+        if (slashIndex < 0) {
+            return null;
+        }
+        if (!descriptorOnly && slashIndex == bundlePath.length() - 1) {
+            return null;
+        }
+        String path = bundlePath.substring(0, slashIndex).trim();
+        return path.isEmpty() ? null : path;
+    }
+
+    private String fallbackBundleName(String bundlePath) {
+        if (bundlePath == null || bundlePath.isBlank()) {
+            return "Unknown bundle";
+        }
+        String leaf = bundlePath;
+        int slashIndex = leaf.lastIndexOf('/');
+        if (slashIndex >= 0) {
+            leaf = leaf.substring(slashIndex + 1);
+        }
+        if (leaf.endsWith(".yaml") || leaf.endsWith(".yml") || leaf.endsWith(".json")) {
+            int dotIndex = leaf.lastIndexOf('.');
+            if (dotIndex > 0) {
+                leaf = leaf.substring(0, dotIndex);
+            }
+        }
+        return leaf.isBlank() ? bundlePath : leaf;
+    }
+
+    private static String cleanError(String message) {
+        if (message == null || message.isBlank()) {
+            return "unknown error";
+        }
+        String cleaned = message.replaceAll("\\(through reference chain:.*", "").trim();
+        return cleaned.length() > 300 ? cleaned.substring(0, 300) + "..." : cleaned;
+    }
+
+    private static String appendReason(String existing, String addition) {
+        if (addition == null || addition.isBlank()) {
+            return existing;
+        }
+        if (existing == null || existing.isBlank()) {
+            return addition;
+        }
+        return existing + "; " + addition;
+    }
+
+    private boolean isQuarantineBundlePath(String bundlePath) {
+        if (bundlePath == null || bundlePath.isBlank()) {
+            return false;
+        }
+        return bundlePath.equals(QUARANTINE_FOLDER) || bundlePath.startsWith(QUARANTINE_FOLDER + "/");
+    }
+
+    private static String quarantineReason() {
+        return "Bundle is quarantined under 'quarantine/' and cannot be used to create a swarm";
+    }
 
     private Path pathFor(String id, Format format) {
         String fileName = sanitize(id) + (format == Format.JSON ? ".json" : ".yaml");
@@ -755,6 +1063,13 @@ public class ScenarioService {
 
     private Stream<ScenarioRecord> streamRecords() {
         return scenarios.values().stream();
+    }
+
+    private boolean hasDiscoveredScenarioId(String scenarioId) {
+        if (scenarioId == null || scenarioId.isBlank()) {
+            return false;
+        }
+        return bundleCatalog.stream().anyMatch(entry -> scenarioId.equals(entry.scenarioId()));
     }
 
     public static Format formatFrom(String contentType) {
@@ -1496,7 +1811,7 @@ public class ScenarioService {
             if (id == null || id.isBlank()) {
                 throw new IllegalArgumentException("Scenario id must not be null or blank");
             }
-            if (scenarios.containsKey(id)) {
+            if (hasDiscoveredScenarioId(id)) {
                 throw new IllegalArgumentException("Scenario '%s' already exists".formatted(id));
             }
             writeBundle(uploaded, defaultUploadBundleDir(id));
@@ -1733,14 +2048,91 @@ public class ScenarioService {
         Scenario scenario,
         Format format,
         boolean defunct,
+        String defunctReason,
         Path descriptorFile,
         Path bundleDir,
         String folderPath
     ) { }
 
+    private record DefunctResult(boolean defunct, String reason) {
+        static DefunctResult ok() {
+            return new DefunctResult(false, null);
+        }
+
+        static DefunctResult because(String reason) {
+            return new DefunctResult(true, reason);
+        }
+    }
+
+    private record ScannedBundle(
+        String bundleKey,
+        String bundlePath,
+        String folderPath,
+        String fallbackName,
+        Format format,
+        Path descriptorFile,
+        Path bundleDir,
+        Scenario scenario,
+        String loadError
+    ) { }
+
+    private record BundleCatalogEntry(
+        String bundleKey,
+        String bundlePath,
+        String folderPath,
+        String scenarioId,
+        String name,
+        String description,
+        String controllerImage,
+        List<BundleBeeSummary> bees,
+        boolean defunct,
+        String defunctReason,
+        boolean duplicateIdConflict,
+        boolean quarantined,
+        ScenarioRecord scenarioRecord,
+        Path descriptorFile,
+        Path bundleDir
+    ) {
+        BundleCatalogEntry withConflict(String reason) {
+            return new BundleCatalogEntry(
+                    bundleKey,
+                    bundlePath,
+                    folderPath,
+                    scenarioId,
+                    name,
+                    description,
+                    controllerImage,
+                    bees,
+                    true,
+                    reason,
+                    true,
+                    quarantined,
+                    scenarioRecord,
+                    descriptorFile,
+                    bundleDir);
+        }
+    }
+
     private record ScenarioDescriptor(Scenario scenario, Path rootDir) { }
 
     private record UploadedBundle(Scenario scenario, Path rootDir, Path tempRoot) { }
+
+    public record BundleBeeSummary(String role, String image) { }
+
+    public record BundleTemplateSummary(
+        String bundleKey,
+        String bundlePath,
+        String folderPath,
+        String id,
+        String name,
+        String description,
+        String controllerImage,
+        List<BundleBeeSummary> bees,
+        boolean defunct,
+        String defunctReason
+    ) { }
+
+    public record BundleDownload(byte[] bytes, String fileName) { }
 
     public record VariablesValidationResult(List<String> warnings) { }
 

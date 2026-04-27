@@ -7,9 +7,14 @@ scenario bundle files that live under:
 
 It intentionally covers only the **bundle editing surface** (variables + bundle-local SUTs).
 
+For bundle diagnostics and bundle-catalog semantics, see:
+
+- `docs/scenarios/SCENARIO_BUNDLE_DIAGNOSTICS.md`
+
 Related docs:
 - Scenario YAML contract: `docs/scenarios/SCENARIO_CONTRACT.md`
 - Scenario Variables contract: `docs/scenarios/SCENARIO_VARIABLES.md`
+- Bundle diagnostics contract: `docs/scenarios/SCENARIO_BUNDLE_DIAGNOSTICS.md`
 
 ---
 
@@ -22,6 +27,53 @@ The UI reaches Scenario Manager via the reverse proxy:
 The service itself exposes the routes under:
 
 - `/scenarios/...`
+
+---
+
+## Bundle-addressed admin operations
+
+Some bundle operations must work even when `scenario.id` is missing or unusable.
+
+Those routes use `bundleKey`, which is the stable bundle identity returned by `GET /api/templates`.
+
+### Move bundle to folder
+
+`POST /scenarios/bundles/move` → request `application/json`
+
+Request body:
+```json
+{ "bundleKey": "tcp/tcp-echo-demo", "path": "quarantine" }
+```
+
+- Moves the whole bundle by its discovered bundle identity.
+- Works for malformed bundles and duplicate-id bundles.
+- `path=""` or `null` means root.
+
+### Download bundle
+
+`GET /scenarios/bundles/download?bundleKey={bundleKey}` → `application/zip`
+
+- Returns a zip for the selected bundle.
+- For descriptor-only bundles, the zip contains the descriptor file.
+
+### Delete bundle
+
+`DELETE /scenarios/bundles?bundleKey={bundleKey}`
+
+- Deletes the selected bundle by its discovered bundle identity.
+- Works even when `scenario.id` is missing or conflicting.
+
+### Scope note
+
+These bundle-addressed routes are the supported admin surface for malformed bundles
+and duplicate-id bundles in the current step.
+
+- `download`
+- `move`
+- `delete`
+
+Repair editing is intentionally out of scope for bundles whose `scenario.id` is missing
+or not uniquely addressable.
 
 ---
 

@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.15.17]
+Timestamp: 2026-04-14T16:14:56Z
+
+- Processor / result extraction: introduce `resultRules` in request envelopes to extract business code, business success, and custom dimensions as processor step headers, with strict parsing and an LRU regex compilation cache.
+- Processor / extraction hardening: fail-loud on invalid or incomplete extractors (blank `pattern`, missing header name for header sources) and on duplicate dimension keys after name normalisation.
+- Templates / Request Builder: allow templates to declare `resultRules` and forward them to `processor-service` for HTTP/TCP/ISO8583 requests.
+- ISO8583 / RAW_HEX: enforce strict hex payloads (no whitespace) and fail-loud on malformed payloads instead of normalising.
+- Docs: add `docs/contracts/result-rules.md` describing the `resultRules` contract and extracted header outputs.
+- Tooling: fix `tools/scenario-templating-check` compilation after adding `resultRules` to template definitions.
+
+## [0.15.16]
+Timestamp: 2026-04-13T19:52:44Z
+
+- Scenario Manager / bundle catalog: redefine `GET /api/templates` as the single discovered-bundle catalog, returning healthy, defunct, malformed, and duplicate-id scenario bundles together with `bundleKey`, `bundlePath`, and `defunctReason` so the UI can explain missing or unusable scenarios directly.
+- Scenario Manager / reload hardening: keep healthy bundles available even when other bundles are malformed, missing required fields, or otherwise broken; bad bundles are now isolated into defunct catalog entries instead of breaking scenario reload as a whole.
+- Scenario Manager / quarantine flow: add bundle-addressed admin operations for move/download/delete, introduce the `scenarios/quarantine/` convention, keep quarantined bundles visible for diagnostics, and exclude quarantined bundles from duplicate-id conflicts against active bundles.
+- UI v1 + v2 / scenario diagnostics: show defunct scenarios in the selection views with an explicit `DEFUNCT` warning and reason, allow selecting them for inspection without allowing swarm creation, and add `Move to quarantine`, `Download bundle`, and `Delete bundle` actions in the Scenarios admin view.
+- Tooling / docs: document the bundle diagnostics and quarantine contract, add a create-swarm guardrail that requires checking `/api/templates` before direct Orchestrator flows, and extend the debug CLI with template listing and preflight validation.
+
 ## [0.15.15]
 Timestamp: 2026-04-09T15:46:49Z
 

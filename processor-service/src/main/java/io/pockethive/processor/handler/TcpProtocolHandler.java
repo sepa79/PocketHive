@@ -1,15 +1,18 @@
 package io.pockethive.processor.handler;
 
 import io.pockethive.processor.ProcessorWorkerConfig;
+import io.pockethive.processor.ResultRulesExtractor;
 import io.pockethive.processor.TcpTransportConfig;
 import io.pockethive.processor.metrics.CallMetrics;
 import io.pockethive.processor.metrics.CallMetricsRecorder;
 import io.pockethive.processor.exception.ProcessorCallException;
 import io.pockethive.processor.response.ResponseBuilder;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.ObjectReader;
 import io.pockethive.worker.sdk.api.TcpRequestEnvelope;
 import io.pockethive.worker.sdk.api.TcpResultEnvelope;
 import io.pockethive.processor.transport.*;
@@ -26,6 +29,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 public class TcpProtocolHandler implements ProtocolHandler {
   private final ObjectMapper mapper;
+  private final ObjectReader strictEnvelopeReader;
   private final Clock clock;
   private final CallMetricsRecorder metricsRecorder;
   private final TcpTransportConfig defaultConfig;
@@ -42,6 +46,8 @@ public class TcpProtocolHandler implements ProtocolHandler {
                             TcpTransportConfig defaultConfig,
                             AtomicLong nextAllowedTimeNanos) {
     this.mapper = mapper;
+    this.strictEnvelopeReader = mapper.readerFor(TcpRequestEnvelope.class)
+        .with(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
     this.clock = clock;
     this.metricsRecorder = metricsRecorder;
     this.defaultConfig = defaultConfig == null ? TcpTransportConfig.defaults() : defaultConfig;
@@ -54,17 +60,18 @@ public class TcpProtocolHandler implements ProtocolHandler {
     String baseUrl = processorConfig.baseUrl();
     Map<String, Object> requestMeta = requestMetadata(baseUrl, null, null, null, null);
 
-    TcpRequestEnvelope.TcpRequest requestEnvelope;
+    TcpRequestEnvelope requestEnvelope;
     try {
-      requestEnvelope = parseRequest(envelope);
+      requestEnvelope = parseEnvelope(envelope);
     } catch (IllegalArgumentException ex) {
       throw new ProcessorCallException(CallMetrics.failure(0L, 0L, -1), ex, requestMeta);
     }
+    TcpRequestEnvelope.TcpRequest request = requestEnvelope.request();
 
     TcpTransportConfig desired = processorConfig.tcpTransport() == null ? defaultConfig : processorConfig.tcpTransport();
     ensureTransportConfig(desired);
 
-    requestMeta = requestMetadata(baseUrl, null, null, requestEnvelope.behavior(), null);
+    requestMeta = requestMetadata(baseUrl, null, null, request.behavior(), null);
     if (baseUrl == null || baseUrl.isBlank()) {
       throw new ProcessorCallException(CallMetrics.failure(0L, 0L, -1),
           new IllegalArgumentException("invalid TCP baseUrl"), requestMeta);
@@ -81,9 +88,9 @@ public class TcpProtocolHandler implements ProtocolHandler {
       throw new ProcessorCallException(CallMetrics.failure(0L, 0L, -1),
           new IllegalArgumentException("invalid TCP baseUrl"), requestMeta);
     }
-    requestMeta = requestMetadata(baseUrl, host, port, requestEnvelope.behavior(), useSsl);
+    requestMeta = requestMetadata(baseUrl, host, port, request.behavior(), useSsl);
 
-    Optional<String> body = extractBody(requestEnvelope.body());
+    Optional<String> body = extractBody(request.body());
     if (body.isEmpty()) {
       throw new ProcessorCallException(CallMetrics.failure(0L, 0L, -1),
           new IllegalArgumentException("no TCP body"), requestMeta);
@@ -91,12 +98,12 @@ public class TcpProtocolHandler implements ProtocolHandler {
 
     TcpBehavior behavior;
     try {
-      behavior = TcpBehavior.valueOf(requestEnvelope.behavior().toUpperCase(Locale.ROOT));
+      behavior = TcpBehavior.valueOf(request.behavior().toUpperCase(Locale.ROOT));
     } catch (IllegalArgumentException ex) {
       throw new ProcessorCallException(CallMetrics.failure(0L, 0L, -1), ex, requestMeta);
     }
-    String endTag = requestEnvelope.endTag();
-    Integer maxBytes = requestEnvelope.maxBytes();
+    String endTag = request.endTag();
+    Integer maxBytes = request.maxBytes();
 
     long start = clock.millis();
     long pacingMillis = 0L;
@@ -167,7 +174,16 @@ public class TcpProtocolHandler implements ProtocolHandler {
       );
       ObjectNode result = mapper.valueToTree(resultEnvelope);
 
-      WorkItem responseItem = ResponseBuilder.build(result, context.info(), metrics);
+      String responseBody = new String(response.body(), StandardCharsets.UTF_8);
+      Map<String, Object> extractionHeaders = ResultRulesExtractor.extract(
+          requestEnvelope.resultRules(),
+          body.get(),
+          request.headers(),
+          responseBody,
+          Map.of()
+      );
+
+      WorkItem responseItem = ResponseBuilder.build(result, context.info(), metrics, extractionHeaders);
       WorkItem updated = message.addStep(context.info(), responseItem.asString(), responseItem.stepHeaders());
       return updated.toBuilder().contentType(responseItem.contentType()).build();
     } catch (Exception ex) {
@@ -215,11 +231,11 @@ public class TcpProtocolHandler implements ProtocolHandler {
     return behavior.trim().toUpperCase(Locale.ROOT);
   }
 
-  private TcpRequestEnvelope.TcpRequest parseRequest(JsonNode envelope) {
+  private TcpRequestEnvelope parseEnvelope(JsonNode envelope) {
     try {
-      TcpRequestEnvelope parsed = mapper.treeToValue(envelope, TcpRequestEnvelope.class);
-      return parsed.request();
+      return strictEnvelopeReader.readValue(envelope);
     } catch (Exception ex) {
+      // Intentionally fail-loud: malformed envelope/resultRules must not be silently ignored.
       throw new IllegalArgumentException("Invalid TCP request envelope", ex);
     }
   }

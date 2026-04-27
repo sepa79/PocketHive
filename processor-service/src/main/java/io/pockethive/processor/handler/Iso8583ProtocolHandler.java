@@ -1,10 +1,13 @@
 package io.pockethive.processor.handler;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.ObjectReader;
 import io.pockethive.processor.ProcessorWorkerConfig;
 import io.pockethive.processor.TcpTransportConfig;
+import io.pockethive.processor.ResultRulesExtractor;
 import io.pockethive.processor.exception.ProcessorCallException;
 import io.pockethive.processor.metrics.CallMetrics;
 import io.pockethive.processor.metrics.CallMetricsRecorder;
@@ -30,6 +33,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 public class Iso8583ProtocolHandler implements ProtocolHandler {
   private final ObjectMapper mapper;
+  private final ObjectReader strictEnvelopeReader;
   private final Clock clock;
   private final CallMetricsRecorder metricsRecorder;
   private final TcpTransportConfig defaultConfig;
@@ -46,6 +50,8 @@ public class Iso8583ProtocolHandler implements ProtocolHandler {
                                 TcpTransportConfig defaultConfig,
                                 AtomicLong nextAllowedTimeNanos) {
     this.mapper = mapper;
+    this.strictEnvelopeReader = mapper.readerFor(Iso8583RequestEnvelope.class)
+        .with(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
     this.clock = clock;
     this.metricsRecorder = metricsRecorder;
     this.defaultConfig = defaultConfig == null ? TcpTransportConfig.defaults() : defaultConfig;
@@ -56,12 +62,13 @@ public class Iso8583ProtocolHandler implements ProtocolHandler {
   @Override
   public WorkItem invoke(WorkItem message, JsonNode envelope, ProcessorWorkerConfig config, WorkerContext context)
       throws Exception {
-    Iso8583RequestEnvelope.Iso8583Request requestEnvelope;
+    Iso8583RequestEnvelope requestEnvelope;
     try {
-      requestEnvelope = parseRequest(envelope);
+      requestEnvelope = parseEnvelope(envelope);
     } catch (IllegalArgumentException ex) {
       throw new ProcessorCallException(CallMetrics.failure(0L, 0L, -1), ex, Map.of("transport", "iso8583"));
     }
+    Iso8583RequestEnvelope.Iso8583Request request = requestEnvelope.request();
 
     Endpoint endpoint;
     try {
@@ -73,13 +80,13 @@ public class Iso8583ProtocolHandler implements ProtocolHandler {
     WireProfile wireProfile;
     byte[] payloadBytes;
     try {
-      wireProfile = WireProfile.fromId(requestEnvelope.wireProfileId());
-      payloadBytes = decodePayload(requestEnvelope);
+      wireProfile = WireProfile.fromId(request.wireProfileId());
+      payloadBytes = decodePayload(request);
     } catch (IllegalArgumentException ex) {
       throw new ProcessorCallException(
           CallMetrics.failure(0L, 0L, -1),
           ex,
-          requestMetadata(endpoint, requestEnvelope, null));
+          requestMetadata(endpoint, request, null));
     }
 
     TcpTransportConfig desired = config.tcpTransport() == null ? defaultConfig : config.tcpTransport();
@@ -143,7 +150,7 @@ public class Iso8583ProtocolHandler implements ProtocolHandler {
               "SEND",
               endpoint.endpoint(),
               wireProfile.id(),
-              requestEnvelope.payloadAdapter(),
+              request.payloadAdapter(),
               payloadBytes.length
           ),
           new Iso8583ResultEnvelope.Iso8583Outcome(
@@ -156,7 +163,16 @@ public class Iso8583ProtocolHandler implements ProtocolHandler {
       );
 
       ObjectNode result = mapper.valueToTree(resultEnvelope);
-      WorkItem responseItem = ResponseBuilder.build(result, context.info(), metrics);
+      String responseHex = resultEnvelope.outcome().responseHex();
+      Map<String, Object> extractionHeaders = ResultRulesExtractor.extract(
+          requestEnvelope.resultRules(),
+          request.payload(),
+          request.headers(),
+          responseHex,
+          Map.of()
+      );
+
+      WorkItem responseItem = ResponseBuilder.build(result, context.info(), metrics, extractionHeaders);
       WorkItem updated = message.addStep(context.info(), responseItem.asString(), responseItem.stepHeaders());
       return updated.toBuilder().contentType(responseItem.contentType()).build();
     } catch (Exception ex) {
@@ -166,7 +182,7 @@ public class Iso8583ProtocolHandler implements ProtocolHandler {
       long connectionLatency = Math.max(0L, pacingMillis);
       CallMetrics metrics = CallMetrics.failure(callDuration, connectionLatency, -1);
       metricsRecorder.record(metrics);
-      throw new ProcessorCallException(metrics, ex, requestMetadata(endpoint, requestEnvelope, wireProfile));
+      throw new ProcessorCallException(metrics, ex, requestMetadata(endpoint, request, wireProfile));
     } finally {
       if (closeAfter && transport != null) {
         try {
@@ -177,11 +193,11 @@ public class Iso8583ProtocolHandler implements ProtocolHandler {
     }
   }
 
-  private Iso8583RequestEnvelope.Iso8583Request parseRequest(JsonNode envelope) {
+  private Iso8583RequestEnvelope parseEnvelope(JsonNode envelope) {
     try {
-      Iso8583RequestEnvelope parsed = mapper.treeToValue(envelope, Iso8583RequestEnvelope.class);
-      return parsed.request();
+      return strictEnvelopeReader.readValue(envelope);
     } catch (Exception ex) {
+      // Intentionally fail-loud: malformed envelope/resultRules must not be silently ignored.
       throw new IllegalArgumentException("Invalid ISO8583 request envelope", ex);
     }
   }
@@ -197,11 +213,17 @@ public class Iso8583ProtocolHandler implements ProtocolHandler {
     if (payload == null || payload.isBlank()) {
       throw new IllegalArgumentException("RAW_HEX payload must not be blank");
     }
-    String normalized = payload.replaceAll("\\s+", "");
-    if ((normalized.length() & 1) != 0) {
+    // Intentionally fail-loud: do not normalise/strip whitespace from payloads.
+    // If callers need readability, they must pre-process upstream and pass clean RAW_HEX.
+    for (int i = 0; i < payload.length(); i++) {
+      if (Character.isWhitespace(payload.charAt(i))) {
+        throw new IllegalArgumentException("RAW_HEX payload must not contain whitespace");
+      }
+    }
+    if ((payload.length() & 1) != 0) {
       throw new IllegalArgumentException("Invalid RAW_HEX payload length");
     }
-    return HexFormat.of().parseHex(normalized);
+    return HexFormat.of().parseHex(payload);
   }
 
   private Endpoint parseEndpoint(String baseUrl) {

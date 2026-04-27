@@ -23,6 +23,7 @@ JAR_MODULES=(
   postprocessor-service
   clearing-export-service
   trigger-service
+  tools/scenario-templating-check
 )
 
 declare -A MODULE_TO_SERVICE=(

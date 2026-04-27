@@ -33,7 +33,7 @@ class TransportEnvelopeDtosTest {
             "{}"
         );
 
-        assertThatThrownBy(() -> new HttpRequestEnvelope("HTTP", request))
+        assertThatThrownBy(() -> new HttpRequestEnvelope("HTTP", request, null))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("Unsupported kind");
     }

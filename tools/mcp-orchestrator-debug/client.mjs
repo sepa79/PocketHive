@@ -47,6 +47,7 @@ function printUsage() {
       "  node tools/mcp-orchestrator-debug/client.mjs swarm-snapshot <swarmId>\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs worker-configs <swarmId>\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs list-scenarios\n" +
+      "  node tools/mcp-orchestrator-debug/client.mjs list-templates\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs get-scenario <scenarioId>\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs reload-scenarios\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs create-swarm <swarmId> <templateId> [notes]\n" +
@@ -69,6 +70,7 @@ function printUsage() {
       "  node tools/mcp-orchestrator-debug/client.mjs get-swarm foo\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs swarm-snapshot foo\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs worker-configs foo\n" +
+      "  node tools/mcp-orchestrator-debug/client.mjs list-templates\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs create-swarm foo local-rest-defaults\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs reload-scenarios\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs start-swarm foo --record\n" +
@@ -127,6 +129,11 @@ const COMMANDS = [
     description: "List scenarios via GET /scenarios from Scenario Manager",
   },
   {
+    name: "list-templates",
+    description:
+      "List bundle catalog via GET /api/templates from Scenario Manager, including defunct entries and diagnostics",
+  },
+  {
     name: "get-scenario",
     description: "Fetch scenario by id via GET /scenarios/{id} from Scenario Manager",
     params: ["scenarioId"],
@@ -137,7 +144,8 @@ const COMMANDS = [
   },
   {
     name: "create-swarm",
-    description: "Create swarm via POST /api/swarms/{swarmId}/create",
+    description:
+      "Create swarm via POST /api/swarms/{swarmId}/create after verifying template usability through Scenario Manager /api/templates",
     params: [
       "swarmId",
       "templateId",
@@ -241,6 +249,12 @@ async function main() {
       const url = `${SCENARIO_MANAGER_BASE_URL.replace(/\/+$/, "")}/scenarios`;
       const scenarios = await httpJson(url);
       console.log(JSON.stringify(scenarios ?? [], null, 2));
+      return;
+    }
+
+    if (subcommand === "list-templates") {
+      const templates = await loadScenarioTemplates();
+      console.log(JSON.stringify(templates ?? [], null, 2));
       return;
     }
 
@@ -378,6 +392,7 @@ async function main() {
           console.error("create-swarm requires <swarmId> and <templateId>");
           process.exit(1);
         }
+        await verifyTemplateIsRunnable(templateId);
         const body = {
           templateId,
           idempotencyKey: randomIdempotencyKey(),
@@ -603,6 +618,45 @@ async function collectPagedJournal({ path, limit, swarmId, runId, correlationId,
     remaining -= 1;
   }
   return all;
+}
+
+async function loadScenarioTemplates() {
+  const base = SCENARIO_MANAGER_BASE_URL.replace(/\/+$/, "");
+  const url = `${base}/api/templates`;
+  const payload = await httpJson(url);
+  return Array.isArray(payload) ? payload : [];
+}
+
+async function verifyTemplateIsRunnable(templateId) {
+  const trimmed = String(templateId ?? "").trim();
+  if (!trimmed) {
+    throw new Error("templateId must not be blank");
+  }
+  const templates = await loadScenarioTemplates();
+  const matches = templates.filter(
+    (entry) => entry && typeof entry === "object" && entry.id === trimmed
+  );
+  if (matches.length === 0) {
+    throw new Error(
+      `Template '${trimmed}' is not present as a runnable entry in Scenario Manager /api/templates. ` +
+        `Do not call Orchestrator create directly before verifying bundle diagnostics.`
+    );
+  }
+  const runnable = matches.find((entry) => entry.defunct !== true);
+  if (!runnable) {
+    const reasons = matches
+      .map((entry) =>
+        typeof entry.defunctReason === "string" && entry.defunctReason.trim()
+          ? `${entry.bundlePath || entry.bundleKey || trimmed}: ${entry.defunctReason.trim()}`
+          : null
+      )
+      .filter(Boolean);
+    throw new Error(
+      `Template '${trimmed}' is defunct according to Scenario Manager /api/templates. ` +
+        `${reasons.length > 0 ? reasons.join(" | ") : "No defunctReason provided."}`
+    );
+  }
+  return runnable;
 }
 
 async function httpJson(path, options = {}) {

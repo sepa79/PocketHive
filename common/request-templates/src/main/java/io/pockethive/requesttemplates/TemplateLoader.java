@@ -88,7 +88,8 @@ public final class TemplateLoader {
                         def.headersTemplate(),
                         def.endTag(),
                         def.maxBytes(),
-                        def.auth()
+                        def.auth(),
+                        def.resultRules()
                     );
                 }
                 case "HTTP" -> {
@@ -101,7 +102,8 @@ public final class TemplateLoader {
                         def.pathTemplate(),
                         def.bodyTemplate(),
                         def.headersTemplate(),
-                        def.auth()
+                        def.auth(),
+                        def.resultRules()
                     );
                 }
                 case "ISO8583" -> {
@@ -115,7 +117,8 @@ public final class TemplateLoader {
                         def.bodyTemplate(),
                         def.headersTemplate(),
                         def.schemaRef(),
-                        def.auth()
+                        def.auth(),
+                        def.resultRules()
                     );
                 }
                 default -> throw new IllegalArgumentException("Unsupported protocol in template: " + protocol);
