@@ -43,6 +43,7 @@ import io.pockethive.orchestrator.domain.HiveJournal;
 import io.pockethive.orchestrator.infra.InMemoryIdempotencyStore;
 import io.pockethive.orchestrator.auth.OrchestratorAuthorization;
 import io.pockethive.orchestrator.auth.OrchestratorCurrentUserHolder;
+import io.pockethive.orchestrator.auth.OrchestratorEndpointAuthorization;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.NetworkBinding;
 import io.pockethive.swarm.model.NetworkBindingClearRequest;
@@ -180,6 +181,22 @@ class SwarmControllerTest {
         }
 
         verifyNoInteractions(publisher);
+    }
+
+    @Test
+    void createRejectsDefunctTemplateBeforeLaunch() throws Exception {
+        SwarmCreateTracker tracker = new SwarmCreateTracker();
+        SwarmStore registry = new SwarmStore();
+        SwarmController ctrl = controller(tracker, registry, new SwarmPlanRegistry());
+        when(scenarioClient.fetchScenarioTemplate("tpl-1"))
+            .thenReturn(new ScenarioClient.ScenarioTemplateDescriptor("tpl-1", "e2e/local-rest", "e2e", true));
+
+        assertThatThrownBy(() -> ctrl.create("sw1", new SwarmCreateRequest("tpl-1", "idem", null)))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("409 CONFLICT")
+            .hasMessageContaining("defunct");
+
+        verifyNoInteractions(publisher, lifecycle);
     }
 
     @Test
@@ -1270,7 +1287,11 @@ class SwarmControllerTest {
     }
 
     private SwarmJournalController journalController(SwarmStore registry) {
-        return new SwarmJournalController(mapper, jdbc, registry);
+        return new SwarmJournalController(
+            mapper,
+            jdbc,
+            registry,
+            new OrchestratorEndpointAuthorization(new OrchestratorAuthorization(), scenarioClient, registry));
     }
 
     private static ControlPlaneProperties controlPlaneProperties() {

@@ -5,21 +5,19 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Assumptions;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.http.MediaType;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 import io.cucumber.java.After;
@@ -35,33 +33,38 @@ import io.pockethive.e2e.clients.ScenarioManagerClient;
 import io.pockethive.e2e.clients.ScenarioManagerClient.TemplateSummary;
 import io.pockethive.e2e.config.EnvironmentConfig;
 import io.pockethive.e2e.config.EnvironmentConfig.ServiceEndpoints;
+import io.pockethive.e2e.support.api.ApiPlaceholderResolver;
+import io.pockethive.e2e.support.api.ApiResponse;
+import io.pockethive.e2e.support.api.ApiService;
+import io.pockethive.e2e.support.api.IngressApiDriver;
+import io.pockethive.e2e.support.auth.AuthRolloutFixtures;
 
 /**
  * Auth-focused acceptance checks for current user permissions and scoped template access.
  */
 public class AuthSteps {
 
-  private static final Logger LOGGER = LoggerFactory.getLogger(AuthSteps.class);
   private static final Duration SWARM_REMOVE_TIMEOUT = Duration.ofSeconds(45);
   private static final Duration SWARM_REGISTRATION_TIMEOUT = Duration.ofSeconds(20);
-  private static final UUID BUNDLE_RUNNER_ID = UUID.fromString("66666666-6666-6666-6666-666666666666");
-  private static final UUID FOLDER_ADMIN_ID = UUID.fromString("77777777-7777-7777-7777-777777777777");
 
   private ServiceEndpoints endpoints;
+  private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
+  private ApiPlaceholderResolver placeholderResolver;
+  private IngressApiDriver apiDriver;
+  private AuthRolloutFixtures authFixtures;
   private AuthServiceClient authServiceClient;
   private AuthServiceClient adminAuthServiceClient;
   private OrchestratorClient adminOrchestratorClient;
   private OrchestratorClient activeOrchestratorClient;
   private ScenarioManagerClient activeScenarioManagerClient;
-  private WebClient rawOrchestratorWebClient;
-  private WebClient rawScenarioManagerWebClient;
   private String activeUsername;
+  private String activeBearerToken;
   private int latestStatus;
   private String latestErrorBody;
+  private JsonNode latestResponseJson;
   private List<TemplateSummary> latestTemplates = List.of();
   private AuthServiceClient.AuthenticatedUser latestAuthUser;
   private final List<String> swarmsToCleanup = new ArrayList<>();
-  private final Map<String, String> resolvedSwarmIds = new HashMap<>();
 
   @Given("the auth harness is initialised")
   public void theAuthHarnessIsInitialised() {
@@ -76,9 +79,10 @@ public class AuthSteps {
     String adminToken = endpoints.auth().accessToken()
         .orElseGet(() -> authServiceClient.devLogin(endpoints.auth().username()));
     adminAuthServiceClient = AuthServiceClient.create(endpoints.auth().authServiceBaseUrl(), adminToken);
+    authFixtures = new AuthRolloutFixtures(adminAuthServiceClient);
     adminOrchestratorClient = OrchestratorClient.create(endpoints.orchestratorBaseUrl(), adminToken);
-    rawOrchestratorWebClient = WebClient.builder().baseUrl(endpoints.orchestratorBaseUrl().toString()).build();
-    rawScenarioManagerWebClient = WebClient.builder().baseUrl(endpoints.scenarioManagerBaseUrl().toString()).build();
+    apiDriver = new IngressApiDriver(endpoints, objectMapper);
+    placeholderResolver = new ApiPlaceholderResolver();
     authenticateAs(endpoints.auth().username());
   }
 
@@ -91,9 +95,9 @@ public class AuthSteps {
   @When("I call protected PocketHive APIs without credentials")
   public void iCallProtectedPocketHiveApisWithoutCredentials() {
     ensureHarness();
-    latestStatus = getStatus(rawScenarioManagerWebClient, "/templates");
+    latestStatus = apiDriver.getStatus(ApiService.SCENARIO_MANAGER, "/templates", null);
     assertEquals(401, latestStatus, "Scenario Manager should reject unauthenticated /templates");
-    latestStatus = getStatus(rawOrchestratorWebClient, "/api/swarms");
+    latestStatus = apiDriver.getStatus(ApiService.ORCHESTRATOR, "/api/swarms", null);
     assertEquals(401, latestStatus, "Orchestrator should reject unauthenticated /api/swarms");
   }
 
@@ -142,7 +146,7 @@ public class AuthSteps {
   public void iTryToCreateSwarmFromTemplate(String swarmId, String templateId) {
     ensureHarness();
     latestErrorBody = null;
-    String resolvedSwarmId = resolveSwarmId(swarmId);
+    String resolvedSwarmId = placeholderResolver.resolveSwarmId(swarmId);
     try {
       ControlResponse response = activeOrchestratorClient.createSwarm(
           resolvedSwarmId,
@@ -168,7 +172,7 @@ public class AuthSteps {
   @When("I wait until swarm {string} becomes visible")
   public void iWaitUntilSwarmBecomesVisible(String swarmId) {
     ensureHarness();
-    String resolvedSwarmId = resolveSwarmId(swarmId);
+    String resolvedSwarmId = placeholderResolver.resolveSwarmId(swarmId);
     Awaitility.await("swarm visible " + swarmId)
         .atMost(SWARM_REGISTRATION_TIMEOUT)
         .pollInterval(Duration.ofSeconds(1))
@@ -179,7 +183,7 @@ public class AuthSteps {
   public void iTryToStopSwarm(String swarmId) {
     ensureHarness();
     latestErrorBody = null;
-    String resolvedSwarmId = resolveSwarmId(swarmId);
+    String resolvedSwarmId = placeholderResolver.resolveSwarmId(swarmId);
     try {
       activeOrchestratorClient.stopSwarm(
           resolvedSwarmId,
@@ -191,11 +195,27 @@ public class AuthSteps {
     }
   }
 
+  @When("I try to start swarm {string}")
+  public void iTryToStartSwarm(String swarmId) {
+    ensureHarness();
+    latestErrorBody = null;
+    String resolvedSwarmId = placeholderResolver.resolveSwarmId(swarmId);
+    try {
+      activeOrchestratorClient.startSwarm(
+          resolvedSwarmId,
+          new ControlRequest(nextIdempotencyKey(resolvedSwarmId, "start"), "auth e2e start"));
+      latestStatus = 202;
+    } catch (WebClientResponseException ex) {
+      latestStatus = ex.getStatusCode().value();
+      latestErrorBody = ex.getResponseBodyAsString();
+    }
+  }
+
   @When("I try to remove swarm {string}")
   public void iTryToRemoveSwarm(String swarmId) {
     ensureHarness();
     latestErrorBody = null;
-    String resolvedSwarmId = resolveSwarmId(swarmId);
+    String resolvedSwarmId = placeholderResolver.resolveSwarmId(swarmId);
     try {
       activeOrchestratorClient.removeSwarm(
           resolvedSwarmId,
@@ -208,22 +228,93 @@ public class AuthSteps {
     }
   }
 
+  @When("I call {string} {string} {string} without credentials")
+  public void iCallApiWithoutCredentials(String service, String method, String path) {
+    ensureHarness();
+    executeRawCall(service, method, path, null, MediaType.APPLICATION_JSON, false);
+  }
+
+  @When("I call {string} {string} {string} for the active user")
+  public void iCallApiForTheActiveUser(String service, String method, String path) {
+    ensureHarness();
+    executeRawCall(service, method, path, null, MediaType.APPLICATION_JSON, true);
+  }
+
+  @When("I call {string} {string} {string} for the active user with body")
+  public void iCallApiForTheActiveUserWithBody(String service, String method, String path, String body) {
+    ensureHarness();
+    executeRawCall(service, method, path, body, MediaType.APPLICATION_JSON, true);
+  }
+
+  @When("I call {string} {string} {string} for the active user with {string} body")
+  public void iCallApiForTheActiveUserWithTypedBody(String service,
+                                                    String method,
+                                                    String path,
+                                                    String contentType,
+                                                    String body) {
+    ensureHarness();
+    executeRawCall(service, method, path, body, MediaType.parseMediaType(contentType), true);
+  }
+
+  @When("I fetch the swarm snapshot for {string} via the API")
+  public void iFetchTheSwarmSnapshotViaTheApi(String swarmAlias) {
+    ensureHarness();
+    executeRawCall("Orchestrator",
+        "GET",
+        "/api/swarms/{{swarm:%s}}".formatted(swarmAlias),
+        null,
+        MediaType.APPLICATION_JSON,
+        true);
+  }
+
+  @When("I wait until swarm journal runs are available for {string}")
+  public void iWaitUntilSwarmJournalRunsAreAvailable(String swarmAlias) {
+    ensureHarness();
+    String resolvedPath = "/api/swarms/{{swarm:%s}}/journal/runs".formatted(swarmAlias);
+    Awaitility.await("journal runs for " + swarmAlias)
+        .atMost(SWARM_REGISTRATION_TIMEOUT)
+        .pollInterval(Duration.ofSeconds(1))
+        .until(() -> {
+          executeRawCall("Orchestrator", "GET", resolvedPath, null, MediaType.APPLICATION_JSON, true);
+          return latestStatus == 200 && latestResponseJson != null && latestResponseJson.isArray() && latestResponseJson.size() > 0;
+        });
+  }
+
+  @When("I remember the last response value at JSON pointer {string} as {string}")
+  public void iRememberTheLastResponseValueAtJsonPointerAs(String jsonPointer, String key) {
+    assertNotNull(latestResponseJson, "Expected the last API response to contain JSON");
+    JsonNode value = latestResponseJson.at(jsonPointer);
+    assertFalse(value.isMissingNode() || value.isNull(),
+        () -> "JSON pointer %s was not found in the last response".formatted(jsonPointer));
+    placeholderResolver.rememberValue(key, value.isValueNode() ? value.asText() : value.toString());
+  }
+
+  @Given("I remember a unique value with prefix {string} as {string}")
+  public void iRememberAUniqueValueWithPrefixAs(String prefix, String key) {
+    placeholderResolver.rememberUniqueValue(prefix, key);
+  }
+
+  @Then("the API response status is {int}")
+  public void theApiResponseStatusIs(int expectedStatus) {
+    assertEquals(expectedStatus, latestStatus, () -> "Unexpected API status body=" + latestErrorBody);
+  }
+
   @Given("the admin provisions a bundle runner user")
   public void theAdminProvisionsABundleRunnerUser() {
     ensureHarness();
-    adminAuthServiceClient.upsertUser(BUNDLE_RUNNER_ID, "local-bundle-runner", "Local Bundle Runner", true);
-    adminAuthServiceClient.replaceGrants(BUNDLE_RUNNER_ID, List.of(
-        grant("POCKETHIVE", "VIEW", "PH_DEPLOYMENT", "*"),
-        grant("POCKETHIVE", "RUN", "PH_BUNDLE", "e2e/local-rest")));
+    authFixtures.provisionBundleRunner();
   }
 
   @Given("the admin provisions an e2e folder admin user")
   public void theAdminProvisionsAnE2eFolderAdminUser() {
     ensureHarness();
-    adminAuthServiceClient.upsertUser(FOLDER_ADMIN_ID, "local-e2e-folder-admin", "Local E2E Folder Admin", true);
-    adminAuthServiceClient.replaceGrants(FOLDER_ADMIN_ID, List.of(
-        grant("POCKETHIVE", "VIEW", "PH_DEPLOYMENT", "*"),
-        grant("POCKETHIVE", "ALL", "PH_FOLDER", "e2e")));
+    authFixtures.provisionE2eFolderAdmin();
+  }
+
+  @Given("the admin provisions a bundles folder admin user")
+  public void theAdminProvisionsABundlesFolderAdminUser() {
+    ensureHarness();
+    authFixtures.provisionBundlesFolderAdmin();
   }
 
   @Then("the current auth profile contains grant {string} on {string}={string}")
@@ -250,7 +341,9 @@ public class AuthSteps {
   @After
   public void cleanupSwarms() {
     if (adminOrchestratorClient == null || swarmsToCleanup.isEmpty()) {
-      resolvedSwarmIds.clear();
+      if (placeholderResolver != null) {
+        placeholderResolver.clear();
+      }
       return;
     }
     List<String> pending = new ArrayList<>(swarmsToCleanup);
@@ -272,39 +365,39 @@ public class AuthSteps {
           .pollInterval(Duration.ofSeconds(2))
           .until(() -> adminOrchestratorClient.findSwarm(swarmId).isEmpty());
     }
-    resolvedSwarmIds.clear();
+    placeholderResolver.clear();
   }
 
   private void authenticateAs(String username) {
     activeUsername = Objects.requireNonNull(username, "username");
-    String bearerToken = authServiceClient.devLogin(username);
-    activeOrchestratorClient = OrchestratorClient.create(endpoints.orchestratorBaseUrl(), bearerToken);
-    activeScenarioManagerClient = ScenarioManagerClient.create(endpoints.scenarioManagerBaseUrl(), bearerToken);
+    activeBearerToken = authServiceClient.devLogin(username);
+    activeOrchestratorClient = OrchestratorClient.create(endpoints.orchestratorBaseUrl(), activeBearerToken);
+    activeScenarioManagerClient = ScenarioManagerClient.create(endpoints.scenarioManagerBaseUrl(), activeBearerToken);
     latestAuthUser = null;
-  }
-
-  private String resolveSwarmId(String alias) {
-    String normalizedAlias = Objects.requireNonNull(alias, "alias").trim();
-    return resolvedSwarmIds.computeIfAbsent(normalizedAlias,
-        key -> "%s-%s".formatted(key, UUID.randomUUID().toString().substring(0, 8)));
   }
 
   private String nextIdempotencyKey(String swarmId, String action) {
     return "%s-%s-%s".formatted(swarmId, action, UUID.randomUUID());
   }
 
-  private int getStatus(WebClient client, String path) {
-    try {
-      return client.get()
-          .uri(path)
-          .retrieve()
-          .toBodilessEntity()
-          .block()
-          .getStatusCode()
-          .value();
-    } catch (WebClientResponseException ex) {
-      return ex.getStatusCode().value();
-    }
+  private void executeRawCall(String service,
+                              String method,
+                              String path,
+                              String body,
+                              MediaType contentType,
+                              boolean authenticated) {
+    String resolvedPath = placeholderResolver.resolveTemplate(path);
+    String resolvedBody = body == null ? null : placeholderResolver.resolveTemplate(body);
+    ApiResponse response = apiDriver.execute(
+        ApiService.fromDisplayName(service),
+        method,
+        resolvedPath,
+        resolvedBody,
+        contentType,
+        authenticated ? activeBearerToken : null);
+    latestStatus = response.status();
+    latestErrorBody = response.body();
+    latestResponseJson = response.jsonBody();
   }
 
   private boolean folderMatches(String expectedFolder, String actualFolder) {
@@ -318,9 +411,5 @@ public class AuthSteps {
 
   private void ensureHarness() {
     Assumptions.assumeTrue(endpoints != null, "Auth harness was not initialised");
-  }
-
-  private AuthServiceClient.AuthGrant grant(String product, String permission, String resourceType, String resourceSelector) {
-    return new AuthServiceClient.AuthGrant(product, permission, resourceType, resourceSelector);
   }
 }

@@ -7,7 +7,7 @@ import {
   deleteBundle,
   deleteScenarioFolder,
   downloadBundle,
-  listBundleTemplates,
+  listBundleWorkspaces,
   listScenarioFolders,
   moveBundleToFolder,
   uploadScenarioBundle,
@@ -125,7 +125,7 @@ export function ScenariosPage() {
     setError(null)
     try {
       const [list, folderList] = await Promise.all([
-        listBundleTemplates(),
+        listBundleWorkspaces(),
         auth.canManagePocketHive ? listScenarioFolders() : Promise.resolve<string[]>([]),
       ])
       setItems(list)

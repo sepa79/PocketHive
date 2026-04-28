@@ -4,6 +4,7 @@ import io.pockethive.capabilities.CapabilityCatalogueService;
 import io.pockethive.capabilities.CapabilityManifest;
 import io.pockethive.scenarios.ScenarioService;
 import io.pockethive.scenarios.auth.ScenarioManagerAuthorization;
+import io.pockethive.scenarios.auth.ScenarioManagerCurrentUserHolder;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -82,6 +83,7 @@ class CapabilityCatalogueControllerTest {
                 "1.0", "2.0", new CapabilityManifest.Image("image/name", "latest", "sha256:abc"),
                 "role", List.of(), List.of(), List.of(), null);
         given(catalogue.findByDigest("sha256:abc")).willReturn(java.util.Optional.of(manifest));
+        given(authorization.canReadPocketHive(org.mockito.ArgumentMatchers.any())).willReturn(true);
 
         mvc.perform(get("/api/capabilities").param("imageDigest", "sha256:abc"))
                 .andExpect(status().isOk())
@@ -91,6 +93,7 @@ class CapabilityCatalogueControllerTest {
     @Test
     void capabilityLookupMissingManifestReturns404() throws Exception {
         given(catalogue.findByDigest(anyString())).willReturn(java.util.Optional.empty());
+        given(authorization.canReadPocketHive(org.mockito.ArgumentMatchers.any())).willReturn(true);
 
         mvc.perform(get("/api/capabilities").param("imageDigest", "sha256:missing"))
                 .andExpect(status().isNotFound());
@@ -103,10 +106,24 @@ class CapabilityCatalogueControllerTest {
                 "role", List.of(), List.of(), List.of(), null);
         given(catalogue.allManifests()).willReturn(List.of(manifest));
         given(catalogue.capabilityFallbackTag()).willReturn("latest");
+        given(authorization.canReadPocketHive(org.mockito.ArgumentMatchers.any())).willReturn(true);
 
         mvc.perform(get("/api/capabilities").param("all", "true"))
                 .andExpect(status().isOk())
                 .andExpect(header().string(CapabilityCatalogueController.CAPABILITY_FALLBACK_TAG_HEADER, "latest"))
                 .andExpect(jsonPath("$[0].image.digest").value("sha256:def"));
+    }
+
+    @Test
+    void capabilityLookupRejectsUserWithoutReadAccess() throws Exception {
+        given(authorization.canReadPocketHive(org.mockito.ArgumentMatchers.any())).willReturn(false);
+
+        try {
+            ScenarioManagerCurrentUserHolder.set(null);
+            mvc.perform(get("/api/capabilities").param("all", "true"))
+                .andExpect(status().isForbidden());
+        } finally {
+            ScenarioManagerCurrentUserHolder.clear();
+        }
     }
 }

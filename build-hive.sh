@@ -84,7 +84,7 @@ usage() {
 Usage: $(basename "$0") [options]
 
 Options:
-  --quick                 Skip tests and Maven clean/cache purge for faster iterations.
+  --quick                 Skip tests and Maven clean/cache purge for faster rebuild/redeploy iterations.
   --module <name>         Rebuild a given module (repeatable).
   --service <name>        Rebuild a docker-compose service (repeatable).
   --clean                 Stop the stack and remove stale containers before building.
@@ -95,8 +95,8 @@ Options:
   --help                  Show this help.
 
 Behaviour:
-  • No flags → local Maven clean package with tests, clears PocketHive local Maven cache, rebuilds all services, starts the full stack.
-  • --quick  → skips tests and keeps existing Maven/target state for faster iterations.
+  • No flags → local Maven clean package with tests, clears PocketHive local Maven cache, rebuilds images/artifacts, and redeploys the full local stack.
+  • --quick  → skips tests and keeps existing Maven/target state for faster rebuild/redeploy iterations; for full-stack runs it still tears down and starts the compose stack.
   • --service generator --module orchestrator-service → rebuild specific services.
 
 Environment:
@@ -372,8 +372,10 @@ stage_artifacts() {
       echo "Unable to locate packaged jar for ${module}" >&2
       exit 1
     fi
-    cp "${jar_path}" "${LOCAL_ARTIFACTS_DIR}/${module}.jar"
-    echo " - Staged ${module} → ${LOCAL_ARTIFACTS_DIR}/${module}.jar"
+    local staged_path="${LOCAL_ARTIFACTS_DIR}/${module}.jar"
+    mkdir -p "$(dirname "${staged_path}")"
+    cp "${jar_path}" "${staged_path}"
+    echo " - Staged ${module} → ${staged_path}"
   done
 }
 
@@ -591,7 +593,10 @@ measure() {
   local start
   start=$(date +%s)
   set +e
-  "$@"
+  (
+    set -euo pipefail
+    "$@"
+  )
   local status=$?
   set -e
   local end
@@ -707,7 +712,7 @@ main() {
 
   print_timing_summary
   echo
-  echo "PocketHive local build complete."
+  echo "PocketHive local rebuild/redeploy complete."
   echo "Finished at: $(date '+%Y-%m-%d %H:%M:%S')"
 }
 

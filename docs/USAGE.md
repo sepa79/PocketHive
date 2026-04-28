@@ -53,7 +53,7 @@ In `docker-compose.yml` under `orchestrator.environment`, set:
 
 - `POCKETHIVE_JOURNAL_SINK: file`
 
-Then restart the stack via `./build-hive.sh` (or `docker compose down && docker compose up -d`).
+Then rebuild/redeploy the stack via `./build-hive.sh` (or `docker compose down && docker compose up -d`).
 
 ### UI behavior
 

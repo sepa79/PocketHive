@@ -1,4 +1,4 @@
-package io.pockethive.scenarios.auth;
+package io.pockethive.networkproxy.auth;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.auth.client.AuthServiceClient;
@@ -15,13 +15,14 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-public class ScenarioManagerAuthFilter extends OncePerRequestFilter {
+public class NetworkProxyManagerAuthFilter extends OncePerRequestFilter {
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final AuthServiceClient authServiceClient;
-    private final ScenarioManagerAuthorization authorization;
+    private final NetworkProxyManagerAuthorization authorization;
 
-    public ScenarioManagerAuthFilter(AuthServiceClient authServiceClient, ScenarioManagerAuthorization authorization) {
+    public NetworkProxyManagerAuthFilter(AuthServiceClient authServiceClient,
+                                         NetworkProxyManagerAuthorization authorization) {
         this.authServiceClient = authServiceClient;
         this.authorization = authorization;
     }
@@ -56,17 +57,16 @@ public class ScenarioManagerAuthFilter extends OncePerRequestFilter {
             return;
         }
 
-        if (!authorization.isAllowed(user, request.getMethod(), request.getRequestURI())) {
-            writeError(response, HttpStatus.FORBIDDEN,
-                authorization.denialMessage(request.getMethod(), request.getRequestURI()));
+        if (!authorization.isAllowed(user, request.getMethod())) {
+            writeError(response, HttpStatus.FORBIDDEN, authorization.denialMessage(request.getMethod()));
             return;
         }
 
         try {
-            ScenarioManagerCurrentUserHolder.set(user);
+            NetworkProxyManagerCurrentUserHolder.set(user);
             filterChain.doFilter(request, response);
         } finally {
-            ScenarioManagerCurrentUserHolder.clear();
+            NetworkProxyManagerCurrentUserHolder.clear();
         }
     }
 

@@ -37,23 +37,22 @@ public class CapabilityCatalogueController {
     }
 
     @GetMapping(value = "/templates", produces = MediaType.APPLICATION_JSON_VALUE)
-    public List<ScenarioTemplateView> templates() {
+    public List<ScenarioService.BundleTemplateSummary> templates() {
         AuthenticatedUserDto user = currentUser();
         return scenarioService.listBundleTemplates().stream()
                 .filter(summary -> isRunnableTemplate(user, summary))
-                .map(this::buildScenarioTemplate)
                 .toList();
     }
 
     @GetMapping(value = "/templates/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ScenarioTemplateView template(@PathVariable("id") String id) {
+    public ScenarioService.BundleTemplateSummary template(@PathVariable("id") String id) {
         AuthenticatedUserDto user = currentUser();
         ScenarioService.BundleTemplateSummary summary = scenarioService.findBundleTemplate(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         if (!isRunnableTemplate(user, summary)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, authorization.runDeniedMessage());
         }
-        return buildScenarioTemplate(summary);
+        return summary;
     }
 
     @GetMapping(value = "/capabilities", produces = MediaType.APPLICATION_JSON_VALUE)
@@ -61,6 +60,10 @@ public class CapabilityCatalogueController {
                                         @RequestParam(name = "imageName", required = false) String imageName,
                                         @RequestParam(name = "tag", required = false) String tag,
                                         @RequestParam(name = "all", defaultValue = "false") boolean all) {
+        AuthenticatedUserDto user = currentUser();
+        if (!authorization.canReadPocketHive(user)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, authorization.readDeniedMessage());
+        }
         if (all) {
             return applyCapabilityMetadata(ResponseEntity.ok()).body(catalogue.allManifests());
         }
@@ -80,20 +83,6 @@ public class CapabilityCatalogueController {
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Provide all=true, imageDigest, or imageName and tag");
     }
 
-    private ScenarioTemplateView buildScenarioTemplate(ScenarioService.BundleTemplateSummary summary) {
-        return new ScenarioTemplateView(
-                summary.bundleKey(),
-                summary.bundlePath(),
-                summary.folderPath(),
-                summary.id(),
-                summary.name(),
-                summary.description(),
-                summary.controllerImage(),
-                summary.bees().stream().map(bee -> new BeeImage(bee.role(), bee.image())).toList(),
-                summary.defunct(),
-                summary.defunctReason());
-    }
-
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
     }
@@ -105,19 +94,6 @@ public class CapabilityCatalogueController {
         }
         return builder;
     }
-
-    public record ScenarioTemplateView(String bundleKey,
-                                       String bundlePath,
-                                       String folderPath,
-                                       String id,
-                                       String name,
-                                       String description,
-                                       String controllerImage,
-                                       List<BeeImage> bees,
-                                       boolean defunct,
-                                       String defunctReason) { }
-
-    public record BeeImage(String role, String image) { }
 
     private AuthenticatedUserDto currentUser() {
         return ScenarioManagerCurrentUserHolder.get();

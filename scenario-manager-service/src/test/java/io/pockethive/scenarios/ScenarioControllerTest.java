@@ -452,6 +452,30 @@ class ScenarioControllerTest {
     }
 
     @Test
+    void runtimePreparationRejectsDefunctScenarioBundle() throws Exception {
+        Path quarantinedBundle = Files.createDirectories(scenariosDir.resolve("quarantine").resolve("defunct-runtime"));
+        Files.writeString(quarantinedBundle.resolve("scenario.yaml"), """
+                id: defunct-runtime
+                name: Defunct Runtime
+                template:
+                  image: ctrl-image:latest
+                  bees: []
+                """);
+
+        mvc.perform(post("/scenarios/reload"))
+                .andExpect(status().isNoContent());
+
+        mvc.perform(post("/scenarios/defunct-runtime/runtime")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                            {
+                              "swarmId": "sw1"
+                            }
+                            """))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void validationFailure() throws Exception {
         mvc.perform(post("/scenarios").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"id\":\"\",\"name\":\"\"}"))

@@ -971,6 +971,11 @@ public class SwarmController {
 
     private void requireRunTemplate(ScenarioClient.ScenarioTemplateDescriptor templateDescriptor) {
         AuthenticatedUserDto user = currentUser();
+        if (templateDescriptor != null && templateDescriptor.defunct()) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                HttpStatus.CONFLICT,
+                "Scenario template is defunct and cannot be launched");
+        }
         if (user == null) {
             return;
         }

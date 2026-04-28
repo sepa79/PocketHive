@@ -78,6 +78,12 @@ by the UI under `/docs/...` as part of the runtime image.
 - `docs/inProgress/network-proxy-plan.md` (Status: in progress) –
   shared-per-SUT network proxying, secure traffic routing, and runtime fault
   profiles.
+- `docs/inProgress/auth-api-rollout-plan.md` (Status: in progress) –
+  service-by-service auth/authz rollout checklist for PocketHive HTTP APIs,
+  including e2e and verification tracking.
+- `docs/inProgress/e2e-api-framework-mini-plan.md` (Status: in progress) –
+  incremental plan for extracting a reusable API/E2E support layer from the
+  current ingress auth pack.
 
 ## Specs & Tools
 

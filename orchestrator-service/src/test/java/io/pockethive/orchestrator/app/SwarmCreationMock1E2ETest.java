@@ -432,6 +432,8 @@ class SwarmCreationMock1E2ETest {
     void journalEndpointReadsFromPostgres() {
         Assumptions.assumeTrue(dockerAvailable, "Docker is required to run this test");
 
+        swarmStore.register(new Swarm("journal-swarm", "swarm-controller-1", "container-1", "run-1"));
+
         jdbc.update(
             """
             INSERT INTO journal_event (
@@ -492,11 +494,12 @@ class SwarmCreationMock1E2ETest {
         HttpHeaders headers = new HttpHeaders();
         headers.set(HttpHeaders.AUTHORIZATION, TEST_AUTHORIZATION);
         ResponseEntity<java.util.List> response = rest.exchange(
-            "/api/swarms/{swarmId}/journal",
+            "/api/swarms/{swarmId}/journal?runId={runId}",
             HttpMethod.GET,
             new HttpEntity<>(headers),
             java.util.List.class,
-            "journal-swarm");
+            "journal-swarm",
+            "run-1");
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody()).hasSize(1);

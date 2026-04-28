@@ -121,6 +121,22 @@ export async function listBundleTemplates(): Promise<BundleTemplateEntry[]> {
   }
 }
 
+export async function listBundleWorkspaces(): Promise<BundleTemplateEntry[]> {
+  const response = await fetch('/scenario-manager/scenarios/bundles/workspaces', {
+    headers: { Accept: 'application/json' },
+  })
+  await ensureOk(response, 'Failed to load scenario workspaces')
+  try {
+    const payload = (await response.json()) as unknown
+    if (!Array.isArray(payload)) return []
+    return payload
+      .map((entry) => normalizeBundleTemplateEntry(entry))
+      .filter((entry): entry is BundleTemplateEntry => entry !== null)
+  } catch {
+    return []
+  }
+}
+
 export async function listScenarioFolders(): Promise<string[]> {
   const response = await fetch('/scenario-manager/scenarios/folders', {
     headers: { Accept: 'application/json' },

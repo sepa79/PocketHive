@@ -21,7 +21,7 @@ public class ScenarioManagerAuthorization {
     );
     private static final Set<String> MANAGE_PERMISSIONS = Set.of(PocketHivePermissionIds.ALL);
 
-    public boolean isAllowed(AuthenticatedUserDto user, String method) {
+    public boolean isAllowed(AuthenticatedUserDto user, String method, String path) {
         if (user == null) {
             return true;
         }
@@ -30,6 +30,9 @@ public class ScenarioManagerAuthorization {
         }
         if (HttpMethod.GET.matches(method)) {
             return hasAnyPermission(user, READ_PERMISSIONS);
+        }
+        if (requiresRunPermission(method, path)) {
+            return hasAnyPermission(user, RUN_PERMISSIONS);
         }
         return hasAnyPermission(user, MANAGE_PERMISSIONS);
     }
@@ -50,7 +53,21 @@ public class ScenarioManagerAuthorization {
         if (user == null) {
             return true;
         }
+        return PocketHiveGrantChecks.hasPermissionInScope(user, MANAGE_PERMISSIONS, null, null);
+    }
+
+    public boolean canManagePocketHive(AuthenticatedUserDto user) {
+        if (user == null) {
+            return true;
+        }
         return hasAnyPermission(user, MANAGE_PERMISSIONS);
+    }
+
+    public boolean canReadPocketHive(AuthenticatedUserDto user) {
+        if (user == null) {
+            return true;
+        }
+        return hasAnyPermission(user, READ_PERMISSIONS);
     }
 
     public boolean canManageFolder(AuthenticatedUserDto user, String folderPath) {
@@ -60,9 +77,12 @@ public class ScenarioManagerAuthorization {
         return PocketHiveGrantChecks.hasPermissionInScope(user, MANAGE_PERMISSIONS, null, folderPath);
     }
 
-    public String denialMessage(String method) {
+    public String denialMessage(String method, String path) {
         if (HttpMethod.GET.matches(method) || HttpMethod.HEAD.matches(method) || HttpMethod.OPTIONS.matches(method)) {
             return "PocketHive VIEW permission required";
+        }
+        if (requiresRunPermission(method, path)) {
+            return "PocketHive RUN permission required";
         }
         return "PocketHive ALL permission required";
     }
@@ -81,6 +101,13 @@ public class ScenarioManagerAuthorization {
 
     private boolean hasAnyPermission(AuthenticatedUserDto user, Set<String> permissions) {
         return PocketHiveGrantChecks.hasAnyPermission(user, permissions);
+    }
+
+    private boolean requiresRunPermission(String method, String path) {
+        if (!HttpMethod.POST.matches(method) || path == null) {
+            return false;
+        }
+        return path.matches("^/scenarios/[^/]+/runtime$");
     }
 
     private boolean hasPermissionInScope(AuthenticatedUserDto user,

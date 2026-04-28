@@ -42,6 +42,10 @@ public class OrchestratorAuthorization {
         return hasPermissionInScope(user, READ_PERMISSIONS, templateMetadata);
     }
 
+    public boolean canRead(AuthenticatedUserDto user, ScenarioClient.ScenarioTemplateDescriptor templateDescriptor) {
+        return hasPermissionInScope(user, READ_PERMISSIONS, templateDescriptor);
+    }
+
     public boolean canRun(AuthenticatedUserDto user, SwarmTemplateMetadata templateMetadata) {
         return hasPermissionInScope(user, RUN_PERMISSIONS, templateMetadata);
     }
@@ -52,6 +56,38 @@ public class OrchestratorAuthorization {
 
     public boolean canRun(AuthenticatedUserDto user, ScenarioClient.ScenarioTemplateDescriptor templateDescriptor) {
         return hasPermissionInScope(user, RUN_PERMISSIONS, templateDescriptor);
+    }
+
+    public boolean canManage(AuthenticatedUserDto user, ScenarioClient.ScenarioTemplateDescriptor templateDescriptor) {
+        return hasPermissionInScope(user, MANAGE_PERMISSIONS, templateDescriptor);
+    }
+
+    public boolean canReadPocketHive(AuthenticatedUserDto user) {
+        if (user == null) {
+            return true;
+        }
+        return PocketHiveGrantChecks.hasAnyPermission(user, READ_PERMISSIONS);
+    }
+
+    public boolean canReadDeployment(AuthenticatedUserDto user) {
+        if (user == null) {
+            return true;
+        }
+        return PocketHiveGrantChecks.hasPermissionInScope(user, READ_PERMISSIONS, null, null);
+    }
+
+    public boolean canManagePocketHive(AuthenticatedUserDto user) {
+        if (user == null) {
+            return true;
+        }
+        return PocketHiveGrantChecks.hasAnyPermission(user, MANAGE_PERMISSIONS);
+    }
+
+    public boolean canManageDeployment(AuthenticatedUserDto user) {
+        if (user == null) {
+            return true;
+        }
+        return PocketHiveGrantChecks.hasPermissionInScope(user, MANAGE_PERMISSIONS, null, null);
     }
 
     public String denialMessage(String method, String path) {

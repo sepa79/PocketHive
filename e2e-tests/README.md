@@ -11,7 +11,7 @@ src/
   main/java/io/pockethive/e2e/
     config/              # Environment & credential handling
     clients/             # HTTP, messaging, and websocket clients
-    support/             # Shared assertions, polling helpers, and fixtures
+    support/             # Shared assertions, polling helpers, API helpers, and fixtures
   test/java/io/pockethive/e2e/
     CucumberE2ETest.java # JUnit Platform entry-point for Cucumber
     hooks/               # Before/After hooks for environment lifecycle management
@@ -110,6 +110,60 @@ Environment variables will be referenced by the harness once the step implementa
 The harness consumes the same RabbitMQ environment variables as the orchestrator's Spring Boot configuration. Configure
 them once (for example in your shell profile or deployment manifest) and both the service and the smoke checks will
 point at the same broker.
+
+## Auth/API rollout pack
+
+`features/auth-access.feature` is the ingress-based pack for auth rollout coverage. Treat it as the default place to
+add coverage when a new protected API surface is introduced or an auth policy changes.
+
+Support structure for this pack:
+
+- `support/api/ApiService` is the canonical mapping from pack-visible service names to ingress base URLs.
+- `support/api/IngressApiDriver` owns raw authenticated or unauthenticated HTTP execution over official ingress paths.
+- `support/api/ApiPlaceholderResolver` owns scenario-local placeholders like `{{swarm:...}}` and `{{value:...}}`.
+- `support/auth/AuthRolloutFixtures` owns reusable auth rollout users and grants used by the pack.
+- Step classes should compose these support types rather than adding new local service-switches or ad-hoc `WebClient` wiring.
+
+Rules for extending it:
+
+- Use the generic raw-call steps in `AuthSteps` before adding new bespoke client helpers.
+- Every new protected surface should cover at least one allowed request and one denied or unauthenticated request.
+- Keep calls on the official ingress/base URLs exposed through `EnvironmentConfig`; do not point scenarios at direct
+  service container ports.
+- Prefer stable API paths and compact JSON bodies so scenarios stay readable and diff-friendly.
+- If the endpoint needs a live swarm, create one with the existing auth steps and reuse it inside the same scenario.
+- If you need new auth test users or grants, add them in `AuthRolloutFixtures` instead of inlining user provisioning in a step class.
+- If you need a new ingress-visible service, add it to `ApiService` rather than branching on raw strings inside steps.
+- If a scenario starts needing complex setup or response parsing, extract a focused support helper first; keep feature files declarative.
+
+Reusable placeholders supported by the raw-call steps:
+
+- `{{swarm:<alias>}}` resolves a swarm id created earlier in the scenario via `I try to create swarm "<alias>" ...`.
+- `{{value:<key>}}` resolves a dynamic value captured from a previous JSON response.
+
+Reusable extraction step:
+
+- `I remember the last response value at JSON pointer "<pointer>" as "<key>"`
+- Use JSON Pointer syntax such as `/tapId`, `/envelope/scope/instance`, or `/0/runId`.
+
+Scenario Manager workspace note:
+
+- `POST /scenarios/folders` and related folder mutations cannot target reserved workspace roots like `e2e/`; the service rejects those paths by design.
+- When you need a folder-scoped write test, provision a user for a writable folder such as `bundles` and keep the scenario path under that scope.
+
+Recommended workflow for adding a new API row:
+
+1. Pick the closest existing auth scenario in `auth-access.feature`, or add a new one if the surface has different
+   lifecycle/setup needs.
+2. Add a denied or unauthenticated raw call first so the protection boundary is explicit.
+3. Add an allowed raw call that reaches business logic for the intended scope.
+4. If the endpoint needs runtime values like `runId` or controller instance ids, capture them with the JSON Pointer
+   step and reuse them through `{{value:...}}`.
+5. Only add a dedicated client/helper method when the generic raw-call step becomes unreadable or the same payload
+   shape repeats across multiple scenarios.
+
+This pack is intentionally small and data-driven so it can grow into a more dedicated PocketHive API auth framework
+without throwing away the existing Cucumber coverage.
 
 ## Phase roadmap reference
 

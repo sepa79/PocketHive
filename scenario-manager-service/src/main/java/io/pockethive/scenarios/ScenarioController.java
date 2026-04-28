@@ -50,6 +50,7 @@ public class ScenarioController {
     public ResponseEntity<Scenario> create(@Valid @RequestBody Scenario scenario,
                                            @RequestHeader(HttpHeaders.CONTENT_TYPE) String contentType) throws IOException {
         log.info("[REST] POST /scenarios contentType={} scenario={}", contentType, safeJson(scenarioSummary(scenario)));
+        requireManageAllFolders();
         Scenario created = service.create(scenario, ScenarioService.formatFrom(contentType));
         log.info("[REST] POST /scenarios -> status=201 scenario={}", safeJson(scenarioSummary(created)));
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -82,11 +83,25 @@ public class ScenarioController {
         return summaries;
     }
 
+    @GetMapping(value = "/bundles/workspaces", produces = MediaType.APPLICATION_JSON_VALUE)
+    public List<ScenarioService.BundleTemplateSummary> listBundleWorkspaces() {
+        log.info("[REST] GET /scenarios/bundles/workspaces");
+        AuthenticatedUserDto user = currentUser();
+        List<ScenarioService.BundleTemplateSummary> summaries = service.listBundleTemplates().stream()
+                .filter(summary -> canReadBundleSummary(user, summary))
+                .toList();
+        log.info("[REST] GET /scenarios/bundles/workspaces -> {} items body={}", summaries.size(), safeJson(summaries));
+        return summaries;
+    }
+
     @GetMapping(value = "/folders", produces = MediaType.APPLICATION_JSON_VALUE)
     public List<String> listBundleFolders() throws IOException {
         log.info("[REST] GET /scenarios/folders");
-        requireManageAllFolders();
-        List<String> folders = service.listBundleFolders();
+        AuthenticatedUserDto user = currentUser();
+        requireManagePocketHive();
+        List<String> folders = service.listBundleFolders().stream()
+                .filter(path -> canManageFolder(user, path))
+                .toList();
         log.info("[REST] GET /scenarios/folders -> {} items body={}", folders.size(), safeJson(folders));
         return folders;
     }
@@ -95,7 +110,7 @@ public class ScenarioController {
     public ResponseEntity<Void> createBundleFolder(@RequestBody FolderRequest request) throws IOException {
         String path = request != null ? request.path() : null;
         log.info("[REST] POST /scenarios/folders path={}", path);
-        requireManageAllFolders();
+        requireManageFolder(path);
         try {
             service.createBundleFolder(path);
             log.info("[REST] POST /scenarios/folders -> status=204");
@@ -552,7 +567,7 @@ public class ScenarioController {
     public ResponseEntity<Scenario> uploadBundle(@RequestBody byte[] body) throws IOException {
         int size = body != null ? body.length : 0;
         log.info("[REST] POST /scenarios/bundles contentType=application/zip size={}", size);
-        requireManageAllFolders();
+        requireManageFolder("bundles");
         Scenario created = service.createBundleFromZip(body);
         log.info("[REST] POST /scenarios/bundles -> status=201 body={}", safeJson(created));
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -582,14 +597,10 @@ public class ScenarioController {
     @PostMapping(value = "/{id}/runtime", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<ScenarioRuntimeResponse> prepareRuntime(@PathVariable("id") String id,
                                                                   @RequestBody RuntimeRequest request) throws IOException {
-        // NOTE: This path is part of the direct orchestrator create flow and still uses
-        // service.find(id), so a direct caller can currently prepare runtime for a defunct
-        // scenario. Agents/tools must verify the selected entry through /api/templates
-        // before calling Orchestrator create or this endpoint.
         String swarmId = request != null ? request.swarmId() : null;
         log.info("[REST] POST /scenarios/{}/runtime swarmId={}", id, swarmId);
         requireRunScenario(id);
-        Scenario scenario = service.find(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        Scenario scenario = service.findAvailable(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         Path runtimeDir = service.prepareRuntimeDirectory(scenario.getId(), swarmId);
         ScenarioRuntimeResponse body = new ScenarioRuntimeResponse(scenario.getId(), swarmId, runtimeDir.toString());
         log.info("[REST] POST /scenarios/{}/runtime -> status=200 body={}", id, safeJson(body));
@@ -636,6 +647,18 @@ public class ScenarioController {
                 .orElse(false);
     }
 
+    private boolean canReadBundleSummary(AuthenticatedUserDto user, ScenarioService.BundleTemplateSummary summary) {
+        if (summary == null) {
+            return false;
+        }
+        if (summary.id() != null && !summary.id().isBlank()) {
+            return canRead(user, summary.id());
+        }
+        return service.findBundleAccess(summary.bundleKey())
+                .map(access -> authorization.canRead(user, access))
+                .orElse(false);
+    }
+
     private void requireReadScenario(String id) {
         requireScenarioAccess(id, authorization::canRead, authorization.readDeniedMessage());
     }
@@ -658,7 +681,7 @@ public class ScenarioController {
 
     private void requireManageFolder(String folderPath) {
         AuthenticatedUserDto user = currentUser();
-        if (!authorization.canManageFolder(user, folderPath)) {
+        if (!canManageFolder(user, folderPath)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, authorization.manageDeniedMessage());
         }
     }
@@ -668,6 +691,17 @@ public class ScenarioController {
         if (!authorization.canManageDeployment(user)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, authorization.manageDeniedMessage());
         }
+    }
+
+    private void requireManagePocketHive() {
+        AuthenticatedUserDto user = currentUser();
+        if (!authorization.canManagePocketHive(user)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, authorization.manageDeniedMessage());
+        }
+    }
+
+    private boolean canManageFolder(AuthenticatedUserDto user, String folderPath) {
+        return authorization.canManageFolder(user, folderPath);
     }
 
     private void requireScenarioAccess(String scenarioId,

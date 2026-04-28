@@ -6,6 +6,8 @@ Welcome to the PocketHive documentation hub. Use these resources to understand t
 - [System Architecture](ARCHITECTURE.md)
 - [SUT + Dataset + Simulation Model (proposal)](architecture/sut-dataset-simulation-model.md)
 - [Network Proxy Plan](inProgress/network-proxy-plan.md)
+- [Auth API Rollout Plan](inProgress/auth-api-rollout-plan.md)
+- [E2E API Framework Mini-Plan](inProgress/e2e-api-framework-mini-plan.md)
 
 ## Roadmap
 - [Release Notes](../CHANGELOG.md)
@@ -52,4 +54,5 @@ Welcome to the PocketHive documentation hub. Use these resources to understand t
 
 ## Contributing
 - [Contributor Guide](../CONTRIBUTING.md)
+- [HiveMind Workflow for Agents](ai/HIVEMIND_WORKFLOW.md)
 - [Control Plane Testing Playbook](ci/control-plane-testing.md)

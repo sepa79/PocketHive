@@ -1,11 +1,18 @@
 package io.pockethive.orchestrator.app;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.auth.contract.AuthGrantDto;
+import io.pockethive.auth.contract.AuthProduct;
+import io.pockethive.auth.contract.AuthProvider;
+import io.pockethive.auth.contract.AuthenticatedUserDto;
+import io.pockethive.auth.contract.PocketHivePermissionIds;
+import io.pockethive.auth.contract.PocketHiveResourceTypes;
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.controlplane.ControlPlaneSignals;
@@ -13,11 +20,16 @@ import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import io.pockethive.controlplane.messaging.SignalMessage;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
+import io.pockethive.orchestrator.auth.OrchestratorAuthorization;
+import io.pockethive.orchestrator.auth.OrchestratorCurrentUserHolder;
+import io.pockethive.orchestrator.auth.OrchestratorEndpointAuthorization;
 import io.pockethive.orchestrator.infra.InMemoryIdempotencyStore;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
+import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -49,7 +61,8 @@ class ComponentControllerTest {
 	            publisher,
 	            new InMemoryIdempotencyStore(),
 	            store,
-	            controlPlaneProperties());
+	            controlPlaneProperties(),
+                endpointAuthorization(store));
         ComponentController.ConfigUpdateRequest request =
             new ComponentController.ConfigUpdateRequest("idem", Map.of("enabled", true), null, SWARM_ID);
 
@@ -82,7 +95,8 @@ class ComponentControllerTest {
 	            publisher,
 	            new InMemoryIdempotencyStore(),
 	            store,
-	            controlPlaneProperties());
+	            controlPlaneProperties(),
+                endpointAuthorization(store));
         ComponentController.ConfigUpdateRequest request =
             new ComponentController.ConfigUpdateRequest("idem", Map.of(), null, null);
 
@@ -102,7 +116,8 @@ class ComponentControllerTest {
 	            publisher,
 	            new InMemoryIdempotencyStore(),
 	            store,
-	            controlPlaneProperties());
+	            controlPlaneProperties(),
+                endpointAuthorization(store));
         ComponentController.ConfigUpdateRequest request =
             new ComponentController.ConfigUpdateRequest("idem", Map.of(), null, SWARM_ID);
 
@@ -128,10 +143,44 @@ class ComponentControllerTest {
         assertThat(response1.getBody().correlationId()).isEqualTo(response2.getBody().correlationId());
     }
 
+    @Test
+    void updateConfigRejectsScopedAdminOutsideGrantedFolder() {
+        SwarmStore store = storeWithSwarm(mapper, "prod-swarm", "tpl-prod", RUN_ID, "prod/tpl-prod", "prod");
+        ComponentController controller = new ComponentController(
+            publisher,
+            new InMemoryIdempotencyStore(),
+            store,
+            controlPlaneProperties(),
+            endpointAuthorization(store));
+
+        try {
+            OrchestratorCurrentUserHolder.set(userWith(
+                PocketHivePermissionIds.ALL,
+                PocketHiveResourceTypes.FOLDER,
+                "demo"));
+            assertThatThrownBy(() -> controller.updateConfig(
+                "processor",
+                "p1",
+                new ComponentController.ConfigUpdateRequest("idem", Map.of("enabled", true), null, "prod-swarm")))
+                .hasMessageContaining("403 FORBIDDEN");
+        } finally {
+            OrchestratorCurrentUserHolder.clear();
+        }
+    }
+
     private static SwarmStore storeWithSwarm(ObjectMapper mapper, String swarmId, String templateId, String runId) {
+        return storeWithSwarm(mapper, swarmId, templateId, runId, "demo/" + templateId, "demo");
+    }
+
+    private static SwarmStore storeWithSwarm(ObjectMapper mapper,
+                                             String swarmId,
+                                             String templateId,
+                                             String runId,
+                                             String bundlePath,
+                                             String folderPath) {
         SwarmStore store = new SwarmStore();
         Swarm swarm = new Swarm(swarmId, "controller-1", "container-1", runId);
-        swarm.attachTemplate(new SwarmTemplateMetadata(templateId, "swarm-controller:latest", java.util.List.of()));
+        swarm.attachTemplate(new SwarmTemplateMetadata(templateId, "swarm-controller:latest", java.util.List.of(), bundlePath, folderPath));
         store.register(swarm);
         var status = mapper.createObjectNode();
         status.put("timestamp", java.time.Instant.now().toString());
@@ -153,6 +202,53 @@ class ComponentControllerTest {
         return store;
     }
 
+    private static OrchestratorEndpointAuthorization endpointAuthorization(SwarmStore store) {
+        return new OrchestratorEndpointAuthorization(new OrchestratorAuthorization(), scenarioClient(), store);
+    }
+
+    private static ScenarioClient scenarioClient() {
+        return new ScenarioClient() {
+            @Override
+            public io.pockethive.orchestrator.domain.ScenarioPlan fetchScenario(String templateId) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public ScenarioTemplateDescriptor fetchScenarioTemplate(String templateId) {
+                return new ScenarioTemplateDescriptor(templateId, "demo/" + templateId, "demo", false);
+            }
+
+            @Override
+            public String prepareScenarioRuntime(String templateId, String swarmId) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public io.pockethive.swarm.model.SutEnvironment fetchScenarioSut(String templateId,
+                                                                             String sutId,
+                                                                             String correlationId,
+                                                                             String idempotencyKey) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public ResolvedVariables resolveScenarioVariables(String templateId,
+                                                             String profileId,
+                                                             String sutId,
+                                                             String correlationId,
+                                                             String idempotencyKey) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public io.pockethive.swarm.model.NetworkProfile fetchNetworkProfile(String profileId,
+                                                                                String correlationId,
+                                                                                String idempotencyKey) {
+                throw new UnsupportedOperationException();
+            }
+        };
+    }
+
     private static ControlPlaneProperties controlPlaneProperties() {
         ControlPlaneProperties properties = new ControlPlaneProperties();
         properties.setExchange("ph.control");
@@ -161,5 +257,21 @@ class ComponentControllerTest {
         properties.setInstanceId("orch-instance");
         properties.getManager().setRole("orchestrator");
         return properties;
+    }
+
+    private static AuthenticatedUserDto userWith(String permission, String resourceType, String resourceSelector) {
+        return new AuthenticatedUserDto(
+            UUID.fromString("11111111-1111-1111-1111-111111111111"),
+            "local-user",
+            "Local User",
+            true,
+            AuthProvider.DEV,
+            List.of(new AuthGrantDto(
+                AuthProduct.POCKETHIVE,
+                permission,
+                resourceType,
+                resourceSelector
+            ))
+        );
     }
 }

@@ -1,5 +1,6 @@
 package io.pockethive.orchestrator.app;
 
+import io.pockethive.orchestrator.auth.OrchestratorEndpointAuthorization;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,20 +22,25 @@ public class ControlPlaneSyncController {
     private static final Logger log = LoggerFactory.getLogger(ControlPlaneSyncController.class);
 
     private final ControlPlaneSyncService sync;
+    private final OrchestratorEndpointAuthorization endpointAuthorization;
 
-    public ControlPlaneSyncController(ControlPlaneSyncService sync) {
+    public ControlPlaneSyncController(ControlPlaneSyncService sync,
+                                      OrchestratorEndpointAuthorization endpointAuthorization) {
         this.sync = Objects.requireNonNull(sync, "sync");
+        this.endpointAuthorization = Objects.requireNonNull(endpointAuthorization, "endpointAuthorization");
     }
 
     @PostMapping("/refresh")
     public ResponseEntity<ControlPlaneSyncResponse> refresh() {
         log.info("REST POST /api/control-plane/refresh");
+        endpointAuthorization.requireManageDeployment();
         return ResponseEntity.accepted().body(sync.refresh());
     }
 
     @PostMapping("/reset")
     public ResponseEntity<ControlPlaneSyncResponse> reset() {
         log.info("REST POST /api/control-plane/reset");
+        endpointAuthorization.requireManageDeployment();
         return ResponseEntity.accepted().body(sync.reset());
     }
 }

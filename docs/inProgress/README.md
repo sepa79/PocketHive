@@ -8,5 +8,10 @@ index is a convenience for humans and tools.
 
 Notable in‑progress plans:
 
+- `docs/inProgress/auth-api-rollout-plan.md` – live checklist for auth/authz
+  rollout across PocketHive HTTP APIs, with e2e + verification tracking.
+- `docs/inProgress/e2e-api-framework-mini-plan.md` – lightweight refactor plan
+  for turning the ingress auth pack into a reusable API/E2E support layer.
+
 Files in this folder should carry a `Status: in progress` header so it’s clear
 they are live design documents rather than historical notes.
