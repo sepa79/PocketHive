@@ -17,6 +17,12 @@ default_branch: main
 
 If the client exposes a global `hivemind` MCP server, use that server with `project_id=pockethive` and `workspace_path=/home/sepa/PocketHive`.
 
+## MCP Tool Naming
+
+MCP clients used by agents may reject tool names that contain characters outside `[a-z0-9_-]`.
+HiveMind tools should therefore use names such as `context_open`, `project_register`, and `feature_list`,
+not dotted names such as `context.open`.
+
 ## Agent Workflow
 
 For meaningful PocketHive work:
