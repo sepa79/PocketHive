@@ -12,6 +12,8 @@ Notable in‑progress plans:
   rollout across PocketHive HTTP APIs, with e2e + verification tracking.
 - `docs/inProgress/e2e-api-framework-mini-plan.md` – lightweight refactor plan
   for turning the ingress auth pack into a reusable API/E2E support layer.
+- `docs/inProgress/proxmox-remote-swarm-deploy-plan.md` – staged plan for
+  registry-backed Proxmox deployment, remote E2E, and later full Swarm mode.
 
 Files in this folder should carry a `Status: in progress` header so it’s clear
 they are live design documents rather than historical notes.
