@@ -6,7 +6,7 @@ Welcome to the PocketHive documentation hub. Use these resources to understand t
 - [System Architecture](ARCHITECTURE.md)
 - [SUT + Dataset + Simulation Model (proposal)](architecture/sut-dataset-simulation-model.md)
 - [Network Proxy Plan](inProgress/network-proxy-plan.md)
-- [Auth API Rollout Plan](inProgress/auth-api-rollout-plan.md)
+- [Auth API Rollout Plan](archive/auth-api-rollout-plan.md)
 - [E2E API Framework Mini-Plan](inProgress/e2e-api-framework-mini-plan.md)
 
 ## Roadmap

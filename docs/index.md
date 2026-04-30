@@ -70,6 +70,9 @@ by the UI under `/docs/...` as part of the runtime image.
 - `docs/architecture/AUTH_SERVICE_API_SPEC.md` (Status: planned / spec draft) –
   MVP HTTP contract for shared `auth-service`, bearer token resolution, and
   product integration.
+- `docs/archive/auth-api-rollout-plan.md` (Status: completed / archived) –
+  service-by-service auth/authz rollout checklist for PocketHive HTTP APIs,
+  including e2e and verification tracking.
 - `docs/ui-v2/SCENARIO_WORKSPACE_PLAN.md` (Status: planned) –
   UI v2 Scenarios workspace plan for bundle explorer, offline Monaco, permissions,
   and guided editors.
@@ -78,10 +81,7 @@ by the UI under `/docs/...` as part of the runtime image.
 - `docs/inProgress/network-proxy-plan.md` (Status: in progress) –
   shared-per-SUT network proxying, secure traffic routing, and runtime fault
   profiles.
-- `docs/inProgress/auth-api-rollout-plan.md` (Status: in progress) –
-  service-by-service auth/authz rollout checklist for PocketHive HTTP APIs,
-  including e2e and verification tracking.
-- `docs/inProgress/e2e-api-framework-mini-plan.md` (Status: in progress) –
+- `docs/inProgress/e2e-api-framework-mini-plan.md` (Status: completed) –
   incremental plan for extracting a reusable API/E2E support layer from the
   current ingress auth pack.
 

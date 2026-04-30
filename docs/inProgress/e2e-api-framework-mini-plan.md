@@ -6,7 +6,7 @@
 
 Related:
 
-- `docs/inProgress/auth-api-rollout-plan.md`
+- `docs/archive/auth-api-rollout-plan.md`
 - `docs/ci/control-plane-testing.md`
 - `e2e-tests/README.md`
 

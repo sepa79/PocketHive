@@ -1,6 +1,6 @@
 # Auth API Rollout Plan
 
-> Status: **in progress**  
+> Status: **completed / archived**  
 > Scope: incoming auth/authz coverage for PocketHive HTTP APIs, e2e rollout tracking, and final verification  
 > Related:
 > - `docs/architecture/AUTH_SERVICE_FOUNDATION_PLAN.md`
@@ -10,6 +10,10 @@
 
 This plan is the working checklist for rolling shared `auth-service` integration
 through every PocketHive API that should be protected.
+
+Archived after all tracked API surfaces had auth/authz, ingress e2e coverage,
+and explicit verification marked complete. Future auth hardening work should
+start from the active architecture/spec docs or a new `docs/inProgress` plan.
 
 It exists so implementation can proceed iteratively, one API surface at a time,
 without losing track of:
