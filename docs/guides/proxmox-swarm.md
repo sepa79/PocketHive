@@ -28,20 +28,25 @@ typical local path is outside the repo:
 export POCKETHIVE_PROXMOX_CONFIG="$HOME/.config/pockethive/proxmox.env"
 ```
 
-## Current lab topology
+## Environment-specific endpoints
 
-The current PocketHive lab uses these explicit endpoints:
+Do not hardcode private lab IPs in reviewable docs or scripts. Keep concrete
+hostnames, IPs, registry endpoints, and shared mount paths in the local env file
+selected by `POCKETHIVE_PROXMOX_CONFIG`.
 
-| Purpose | Endpoint |
+Common values:
+
+| Purpose | Env value |
 | --- | --- |
-| Full Swarm ingress | `http://192.168.88.50:8088` |
-| UI v2 | `http://192.168.88.50:8088/v2/` |
-| Registry | `192.168.88.54:5000/pockethive` |
-| Shared scenarios runtime root | `/mnt/shared/pockethive/scenarios-runtime` |
+| Full Swarm ingress | `POCKETHIVE_SWARM_INGRESS_URL` |
+| UI v2 | `${POCKETHIVE_SWARM_INGRESS_URL}/v2/` |
+| Registry endpoint | `POCKETHIVE_IMAGE_REGISTRY` |
+| Registry namespace | `POCKETHIVE_IMAGE_NAMESPACE` |
+| Shared scenarios runtime root | `POCKETHIVE_SCENARIOS_RUNTIME_ROOT` |
 
-The `.50` target is the official ingress/API path for remote Swarm checks.
-Tests and diagnostics should not bypass it with direct backend container ports
-unless a test explicitly targets that service interface.
+The configured Swarm ingress URL is the official ingress/API path for remote
+Swarm checks. Tests and diagnostics should not bypass it with direct backend
+container ports unless a test explicitly targets that service interface.
 
 ## Node preparation
 
@@ -51,10 +56,11 @@ Prepare the Swarm host paths and static inputs through the helper script:
 tools/docker/proxmox-swarm-prepare-node.sh --config "$POCKETHIVE_PROXMOX_CONFIG"
 ```
 
-The full Swarm stack expects an explicit shared scenarios runtime root:
+The full Swarm stack expects an explicit shared scenarios runtime root. Read the
+concrete path from the local env file:
 
-```text
-/mnt/shared/pockethive/scenarios-runtime
+```bash
+printf '%s\n' "$POCKETHIVE_SCENARIOS_RUNTIME_ROOT"
 ```
 
 Every node that may run dynamic workers must see the same path, or dynamic
@@ -67,8 +73,8 @@ Build and push a selected image:
 
 ```bash
 tools/docker/remote-images.sh \
-  --registry 192.168.88.54:5000 \
-  --namespace pockethive \
+  --registry "$POCKETHIVE_IMAGE_REGISTRY" \
+  --namespace "$POCKETHIVE_IMAGE_NAMESPACE" \
   --tag dev-YYYYMMDD-HHMM-g<sha>-dirty \
   --service ui-v2 \
   --push
@@ -101,10 +107,10 @@ deploy command on the manager node.
 Use the official ingress for stack health:
 
 ```bash
-curl -s http://192.168.88.50:8088/healthz
-curl -s http://192.168.88.50:8088/orchestrator/actuator/health
-curl -s http://192.168.88.50:8088/scenario-manager/actuator/health
-curl -s http://192.168.88.50:8088/network-proxy-manager/actuator/health
+curl -s "$POCKETHIVE_SWARM_INGRESS_URL/healthz"
+curl -s "$POCKETHIVE_SWARM_INGRESS_URL/orchestrator/actuator/health"
+curl -s "$POCKETHIVE_SWARM_INGRESS_URL/scenario-manager/actuator/health"
+curl -s "$POCKETHIVE_SWARM_INGRESS_URL/network-proxy-manager/actuator/health"
 ```
 
 The current full Swarm target has passed these E2E groups through documented
