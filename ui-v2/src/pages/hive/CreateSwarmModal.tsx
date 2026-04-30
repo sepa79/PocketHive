@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import YAML from 'yaml'
 import { ScenarioTree } from '../../components/scenarios/ScenarioTree'
 import { useAuth } from '../../lib/authContext'
+import { newUuid } from '../../lib/uuid'
 
 type BeeSummary = {
   role: string
@@ -44,10 +45,7 @@ const ORCHESTRATOR_BASE = '/orchestrator/api'
 const TEMPLATES_ENDPOINT = '/scenario-manager/api/templates'
 
 function createIdempotencyKey() {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-    return crypto.randomUUID()
-  }
-  return `ph-${Date.now()}-${Math.random().toString(16).slice(2)}`
+  return `ph-${newUuid()}`
 }
 
 async function readErrorMessage(response: Response): Promise<string> {

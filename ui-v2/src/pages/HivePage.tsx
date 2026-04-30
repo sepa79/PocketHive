@@ -13,6 +13,7 @@ import {
 } from '../lib/capabilities'
 import { detectUiBasename } from '../lib/routing/basename'
 import { listBundleTemplates, type BundleTemplateEntry } from '../lib/scenariosApi'
+import { newUuid } from '../lib/uuid'
 import {
   createIdempotencyKey as createNetworkIdempotencyKey,
   formatInstant,
@@ -121,10 +122,7 @@ const ORCHESTRATOR_BASE = '/orchestrator/api'
 const CAPABILITIES_ENDPOINT = '/scenario-manager/api/capabilities?all=true'
 
 function createIdempotencyKey() {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-    return crypto.randomUUID()
-  }
-  return `ph-${Date.now()}-${Math.random().toString(16).slice(2)}`
+  return `ph-${newUuid()}`
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -467,7 +465,6 @@ export function HivePage() {
   const [snapshotError, setSnapshotError] = useState<string | null>(null)
   const [snapshotLoading, setSnapshotLoading] = useState(false)
   const [capabilities, setCapabilities] = useState<CapabilityManifest[]>([])
-  const [capabilityFallbackTag, setCapabilityFallbackTag] = useState<string | null>(null)
   const [capabilitiesLoaded, setCapabilitiesLoaded] = useState(false)
   const [capabilitiesError, setCapabilitiesError] = useState<string | null>(null)
   const [templateEntries, setTemplateEntries] = useState<BundleTemplateEntry[]>([])
@@ -611,24 +608,16 @@ export function HivePage() {
       })
       if (!response.ok) {
         setCapabilities([])
-        setCapabilityFallbackTag(null)
         setCapabilitiesLoaded(true)
         setCapabilitiesError('Failed to load capabilities')
         return
       }
       const payload = await response.json()
       const normalized = normalizeManifests(payload)
-      const fallbackTagHeader = response.headers.get('X-Pockethive-Capability-Fallback-Tag')
-      setCapabilityFallbackTag(
-        typeof fallbackTagHeader === 'string' && fallbackTagHeader.trim().length > 0
-          ? fallbackTagHeader.trim()
-          : null,
-      )
       setCapabilities(normalized)
       setCapabilitiesLoaded(true)
     } catch (err) {
       setCapabilities([])
-      setCapabilityFallbackTag(null)
       setCapabilitiesLoaded(true)
       setCapabilitiesError(err instanceof Error ? err.message : 'Failed to load capabilities')
     }
@@ -1513,7 +1502,7 @@ export function HivePage() {
 	                                roleKey ? runtimeWorkersByRole.get(roleKey) ?? null : null
 	                              const runtimeImage = runtimeWorker?.runtime?.image ?? null
 	                              const manifestResolution = runtimeImage
-	                                ? resolveManifestForImage(runtimeImage, manifestIndex, capabilityFallbackTag)
+	                                ? resolveManifestForImage(runtimeImage, manifestIndex)
 	                                : { manifest: null, kind: 'none' as const, requestedTag: null, resolvedTag: null }
 	                              const manifest = manifestResolution.manifest
 	                              const ports = activeBee.ports
@@ -1869,11 +1858,6 @@ export function HivePage() {
 	                                          </span>
 		                                        ) : (
 		                                          <span className="muted">config fields: —</span>
-		                                        )}
-		                                        {manifestResolution.kind === 'fallback_tag' && (
-		                                          <span className="warningText">
-		                                            capability fallback: runtime tag {manifestResolution.requestedTag ?? 'unknown'} uses manifest tag {manifestResolution.resolvedTag ?? 'unknown'}
-		                                          </span>
 		                                        )}
 	                                      </>
 	                                    )}

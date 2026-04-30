@@ -24,27 +24,20 @@ public class CapabilityCatalogueService {
     private static final Logger logger = LoggerFactory.getLogger(CapabilityCatalogueService.class);
 
     private final Path capabilitiesDir;
-    private final String fallbackTag;
     private final ObjectMapper jsonMapper;
     private final ObjectMapper yamlMapper;
 
     private volatile Map<String, CapabilityManifest> manifestsByDigest = Map.of();
-    private volatile Map<ImageCoordinate, CapabilityManifest> manifestsByNameAndTag = Map.of();
+    private volatile Map<String, CapabilityManifest> manifestsByImageName = Map.of();
     private volatile List<CapabilityManifest> manifests = List.of();
 
     @Autowired
-    public CapabilityCatalogueService(@Value("${capabilities.dir:capabilities}") String directory,
-                                      @Value("${pockethive.capabilities.fallback-tag:}") String fallbackTag) throws IOException {
-        this(Paths.get(directory), fallbackTag);
+    public CapabilityCatalogueService(@Value("${capabilities.dir:capabilities}") String directory) throws IOException {
+        this(Paths.get(directory));
     }
 
-    public CapabilityCatalogueService(String directory) throws IOException {
-        this(Paths.get(directory), null);
-    }
-
-    public CapabilityCatalogueService(Path directory, String fallbackTag) throws IOException {
+    public CapabilityCatalogueService(Path directory) throws IOException {
         this.capabilitiesDir = directory.toAbsolutePath().normalize();
-        this.fallbackTag = normalizeTag(fallbackTag);
         Files.createDirectories(this.capabilitiesDir);
         this.jsonMapper = configuredMapper(new ObjectMapper());
         this.yamlMapper = configuredMapper(new ObjectMapper(new YAMLFactory()));
@@ -63,7 +56,7 @@ public class CapabilityCatalogueService {
 
     public synchronized void reload() {
         Map<String, CapabilityManifest> digestIndex = new HashMap<>();
-        Map<ImageCoordinate, CapabilityManifest> nameTagIndex = new HashMap<>();
+        Map<String, CapabilityManifest> imageNameIndex = new HashMap<>();
         List<CapabilityManifest> loaded = new ArrayList<>();
 
         if (!Files.isDirectory(capabilitiesDir)) {
@@ -83,10 +76,10 @@ public class CapabilityCatalogueService {
                     }
                 }
 
-                ImageCoordinate nameTagKey = coordinates.nameTag();
-                CapabilityManifest previous = nameTagKey == null ? null : nameTagIndex.put(nameTagKey, manifest);
+                String imageNameKey = coordinates.imageName();
+                CapabilityManifest previous = imageNameIndex.put(imageNameKey, manifest);
                 if (previous != null) {
-                    throw duplicateKey("name+tag", nameTagKey.toString(), path);
+                    throw duplicateKey("image name", imageNameKey, path);
                 }
             }
         } catch (IOException | DirectoryIteratorException e) {
@@ -98,7 +91,7 @@ public class CapabilityCatalogueService {
                 .thenComparing(m -> Objects.toString(m.image().tag(), "")));
 
         manifestsByDigest = Map.copyOf(digestIndex);
-        manifestsByNameAndTag = Map.copyOf(nameTagIndex);
+        manifestsByImageName = Map.copyOf(imageNameIndex);
         manifests = List.copyOf(loaded);
 
         logger.info("Loaded {} capability manifest(s) from {}", loaded.size(), capabilitiesDir);
@@ -112,20 +105,16 @@ public class CapabilityCatalogueService {
         return Optional.ofNullable(manifestsByDigest.get(normalized));
     }
 
-    public Optional<CapabilityManifest> findByNameAndTag(String name, String tag) {
-        ImageCoordinate key = createCoordinate(name, tag);
+    public Optional<CapabilityManifest> findByImageName(String name) {
+        String key = canonicalImageName(name);
         if (key == null) {
             return Optional.empty();
         }
-        return Optional.ofNullable(manifestsByNameAndTag.get(key));
+        return Optional.ofNullable(manifestsByImageName.get(key));
     }
 
     public List<CapabilityManifest> allManifests() {
         return manifests;
-    }
-
-    public String capabilityFallbackTag() {
-        return fallbackTag;
     }
 
     public Optional<CapabilityManifest> findByImageReference(String imageReference) {
@@ -138,23 +127,10 @@ public class CapabilityCatalogueService {
             return Optional.empty();
         }
 
-        if (reference.digest() != null) {
-            Optional<CapabilityManifest> byDigest = findByDigest(reference.digest());
-            if (byDigest.isPresent()) {
-                return byDigest.map(manifest -> new CapabilityResolution(manifest, imageReference, reference.tag(), manifest.image().tag(), false));
-            }
-        }
-
-        if (reference.name() != null && reference.tag() != null) {
-            Optional<CapabilityManifest> exact = findByNameAndTag(reference.name(), reference.tag());
-            if (exact.isPresent()) {
-                return exact.map(manifest -> new CapabilityResolution(manifest, imageReference, reference.tag(), manifest.image().tag(), false));
-            }
-            if (fallbackTag != null && !fallbackTag.equals(reference.tag())) {
-                Optional<CapabilityManifest> fallback = findByNameAndTag(reference.name(), fallbackTag);
-                if (fallback.isPresent()) {
-                    return fallback.map(manifest -> new CapabilityResolution(manifest, imageReference, reference.tag(), manifest.image().tag(), true));
-                }
+        if (reference.name() != null) {
+            Optional<CapabilityManifest> match = findByImageName(reference.name());
+            if (match.isPresent()) {
+                return match.map(manifest -> new CapabilityResolution(manifest, imageReference, reference.tag(), manifest.image().tag()));
             }
         }
 
@@ -188,19 +164,14 @@ public class CapabilityCatalogueService {
         }
 
         String name = null;
-        String tag = null;
         String digest = null;
 
         if (image != null) {
             name = normalizeName(image.name());
-            tag = normalizeTag(image.tag());
             digest = normalizeDigest(image.digest());
 
             if (name == null) {
                 errors.add("image.name is required");
-            }
-            if (tag == null && digest == null) {
-                errors.add("image requires a tag when digest is absent");
             }
         }
 
@@ -208,8 +179,7 @@ public class CapabilityCatalogueService {
             throw new IllegalStateException("Invalid capability manifest " + source + ": " + String.join(", ", errors));
         }
 
-        ImageCoordinate nameTag = (tag == null) ? null : new ImageCoordinate(name, tag);
-        return new ManifestCoordinates(digest, nameTag);
+        return new ManifestCoordinates(digest, canonicalImageName(name));
     }
 
     private static IllegalStateException duplicateKey(String keyType, String key, Path path) {
@@ -241,13 +211,25 @@ public class CapabilityCatalogueService {
         return digest.trim().toLowerCase(Locale.ROOT);
     }
 
-    private ImageCoordinate createCoordinate(String name, String tag) {
+    private static String canonicalImageName(String name) {
         String normalizedName = normalizeName(name);
-        String normalizedTag = normalizeTag(tag);
-        if (normalizedName == null || normalizedTag == null) {
+        if (normalizedName == null) {
             return null;
         }
-        return new ImageCoordinate(normalizedName, normalizedTag);
+        int digestSep = normalizedName.indexOf('@');
+        if (digestSep >= 0) {
+            normalizedName = normalizedName.substring(0, digestSep);
+        }
+        int lastColon = normalizedName.lastIndexOf(':');
+        int lastSlash = normalizedName.lastIndexOf('/');
+        if (lastColon > lastSlash) {
+            normalizedName = normalizedName.substring(0, lastColon);
+            lastSlash = normalizedName.lastIndexOf('/');
+        }
+        if (lastSlash >= 0 && lastSlash < normalizedName.length() - 1) {
+            return normalizedName.substring(lastSlash + 1);
+        }
+        return normalizedName;
     }
 
     private ImageReference parseImageReference(String reference) {
@@ -282,15 +264,12 @@ public class CapabilityCatalogueService {
         return new ImageReference(name, tag, digest);
     }
 
-    private record ManifestCoordinates(String digest, ImageCoordinate nameTag) { }
-
-    private record ImageCoordinate(String name, String tag) { }
+    private record ManifestCoordinates(String digest, String imageName) { }
 
     private record ImageReference(String name, String tag, String digest) { }
 
     public record CapabilityResolution(CapabilityManifest manifest,
                                        String imageReference,
                                        String requestedTag,
-                                       String resolvedTag,
-                                       boolean fallbackUsed) { }
+                                       String resolvedTag) { }
 }

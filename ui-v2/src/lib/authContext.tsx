@@ -23,6 +23,8 @@ import {
   AuthServiceResourceSelectors,
   AuthServiceResourceTypes,
 } from './authContracts'
+import { bootstrapControlPlane, resetControlPlaneBootstrap } from './controlPlane/bootstrap'
+import { resetControlPlaneSchema } from './controlPlane/schemaRegistry'
 
 type AuthStatus = 'loading' | 'anonymous' | 'authenticated'
 
@@ -82,6 +84,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(resolvedUser)
         setStatus('authenticated')
         setError(null)
+        bootstrapControlPlane()
       } catch (e) {
         if (cancelled) return
         clearAuthSession()
@@ -105,10 +108,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(nextSession)
     setUser(nextSession.user)
     setStatus('authenticated')
+    bootstrapControlPlane()
   }
 
   function logout() {
     clearAuthSession()
+    resetControlPlaneBootstrap()
+    resetControlPlaneSchema()
     setSession(null)
     setUser(null)
     setStatus('anonymous')
@@ -129,6 +135,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(resolvedUser)
     setStatus('authenticated')
     setError(null)
+    bootstrapControlPlane()
   }
 
   return (

@@ -16,6 +16,7 @@ import {
   PocketHiveResourceSelectors,
   PocketHiveResourceTypes,
 } from '../lib/authContracts'
+import { newUuid } from '../lib/uuid'
 
 type EditableUser = {
   id: string
@@ -39,7 +40,7 @@ function cloneGrants(grants: AuthGrant[]) {
 
 function createBlankUser(): EditableUser {
   return {
-    id: crypto.randomUUID(),
+    id: newUuid(),
     username: '',
     displayName: '',
     active: true,

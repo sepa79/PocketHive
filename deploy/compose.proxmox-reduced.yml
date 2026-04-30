@@ -1,0 +1,60 @@
+# Reduced remote runtime for the first Proxmox single-node smoke pass.
+#
+# Use only with docker-compose.yml and deploy/compose.proxmox-single-node.yml.
+# This keeps the first .55 deployment focused on the control-plane and core
+# SUT path, while avoiding optional data/observability services until their
+# placement is explicit.
+
+services:
+  ui:
+    volumes:
+      - ./deploy/nginx.proxmox-reduced.conf:/etc/nginx/conf.d/default.conf:ro
+
+  log-aggregator:
+    depends_on: !override
+      rabbitmq:
+        condition: service_started
+
+  scenario-manager:
+    depends_on: !override
+      auth-service:
+        condition: service_healthy
+      log-aggregator:
+        condition: service_healthy
+
+  orchestrator:
+    environment:
+      POCKETHIVE_SINK_CLICKHOUSE_ENDPOINT: ""
+      POCKETHIVE_SINK_CLICKHOUSE_TABLE: ""
+      POCKETHIVE_SINK_CLICKHOUSE_USERNAME: ""
+      POCKETHIVE_SINK_CLICKHOUSE_PASSWORD: ""
+    depends_on: !override
+      auth-service:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      log-aggregator:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      pushgateway:
+        condition: service_healthy
+
+  wiremock:
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/__admin/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  network-proxy-manager:
+    depends_on: !override
+      auth-service:
+        condition: service_healthy
+      scenario-manager:
+        condition: service_healthy
+      toxiproxy:
+        condition: service_healthy
+      haproxy:
+        condition: service_healthy

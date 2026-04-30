@@ -4,64 +4,26 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}"
 
-ALL_SERVICES=(rabbitmq log-aggregator auth-service scenario-manager network-proxy-manager haproxy orchestrator tcp-mock-server tcp-mock-server-tls toxiproxy ui ui-v2 prometheus grafana loki wiremock pushgateway redis redis-commander swarm-controller generator request-builder http-sequence moderator processor postprocessor clearing-export trigger)
+source "${SCRIPT_DIR}/tools/docker/image-manifest.sh"
+
+INFRA_SERVICES=(rabbitmq tcp-mock-server-tls toxiproxy prometheus grafana loki wiremock pushgateway redis redis-commander)
+mapfile -t IMAGE_SERVICES < <(pockethive_all_image_services)
+ALL_SERVICES=("${INFRA_SERVICES[@]}" "${IMAGE_SERVICES[@]}")
 declare -A DURATIONS=()
 TIMING_ORDER=(clean build_base maven_package stage_artifacts docker_build_workers docker_build compose_up restart)
 BUILD_START_TIME=0
-JAR_MODULES=(
-  log-aggregator-service
-  auth-service
-  scenario-manager-service
-  network-proxy-manager-service
-  orchestrator-service
-  tcp-mock-server
-  swarm-controller-service
-  generator-service
-  request-builder-service
-  http-sequence-service
-  moderator-service
-  processor-service
-  postprocessor-service
-  clearing-export-service
-  trigger-service
-  tools/scenario-templating-check
-)
+mapfile -t JAR_MODULES < <(pockethive_all_java_modules)
 
-declare -A MODULE_TO_SERVICE=(
-  ["log-aggregator-service"]="log-aggregator"
-  ["auth-service"]="auth-service"
-  ["scenario-manager-service"]="scenario-manager"
-  ["network-proxy-manager-service"]="network-proxy-manager"
-  ["orchestrator-service"]="orchestrator"
-  ["tcp-mock-server"]="tcp-mock-server"
-  ["swarm-controller-service"]="swarm-controller"
-  ["generator-service"]="generator"
-  ["request-builder-service"]="request-builder"
-  ["http-sequence-service"]="http-sequence"
-  ["moderator-service"]="moderator"
-  ["processor-service"]="processor"
-  ["postprocessor-service"]="postprocessor"
-  ["clearing-export-service"]="clearing-export"
-  ["trigger-service"]="trigger"
-)
-
-declare -A SERVICE_TO_MODULE=(
-  ["log-aggregator"]="log-aggregator-service"
-  ["auth-service"]="auth-service"
-  ["scenario-manager"]="scenario-manager-service"
-  ["network-proxy-manager"]="network-proxy-manager-service"
-  ["orchestrator"]="orchestrator-service"
-  ["tcp-mock-server"]="tcp-mock-server"
-  ["swarm-controller"]="swarm-controller-service"
-  ["generator"]="generator-service"
-  ["request-builder"]="request-builder-service"
-  ["http-sequence"]="http-sequence-service"
-  ["moderator"]="moderator-service"
-  ["processor"]="processor-service"
-  ["postprocessor"]="postprocessor-service"
-  ["clearing-export"]="clearing-export-service"
-  ["trigger"]="trigger-service"
-)
+declare -A MODULE_TO_SERVICE=()
+declare -A SERVICE_TO_MODULE=()
+for image in "${POCKETHIVE_IMAGE_NAMES[@]}"; do
+  module="${POCKETHIVE_IMAGE_MODULE[$image]}"
+  service="${POCKETHIVE_IMAGE_SERVICE[$image]}"
+  if [[ -n "${module}" && -n "${service}" ]]; then
+    MODULE_TO_SERVICE["${module}"]="${service}"
+    SERVICE_TO_MODULE["${service}"]="${module}"
+  fi
+done
 
 LOCAL_ARTIFACTS_DIR="${LOCAL_ARTIFACTS_DIR:-.local-jars}"
 COMPOSE_FILES=(-f docker-compose.yml)
@@ -119,83 +81,52 @@ compose_build_services() {
 
   local built_any=false
   for svc in "${services[@]}"; do
-    case "$svc" in
-      log-aggregator)
-        echo "Building log-aggregator image from log-aggregator-service/Dockerfile.runtime"
+    local image="${POCKETHIVE_SERVICE_IMAGE[$svc]:-}"
+    if [[ -z "${image}" ]]; then
+      # Infrastructure / third-party services (rabbitmq, prometheus, grafana, etc.)
+      # use upstream images and are not built locally here.
+      continue
+    fi
+
+    local kind="${POCKETHIVE_IMAGE_KIND[$image]}"
+    if [[ "${kind}" == "worker" || "${kind}" == "base" ]]; then
+      continue
+    fi
+
+    local dockerfile="${POCKETHIVE_IMAGE_DOCKERFILE[$image]}"
+    local context="${POCKETHIVE_IMAGE_CONTEXT[$image]}"
+    echo "Building ${image} image from ${dockerfile}"
+    case "${kind}" in
+      runtime)
         docker build \
-          -f log-aggregator-service/Dockerfile.runtime \
+          -f "${dockerfile}" \
           --build-arg RUNTIME_IMAGE="${RUNTIME_IMAGE}" \
-          -t log-aggregator:latest .
-        built_any=true
+          -t "${image}:latest" "${context}"
         ;;
-      scenario-manager)
-        echo "Building scenario-manager image from scenario-manager-service/Dockerfile.runtime"
+      static)
         docker build \
-          -f scenario-manager-service/Dockerfile.runtime \
-          --build-arg RUNTIME_IMAGE="${RUNTIME_IMAGE}" \
-          -t scenario-manager:latest .
-        built_any=true
-        ;;
-      auth-service)
-        echo "Building auth-service image from auth-service/Dockerfile.runtime"
-        docker build \
-          -f auth-service/Dockerfile.runtime \
-          --build-arg RUNTIME_IMAGE="${RUNTIME_IMAGE}" \
-          -t auth-service:latest .
-        built_any=true
-        ;;
-      network-proxy-manager)
-        echo "Building network-proxy-manager image from network-proxy-manager-service/Dockerfile.runtime"
-        docker build \
-          -f network-proxy-manager-service/Dockerfile.runtime \
-          --build-arg RUNTIME_IMAGE="${RUNTIME_IMAGE}" \
-          -t network-proxy-manager:latest .
-        built_any=true
-        ;;
-      haproxy)
-        echo "Building network-proxy-haproxy image from network-proxy-haproxy/Dockerfile"
-        docker build \
-          -f network-proxy-haproxy/Dockerfile \
-          -t network-proxy-haproxy:latest network-proxy-haproxy
-        built_any=true
-        ;;
-      orchestrator)
-        echo "Building orchestrator image from orchestrator-service/Dockerfile.runtime"
-        docker build \
-          -f orchestrator-service/Dockerfile.runtime \
-          --build-arg RUNTIME_IMAGE="${RUNTIME_IMAGE}" \
-          -t orchestrator:latest .
-        built_any=true
-        ;;
-      tcp-mock-server)
-        echo "Building tcp-mock-server image from tcp-mock-server/Dockerfile.runtime"
-        docker build \
-          -f tcp-mock-server/Dockerfile.runtime \
-          --build-arg RUNTIME_IMAGE="${RUNTIME_IMAGE}" \
-          -t tcp-mock-server:latest .
-        built_any=true
+          -f "${dockerfile}" \
+          -t "${image}:latest" "${context}"
         ;;
       ui)
-        echo "Building ui image from ui/Dockerfile"
-        docker build \
-          -f ui/Dockerfile \
-          --build-arg VITE_STOMP_READONLY_USER="${VITE_STOMP_READONLY_USER:-ph-observer}" \
-          --build-arg VITE_STOMP_READONLY_PASSCODE="${VITE_STOMP_READONLY_PASSCODE:-ph-observer}" \
-          -t ui:latest .
-        built_any=true
-        ;;
-      ui-v2)
-        echo "Building ui-v2 image from ui-v2/Dockerfile"
-        docker build \
-          -f ui-v2/Dockerfile \
-          -t ui-v2:latest .
-        built_any=true
+        if [[ "${image}" == "ui" ]]; then
+          docker build \
+            -f "${dockerfile}" \
+            --build-arg VITE_STOMP_READONLY_USER="${VITE_STOMP_READONLY_USER:-ph-observer}" \
+            --build-arg VITE_STOMP_READONLY_PASSCODE="${VITE_STOMP_READONLY_PASSCODE:-ph-observer}" \
+            -t "${image}:latest" "${context}"
+        else
+          docker build \
+            -f "${dockerfile}" \
+            -t "${image}:latest" "${context}"
+        fi
         ;;
       *)
-        # Infrastructure / third-party services (rabbitmq, prometheus, grafana, etc.)
-        # use upstream images and are not built locally here.
+        echo "Unsupported image kind '${kind}' for ${image}" >&2
+        exit 1
         ;;
     esac
+    built_any=true
   done
 
   if ! $built_any; then
@@ -385,56 +316,17 @@ build_worker_images() {
 
   local built_any=false
   for module in "${modules[@]}"; do
-    local image=""
-    local target=""
-    case "$module" in
-      swarm-controller-service)
-        image="swarm-controller:latest"
-        target="swarm-controller"
-        ;;
-      generator-service)
-        image="generator:latest"
-        target="generator"
-        ;;
-      request-builder-service)
-        image="request-builder:latest"
-        target="request-builder"
-        ;;
-      http-sequence-service)
-        image="http-sequence:latest"
-        target="http-sequence"
-        ;;
-      moderator-service)
-        image="moderator:latest"
-        target="moderator"
-        ;;
-      processor-service)
-        image="processor:latest"
-        target="processor"
-        ;;
-      postprocessor-service)
-        image="postprocessor:latest"
-        target="postprocessor"
-        ;;
-      clearing-export-service)
-        image="clearing-export:latest"
-        target="clearing-export"
-        ;;
-      trigger-service)
-        image="trigger:latest"
-        target="trigger"
-        ;;
-      *)
-        continue
-        ;;
-    esac
+    local image="${POCKETHIVE_MODULE_IMAGE[$module]:-}"
+    [[ -n "${image}" ]] || continue
+    [[ "${POCKETHIVE_IMAGE_KIND[$image]}" == "worker" ]] || continue
+    local target="${POCKETHIVE_IMAGE_TARGET[$image]}"
     built_any=true
-    echo "Building worker image ${image} from module ${module}"
+    echo "Building worker image ${image}:latest from module ${module}"
     docker build \
-      -f Dockerfile.bees.local \
+      -f "${POCKETHIVE_IMAGE_DOCKERFILE[$image]}" \
       --target "${target}" \
       --build-arg RUNTIME_IMAGE="${RUNTIME_IMAGE}" \
-      -t "${image}" .
+      -t "${image}:latest" "${POCKETHIVE_IMAGE_CONTEXT[$image]}"
   done
 
   if ! $built_any; then

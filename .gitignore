@@ -30,6 +30,8 @@ dependency-reduced-pom.xml
 
 # --- Docker / Compose ---
 .env
+deploy/*.env
+deploy/*.local.env
 docker-data/
 .local-bee-artifacts/
 .local-jars/

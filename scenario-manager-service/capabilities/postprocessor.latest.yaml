@@ -3,7 +3,6 @@ capabilitiesVersion: "1.0"
 role: postprocessor
 image:
   name: postprocessor
-  tag: latest
 ui:
   label: "Postprocessor"
   color: "#facc15"

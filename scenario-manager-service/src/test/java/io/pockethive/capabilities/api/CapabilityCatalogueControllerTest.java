@@ -17,7 +17,6 @@ import java.util.List;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -91,6 +90,19 @@ class CapabilityCatalogueControllerTest {
     }
 
     @Test
+    void capabilityLookupByImageNameDoesNotRequireTag() throws Exception {
+        CapabilityManifest manifest = new CapabilityManifest(
+                "1.0", "2.0", new CapabilityManifest.Image("processor", null, null),
+                "processor", List.of(), List.of(), List.of(), null);
+        given(catalogue.findByImageName("processor")).willReturn(java.util.Optional.of(manifest));
+        given(authorization.canReadPocketHive(org.mockito.ArgumentMatchers.any())).willReturn(true);
+
+        mvc.perform(get("/api/capabilities").param("imageName", "processor"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.image.name").value("processor"));
+    }
+
+    @Test
     void capabilityLookupMissingManifestReturns404() throws Exception {
         given(catalogue.findByDigest(anyString())).willReturn(java.util.Optional.empty());
         given(authorization.canReadPocketHive(org.mockito.ArgumentMatchers.any())).willReturn(true);
@@ -105,12 +117,10 @@ class CapabilityCatalogueControllerTest {
                 "1.0", "2.0", new CapabilityManifest.Image("image/name", "latest", "sha256:def"),
                 "role", List.of(), List.of(), List.of(), null);
         given(catalogue.allManifests()).willReturn(List.of(manifest));
-        given(catalogue.capabilityFallbackTag()).willReturn("latest");
         given(authorization.canReadPocketHive(org.mockito.ArgumentMatchers.any())).willReturn(true);
 
         mvc.perform(get("/api/capabilities").param("all", "true"))
                 .andExpect(status().isOk())
-                .andExpect(header().string(CapabilityCatalogueController.CAPABILITY_FALLBACK_TAG_HEADER, "latest"))
                 .andExpect(jsonPath("$[0].image.digest").value("sha256:def"));
     }
 

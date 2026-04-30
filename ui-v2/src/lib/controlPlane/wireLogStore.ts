@@ -4,6 +4,7 @@ import type {
   ControlPlaneEnvelope,
   ControlPlaneSource,
 } from './types'
+import { newUuid } from '../uuid'
 
 const MAX_ENTRIES = 5000
 const MAX_BYTES = 10 * 1024 * 1024
@@ -45,7 +46,7 @@ export function recordWireLog(source: ControlPlaneSource, routingKey: string | u
   const decoded = decodeControlPlaneEnvelope({ source, routingKey, payload })
   const receivedAt = decoded.ok ? decoded.envelope.timestamp : decoded.error.receivedAt
   const entry: WireLogEntry = {
-    id: crypto.randomUUID(),
+    id: newUuid(),
     receivedAt,
     source,
     routingKey,

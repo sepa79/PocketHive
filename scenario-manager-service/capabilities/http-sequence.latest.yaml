@@ -3,7 +3,6 @@ capabilitiesVersion: "1.1"
 role: http-sequence
 image:
   name: http-sequence
-  tag: latest
 ui:
   label: "HTTP Sequence"
   color: "#0ea5e9"

@@ -395,7 +395,6 @@ services:
     image: ${DOCKER_REGISTRY:-}scenario-manager:${POCKETHIVE_VERSION:-latest}
     environment:
       POCKETHIVE_IMAGES_DEFAULT_TAG: ${POCKETHIVE_VERSION:-latest}
-      POCKETHIVE_CAPABILITIES_FALLBACK_TAG: latest
       POCKETHIVE_AUTH_SERVICE_URL: http://auth-service:8080
       <<: *metrics-env
       RABBITMQ_HOST: rabbitmq

@@ -1,3 +1,5 @@
+import { newUuid } from './uuid'
+
 export type NetworkMode = 'DIRECT' | 'PROXIED'
 
 export type ResolvedSutEndpoint = {
@@ -40,10 +42,7 @@ export type ManualNetworkOverride = {
 }
 
 export function createIdempotencyKey() {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-    return crypto.randomUUID()
-  }
-  return `ph-${Date.now()}-${Math.random().toString(16).slice(2)}`
+  return `ph-${newUuid()}`
 }
 
 export async function readErrorMessage(response: Response): Promise<string> {

@@ -3,7 +3,6 @@ capabilitiesVersion: "1.0"
 role: clearing-export
 image:
   name: clearing-export
-  tag: latest
 ui:
   label: "Clearing Export"
   color: "#84cc16"

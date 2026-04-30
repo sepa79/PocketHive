@@ -1,0 +1,23 @@
+id: proxmox-registry-smoke
+name: Proxmox Registry Smoke
+description: Remote single-node smoke scenario using explicit registry image tags.
+template:
+  image: swarm-controller:dev-20260429-1701-g6b3c9177-dirty
+  bees:
+    - role: generator
+      image: generator:dev-20260429-1701-g6b3c9177-dirty
+      work:
+        out:
+          out: gen
+    - role: processor
+      image: processor:dev-20260429-1701-g6b3c9177-dirty
+      work:
+        in:
+          in: gen
+        out:
+          out: final
+    - role: postprocessor
+      image: postprocessor:dev-20260429-1701-g6b3c9177-dirty
+      work:
+        in:
+          in: final

@@ -571,7 +571,7 @@ public class ScenarioService {
             return scenario;
         }
 
-        String controllerImage = appendDefaultTag(template.image());
+        String controllerImage = applyDefaultTag(template.image());
         boolean changed = !Objects.equals(controllerImage, template.image());
 
         List<Bee> bees = template.bees();
@@ -579,7 +579,7 @@ public class ScenarioService {
         if (bees != null && !bees.isEmpty()) {
             updatedBees = new ArrayList<>(bees.size());
             for (Bee bee : bees) {
-                String updatedImage = appendDefaultTag(bee.image());
+                String updatedImage = applyDefaultTag(bee.image());
                 if (!Objects.equals(updatedImage, bee.image())) {
                     changed = true;
                     updatedBees.add(new Bee(
@@ -613,7 +613,7 @@ public class ScenarioService {
         );
     }
 
-    private String appendDefaultTag(String imageReference) {
+    private String applyDefaultTag(String imageReference) {
         if (defaultImageTag == null || imageReference == null) {
             return imageReference;
         }
@@ -621,23 +621,26 @@ public class ScenarioService {
         if (trimmed.isEmpty()) {
             return imageReference;
         }
-        if (hasTagOrDigest(trimmed)) {
+        if (hasDigest(trimmed)) {
             return trimmed;
         }
-        return trimmed + ":" + defaultImageTag;
+        return imageNameWithoutTag(trimmed) + ":" + defaultImageTag;
     }
 
-    private static boolean hasTagOrDigest(String imageReference) {
+    private static boolean hasDigest(String imageReference) {
         if (imageReference == null || imageReference.isBlank()) {
             return false;
         }
-        int digestSep = imageReference.indexOf('@');
-        if (digestSep >= 0) {
-            return true;
-        }
+        return imageReference.indexOf('@') >= 0;
+    }
+
+    private static String imageNameWithoutTag(String imageReference) {
         int lastColon = imageReference.lastIndexOf(':');
         int lastSlash = imageReference.lastIndexOf('/');
-        return lastColon > lastSlash;
+        if (lastColon > lastSlash) {
+            return imageReference.substring(0, lastColon);
+        }
+        return imageReference;
     }
 
     private static String normalizeTag(String value) {
@@ -662,22 +665,12 @@ public class ScenarioService {
         Optional<io.pockethive.capabilities.CapabilityCatalogueService.CapabilityResolution> resolution =
                 capabilities.resolveByImageReference(imageReference);
         if (resolution.isPresent()) {
-            io.pockethive.capabilities.CapabilityCatalogueService.CapabilityResolution matched = resolution.get();
-            if (matched.fallbackUsed()) {
-                logger.warn(
-                        "Scenario '{}' {} image '{}' is using fallback capability manifest tag '{}' instead of requested tag '{}'",
-                        scenarioId,
-                        component,
-                        imageReference,
-                        matched.resolvedTag(),
-                        matched.requestedTag());
-            }
             return;
         }
 
         if (capabilities.findByImageReference(imageReference).isEmpty()) {
             logger.warn("Scenario '{}' missing capability manifest for {} image '{}'", scenarioId, component, imageReference);
-            reasons.add("No capability manifest found for image '" + imageReference + "' (" + component + "). Check that this image version is installed.");
+            reasons.add("No capability manifest found for image '" + imageReference + "' (" + component + "). Check that this image is installed.");
         }
     }
 

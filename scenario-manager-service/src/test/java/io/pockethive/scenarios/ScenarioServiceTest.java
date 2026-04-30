@@ -378,10 +378,41 @@ class ScenarioServiceTest {
     }
 
     @Test
-    void fallbackCapabilityTagAllowsExplicitImageTagsWhenConfigured() throws IOException {
+    void defaultImageTagOverridesScenarioImageTagsWhenConfigured() throws IOException {
+        writeManifest("ctrl", "ctrl-image", "runtime");
+        writeManifest("worker", "worker-image", "runtime");
+        capabilities.reload();
+        service = new ScenarioService(scenariosDir.toString(), "runtime", capabilities);
+
+        writeScenario("runtime-tagged.yaml", """
+                id: runtime-tagged
+                name: Runtime Tagged Scenario
+                template:
+                  image: registry.example/pockethive/ctrl-image:latest
+                  bees:
+                    - role: worker
+                      image: registry.example/pockethive/worker-image:0.15
+                      work:
+                        in:
+                          in: a
+                        out:
+                          out: b
+                """);
+
+        service.reload();
+
+        Scenario scenario = service.findAvailable("runtime-tagged").orElseThrow();
+        assertThat(scenario.getTemplate().image()).isEqualTo("registry.example/pockethive/ctrl-image:runtime");
+        assertThat(scenario.getTemplate().bees())
+                .extracting(Bee::image)
+                .containsExactly("registry.example/pockethive/worker-image:runtime");
+    }
+
+    @Test
+    void capabilityLookupIgnoresExplicitImageTags() throws IOException {
         writeManifest("ctrl", "ctrl-image", "latest");
         writeManifest("worker", "worker-image", "latest");
-        capabilities = new CapabilityCatalogueService(capabilitiesDir, "latest");
+        capabilities = new CapabilityCatalogueService(capabilitiesDir);
         capabilities.reload();
         service = new ScenarioService(scenariosDir.toString(), capabilities);
 
@@ -389,10 +420,10 @@ class ScenarioServiceTest {
                 id: experimental
                 name: Experimental Scenario
                 template:
-                  image: ctrl-image:experimental
+                  image: 192.168.88.54:5000/pockethive/ctrl-image:experimental
                   bees:
                     - role: worker
-                      image: worker-image:experimental
+                      image: 192.168.88.54:5000/pockethive/worker-image:experimental
                       work:
                         in:
                           in: a
@@ -404,10 +435,10 @@ class ScenarioServiceTest {
 
         assertThat(service.findAvailable("experimental")).isPresent();
         Scenario scenario = service.findAvailable("experimental").orElseThrow();
-        assertThat(scenario.getTemplate().image()).isEqualTo("ctrl-image:experimental");
+        assertThat(scenario.getTemplate().image()).isEqualTo("192.168.88.54:5000/pockethive/ctrl-image:experimental");
         assertThat(scenario.getTemplate().bees())
                 .extracting(Bee::image)
-                .containsExactly("worker-image:experimental");
+                .containsExactly("192.168.88.54:5000/pockethive/worker-image:experimental");
     }
 
     @Test
