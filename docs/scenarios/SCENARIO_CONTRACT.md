@@ -188,8 +188,8 @@ The **capabilities** files under `scenario-manager-service/capabilities/` are
 the authoritative list of user-tunable fields per worker and IO type.
 Capability lookup uses the canonical image name without registry, namespace,
 tag, or digest, so `processor:0.15`, `processor:latest`, and
-`192.168.88.54:5000/pockethive/processor:dev-*` all resolve the `processor`
-manifest. Each entry maps a UI field to a path in `config`.
+`registry.example.lan:5000/pockethive/processor:dev-*` all resolve the
+`processor` manifest. Each entry maps a UI field to a path in `config`.
 
 ### IO configuration examples
 

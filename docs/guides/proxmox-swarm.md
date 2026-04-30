@@ -113,7 +113,7 @@ curl -s "$POCKETHIVE_SWARM_INGRESS_URL/scenario-manager/actuator/health"
 curl -s "$POCKETHIVE_SWARM_INGRESS_URL/network-proxy-manager/actuator/health"
 ```
 
-The current full Swarm target has passed these E2E groups through documented
+The full Swarm target previously passed these E2E groups through documented
 ingress/API paths:
 
 - `smoke`
@@ -126,6 +126,11 @@ ingress/API paths:
 The data group also uses explicit documented service interfaces for TCP mock,
 Redis, and ClickHouse checks. Those values must remain explicit in the E2E env;
 they are not substitutes for the public ingress path.
+
+The latest smoke rerun after the auth-enabled UI v2 deployment passed 16 of 17
+checks and still has a known auth rollout visibility timeout on
+`auth-rollout-swarm`. Treat `smoke` as not currently green until that race is
+fixed or revalidated.
 
 ## Known diagnostic gap
 
