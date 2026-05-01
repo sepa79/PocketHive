@@ -1,7 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import YAML from 'yaml'
+import { MonacoEditorHost } from '../../components/MonacoEditorHost'
+import { BundleFileTree } from '../../components/scenarios/BundleFileTree'
 import { ScenarioTree } from '../../components/scenarios/ScenarioTree'
 import { useAuth } from '../../lib/authContext'
+import { readBundleFile, readBundleTree, type BundleFilePayload, type BundleTreeNode } from '../../lib/scenariosApi'
 import { newUuid } from '../../lib/uuid'
 
 type BeeSummary = {
@@ -112,6 +115,13 @@ function templateMatchesNeedle(template: ScenarioTemplate, needle: string): bool
   return haystack.includes(needle)
 }
 
+function monacoLanguage(editorKind: BundleFilePayload['editorKind']) {
+  if (editorKind === 'yaml') return 'yaml'
+  if (editorKind === 'json') return 'json'
+  if (editorKind === 'markdown') return 'markdown'
+  return 'plaintext'
+}
+
 function extractVariablesMeta(yamlText: string): VariablesMeta {
   const parsed = YAML.parse(yamlText) as unknown
   if (!parsed || typeof parsed !== 'object') {
@@ -160,6 +170,13 @@ export function CreateSwarmModal({
   const [templatesLoaded, setTemplatesLoaded] = useState(false)
   const [templateFilter, setTemplateFilter] = useState('')
   const [selectedBundleKey, setSelectedBundleKey] = useState('')
+  const [bundleTreeNodes, setBundleTreeNodes] = useState<BundleTreeNode[]>([])
+  const [bundleTreeLoading, setBundleTreeLoading] = useState(false)
+  const [bundleTreeError, setBundleTreeError] = useState<string | null>(null)
+  const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null)
+  const [selectedFile, setSelectedFile] = useState<BundleFilePayload | null>(null)
+  const [selectedFileLoading, setSelectedFileLoading] = useState(false)
+  const [selectedFileError, setSelectedFileError] = useState<string | null>(null)
   const [swarmId, setSwarmId] = useState('')
   const [autoPullImages, setAutoPullImages] = useState(false)
 
@@ -343,6 +360,79 @@ export function CreateSwarmModal({
   )
 
   useEffect(() => {
+    if (!open || !selectedTemplate) {
+      setBundleTreeNodes([])
+      setBundleTreeError(null)
+      setBundleTreeLoading(false)
+      setSelectedFilePath(null)
+      setSelectedFile(null)
+      setSelectedFileError(null)
+      setSelectedFileLoading(false)
+      return
+    }
+
+    let cancelled = false
+    setBundleTreeLoading(true)
+    setBundleTreeError(null)
+    setBundleTreeNodes([])
+    setSelectedFilePath(null)
+    setSelectedFile(null)
+    setSelectedFileError(null)
+
+    readBundleTree(selectedTemplate.bundleKey)
+      .then((tree) => {
+        if (cancelled) return
+        setBundleTreeNodes(tree.nodes)
+        const preferred = tree.nodes.find((node) => node.nodeType === 'file' && node.path === 'scenario.yaml')
+          ?? tree.nodes.find((node) => node.nodeType === 'file' && node.editorKind !== 'unsupported')
+          ?? tree.nodes.find((node) => node.nodeType === 'file')
+          ?? null
+        setSelectedFilePath(preferred?.path ?? null)
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return
+        setBundleTreeNodes([])
+        setBundleTreeError(err instanceof Error ? err.message : 'Failed to load bundle files')
+      })
+      .finally(() => {
+        if (!cancelled) setBundleTreeLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [open, selectedTemplate])
+
+  useEffect(() => {
+    if (!open || !selectedTemplate || !selectedFilePath) {
+      setSelectedFile(null)
+      setSelectedFileError(null)
+      setSelectedFileLoading(false)
+      return
+    }
+
+    let cancelled = false
+    setSelectedFileLoading(true)
+    setSelectedFileError(null)
+    setSelectedFile(null)
+
+    readBundleFile(selectedTemplate.bundleKey, selectedFilePath)
+      .then((file) => {
+        if (!cancelled) setSelectedFile(file)
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setSelectedFileError(err instanceof Error ? err.message : 'Failed to load bundle file')
+      })
+      .finally(() => {
+        if (!cancelled) setSelectedFileLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [open, selectedTemplate, selectedFilePath])
+
+  useEffect(() => {
     if (!selectedBundleKey) return
     if (runnableTemplates.some((template) => template.bundleKey === selectedBundleKey)) return
     setSelectedBundleKey('')
@@ -433,6 +523,9 @@ export function CreateSwarmModal({
         setSwarmId('')
         setSelectedBundleKey('')
         setTemplateFilter('')
+        setBundleTreeNodes([])
+        setSelectedFilePath(null)
+        setSelectedFile(null)
         setAutoPullImages(false)
         setSutIds([])
         setSutId('')
@@ -627,6 +720,57 @@ export function CreateSwarmModal({
                       <div className="swarmTemplateValue">
                         {selectedTemplate.bees.length === 0 ? '—' : selectedTemplate.bees.map((bee) => bee.role).join(', ')}
                       </div>
+                    </div>
+                  </div>
+                  <div className="swarmTemplateMeta bundleWorkspacePreviewGrid">
+                    <div>
+                      <span className="fieldLabel">Bundle files</span>
+                      {bundleTreeLoading ? (
+                        <div className="muted" style={{ marginTop: 8 }}>Loading files…</div>
+                      ) : bundleTreeError ? (
+                        <div className="warningText" style={{ marginTop: 8 }}>{bundleTreeError}</div>
+                      ) : (
+                        <BundleFileTree
+                          nodes={bundleTreeNodes}
+                          selectedPath={selectedFilePath}
+                          onSelectFile={setSelectedFilePath}
+                          height={190}
+                        />
+                      )}
+                    </div>
+                    <div className="scenarioFilePreview">
+                      <div className="scenarioFilePreviewHeader">
+                        <div className="scenarioTreeTitle">{selectedFilePath ?? 'No file selected'}</div>
+                        {selectedFile ? <div className="pill pillInfo">{selectedFile.editorKind}</div> : null}
+                      </div>
+                      {selectedFileLoading ? (
+                        <div className="scenarioFileUnsupported">Loading file…</div>
+                      ) : selectedFileError ? (
+                        <div className="scenarioFileUnsupported warningText">{selectedFileError}</div>
+                      ) : selectedFile && selectedFile.content !== null ? (
+                        <div className="scenarioFilePreviewBody">
+                          <MonacoEditorHost
+                            className="monacoSurface"
+                            value={selectedFile.content}
+                            language={monacoLanguage(selectedFile.editorKind)}
+                            theme="vs-dark"
+                            options={{
+                              readOnly: true,
+                              automaticLayout: true,
+                              minimap: { enabled: false },
+                              scrollBeyondLastLine: false,
+                              wordWrap: 'on',
+                              fontSize: 12,
+                            }}
+                          />
+                        </div>
+                      ) : selectedFile ? (
+                        <div className="scenarioFileUnsupported">
+                          This file is not editable or previewable in New Swarm.
+                        </div>
+                      ) : (
+                        <div className="scenarioFileUnsupported">Select a file to preview it.</div>
+                      )}
                     </div>
                   </div>
                 </>

@@ -6,6 +6,7 @@ import io.pockethive.capabilities.CapabilityCatalogueService;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.SwarmTemplate;
 import jakarta.annotation.PostConstruct;
+import org.springframework.http.MediaType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -15,6 +16,8 @@ import org.springframework.stereotype.Service;
 import java.io.IOException;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -33,6 +36,13 @@ public class ScenarioService {
     private static final String DEFAULT_UPLOAD_FOLDER = "bundles";
     private static final String QUARANTINE_FOLDER = "quarantine";
     private static final String UPLOAD_TEMP_PREFIX = "pockethive-scenario-upload-";
+    private static final String NODE_TYPE_DIRECTORY = "directory";
+    private static final String NODE_TYPE_FILE = "file";
+    private static final String EDITOR_KIND_TEXT = "text";
+    private static final String EDITOR_KIND_YAML = "yaml";
+    private static final String EDITOR_KIND_JSON = "json";
+    private static final String EDITOR_KIND_MARKDOWN = "markdown";
+    private static final String EDITOR_KIND_UNSUPPORTED = "unsupported";
 
     private final Path storageDir;
     private final Path testStorageDir;
@@ -451,6 +461,51 @@ public class ScenarioService {
         return new BundleDownload(out.toByteArray(), fallbackBundleName(entry.bundlePath()) + "-bundle.zip");
     }
 
+    public synchronized BundleTree readBundleTree(String bundleKey) throws IOException {
+        BundleCatalogEntry entry = bundleEntry(bundleKey);
+        BundleRoot root = bundleRoot(entry);
+        List<BundleTreeNode> nodes = new ArrayList<>();
+        if (root.descriptorOnly()) {
+            Path descriptor = root.descriptorFile();
+            nodes.add(bundleTreeNode(entry.bundleKey(), root.root(), descriptor));
+            return new BundleTree(entry.bundleKey(), nodes);
+        }
+
+        try (Stream<Path> paths = Files.walk(root.root())) {
+            paths
+                    .filter(path -> !path.equals(root.root()))
+                    .sorted(Comparator
+                            .comparing((Path path) -> !Files.isDirectory(path))
+                            .thenComparing(path -> root.root().relativize(path).toString().replace('\\', '/')))
+                    .forEach(path -> nodes.add(bundleTreeNode(entry.bundleKey(), root.root(), path)));
+        }
+        return new BundleTree(entry.bundleKey(), nodes);
+    }
+
+    public synchronized BundleFilePayload readBundleWorkspaceFile(String bundleKey, String relativePath) throws IOException {
+        BundleCatalogEntry entry = bundleEntry(bundleKey);
+        BundleRoot root = bundleRoot(entry);
+        Path file = resolveBundleEntryPath(root, relativePath);
+        if (!Files.isRegularFile(file)) {
+            throw new IllegalArgumentException("Bundle path is not a file");
+        }
+
+        String editorKind = editorKind(file);
+        byte[] bytes = Files.readAllBytes(file);
+        String content = EDITOR_KIND_UNSUPPORTED.equals(editorKind) ? null : Files.readString(file);
+        boolean writable = !EDITOR_KIND_UNSUPPORTED.equals(editorKind);
+        return new BundleFilePayload(
+                entry.bundleKey(),
+                relativeBundlePath(root.root(), file),
+                file.getFileName().toString(),
+                mediaType(file, editorKind),
+                editorKind,
+                writable,
+                bytes.length,
+                "sha256:" + sha256Hex(bytes),
+                content);
+    }
+
 	    private Path resolveBundleFolder(String folderPath, boolean allowRoot) {
 	        String trimmed = folderPath == null ? "" : folderPath.trim();
 	        if (trimmed.isEmpty()) {
@@ -482,6 +537,119 @@ public class ScenarioService {
 	        }
 	        return normalized;
 	    }
+
+    private BundleRoot bundleRoot(BundleCatalogEntry entry) {
+        Path bundleDir = entry.bundleDir();
+        if (bundleDir != null && Files.isDirectory(bundleDir)) {
+            return new BundleRoot(bundleDir.toAbsolutePath().normalize(), null, false);
+        }
+        Path descriptor = entry.descriptorFile();
+        if (descriptor == null || !Files.isRegularFile(descriptor)) {
+            throw new IllegalArgumentException("Bundle '%s' not found".formatted(entry.bundleKey()));
+        }
+        Path normalizedDescriptor = descriptor.toAbsolutePath().normalize();
+        return new BundleRoot(normalizedDescriptor.getParent(), normalizedDescriptor, true);
+    }
+
+    private BundleTreeNode bundleTreeNode(String bundleKey, Path root, Path path) {
+        boolean directory = Files.isDirectory(path);
+        String editorKind = directory ? EDITOR_KIND_UNSUPPORTED : editorKind(path);
+        return new BundleTreeNode(
+                bundleKey,
+                relativeBundlePath(root, path),
+                path.getFileName().toString(),
+                directory ? NODE_TYPE_DIRECTORY : NODE_TYPE_FILE,
+                directory ? null : mediaType(path, editorKind),
+                editorKind,
+                !directory && !EDITOR_KIND_UNSUPPORTED.equals(editorKind),
+                directory ? null : safeSize(path));
+    }
+
+    private Path resolveBundleEntryPath(BundleRoot root, String relativePath) {
+        String trimmed = relativePath == null ? "" : relativePath.trim();
+        if (trimmed.isEmpty() || trimmed.startsWith("/") || trimmed.contains("\\") || trimmed.contains("..")) {
+            throw new IllegalArgumentException("Invalid bundle path");
+        }
+        Path resolved = root.root().resolve(trimmed).normalize();
+        if (!resolved.startsWith(root.root())) {
+            throw new IllegalArgumentException("Invalid bundle path");
+        }
+        if (root.descriptorOnly() && !resolved.equals(root.descriptorFile())) {
+            throw new IllegalArgumentException("Bundle path not found");
+        }
+        if (!Files.exists(resolved)) {
+            throw new IllegalArgumentException("Bundle path not found");
+        }
+        return resolved;
+    }
+
+    private static String relativeBundlePath(Path root, Path path) {
+        return root.relativize(path).toString().replace('\\', '/');
+    }
+
+    private static Long safeSize(Path path) {
+        try {
+            return Files.size(path);
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
+    private static String editorKind(Path path) {
+        String fileName = path.getFileName().toString().toLowerCase(Locale.ROOT);
+        if (fileName.endsWith(".yaml") || fileName.endsWith(".yml")) {
+            return EDITOR_KIND_YAML;
+        }
+        if (fileName.endsWith(".json")) {
+            return EDITOR_KIND_JSON;
+        }
+        if (fileName.endsWith(".md") || fileName.endsWith(".markdown")) {
+            return EDITOR_KIND_MARKDOWN;
+        }
+        if (fileName.endsWith(".txt")
+                || fileName.endsWith(".csv")
+                || fileName.endsWith(".properties")
+                || fileName.endsWith(".env")
+                || fileName.endsWith(".xml")
+                || fileName.endsWith(".http")) {
+            return EDITOR_KIND_TEXT;
+        }
+        return EDITOR_KIND_UNSUPPORTED;
+    }
+
+    private static String mediaType(Path path, String editorKind) {
+        if (EDITOR_KIND_YAML.equals(editorKind)) {
+            return "application/x-yaml";
+        }
+        if (EDITOR_KIND_JSON.equals(editorKind)) {
+            return MediaType.APPLICATION_JSON_VALUE;
+        }
+        if (EDITOR_KIND_MARKDOWN.equals(editorKind)) {
+            return "text/markdown";
+        }
+        if (EDITOR_KIND_TEXT.equals(editorKind)) {
+            return MediaType.TEXT_PLAIN_VALUE;
+        }
+        try {
+            String probed = Files.probeContentType(path);
+            return probed != null && !probed.isBlank() ? probed : "application/octet-stream";
+        } catch (IOException e) {
+            return "application/octet-stream";
+        }
+    }
+
+    private static String sha256Hex(byte[] bytes) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(bytes);
+            StringBuilder hex = new StringBuilder(digest.length * 2);
+            for (byte b : digest) {
+                hex.append(String.format("%02x", b));
+            }
+            return hex.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 digest is unavailable", e);
+        }
+    }
 
     private Set<Path> scenarioBundleRoots() {
         Set<Path> roots = new LinkedHashSet<>();
@@ -2146,6 +2314,8 @@ public class ScenarioService {
         }
     }
 
+    private record BundleRoot(Path root, Path descriptorFile, boolean descriptorOnly) { }
+
     private record ScenarioDescriptor(Scenario scenario, Path rootDir) { }
 
     private record UploadedBundle(Scenario scenario, Path rootDir, Path tempRoot) { }
@@ -2189,6 +2359,31 @@ public class ScenarioService {
     }
 
     public record BundleDownload(byte[] bytes, String fileName) { }
+
+    public record BundleTree(String bundleKey, List<BundleTreeNode> nodes) { }
+
+    public record BundleTreeNode(
+        String bundleKey,
+        String path,
+        String name,
+        String nodeType,
+        String mediaType,
+        String editorKind,
+        boolean writable,
+        Long size
+    ) { }
+
+    public record BundleFilePayload(
+        String bundleKey,
+        String path,
+        String name,
+        String mediaType,
+        String editorKind,
+        boolean writable,
+        long size,
+        String revision,
+        String content
+    ) { }
 
     public record VariablesValidationResult(List<String> warnings) { }
 

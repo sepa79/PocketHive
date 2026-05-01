@@ -154,6 +154,58 @@ class ScenarioControllerTest {
     }
 
     @Test
+    void bundleWorkspaceReadApiListsTreeAndReadsFilesByBundleKey() throws Exception {
+        Path bundle = scenariosDir.resolve("tcp").resolve("demo");
+        Files.createDirectories(bundle.resolve("templates/http"));
+        Files.writeString(bundle.resolve("scenario.yaml"), """
+                id: tcp-demo
+                name: TCP Demo
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - role: worker
+                      image: worker-image:latest
+                      work:
+                        in:
+                          in: a
+                        out:
+                          out: b
+                """);
+        Files.writeString(bundle.resolve("templates/http/request.yaml"), "method: GET\npath: /health\n");
+        Files.write(bundle.resolve("payload.bin"), new byte[] {0, 1, 2});
+
+        mvc.perform(post("/scenarios/reload"))
+                .andExpect(status().isNoContent());
+
+        mvc.perform(get("/scenarios/bundles/tree")
+                        .param("bundleKey", "tcp/demo")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.bundleKey").value("tcp/demo"))
+                .andExpect(jsonPath("$.nodes[?(@.path == 'scenario.yaml')].editorKind").value(org.hamcrest.Matchers.hasItem("yaml")))
+                .andExpect(jsonPath("$.nodes[?(@.path == 'templates')].nodeType").value(org.hamcrest.Matchers.hasItem("directory")))
+                .andExpect(jsonPath("$.nodes[?(@.path == 'templates/http/request.yaml')].editorKind").value(org.hamcrest.Matchers.hasItem("yaml")))
+                .andExpect(jsonPath("$.nodes[?(@.path == 'payload.bin')].editorKind").value(org.hamcrest.Matchers.hasItem("unsupported")));
+
+        mvc.perform(get("/scenarios/bundles/file")
+                        .param("bundleKey", "tcp/demo")
+                        .param("path", "templates/http/request.yaml")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.bundleKey").value("tcp/demo"))
+                .andExpect(jsonPath("$.path").value("templates/http/request.yaml"))
+                .andExpect(jsonPath("$.editorKind").value("yaml"))
+                .andExpect(jsonPath("$.revision").value(org.hamcrest.Matchers.startsWith("sha256:")))
+                .andExpect(jsonPath("$.content").value("method: GET\npath: /health\n"));
+
+        mvc.perform(get("/scenarios/bundles/file")
+                        .param("bundleKey", "tcp/demo")
+                        .param("path", "../scenario.yaml")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void rawUpdatePreservesYamlLiteralBlockFormatting() throws Exception {
         String initial = """
                 id: literal-demo

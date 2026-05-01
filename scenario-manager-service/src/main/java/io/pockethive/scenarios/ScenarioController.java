@@ -94,6 +94,36 @@ public class ScenarioController {
         return summaries;
     }
 
+    @GetMapping(value = "/bundles/tree", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ScenarioService.BundleTree readBundleTree(@RequestParam("bundleKey") String bundleKey) throws IOException {
+        log.info("[REST] GET /scenarios/bundles/tree bundleKey={}", bundleKey);
+        requireReadBundle(bundleKey);
+        try {
+            ScenarioService.BundleTree tree = service.readBundleTree(bundleKey);
+            log.info("[REST] GET /scenarios/bundles/tree -> status=200 bundleKey={} nodes={}", bundleKey, tree.nodes().size());
+            return tree;
+        } catch (IllegalArgumentException e) {
+            log.warn("[REST] GET /scenarios/bundles/tree -> status=400 bundleKey={} {}", bundleKey, e.getMessage());
+            throw bundleReadException(e);
+        }
+    }
+
+    @GetMapping(value = "/bundles/file", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ScenarioService.BundleFilePayload readBundleFile(@RequestParam("bundleKey") String bundleKey,
+                                                            @RequestParam("path") String path) throws IOException {
+        log.info("[REST] GET /scenarios/bundles/file bundleKey={} path={}", bundleKey, path);
+        requireReadBundle(bundleKey);
+        try {
+            ScenarioService.BundleFilePayload file = service.readBundleWorkspaceFile(bundleKey, path);
+            log.info("[REST] GET /scenarios/bundles/file -> status=200 bundleKey={} path={} editorKind={}",
+                    bundleKey, file.path(), file.editorKind());
+            return file;
+        } catch (IllegalArgumentException e) {
+            log.warn("[REST] GET /scenarios/bundles/file -> status=400 bundleKey={} path={} {}", bundleKey, path, e.getMessage());
+            throw bundleReadException(e);
+        }
+    }
+
     @GetMapping(value = "/folders", produces = MediaType.APPLICATION_JSON_VALUE)
     public List<String> listBundleFolders() throws IOException {
         log.info("[REST] GET /scenarios/folders");
@@ -635,6 +665,14 @@ public class ScenarioController {
         summary.put("name", scenario.getName());
         summary.put("description", scenario.getDescription());
         return summary;
+    }
+
+    private ResponseStatusException bundleReadException(IllegalArgumentException e) {
+        String message = e.getMessage() == null ? "" : e.getMessage();
+        HttpStatus status = message.toLowerCase(java.util.Locale.ROOT).contains("not found")
+                ? HttpStatus.NOT_FOUND
+                : HttpStatus.BAD_REQUEST;
+        return new ResponseStatusException(status, message, e);
     }
 
     private AuthenticatedUserDto currentUser() {

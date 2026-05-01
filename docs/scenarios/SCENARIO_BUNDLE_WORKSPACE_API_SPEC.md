@@ -42,6 +42,9 @@ The workspace identity is:
 
 All bundle/file operations are scoped to one explicit bundle.
 
+Because bundle keys may contain `/`, workspace endpoints pass `bundleKey` as an
+explicit query parameter rather than as a path segment.
+
 ---
 
 ## 3. Authorization rules
@@ -139,7 +142,7 @@ Returns:
 
 ### 5.2 Read bundle tree
 
-`GET /scenarios/bundles/{bundleKey}/tree`
+`GET /scenarios/bundles/tree?bundleKey=<bundle-key>`
 
 Purpose:
 
@@ -162,7 +165,7 @@ Rules:
 
 ### 5.3 Read file
 
-`GET /scenarios/bundles/{bundleKey}/file?path=<bundle-relative-path>`
+`GET /scenarios/bundles/file?bundleKey=<bundle-key>&path=<bundle-relative-path>`
 
 Purpose:
 
@@ -181,7 +184,7 @@ Rules:
 
 ### 5.4 Write file
 
-`PUT /scenarios/bundles/{bundleKey}/file?path=<bundle-relative-path>`
+`PUT /scenarios/bundles/file?bundleKey=<bundle-key>&path=<bundle-relative-path>`
 
 Request body:
 
@@ -209,7 +212,7 @@ Rules:
 
 ### 5.5 Create file
 
-`POST /scenarios/bundles/{bundleKey}/files`
+`POST /scenarios/bundles/files?bundleKey=<bundle-key>`
 
 Request body:
 
@@ -228,7 +231,7 @@ Rules:
 
 ### 5.6 Create folder
 
-`POST /scenarios/bundles/{bundleKey}/folders`
+`POST /scenarios/bundles/folders?bundleKey=<bundle-key>`
 
 Request body:
 
@@ -240,7 +243,7 @@ Request body:
 
 ### 5.7 Rename/move file or folder
 
-`POST /scenarios/bundles/{bundleKey}/entries/move`
+`POST /scenarios/bundles/entries/move?bundleKey=<bundle-key>`
 
 Request body:
 
@@ -260,7 +263,7 @@ Rules:
 
 ### 5.8 Delete file or folder
 
-`DELETE /scenarios/bundles/{bundleKey}/entry?path=<bundle-relative-path>`
+`DELETE /scenarios/bundles/entry?bundleKey=<bundle-key>&path=<bundle-relative-path>`
 
 Rules:
 

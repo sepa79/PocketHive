@@ -2293,8 +2293,9 @@ select.textInputCompact option {
 
 .swarmTemplatePicker {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) minmax(260px, 1.2fr);
+  grid-template-columns: minmax(220px, 1fr) minmax(0, 2fr);
   gap: 12px;
+  min-height: 0;
 }
 
 .swarmTemplatePickerGrow {
@@ -2387,6 +2388,23 @@ select.textInputCompact option {
   display: grid;
   gap: 10px;
   margin-top: 10px;
+}
+
+.bundleWorkspacePreviewGrid {
+  flex: 1;
+  min-height: 0;
+  grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  align-items: stretch;
+}
+
+.bundleWorkspacePreviewGrid > div {
+  min-height: 0;
+}
+
+.bundleWorkspacePreviewGrid > div:first-child {
+  display: flex;
+  flex-direction: column;
 }
 
 .swarmTemplateValue {
@@ -2536,6 +2554,64 @@ select.textInputCompact option {
   font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.02em;
+}
+
+.scenarioTreeGlyphFile {
+  border-radius: 3px;
+  background: rgba(45, 212, 191, 0.14);
+  border: 1px solid rgba(45, 212, 191, 0.38);
+  color: #5eead4;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.scenarioFilePreview {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+}
+
+.scenarioFilePreviewHeader {
+  min-height: 34px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.scenarioFilePreviewBody {
+  flex: 1;
+  min-height: 0;
+}
+
+.scenarioFilePreviewBody .monacoSurface,
+.scenarioFilePreviewBody .monacoFallback {
+  height: 100%;
+}
+
+@media (max-width: 1180px) {
+  .bundleWorkspacePreviewGrid {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(260px, 1fr);
+  }
+}
+
+.scenarioFileUnsupported {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  color: var(--muted);
+  text-align: center;
 }
 
 .scenarioTreeText {
