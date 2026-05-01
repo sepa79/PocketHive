@@ -4,6 +4,7 @@ import { MonacoEditorHost } from '../../components/MonacoEditorHost'
 import { BundleFileTree } from '../../components/scenarios/BundleFileTree'
 import { ScenarioTree } from '../../components/scenarios/ScenarioTree'
 import { useAuth } from '../../lib/authContext'
+import { monacoLanguageForBundleFile } from '../../lib/bundleEditor'
 import { readBundleFile, readBundleTree, type BundleFilePayload, type BundleTreeNode } from '../../lib/scenariosApi'
 import { newUuid } from '../../lib/uuid'
 
@@ -113,13 +114,6 @@ function templateMatchesNeedle(template: ScenarioTemplate, needle: string): bool
   if (!needle) return true
   const haystack = `${template.folderPath ?? ''} ${template.bundlePath} ${template.id ?? ''} ${template.name} ${template.description ?? ''}`.toLowerCase()
   return haystack.includes(needle)
-}
-
-function monacoLanguage(editorKind: BundleFilePayload['editorKind']) {
-  if (editorKind === 'yaml') return 'yaml'
-  if (editorKind === 'json') return 'json'
-  if (editorKind === 'markdown') return 'markdown'
-  return 'plaintext'
 }
 
 function extractVariablesMeta(yamlText: string): VariablesMeta {
@@ -752,7 +746,7 @@ export function CreateSwarmModal({
                           <MonacoEditorHost
                             className="monacoSurface"
                             value={selectedFile.content}
-                            language={monacoLanguage(selectedFile.editorKind)}
+                            language={monacoLanguageForBundleFile(selectedFile.editorKind)}
                             theme="vs-dark"
                             options={{
                               readOnly: true,

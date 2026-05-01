@@ -2596,10 +2596,53 @@ select.textInputCompact option {
   height: 100%;
 }
 
+.scenarioWorkspaceGrid {
+  display: grid;
+  grid-template-columns: minmax(300px, 1fr) minmax(0, 2fr);
+  gap: 12px;
+  align-items: stretch;
+}
+
+.scenarioWorkspaceSidebar,
+.scenarioWorkspaceDetails {
+  min-width: 0;
+}
+
+.scenarioWorkspaceTree {
+  margin-top: 12px;
+  min-height: 0;
+}
+
+.scenarioWorkspaceActions {
+  margin-top: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.scenarioWorkspaceEditor {
+  height: min(62vh, 640px);
+  min-height: 380px;
+  margin-top: 14px;
+}
+
 @media (max-width: 1180px) {
   .bundleWorkspacePreviewGrid {
     grid-template-columns: 1fr;
     grid-template-rows: auto minmax(260px, 1fr);
+  }
+
+  .scenarioWorkspaceGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .scenarioWorkspaceEditor {
+    height: auto;
+    min-height: 0;
+  }
+
+  .scenarioWorkspaceEditor .scenarioFilePreview {
+    height: 420px;
   }
 }
 
@@ -2629,6 +2672,10 @@ select.textInputCompact option {
   gap: 8px;
 }
 
+.scenarioTreeTitleRow .pill {
+  flex: 0 0 auto;
+}
+
 .scenarioTreeTitle {
   min-width: 0;
   flex: 1;
@@ -2641,6 +2688,12 @@ select.textInputCompact option {
 
 .scenarioTreeTitleDefunct {
   color: var(--muted);
+}
+
+.scenarioTreeDefunctPill {
+  padding: 2px 6px;
+  font-size: 9px;
+  line-height: 1.1;
 }
 
 .swarmMessage {

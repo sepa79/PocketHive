@@ -1,26 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ConfirmModal } from '../components/ConfirmModal'
+import { MonacoEditorHost } from '../components/MonacoEditorHost'
+import { ScenarioWorkspaceTree } from '../components/scenarios/ScenarioWorkspaceTree'
 import { useAuth } from '../lib/authContext'
+import { monacoLanguageForBundleFile } from '../lib/bundleEditor'
 import {
+  type BundleFilePayload,
   type BundleTemplateEntry,
-  createScenarioFolder,
+  type BundleTreeNode,
   deleteBundle,
-  deleteScenarioFolder,
   downloadBundle,
   listBundleWorkspaces,
-  listScenarioFolders,
-  moveBundleToFolder,
+  readBundleFile,
+  readBundleTree,
   uploadScenarioBundle,
 } from '../lib/scenariosApi'
-
-type FolderFilter = { kind: 'all' } | { kind: 'root' } | { kind: 'folder'; path: string }
-const QUARANTINE_FOLDER = 'quarantine'
-type ScenarioFolderNode = {
-  name: string
-  path: string
-  children: ScenarioFolderNode[]
-  scenarios: BundleTemplateEntry[]
-}
 
 function folderLabel(summary: BundleTemplateEntry): string {
   return summary.folderPath && summary.folderPath.trim().length > 0 ? summary.folderPath.trim() : 'root'
@@ -30,79 +24,20 @@ function bundleLabel(entry: BundleTemplateEntry): string {
   return entry.id ?? entry.bundlePath
 }
 
-function isQuarantined(entry: BundleTemplateEntry): boolean {
-  return entry.bundlePath === QUARANTINE_FOLDER || entry.bundlePath.startsWith(`${QUARANTINE_FOLDER}/`)
-}
-
-function buildScenarioFolderTree(items: BundleTemplateEntry[]): { folders: ScenarioFolderNode[]; rootScenarios: BundleTemplateEntry[] } {
-  const rootScenarios: BundleTemplateEntry[] = []
-  type MutableNode = { name: string; path: string; children: Map<string, MutableNode>; scenarios: BundleTemplateEntry[] }
-  type RootNode = { children: Map<string, MutableNode>; scenarios: BundleTemplateEntry[] }
-  const root: RootNode = { children: new Map(), scenarios: [] }
-
-  const ensureNode = (parent: RootNode | MutableNode, name: string, path: string): MutableNode => {
-    const existing = parent.children.get(name)
-    if (existing) return existing
-    const created: MutableNode = { name, path, children: new Map<string, MutableNode>(), scenarios: [] }
-    parent.children.set(name, created)
-    return created
-  }
-
-  for (const item of items) {
-    const folderPath = item.folderPath?.trim() ?? ''
-    if (!folderPath) {
-      rootScenarios.push(item)
-      continue
-    }
-    const segments = folderPath.split('/').map((segment) => segment.trim()).filter((segment) => segment.length > 0)
-    if (segments.length === 0) {
-      rootScenarios.push(item)
-      continue
-    }
-    let current: RootNode | MutableNode = root
-    let currentPath = ''
-    for (const segment of segments) {
-      currentPath = currentPath ? `${currentPath}/${segment}` : segment
-      current = ensureNode(current, segment, currentPath)
-    }
-    current.scenarios.push(item)
-  }
-
-  const finalize = (node: MutableNode): ScenarioFolderNode => ({
-    name: node.name,
-    path: node.path,
-    children: Array.from(node.children.values())
-      .map(finalize)
-      .sort((a, b) => a.name.localeCompare(b.name)),
-    scenarios: [...node.scenarios].sort((a, b) => a.name.localeCompare(b.name)),
-  })
-
-  return {
-    folders: Array.from(root.children.values())
-      .map(finalize)
-      .sort((a, b) => a.name.localeCompare(b.name)),
-    rootScenarios: [...rootScenarios].sort((a, b) => a.name.localeCompare(b.name)),
-  }
-}
-
-function countScenarios(node: ScenarioFolderNode): number {
-  let count = node.scenarios.length
-  for (const child of node.children) {
-    count += countScenarios(child)
-  }
-  return count
-}
-
 export function ScenariosPage() {
   const auth = useAuth()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [folders, setFolders] = useState<string[]>([])
   const [items, setItems] = useState<BundleTemplateEntry[]>([])
-  const [filter, setFilter] = useState<FolderFilter>({ kind: 'all' })
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
+  const [bundleTreeNodes, setBundleTreeNodes] = useState<BundleTreeNode[]>([])
+  const [bundleTreeLoading, setBundleTreeLoading] = useState(false)
+  const [bundleTreeError, setBundleTreeError] = useState<string | null>(null)
+  const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null)
+  const [selectedFile, setSelectedFile] = useState<BundleFilePayload | null>(null)
+  const [selectedFileLoading, setSelectedFileLoading] = useState(false)
+  const [selectedFileError, setSelectedFileError] = useState<string | null>(null)
 
-  const [newFolderPath, setNewFolderPath] = useState('')
   const [busy, setBusy] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<BundleTemplateEntry | null>(null)
   const uploadInputRef = useRef<HTMLInputElement | null>(null)
@@ -113,23 +48,79 @@ export function ScenariosPage() {
   )
 
   const canManageSelected = selected ? auth.canManageBundle(selected.bundlePath, selected.folderPath) : false
+  const visibleItems = useMemo(
+    () => items.filter((entry) => auth.canViewBundle(entry.bundlePath, entry.folderPath)),
+    [auth, items],
+  )
 
-  const [movePath, setMovePath] = useState('')
   useEffect(() => {
-    const current = selected?.folderPath ? selected.folderPath.trim() : ''
-    setMovePath(current)
-  }, [selected?.bundleKey, selected?.folderPath])
+    let cancelled = false
+    setBundleTreeNodes([])
+    setBundleTreeError(null)
+    setSelectedFilePath(null)
+    setSelectedFile(null)
+    setSelectedFileError(null)
+
+    if (!selected) {
+      setBundleTreeLoading(false)
+      return
+    }
+
+    setBundleTreeLoading(true)
+    readBundleTree(selected.bundleKey)
+      .then((tree) => {
+        if (cancelled) return
+        setBundleTreeNodes(tree.nodes)
+        const preferred = tree.nodes.find((node) => node.nodeType === 'file' && node.path === 'scenario.yaml')
+          ?? tree.nodes.find((node) => node.nodeType === 'file' && node.editorKind !== 'unsupported')
+          ?? tree.nodes.find((node) => node.nodeType === 'file')
+        setSelectedFilePath(preferred?.path ?? null)
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setBundleTreeError(err instanceof Error ? err.message : 'Failed to load bundle files')
+      })
+      .finally(() => {
+        if (!cancelled) setBundleTreeLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [selected])
+
+  useEffect(() => {
+    let cancelled = false
+    setSelectedFile(null)
+    setSelectedFileError(null)
+
+    if (!selected || !selectedFilePath) {
+      setSelectedFileLoading(false)
+      return
+    }
+
+    setSelectedFileLoading(true)
+    readBundleFile(selected.bundleKey, selectedFilePath)
+      .then((file) => {
+        if (!cancelled) setSelectedFile(file)
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setSelectedFileError(err instanceof Error ? err.message : 'Failed to load bundle file')
+      })
+      .finally(() => {
+        if (!cancelled) setSelectedFileLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [selected, selectedFilePath])
 
   const reload = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const [list, folderList] = await Promise.all([
-        listBundleWorkspaces(),
-        auth.canManagePocketHive ? listScenarioFolders() : Promise.resolve<string[]>([]),
-      ])
+      const list = await listBundleWorkspaces()
       setItems(list)
-      setFolders(folderList)
       setSelectedKey((current) => {
         if (list.length === 0) return null
         if (current && list.some((entry) => entry.bundleKey === current)) return current
@@ -140,116 +131,11 @@ export function ScenariosPage() {
     } finally {
       setLoading(false)
     }
-  }, [auth.canManagePocketHive])
+  }, [])
 
   useEffect(() => {
     void reload()
   }, [reload])
-
-  const visibleItems = useMemo(() => {
-    const readableItems = items.filter((entry) => auth.canViewBundle(entry.bundlePath, entry.folderPath))
-    if (filter.kind === 'all') return readableItems
-    if (filter.kind === 'root') return readableItems.filter((entry) => !entry.folderPath || entry.folderPath.trim().length === 0)
-    const target = filter.path.trim()
-    return readableItems.filter((entry) => (entry.folderPath ?? '').trim() === target)
-  }, [auth, filter, items])
-
-  const tree = useMemo(() => buildScenarioFolderTree(visibleItems), [visibleItems])
-
-  const folderOptions = useMemo(() => {
-    const paths = new Set<string>(folders)
-    for (const entry of visibleItems) {
-      const path = entry.folderPath?.trim() ?? ''
-      if (path) {
-        paths.add(path)
-      }
-    }
-    return Array.from(paths).sort((left, right) => left.localeCompare(right))
-  }, [folders, visibleItems])
-
-  const openFolderPaths = useMemo(() => {
-    if (filter.kind === 'folder') {
-      return new Set<string>([filter.path.trim()])
-    }
-    if (filter.kind === 'root') {
-      return new Set<string>()
-    }
-    if (!selected?.folderPath) {
-      return new Set<string>()
-    }
-    const segments = selected.folderPath
-      .split('/')
-      .map((segment) => segment.trim())
-      .filter((segment) => segment.length > 0)
-    const result = new Set<string>()
-    let currentPath = ''
-    for (const segment of segments) {
-      currentPath = currentPath ? `${currentPath}/${segment}` : segment
-      result.add(currentPath)
-    }
-    return result
-  }, [filter, selected?.folderPath])
-
-  const handleCreateFolder = useCallback(async () => {
-    const path = newFolderPath.trim()
-    if (!path) return
-    setBusy(true)
-    try {
-      await createScenarioFolder(path)
-      setNewFolderPath('')
-      await reload()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Create folder failed')
-    } finally {
-      setBusy(false)
-    }
-  }, [newFolderPath, reload])
-
-  const handleDeleteFolder = useCallback(async () => {
-    if (filter.kind !== 'folder') return
-    const path = filter.path.trim()
-    if (!path) return
-    setBusy(true)
-    try {
-      await deleteScenarioFolder(path)
-      setFilter({ kind: 'all' })
-      await reload()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Delete folder failed')
-    } finally {
-      setBusy(false)
-    }
-  }, [filter, reload])
-
-  const handleMoveSelected = useCallback(async () => {
-    if (!selected) return
-    const target = movePath.trim()
-    const current = selected.folderPath ? selected.folderPath.trim() : ''
-    if (target === current) return
-    setBusy(true)
-    try {
-      await moveBundleToFolder(selected.bundleKey, target.length > 0 ? target : null)
-      await reload()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Move failed')
-    } finally {
-      setBusy(false)
-    }
-  }, [movePath, reload, selected])
-
-  const handleMoveToQuarantine = useCallback(async () => {
-    if (!selected || isQuarantined(selected)) return
-    setBusy(true)
-    setError(null)
-    try {
-      await moveBundleToFolder(selected.bundleKey, QUARANTINE_FOLDER)
-      await reload()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Move to quarantine failed')
-    } finally {
-      setBusy(false)
-    }
-  }, [reload, selected])
 
   const triggerUpload = useCallback(() => {
     uploadInputRef.current?.click()
@@ -310,48 +196,6 @@ export function ScenariosPage() {
     }
   }, [deleteTarget, reload])
 
-  const renderScenarioButton = useCallback(
-    (entry: BundleTemplateEntry) => {
-      const active = entry.bundleKey === selectedKey
-      return (
-        <button
-          key={entry.bundleKey}
-          type="button"
-          className={active ? 'swarmCard swarmCardSelected' : 'swarmCard'}
-          onClick={() => setSelectedKey(entry.bundleKey)}
-          style={{ textAlign: 'left', opacity: entry.defunct ? 0.7 : 1 }}
-        >
-          <div className="row between">
-            <div className="h2">{entry.name}</div>
-            <div className="row" style={{ gap: 6 }}>
-              {entry.defunct ? <div className="pill pillBad">DEFUNCT</div> : null}
-              <div className="pill pillInfo">{folderLabel(entry)}</div>
-            </div>
-          </div>
-          <div className="muted" style={{ marginTop: 6 }}>
-            {bundleLabel(entry)}
-          </div>
-        </button>
-      )
-    },
-    [selectedKey],
-  )
-
-  const renderFolderNode = useCallback(
-    (node: ScenarioFolderNode) => (
-      <details key={node.path} open={filter.kind === 'all' ? openFolderPaths.has(node.path) : true}>
-        <summary className="muted" style={{ cursor: 'pointer', padding: '6px 8px' }}>
-          {node.name} <span className="muted">({countScenarios(node)})</span>
-        </summary>
-        <div style={{ marginLeft: 12 }}>
-          {node.children.map((child) => renderFolderNode(child))}
-          {node.scenarios.map((entry) => renderScenarioButton(entry))}
-        </div>
-      </details>
-    ),
-    [filter.kind, openFolderPaths, renderScenarioButton],
-  )
-
   if (!auth.canAccessPocketHive) {
     return (
       <div className="page">
@@ -409,95 +253,35 @@ export function ScenariosPage() {
         </div>
       ) : null}
 
-      <div className="swarmViewGrid" style={{ marginTop: 12 }}>
-        <div className="swarmViewCards">
-          <div className="card">
-            <div className="row between">
-              <div className="h2">Folders</div>
+      <div className="scenarioWorkspaceGrid" style={{ marginTop: 12 }}>
+        <div className="card scenarioWorkspaceSidebar">
+          <div className="row between">
+            <div className="h2">Workspace</div>
+            <div className="row" style={{ gap: 8 }}>
+              {bundleTreeLoading ? <span className="pill pillInfo">FILES</span> : null}
+              <div className={loading ? 'pill pillInfo' : 'pill pillOk'}>{loading ? 'LOADING' : `${visibleItems.length}`}</div>
               <button type="button" className="actionButton actionButtonGhost" onClick={() => void reload()} disabled={busy || loading}>
                 Refresh
               </button>
             </div>
-
-            <div className="formGrid" style={{ marginTop: 12 }}>
-              <label className="field">
-                <span className="fieldLabel">Filter</span>
-                <select
-                  className="textInput"
-                  value={filter.kind === 'all' ? '__all__' : filter.kind === 'root' ? '__root__' : filter.path}
-                  onChange={(event) => {
-                    const value = event.target.value
-                    if (value === '__all__') setFilter({ kind: 'all' })
-                    else if (value === '__root__') setFilter({ kind: 'root' })
-                    else setFilter({ kind: 'folder', path: value })
-                  }}
-                  disabled={busy}
-                >
-                  <option value="__all__">All folders</option>
-                  <option value="__root__">Root</option>
-                  {folderOptions.map((path) => (
-                    <option key={path} value={path}>
-                      {path}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              {auth.canManagePocketHive ? (
-                <label className="field">
-                  <span className="fieldLabel">New folder</span>
-                  <input
-                    className="textInput"
-                    value={newFolderPath}
-                    onChange={(event) => setNewFolderPath(event.target.value)}
-                    placeholder="tcp/perf"
-                    disabled={busy}
-                  />
-                  <div className="row" style={{ marginTop: 8 }}>
-                    <button type="button" className="actionButton" onClick={() => void handleCreateFolder()} disabled={busy || newFolderPath.trim().length === 0}>
-                      Add
-                    </button>
-                    <button
-                      type="button"
-                      className="actionButton actionButtonDanger"
-                      onClick={() => void handleDeleteFolder()}
-                      disabled={busy || filter.kind !== 'folder' || !auth.canManageFolder(filter.kind === 'folder' ? filter.path : null)}
-                    >
-                      Delete (empty only)
-                    </button>
-                  </div>
-                </label>
-              ) : (
-                <div className="field">
-                  <span className="fieldLabel">Write access</span>
-                  <div className="muted">PocketHive ALL permission is required to create, move, upload, or delete bundles.</div>
-                </div>
-              )}
-            </div>
           </div>
 
-          <div className="card" style={{ marginTop: 12 }}>
-            <div className="row between">
-              <div className="h2">Scenarios</div>
-              <div className={loading ? 'pill pillInfo' : 'pill pillOk'}>{loading ? 'LOADING' : `${visibleItems.length}`}</div>
-            </div>
+          {bundleTreeError ? <div className="warningText" style={{ marginTop: 10 }}>{bundleTreeError}</div> : null}
 
-            <div className="swarmCardList" style={{ maxHeight: 'min(70vh, 820px)' }}>
-              {tree.folders.map((folder) => renderFolderNode(folder))}
-              {tree.rootScenarios.length > 0 ? (
-                <details open={filter.kind !== 'folder'}>
-                  <summary className="muted" style={{ cursor: 'pointer', padding: '6px 8px' }}>
-                    (root) <span className="muted">({tree.rootScenarios.length})</span>
-                  </summary>
-                  <div style={{ marginLeft: 12 }}>{tree.rootScenarios.map((entry) => renderScenarioButton(entry))}</div>
-                </details>
-              ) : null}
-              {!loading && visibleItems.length === 0 ? <div className="muted">No scenarios.</div> : null}
-            </div>
+          <div className="scenarioWorkspaceTree">
+            <ScenarioWorkspaceTree
+              bundles={visibleItems}
+              selectedBundleKey={selectedKey}
+              selectedFilePath={selectedFilePath}
+              bundleFiles={bundleTreeNodes}
+              onSelectBundle={(bundleKey) => setSelectedKey(bundleKey)}
+              onSelectFile={setSelectedFilePath}
+              height={680}
+            />
           </div>
         </div>
 
-        <div className="card">
+        <div className="card scenarioWorkspaceDetails">
           <div className="row between">
             <div className="h2">Details</div>
             {selected ? <div className="pill pillOk">SELECTED</div> : <div className="pill pillWarn">NONE</div>}
@@ -537,71 +321,52 @@ export function ScenariosPage() {
                 </div>
               ) : null}
 
-              <div className="formGrid" style={{ marginTop: 14 }}>
-                <label className="field">
-                  <span className="fieldLabel">Move to folder</span>
-                  <select
-                    className="textInput"
-                    value={movePath.trim().length === 0 ? '__root__' : movePath}
-                    onChange={(event) => setMovePath(event.target.value === '__root__' ? '' : event.target.value)}
-                    disabled={busy || !canManageSelected}
-                  >
-                    <option value="__root__">root</option>
-                    {!folders.includes(QUARANTINE_FOLDER) ? (
-                      <option value={QUARANTINE_FOLDER}>{QUARANTINE_FOLDER}</option>
-                    ) : null}
-                    {folderOptions.map((path) => (
-                      <option key={path} value={path}>
-                        {path}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <div className="field">
-                  <span className="fieldLabel">Action</span>
-                  <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
-                    <button
-                      type="button"
-                      className="actionButton"
-                      onClick={() => void handleMoveSelected()}
-                      disabled={
-                        busy ||
-                        !canManageSelected ||
-                        selected.defunct ||
-                        movePath.trim() === (selected.folderPath ? selected.folderPath.trim() : '')
-                      }
-                    >
-                      Move
-                    </button>
-                    {selected.defunct && !isQuarantined(selected) ? (
-                      <button
-                        type="button"
-                        className="actionButton"
-                        onClick={() => void handleMoveToQuarantine()}
-                        disabled={busy || !canManageSelected}
-                      >
-                        Move to quarantine
-                      </button>
-                    ) : null}
-                    <button type="button" className="actionButton actionButtonGhost" onClick={() => void handleDownloadSelected()} disabled={busy}>
-                      Download bundle
-                    </button>
-                    <button
-                      type="button"
-                      className="actionButton actionButtonDanger"
-                      onClick={() => setDeleteTarget(selected)}
-                      disabled={busy || !canManageSelected}
-                    >
-                      Delete bundle
-                    </button>
+              <div className="scenarioWorkspaceActions">
+                <button type="button" className="actionButton actionButtonGhost" onClick={() => void handleDownloadSelected()} disabled={busy}>
+                  Download bundle
+                </button>
+                <button
+                  type="button"
+                  className="actionButton actionButtonDanger"
+                  onClick={() => setDeleteTarget(selected)}
+                  disabled={busy || !canManageSelected}
+                >
+                  Delete bundle
+                </button>
+              </div>
+
+              <div className="scenarioWorkspaceEditor">
+                <div className="scenarioFilePreview">
+                  <div className="scenarioFilePreviewHeader">
+                    <div className="scenarioTreeTitle">{selectedFilePath ?? 'No file selected'}</div>
+                    {selectedFile ? <div className="pill pillInfo">{selectedFile.editorKind}</div> : null}
                   </div>
-                  <div className="muted" style={{ marginTop: 6 }}>
-                    {selected.defunct
-                      ? isQuarantined(selected)
-                        ? 'Quarantined bundles stay visible for diagnosis. Download or remove them when no longer needed.'
-                        : 'Defunct bundles can be quarantined, downloaded, or removed. Repair editing stays out of scope for broken ids.'
-                      : 'Healthy bundles can be moved between folders, downloaded, or removed.'}
-                  </div>
+                  {selectedFileLoading ? (
+                    <div className="scenarioFileUnsupported">Loading file…</div>
+                  ) : selectedFileError ? (
+                    <div className="scenarioFileUnsupported warningText">{selectedFileError}</div>
+                  ) : selectedFile && selectedFile.content !== null ? (
+                    <div className="scenarioFilePreviewBody">
+                      <MonacoEditorHost
+                        className="monacoSurface"
+                        value={selectedFile.content}
+                        language={monacoLanguageForBundleFile(selectedFile.editorKind)}
+                        theme="vs-dark"
+                        options={{
+                          readOnly: true,
+                          automaticLayout: true,
+                          minimap: { enabled: false },
+                          scrollBeyondLastLine: false,
+                          wordWrap: 'on',
+                          fontSize: 12,
+                        }}
+                      />
+                    </div>
+                  ) : selectedFile ? (
+                    <div className="scenarioFileUnsupported">This file is not previewable in Scenarios.</div>
+                  ) : (
+                    <div className="scenarioFileUnsupported">Select a file to preview it.</div>
+                  )}
                 </div>
               </div>
             </>
