@@ -189,6 +189,115 @@ class ScenarioManagerAuthFilterTest {
     }
 
     @Test
+    void bundleWorkspaceReadEndpointsRespectBundleScope() throws Exception {
+        writeScenario("demo", "alpha", "Alpha");
+        Files.writeString(tempDir.resolve("demo").resolve("alpha").resolve("note.txt"), "hello");
+        writeScenario("prod", "omega", "Omega");
+        scenarioService.reload();
+        when(authServiceClient.resolve(anyString())).thenReturn(userWith(
+            PocketHivePermissionIds.VIEW,
+            PocketHiveResourceTypes.FOLDER,
+            "demo"));
+
+        mvc.perform(get("/scenarios/bundles/tree")
+                .param("bundleKey", "demo/alpha")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer test-token"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.bundleKey").value("demo/alpha"))
+            .andExpect(jsonPath("$.nodes[?(@.path=='note.txt')]").exists());
+
+        mvc.perform(get("/scenarios/bundles/file")
+                .param("bundleKey", "demo/alpha")
+                .param("path", "note.txt")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer test-token"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.bundleKey").value("demo/alpha"))
+            .andExpect(jsonPath("$.content").value("hello"));
+
+        mvc.perform(get("/scenarios/bundles/download")
+                .param("bundleKey", "demo/alpha")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer test-token"))
+            .andExpect(status().isOk());
+
+        mvc.perform(get("/scenarios/bundles/tree")
+                .param("bundleKey", "prod/omega")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer test-token"))
+            .andExpect(status().isForbidden())
+            .andExpect(status().reason("PocketHive VIEW permission required within matching scope"));
+
+        mvc.perform(get("/scenarios/bundles/file")
+                .param("bundleKey", "prod/omega")
+                .param("path", "scenario.yaml")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer test-token"))
+            .andExpect(status().isForbidden())
+            .andExpect(status().reason("PocketHive VIEW permission required within matching scope"));
+
+        mvc.perform(get("/scenarios/bundles/download")
+                .param("bundleKey", "prod/omega")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer test-token"))
+            .andExpect(status().isForbidden())
+            .andExpect(status().reason("PocketHive VIEW permission required within matching scope"));
+    }
+
+    @Test
+    void bundleWorkspaceWriteEndpointsRespectSourceAndTargetScope() throws Exception {
+        writeScenario("demo", "alpha", "Alpha");
+        writeScenario("demo", "beta", "Beta");
+        writeScenario("prod", "omega", "Omega");
+        scenarioService.reload();
+        when(authServiceClient.resolve(anyString())).thenReturn(userWith(
+            PocketHivePermissionIds.ALL,
+            PocketHiveResourceTypes.FOLDER,
+            "demo"));
+
+        mvc.perform(post("/scenarios/bundles/move")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer test-token")
+                .contentType("application/json")
+                .content("""
+                    {
+                      "bundleKey": "demo/alpha",
+                      "path": "demo/archive"
+                    }
+                    """))
+            .andExpect(status().isNoContent());
+
+        mvc.perform(post("/scenarios/bundles/move")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer test-token")
+                .contentType("application/json")
+                .content("""
+                    {
+                      "bundleKey": "demo/beta",
+                      "path": "prod/archive"
+                    }
+                    """))
+            .andExpect(status().isForbidden())
+            .andExpect(status().reason("PocketHive ALL permission required within matching scope"));
+
+        mvc.perform(post("/scenarios/bundles/move")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer test-token")
+                .contentType("application/json")
+                .content("""
+                    {
+                      "bundleKey": "prod/omega",
+                      "path": "demo/archive"
+                    }
+                    """))
+            .andExpect(status().isForbidden())
+            .andExpect(status().reason("PocketHive ALL permission required within matching scope"));
+
+        mvc.perform(delete("/scenarios/bundles")
+                .param("bundleKey", "prod/omega")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer test-token"))
+            .andExpect(status().isForbidden())
+            .andExpect(status().reason("PocketHive ALL permission required within matching scope"));
+
+        mvc.perform(delete("/scenarios/bundles")
+                .param("bundleKey", "demo/beta")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer test-token"))
+            .andExpect(status().isNoContent());
+    }
+
+    @Test
     void writeApisRejectViewOnlyUser() throws Exception {
         when(authServiceClient.resolve(anyString())).thenReturn(userWith(PocketHivePermissionIds.VIEW));
 
