@@ -124,6 +124,107 @@ public class ScenarioController {
         }
     }
 
+    @PutMapping(value = "/bundles/file", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    public ScenarioService.BundleFileWriteResult writeBundleFile(@RequestParam("bundleKey") String bundleKey,
+                                                                 @RequestParam("path") String path,
+                                                                 @RequestBody BundleFileWriteRequest request) throws IOException {
+        log.info("[REST] PUT /scenarios/bundles/file bundleKey={} path={}", bundleKey, path);
+        requireManageBundle(bundleKey);
+        try {
+            ScenarioService.BundleFileWriteResult result = service.writeBundleWorkspaceFile(
+                    bundleKey,
+                    path,
+                    request != null ? request.content() : null,
+                    request != null ? request.expectedRevision() : null);
+            log.info("[REST] PUT /scenarios/bundles/file -> status=200 bundleKey={} path={}", bundleKey, path);
+            return result;
+        } catch (ScenarioService.WorkspaceConflictException e) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMessage(), e);
+        } catch (ScenarioService.WorkspaceUnsupportedMediaTypeException e) {
+            throw new ResponseStatusException(HttpStatus.UNSUPPORTED_MEDIA_TYPE, e.getMessage(), e);
+        } catch (IllegalArgumentException e) {
+            log.warn("[REST] PUT /scenarios/bundles/file -> status=400 bundleKey={} path={} {}", bundleKey, path, e.getMessage());
+            throw bundleReadException(e);
+        }
+    }
+
+    @PostMapping(value = "/bundles/files", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<ScenarioService.BundleFilePayload> createBundleFile(@RequestParam("bundleKey") String bundleKey,
+                                                                              @RequestBody BundleFileCreateRequest request) throws IOException {
+        String path = request != null ? request.path() : null;
+        log.info("[REST] POST /scenarios/bundles/files bundleKey={} path={}", bundleKey, path);
+        requireManageBundle(bundleKey);
+        try {
+            ScenarioService.BundleFilePayload file = service.createBundleWorkspaceFile(
+                    bundleKey,
+                    path,
+                    request != null ? request.content() : null);
+            log.info("[REST] POST /scenarios/bundles/files -> status=201 bundleKey={} path={}", bundleKey, file.path());
+            return ResponseEntity.status(HttpStatus.CREATED).body(file);
+        } catch (ScenarioService.WorkspaceConflictException e) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMessage(), e);
+        } catch (ScenarioService.WorkspaceUnsupportedMediaTypeException e) {
+            throw new ResponseStatusException(HttpStatus.UNSUPPORTED_MEDIA_TYPE, e.getMessage(), e);
+        } catch (IllegalArgumentException e) {
+            log.warn("[REST] POST /scenarios/bundles/files -> status=400 bundleKey={} path={} {}", bundleKey, path, e.getMessage());
+            throw bundleReadException(e);
+        }
+    }
+
+    @PostMapping(value = "/bundles/folders", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<Void> createBundleWorkspaceFolder(@RequestParam("bundleKey") String bundleKey,
+                                                            @RequestBody FolderRequest request) throws IOException {
+        String path = request != null ? request.path() : null;
+        log.info("[REST] POST /scenarios/bundles/folders bundleKey={} path={}", bundleKey, path);
+        requireManageBundle(bundleKey);
+        try {
+            service.createBundleWorkspaceFolder(bundleKey, path);
+            log.info("[REST] POST /scenarios/bundles/folders -> status=204 bundleKey={} path={}", bundleKey, path);
+            return ResponseEntity.noContent().build();
+        } catch (ScenarioService.WorkspaceConflictException e) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMessage(), e);
+        } catch (IllegalArgumentException e) {
+            log.warn("[REST] POST /scenarios/bundles/folders -> status=400 bundleKey={} path={} {}", bundleKey, path, e.getMessage());
+            throw bundleReadException(e);
+        }
+    }
+
+    @PostMapping(value = "/bundles/entries/rename", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<Void> renameBundleWorkspaceEntry(@RequestParam("bundleKey") String bundleKey,
+                                                           @RequestBody BundleEntryRenameRequest request) throws IOException {
+        String path = request != null ? request.path() : null;
+        String name = request != null ? request.name() : null;
+        log.info("[REST] POST /scenarios/bundles/entries/rename bundleKey={} path={} name={}", bundleKey, path, name);
+        requireManageBundle(bundleKey);
+        try {
+            service.renameBundleWorkspaceEntry(bundleKey, path, name);
+            log.info("[REST] POST /scenarios/bundles/entries/rename -> status=204 bundleKey={} path={} name={}", bundleKey, path, name);
+            return ResponseEntity.noContent().build();
+        } catch (ScenarioService.WorkspaceConflictException e) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMessage(), e);
+        } catch (IllegalArgumentException e) {
+            log.warn("[REST] POST /scenarios/bundles/entries/rename -> status=400 bundleKey={} path={} name={} {}", bundleKey, path, name, e.getMessage());
+            throw bundleReadException(e);
+        }
+    }
+
+    @DeleteMapping(value = "/bundles/entry")
+    public ResponseEntity<Void> deleteBundleWorkspaceEntry(@RequestParam("bundleKey") String bundleKey,
+                                                           @RequestParam("path") String path) throws IOException {
+        log.info("[REST] DELETE /scenarios/bundles/entry bundleKey={} path={}", bundleKey, path);
+        requireManageBundle(bundleKey);
+        try {
+            service.deleteBundleWorkspaceEntry(bundleKey, path);
+            log.info("[REST] DELETE /scenarios/bundles/entry -> status=204 bundleKey={} path={}", bundleKey, path);
+            return ResponseEntity.noContent().build();
+        } catch (ScenarioService.WorkspaceConflictException e) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMessage(), e);
+        } catch (IllegalArgumentException e) {
+            log.warn("[REST] DELETE /scenarios/bundles/entry -> status=400 bundleKey={} path={} {}", bundleKey, path, e.getMessage());
+            throw bundleReadException(e);
+        }
+    }
+
     @GetMapping(value = "/folders", produces = MediaType.APPLICATION_JSON_VALUE)
     public List<String> listBundleFolders() throws IOException {
         log.info("[REST] GET /scenarios/folders");
@@ -791,5 +892,14 @@ public class ScenarioController {
     }
 
     public record BundleMoveRequest(String bundleKey, String path) {
+    }
+
+    public record BundleFileWriteRequest(String content, String expectedRevision) {
+    }
+
+    public record BundleFileCreateRequest(String path, String content) {
+    }
+
+    public record BundleEntryRenameRequest(String path, String name) {
     }
 }

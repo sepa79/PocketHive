@@ -84,6 +84,10 @@ export type BundleFilePayload = {
   content: string | null
 }
 
+export type BundleFileWriteResult = {
+  revision: string
+}
+
 function normalizeScenarioSummary(input: unknown): ScenarioSummary | null {
   if (!isRecord(input)) return null
   const id = asString(input['id'])
@@ -179,6 +183,12 @@ function normalizeBundleFile(input: unknown): BundleFilePayload | null {
   }
 }
 
+function normalizeBundleFileWriteResult(input: unknown): BundleFileWriteResult | null {
+  if (!isRecord(input)) return null
+  const revision = asString(input['revision'])
+  return revision ? { revision } : null
+}
+
 export async function listScenarios(opts?: { includeDefunct?: boolean }): Promise<ScenarioSummary[]> {
   const includeDefunct = opts?.includeDefunct ?? true
   const params = new URLSearchParams({ includeDefunct: includeDefunct ? 'true' : 'false' })
@@ -251,6 +261,66 @@ export async function readBundleFile(bundleKey: string, path: string): Promise<B
     throw new Error('Invalid bundle file response')
   }
   return normalized
+}
+
+export async function writeBundleFile(bundleKey: string, path: string, content: string, expectedRevision: string): Promise<BundleFileWriteResult> {
+  const params = new URLSearchParams({ bundleKey, path })
+  const response = await fetch(`/scenario-manager/scenarios/bundles/file?${params.toString()}`, {
+    method: 'PUT',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content, expectedRevision }),
+  })
+  await ensureOk(response, 'Failed to write bundle file')
+  const payload = (await response.json()) as unknown
+  const normalized = normalizeBundleFileWriteResult(payload)
+  if (!normalized) {
+    throw new Error('Invalid bundle file write response')
+  }
+  return normalized
+}
+
+export async function createBundleFile(bundleKey: string, path: string, content = ''): Promise<BundleFilePayload> {
+  const params = new URLSearchParams({ bundleKey })
+  const response = await fetch(`/scenario-manager/scenarios/bundles/files?${params.toString()}`, {
+    method: 'POST',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path, content }),
+  })
+  await ensureOk(response, 'Failed to create bundle file')
+  const payload = (await response.json()) as unknown
+  const normalized = normalizeBundleFile(payload)
+  if (!normalized) {
+    throw new Error('Invalid bundle file response')
+  }
+  return normalized
+}
+
+export async function createBundleFolder(bundleKey: string, path: string): Promise<void> {
+  const params = new URLSearchParams({ bundleKey })
+  const response = await fetch(`/scenario-manager/scenarios/bundles/folders?${params.toString()}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path }),
+  })
+  await ensureOk(response, 'Failed to create bundle folder')
+}
+
+export async function renameBundleEntry(bundleKey: string, path: string, name: string): Promise<void> {
+  const params = new URLSearchParams({ bundleKey })
+  const response = await fetch(`/scenario-manager/scenarios/bundles/entries/rename?${params.toString()}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path, name }),
+  })
+  await ensureOk(response, 'Failed to rename bundle entry')
+}
+
+export async function deleteBundleEntry(bundleKey: string, path: string): Promise<void> {
+  const params = new URLSearchParams({ bundleKey, path })
+  const response = await fetch(`/scenario-manager/scenarios/bundles/entry?${params.toString()}`, {
+    method: 'DELETE',
+  })
+  await ensureOk(response, 'Failed to delete bundle entry')
 }
 
 export async function listScenarioFolders(): Promise<string[]> {

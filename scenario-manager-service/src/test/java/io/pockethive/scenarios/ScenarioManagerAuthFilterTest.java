@@ -298,6 +298,134 @@ class ScenarioManagerAuthFilterTest {
     }
 
     @Test
+    void bundleWorkspaceEntryMutationsRespectManageScopeAndConflicts() throws Exception {
+        writeScenario("demo", "alpha", "Alpha");
+        Files.writeString(tempDir.resolve("demo").resolve("alpha").resolve("note.txt"), "hello");
+        writeScenario("prod", "omega", "Omega");
+        scenarioService.reload();
+        when(authServiceClient.resolve(anyString())).thenReturn(userWith(
+            PocketHivePermissionIds.ALL,
+            PocketHiveResourceTypes.FOLDER,
+            "demo"));
+
+        String revision = mvc.perform(get("/scenarios/bundles/file")
+                .param("bundleKey", "demo/alpha")
+                .param("path", "note.txt")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer test-token"))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString()
+            .replaceAll(".*\\\"revision\\\":\\\"([^\\\"]+)\\\".*", "$1");
+
+        mvc.perform(put("/scenarios/bundles/file")
+                .param("bundleKey", "demo/alpha")
+                .param("path", "note.txt")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer test-token")
+                .contentType("application/json")
+                .content("""
+                    {
+                      "content": "updated",
+                      "expectedRevision": "%s"
+                    }
+                    """.formatted(revision)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.revision").value(org.hamcrest.Matchers.startsWith("sha256:")));
+
+        mvc.perform(put("/scenarios/bundles/file")
+                .param("bundleKey", "demo/alpha")
+                .param("path", "note.txt")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer test-token")
+                .contentType("application/json")
+                .content("""
+                    {
+                      "content": "stale",
+                      "expectedRevision": "%s"
+                    }
+                    """.formatted(revision)))
+            .andExpect(status().isConflict());
+
+        mvc.perform(post("/scenarios/bundles/folders")
+                .param("bundleKey", "demo/alpha")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer test-token")
+                .contentType("application/json")
+                .content("""
+                    {
+                      "path": "templates/http"
+                    }
+                    """))
+            .andExpect(status().isNoContent());
+
+        mvc.perform(post("/scenarios/bundles/files")
+                .param("bundleKey", "demo/alpha")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer test-token")
+                .contentType("application/json")
+                .content("""
+                    {
+                      "path": "templates/http/new.yaml",
+                      "content": "method: GET\\n"
+                    }
+                    """))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.path").value("templates/http/new.yaml"));
+
+        mvc.perform(post("/scenarios/bundles/entries/rename")
+                .param("bundleKey", "demo/alpha")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer test-token")
+                .contentType("application/json")
+                .content("""
+                    {
+                      "path": "templates/http/new.yaml",
+                      "name": "renamed.yaml"
+                    }
+                    """))
+            .andExpect(status().isNoContent());
+
+        mvc.perform(post("/scenarios/bundles/entries/rename")
+                .param("bundleKey", "demo/alpha")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer test-token")
+                .contentType("application/json")
+                .content("""
+                    {
+                      "path": "templates/http/renamed.yaml",
+                      "name": "nested/move.yaml"
+                    }
+                    """))
+            .andExpect(status().isBadRequest());
+
+        mvc.perform(delete("/scenarios/bundles/entry")
+                .param("bundleKey", "demo/alpha")
+                .param("path", "templates/http")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer test-token"))
+            .andExpect(status().isConflict());
+
+        mvc.perform(delete("/scenarios/bundles/entry")
+                .param("bundleKey", "demo/alpha")
+                .param("path", "templates/http/renamed.yaml")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer test-token"))
+            .andExpect(status().isNoContent());
+
+        mvc.perform(delete("/scenarios/bundles/entry")
+                .param("bundleKey", "demo/alpha")
+                .param("path", "templates/http")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer test-token"))
+            .andExpect(status().isNoContent());
+
+        mvc.perform(post("/scenarios/bundles/files")
+                .param("bundleKey", "prod/omega")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer test-token")
+                .contentType("application/json")
+                .content("""
+                    {
+                      "path": "blocked.txt",
+                      "content": "blocked"
+                    }
+                    """))
+            .andExpect(status().isForbidden())
+            .andExpect(status().reason("PocketHive ALL permission required within matching scope"));
+    }
+
+    @Test
     void writeApisRejectViewOnlyUser() throws Exception {
         when(authServiceClient.resolve(anyString())).thenReturn(userWith(PocketHivePermissionIds.VIEW));
 

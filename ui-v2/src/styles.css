@@ -2613,6 +2613,60 @@ select.textInputCompact option {
   min-height: 0;
 }
 
+.scenarioWorkspaceTreeActions {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.scenarioWorkspaceTreeActions .actionButton {
+  width: 100%;
+  justify-content: center;
+}
+
+.scenarioWorkspaceSelectionRow {
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.scenarioWorkspaceSelectionLabel {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.scenarioWorkspaceSelectionActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.scenarioWorkspaceIconButton {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  color: rgba(210, 232, 244, 0.86);
+}
+
+.scenarioWorkspaceIconButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.38;
+}
+
+.scenarioWorkspaceIconButtonDanger {
+  color: rgba(255, 158, 158, 0.88);
+}
+
+.scenarioWorkspaceIconButtonDanger:hover:not(:disabled) {
+  border-color: rgba(255, 95, 95, 0.4);
+  background: rgba(255, 95, 95, 0.12);
+}
+
 .scenarioWorkspaceActions {
   margin-top: 14px;
   display: flex;

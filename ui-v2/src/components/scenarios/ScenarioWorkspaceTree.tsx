@@ -10,6 +10,15 @@ type WorkspaceFolderNode = {
   children: WorkspaceNode[]
 }
 
+type WorkspaceDirectoryNode = {
+  id: string
+  kind: 'directory'
+  bundleKey: string
+  path: string
+  name: string
+  children: WorkspaceNode[]
+}
+
 type WorkspaceBundleNode = {
   id: string
   kind: 'bundle'
@@ -28,7 +37,12 @@ type WorkspaceFileNode = {
   item: BundleTreeNode
 }
 
-type WorkspaceNode = WorkspaceFolderNode | WorkspaceBundleNode | WorkspaceFileNode
+type WorkspaceNode = WorkspaceFolderNode | WorkspaceDirectoryNode | WorkspaceBundleNode | WorkspaceFileNode
+
+export type ScenarioWorkspaceSelection =
+  | { kind: 'bundle'; bundleKey: string }
+  | { kind: 'directory'; bundleKey: string; path: string }
+  | { kind: 'file'; bundleKey: string; path: string }
 
 type MutableFolder = {
   path: string
@@ -84,9 +98,10 @@ function buildFileNodes(bundleKey: string, nodes: readonly BundleTreeNode[]): Wo
     }
   }
 
-  const finalize = (folder: MutableFileFolder): WorkspaceFolderNode => ({
+  const finalize = (folder: MutableFileFolder): WorkspaceDirectoryNode => ({
     id: `filedir:${bundleKey}:${folder.path}`,
-    kind: 'folder',
+    kind: 'directory',
+    bundleKey,
     path: folder.path,
     name: folder.name,
     children: [
@@ -166,6 +181,9 @@ function collectOpenIds(nodes: readonly WorkspaceNode[], selectedBundleKey: stri
         result.push(node.id)
       }
       result.push(...childIds)
+    } else if (node.kind === 'directory') {
+      result.push(node.id)
+      result.push(...collectOpenIds(node.children, selectedBundleKey))
     } else if (node.kind === 'bundle' && node.bundleKey === selectedBundleKey) {
       result.push(node.id)
     }
@@ -177,7 +195,7 @@ function rowClassName(node: WorkspaceNode, selected: boolean) {
   return [
     'scenarioTreeRow',
     selected ? 'scenarioTreeRowSelected' : '',
-    node.kind === 'folder' ? 'scenarioTreeRowFolder' : '',
+    node.kind === 'folder' || node.kind === 'directory' ? 'scenarioTreeRowFolder' : '',
     node.kind === 'bundle' ? 'scenarioTreeRowBundle' : '',
     node.kind === 'bundle' && node.item.defunct ? 'scenarioTreeRowDefunct' : '',
   ].filter(Boolean).join(' ')
@@ -188,7 +206,11 @@ function Renderer({
   style,
   dragHandle,
   onToggleBundle,
-}: NodeRendererProps<WorkspaceNode> & { onToggleBundle: (bundleKey: string) => void }) {
+  onSelectDirectory,
+}: NodeRendererProps<WorkspaceNode> & {
+  onToggleBundle: (bundleKey: string) => void
+  onSelectDirectory: (bundleKey: string, path: string) => void
+}) {
   const data = node.data
   const isBranch = data.kind !== 'file'
   const isOpen = data.kind === 'bundle' ? node.isOpen && data.children.length > 0 : node.isOpen
@@ -206,9 +228,15 @@ function Renderer({
               node.focus()
               return
             }
+            if (data.kind === 'directory') {
+              onSelectDirectory(data.bundleKey, data.path)
+              node.toggle()
+              node.focus()
+              return
+            }
             if (data.kind === 'bundle') {
               onToggleBundle(data.bundleKey)
-              node.open()
+              node.toggle()
               node.focus()
             }
           }}
@@ -220,6 +248,7 @@ function Renderer({
         <span
           className={
             data.kind === 'folder'
+              || data.kind === 'directory'
               ? `scenarioTreeGlyph scenarioTreeGlyphFolder ${node.isOpen ? 'scenarioTreeGlyphFolderOpen' : ''}`
               : data.kind === 'bundle'
                 ? 'scenarioTreeGlyph scenarioTreeGlyphScenario'
@@ -227,7 +256,7 @@ function Renderer({
           }
           aria-hidden="true"
         >
-          {data.kind === 'folder' ? '' : data.kind === 'bundle' ? 'S' : 'F'}
+          {data.kind === 'folder' || data.kind === 'directory' ? '' : data.kind === 'bundle' ? 'S' : 'F'}
         </span>
         <div className="scenarioTreeText">
           <div className="scenarioTreeTitleRow">
@@ -246,22 +275,32 @@ export function ScenarioWorkspaceTree({
   bundles,
   selectedBundleKey,
   selectedFilePath,
+  selectedDirectoryPath,
   bundleFiles,
   onSelectBundle,
   onSelectFile,
+  onSelectDirectory,
   height = 640,
 }: {
   bundles: readonly BundleTemplateEntry[]
   selectedBundleKey: string | null
   selectedFilePath: string | null
+  selectedDirectoryPath: string | null
   bundleFiles: readonly BundleTreeNode[]
   onSelectBundle: (bundleKey: string) => void
   onSelectFile: (path: string) => void
+  onSelectDirectory: (path: string) => void
   height?: number
 }) {
   const treeRef = useRef<TreeApi<WorkspaceNode> | null>(null)
   const data = useMemo(() => buildWorkspaceTree(bundles, selectedBundleKey, bundleFiles), [bundleFiles, bundles, selectedBundleKey])
-  const selectedNodeId = selectedBundleKey && selectedFilePath ? `file:${selectedBundleKey}:${selectedFilePath}` : selectedBundleKey ? `bundle:${selectedBundleKey}` : undefined
+  const selectedNodeId = selectedBundleKey && selectedFilePath
+    ? `file:${selectedBundleKey}:${selectedFilePath}`
+    : selectedBundleKey && selectedDirectoryPath
+      ? `filedir:${selectedBundleKey}:${selectedDirectoryPath}`
+      : selectedBundleKey
+        ? `bundle:${selectedBundleKey}`
+        : undefined
   const initialOpenState = useMemo(
     () => Object.fromEntries(collectOpenIds(data, selectedBundleKey).map((id) => [id, true])),
     [data, selectedBundleKey],
@@ -299,16 +338,22 @@ export function ScenarioWorkspaceTree({
             node.toggle()
             return
           }
+          if (node.data.kind === 'directory') {
+            onSelectBundle(node.data.bundleKey)
+            onSelectDirectory(node.data.path)
+            node.toggle()
+            return
+          }
           if (node.data.kind === 'bundle') {
             onSelectBundle(node.data.bundleKey)
-            node.open()
+            node.toggle()
             return
           }
           onSelectBundle(node.data.bundleKey)
           onSelectFile(node.data.path)
         }}
       >
-        {(props) => <Renderer {...props} onToggleBundle={onSelectBundle} />}
+        {(props) => <Renderer {...props} onToggleBundle={onSelectBundle} onSelectDirectory={onSelectDirectory} />}
       </Tree>
     </div>
   )

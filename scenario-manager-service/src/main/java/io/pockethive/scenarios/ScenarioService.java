@@ -506,6 +506,109 @@ public class ScenarioService {
                 content);
     }
 
+    public synchronized BundleFileWriteResult writeBundleWorkspaceFile(String bundleKey,
+                                                                       String relativePath,
+                                                                       String content,
+                                                                       String expectedRevision) throws IOException {
+        BundleCatalogEntry entry = bundleEntry(bundleKey);
+        BundleRoot root = bundleRoot(entry);
+        Path file = resolveBundleEntryPath(root, relativePath);
+        if (!Files.isRegularFile(file)) {
+            throw new IllegalArgumentException("Bundle path is not a file");
+        }
+        requireEditableBundleFile(file);
+        String currentRevision = "sha256:" + sha256Hex(Files.readAllBytes(file));
+        if (expectedRevision != null && !expectedRevision.isBlank() && !currentRevision.equals(expectedRevision.trim())) {
+            throw new WorkspaceConflictException("File revision is stale");
+        }
+        Files.writeString(file, content != null ? content : "");
+        reload();
+        return new BundleFileWriteResult("sha256:" + sha256Hex(Files.readAllBytes(file)));
+    }
+
+    public synchronized BundleFilePayload createBundleWorkspaceFile(String bundleKey,
+                                                                    String relativePath,
+                                                                    String content) throws IOException {
+        BundleCatalogEntry entry = bundleEntry(bundleKey);
+        BundleRoot root = bundleRoot(entry);
+        if (root.descriptorOnly()) {
+            throw new IllegalArgumentException("Bundle is descriptor-only");
+        }
+        Path file = resolveBundleTargetPath(root, relativePath);
+        requireEditableBundleFile(file);
+        if (Files.exists(file)) {
+            throw new WorkspaceConflictException("Bundle path already exists");
+        }
+        Path parent = file.getParent();
+        if (parent != null) {
+            Files.createDirectories(parent);
+        }
+        Files.writeString(file, content != null ? content : "");
+        reload();
+        return readBundleWorkspaceFile(bundleKey, relativeBundlePath(root.root(), file));
+    }
+
+    public synchronized void createBundleWorkspaceFolder(String bundleKey, String relativePath) throws IOException {
+        BundleCatalogEntry entry = bundleEntry(bundleKey);
+        BundleRoot root = bundleRoot(entry);
+        if (root.descriptorOnly()) {
+            throw new IllegalArgumentException("Bundle is descriptor-only");
+        }
+        Path folder = resolveBundleTargetPath(root, relativePath);
+        if (Files.exists(folder)) {
+            throw new WorkspaceConflictException("Bundle path already exists");
+        }
+        Files.createDirectories(folder);
+        reload();
+    }
+
+    public synchronized void renameBundleWorkspaceEntry(String bundleKey, String relativePath, String name) throws IOException {
+        BundleCatalogEntry entry = bundleEntry(bundleKey);
+        BundleRoot root = bundleRoot(entry);
+        if (root.descriptorOnly()) {
+            throw new IllegalArgumentException("Bundle is descriptor-only");
+        }
+        Path source = resolveBundleEntryPath(root, relativePath);
+        String targetName = normalizeBundleEntryName(name);
+        Path parent = source.getParent();
+        if (parent == null) {
+            throw new IllegalArgumentException("Cannot rename bundle root");
+        }
+        Path target = parent.resolve(targetName).normalize();
+        if (!target.startsWith(root.root())) {
+            throw new IllegalArgumentException("Invalid bundle path");
+        }
+        if (source.equals(target)) {
+            return;
+        }
+        if (Files.exists(target)) {
+            throw new WorkspaceConflictException("Bundle path already exists");
+        }
+        Files.move(source, target);
+        reload();
+    }
+
+    public synchronized void deleteBundleWorkspaceEntry(String bundleKey, String relativePath) throws IOException {
+        BundleCatalogEntry entry = bundleEntry(bundleKey);
+        BundleRoot root = bundleRoot(entry);
+        if (root.descriptorOnly()) {
+            throw new IllegalArgumentException("Bundle is descriptor-only");
+        }
+        Path target = resolveBundleEntryPath(root, relativePath);
+        if (target.equals(root.root())) {
+            throw new IllegalArgumentException("Cannot delete bundle root");
+        }
+        if (Files.isDirectory(target)) {
+            try (Stream<Path> children = Files.list(target)) {
+                if (children.findAny().isPresent()) {
+                    throw new WorkspaceConflictException("Bundle folder is not empty");
+                }
+            }
+        }
+        Files.delete(target);
+        reload();
+    }
+
 	    private Path resolveBundleFolder(String folderPath, boolean allowRoot) {
 	        String trimmed = folderPath == null ? "" : folderPath.trim();
 	        if (trimmed.isEmpty()) {
@@ -566,10 +669,7 @@ public class ScenarioService {
     }
 
     private Path resolveBundleEntryPath(BundleRoot root, String relativePath) {
-        String trimmed = relativePath == null ? "" : relativePath.trim();
-        if (trimmed.isEmpty() || trimmed.startsWith("/") || trimmed.contains("\\") || trimmed.contains("..")) {
-            throw new IllegalArgumentException("Invalid bundle path");
-        }
+        String trimmed = normalizeBundleRelativePath(relativePath);
         Path resolved = root.root().resolve(trimmed).normalize();
         if (!resolved.startsWith(root.root())) {
             throw new IllegalArgumentException("Invalid bundle path");
@@ -581,6 +681,47 @@ public class ScenarioService {
             throw new IllegalArgumentException("Bundle path not found");
         }
         return resolved;
+    }
+
+    private Path resolveBundleTargetPath(BundleRoot root, String relativePath) {
+        String trimmed = normalizeBundleRelativePath(relativePath);
+        Path resolved = root.root().resolve(trimmed).normalize();
+        if (!resolved.startsWith(root.root())) {
+            throw new IllegalArgumentException("Invalid bundle path");
+        }
+        return resolved;
+    }
+
+    private String normalizeBundleRelativePath(String relativePath) {
+        String trimmed = relativePath == null ? "" : relativePath.trim();
+        if (trimmed.isEmpty() || trimmed.startsWith("/") || trimmed.contains("\\") || trimmed.contains("..")) {
+            throw new IllegalArgumentException("Invalid bundle path");
+        }
+        for (String segment : trimmed.split("/")) {
+            if (segment.isBlank() || segment.equals(".") || segment.equals("..")) {
+                throw new IllegalArgumentException("Invalid bundle path");
+            }
+        }
+        return trimmed;
+    }
+
+    private String normalizeBundleEntryName(String name) {
+        String trimmed = name == null ? "" : name.trim();
+        if (trimmed.isEmpty()
+                || trimmed.contains("/")
+                || trimmed.contains("\\")
+                || trimmed.equals(".")
+                || trimmed.equals("..")
+                || trimmed.contains("..")) {
+            throw new IllegalArgumentException("Invalid bundle entry name");
+        }
+        return trimmed;
+    }
+
+    private void requireEditableBundleFile(Path file) {
+        if (EDITOR_KIND_UNSUPPORTED.equals(editorKind(file))) {
+            throw new WorkspaceUnsupportedMediaTypeException("Bundle file type is not editable");
+        }
     }
 
     private static String relativeBundlePath(Path root, Path path) {
@@ -2362,6 +2503,8 @@ public class ScenarioService {
 
     public record BundleTree(String bundleKey, List<BundleTreeNode> nodes) { }
 
+    public record BundleFileWriteResult(String revision) { }
+
     public record BundleTreeNode(
         String bundleKey,
         String path,
@@ -2384,6 +2527,18 @@ public class ScenarioService {
         String revision,
         String content
     ) { }
+
+    public static class WorkspaceConflictException extends RuntimeException {
+        public WorkspaceConflictException(String message) {
+            super(message);
+        }
+    }
+
+    public static class WorkspaceUnsupportedMediaTypeException extends RuntimeException {
+        public WorkspaceUnsupportedMediaTypeException(String message) {
+            super(message);
+        }
+    }
 
     public record VariablesValidationResult(List<String> warnings) { }
 

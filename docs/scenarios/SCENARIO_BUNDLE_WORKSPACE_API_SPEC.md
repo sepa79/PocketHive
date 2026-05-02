@@ -241,24 +241,25 @@ Request body:
 }
 ```
 
-### 5.7 Rename/move file or folder
+### 5.7 Rename file or folder
 
-`POST /scenarios/bundles/entries/move?bundleKey=<bundle-key>`
+`POST /scenarios/bundles/entries/rename?bundleKey=<bundle-key>`
 
 Request body:
 
 ```json
 {
-  "fromPath": "templates/http/request.yaml",
-  "toPath": "templates/http/request-v2.yaml"
+  "path": "templates/http/request.yaml",
+  "name": "request-v2.yaml"
 }
 ```
 
 Rules:
 
 - same-bundle only,
-- both paths are bundle-relative,
-- directories and files use the same move contract in MVP,
+- `path` is bundle-relative,
+- `name` is a single entry name, not a path,
+- directories and files use the same rename contract in MVP,
 - existing target returns `409`.
 
 ### 5.8 Delete file or folder

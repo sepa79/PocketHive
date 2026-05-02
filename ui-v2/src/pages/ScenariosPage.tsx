@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ConfirmModal } from '../components/ConfirmModal'
+import { Icon } from '../components/Icon'
 import { MonacoEditorHost } from '../components/MonacoEditorHost'
 import { ScenarioWorkspaceTree } from '../components/scenarios/ScenarioWorkspaceTree'
 import { useAuth } from '../lib/authContext'
@@ -8,12 +9,17 @@ import {
   type BundleFilePayload,
   type BundleTemplateEntry,
   type BundleTreeNode,
+  createBundleFile,
+  createBundleFolder,
   deleteBundle,
+  deleteBundleEntry,
   downloadBundle,
   listBundleWorkspaces,
   readBundleFile,
   readBundleTree,
+  renameBundleEntry,
   uploadScenarioBundle,
+  writeBundleFile,
 } from '../lib/scenariosApi'
 
 function folderLabel(summary: BundleTemplateEntry): string {
@@ -22,6 +28,22 @@ function folderLabel(summary: BundleTemplateEntry): string {
 
 function bundleLabel(entry: BundleTemplateEntry): string {
   return entry.id ?? entry.bundlePath
+}
+
+function parentPath(path: string | null): string {
+  if (!path) return ''
+  const index = path.lastIndexOf('/')
+  return index > 0 ? path.slice(0, index) : ''
+}
+
+function basename(path: string): string {
+  const index = path.lastIndexOf('/')
+  return index >= 0 ? path.slice(index + 1) : path
+}
+
+function joinPath(prefix: string, leaf: string): string {
+  const cleanLeaf = leaf.trim().replace(/^\/+/, '')
+  return prefix ? `${prefix}/${cleanLeaf}` : cleanLeaf
 }
 
 export function ScenariosPage() {
@@ -34,7 +56,9 @@ export function ScenariosPage() {
   const [bundleTreeLoading, setBundleTreeLoading] = useState(false)
   const [bundleTreeError, setBundleTreeError] = useState<string | null>(null)
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null)
+  const [selectedDirectoryPath, setSelectedDirectoryPath] = useState<string | null>(null)
   const [selectedFile, setSelectedFile] = useState<BundleFilePayload | null>(null)
+  const [fileDraft, setFileDraft] = useState('')
   const [selectedFileLoading, setSelectedFileLoading] = useState(false)
   const [selectedFileError, setSelectedFileError] = useState<string | null>(null)
 
@@ -46,6 +70,7 @@ export function ScenariosPage() {
     () => (selectedKey ? items.find((entry) => entry.bundleKey === selectedKey) ?? null : null),
     [items, selectedKey],
   )
+  const selectedBundleKey = selected?.bundleKey ?? null
 
   const canManageSelected = selected ? auth.canManageBundle(selected.bundlePath, selected.folderPath) : false
   const visibleItems = useMemo(
@@ -58,16 +83,18 @@ export function ScenariosPage() {
     setBundleTreeNodes([])
     setBundleTreeError(null)
     setSelectedFilePath(null)
+    setSelectedDirectoryPath(null)
     setSelectedFile(null)
+    setFileDraft('')
     setSelectedFileError(null)
 
-    if (!selected) {
+    if (!selectedBundleKey) {
       setBundleTreeLoading(false)
       return
     }
 
     setBundleTreeLoading(true)
-    readBundleTree(selected.bundleKey)
+    readBundleTree(selectedBundleKey)
       .then((tree) => {
         if (cancelled) return
         setBundleTreeNodes(tree.nodes)
@@ -75,6 +102,7 @@ export function ScenariosPage() {
           ?? tree.nodes.find((node) => node.nodeType === 'file' && node.editorKind !== 'unsupported')
           ?? tree.nodes.find((node) => node.nodeType === 'file')
         setSelectedFilePath(preferred?.path ?? null)
+        setSelectedDirectoryPath(null)
       })
       .catch((err: unknown) => {
         if (!cancelled) setBundleTreeError(err instanceof Error ? err.message : 'Failed to load bundle files')
@@ -86,11 +114,12 @@ export function ScenariosPage() {
     return () => {
       cancelled = true
     }
-  }, [selected])
+  }, [selectedBundleKey])
 
   useEffect(() => {
     let cancelled = false
     setSelectedFile(null)
+    setFileDraft('')
     setSelectedFileError(null)
 
     if (!selected || !selectedFilePath) {
@@ -101,7 +130,10 @@ export function ScenariosPage() {
     setSelectedFileLoading(true)
     readBundleFile(selected.bundleKey, selectedFilePath)
       .then((file) => {
-        if (!cancelled) setSelectedFile(file)
+        if (!cancelled) {
+          setSelectedFile(file)
+          setFileDraft(file.content ?? '')
+        }
       })
       .catch((err: unknown) => {
         if (!cancelled) setSelectedFileError(err instanceof Error ? err.message : 'Failed to load bundle file')
@@ -114,6 +146,12 @@ export function ScenariosPage() {
       cancelled = true
     }
   }, [selected, selectedFilePath])
+
+  const refreshCurrentBundleTree = useCallback(async () => {
+    if (!selected) return
+    const tree = await readBundleTree(selected.bundleKey)
+    setBundleTreeNodes(tree.nodes)
+  }, [selected])
 
   const reload = useCallback(async () => {
     setLoading(true)
@@ -141,11 +179,20 @@ export function ScenariosPage() {
     uploadInputRef.current?.click()
   }, [])
 
+  const selectedEntryLabel = selectedFilePath ?? selectedDirectoryPath ?? '(bundle root)'
+  const selectedEntryParent = selectedDirectoryPath ?? parentPath(selectedFilePath)
+  const fileDirty = selectedFile !== null && selectedFile.content !== null && fileDraft !== selectedFile.content
+  const confirmDiscardChanges = useCallback(() => {
+    if (!fileDirty) return true
+    return window.confirm('Discard unsaved file changes?')
+  }, [fileDirty])
+
   const handleUploadChange = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0] ?? null
       event.target.value = ''
       if (!file) return
+      if (!confirmDiscardChanges()) return
       setBusy(true)
       setError(null)
       try {
@@ -157,7 +204,7 @@ export function ScenariosPage() {
         setBusy(false)
       }
     },
-    [reload],
+    [confirmDiscardChanges, reload],
   )
 
   const handleDownloadSelected = useCallback(async () => {
@@ -195,6 +242,141 @@ export function ScenariosPage() {
       setBusy(false)
     }
   }, [deleteTarget, reload])
+
+  const handleReload = useCallback(async () => {
+    if (!confirmDiscardChanges()) return
+    await reload()
+  }, [confirmDiscardChanges, reload])
+
+  const handleSelectBundle = useCallback((bundleKey: string) => {
+    if (bundleKey !== selectedKey && !confirmDiscardChanges()) return
+    setSelectedKey(bundleKey)
+  }, [confirmDiscardChanges, selectedKey])
+
+  const handleSelectFile = useCallback((path: string) => {
+    if (path !== selectedFilePath && !confirmDiscardChanges()) return
+    setSelectedDirectoryPath(null)
+    setSelectedFilePath(path)
+  }, [confirmDiscardChanges, selectedFilePath])
+
+  const handleSelectDirectory = useCallback((path: string) => {
+    if (path !== selectedDirectoryPath && !confirmDiscardChanges()) return
+    setSelectedFilePath(null)
+    setSelectedDirectoryPath(path)
+  }, [confirmDiscardChanges, selectedDirectoryPath])
+
+  const handleCreateFile = useCallback(async () => {
+    if (!selected) return
+    if (!confirmDiscardChanges()) return
+    const path = window.prompt('New file path', joinPath(selectedEntryParent, 'new-file.yaml'))
+    if (!path) return
+    setBusy(true)
+    setError(null)
+    try {
+      const created = await createBundleFile(selected.bundleKey, path, '')
+      await refreshCurrentBundleTree()
+      await reload()
+      setSelectedDirectoryPath(null)
+      setSelectedFilePath(created.path)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Create file failed')
+    } finally {
+      setBusy(false)
+    }
+  }, [confirmDiscardChanges, refreshCurrentBundleTree, reload, selected, selectedEntryParent])
+
+  const handleCreateFolder = useCallback(async () => {
+    if (!selected) return
+    if (!confirmDiscardChanges()) return
+    const path = window.prompt('New folder path', joinPath(selectedEntryParent, 'new-folder'))
+    if (!path) return
+    setBusy(true)
+    setError(null)
+    try {
+      await createBundleFolder(selected.bundleKey, path)
+      await refreshCurrentBundleTree()
+      await reload()
+      setSelectedFilePath(null)
+      setSelectedDirectoryPath(path.trim())
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Create folder failed')
+    } finally {
+      setBusy(false)
+    }
+  }, [confirmDiscardChanges, refreshCurrentBundleTree, reload, selected, selectedEntryParent])
+
+  const handleRenameEntry = useCallback(async () => {
+    if (!selected) return
+    const currentPath = selectedFilePath ?? selectedDirectoryPath
+    if (!currentPath) return
+    if (!confirmDiscardChanges()) return
+    const nextName = window.prompt('Rename', basename(currentPath))
+    if (!nextName) return
+    const trimmedName = nextName.trim()
+    if (!trimmedName || trimmedName.includes('/') || trimmedName.includes('\\')) {
+      setError('Rename expects a name, not a path')
+      return
+    }
+    if (trimmedName === basename(currentPath)) return
+    setBusy(true)
+    setError(null)
+    try {
+      await renameBundleEntry(selected.bundleKey, currentPath, trimmedName)
+      const targetPath = joinPath(parentPath(currentPath), trimmedName)
+      await refreshCurrentBundleTree()
+      await reload()
+      if (selectedFilePath) {
+        setSelectedFilePath(targetPath)
+        setSelectedDirectoryPath(null)
+      } else {
+        setSelectedFilePath(null)
+        setSelectedDirectoryPath(targetPath)
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Rename failed')
+    } finally {
+      setBusy(false)
+    }
+  }, [confirmDiscardChanges, refreshCurrentBundleTree, reload, selected, selectedDirectoryPath, selectedFilePath])
+
+  const handleDeleteEntry = useCallback(async () => {
+    if (!selected) return
+    const currentPath = selectedFilePath ?? selectedDirectoryPath
+    if (!currentPath) return
+    if (!confirmDiscardChanges()) return
+    if (!window.confirm(`Delete '${currentPath}' from bundle '${bundleLabel(selected)}'?`)) return
+    setBusy(true)
+    setError(null)
+    try {
+      await deleteBundleEntry(selected.bundleKey, currentPath)
+      await refreshCurrentBundleTree()
+      await reload()
+      setSelectedFilePath(null)
+      setSelectedDirectoryPath(parentPath(currentPath) || null)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Delete entry failed')
+    } finally {
+      setBusy(false)
+    }
+  }, [confirmDiscardChanges, refreshCurrentBundleTree, reload, selected, selectedDirectoryPath, selectedFilePath])
+
+  const handleSaveFile = useCallback(async () => {
+    if (!selected || !selectedFile || selectedFile.content === null) return
+    setBusy(true)
+    setError(null)
+    try {
+      const result = await writeBundleFile(selected.bundleKey, selectedFile.path, fileDraft, selectedFile.revision)
+      await refreshCurrentBundleTree()
+      await reload()
+      const saved = await readBundleFile(selected.bundleKey, selectedFile.path)
+      setSelectedFile({ ...saved, revision: result.revision })
+      setFileDraft(saved.content ?? fileDraft)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Save file failed')
+    } finally {
+      setBusy(false)
+    }
+  }, [fileDraft, refreshCurrentBundleTree, reload, selected, selectedFile])
 
   if (!auth.canAccessPocketHive) {
     return (
@@ -260,7 +442,7 @@ export function ScenariosPage() {
             <div className="row" style={{ gap: 8 }}>
               {bundleTreeLoading ? <span className="pill pillInfo">FILES</span> : null}
               <div className={loading ? 'pill pillInfo' : 'pill pillOk'}>{loading ? 'LOADING' : `${visibleItems.length}`}</div>
-              <button type="button" className="actionButton actionButtonGhost" onClick={() => void reload()} disabled={busy || loading}>
+              <button type="button" className="actionButton actionButtonGhost" onClick={() => void handleReload()} disabled={busy || loading}>
                 Refresh
               </button>
             </div>
@@ -268,14 +450,50 @@ export function ScenariosPage() {
 
           {bundleTreeError ? <div className="warningText" style={{ marginTop: 10 }}>{bundleTreeError}</div> : null}
 
+          <div className="scenarioWorkspaceTreeActions">
+            <button type="button" className="actionButton actionButtonGhost" onClick={() => void handleCreateFile()} disabled={busy || !canManageSelected}>
+              New file
+            </button>
+            <button type="button" className="actionButton actionButtonGhost" onClick={() => void handleCreateFolder()} disabled={busy || !canManageSelected}>
+              New folder
+            </button>
+          </div>
+          <div className="scenarioWorkspaceSelectionRow">
+            <div className="muted scenarioWorkspaceSelectionLabel">{selectedEntryLabel}</div>
+            <div className="scenarioWorkspaceSelectionActions" aria-label="Selected entry actions">
+              <button
+                type="button"
+                className="iconButton scenarioWorkspaceIconButton"
+                onClick={() => void handleRenameEntry()}
+                disabled={busy || !canManageSelected || (!selectedFilePath && !selectedDirectoryPath)}
+                title="Rename selected file or folder"
+                aria-label="Rename selected file or folder"
+              >
+                <Icon name="edit" />
+              </button>
+              <button
+                type="button"
+                className="iconButton scenarioWorkspaceIconButton scenarioWorkspaceIconButtonDanger"
+                onClick={() => void handleDeleteEntry()}
+                disabled={busy || !canManageSelected || (!selectedFilePath && !selectedDirectoryPath)}
+                title="Delete selected file or folder"
+                aria-label="Delete selected file or folder"
+              >
+                <Icon name="trash" />
+              </button>
+            </div>
+          </div>
+
           <div className="scenarioWorkspaceTree">
             <ScenarioWorkspaceTree
               bundles={visibleItems}
               selectedBundleKey={selectedKey}
               selectedFilePath={selectedFilePath}
+              selectedDirectoryPath={selectedDirectoryPath}
               bundleFiles={bundleTreeNodes}
-              onSelectBundle={(bundleKey) => setSelectedKey(bundleKey)}
-              onSelectFile={setSelectedFilePath}
+              onSelectBundle={handleSelectBundle}
+              onSelectFile={handleSelectFile}
+              onSelectDirectory={handleSelectDirectory}
               height={680}
             />
           </div>
@@ -322,13 +540,18 @@ export function ScenariosPage() {
               ) : null}
 
               <div className="scenarioWorkspaceActions">
+                <button type="button" className="actionButton" onClick={() => void handleSaveFile()} disabled={busy || !canManageSelected || !fileDirty}>
+                  Save file
+                </button>
                 <button type="button" className="actionButton actionButtonGhost" onClick={() => void handleDownloadSelected()} disabled={busy}>
                   Download bundle
                 </button>
                 <button
                   type="button"
                   className="actionButton actionButtonDanger"
-                  onClick={() => setDeleteTarget(selected)}
+                  onClick={() => {
+                    if (confirmDiscardChanges()) setDeleteTarget(selected)
+                  }}
                   disabled={busy || !canManageSelected}
                 >
                   Delete bundle
@@ -349,11 +572,12 @@ export function ScenariosPage() {
                     <div className="scenarioFilePreviewBody">
                       <MonacoEditorHost
                         className="monacoSurface"
-                        value={selectedFile.content}
+                        value={fileDraft}
                         language={monacoLanguageForBundleFile(selectedFile.editorKind)}
                         theme="vs-dark"
+                        onChange={(value) => setFileDraft(value ?? '')}
                         options={{
-                          readOnly: true,
+                          readOnly: !canManageSelected,
                           automaticLayout: true,
                           minimap: { enabled: false },
                           scrollBeyondLastLine: false,
