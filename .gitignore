@@ -44,6 +44,10 @@ tools/mcp-orchestrator-debug/control-recording.jsonl
 tools/mcp-orchestrator-debug/control-recording-run*.jsonl
 tools/mcp-orchestrator-debug/session-log.jsonl
 
+# --- MCP ---
+.amazonq/mcp.json
+tools/mcp-server/node_modules/
+
 # --- PocketHive runtime ---
 scenarios-runtime/
 **/scenarios-runtime/

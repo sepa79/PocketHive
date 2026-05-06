@@ -1,0 +1,152 @@
+{
+  "name": "q_ide_default",
+  "description": "Default agent configuration",
+  "prompt": "",
+  "mcpServers": {
+    "pockethive-bundles": {
+      "command": "node",
+      "args": [
+        "tools/mcp-server/start.cjs"
+      ]
+    }
+  },
+  "tools": [
+    "fs_read",
+    "execute_bash",
+    "fs_write",
+    "report_issue",
+    "use_aws",
+    "fsRead",
+    "fsWrite",
+    "fsReplace",
+    "listDirectory",
+    "fileSearch",
+    "executeBash",
+    "codeReview",
+    "displayFindings",
+    "@github",
+    "@pockethive-bundles",
+    "@hivemind"
+  ],
+  "toolAliases": {},
+  "allowedTools": [
+    "fs_read",
+    "report_issue",
+    "use_aws",
+    "execute_bash",
+    "fs_write",
+    "fsRead",
+    "listDirectory",
+    "fileSearch",
+    "codeReview",
+    "displayFindings",
+    "@pockethive-bundles/bundle.list",
+    "@pockethive-bundles/bundle.read",
+    "@pockethive-bundles/bundle.validate",
+    "@pockethive-bundles/scenario.sync",
+    "@pockethive-bundles/scenario.list",
+    "@pockethive-bundles/scenario.get",
+    "@pockethive-bundles/swarm.list",
+    "@pockethive-bundles/swarm.get",
+    "@pockethive-bundles/swarm.create",
+    "@pockethive-bundles/swarm.start",
+    "@pockethive-bundles/swarm.stop",
+    "@pockethive-bundles/swarm.remove",
+    "@pockethive-bundles/debug.queues",
+    "@pockethive-bundles/debug.tap",
+    "@pockethive-bundles/debug.tap.read",
+    "@pockethive-bundles/debug.tap.close",
+    "@pockethive-bundles/debug.journal",
+    "@pockethive-bundles/debug.docker-logs",
+    "@pockethive-bundles/debug.config-update",
+    "@pockethive-bundles/debug.prometheus",
+    "@pockethive-bundles/health.check",
+    "@pockethive-bundles/git.status",
+    "@pockethive-bundles/docs.refresh",
+    "@pockethive-bundles/git.diff",
+    "@pockethive-bundles/docker.execute",
+    "@pockethive-bundles/docker.compose",
+    "@pockethive-bundles/git.execute",
+    "@pockethive-bundles/maven.execute",
+    "@pockethive-bundles/npm.execute",
+    "@pockethive-bundles/tools.check",
+    "@pockethive-bundles/bundle.validate.result",
+    "@pockethive-bundles/scenario.deploy",
+    "@pockethive-bundles/swarm.wait-ready",
+    "@pockethive-bundles/mock.wiremock.list",
+    "@pockethive-bundles/mock.wiremock.add",
+    "@pockethive-bundles/mock.wiremock.reset",
+    "@pockethive-bundles/mock.wiremock.requests",
+    "@pockethive-bundles/mock.wiremock.unmatched",
+    "@pockethive-bundles/mock.tcp.list",
+    "@pockethive-bundles/mock.tcp.add",
+    "@pockethive-bundles/mock.tcp.reset",
+    "@pockethive-bundles/mock.tcp.requests",
+    "@pockethive-bundles/mock.tcp.unmatched",
+    "@pockethive-bundles/mock.tcp.scenarios",
+    "@pockethive-bundles/mock.tcp.reset-scenarios",
+    "@pockethive-bundles/paths.check",
+    "@pockethive-bundles/mock.tcp.enable",
+    "@pockethive-bundles/mock.tcp.disable",
+    "@pockethive-bundles/mock.tcp.update",
+    "@pockethive-bundles/env.list",
+    "@pockethive-bundles/env.switch",
+    "@pockethive-bundles/github.list_issues",
+    "@pockethive-bundles/github.get_issue",
+    "@pockethive-bundles/github.search_issues",
+    "@hivemind/project.register",
+    "@hivemind/feature.list",
+    "@hivemind/feature.add",
+    "@hivemind/feature.remove",
+    "@hivemind/feature.rename",
+    "@hivemind/context.open",
+    "@hivemind/context.get",
+    "@hivemind/context.update",
+    "@hivemind/context.close",
+    "@hivemind/context.get_project_brief",
+    "@hivemind/context.get_branch_brief",
+    "@hivemind/context.get_open_threads",
+    "@hivemind/learning.capture",
+    "@hivemind/learning.get_recent",
+    "@hivemind/learning.feedback",
+    "@hivemind/learning.search",
+    "@hivemind/issue.report",
+    "@hivemind/issue.get",
+    "@hivemind/issue.add_event",
+    "@hivemind/issue.list",
+    "@hivemind/rules.define",
+    "@hivemind/rules.get",
+    "@hivemind/session.start",
+    "@hivemind/session.end",
+    "@hivemind/entry.append",
+    "@hivemind/rule_check.submit",
+    "@hivemind/rule_check.list_for_session",
+    "@hivemind/entry.search"
+  ],
+  "toolsSettings": {
+    "use_aws": {
+      "alwaysAllow": [
+        {
+          "preset": "readOnly"
+        }
+      ]
+    },
+    "execute_bash": {
+      "alwaysAllow": [
+        {
+          "preset": "readOnly"
+        }
+      ]
+    }
+  },
+  "resources": [
+    "file://AmazonQ.md",
+    "file://README.md",
+    "file://.amazonq/rules/**/*.md"
+  ],
+  "hooks": {
+    "agentSpawn": [],
+    "userPromptSubmit": []
+  },
+  "useLegacyMcpJson": true
+}
