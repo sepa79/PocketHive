@@ -13,12 +13,17 @@ import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
 import io.pockethive.processor.TcpTransportConfig;
 import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.KeyStore;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import javax.net.ssl.KeyManagerFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -52,11 +57,8 @@ public class NettyTransport implements TcpTransport {
         long start = System.currentTimeMillis();
 
         try {
-            if (logger.isDebugEnabled()) {
-                logger.debug("TCP_SEND host={} port={} bytes={} payload={}",
-                    request.host(), request.port(), request.payload().length,
-                    new String(request.payload(), StandardCharsets.UTF_8));
-            }
+            logger.debug("TCP_SEND host={} port={} bytes={} payload=<redacted>",
+                request.host(), request.port(), request.payload().length);
 
             CompletableFuture<byte[]> responseFuture = new CompletableFuture<>();
             int connectTimeout = (Integer) request.options().getOrDefault("connectTimeoutMs", 5000);
@@ -65,7 +67,7 @@ public class NettyTransport implements TcpTransport {
             String endTag = (String) request.options().getOrDefault("endTag", "</Document>");
             boolean useSsl = Boolean.TRUE.equals(request.options().get("ssl"));
             boolean sslVerify = Boolean.TRUE.equals(request.options().getOrDefault("sslVerify", false));
-            SslContext sslContext = useSsl ? buildClientSslContext(sslVerify) : null;
+            SslContext sslContext = useSsl ? buildClientSslContext(request, sslVerify) : null;
 
             Bootstrap bootstrap = new Bootstrap()
                 .group(group)
@@ -89,11 +91,8 @@ public class NettyTransport implements TcpTransport {
             byte[] response = responseFuture.get(readTimeout, TimeUnit.MILLISECONDS);
             long latency = System.currentTimeMillis() - start;
 
-            if (logger.isDebugEnabled()) {
-                logger.debug("TCP_RECV host={} port={} bytes={} latency={}ms payload={}",
-                    request.host(), request.port(), response.length, latency,
-                    new String(response, StandardCharsets.UTF_8));
-            }
+            logger.debug("TCP_RECV host={} port={} bytes={} latency={}ms payload=<redacted>",
+                request.host(), request.port(), response.length, latency);
 
             return new TcpResponse(200, response, latency);
 
@@ -129,12 +128,32 @@ public class NettyTransport implements TcpTransport {
         }));
     }
 
-    private static SslContext buildClientSslContext(boolean sslVerify) throws Exception {
+    private static SslContext buildClientSslContext(TcpRequest request, boolean sslVerify) throws Exception {
         SslContextBuilder builder = SslContextBuilder.forClient();
         if (!sslVerify) {
             builder.trustManager(InsecureTrustManagerFactory.INSTANCE);
         }
+        KeyManagerFactory keyManagerFactory = keyManagerFactory(request);
+        if (keyManagerFactory != null) {
+            builder.keyManager(keyManagerFactory);
+        }
         return builder.build();
+    }
+
+    private static KeyManagerFactory keyManagerFactory(TcpRequest request) throws Exception {
+        Object keyStorePath = request.options().get("keyStorePath");
+        if (keyStorePath == null || keyStorePath.toString().isBlank()) {
+            return null;
+        }
+        String type = request.options().getOrDefault("keyStoreType", "PKCS12").toString();
+        char[] password = request.options().getOrDefault("keyStorePassword", "").toString().toCharArray();
+        KeyStore keyStore = KeyStore.getInstance(type);
+        try (InputStream in = Files.newInputStream(Path.of(keyStorePath.toString()))) {
+            keyStore.load(in, password);
+        }
+        KeyManagerFactory factory = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+        factory.init(keyStore, password);
+        return factory;
     }
 
     private static class NettyClientHandler extends SimpleChannelInboundHandler<ByteBuf> {

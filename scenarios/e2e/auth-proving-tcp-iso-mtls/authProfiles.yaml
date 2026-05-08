@@ -1,0 +1,18 @@
+profiles:
+  tcp-prefix:
+    type: MESSAGE_FIELD_AUTH
+    storage:
+      mode: NONE
+    value: "ECHO AUTH-PROOF:"
+  iso-mac:
+    type: ISO8583_MAC
+    storage:
+      mode: NONE
+    macKey: local-dummy-iso-mac-key
+  mtls-client:
+    type: TLS_CLIENT_CERT
+    storage:
+      mode: NONE
+    keyStorePath: /app/scenario/certs/client.p12
+    keyStorePassword: changeit
+    keyStoreType: PKCS12

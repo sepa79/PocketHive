@@ -1,0 +1,11 @@
+serviceId: default
+callId: iso-mac
+protocol: ISO8583
+wireProfileId: MC_2BYTE_LEN_BIN_BITMAP
+payloadAdapter: RAW_HEX
+bodyTemplate: "0200A1B2C3D4"
+headersTemplate:
+  x-auth-proof: iso-mac
+authRef:
+  profileId: iso-mac
+  applyAs: ISO8583_MAC_FIELD

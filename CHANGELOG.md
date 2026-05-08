@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.15.18]
+Timestamp: 2026-05-08T16:25:51Z
+
+- **BREAKING** Auth: replace legacy global/inline template auth with worker-scoped `authProfiles.yaml` plus template `authRef`, rejecting inline `auth:`, duplicate profile keys, missing profiles, and unsupported apply modes explicitly.
+- Auth lifecycle: add Redis-only durable token records, leases, due-index scheduling, profile fingerprint collision checks, and Testcontainers-backed Redis lifecycle coverage for environments without a local Redis.
+- Auth application: apply token material through typed HTTP, TCP, ISO8583, and mTLS paths across request-builder, HTTP sequence, and processor workers, with redacted failures and first-failure journal dedupe.
+- Auth proving: add committed E2E auth proving scenarios, evidence docs, and a runner covering HTTP, sequence, TCP, ISO8583, mTLS, auth failure dedupe, token-key collisions, no-auth worker cleanliness, and stop/start token reuse.
+
 ## [0.15.17]
 Timestamp: 2026-04-14T16:14:56Z
 

@@ -11,8 +11,12 @@ import io.pockethive.processor.exception.ProcessorCallException;
 import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
 import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerContext;
+import io.pockethive.worker.sdk.auth.AuthFailureException;
+import io.pockethive.worker.sdk.auth.AuthFailureJournalDeduplicator;
+import io.pockethive.worker.sdk.config.RedisSequenceProperties;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
 import io.pockethive.worker.sdk.config.WorkerCapability;
+import io.pockethive.worker.sdk.templating.TemplateRenderer;
 
 import java.time.Clock;
 import java.util.Locale;
@@ -79,17 +83,28 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
   private final ProcessorWorkerProperties properties;
   private final CallMetricsRecorder metricsRecorder = new CallMetricsRecorder();
   private final Map<String, ProtocolHandler> protocolHandlers;
+  private final AuthFailureJournalDeduplicator authFailureJournal = new AuthFailureJournalDeduplicator();
 
   @Autowired
+  ProcessorWorkerImpl(ObjectMapper mapper,
+                      ProcessorWorkerProperties properties,
+                      TemplateRenderer templateRenderer,
+                      RedisSequenceProperties redisProperties) {
+    this(mapper, properties, newHttpClientBundle(true), newHttpClientBundle(false), Clock.systemUTC(), templateRenderer, redisProperties);
+  }
+
   ProcessorWorkerImpl(ObjectMapper mapper, ProcessorWorkerProperties properties) {
-    this(mapper, properties, newHttpClientBundle(true), newHttpClientBundle(false), Clock.systemUTC());
+    this(mapper, properties, newHttpClientBundle(true), newHttpClientBundle(false), Clock.systemUTC(),
+        new io.pockethive.worker.sdk.templating.PebbleTemplateRenderer(), new RedisSequenceProperties());
   }
 
   ProcessorWorkerImpl(ObjectMapper mapper, ProcessorWorkerProperties properties, HttpClient httpClient, HttpClient noKeepAliveClient, Clock clock) {
     this(mapper, properties,
         new HttpClientBundle(httpClient, noKeepAliveClient, ThreadLocal.withInitial(() -> httpClient)),
         new HttpClientBundle(httpClient, noKeepAliveClient, ThreadLocal.withInitial(() -> httpClient)),
-        clock);
+        clock,
+        new io.pockethive.worker.sdk.templating.PebbleTemplateRenderer(),
+        new RedisSequenceProperties());
   }
 
   ProcessorWorkerImpl(ObjectMapper mapper,
@@ -102,14 +117,18 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
     this(mapper, properties,
         new HttpClientBundle(verifiedClient, verifiedNoKeepAliveClient, ThreadLocal.withInitial(() -> verifiedClient)),
         new HttpClientBundle(insecureClient, insecureNoKeepAliveClient, ThreadLocal.withInitial(() -> insecureClient)),
-        clock);
+        clock,
+        new io.pockethive.worker.sdk.templating.PebbleTemplateRenderer(),
+        new RedisSequenceProperties());
   }
 
   private ProcessorWorkerImpl(ObjectMapper mapper,
                               ProcessorWorkerProperties properties,
                               HttpClientBundle verifiedClients,
                               HttpClientBundle insecureClients,
-                              Clock clock) {
+                              Clock clock,
+                              TemplateRenderer templateRenderer,
+                              RedisSequenceProperties redisProperties) {
     this.mapper = Objects.requireNonNull(mapper, "mapper");
     this.properties = Objects.requireNonNull(properties, "properties");
     java.util.concurrent.atomic.AtomicLong nextAllowedTimeNanos = new java.util.concurrent.atomic.AtomicLong(0L);
@@ -125,13 +144,16 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
             insecureClients.noKeepAlive(),
             insecureClients.perThread(),
             nextAllowedTimeNanos),
-        "TCP", new TcpProtocolHandler(mapper, clock, metricsRecorder, properties.defaultConfig().tcpTransport(), nextAllowedTimeNanos),
+        "TCP", new TcpProtocolHandler(mapper, clock, metricsRecorder, properties.defaultConfig().tcpTransport(), nextAllowedTimeNanos,
+            templateRenderer, redisProperties),
         "ISO8583", new Iso8583ProtocolHandler(
             mapper,
             clock,
             metricsRecorder,
             properties.defaultConfig().tcpTransport(),
-            nextAllowedTimeNanos)
+            nextAllowedTimeNanos,
+            templateRenderer,
+            redisProperties)
     );
   }
 
@@ -144,6 +166,10 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
     try {
       return invoke(in, config, context);
     } catch (ProcessorCallException ex) {
+      var authFailure = AuthFailureException.find(ex);
+      if (authFailure.isPresent()) {
+        return handleAuthFailure(authFailure.get(), context);
+      }
       Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
       logger.warn("Processor request failed: {}", cause.toString(), ex);
       if (cause instanceof RuntimeException runtimeException) {
@@ -151,6 +177,10 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
       }
       throw new IllegalStateException("Processor request failed", cause);
     } catch (RuntimeException ex) {
+      var authFailure = AuthFailureException.find(ex);
+      if (authFailure.isPresent()) {
+        return handleAuthFailure(authFailure.get(), context);
+      }
       logger.warn("Processor runtime failure: {}", ex.toString(), ex);
       throw ex;
     } catch (Exception ex) {
@@ -159,6 +189,19 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
     } finally {
       publishStatus(context, config);
     }
+  }
+
+  private WorkItem handleAuthFailure(AuthFailureException failure, WorkerContext context) {
+    AuthFailureJournalDeduplicator.Decision decision = authFailureJournal.record(
+        context.info().swarmId() + ":" + context.info().instanceId() + ":processor",
+        failure);
+    if (decision.firstOccurrence()) {
+      context.logger().warn("Processor auth failure: {}", failure.getMessage(), failure);
+      throw failure;
+    }
+    context.logger().debug("Suppressed repeated Processor auth journal alert occurrence={}",
+        decision.occurrences());
+    return null;
   }
 
   private WorkItem invoke(WorkItem message, ProcessorWorkerConfig config, WorkerContext context) throws Exception {

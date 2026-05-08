@@ -80,11 +80,11 @@ services:
     #   - "9090:9090"
 
   grafana:
-    build:
-      context: grafana
+    image: grafana/grafana
     environment:
       GF_SECURITY_ADMIN_USER: pockethive
       GF_SECURITY_ADMIN_PASSWORD: pockethive
+      GF_INSTALL_PLUGINS: grafana-clickhouse-datasource
     volumes:
       - ./grafana/grafana.ini:/etc/grafana/grafana.ini:ro
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
@@ -163,11 +163,11 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U pockethive -d pockethive -h 127.0.0.1 -p 5432 && psql -U pockethive -d pockethive -c 'SELECT 1' -q --no-align -t 2>/dev/null | grep -q 1"]
+      test: ["CMD-SHELL", "pg_isready -U pockethive -d pockethive -h 127.0.0.1 -p 5432"]
       interval: 5s
       timeout: 5s
       retries: 12
-      start_period: 20s
+      start_period: 10s
 
   clickhouse:
     image: clickhouse/clickhouse-server:24.8
@@ -248,12 +248,12 @@ services:
       - prometheus
 
   toxiproxy:
-    build:
-      context: toxiproxy
+    image: ghcr.io/shopify/toxiproxy:2.11.0
+    command: ["-host", "0.0.0.0"]
     ports:
       - "18474:8474"
     healthcheck:
-      test: ["CMD", "/usr/local/bin/toxiproxy-cli", "list"]
+      test: ["CMD", "/toxiproxy-cli", "list"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -339,12 +339,6 @@ services:
 
   orchestrator:
     image: ${DOCKER_REGISTRY:-}orchestrator:${POCKETHIVE_VERSION:-latest}
-    restart: on-failure
-    deploy:
-      restart_policy:
-        condition: on-failure
-        delay: 5s
-        max_attempts: 5
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${POCKETHIVE_SCENARIOS_RUNTIME_ROOT:-/opt/pockethive/scenarios-runtime}:/app/scenarios-runtime

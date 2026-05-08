@@ -391,7 +391,7 @@ public final class ScenarioTemplateValidator {
                 raw.pathTemplate(),
                 raw.bodyTemplate(),
                 raw.headersTemplate(),
-                raw.auth(),
+                raw.authRef(),
                 raw.resultRules()
             );
         } catch (Exception ex) {

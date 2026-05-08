@@ -1,8 +1,10 @@
 package io.pockethive.requesttemplates;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.StreamReadFeature;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import io.pockethive.worker.sdk.auth.AuthFailureException;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -19,7 +21,9 @@ public final class TemplateLoader {
 
     public TemplateLoader() {
         this.jsonMapper = new ObjectMapper().findAndRegisterModules();
-        this.yamlMapper = new ObjectMapper(new YAMLFactory()).findAndRegisterModules();
+        this.yamlMapper = new ObjectMapper(YAMLFactory.builder()
+            .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
+            .build()).findAndRegisterModules();
     }
 
     /**
@@ -45,10 +49,7 @@ public final class TemplateLoader {
         Map<String, LoadedTemplate> templates = new HashMap<>();
         try (Stream<Path> paths = Files.walk(rootPath)) {
             paths.filter(Files::isRegularFile)
-                .filter(p -> {
-                    String name = p.getFileName().toString().toLowerCase();
-                    return name.endsWith(".json") || name.endsWith(".yaml") || name.endsWith(".yml");
-                })
+                .filter(TemplateLoader::isTemplateFile)
                 .forEach(path -> {
                     TemplateDefinition def = parseTemplate(path, defaultServiceId);
                     if (def != null && def.callId() != null && !def.callId().isBlank()) {
@@ -64,10 +65,19 @@ public final class TemplateLoader {
         return Map.copyOf(templates);
     }
 
+    private static boolean isTemplateFile(Path path) {
+        String name = path.getFileName().toString().toLowerCase(Locale.ROOT);
+        if ("authprofiles.yaml".equals(name) || "authprofiles.yml".equals(name)) {
+            return false;
+        }
+        return name.endsWith(".json") || name.endsWith(".yaml") || name.endsWith(".yml");
+    }
+
     private TemplateDefinition parseTemplate(Path path, String defaultServiceId) {
         try {
             ObjectMapper mapper = selectMapper(path);
             Map<String, Object> templateMap = mapper.readValue(path.toFile(), new TypeReference<>() {});
+            validateAuthShape(templateMap, path);
             String protocol = normalizeProtocol(templateMap.get("protocol"), path);
 
             String rawService = templateMap.get("serviceId") == null ? null : templateMap.get("serviceId").toString();
@@ -88,7 +98,7 @@ public final class TemplateLoader {
                         def.headersTemplate(),
                         def.endTag(),
                         def.maxBytes(),
-                        def.auth(),
+                        def.authRef(),
                         def.resultRules()
                     );
                 }
@@ -102,7 +112,7 @@ public final class TemplateLoader {
                         def.pathTemplate(),
                         def.bodyTemplate(),
                         def.headersTemplate(),
-                        def.auth(),
+                        def.authRef(),
                         def.resultRules()
                     );
                 }
@@ -117,7 +127,7 @@ public final class TemplateLoader {
                         def.bodyTemplate(),
                         def.headersTemplate(),
                         def.schemaRef(),
-                        def.auth(),
+                        def.authRef(),
                         def.resultRules()
                     );
                 }
@@ -125,6 +135,28 @@ public final class TemplateLoader {
             };
         } catch (Exception ex) {
             throw new IllegalStateException("Failed to parse template " + path, ex);
+        }
+    }
+
+    private static void validateAuthShape(Map<String, Object> templateMap, Path path) {
+        boolean hasLegacyAuth = templateMap.containsKey("auth");
+        boolean hasAuthRef = templateMap.containsKey("authRef");
+        if (hasLegacyAuth && hasAuthRef) {
+            throw AuthFailureException.configuration(
+                "legacy-auth-with-authref",
+                "Template " + path + " must not contain both auth and authRef",
+                null
+            );
+        }
+        if (hasLegacyAuth) {
+            throw AuthFailureException.configuration(
+                "legacy-inline-auth",
+                "Template " + path + " uses legacy auth; use authRef",
+                null
+            );
+        }
+        if (hasAuthRef && templateMap.get("authRef") == null) {
+            throw new IllegalArgumentException("Template " + path + " authRef must not be null");
         }
     }
 

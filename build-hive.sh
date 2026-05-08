@@ -579,17 +579,6 @@ print_timing_summary() {
   echo
 }
 
-setup_mcp() {
-  local mcp_dir="${SCRIPT_DIR}/tools/mcp-server"
-  if [[ ! -d "$mcp_dir" ]]; then
-    echo "MCP server directory not found at ${mcp_dir}, skipping."
-    return
-  fi
-  echo "Installing MCP server dependencies (tools/mcp-server)..."
-  npm install --silent --prefix "$mcp_dir"
-  echo "MCP server ready."
-}
-
 main() {
   parse_args "$@"
   require_tools
@@ -670,8 +659,6 @@ main() {
 
   print_timing_summary
   echo
-  setup_mcp
-
   echo "PocketHive local build complete."
   echo "Finished at: $(date '+%Y-%m-%d %H:%M:%S')"
 }

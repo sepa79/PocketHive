@@ -8,8 +8,11 @@ import io.pockethive.worker.sdk.api.TcpRequestEnvelope;
 import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkStep;
 import io.pockethive.worker.sdk.api.WorkerContext;
-import io.pockethive.worker.sdk.auth.AuthConfig;
-import io.pockethive.worker.sdk.auth.AuthHeaderGenerator;
+import io.pockethive.worker.sdk.auth.AuthFailureException;
+import io.pockethive.worker.sdk.auth.AuthFailureJournalDeduplicator;
+import io.pockethive.worker.sdk.auth.AuthRef;
+import io.pockethive.worker.sdk.auth.AuthRuntime;
+import io.pockethive.worker.sdk.config.RedisSequenceProperties;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
 import io.pockethive.worker.sdk.config.WorkerCapability;
 import io.pockethive.worker.sdk.templating.MessageBodyType;
@@ -23,12 +26,12 @@ import io.pockethive.requesttemplates.TemplateDefinition;
 import io.pockethive.requesttemplates.TemplateLoader;
 import java.util.HashMap;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.LongAdder;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Component;
 
 @Component("requestBuilderWorker")
@@ -44,7 +47,8 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
   private final TemplateRenderer templateRenderer;
   private final MessageTemplateRenderer messageTemplateRenderer;
   private final TemplateLoader templateLoader;
-  private final AuthHeaderGenerator authHeaderGenerator;
+  private final RedisSequenceProperties redisProperties;
+  private final AuthFailureJournalDeduplicator authFailureJournal = new AuthFailureJournalDeduplicator();
   private final J8583FieldListXmlCodec fieldListXmlCodec =
       new J8583FieldListXmlCodec(new Iso8583SchemaPackRegistry());
   private volatile Map<String, TemplateDefinition> templates;
@@ -57,18 +61,18 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
   @Autowired
   RequestBuilderWorkerImpl(RequestBuilderWorkerProperties properties, 
                           TemplateRenderer templateRenderer,
-                          @Nullable AuthHeaderGenerator authHeaderGenerator) {
-    this(properties, templateRenderer, new TemplateLoader(), authHeaderGenerator);
+                          RedisSequenceProperties redisProperties) {
+    this(properties, templateRenderer, new TemplateLoader(), redisProperties);
   }
 
   RequestBuilderWorkerImpl(RequestBuilderWorkerProperties properties,
                         TemplateRenderer templateRenderer,
                         TemplateLoader templateLoader,
-                        @Nullable AuthHeaderGenerator authHeaderGenerator) {
+                        RedisSequenceProperties redisProperties) {
     this.properties = Objects.requireNonNull(properties, "properties");
     this.templateRenderer = Objects.requireNonNull(templateRenderer, "templateRenderer");
     this.templateLoader = Objects.requireNonNull(templateLoader, "templateLoader");
-    this.authHeaderGenerator = authHeaderGenerator;
+    this.redisProperties = redisProperties == null ? new RedisSequenceProperties() : redisProperties;
     this.messageTemplateRenderer = new MessageTemplateRenderer(templateRenderer);
     reloadTemplates();
   }
@@ -77,8 +81,6 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
   public WorkItem onMessage(WorkItem seed, WorkerContext context) {
     RequestBuilderWorkerConfig config =
         context.configOrDefault(RequestBuilderWorkerConfig.class, properties::defaultConfig);
-
-    reloadTemplatesIfNeeded(config);
 
     WorkItem effectiveSeed = seed;
     if (effectiveSeed.headers().get("vars") == null && config.vars() != null && !config.vars().isEmpty()) {
@@ -92,14 +94,17 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
       return handleMissing(config, seed, context);
     }
 
-    TemplateDefinition definition =
-        templates.get(TemplateLoader.key(serviceId, callId));
-    if (definition == null) {
-      context.logger().warn("No request template found for serviceId={} callId={}; {}", serviceId, callId, missingBehavior(config));
-      return handleMissing(config, seed, context);
-    }
-
     try {
+      reloadTemplatesIfNeeded(config);
+      TemplateDefinition definition =
+          templates.get(TemplateLoader.key(serviceId, callId));
+      if (definition == null) {
+        context.logger().warn("No request template found for serviceId={} callId={}; {}", serviceId, callId, missingBehavior(config));
+        return handleMissing(config, seed, context);
+      }
+
+      AuthRuntime authRuntime = AuthRuntime.forTemplates(
+          config.templateRoot(), authRefs(templates), config.vars(), context, templateRenderer, redisProperties);
       Object envelope;
       String protocol = definition.protocol();
       if ("TCP".equals(protocol) && definition instanceof TcpTemplateDefinition tcpDef) {
@@ -113,25 +118,24 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
             messageTemplateRenderer.render(template, effectiveSeed);
 
         Map<String, String> headers = new HashMap<>(rendered.headers());
-        
-        // Add auth headers if configured in template
-        if (tcpDef.auth() != null && authHeaderGenerator != null) {
-          try {
-            AuthConfig authConfig = AuthConfig.fromTemplate(tcpDef.auth(), serviceId, callId);
-            Map<String, String> authHeaders = authHeaderGenerator.generate(context, authConfig, seed);
-            headers.putAll(authHeaders);
-          } catch (Exception ex) {
-            context.logger().warn("Failed to generate auth headers for serviceId={} callId={}", serviceId, callId, ex);
+        String body = rendered.body();
+        List<AuthRef> authApplications = List.of();
+        if (tcpDef.authRef() != null) {
+          switch (tcpDef.authRef().applyAs()) {
+            case TCP_PAYLOAD_PREFIX, HMAC_PAYLOAD_FIELD -> body = authRuntime.applyTcpBody(tcpDef.authRef(), body, effectiveSeed, context);
+            case ISO8583_MAC_FIELD, MTLS_CLIENT_CERT -> authApplications = List.of(tcpDef.authRef());
+            default -> throw new IllegalArgumentException("Unsupported TCP auth applyAs: " + tcpDef.authRef().applyAs());
           }
         }
 
         envelope = TcpRequestEnvelope.of(
             new TcpRequestEnvelope.TcpRequest(
                 tcpDef.behavior(),
-                rendered.body(),
+                body,
                 headers,
                 tcpDef.endTag(),
-                tcpDef.maxBytes()
+                tcpDef.maxBytes(),
+                authApplications
             ),
             tcpDef.resultRules()
         );
@@ -148,33 +152,28 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
             messageTemplateRenderer.render(template, effectiveSeed);
 
         Map<String, String> headers = new HashMap<>(rendered.headers());
-        
-        // Add auth headers if configured in template
-        if (httpDef.auth() != null && authHeaderGenerator != null) {
-          try {
-            AuthConfig authConfig = AuthConfig.fromTemplate(httpDef.auth(), serviceId, callId);
-            Map<String, String> authHeaders = authHeaderGenerator.generate(context, authConfig, seed);
-            headers.putAll(authHeaders);
-          } catch (Exception ex) {
-            context.logger().warn("Failed to generate auth headers for serviceId={} callId={}", serviceId, callId, ex);
-          }
-        }
 
         String method = rendered.method() == null ? "GET" : rendered.method().toUpperCase(Locale.ROOT);
+        AuthRuntime.MutableHttpRequest authRequest = new AuthRuntime.MutableHttpRequest(
+            method, rendered.path(), headers, rendered.body());
+        if (httpDef.authRef() != null) {
+          authRuntime.applyHttp(httpDef.authRef(), authRequest, effectiveSeed, context);
+          headers = authRequest.headers();
+        }
         String contentType = headers.getOrDefault("Content-Type", "").toLowerCase();
         boolean isJson = contentType.contains("application/json") ||
                         (contentType.isEmpty() && looksLikeJson(rendered.body()));
         envelope = HttpRequestEnvelope.of(
             new HttpRequestEnvelope.HttpRequest(
                 method,
-                rendered.path(),
+                authRequest.path(),
                 headers,
                 resolveBodyValue(rendered.body(), isJson)
             ),
             httpDef.resultRules()
         );
       } else if ("ISO8583".equals(protocol) && definition instanceof Iso8583TemplateDefinition isoDef) {
-        envelope = buildIso8583Envelope(isoDef, effectiveSeed, context, serviceId, callId);
+        envelope = buildIso8583Envelope(isoDef, effectiveSeed, context, serviceId, callId, authRuntime);
       } else {
         throw new IllegalStateException("Unsupported template protocol: " + protocol);
       }
@@ -192,6 +191,10 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
       publishStatus(context, config);
       return result;
     } catch (Exception ex) {
+      var authFailure = AuthFailureException.find(ex);
+      if (authFailure.isPresent()) {
+        return handleAuthFailure(authFailure.get(), config, context, serviceId, callId);
+      }
       context.logger().error("Request Builder failed to render template for serviceId={} callId={}",
           serviceId, callId, ex);
       recordError();
@@ -200,6 +203,28 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
           "Request Builder runtime failure for serviceId=%s callId=%s".formatted(serviceId, callId),
           ex);
     }
+  }
+
+  private WorkItem handleAuthFailure(
+      AuthFailureException failure,
+      RequestBuilderWorkerConfig config,
+      WorkerContext context,
+      String serviceId,
+      String callId
+  ) {
+    recordError();
+    publishStatus(context, config);
+    AuthFailureJournalDeduplicator.Decision decision = authFailureJournal.record(
+        context.info().swarmId() + ":" + context.info().instanceId() + ":request-builder",
+        failure);
+    if (decision.firstOccurrence()) {
+      context.logger().error("Request Builder auth failure for serviceId={} callId={}: {}",
+          serviceId, callId, failure.getMessage());
+      throw failure;
+    }
+    context.logger().debug("Suppressed repeated Request Builder auth journal alert for serviceId={} callId={} occurrence={}",
+        serviceId, callId, decision.occurrences());
+    return null;
   }
 
   private void reloadTemplates() {
@@ -283,7 +308,8 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
                                                       WorkItem effectiveSeed,
                                                       WorkerContext context,
                                                       String serviceId,
-                                                      String callId) {
+                                                      String callId,
+                                                      AuthRuntime authRuntime) {
     MessageTemplate template = MessageTemplate.builder()
         .bodyType(MessageBodyType.SIMPLE)
         .bodyTemplate(isoDef.bodyTemplate())
@@ -292,15 +318,9 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
     MessageTemplateRenderer.RenderedMessage rendered = messageTemplateRenderer.render(template, effectiveSeed);
 
     Map<String, String> headers = new HashMap<>(rendered.headers());
-    if (isoDef.auth() != null && authHeaderGenerator != null) {
-      try {
-        AuthConfig authConfig = AuthConfig.fromTemplate(isoDef.auth(), serviceId, callId);
-        Map<String, String> authHeaders = authHeaderGenerator.generate(context, authConfig, effectiveSeed);
-        headers.putAll(authHeaders);
-      } catch (Exception ex) {
-        context.logger().warn("Failed to generate auth headers for serviceId={} callId={}", serviceId, callId, ex);
-      }
-    }
+    List<AuthRef> authApplications = isoDef.authRef() == null
+        ? List.of()
+        : List.of(isoDef.authRef());
 
     String payloadAdapter = requireNonBlank(isoDef.payloadAdapter(), "payloadAdapter").toUpperCase(Locale.ROOT);
     String wireProfileId = requireNonBlank(isoDef.wireProfileId(), "wireProfileId");
@@ -311,7 +331,8 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
           "RAW_HEX",
           requireNonBlank(rendered.body(), "payload"),
           headers,
-          null
+          null,
+          authApplications
       ), isoDef.resultRules());
     }
 
@@ -334,7 +355,8 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
           "RAW_HEX",
           hexPayload,
           headers,
-          null
+          null,
+          authApplications
       ), isoDef.resultRules());
     }
 
@@ -346,6 +368,27 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
       throw new IllegalArgumentException(field + " must not be blank");
     }
     return value.trim();
+  }
+
+  private static List<AuthRef> authRefs(Map<String, TemplateDefinition> templates) {
+    if (templates == null || templates.isEmpty()) {
+      return List.of();
+    }
+    return templates.values().stream()
+        .map(definition -> {
+          if (definition instanceof HttpTemplateDefinition http) {
+            return http.authRef();
+          }
+          if (definition instanceof TcpTemplateDefinition tcp) {
+            return tcp.authRef();
+          }
+          if (definition instanceof Iso8583TemplateDefinition iso) {
+            return iso.authRef();
+          }
+          return null;
+        })
+        .filter(Objects::nonNull)
+        .toList();
   }
 
   private void recordError() {

@@ -6,6 +6,8 @@ implemented. They act as a backlog of larger architectural changes.
 Notable “todo” plans:
 
 - `docs/todo/control-plane-contract-enforcement.md` – enforce AsyncAPI/JSON Schema contracts with dedicated contract tests + CI gates.
+- `docs/todo/auth-redesign-plan.md` – redesign worker auth around explicit opt-in activation, durable Redis token storage, TCP/ISO8583 support, and bounded failure reporting.
+- `docs/todo/auth-redesign-evidence.md` – current auth redesign build/test evidence and remaining deployed-proof gaps.
 - `docs/todo/ninja-bee.md` – Ninja Bee pipeline worker + Capabilities model (draft).
 - `docs/todo/swarm-runtime-core-refactor.md` – break up SwarmRuntimeCore (1000+ LOC) into smaller units and add focused tests.
 - `docs/todo/config-key-normalisation-plan.md` – unify config keys to camelCase; not started yet.
