@@ -1,0 +1,17 @@
+{
+  "name": "pockethive-bundles-mcp",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "MCP server for PocketHive scenario bundle authoring, testing, and debugging",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node test.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.25.1",
+    "amqplib": "^0.10.4",
+    "archiver": "^7.0.1",
+    "zod": "^3.24.1"
+  }
+}

@@ -1,0 +1,4 @@
+out/
+node_modules/
+resources/dist-plugin/
+*.vsix

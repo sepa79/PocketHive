@@ -1,0 +1,30 @@
+{
+  "mcpServers": {
+    "pockethive-bundles": {
+      "command": "node",
+      "args": [
+        "C:\\Private\\projects\\PocketHiveClean\\tools\\mcp-server\\start.cjs"
+      ],
+      "disabled": false
+    },
+    "atlassian": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "https://mcp.atlassian.com/v1/mcp"
+      ],
+      "disabled": true
+    },
+    "hivemind": {
+      "command": "node",
+      "args": [
+        "C:\\Users\\tday\\AppData\\Local\\Temp\\1\\hivemind-mcp-0.1.2\\src\\server.mjs"
+      ],
+      "env": {
+        "HIVEMIND_API_BASE_URL": "http://localhost:4010"
+      },
+      "disabled": false
+    }
+  }
+}

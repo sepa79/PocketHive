@@ -28,6 +28,7 @@ the ground truth.
 | ui-v2 components to reuse | `ui-v2/src/pages/`, `ui-v2/src/lib/`, `ui-v2/src/styles.css` |
 | Architecture | `docs/ARCHITECTURE.md` |
 | Plugin spec | `docs/inProgress/pockethive-plugin/` (this folder) |
+| **Build-ready gap resolutions** | `docs/inProgress/pockethive-plugin/BUILD-READY-GAPS.md` |
 
 ---
 

@@ -1,19 +1,18 @@
 import * as vscode from 'vscode';
 
 import {
-  addHiveUrl,
-  listSwarms,
-  openScenarioFile,
-  openUi,
-  openScenarioRaw,
-  openSwarmDetails,
-  previewScenario,
-  removeHiveUrl,
-  runAllSwarms,
-  runSwarmCommand,
-  setActiveHiveUrl,
-  showEntry
+  addHiveUrl, setActiveHiveUrl, removeHiveUrl, listSwarms,
+  runSwarmCommand, runAllSwarms, openUi, openSwarmDetails,
+  openScenarioRaw, openScenarioFile, previewScenario, showEntry,
+  // New MCP-backed commands
+  addEnvironmentCommand, setActiveEnvironmentCommand, removeEnvironmentCommand,
+  addBundlesFolderCommand, setActiveBundlesFolderCommand,
+  validateBundleCommand, deployBundleCommand,
+  startSwarmMcp, stopSwarmMcp, removeSwarmMcp,
+  openSwarmDetailsMcp, openJournalMcp, openQueuesMcp,
+  restartMcpServerCommand,
 } from './commands';
+
 import { PREVIEW_SCHEME, SCENARIO_SCHEME } from './constants';
 import { ScenarioEditorProvider } from './editors/scenarioEditor';
 import { configureTimeWindow, loadTimeWindow } from './filterState';
@@ -26,11 +25,19 @@ import { HiveProvider } from './providers/hiveProvider';
 import { JournalProvider } from './providers/journalProvider';
 import { ScenarioProvider } from './providers/scenarioProvider';
 import { SettingsProvider } from './providers/settingsProvider';
+import { startMcpServer, stopMcpServer, onMcpStatusChange } from './mcp/manager';
+import { migrateSettingsIfNeeded } from './config';
 
-export function activate(context: vscode.ExtensionContext): void {
+let statusBarItem: vscode.StatusBarItem;
+
+export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const outputChannel = initOutputChannel();
   context.subscriptions.push(outputChannel);
 
+  // Migrate legacy hiveUrls → environments on first run
+  await migrateSettingsIfNeeded();
+
+  // Providers
   const previewProvider = initPreviewProvider();
   const hiveProvider = new HiveProvider();
   const buzzProvider = new BuzzProvider(loadTimeWindow(context.workspaceState, 'buzzTimeWindowMs'));
@@ -39,7 +46,27 @@ export function activate(context: vscode.ExtensionContext): void {
   const scenarioFsProvider = new ScenarioFileSystemProvider();
   const settingsProvider = new SettingsProvider();
 
+  // Status bar
+  statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 10);
+  statusBarItem.command = 'pockethive.showSettings';
+  updateStatusBar('stopped');
+  statusBarItem.show();
+  context.subscriptions.push(statusBarItem);
+
+  onMcpStatusChange(status => {
+    updateStatusBar(status);
+    hiveProvider.refresh();
+    scenarioProvider.refresh();
+    settingsProvider.refresh();
+  });
+
+  // Start MCP server
+  startMcpServer(context).catch(err => {
+    outputChannel.appendLine(`[PocketHive] MCP server start failed: ${err}`);
+  });
+
   context.subscriptions.push(
+    // ── Existing commands ──────────────────────────────────────────────────
     ScenarioEditorProvider.register(context),
     vscode.commands.registerCommand('pockethive.addHiveUrl', addHiveUrl),
     vscode.commands.registerCommand('pockethive.setActiveHiveUrl', setActiveHiveUrl),
@@ -61,34 +88,67 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('pockethive.refreshJournal', () => journalProvider.refresh()),
     vscode.commands.registerCommand('pockethive.refreshScenario', () => scenarioProvider.refresh()),
     vscode.commands.registerCommand('pockethive.filterBuzz', (option) =>
-      configureTimeWindow('Buzz', buzzProvider, context.workspaceState, 'buzzTimeWindowMs', option)
-    ),
+      configureTimeWindow('Buzz', buzzProvider, context.workspaceState, 'buzzTimeWindowMs', option)),
     vscode.commands.registerCommand('pockethive.filterJournal', (option) =>
-      configureTimeWindow('Journal', journalProvider, context.workspaceState, 'journalTimeWindowMs', option)
-    ),
+      configureTimeWindow('Journal', journalProvider, context.workspaceState, 'journalTimeWindowMs', option)),
     vscode.commands.registerCommand('pockethive.helpSettings', () => openHelp('settings')),
     vscode.commands.registerCommand('pockethive.helpHive', () => openHelp('hive')),
     vscode.commands.registerCommand('pockethive.helpBuzz', () => openHelp('buzz')),
     vscode.commands.registerCommand('pockethive.helpJournal', () => openHelp('journal')),
     vscode.commands.registerCommand('pockethive.helpScenario', () => openHelp('scenario')),
+
+    // ── New MCP-backed commands ────────────────────────────────────────────
+    vscode.commands.registerCommand('pockethive.addEnvironment', () => addEnvironmentCommand(context)),
+    vscode.commands.registerCommand('pockethive.setActiveEnvironment', (name: string) => setActiveEnvironmentCommand(name, context)),
+    vscode.commands.registerCommand('pockethive.removeEnvironment', (name: string) => removeEnvironmentCommand(name)),
+    vscode.commands.registerCommand('pockethive.addBundlesFolder', () => addBundlesFolderCommand(context)),
+    vscode.commands.registerCommand('pockethive.setActiveBundlesFolder', (path: string) => setActiveBundlesFolderCommand(path, context)),
+    vscode.commands.registerCommand('pockethive.validateBundle', (bundleName: string) => validateBundleCommand(bundleName, scenarioProvider)),
+    vscode.commands.registerCommand('pockethive.deployBundle', (bundleName: string) => deployBundleCommand(bundleName)),
+    vscode.commands.registerCommand('pockethive.startSwarmMcp', (swarmId: string) => startSwarmMcp(swarmId).then(() => hiveProvider.refresh())),
+    vscode.commands.registerCommand('pockethive.stopSwarmMcp', (swarmId: string) => stopSwarmMcp(swarmId).then(() => hiveProvider.refresh())),
+    vscode.commands.registerCommand('pockethive.removeSwarmMcp', (swarmId: string) => removeSwarmMcp(swarmId, hiveProvider)),
+    vscode.commands.registerCommand('pockethive.openSwarmDetailsMcp', (swarmId: string) => openSwarmDetailsMcp(swarmId)),
+    vscode.commands.registerCommand('pockethive.openJournal', (swarmId: string) => openJournalMcp(swarmId)),
+    vscode.commands.registerCommand('pockethive.openQueueMonitor', (swarmId: string) => openQueuesMcp(swarmId)),
+    vscode.commands.registerCommand('pockethive.restartMcpServer', () => restartMcpServerCommand(context)),
+    vscode.commands.registerCommand('pockethive.showSettings', () =>
+      vscode.commands.executeCommand('pockethive.settings.focus')),
+
+    // ── Tree view providers ────────────────────────────────────────────────
     vscode.window.registerTreeDataProvider('pockethive.hive', hiveProvider),
     vscode.window.registerTreeDataProvider('pockethive.buzz', buzzProvider),
     vscode.window.registerTreeDataProvider('pockethive.journal', journalProvider),
     vscode.window.registerTreeDataProvider('pockethive.scenario', scenarioProvider),
     vscode.window.registerTreeDataProvider('pockethive.settings', settingsProvider),
     vscode.workspace.registerTextDocumentContentProvider(PREVIEW_SCHEME, previewProvider),
-    vscode.workspace.registerFileSystemProvider(SCENARIO_SCHEME, scenarioFsProvider, { isCaseSensitive: true })
-  );
+    vscode.workspace.registerFileSystemProvider(SCENARIO_SCHEME, scenarioFsProvider, { isCaseSensitive: true }),
 
-  context.subscriptions.push(
-    vscode.workspace.onDidChangeConfiguration((event) => {
+    // ── Config change listener ─────────────────────────────────────────────
+    vscode.workspace.onDidChangeConfiguration(event => {
+      if (event.affectsConfiguration('pockethive.activeEnvironment') ||
+          event.affectsConfiguration('pockethive.activeBundlesFolder') ||
+          event.affectsConfiguration('pockethive.pockethiveRoot')) {
+        startMcpServer(context).catch(() => {});
+      }
       if (event.affectsConfiguration('pockethive')) {
         settingsProvider.refresh();
+        hiveProvider.refresh();
+        scenarioProvider.refresh();
       }
-    })
+    }),
   );
 }
 
-export function deactivate(): void {
+export async function deactivate(): Promise<void> {
+  await stopMcpServer();
   disposeOutputChannel();
+}
+
+function updateStatusBar(status: string): void {
+  const env = vscode.workspace.getConfiguration('pockethive').get<string>('activeEnvironment') ?? '';
+  const label = env || 'not configured';
+  const dot = status === 'running' ? '●' : status === 'starting' ? '◌' : '○';
+  statusBarItem.text = `🐝 PocketHive: ${label}  ${dot}`;
+  statusBarItem.tooltip = `PocketHive MCP: ${status}`;
 }

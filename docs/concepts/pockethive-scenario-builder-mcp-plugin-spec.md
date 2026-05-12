@@ -94,46 +94,38 @@ Each authoring session should contain:
 
 ## 5. Minimal MCP Tool Set
 
+> **Naming convention**: All tool names use dot-delimited format (e.g. `session.start`,
+> `bee.config.set`). Earlier drafts of this spec used underscore names — those are
+> superseded by this list. The BUNDLE-WIZARD.md conversation strategy uses these
+> dot-delimited names throughout.
+
 ### 5.1 Session lifecycle
 
-#### `start_session`
+#### `session.start`
 Create a new working session.
 
 Input:
-
 ```json
-{
-  "mode": "create",
-  "workspacePath": "/path/to/workspace",
-  "baseScenarioRef": null
-}
+{ "mode": "create", "workspacePath": "/path/to/workspace", "baseScenarioRef": null }
 ```
 
 Output:
-
 ```json
-{
-  "sessionId": "sess-123",
-  "status": "started"
-}
+{ "sessionId": "sess-123", "status": "started" }
 ```
 
-#### `load_existing_scenario`
+#### `session.load`
 Load an existing scenario into the working session.
 
 Input:
-
 ```json
-{
-  "sessionId": "sess-123",
-  "scenarioRef": "examples/local-rest"
-}
+{ "sessionId": "sess-123", "scenarioRef": "examples/local-rest" }
 ```
 
-#### `close_session`
+#### `session.close`
 Close session and finalize outputs derived from the working bundle copy.
 
-#### `discard_session`
+#### `session.discard`
 Discard working state without exporting bundle artifacts.
 
 ---
@@ -142,120 +134,87 @@ Discard working state without exporting bundle artifacts.
 
 These tools are preferred where possible, because they reduce the number of low-level calls AI must make.
 
-#### `create_scenario`
+#### `scenario.create`
 Create a canonical scenario bundle scaffold.
 
-Input:
+#### `pipeline.create.rest`
+Create a typical REST-oriented pipeline. Accepts `useRequestBuilder` (bool) and `includeModerator` (bool) flags.
 
-```json
-{
-  "sessionId": "sess-123",
-  "bundleName": "my-scenario",
-  "scenarioName": "My Scenario",
-  "templateType": "rest-basic"
-}
-```
+#### `pipeline.create.tcp`
+Create a TCP pipeline.
 
-#### `create_rest_pipeline`
-Create a typical REST-oriented pipeline by updating canonical scenario fields.
+#### `pipeline.create.sequence`
+Create an http-sequence pipeline.
 
-Example output structure may include:
-- generator
-- request-builder (optional)
-- processor
-- postprocessor
-- moderator (optional)
-
-Input:
-
-```json
-{
-  "sessionId": "sess-123",
-  "useRequestBuilder": true,
-  "includeModerator": false
-}
-```
-
-#### `import_postman_collection`
+#### `import.postman`
 Import a Postman collection into an intermediate representation.
 
 Input:
-
 ```json
-{
-  "sessionId": "sess-123",
-  "filePath": "/path/input/postman.json"
-}
+{ "sessionId": "sess-123", "filePath": "/path/input/postman.json" }
 ```
 
-#### `bind_sut_endpoint`
+#### `sut.bind`
 Bind the scenario bundle to an existing SUT / endpoint mapping supported by the current contract.
 
-#### `add_plan_stage`
+#### `plan.stage.add`
 Add a stage to canonical `plan`.
 
 Input:
-
 ```json
-{
-  "sessionId": "sess-123",
-  "stageType": "steady",
-  "startAfter": "10s",
-  "duration": "2m",
-  "targetRate": 200
-}
+{ "sessionId": "sess-123", "stageType": "steady", "startAfter": "10s", "duration": "2m", "targetRate": 200 }
 ```
+
+#### `variables.set`
+Create or update scenario variables.
 
 ---
 
 ### 5.3 Mid-level domain tools
 
-#### `add_bee`
+#### `bee.add`
 Add a bee to `template.bees[]`.
 
-#### `remove_bee`
+#### `bee.remove`
 Remove a bee from `template.bees[]`.
 
-#### `connect_bees`
+#### `bee.connect`
 Create or update a logical topology edge in `topology.edges[]`.
 This tool must only operate on the canonical topology/ports/work contract.
 It must not invent a separate graph model.
 
-#### `set_bee_config`
+#### `bee.config.set`
 Set or merge a safe subset of bee config.
 
-#### `set_env_var`
+#### `bee.env.set`
 Set a scenario or bee environment variable.
 
-#### `set_bee_ports`
+#### `bee.ports.set`
 Add or update logical `ports[]` for a bee as defined by the scenario contract.
 
-#### `set_bee_work_io`
+#### `bee.work.set`
 Add or update canonical `template.bees[].work.in/out` mappings.
 
-#### `set_topology`
+#### `topology.set`
 Set `topology` fields in a constrained way that remains consistent with `ports[]` and `work`.
 
-#### `set_traffic_policy`
+#### `traffic-policy.set`
 Set a basic traffic policy.
 
-#### `set_variables`
-Create or update scenario variables.
-
-#### `add_http_template`
+#### `template.http.add`
 Create a HTTP template entry.
 
-#### `update_http_template`
+#### `template.http.update`
 Update a HTTP template entry.
 
-#### `attach_template_to_request_builder`
+#### `template.http.attach`
 Map template assets to request-builder config.
 
 ---
 
 ### 5.4 Validation and output tools
 
-#### `validate_session`
+#### `session.validate`
 Run validation against the working bundle copy and canonical scenario contract.
 
 Validation should return:
@@ -268,22 +227,22 @@ Validation should return:
 - incomplete plan definitions
 - unsupported config fragments
 
-#### `preview_diff`
+#### `session.preview-diff`
 Return a diff between the source bundle and the generated canonical bundle output.
 
-#### `generate_bundle`
+#### `bundle.generate`
 Generate final canonical bundle artifacts in a temporary or target location.
 
-#### `export_bundle`
+#### `bundle.export`
 Write final bundle to output path or ZIP.
 
-#### `get_action_log`
+#### `session.action-log`
 Return recorded execution log.
 
-#### `get_validation_log`
+#### `session.validation-log`
 Return validation result log.
 
-#### `submit_ai_feedback_report`
+#### `session.feedback`
 Store AI-authored summary of work done, assumptions and recommended follow-ups.
 
 ## 6. AI Feedback Report Requirement
@@ -377,7 +336,7 @@ The VS Code plugin should provide:
 
 ### Suggested minimal UX flow
 
-1. User starts “Scenario Builder Session”
+1. User starts "Scenario Builder Session"
 2. User provides target intent or loads existing scenario
 3. AI performs MCP-driven authoring
 4. User sees generated state and logs
@@ -411,14 +370,14 @@ Bad direction:
 - `write_file_anywhere`
 
 Preferred direction:
-- `create_rest_pipeline`
-- `add_bee`
-- `connect_bees`
-- `set_bee_ports`
-- `set_bee_work_io`
-- `add_plan_stage`
-- `attach_template_to_request_builder`
-- `validate_session`
+- `pipeline.create.rest`
+- `bee.add`
+- `bee.connect`
+- `bee.ports.set`
+- `bee.work.set`
+- `plan.stage.add`
+- `template.http.attach`
+- `session.validate`
 
 Reason:
 - fewer AI errors
@@ -457,4 +416,3 @@ MVP is successful if the plugin can reliably support:
 - importing Postman input into a controlled intermediate flow,
 - generating output artifacts without AI writing YAML directly,
 - exposing clear logs and actionable validation feedback.
-

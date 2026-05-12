@@ -1,123 +1,111 @@
 import * as vscode from 'vscode';
-
-import { requestJson } from '../api';
-import { resolveServiceConfig } from '../config';
-import { formatError } from '../format';
-import { ScenarioSummary } from '../types';
+import { bundleList, type BundleSummary } from '../mcp/tools';
+import { getActiveBundlesFolder } from '../config';
+import { isMcpRunning } from '../mcp/manager';
 
 type ScenarioNode =
-  | { kind: 'scenario'; scenario: ScenarioSummary }
-  | { kind: 'folder'; scenarioId: string; label: string; folder: 'schemas' | 'templates' }
-  | { kind: 'file'; scenarioId: string; label: string; fileType: 'scenario' | 'schema' | 'template'; path?: string }
-  | { kind: 'message'; message: string };
+  | { kind: 'folder-header'; path: string }
+  | { kind: 'bundle'; bundle: BundleSummary; validationState: ValidationState }
+  | { kind: 'message'; message: string; icon?: string };
+
+type ValidationState = 'unknown' | 'validating' | 'passed' | 'failed';
+
+// Simple in-memory validation cache (survives provider refreshes within a session)
+const _validationCache = new Map<string, { state: ValidationState; error?: string; at: number }>();
 
 export class ScenarioProvider implements vscode.TreeDataProvider<ScenarioNode> {
   private readonly emitter = new vscode.EventEmitter<ScenarioNode | undefined>();
   readonly onDidChangeTreeData = this.emitter.event;
 
-  refresh(): void {
+  refresh(): void { this.emitter.fire(undefined); }
+
+  setValidationResult(bundleName: string, state: 'passed' | 'failed', error?: string): void {
+    _validationCache.set(bundleName, { state, error, at: Date.now() });
     this.emitter.fire(undefined);
   }
 
-  getTreeItem(element: ScenarioNode): vscode.TreeItem {
-    if (element.kind === 'message') {
-      return new vscode.TreeItem(element.message, vscode.TreeItemCollapsibleState.None);
-    }
+  setValidating(bundleName: string): void {
+    _validationCache.set(bundleName, { state: 'validating', at: Date.now() });
+    this.emitter.fire(undefined);
+  }
 
-    if (element.kind === 'scenario') {
-      const label = element.scenario.name || element.scenario.id;
-      const item = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.Collapsed);
-      if (element.scenario.name && element.scenario.name !== element.scenario.id) {
-        item.description = element.scenario.id;
-      }
-      item.contextValue = 'scenarioItem';
+  getTreeItem(node: ScenarioNode): vscode.TreeItem {
+    if (node.kind === 'folder-header') {
+      const parts = node.path.replace(/\\/g, '/').split('/').filter(Boolean);
+      const name = parts[parts.length - 1] ?? node.path;
+      const item = new vscode.TreeItem(name, vscode.TreeItemCollapsibleState.None);
+      item.description = 'active bundles folder';
+      item.tooltip = node.path;
+      item.iconPath = new vscode.ThemeIcon('folder-active');
       return item;
     }
 
-    if (element.kind === 'folder') {
-      const item = new vscode.TreeItem(element.label, vscode.TreeItemCollapsibleState.Collapsed);
-      item.iconPath = new vscode.ThemeIcon('folder');
+    if (node.kind === 'message') {
+      const item = new vscode.TreeItem(node.message, vscode.TreeItemCollapsibleState.None);
+      item.iconPath = new vscode.ThemeIcon(node.icon ?? 'info');
       return item;
     }
 
-    const item = new vscode.TreeItem(element.label, vscode.TreeItemCollapsibleState.None);
-    item.iconPath = new vscode.ThemeIcon('file');
-    item.command = {
-      command: 'pockethive.openScenarioFile',
-      title: 'Open scenario file',
-      arguments: [{ scenarioId: element.scenarioId, kind: element.fileType, path: element.path }]
-    };
+    const { bundle, validationState } = node;
+    const item = new vscode.TreeItem(bundle.name, vscode.TreeItemCollapsibleState.None);
+    item.contextValue = `bundle-${validationState}`;
+    item.iconPath = validationIcon(validationState);
+
+    const tags: string[] = [];
+    if (bundle.hasTemplates) tags.push('templates');
+    if (bundle.hasDatasets) tags.push('datasets');
+    if (bundle.hasSut) tags.push('sut');
+    item.description = tags.join(' · ') || undefined;
+
+    const cached = _validationCache.get(bundle.name);
+    if (validationState === 'failed' && cached?.error) {
+      item.tooltip = `FAIL: ${cached.error}`;
+    } else if (validationState === 'passed') {
+      const ago = cached ? Math.round((Date.now() - cached.at) / 60000) : 0;
+      item.tooltip = `Validated ${ago}m ago`;
+    }
+
     return item;
   }
 
   async getChildren(element?: ScenarioNode): Promise<ScenarioNode[]> {
-    const config = resolveServiceConfig('scenarioManagerUrl');
-    if ('error' in config) {
-      return [{ kind: 'message', message: config.error }];
+    if (element) return [];
+
+    if (!isMcpRunning()) {
+      return [{ kind: 'message', message: 'MCP server not running. Check Settings.', icon: 'warning' }];
     }
 
-    if (element?.kind === 'scenario') {
-      return [
-        { kind: 'file', scenarioId: element.scenario.id, label: 'scenario.yaml', fileType: 'scenario' },
-        { kind: 'folder', scenarioId: element.scenario.id, label: 'schemas', folder: 'schemas' },
-        { kind: 'folder', scenarioId: element.scenario.id, label: 'templates', folder: 'templates' }
-      ];
-    }
+    const folder = getActiveBundlesFolder();
+    const header: ScenarioNode = folder
+      ? { kind: 'folder-header', path: folder }
+      : { kind: 'message', message: 'No bundles folder configured. Add one in Settings.', icon: 'warning' };
 
-    if (element?.kind === 'folder') {
-      try {
-        if (element.folder === 'schemas') {
-          const files = await requestJson<string[]>(
-            config.baseUrl,
-            config.authToken,
-            'GET',
-            `/scenarios/${encodeURIComponent(element.scenarioId)}/schemas`
-          );
-          if (!files.length) {
-            return [{ kind: 'message', message: 'No schema files.' }];
-          }
-          return files.map((path) => ({
-            kind: 'file',
-            scenarioId: element.scenarioId,
-            label: path,
-            fileType: 'schema',
-            path
-          }));
-        }
-
-        const files = await requestJson<string[]>(
-          config.baseUrl,
-          config.authToken,
-          'GET',
-          `/scenarios/${encodeURIComponent(element.scenarioId)}/templates`
-        );
-        if (!files.length) {
-          return [{ kind: 'message', message: 'No templates.' }];
-        }
-        return files.map((path) => ({
-          kind: 'file',
-          scenarioId: element.scenarioId,
-          label: path,
-          fileType: 'template',
-          path
-        }));
-      } catch (error) {
-        return [{ kind: 'message', message: `Failed to load files: ${formatError(error)}` }];
-      }
-    }
-
-    if (element) {
-      return [];
-    }
+    if (!folder) return [header];
 
     try {
-      const scenarios = await requestJson<ScenarioSummary[]>(config.baseUrl, config.authToken, 'GET', '/scenarios');
-      if (!scenarios.length) {
-        return [{ kind: 'message', message: 'No scenarios found.' }];
+      const { bundles } = await bundleList();
+      if (!bundles.length) {
+        return [header, { kind: 'message', message: 'No bundles found.', icon: 'circle-outline' }];
       }
-      return scenarios.map((scenario) => ({ kind: 'scenario', scenario }));
-    } catch (error) {
-      return [{ kind: 'message', message: `Failed to load scenarios: ${formatError(error)}` }];
+      return [
+        header,
+        ...bundles.map(bundle => ({
+          kind: 'bundle' as const,
+          bundle,
+          validationState: (_validationCache.get(bundle.name)?.state ?? 'unknown') as ValidationState,
+        })),
+      ];
+    } catch (err) {
+      return [header, { kind: 'message', message: `Failed to load bundles: ${String(err)}`, icon: 'error' }];
     }
+  }
+}
+
+function validationIcon(state: ValidationState): vscode.ThemeIcon {
+  switch (state) {
+    case 'passed':    return new vscode.ThemeIcon('check', new vscode.ThemeColor('testing.iconPassed'));
+    case 'failed':    return new vscode.ThemeIcon('error', new vscode.ThemeColor('testing.iconFailed'));
+    case 'validating': return new vscode.ThemeIcon('sync~spin');
+    default:          return new vscode.ThemeIcon('circle-outline');
   }
 }

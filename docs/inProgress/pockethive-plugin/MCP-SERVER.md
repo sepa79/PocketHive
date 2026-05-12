@@ -245,16 +245,24 @@ Output: {
 Shows the diff between the local bundle files and the version currently
 deployed to the Scenario Manager.
 
+> **Note**: The Scenario Manager REST API does not expose an endpoint to
+> list or download deployed bundle file contents. `bundle.diff` therefore
+> compares local files against a local deploy manifest written by
+> `scenario.deploy` at deploy time (`.pockethive-deploy-manifest.json`
+> in the bundle directory). If no manifest exists, the tool reports all
+> local files as undeployed. This is a known limitation — a future SM
+> API endpoint (`GET /scenarios/{id}/files`) would enable true remote diff.
+
 ```
 Tool: bundle.diff
 Input: { bundle: string }
 Output: {
   bundle: string,
   localFiles: string[],
-  deployedFiles: string[],
+  deployedFiles: string[],   // from local manifest, not SM API
   added: string[],
   removed: string[],
-  modified: string[]    // files that differ (by content hash)
+  modified: string[]         // files whose mtime is newer than last deploy
 }
 ```
 
