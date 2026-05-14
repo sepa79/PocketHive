@@ -1,0 +1,51 @@
+id: auth-proving-no-auth
+name: Auth Proving - No Auth Clean Worker
+description: Proves a request-builder worker with no reachable authRef runs without auth activation or Redis token records.
+template:
+  image: swarm-controller:latest
+  bees:
+    - role: generator
+      image: generator:latest
+      config:
+        inputs:
+          type: SCHEDULER
+          scheduler:
+            ratePerSec: 1
+            maxMessages: 1
+        worker:
+          message:
+            bodyType: SIMPLE
+            body: '{"scenario":"auth-proving-no-auth","call":"plain"}'
+            headers:
+              content-type: application/json
+              x-ph-call-id: plain
+      work:
+        out:
+          out: build
+    - role: request-builder
+      image: request-builder:latest
+      config:
+        worker:
+          templateRoot: /app/scenario/templates/http
+          serviceId: default
+          passThroughOnMissingTemplate: false
+      work:
+        in:
+          in: build
+        out:
+          out: proc
+    - role: processor
+      image: processor:latest
+      config:
+        worker:
+          baseUrl: "{{ sut.endpoints['default'].baseUrl }}"
+      work:
+        in:
+          in: proc
+        out:
+          out: post
+    - role: postprocessor
+      image: postprocessor:latest
+      work:
+        in:
+          in: post

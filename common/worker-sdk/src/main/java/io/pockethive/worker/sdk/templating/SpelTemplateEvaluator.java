@@ -113,9 +113,6 @@ final class SpelTemplateEvaluator {
   private static final Method RESET_SEQUENCE_METHOD = Objects.requireNonNull(
     ReflectionUtils.findMethod(SpelFunctions.class, "resetSequence", String.class),
     "resetSequence method missing");
-  private static final Method AUTH_TOKEN_METHOD = Objects.requireNonNull(
-    ReflectionUtils.findMethod(SpelFunctions.class, "authToken", String.class),
-    "authToken method missing");
 
   Object evaluate(String expression, Map<String, Object> rootValues) {
     if (expression == null || expression.isBlank()) {
@@ -143,7 +140,6 @@ final class SpelTemplateEvaluator {
     context.registerFunction("sequence", SEQUENCE_METHOD);
     context.registerFunction("sequenceWith", SEQUENCE_WITH_METHOD);
     context.registerFunction("resetSequence", RESET_SEQUENCE_METHOD);
-    context.registerFunction("authToken", AUTH_TOKEN_METHOD);
 
     return PARSER.parseExpression(expression).getValue(context);
   }
@@ -337,9 +333,5 @@ final class SpelTemplateEvaluator {
       return RedisSequenceGenerator.getDefaultInstance().reset(key);
     }
 
-    static String authToken(String tokenKey) {
-      if (tokenKey == null || tokenKey.isBlank()) return "";
-      return AuthTokenHolder.getToken(tokenKey);
-    }
   }
 }

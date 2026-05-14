@@ -1,0 +1,12 @@
+serviceId: default
+callId: hmac
+protocol: HTTP
+method: POST
+pathTemplate: /api/auth-proof/request-builder/hmac
+bodyTemplate: "{{ payload }}"
+headersTemplate:
+  content-type: application/json
+authRef:
+  profileId: hmac
+  applyAs: HMAC_HEADER
+  headerName: X-Signature

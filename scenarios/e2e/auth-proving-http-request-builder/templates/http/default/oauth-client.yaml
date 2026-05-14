@@ -1,0 +1,11 @@
+serviceId: default
+callId: oauth-client
+protocol: HTTP
+method: POST
+pathTemplate: /api/auth-proof/request-builder/oauth-client
+bodyTemplate: "{{ payload }}"
+headersTemplate:
+  content-type: application/json
+authRef:
+  profileId: oauth-client
+  applyAs: HTTP_AUTHORIZATION_BEARER

@@ -3,9 +3,13 @@ package io.pockethive.processor.transport;
 import io.pockethive.processor.TcpTransportConfig;
 import java.io.*;
 import java.net.Socket;
-import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.KeyStore;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import javax.net.ssl.KeyManager;
+import javax.net.ssl.KeyManagerFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,13 +41,13 @@ public class SocketTransport implements TcpTransport {
         int connectTimeout = (Integer) request.options().getOrDefault("connectTimeoutMs", config != null ? config.connectTimeoutMs() : 5000);
         int readTimeout = (Integer) request.options().getOrDefault("readTimeoutMs", config != null ? config.readTimeoutMs() : 30000);
 
-        if (shouldPool()) {
+        if (shouldPool(request)) {
             return executeWithPooledSocket(request, behavior, start, connectTimeout, readTimeout, useSsl);
         }
 
         boolean keepAlive = config == null || config.keepAlive();
         boolean tcpNoDelay = config == null || config.tcpNoDelay();
-        try (Socket socket = useSsl ? createSslSocket(request.host(), request.port(), sslVerify, connectTimeout)
+        try (Socket socket = useSsl ? createSslSocket(request, sslVerify, connectTimeout)
                                     : new Socket()) {
             if (!useSsl) {
                 socket.connect(new java.net.InetSocketAddress(request.host(), request.port()), connectTimeout);
@@ -54,8 +58,11 @@ public class SocketTransport implements TcpTransport {
         }
     }
 
-    private boolean shouldPool() {
+    private boolean shouldPool(TcpRequest request) {
         if (config == null) {
+            return false;
+        }
+        if (request.options().containsKey("keyStorePath")) {
             return false;
         }
         if (!config.keepAlive()) {
@@ -108,11 +115,8 @@ public class SocketTransport implements TcpTransport {
         OutputStream out = socket.getOutputStream();
         InputStream in = socket.getInputStream();
 
-        if (logger.isDebugEnabled()) {
-            logger.debug("TCP_SEND host={} port={} bytes={} payload={}",
-                request.host(), request.port(), request.payload().length,
-                new String(request.payload(), StandardCharsets.UTF_8));
-        }
+        logger.debug("TCP_SEND host={} port={} bytes={} payload=<redacted>",
+            request.host(), request.port(), request.payload().length);
 
         out.write(request.payload());
         out.flush();
@@ -124,11 +128,8 @@ public class SocketTransport implements TcpTransport {
         byte[] response = readResponse(in, request, behavior);
         long latency = System.currentTimeMillis() - start;
 
-        if (logger.isDebugEnabled()) {
-            logger.debug("TCP_RECV host={} port={} bytes={} latency={}ms payload={}",
-                request.host(), request.port(), response.length, latency,
-                new String(response, StandardCharsets.UTF_8));
-        }
+        logger.debug("TCP_RECV host={} port={} bytes={} latency={}ms payload=<redacted>",
+            request.host(), request.port(), response.length, latency);
 
         return new TcpResponse(200, response, latency);
     }
@@ -138,8 +139,9 @@ public class SocketTransport implements TcpTransport {
         return reader.read(in, request);
     }
 
-    private Socket createSslSocket(String host, int port, boolean verify, int connectTimeout) throws Exception {
+    private Socket createSslSocket(TcpRequest request, boolean verify, int connectTimeout) throws Exception {
         javax.net.ssl.SSLContext sslContext = javax.net.ssl.SSLContext.getInstance("TLS");
+        KeyManager[] keyManagers = keyManagers(request);
         if (!verify) {
             javax.net.ssl.TrustManager[] trustAllCerts = new javax.net.ssl.TrustManager[] {
                 new javax.net.ssl.X509TrustManager() {
@@ -148,16 +150,32 @@ public class SocketTransport implements TcpTransport {
                     public void checkServerTrusted(java.security.cert.X509Certificate[] certs, String authType) {}
                 }
             };
-            sslContext.init(null, trustAllCerts, new java.security.SecureRandom());
+            sslContext.init(keyManagers, trustAllCerts, new java.security.SecureRandom());
         } else {
-            sslContext.init(null, null, null);
+            sslContext.init(keyManagers, null, null);
         }
 
         javax.net.ssl.SSLSocketFactory factory = sslContext.getSocketFactory();
         javax.net.ssl.SSLSocket sslSocket = (javax.net.ssl.SSLSocket) factory.createSocket();
-        sslSocket.connect(new java.net.InetSocketAddress(host, port), connectTimeout);
+        sslSocket.connect(new java.net.InetSocketAddress(request.host(), request.port()), connectTimeout);
         sslSocket.startHandshake();
         return sslSocket;
+    }
+
+    private static KeyManager[] keyManagers(TcpRequest request) throws Exception {
+        Object keyStorePath = request.options().get("keyStorePath");
+        if (keyStorePath == null || keyStorePath.toString().isBlank()) {
+            return null;
+        }
+        String type = request.options().getOrDefault("keyStoreType", "PKCS12").toString();
+        char[] password = request.options().getOrDefault("keyStorePassword", "").toString().toCharArray();
+        KeyStore keyStore = KeyStore.getInstance(type);
+        try (InputStream in = Files.newInputStream(Path.of(keyStorePath.toString()))) {
+            keyStore.load(in, password);
+        }
+        KeyManagerFactory factory = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+        factory.init(keyStore, password);
+        return factory.getKeyManagers();
     }
 
     @Override

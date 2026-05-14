@@ -1,0 +1,12 @@
+serviceId: default
+callId: aws
+protocol: HTTP
+method: POST
+pathTemplate: /api/auth-proof/request-builder/aws
+bodyTemplate: "{{ payload }}"
+headersTemplate:
+  content-type: application/json
+authRef:
+  profileId: aws
+  applyAs: HTTP_HEADER
+  headerName: Authorization

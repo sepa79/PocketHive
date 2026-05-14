@@ -1,0 +1,29 @@
+profiles:
+  sequence-oauth:
+    type: OAUTH2_CLIENT_CREDENTIALS
+    storage:
+      mode: REDIS
+      tokenKey: http-sequence-shared
+    refresh:
+      refreshAheadSeconds: 30
+      leaseSeconds: 10
+    tokenUrl: http://wiremock:8080/oauth/token/sequence
+    clientId: sequence-client
+    clientSecret: local-dummy-sequence-secret
+  sequence-basic:
+    type: BASIC_AUTH
+    storage:
+      mode: NONE
+    username: sequence-user
+    password: sequence-password
+  sequence-query:
+    type: STATIC_TOKEN
+    storage:
+      mode: NONE
+    token: sequence-query-token
+    queryParam: access_token
+  sequence-static:
+    type: STATIC_TOKEN
+    storage:
+      mode: NONE
+    token: sequence-static-token

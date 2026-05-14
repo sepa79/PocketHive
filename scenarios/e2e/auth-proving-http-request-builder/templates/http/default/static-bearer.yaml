@@ -1,0 +1,11 @@
+serviceId: default
+callId: static-bearer
+protocol: HTTP
+method: POST
+pathTemplate: /api/auth-proof/request-builder/static-bearer
+bodyTemplate: "{{ payload }}"
+headersTemplate:
+  content-type: application/json
+authRef:
+  profileId: static-bearer
+  applyAs: HTTP_AUTHORIZATION_BEARER

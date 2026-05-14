@@ -1,0 +1,14 @@
+serviceId: default
+callId: mtls-secure
+protocol: TCP
+behavior: REQUEST_RESPONSE
+transport: socket
+endTag: "-----END SECURE RESPONSE-----"
+maxBytes: 8192
+bodyTemplate: |
+  -----BEGIN SECURE MESSAGE----- Session-ID: {{ payloadAsJson.sessionId }} Timestamp: {{ payloadAsJson.timestamp }} Data: {{ payloadAsJson.encryptedData }} Signature: {{ payloadAsJson.signature }} -----END SECURE MESSAGE-----
+headersTemplate:
+  Session-ID: "{{ payloadAsJson.sessionId }}"
+authRef:
+  profileId: mtls-client
+  applyAs: MTLS_CLIENT_CERT

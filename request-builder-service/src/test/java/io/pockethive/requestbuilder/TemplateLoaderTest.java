@@ -182,4 +182,74 @@ class TemplateLoaderTest {
     assertThat(isoDef.schemaRef()).isNotNull();
     assertThat(isoDef.schemaRef().schemaFile()).isEqualTo("ctap.xml");
   }
+
+  @Test
+  void rejectsLegacyInlineAuth() throws Exception {
+    Path dir = Files.createTempDirectory("legacy-auth-template");
+    Files.writeString(dir.resolve("call.yaml"), """
+        serviceId: svc
+        callId: CallA
+        protocol: HTTP
+        method: GET
+        pathTemplate: /test
+        bodyTemplate: ""
+        auth:
+          type: STATIC_TOKEN
+          token: bad
+        """);
+
+    TemplateLoader loader = new TemplateLoader();
+
+    assertThatThrownBy(() -> loader.load(dir.toString(), "default"))
+        .isInstanceOf(IllegalStateException.class)
+        .satisfies(ex -> assertThat(ex.getCause()).hasMessageContaining("legacy auth"));
+  }
+
+  @Test
+  void rejectsDuplicateYamlKeys() throws Exception {
+    Path dir = Files.createTempDirectory("duplicate-template-keys");
+    Files.writeString(dir.resolve("call.yaml"), """
+        serviceId: svc
+        callId: CallA
+        callId: CallB
+        protocol: HTTP
+        method: GET
+        pathTemplate: /test
+        bodyTemplate: ""
+        """);
+
+    TemplateLoader loader = new TemplateLoader();
+
+    assertThatThrownBy(() -> loader.load(dir.toString(), "default"))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("Failed to parse template");
+  }
+
+  @Test
+  void ignoresAuthProfilesYamlWhenScanningTemplates() throws Exception {
+    Path dir = Files.createTempDirectory("templates-with-auth-profiles");
+    Files.writeString(dir.resolve("authProfiles.yaml"), """
+        profiles:
+          bearer:
+            type: STATIC_TOKEN
+            storage:
+              mode: NONE
+            token: ignored-by-template-loader
+        """);
+    Files.writeString(dir.resolve("call.yaml"), """
+        serviceId: svc
+        callId: CallA
+        protocol: HTTP
+        method: GET
+        pathTemplate: /test
+        bodyTemplate: ""
+        headersTemplate: {}
+        """);
+
+    TemplateLoader loader = new TemplateLoader();
+    Map<String, TemplateDefinition> templates = loader.load(dir.toString(), "default");
+
+    assertThat(templates).hasSize(1);
+    assertThat(templates).containsKey("svc::CallA");
+  }
 }

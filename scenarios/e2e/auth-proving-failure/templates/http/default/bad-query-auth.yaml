@@ -1,0 +1,11 @@
+serviceId: default
+callId: bad-query-auth
+protocol: HTTP
+method: POST
+pathTemplate: /api/auth-proof/failure/should-not-send
+bodyTemplate: "{{ payload }}"
+headersTemplate:
+  content-type: application/json
+authRef:
+  profileId: bad-query
+  applyAs: HTTP_QUERY_PARAM

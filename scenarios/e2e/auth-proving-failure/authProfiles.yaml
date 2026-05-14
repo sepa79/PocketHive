@@ -1,0 +1,6 @@
+profiles:
+  bad-query:
+    type: STATIC_TOKEN
+    storage:
+      mode: NONE
+    token: failure-token-that-must-not-be-logged

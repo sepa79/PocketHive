@@ -1,0 +1,17 @@
+profiles:
+  collision-one:
+    type: OAUTH2_CLIENT_CREDENTIALS
+    storage:
+      mode: REDIS
+      tokenKey: shared-collision-token
+    tokenUrl: http://wiremock:8080/oauth/token/collision-one
+    clientId: collision-client
+    clientSecret: collision-secret-one-that-must-not-be-logged
+  collision-two:
+    type: OAUTH2_CLIENT_CREDENTIALS
+    storage:
+      mode: REDIS
+      tokenKey: shared-collision-token
+    tokenUrl: http://wiremock:8080/oauth/token/collision-two
+    clientId: collision-client
+    clientSecret: collision-secret-two-that-must-not-be-logged

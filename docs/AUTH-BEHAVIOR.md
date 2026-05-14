@@ -1,184 +1,114 @@
-# Auth System Behavior
+# Auth Behavior
 
-## Global Enable/Disable
+Status: implemented redesign
 
-Auth is **globally enabled by default** across all workers in a PocketHive deployment.
+PocketHive auth is explicit, worker-scoped, and activated only by templates that declare `authRef`.
 
-### Key Characteristics
+## Runtime Shape
 
-1. **Global Scope**: Auth cannot be enabled/disabled per-worker or per-swarm
-2. **Dormant by Default**: When enabled, auth has zero overhead until actually used
-3. **Usage-Triggered**: Auth activates when:
-   - Templates contain `auth:` blocks, OR
-   - Worker config contains `auth:` section
-4. **Shared Token Store**: All workers share the same in-memory token cache
+- `authProfiles.yaml` is the scenario-bundle source of truth.
+- Request templates reference profiles with `authRef.profileId` and `authRef.applyAs`.
+- Workers without reachable `authRef` do not create an auth runtime, Redis token store, refresh path, or auth metrics.
+- Inline template `auth:` is rejected at template-load time. There is no runtime compatibility path for legacy inline auth.
 
-## How It Works
+## Bundle Layout
 
-### Scenario 1: Worker Without Auth
+`authProfiles.yaml` belongs at the scenario root or an ancestor of the template root:
 
 ```yaml
-# Worker config - no auth specified
-- role: generator
-  config:
-    worker:
-      message:
-        body: '{"data": "test"}'
+profiles:
+  "payments:oauth":
+    type: OAUTH2_CLIENT_CREDENTIALS
+    storage:
+      mode: REDIS
+      tokenKey: payments-api
+    tokenUrl: "{{ sut.auth.tokenUrl }}"
+    clientId: "{{ vars.clientId }}"
+    clientSecret:
+      env: PAYMENTS_CLIENT_SECRET
 ```
 
-**Behavior:**
-- Auth beans exist but are never called
-- No tokens fetched or cached
-- Token refresh scheduler runs but finds no tokens (no-op)
-- Zero performance impact
-
-### Scenario 2: Worker With Auth in Template
+HTTP/TCP/ISO8583 templates then opt in:
 
 ```yaml
-# Template with auth block
-auth:
-  type: oauth2-client-credentials
-  tokenKey: api:auth
-  tokenUrl: https://auth.example.com/oauth/token
-  clientId: my-client
-  clientSecret: my-secret
+protocol: HTTP
+callId: get-balance
+method: GET
+pathTemplate: /balance/{{ vars.accountId }}
+headersTemplate: {}
+bodyTemplate: ""
+authRef:
+  profileId: "payments:oauth"
+  applyAs: HTTP_AUTHORIZATION_BEARER
 ```
 
-**Behavior:**
-- Request builder calls `AuthHeaderGenerator.generate()`
-- Token fetched and cached under `api:auth` key
-- Token refresh scheduler detects token and schedules refresh
-- Auth headers added to requests
+## Validation
 
-### Scenario 3: Worker With Auth in Config
+PocketHive rejects:
 
-```yaml
-# Worker config with auth section
-- role: generator
-  config:
-    worker:
-      auth:
-        - tokenKey: "api:auth"
-          type: oauth2-client-credentials
-          tokenUrl: https://api.example.com/oauth/token
-          clientId: api-client
-          clientSecret: api-secret
-      message:
-        headers:
-          x-ph-auth-token-key: "api:auth"
-```
+- duplicate YAML profile keys
+- unknown profile references
+- unknown `applyAs` values
+- inline `auth:`
+- templates containing both `auth:` and `authRef`
+- refreshable profiles without `storage.mode: REDIS`
+- non-refresh profiles without `storage.mode: NONE`
+- reused Redis token keys with different profile fingerprints in the same activation set
 
-**Behavior:**
-- Auth config registered in `AuthConfigRegistry`
-- Generator sets `x-ph-auth-token-key` header
-- Request builder looks up config by tokenKey
-- Token fetched, cached, and refreshed
-- Auth headers added to requests
-
-### Scenario 4: Mixed Workers in Same Swarm
-
-```yaml
-# Swarm with 2 workers
-- role: generator      # No auth
-- role: request-builder  # Uses auth in templates
-```
-
-**Behavior:**
-- Generator: Auth beans exist but unused (no overhead)
-- Request Builder: Auth active, tokens cached and refreshed
-- Both workers share the same token store
-
-## Configuration
-
-### Default (Recommended)
-
-```yaml
-# No configuration needed - auth is enabled globally
-```
-
-### Explicit Enable
-
-```yaml
-pockethive:
-  auth:
-    enabled: true  # default
-    scheduler:
-      enabled: true  # default
-```
-
-### Global Disable
-
-```yaml
-pockethive:
-  auth:
-    enabled: false  # disables auth for ALL workers
-```
-
-**Warning:** Setting `enabled: false` disables auth globally. Workers with `auth:` blocks in templates will fail.
+Validation errors name the profile, template, or apply mode where possible.
 
 ## Token Lifecycle
 
-### 1. First Request
-- Worker calls `AuthHeaderGenerator.generate()`
-- Token fetched synchronously (blocks first request)
-- Token stored in `InMemoryTokenStore` with key `tokenKey`
-- Subsequent requests use cached token
+Refreshable strategies use Redis only. Keys are scoped by swarm:
 
-### 2. Background Refresh
-- `TokenRefreshScheduler` scans token store every 10 seconds (default)
-- Tokens within refresh window (60s before expiry) are refreshed
-- Emergency refresh (10s before expiry) if background refresh missed
+- `ph:tokens:<swarmId>:record:<tokenKey>`
+- `ph:tokens:<swarmId>:lease:<tokenKey>`
+- `ph:tokens:<swarmId>:due`
 
-### 3. Token Expiry
-- Expired tokens are removed from cache
-- Next request triggers synchronous fetch (back to step 1)
+Redis operations claim leases, store records, release leases, and maintain the due index atomically with Lua. There is no in-memory token fallback and no `KEYS` scan.
 
-## Performance Impact
+Profiles sharing a `tokenKey` may reuse the same token only when their config fingerprint matches. If two active profiles use the same token key with different resolved configuration, startup/work-item processing fails explicitly.
 
-### Workers Without Auth
-- **Memory**: ~100KB for auth beans (negligible)
-- **CPU**: Token refresh scheduler runs but exits immediately (no tokens)
-- **Network**: Zero (no auth calls made)
+The deployed proof scenario `scenarios/e2e/auth-proving-profile-collision` exercises this case: no protected request is sent, no OAuth token endpoint is called, no Redis token record is written, and one redacted `runtime.exception` journal alert is emitted for the repeated worker failures.
 
-### Workers With Auth
-- **Memory**: ~1KB per cached token
-- **CPU**: Background refresh every 10s per token
-- **Network**: Token fetch on first use + periodic refresh
+## Strategies
 
-## FAQ
+Supported profile types:
 
-### Can I disable auth for specific workers?
+- `BEARER_TOKEN`
+- `STATIC_TOKEN`
+- `BASIC_AUTH`
+- `API_KEY`
+- `OAUTH2_CLIENT_CREDENTIALS`
+- `OAUTH2_PASSWORD_GRANT`
+- `HMAC_SIGNATURE`
+- `AWS_SIGNATURE_V4`
+- `MESSAGE_FIELD_AUTH`
+- `ISO8583_MAC`
+- `TLS_CLIENT_CERT`
 
-No. Auth is global. However, workers without `auth:` blocks in templates have zero overhead.
+Refreshable strategies are OAuth client credentials and OAuth password grant. Static strategies do not write Redis token records.
 
-### Can I disable auth for specific swarms?
+## Application Points
 
-No. Auth is deployment-wide. To disable auth, set `pockethive.auth.enabled=false` globally.
+HTTP request auth supports bearer authorization, headers, query parameters, and HMAC headers.
 
-### What happens if I disable auth but templates use it?
+TCP request auth supports payload prefix and payload field material in the request builder, plus processor-stage mTLS transport options.
 
-Workers will fail when trying to generate auth headers. Remove `auth:` blocks from templates or re-enable auth.
+ISO8583 request auth supports processor-stage MAC application. The processor applies ISO8583 auth from typed request metadata, not pseudo-headers.
 
-### Do all workers share the same tokens?
+mTLS uses `applyAs: MTLS_CLIENT_CERT` with a `TLS_CLIENT_CERT` profile that points to an explicit external keystore reference. PocketHive reads the keystore to build the client TLS context but does not manage or rotate certificate material.
 
-Yes. The `InMemoryTokenStore` is shared across all workers in the same JVM. Different worker instances (different containers) have separate token stores.
+## Failure And Observability
 
-### Can I use different auth configs in the same swarm?
+Auth failures fail the affected work item or startup path explicitly. Tokens, passwords, signing keys, private keys, certificate passwords, and signed payload material must not be logged or journaled.
 
-Yes! Use different `tokenKey` values:
+The runtime:
 
-```yaml
-# Template 1
-auth:
-  tokenKey: payments:auth
-  type: oauth2-client-credentials
-  ...
+- increments auth apply, refresh, contention, failure, and recovery metrics
+- logs the first failure per worker/profile/apply mode/stage
+- logs throttled repeated-failure summaries
+- logs recovery once the same profile/apply mode succeeds again
+- publishes redacted status deltas for failure, summary, and recovery events
 
-# Template 2
-auth:
-  tokenKey: cards:auth
-  type: oauth2-client-credentials
-  ...
-```
-
-Each `tokenKey` maintains its own token and refresh schedule.
+The runtime intentionally avoids logging exception messages for auth failures because those messages can contain URLs, paths, or provider details.

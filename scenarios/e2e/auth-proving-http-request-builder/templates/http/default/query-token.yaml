@@ -1,0 +1,12 @@
+serviceId: default
+callId: query-token
+protocol: HTTP
+method: POST
+pathTemplate: /api/auth-proof/request-builder/query
+bodyTemplate: "{{ payload }}"
+headersTemplate:
+  content-type: application/json
+authRef:
+  profileId: query-token
+  applyAs: HTTP_QUERY_PARAM
+  queryParam: access_token

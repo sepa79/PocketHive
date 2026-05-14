@@ -1,5 +1,7 @@
 package io.pockethive.worker.sdk.auth;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonValue;
 import java.util.Locale;
 
 /**
@@ -25,6 +27,7 @@ public enum AuthType {
      * @param value the auth type string
      * @return the parsed AuthType
      */
+    @JsonCreator
     public static AuthType parse(String value) {
         if (value == null || value.isBlank()) {
             return NONE;
@@ -35,6 +38,7 @@ public enum AuthType {
     /**
      * Returns the canonical kebab-case key for lookups.
      */
+    @JsonValue
     public String key() {
         return name().toLowerCase(Locale.ROOT).replace('_', '-');
     }

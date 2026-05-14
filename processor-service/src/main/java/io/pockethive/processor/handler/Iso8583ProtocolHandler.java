@@ -17,10 +17,15 @@ import io.pockethive.processor.transport.TcpRequest;
 import io.pockethive.processor.transport.TcpResponse;
 import io.pockethive.processor.transport.TcpTransport;
 import io.pockethive.processor.transport.TcpTransportFactory;
+import io.pockethive.worker.sdk.auth.AuthApplyAs;
+import io.pockethive.worker.sdk.auth.AuthRef;
+import io.pockethive.worker.sdk.auth.AuthRuntime;
 import io.pockethive.worker.sdk.api.Iso8583RequestEnvelope;
 import io.pockethive.worker.sdk.api.Iso8583ResultEnvelope;
 import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerContext;
+import io.pockethive.worker.sdk.config.RedisSequenceProperties;
+import io.pockethive.worker.sdk.templating.TemplateRenderer;
 import java.net.URI;
 import java.time.Clock;
 import java.util.HashMap;
@@ -38,6 +43,8 @@ public class Iso8583ProtocolHandler implements ProtocolHandler {
   private final CallMetricsRecorder metricsRecorder;
   private final TcpTransportConfig defaultConfig;
   private final AtomicLong nextAllowedTimeNanos;
+  private final TemplateRenderer templateRenderer;
+  private final RedisSequenceProperties redisProperties;
   private final Object transportLock = new Object();
 
   private volatile TcpTransportConfig activeConfig;
@@ -48,7 +55,9 @@ public class Iso8583ProtocolHandler implements ProtocolHandler {
                                 Clock clock,
                                 CallMetricsRecorder metricsRecorder,
                                 TcpTransportConfig defaultConfig,
-                                AtomicLong nextAllowedTimeNanos) {
+                                AtomicLong nextAllowedTimeNanos,
+                                TemplateRenderer templateRenderer,
+                                RedisSequenceProperties redisProperties) {
     this.mapper = mapper;
     this.strictEnvelopeReader = mapper.readerFor(Iso8583RequestEnvelope.class)
         .with(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
@@ -56,6 +65,8 @@ public class Iso8583ProtocolHandler implements ProtocolHandler {
     this.metricsRecorder = metricsRecorder;
     this.defaultConfig = defaultConfig == null ? TcpTransportConfig.defaults() : defaultConfig;
     this.nextAllowedTimeNanos = nextAllowedTimeNanos == null ? new AtomicLong(0L) : nextAllowedTimeNanos;
+    this.templateRenderer = templateRenderer;
+    this.redisProperties = redisProperties;
     reloadTransports(this.defaultConfig);
   }
 
@@ -79,9 +90,23 @@ public class Iso8583ProtocolHandler implements ProtocolHandler {
 
     WireProfile wireProfile;
     byte[] payloadBytes;
+    Map<String, Object> authTransportOptions = Map.of();
     try {
       wireProfile = WireProfile.fromId(request.wireProfileId());
       payloadBytes = decodePayload(request);
+      if (request.authApplications() != null && !request.authApplications().isEmpty()) {
+        AuthRuntime authRuntime = AuthRuntime.forApplications(
+            request.authApplications(), Map.of(), context, templateRenderer, redisProperties);
+        String payloadHex = HexFormat.of().withUpperCase().formatHex(payloadBytes);
+        for (AuthRef authRef : request.authApplications()) {
+          if (authRef.applyAs() == AuthApplyAs.MTLS_CLIENT_CERT) {
+            authTransportOptions = authRuntime.transportOptions(authRef, context);
+          } else {
+            payloadHex = authRuntime.applyIsoPayloadHex(authRef, payloadHex, message, context);
+          }
+        }
+        payloadBytes = HexFormat.of().parseHex(payloadHex);
+      }
     } catch (IllegalArgumentException ex) {
       throw new ProcessorCallException(
           CallMetrics.failure(0L, 0L, -1),
@@ -107,6 +132,7 @@ public class Iso8583ProtocolHandler implements ProtocolHandler {
       options.put("maxBytes", transportConfig.maxBytes());
       options.put("ssl", "tcps".equals(endpoint.scheme()));
       options.put("sslVerify", transportConfig.sslVerify());
+      options.putAll(authTransportOptions);
       TcpRequest tcpRequest = new TcpRequest(endpoint.host(), endpoint.port(), framedPayload, options);
 
       transport = switch (transportConfig.connectionReuse()) {

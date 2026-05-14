@@ -9,14 +9,17 @@ import io.pockethive.requesttemplates.TemplateLoader;
 import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.api.WorkerInfo;
-import io.pockethive.worker.sdk.auth.AuthConfig;
-import io.pockethive.worker.sdk.auth.AuthHeaderGenerator;
+import io.pockethive.worker.sdk.auth.AuthFailureException;
+import io.pockethive.worker.sdk.auth.AuthFailureJournalDeduplicator;
+import io.pockethive.worker.sdk.auth.AuthRef;
+import io.pockethive.worker.sdk.auth.AuthRuntime;
 import io.pockethive.worker.sdk.config.RedisSequenceProperties;
 import io.pockethive.worker.sdk.templating.TemplateRenderer;
 import io.pockethive.worker.sdk.templating.TemplatingRenderException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Clock;
+import java.util.List;
 import java.util.Locale;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -32,7 +35,8 @@ final class HttpSequenceRunner {
   private final TemplateLoader templateLoader;
   private final HttpCallExecutor httpExecutor;
   private final RedisDebugCaptureStore debugCaptureStore;
-  private final AuthHeaderGenerator authHeaderGenerator;
+  private final RedisSequenceProperties redisProperties;
+  private final AuthFailureJournalDeduplicator authFailureJournal = new AuthFailureJournalDeduplicator();
 
   private volatile Map<String, TemplateDefinition> templates;
   private volatile String lastTemplateConfigKey;
@@ -47,8 +51,7 @@ final class HttpSequenceRunner {
       TemplateRenderer templateRenderer,
       TemplateLoader templateLoader,
       HttpCallExecutor httpExecutor,
-      RedisSequenceProperties redisProperties,
-      AuthHeaderGenerator authHeaderGenerator
+      RedisSequenceProperties redisProperties
   ) {
     this.mapper = Objects.requireNonNull(mapper, "mapper");
     this.clock = Objects.requireNonNull(clock, "clock");
@@ -56,7 +59,7 @@ final class HttpSequenceRunner {
     this.templateLoader = Objects.requireNonNull(templateLoader, "templateLoader");
     this.httpExecutor = Objects.requireNonNull(httpExecutor, "httpExecutor");
     this.debugCaptureStore = new RedisDebugCaptureStore(mapper, redisProperties);
-    this.authHeaderGenerator = authHeaderGenerator;
+    this.redisProperties = Objects.requireNonNull(redisProperties, "redisProperties");
   }
 
   WorkItem run(WorkItem seed, WorkerContext context, HttpSequenceWorkerConfig config) {
@@ -77,11 +80,13 @@ final class HttpSequenceRunner {
       seed = seed.toBuilder().headers(headers).build();
     }
 
-    reloadTemplatesIfNeeded(config);
     WorkItem current = seed;
     boolean failed = false;
     int totalCapturedBytes = 0;
     try {
+      reloadTemplatesIfNeeded(config);
+      AuthRuntime authRuntime = AuthRuntime.forTemplates(
+          config.templateRoot(), authRefs(templates), config.vars(), context, templateRenderer, redisProperties);
       for (int i = 0; i < config.steps().size(); i++) {
         HttpSequenceWorkerConfig.Step step = config.steps().get(i);
         if (step.callId() == null) {
@@ -96,7 +101,7 @@ final class HttpSequenceRunner {
         }
 
         HttpCallExecutor.RenderedCall rendered =
-            renderCall(httpDef, serviceId, step.callId(), payload, current, context);
+            renderCall(httpDef, serviceId, step.callId(), payload, current, context, authRuntime);
 
         HttpCallAttempt attempt = executeWithRetry(config, step, rendered, context);
         HttpCallExecutor.HttpCallResult result = attempt.result();
@@ -145,6 +150,20 @@ final class HttpSequenceRunner {
       return current;
     } catch (RuntimeException ex) {
       errorJourneys.increment();
+      var authFailure = AuthFailureException.find(ex);
+      if (authFailure.isPresent()) {
+        AuthFailureException failure = authFailure.get();
+        AuthFailureJournalDeduplicator.Decision decision = authFailureJournal.record(
+            context.info().swarmId() + ":" + context.info().instanceId() + ":http-sequence",
+            failure);
+        if (decision.firstOccurrence()) {
+          context.logger().warn("HTTP sequence auth failure: {}", failure.getMessage(), failure);
+          throw failure;
+        }
+        context.logger().debug("Suppressed repeated HTTP sequence auth journal alert occurrence={}",
+            decision.occurrences());
+        return null;
+      }
       context.logger().warn("HTTP sequence runtime failure: {}", ex.toString(), ex);
       throw ex;
     } finally {
@@ -168,7 +187,8 @@ final class HttpSequenceRunner {
                                   String callId,
                                   Map<String, Object> payload,
                                   WorkItem workItem,
-                                  WorkerContext context) {
+                                  WorkerContext context,
+                                  AuthRuntime authRuntime) {
     Map<String, Object> ctx = new java.util.HashMap<>();
     ctx.put("payload", payload);
     ctx.put("payloadAsJson", payload);
@@ -189,14 +209,12 @@ final class HttpSequenceRunner {
       httpDef.headersTemplate().forEach((name, value) -> headers.put(name, render("header:" + name, value, ctx)));
     }
 
-    if (httpDef.auth() != null && authHeaderGenerator != null) {
-      try {
-        AuthConfig authConfig = AuthConfig.fromTemplate(httpDef.auth(), serviceId, callId);
-        Map<String, String> authHeaders = authHeaderGenerator.generate(context, authConfig, workItem);
-        headers.putAll(authHeaders);
-      } catch (Exception ex) {
-        context.logger().warn("Auth header generation failed for serviceId={} callId={}: {}", serviceId, callId, ex.getMessage());
-      }
+    if (httpDef.authRef() != null) {
+      AuthRuntime.MutableHttpRequest authRequest = new AuthRuntime.MutableHttpRequest(method, path, headers, body);
+      authRuntime.applyHttp(httpDef.authRef(), authRequest, workItem, context);
+      headers.clear();
+      headers.putAll(authRequest.headers());
+      path = authRequest.path();
     }
 
     String upper = method == null || method.isBlank() ? "GET" : method.toUpperCase(Locale.ROOT);
@@ -212,6 +230,18 @@ final class HttpSequenceRunner {
     } catch (Exception ex) {
       throw new TemplatingRenderException("Failed to render " + label, ex);
     }
+  }
+
+  private static List<AuthRef> authRefs(Map<String, TemplateDefinition> templates) {
+    if (templates == null || templates.isEmpty()) {
+      return List.of();
+    }
+    return templates.values().stream()
+        .filter(HttpTemplateDefinition.class::isInstance)
+        .map(HttpTemplateDefinition.class::cast)
+        .map(HttpTemplateDefinition::authRef)
+        .filter(Objects::nonNull)
+        .toList();
   }
 
   private HttpCallAttempt executeWithRetry(HttpSequenceWorkerConfig worker,

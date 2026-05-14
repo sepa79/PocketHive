@@ -1,6 +1,7 @@
 package io.pockethive.requesttemplates;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import io.pockethive.worker.sdk.auth.AuthRef;
 import io.pockethive.swarm.model.ResultRules;
 import java.util.Map;
 
@@ -14,7 +15,7 @@ public record Iso8583TemplateDefinition(
     String bodyTemplate,
     Map<String, String> headersTemplate,
     IsoSchemaRef schemaRef,
-    Map<String, Object> auth,
+    AuthRef authRef,
     ResultRules resultRules
 ) implements TemplateDefinition {
 

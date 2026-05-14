@@ -1,0 +1,13 @@
+serviceId: default
+callId: tcp-prefix
+protocol: TCP
+behavior: ECHO
+transport: socket
+endTag: "\n"
+maxBytes: 8192
+bodyTemplate: "{{ payload }}END"
+headersTemplate:
+  x-auth-proof: tcp-prefix
+authRef:
+  profileId: tcp-prefix
+  applyAs: TCP_PAYLOAD_PREFIX

@@ -1,6 +1,7 @@
 package io.pockethive.requesttemplates;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import io.pockethive.worker.sdk.auth.AuthRef;
 import io.pockethive.swarm.model.ResultRules;
 import java.util.Map;
 
@@ -15,7 +16,7 @@ public record TcpTemplateDefinition(
     Map<String, String> headersTemplate,
     String endTag, // End delimiter for response reading
     Integer maxBytes, // Max bytes to read
-    Map<String, Object> auth,
+    AuthRef authRef,
     ResultRules resultRules
 ) implements TemplateDefinition {
 }
