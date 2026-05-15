@@ -105,37 +105,9 @@ export function resolveServiceConfig(key: 'orchestratorUrl' | 'scenarioManagerUr
   const base = resolveHiveBaseUrl();
   if ('error' in base) return base;
   const suffix = key === 'orchestratorUrl' ? '/orchestrator' : '/scenario-manager';
-  const authToken = getAuthToken();
-  return { baseUrl: base.baseUrl + suffix, authToken };
-}
-
-export function normalizeHiveUrl(value: string): string | null {
-  if (!value) return null;
-  const trimmed = value.trim().replace(/\/+$/, '');
-  if (!trimmed) return null;
-  if (trimmed.endsWith('/orchestrator')) return trimmed.slice(0, -'/orchestrator'.length) || null;
-  if (trimmed.endsWith('/scenario-manager')) return trimmed.slice(0, -'/scenario-manager'.length) || null;
-  return trimmed;
-}
-
-export function getHiveUrls(): string[] {
-  return vscode.workspace.getConfiguration('pockethive').get<string[]>('hiveUrls') ?? [];
-}
-
-export function getActiveHiveUrl(): string | null {
-  const v = vscode.workspace.getConfiguration('pockethive').get<string>('activeHiveUrl');
-  return v?.trim() || null;
-}
-
-export async function updateHiveUrls(urls: string[]): Promise<void> {
-  await vscode.workspace.getConfiguration('pockethive').update('hiveUrls', urls, true);
-}
-
-export async function updateActiveHiveUrl(url: string | null): Promise<void> {
-  await vscode.workspace.getConfiguration('pockethive').update('activeHiveUrl', url, true);
+  return { baseUrl: base.baseUrl + suffix, authToken: getAuthToken() };
 }
 
 export function getAuthToken(): string | undefined {
-  const v = vscode.workspace.getConfiguration('pockethive').get<string>('authToken');
-  return v?.trim() || undefined;
+  return getActiveEnvironment()?.authToken?.trim() || undefined;
 }

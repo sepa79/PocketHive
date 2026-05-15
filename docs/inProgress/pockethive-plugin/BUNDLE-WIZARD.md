@@ -51,7 +51,7 @@ START
   │    Q: "What are you testing? REST API / SOAP / TCP / message replay?"
   │    Q: "Do you have an existing Postman collection, OpenAPI spec, or sample requests?"
   │    Infers: protocol (HTTP|TCP), pipeline pattern, whether request-builder is needed
-  │    MCP: session.start → scenario.create → pipeline.create.rest / pipeline.create.tcp / pipeline.create.sequence
+  │    MCP: wizard.start; wizard.complete internally creates the scenario and pipeline
   │    Gate: scenario scaffold exists with correct bee roles before proceeding
   │
   ├─ 2. TARGET (behavioural — what are you hitting?)
@@ -67,7 +67,7 @@ START
   │    Q: "How many different call types? (single endpoint vs multi-call)"
   │    Infers: templates needed, serviceId/callId pairs, content-type
   │    MCP: template.http.add, template.http.attach
-  │    Gate: at least one template validates (scenario-templating-check)
+  │    Gate: at least one template validates through the MCP validation tool
   │    Skip if: protocol=TCP with static body (template is inline)
   │
   ├─ 4. DATA SOURCE (data — where do payloads come from?)
@@ -194,12 +194,17 @@ If the user says "actually make it TCP", the agent:
 
 ## MCP tool mapping per tier
 
-All session tools use dot-delimited naming to match the existing MCP server
-convention (`swarm.list`, `bundle.validate`, etc.).
+The public novice-facing intake surface is `wizard.start`,
+`wizard.answer`, `wizard.summary`, and `wizard.complete`.
+
+Lower-level authoring tools use dot-delimited naming to match the existing MCP
+server convention (`swarm.list`, `bundle.validate`, etc.). Those lower-level
+tools may be called internally by `wizard.complete` or by advanced agents, but
+they are not the primary novice interface.
 
 | Tier | MCP tools used |
 |---|---|
-| 1 Intent | `session.start`, `scenario.create`, `pipeline.create.rest` / `pipeline.create.tcp` / `pipeline.create.sequence` |
+| 1 Intent | Public: `wizard.start`; internal/advanced: `scenario.create`, `pipeline.create.rest` / `pipeline.create.tcp` / `pipeline.create.sequence` |
 | 2 Target | `bee.config.set` (processor), `sut.bind` |
 | 3 Request | `template.http.add`, `template.http.attach`, `import.postman` |
 | 4 Data | `bee.config.set` (generator inputs) |
@@ -208,13 +213,31 @@ convention (`swarm.list`, `bundle.validate`, etc.).
 | 6 Observability | `bee.config.set` (postprocessor), `bee.add` (clearing-export) |
 | 7 Finalize | `session.validate`, `session.preview-diff`, `bundle.generate`, `bundle.export`, `session.feedback` |
 
+### Public vs Advanced State Model
+
+The wizard has one user-visible state model and one lower-level authoring
+model.
+
+| Layer | Tools | Who calls it | Writes bundle files? |
+|---|---|---|---|
+| Novice wizard | `wizard.start`, `wizard.answer`, `wizard.summary`, `wizard.complete` | AI assistant on behalf of a novice user | Only `wizard.complete` |
+| Authoring session | `session.validate`, `session.preview-diff`, `session.feedback` | Advanced agents or wizard internals | No direct file writes except declared session artifacts |
+| Domain edits | `scenario.*`, `pipeline.*`, `bee.*`, `template.*`, `variables.*`, `sut.*`, `traffic-policy.*`, `plan.*` | Advanced agents or wizard internals | Guarded bundle/session writes |
+| Export/docs | `bundle.generate`, `bundle.export`, `bundle.docs.*` | Advanced agents or wizard internals | Guarded bundle writes |
+
+For novice creation, the assistant should not expose the lower-level tool chain
+as the primary interface. It should collect intent through `wizard.*`, then let
+`wizard.complete` orchestrate validation and generation.
+
 ### Tool naming convention
 
 The concept spec (`pockethive-scenario-builder-mcp-plugin-spec.md`) used
-underscore names (`start_session`, `create_scenario`). The canonical naming
-for all PocketHive MCP tools is **dot-delimited** (`session.start`,
-`scenario.create`). The concept spec tool names should be read as logical
-operations; the implementation uses the dot-delimited form above.
+underscore names (`start_session`, `create_scenario`). Do not use underscore
+tool names in implementation.
+
+For novice creation, use `wizard.*`. For lower-level advanced operations, use
+dot-delimited names such as `scenario.create`, `pipeline.create.rest`,
+`bee.config.set`, and `bundle.export`.
 
 ## Pipeline patterns (tier 1 resolution)
 
@@ -246,6 +269,54 @@ rather than guessing.
 
 ## Example conversations
 
+### Complete novice transcript
+
+```
+User:  "I need to test our onboarding API, but I don't know how to make a bundle."
+
+Agent: [calls wizard.start]
+       "No problem. First, what kind of target are we testing: REST, TCP,
+        SOAP, or a message replay?"
+
+User:  "REST. It is a POST to /api/onboarding."
+
+Agent: [calls wizard.answer { questionId: "protocol", answer: "REST" }]
+       "What base URL should the processor call? If you are not ready to hit
+        the real service, I can bind this to WireMock instead."
+
+User:  "Use WireMock for now."
+
+Agent: [calls wizard.answer { questionId: "target", answer: "wiremock" }]
+       "What should a typical request body look like?"
+
+User:  "JSON with customerId, email, and plan."
+
+Agent: [calls wizard.answer { questionId: "requestShape", answer: "customerId/email/plan JSON" }]
+       "I'll create a REST smoke-test bundle:
+        - Generator -> Processor -> Postprocessor
+        - POST /api/onboarding
+        - WireMock as the SUT double
+        - synthetic JSON payloads with customerId, email, and plan
+        - 10 messages per second
+        - standard metrics and journal/tap evidence
+        Shall I generate it?"
+
+User:  "Yes."
+
+Agent: [calls wizard.summary, then wizard.complete]
+       "Bundle generated and validated.
+        Created:
+        - scenario.yaml
+        - mock-config/wiremock/
+        - README.md
+        - FLOW_DOCUMENT.md
+        - CHANGELOG.md
+
+        Validation passed. Evidence still needs a runtime run:
+        deploy the scenario, start a swarm, then collect journal, queues,
+        tap sample, mock requests, and Prometheus metrics."
+```
+
 ### Quick smoke test
 
 ```
@@ -257,10 +328,8 @@ Agent: "I'll create a simple REST bundle:
         - Bundle name: api-health-smoke
         Go ahead?"
 User:  "Yes"
-Agent: [calls: session.start, scenario.create, pipeline.create.rest,
-        bee.config.set(processor, baseUrl=http://localhost:8080),
-        bee.config.set(generator, message.path=/api/health, method=POST),
-        session.validate]
+Agent: [calls: wizard.start, wizard.answer, wizard.summary, wizard.complete;
+        wizard internally creates the REST pipeline and validates it]
        "Bundle created and validated. No issues found.
         [shows scenario.yaml snippet]
         Want me to deploy it, or change anything?"
@@ -282,11 +351,9 @@ Agent: "I found 6 requests in the collection across 2 folders.
         - Default rate: 10 msg/s
         Sound right?"
 User:  "Yes but make it 100/s with a 30s ramp"
-Agent: [calls: session.start, scenario.create, pipeline.create.rest(useRequestBuilder=true),
-        import.postman, sut.bind,
-        bee.config.set(moderator, mode.type=rate-per-sec, mode.ratePerSec=100),
-        plan.stage.add(ramp, 0→100, 30s), plan.stage.add(steady, 100, 5m),
-        session.validate]
+Agent: [calls: wizard.start, wizard.answer, wizard.summary, wizard.complete;
+        wizard internally imports Postman, binds the SUT, adds the request-builder,
+        adds traffic shaping, and validates]
        "Bundle created. Validation found 1 warning:
         ⚠ Template 'RefundPayment' uses {{auth_token}} but no variable defined.
         Want me to add a variable for that, or will you set it in the SUT config?"
@@ -300,7 +367,7 @@ Agent: "I'll load payment-load and add a moderator between generator and process
         What rate range and period?
         (e.g. 10–100 msg/s with 60s period)"
 User:  "20 to 200, 120 second period"
-Agent: [calls: session.start(mode=modify), session.load,
+Agent: [advanced path calls: scenario.load,
         bee.add(moderator), bee.connect(generator→moderator→processor),
         bee.config.set(moderator, mode.type=sine, sine.minRatePerSec=20,
           sine.maxRatePerSec=200, sine.periodSeconds=120),
@@ -329,6 +396,11 @@ Agent: [calls: session.start(mode=modify), session.load,
 - **Never assume protocol.** Always confirm HTTP vs TCP vs ISO8583.
 - **Never set secrets in config.** Auth tokens go in SUT environment or variables.
 - **Always show the diff** before exporting. User must approve.
+- **Never use shell tools.** The wizard cannot rebuild services, run Git,
+  inspect Docker, read container logs, or execute local commands.
+- **Use PocketHive evidence.** Verify with journals, taps, queues, metrics,
+  mock request history, datasets, and PocketHive-provided log APIs if they
+  exist. Loki is future-only unless exposed through PocketHive.
 
 ## Scenario contract coverage
 
@@ -366,7 +438,7 @@ There are two complementary paths:
 | Path | Tool | When | Phase |
 |---|---|---|---|
 | **IDE quick-pick** | `bundle.scaffold` | User knows exactly what they want, clicks [+ New] in Scenarios tab | Phase 1 |
-| **AI chat wizard** | `session.start` → `pipeline.create.*` → ... → `bundle.export` | User describes intent in natural language, agent guides them | Phase 4 |
+| **AI chat wizard** | `wizard.start` → `wizard.answer` → `wizard.summary` → `wizard.complete` | User describes intent in natural language, agent guides them | Phase 4 |
 
 `bundle.scaffold` is the **fast path** — a single MCP tool that writes a
 minimal scaffold directly. It remains useful even after Phase 4 lands
@@ -386,11 +458,12 @@ This wizard spec defines the **conversation strategy**. It depends on:
 | `Scenario.java` | Authoritative field list: id, name, description, template, topology, trafficPolicy, plan |
 | `capabilities/*.latest.yaml` | Valid config fields per worker role |
 | `IMPLEMENTATION-GUIDE.md` §10 | `bundle.scaffold` MCP tool for IDE quick-pick |
-| `MCP-APPS.md` App 5 | Create Swarm Form (post-bundle, for running the bundle) |
+| `MCP-APPS.md` | Phase 1.5 evidence widget plus future MCP Apps UI ideas |
 
 ## What this spec does NOT cover
 
 - The MCP tool implementations (see `pockethive-scenario-builder-mcp-plugin-spec.md`)
 - The VS Code / IntelliJ UI for the wizard (see Phase 4 in `README.md`)
 - Runtime swarm management (see `VIEWS.md`, Hive tab)
-- Bundle validation internals (see `tools/scenario-templating-check`)
+- Bundle validation internals (see the validator implementation behind
+  `bundle.validate`; it must be called in-process or through a PocketHive API)

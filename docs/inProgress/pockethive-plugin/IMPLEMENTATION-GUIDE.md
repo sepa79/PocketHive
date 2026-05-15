@@ -148,6 +148,11 @@ export class McpTools {
 
 ## 2. MCP server manager (src/mcp/manager.ts)
 
+The IDE adapter may spawn the MCP server process. This does not relax the MCP
+tool boundary: MCP tools still must not execute shell commands, run local dev
+tools, or read container logs. The spawned process is the product integration
+server itself, not a general command runner.
+
 ```typescript
 import * as vscode from 'vscode';
 import { spawn, ChildProcess } from 'node:child_process';

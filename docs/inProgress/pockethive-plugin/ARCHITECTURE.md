@@ -21,8 +21,8 @@
                    |                               |
 +------------------v-------------------------------v---------------+
 |  AI Chat Clients (Claude, Copilot, Amazon Q, Cursor, Goose)     |
-|  MCP Apps rendered as sandboxed iframes in conversation         |
-|  Transport: HTTP/SSE (StreamableHTTP)                           |
+|  Current: JSON MCP tools over HTTP/SSE                          |
+|  Phase 1.5: evidence.summary MCP App where supported            |
 +------------------+-------------------------------+---------------+
                    |                               |
                    +---------------+---------------+
@@ -30,9 +30,8 @@
 +----------------------------------v-------------------------------+
 |  tools/pockethive-mcp  (Node.js MCP server)                     |
 |                                                                  |
-|  stdio tools:    reg() — JSON text responses                    |
-|  App tools:      registerAppTool() — JSON + ui:// resource      |
-|  App resources:  registerAppResource() — bundled HTML           |
+|  Current tools:  reg() - JSON text responses                    |
+|  Phase 1.5 App:  evidence.summary + evidence-summary resource   |
 |                                                                  |
 |  Published as: @pockethive/mcp-server (npm)                     |
 +----------------------------------+-------------------------------+
@@ -42,7 +41,8 @@
 +----------------------------------v-------------------------------+
 |  PocketHive Stack                                               |
 |  Orchestrator · Scenario Manager · RabbitMQ · Prometheus        |
-|  WireMock · TCP Mock · ClickHouse · Loki                        |
+|  WireMock · TCP Mock · ClickHouse                               |
+|  Future option: PocketHive-provided logs backed by Loki          |
 |  (local Docker Compose or remote NFT server)                    |
 +------------------------------------------------------------------+
 ```
@@ -55,12 +55,17 @@ The plugin architecture provides three distinct UI surfaces:
 |---|---|---|---|
 | VS Code plugin | stdio | Webview panels (postMessage) | IDE-integrated views |
 | IntelliJ plugin | stdio | JCEF panels (CefMessageRouter) | IDE-integrated views |
-| AI chat (Claude, Copilot, etc.) | HTTP/SSE | MCP Apps (sandboxed iframe) | Conversational dashboards |
+| AI chat (Claude, Copilot, etc.) | HTTP/SSE | JSON MCP tools | Conversational diagnostics |
+| AI chat with MCP Apps support | HTTP/SSE | Evidence summary MCP App | Phase 1.5 evidence visualisation |
+| AI chat with broader MCP Apps | HTTP/SSE | Dashboards/forms | Future platform |
 
-MCP Apps are only available in HTTP/SSE mode. In stdio mode (IDE plugins),
-the same functionality is provided by the IDE webview panels. The MCP server
-detects client capabilities at connection time and falls back to plain JSON
-text when MCP Apps are not supported.
+MCP Apps start with a narrow Phase 1.5 spike: a read-only evidence summary
+widget for App-capable HTTP/SSE clients. In stdio mode (IDE plugins), rich UI
+is provided by IDE webview panels.
+
+Response shape is selected by explicit client capability negotiation. This is
+not a fallback chain: a JSON-only client gets the JSON response form, and an
+App-capable client gets the same tool result plus the declared UI resource.
 
 ## MCP transport modes
 
@@ -70,11 +75,12 @@ The IDE plugin spawns the MCP server as a child process. Tools return
 JSON text. MCP Apps are not available in stdio mode — the IDE webview
 panels serve the same purpose.
 
-### HTTP/SSE — Streamable HTTP (AI chat + MCP Apps mode)
+### HTTP/SSE - Streamable HTTP (AI chat mode)
 
 The MCP server runs as an HTTP server. AI chat clients (Claude, Copilot,
-Cursor) connect over HTTP/SSE. MCP Apps are available — the server
-serves `ui://pockethive/*` resources as bundled HTML.
+Cursor) connect over HTTP/SSE. Phase 1-3 return JSON MCP tool responses.
+Phase 1.5 may serve `ui://pockethive/evidence-summary` for clients that
+explicitly support MCP Apps.
 
 ```
 IDE plugin  -->  stdio  -->  pockethive-mcp (child process)
@@ -101,7 +107,8 @@ ui-v2/vite.config.ts
 
 The plugin embeds `dist-plugin/` as static assets. Webview panels load
 `index.html` and communicate with the extension host via `postMessage`.
-The extension host proxies all API calls (REST, STOMP) to avoid CORS issues.
+The extension host proxies REST calls. STOMP uses the explicit connection
+strategy in `BUILD-READY-GAPS.md`.
 
 IntelliJ JCEF renders the same `index.html`. The Kotlin adapter provides
 the same `postMessage` bridge via `CefMessageRouter`.
@@ -132,7 +139,6 @@ a plugin.
 // VS Code — constructing env for spawn
 function buildMcpEnv(settings: PocketHiveSettings): NodeJS.ProcessEnv {
   const env = settings.activeEnvironment();
-  const token = await context.secrets.get(`ph.env.${env.name}.authToken`);
   const rabbitPass = await context.secrets.get(`ph.env.${env.name}.rabbitPass`);
   return {
     ...process.env,
@@ -141,7 +147,6 @@ function buildMcpEnv(settings: PocketHiveSettings): NodeJS.ProcessEnv {
     BUNDLES_ROOT:          settings.activeBundlesFolder,
     RABBITMQ_DEFAULT_USER: env.rabbitUser ?? 'guest',
     RABBITMQ_DEFAULT_PASS: rabbitPass ?? 'guest',
-    GITHUB_TOKEN:          token ?? '',
     ...(env.tcpMockUrl  ? { TCP_MOCK_BASE_URL:  env.tcpMockUrl  } : {}),
     ...(env.wiremockUrl ? { WIREMOCK_BASE_URL:  env.wiremockUrl } : {}),
   };
@@ -152,7 +157,6 @@ function buildMcpEnv(settings: PocketHiveSettings): NodeJS.ProcessEnv {
 // IntelliJ — constructing env for ProcessBuilder
 fun buildMcpEnv(settings: PocketHiveSettings): Map<String, String> {
     val env = settings.activeEnvironment() ?: return emptyMap()
-    val token = PasswordSafe.instance.getPassword(credAttr(env.name, "authToken")) ?: ""
     val rabbitPass = PasswordSafe.instance.getPassword(credAttr(env.name, "rabbitPass")) ?: "guest"
     return mapOf(
         "POCKETHIVE_BASE_URL"   to env.baseUrl,
@@ -160,7 +164,6 @@ fun buildMcpEnv(settings: PocketHiveSettings): Map<String, String> {
         "BUNDLES_ROOT"          to settings.state.activeBundlesFolder,
         "RABBITMQ_DEFAULT_USER" to (env.rabbitUser.ifBlank { "guest" }),
         "RABBITMQ_DEFAULT_PASS" to rabbitPass,
-        "GITHUB_TOKEN"          to token,
     ) + (if (env.tcpMockUrl.isNotBlank())  mapOf("TCP_MOCK_BASE_URL"  to env.tcpMockUrl)  else emptyMap())
       + (if (env.wiremockUrl.isNotBlank()) mapOf("WIREMOCK_BASE_URL"  to env.wiremockUrl) else emptyMap())
 }
@@ -200,6 +203,17 @@ message on panel open. The webview derives the STOMP URL from `baseUrl`.
 baseUrl: http://localhost:8088
 STOMP:   ws://localhost:8088/stomp/websocket
 ```
+
+## Logs And Evidence
+
+The plugin does not read Docker/container logs and the MCP server does not run
+shell log commands. Current diagnostics should use PocketHive-provided runtime
+evidence: swarm status, journal, queues, debug taps, Prometheus metrics, mock
+request history, and dataset checks.
+
+If PocketHive later exposes structured logs through a product API, the MCP may
+add a tool for that API. Loki is a possible backend for that future feature, but
+direct Loki access is not part of the current plugin design.
 
 ## Process isolation
 

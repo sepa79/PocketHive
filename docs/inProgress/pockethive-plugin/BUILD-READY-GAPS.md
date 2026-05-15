@@ -112,8 +112,9 @@ handling is needed.
 
 ## Gap 12 — Settings migration for existing extension users
 
-On activation, if `pockethive.hiveUrls` exists and `pockethive.environments`
-is empty, migrate automatically:
+This is an explicit compatibility feature, not an implicit fallback. On
+activation, if `pockethive.hiveUrls` exists and `pockethive.environments` is
+empty, show a migration prompt. Only migrate after the user accepts.
 
 ```typescript
 // src/config.ts — call from activate() before McpServerManager.start()
@@ -134,9 +135,18 @@ export async function migrateSettingsIfNeeded(): Promise<void> {
     const activeIdx = legacyUrls.indexOf(activeUrl);
     const activeName = activeIdx >= 0 ? migrated[activeIdx].name : migrated[0]?.name ?? '';
 
+    const choice = await vscode.window.showInformationMessage(
+      'PocketHive can migrate your old hiveUrls setting to named environments.',
+      'Migrate',
+      'Not now'
+    );
+    if (choice !== 'Migrate') {
+      return;
+    }
+
     await config.update('environments', migrated, vscode.ConfigurationTarget.Global);
     await config.update('activeEnvironment', activeName, vscode.ConfigurationTarget.Global);
-    // Leave legacy keys in place — do not delete them (non-destructive migration)
+    // Leave legacy keys in place - do not delete them (non-destructive migration)
   }
 }
 ```
@@ -145,12 +155,10 @@ export async function migrateSettingsIfNeeded(): Promise<void> {
 
 ## Gap 13 — bundle.scaffold YAML content
 
-`bundle.scaffold` in `server.mjs` uses the `yaml` npm package
-(`import('yaml').then(m => m.stringify(...))`) to serialise the scaffold
-object. The `yaml` package is already a dependency of the bundles repo
-(`package.json`). If it is not available in the MCP server's own
-`node_modules`, the tool falls back to `JSON.stringify` which produces
-valid but less readable output.
+`bundle.scaffold` in `server.mjs` uses the `yaml` npm package to serialise the
+scaffold object. The MCP server package must declare `yaml` as its own
+dependency. If it is not available, startup or tool registration must fail with
+a clear missing-dependency error.
 
 The scaffold content for each pattern is defined directly in the tool
 handler as a plain JS object matching the canonical scenario contract.
@@ -158,19 +166,27 @@ No separate template files are needed.
 
 ---
 
-## Gap 14 — @modelcontextprotocol/ext-apps availability
+## Gap 14 — MCP Apps availability and early scope
 
-`@modelcontextprotocol/ext-apps` is not yet confirmed as a published npm
-package. MCP Apps (Phase MCP-Apps) are therefore **deferred** until the
-package is confirmed available.
+`@modelcontextprotocol/ext-apps` is published, so package availability is no
+longer the blocker. Target client support still must be verified before relying
+on App rendering for a workflow.
 
-**Decision**: The MCP Apps layer described in `MCP-APPS.md` is out of scope
-for Phase 1–3. The `registerAppTool` / `registerAppResource` calls must NOT
-be added to `server.mjs` until the package is confirmed on npm and its API
-is stable. All Phase 1–3 tools use the existing `reg()` wrapper only.
+**Decision**: Add a Phase 1.5 spike for one read-only App-backed tool:
+`evidence.summary`. The JSON tool result is canonical. App-capable clients may
+render `ui://pockethive/evidence-summary` from that same result.
 
-When MCP Apps become available, wrap existing tools using `registerAppTool`
-as a drop-in replacement for `reg()` — no tool logic changes needed.
+Do not build the broader MCP Apps dashboard/form platform in Phase 1.5. Future
+Apps in `MCP-APPS.md` remain candidates after the evidence widget proves the
+transport, packaging, and client support.
+
+Implementation rules:
+
+- Keep one canonical `evidence.summary` handler.
+- Add explicit capability negotiation around the response presentation.
+- Do not fork evidence logic by client type.
+- Do not let the widget call PocketHive APIs directly.
+- Do not add write-capable App tools in this phase.
 
 ---
 

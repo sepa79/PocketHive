@@ -10,12 +10,15 @@
   "files": [
     "server.mjs",
     "start.cjs",
-    "dev-tools/"
+    "poc-runner.mjs",
+    "smoke-test.mjs"
   ],
   "publishConfig": {
     "access": "public"
   },
   "scripts": {
+    "poc": "node poc-runner.mjs",
+    "poc:live": "cross-env PH_POC_LIVE=1 node poc-runner.mjs",
     "start": "node server.mjs",
     "start:http": "cross-env PH_MCP_HTTP_PORT=3100 node server.mjs"
   },

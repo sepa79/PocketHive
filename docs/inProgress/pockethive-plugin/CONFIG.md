@@ -6,7 +6,8 @@
 ## Principles
 
 1. Config lives in IDE settings — never in .env files
-2. Secrets live in OS keychain — never in settings.json or pockethive.xml
+2. Auth is scoped to the environment. Each environment may declare its own
+   optional PocketHive auth token so local and remote hives can differ cleanly.
 3. Config is injected into the MCP server as environment variables at spawn time
 4. Switching environment or bundles folder respawns the MCP server (~1s, transparent)
 5. All config is structured and typed — no free-form key=value strings
@@ -22,6 +23,7 @@ Stored in `settings.json` (global or workspace scope).
     {
       "name": "local",
       "baseUrl": "http://localhost:8088",
+      "authToken": "",
       "rabbitUser": "guest",
       "tcpMockUrl": "",       // blank = auto-derive from baseUrl host
       "wiremockUrl": ""       // blank = auto-derive from baseUrl host
@@ -29,6 +31,7 @@ Stored in `settings.json` (global or workspace scope).
     {
       "name": "nft-remote",
       "baseUrl": "http://nft-server:8088",
+      "authToken": "${TOKEN_FOR_NFT_REMOTE}",
       "rabbitUser": "admin",
       "tcpMockUrl": "http://nft-server:8083",
       "wiremockUrl": "http://nft-server:8080"
@@ -83,40 +86,42 @@ Equivalent structure to VS Code settings.
 </component>
 ```
 
-## Secrets storage
+## Secrets and auth storage
 
-Secrets are NEVER stored in settings files. They use OS keychain APIs.
+RabbitMQ passwords use OS keychain APIs. PocketHive API auth is represented as
+an optional per-environment `authToken` property for now, because PocketHive auth
+is future functionality and the extension needs a stable active-environment
+pass-through for MCP and direct API calls.
 
 | Secret | Key pattern | VS Code API | IntelliJ API |
 |---|---|---|---|
-| Auth token | `ph.env.<name>.authToken` | `context.secrets` | `PasswordSafe` |
 | RabbitMQ password | `ph.env.<name>.rabbitPass` | `context.secrets` | `PasswordSafe` |
 
-### VS Code secrets
+### VS Code RabbitMQ secret
 
 ```typescript
 // Store
-await context.secrets.store(`ph.env.${envName}.authToken`, token);
+await context.secrets.store(`ph.env.${envName}.rabbitPass`, password);
 
 // Read
-const token = await context.secrets.get(`ph.env.${envName}.authToken`);
+const password = await context.secrets.get(`ph.env.${envName}.rabbitPass`);
 
 // Delete
-await context.secrets.delete(`ph.env.${envName}.authToken`);
+await context.secrets.delete(`ph.env.${envName}.rabbitPass`);
 ```
 
-### IntelliJ secrets
+### IntelliJ RabbitMQ secret
 
 ```kotlin
 // Store
 PasswordSafe.instance.setPassword(
-    CredentialAttributes(ServiceNameProvider.generateServiceName("PocketHive", "$envName/authToken")),
-    token
+    CredentialAttributes(ServiceNameProvider.generateServiceName("PocketHive", "$envName/rabbitPass")),
+    password
 )
 
 // Read
-val token = PasswordSafe.instance.getPassword(
-    CredentialAttributes(ServiceNameProvider.generateServiceName("PocketHive", "$envName/authToken"))
+val password = PasswordSafe.instance.getPassword(
+    CredentialAttributes(ServiceNameProvider.generateServiceName("PocketHive", "$envName/rabbitPass"))
 )
 ```
 
@@ -127,12 +132,11 @@ The IDE plugin constructs this map and passes it to the MCP server process:
 | Variable | Source | Required |
 |---|---|---|
 | `POCKETHIVE_BASE_URL` | `environments[activeEnvironment].baseUrl` | Yes |
+| `POCKETHIVE_AUTH_TOKEN` | `environments[activeEnvironment].authToken` | No |
 | `POCKETHIVE_ROOT` | `pockethiveRoot` setting | For validation |
 | `BUNDLES_ROOT` | `activeBundlesFolder` setting | For bundle tools |
 | `RABBITMQ_DEFAULT_USER` | `environments[activeEnvironment].rabbitUser` | No (default: guest) |
 | `RABBITMQ_DEFAULT_PASS` | keychain `ph.env.<name>.rabbitPass` | No (default: guest) |
-| `GITHUB_TOKEN` | keychain `ph.env.<name>.authToken` | For GitHub tools |
-| `GITHUB_REPO` | hardcoded `sepa79/PocketHive` | For GitHub tools |
 | `TCP_MOCK_BASE_URL` | `environments[activeEnvironment].tcpMockUrl` | No (auto-derived) |
 | `WIREMOCK_BASE_URL` | `environments[activeEnvironment].wiremockUrl` | No (auto-derived) |
 | `PH_BUNDLES_ROOTS` | all `bundlesFolders` joined with `,` | For context tools |
@@ -221,7 +225,7 @@ Users migrating from the bundles repo `.env` approach:
 |---|---|
 | `POCKETHIVE_BASE_URL=http://...` | `pockethive.environments[0].baseUrl` |
 | `POCKETHIVE_ROOT=/path/to/ph` | `pockethive.pockethiveRoot` |
-| `GITHUB_TOKEN=ghp_...` | keychain via "Set token" action |
+| GitHub issue token | External GitHub MCP config, not PocketHive MCP |
 | `.env.local`, `.env.nft-remote` | `pockethive.environments` array entries |
 | `scripts/switch-env.sh local` | click "Use" in Settings tree view |
 | Bundles repo root = BUNDLES_ROOT | `pockethive.activeBundlesFolder` |

@@ -97,6 +97,7 @@ Added to `contributes.configuration` in `package.json`:
     "properties": {
       "name":        { "type": "string" },
       "baseUrl":     { "type": "string" },
+      "authToken":   { "type": "string", "default": "", "description": "Optional PocketHive bearer token for this environment." },
       "rabbitUser":  { "type": "string", "default": "guest" },
       "tcpMockUrl":  { "type": "string" },
       "wiremockUrl": { "type": "string" }
@@ -142,8 +143,10 @@ Added to `contributes.configuration` in `package.json`:
 }
 ```
 
-Secrets (auth tokens, passwords) are stored via `context.secrets`, never
-in `settings.json`.
+RabbitMQ passwords are stored via `context.secrets`. The optional
+environment-level `authToken` remains in the VS Code configuration because
+PocketHive API authentication is planned future functionality and each
+environment may require a different token.
 
 ## MCP manager (src/mcp/manager.ts)
 
@@ -376,7 +379,11 @@ The existing extension (v0.0.7) calls PocketHive APIs directly in
 1. Add MCP manager alongside existing direct API calls
 2. New commands use MCP tools exclusively
 3. Existing commands are progressively migrated to MCP
-4. Direct API calls in `api.ts` are kept as fallback during transition
+4. Existing direct API calls in `api.ts` may remain only until their command is
+   migrated; do not add new direct API alternatives
 5. v1.0.0 release removes all direct API calls — everything goes through MCP
 
 This allows incremental delivery without breaking existing functionality.
+The extension must not add shell-backed commands for Docker, Git, Maven, npm,
+or container logs. Use MCP diagnostics backed by PocketHive APIs, journals,
+taps, queues, metrics, and mock/dataset tools.

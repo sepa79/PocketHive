@@ -66,6 +66,135 @@ Any create-swarm client must treat `GET /api/templates` as the source of truth f
 
 ---
 
+## Authoring contract endpoint
+
+`GET /api/authoring-contract` returns the Scenario Manager authoring contract
+used by editors and MCP tools.
+
+The response is read-only and versioned. It combines:
+
+- supported Scenario Manager endpoints for authoring and validation,
+- scenario bundle file layout rules,
+- variable/SUT/auth/traffic-policy authoring hints,
+- capability manifest summaries,
+- template catalog metadata,
+- a deterministic `fingerprint`.
+
+The fingerprint changes when contract-visible capabilities/templates change.
+Long-lived clients may cache the full response for a session and only refresh it
+when explicitly asked to check or when the fingerprint changes.
+
+`GET /api/authoring-contract/fingerprint` returns the lightweight fingerprint
+view for clients that want to check whether their cached contract is stale.
+
+Example response:
+
+```json
+{
+  "contractVersion": "scenario-authoring.v1",
+  "fingerprint": "sha256:...",
+  "source": "scenario-manager",
+  "endpoints": {
+    "templates": "/api/templates",
+    "capabilities": "/api/capabilities",
+    "validateBundle": "/scenarios/bundles/validate",
+    "validateScenario": "/scenarios/{id}/validate",
+    "validateTemplates": "/scenarios/{id}/templates/validate"
+  },
+  "cache": {
+    "sessionCacheable": true,
+    "refreshWhenFingerprintChanges": true
+  }
+}
+```
+
+---
+
+## Structured validation findings
+
+Validation endpoints return findings in a machine-readable shape:
+
+```json
+{
+  "code": "TEMPLATE_CALL_ID_MISSING",
+  "severity": "error",
+  "path": "scenario.yaml:plan",
+  "message": "Scenario references HTTP callId 'login' but no matching template exists.",
+  "fix": "Add templates/http/<service>/login.yaml or update the x-ph-call-id reference."
+}
+```
+
+`severity` is one of:
+
+- `error` — bundle should not be deployed or used for swarm creation.
+- `warning` — bundle can be saved, but authoring should review the issue.
+- `info` — explanatory context only.
+
+Clients must key automation on `code` and `path`, not on the human-readable
+`message` text.
+
+---
+
+## Dry-run validation endpoints
+
+### Validate an uploaded bundle without importing it
+
+`POST /scenarios/bundles/validate` consumes `application/zip` and returns
+`application/json`.
+
+This endpoint unpacks and validates the bundle in temporary storage only. It
+does not create, replace, move, or delete any scenario bundle.
+
+Response:
+
+```json
+{
+  "ok": false,
+  "source": "uploaded-zip",
+  "scenarioId": "webauth-demo",
+  "bundleKey": null,
+  "bundlePath": null,
+  "findings": [
+    {
+      "code": "CAPABILITY_MANIFEST_MISSING",
+      "severity": "error",
+      "path": "scenario.yaml:template",
+      "message": "No capability manifest found for image 'example:latest' (controller).",
+      "fix": "Install the matching capability manifest or update the image reference."
+    }
+  ]
+}
+```
+
+### Validate an existing scenario by id
+
+`POST /scenarios/{id}/validate` returns the same validation result shape for an
+already loaded scenario bundle.
+
+### Validate an existing bundle by bundle key
+
+`POST /scenarios/bundles/validate-existing?bundleKey={bundleKey}` validates the
+catalog entry identified by `bundleKey`. Use this for malformed bundles,
+duplicate-id bundles, or bundles whose `scenario.id` is not safe to address.
+
+### Validate template call contracts
+
+`POST /scenarios/{id}/templates/validate` checks bundle-local template files
+against the scenario references that Scenario Manager can inspect.
+
+Initial checks include:
+
+- HTTP template files under `templates/http/**`,
+- required HTTP template fields: `protocol`, `serviceId`, `callId`, `method`,
+  `pathTemplate`,
+- duplicate HTTP template `callId` values,
+- `x-ph-call-id` references in `scenario.yaml` that have no matching template.
+
+Future renderer-backed checks may extend this endpoint, but clients should treat
+the endpoint as the canonical template validation surface now.
+
+---
+
 ## Defunct semantics
 
 A bundle is `defunct` when it exists on disk but must not be usable for swarm creation.

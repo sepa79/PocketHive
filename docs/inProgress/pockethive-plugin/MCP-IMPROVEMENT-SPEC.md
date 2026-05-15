@@ -9,18 +9,14 @@
 ## Table of Contents
 
 1. [Overview & Guiding Principles](#1-overview--guiding-principles)
-2. [Security Sandbox — Shell Tool Replacement](#2-security-sandbox--shell-tool-replacement)
-3. [Contract Tools — Scenario Manager as Authority](#3-contract-tools--scenario-manager-as-authority)
-4. [Fast Structural Validator — bundle.check](#4-fast-structural-validator--bundlecheck)
-5. [Scenario Wizard](#5-scenario-wizard)
-6. [Mock Configuration — mock-config/](#6-mock-configuration--mock-config)
-7. [Dataset Management](#7-dataset-management)
-8. [Documentation Standards](#8-documentation-standards)
-9. [Performance Testing Standards](#9-performance-testing-standards)
-10. [Variable Profile Standards](#10-variable-profile-standards)
-11. [Bundle Structure Standard](#11-bundle-structure-standard)
-12. [Rules Files](#12-rules-files)
-13. [Implementation Order](#13-implementation-order)
+2. [Novice Mental Model](#2-novice-mental-model)
+3. [Responsibility Boundary — No Shell Tools](#3-responsibility-boundary--no-shell-tools)
+4. [Contract Tools — Runtime First](#4-contract-tools--runtime-first)
+5. [Fast Structural Validator — bundle.check](#5-fast-structural-validator--bundlecheck)
+6. [Scenario Wizard](#6-scenario-wizard)
+7. [Mock Configuration — mock-config/](#7-mock-configuration--mock-config)
+8. [Dataset Management](#8-dataset-management)
+9. [Documentation Standards](#9-documentation-standards)
 
 ---
 
@@ -34,8 +30,9 @@ additional clarification.
 
 ### The Problem Being Solved
 
-1. **Security** — the MCP has unrestricted shell access (docker, maven, git, npm).
-   Any AI session can run arbitrary commands. This must be sandboxed.
+1. **Security and responsibility boundary** — the MCP has accumulated shell and
+   devops capabilities (docker, maven, git, npm). That is outside the plugin's
+   responsibility. The MCP must not execute shell commands.
 
 2. **Contract knowledge** — the AI has to guess the PocketHive contract by reading
    Java source, markdown docs, and YAML files. These go stale. The Scenario Manager
@@ -51,172 +48,227 @@ additional clarification.
    must have a CHANGELOG with structured evidence and a FLOW_DOCUMENT explaining
    the architecture.
 
-6. **Performance mindset** — scenarios are performance tests. They must have traffic
-   shapes, variable profiles, result rules, and stakeholder-readable evidence.
+6. **Performance mindset** — scenarios are performance tests. They must have
+   explicit traffic shape, success criteria, observability, and
+   stakeholder-readable evidence.
 
 ### Guiding Principles
 
-- **No hard-coded environment values** — everything environment-specific goes in
-  `variables.yaml` with at least `smoke`, `default`, and `nft` profiles.
+- **No hard-coded environment values** — environment-specific values go in
+  `variables.yaml`. If `variables.yaml` is created, it should include explicit
+  profiles such as `smoke`, `default`, and `nft`.
 - **No assumptions** — the wizard asks before authoring. Missing context = question,
   not guess.
-- **Contract from the runtime** — the Scenario Manager API is the source of truth.
-  No parsing, no docs, no YAML files to maintain.
+- **Contract from the runtime first** — the Scenario Manager API is the preferred
+  source of truth. Explicit offline sources are allowed only when the stack is
+  unavailable, and the tool response must say which source was used.
 - **Evidence is mandatory** — no bundle is complete without a CHANGELOG entry with
   all evidence fields populated from actual tool output.
-- **Performance specialist mindset** — every scenario is a performance test. Plans,
-  result rules, and observability are not optional.
+- **Performance specialist mindset** — every scenario is a performance test.
+  Traffic shape, success criteria, and observability must be explicit.
 
 ---
 
-## 2. Security Sandbox — Shell Tool Replacement
+## 2. Novice Mental Model
 
-### 2.1 Tools to Remove
+The MCP should behave like a PocketHive scenario-building skill, not a toolbox.
+A novice user should be able to describe the test in plain language and be
+guided to a valid, repeatable, evidence-backed bundle.
+
+```
+User intent
+  "Create a load test for onboarding"
+        |
+        v
+Wizard intake
+  protocol, target, data, auth, traffic, observability
+        |
+        v
+Contract-aware authoring
+  contract.* tools + domain authoring tools
+        |
+        v
+Bundle artifacts
+  scenario.yaml, templates/, authProfiles.yaml, variables.yaml,
+  sut/, datasets/, mock-config/, README/FLOW/CHANGELOG
+        |
+        v
+Validation
+  bundle.check fast structural check
+  bundle.validate full template/runtime check
+        |
+        v
+Run and evidence
+  scenario.deploy -> swarm.create/start
+  journal, queues, taps, metrics, mocks, datasets, PocketHive logs if exposed
+        |
+        v
+Closeout
+  changelog evidence + HiveMind learning
+```
+
+The AI must avoid expensive guesses. If the user has not said where data comes
+from, whether auth is needed, what endpoints are called, or what success means,
+the wizard asks. It may infer low-risk defaults only after showing the
+assumption to the user.
+
+### 2.1 Current Evidence Sources
+
+Use these sources today. `EVIDENCE.md` is the canonical taxonomy for what each
+source proves:
+
+- `debug.journal` for swarm lifecycle and runtime events
+- `debug.tap` for representative WorkItems and payload flow
+- `debug.queues` for queue depth/drain evidence
+- `debug.prometheus` for metrics
+- `mock.wiremock.requests` / `mock.tcp.requests` for SUT-double evidence
+- `dataset.check` for Redis dataset readiness
+- `evidence.summary` for an aggregate read-only evidence view
+- PocketHive-provided log APIs, if PocketHive exposes them
+
+Do not use Docker/container logs directly. Loki is a possible future backend,
+but not a current MCP integration target unless PocketHive exposes it through
+its own API.
+
+---
+
+## 3. Responsibility Boundary — No Shell Tools
+
+### 3.1 Rule
+
+The PocketHive MCP server is an application integration layer, not a local
+terminal, build runner, Docker controller, Git client, or log scraper. It must
+not execute shell commands directly or indirectly.
+
+This is stricter than "sandbox the dangerous commands". The correct boundary is:
+
+- MCP tools may call PocketHive-owned HTTP APIs, RabbitMQ management APIs,
+  Prometheus APIs, WireMock/TCP mock admin APIs, and structured file APIs for
+  the active bundle.
+- MCP tools may read and write bundle artifacts under the configured
+  `BUNDLES_ROOT`, using explicit path containment checks.
+- MCP tools must not run `docker`, `docker compose`, `mvn`, `npm`, `node`
+  scripts, `git`, `bash`, `wsl`, PowerShell, or arbitrary child processes.
+- MCP tools must not read Docker/container logs directly. Runtime diagnosis
+  should use PocketHive-provided evidence: swarm status, swarm journal, queues,
+  debug taps, metrics, mock request history, dataset checks, and any
+  PocketHive-owned log API that exists.
+- Loki may become a future structured log backend, but it is out of scope for
+  this phase unless PocketHive exposes it through a product-owned API. Do not
+  add direct Loki tools now.
+
+### 3.2 Tools to Remove
 
 Remove these tools entirely from `server.mjs`:
 
 | Tool | Reason |
 |---|---|
-| `docker.execute` | Unrestricted — can rm, build, push, exec |
-| `docker.compose` | Unrestricted — can down, destroy volumes |
-| `git.execute` | Unrestricted — can push --force, checkout, reset |
-| `maven.execute` | Unrestricted — can deploy to registry, run arbitrary goals |
-| `npm.execute` | Unrestricted — can publish, run arbitrary scripts |
-| `tools.check` | Only useful alongside the above |
+| `docker.execute` | Shell/Docker control is outside MCP responsibility |
+| `docker.compose` | Stack lifecycle belongs to local dev tooling, not MCP |
+| `git.execute` | Git writes/pushes/resets are outside MCP responsibility |
+| `git.status` | Git inspection belongs to IDE/Git tooling, not MCP |
+| `git.diff` | Git inspection belongs to IDE/Git tooling, not MCP |
+| `maven.execute` | Build execution belongs to local dev tooling/CI |
+| `npm.execute` | Package/script execution belongs to local dev tooling/CI |
+| `tools.check` | Shell-tool support utility; remove with shell tools |
+| `docs.refresh` | Sync scripts are shell-based and no longer needed in-repo |
+| `stack.start` | Stack lifecycle is outside MCP responsibility |
+| `stack.stop` | Stack lifecycle is outside MCP responsibility |
+| `stack.rebuild` | Do not add; rebuilds are outside MCP responsibility |
+| `bundle.commit` | Do not add; commits are outside MCP responsibility |
+| `debug.shell` | Do not add; shell/Docker debug is outside MCP responsibility |
+| `debug.docker-logs` | Remove; direct container logs are outside MCP scope |
 
-Also remove the `docs.refresh` tool. The MCP server now lives inside the PocketHive
-repo (`tools/pockethive-mcp/`) and has direct access to all docs and capabilities via
-`REPO_ROOT`. There is no synced copy to refresh.
+Also remove the `pockethiveRefStale` check from `health.check`. It only made
+sense when the MCP server depended on a synced reference copy.
 
-Also remove the `pockethiveRefStale` check from `health.check` — it only made sense
-when there was a stale synced copy to warn about.
+### 3.3 What Remains In Scope
 
-### 2.2 Tools to Add
+Keep and improve API/file-backed tools:
 
-#### `stack.rebuild`
+| Area | In-scope tools |
+|---|---|
+| Context | `context.get`, `context.set-bundles-root`, `context.list-bundles-roots` |
+| Bundle files | `bundle.list`, `bundle.read`, `bundle.check`, `bundle.validate`, `bundle.validate.result`, `bundle.diff` |
+| Scenario lifecycle | `scenario.deploy`, `scenario.list`, `scenario.get` |
+| Swarm lifecycle | `swarm.list`, `swarm.get`, `swarm.create`, `swarm.wait-ready`, `swarm.start`, `swarm.stop`, `swarm.remove` |
+| Real-time control | `component.config-update` through Orchestrator only; read current component config from Orchestrator journal/status evidence, deep-merge requested changes, then send the merged update |
+| Debug evidence | `debug.queues`, `debug.tap`, `debug.tap.read`, `debug.tap.close`, `debug.journal`, `debug.config-update` compatibility alias, `debug.prometheus`, `evidence.summary`, PocketHive-provided log tools if/when exposed by PocketHive APIs |
+| Mocks | `mock.wiremock.*`, `mock.tcp.*`, `mock.save`, `mock.load` |
+| Datasets | `dataset.seed`, `dataset.check`, `dataset.save` |
+| Contracts | `contract.*` |
+| Wizard/session authoring | Public novice flow: `wizard.*`; lower-level advanced authoring: dot-delimited domain tools such as `scenario.create`, `pipeline.create.*`, `bee.config.set` |
+| Docs/evidence | `bundle.docs.generate`, `bundle.docs.changelog` |
 
-Rebuilds one PocketHive service image and restarts it. Replaces the
-`maven.execute + docker.execute` pattern for fixing broken images.
+Every tool in this table must have a contract entry matching
+`TOOL-CONTRACTS.md` before implementation.
 
-```
-Input:
-  service: string  — must be in REBUILD_ALLOWLIST
+### 3.4 Local Development And Logs
 
-REBUILD_ALLOWLIST = [
-  "generator", "moderator", "processor", "postprocessor",
-  "request-builder", "http-sequence", "swarm-controller",
-  "scenario-manager", "orchestrator", "clearing-export", "trigger"
-]
+Local build, stack start/stop, Docker inspection, package management, Git
+operations, and log inspection remain available to humans through existing
+developer workflows:
 
-Action:
-  Validates service is in allowlist. Throws if not.
-  Validates POCKETHIVE_ROOT is set. Throws if not.
-  Converts POCKETHIVE_ROOT to WSL path.
-  Spawns detached: wsl bash -lc "cd '<prWsl>' && bash build-hive.sh --quick --service <service>"
-  Does NOT wait for completion.
+- `build-hive.sh`
+- `docker compose`
+- IDE Git tooling / command-line Git
+- CI jobs
+- PocketHive UI/runtime diagnostics
 
-Output:
-  { started: true, service, message: "Rebuild of '<service>' launched in background.
-    Poll health.check every 15s to confirm the service comes back up." }
-```
+The MCP may return a clear message such as "Use the local dev workflow outside
+MCP" when a user asks it to perform those tasks. It must not run them.
 
-#### `bundle.commit`
+### 3.5 Implementation Location
 
-Stages and commits the active bundle to git. Scoped to the active bundles folder only.
+All MCP server changes are in `tools/pockethive-mcp/server.mjs`.
 
-```
-Input:
-  bundle: string   — bundle name (folder name under getBundlesDir())
-  message: string  — commit message
+Remove the shell/dev-tool section and the supporting imports/modules:
 
-Action:
-  Resolves bundleDir = resolve(getBundlesDir(), bundle)
-  Throws if bundleDir does not exist.
-  Converts getBundlesDir() to WSL path as repoWsl.
-  Converts bundleDir to WSL path as bundleWsl.
-  Runs: git -C '<repoWsl>' add '<bundleWsl>'
-  Runs: git -C '<repoWsl>' commit -m '<message>'
-  Does NOT push. Does NOT touch any path outside bundleDir.
+- `DockerTool`
+- `GitTool`
+- `MavenTool`
+- `NpmTool`
+- generic shell executor usage for command execution
 
-Output:
-  { committed: true, bundle, message, output: <git commit output> }
-```
-
-#### `debug.shell`
-
-Read-only Docker inspection for local debugging. Opt-in only.
-
-```
-Input:
-  swarmId: string         — scope guard
-  command: string         — must be in ALLOWED_COMMANDS
-  args?: string[]
-
-ALLOWED_COMMANDS = ["logs", "inspect", "ps", "stats", "top"]
-
-Guards:
-  1. process.env.POCKETHIVE_DEBUG_SHELL must equal "true"
-     Throws: "debug.shell is disabled. Set POCKETHIVE_DEBUG_SHELL=true in .env to enable."
-  2. command must be in ALLOWED_COMMANDS
-     Throws: "Command '<x>' is not allowed. Allowed: logs, inspect, ps, stats, top"
-  3. Every non-flag arg (not starting with "-") must start with swarmId
-     Throws: "Argument '<x>' does not match swarmId prefix '<swarmId>'.
-              Only containers for this swarm are accessible."
-
-Action:
-  Runs: docker <command> <args...> via shell()
-
-Output:
-  { command: "docker <command>", args, output: <stdout> }
-```
-
-### 2.3 Tools to Keep Unchanged
-
-- `git.status` — read-only, scoped to bundles repo
-- `git.diff` — read-only, scoped to bundle
-- `stack.start` / `stack.stop` — needed for local dev
-- `debug.docker-logs` — already scoped to swarmId
-
-### 2.4 Implementation Location
-
-All changes in `tools/pockethive-mcp/server.mjs`.
-
-Replace the entire `// ── Dev tools` section (from the comment through `tools.check`)
-with the three new tools above.
-
-The `dockerTool`, `gitTool`, `mavenTool`, `npmTool` imports and instantiations at the
-top of the file can be removed once the dev tools section is replaced. Keep the
-`gitTool` import only if `git.status` and `git.diff` still use it — check and remove
-if they use `shell()` directly instead.
+Any remaining child-process usage must be deleted or replaced with an
+API-backed implementation. Path operations for bundle files must use Node's
+filesystem APIs directly and must enforce that resolved paths stay within the
+configured bundle root.
 
 ---
 
-## 3. Contract Tools — Scenario Manager as Authority
+## 4. Contract Tools — Runtime First
 
-### 3.1 Design Decision
+### 4.1 Design Decision
 
-The Scenario Manager is the authoritative source for the PocketHive contract. It:
+The Scenario Manager is the preferred runtime source for the PocketHive contract. It:
 - Already validates bundles on deploy
 - Already serves capabilities via `GET /api/capabilities?all=true`
-- Runs the live Java models — no parsing, no docs, no YAML files to maintain
+- Runs the live Java models
 
 **Phase A (implement now):** MCP contract tools read from:
 1. `GET <SM_URL>/api/capabilities?all=true` — worker config schemas (live, always correct)
-2. `REPO_ROOT/scenario-manager-service/capabilities/*.latest.yaml` — fallback when stack is down
+2. `REPO_ROOT/scenario-manager-service/capabilities/*.latest.yaml` — explicit offline source when stack is down
 3. `REPO_ROOT/docs/scenarios/SCENARIO_CONTRACT.md` — scenario/bee/plan structure (read directly)
 4. `REPO_ROOT/docs/AUTH-USER-GUIDE.md` + `AUTH-BEHAVIOR.md` — auth contract (read directly)
 5. `REPO_ROOT/docs/scenarios/SCENARIO_PATTERNS.md` — pipeline patterns (read directly)
 
-**Phase B (future Scenario Manager work — tracked as GitHub issue):**
+**Scenario Manager authoring contract (current target):**
 Expand the Scenario Manager API with:
-- `GET /api/contracts` — full contract manifest from live Java models
-- `POST /api/validate/bundle` — validate without deploying, return structured errors with `fix` field
-- `POST /api/validate/template` — single template validation
-- `GET /api/contracts/patterns` — pipeline patterns
+- `GET /api/authoring-contract` — full authoring manifest from live Scenario Manager sources
+- `GET /api/authoring-contract/fingerprint` — lightweight cache freshness check
+- `POST /scenarios/bundles/validate` — side-effect-free bundle validation with structured findings
+- `POST /scenarios/{id}/validate` — validate an existing loaded scenario bundle
+- `POST /scenarios/bundles/validate-existing?bundleKey=...` — validate a catalog entry by bundle identity
+- `POST /scenarios/{id}/templates/validate` — bundle-local template call validation
 
-Phase B makes Phase A obsolete. Phase A is the pragmatic bridge.
+MCP should call the authoring contract once per server session and cache it.
+It should call again only when `forceRefresh` is explicit or when a fingerprint
+check shows the Scenario Manager contract changed. All contract tools must
+return `source` and cache state so agents and users can see where the contract
+came from.
 
-### 3.2 New MCP Tools
+### 4.2 New MCP Tools
 
 #### `contract.worker-config`
 
@@ -240,6 +292,7 @@ Output:
   {
     role: string,
     source: "live" | "cached",
+    sourceReason?: string,       // e.g. "Scenario Manager unavailable"
     capabilitiesVersion: string,
     config: [
       {
@@ -533,12 +586,14 @@ Output:
   }
 ```
 
-### 3.3 Implementation Notes
+### 4.3 Implementation Notes
 
 - All contract tools are read-only. They never write files.
 - If `REPO_ROOT` is not set or the file does not exist, throw a clear error:
   `"POCKETHIVE_ROOT not set or file not found: <path>. Ensure POCKETHIVE_ROOT points to the PocketHive repo checkout."`
-- The live capabilities API call has a 5s timeout. On timeout, fall back to cached YAML silently.
+- The live capabilities API call has a 5s timeout. On timeout, use cached YAML
+  only as an explicit offline source and include `source: "cached"` plus a
+  `sourceReason`. Never silently switch sources.
 - Enum extraction from Java source uses this regex pattern:
   `/^\s+([A-Z][A-Z0-9_]*)\s*[,;]?\s*(?:\/\/.*)?$/gm`
   Applied to the file content after stripping the class/enum declaration line.
@@ -546,15 +601,15 @@ Output:
 
 ---
 
-## 4. Fast Structural Validator — bundle.check
+## 5. Fast Structural Validator — bundle.check
 
-### 4.1 Purpose
+### 5.1 Purpose
 
 Pure JavaScript, no JVM, no WSL. Returns in <1s. Runs after every domain tool call
 and before `bundle.validate` / `scenario.deploy`. Catches structural errors immediately
 without the 30–150s JVM validation cycle.
 
-### 4.2 Tool Definition
+### 5.2 Tool Definition
 
 ```
 Tool: bundle.check
@@ -574,7 +629,7 @@ Output:
   }
 ```
 
-### 4.3 Checks
+### 5.3 Checks
 
 Every check produces an item with `code`, `path`, `message`, `fix`, `severity`.
 
@@ -702,89 +757,108 @@ CHECK-20  no result rules on HTTP templates (info only)
 
 ---
 
-## 5. Scenario Wizard
+## 6. Scenario Wizard
 
-### 5.1 Purpose
+### 6.1 Purpose
 
 A structured intake flow that gathers all requirements before authoring any files.
 The AI **must not create bundle files** until `wizard.complete` is called.
 
-### 5.2 In-Memory Session Store
+### 6.2 In-Memory Session Store
 
-The wizard maintains sessions in a `Map<sessionId, WizardSession>` in the MCP server process.
+The wizard maintains sessions in a `Map<sessionId, WizardSession>` in the MCP
+server process.
 
 ```javascript
 // WizardSession shape
 {
   sessionId: string,          // uuid
-  status: "gathering" | "ready" | "completed",
-  answers: Map<questionId, answer>,
-  createdAt: number
+  intent: string,
+  status: "gathering" | "ready",
+  answers: Record<string, unknown>,
+  createdAt: string,
+  createdAtMs: number
 }
 ```
 
 Sessions expire after 2 hours (cleanup on access).
 
-### 5.3 Tool: `wizard.start`
+### 6.3 Tool: `wizard.start`
 
 ```
 Input:
-  intent?: string   // optional free-text description
+  intent: string
+  bundleId?: string
+  protocol?: "REST" | "TCP" | "SEQUENCE" | "HTTP"
+  target?: "wiremock-local" | "tcp-mock-local" | "external"
+  targetBaseUrl?: string
+  endpoint?: string | { method: string, path: string }
+  endpoints?: Array<string | { method: string, path: string, callId?: string, bodyTemplate?: string }>
+  requestBody?: string
+  tcpPayload?: string
+  ratePerSec?: number
+  defaultRatePerSec?: number
+  nftRatePerSec?: number
+  trafficShape?: "smoke" | "ramp_steady" | "spike" | "soak" | "flat"
+  runDuration?: string
+  nftDuration?: string
+  dataSource?: "SCHEDULER" | "CSV_DATASET" | "REDIS_DATASET"
+  csvColumns?: string[]
+  redisLists?: string[]
+  redisOutput?: "yes" | "no"
+  auth?: "none" | "oauth2_client_credentials" | "bearer_token_static" |
+         "basic_auth" | "api_key" | "hmac" | "aws_sig_v4" |
+         "iso8583_mac" | "mtls"
+  authTokenUrl?: string
+  authClientId?: string
+  authSecretSource?: "env_var" | "file"
+  authSecretEnvVar?: string
+  sutDouble?: "real_system" | "wiremock" | "tcp_mock" | "wiremock_and_tcp"
+  mockEndpoints?: array
+  resultRules?: "yes" | "no"
+  resultCodePattern?: string
+  successCodes?: string[]
+  performanceObjective?: string
+  clickhouse?: "yes_for_nft_only" | "yes_always" | "no"
+  grafanaDashboard?: "rtt_overview" | "tx_outcomes" | "quality" |
+                     "pipeline_observability" | "none"
+  docs?: "yes" | "no"
 
 Action:
-  Generate sessionId = randomUUID()
-  Create WizardSession with status: "gathering", answers: empty
+  Generate sessionId = "wiz-" + randomUUID()
+  Create WizardSession with explicit answers supplied by the caller
   Store in sessions map
-  Determine first question (always Q01)
+  Determine first missing required question
 
 Output:
   {
     sessionId: string,
-    status: "gathering",
-    message: "I'll ask you a series of questions to design the right scenario.
-              Answer each question or say 'skip' for optional ones.",
-    nextQuestion: {
-      id: "Q01",
-      text: "What protocol does the target system use?",
-      options: ["HTTP_REST", "SOAP_XML", "TCP", "ISO8583"],
-      required: true,
-      hint: "HTTP_REST covers REST APIs. SOAP_XML for XML/SOAP services.
-             TCP for raw socket protocols. ISO8583 for financial messaging."
-    }
+    status: "gathering" | "ready",
+    ready: boolean,
+    missing: string[],
+    errors: string[],
+    nextQuestion: { id, prompt, options? } | null,
+    bundle: object | null,
+    scenario: object | null
   }
 ```
 
-### 5.4 Tool: `wizard.answer`
+### 6.4 Tool: `wizard.answer`
 
 ```
 Input:
   sessionId: string
-  questionId: string
-  answer: string | string[]
+  questionId: any wizard.start optional field above. Backward-compatible aliases
+              are accepted for endpoint/ratePerSec and snake_case question ids.
+  answer: any
 
 Action:
   Retrieve session. Throw if not found or expired.
-  Store answer: session.answers.set(questionId, answer)
-  Determine next question using QUESTION_FLOW logic (see 5.6)
-  If no more required questions unanswered: set status = "ready", compute summary
-  Else: return next question
-
-Output when more questions remain:
-  {
-    sessionId,
-    status: "gathering",
-    nextQuestion: { id, text, options?, required, hint? }
-  }
-
-Output when all required questions answered:
-  {
-    sessionId,
-    status: "ready",
-    summary: WizardSummary   // see 5.5
-  }
+  Normalize and store answer.
+  Return the same plan shape as wizard.start.
 ```
 
-### 5.5 Tool: `wizard.summary`
+### 6.5 Tool: `wizard.summary`
 
 ```
 Input:
@@ -798,71 +872,56 @@ Output: WizardSummary
   {
     sessionId,
     status: "ready" | "gathering",
-    pattern: string,              // derived from answers
-    bundleName: string,           // derived: kebab-case from intent or protocol+pattern
-    answers: { [questionId]: answer },
-    assumptions: string[],        // things inferred from answers
-    missingOptional: string[],    // optional questions not yet answered
-    readyToGenerate: boolean,     // true when all required questions answered
-    proposedStructure: {          // what will be created
-      files: string[],            // list of files that will be created
-      variableProfiles: string[], // e.g. ["smoke", "default", "nft"]
-      sutEnvironments: string[],  // e.g. ["wiremock-local"]
-      mockStubsNeeded: number,    // count of WireMock stubs to generate
-      redisListsNeeded: string[]  // Redis list names if REDIS_DATASET
-    }
+    ready: boolean,
+    missing: string[],
+    errors: string[],
+    nextQuestion: object | null,
+    bundle: { id: string, path: string } | null,
+    scenario: { id, protocol, pattern, target, endpoint, ratePerSec } | null
   }
 ```
 
-### 5.6 Tool: `wizard.complete`
+### 6.6 Tool: `wizard.complete`
 
 ```
 Input:
   sessionId: string
-  bundleName?: string   // override derived bundle name
 
 Action:
   Retrieve session. Throw if not ready.
-  Resolve bundleName (use provided or derived).
-  bundleDir = resolve(getBundlesDir(), bundleName)
+  Resolve bundle id from explicit wizard answer.
+  bundleDir = resolve(getBundlesDir(), bundleId)
   Throw if bundleDir already exists (prevent overwrite).
 
   Generate files based on answers:
-    1. scenario.yaml          — always
-    2. variables.yaml         — always (smoke + default + nft profiles)
-    3. sut/<sutId>/sut.yaml   — always
-    4. authProfiles.yaml      — if auth != "none"
-    5. templates/<serviceId>/<callId>.yaml — one per endpoint (Q14)
-    6. datasets/<file>.csv    — if data_source == CSV_DATASET or REDIS_DATASET
-    7. mock-config/wiremock/<stub>.json — if sut_double == wiremock
-    8. mock-config/redis-state.json — if data_source == REDIS_DATASET
-    9. README.md              — always
-   10. FLOW_DOCUMENT.md       — always
-   11. CHANGELOG.md           — always (empty, first entry added after evidence run)
+    1. scenario.yaml                     — always, Scenario Manager contract shape
+    2. variables.yaml                    — always, Scenario Variables v1 shape
+    3. sut/<sutId>/sut.yaml              — always
+    4. templates/http/<serviceId>/*.yaml — REST/SEQUENCE
+    5. templates/tcp/<serviceId>/*.yaml  — TCP
+    6. authProfiles.yaml                 — when auth != none
+    7. datasets/sample.csv               — when CSV_DATASET
+    8. mock-config/redis-state.json      — when REDIS_DATASET
+    9. mock-config/wiremock/*.json       — when WireMock mock target
+   10. mock-config/tcp/*.yaml            — when TCP mock target
+   11. README.md                         — always
+   12. FLOW_DOCUMENT.md, CHANGELOG.md    — when docs != no
 
   Run bundle.check on generated bundle.
-  If errors: do NOT write files, return errors with fixes.
-  If only warnings/info: write files, return warnings.
+  Return structural errors/warnings explicitly. For live Scenario Manager
+  validation, call bundle.validate with validator="scenario-manager-dry-run".
+  Use validator="scenario-manager-upload" only when the user explicitly wants
+  Scenario Manager import/replace side effects.
 
 Output:
   {
-    created: true,
-    bundleName,
-    bundleDir,
-    filesCreated: string[],
-    warnings: string[],
-    nextSteps: [
-      "1. Review generated files in bundles/<bundleName>/",
-      "2. Load mock stubs: mock.load { bundle: '<bundleName>' }",
-      "3. Seed Redis data (if applicable): dataset.seed { ... }",
-      "4. Deploy: scenario.deploy { bundle: '<bundleName>' }",
-      "5. Run: swarm.create + swarm.start",
-      "6. After successful run: bundle.docs.changelog { bundle, swarmId, ... }"
-    ]
+    completed: true,
+    generated: { created, bundleId, path, pattern, target },
+    structural: BundleCheckResult
   }
 ```
 
-### 5.7 Question Flow
+### 6.7 Question Flow
 
 Questions are asked in order. `shown_when` conditions are evaluated against current answers.
 `required: true` questions block `wizard.complete` if unanswered.
@@ -1087,7 +1146,7 @@ Q30  id: "docs"
      required: false
 ```
 
-### 5.8 Pattern Derivation Logic
+### 6.8 Pattern Derivation Logic
 
 ```javascript
 function derivePattern(answers) {
@@ -1104,7 +1163,7 @@ function derivePattern(answers) {
 }
 ```
 
-### 5.9 Bundle Name Derivation Logic
+### 6.9 Bundle Name Derivation Logic
 
 ```javascript
 function deriveBundleName(answers, intent) {
@@ -1125,15 +1184,15 @@ function deriveBundleName(answers, intent) {
 
 ---
 
-## 6. Mock Configuration — mock-config/
+## 7. Mock Configuration — mock-config/
 
-### 6.1 Purpose
+### 7.1 Purpose
 
 All mock stub definitions are saved as bundle artifacts in `mock-config/`. This makes
 mock state version-controlled, repeatable, and self-documenting. A new session or a
 stack restart can restore the exact mock state with one tool call.
 
-### 6.2 Directory Structure
+### 7.2 Directory Structure
 
 ```
 mock-config/
@@ -1141,7 +1200,7 @@ mock-config/
     <stub-name>.json     — one file per WireMock stub mapping
   tcp/
     <mapping-name>.json  — one file per TCP mock mapping
-  redis-state.json       — expected Redis list state (see Section 7)
+  redis-state.json       — expected Redis list state (see Section 8)
 ```
 
 File naming convention: use the endpoint path as the name, replacing `/` with `-`
@@ -1150,7 +1209,7 @@ and removing leading `-`. Examples:
 - `GET /api/config` → `get-api-config.json`
 - `POST /api/auth/init` → `post-api-auth-init.json`
 
-### 6.3 Tool: `mock.save`
+### 7.3 Tool: `mock.save`
 
 ```
 Input:
@@ -1182,7 +1241,7 @@ Output:
   }
 ```
 
-### 6.4 Tool: `mock.load`
+### 7.4 Tool: `mock.load`
 
 ```
 Input:
@@ -1221,7 +1280,7 @@ Output:
   }
 ```
 
-### 6.5 WireMock Stub File Format
+### 7.5 WireMock Stub File Format
 
 Each file in `mock-config/wiremock/` is the exact JSON object accepted by
 `POST /__admin/mappings`. Example:
@@ -1245,7 +1304,7 @@ Each file in `mock-config/wiremock/` is the exact JSON object accepted by
 }
 ```
 
-### 6.6 Wizard Integration
+### 7.6 Wizard Integration
 
 After `wizard.complete` generates mock stubs via `mock.wiremock.add`, it
 automatically calls `mock.save { bundle }` to persist them. The AI does not
@@ -1253,16 +1312,16 @@ need to call `mock.save` manually after wizard-generated bundles.
 
 ---
 
-## 7. Dataset Management
+## 8. Dataset Management
 
-### 7.1 Purpose
+### 8.1 Purpose
 
 Every bundle using `REDIS_DATASET` or `CSV_DATASET` must have:
 1. `datasets/<file>.csv` — the source data (version-controlled)
 2. `mock-config/redis-state.json` — expected Redis list state (for REDIS_DATASET)
-3. A documented seeding procedure in FLOW_DOCUMENT Section 12
+3. A documented seeding procedure in FLOW_DOCUMENT Section 10
 
-### 7.2 Tool: `dataset.seed`
+### 8.2 Tool: `dataset.seed`
 
 ```
 Input:
@@ -1295,7 +1354,7 @@ Output:
   }
 ```
 
-### 7.3 Tool: `dataset.check`
+### 8.3 Tool: `dataset.check`
 
 ```
 Input:
@@ -1329,7 +1388,7 @@ Output:
   }
 ```
 
-### 7.4 Tool: `dataset.save`
+### 8.4 Tool: `dataset.save`
 
 ```
 Input:
@@ -1368,12 +1427,12 @@ Output:
   { saved: true, file: "mock-config/redis-state.json", lists: N }
 ```
 
-### 7.5 CSV File Standards
+### 8.5 CSV File Standards
 
 - Must have a header row
 - Column names must be camelCase or snake_case — no spaces
 - Must be UTF-8 encoded
-- Must be documented in FLOW_DOCUMENT Section 9 (Dataset)
+- Must be documented in FLOW_DOCUMENT Section 10 (Mock Requirements / Redis Dataset)
 
 Minimum records:
 - `smoke` / `default` profile: 10 records minimum
@@ -1382,9 +1441,9 @@ Minimum records:
 
 ---
 
-## 8. Documentation Standards
+## 9. Documentation Standards
 
-### 8.1 Tool: `bundle.docs.generate`
+### 9.1 Tool: `bundle.docs.generate`
 
 ```
 Input:
@@ -1402,6 +1461,10 @@ Action:
     prometheus_success = debug.prometheus { query: "ph_transaction_processor_success{ph_swarm='<swarmId>'}" }
     wiremock_requests  = mock.wiremock.requests { limit: 100 }
     redis_keys = (check ph:tokens:<swarmId>:* if auth used)
+    pockethive_logs = optional, only if PocketHive exposes a structured log API
+
+  Do not collect evidence by reading Docker/container logs directly.
+  Loki is future-only unless accessed through a PocketHive-owned API.
 
   Read scenario.yaml, variables.yaml, authProfiles.yaml from bundle.
   Read wizard session answers if available (sessionId stored in bundle metadata).
@@ -1419,7 +1482,7 @@ Output:
   }
 ```
 
-### 8.2 Tool: `bundle.docs.changelog`
+### 9.2 Tool: `bundle.docs.changelog`
 
 ```
 Input:
@@ -1459,7 +1522,7 @@ Input:
 Action:
   Read existing CHANGELOG.md or create if not exists.
   Determine next version number (increment patch from last entry, or start at 0.1.0).
-  Format entry using CHANGELOG_TEMPLATE (see 8.3).
+  Format entry using CHANGELOG_TEMPLATE (see 9.3).
   Prepend new entry after the # Changelog header.
   Write file.
 
@@ -1467,7 +1530,7 @@ Output:
   { appended: true, version, file: "CHANGELOG.md" }
 ```
 
-### 8.3 CHANGELOG.md Template
+### 9.3 CHANGELOG.md Template
 
 ```markdown
 # Changelog — <bundle-name>
@@ -1555,7 +1618,7 @@ Sample WorkItem (1 representative journey from debug.tap):
 <known issues or "None">
 ```
 
-### 8.4 FLOW_DOCUMENT.md Template
+### 9.4 FLOW_DOCUMENT.md Template
 
 ```markdown
 # Flow Document — <bundle-name>
@@ -1754,7 +1817,7 @@ swarm.remove { swarmId: "my-run-01" }
 <known gaps, assumptions, or future work — or "None">
 ```
 
-### 8.5 README.md Template
+### 9.5 README.md Template
 
 ```markdown
 # <Bundle Name>

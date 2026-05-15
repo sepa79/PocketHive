@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 
 import {
-  addHiveUrl, setActiveHiveUrl, removeHiveUrl, listSwarms,
+  listSwarms,
   runSwarmCommand, runAllSwarms, openUi, openSwarmDetails,
   openScenarioRaw, openScenarioFile, previewScenario, showEntry,
   // New MCP-backed commands
@@ -68,9 +68,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(
     // ── Existing commands ──────────────────────────────────────────────────
     ScenarioEditorProvider.register(context),
-    vscode.commands.registerCommand('pockethive.addHiveUrl', addHiveUrl),
-    vscode.commands.registerCommand('pockethive.setActiveHiveUrl', setActiveHiveUrl),
-    vscode.commands.registerCommand('pockethive.removeHiveUrl', removeHiveUrl),
     vscode.commands.registerCommand('pockethive.listSwarms', listSwarms),
     vscode.commands.registerCommand('pockethive.startSwarm', (swarmId?: string) => runSwarmCommand('start', swarmId)),
     vscode.commands.registerCommand('pockethive.stopSwarm', (swarmId?: string) => runSwarmCommand('stop', swarmId)),
@@ -127,6 +124,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     // ── Config change listener ─────────────────────────────────────────────
     vscode.workspace.onDidChangeConfiguration(event => {
       if (event.affectsConfiguration('pockethive.activeEnvironment') ||
+          event.affectsConfiguration('pockethive.environments') ||
           event.affectsConfiguration('pockethive.activeBundlesFolder') ||
           event.affectsConfiguration('pockethive.pockethiveRoot')) {
         startMcpServer(context).catch(() => {});

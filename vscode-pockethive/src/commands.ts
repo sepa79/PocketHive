@@ -1,11 +1,9 @@
 import * as vscode from 'vscode';
 import { randomUUID } from 'crypto';
 
-// Legacy direct-API imports (kept for backward compat during transition)
 import { requestJson, requestText } from './api';
 import {
-  getActiveHiveUrl, getHiveUrls, normalizeHiveUrl, resolveHiveBaseUrl,
-  resolveServiceConfig, updateActiveHiveUrl, updateHiveUrls,
+  resolveHiveBaseUrl, resolveServiceConfig,
   getEnvironments, getActiveEnvironmentName, setActiveEnvironment,
   addEnvironment, removeEnvironment, addBundlesFolder, setActiveBundlesFolder,
   getActiveBundlesFolder, migrateSettingsIfNeeded,
@@ -40,7 +38,19 @@ export async function addEnvironmentCommand(context: vscode.ExtensionContext): P
   });
   if (!baseUrl) return;
 
-  await addEnvironment({ name: name.trim(), baseUrl: baseUrl.trim(), rabbitUser: 'guest' });
+  const authToken = await vscode.window.showInputBox({
+    title: 'Add Environment (3/3)',
+    prompt: 'Optional PocketHive auth token for this environment',
+    password: true,
+    ignoreFocusOut: true,
+  });
+
+  await addEnvironment({
+    name: name.trim(),
+    baseUrl: baseUrl.trim(),
+    rabbitUser: 'guest',
+    ...(authToken?.trim() ? { authToken: authToken.trim() } : {}),
+  });
   vscode.window.showInformationMessage(`PocketHive: Environment '${name}' added.`);
   await restartMcpServer(context);
 }
@@ -103,13 +113,19 @@ export async function validateBundleCommand(
       vscode.window.showErrorMessage(`PocketHive: Validation error for '${bundleName}': ${result.error}`);
       return;
     }
-    const failed = [result.generator, result.httpTemplates].filter(r => r?.startsWith('FAIL:'));
-    if (failed.length) {
-      scenarioProvider.setValidationResult(bundleName, 'failed', failed[0]);
-      vscode.window.showErrorMessage(`PocketHive: '${bundleName}' validation failed. ${failed[0]}`);
+    const structural = result.structural;
+    if (!structural) {
+      const message = result.note ?? 'No validation result was returned.';
+      scenarioProvider.setValidationResult(bundleName, 'failed', message);
+      vscode.window.showErrorMessage(`PocketHive: '${bundleName}' validation failed. ${message}`);
+    } else if (!structural.ok) {
+      const message = structural.errors[0]?.message ?? 'Bundle structure check failed.';
+      scenarioProvider.setValidationResult(bundleName, 'failed', message);
+      vscode.window.showErrorMessage(`PocketHive: '${bundleName}' validation failed. ${message}`);
     } else {
       scenarioProvider.setValidationResult(bundleName, 'passed');
-      vscode.window.showInformationMessage(`PocketHive: '${bundleName}' validation passed.`);
+      const warningText = structural.warnings.length ? ` ${structural.warnings.length} warning(s).` : '';
+      vscode.window.showInformationMessage(`PocketHive: '${bundleName}' structure check passed.${warningText}`);
     }
   } catch (err) {
     scenarioProvider.setValidationResult(bundleName, 'failed', String(err));
@@ -195,49 +211,9 @@ export async function restartMcpServerCommand(context: vscode.ExtensionContext):
   vscode.window.showInformationMessage('PocketHive: MCP server restarted.');
 }
 
-// ── Legacy commands (kept for backward compat) ────────────────────────────────
+// ── Direct API commands ───────────────────────────────────────────────────────
 
 type ScenarioFileTarget = { scenarioId: string; kind: 'scenario' | 'schema' | 'template'; path?: string };
-
-export async function addHiveUrl(): Promise<void> {
-  const next = await vscode.window.showInputBox({
-    prompt: 'Hive base URL (example: http://localhost:8088)',
-    value: getActiveHiveUrl() ?? undefined,
-    ignoreFocusOut: true,
-    validateInput: (value) => (value.trim().length === 0 ? 'Hive URL is required.' : null),
-  });
-  if (!next) return;
-  const normalized = normalizeHiveUrl(next);
-  if (!normalized) { vscode.window.showErrorMessage('PocketHive: Hive URL is invalid.'); return; }
-  const existing = getHiveUrls();
-  const updated = [normalized, ...existing.filter((url) => url !== normalized)];
-  await updateHiveUrls(updated);
-  await updateActiveHiveUrl(normalized);
-  vscode.window.showInformationMessage(`PocketHive: Hive URL added (${normalized}).`);
-}
-
-export async function setActiveHiveUrl(target: unknown): Promise<void> {
-  const url = resolveHiveUrl(target);
-  if (!url) { vscode.window.showErrorMessage('PocketHive: Hive URL is required.'); return; }
-  await updateActiveHiveUrl(url);
-  vscode.window.showInformationMessage(`PocketHive: active Hive URL set to ${url}.`);
-}
-
-export async function removeHiveUrl(target: unknown): Promise<void> {
-  const url = resolveHiveUrl(target);
-  if (!url) { vscode.window.showErrorMessage('PocketHive: Hive URL is required.'); return; }
-  const choice = await vscode.window.showWarningMessage(`Remove Hive URL '${url}'?`, { modal: true }, 'Remove');
-  if (choice !== 'Remove') return;
-  const existing = getHiveUrls();
-  const updated = existing.filter((entry) => entry !== url);
-  await updateHiveUrls(updated);
-  const active = getActiveHiveUrl();
-  if (active === url) {
-    const next = updated[0] ?? null;
-    await updateActiveHiveUrl(next);
-    if (next) vscode.window.showInformationMessage(`PocketHive: active Hive URL set to ${next}.`);
-  }
-}
 
 export async function listSwarms(): Promise<void> {
   await withService('orchestratorUrl', async (baseUrl, authToken) => {
@@ -362,7 +338,7 @@ async function withService<T>(key: 'orchestratorUrl' | 'scenarioManagerUrl', act
   const outputChannel = getOutputChannel();
   outputChannel.appendLine(`[${new Date().toISOString()}] CONFIG ${key}=${config.baseUrl}`);
   try {
-    return await action(config.baseUrl, undefined);
+    return await action(config.baseUrl, config.authToken);
   } catch (error) {
     const message = formatError(error);
     outputChannel.appendLine(`[${new Date().toISOString()}] ERROR ${message}`);
@@ -395,12 +371,5 @@ function resolveSwarmId(arg: unknown): string | undefined {
       if (s && typeof s === 'object' && 'id' in s) { const id = (s as { id?: unknown }).id; return typeof id === 'string' ? id : undefined; }
     }
   }
-  return undefined;
-}
-
-function resolveHiveUrl(arg: unknown): string | undefined {
-  if (!arg) return undefined;
-  if (typeof arg === 'string') return arg;
-  if (typeof arg === 'object' && 'url' in arg && typeof (arg as { url?: unknown }).url === 'string') return (arg as { url: string }).url;
   return undefined;
 }

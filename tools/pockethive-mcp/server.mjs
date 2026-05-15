@@ -4,38 +4,24 @@
  * PocketHive Scenario Bundles MCP Server
  *
  * Provides tools for the full TDD lifecycle of scenario bundles:
- *   - Validate templates offline
- *   - Sync bundles to running Scenario Manager
+ *   - Validate bundle structure
  *   - Create / start / stop / remove swarms
  *   - Inspect swarm status, queues, control-plane messages
  *   - Tap data-plane messages for debugging
- *   - Read docker logs for worker containers
  *   - Read swarm journal for timeline inspection
  *
- * Designed to be spawned by Amazon Q via .amazonq/mcp.json.
+ * Designed to be spawned by IDEs and agent clients.
  */
 
-import { spawn, execFileSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync, writeFileSync, unlinkSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync, unlinkSync } from "node:fs";
+import { createServer } from "node:http";
+import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createRequire } from "node:module";
 import { platform } from "node:os";
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-
-// Load CommonJS dev-tools
-const require = createRequire(import.meta.url);
-const { DockerTool } = require("./dev-tools/docker-tool.cjs");
-const { GitTool } = require("./dev-tools/git-tool.cjs");
-const { MavenTool } = require("./dev-tools/maven-tool.cjs");
-const { NpmTool } = require("./dev-tools/npm-tool.cjs");
-
-const dockerTool = new DockerTool();
-const gitTool = new GitTool();
-const mavenTool = new MavenTool();
-const npmTool = new NpmTool();
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -51,23 +37,9 @@ function getBundlesDir() {
   return BUNDLES_ROOT ? resolve(BUNDLES_ROOT) : BUNDLES_DIR_DEFAULT;
 }
 
-// Load .env
-const envFile = resolve(REPO_ROOT, ".env");
-if (existsSync(envFile)) {
-  for (const line of readFileSync(envFile, "utf8").split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const eq = trimmed.indexOf("=");
-    if (eq < 1) continue;
-    const key = trimmed.slice(0, eq).trim();
-    // Always override — ensures a re-saved .env (e.g. CRLF→LF fix) takes effect
-    // Strip any stray \r that survived trimming on the value side
-    process.env[key] = trimmed.slice(eq + 1).replace(/\r$/, "");
-  }
-}
-
 const POCKETHIVE_ROOT = process.env.POCKETHIVE_ROOT || "";
 const BASE_URL = process.env.POCKETHIVE_BASE_URL || "http://localhost:8088";
+const POCKETHIVE_AUTH_TOKEN = process.env.POCKETHIVE_AUTH_TOKEN || "";
 // PH_BUNDLES_ROOTS: JSON array of all configured bundle roots injected by the IDE plugin.
 // Falls back to empty array when running standalone (bundles repo mode uses BUNDLES_DIR instead).
 let _bundlesRoots = [];
@@ -82,121 +54,22 @@ const ORCH_URL = process.env.ORCHESTRATOR_BASE_URL || `${BASE_URL}/orchestrator`
 const SM_URL = process.env.SCENARIO_MANAGER_BASE_URL || `${BASE_URL}/scenario-manager`;
 const RABBIT_MGMT = process.env.RABBITMQ_MANAGEMENT_BASE_URL || `${BASE_URL}/rabbitmq/api`;
 const PROM_URL = process.env.PROMETHEUS_BASE_URL || `${BASE_URL}/prometheus`;
-// TCP_MOCK_BASE_URL and WIREMOCK_BASE_URL can be set explicitly in .env to override
+// TCP_MOCK_BASE_URL and WIREMOCK_BASE_URL can be set explicitly to override
 // the auto-derived URLs (host from BASE_URL, standard ports 8083/8080).
-
-const IS_WINDOWS = platform() === "win32";
-const WSL_EXE = "C:\\Windows\\System32\\wsl.exe";
-const PS_EXE = "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe";
 
 // ── Path helpers ──────────────────────────────────────────────────────────────
 
-/** Detect WSL mount prefix (/mnt or empty) by probing the live WSL instance. Cached after first call. */
-let _wslMountPrefix = null;
-async function getWslMountPrefix() {
-  if (_wslMountPrefix !== null) return _wslMountPrefix;
-  // Derive from POCKETHIVE_ROOT if it is already a POSIX path — avoids a WSL probe
-  // that can cache a wrong result if WSL isn't fully up at MCP server start time.
-  const pr = process.env.POCKETHIVE_ROOT || "";
-  if (pr.startsWith('/')) {
-    _wslMountPrefix = pr.startsWith('/mnt/') ? '/mnt' : '';
-    return _wslMountPrefix;
-  }
-  // Probe live WSL instance
-  try {
-    const result = execFileSync(WSL_EXE, ['bash', '-lc', 'test -d /mnt/c && echo mnt || echo root'],
-      { encoding: 'utf8', timeout: 5000 }).trim();
-    _wslMountPrefix = result === 'mnt' ? '/mnt' : '';
-  } catch {
-    _wslMountPrefix = '/mnt'; // safe default
-  }
-  return _wslMountPrefix;
-}
-
-/** Convert a Windows path to a WSL path using the detected mount prefix. No-op if already POSIX. */
-function toWslPath(p, mountPrefix = '/mnt') {
-  if (!p) return p;
-  if (p.startsWith('/')) return p;
-  return p.replace(/\\/g, '/').replace(/^([A-Za-z]):/, (_, d) => `${mountPrefix}/${d.toLowerCase()}`);
-}
-
-/** Async version — detects the correct mount prefix before converting. */
-async function toWslPathAsync(p) {
-  return toWslPath(p, await getWslMountPrefix());
-}
-
-/** Join path segments, normalising backslashes. */
-function joinPath(base, ...parts) {
-  if (!base) return parts.join("/");
-  const b = base.replace(/\\/g, "/").replace(/\/+$/, "");
-  return [b, ...parts.map(p => p.replace(/\\/g, "/"))].join("/");
-}
-
-// ── Shell execution ───────────────────────────────────────────────────────────
-
-/**
- * Run a bash command via WSL.
- * On Windows: uses execFileSync(WSL_EXE, ['bash', '-lc', cmd]) — synchronous but
- * runs in a proper login shell with java/mvn/docker on PATH.
- * On Linux/macOS: uses execFileSync with bash directly.
- *
- * NOTE: Do NOT use this for commands that spawn the JVM — those hang due to a
- * WSL2 pipe-inheritance bug. Use wslRunToFile() for java invocations instead.
- */
-async function shell(cmd, cwd, timeoutMs = 120000) {
-  try {
-    const opts = { encoding: "utf8", timeout: timeoutMs, stdio: ["ignore", "pipe", "pipe"] };
-    let result;
-    if (!IS_WINDOWS) {
-      result = execFileSync("bash", ["-c", `cd '${cwd || REPO_ROOT}' && ${cmd}`], opts);
-    } else {
-      const prefix = await getWslMountPrefix();
-      // Only cd if a cwd was explicitly provided — docker/git commands don't need it
-      // and a wrong WSL mount prefix would cause every command to fail.
-      const cdPart = cwd ? `cd '${toWslPath(cwd, prefix)}' && ` : "";
-      result = execFileSync(WSL_EXE, ["bash", "-lc", `${cdPart}${cmd}`], opts);
-    }
-    return result.trim();
-  } catch (e) {
-    throw new Error((e.stderr || e.stdout || e.message || String(e)).toString().trim());
+function ensureInside(base, target) {
+  const rel = relative(resolve(base), resolve(target));
+  if (rel.startsWith("..") || rel === ".." || resolve(rel) === rel) {
+    throw new Error(`Path escapes configured bundle root: ${target}`);
   }
 }
 
-/**
- * Run a bash command via WSL where the command spawns a JVM.
- * Uses PowerShell Start-Process to launch wsl in a completely detached Windows
- * process (no inherited pipe handles), writes output to a temp file, then reads it.
- * This is the only reliable way to run Java via WSL from a Windows Node process.
- */
-async function wslRunToFile(bashCmd, timeoutMs = 60000) {
-  const id = Date.now();
-  const OUT = `/c/Windows/Temp/mcp-wsl-out-${id}.txt`;
-  const DONE = `/c/Windows/Temp/mcp-wsl-done-${id}.txt`;
-
-  const fullCmd = `${bashCmd} >'${OUT}' 2>&1; echo $? >'${DONE}'`;
-  const ps1 = `$bashCmd = @'\n${fullCmd}\n'@\nStart-Process -FilePath '${WSL_EXE}' -ArgumentList @('bash', '-lc', $bashCmd) -WindowStyle Hidden -Wait\n`;
-  const ps1Path = `C:\\Windows\\Temp\\mcp-launch-${id}.ps1`;
-  writeFileSync(ps1Path, ps1, "utf8");
-
-  // Use async spawn so the Node event loop stays alive for MCP keepalive messages
-  await new Promise((res, rej) => {
-    const proc = spawn(PS_EXE,
-      ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ps1Path],
-      { stdio: "ignore" }
-    );
-    const t = setTimeout(() => { proc.kill(); rej(new Error(`wslRunToFile timed out after ${timeoutMs}ms`)); }, timeoutMs);
-    proc.on("close", () => { clearTimeout(t); res(); });
-    proc.on("error", err => { clearTimeout(t); rej(err); });
-  });
-
-  let output = "", exitCode = "?";
-  try { output = execFileSync(WSL_EXE, ["bash", "-c", `cat '${OUT}' 2>/dev/null`], { encoding: "utf8", timeout: 10000 }).trim(); } catch { /* ignore */ }
-  try { exitCode = execFileSync(WSL_EXE, ["bash", "-c", `cat '${DONE}' 2>/dev/null`], { encoding: "utf8", timeout: 5000 }).trim(); } catch { /* ignore */ }
-  try { execFileSync(WSL_EXE, ["bash", "-c", `rm -f '${OUT}' '${DONE}'`], { timeout: 3000 }); } catch { /* ignore */ }
-  try { unlinkSync(ps1Path); } catch { /* ignore */ }
-
-  if (exitCode !== "0") throw new Error(output || `exit ${exitCode}`);
-  return output;
+function bundleDir(bundle) {
+  const dir = resolve(getBundlesDir(), bundle);
+  ensureInside(getBundlesDir(), dir);
+  return dir;
 }
 
 // ── HTTP helper ───────────────────────────────────────────────────────────────
@@ -207,7 +80,11 @@ async function httpJson(url, opts = {}) {
   const timer = setTimeout(() => controller.abort(), opts.timeoutMs || 30000);
   const init = {
     method: opts.method || "GET",
-    headers: { "content-type": "application/json", ...(opts.headers || {}) },
+    headers: {
+      "content-type": "application/json",
+      ...(POCKETHIVE_AUTH_TOKEN ? { authorization: `Bearer ${POCKETHIVE_AUTH_TOKEN}` } : {}),
+      ...(opts.headers || {}),
+    },
     signal: controller.signal,
   };
   if (opts.body !== undefined) {
@@ -243,6 +120,8 @@ function rabbitAuth() {
 const server = new McpServer({ name: "pockethive-bundles", version: "1.0.0" });
 
 const HANDLER_TIMEOUT_MS = 150000; // 2.5 min max per tool call
+const APP_RESOURCE_MIME_TYPE = "text/html;profile=mcp-app";
+const EVIDENCE_WIDGET_URI = "ui://pockethive/evidence-summary-v1.html";
 
 function reg(name, desc, schema, handler) {
   server.registerTool(name, { title: name, description: desc, inputSchema: schema }, async (input = {}) => {
@@ -258,6 +137,22 @@ function reg(name, desc, schema, handler) {
       return { isError: true, content: [{ type: "text", text: `Error: ${err.message || err}` }] };
     }
   });
+}
+
+function jsonToolResult(data, extra = {}) {
+  return {
+    content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
+    ...extra,
+  };
+}
+
+async function runWithTimeout(name, handler, input) {
+  return await Promise.race([
+    handler(input),
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`Tool '${name}' timed out after ${HANDLER_TIMEOUT_MS / 1000}s`)), HANDLER_TIMEOUT_MS)
+    ),
+  ]);
 }
 
 // ── Bundle management ─────────────────────────────────────────────────────────
@@ -284,9 +179,10 @@ reg("bundle.list", "List all scenario bundles in this repo", {}, async () => {
 
 reg("bundle.read", "Read a file from a bundle (scenario.yaml, template, dataset, etc.)", {
   bundle: z.string().describe("Bundle name"),
-  file: z.string().describe("Relative path within the bundle, e.g. 'scenario.yaml' or 'templates/default/my-call.yaml'"),
+  file: z.string().describe("Relative path within the bundle, e.g. 'scenario.yaml' or 'templates/http/default/my-call.yaml'"),
 }, async ({ bundle, file }) => {
-  const path = resolve(getBundlesDir(), bundle, file);
+  const path = resolve(bundleDir(bundle), file);
+  ensureInside(bundleDir(bundle), path);
   if (!existsSync(path)) throw new Error(`File not found: ${path}`);
   const content = readFileSync(path, "utf8");
   const MAX = 100_000;
@@ -302,10 +198,9 @@ reg("bundle.scaffold", "Scaffold a new bundle directory with a canonical scenari
   pattern: z.enum(["rest-simple", "rest-rbuilder", "sequence", "tcp-simple", "blank"]),
   sutType: z.enum(["wiremock-local", "tcp-mock-local", "none"]).default("none"),
 }, async ({ bundleId, pattern, sutType }) => {
-  const { mkdirSync } = await import("node:fs");
-  const bundleDir = resolve(getBundlesDir(), bundleId);
-  if (existsSync(bundleDir)) throw new Error(`Bundle '${bundleId}' already exists at ${bundleDir}`);
-  mkdirSync(bundleDir, { recursive: true });
+  const targetBundleDir = bundleDir(bundleId);
+  if (existsSync(targetBundleDir)) throw new Error(`Bundle '${bundleId}' already exists at ${targetBundleDir}`);
+  mkdirSync(targetBundleDir, { recursive: true });
 
   const sutBaseUrl = sutType === "wiremock-local" ? "http://wiremock:8080"
     : sutType === "tcp-mock-local" ? "tcp://tcp-mock-server:8080"
@@ -325,7 +220,7 @@ reg("bundle.scaffold", "Scaffold a new bundle directory with a canonical scenari
         config: { inputs: { type: "SCHEDULER", scheduler: { ratePerSec: 10 } },
           worker: { message: { bodyType: "SIMPLE", body: "{}", headers: { "x-ph-call-id": "my-call", "x-ph-service-id": "default" } } } } },
       { role: "request-builder", image: "request-builder:latest", work: { in: { in: "build" }, out: { out: "proc" } },
-        config: { worker: { templateRoot: "/app/scenario/templates", serviceId: "default" } } },
+        config: { templateRoot: "/app/scenario/templates/http", serviceId: "default" } },
       { role: "processor", image: "processor:latest", work: { in: { in: "proc" }, out: { out: "post" } },
         config: { baseUrl: "{{ sut.endpoints['target'].baseUrl }}", worker: { mode: "THREAD_COUNT", threadCount: 5 } } },
       { role: "postprocessor", image: "postprocessor:latest", work: { in: { in: "post" } } },
@@ -355,22 +250,1288 @@ reg("bundle.scaffold", "Scaffold a new bundle directory with a canonical scenari
     description: `Scaffolded by bundle.scaffold (pattern: ${pattern})`,
     template: { image: "swarm-controller:latest", bees: beesByPattern[pattern] },
   };
-  writeFileSync(resolve(bundleDir, "scenario.yaml"), stringify(scenario), "utf8");
+  writeFileSync(resolve(targetBundleDir, "scenario.yaml"), stringify(scenario), "utf8");
 
   if (pattern === "rest-rbuilder") {
-    mkdirSync(resolve(bundleDir, "templates", "default"), { recursive: true });
+    mkdirSync(resolve(targetBundleDir, "templates", "http", "default"), { recursive: true });
     const tpl = `serviceId: default\ncallId: my-call\nprotocol: HTTP\nmethod: POST\npathTemplate: /api/endpoint\nbodyTemplate: |\n  {}\nheadersTemplate:\n  Content-Type: application/json\n`;
-    writeFileSync(resolve(bundleDir, "templates", "default", "my-call.yaml"), tpl, "utf8");
+    writeFileSync(resolve(targetBundleDir, "templates", "http", "default", "my-call.yaml"), tpl, "utf8");
   }
 
   if (sutType !== "none") {
-    mkdirSync(resolve(bundleDir, "sut", sutType), { recursive: true });
+    mkdirSync(resolve(targetBundleDir, "sut", sutType), { recursive: true });
     const sut = `id: ${sutType}\nname: ${sutType}\ntype: sandbox\nendpoints:\n  target:\n    kind: ${sutProtocol}\n    baseUrl: ${sutBaseUrl}\n`;
-    writeFileSync(resolve(bundleDir, "sut", sutType, "sut.yaml"), sut, "utf8");
+    writeFileSync(resolve(targetBundleDir, "sut", sutType, "sut.yaml"), sut, "utf8");
   }
 
-  return { created: true, bundleId, path: bundleDir, pattern, sutType };
+  return { created: true, bundleId, path: targetBundleDir, pattern, sutType };
 });
+
+// ── Novice bundle wizard ─────────────────────────────────────────────────────
+
+const WIZARD_SESSIONS = new Map();
+const WIZARD_SESSION_TTL_MS = 2 * 60 * 60 * 1000;
+const WIZARD_CANONICAL_FIELDS = [
+  "bundleId",
+  "protocol",
+  "target",
+  "targetBaseUrl",
+  "endpoints",
+  "requestBody",
+  "tcpPayload",
+  "defaultRatePerSec",
+  "nftRatePerSec",
+  "trafficShape",
+  "runDuration",
+  "nftDuration",
+  "dataSource",
+  "csvColumns",
+  "redisLists",
+  "redisOutput",
+  "auth",
+  "authTokenUrl",
+  "authClientId",
+  "authSecretSource",
+  "authSecretEnvVar",
+  "sutNftUrl",
+  "sutDouble",
+  "mockEndpoints",
+  "resultRules",
+  "resultCodePattern",
+  "successCodes",
+  "performanceObjective",
+  "clickhouse",
+  "grafanaDashboard",
+  "docs",
+];
+
+const WIZARD_ALIASES = {
+  endpoint: "endpoints",
+  ratePerSec: "defaultRatePerSec",
+  rate: "defaultRatePerSec",
+  nft_rate: "nftRatePerSec",
+  traffic_shape: "trafficShape",
+  run_duration: "runDuration",
+  nft_duration: "nftDuration",
+  data_source: "dataSource",
+  csv_columns: "csvColumns",
+  redis_lists: "redisLists",
+  redis_output: "redisOutput",
+  auth_token_url: "authTokenUrl",
+  auth_client_id: "authClientId",
+  auth_secret_source: "authSecretSource",
+  auth_secret_env_var: "authSecretEnvVar",
+  sut_base_url: "targetBaseUrl",
+  sut_nft_url: "sutNftUrl",
+  sut_double: "sutDouble",
+  mock_endpoints: "mockEndpoints",
+  result_rules: "resultRules",
+  result_code_pattern: "resultCodePattern",
+  success_codes: "successCodes",
+  performance_objective: "performanceObjective",
+  grafana_dashboard: "grafanaDashboard",
+};
+
+const WIZARD_QUESTION_IDS = [...WIZARD_CANONICAL_FIELDS, ...Object.keys(WIZARD_ALIASES)];
+const WIZARD_PROTOCOLS = ["REST", "TCP", "SEQUENCE"];
+const WIZARD_TARGETS = ["wiremock-local", "tcp-mock-local", "external"];
+const WIZARD_DATA_SOURCES = ["SCHEDULER", "CSV_DATASET", "REDIS_DATASET"];
+const WIZARD_TRAFFIC_SHAPES = ["smoke", "ramp_steady", "spike", "soak", "flat"];
+const WIZARD_AUTH_TYPES = [
+  "none",
+  "oauth2_client_credentials",
+  "bearer_token_static",
+  "basic_auth",
+  "api_key",
+  "hmac",
+  "aws_sig_v4",
+  "iso8583_mac",
+  "mtls",
+];
+const WIZARD_SUT_DOUBLES = ["real_system", "wiremock", "tcp_mock", "wiremock_and_tcp"];
+const WIZARD_CLICKHOUSE_MODES = ["yes_for_nft_only", "yes_always", "no"];
+const WIZARD_GRAFANA_DASHBOARDS = ["rtt_overview", "tx_outcomes", "quality", "pipeline_observability", "none"];
+
+const WIZARD_QUESTIONS = {
+  bundleId: {
+    prompt: "What should the bundle id be? Use lowercase letters, numbers, and hyphens, for example onboarding-smoke.",
+  },
+  protocol: {
+    prompt: "Which protocol should this bundle exercise?",
+    options: WIZARD_PROTOCOLS,
+  },
+  target: {
+    prompt: "Which target should the generated bundle bind to?",
+    options: WIZARD_TARGETS,
+  },
+  targetBaseUrl: {
+    prompt: "What is the external target base URL? Use http(s):// for REST/SEQUENCE or tcp:// for TCP.",
+  },
+  endpoints: {
+    prompt: "Which endpoint(s) should be called? Use METHOD /path, one per line, for example POST /api/onboarding.",
+  },
+  requestBody: {
+    prompt: "What request body/template should be sent for this endpoint?",
+  },
+  tcpPayload: {
+    prompt: "What TCP payload should the generator send?",
+  },
+  defaultRatePerSec: {
+    prompt: "What default generation rate should be used, in requests/messages per second?",
+  },
+  trafficShape: {
+    prompt: "What traffic shape should this scenario use?",
+    options: WIZARD_TRAFFIC_SHAPES,
+  },
+  runDuration: {
+    prompt: "How long should the default profile run, for example 60s or 5m?",
+  },
+  dataSource: {
+    prompt: "Where does test data come from?",
+    options: WIZARD_DATA_SOURCES,
+  },
+  csvColumns: {
+    prompt: "What columns should the sample CSV dataset contain?",
+  },
+  redisLists: {
+    prompt: "Which Redis dataset list names should this scenario read from?",
+  },
+  auth: {
+    prompt: "Does the target require authentication?",
+    options: WIZARD_AUTH_TYPES,
+  },
+  authTokenUrl: {
+    prompt: "What token URL should the OAuth2 profile use?",
+  },
+  authClientId: {
+    prompt: "What client id, username, or key id should the auth profile use?",
+  },
+  authSecretEnvVar: {
+    prompt: "Which environment variable provides the auth secret at runtime?",
+  },
+  sutDouble: {
+    prompt: "Is the target real, WireMock, TCP mock, or both?",
+    options: WIZARD_SUT_DOUBLES,
+  },
+  resultRules: {
+    prompt: "Is there a business result code to extract from the response?",
+    options: ["yes", "no"],
+  },
+  resultCodePattern: {
+    prompt: "What regex extracts the business result code? It must have one capture group.",
+  },
+  successCodes: {
+    prompt: "Which business result code values count as success?",
+  },
+};
+
+function canonicalWizardQuestionId(questionId) {
+  const id = WIZARD_ALIASES[questionId] || questionId;
+  if (!WIZARD_CANONICAL_FIELDS.includes(id)) throw new Error(`Unknown wizard questionId '${questionId}'`);
+  return id;
+}
+
+function parseWizardList(value) {
+  if (value === undefined || value === null || value === "") return [];
+  if (Array.isArray(value)) return value.map(v => String(v).trim()).filter(Boolean);
+  return String(value).split(/\r?\n|,/).map(v => v.trim()).filter(Boolean);
+}
+
+function normalizeWizardBoolean(value) {
+  if (typeof value === "boolean") return value ? "yes" : "no";
+  const normalized = String(value).trim().toLowerCase();
+  if (["yes", "y", "true", "1"].includes(normalized)) return "yes";
+  if (["no", "n", "false", "0"].includes(normalized)) return "no";
+  throw new Error("Answer must be yes/no or boolean");
+}
+
+function normalizeWizardEnum(questionId, answer, allowed) {
+  const value = String(answer).trim();
+  if (!allowed.includes(value)) throw new Error(`${questionId} must be one of: ${allowed.join(", ")}`);
+  return value;
+}
+
+function slug(value, fallback = "main") {
+  const s = String(value || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return s || fallback;
+}
+
+function normalizeWizardEndpoint(entry, index = 0) {
+  if (typeof entry === "object" && entry !== null) {
+    const method = String(entry.method || "").trim().toUpperCase();
+    const path = String(entry.path || "").trim();
+    if (!method || !path.startsWith("/")) throw new Error("endpoint object must include method and an absolute /path");
+    return {
+      method,
+      path,
+      callId: slug(entry.callId || `${method}-${path}` || `call-${index + 1}`, `call-${index + 1}`),
+      description: entry.description ? String(entry.description).trim() : "",
+      bodyTemplate: entry.bodyTemplate !== undefined ? String(entry.bodyTemplate) : undefined,
+    };
+  }
+  const text = String(entry).trim();
+  const match = text.match(/^([A-Za-z]+)\s+(\S+)(?:\s+[-–]\s+(.+))?$/);
+  if (!match || !match[2].startsWith("/")) throw new Error("endpoint must be in the form METHOD /path");
+  return {
+    method: match[1].toUpperCase(),
+    path: match[2],
+    callId: slug(`${match[1]}-${match[2]}`, `call-${index + 1}`),
+    description: match[3] ? match[3].trim() : "",
+  };
+}
+
+function normalizeWizardEndpoints(answer) {
+  const entries = Array.isArray(answer)
+    ? answer
+    : typeof answer === "object" && answer !== null
+      ? [answer]
+      : String(answer).split(/\r?\n/).map(v => v.trim()).filter(Boolean);
+  return entries.map((entry, index) => normalizeWizardEndpoint(entry, index));
+}
+
+function normalizeWizardMockEndpoint(entry, index = 0) {
+  if (typeof entry === "object" && entry !== null) {
+    if (entry.method || entry.path) {
+      const endpoint = normalizeWizardEndpoint(entry, index);
+      return {
+        ...endpoint,
+        status: Number(entry.status || 200),
+        responseBody: entry.responseBody ?? { ok: true, callId: endpoint.callId },
+      };
+    }
+    return entry;
+  }
+  const endpoint = normalizeWizardEndpoint(entry, index);
+  return { ...endpoint, status: 200, responseBody: { ok: true, callId: endpoint.callId } };
+}
+
+function normalizeWizardAnswer(questionId, answer) {
+  questionId = canonicalWizardQuestionId(questionId);
+  if (answer === undefined || answer === null) return undefined;
+  if (["defaultRatePerSec", "nftRatePerSec"].includes(questionId)) {
+    const value = Number(answer);
+    if (!Number.isFinite(value) || value <= 0) throw new Error(`${questionId} must be a positive number`);
+    return value;
+  }
+  if (questionId === "endpoints") {
+    return normalizeWizardEndpoints(answer);
+  }
+  if (questionId === "protocol") {
+    const value = String(answer).trim().toUpperCase();
+    if (value === "HTTP") return "REST";
+    return normalizeWizardEnum(questionId, value, WIZARD_PROTOCOLS);
+  }
+  if (questionId === "target") {
+    return normalizeWizardEnum(questionId, answer, WIZARD_TARGETS);
+  }
+  if (questionId === "dataSource") {
+    return normalizeWizardEnum(questionId, String(answer).trim().toUpperCase(), WIZARD_DATA_SOURCES);
+  }
+  if (questionId === "trafficShape") {
+    return normalizeWizardEnum(questionId, String(answer).trim().toLowerCase(), WIZARD_TRAFFIC_SHAPES);
+  }
+  if (questionId === "auth") {
+    return normalizeWizardEnum(questionId, String(answer).trim().toLowerCase(), WIZARD_AUTH_TYPES);
+  }
+  if (questionId === "authSecretSource") {
+    return normalizeWizardEnum(questionId, String(answer).trim().toLowerCase(), ["env_var", "file"]);
+  }
+  if (questionId === "sutDouble") {
+    return normalizeWizardEnum(questionId, String(answer).trim().toLowerCase(), WIZARD_SUT_DOUBLES);
+  }
+  if (["redisOutput", "resultRules", "docs"].includes(questionId)) {
+    return normalizeWizardBoolean(answer);
+  }
+  if (questionId === "clickhouse") {
+    return normalizeWizardEnum(questionId, String(answer).trim().toLowerCase(), WIZARD_CLICKHOUSE_MODES);
+  }
+  if (questionId === "grafanaDashboard") {
+    return normalizeWizardEnum(questionId, String(answer).trim().toLowerCase(), WIZARD_GRAFANA_DASHBOARDS);
+  }
+  if (["csvColumns", "redisLists", "successCodes"].includes(questionId)) {
+    return parseWizardList(answer);
+  }
+  if (questionId === "mockEndpoints") {
+    const entries = Array.isArray(answer)
+      ? answer
+      : typeof answer === "object" && answer !== null
+        ? [answer]
+        : String(answer).split(/\r?\n/).map(v => v.trim()).filter(Boolean);
+    return entries.map((entry, index) => normalizeWizardMockEndpoint(entry, index));
+  }
+  return String(answer).trim();
+}
+
+function applyWizardAnswers(target, source = {}) {
+  for (const [rawId, value] of Object.entries(source)) {
+    if (value === undefined || rawId === "intent") continue;
+    if (!WIZARD_CANONICAL_FIELDS.includes(rawId) && !WIZARD_ALIASES[rawId]) continue;
+    const id = canonicalWizardQuestionId(rawId);
+    target[id] = normalizeWizardAnswer(id, value);
+  }
+}
+
+function wizardAnswersWithDefaults(answers) {
+  const protocol = answers.protocol;
+  const target = answers.target;
+  const defaultSutDouble = target === "external"
+    ? "real_system"
+    : target === "tcp-mock-local"
+      ? "tcp_mock"
+      : "wiremock";
+  return {
+    dataSource: "SCHEDULER",
+    trafficShape: "ramp_steady",
+    runDuration: "60s",
+    auth: "none",
+    authSecretSource: "env_var",
+    sutDouble: defaultSutDouble,
+    redisOutput: "no",
+    resultRules: "no",
+    clickhouse: "yes_for_nft_only",
+    grafanaDashboard: "rtt_overview",
+    docs: "yes",
+    ...answers,
+    protocol,
+    target,
+  };
+}
+
+function wizardAssumptions(rawAnswers, answers) {
+  const assumptions = [];
+  for (const [field, value] of Object.entries(wizardAnswersWithDefaults({}))) {
+    if (rawAnswers[field] === undefined && answers[field] !== undefined) assumptions.push(`${field}=${value}`);
+  }
+  if (answers.mockEndpoints?.length === undefined && answers.sutDouble !== "real_system" && answers.endpoints?.length) {
+    assumptions.push("mockEndpoints generated from endpoints");
+  }
+  if (answers.dataSource === "CSV_DATASET") {
+    assumptions.push("CSV sample artifact generated; runtime still uses Scheduler because the current generator capability manifest exposes SCHEDULER and REDIS_DATASET inputs");
+  }
+  return assumptions;
+}
+
+function wizardMissingQuestions(answers) {
+  answers = wizardAnswersWithDefaults(answers);
+  const missing = [];
+  for (const id of ["bundleId", "protocol", "target", "defaultRatePerSec"]) {
+    if (answers[id] === undefined || answers[id] === "") missing.push(id);
+  }
+  if (answers.target === "external" && !answers.targetBaseUrl) missing.push("targetBaseUrl");
+  if (answers.protocol === "REST" || answers.protocol === "SEQUENCE") {
+    if (!answers.endpoints?.length) missing.push("endpoints");
+    const firstEndpoint = answers.endpoints?.[0];
+    if (firstEndpoint && ["POST", "PUT", "PATCH"].includes(firstEndpoint.method) && !firstEndpoint.bodyTemplate && !answers.requestBody) {
+      missing.push("requestBody");
+    }
+  }
+  if (answers.protocol === "TCP" && !answers.tcpPayload) missing.push("tcpPayload");
+  if (answers.dataSource === "CSV_DATASET" && !answers.csvColumns?.length) missing.push("csvColumns");
+  if (answers.dataSource === "REDIS_DATASET" && !answers.redisLists?.length) missing.push("redisLists");
+  if (answers.auth === "oauth2_client_credentials") {
+    for (const id of ["authTokenUrl", "authClientId", "authSecretEnvVar"]) {
+      if (!answers[id]) missing.push(id);
+    }
+  } else if (answers.auth !== "none") {
+    if (!answers.authSecretEnvVar) missing.push("authSecretEnvVar");
+  }
+  if (answers.resultRules === "yes") {
+    if (!answers.resultCodePattern) missing.push("resultCodePattern");
+    if (!answers.successCodes?.length) missing.push("successCodes");
+  }
+  return missing;
+}
+
+function validateWizardAnswers(answers) {
+  answers = wizardAnswersWithDefaults(answers);
+  const errors = [];
+  if (answers.bundleId && !/^[a-z0-9][a-z0-9-]*$/.test(answers.bundleId)) {
+    errors.push("bundleId must use lowercase letters, numbers, and hyphens only");
+  }
+  if (answers.protocol === "TCP" && answers.target === "wiremock-local") {
+    errors.push("TCP bundles cannot target wiremock-local; use tcp-mock-local or external");
+  }
+  if ((answers.protocol === "REST" || answers.protocol === "SEQUENCE") && answers.target === "tcp-mock-local") {
+    errors.push(`${answers.protocol} bundles cannot target tcp-mock-local; use wiremock-local or external`);
+  }
+  if (answers.target === "external" && answers.targetBaseUrl) {
+    try { new URL(answers.targetBaseUrl); } catch { errors.push("targetBaseUrl must be a valid URL"); }
+  }
+  if (answers.protocol === "TCP" && answers.auth && !["none", "iso8583_mac", "mtls"].includes(answers.auth)) {
+    errors.push("TCP wizard bundles support auth none, iso8583_mac, or mtls only");
+  }
+  if (answers.resultCodePattern) {
+    try {
+      const regex = new RegExp(answers.resultCodePattern);
+      if (regex.exec("")?.length > 2) errors.push("resultCodePattern must have at most one capture group");
+    } catch (e) {
+      errors.push(`resultCodePattern must be a valid regex: ${e.message}`);
+    }
+  }
+  return errors;
+}
+
+function wizardNextQuestion(answers) {
+  const id = wizardMissingQuestions(answers)[0];
+  return id ? { id, ...WIZARD_QUESTIONS[id] } : null;
+}
+
+function wizardPattern(answers) {
+  answers = wizardAnswersWithDefaults(answers);
+  if (answers.protocol === "TCP") return "tcp-simple";
+  if (answers.protocol === "SEQUENCE") return "sequence";
+  if (answers.dataSource === "REDIS_DATASET" && answers.redisOutput === "yes") return "redis-loop";
+  return "rest-rbuilder";
+}
+
+function wizardTarget(answers) {
+  answers = wizardAnswersWithDefaults(answers);
+  if (answers.target === "external") {
+    return {
+      id: "external-target",
+      kind: answers.protocol === "TCP" ? "TCP" : "HTTP",
+      baseUrl: answers.targetBaseUrl,
+      endpointKey: answers.protocol === "TCP" ? "tcp-server" : "default",
+    };
+  }
+  if (answers.target === "tcp-mock-local") {
+    return { id: "tcp-mock-local", kind: "TCP", baseUrl: "tcp://tcp-mock-server:8080", endpointKey: "tcp-server" };
+  }
+  return { id: "wiremock-local", kind: "HTTP", baseUrl: "http://wiremock:8080", endpointKey: "default" };
+}
+
+function wizardMockEndpoints(answers) {
+  answers = wizardAnswersWithDefaults(answers);
+  if (answers.mockEndpoints?.length) return answers.mockEndpoints;
+  if (answers.protocol === "TCP") {
+    return [{ id: "tcp-request", request: answers.tcpPayload, response: "OK" }];
+  }
+  return (answers.endpoints || []).map((endpoint, index) => ({
+    ...endpoint,
+    status: 200,
+    responseBody: { ok: true, callId: endpoint.callId || `call-${index + 1}` },
+  }));
+}
+
+function wizardAuthType(answers) {
+  const map = {
+    oauth2_client_credentials: "OAUTH2_CLIENT_CREDENTIALS",
+    bearer_token_static: "STATIC_TOKEN",
+    basic_auth: "BASIC_AUTH",
+    api_key: "API_KEY",
+    hmac: "HMAC_SIGNATURE",
+    aws_sig_v4: "AWS_SIGNATURE_V4",
+    iso8583_mac: "ISO8583_MAC",
+    mtls: "TLS_CLIENT_CERT",
+  };
+  return map[answers.auth];
+}
+
+function wizardAuthProfiles(answers) {
+  const profileId = "wizard-auth";
+  const secretRef = answers.authSecretSource === "file"
+    ? { file: answers.authSecretEnvVar }
+    : { env: answers.authSecretEnvVar };
+  const profile = { type: wizardAuthType(answers), storage: { mode: answers.auth === "oauth2_client_credentials" ? "REDIS" : "NONE" } };
+  if (answers.auth === "oauth2_client_credentials") {
+    profile.storage.tokenKey = `${answers.bundleId}.wizard-auth`;
+    profile.refresh = { refreshAheadSeconds: 60, leaseSeconds: 15 };
+    profile.tokenUrl = answers.authTokenUrl;
+    profile.clientId = answers.authClientId;
+    profile.clientSecret = secretRef;
+  } else if (answers.auth === "bearer_token_static") {
+    profile.token = secretRef;
+  } else if (answers.auth === "basic_auth") {
+    profile.username = answers.authClientId || "wizard-user";
+    profile.password = secretRef;
+  } else if (answers.auth === "api_key") {
+    profile.key = secretRef;
+    profile.headerName = "X-Api-Key";
+  } else if (answers.auth === "hmac") {
+    profile.secretKey = secretRef;
+  } else if (answers.auth === "aws_sig_v4") {
+    profile.accessKeyId = answers.authClientId || "WIZARD_ACCESS_KEY";
+    profile.secretAccessKey = secretRef;
+    profile.region = "eu-west-1";
+    profile.service = "execute-api";
+  } else if (answers.auth === "iso8583_mac") {
+    profile.macKey = secretRef;
+  } else if (answers.auth === "mtls") {
+    profile.keyStorePath = "/run/secrets/client.p12";
+    profile.keyStorePassword = secretRef;
+  }
+  return { [profileId]: profile };
+}
+
+function wizardAuthRef(answers) {
+  const applyAs = answers.protocol === "TCP"
+    ? answers.auth === "mtls" ? "MTLS_CLIENT_CERT" : "ISO8583_MAC_FIELD"
+    : answers.auth === "bearer_token_static" || answers.auth === "oauth2_client_credentials"
+      ? "HTTP_AUTHORIZATION_BEARER"
+      : answers.auth === "api_key"
+        ? "HTTP_HEADER"
+        : "HTTP_HEADER";
+  return { profileId: "wizard-auth", applyAs };
+}
+
+function wizardFlowDocument(session, answers, target) {
+  const endpointRows = (answers.endpoints || []).map((endpoint, index) =>
+    `| ${index + 1} | ${endpoint.callId} | ${endpoint.method} | ${endpoint.path} | ${endpoint.description || "Generated by wizard"} |`
+  );
+  return [
+    `# ${answers.bundleId} Flow`,
+    "",
+    `Intent: ${session.intent}`,
+    "",
+    "## Runtime Contract Source",
+    "",
+    "- Scenario shape follows `docs/scenarios/SCENARIO_CONTRACT.md` and `io.pockethive.scenarios.Scenario`.",
+    "- Worker fields follow Scenario Manager capability manifests from `/api/capabilities`.",
+    "- Runtime validation should use `bundle.validate` with `validator: scenario-manager-dry-run` when Scenario Manager is available.",
+    "",
+    "## Target",
+    "",
+    `- SUT: ${target.id}`,
+    `- Endpoint key: ${target.endpointKey}`,
+    `- Base URL: ${target.baseUrl}`,
+    "",
+    "## Endpoints",
+    "",
+    "| # | callId | Method | Path | Notes |",
+    "|---|---|---|---|---|",
+    ...(endpointRows.length ? endpointRows : ["| 1 | tcp-request | TCP | n/a | TCP request-response |"]),
+    "",
+    "## Data And Traffic",
+    "",
+    `- Data source: ${answers.dataSource}`,
+    `- Default profile: ${answers.defaultRatePerSec} rps for ${answers.runDuration}`,
+    `- NFT profile: ${answers.nftRatePerSec || answers.defaultRatePerSec} rps for ${answers.nftDuration || answers.runDuration}`,
+    `- Traffic shape: ${answers.trafficShape}`,
+    "",
+    "## Evidence",
+    "",
+    `- ClickHouse mode: ${answers.clickhouse}`,
+    `- Grafana dashboard: ${answers.grafanaDashboard}`,
+    `- Objective: ${answers.performanceObjective || "not set"}`,
+  ].join("\n");
+}
+
+function wizardChangelog(session, answers) {
+  return [
+    "# Changelog",
+    "",
+    `## ${new Date().toISOString().slice(0, 10)} - Wizard generated`,
+    "",
+    `- Created bundle ${answers.bundleId} from wizard intent.`,
+    `- Pattern: ${wizardPattern(answers)}.`,
+    `- Auth: ${answers.auth}.`,
+    `- Data source: ${answers.dataSource}.`,
+    "",
+    "### Evidence",
+    "",
+    "- Pending first live run.",
+  ].join("\n");
+}
+
+function wizardPlan(session) {
+  const answers = wizardAnswersWithDefaults(session.answers);
+  const missing = wizardMissingQuestions(answers);
+  const errors = validateWizardAnswers(answers);
+  const ready = missing.length === 0 && errors.length === 0;
+  const bundleIdValid = answers.bundleId && /^[a-z0-9][a-z0-9-]*$/.test(answers.bundleId);
+  const target = answers.target && answers.protocol && (answers.target !== "external" || answers.targetBaseUrl)
+    ? wizardTarget(answers)
+    : null;
+  return {
+    sessionId: session.sessionId,
+    status: ready ? "ready" : "gathering",
+    intent: session.intent,
+    ready,
+    missing,
+    errors,
+    nextQuestion: missing.length ? wizardNextQuestion(answers) : null,
+    assumptions: wizardAssumptions(session.answers, answers),
+    bundle: bundleIdValid ? { id: answers.bundleId, path: bundleDir(answers.bundleId) } : null,
+    scenario: answers.bundleId ? {
+      id: answers.bundleId,
+      protocol: answers.protocol ?? null,
+      pattern: answers.protocol ? wizardPattern(answers) : null,
+      target,
+      endpoints: answers.endpoints ?? [],
+      ratePerSec: answers.defaultRatePerSec ?? null,
+      dataSource: answers.dataSource,
+      trafficShape: answers.trafficShape,
+      runDuration: answers.runDuration,
+      sutDouble: answers.sutDouble,
+      auth: answers.auth,
+      observability: {
+        clickhouse: answers.clickhouse,
+        grafanaDashboard: answers.grafanaDashboard,
+        performanceObjective: answers.performanceObjective || null,
+      },
+    } : null,
+  };
+}
+
+function wizardSession(sessionId) {
+  const session = WIZARD_SESSIONS.get(sessionId);
+  if (!session) throw new Error(`No wizard session found for ${sessionId}`);
+  if (Date.now() - session.createdAtMs > WIZARD_SESSION_TTL_MS) {
+    WIZARD_SESSIONS.delete(sessionId);
+    throw new Error(`Wizard session expired for ${sessionId}`);
+  }
+  return session;
+}
+
+function cleanupWizardSessions() {
+  const now = Date.now();
+  for (const [sessionId, session] of WIZARD_SESSIONS.entries()) {
+    if (now - session.createdAtMs > WIZARD_SESSION_TTL_MS) WIZARD_SESSIONS.delete(sessionId);
+  }
+}
+
+async function writeWizardBundle(session) {
+  const { stringify } = await import("yaml").catch(() => ({ stringify: JSON.stringify }));
+  const answers = wizardAnswersWithDefaults(session.answers);
+  const target = wizardTarget(answers);
+  const targetBundleDir = bundleDir(answers.bundleId);
+  if (existsSync(targetBundleDir)) throw new Error(`Bundle '${answers.bundleId}' already exists at ${targetBundleDir}`);
+  mkdirSync(targetBundleDir, { recursive: true });
+
+  const filesCreated = [];
+  const writeGenerated = (relativePath, content) => {
+    const fullPath = resolve(targetBundleDir, relativePath);
+    mkdirSync(dirname(fullPath), { recursive: true });
+    writeFileSync(fullPath, content, "utf8");
+    filesCreated.push(relativePath);
+  };
+
+  const serviceId = answers.protocol === "SEQUENCE" ? "sequence" : "default";
+  const templateProtocolDir = answers.protocol === "TCP" ? "tcp" : "http";
+  const templateRoot = `/app/scenario/templates/${templateProtocolDir}`;
+  const processorBase = `{{ sut.endpoints['${target.endpointKey}'].baseUrl }}`;
+  const firstEndpoint = answers.endpoints?.[0] || { method: "POST", path: "/", callId: "main" };
+  const primaryCallId = answers.protocol === "TCP" ? "tcp-request" : firstEndpoint.callId || "main";
+  const callIdTemplate = answers.protocol === "SEQUENCE"
+    ? primaryCallId
+    : answers.endpoints?.length > 1
+      ? `{{ pickWeighted(${answers.endpoints.map(endpoint => `'${endpoint.callId}', 1`).join(", ")}) }}`
+      : primaryCallId;
+  const generatorInputConfig = answers.dataSource === "REDIS_DATASET"
+    ? {
+        type: "REDIS_DATASET",
+        redis: answers.redisLists.length === 1
+          ? { host: "redis", port: 6379, listName: answers.redisLists[0], ratePerSec: answers.defaultRatePerSec }
+          : {
+              host: "redis",
+              port: 6379,
+              sources: answers.redisLists.map(listName => ({ listName, weight: 1 })),
+              pickStrategy: "WEIGHTED_RANDOM",
+              ratePerSec: answers.defaultRatePerSec,
+            },
+      }
+    : { type: "SCHEDULER", scheduler: { ratePerSec: answers.defaultRatePerSec } };
+  const postprocessor = { role: "postprocessor", image: "postprocessor:latest", work: { in: { in: "post" } } };
+  const bees = [];
+
+  if (answers.protocol === "TCP") {
+    bees.push(
+      {
+        role: "generator",
+        image: "generator:latest",
+        work: { out: { out: "proc" } },
+        config: {
+          inputs: generatorInputConfig,
+          outputs: { type: "RABBITMQ" },
+          worker: {
+            message: {
+              bodyType: "SIMPLE",
+              body: answers.dataSource === "REDIS_DATASET" ? "{{ payload }}" : answers.tcpPayload,
+              headers: { "x-ph-call-id": primaryCallId },
+            },
+          },
+        },
+      },
+      {
+        role: "request-builder",
+        image: "request-builder:latest",
+        work: { in: { in: "proc" }, out: { out: "built" } },
+        config: { templateRoot, serviceId },
+      },
+      {
+        role: "processor",
+        image: "processor:latest",
+        work: { in: { in: "built" }, out: { out: "post" } },
+        config: { baseUrl: processorBase, worker: { mode: "THREAD_COUNT", threadCount: 5, tcpTransport: { type: "socket" } } },
+      },
+      postprocessor,
+    );
+  } else if (answers.protocol === "SEQUENCE") {
+    bees.push(
+      {
+        role: "generator",
+        image: "generator:latest",
+        work: { out: { out: "seq" } },
+        config: {
+          inputs: generatorInputConfig,
+          outputs: { type: "RABBITMQ" },
+          worker: { message: { bodyType: "SIMPLE", body: answers.dataSource === "REDIS_DATASET" ? "{{ payload }}" : (answers.requestBody || "{}") } },
+        },
+      },
+      {
+        role: "http-sequence",
+        image: "http-sequence:latest",
+        work: { in: { in: "seq" }, out: { out: "post" } },
+        config: {
+          worker: {
+            baseUrl: processorBase,
+            templateRoot,
+            serviceId,
+            threadCount: 1,
+            steps: answers.endpoints.map((endpoint, index) => ({ id: `step-${index + 1}-${endpoint.callId}`, callId: endpoint.callId })),
+            debugCapture: {
+              mode: "ERROR_ONLY",
+              includeHeaders: true,
+              includeRequest: true,
+              bodyPreviewBytes: 4096,
+              redisTtlSeconds: 120,
+            },
+          },
+        },
+      },
+      postprocessor,
+    );
+  } else {
+    bees.push(
+      {
+        role: "generator",
+        image: "generator:latest",
+        work: { out: { out: "build" } },
+        config: {
+          inputs: generatorInputConfig,
+          outputs: { type: "RABBITMQ" },
+          worker: {
+            message: {
+              bodyType: "SIMPLE",
+              body: answers.dataSource === "REDIS_DATASET" ? "{{ payload }}" : "{}",
+              headers: { "x-ph-call-id": callIdTemplate, "x-ph-service-id": serviceId },
+            },
+          },
+        },
+      },
+      {
+        role: "request-builder",
+        image: "request-builder:latest",
+        work: { in: { in: "build" }, out: { out: "proc" } },
+        config: { templateRoot, serviceId },
+      },
+      {
+        role: "processor",
+        image: "processor:latest",
+        work: { in: { in: "proc" }, out: { out: "post" } },
+        config: { baseUrl: processorBase, worker: { mode: "THREAD_COUNT", threadCount: 5 } },
+      },
+      postprocessor,
+    );
+  }
+
+  const scenario = {
+    id: answers.bundleId,
+    name: answers.bundleId,
+    description: `Generated by wizard.complete from intent: ${session.intent}`,
+    template: { image: "swarm-controller:latest", bees },
+    plan: {
+      version: 1,
+      source: "wizard.complete",
+      pattern: wizardPattern(answers),
+      profiles: {
+        smoke: { ratePerSec: 1, duration: "10s", trafficShape: "smoke" },
+        default: { ratePerSec: answers.defaultRatePerSec, duration: answers.runDuration, trafficShape: answers.trafficShape },
+        nft: {
+          ratePerSec: answers.nftRatePerSec || answers.defaultRatePerSec,
+          duration: answers.nftDuration || answers.runDuration,
+          trafficShape: answers.trafficShape,
+        },
+      },
+      endpoints: answers.endpoints || [],
+      dataSource: answers.dataSource,
+      observability: {
+        clickhouse: answers.clickhouse,
+        grafanaDashboard: answers.grafanaDashboard,
+        performanceObjective: answers.performanceObjective || null,
+        resultRules: answers.resultRules === "yes"
+          ? { resultCodePattern: answers.resultCodePattern, successCodes: answers.successCodes }
+          : null,
+      },
+    },
+  };
+  writeGenerated("scenario.yaml", stringify(scenario));
+
+  writeGenerated("variables.yaml", stringify({
+    version: 1,
+    definitions: [
+      { name: "ratePerSec", scope: "global", type: "float", required: true },
+      { name: "runDuration", scope: "global", type: "string", required: true },
+      { name: "trafficShape", scope: "global", type: "string", required: true },
+      { name: "targetBaseUrl", scope: "sut", type: "string", required: true },
+    ],
+    profiles: [
+      { id: "smoke", name: "Smoke" },
+      { id: "default", name: "Default" },
+      { id: "nft", name: "NFT" },
+    ],
+    values: {
+      global: {
+        smoke: { ratePerSec: 1, runDuration: "10s", trafficShape: "smoke" },
+        default: { ratePerSec: answers.defaultRatePerSec, runDuration: answers.runDuration, trafficShape: answers.trafficShape },
+        nft: {
+          ratePerSec: answers.nftRatePerSec || answers.defaultRatePerSec,
+          runDuration: answers.nftDuration || answers.runDuration,
+          trafficShape: answers.trafficShape,
+        },
+      },
+      sut: {
+        smoke: { [target.id]: { targetBaseUrl: target.baseUrl } },
+        default: { [target.id]: { targetBaseUrl: target.baseUrl } },
+        nft: { [target.id]: { targetBaseUrl: answers.sutNftUrl || target.baseUrl } },
+      },
+    },
+  }));
+
+  writeGenerated(`sut/${target.id}/sut.yaml`, stringify({
+    id: target.id,
+    name: target.id,
+    type: target.id.includes("local") ? "sandbox" : "external",
+    endpoints: { [target.endpointKey]: { kind: target.kind, baseUrl: target.baseUrl } },
+  }));
+
+  if (answers.auth !== "none") {
+    writeGenerated("authProfiles.yaml", stringify({ profiles: wizardAuthProfiles(answers) }));
+  }
+
+  if (answers.protocol === "TCP") {
+    const tcpTemplate = {
+      serviceId,
+      callId: primaryCallId,
+      protocol: "TCP",
+      behavior: "REQUEST_RESPONSE",
+      transport: "socket",
+      endTag: "ETX",
+      maxBytes: 8192,
+      bodyTemplate: answers.tcpPayload,
+      headersTemplate: { "x-ph-call-id": primaryCallId },
+    };
+    if (answers.auth !== "none") tcpTemplate.authRef = wizardAuthRef(answers);
+    writeGenerated(`templates/tcp/${serviceId}/${primaryCallId}.yaml`, stringify(tcpTemplate));
+  } else {
+    for (const endpoint of answers.endpoints) {
+      const template = {
+        serviceId,
+        callId: endpoint.callId,
+        protocol: "HTTP",
+        method: endpoint.method,
+        pathTemplate: endpoint.path,
+        headersTemplate: { "content-type": "application/json" },
+      };
+      const endpointBody = endpoint.bodyTemplate || answers.requestBody;
+      if (endpointBody) template.bodyTemplate = endpointBody;
+      if (answers.auth !== "none") template.authRef = wizardAuthRef(answers);
+      writeGenerated(`templates/http/${serviceId}/${endpoint.callId}.yaml`, stringify(template));
+    }
+  }
+
+  if (answers.dataSource === "CSV_DATASET") {
+    writeGenerated("datasets/sample.csv", `${answers.csvColumns.join(",")}\n${answers.csvColumns.map((col, i) => `${slug(col, `value${i + 1}`)}-1`).join(",")}\n`);
+  }
+
+  if (answers.dataSource === "REDIS_DATASET") {
+    writeGenerated("mock-config/redis-state.json", JSON.stringify({
+      version: 1,
+      lists: answers.redisLists.map(listName => ({
+        listName,
+        sourceFile: "datasets/sample.jsonl",
+        records: [{ id: "sample-1", payload: answers.requestBody || answers.tcpPayload || "{}" }],
+      })),
+      output: answers.redisOutput,
+    }, null, 2));
+  }
+
+  if (["wiremock", "wiremock_and_tcp"].includes(answers.sutDouble)) {
+    for (const endpoint of wizardMockEndpoints(answers).filter(mock => mock.method && mock.path)) {
+      writeGenerated(`mock-config/wiremock/${endpoint.callId}.json`, JSON.stringify({
+        request: { method: endpoint.method, urlPath: endpoint.path },
+        response: {
+          status: endpoint.status || 200,
+          headers: { "Content-Type": "application/json" },
+          jsonBody: endpoint.responseBody || { ok: true, callId: endpoint.callId },
+        },
+      }, null, 2));
+    }
+  }
+
+  if (["tcp_mock", "wiremock_and_tcp"].includes(answers.sutDouble)) {
+    writeGenerated("mock-config/tcp/tcp-request.yaml", stringify({
+      id: "tcp-request",
+      request: answers.tcpPayload,
+      response: "OK",
+      transport: "socket",
+    }));
+  }
+
+  writeGenerated("README.md", [
+    `# ${answers.bundleId}`,
+    "",
+    `Generated by PocketHive wizard from: ${session.intent}`,
+    "",
+    `- Protocol: ${answers.protocol}`,
+    `- Target: ${target.id} (${target.baseUrl})`,
+    `- Pattern: ${wizardPattern(answers)}`,
+    `- Data source: ${answers.dataSource}`,
+    `- Default rate: ${answers.defaultRatePerSec}/s`,
+    `- Default duration: ${answers.runDuration}`,
+    `- Traffic shape: ${answers.trafficShape}`,
+    `- Auth: ${answers.auth}`,
+    `- Evidence dashboard: ${answers.grafanaDashboard}`,
+    "",
+    "## Generated Artifacts",
+    "",
+    ...filesCreated.map(file => `- ${file}`),
+  ].join("\n"));
+
+  if (answers.docs === "yes") {
+    writeGenerated("FLOW_DOCUMENT.md", wizardFlowDocument(session, answers, target));
+    writeGenerated("CHANGELOG.md", wizardChangelog(session, answers));
+  }
+
+  return {
+    created: true,
+    bundleId: answers.bundleId,
+    path: targetBundleDir,
+    pattern: wizardPattern(answers),
+    target,
+    filesCreated,
+    assumptions: wizardAssumptions(session.answers, answers),
+  };
+}
+
+reg("wizard.start", "Start a novice bundle creation session. Collects intent and explicit answers; it does not write files.", {
+  intent: z.string().describe("Natural-language description of the bundle the user wants."),
+  bundleId: z.string().optional(),
+  protocol: z.enum(["REST", "TCP", "SEQUENCE", "HTTP"]).optional(),
+  target: z.enum(["wiremock-local", "tcp-mock-local", "external"]).optional(),
+  targetBaseUrl: z.string().optional(),
+  endpoint: z.union([z.string(), z.object({ method: z.string(), path: z.string() })]).optional(),
+  endpoints: z.union([
+    z.string(),
+    z.array(z.union([z.string(), z.object({
+      method: z.string(),
+      path: z.string(),
+      callId: z.string().optional(),
+      description: z.string().optional(),
+      bodyTemplate: z.string().optional(),
+    })])),
+  ]).optional(),
+  requestBody: z.string().optional(),
+  tcpPayload: z.string().optional(),
+  ratePerSec: z.number().optional(),
+  defaultRatePerSec: z.number().optional(),
+  nftRatePerSec: z.number().optional(),
+  trafficShape: z.enum(WIZARD_TRAFFIC_SHAPES).optional(),
+  runDuration: z.string().optional(),
+  nftDuration: z.string().optional(),
+  dataSource: z.enum(WIZARD_DATA_SOURCES).optional(),
+  csvColumns: z.union([z.string(), z.array(z.string())]).optional(),
+  redisLists: z.union([z.string(), z.array(z.string())]).optional(),
+  redisOutput: z.union([z.boolean(), z.enum(["yes", "no"])]).optional(),
+  auth: z.enum(WIZARD_AUTH_TYPES).optional(),
+  authTokenUrl: z.string().optional(),
+  authClientId: z.string().optional(),
+  authSecretSource: z.enum(["env_var", "file"]).optional(),
+  authSecretEnvVar: z.string().optional(),
+  sutNftUrl: z.string().optional(),
+  sutDouble: z.enum(WIZARD_SUT_DOUBLES).optional(),
+  mockEndpoints: z.array(z.any()).optional(),
+  resultRules: z.union([z.boolean(), z.enum(["yes", "no"])]).optional(),
+  resultCodePattern: z.string().optional(),
+  successCodes: z.union([z.string(), z.array(z.string())]).optional(),
+  performanceObjective: z.string().optional(),
+  clickhouse: z.enum(WIZARD_CLICKHOUSE_MODES).optional(),
+  grafanaDashboard: z.enum(WIZARD_GRAFANA_DASHBOARDS).optional(),
+  docs: z.union([z.boolean(), z.enum(["yes", "no"])]).optional(),
+}, async (input) => {
+  cleanupWizardSessions();
+  const session = {
+    sessionId: `wiz-${crypto.randomUUID?.() || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`}`,
+    intent: input.intent,
+    answers: {},
+    createdAt: new Date().toISOString(),
+    createdAtMs: Date.now(),
+  };
+  applyWizardAnswers(session.answers, input);
+  WIZARD_SESSIONS.set(session.sessionId, session);
+  return wizardPlan(session);
+});
+
+reg("wizard.answer", "Answer one question in a novice bundle creation session. Does not write files.", {
+  sessionId: z.string(),
+  questionId: z.enum(WIZARD_QUESTION_IDS),
+  answer: z.any(),
+}, async ({ sessionId, questionId, answer }) => {
+  const session = wizardSession(sessionId);
+  session.answers[questionId] = normalizeWizardAnswer(questionId, answer);
+  session.updatedAt = new Date().toISOString();
+  return wizardPlan(session);
+});
+
+reg("wizard.summary", "Return the current wizard plan, missing inputs, and generated bundle preview. Does not write files.", {
+  sessionId: z.string(),
+}, async ({ sessionId }) => wizardPlan(wizardSession(sessionId)));
+
+reg("wizard.complete", "Complete a wizard session and generate the bundle files. This is the only wizard.* tool that writes files.", {
+  sessionId: z.string(),
+}, async ({ sessionId }) => {
+  const session = wizardSession(sessionId);
+  const plan = wizardPlan(session);
+  if (!plan.ready) {
+    throw new Error(`Wizard is not complete. Missing: ${plan.missing.join(", ") || "none"}. Errors: ${plan.errors.join("; ") || "none"}`);
+  }
+  const generated = await writeWizardBundle(session);
+  const structural = await runBundleCheck(generated.bundleId);
+  WIZARD_SESSIONS.delete(sessionId);
+  return { completed: true, generated, structural };
+});
+
+async function runBundleCheck(bundle) {
+  const targetBundleDir = bundleDir(bundle);
+  const scenarioPath = resolve(targetBundleDir, "scenario.yaml");
+  const checks = [];
+  const errors = [];
+  const warnings = [];
+
+  const addCheck = (id, ok, message, severity = "error") => {
+    checks.push({ id, ok, message, severity });
+    if (!ok && severity === "error") errors.push({ id, message });
+    if (!ok && severity === "warning") warnings.push({ id, message });
+  };
+
+  if (!existsSync(targetBundleDir)) {
+    addCheck("bundle.exists", false, `Bundle directory not found: ${targetBundleDir}`);
+    return { ok: false, bundle, path: targetBundleDir, checks, errors, warnings };
+  }
+  addCheck("bundle.exists", true, "Bundle directory exists");
+
+  if (!existsSync(scenarioPath)) {
+    addCheck("scenario.exists", false, "scenario.yaml exists");
+    return { ok: false, bundle, path: targetBundleDir, checks, errors, warnings };
+  }
+  addCheck("scenario.exists", true, "scenario.yaml exists");
+
+  let scenario;
+  try {
+    const { parse } = await import("yaml");
+    scenario = parse(readFileSync(scenarioPath, "utf8"));
+    addCheck("scenario.parse", true, "scenario.yaml parses as YAML");
+  } catch (e) {
+    addCheck("scenario.parse", false, `scenario.yaml parse failed: ${e.message}`);
+    return { ok: false, bundle, path: targetBundleDir, checks, errors, warnings };
+  }
+
+  addCheck("scenario.id", typeof scenario?.id === "string" && scenario.id.length > 0, "scenario.id is required");
+  addCheck("scenario.template", !!scenario?.template && typeof scenario.template === "object", "scenario.template is required");
+
+  const bees = Array.isArray(scenario?.template?.bees) ? scenario.template.bees : [];
+  addCheck("scenario.template.bees", bees.length > 0, "template.bees must contain at least one bee");
+
+  const roles = new Set();
+  const producedQueues = new Set();
+  const consumedQueues = [];
+  for (const bee of bees) {
+    const role = bee?.role;
+    if (!role || typeof role !== "string") {
+      addCheck("bee.role", false, "Each bee requires a string role");
+      continue;
+    }
+    if (roles.has(role)) {
+      addCheck(`bee.${role}.unique`, false, `Duplicate bee role '${role}'`);
+    }
+    roles.add(role);
+    addCheck(`bee.${role}.image`, typeof bee?.image === "string" && bee.image.length > 0, `Bee '${role}' has an image`);
+
+    const outputs = bee?.work?.out && typeof bee.work.out === "object" ? bee.work.out : {};
+    for (const suffix of Object.values(outputs)) {
+      if (typeof suffix === "string" && suffix.length > 0) producedQueues.add(suffix);
+    }
+
+    const inputs = bee?.work?.in && typeof bee.work.in === "object" ? bee.work.in : {};
+    for (const suffix of Object.values(inputs)) {
+      if (typeof suffix === "string" && suffix.length > 0) consumedQueues.push({ role, suffix });
+    }
+  }
+
+  for (const { role, suffix } of consumedQueues) {
+    addCheck(
+      `queue.${role}.${suffix}.producer`,
+      producedQueues.has(suffix),
+      `Bee '${role}' consumes queue suffix '${suffix}' with an upstream producer`
+    );
+  }
+
+  const hasGenerator = roles.has("generator");
+  const hasTerminal = roles.has("postprocessor") || roles.has("clearing-export");
+  addCheck("pattern.generator", hasGenerator, "Scenario has a generator bee", "warning");
+  addCheck("pattern.terminal", hasTerminal, "Scenario has a terminal postprocessor or clearing-export bee", "warning");
+
+  const artifacts = {
+    templates: existsSync(resolve(targetBundleDir, "templates")),
+    datasets: existsSync(resolve(targetBundleDir, "datasets")),
+    sut: existsSync(resolve(targetBundleDir, "sut")),
+    variables: existsSync(resolve(targetBundleDir, "variables.yaml")),
+    mockConfig: existsSync(resolve(targetBundleDir, "mock-config")),
+    readme: existsSync(resolve(targetBundleDir, "README.md")),
+    flowDocument: existsSync(resolve(targetBundleDir, "FLOW_DOCUMENT.md")),
+    changelog: existsSync(resolve(targetBundleDir, "CHANGELOG.md")),
+  };
+
+  return {
+    ok: errors.length === 0,
+    bundle,
+    path: targetBundleDir,
+    scenarioId: scenario?.id,
+    checks,
+    errors,
+    warnings,
+    artifacts,
+    source: "bundle.check.structural",
+  };
+}
+
+reg("bundle.check", "Run a fast structural check on a bundle without shelling out.", {
+  bundle: z.string().describe("Bundle name"),
+}, async ({ bundle }) => runBundleCheck(bundle));
+
+async function createBundleZipBytes(bundle) {
+  const targetBundleDir = bundleDir(bundle);
+  if (!existsSync(resolve(targetBundleDir, "scenario.yaml"))) throw new Error(`No scenario.yaml found in bundle '${bundle}'`);
+  const { createWriteStream } = await import("node:fs");
+  const archiver = await import("archiver").catch(() => null);
+  if (!archiver) throw new Error("archiver dependency is required for Scenario Manager bundle upload validation");
+
+  const os = await import("node:os");
+  const tmpZip = resolve(os.tmpdir(), `ph-bundle-${bundle}-${Date.now()}.zip`);
+  await new Promise((res, rej) => {
+    const output = createWriteStream(tmpZip);
+    const archive = archiver.default("zip", { zlib: { level: 6 } });
+    output.on("close", res);
+    archive.on("error", rej);
+    archive.pipe(output);
+    archive.directory(targetBundleDir, false);
+    archive.finalize();
+  });
+  const zipBytes = readFileSync(tmpZip);
+  try { unlinkSync(tmpZip); } catch { /* ignore */ }
+  return zipBytes;
+}
+
+async function scenarioManagerBundleExists(bundle) {
+  try {
+    await httpJson(`${SM_URL}/scenarios/${encodeURIComponent(bundle)}`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function scenarioManagerUploadBundle(bundle, { replaceExisting = true } = {}) {
+  const zipBytes = await createBundleZipBytes(bundle);
+  const exists = await scenarioManagerBundleExists(bundle);
+  if (exists && !replaceExisting) {
+    throw new Error(`Scenario '${bundle}' already exists in Scenario Manager; set replaceExisting=true for upload validation`);
+  }
+  try {
+    if (exists) {
+      const scenario = await httpJson(`${SM_URL}/scenarios/${encodeURIComponent(bundle)}/bundle`, {
+        method: "PUT",
+        body: zipBytes,
+        headers: { "content-type": "application/zip" },
+        timeoutMs: 60000,
+      });
+      return { uploaded: true, method: "http-replace", scenario };
+    }
+    const scenario = await httpJson(`${SM_URL}/scenarios/bundles`, {
+      method: "POST",
+      body: zipBytes,
+      headers: { "content-type": "application/zip" },
+      timeoutMs: 60000,
+    });
+    return { uploaded: true, method: "http-create", scenario };
+  } catch (e) {
+    throw new Error(`Scenario Manager rejected bundle '${bundle}' (${exists ? "PUT replace" : "POST create"}): ${e.message}`);
+  }
+}
+
+async function scenarioManagerDryRunValidateBundle(bundle) {
+  const zipBytes = await createBundleZipBytes(bundle);
+  try {
+    return await httpJson(`${SM_URL}/scenarios/bundles/validate`, {
+      method: "POST",
+      body: zipBytes,
+      headers: { "content-type": "application/zip" },
+      timeoutMs: 60000,
+    });
+  } catch (e) {
+    throw new Error(`Scenario Manager dry-run validation rejected bundle '${bundle}': ${e.message}`);
+  }
+}
+
+const _scenarioContractCache = new Map(); // baseUrl -> cached authoring contract
+
+async function scenarioManagerContractSnapshot({
+  scenarioId = "",
+  includeCapabilities = true,
+  includeTemplates = true,
+  forceRefresh = false,
+  checkFingerprint = false,
+} = {}) {
+  const cacheKey = SM_URL;
+  let cached = _scenarioContractCache.get(cacheKey);
+  let cacheState = cached ? "hit" : "miss";
+
+  if (cached && checkFingerprint && !forceRefresh) {
+    const remote = await httpJson(`${SM_URL}/api/authoring-contract/fingerprint`);
+    if (remote?.fingerprint && remote.fingerprint !== cached.contract?.fingerprint) {
+      cacheState = "stale";
+      cached = null;
+    }
+  }
+
+  if (!cached || forceRefresh) {
+    const contract = await httpJson(`${SM_URL}/api/authoring-contract`);
+    cached = { contract, fetchedAt: new Date().toISOString() };
+    _scenarioContractCache.set(cacheKey, cached);
+    cacheState = forceRefresh ? "refresh" : cacheState === "stale" ? "refresh-after-stale" : "miss";
+  }
+
+  const snapshot = {
+    source: "scenario-manager-api",
+    baseUrl: SM_URL,
+    endpoints: {
+      ...(cached.contract?.endpoints || {}),
+      scenario: scenarioId ? `${SM_URL}/scenarios/${encodeURIComponent(scenarioId)}` : null,
+    },
+    contract: cached.contract,
+    cache: {
+      state: cacheState,
+      fetchedAt: cached.fetchedAt,
+      fingerprint: cached.contract?.fingerprint || null,
+      checkFingerprint,
+      forceRefresh,
+    },
+  };
+  if (includeCapabilities) snapshot.capabilities = cached.contract?.capabilities?.manifests || [];
+  if (includeTemplates) snapshot.templates = cached.contract?.templateCatalog || [];
+  if (scenarioId) snapshot.scenario = await httpJson(`${SM_URL}/scenarios/${encodeURIComponent(scenarioId)}`);
+  return snapshot;
+}
 
 // In-memory job store for async validation results
 const _validateJobs = new Map(); // jobId -> { status, result, error, startedAt }
@@ -385,57 +1546,46 @@ setInterval(() => {
 
 reg("bundle.validate", "Start async validation of a bundle. Returns a jobId immediately. Poll with bundle.validate.result.", {
   bundle: z.string().describe("Bundle name"),
-}, async ({ bundle }) => {
-  if (!POCKETHIVE_ROOT) throw new Error("POCKETHIVE_ROOT not set.");
-  const bundleDir = resolve(getBundlesDir(), bundle);
-  if (!existsSync(resolve(bundleDir, "scenario.yaml"))) throw new Error(`No scenario.yaml in ${bundle}`);
+  validator: z.enum(["local-structural", "scenario-manager-dry-run", "scenario-manager-upload"]).optional().describe("local-structural runs bundle.check only. scenario-manager-dry-run validates through Scenario Manager without writes. scenario-manager-upload validates through Scenario Manager upload/replace and has write side effects."),
+  replaceExisting: z.boolean().optional().describe("Only for scenario-manager-upload. Allows replacing an existing Scenario Manager bundle."),
+}, async ({ bundle, validator = "local-structural", replaceExisting = true }) => {
+  const check = await runBundleCheck(bundle);
+  if (!check.ok) {
+    throw new Error(`Bundle '${bundle}' failed structural check: ${check.errors.map(e => e.message).join("; ")}`);
+  }
 
-  const jobId = `${bundle}-${Date.now()}`;
+  const jobId = `${bundle}-${validator}-${Date.now()}`;
   _validateJobs.set(jobId, { status: "running", result: null, error: null, startedAt: Date.now() });
 
-  // Run validation in background — do not await
   (async () => {
     try {
-      const bundleDir = resolve(getBundlesDir(), bundle);
-      const results = { generator: null, httpTemplates: null };
-
-      if (IS_WINDOWS) {
-        // Windows: invoke Java via WSL to avoid pipe-inheritance hang
-        const prWsl = await toWslPathAsync(POCKETHIVE_ROOT);
-        const scenarioPath = await toWslPathAsync(joinPath(bundleDir.toString(), "scenario.yaml"));
-        const classesDir = `${prWsl}/tools/scenario-templating-check/target/classes`;
-        const cpCache = `${prWsl}/tools/scenario-templating-check/target/mcp-classpath.txt`;
-        await shell(`mvn -q -f '${prWsl}/tools/scenario-templating-check/pom.xml' dependency:build-classpath -Dmdep.outputFile='${cpCache}' 2>/dev/null || true`, undefined, 120000);
-        const javaBase = `source ~/.bashrc 2>/dev/null; java -cp '${classesDir}:'$(cat '${cpCache}') io.pockethive.tools.ScenarioTemplateValidator`;
-        try {
-          results.generator = await wslRunToFile(`${javaBase} --scenario '${scenarioPath}'`);
-        } catch (e) { results.generator = `FAIL: ${e.message}`; }
-        const templateDir = resolve(bundleDir, "templates");
-        if (existsSync(templateDir)) {
-          const tplPath = await toWslPathAsync(templateDir.toString());
-          try {
-            results.httpTemplates = await wslRunToFile(`${javaBase} --check-http-templates --scenario '${scenarioPath}' --template-root '${tplPath}'`);
-          } catch (e) { results.httpTemplates = `FAIL: ${e.message}`; }
-        }
+      const structural = await runBundleCheck(bundle);
+      let result;
+      if (validator === "scenario-manager-dry-run") {
+        result = {
+          mode: validator,
+          source: "scenario-manager-api",
+          structural,
+          scenarioManager: await scenarioManagerDryRunValidateBundle(bundle),
+          note: "Scenario Manager dry-run validation uses the running Scenario Manager contract without importing or replacing the bundle.",
+        };
+      } else if (validator === "scenario-manager-upload") {
+        result = {
+          mode: validator,
+          source: "scenario-manager-api",
+          structural,
+          scenarioManager: await scenarioManagerUploadBundle(bundle, { replaceExisting }),
+          note: "Scenario Manager upload/replace validates using the running Scenario Manager contract and stores/replaces the bundle there.",
+        };
       } else {
-        // Linux/macOS: invoke Java directly via shell
-        const scenarioPath = joinPath(bundleDir.toString(), "scenario.yaml");
-        const classesDir = `${POCKETHIVE_ROOT}/tools/scenario-templating-check/target/classes`;
-        const cpCache = `${POCKETHIVE_ROOT}/tools/scenario-templating-check/target/mcp-classpath.txt`;
-        await shell(`mvn -q -f '${POCKETHIVE_ROOT}/tools/scenario-templating-check/pom.xml' dependency:build-classpath -Dmdep.outputFile='${cpCache}' 2>/dev/null || true`, undefined, 120000);
-        const javaBase = `java -cp '${classesDir}':$(cat '${cpCache}') io.pockethive.tools.ScenarioTemplateValidator`;
-        try {
-          results.generator = await shell(`${javaBase} --scenario '${scenarioPath}'`);
-        } catch (e) { results.generator = `FAIL: ${e.message}`; }
-        const templateDir = resolve(bundleDir, "templates");
-        if (existsSync(templateDir)) {
-          try {
-            results.httpTemplates = await shell(`${javaBase} --check-http-templates --scenario '${scenarioPath}' --template-root '${templateDir}'`);
-          } catch (e) { results.httpTemplates = `FAIL: ${e.message}`; }
-        }
+        result = {
+          mode: validator,
+          source: "bundle.check",
+          structural,
+          note: "Local structural validation only. Use validator=scenario-manager-dry-run when live Scenario Manager validation is intended.",
+        };
       }
-
-      _validateJobs.set(jobId, { status: "done", result: results, error: null, startedAt: _validateJobs.get(jobId).startedAt });
+      _validateJobs.set(jobId, { status: "done", result, error: null, startedAt: _validateJobs.get(jobId).startedAt });
     } catch (e) {
       _validateJobs.set(jobId, { status: "error", result: null, error: e.message, startedAt: _validateJobs.get(jobId).startedAt });
     }
@@ -456,96 +1606,11 @@ reg("bundle.validate.result", "Poll for the result of a bundle.validate job.", {
   return { jobId, status: "done", elapsedSeconds: elapsed, ...job.result };
 });
 
-// ── Scenario sync ─────────────────────────────────────────────────────────────
-
-reg("scenario.sync", "Sync bundles to the running Scenario Manager container and trigger reload", {}, async () => {
-  let container;
-  try {
-    const raw = await shell('docker ps -q --filter "label=com.docker.compose.service=scenario-manager"');
-    container = raw.split(/\r?\n/)[0]?.trim();
-  } catch { container = ""; }
-  if (!container) throw new Error("No running scenario-manager container found");
-  await shell(`docker cp "${await toWslPathAsync(getBundlesDir())}/." "${container}:/app/scenarios-runtime/bundles"`);
-  const reloadUrl = `${SM_URL}/scenarios/reload`;
-  await httpJson(reloadUrl, { method: "POST" });
-  return { synced: true, container, reloadUrl };
-});
-
-reg("scenario.deploy", "Deploy a bundle to the Scenario Manager's scenarios directory and reload. Use this (not scenario.sync) to make a bundle loadable via scenario.list/get. Works against both local and remote stacks — uses the HTTP bundle upload API, no Docker required.", {
+reg("scenario.deploy", "Deploy a bundle to the Scenario Manager's scenarios directory and reload. Works against both local and remote stacks through the HTTP bundle upload API.", {
   bundle: z.string().describe("Bundle name to deploy"),
 }, async ({ bundle }) => {
-  const bundleDir = resolve(getBundlesDir(), bundle);
-  if (!existsSync(resolve(bundleDir, "scenario.yaml"))) throw new Error(`No scenario.yaml found in bundle '${bundle}'`);
-
-  // ── Build zip in memory ──────────────────────────────────────────────────
-  const { createWriteStream, createReadStream } = await import("node:fs");
-  const { pipeline } = await import("node:stream/promises");
-  const archiver = await import("archiver").catch(() => null);
-
-  // Fall back to docker cp path if archiver is not available (local stack only)
-  if (!archiver) {
-    let container;
-    try {
-      const raw = await shell('docker ps -q --filter "label=com.docker.compose.service=scenario-manager"');
-      container = raw.split(/\r?\n/)[0]?.trim();
-    } catch { container = ""; }
-    if (!container) throw new Error("archiver npm package not available and no local Docker container found. Run: npm install archiver in tools/mcp-server/");
-    const jsonPath = resolve(bundleDir, "scenario.json");
-    if (existsSync(jsonPath)) { const { unlinkSync } = await import("node:fs"); unlinkSync(jsonPath); }
-    await shell(`docker cp "${await toWslPathAsync(bundleDir)}" "${container}:/app/scenarios/bundles/"`);
-    await shell(`docker cp "${await toWslPathAsync(bundleDir)}" "${container}:/app/scenarios-runtime/bundles/"`);
-    await httpJson(`${SM_URL}/scenarios/reload`, { method: "POST" });
-    return { deployed: true, bundle, method: "docker-cp", container };
-  }
-
-  // Build zip from bundle directory
-  const os = await import("node:os");
-  const tmpZip = resolve(os.tmpdir(), `ph-bundle-${bundle}-${Date.now()}.zip`);
-  await new Promise((res, rej) => {
-    const output = createWriteStream(tmpZip);
-    const archive = archiver.default("zip", { zlib: { level: 6 } });
-    output.on("close", res);
-    archive.on("error", rej);
-    archive.pipe(output);
-    archive.directory(bundleDir, false); // false = no top-level folder wrapper
-    archive.finalize();
-  });
-
-  const zipBytes = readFileSync(tmpZip);
-  try { unlinkSync(tmpZip); } catch { /* ignore */ }
-
-  // Check if scenario already exists — use PUT (replace) or POST (create)
-  let exists = false;
-  try {
-    await httpJson(`${SM_URL}/scenarios/${encodeURIComponent(bundle)}`);
-    exists = true;
-  } catch { exists = false; }
-
-  let result;
-  try {
-    if (exists) {
-      // PUT /scenarios/{id}/bundle — replace existing
-      result = await httpJson(`${SM_URL}/scenarios/${encodeURIComponent(bundle)}/bundle`, {
-        method: "PUT",
-        body: zipBytes,
-        headers: { "content-type": "application/zip" },
-        timeoutMs: 60000,
-      });
-    } else {
-      // POST /scenarios/bundles — create new
-      result = await httpJson(`${SM_URL}/scenarios/bundles`, {
-        method: "POST",
-        body: zipBytes,
-        headers: { "content-type": "application/zip" },
-        timeoutMs: 60000,
-      });
-    }
-  } catch (e) {
-    // Surface the SM error body for easier diagnosis
-    throw new Error(`Scenario Manager rejected bundle '${bundle}' (${exists ? "PUT replace" : "POST create"}): ${e.message}`);
-  }
-
-  return { deployed: true, bundle, method: exists ? "http-replace" : "http-create", scenario: result };
+  const result = await scenarioManagerUploadBundle(bundle, { replaceExisting: true });
+  return { deployed: true, bundle, method: result.method, scenario: result.scenario };
 });
 
 reg("scenario.list", "List scenarios loaded in the Scenario Manager", {}, async () => {
@@ -556,6 +1621,29 @@ reg("scenario.get", "Get a specific scenario from the Scenario Manager", {
   scenarioId: z.string(),
 }, async ({ scenarioId }) => {
   return await httpJson(`${SM_URL}/scenarios/${encodeURIComponent(scenarioId)}`);
+});
+
+reg("scenario.contracts.get", "Read Scenario Manager-backed contracts and capability manifests. This is the runtime contract source for wizard generation.", {
+  scenarioId: z.string().optional(),
+  includeCapabilities: z.boolean().optional(),
+  includeTemplates: z.boolean().optional(),
+  forceRefresh: z.boolean().optional(),
+  checkFingerprint: z.boolean().optional(),
+}, async ({ scenarioId = "", includeCapabilities = true, includeTemplates = true, forceRefresh = false, checkFingerprint = false }) => {
+  return await scenarioManagerContractSnapshot({ scenarioId, includeCapabilities, includeTemplates, forceRefresh, checkFingerprint });
+});
+
+reg("scenario.capabilities.get", "Read Scenario Manager worker capability manifests from /api/capabilities.", {
+  imageName: z.string().optional(),
+  tag: z.string().optional(),
+  all: z.boolean().optional(),
+}, async ({ imageName = "", tag = "latest", all = false }) => {
+  if (all || !imageName) return await httpJson(`${SM_URL}/api/capabilities?all=true`);
+  return await httpJson(`${SM_URL}/api/capabilities?imageName=${encodeURIComponent(imageName)}&tag=${encodeURIComponent(tag)}`);
+});
+
+reg("scenario.templates.catalog", "Read Scenario Manager's bundle catalog from /api/templates, including defunct validation status.", {}, async () => {
+  return await httpJson(`${SM_URL}/api/templates`);
 });
 
 // ── Swarm lifecycle ───────────────────────────────────────────────────────────
@@ -690,46 +1778,446 @@ reg("debug.journal", "Read swarm journal (timeline of control-plane events)", {
   return await httpJson(`/api/swarms/${encodeURIComponent(swarmId)}/journal/page?limit=${limit}`);
 });
 
-reg("debug.docker-logs", "Read recent docker logs for a swarm's containers", {
+function summarizePatch(patch) {
+  if (!patch || typeof patch !== "object" || Array.isArray(patch)) {
+    return { empty: true, topLevelKeys: [] };
+  }
+  return {
+    empty: Object.keys(patch).length === 0,
+    topLevelKeys: Object.keys(patch).sort(),
+  };
+}
+
+function isPlainObject(value) {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function cloneJson(value) {
+  return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
+}
+
+function deepMergeConfig(current, updates) {
+  const merged = isPlainObject(current) ? cloneJson(current) : {};
+  for (const [key, value] of Object.entries(updates || {})) {
+    if (isPlainObject(value) && isPlainObject(merged[key])) {
+      merged[key] = deepMergeConfig(merged[key], value);
+    } else {
+      merged[key] = cloneJson(value);
+    }
+  }
+  return merged;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function textValue(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : "";
+}
+
+function journalItems(page) {
+  if (Array.isArray(page)) return page;
+  if (Array.isArray(page?.items)) return page.items;
+  return [];
+}
+
+function scopedJournalEntry(entry, { role, instanceId }) {
+  const scope = isPlainObject(entry?.scope) ? entry.scope : {};
+  return textValue(scope.role) === role && textValue(scope.instance) === instanceId;
+}
+
+function configFromJournalEntry(entry) {
+  const data = isPlainObject(entry?.data) ? entry.data : {};
+  const raw = isPlainObject(entry?.raw) ? entry.raw : {};
+  const rawData = isPlainObject(raw.data) ? raw.data : {};
+  if (isPlainObject(data.config)) return data.config;
+  if (isPlainObject(rawData.config)) return rawData.config;
+  return null;
+}
+
+async function currentComponentConfig({ swarmId, role, instanceId, refreshStatus = true, journalLimit = 500 }) {
+  if (refreshStatus) {
+    await httpJson("/api/control-plane/refresh", { method: "POST", timeoutMs: 10000 });
+    await sleep(500);
+  }
+
+  const endpoint = `/api/swarms/${encodeURIComponent(swarmId)}/journal/page?limit=${journalLimit}`;
+  const page = await httpJson(endpoint, { timeoutMs: 10000 });
+  const selected = journalItems(page).find((entry) =>
+    textValue(entry?.type) === "status-full" &&
+    scopedJournalEntry(entry, { role, instanceId }) &&
+    configFromJournalEntry(entry)
+  );
+
+  if (!selected) {
+    throw new Error(
+      `CURRENT_CONFIG_UNAVAILABLE: no latest status-full config found for ${role}/${instanceId} in swarm ${swarmId}. ` +
+      "Request a fresh control-plane status snapshot and retry, or use the exact instance id from the UI component stream."
+    );
+  }
+
+  const config = configFromJournalEntry(selected);
+  return {
+    source: `${ORCH_URL}${endpoint}`,
+    refreshRequested: refreshStatus,
+    matchedRole: textValue(selected.scope?.role),
+    matchedInstanceId: textValue(selected.scope?.instance),
+    receivedAt: selected.timestamp || null,
+    runId: selected.runId || null,
+    config: cloneJson(config),
+  };
+}
+
+async function sendComponentConfigUpdate({
+  swarmId,
+  role,
+  instanceId,
+  patch,
+  idempotencyKey: providedIdempotencyKey = "",
+  notes = "",
+  allowEmptyPatch = false,
+  refreshStatus = true,
+}) {
+  if (!patch || typeof patch !== "object" || Array.isArray(patch)) {
+    throw new Error("patch must be an object");
+  }
+  const patchSummary = summarizePatch(patch);
+  if (patchSummary.empty && !allowEmptyPatch) {
+    throw new Error("EMPTY_PATCH_REJECTED: pass allowEmptyPatch=true only when an explicit empty config-update is intended");
+  }
+  const current = await currentComponentConfig({ swarmId, role, instanceId, refreshStatus });
+  const mergedConfig = deepMergeConfig(current.config, patch);
+  const mergedSummary = summarizePatch(mergedConfig);
+  const key = providedIdempotencyKey || idempotencyKey();
+  const endpoint = `/api/components/${encodeURIComponent(role)}/${encodeURIComponent(instanceId)}/config`;
+  const body = {
+    idempotencyKey: key,
+    patch: mergedConfig,
+    swarmId,
+    ...(notes ? { notes } : {}),
+  };
+  const response = await httpJson(endpoint, {
+    method: "POST",
+    body,
+  });
+  return {
+    accepted: true,
+    source: "orchestrator-api",
+    endpoint: `${ORCH_URL}${endpoint}`,
+    target: { swarmId, role, instanceId },
+    idempotencyKey: key,
+    mode: "merge-with-current-config",
+    currentConfig: {
+      source: current.source,
+      refreshRequested: current.refreshRequested,
+      matchedRole: current.matchedRole,
+      matchedInstanceId: current.matchedInstanceId,
+      receivedAt: current.receivedAt,
+      runId: current.runId,
+      topLevelKeys: summarizePatch(current.config).topLevelKeys,
+    },
+    patchSummary,
+    mergedConfigSummary: mergedSummary,
+    response,
+    watch: response?.watch || null,
+    evidenceNext: [
+      {
+        tool: "debug.journal",
+        input: { swarmId, limit: 50 },
+        purpose: "Check control-plane dispatch, outcome, alert, and worker status entries after the update.",
+      },
+      {
+        uiObservationApi: "STOMP /exchange/ph.control/#",
+        purpose: "The web UI watches this read-only stream for status-full, outcome, alert, and queue metric events.",
+      },
+      {
+        orchestratorApi: "POST /api/control-plane/refresh",
+        purpose: "Request fresh status-full snapshots if component state is stale after the config update.",
+      },
+      {
+        tool: "debug.prometheus",
+        inputHint: {
+          query: `ph_swarm_queue_depth{ph_swarm="${swarmId}"}`,
+        },
+        purpose: "Inspect queue depth or worker metrics to verify runtime effect, especially for rate changes.",
+      },
+    ],
+  };
+}
+
+reg("component.config-update", "Send a real-time config-update signal to one running component through the Orchestrator API used by the UI.", {
   swarmId: z.string(),
-  tail: z.number().optional().default(50).describe("Number of log lines"),
-  role: z.string().optional().describe("Filter by worker role in container name"),
-}, async ({ swarmId, tail, role }) => {
-  const filter = role ? `${swarmId}.*${role}` : swarmId;
-  let ids;
-  try {
-    const raw = await shell(`docker ps -q --filter "name=${filter}"`);
-    ids = raw.split(/\r?\n/).filter(Boolean);
-  } catch (e) {
-    return { containers: [], message: `No containers found matching '${filter}'`, error: e.message };
-  }
-  if (ids.length === 0) return { containers: [], message: `No containers found matching '${filter}'` };
-  const logs = {};
-  for (const id of ids.slice(0, 10)) {
-    try {
-      const name = (await shell(`docker inspect --format "{{.Name}}" ${id}`)).replace(/^\//, "");
-      logs[name] = await shell(`docker logs --tail ${tail} ${id} 2>&1`);
-    } catch (e) { logs[id] = `Error: ${e.message}`; }
-  }
-  return { containers: Object.keys(logs), logs };
+  role: z.string(),
+  instanceId: z.string(),
+  patch: z.record(z.any()).describe("Config patch object, e.g. {enabled: true, ratePerSec: 10}"),
+  idempotencyKey: z.string().optional(),
+  notes: z.string().optional(),
+  allowEmptyPatch: z.boolean().optional().describe("Defaults false. Set true only when an explicit empty config-update/reset is intended."),
+  refreshStatus: z.boolean().optional().describe("Defaults true. Requests fresh status-full snapshots before reading the current config from the journal."),
+}, async ({ swarmId, role, instanceId, patch, idempotencyKey: requestedKey = "", notes = "", allowEmptyPatch = false, refreshStatus = true }) => {
+  return await sendComponentConfigUpdate({
+    swarmId,
+    role,
+    instanceId,
+    patch,
+    idempotencyKey: requestedKey,
+    notes,
+    allowEmptyPatch,
+    refreshStatus,
+  });
 });
 
-reg("debug.config-update", "Send a config-update signal to a worker via the Orchestrator", {
+reg("debug.config-update", "Compatibility alias for component.config-update.", {
   swarmId: z.string(),
   role: z.string(),
   instanceId: z.string(),
   patch: z.record(z.any()).describe("Config patch object, e.g. {enabled: true, ratePerSec: 10}"),
 }, async ({ swarmId, role, instanceId, patch }) => {
-  return await httpJson(`/api/components/${encodeURIComponent(role)}/${encodeURIComponent(instanceId)}/config`, {
-    method: "POST",
-    body: { idempotencyKey: idempotencyKey(), patch, swarmId },
-  });
+  return await sendComponentConfigUpdate({ swarmId, role, instanceId, patch });
 });
 
 reg("debug.prometheus", "Query Prometheus for metrics (instant query). Use to verify postprocessor metrics are flowing, e.g. ph_transaction_total_latency_ms", {
   query: z.string().describe("PromQL query, e.g. ph_transaction_total_latency_ms{ph_swarm=\"my-swarm\"}"),
 }, async ({ query }) => {
   return await httpJson(`${PROM_URL}/api/v1/query?query=${encodeURIComponent(query)}`, { timeoutMs: 10000 });
+});
+
+async function evidenceSource(name, fn) {
+  try {
+    return { name, status: "ok", data: await fn() };
+  } catch (e) {
+    return { name, status: "unavailable", error: e.message || String(e) };
+  }
+}
+
+function countArrayLike(value) {
+  if (Array.isArray(value)) return value.length;
+  if (Array.isArray(value?.requests)) return value.requests.length;
+  if (Array.isArray(value?.requestJournal)) return value.requestJournal.length;
+  if (Array.isArray(value?.mappings)) return value.mappings.length;
+  return undefined;
+}
+
+async function buildEvidenceSummary({ swarmId, includeTapSample }) {
+  const sources = [];
+  sources.push(await evidenceSource("swarm.get", () => httpJson(`/api/swarms/${encodeURIComponent(swarmId)}`)));
+  sources.push(await evidenceSource("debug.queues", async () => {
+    const queues = await httpJson(`${RABBIT_MGMT}/queues`, { headers: { authorization: rabbitAuth() } });
+    const prefix = `ph.${swarmId}.`;
+    const controlPrefix = `ph.control.${swarmId}.`;
+    return queues
+      .filter(q => q.name.startsWith(prefix) || q.name.startsWith(controlPrefix))
+      .map(q => ({ name: q.name, messages: q.messages, consumers: q.consumers }));
+  }));
+  sources.push(await evidenceSource("debug.journal", () => httpJson(`/api/swarms/${encodeURIComponent(swarmId)}/journal/page?limit=50`)));
+  sources.push(await evidenceSource("debug.prometheus.success", () =>
+    httpJson(`${PROM_URL}/api/v1/query?query=${encodeURIComponent(`ph_transaction_processor_success{ph_swarm="${swarmId}"}`)}`, { timeoutMs: 10000 })
+  ));
+  sources.push(await evidenceSource("debug.prometheus.latency", () =>
+    httpJson(`${PROM_URL}/api/v1/query?query=${encodeURIComponent(`ph_transaction_total_latency_ms{ph_swarm="${swarmId}"}`)}`, { timeoutMs: 10000 })
+  ));
+  sources.push(await evidenceSource("mock.wiremock.requests", () => httpJson(`${WIREMOCK_URL}/__admin/requests?limit=20`, { timeoutMs: 10000 })));
+  sources.push(await evidenceSource("mock.wiremock.unmatched", () => httpJson(`${WIREMOCK_URL}/__admin/requests/unmatched`, { timeoutMs: 10000 })));
+  sources.push(await evidenceSource("mock.tcp.requests", () => httpJson(`${TCP_MOCK_URL}/api/requests?limit=20`, {
+    headers: { authorization: tcpMockAuth() }, timeoutMs: 10000,
+  })));
+  sources.push(await evidenceSource("mock.tcp.unmatched", () => httpJson(`${TCP_MOCK_URL}/api/requests/unmatched`, {
+    headers: { authorization: tcpMockAuth() }, timeoutMs: 10000,
+  })));
+
+  let tapSample = null;
+  if (includeTapSample) {
+    const tapSource = await evidenceSource("debug.tap.postprocessor.in", async () => {
+      const tap = await httpJson("/api/debug/taps", {
+        method: "POST",
+        body: { swarmId, role: "postprocessor", direction: "IN", ioName: "in", maxItems: 1, ttlSeconds: 30 },
+      });
+      try {
+        const read = await httpJson(`/api/debug/taps/${encodeURIComponent(tap.tapId || tap.id)}?drain=1`);
+        return { tap, read };
+      } finally {
+        const tapId = tap.tapId || tap.id;
+        if (tapId) {
+          try { await httpJson(`/api/debug/taps/${encodeURIComponent(tapId)}`, { method: "DELETE" }); } catch { /* best effort cleanup */ }
+        }
+      }
+    });
+    sources.push(tapSource);
+    tapSample = tapSource.status === "ok" ? tapSource.data : null;
+  }
+
+  const source = (name) => sources.find(s => s.name === name);
+  const queues = source("debug.queues");
+  const journal = source("debug.journal");
+  const wiremockRequests = source("mock.wiremock.requests");
+  const wiremockUnmatched = source("mock.wiremock.unmatched");
+  const tcpRequests = source("mock.tcp.requests");
+  const tcpUnmatched = source("mock.tcp.unmatched");
+
+  const queueRows = queues?.status === "ok" && Array.isArray(queues.data) ? queues.data : [];
+  const missingEvidence = sources
+    .filter(s => s.status !== "ok")
+    .map(s => ({ source: s.name, reason: s.error }));
+  if (!includeTapSample) {
+    missingEvidence.push({ source: "debug.tap", reason: "Tap sample was not requested. Call with includeTapSample=true when payload evidence is needed." });
+  }
+
+  return {
+    swarmId,
+    lifecycle: {
+      available: source("swarm.get")?.status === "ok",
+      raw: source("swarm.get")?.data ?? null,
+    },
+    queues: {
+      available: queues?.status === "ok",
+      count: queueRows.length,
+      totalMessages: queueRows.reduce((sum, q) => sum + (Number(q.messages) || 0), 0),
+      rows: queueRows,
+    },
+    journal: {
+      available: journal?.status === "ok",
+      raw: journal?.data ?? null,
+    },
+    metrics: {
+      success: source("debug.prometheus.success")?.data ?? null,
+      latency: source("debug.prometheus.latency")?.data ?? null,
+    },
+    mocks: {
+      wiremockRequests: countArrayLike(wiremockRequests?.data),
+      wiremockUnmatched: countArrayLike(wiremockUnmatched?.data),
+      tcpRequests: countArrayLike(tcpRequests?.data),
+      tcpUnmatched: countArrayLike(tcpUnmatched?.data),
+    },
+    datasets: {
+      available: false,
+      note: "dataset.check is not implemented in this MCP server yet.",
+    },
+    tapSample,
+    missingEvidence,
+    sources: sources.map(({ name, status, error }) => ({ name, status, error })),
+  };
+}
+
+function evidenceWidgetHtml() {
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root { color-scheme: light dark; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    body { margin: 0; padding: 16px; background: Canvas; color: CanvasText; }
+    .wrap { display: grid; gap: 12px; }
+    .top { display: flex; justify-content: space-between; gap: 12px; align-items: start; }
+    h1 { font-size: 18px; line-height: 1.25; margin: 0; }
+    .badge { border: 1px solid color-mix(in srgb, CanvasText 18%, transparent); border-radius: 999px; padding: 4px 8px; font-size: 12px; white-space: nowrap; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; }
+    .panel { border: 1px solid color-mix(in srgb, CanvasText 16%, transparent); border-radius: 8px; padding: 10px; background: color-mix(in srgb, Canvas 94%, CanvasText 6%); }
+    .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0; opacity: .72; margin-bottom: 6px; }
+    .value { font-size: 20px; font-weight: 650; line-height: 1.2; }
+    .small { font-size: 12px; opacity: .78; margin-top: 4px; overflow-wrap: anywhere; }
+    ul { margin: 6px 0 0; padding-left: 18px; }
+    li { margin: 3px 0; }
+    pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; margin: 0; }
+  </style>
+</head>
+<body>
+  <div id="root" class="wrap"></div>
+  <script type="module">
+    const root = document.getElementById("root");
+    const openai = globalThis.openai || {};
+    const data = openai.toolOutput || openai.structuredContent || openai.toolResponseMetadata?.evidenceSummary || {};
+    const sourceCounts = Array.isArray(data.sources)
+      ? { ok: data.sources.filter(s => s.status === "ok").length, total: data.sources.length }
+      : { ok: 0, total: 0 };
+    const missing = Array.isArray(data.missingEvidence) ? data.missingEvidence : [];
+    const queues = data.queues || {};
+    const mocks = data.mocks || {};
+    const lifecycleStatus = data.lifecycle?.raw?.status || data.lifecycle?.raw?.state || (data.lifecycle?.available ? "available" : "unknown");
+
+    function esc(value) {
+      return String(value ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+    }
+    function panel(label, value, small = "") {
+      return '<div class="panel"><div class="label">' + esc(label) + '</div><div class="value">' + esc(value) + '</div>' +
+        (small ? '<div class="small">' + esc(small) + '</div>' : '') + '</div>';
+    }
+
+    if (!data.swarmId) {
+      root.innerHTML = '<div class="panel">No evidence summary was provided.</div>';
+    } else {
+      root.innerHTML = [
+        '<div class="top"><h1>Evidence: ' + esc(data.swarmId) + '</h1><div class="badge">' + esc(lifecycleStatus) + '</div></div>',
+        '<div class="grid">',
+          panel('Sources', sourceCounts.ok + '/' + sourceCounts.total, 'available evidence feeds'),
+          panel('Queues', queues.totalMessages ?? 'n/a', (queues.count ?? 0) + ' queue(s)'),
+          panel('WireMock', mocks.wiremockRequests ?? 'n/a', (mocks.wiremockUnmatched ?? 0) + ' unmatched'),
+          panel('TCP mock', mocks.tcpRequests ?? 'n/a', (mocks.tcpUnmatched ?? 0) + ' unmatched'),
+        '</div>',
+        '<div class="panel"><div class="label">Missing evidence</div>',
+          missing.length ? '<ul>' + missing.map(item => '<li><strong>' + esc(item.source) + '</strong>: ' + esc(item.reason) + '</li>').join('') + '</ul>' : '<div class="small">No missing evidence reported.</div>',
+        '</div>',
+        data.tapSample ? '<div class="panel"><div class="label">Tap sample</div><pre>' + esc(JSON.stringify(data.tapSample, null, 2)).slice(0, 4000) + '</pre></div>' : ''
+      ].join('');
+    }
+  </script>
+</body>
+</html>`;
+}
+
+server.registerResource(
+  "evidence-summary-widget",
+  EVIDENCE_WIDGET_URI,
+  {
+    title: "PocketHive Evidence Summary",
+    description: "Read-only evidence summary widget for one PocketHive swarm.",
+    mimeType: APP_RESOURCE_MIME_TYPE,
+  },
+  async () => ({
+    contents: [{
+      uri: EVIDENCE_WIDGET_URI,
+      mimeType: APP_RESOURCE_MIME_TYPE,
+      text: evidenceWidgetHtml(),
+      _meta: {
+        ui: {
+          prefersBorder: true,
+          csp: { connectDomains: [], resourceDomains: [] },
+        },
+        "openai/widgetDescription": "Read-only PocketHive swarm evidence summary.",
+        "openai/widgetPrefersBorder": true,
+        "openai/widgetCSP": { connect_domains: [], resource_domains: [] },
+      },
+    }],
+  }),
+);
+
+server.registerTool("evidence.summary", {
+  title: "evidence.summary",
+  description: "Return a read-only aggregate evidence summary for a swarm and render the optional evidence widget for App-capable clients.",
+  inputSchema: {
+    swarmId: z.string(),
+    includeTapSample: z.boolean().optional().default(false),
+  },
+  annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+  _meta: {
+    ui: { resourceUri: EVIDENCE_WIDGET_URI },
+    "openai/outputTemplate": EVIDENCE_WIDGET_URI,
+  },
+}, async (input = {}) => {
+  try {
+    const result = await runWithTimeout("evidence.summary", buildEvidenceSummary, input);
+    return jsonToolResult(result, {
+      structuredContent: result,
+      _meta: {
+        ui: { resourceUri: EVIDENCE_WIDGET_URI },
+        "openai/outputTemplate": EVIDENCE_WIDGET_URI,
+        evidenceSummary: result,
+      },
+    });
+  } catch (err) {
+    return { isError: true, content: [{ type: "text", text: `Error: ${err.message || err}` }] };
+  }
 });
 
 // ── Mock server tools ─────────────────────────────────────────────────────────
@@ -861,49 +2349,6 @@ reg("mock.tcp.update", "Update specific fields of a TCP mock mapping by ID (e.g.
   });
 });
 
-// ── Path diagnostics ─────────────────────────────────────────────────────────
-
-reg("paths.check", "Show all resolved paths used by the MCP server. Run this first when debugging path issues.", {}, async () => {
-  const mountPrefix = await getWslMountPrefix();
-  const prWsl = toWslPath(POCKETHIVE_ROOT, mountPrefix);
-  const repoWsl = toWslPath(REPO_ROOT, mountPrefix);
-  const checks = {
-    REPO_ROOT_windows: REPO_ROOT,
-    REPO_ROOT_wsl: repoWsl,
-    POCKETHIVE_ROOT_raw: POCKETHIVE_ROOT || "(not set)",
-    POCKETHIVE_ROOT_wsl: prWsl || "(not set)",
-    IS_WINDOWS,
-    WSL_EXE,
-  };
-  // Verify paths exist in WSL
-  for (const [key, p] of [
-    ["repo_exists", repoWsl],
-    ["pockethive_exists", prWsl],
-    ["validator_classes", prWsl && `${prWsl}/tools/scenario-templating-check/target/classes`],
-    ["validator_cp_cache", prWsl && `${prWsl}/tools/scenario-templating-check/target/mcp-classpath.txt`],
-  ]) {
-    if (!p) { checks[key] = "SKIP (path not set)"; continue; }
-    try {
-      const r = execFileSync(WSL_EXE, ["bash", "-c", `test -e '${p}' && echo yes || echo no`],
-        { encoding: "utf8", timeout: 5000 }).trim();
-      checks[key] = r === "yes" ? "OK" : `MISSING: ${p}`;
-    } catch (e) { checks[key] = `ERROR: ${e.message}`; }
-  }
-  // Show example resolved paths for a bundle
-  const exampleBundle = existsSync(getBundlesDir())
-    ? readdirSync(getBundlesDir(), { withFileTypes: true }).find(d => d.isDirectory())?.name
-    : undefined;
-  if (exampleBundle) {
-    const bundleDir = resolve(getBundlesDir(), exampleBundle);
-    checks.example_bundle = exampleBundle;
-    checks.example_bundleDir_windows = bundleDir.toString();
-    checks.example_bundleDir_wsl = toWslPath(bundleDir.toString(), mountPrefix);
-    checks.example_scenarioPath_wsl = toWslPath(joinPath(bundleDir.toString(), "scenario.yaml"), mountPrefix);
-  }
-  return checks;
-});
-
-
 // ── Context tools ────────────────────────────────────────────────────────────
 
 reg("context.get", "Return the current active configuration context. Call at session start to understand what the server is working with.", {}, async () => {
@@ -911,7 +2356,9 @@ reg("context.get", "Return the current active configuration context. Call at ses
     bundlesRoot: getBundlesDir(),
     bundlesRootName: getBundlesDir().split(/[\\/]/).filter(Boolean).pop() || "",
     pockethiveRoot: POCKETHIVE_ROOT || "(not set)",
+    activeEnvironment: process.env.PH_ACTIVE_ENVIRONMENT || "",
     baseUrl: BASE_URL,
+    hasAuthToken: Boolean(POCKETHIVE_AUTH_TOKEN),
     mcpVersion: "1.0.0",
     platform: platform(),
     allBundlesRoots: _bundlesRoots,
@@ -943,131 +2390,70 @@ reg("context.list-bundles-roots", "List all configured bundle roots injected by 
 
 // ── Environment profile switching ───────────────────────────────────────────
 
-reg("env.current", "Return the active environment details (without secrets).", {}, async () => {
-  const activeContent = existsSync(resolve(REPO_ROOT, ".env"))
-    ? readFileSync(resolve(REPO_ROOT, ".env"), "utf8") : "";
+reg("env.current", "Return the active environment details injected into this MCP process (without secrets).", {}, async () => {
   return {
+    activeEnvironment: process.env.PH_ACTIVE_ENVIRONMENT || "",
     baseUrl: BASE_URL,
+    hasAuthToken: Boolean(POCKETHIVE_AUTH_TOKEN),
     rabbitUser: process.env.RABBITMQ_DEFAULT_USER || "guest",
     tcpMockUrl: TCP_MOCK_URL,
     wiremockUrl: WIREMOCK_URL,
-    hasAuthToken: !!(process.env.GITHUB_TOKEN),
     pockethiveRoot: POCKETHIVE_ROOT || "(not set)",
     bundlesRoot: getBundlesDir(),
   };
 });
 
-reg("env.add", "Create a new named environment profile (.env.<name> file).", {
+reg("env.add", "Request creation of a named environment profile in the client settings store.", {
   name: z.string().describe("Profile name, e.g. 'nft-remote'"),
   baseUrl: z.string().describe("PocketHive base URL"),
   rabbitUser: z.string().optional().default("guest"),
   tcpMockUrl: z.string().optional().default(""),
   wiremockUrl: z.string().optional().default(""),
 }, async ({ name, baseUrl, rabbitUser, tcpMockUrl, wiremockUrl }) => {
-  const profileFile = resolve(REPO_ROOT, `.env.${name}`);
-  const lines = [
-    `# Profile: ${name}`,
-    `POCKETHIVE_BASE_URL=${baseUrl}`,
-    `RABBITMQ_DEFAULT_USER=${rabbitUser}`,
-  ];
-  if (tcpMockUrl) lines.push(`TCP_MOCK_BASE_URL=${tcpMockUrl}`);
-  if (wiremockUrl) lines.push(`WIREMOCK_BASE_URL=${wiremockUrl}`);
-  writeFileSync(profileFile, lines.join("\n") + "\n", "utf8");
-  return { added: true, name, file: profileFile };
+  return {
+    added: false,
+    requiresClientPersistence: true,
+    environment: { name, baseUrl, rabbitUser, tcpMockUrl, wiremockUrl },
+    message: "Persist this environment in the IDE/client settings store and restart the MCP server with the selected environment.",
+  };
 });
 
-reg("env.remove", "Remove a named environment profile (.env.<name> file).", {
+reg("env.remove", "Request removal of a named environment profile from the client settings store.", {
   name: z.string().describe("Profile name to remove"),
 }, async ({ name }) => {
-  const profileFile = resolve(REPO_ROOT, `.env.${name}`);
-  if (!existsSync(profileFile)) throw new Error(`Profile '${name}' not found`);
-  unlinkSync(profileFile);
-  return { removed: true, name };
+  return {
+    removed: false,
+    requiresClientPersistence: true,
+    name,
+    message: "Remove this environment from the IDE/client settings store and restart the MCP server if it was active.",
+  };
 });
 
-reg("env.list", "List available environment profiles (.env.<profile> files) and show the active one", {}, async () => {
-  const profiles = [];
-  const examples = [];
-  const files = existsSync(REPO_ROOT) ? readdirSync(REPO_ROOT).filter(f => f.startsWith(".env.")) : [];
-  for (const f of files) {
-    if (f.startsWith(".env.example.")) {
-      examples.push(f.replace(".env.example.", ""));
-      continue;
-    }
-    const profile = f.replace(".env.", "");
-    const content = readFileSync(resolve(REPO_ROOT, f), "utf8");
-    const baseUrl = content.match(/^POCKETHIVE_BASE_URL=(.+)$/m)?.[1] || "(not set)";
-    const tcpMock = content.match(/^TCP_MOCK_BASE_URL=(.+)$/m)?.[1] || "(auto-derived)";
-    profiles.push({ profile, file: f, baseUrl, tcpMockUrl: tcpMock });
+reg("env.list", "List environment profiles injected by the IDE/client settings store.", {}, async () => {
+  let profiles = [];
+  try {
+    profiles = process.env.PH_ENVIRONMENTS ? JSON.parse(process.env.PH_ENVIRONMENTS) : [];
+  } catch {
+    throw new Error("PH_ENVIRONMENTS is not valid JSON");
   }
-  // Show active .env
-  const activeContent = existsSync(resolve(REPO_ROOT, ".env"))
-    ? readFileSync(resolve(REPO_ROOT, ".env"), "utf8") : "";
-  const activeProfile = activeContent.match(/# Profile: (\S+)/)?.[1] ||
-    activeContent.match(/# Activate with: scripts\/switch-env\.sh (\S+)/)?.[1] || "unknown";
-  const activeBaseUrl = activeContent.match(/^POCKETHIVE_BASE_URL=(.+)$/m)?.[1] || BASE_URL;
-  const result = { activeProfile, activeBaseUrl, profiles };
-  if (profiles.length === 0) {
-    result.hint = `No profiles found. Copy an example template to get started: ${examples.map(e => `cp .env.example.${e} .env.${e}`).join(" or ")}`;
-  }
-  if (examples.length > 0) result.exampleTemplates = examples;
-  return result;
+  return {
+    activeEnvironment: process.env.PH_ACTIVE_ENVIRONMENT || "",
+    activeBaseUrl: BASE_URL,
+    profiles,
+    source: "injected-env",
+  };
 });
 
-reg("env.switch", "Switch to a different environment profile. Copies .env.<profile> to .env. Requires IDE reload to take effect.", {
+reg("env.switch", "Request a switch to a named environment profile in the IDE/client settings store.", {
   profile: z.string().describe("Profile name, e.g. 'local' or 'remote-nft'"),
 }, async ({ profile }) => {
-  const profileFile = resolve(REPO_ROOT, `.env.${profile}`);
-  if (!existsSync(profileFile)) {
-    const available = readdirSync(REPO_ROOT)
-      .filter(f => f.startsWith(".env.") && !f.startsWith(".env.example."))
-      .map(f => f.replace(".env.", ""));
-    const examples = readdirSync(REPO_ROOT)
-      .filter(f => f.startsWith(".env.example."))
-      .map(f => f.replace(".env.example.", ""));
-    let msg = `Profile '${profile}' not found.`;
-    if (available.length > 0) msg += ` Available: ${available.join(", ")}.`;
-    if (examples.length > 0) msg += ` To create it from a template: cp .env.example.${examples[0]} .env.${profile}`;
-    throw new Error(msg);
-  }
-  const content = readFileSync(profileFile, "utf8");
-  writeFileSync(resolve(REPO_ROOT, ".env"), content, "utf8");
-  const baseUrl = content.match(/^POCKETHIVE_BASE_URL=(.+)$/m)?.[1] || "(not set)";
   return {
-    switched: true,
+    switched: false,
     profile,
-    baseUrl,
-    // requiresRestart signals the IDE plugin to kill and respawn the MCP server
-    // with the new env vars — the server itself cannot reload its own environment.
+    requiresClientPersistence: true,
     requiresRestart: true,
-    message: "Profile switched. The IDE plugin will restart the MCP server automatically.",
+    message: "Persist the active environment in the IDE/client settings store, then restart the MCP server with the new injected environment.",
   };
-});
-
-reg("stack.start", "Start the PocketHive stack via docker compose up. Use when health.check shows services are DOWN.", {
-  build: z.boolean().optional().default(false).describe("If true, runs build-hive.sh --quick instead of docker compose up"),
-}, async ({ build }) => {
-  if (!POCKETHIVE_ROOT) throw new Error("POCKETHIVE_ROOT not set in .env");
-  const mountPrefix = await getWslMountPrefix();
-  const prWsl = toWslPath(POCKETHIVE_ROOT, mountPrefix);
-  const cmd = build
-    ? `cd '${prWsl}' && bash build-hive.sh --quick`
-    : `cd '${prWsl}' && docker compose up -d`;
-  // Fire and forget — detach immediately so MCP doesn't time out
-  const proc = spawn(WSL_EXE, ["bash", "-lc", cmd], { stdio: "ignore", detached: true });
-  proc.unref();
-  return {
-    started: true,
-    build,
-    message: "Stack start launched in background. Poll health.check every 10s to confirm services come up."
-  };
-});
-
-reg("stack.stop", "Stop the PocketHive stack via docker compose down.", {}, async () => {
-  if (!POCKETHIVE_ROOT) throw new Error("POCKETHIVE_ROOT not set in .env");
-  const prWsl = await toWslPathAsync(POCKETHIVE_ROOT);
-  const output = await shell(`cd '${prWsl}' && docker compose down`, undefined, 60000);
-  return { stopped: true, output };
 });
 
 reg("health.check", "Check connectivity to Orchestrator, Scenario Manager, RabbitMQ, and Prometheus", {}, async () => {
@@ -1085,24 +2471,6 @@ reg("health.check", "Check connectivity to Orchestrator, Scenario Manager, Rabbi
     } catch (e) { results[name] = `DOWN: ${e.message}`; }
   }
 
-  const syncedFrom = resolve(REPO_ROOT, "docs/pockethive-ref/SYNCED_FROM.md");
-  if (existsSync(syncedFrom)) {
-    const content = readFileSync(syncedFrom, "utf8");
-    const commitMatch = content.match(/Commit:\s*`([^`]+)`/);
-    const dateMatch = content.match(/Date:\s*(\S+)/);
-    results.pockethiveRefSynced = dateMatch?.[1] || "unknown";
-    results.pockethiveRefCommit = commitMatch?.[1] || "unknown";
-    if (POCKETHIVE_ROOT) {
-      try {
-        const phWsl = await toWslPathAsync(POCKETHIVE_ROOT);
-        const headSha = await shell(`git -C "${phWsl}" rev-parse --short HEAD`);
-        results.pockethiveHeadCommit = headSha;
-        results.pockethiveRefStale = headSha !== (commitMatch?.[1] || "");
-      } catch { /* ignore */ }
-    }
-  } else {
-    results.pockethiveRefSynced = "NOT SYNCED — run scripts/sync-pockethive-ref.sh";
-  }
   results.pockethiveRoot = POCKETHIVE_ROOT || "(not set)";
   results.baseUrl = BASE_URL;
   results.tcpMockUrl = TCP_MOCK_URL;
@@ -1110,214 +2478,35 @@ reg("health.check", "Check connectivity to Orchestrator, Scenario Manager, Rabbi
   return results;
 });
 
-// ── Git helpers ───────────────────────────────────────────────────────────────
-
-reg("git.status", "Show git status of the bundles repo", {}, async () => {
-  const repoWsl = await toWslPathAsync(REPO_ROOT);
-  const [status, branch] = await Promise.all([
-    shell(`git -C '${repoWsl}' status --short`),
-    shell(`git -C '${repoWsl}' rev-parse --abbrev-ref HEAD`),
-  ]);
-  return { status, branch };
-});
-
-reg("docs.refresh", "Re-sync PocketHive reference docs and regenerate derived files (capabilities, AGENTS.md). Run when health.check shows pockethiveRefStale=true.", {}, async () => {
-  if (!POCKETHIVE_ROOT) throw new Error("POCKETHIVE_ROOT not set. Run scripts/init-dev.sh first.");
-  const mountPrefix = await getWslMountPrefix();
-  const syncScript = toWslPath(joinPath(REPO_ROOT, "scripts/sync-pockethive-ref.sh"), mountPrefix);
-  const phRootWsl = toWslPath(POCKETHIVE_ROOT, mountPrefix);
-  // Use -C flag pattern: no cwd needed, paths are explicit
-  const output = await shell(`"${syncScript}" --pockethive-root "${phRootWsl}"`);
-  // Run drift check — non-zero exit is informational, not an error
-  let driftOutput = "";
-  try {
-    const driftScript = toWslPath(joinPath(REPO_ROOT, "scripts/check-docs-drift.mjs"), mountPrefix);
-    driftOutput = await shell(`node '${driftScript}'`);
-  } catch (e) {
-    driftOutput = e.message || String(e);
-  }
-  return { refreshed: true, output, drift: driftOutput || "No drift detected." };
-});
-
-reg("git.diff", "Show git diff for a specific bundle or the whole repo", {
-  bundle: z.string().optional(),
-}, async ({ bundle }) => {
-  const repoWsl = await toWslPathAsync(REPO_ROOT);
-  const path = bundle ? `scenarios/bundles/${bundle}` : ".";
-  return { diff: await shell(`git -C '${repoWsl}' diff -- "${path}"`) };
-});
-
-// ── Safe dev tools (sandboxed replacements) ──────────────────────────────────
-
-// Allowlist of service names that stack.rebuild accepts.
-const REBUILD_ALLOWLIST = new Set([
-  "generator", "moderator", "processor", "postprocessor",
-  "request-builder", "http-sequence", "swarm-controller",
-  "scenario-manager", "orchestrator", "clearing-export", "trigger",
-]);
-
-reg("stack.rebuild", "Rebuild one PocketHive service image and restart it. Safe replacement for maven.execute + docker.execute. Only pre-approved service names are accepted.", {
-  service: z.string().describe(`Service to rebuild. Allowed: ${[...REBUILD_ALLOWLIST].join(", ")}`),
-}, async ({ service }) => {
-  if (!REBUILD_ALLOWLIST.has(service)) {
-    throw new Error(`Service '${service}' is not in the rebuild allowlist. Allowed: ${[...REBUILD_ALLOWLIST].join(", ")}`);
-  }
-  if (!POCKETHIVE_ROOT) throw new Error("POCKETHIVE_ROOT not set.");
-  const prWsl = await toWslPathAsync(POCKETHIVE_ROOT);
-  // Fire and forget — build-hive.sh --quick --service <name> runs in background
-  const proc = spawn(WSL_EXE, ["bash", "-lc", `cd '${prWsl}' && bash build-hive.sh --quick --service ${service}`],
-    { stdio: "ignore", detached: true });
-  proc.unref();
-  return {
-    started: true,
-    service,
-    message: `Rebuild of '${service}' launched in background. Poll health.check every 15s to confirm the service comes back up.`,
-  };
-});
-
-reg("bundle.commit", "Stage and commit the active bundle to git. Scoped to the active bundles folder only — no push, no force, no cross-repo writes.", {
-  bundle: z.string().describe("Bundle name to commit"),
-  message: z.string().describe("Commit message"),
-}, async ({ bundle, message }) => {
-  const bundleDir = resolve(getBundlesDir(), bundle);
-  if (!existsSync(bundleDir)) throw new Error(`Bundle '${bundle}' not found at ${bundleDir}`);
-  const repoWsl = await toWslPathAsync(getBundlesDir());
-  const bundleWsl = await toWslPathAsync(bundleDir);
-  // Only stage the specific bundle directory — nothing else
-  const addOut = await shell(`git -C '${repoWsl}' add '${bundleWsl}'`);
-  const commitOut = await shell(`git -C '${repoWsl}' commit -m ${JSON.stringify(message)}`);
-  return { committed: true, bundle, message, output: commitOut };
-});
-
-// Read-only debug shell — only available when POCKETHIVE_DEBUG_SHELL=true
-// Scoped to containers matching swarmId prefix. Read-only commands only.
-const DEBUG_SHELL_ALLOWED_CMDS = new Set(["logs", "inspect", "ps", "stats", "top"]);
-
-reg("debug.shell", "Read-only Docker inspection for local debugging. Only available when POCKETHIVE_DEBUG_SHELL=true in .env. Scoped to swarmId containers. Read-only commands only (logs, inspect, ps, stats, top).", {
-  swarmId: z.string().describe("Swarm ID — only containers matching this prefix are accessible"),
-  command: z.string().describe(`Docker command. Allowed: ${[...DEBUG_SHELL_ALLOWED_CMDS].join(", ")}`),
-  args: z.array(z.string()).optional().describe("Command arguments"),
-}, async ({ swarmId, command, args = [] }) => {
-  if (process.env.POCKETHIVE_DEBUG_SHELL !== "true") {
-    throw new Error("debug.shell is disabled. Set POCKETHIVE_DEBUG_SHELL=true in .env to enable local debugging.");
-  }
-  if (!DEBUG_SHELL_ALLOWED_CMDS.has(command)) {
-    throw new Error(`Command '${command}' is not allowed. Allowed: ${[...DEBUG_SHELL_ALLOWED_CMDS].join(", ")}`);
-  }
-  // Validate all args reference containers scoped to swarmId
-  for (const arg of args) {
-    if (arg.startsWith("-")) continue; // flags are fine
-    if (!arg.startsWith(swarmId)) {
-      throw new Error(`Argument '${arg}' does not match swarmId prefix '${swarmId}'. Only containers for this swarm are accessible.`);
-    }
-  }
-  const result = await shell(`docker ${command} ${args.join(" ")}`);
-  return { command: `docker ${command}`, args, output: result };
-});
-
-// ── GitHub Issues ────────────────────────────────────────────────────────────
-
-const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
-const GITHUB_REPO = process.env.GITHUB_REPO || "sepa79/PocketHive";
-const [GITHUB_OWNER, GITHUB_REPO_NAME] = GITHUB_REPO.split("/");
-
-function githubAuth() {
-  if (!GITHUB_TOKEN) throw new Error("GITHUB_TOKEN not set in .env");
-  return `Bearer ${GITHUB_TOKEN}`;
-}
-
-reg("github.list_issues", "List issues in the GitHub repository", {
-  state: z.enum(["open", "closed", "all"]).optional().default("open"),
-  per_page: z.number().optional().default(10),
-  page: z.number().optional().default(1),
-  labels: z.array(z.string()).optional(),
-}, async ({ state, per_page, page, labels }) => {
-  let url = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO_NAME}/issues?state=${state}&per_page=${per_page}&page=${page}`;
-  if (labels && labels.length > 0) {
-    url += `&labels=${labels.join(",")}`;
-  }
-  return await httpJson(url, {
-    headers: { authorization: githubAuth() },
-    timeoutMs: 10000,
-  });
-});
-
-reg("github.get_issue", "Get details of a specific issue", {
-  issue_number: z.number(),
-}, async ({ issue_number }) => {
-  return await httpJson(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO_NAME}/issues/${issue_number}`, {
-    headers: { authorization: githubAuth() },
-    timeoutMs: 10000,
-  });
-});
-
-reg("github.create_issue", "Create a new issue in the GitHub repository", {
-  title: z.string(),
-  body: z.string().optional(),
-  labels: z.array(z.string()).optional(),
-  assignees: z.array(z.string()).optional(),
-}, async ({ title, body, labels, assignees }) => {
-  const issueData = { title };
-  if (body) issueData.body = body;
-  if (labels && labels.length > 0) issueData.labels = labels;
-  if (assignees && assignees.length > 0) issueData.assignees = assignees;
-  
-  return await httpJson(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO_NAME}/issues`, {
-    method: "POST",
-    body: issueData,
-    headers: { authorization: githubAuth() },
-    timeoutMs: 10000,
-  });
-});
-
-reg("github.update_issue", "Update an existing issue", {
-  issue_number: z.number(),
-  title: z.string().optional(),
-  body: z.string().optional(),
-  state: z.enum(["open", "closed"]).optional(),
-  labels: z.array(z.string()).optional(),
-  assignees: z.array(z.string()).optional(),
-}, async ({ issue_number, title, body, state, labels, assignees }) => {
-  const updateData = {};
-  if (title) updateData.title = title;
-  if (body) updateData.body = body;
-  if (state) updateData.state = state;
-  if (labels) updateData.labels = labels;
-  if (assignees) updateData.assignees = assignees;
-  
-  return await httpJson(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO_NAME}/issues/${issue_number}`, {
-    method: "PATCH",
-    body: updateData,
-    headers: { authorization: githubAuth() },
-    timeoutMs: 10000,
-  });
-});
-
-reg("github.add_issue_comment", "Add a comment to an existing issue", {
-  issue_number: z.number(),
-  body: z.string(),
-}, async ({ issue_number, body }) => {
-  return await httpJson(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO_NAME}/issues/${issue_number}/comments`, {
-    method: "POST",
-    body: { body },
-    headers: { authorization: githubAuth() },
-    timeoutMs: 10000,
-  });
-});
-
-reg("github.search_issues", "Search for issues across the repository", {
-  q: z.string().describe("Search query (GitHub search syntax)"),
-  per_page: z.number().optional().default(10),
-  page: z.number().optional().default(1),
-}, async ({ q, per_page, page }) => {
-  const searchQuery = q.includes("repo:") ? q : `repo:${GITHUB_OWNER}/${GITHUB_REPO_NAME} ${q}`;
-  return await httpJson(`https://api.github.com/search/issues?q=${encodeURIComponent(searchQuery)}&per_page=${per_page}&page=${page}`, {
-    headers: { authorization: githubAuth() },
-    timeoutMs: 10000,
-  });
-});
-
 // ── Start ─────────────────────────────────────────────────────────────────────
 
-const transport = new StdioServerTransport();
-await server.connect(transport);
+async function startHttpServer() {
+  const port = Number(process.env.PH_MCP_HTTP_PORT);
+  if (!Number.isInteger(port) || port <= 0) throw new Error("PH_MCP_HTTP_PORT must be a positive integer");
+  const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: () => crypto.randomUUID() });
+  await server.connect(transport);
+  const httpServer = createServer(async (req, res) => {
+    try {
+      const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+      if (url.pathname !== "/mcp") {
+        res.writeHead(404, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: "not_found", message: "Use /mcp for the PocketHive MCP endpoint." }));
+        return;
+      }
+      await transport.handleRequest(req, res);
+    } catch (err) {
+      if (!res.headersSent) res.writeHead(500, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: "mcp_http_error", message: err.message || String(err) }));
+    }
+  });
+  httpServer.listen(port, () => {
+    console.error(`PocketHive MCP Streamable HTTP listening on http://localhost:${port}/mcp`);
+  });
+}
+
+if (process.env.PH_MCP_HTTP_PORT) {
+  await startHttpServer();
+} else {
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+}

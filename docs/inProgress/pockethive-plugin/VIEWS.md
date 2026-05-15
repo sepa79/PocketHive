@@ -192,7 +192,7 @@ BUNDLES FOLDERS                           [+ Add]
     /path/to/PocketHive/  [Browse]
   MCP Server
     [●green] Running  pid <N>  stdio
-    [Restart] [Show logs]
+    [Restart] [Diagnostics]
 ```
 
 ---

@@ -28,6 +28,10 @@ the ground truth.
 | ui-v2 components to reuse | `ui-v2/src/pages/`, `ui-v2/src/lib/`, `ui-v2/src/styles.css` |
 | Architecture | `docs/ARCHITECTURE.md` |
 | Plugin spec | `docs/inProgress/pockethive-plugin/` (this folder) |
+| **Plugin docs index** | `docs/inProgress/pockethive-plugin/README.md` |
+| **MCP tool contracts** | `docs/inProgress/pockethive-plugin/TOOL-CONTRACTS.md` |
+| **Evidence taxonomy** | `docs/inProgress/pockethive-plugin/EVIDENCE.md` |
+| **Developer setup** | `docs/inProgress/pockethive-plugin/DEVELOPER-SETUP.md` |
 | **Build-ready gap resolutions** | `docs/inProgress/pockethive-plugin/BUILD-READY-GAPS.md` |
 
 ---
@@ -52,6 +56,20 @@ the ground truth.
 
 - **Do not add new PocketHive API endpoints** to support the plugin. Use
   what exists.
+
+- **Do not add shell-backed MCP tools.** The MCP server must not run Docker,
+  Compose, Maven, npm, Git, WSL, bash, PowerShell, or local scripts. Build,
+  stack lifecycle, Git, and package-management workflows stay outside MCP.
+
+- **Do not add general GitHub tools to PocketHive MCP.** GitHub issue access
+  belongs to a separate GitHub MCP configured with an issue-only token. A
+  narrow PocketHive-specific evidence export helper may be proposed later, but
+  `github.*` CRUD/search tools stay out of this MCP server.
+
+- **Do not read container logs directly.** Use PocketHive-provided evidence:
+  swarm status, swarm journal, queues, debug taps, metrics, mock request
+  history, dataset checks, and PocketHive-owned log APIs if they exist. Loki
+  is a future option only when exposed through a PocketHive API.
 
 - **Do not duplicate ui-v2 React components**. Webview panels embed the
   built `ui-v2` output. Do not rewrite topology views, journal pages, or
@@ -79,11 +97,15 @@ in `server.mjs`. Every tool must:
 - Use `z.string()`, `z.number()`, `z.boolean()`, `z.enum()` for inputs
 - Return a plain JSON-serialisable object
 - Handle errors by throwing — the `reg` wrapper catches and formats them
+- Call only PocketHive-owned APIs, mock admin APIs, RabbitMQ management APIs,
+  Prometheus APIs, or guarded bundle file operations
+- Never execute shell commands or spawn child processes from MCP tool handlers
 
-Tools that should render interactive UIs in AI chat use
-`registerAppTool()` instead of `reg()`. See `MCP-APPS.md` for the
-registration pattern. App-capable tools fall back to plain JSON text
-when the connecting client does not support MCP Apps.
+MCP Apps start with a narrow Phase 1.5 `evidence.summary` widget. Tools use
+explicit capability negotiation: JSON-only clients get JSON tool responses, and
+App-capable clients get the same tool result plus a declared UI resource. Do
+not describe this as a fallback chain. Do not build broader write-capable Apps
+until the evidence widget proves the transport, packaging, and client support.
 
 ### context.* tools
 `context.get`, `context.set-bundles-root`, `context.list-bundles-roots`
@@ -259,8 +281,10 @@ specific tests alongside existing ones.
 6. Enhance `env.list`, `env.switch`, add `env.current`, `env.add`, `env.remove`
 7. Add HTTP/SSE transport (guarded by `PH_MCP_HTTP_PORT` env var)
 8. Update `package.json` — name `@pockethive/mcp-server`, add `bin` entry
-9. Add `Dockerfile` for standalone deployment
-10. Update bundles repo `mcp.json` to reference npm package
+9. Remove all shell/devops/log-scraping tools from the MCP surface
+10. Remove general `github.*` tools from the PocketHive MCP surface
+11. Add `Dockerfile` for standalone deployment
+12. Update bundles repo `mcp.json` to reference npm package
 
 ### Phase 2 — VS Code enhancement
 
@@ -293,20 +317,40 @@ specific tests alongside existing ones.
 9. Implement `PocketHiveStatusBarWidget`
 10. Register all actions in `plugin.xml`
 
-### Phase 4 — Authoring session MCP
+### Phase 4 — Wizard And Domain Authoring MCP
 
-Implement the session-based scenario authoring tools from
-`docs/concepts/pockethive-scenario-builder-mcp-plugin-spec.md`:
-- `session.start`, `session.close`, `session.discard`
-- `create_scenario`, `create_rest_pipeline`, `add_bee`, `connect_bees`
-- `set_bee_config`, `add_plan_stage`, `add_http_template`
-- `validate_session`, `preview_diff`, `generate_bundle`, `export_bundle`
-- `get_action_log`, `get_validation_log`, `submit_ai_feedback_report`
+Implement the public novice-facing wizard tools:
+- `wizard.start`
+- `wizard.answer`
+- `wizard.summary`
+- `wizard.complete`
+
+Implement lower-level dot-delimited domain authoring tools as needed behind
+the wizard:
+- `scenario.create`, `pipeline.create.rest`, `pipeline.create.tcp`,
+  `pipeline.create.sequence`
+- `bee.add`, `bee.remove`, `bee.config.set`, `bee.connect`
+- `template.http.add`, `template.http.attach`, `import.postman`
+- `auth.profile.add`, `sut.bind`, `variables.set`
+- `session.validate`, `session.preview-diff`, `bundle.generate`,
+  `bundle.export`, `session.feedback`
+
+Do not implement underscore tool names from older concept docs. Treat those as
+logical operation names only.
 
 The AI chat conversation strategy for bundle creation is defined in
 [BUNDLE-WIZARD.md](./BUNDLE-WIZARD.md). It specifies the risk-ordered
-decision tree, adaptive skip logic, and conversation heuristics that
-agents follow when calling the session tools above.
+decision tree, adaptive skip logic, and conversation heuristics that agents
+follow when using the wizard and lower-level domain tools.
+
+### Phase 1.5 — Read-only Evidence MCP App
+
+Implement only:
+- `evidence.summary`
+- `ui://pockethive/evidence-summary`
+
+The JSON result is canonical. The widget renders that result and does not call
+PocketHive APIs directly.
 
 ---
 
@@ -317,6 +361,10 @@ agents follow when calling the session tools above.
 | Config storage | IDE settings API only — no .env files |
 | Secrets | OS keychain only — never settings.json |
 | API calls | Via MCP tools only — no direct HTTP from new plugin code |
+| Shell | No shell-backed MCP tools; child-process execution is allowed only for IDE adapters spawning the MCP server itself |
+| Logs | Use PocketHive log APIs only if available; no Docker logs, no direct Loki |
+| GitHub | Use external GitHub MCP with issue-only token; no general `github.*` tools in PocketHive MCP |
+| MCP Apps | Phase 1.5 is read-only `evidence.summary` widget only |
 | UI components | Reuse ui-v2 via webview — no reimplementation |
 | PH services | Read-only consumer — no new endpoints, no service changes |
 | Scenario YAML | Only use fields that exist in Java source records |

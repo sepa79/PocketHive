@@ -109,21 +109,22 @@ async function buildMcpEnv(context: vscode.ExtensionContext): Promise<NodeJS.Pro
   const envs = cfg.get<Environment[]>('environments') ?? [];
   const activeName = cfg.get<string>('activeEnvironment') ?? '';
   const env = envs.find(e => e.name === activeName) ?? envs[0];
+  const safeEnvs = envs.map(({ authToken: _authToken, ...safe }) => safe);
   const bundlesFolder = cfg.get<string>('activeBundlesFolder') ?? '';
   const pockethiveRoot = cfg.get<string>('pockethiveRoot') ?? '';
   const allFolders = cfg.get<string[]>('bundlesFolders') ?? [];
 
   const rabbitPass = env ? (await context.secrets.get(`ph.env.${env.name}.rabbitPass`) ?? 'guest') : 'guest';
-  const authToken = env ? (await context.secrets.get(`ph.env.${env.name}.authToken`) ?? '') : '';
-
   return {
     ...process.env,
     POCKETHIVE_BASE_URL: env?.baseUrl ?? 'http://localhost:8088',
+    POCKETHIVE_AUTH_TOKEN: env?.authToken?.trim() ?? '',
     POCKETHIVE_ROOT: pockethiveRoot,
     BUNDLES_ROOT: bundlesFolder,
     RABBITMQ_DEFAULT_USER: env?.rabbitUser ?? 'guest',
     RABBITMQ_DEFAULT_PASS: rabbitPass,
-    GITHUB_TOKEN: authToken,
+    PH_ACTIVE_ENVIRONMENT: env?.name ?? '',
+    PH_ENVIRONMENTS: JSON.stringify(safeEnvs),
     PH_BUNDLES_ROOTS: JSON.stringify(allFolders),
     ...(env?.tcpMockUrl ? { TCP_MOCK_BASE_URL: env.tcpMockUrl } : {}),
     ...(env?.wiremockUrl ? { WIREMOCK_BASE_URL: env.wiremockUrl } : {}),
@@ -133,6 +134,7 @@ async function buildMcpEnv(context: vscode.ExtensionContext): Promise<NodeJS.Pro
 export interface Environment {
   name: string;
   baseUrl: string;
+  authToken?: string;
   rabbitUser?: string;
   tcpMockUrl?: string;
   wiremockUrl?: string;

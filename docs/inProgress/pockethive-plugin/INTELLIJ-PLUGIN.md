@@ -226,7 +226,6 @@ class McpServerManager(private val project: Project) {
             put("BUNDLES_ROOT",           settings.state.activeBundlesFolder)
             put("RABBITMQ_DEFAULT_USER",  env.rabbitUser.ifBlank { "guest" })
             put("RABBITMQ_DEFAULT_PASS",  PocketHiveCredentials.getRabbitPass(env.name))
-            put("GITHUB_TOKEN",           PocketHiveCredentials.getAuthToken(env.name) ?: "")
             put("PH_BUNDLES_ROOTS",       Json.encodeToString(settings.state.bundlesFolders))
             if (env.tcpMockUrl.isNotBlank())  put("TCP_MOCK_BASE_URL",  env.tcpMockUrl)
             if (env.wiremockUrl.isNotBlank()) put("WIREMOCK_BASE_URL",  env.wiremockUrl)

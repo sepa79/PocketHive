@@ -20,6 +20,10 @@ export async function bundleScaffold(bundleId: string, pattern: string, sutType 
   return call('bundle.scaffold', { bundleId, pattern, sutType });
 }
 
+export async function bundleCheck(bundle: string): Promise<BundleCheckResult> {
+  return call('bundle.check', { bundle }) as Promise<BundleCheckResult>;
+}
+
 export async function bundleValidate(bundle: string): Promise<{ jobId: string }> {
   return call('bundle.validate', { bundle }) as Promise<{ jobId: string }>;
 }
@@ -82,6 +86,10 @@ export async function debugJournal(swarmId: string, limit = 20) {
   return call('debug.journal', { swarmId, limit });
 }
 
+export async function evidenceSummary(swarmId: string, includeTapSample = false): Promise<EvidenceSummary> {
+  return call('evidence.summary', { swarmId, includeTapSample }) as Promise<EvidenceSummary>;
+}
+
 // ── Health ────────────────────────────────────────────────────────────────────
 
 export async function healthCheck(): Promise<HealthResult> {
@@ -109,10 +117,24 @@ export interface BundleSummary {
 export interface ValidationResult {
   jobId: string;
   status: 'running' | 'done' | 'error';
-  generator?: string;
-  httpTemplates?: string;
+  mode?: string;
+  source?: string;
+  structural?: BundleCheckResult;
+  note?: string;
   error?: string;
   elapsedSeconds?: number;
+}
+
+export interface BundleCheckResult {
+  ok: boolean;
+  bundle: string;
+  path: string;
+  scenarioId?: string;
+  checks: Array<{ id: string; ok: boolean; message: string; severity: string }>;
+  errors: Array<{ id: string; message: string }>;
+  warnings: Array<{ id: string; message: string }>;
+  artifacts?: Record<string, boolean>;
+  source?: string;
 }
 
 export interface ScenarioSummary {
@@ -146,6 +168,18 @@ export interface HealthResult {
   prometheus: string;
   baseUrl: string;
   [key: string]: unknown;
+}
+
+export interface EvidenceSummary {
+  swarmId: string;
+  lifecycle: Record<string, unknown>;
+  queues: Record<string, unknown>;
+  journal: Record<string, unknown>;
+  metrics: Record<string, unknown>;
+  mocks: Record<string, unknown>;
+  datasets: Record<string, unknown>;
+  missingEvidence: Array<{ source: string; reason?: string }>;
+  sources: Array<{ name: string; status: string; error?: string }>;
 }
 
 export interface ContextInfo {

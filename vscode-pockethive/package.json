@@ -46,9 +46,6 @@
       }
     ],
     "commands": [
-      { "command": "pockethive.addHiveUrl",            "title": "Add Hive URL",            "category": "PocketHive" },
-      { "command": "pockethive.setActiveHiveUrl",       "title": "Use Hive URL",            "category": "PocketHive" },
-      { "command": "pockethive.removeHiveUrl",          "title": "Delete Hive URL",         "category": "PocketHive", "icon": "$(trash)" },
       { "command": "pockethive.listSwarms",             "title": "List swarms",             "category": "PocketHive" },
       { "command": "pockethive.startAllSwarms",         "title": "Start all swarms",        "category": "PocketHive", "icon": "$(play)" },
       { "command": "pockethive.stopAllSwarms",          "title": "Stop all swarms",         "category": "PocketHive", "icon": "$(debug-stop)" },
@@ -106,8 +103,6 @@
         { "command": "pockethive.addEnvironment",  "when": "view == pockethive.settings", "group": "navigation" }
       ],
       "view/item/context": [
-        { "command": "pockethive.setActiveHiveUrl",       "when": "view == pockethive.settings && viewItem == hiveInstance",       "group": "inline" },
-        { "command": "pockethive.removeHiveUrl",          "when": "view == pockethive.settings && viewItem =~ /^hiveInstance/",    "group": "inline" },
         { "command": "pockethive.setActiveEnvironment",   "when": "view == pockethive.settings && viewItem == environment",        "group": "inline" },
         { "command": "pockethive.removeEnvironment",      "when": "view == pockethive.settings && viewItem =~ /^environment/",     "group": "inline" },
         { "command": "pockethive.setActiveBundlesFolder", "when": "view == pockethive.settings && viewItem == bundlesFolder",      "group": "inline" },
@@ -135,6 +130,7 @@
             "properties": {
               "name":        { "type": "string" },
               "baseUrl":     { "type": "string" },
+              "authToken":   { "type": "string", "default": "", "description": "Optional PocketHive bearer token for this environment." },
               "rabbitUser":  { "type": "string", "default": "guest" },
               "tcpMockUrl":  { "type": "string", "default": "" },
               "wiremockUrl": { "type": "string", "default": "" }
@@ -166,21 +162,6 @@
           "type": "string",
           "default": "",
           "description": "Override path to pockethive-mcp server.mjs. Leave blank to use installed npm package."
-        },
-        "pockethive.hiveUrls": {
-          "type": "array",
-          "items": { "type": "string" },
-          "default": [],
-          "description": "Legacy: List of Hive base URLs. Migrated to pockethive.environments on first activation."
-        },
-        "pockethive.activeHiveUrl": {
-          "type": "string",
-          "default": "",
-          "description": "Legacy: Active Hive base URL. Migrated to pockethive.activeEnvironment on first activation."
-        },
-        "pockethive.authToken": {
-          "type": "string",
-          "description": "Legacy: Bearer token for Orchestrator API."
         }
       }
     }

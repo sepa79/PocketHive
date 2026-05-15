@@ -1,21 +1,23 @@
 # PocketHive MCP Apps
 
 ## Status
-`IN PROGRESS`
+`PHASE 1.5 SPIKE + FUTURE PLATFORM`
 
 ## Overview
 
-MCP Apps extend the PocketHive MCP server so that AI agents (Amazon Q,
-Claude, Cursor, Copilot) can render interactive dashboards, forms, and
-live monitors directly inside the chat conversation — not just text.
+MCP Apps can extend the PocketHive MCP server so that AI agents can render
+interactive dashboards, forms, and live monitors directly inside the chat
+conversation — not just text.
 
-This is a first-class addition to the plugin architecture. MCP Apps and
-the IDE plugin webview panels share the same design tokens and tool
-calls but are built and deployed independently.
+`@modelcontextprotocol/ext-apps` is published, so the package-exists blocker is
+gone. Target client support still needs to be verified per client.
 
-**Supported clients:** Claude, Claude Desktop, VS Code GitHub Copilot,
-Goose, Postman, MCPJam. Amazon Q support depends on its MCP Apps
-adoption timeline.
+The early scope is deliberately small: one read-only `evidence.summary` widget
+that visualises existing evidence tool output. The broader dashboard/form
+platform remains future work.
+
+**Potential clients:** Claude, Claude Desktop, VS Code GitHub Copilot, Goose,
+Postman, MCPJam. Confirm support before building against any client.
 
 ---
 
@@ -24,10 +26,10 @@ adoption timeline.
 ```
 +------------------------------------------------------------------+
 |  AI Chat (Claude, Copilot, Amazon Q, etc.)                       |
-|  User asks: "show me swarm status"                               |
-|  Agent calls: swarm.list                                         |
-|  Host fetches: ui://pockethive/swarm-dashboard                   |
-|  Renders: interactive swarm dashboard in sandboxed iframe        |
+|  User asks: "show evidence for swarm-x"                          |
+|  Agent calls: evidence.summary                                   |
+|  Host fetches: ui://pockethive/evidence-summary                  |
+|  Renders: read-only evidence widget in sandboxed iframe          |
 +------------------------------------------------------------------+
                          same tools
 +------------------------------------------------------------------+
@@ -43,13 +45,16 @@ adoption timeline.
 +------------------------------------------------------------------+
 ```
 
-The MCP server detects whether the connecting client supports MCP Apps
-via capability negotiation at `ui/initialize`. If not supported, tools
-return plain JSON text as before — fully backwards compatible.
+The MCP server must use explicit capability negotiation before returning App
+resources. JSON-only clients receive JSON tool responses. App-capable clients
+receive the same tool result plus the declared UI resource.
 
 ---
 
 ## Project structure
+
+Phase 1.5 adds only the evidence summary app. Other app folders below are
+future platform candidates.
 
 ```
 tools/pockethive-mcp/
@@ -60,9 +65,11 @@ tools/pockethive-mcp/
     tsconfig.json
     shared/
       tokens.css                <- design tokens (shared with ui-v2)
-      hal-eye.css               <- HAL eye component CSS
       components.ts             <- shared vanilla TS helpers
-    swarm-dashboard/
+    evidence-summary/           <- Phase 1.5
+      mcp-app.html
+      src/mcp-app.ts
+    swarm-dashboard/            <- future
       mcp-app.html
       src/mcp-app.ts
     bundle-explorer/
@@ -100,8 +107,8 @@ tools/pockethive-mcp/
     "build:watch": "node build-all.mjs --watch"
   },
   "dependencies": {
-    "@modelcontextprotocol/ext-apps": "^1.0.0",
-    "@modelcontextprotocol/sdk": "^1.25.1"
+    "@modelcontextprotocol/ext-apps": "^1.7.1",
+    "@modelcontextprotocol/sdk": "^1.29.0"
   },
   "devDependencies": {
     "typescript": "~5.8.3",
@@ -120,8 +127,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const apps = [
-  'swarm-dashboard', 'bundle-explorer', 'queue-monitor',
-  'health-dashboard', 'create-swarm-form', 'journal-viewer', 'tap-viewer'
+  'evidence-summary'
 ];
 
 for (const app of apps) {
@@ -195,7 +201,46 @@ function registerApp(name, toolName, desc, schema, handler) {
 
 ---
 
-## App 1 — Swarm Dashboard
+## Phase 1.5 App — Evidence Summary
+
+**Trigger:** User asks "show evidence for swarm X", "did this run prove the
+scenario works?", "what evidence is missing?"
+
+**Tool:** `evidence.summary`
+
+**Scope:** read-only. The tool returns the canonical evidence model. The widget
+only renders that model.
+
+**UI:**
+
+```
++--------------------------------------------------+
+| Evidence: <swarm-id>                    RUNNING  |
+|--------------------------------------------------|
+| Lifecycle     READY -> RUNNING -> STOPPED         |
+| Queues        drained: yes   max depth: 12        |
+| Journal       0 errors       2 warnings           |
+| Tap sample    processor OUT captured              |
+| Mock calls    125 matched    0 unmatched          |
+| Metrics       100/s avg      p95 42ms             |
+|--------------------------------------------------|
+| Missing evidence                                  |
+| - no structured PocketHive logs available         |
+| - no dataset check attached                       |
++--------------------------------------------------+
+```
+
+**Rules:**
+
+- No writes.
+- No direct runtime calls from the widget.
+- No shell, Docker logs, or direct Loki.
+- All values come from the `evidence.summary` result.
+- JSON output remains canonical for non-App clients.
+
+---
+
+## Future App 1 — Swarm Dashboard
 
 **Trigger:** User asks "show me swarms", "what's running", "swarm status"
 
@@ -308,7 +353,7 @@ async function checkConnectivity() {
 
 ---
 
-## App 2 — Bundle Explorer
+## Future App 2 — Bundle Explorer
 
 **Trigger:** User asks "show me bundles", "list scenarios", "what bundles do I have"
 
@@ -344,7 +389,7 @@ via MCP session tools.
 
 ---
 
-## App 3 — Queue Monitor
+## Future App 3 — Queue Monitor
 
 **Trigger:** User asks "show queue depths", "is there a backlog", "monitor queues for <swarm>"
 
@@ -386,7 +431,7 @@ async function startAutoRefresh(swarmId: string) {
 
 ---
 
-## App 4 — Health Dashboard
+## Future App 4 — Health Dashboard
 
 **Trigger:** User asks "is the stack healthy", "check health", "what's the status"
 
@@ -412,7 +457,7 @@ async function startAutoRefresh(swarmId: string) {
 
 ---
 
-## App 5 — Create Swarm Form
+## Future App 5 — Create Swarm Form
 
 **Trigger:** User asks "create a swarm", "run bundle-a", "start a load test"
 
@@ -464,7 +509,7 @@ async function createAndStart() {
 
 ---
 
-## App 6 — Journal Viewer
+## Future App 6 — Journal Viewer
 
 **Trigger:** User asks "show journal for <swarm>", "what happened", "any errors"
 
@@ -494,7 +539,7 @@ Clicking **Load more** calls `debug.journal` with an offset.
 
 ---
 
-## App 7 — Debug Tap Viewer
+## Future App 7 — Debug Tap Viewer
 
 **Trigger:** User asks "tap the processor output", "show me what's flowing through"
 
@@ -553,20 +598,20 @@ body {
 
 ---
 
-## Capability negotiation — backwards compatibility
+## Capability Negotiation
 
 The server checks whether the connecting client supports MCP Apps at
-`ui/initialize`. If not, `registerAppTool` falls back to returning
-plain JSON text — identical to the existing `reg()` behaviour.
+`ui/initialize`. JSON-only clients receive plain JSON tool responses.
+App-capable clients receive the same canonical tool result plus a UI resource.
 
 This means:
 - Amazon Q (if it doesn't yet support MCP Apps) gets JSON text responses
 - Claude, Copilot, Cursor get the interactive App UI
-- No code changes needed when a new client adds MCP Apps support
+- Tool logic does not fork by client type
 
 ```javascript
-// registerAppTool handles this automatically via the ext-apps SDK.
-// No manual capability check needed in tool handlers.
+// Capability negotiation belongs in the registration/transport layer.
+// Tool handlers should stay canonical and client-neutral.
 ```
 
 ---
@@ -591,25 +636,21 @@ panels serve the same purpose. This is the correct split:
 
 ---
 
-## Build integration
+## Server integration
 
-Add to `tools/pockethive-mcp/package.json`:
+The first evidence widget is intentionally inline in `server.mjs`, so there is
+no separate frontend build. The package exposes HTTP mode for App-capable
+clients:
 
 ```json
 "scripts": {
-  "build:apps": "cd apps && npm install && npm run build",
   "start":      "node server.mjs",
   "start:http": "PH_MCP_HTTP_PORT=3100 node server.mjs"
 }
 ```
 
-CI builds apps before packaging:
-
-```yaml
-# .github/workflows/publish-images.yml (addition)
-- name: Build MCP Apps
-  run: cd tools/pockethive-mcp && npm run build:apps
-```
+Phase 1.5 registers only `ui://pockethive/evidence-summary-v1.html`. Other app
+bundles are not published until their phase is approved.
 
 ---
 
@@ -637,7 +678,7 @@ SERVERS='["http://localhost:3100/mcp"]' npm start
 npx cloudflared tunnel --url http://localhost:3100
 
 # Add the generated URL as a custom connector in Claude settings
-# Then ask: "show me my PocketHive swarms"
+# Then ask: "show evidence for swarm <swarm-id>"
 ```
 
 ### With VS Code GitHub Copilot
@@ -662,7 +703,7 @@ The following docs have been updated to reflect MCP Apps:
 
 | Doc | Change applied |
 |---|---|
-| ARCHITECTURE.md | Three-surface table and MCP Apps description added |
-| MCP-SERVER.md | `dist/apps/` in package.json files, file structure, and Dockerfile |
-| AGENT-RULES.md | `registerAppTool` note added to §3 "Adding new tools" |
-| README.md | MCP-APPS.md listed in contents table |
+| ARCHITECTURE.md | Phase 1.5 evidence widget described |
+| MCP-SERVER.md | `evidence.summary` tool and Phase 1.5 App packaging described |
+| AGENT-RULES.md | Phase 1.5 App constraints added |
+| README.md | MCP-APPS.md listed as evidence-widget spike plus future platform |
