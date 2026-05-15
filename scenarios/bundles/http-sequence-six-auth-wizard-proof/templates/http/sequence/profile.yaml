@@ -1,0 +1,10 @@
+serviceId: sequence
+callId: profile
+protocol: HTTP
+method: GET
+pathTemplate: /api/wizard-proof/profile?customerId={{ payload.customerId }}&journeyId={{ payload.journeyId }}&sessionId={{ payload.sessionId }}
+headersTemplate:
+  content-type: application/json
+authRef:
+  profileId: wizard-auth
+  applyAs: HTTP_AUTHORIZATION_BEARER

@@ -13,6 +13,7 @@ import {
   restartMcpServerCommand,
 } from './commands';
 
+import { registerAutoRefresh } from './autoRefresh';
 import { PREVIEW_SCHEME, SCENARIO_SCHEME } from './constants';
 import { ScenarioEditorProvider } from './editors/scenarioEditor';
 import { configureTimeWindow, loadTimeWindow } from './filterState';
@@ -46,6 +47,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const scenarioFsProvider = new ScenarioFileSystemProvider();
   const settingsProvider = new SettingsProvider();
 
+  registerAutoRefresh(context, [
+    { key: 'hive', refresh: () => hiveProvider.refresh() },
+    { key: 'buzz', refresh: () => buzzProvider.refresh() },
+    { key: 'journal', refresh: () => journalProvider.refresh() },
+    { key: 'scenario', refresh: () => scenarioProvider.refresh() },
+    { key: 'settings', refresh: () => settingsProvider.refresh() },
+  ]);
+
   // Status bar
   statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 10);
   statusBarItem.command = 'pockethive.showSettings';
@@ -72,8 +81,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand('pockethive.startSwarm', (swarmId?: string) => runSwarmCommand('start', swarmId)),
     vscode.commands.registerCommand('pockethive.stopSwarm', (swarmId?: string) => runSwarmCommand('stop', swarmId)),
     vscode.commands.registerCommand('pockethive.removeSwarm', (swarmId?: string) => runSwarmCommand('remove', swarmId)),
-    vscode.commands.registerCommand('pockethive.startAllSwarms', () => runAllSwarms('start')),
-    vscode.commands.registerCommand('pockethive.stopAllSwarms', () => runAllSwarms('stop')),
+    vscode.commands.registerCommand('pockethive.startAllSwarms', () => runAllSwarms('start').then(() => hiveProvider.refresh())),
+    vscode.commands.registerCommand('pockethive.stopAllSwarms', () => runAllSwarms('stop').then(() => hiveProvider.refresh())),
     vscode.commands.registerCommand('pockethive.openUi', openUi),
     vscode.commands.registerCommand('pockethive.openSwarmDetails', openSwarmDetails),
     vscode.commands.registerCommand('pockethive.openScenarioRaw', openScenarioRaw),
@@ -96,18 +105,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
     // ── New MCP-backed commands ────────────────────────────────────────────
     vscode.commands.registerCommand('pockethive.addEnvironment', () => addEnvironmentCommand(context)),
-    vscode.commands.registerCommand('pockethive.setActiveEnvironment', (name: string) => setActiveEnvironmentCommand(name, context)),
-    vscode.commands.registerCommand('pockethive.removeEnvironment', (name: string) => removeEnvironmentCommand(name)),
+    vscode.commands.registerCommand('pockethive.setActiveEnvironment', (target: unknown) => setActiveEnvironmentCommand(target, context)),
+    vscode.commands.registerCommand('pockethive.removeEnvironment', (target: unknown) => removeEnvironmentCommand(target)),
     vscode.commands.registerCommand('pockethive.addBundlesFolder', () => addBundlesFolderCommand(context)),
-    vscode.commands.registerCommand('pockethive.setActiveBundlesFolder', (path: string) => setActiveBundlesFolderCommand(path, context)),
-    vscode.commands.registerCommand('pockethive.validateBundle', (bundleName: string) => validateBundleCommand(bundleName, scenarioProvider)),
-    vscode.commands.registerCommand('pockethive.deployBundle', (bundleName: string) => deployBundleCommand(bundleName)),
-    vscode.commands.registerCommand('pockethive.startSwarmMcp', (swarmId: string) => startSwarmMcp(swarmId).then(() => hiveProvider.refresh())),
-    vscode.commands.registerCommand('pockethive.stopSwarmMcp', (swarmId: string) => stopSwarmMcp(swarmId).then(() => hiveProvider.refresh())),
-    vscode.commands.registerCommand('pockethive.removeSwarmMcp', (swarmId: string) => removeSwarmMcp(swarmId, hiveProvider)),
-    vscode.commands.registerCommand('pockethive.openSwarmDetailsMcp', (swarmId: string) => openSwarmDetailsMcp(swarmId)),
-    vscode.commands.registerCommand('pockethive.openJournal', (swarmId: string) => openJournalMcp(swarmId)),
-    vscode.commands.registerCommand('pockethive.openQueueMonitor', (swarmId: string) => openQueuesMcp(swarmId)),
+    vscode.commands.registerCommand('pockethive.setActiveBundlesFolder', (target: unknown) => setActiveBundlesFolderCommand(target, context)),
+    vscode.commands.registerCommand('pockethive.validateBundle', (target: unknown) => validateBundleCommand(target, scenarioProvider)),
+    vscode.commands.registerCommand('pockethive.deployBundle', (target: unknown) => deployBundleCommand(target)),
+    vscode.commands.registerCommand('pockethive.startSwarmMcp', (target: unknown) => startSwarmMcp(target).then(() => hiveProvider.refresh())),
+    vscode.commands.registerCommand('pockethive.stopSwarmMcp', (target: unknown) => stopSwarmMcp(target).then(() => hiveProvider.refresh())),
+    vscode.commands.registerCommand('pockethive.removeSwarmMcp', (target: unknown) => removeSwarmMcp(target, hiveProvider)),
+    vscode.commands.registerCommand('pockethive.openSwarmDetailsMcp', (target: unknown) => openSwarmDetailsMcp(target)),
+    vscode.commands.registerCommand('pockethive.openJournal', (target: unknown) => openJournalMcp(target)),
+    vscode.commands.registerCommand('pockethive.openQueueMonitor', (target: unknown) => openQueuesMcp(target)),
     vscode.commands.registerCommand('pockethive.restartMcpServer', () => restartMcpServerCommand(context)),
     vscode.commands.registerCommand('pockethive.showSettings', () =>
       vscode.commands.executeCommand('pockethive.settings.focus')),

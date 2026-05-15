@@ -1,0 +1,7 @@
+id: wiremock-local
+name: wiremock-local
+type: sandbox
+endpoints:
+  default:
+    kind: HTTP
+    baseUrl: http://wiremock:8080

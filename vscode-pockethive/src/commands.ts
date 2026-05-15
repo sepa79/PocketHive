@@ -61,13 +61,23 @@ export async function addEnvironmentCommand(context: vscode.ExtensionContext): P
   await restartMcpServer(context);
 }
 
-export async function setActiveEnvironmentCommand(name: string, context: vscode.ExtensionContext): Promise<void> {
+export async function setActiveEnvironmentCommand(target: unknown, context: vscode.ExtensionContext): Promise<void> {
+  const name = resolveEnvironmentName(target);
+  if (!name) {
+    vscode.window.showErrorMessage('PocketHive: environment name is required.');
+    return;
+  }
   await setActiveEnvironment(name);
   vscode.window.showInformationMessage(`PocketHive: Switched to '${name}'.`);
   await restartMcpServer(context);
 }
 
-export async function removeEnvironmentCommand(name: string): Promise<void> {
+export async function removeEnvironmentCommand(target: unknown): Promise<void> {
+  const name = resolveEnvironmentName(target);
+  if (!name) {
+    vscode.window.showErrorMessage('PocketHive: environment name is required.');
+    return;
+  }
   const choice = await vscode.window.showWarningMessage(
     `Remove environment '${name}'?`, { modal: true }, 'Remove'
   );
@@ -91,7 +101,12 @@ export async function addBundlesFolderCommand(context: vscode.ExtensionContext):
   await restartMcpServer(context);
 }
 
-export async function setActiveBundlesFolderCommand(folderPath: string, context: vscode.ExtensionContext): Promise<void> {
+export async function setActiveBundlesFolderCommand(target: unknown, context: vscode.ExtensionContext): Promise<void> {
+  const folderPath = resolveFolderPath(target);
+  if (!folderPath) {
+    vscode.window.showErrorMessage('PocketHive: bundles folder path is required.');
+    return;
+  }
   await setActiveBundlesFolder(folderPath);
   vscode.window.showInformationMessage(`PocketHive: Active bundles folder set.`);
   await restartMcpServer(context);
@@ -100,9 +115,14 @@ export async function setActiveBundlesFolderCommand(folderPath: string, context:
 // ── Bundle actions ────────────────────────────────────────────────────────────
 
 export async function validateBundleCommand(
-  bundleName: string,
+  bundleTarget: unknown,
   scenarioProvider: { setValidating(n: string): void; setValidationResult(n: string, s: 'passed' | 'failed', e?: string): void }
 ): Promise<void> {
+  const bundleName = resolveBundleName(bundleTarget);
+  if (!bundleName) {
+    vscode.window.showErrorMessage('PocketHive: bundle name is required.');
+    return;
+  }
   scenarioProvider.setValidating(bundleName);
   try {
     const { jobId } = await McpTools.bundleValidate(bundleName);
@@ -139,7 +159,12 @@ export async function validateBundleCommand(
   }
 }
 
-export async function deployBundleCommand(bundleName: string): Promise<void> {
+export async function deployBundleCommand(bundleTarget: unknown): Promise<void> {
+  const bundleName = resolveBundleName(bundleTarget);
+  if (!bundleName) {
+    vscode.window.showErrorMessage('PocketHive: bundle name is required.');
+    return;
+  }
   try {
     await McpTools.scenarioDeploy(bundleName);
     vscode.window.showInformationMessage(`PocketHive: '${bundleName}' deployed.`);
@@ -150,7 +175,12 @@ export async function deployBundleCommand(bundleName: string): Promise<void> {
 
 // ── Swarm actions (MCP) ───────────────────────────────────────────────────────
 
-export async function startSwarmMcp(swarmId: string): Promise<void> {
+export async function startSwarmMcp(swarmTarget: unknown): Promise<void> {
+  const swarmId = resolveSwarmId(swarmTarget);
+  if (!swarmId) {
+    vscode.window.showErrorMessage('PocketHive: swarm id is required.');
+    return;
+  }
   try {
     await McpTools.swarmStart(swarmId);
     vscode.window.showInformationMessage(`PocketHive: Swarm '${swarmId}' started.`);
@@ -159,7 +189,12 @@ export async function startSwarmMcp(swarmId: string): Promise<void> {
   }
 }
 
-export async function stopSwarmMcp(swarmId: string): Promise<void> {
+export async function stopSwarmMcp(swarmTarget: unknown): Promise<void> {
+  const swarmId = resolveSwarmId(swarmTarget);
+  if (!swarmId) {
+    vscode.window.showErrorMessage('PocketHive: swarm id is required.');
+    return;
+  }
   try {
     await McpTools.swarmStop(swarmId);
     vscode.window.showInformationMessage(`PocketHive: Swarm '${swarmId}' stopped.`);
@@ -168,7 +203,12 @@ export async function stopSwarmMcp(swarmId: string): Promise<void> {
   }
 }
 
-export async function removeSwarmMcp(swarmId: string, hiveProvider: { refresh(): void }): Promise<void> {
+export async function removeSwarmMcp(swarmTarget: unknown, hiveProvider: { refresh(): void }): Promise<void> {
+  const swarmId = resolveSwarmId(swarmTarget);
+  if (!swarmId) {
+    vscode.window.showErrorMessage('PocketHive: swarm id is required.');
+    return;
+  }
   const choice = await vscode.window.showWarningMessage(
     `Remove swarm '${swarmId}'? This tears down all containers and queues.`,
     { modal: true }, 'Remove'
@@ -183,7 +223,12 @@ export async function removeSwarmMcp(swarmId: string, hiveProvider: { refresh():
   }
 }
 
-export async function openSwarmDetailsMcp(swarmId: string): Promise<void> {
+export async function openSwarmDetailsMcp(swarmTarget: unknown): Promise<void> {
+  const swarmId = resolveSwarmId(swarmTarget);
+  if (!swarmId) {
+    vscode.window.showErrorMessage('PocketHive: swarm id is required.');
+    return;
+  }
   try {
     const detail = await McpTools.swarmGet(swarmId);
     await openJsonPreview(`Swarm ${swarmId}`, detail);
@@ -192,7 +237,12 @@ export async function openSwarmDetailsMcp(swarmId: string): Promise<void> {
   }
 }
 
-export async function openJournalMcp(swarmId: string): Promise<void> {
+export async function openJournalMcp(swarmTarget: unknown): Promise<void> {
+  const swarmId = resolveSwarmId(swarmTarget);
+  if (!swarmId) {
+    vscode.window.showErrorMessage('PocketHive: swarm id is required.');
+    return;
+  }
   try {
     const journal = await McpTools.debugJournal(swarmId, 50);
     await openJsonPreview(`Journal: ${swarmId}`, journal);
@@ -201,7 +251,12 @@ export async function openJournalMcp(swarmId: string): Promise<void> {
   }
 }
 
-export async function openQueuesMcp(swarmId: string): Promise<void> {
+export async function openQueuesMcp(swarmTarget: unknown): Promise<void> {
+  const swarmId = resolveSwarmId(swarmTarget);
+  if (!swarmId) {
+    vscode.window.showErrorMessage('PocketHive: swarm id is required.');
+    return;
+  }
   try {
     const queues = await McpTools.debugQueues(swarmId);
     await openJsonPreview(`Queues: ${swarmId}`, queues);
@@ -356,12 +411,92 @@ async function withMcp<T>(action: () => Promise<T>): Promise<T | undefined> {
 
 function resolveScenarioId(arg: unknown): string | undefined {
   if (!arg) return undefined;
-  if (typeof arg === 'string') return arg;
+  if (typeof arg === 'string') return nonBlank(arg);
   if (typeof arg === 'object') {
-    if ('id' in arg && typeof (arg as { id?: unknown }).id === 'string') return (arg as { id: string }).id;
+    if ('id' in arg && typeof (arg as { id?: unknown }).id === 'string') return nonBlank((arg as { id: string }).id);
+    if ('label' in arg) {
+      const label = (arg as { label?: unknown }).label;
+      if (typeof label === 'string') return nonBlank(label);
+      if (label && typeof label === 'object' && 'label' in label) {
+        const nested = (label as { label?: unknown }).label;
+        if (typeof nested === 'string') return nonBlank(nested);
+      }
+    }
+    if ('command' in arg) {
+      const command = (arg as { command?: { arguments?: unknown[] } }).command;
+      const first = command?.arguments?.[0];
+      if (typeof first === 'string') return nonBlank(first);
+    }
     if ('scenario' in arg) {
       const s = (arg as { scenario?: unknown }).scenario;
-      if (s && typeof s === 'object' && 'id' in s) { const id = (s as { id?: unknown }).id; return typeof id === 'string' ? id : undefined; }
+      const id = resolveScenarioId(s);
+      if (id) return id;
+    }
+  }
+  return undefined;
+}
+
+function resolveEnvironmentName(arg: unknown): string | undefined {
+  if (!arg) return undefined;
+  if (typeof arg === 'string') return nonBlank(arg);
+  if (typeof arg === 'object') {
+    if ('name' in arg && typeof (arg as { name?: unknown }).name === 'string') return nonBlank((arg as { name: string }).name);
+    if ('id' in arg && typeof (arg as { id?: unknown }).id === 'string') return nonBlank((arg as { id: string }).id);
+    if ('command' in arg) {
+      const command = (arg as { command?: { arguments?: unknown[] } }).command;
+      const first = command?.arguments?.[0];
+      if (typeof first === 'string') return nonBlank(first);
+    }
+    if ('label' in arg) {
+      const label = (arg as { label?: unknown }).label;
+      if (typeof label === 'string') return nonBlank(label);
+      if (label && typeof label === 'object' && 'label' in label) {
+        const nested = (label as { label?: unknown }).label;
+        if (typeof nested === 'string') return nonBlank(nested);
+      }
+    }
+  }
+  return undefined;
+}
+
+function resolveFolderPath(arg: unknown): string | undefined {
+  if (!arg) return undefined;
+  if (typeof arg === 'string') return nonBlank(arg);
+  if (typeof arg === 'object') {
+    if ('path' in arg && typeof (arg as { path?: unknown }).path === 'string') return nonBlank((arg as { path: string }).path);
+    if ('id' in arg && typeof (arg as { id?: unknown }).id === 'string') return nonBlank((arg as { id: string }).id);
+    if ('command' in arg) {
+      const command = (arg as { command?: { arguments?: unknown[] } }).command;
+      const first = command?.arguments?.[0];
+      if (typeof first === 'string') return nonBlank(first);
+    }
+  }
+  return undefined;
+}
+
+function resolveBundleName(arg: unknown): string | undefined {
+  if (!arg) return undefined;
+  if (typeof arg === 'string') return nonBlank(arg);
+  if (typeof arg === 'object') {
+    if ('name' in arg && typeof (arg as { name?: unknown }).name === 'string') return nonBlank((arg as { name: string }).name);
+    if ('id' in arg && typeof (arg as { id?: unknown }).id === 'string') return nonBlank((arg as { id: string }).id);
+    if ('label' in arg) {
+      const label = (arg as { label?: unknown }).label;
+      if (typeof label === 'string') return nonBlank(label);
+      if (label && typeof label === 'object' && 'label' in label) {
+        const nested = (label as { label?: unknown }).label;
+        if (typeof nested === 'string') return nonBlank(nested);
+      }
+    }
+    if ('command' in arg) {
+      const command = (arg as { command?: { arguments?: unknown[] } }).command;
+      const first = command?.arguments?.[0];
+      if (typeof first === 'string') return nonBlank(first);
+    }
+    if ('bundle' in arg) {
+      const bundle = (arg as { bundle?: unknown }).bundle;
+      const name = resolveBundleName(bundle);
+      if (name) return name;
     }
   }
   return undefined;
@@ -369,13 +504,34 @@ function resolveScenarioId(arg: unknown): string | undefined {
 
 function resolveSwarmId(arg: unknown): string | undefined {
   if (!arg) return undefined;
-  if (typeof arg === 'string') return arg;
+  if (typeof arg === 'string') return nonBlank(arg);
   if (typeof arg === 'object') {
-    if ('id' in arg && typeof (arg as { id?: unknown }).id === 'string') return (arg as { id: string }).id;
+    if ('id' in arg && typeof (arg as { id?: unknown }).id === 'string') return nonBlank((arg as { id: string }).id);
+    if ('label' in arg) {
+      const label = (arg as { label?: unknown }).label;
+      if (typeof label === 'string') return nonBlank(label);
+      if (label && typeof label === 'object' && 'label' in label) {
+        const nested = (label as { label?: unknown }).label;
+        if (typeof nested === 'string') return nonBlank(nested);
+      }
+    }
+    if ('command' in arg) {
+      const command = (arg as { command?: { arguments?: unknown[] } }).command;
+      const first = command?.arguments?.[0];
+      if (typeof first === 'string') return nonBlank(first);
+    }
     if ('swarm' in arg) {
       const s = (arg as { swarm?: unknown }).swarm;
-      if (s && typeof s === 'object' && 'id' in s) { const id = (s as { id?: unknown }).id; return typeof id === 'string' ? id : undefined; }
+      if (s && typeof s === 'object' && 'id' in s) {
+        const id = (s as { id?: unknown }).id;
+        return typeof id === 'string' ? nonBlank(id) : undefined;
+      }
     }
   }
   return undefined;
+}
+
+function nonBlank(value: string): string | undefined {
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
 }

@@ -354,15 +354,22 @@ input:
     swarmId: string
   optional:
     includeTapSample: boolean
+    scenarioId: string
 output:
   required:
     swarmId: string
+    scenarioId: string | null
     lifecycle: object
     queues: object
     journal: object
     metrics: object
     mocks: object
     datasets: object
+    redis: object
+    flow: object
+    auth: object
+    payloads: object
+    report: object
     missingEvidence: array
     sources: array
 sideEffects:
@@ -375,6 +382,10 @@ allowedSources:
   - debug.prometheus
   - debug.tap/read when includeTapSample is true
   - mock request tools
+  - scenario.get when a template id can be inferred from swarm status or when
+    scenarioId is provided
+  - Redis token/debug-capture reads for redacted auth and HTTP sequence capture
+    evidence
   - dataset.check
 writeScope: none
 evidenceValue: Summarises what runtime evidence exists and what is missing.
@@ -384,8 +395,28 @@ failureModes:
 phase: 1.5
 ```
 
-The optional MCP App widget renders this exact output. It must not perform its
-own runtime calls or contain separate evidence logic.
+`report` is a derived read-only acceptance report over the same evidence
+sources. It contains:
+
+```yaml
+report:
+  verdict: pass | partial | fail
+  title: string
+  generatedAt: ISO-8601 string
+  checklist:
+    - id: queues.drained
+      label: string
+      status: pass | partial | fail | unknown | not_applicable
+      summary: string
+      evidence: array
+      gaps: array
+  sections:
+    - title: string
+      rows: array
+```
+
+The optional MCP App widget renders this exact output as a report. It must not
+perform its own runtime calls or contain separate evidence logic.
 
 ## Real-Time Component Control
 

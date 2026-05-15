@@ -1,0 +1,118 @@
+{
+  "runId": "mcp-wizard-proof-1778868788",
+  "generatedAt": "2026-05-15T18:13:18Z",
+  "bundle": "http-sequence-six-auth-wizard-proof",
+  "bundleRoot": "/home/tim/IdeaProjects/PocketHive2/pockethive-scenario-bundles",
+  "swarmId": "http-sequence-six-auth-wizard-proof-1778868788",
+  "createdWithWizard": {
+    "sessionId": "wiz-8c7f32b5-e671-429b-9df8-08672b1a9eef",
+    "tools": [
+      "wizard.start",
+      "wizard.answer",
+      "wizard.complete"
+    ],
+    "structuralCheckOk": true,
+    "scenarioManagerDryRunValidationOk": true
+  },
+  "runtimeMcpToolsUsed": [
+    "scenario.deploy",
+    "scenario.raw.write",
+    "mock.wiremock.add",
+    "swarm.create",
+    "swarm.wait-ready",
+    "swarm.start",
+    "evidence.summary",
+    "mock.wiremock.requests",
+    "mock.wiremock.unmatched",
+    "swarm.stop",
+    "swarm.get"
+  ],
+  "runtimePatch": {
+    "reason": "Make the proof deterministic and provide the env var required by the generated OAuth2 auth profile.",
+    "changes": [
+      "generator scheduler maxMessages set to 1",
+      "http-sequence debugCapture mode set to ALWAYS",
+      "WIZARD_PROOF_CLIENT_SECRET injected into the deployed http-sequence bee environment for this local proof"
+    ],
+    "secretHandling": "The evidence file intentionally does not store the dummy client secret value."
+  },
+  "firstAttempt": {
+    "swarmId": "http-sequence-six-auth-wizard-proof-1778868688",
+    "result": "failed_before_http_requests",
+    "error": "Required auth env reference is not set: WIZARD_PROOF_CLIENT_SECRET",
+    "actionTaken": "Stopped the swarm, injected the required env var into the deployed scenario copy via MCP, and reran with a fresh swarm id."
+  },
+  "wiremockProof": {
+    "tokenRequest": {
+      "path": "/oauth/token/wizard-proof",
+      "method": "POST",
+      "matchedStub": "wizard-proof-oauth-token",
+      "status": 200,
+      "loggedDateString": "2026-05-15T18:12:34.092Z"
+    },
+    "businessRequestCount": 6,
+    "businessRequests": [
+      {
+        "path": "/api/wizard-proof/start",
+        "method": "POST",
+        "authorization": "Bearer wizard-proof-token",
+        "matchedStub": "wizard-proof-start-auth-required",
+        "status": 200,
+        "loggedDateString": "2026-05-15T18:12:34.129Z"
+      },
+      {
+        "path": "/api/wizard-proof/profile",
+        "method": "GET",
+        "authorization": "Bearer wizard-proof-token",
+        "matchedStub": "wizard-proof-profile-auth-required",
+        "status": 200,
+        "loggedDateString": "2026-05-15T18:12:34.162Z"
+      },
+      {
+        "path": "/api/wizard-proof/validate",
+        "method": "POST",
+        "authorization": "Bearer wizard-proof-token",
+        "matchedStub": "wizard-proof-validate-auth-required",
+        "status": 200,
+        "loggedDateString": "2026-05-15T18:12:34.166Z"
+      },
+      {
+        "path": "/api/wizard-proof/session",
+        "method": "PUT",
+        "authorization": "Bearer wizard-proof-token",
+        "matchedStub": "wizard-proof-session-auth-required",
+        "status": 200,
+        "loggedDateString": "2026-05-15T18:12:34.172Z"
+      },
+      {
+        "path": "/api/wizard-proof/confirm",
+        "method": "POST",
+        "authorization": "Bearer wizard-proof-token",
+        "matchedStub": "wizard-proof-confirm-auth-required",
+        "status": 200,
+        "loggedDateString": "2026-05-15T18:12:34.177Z"
+      },
+      {
+        "path": "/api/wizard-proof/receipt",
+        "method": "GET",
+        "authorization": "Bearer wizard-proof-token",
+        "matchedStub": "wizard-proof-receipt-auth-required",
+        "status": 200,
+        "loggedDateString": "2026-05-15T18:12:34.181Z"
+      }
+    ],
+    "wizardProofUnmatchedCount": 0,
+    "note": "mock.wiremock.unmatched still contains older /api/onboarding requests from earlier local runs; no unmatched request used the /api/wizard-proof prefix."
+  },
+  "swarmCleanup": {
+    "stopRequested": true,
+    "finalSwarmStatus": "STOPPED",
+    "finalTotals": {
+      "desired": 3,
+      "healthy": 3,
+      "running": 0,
+      "enabled": 0
+    }
+  },
+  "pass": true
+}

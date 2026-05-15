@@ -1,0 +1,11 @@
+serviceId: sequence
+callId: start
+protocol: HTTP
+method: POST
+pathTemplate: /api/wizard-proof/start
+headersTemplate:
+  content-type: application/json
+bodyTemplate: '{"step":"start","customerId":"{{ payload.customerId }}","proofRun":"{{ payload.proofRun }}"}'
+authRef:
+  profileId: wizard-auth
+  applyAs: HTTP_AUTHORIZATION_BEARER

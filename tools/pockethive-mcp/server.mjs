@@ -15,6 +15,7 @@
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync, unlinkSync } from "node:fs";
 import { createServer } from "node:http";
+import net from "node:net";
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { platform } from "node:os";
@@ -63,6 +64,8 @@ const AUTH_SERVICE_URL = process.env.AUTH_SERVICE_BASE_URL || `${BASE_URL}/auth-
 const POCKETHIVE_AUTH_USERNAME = process.env.POCKETHIVE_AUTH_USERNAME || "";
 const RABBIT_MGMT = process.env.RABBITMQ_MANAGEMENT_BASE_URL || `${BASE_URL}/rabbitmq/api`;
 const PROM_URL = process.env.PROMETHEUS_BASE_URL || `${BASE_URL}/prometheus`;
+const REDIS_HOST = process.env.REDIS_HOST || "localhost";
+const REDIS_PORT = Number(process.env.REDIS_PORT || "6379");
 // TCP_MOCK_BASE_URL and WIREMOCK_BASE_URL can be set explicitly to override
 // the auto-derived URLs (host from BASE_URL, standard ports 8083/8080).
 
@@ -96,6 +99,36 @@ function bundleRootPolicy() {
       : null,
   };
 }
+
+function targetString(value, preferredKeys = ["id", "name"]) {
+  if (typeof value === "string") return value.trim() || undefined;
+  if (!value || typeof value !== "object") return undefined;
+  for (const key of preferredKeys) {
+    if (typeof value[key] === "string" && value[key].trim()) return value[key].trim();
+  }
+  for (const nested of ["swarm", "bundle", "scenario"]) {
+    const found = targetString(value[nested], preferredKeys);
+    if (found) return found;
+  }
+  const commandArg = Array.isArray(value.command?.arguments) ? value.command.arguments[0] : undefined;
+  const fromCommand = targetString(commandArg, preferredKeys);
+  if (fromCommand) return fromCommand;
+  const label = value.label;
+  if (typeof label === "string" && label.trim()) return label.trim();
+  if (label && typeof label === "object") {
+    const fromLabel = targetString(label, ["label", ...preferredKeys]);
+    if (fromLabel) return fromLabel;
+  }
+  return undefined;
+}
+
+function targetStringSchema(description, preferredKeys = ["id", "name"]) {
+  return z.preprocess(value => targetString(value, preferredKeys) ?? value, z.string()).describe(description);
+}
+
+const BUNDLE_ARG = targetStringSchema("Bundle name", ["name", "id"]);
+const SCENARIO_ID_ARG = targetStringSchema("Scenario ID", ["id", "name"]);
+const SWARM_ID_ARG = targetStringSchema("Swarm ID", ["id", "name"]);
 
 // ── HTTP helper ───────────────────────────────────────────────────────────────
 
@@ -322,7 +355,7 @@ reg("bundle.list", "List all scenario bundles in the configured bundle root", {}
 });
 
 reg("bundle.read", "Read a file from a bundle (scenario.yaml, template, dataset, etc.)", {
-  bundle: z.string().describe("Bundle name"),
+  bundle: BUNDLE_ARG,
   file: z.string().describe("Relative path within the bundle, e.g. 'scenario.yaml' or 'templates/http/default/my-call.yaml'"),
 }, async ({ bundle, file }) => {
   const path = resolve(bundleDir(bundle), file);
@@ -1550,7 +1583,7 @@ async function runBundleCheck(bundle) {
 }
 
 reg("bundle.check", "Run a fast structural check on a bundle without shelling out.", {
-  bundle: z.string().describe("Bundle name"),
+  bundle: BUNDLE_ARG,
 }, async ({ bundle }) => runBundleCheck(bundle));
 
 async function createBundleZipBytes(bundle) {
@@ -1689,7 +1722,7 @@ setInterval(() => {
 }, 60_000).unref();
 
 reg("bundle.validate", "Start async validation of a bundle. Returns a jobId immediately. Poll with bundle.validate.result.", {
-  bundle: z.string().describe("Bundle name"),
+  bundle: BUNDLE_ARG,
   validator: z.enum(["local-structural", "scenario-manager-dry-run", "scenario-manager-upload"]).optional().describe("local-structural runs bundle.check only. scenario-manager-dry-run validates through Scenario Manager without writes. scenario-manager-upload validates through Scenario Manager upload/replace and has write side effects."),
   replaceExisting: z.boolean().optional().describe("Only for scenario-manager-upload. Allows replacing an existing Scenario Manager bundle."),
 }, async ({ bundle, validator = "local-structural", replaceExisting = true }) => {
@@ -1751,7 +1784,7 @@ reg("bundle.validate.result", "Poll for the result of a bundle.validate job.", {
 });
 
 reg("scenario.deploy", "Deploy a bundle to the Scenario Manager's scenarios directory and reload. Works against both local and remote stacks through the HTTP bundle upload API.", {
-  bundle: z.string().describe("Bundle name to deploy"),
+  bundle: BUNDLE_ARG,
 }, async ({ bundle }) => {
   const result = await scenarioManagerUploadBundle(bundle, { replaceExisting: true });
   return { deployed: true, bundle, method: result.method, scenario: result.scenario };
@@ -1762,13 +1795,13 @@ reg("scenario.list", "List scenarios loaded in the Scenario Manager", {}, async 
 });
 
 reg("scenario.get", "Get a specific scenario from the Scenario Manager", {
-  scenarioId: z.string(),
+  scenarioId: SCENARIO_ID_ARG,
 }, async ({ scenarioId }) => {
   return await httpJson(`${SM_URL}/scenarios/${encodeURIComponent(scenarioId)}`);
 });
 
 reg("scenario.raw.read", "Read raw scenario YAML through Scenario Manager.", {
-  scenarioId: z.string(),
+  scenarioId: SCENARIO_ID_ARG,
 }, async ({ scenarioId }) => {
   const content = await httpText(`${SM_URL}/scenarios/${encodeURIComponent(scenarioId)}/raw`, {
     accept: "text/plain",
@@ -1777,7 +1810,7 @@ reg("scenario.raw.read", "Read raw scenario YAML through Scenario Manager.", {
 });
 
 reg("scenario.raw.write", "Write raw scenario YAML through Scenario Manager.", {
-  scenarioId: z.string(),
+  scenarioId: SCENARIO_ID_ARG,
   content: z.string(),
 }, async ({ scenarioId, content }) => {
   const response = await httpText(`${SM_URL}/scenarios/${encodeURIComponent(scenarioId)}/raw`, {
@@ -1790,7 +1823,7 @@ reg("scenario.raw.write", "Write raw scenario YAML through Scenario Manager.", {
 });
 
 reg("scenario.schema.read", "Read a scenario schema file through Scenario Manager.", {
-  scenarioId: z.string(),
+  scenarioId: SCENARIO_ID_ARG,
   path: z.string(),
 }, async ({ scenarioId, path }) => {
   const content = await httpText(`${SM_URL}/scenarios/${encodeURIComponent(scenarioId)}/schema?path=${encodeURIComponent(path)}`, {
@@ -1800,7 +1833,7 @@ reg("scenario.schema.read", "Read a scenario schema file through Scenario Manage
 });
 
 reg("scenario.template.read", "Read a scenario template file through Scenario Manager.", {
-  scenarioId: z.string(),
+  scenarioId: SCENARIO_ID_ARG,
   path: z.string(),
 }, async ({ scenarioId, path }) => {
   const content = await httpText(`${SM_URL}/scenarios/${encodeURIComponent(scenarioId)}/template?path=${encodeURIComponent(path)}`, {
@@ -1810,7 +1843,7 @@ reg("scenario.template.read", "Read a scenario template file through Scenario Ma
 });
 
 reg("scenario.contracts.get", "Read Scenario Manager-backed contracts and capability manifests. This is the runtime contract source for wizard generation.", {
-  scenarioId: z.string().optional(),
+  scenarioId: SCENARIO_ID_ARG.optional(),
   includeCapabilities: z.boolean().optional(),
   includeTemplates: z.boolean().optional(),
   forceRefresh: z.boolean().optional(),
@@ -1839,13 +1872,13 @@ reg("swarm.list", "List all swarms from the Orchestrator", {}, async () => {
 });
 
 reg("swarm.get", "Get swarm status from the Orchestrator", {
-  swarmId: z.string(),
+  swarmId: SWARM_ID_ARG,
 }, async ({ swarmId }) => {
   return await httpJson(`/api/swarms/${encodeURIComponent(swarmId)}`);
 });
 
 reg("swarm.create", "Create a new swarm from a scenario template", {
-  swarmId: z.string().describe("Unique swarm identifier"),
+  swarmId: SWARM_ID_ARG.describe("Unique swarm identifier"),
   templateId: z.string().describe("Scenario template ID (must match scenario.yaml id)"),
   sutId: z.string().optional().describe("SUT environment ID"),
   variablesProfileId: z.string().optional().describe("Variables profile ID"),
@@ -1857,7 +1890,7 @@ reg("swarm.create", "Create a new swarm from a scenario template", {
 });
 
 reg("swarm.start", "Start a created swarm", {
-  swarmId: z.string(),
+  swarmId: SWARM_ID_ARG,
 }, async ({ swarmId }) => {
   return await httpJson(`/api/swarms/${encodeURIComponent(swarmId)}/start`, {
     method: "POST", body: { idempotencyKey: idempotencyKey() },
@@ -1865,7 +1898,7 @@ reg("swarm.start", "Start a created swarm", {
 });
 
 reg("swarm.wait-ready", "Poll swarm status until all workers are healthy (totals.healthy == totals.desired). Call this after swarm.create before swarm.start to avoid NotReady rejections.", {
-  swarmId: z.string(),
+  swarmId: SWARM_ID_ARG,
   timeoutSec: z.number().optional().default(90),
 }, async ({ swarmId, timeoutSec }) => {
   // Cap at 80s to stay safely under the MCP framework's ~150s tool timeout.
@@ -1901,7 +1934,7 @@ reg("swarm.wait-ready", "Poll swarm status until all workers are healthy (totals
 });
 
 reg("swarm.stop", "Stop a running swarm (non-destructive)", {
-  swarmId: z.string(),
+  swarmId: SWARM_ID_ARG,
 }, async ({ swarmId }) => {
   return await httpJson(`/api/swarms/${encodeURIComponent(swarmId)}/stop`, {
     method: "POST", body: { idempotencyKey: idempotencyKey() },
@@ -1909,7 +1942,7 @@ reg("swarm.stop", "Stop a running swarm (non-destructive)", {
 });
 
 reg("swarm.remove", "Remove a swarm (destructive — tears down containers and queues)", {
-  swarmId: z.string(),
+  swarmId: SWARM_ID_ARG,
 }, async ({ swarmId }) => {
   return await httpJson(`/api/swarms/${encodeURIComponent(swarmId)}/remove`, {
     method: "POST", body: { idempotencyKey: idempotencyKey() },
@@ -1919,7 +1952,7 @@ reg("swarm.remove", "Remove a swarm (destructive — tears down containers and q
 // ── Debugging ─────────────────────────────────────────────────────────────────
 
 reg("debug.queues", "List RabbitMQ queues (optionally filtered by swarm prefix)", {
-  swarmId: z.string().optional().describe("Filter queues by swarm ID prefix"),
+  swarmId: SWARM_ID_ARG.optional().describe("Filter queues by swarm ID prefix"),
 }, async ({ swarmId }) => {
   const queues = await httpJson(`${RABBIT_MGMT}/queues`, { headers: { authorization: rabbitAuth() } });
   if (!swarmId) return queues.map(q => ({ name: q.name, messages: q.messages, consumers: q.consumers }));
@@ -1931,7 +1964,7 @@ reg("debug.queues", "List RabbitMQ queues (optionally filtered by swarm prefix)"
 });
 
 reg("debug.tap", "Create a debug tap to sample data-plane messages from a swarm queue", {
-  swarmId: z.string(),
+  swarmId: SWARM_ID_ARG,
   role: z.string().describe("Worker role to tap, e.g. 'postprocessor'"),
   direction: z.enum(["IN", "OUT"]).default("IN"),
   ioName: z.string().default("in"),
@@ -1958,7 +1991,7 @@ reg("debug.tap.close", "Close and delete a debug tap", {
 });
 
 reg("debug.journal", "Read swarm journal (timeline of control-plane events)", {
-  swarmId: z.string(),
+  swarmId: SWARM_ID_ARG,
   limit: z.number().optional().default(50),
 }, async ({ swarmId, limit }) => {
   return await httpJson(`/api/swarms/${encodeURIComponent(swarmId)}/journal/page?limit=${limit}`);
@@ -2197,7 +2230,7 @@ async function sendComponentConfigUpdate({
 }
 
 reg("component.config-preview", "Preview the merge-with-current-config plan for a running component without sending an update.", {
-  swarmId: z.string(),
+  swarmId: SWARM_ID_ARG,
   role: z.string(),
   instanceId: z.string(),
   patch: z.record(z.any()).describe("Config patch object, e.g. {enabled: true, ratePerSec: 10}"),
@@ -2214,7 +2247,7 @@ reg("component.config-preview", "Preview the merge-with-current-config plan for 
 });
 
 reg("component.config-update", "Send a real-time config-update signal to one running component through the Orchestrator API used by the UI.", {
-  swarmId: z.string(),
+  swarmId: SWARM_ID_ARG,
   role: z.string(),
   instanceId: z.string(),
   patch: z.record(z.any()).describe("Config patch object, e.g. {enabled: true, ratePerSec: 10}"),
@@ -2236,7 +2269,7 @@ reg("component.config-update", "Send a real-time config-update signal to one run
 });
 
 reg("debug.config-update", "Compatibility alias for component.config-update.", {
-  swarmId: z.string(),
+  swarmId: SWARM_ID_ARG,
   role: z.string(),
   instanceId: z.string(),
   patch: z.record(z.any()).describe("Config patch object, e.g. {enabled: true, ratePerSec: 10}"),
@@ -2266,9 +2299,421 @@ function countArrayLike(value) {
   return undefined;
 }
 
-async function buildEvidenceSummary({ swarmId, includeTapSample }) {
+function redisEncode(args) {
+  return `*${args.length}\r\n` + args.map(arg => {
+    const value = Buffer.from(String(arg));
+    return `$${value.length}\r\n${value.toString("utf8")}\r\n`;
+  }).join("");
+}
+
+class RespIncomplete extends Error {}
+
+function parseResp(buffer, offset = 0) {
+  if (offset >= buffer.length) throw new RespIncomplete();
+  const type = String.fromCharCode(buffer[offset]);
+  const lineEnd = buffer.indexOf("\r\n", offset);
+  if (lineEnd < 0) throw new RespIncomplete();
+  const line = buffer.toString("utf8", offset + 1, lineEnd);
+  const next = lineEnd + 2;
+  if (type === "+") return { value: line, offset: next };
+  if (type === "-") throw new Error(line);
+  if (type === ":") return { value: Number(line), offset: next };
+  if (type === "$") {
+    const length = Number(line);
+    if (length < 0) return { value: null, offset: next };
+    const end = next + length;
+    if (buffer.length < end + 2) throw new RespIncomplete();
+    return { value: buffer.toString("utf8", next, end), offset: end + 2 };
+  }
+  if (type === "*") {
+    const count = Number(line);
+    if (count < 0) return { value: null, offset: next };
+    const values = [];
+    let cursor = next;
+    for (let i = 0; i < count; i++) {
+      const parsed = parseResp(buffer, cursor);
+      values.push(parsed.value);
+      cursor = parsed.offset;
+    }
+    return { value: values, offset: cursor };
+  }
+  throw new Error(`Unsupported Redis response type: ${type}`);
+}
+
+async function redisCommand(args, timeoutMs = 5000) {
+  return await new Promise((resolvePromise, reject) => {
+    const socket = net.createConnection({ host: REDIS_HOST, port: REDIS_PORT });
+    let done = false;
+    let chunks = Buffer.alloc(0);
+    const timer = setTimeout(() => {
+      finish(new Error(`Redis command timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+    function finish(err, value) {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      socket.destroy();
+      if (err) reject(err);
+      else resolvePromise(value);
+    }
+    socket.on("connect", () => socket.write(redisEncode(args)));
+    socket.on("data", chunk => {
+      chunks = Buffer.concat([chunks, chunk]);
+      try {
+        finish(null, parseResp(chunks).value);
+      } catch (err) {
+        if (!(err instanceof RespIncomplete)) finish(err);
+      }
+    });
+    socket.on("error", finish);
+  });
+}
+
+function hgetallToObject(values) {
+  const out = {};
+  if (!Array.isArray(values)) return out;
+  for (let i = 0; i < values.length; i += 2) out[values[i]] = values[i + 1];
+  return out;
+}
+
+function redactTokenRecord(record) {
+  if (!record || typeof record !== "object") return record;
+  const copy = { ...record };
+  if (copy.accessToken) copy.accessToken = "<redacted>";
+  return copy;
+}
+
+function redactHeaders(headers) {
+  if (!headers || typeof headers !== "object") return headers;
+  const copy = { ...headers };
+  for (const key of Object.keys(copy)) {
+    if (["authorization", "proxy-authorization", "x-api-key"].includes(key.toLowerCase())) {
+      copy[key] = "<redacted>";
+    }
+  }
+  return copy;
+}
+
+function redactDebugCapture(value) {
+  if (!value || typeof value !== "object") return value;
+  const copy = { ...value };
+  if (copy.headers) copy.headers = redactHeaders(copy.headers);
+  if (copy.request && typeof copy.request === "object") {
+    copy.request = { ...copy.request, headers: redactHeaders(copy.request.headers) };
+  }
+  return copy;
+}
+
+async function readRedisEvidence(swarmId) {
+  const tokenKeys = await redisCommand(["KEYS", `ph:tokens:${swarmId}:*`]);
+  const recordKeys = (Array.isArray(tokenKeys) ? tokenKeys : []).filter(key => key.includes(":record:")).sort();
+  const records = [];
+  for (const key of recordKeys) {
+    records.push({ key, ttl: await redisCommand(["TTL", key]), fields: redactTokenRecord(hgetallToObject(await redisCommand(["HGETALL", key]))) });
+  }
+  const dueKey = `ph:tokens:${swarmId}:due`;
+  const due = Array.isArray(tokenKeys) && tokenKeys.includes(dueKey)
+    ? await redisCommand(["ZRANGE", dueKey, "0", "-1", "WITHSCORES"])
+    : [];
+  return { tokenKeys: Array.isArray(tokenKeys) ? tokenKeys.sort() : [], records, due };
+}
+
+async function readRedisDebugCaptures(swarmId) {
+  const keys = await redisCommand(["KEYS", `ph:debug:http-seq:${swarmId}:*`]);
+  const sortedKeys = Array.isArray(keys) ? keys.sort() : [];
+  const captures = [];
+  for (const key of sortedKeys.slice(0, 50)) {
+    const raw = await redisCommand(["GET", key]);
+    let parsed = null;
+    try { parsed = raw ? JSON.parse(raw) : null; } catch { parsed = { parseError: true }; }
+    captures.push({ key, ttl: await redisCommand(["TTL", key]), data: redactDebugCapture(parsed) });
+  }
+  return { count: sortedKeys.length, keys: sortedKeys, captures };
+}
+
+function sourceData(sources, name) {
+  const source = sources.find(s => s.name === name);
+  return source?.status === "ok" ? source.data : null;
+}
+
+function inferScenarioId(swarmSource, fallbackSwarmId) {
+  const fromRuntime = swarmSource?.envelope?.runtime?.templateId
+    || swarmSource?.envelope?.data?.context?.workers?.find(worker => worker?.runtime?.templateId)?.runtime?.templateId;
+  if (fromRuntime) return fromRuntime;
+  const match = String(fallbackSwarmId || "").match(/^(.+)-\d{10,}$/);
+  return match ? match[1] : null;
+}
+
+function pathOnly(url) {
+  return String(url || "").split("?")[0];
+}
+
+function wiremockEntries(data) {
+  return Array.isArray(data?.requests) ? data.requests : [];
+}
+
+function parseJsonLoose(value) {
+  if (!value || typeof value !== "string") return null;
+  try { return JSON.parse(value); } catch { return null; }
+}
+
+function flattenStringValues(value, prefix = "") {
+  if (value == null) return [];
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    const text = String(value);
+    return text.length >= 3 ? [{ path: prefix, value: text }] : [];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((item, index) => flattenStringValues(item, `${prefix}/${index}`));
+  }
+  if (typeof value === "object") {
+    return Object.entries(value).flatMap(([key, item]) => flattenStringValues(item, `${prefix}/${key}`));
+  }
+  return [];
+}
+
+function headerValue(headers, name) {
+  if (!headers || typeof headers !== "object") return "";
+  const found = Object.entries(headers).find(([key]) => key.toLowerCase() === name.toLowerCase());
+  const value = found?.[1];
+  return Array.isArray(value) ? value.join(",") : String(value || "");
+}
+
+function bodyPatternCount(entry) {
+  const patterns = entry?.stubMapping?.request?.bodyPatterns;
+  return Array.isArray(patterns) ? patterns.length : 0;
+}
+
+function authMatcherPresent(entry) {
+  return !!entry?.stubMapping?.request?.headers?.Authorization;
+}
+
+function selectLatestExpectedSequence(entries, expectedEndpoints) {
+  if (!expectedEndpoints.length) return entries;
+  const expected = expectedEndpoints.map(endpoint => `${endpoint.method} ${endpoint.path}`);
+  const labelled = entries.map(entry => ({
+    entry,
+    label: `${entry?.request?.method} ${pathOnly(entry?.request?.url)}`,
+  }));
+  for (let start = labelled.length - expected.length; start >= 0; start--) {
+    const slice = labelled.slice(start, start + expected.length);
+    if (slice.every((item, index) => item.label === expected[index])) {
+      return slice.map(item => item.entry);
+    }
+  }
+  return entries.slice(Math.max(0, entries.length - expected.length));
+}
+
+function makeClaim(id, label, status, summary, evidence = [], gaps = []) {
+  return { id, label, status, summary, evidence, gaps };
+}
+
+function reportVerdict(claims) {
+  if (claims.some(claim => claim.status === "fail")) return "fail";
+  if (claims.some(claim => ["partial", "unknown"].includes(claim.status))) return "partial";
+  return "pass";
+}
+
+function buildReport({ swarmId, scenarioId, sources, queueRows, tapSample, includeTapSample }) {
+  const scenario = sourceData(sources, "scenario.get");
+  const wiremockData = sourceData(sources, "mock.wiremock.requests");
+  const unmatchedData = sourceData(sources, "mock.wiremock.unmatched");
+  const redisAuth = sourceData(sources, "redis.auth-tokens");
+  const redisDebug = sourceData(sources, "redis.http-sequence-debug");
+  const swarm = sourceData(sources, "swarm.get");
+  const expectedEndpoints = Array.isArray(scenario?.plan?.endpoints) ? scenario.plan.endpoints : [];
+  const expectedPaths = new Set(expectedEndpoints.map(endpoint => endpoint.path).filter(Boolean));
+  const expectedByPath = new Map(expectedEndpoints.map(endpoint => [endpoint.path, endpoint]));
+  const allRequests = wiremockEntries(wiremockData);
+  const businessRequests = allRequests
+    .filter(entry => expectedPaths.has(pathOnly(entry?.request?.url)))
+    .sort((a, b) => Number(a?.request?.loggedDate || 0) - Number(b?.request?.loggedDate || 0));
+  const selectedBusinessRequests = selectLatestExpectedSequence(businessRequests, expectedEndpoints);
+  const selectedStart = Math.min(...selectedBusinessRequests.map(entry => Number(entry?.request?.loggedDate || 0)).filter(Boolean));
+  const selectedEnd = Math.max(...selectedBusinessRequests.map(entry => Number(entry?.request?.loggedDate || 0)).filter(Boolean));
+  const tokenRequestsAll = allRequests
+    .filter(entry => pathOnly(entry?.request?.url).includes("/oauth/token"))
+    .sort((a, b) => Number(a?.request?.loggedDate || 0) - Number(b?.request?.loggedDate || 0));
+  const tokenRequests = Number.isFinite(selectedStart) && Number.isFinite(selectedEnd)
+    ? tokenRequestsAll.filter(entry => {
+        const loggedDate = Number(entry?.request?.loggedDate || 0);
+        return loggedDate >= selectedStart - 1000 && loggedDate <= selectedEnd + 1000;
+      })
+    : tokenRequestsAll;
+  const unmatchedForScenario = wiremockEntries(unmatchedData).filter(entry => {
+    const path = pathOnly(entry?.request?.url);
+    return expectedPaths.has(path) || path.includes("/wizard-proof") || path.includes("/oauth/token/wizard-proof");
+  });
+  const workQueues = queueRows.filter(row => !String(row.name || "").startsWith(`ph.control.${swarmId}.`));
+  const controlQueues = queueRows.filter(row => String(row.name || "").startsWith(`ph.control.${swarmId}.`));
+  const workQueueMessages = workQueues.reduce((sum, row) => sum + (Number(row.messages) || 0), 0);
+  const controlQueueMessages = controlQueues.reduce((sum, row) => sum + (Number(row.messages) || 0), 0);
+  const expectedSequence = expectedEndpoints.map(endpoint => `${endpoint.method} ${endpoint.path}`);
+  const actualSequence = selectedBusinessRequests.map(entry => `${entry?.request?.method} ${pathOnly(entry?.request?.url)}`);
+  const ordered = expectedSequence.length > 0
+    && expectedSequence.length === actualSequence.length
+    && expectedSequence.every((value, index) => value === actualSequence[index]);
+  const nonGetExpected = expectedEndpoints.filter(endpoint => String(endpoint.method || "").toUpperCase() !== "GET");
+  const payloadRows = nonGetExpected.map(endpoint => {
+    const entry = selectedBusinessRequests.find(item => pathOnly(item?.request?.url) === endpoint.path && item?.request?.method === endpoint.method);
+    const parsed = parseJsonLoose(entry?.request?.body);
+    return {
+      callId: endpoint.callId,
+      path: endpoint.path,
+      parseableJson: !!parsed,
+      bodyPatterns: bodyPatternCount(entry),
+      matched: !!entry?.wasMatched,
+    };
+  });
+  const allPayloadsJson = payloadRows.length > 0 && payloadRows.every(row => row.parseableJson);
+  const allPayloadsAsserted = payloadRows.length > 0 && payloadRows.every(row => row.bodyPatterns > 0 && row.matched);
+  const responseValues = selectedBusinessRequests.flatMap((entry, index) => {
+    const response = parseJsonLoose(entry?.response?.body);
+    return flattenStringValues(response)
+      .filter(item => !["true", "false"].includes(item.value) && !["start", "profile", "validate", "session-update", "confirm", "receipt"].includes(item.value))
+      .map(item => ({ ...item, stepIndex: index, callId: expectedByPath.get(pathOnly(entry?.request?.url))?.callId || pathOnly(entry?.request?.url) }));
+  });
+  const dataLinks = [];
+  for (const candidate of responseValues) {
+    for (let index = candidate.stepIndex + 1; index < selectedBusinessRequests.length; index++) {
+      const later = selectedBusinessRequests[index];
+      const haystack = `${later?.request?.url || ""}\n${later?.request?.body || ""}`;
+      if (candidate.value && haystack.includes(candidate.value)) {
+        dataLinks.push({
+          from: candidate.callId,
+          valuePath: candidate.path,
+          to: expectedByPath.get(pathOnly(later?.request?.url))?.callId || pathOnly(later?.request?.url),
+        });
+        break;
+      }
+    }
+  }
+  const configuredExtracts = (scenario?.template?.bees || [])
+    .find(bee => bee?.role === "http-sequence")?.config?.worker?.steps
+    ?.flatMap(step => (step.extracts || []).map(extract => ({ stepId: step.id, callId: step.callId, to: extract.to }))) || [];
+  const authHeaders = selectedBusinessRequests.map(entry => headerValue(entry?.request?.headers, "authorization"));
+  const bearerCount = authHeaders.filter(value => value.startsWith("Bearer ")).length;
+  const authMatchers = selectedBusinessRequests.filter(authMatcherPresent).length;
+  const tokenRecord = Array.isArray(redisAuth?.records) ? redisAuth.records[0] : null;
+  const nowMs = Date.now();
+  const refreshAt = Number(tokenRecord?.fields?.refreshAt);
+  const expiresAt = Number(tokenRecord?.fields?.expiresAt);
+  const refreshDue = Number.isFinite(refreshAt) && refreshAt <= nowMs;
+  const lifecycleState = swarm?.envelope?.data?.context?.state || swarm?.envelope?.data?.context?.swarmStatus || swarm?.status || "unknown";
+  const dataSource = scenario?.plan?.dataSource;
+  const usesRedisDataset = dataSource === "REDIS_DATASET";
+  const debugCaptureCount = Number(redisDebug?.count || 0);
+
+  const claims = [
+    makeClaim(
+      "queues.drained",
+      "Queues drained",
+      workQueueMessages === 0 ? "pass" : "fail",
+      workQueueMessages === 0
+        ? `Work queues are empty${controlQueueMessages ? `; ${controlQueueMessages} control-plane message(s) remain` : ""}.`
+        : `${workQueueMessages} work message(s) remain.`,
+      [`${workQueues.length} work queue(s), ${controlQueues.length} control queue(s)`],
+      [],
+    ),
+    makeClaim(
+      "requests.handled",
+      "Requests handled",
+      expectedEndpoints.length > 0 && selectedBusinessRequests.length === expectedEndpoints.length && unmatchedForScenario.length === 0 ? "pass" : "fail",
+      `${selectedBusinessRequests.length}/${expectedEndpoints.length || "unknown"} expected business request(s) matched in the latest flow; ${unmatchedForScenario.length} scenario unmatched request(s).`,
+      selectedBusinessRequests.map(entry => `${entry?.request?.method} ${entry?.request?.url} -> ${entry?.response?.status}`),
+      unmatchedForScenario.length ? ["WireMock has unmatched requests for this scenario prefix."] : [],
+    ),
+    makeClaim(
+      "payloads.valid",
+      "Payloads valid",
+      allPayloadsAsserted ? "pass" : allPayloadsJson ? "partial" : "unknown",
+      allPayloadsAsserted ? "WireMock body matchers validated each mutating request payload." : allPayloadsJson ? "Mutating payloads were parseable JSON, but not all stubs asserted body fields." : "No mutating payload evidence was available.",
+      payloadRows.map(row => `${row.callId}: json=${row.parseableJson}, bodyMatchers=${row.bodyPatterns}`),
+      allPayloadsAsserted ? [] : ["Add WireMock bodyPatterns for every mutating request."],
+    ),
+    makeClaim(
+      "data.between_steps",
+      "Data passed between steps",
+      dataLinks.length > 0 && configuredExtracts.length > 0 ? "pass" : dataLinks.length > 0 ? "partial" : "unknown",
+      dataLinks.length > 0 ? `${dataLinks.length} response value(s) appeared in later requests.` : "No response-to-later-request value propagation was detected.",
+      dataLinks.map(link => `${link.from}${link.valuePath} -> ${link.to}`),
+      dataLinks.length > 0 && configuredExtracts.length > 0 ? [] : ["Use step extracts and later request templates that reference extracted payload fields."],
+    ),
+    makeClaim(
+      "flow.order",
+      "Step flow",
+      ordered ? "pass" : "fail",
+      ordered ? "Observed HTTP calls match the scenario plan order." : "Observed HTTP call order does not match the scenario plan.",
+      actualSequence,
+      ordered ? [] : [`Expected: ${expectedSequence.join(" -> ")}`],
+    ),
+    makeClaim(
+      "auth.flow",
+      "Auth flow",
+      tokenRequests.length > 0 && bearerCount === selectedBusinessRequests.length && authMatchers === selectedBusinessRequests.length ? "pass" : "fail",
+      `${tokenRequests.length} token request(s); ${bearerCount}/${selectedBusinessRequests.length} business request(s) used bearer auth; ${authMatchers}/${selectedBusinessRequests.length} stubs required auth.`,
+      tokenRequests.map(entry => `${entry?.request?.method} ${entry?.request?.url} -> ${entry?.response?.status}`),
+      bearerCount === selectedBusinessRequests.length ? [] : ["Not every business request used bearer auth."],
+    ),
+    makeClaim(
+      "auth.expiry",
+      "Auth expiry / refresh",
+      tokenRequests.length > 1 && refreshDue ? "pass" : tokenRequests.length > 1 || refreshDue ? "partial" : "unknown",
+      tokenRequests.length > 1 ? `Token endpoint was called ${tokenRequests.length} times during one flow.` : "Only one token acquisition was observed.",
+      [
+        tokenRecord ? `Redis token refreshAt=${tokenRecord.fields?.refreshAt || "unknown"}, expiresAt=${tokenRecord.fields?.expiresAt || "unknown"}` : "No Redis token record",
+      ],
+      tokenRequests.length > 1 && refreshDue ? [] : ["Use a short token TTL proof to exercise refresh/expiry behavior."],
+    ),
+    makeClaim(
+      "redis.flows",
+      "Redis data flows",
+      tokenRecord && debugCaptureCount >= expectedEndpoints.length && !usesRedisDataset ? "pass" : tokenRecord || debugCaptureCount > 0 ? "partial" : "unknown",
+      usesRedisDataset
+        ? "Scenario uses Redis dataset input; dataset list checks are required."
+        : `Redis token record ${tokenRecord ? "exists" : "missing"}; ${debugCaptureCount} HTTP sequence debug capture(s).`,
+      [
+        tokenRecord ? tokenRecord.key : "No auth token record",
+        `${debugCaptureCount} debug capture key(s)`,
+      ],
+      usesRedisDataset ? ["Add dataset.check evidence for Redis list input/output."] : [],
+    ),
+    makeClaim(
+      "payload.trace",
+      "Runtime payload trace",
+      tapSample || debugCaptureCount >= expectedEndpoints.length ? "pass" : includeTapSample ? "unknown" : "partial",
+      tapSample
+        ? "A postprocessor input tap sample was captured."
+        : debugCaptureCount >= expectedEndpoints.length
+          ? "Redis debug capture contains one HTTP sequence capture per expected step."
+          : "No runtime payload trace is attached to this summary.",
+      tapSample ? ["debug.tap.postprocessor.in"] : [`${debugCaptureCount} Redis debug capture key(s)`],
+      tapSample || debugCaptureCount >= expectedEndpoints.length ? [] : ["Open the tap before the run or enable HTTP sequence Redis debug capture."],
+    ),
+  ];
+
+  return {
+    verdict: reportVerdict(claims),
+    title: `Evidence report for ${swarmId}`,
+    generatedAt: new Date().toISOString(),
+    lifecycleState,
+    checklist: claims,
+    sections: [
+      { title: "Expected flow", rows: expectedSequence },
+      { title: "Observed flow", rows: actualSequence },
+      { title: "Redis debug captures", rows: (redisDebug?.captures || []).map(capture => `${capture.data?.callId || "unknown"} -> ${capture.data?.status || "unknown"} (${capture.key})`) },
+    ],
+  };
+}
+
+async function buildEvidenceSummary({ swarmId, includeTapSample, scenarioId }) {
   const sources = [];
-  sources.push(await evidenceSource("swarm.get", () => httpJson(`/api/swarms/${encodeURIComponent(swarmId)}`)));
+  const swarmSource = await evidenceSource("swarm.get", () => httpJson(`/api/swarms/${encodeURIComponent(swarmId)}`));
+  sources.push(swarmSource);
+  const inferredScenarioId = scenarioId || inferScenarioId(swarmSource.status === "ok" ? swarmSource.data : null, swarmId);
+  if (inferredScenarioId) {
+    sources.push(await evidenceSource("scenario.get", () => httpJson(`${SM_URL}/scenarios/${encodeURIComponent(inferredScenarioId)}`)));
+  }
   sources.push(await evidenceSource("debug.queues", async () => {
     const queues = await httpJson(`${RABBIT_MGMT}/queues`, { headers: { authorization: rabbitAuth() } });
     const prefix = `ph.${swarmId}.`;
@@ -2292,6 +2737,8 @@ async function buildEvidenceSummary({ swarmId, includeTapSample }) {
   sources.push(await evidenceSource("mock.tcp.unmatched", () => httpJson(`${TCP_MOCK_URL}/api/requests/unmatched`, {
     headers: { authorization: tcpMockAuth() }, timeoutMs: 10000,
   })));
+  sources.push(await evidenceSource("redis.auth-tokens", () => readRedisEvidence(swarmId)));
+  sources.push(await evidenceSource("redis.http-sequence-debug", () => readRedisDebugCaptures(swarmId)));
 
   let tapSample = null;
   if (includeTapSample) {
@@ -2321,6 +2768,8 @@ async function buildEvidenceSummary({ swarmId, includeTapSample }) {
   const wiremockUnmatched = source("mock.wiremock.unmatched");
   const tcpRequests = source("mock.tcp.requests");
   const tcpUnmatched = source("mock.tcp.unmatched");
+  const redisAuth = source("redis.auth-tokens");
+  const redisDebug = source("redis.http-sequence-debug");
 
   const queueRows = queues?.status === "ok" && Array.isArray(queues.data) ? queues.data : [];
   const missingEvidence = sources
@@ -2329,9 +2778,11 @@ async function buildEvidenceSummary({ swarmId, includeTapSample }) {
   if (!includeTapSample) {
     missingEvidence.push({ source: "debug.tap", reason: "Tap sample was not requested. Call with includeTapSample=true when payload evidence is needed." });
   }
+  const report = buildReport({ swarmId, scenarioId: inferredScenarioId, sources, queueRows, tapSample, includeTapSample });
 
   return {
     swarmId,
+    scenarioId: inferredScenarioId || null,
     lifecycle: {
       available: source("swarm.get")?.status === "ok",
       raw: source("swarm.get")?.data ?? null,
@@ -2360,6 +2811,18 @@ async function buildEvidenceSummary({ swarmId, includeTapSample }) {
       available: false,
       note: "dataset.check is not implemented in this MCP server yet.",
     },
+    redis: {
+      available: redisAuth?.status === "ok" || redisDebug?.status === "ok",
+      authTokens: redisAuth?.data ?? null,
+      httpSequenceDebug: redisDebug?.data ?? null,
+    },
+    flow: {
+      expected: report.sections.find(section => section.title === "Expected flow")?.rows || [],
+      observed: report.sections.find(section => section.title === "Observed flow")?.rows || [],
+    },
+    auth: report.checklist.find(claim => claim.id === "auth.flow") || null,
+    payloads: report.checklist.find(claim => claim.id === "payloads.valid") || null,
+    report,
     tapSample,
     missingEvidence,
     sources: sources.map(({ name, status, error }) => ({ name, status, error })),
@@ -2381,12 +2844,21 @@ function evidenceWidgetHtml() {
     .badge { border: 1px solid color-mix(in srgb, CanvasText 18%, transparent); border-radius: 999px; padding: 4px 8px; font-size: 12px; white-space: nowrap; }
     .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; }
     .panel { border: 1px solid color-mix(in srgb, CanvasText 16%, transparent); border-radius: 8px; padding: 10px; background: color-mix(in srgb, Canvas 94%, CanvasText 6%); }
+    .table { display: grid; gap: 6px; }
+    .row { display: grid; grid-template-columns: minmax(130px, 1fr) 92px minmax(160px, 2fr); gap: 8px; align-items: start; padding: 8px 0; border-top: 1px solid color-mix(in srgb, CanvasText 10%, transparent); }
+    .row:first-child { border-top: 0; }
     .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0; opacity: .72; margin-bottom: 6px; }
     .value { font-size: 20px; font-weight: 650; line-height: 1.2; }
     .small { font-size: 12px; opacity: .78; margin-top: 4px; overflow-wrap: anywhere; }
+    .status { display: inline-flex; width: fit-content; border-radius: 999px; padding: 3px 8px; font-size: 11px; font-weight: 700; text-transform: uppercase; border: 1px solid color-mix(in srgb, CanvasText 16%, transparent); }
+    .pass { color: #12753c; background: color-mix(in srgb, #19a957 14%, Canvas); }
+    .partial, .unknown { color: #835800; background: color-mix(in srgb, #d99a00 16%, Canvas); }
+    .fail { color: #a11224; background: color-mix(in srgb, #d8243c 13%, Canvas); }
+    .not_applicable { color: color-mix(in srgb, CanvasText 70%, transparent); background: color-mix(in srgb, CanvasText 7%, Canvas); }
     ul { margin: 6px 0 0; padding-left: 18px; }
     li { margin: 3px 0; }
     pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; margin: 0; }
+    @media (max-width: 560px) { .row { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
@@ -2401,6 +2873,8 @@ function evidenceWidgetHtml() {
     const missing = Array.isArray(data.missingEvidence) ? data.missingEvidence : [];
     const queues = data.queues || {};
     const mocks = data.mocks || {};
+    const report = data.report || {};
+    const checklist = Array.isArray(report.checklist) ? report.checklist : [];
     const lifecycleStatus = data.lifecycle?.raw?.status || data.lifecycle?.raw?.state || (data.lifecycle?.available ? "available" : "unknown");
 
     function esc(value) {
@@ -2410,18 +2884,41 @@ function evidenceWidgetHtml() {
       return '<div class="panel"><div class="label">' + esc(label) + '</div><div class="value">' + esc(value) + '</div>' +
         (small ? '<div class="small">' + esc(small) + '</div>' : '') + '</div>';
     }
+    function statusPill(status) {
+      const cls = String(status || "unknown").replace(/[^a-z_]/g, "");
+      return '<span class="status ' + esc(cls) + '">' + esc(status || "unknown") + '</span>';
+    }
+    function checklistRows() {
+      if (!checklist.length) return '<div class="small">No report checklist was provided.</div>';
+      return '<div class="table">' + checklist.map(item =>
+        '<div class="row"><div><strong>' + esc(item.label) + '</strong></div><div>' + statusPill(item.status) + '</div><div>' +
+        esc(item.summary) +
+        (Array.isArray(item.gaps) && item.gaps.length ? '<div class="small">Gap: ' + esc(item.gaps.join("; ")) + '</div>' : '') +
+        '</div></div>'
+      ).join('') + '</div>';
+    }
+    function section(title) {
+      const found = Array.isArray(report.sections) ? report.sections.find(item => item.title === title) : null;
+      const rows = Array.isArray(found?.rows) ? found.rows : [];
+      return '<div class="panel"><div class="label">' + esc(title) + '</div>' +
+        (rows.length ? '<ul>' + rows.slice(0, 12).map(row => '<li>' + esc(typeof row === "string" ? row : JSON.stringify(row)) + '</li>').join('') + '</ul>' : '<div class="small">No rows.</div>') +
+        '</div>';
+    }
 
     if (!data.swarmId) {
       root.innerHTML = '<div class="panel">No evidence summary was provided.</div>';
     } else {
       root.innerHTML = [
-        '<div class="top"><h1>Evidence: ' + esc(data.swarmId) + '</h1><div class="badge">' + esc(lifecycleStatus) + '</div></div>',
+        '<div class="top"><h1>Evidence Report: ' + esc(data.swarmId) + '</h1><div class="badge">' + esc(report.verdict || lifecycleStatus) + '</div></div>',
         '<div class="grid">',
           panel('Sources', sourceCounts.ok + '/' + sourceCounts.total, 'available evidence feeds'),
           panel('Queues', queues.totalMessages ?? 'n/a', (queues.count ?? 0) + ' queue(s)'),
           panel('WireMock', mocks.wiremockRequests ?? 'n/a', (mocks.wiremockUnmatched ?? 0) + ' unmatched'),
-          panel('TCP mock', mocks.tcpRequests ?? 'n/a', (mocks.tcpUnmatched ?? 0) + ' unmatched'),
+          panel('Redis', data.redis?.httpSequenceDebug?.count ?? 'n/a', 'HTTP sequence capture(s)'),
         '</div>',
+        '<div class="panel"><div class="label">Acceptance checklist</div>' + checklistRows() + '</div>',
+        section('Observed flow'),
+        section('Redis debug captures'),
         '<div class="panel"><div class="label">Missing evidence</div>',
           missing.length ? '<ul>' + missing.map(item => '<li><strong>' + esc(item.source) + '</strong>: ' + esc(item.reason) + '</li>').join('') + '</ul>' : '<div class="small">No missing evidence reported.</div>',
         '</div>',
@@ -2463,8 +2960,9 @@ server.registerTool("evidence.summary", {
   title: "evidence.summary",
   description: "Return a read-only aggregate evidence summary for a swarm and render the optional evidence widget for App-capable clients.",
   inputSchema: {
-    swarmId: z.string(),
+    swarmId: SWARM_ID_ARG,
     includeTapSample: z.boolean().optional().default(false),
+    scenarioId: SCENARIO_ID_ARG.optional(),
   },
   annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
   _meta: {

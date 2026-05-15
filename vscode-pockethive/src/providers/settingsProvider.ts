@@ -33,6 +33,7 @@ export class SettingsProvider implements vscode.TreeDataProvider<SettingsNode> {
       }
       case 'environment': {
         const item = new vscode.TreeItem(node.name, vscode.TreeItemCollapsibleState.None);
+        item.id = node.name;
         item.description = `${environmentStateLabel(node.state)}  ${node.baseUrl}`;
         item.tooltip = node.message ? `${node.baseUrl}\n${node.message}` : node.baseUrl;
         item.iconPath = environmentIcon(node.state, node.active);
@@ -54,6 +55,7 @@ export class SettingsProvider implements vscode.TreeDataProvider<SettingsNode> {
         const parts = node.path.replace(/\\/g, '/').split('/').filter(Boolean);
         const name = parts[parts.length - 1] ?? node.path;
         const item = new vscode.TreeItem(name, vscode.TreeItemCollapsibleState.None);
+        item.id = node.path;
         item.description = node.path;
         item.tooltip = node.path;
         item.iconPath = node.active

@@ -214,20 +214,24 @@ only renders that model.
 **UI:**
 
 ```
-+--------------------------------------------------+
-| Evidence: <swarm-id>                    RUNNING  |
-|--------------------------------------------------|
-| Lifecycle     READY -> RUNNING -> STOPPED         |
-| Queues        drained: yes   max depth: 12        |
-| Journal       0 errors       2 warnings           |
-| Tap sample    processor OUT captured              |
-| Mock calls    125 matched    0 unmatched          |
-| Metrics       100/s avg      p95 42ms             |
-|--------------------------------------------------|
-| Missing evidence                                  |
-| - no structured PocketHive logs available         |
-| - no dataset check attached                       |
-+--------------------------------------------------+
++------------------------------------------------------------------+
+| Evidence Report: <swarm-id>                              PARTIAL  |
+|------------------------------------------------------------------|
+| Queues drained                  PASS     work queues are empty    |
+| Requests handled                PASS     6/6 expected calls       |
+| Payloads valid                  PASS     WireMock body matchers   |
+| Data passed between steps       PASS     extract -> later request |
+| Step flow                       PASS     ordered timestamps       |
+| Auth flow                       PASS     token + bearer calls     |
+| Auth expiry / refresh           PASS     repeated token refresh   |
+| Redis data / token state        PASS     token + debug captures   |
+|------------------------------------------------------------------|
+| Flow timeline                                                     |
+| 1 start -> 2 profile -> 3 validate -> 4 session -> 5 confirm ...  |
+|------------------------------------------------------------------|
+| Missing evidence / risks                                           |
+| - swarm-controller control queue has one retained control signal   |
++------------------------------------------------------------------+
 ```
 
 **Rules:**
@@ -237,6 +241,8 @@ only renders that model.
 - No shell, Docker logs, or direct Loki.
 - All values come from the `evidence.summary` result.
 - JSON output remains canonical for non-App clients.
+- The report must distinguish full proof, partial proof, and not-applicable
+  claims instead of implying evidence that was not collected.
 
 ---
 

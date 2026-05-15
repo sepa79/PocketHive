@@ -1,0 +1,32 @@
+{
+  "name": "wizard-proof-receipt-auth-query-required",
+  "request": {
+    "method": "GET",
+    "urlPath": "/api/wizard-proof/receipt",
+    "headers": {
+      "Authorization": {
+        "equalTo": "Bearer wizard-proof-token"
+      }
+    },
+    "queryParameters": {
+      "journeyId": {
+        "equalTo": "JRN-WIZ-9001"
+      },
+      "confirmationId": {
+        "equalTo": "CNF-WIZ-9001"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "ok": true,
+      "callId": "receipt",
+      "receiptId": "RCP-WIZ-9001"
+    }
+  },
+  "priority": 1
+}

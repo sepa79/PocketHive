@@ -48,6 +48,7 @@ export class ScenarioProvider implements vscode.TreeDataProvider<ScenarioNode> {
 
     const { bundle, validationState } = node;
     const item = new vscode.TreeItem(bundle.name, vscode.TreeItemCollapsibleState.None);
+    item.id = bundle.name;
     item.contextValue = `bundle-${validationState}`;
     item.iconPath = validationIcon(validationState);
 

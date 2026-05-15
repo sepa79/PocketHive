@@ -163,6 +163,41 @@
           "type": "string",
           "default": "",
           "description": "Override path to pockethive-mcp server.mjs or start.cjs. Leave blank to use installed npm package."
+        },
+        "pockethive.autoRefresh.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically refresh PocketHive tree views while the MCP server is running."
+        },
+        "pockethive.autoRefresh.intervals.hive": {
+          "type": "number",
+          "default": 10,
+          "minimum": 5,
+          "description": "Hive view auto-refresh interval in seconds."
+        },
+        "pockethive.autoRefresh.intervals.buzz": {
+          "type": "number",
+          "default": 20,
+          "minimum": 5,
+          "description": "Buzz view auto-refresh interval in seconds."
+        },
+        "pockethive.autoRefresh.intervals.journal": {
+          "type": "number",
+          "default": 20,
+          "minimum": 5,
+          "description": "Journal view auto-refresh interval in seconds."
+        },
+        "pockethive.autoRefresh.intervals.scenario": {
+          "type": "number",
+          "default": 60,
+          "minimum": 5,
+          "description": "Scenarios view auto-refresh interval in seconds."
+        },
+        "pockethive.autoRefresh.intervals.settings": {
+          "type": "number",
+          "default": 30,
+          "minimum": 5,
+          "description": "Settings view auto-refresh interval in seconds."
         }
       }
     }

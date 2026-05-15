@@ -1,0 +1,35 @@
+{
+  "name": "wizard-proof-profile-auth-query-required",
+  "request": {
+    "method": "GET",
+    "urlPath": "/api/wizard-proof/profile",
+    "headers": {
+      "Authorization": {
+        "equalTo": "Bearer wizard-proof-token"
+      }
+    },
+    "queryParameters": {
+      "customerId": {
+        "equalTo": "CUST-WIZ-1001"
+      },
+      "journeyId": {
+        "equalTo": "JRN-WIZ-9001"
+      },
+      "sessionId": {
+        "equalTo": "SES-WIZ-9001"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "ok": true,
+      "callId": "profile",
+      "profileVersion": "PROFILE-V2"
+    }
+  },
+  "priority": 1
+}

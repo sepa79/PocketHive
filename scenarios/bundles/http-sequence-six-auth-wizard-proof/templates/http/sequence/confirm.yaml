@@ -1,0 +1,11 @@
+serviceId: sequence
+callId: confirm
+protocol: HTTP
+method: POST
+pathTemplate: /api/wizard-proof/confirm
+headersTemplate:
+  content-type: application/json
+bodyTemplate: '{"step":"confirm","customerId":"{{ payload.customerId }}","journeyId":"{{ payload.journeyId }}","sessionVersion":"{{ payload.sessionVersion }}","validationId":"{{ payload.validationId }}"}'
+authRef:
+  profileId: wizard-auth
+  applyAs: HTTP_AUTHORIZATION_BEARER

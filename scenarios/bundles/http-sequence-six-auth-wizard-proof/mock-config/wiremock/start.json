@@ -1,0 +1,30 @@
+{
+  "name": "wizard-proof-start-auth-body-required",
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/wizard-proof/start",
+    "headers": {
+      "Authorization": {
+        "equalTo": "Bearer wizard-proof-token"
+      }
+    },
+    "bodyPatterns": [
+      {
+        "equalToJson": "{\"step\":\"start\",\"customerId\":\"CUST-WIZ-1001\",\"proofRun\":\"wizard-full-report\"}"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "ok": true,
+      "callId": "start",
+      "journeyId": "JRN-WIZ-9001",
+      "sessionId": "SES-WIZ-9001"
+    }
+  },
+  "priority": 1
+}

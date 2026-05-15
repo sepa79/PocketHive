@@ -34,6 +34,7 @@ export class HiveProvider implements vscode.TreeDataProvider<HiveNode> {
     const { swarm } = node;
     const status = swarm.status ?? 'UNKNOWN';
     const item = new vscode.TreeItem(swarm.id, vscode.TreeItemCollapsibleState.None);
+    item.id = swarm.id;
     item.description = status;
     item.tooltip = `Template: ${swarm.templateId ?? '—'}\nStatus: ${status}\nHealth: ${swarm.health ?? '—'}`;
     item.iconPath = statusIcon(status);
