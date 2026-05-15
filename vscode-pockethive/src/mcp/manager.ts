@@ -119,6 +119,7 @@ async function buildMcpEnv(context: vscode.ExtensionContext): Promise<NodeJS.Pro
     ...process.env,
     POCKETHIVE_BASE_URL: env?.baseUrl ?? 'http://localhost:8088',
     POCKETHIVE_AUTH_TOKEN: env?.authToken?.trim() ?? '',
+    POCKETHIVE_AUTH_USERNAME: env?.authUsername?.trim() ?? '',
     POCKETHIVE_ROOT: pockethiveRoot,
     BUNDLES_ROOT: bundlesFolder,
     RABBITMQ_DEFAULT_USER: env?.rabbitUser ?? 'guest',
@@ -135,6 +136,7 @@ export interface Environment {
   name: string;
   baseUrl: string;
   authToken?: string;
+  authUsername?: string;
   rabbitUser?: string;
   tcpMockUrl?: string;
   wiremockUrl?: string;

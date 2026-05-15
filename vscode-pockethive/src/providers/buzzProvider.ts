@@ -1,10 +1,10 @@
 import * as vscode from 'vscode';
 
-import { requestJson } from '../api';
-import { resolveServiceConfig } from '../config';
 import { describeTimeWindow, filterEntriesByTime, getTimeWindowOptions, sortEntriesNewestFirst } from '../filters';
 import { formatEntryDescription, formatEntryLabel, formatError } from '../format';
 import { JournalEntry, JournalPage } from '../types';
+import { isMcpRunning } from '../mcp/manager';
+import { debugHiveJournal } from '../mcp/tools';
 
 type BuzzNode =
   | { kind: 'filter' }
@@ -72,18 +72,12 @@ export class BuzzProvider implements vscode.TreeDataProvider<BuzzNode> {
     }
 
     const filterNode: BuzzNode = { kind: 'filter' };
-    const config = resolveServiceConfig('orchestratorUrl');
-    if ('error' in config) {
-      return [filterNode, { kind: 'message', message: config.error }];
+    if (!isMcpRunning()) {
+      return [filterNode, { kind: 'message', message: 'MCP server not running. Check Settings.' }];
     }
 
     try {
-      const page = await requestJson<JournalPage>(
-        config.baseUrl,
-        config.authToken,
-        'GET',
-        '/api/journal/hive/page?limit=50'
-      );
+      const page = await debugHiveJournal(50) as JournalPage;
       const entries = Array.isArray(page.items) ? page.items : [];
       const filtered = filterEntriesByTime(entries, this.timeWindowMs);
       const sorted = sortEntriesNewestFirst(filtered).slice(0, 50);

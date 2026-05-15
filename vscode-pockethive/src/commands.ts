@@ -1,9 +1,7 @@
 import * as vscode from 'vscode';
-import { randomUUID } from 'crypto';
 
-import { requestJson, requestText } from './api';
 import {
-  resolveHiveBaseUrl, resolveServiceConfig,
+  resolveHiveBaseUrl,
   getEnvironments, getActiveEnvironmentName, setActiveEnvironment,
   addEnvironment, removeEnvironment, addBundlesFolder, setActiveBundlesFolder,
   getActiveBundlesFolder, migrateSettingsIfNeeded,
@@ -14,7 +12,7 @@ import { getOutputChannel } from './output';
 import { pickScenarioId, pickSwarmId } from './pickers';
 import { openJsonPreview, openPreviewDocument } from './preview';
 import { renderScenarioPreviewHtml } from './scenarioPreview';
-import { ScenarioDetail, ScenarioSummary, SwarmSummary } from './types';
+import { ScenarioDetail, ScenarioSummary } from './types';
 import { restartMcpServer } from './mcp/manager';
 import * as McpTools from './mcp/tools';
 
@@ -39,9 +37,16 @@ export async function addEnvironmentCommand(context: vscode.ExtensionContext): P
   if (!baseUrl) return;
 
   const authToken = await vscode.window.showInputBox({
-    title: 'Add Environment (3/3)',
+    title: 'Add Environment (3/4)',
     prompt: 'Optional PocketHive auth token for this environment',
     password: true,
+    ignoreFocusOut: true,
+  });
+
+  const authUsername = await vscode.window.showInputBox({
+    title: 'Add Environment (4/4)',
+    prompt: 'Optional local/dev auth username (used when auth token is blank)',
+    value: authToken?.trim() ? '' : 'local-admin',
     ignoreFocusOut: true,
   });
 
@@ -50,6 +55,7 @@ export async function addEnvironmentCommand(context: vscode.ExtensionContext): P
     baseUrl: baseUrl.trim(),
     rabbitUser: 'guest',
     ...(authToken?.trim() ? { authToken: authToken.trim() } : {}),
+    ...(authUsername?.trim() ? { authUsername: authUsername.trim() } : {}),
   });
   vscode.window.showInformationMessage(`PocketHive: Environment '${name}' added.`);
   await restartMcpServer(context);
@@ -216,10 +222,10 @@ export async function restartMcpServerCommand(context: vscode.ExtensionContext):
 type ScenarioFileTarget = { scenarioId: string; kind: 'scenario' | 'schema' | 'template'; path?: string };
 
 export async function listSwarms(): Promise<void> {
-  await withService('orchestratorUrl', async (baseUrl, authToken) => {
-    const swarms = await requestJson<SwarmSummary[]>(baseUrl, authToken, 'GET', '/api/swarms');
+  await withMcp(async () => {
+    const swarms = await McpTools.swarmList();
     const outputChannel = getOutputChannel();
-    outputChannel.appendLine(`[${new Date().toISOString()}] GET /api/swarms`);
+    outputChannel.appendLine(`[${new Date().toISOString()}] MCP swarm.list`);
     outputChannel.appendLine(JSON.stringify(swarms, null, 2));
     outputChannel.show(true);
     vscode.window.showInformationMessage(`PocketHive: ${swarms.length} swarms listed.`);
@@ -227,8 +233,8 @@ export async function listSwarms(): Promise<void> {
 }
 
 export async function runSwarmCommand(action: 'start' | 'stop' | 'remove', swarmTarget?: unknown): Promise<void> {
-  await withService('orchestratorUrl', async (baseUrl, authToken) => {
-    const target = resolveSwarmId(swarmTarget) ?? (await pickSwarmId(baseUrl, authToken));
+  await withMcp(async () => {
+    const target = resolveSwarmId(swarmTarget) ?? (await pickSwarmId());
     if (!target) return;
     if (action === 'remove') {
       const choice = await vscode.window.showWarningMessage(
@@ -236,10 +242,13 @@ export async function runSwarmCommand(action: 'start' | 'stop' | 'remove', swarm
       );
       if (choice !== 'Remove') return;
     }
-    const body = { idempotencyKey: randomUUID() };
-    const response = await requestJson<Record<string, unknown>>(baseUrl, authToken, 'POST', `/api/swarms/${encodeURIComponent(target)}/${action}`, body);
+    const response = action === 'start'
+      ? await McpTools.swarmStart(target)
+      : action === 'stop'
+        ? await McpTools.swarmStop(target)
+        : await McpTools.swarmRemove(target);
     const outputChannel = getOutputChannel();
-    outputChannel.appendLine(`[${new Date().toISOString()}] POST /api/swarms/${target}/${action}`);
+    outputChannel.appendLine(`[${new Date().toISOString()}] MCP swarm.${action} ${target}`);
     outputChannel.appendLine(JSON.stringify(response, null, 2));
     outputChannel.show(true);
     vscode.window.showInformationMessage(`PocketHive: ${action} accepted for swarm '${target}'.`);
@@ -247,15 +256,16 @@ export async function runSwarmCommand(action: 'start' | 'stop' | 'remove', swarm
 }
 
 export async function runAllSwarms(action: 'start' | 'stop'): Promise<void> {
-  await withService('orchestratorUrl', async (baseUrl, authToken) => {
-    const swarms = await requestJson<SwarmSummary[]>(baseUrl, authToken, 'GET', '/api/swarms');
+  await withMcp(async () => {
+    const swarms = await McpTools.swarmList();
     if (!swarms.length) { vscode.window.showInformationMessage('PocketHive: No swarms found.'); return; }
     const outputChannel = getOutputChannel();
-    outputChannel.appendLine(`[${new Date().toISOString()}] ${action.toUpperCase()} all swarms (${swarms.length})`);
+    outputChannel.appendLine(`[${new Date().toISOString()}] MCP ${action.toUpperCase()} all swarms (${swarms.length})`);
     const failures: string[] = [];
     for (const swarm of swarms) {
       try {
-        await requestJson<Record<string, unknown>>(baseUrl, authToken, 'POST', `/api/swarms/${encodeURIComponent(swarm.id)}/${action}`, { idempotencyKey: randomUUID() });
+        if (action === 'start') await McpTools.swarmStart(swarm.id);
+        else await McpTools.swarmStop(swarm.id);
       } catch (error) { failures.push(`${swarm.id}: ${formatError(error)}`); }
     }
     if (failures.length > 0) {
@@ -276,20 +286,20 @@ export async function openUi(): Promise<void> {
 }
 
 export async function openSwarmDetails(swarmId?: string): Promise<void> {
-  await withService('orchestratorUrl', async (baseUrl, authToken) => {
-    const target = swarmId ?? (await pickSwarmId(baseUrl, authToken));
+  await withMcp(async () => {
+    const target = swarmId ?? (await pickSwarmId());
     if (!target) return;
-    const swarm = await requestJson<Record<string, unknown>>(baseUrl, authToken, 'GET', `/api/swarms/${encodeURIComponent(target)}`);
+    const swarm = await McpTools.swarmGet(target);
     await openJsonPreview(`Swarm ${target}`, swarm);
   });
 }
 
 export async function openScenarioRaw(scenarioId?: string | ScenarioSummary | { scenario?: ScenarioSummary }): Promise<void> {
-  await withService('scenarioManagerUrl', async (baseUrl, authToken) => {
-    const target = resolveScenarioId(scenarioId) ?? (await pickScenarioId(baseUrl, authToken));
+  await withMcp(async () => {
+    const target = resolveScenarioId(scenarioId) ?? (await pickScenarioId());
     if (!target) return;
     const outputChannel = getOutputChannel();
-    outputChannel.appendLine(`[${new Date().toISOString()}] OPEN scenario ${target}`);
+    outputChannel.appendLine(`[${new Date().toISOString()}] MCP OPEN scenario ${target}`);
     const uri = scenarioUri(target);
     try {
       await vscode.commands.executeCommand('vscode.openWith', uri, 'pockethive.scenarioEditor');
@@ -304,10 +314,10 @@ export async function openScenarioRaw(scenarioId?: string | ScenarioSummary | { 
 }
 
 export async function previewScenario(scenarioId?: string | ScenarioSummary | { scenario?: ScenarioSummary }): Promise<void> {
-  await withService('scenarioManagerUrl', async (baseUrl, authToken) => {
-    const target = resolveScenarioId(scenarioId) ?? (await pickScenarioId(baseUrl, authToken));
+  await withMcp(async () => {
+    const target = resolveScenarioId(scenarioId) ?? (await pickScenarioId());
     if (!target) return;
-    const scenario = await requestJson<ScenarioDetail>(baseUrl, authToken, 'GET', `/scenarios/${encodeURIComponent(target)}`);
+    const scenario = await McpTools.scenarioGet(target) as ScenarioDetail;
     const panel = vscode.window.createWebviewPanel('pockethiveScenarioPreview', `Scenario: ${target}`, vscode.ViewColumn.Beside, { enableFindWidget: true });
     panel.webview.html = renderScenarioPreviewHtml(scenario);
   });
@@ -317,12 +327,11 @@ export async function openScenarioFile(target: ScenarioFileTarget): Promise<void
   if (!target?.scenarioId) { vscode.window.showErrorMessage('PocketHive: scenario id is required.'); return; }
   if (target.kind === 'scenario') { await openScenarioRaw(target.scenarioId); return; }
   if (!target.path) { vscode.window.showErrorMessage('PocketHive: file path is required.'); return; }
-  await withService('scenarioManagerUrl', async (baseUrl, authToken) => {
-    const endpoint = target.kind === 'schema'
-      ? `/scenarios/${encodeURIComponent(target.scenarioId)}/schema?path=${encodeURIComponent(target.path!)}`
-      : `/scenarios/${encodeURIComponent(target.scenarioId)}/template?path=${encodeURIComponent(target.path!)}`;
-    const text = await requestText(baseUrl, authToken, 'GET', endpoint);
-    await openPreviewDocument(`${target.scenarioId}/${target.path}`, text, target.kind === 'schema' ? 'json' : 'yaml');
+  await withMcp(async () => {
+    const result = target.kind === 'schema'
+      ? await McpTools.scenarioSchemaRead(target.scenarioId, target.path!)
+      : await McpTools.scenarioTemplateRead(target.scenarioId, target.path!);
+    await openPreviewDocument(`${target.scenarioId}/${target.path}`, result.content, target.kind === 'schema' ? 'json' : 'yaml');
   });
 }
 
@@ -332,13 +341,10 @@ export async function showEntry(entry: unknown, title?: string): Promise<void> {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-async function withService<T>(key: 'orchestratorUrl' | 'scenarioManagerUrl', action: (baseUrl: string, authToken?: string) => Promise<T>): Promise<T | undefined> {
-  const config = resolveServiceConfig(key);
-  if ('error' in config) { vscode.window.showErrorMessage(config.error); return undefined; }
+async function withMcp<T>(action: () => Promise<T>): Promise<T | undefined> {
   const outputChannel = getOutputChannel();
-  outputChannel.appendLine(`[${new Date().toISOString()}] CONFIG ${key}=${config.baseUrl}`);
   try {
-    return await action(config.baseUrl, config.authToken);
+    return await action();
   } catch (error) {
     const message = formatError(error);
     outputChannel.appendLine(`[${new Date().toISOString()}] ERROR ${message}`);

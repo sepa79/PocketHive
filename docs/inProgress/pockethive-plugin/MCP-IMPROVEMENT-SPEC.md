@@ -57,6 +57,10 @@ additional clarification.
 - **No hard-coded environment values** — environment-specific values go in
   `variables.yaml`. If `variables.yaml` is created, it should include explicit
   profiles such as `smoke`, `default`, and `nft`.
+- **Bundles are separate product content** — scenario bundles should be authored
+  in a separate scenario-bundles repository. The PocketHive product repo may
+  keep examples/fixtures, but MCP authoring should point `BUNDLES_ROOT` at the
+  external repo.
 - **No assumptions** — the wizard asks before authoring. Missing context = question,
   not guess.
 - **Contract from the runtime first** — the Scenario Manager API is the preferred

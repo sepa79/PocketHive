@@ -11,6 +11,12 @@
 3. Config is injected into the MCP server as environment variables at spawn time
 4. Switching environment or bundles folder respawns the MCP server (~1s, transparent)
 5. All config is structured and typed — no free-form key=value strings
+6. Scenario bundles should live in a separate scenario-bundles repo. In-repo
+   `scenarios/bundles` paths are legacy/example fallbacks, not the normal
+   authoring location.
+7. Checked-in MCP config must use relative paths so a clean checkout works on
+   another developer machine. Resolve `.` from the PocketHive repo root and
+   keep the normal bundles repo as `../pockethive-scenario-bundles`.
 
 ## VS Code settings schema
 
@@ -43,15 +49,15 @@ Stored in `settings.json` (global or workspace scope).
 
   // Registered bundle folder paths
   "pockethive.bundlesFolders": [
-    "/Users/tday/IdeaProjects/qa-nft-pockethive-bundles2",
-    "/Private/projects/payment-scenarios"
+    "../pockethive-scenario-bundles",
+    "../payment-scenarios"
   ],
 
   // Which bundles folder is active
-  "pockethive.activeBundlesFolder": "/Users/tday/IdeaProjects/qa-nft-pockethive-bundles2",
+  "pockethive.activeBundlesFolder": "../pockethive-scenario-bundles",
 
   // Path to PocketHive repo checkout (for offline validation)
-  "pockethive.pockethiveRoot": "/Private/projects/PocketHiveClean",
+  "pockethive.pockethiveRoot": ".",
 
   // MCP server transport
   "pockethive.mcpTransport": "stdio",   // "stdio" | "http"
@@ -77,11 +83,11 @@ Equivalent structure to VS Code settings.
   <option name="activeEnvironment" value="local" />
   <option name="bundlesFolders">
     <list>
-      <option value="/Users/tday/IdeaProjects/qa-nft-pockethive-bundles2" />
+      <option value="../pockethive-scenario-bundles" />
     </list>
   </option>
-  <option name="activeBundlesFolder" value="/Users/tday/IdeaProjects/qa-nft-pockethive-bundles2" />
-  <option name="pockethiveRoot" value="/Private/projects/PocketHiveClean" />
+  <option name="activeBundlesFolder" value="../pockethive-scenario-bundles" />
+  <option name="pockethiveRoot" value="." />
   <option name="mcpTransport" value="stdio" />
 </component>
 ```
@@ -134,12 +140,12 @@ The IDE plugin constructs this map and passes it to the MCP server process:
 | `POCKETHIVE_BASE_URL` | `environments[activeEnvironment].baseUrl` | Yes |
 | `POCKETHIVE_AUTH_TOKEN` | `environments[activeEnvironment].authToken` | No |
 | `POCKETHIVE_ROOT` | `pockethiveRoot` setting | For validation |
-| `BUNDLES_ROOT` | `activeBundlesFolder` setting | For bundle tools |
+| `BUNDLES_ROOT` | `activeBundlesFolder` setting | For bundle tools; should be a separate scenario-bundles repo checkout |
 | `RABBITMQ_DEFAULT_USER` | `environments[activeEnvironment].rabbitUser` | No (default: guest) |
 | `RABBITMQ_DEFAULT_PASS` | keychain `ph.env.<name>.rabbitPass` | No (default: guest) |
 | `TCP_MOCK_BASE_URL` | `environments[activeEnvironment].tcpMockUrl` | No (auto-derived) |
 | `WIREMOCK_BASE_URL` | `environments[activeEnvironment].wiremockUrl` | No (auto-derived) |
-| `PH_BUNDLES_ROOTS` | all `bundlesFolders` joined with `,` | For context tools |
+| `PH_BUNDLES_ROOTS` | JSON encoded `bundlesFolders` list | For context tools |
 
 ## Auto-derivation of service URLs
 
@@ -228,4 +234,4 @@ Users migrating from the bundles repo `.env` approach:
 | GitHub issue token | External GitHub MCP config, not PocketHive MCP |
 | `.env.local`, `.env.nft-remote` | `pockethive.environments` array entries |
 | `scripts/switch-env.sh local` | click "Use" in Settings tree view |
-| Bundles repo root = BUNDLES_ROOT | `pockethive.activeBundlesFolder` |
+| Bundles repo root = BUNDLES_ROOT | `pockethive.activeBundlesFolder` pointing at the separate scenario-bundles repo |

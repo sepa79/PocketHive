@@ -46,6 +46,26 @@ export async function scenarioGet(scenarioId: string): Promise<ScenarioDetail> {
   return call('scenario.get', { scenarioId }) as Promise<ScenarioDetail>;
 }
 
+export async function scenarioRawRead(scenarioId: string): Promise<{ scenarioId: string; content: string }> {
+  return call('scenario.raw.read', { scenarioId }) as Promise<{ scenarioId: string; content: string }>;
+}
+
+export async function scenarioRawWrite(scenarioId: string, content: string): Promise<{ scenarioId: string; written: boolean; response?: string }> {
+  return call('scenario.raw.write', { scenarioId, content }) as Promise<{ scenarioId: string; written: boolean; response?: string }>;
+}
+
+export async function scenarioSchemaRead(scenarioId: string, path: string): Promise<{ scenarioId: string; path: string; content: string }> {
+  return call('scenario.schema.read', { scenarioId, path }) as Promise<{ scenarioId: string; path: string; content: string }>;
+}
+
+export async function scenarioTemplateRead(scenarioId: string, path: string): Promise<{ scenarioId: string; path: string; content: string }> {
+  return call('scenario.template.read', { scenarioId, path }) as Promise<{ scenarioId: string; path: string; content: string }>;
+}
+
+export async function scenarioCapabilities(all = true): Promise<unknown[]> {
+  return call('scenario.capabilities.get', { all }) as Promise<unknown[]>;
+}
+
 // ── Swarm ─────────────────────────────────────────────────────────────────────
 
 export async function swarmList(): Promise<SwarmSummary[]> {
@@ -86,6 +106,10 @@ export async function debugJournal(swarmId: string, limit = 20) {
   return call('debug.journal', { swarmId, limit });
 }
 
+export async function debugHiveJournal(limit = 50) {
+  return call('debug.hive-journal', { limit });
+}
+
 export async function evidenceSummary(swarmId: string, includeTapSample = false): Promise<EvidenceSummary> {
   return call('evidence.summary', { swarmId, includeTapSample }) as Promise<EvidenceSummary>;
 }
@@ -94,6 +118,10 @@ export async function evidenceSummary(swarmId: string, includeTapSample = false)
 
 export async function healthCheck(): Promise<HealthResult> {
   return call('health.check') as Promise<HealthResult>;
+}
+
+export async function envStatus(): Promise<EnvironmentStatusResult> {
+  return call('env.status') as Promise<EnvironmentStatusResult>;
 }
 
 // ── Context ───────────────────────────────────────────────────────────────────
@@ -188,4 +216,19 @@ export interface ContextInfo {
   pockethiveRoot: string;
   baseUrl: string;
   platform: string;
+}
+
+export interface EnvironmentStatusResult {
+  activeEnvironment: string;
+  environments: EnvironmentStatus[];
+  source: string;
+}
+
+export interface EnvironmentStatus {
+  name: string;
+  baseUrl: string;
+  active: boolean;
+  state: 'active' | 'inactive' | 'inaccessible' | 'degraded' | 'auth-required' | 'auth-error' | 'invalid';
+  message?: string;
+  services?: Record<string, { ok: boolean; status: string; httpStatus?: number | null; error?: string | null }>;
 }

@@ -379,7 +379,7 @@ All variables injected by the IDE plugin at spawn time:
 | Variable | Source | Description |
 |---|---|---|
 | `POCKETHIVE_BASE_URL` | active environment | Reverse proxy root URL |
-| `BUNDLES_ROOT` | active bundles folder | Path to bundles directory |
+| `BUNDLES_ROOT` | active bundles folder | Path to bundles directory; should normally be a separate scenario-bundles repo |
 | `POCKETHIVE_ROOT` | plugin setting | Path to PocketHive repo checkout |
 | `RABBITMQ_DEFAULT_USER` | active environment | RabbitMQ username |
 | `RABBITMQ_DEFAULT_PASS` | keychain | RabbitMQ password |
@@ -430,6 +430,11 @@ CMD ["node", "server.mjs"]
 ```
 
 ## Bundles repo after migration
+
+Scenario bundles should live in a separate repository from PocketHive product
+code. The product repo can retain small examples and legacy smoke fixtures, but
+authoring tools should treat an external `BUNDLES_ROOT` checkout as the normal
+case.
 
 The bundles repo `mcp.json` changes from pointing at the local server file
 to the installed npm package:

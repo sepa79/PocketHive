@@ -1,9 +1,8 @@
 import * as vscode from 'vscode';
 
-import { requestJson, requestText } from '../api';
-import { resolveServiceConfig } from '../config';
 import { SCENARIO_FILE_NAMES, SCENARIO_SCHEME } from '../constants';
 import { ScenarioSummary } from '../types';
+import { scenarioList, scenarioRawRead, scenarioRawWrite } from '../mcp/tools';
 
 export class ScenarioFileSystemProvider implements vscode.FileSystemProvider {
   private readonly emitter = new vscode.EventEmitter<vscode.FileChangeEvent[]>();
@@ -40,12 +39,7 @@ export class ScenarioFileSystemProvider implements vscode.FileSystemProvider {
     }
 
     if (parsed.kind === 'root') {
-      const config = resolveServiceConfig('scenarioManagerUrl');
-      if ('error' in config) {
-        throw vscode.FileSystemError.Unavailable(config.error);
-      }
-
-      const scenarios = await requestJson<ScenarioSummary[]>(config.baseUrl, config.authToken, 'GET', '/scenarios');
+      const scenarios = await scenarioList() as ScenarioSummary[];
       return scenarios.map((scenario) => [scenario.id, vscode.FileType.Directory]);
     }
 
@@ -62,17 +56,7 @@ export class ScenarioFileSystemProvider implements vscode.FileSystemProvider {
       throw vscode.FileSystemError.FileNotFound(uri);
     }
 
-    const config = resolveServiceConfig('scenarioManagerUrl');
-    if ('error' in config) {
-      throw vscode.FileSystemError.Unavailable(config.error);
-    }
-
-    const raw = await requestText(
-      config.baseUrl,
-      config.authToken,
-      'GET',
-      `/scenarios/${encodeURIComponent(parsed.scenarioId)}/raw`
-    );
+    const raw = (await scenarioRawRead(parsed.scenarioId)).content;
     const content = Buffer.from(raw, 'utf8');
     this.stats.set(uri.toString(), {
       type: vscode.FileType.File,
@@ -89,18 +73,7 @@ export class ScenarioFileSystemProvider implements vscode.FileSystemProvider {
       throw vscode.FileSystemError.FileNotFound(uri);
     }
 
-    const config = resolveServiceConfig('scenarioManagerUrl');
-    if ('error' in config) {
-      throw vscode.FileSystemError.Unavailable(config.error);
-    }
-
-    await requestText(
-      config.baseUrl,
-      config.authToken,
-      'PUT',
-      `/scenarios/${encodeURIComponent(parsed.scenarioId)}/raw`,
-      Buffer.from(content).toString('utf8')
-    );
+    await scenarioRawWrite(parsed.scenarioId, Buffer.from(content).toString('utf8'));
 
     this.stats.set(uri.toString(), {
       type: vscode.FileType.File,

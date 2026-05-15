@@ -131,6 +131,7 @@
               "name":        { "type": "string" },
               "baseUrl":     { "type": "string" },
               "authToken":   { "type": "string", "default": "", "description": "Optional PocketHive bearer token for this environment." },
+              "authUsername": { "type": "string", "default": "", "description": "Optional local/dev auth username. Passed to MCP as POCKETHIVE_AUTH_USERNAME when authToken is blank." },
               "rabbitUser":  { "type": "string", "default": "guest" },
               "tcpMockUrl":  { "type": "string", "default": "" },
               "wiremockUrl": { "type": "string", "default": "" }
@@ -161,7 +162,7 @@
         "pockethive.mcpServerPath": {
           "type": "string",
           "default": "",
-          "description": "Override path to pockethive-mcp server.mjs. Leave blank to use installed npm package."
+          "description": "Override path to pockethive-mcp server.mjs or start.cjs. Leave blank to use installed npm package."
         }
       }
     }

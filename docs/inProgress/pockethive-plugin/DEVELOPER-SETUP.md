@@ -20,6 +20,12 @@ A new developer should be able to:
 The setup must stay explicit. Do not silently create local HiveMind stores,
 switch endpoints, or start Docker/build tools from MCP.
 
+Scenario bundles should be authored in a separate scenario-bundles repository,
+not inside the PocketHive product repository. The in-repo `scenarios/bundles`
+folder is acceptable only as a legacy/example fallback for smoke tests and
+backwards-compatible local development. New team work should configure
+`BUNDLES_ROOT` to an external checkout.
+
 ## Recommended Developer Profiles
 
 | Profile | Purpose | PocketHive stack | HiveMind |
@@ -39,6 +45,7 @@ They are not guessed by the MCP server.
 | npm | Dependency install and package scripts |
 | Java 21 | PocketHive services |
 | Docker/Compose | Local PocketHive stack, outside MCP |
+| Scenario bundles repo checkout | Active `BUNDLES_ROOT` for authoring |
 | VS Code | Extension development |
 | GitHub MCP client config | Issue workflows, outside PocketHive MCP |
 | HiveMind MCP client config | Shared agent memory |
@@ -51,7 +58,7 @@ The IDE plugin passes these values to `pockethive-mcp` at process spawn:
 |---|---|---|
 | `POCKETHIVE_BASE_URL` | Yes | Active environment setting |
 | `POCKETHIVE_ROOT` | Yes for validation | Repo path setting |
-| `BUNDLES_ROOT` | Yes for bundle tools | Active bundles folder setting |
+| `BUNDLES_ROOT` | Yes for bundle tools | Active bundles folder setting; should point to separate scenario-bundles repo |
 | `RABBITMQ_DEFAULT_USER` | No | Active environment setting |
 | `RABBITMQ_DEFAULT_PASS` | No | OS keychain |
 | `TCP_MOCK_BASE_URL` | No | Active environment setting |
@@ -132,7 +139,7 @@ server must not expose doctor as an MCP tool.
 1. Developer installs dependencies.
 2. Developer configures IDE plugin settings:
    - PocketHive repo path
-   - bundles root
+   - bundles root from a separate scenario-bundles checkout
    - environment base URL
    - Rabbit credentials if needed
 3. Developer configures global HiveMind MCP remote.
@@ -145,4 +152,3 @@ server must not expose doctor as an MCP tool.
 The setup is ready when a new developer can diagnose every missing dependency
 or endpoint from one doctor output, without reading implementation code and
 without the MCP server taking over local devops tasks.
-

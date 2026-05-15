@@ -1,0 +1,12 @@
+serviceId: sequence
+callId: validate
+protocol: HTTP
+method: POST
+pathTemplate: /api/six-auth/validate
+headersTemplate:
+  content-type: application/json
+  x-ph-proof-run: http-sequence-six-auth-flow
+bodyTemplate: '{"step":"validate","customerId":"CUST-1001"}'
+authRef:
+  profileId: wizard-auth
+  applyAs: HTTP_AUTHORIZATION_BEARER

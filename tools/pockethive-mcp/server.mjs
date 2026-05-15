@@ -81,9 +81,26 @@ function bundleDir(bundle) {
   return dir;
 }
 
+function bundleRootPolicy() {
+  const activeRoot = resolve(getBundlesDir());
+  const productRoot = resolve(POCKETHIVE_ROOT || REPO_ROOT);
+  const rel = relative(productRoot, activeRoot);
+  const colocatedWithPocketHive = rel === "" || (!rel.startsWith("..") && !resolve(rel).startsWith("/"));
+  return {
+    policy: "scenario bundles should normally live in a separate scenario-bundles repo",
+    activeRoot,
+    productRoot,
+    colocatedWithPocketHive,
+    warning: colocatedWithPocketHive
+      ? "Active BUNDLES_ROOT is inside the PocketHive product repo. Use this only for examples/smoke tests; configure a separate scenario-bundles checkout for normal authoring."
+      : null,
+  };
+}
+
 // ── HTTP helper ───────────────────────────────────────────────────────────────
 
 let cachedAuthHeader = null;
+const profileAuthHeaderCache = new Map();
 
 async function resolveAuthorizationHeader() {
   if (POCKETHIVE_AUTH_TOKEN.trim()) {
@@ -123,6 +140,39 @@ function needsPocketHiveAuth(url) {
   return String(url).startsWith(ORCH_URL) || String(url).startsWith(SM_URL);
 }
 
+function normalizeBaseUrl(value) {
+  return String(value || "").replace(/\/+$/, "");
+}
+
+async function resolveProfileAuthorizationHeader(profile) {
+  const token = String(profile?.authToken || "").trim();
+  if (token) return token.startsWith("Bearer ") ? token : `Bearer ${token}`;
+  const username = String(profile?.authUsername || "").trim();
+  if (!username) return null;
+  const baseUrl = normalizeBaseUrl(profile?.baseUrl || BASE_URL);
+  const authBase = normalizeBaseUrl(profile?.authServiceBaseUrl || `${baseUrl}/auth-service`);
+  const cacheKey = `${authBase}|${username}`;
+  if (profileAuthHeaderCache.has(cacheKey)) return profileAuthHeaderCache.get(cacheKey);
+  const response = await fetch(`${authBase}/api/auth/dev/login`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "accept": "application/json",
+    },
+    body: JSON.stringify({ username }),
+  });
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`Auth login failed for ${authBase}/api/auth/dev/login: HTTP ${response.status}: ${text || "<empty>"}`);
+  }
+  const payload = text ? JSON.parse(text) : null;
+  const accessToken = payload && typeof payload.accessToken === "string" ? payload.accessToken.trim() : "";
+  if (!accessToken) throw new Error("Auth login returned empty accessToken");
+  const header = `Bearer ${accessToken}`;
+  profileAuthHeaderCache.set(cacheKey, header);
+  return header;
+}
+
 async function httpJson(url, opts = {}) {
   const full = url.startsWith("http") ? url : `${ORCH_URL}${url}`;
   const controller = new AbortController();
@@ -150,6 +200,36 @@ async function httpJson(url, opts = {}) {
     const text = await res.text();
     if (!res.ok) throw new Error(`HTTP ${res.status} for ${full}: ${text || "<empty>"}`);
     return text ? JSON.parse(text) : null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function httpText(url, opts = {}) {
+  const full = url.startsWith("http") ? url : `${ORCH_URL}${url}`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), opts.timeoutMs || 30000);
+  const authHeader = needsPocketHiveAuth(full) ? await resolveAuthorizationHeader() : null;
+  const init = {
+    method: opts.method || "GET",
+    headers: {
+      "accept": opts.accept || "text/plain",
+      ...(opts.contentType ? { "content-type": opts.contentType } : {}),
+      ...(authHeader ? { authorization: authHeader } : {}),
+      ...(opts.headers || {}),
+    },
+    signal: controller.signal,
+  };
+  if (opts.body !== undefined) {
+    init.body = typeof opts.body === "string" || Buffer.isBuffer(opts.body) || opts.body instanceof Uint8Array
+      ? opts.body
+      : JSON.stringify(opts.body);
+  }
+  try {
+    const res = await fetch(full, init);
+    const text = await res.text();
+    if (!res.ok) throw new Error(`HTTP ${res.status} for ${full}: ${text || "<empty>"}`);
+    return text;
   } finally {
     clearTimeout(timer);
   }
@@ -221,11 +301,11 @@ async function runWithTimeout(name, handler, input) {
 
 // ── Bundle management ─────────────────────────────────────────────────────────
 
-reg("bundle.list", "List all scenario bundles in this repo", {}, async () => {
+reg("bundle.list", "List all scenario bundles in the configured bundle root", {}, async () => {
   const dir = getBundlesDir();
   if (!existsSync(dir)) return { bundles: [] };
   const bundles = readdirSync(dir, { withFileTypes: true })
-    .filter(d => d.isDirectory())
+    .filter(d => d.isDirectory() && !d.name.startsWith("."))
     .map(d => {
       const p = resolve(dir, d.name);
       return {
@@ -1687,6 +1767,48 @@ reg("scenario.get", "Get a specific scenario from the Scenario Manager", {
   return await httpJson(`${SM_URL}/scenarios/${encodeURIComponent(scenarioId)}`);
 });
 
+reg("scenario.raw.read", "Read raw scenario YAML through Scenario Manager.", {
+  scenarioId: z.string(),
+}, async ({ scenarioId }) => {
+  const content = await httpText(`${SM_URL}/scenarios/${encodeURIComponent(scenarioId)}/raw`, {
+    accept: "text/plain",
+  });
+  return { scenarioId, content };
+});
+
+reg("scenario.raw.write", "Write raw scenario YAML through Scenario Manager.", {
+  scenarioId: z.string(),
+  content: z.string(),
+}, async ({ scenarioId, content }) => {
+  const response = await httpText(`${SM_URL}/scenarios/${encodeURIComponent(scenarioId)}/raw`, {
+    method: "PUT",
+    body: content,
+    accept: "text/plain",
+    contentType: "text/plain",
+  });
+  return { scenarioId, written: true, response };
+});
+
+reg("scenario.schema.read", "Read a scenario schema file through Scenario Manager.", {
+  scenarioId: z.string(),
+  path: z.string(),
+}, async ({ scenarioId, path }) => {
+  const content = await httpText(`${SM_URL}/scenarios/${encodeURIComponent(scenarioId)}/schema?path=${encodeURIComponent(path)}`, {
+    accept: "text/plain",
+  });
+  return { scenarioId, path, content };
+});
+
+reg("scenario.template.read", "Read a scenario template file through Scenario Manager.", {
+  scenarioId: z.string(),
+  path: z.string(),
+}, async ({ scenarioId, path }) => {
+  const content = await httpText(`${SM_URL}/scenarios/${encodeURIComponent(scenarioId)}/template?path=${encodeURIComponent(path)}`, {
+    accept: "text/plain",
+  });
+  return { scenarioId, path, content };
+});
+
 reg("scenario.contracts.get", "Read Scenario Manager-backed contracts and capability manifests. This is the runtime contract source for wizard generation.", {
   scenarioId: z.string().optional(),
   includeCapabilities: z.boolean().optional(),
@@ -1840,6 +1962,12 @@ reg("debug.journal", "Read swarm journal (timeline of control-plane events)", {
   limit: z.number().optional().default(50),
 }, async ({ swarmId, limit }) => {
   return await httpJson(`/api/swarms/${encodeURIComponent(swarmId)}/journal/page?limit=${limit}`);
+});
+
+reg("debug.hive-journal", "Read hive-level journal entries through Orchestrator.", {
+  limit: z.number().optional().default(50),
+}, async ({ limit }) => {
+  return await httpJson(`/api/journal/hive/page?limit=${limit}`);
 });
 
 function sleep(ms) {
@@ -2502,6 +2630,7 @@ reg("context.get", "Return the current active configuration context. Call at ses
     mcpVersion: "1.0.0",
     platform: platform(),
     allBundlesRoots: _bundlesRoots,
+    bundleRootPolicy: bundleRootPolicy(),
   };
 });
 
@@ -2541,6 +2670,7 @@ reg("env.current", "Return the active environment details injected into this MCP
     wiremockUrl: WIREMOCK_URL,
     pockethiveRoot: POCKETHIVE_ROOT || "(not set)",
     bundlesRoot: getBundlesDir(),
+    bundleRootPolicy: bundleRootPolicy(),
   };
 });
 
@@ -2582,6 +2712,110 @@ reg("env.list", "List environment profiles injected by the IDE/client settings s
     activeBaseUrl: BASE_URL,
     profiles,
     source: "injected-env",
+  };
+});
+
+async function probeHealthEndpoint(baseUrl, servicePath, authHeader) {
+  const url = `${normalizeBaseUrl(baseUrl)}${servicePath}/actuator/health`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 3000);
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        "accept": "application/json",
+        ...(authHeader ? { authorization: authHeader } : {}),
+      },
+      signal: controller.signal,
+    });
+    const text = await response.text();
+    let body = null;
+    try { body = text ? JSON.parse(text) : null; } catch { body = text || null; }
+    return {
+      ok: response.ok,
+      httpStatus: response.status,
+      status: body?.status || (response.ok ? "UP" : "DOWN"),
+      error: response.ok ? null : (typeof body === "string" ? body : body?.error || body?.message || response.statusText),
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      httpStatus: null,
+      status: "DOWN",
+      error: e?.name === "AbortError" ? "timeout" : (e?.message || String(e)),
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function classifyEnvironmentHealth(services) {
+  const statuses = Object.values(services);
+  if (statuses.every(service => service.ok && service.status === "UP")) return "reachable";
+  if (statuses.some(service => service.httpStatus === 401 || String(service.error || "").toLowerCase().includes("missing authorization"))) return "auth-required";
+  if (statuses.some(service => service.ok)) return "degraded";
+  return "inaccessible";
+}
+
+reg("env.status", "Check configured PocketHive environments through MCP and classify them for IDE settings views.", {}, async () => {
+  let profiles = [];
+  try {
+    profiles = process.env.PH_ENVIRONMENTS ? JSON.parse(process.env.PH_ENVIRONMENTS) : [];
+  } catch {
+    throw new Error("PH_ENVIRONMENTS is not valid JSON");
+  }
+  const activeEnvironment = process.env.PH_ACTIVE_ENVIRONMENT || "";
+  const results = [];
+  for (const profile of Array.isArray(profiles) ? profiles : []) {
+    const name = String(profile?.name || "");
+    const baseUrl = normalizeBaseUrl(profile?.baseUrl || "");
+    const active = name === activeEnvironment;
+    if (!name || !baseUrl) {
+      results.push({
+        name,
+        baseUrl,
+        active,
+        state: "invalid",
+        services: {},
+        message: "Environment requires name and baseUrl.",
+      });
+      continue;
+    }
+    let authHeader = null;
+    try {
+      authHeader = active ? await resolveAuthorizationHeader() : await resolveProfileAuthorizationHeader(profile);
+    } catch (e) {
+      results.push({
+        name,
+        baseUrl,
+        active,
+        state: "auth-error",
+        services: {},
+        message: e?.message || String(e),
+      });
+      continue;
+    }
+    const [orchestrator, scenarioManager] = await Promise.all([
+      probeHealthEndpoint(baseUrl, "/orchestrator", authHeader),
+      probeHealthEndpoint(baseUrl, "/scenario-manager", authHeader),
+    ]);
+    const services = {
+      orchestrator,
+      "scenario-manager": scenarioManager,
+    };
+    const reachability = classifyEnvironmentHealth(services);
+    results.push({
+      name,
+      baseUrl,
+      active,
+      state: active ? (reachability === "reachable" ? "active" : reachability) : (reachability === "reachable" ? "inactive" : reachability),
+      services,
+    });
+  }
+  return {
+    activeEnvironment,
+    environments: results,
+    source: "mcp-env-status",
   };
 });
 

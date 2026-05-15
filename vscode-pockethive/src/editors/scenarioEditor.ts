@@ -1,8 +1,7 @@
 import * as vscode from 'vscode';
 import { isMap, isSeq, parseDocument, stringify, YAMLMap, YAMLSeq } from 'yaml';
 
-import { requestJson } from '../api';
-import { resolveServiceConfig } from '../config';
+import { scenarioCapabilities } from '../mcp/tools';
 
 type ScenarioFormData = {
   id: string;
@@ -551,22 +550,8 @@ function formatError(error: unknown): string {
 }
 
 async function sendCapabilities(webview: vscode.Webview): Promise<void> {
-  const config = resolveServiceConfig('scenarioManagerUrl');
-  if ('error' in config) {
-    webview.postMessage({
-      type: 'capabilities',
-      ok: false,
-      error: config.error
-    } satisfies ScenarioStateMessage);
-    return;
-  }
   try {
-    const manifests = await requestJson<unknown[]>(
-      config.baseUrl,
-      config.authToken,
-      'GET',
-      '/api/capabilities?all=true'
-    );
+    const manifests = await scenarioCapabilities(true);
     webview.postMessage({
       type: 'capabilities',
       ok: true,

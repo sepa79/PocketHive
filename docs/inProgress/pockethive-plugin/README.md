@@ -30,6 +30,12 @@ PocketHive runtime evidence
 The MCP server is not a terminal. It does not build services, start Docker,
 run Git, run package managers, read container logs, or query Loki directly.
 
+Scenario bundles should live in a separate scenario-bundles repository. The
+PocketHive product repo may keep small bundled examples and legacy fixtures for
+runtime smoke tests, but day-to-day authoring through the MCP/IDE plugin should
+point `BUNDLES_ROOT` at an explicit external checkout. This keeps product code,
+runtime examples, and team-owned test content on clean lifecycle boundaries.
+
 ## Read Order
 
 | Step | Read | Purpose |
@@ -100,7 +106,7 @@ support is confirmed.
 | Read container logs | No product contract | No | No | No |
 | Read structured product logs | If product API exists | Via PocketHive API only | Via MCP only | Interprets |
 | Query Loki directly | Future backend only | No | No | No |
-| Manage scenario bundles | Owns runtime import | Guarded bundle files | Calls MCP | Requests changes |
+| Manage scenario bundles | Owns runtime import | Guarded external bundle repo files | Calls MCP | Requests changes |
 | Validate scenario contracts | Runtime source of truth | Exposes/checks contracts | Displays results | Uses results |
 | Seed/check mocks and datasets | Runtime/admin APIs | API-backed tools | Calls MCP | Requests evidence |
 | Record evidence | Provides raw evidence | Collects via tools | Displays results | Summarises |

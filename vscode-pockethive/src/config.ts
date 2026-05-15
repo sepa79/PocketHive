@@ -93,21 +93,8 @@ export async function migrateSettingsIfNeeded(): Promise<void> {
   await cfg.update('activeEnvironment', activeName, vscode.ConfigurationTarget.Global);
 }
 
-// ── Legacy compat (kept for existing code that still calls these) ─────────────
-
 export function resolveHiveBaseUrl(): { baseUrl: string } | { error: string } {
   const env = getActiveEnvironment();
   if (!env) return { error: 'PocketHive: no environment configured. Add one in Settings.' };
   return { baseUrl: env.baseUrl };
-}
-
-export function resolveServiceConfig(key: 'orchestratorUrl' | 'scenarioManagerUrl') {
-  const base = resolveHiveBaseUrl();
-  if ('error' in base) return base;
-  const suffix = key === 'orchestratorUrl' ? '/orchestrator' : '/scenario-manager';
-  return { baseUrl: base.baseUrl + suffix, authToken: getAuthToken() };
-}
-
-export function getAuthToken(): string | undefined {
-  return getActiveEnvironment()?.authToken?.trim() || undefined;
 }
