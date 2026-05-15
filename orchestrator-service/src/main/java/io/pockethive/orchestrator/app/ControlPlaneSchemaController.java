@@ -1,5 +1,6 @@
 package io.pockethive.orchestrator.app;
 
+import io.pockethive.orchestrator.auth.OrchestratorEndpointAuthorization;
 import java.io.IOException;
 import java.io.InputStream;
 import java.security.MessageDigest;
@@ -34,8 +35,10 @@ public class ControlPlaneSchemaController {
 
     private final byte[] schemaBytes;
     private final String etag;
+    private final OrchestratorEndpointAuthorization endpointAuthorization;
 
-    public ControlPlaneSchemaController() {
+    public ControlPlaneSchemaController(OrchestratorEndpointAuthorization endpointAuthorization) {
+        this.endpointAuthorization = endpointAuthorization;
         Resource resource = new ClassPathResource(RESOURCE_NAME);
         if (!resource.exists()) {
             throw new IllegalStateException("Missing control-plane schema resource: " + RESOURCE_NAME);
@@ -46,6 +49,7 @@ public class ControlPlaneSchemaController {
 
     @GetMapping("/control-events")
     public ResponseEntity<byte[]> schema(@RequestHeader(value = "If-None-Match", required = false) String ifNoneMatch) {
+        endpointAuthorization.requireReadPocketHive();
         HttpHeaders headers = new HttpHeaders();
         headers.set(HttpHeaders.CONTENT_TYPE, SCHEMA_CONTENT_TYPE);
         headers.setCacheControl(CACHE_CONTROL.getHeaderValue());

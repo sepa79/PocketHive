@@ -1,5 +1,6 @@
 package io.pockethive.orchestrator.app;
 
+import io.pockethive.orchestrator.auth.OrchestratorEndpointAuthorization;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import java.time.Instant;
@@ -22,24 +23,30 @@ import org.springframework.web.bind.annotation.RestController;
 public class DebugTapController {
 
     private final DebugTapService service;
+    private final OrchestratorEndpointAuthorization endpointAuthorization;
 
-    public DebugTapController(DebugTapService service) {
+    public DebugTapController(DebugTapService service,
+                              OrchestratorEndpointAuthorization endpointAuthorization) {
         this.service = Objects.requireNonNull(service, "service");
+        this.endpointAuthorization = Objects.requireNonNull(endpointAuthorization, "endpointAuthorization");
     }
 
     @PostMapping
     public ResponseEntity<DebugTapResponse> create(@Valid @RequestBody DebugTapRequest request) {
+        endpointAuthorization.requireManageSwarm(request.swarmId());
         return ResponseEntity.ok(service.create(request));
     }
 
     @GetMapping("/{tapId}")
     public ResponseEntity<DebugTapResponse> read(@PathVariable("tapId") @NotBlank String tapId,
                                                  @RequestParam(name = "drain", required = false) Integer drain) {
+        endpointAuthorization.requireReadSwarm(service.describe(tapId).swarmId());
         return ResponseEntity.ok(service.read(tapId, drain));
     }
 
     @DeleteMapping("/{tapId}")
     public ResponseEntity<DebugTapResponse> close(@PathVariable("tapId") @NotBlank String tapId) {
+        endpointAuthorization.requireManageSwarm(service.describe(tapId).swarmId());
         return ResponseEntity.ok(service.close(tapId));
     }
 

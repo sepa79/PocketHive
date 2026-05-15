@@ -3,7 +3,6 @@ capabilitiesVersion: "1.0"
 role: io-redis-output
 image:
   name: io-redis-output
-  tag: latest
 ui:
   label: "Redis output IO"
   ioType: "REDIS"

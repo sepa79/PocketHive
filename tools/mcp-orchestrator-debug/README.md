@@ -45,12 +45,16 @@ This will pull `@modelcontextprotocol/sdk`, `amqplib`, and `zod`.
 The server reads the same environment variables you already use in E2E tests / tooling:
 
 - `ORCHESTRATOR_BASE_URL` (default: `http://localhost:8088/orchestrator`)
+- `SCENARIO_MANAGER_BASE_URL` (default: `http://localhost:8088/scenario-manager`)
+- `AUTH_SERVICE_BASE_URL` (default: `http://localhost:1083`)
 - `RABBITMQ_HOST` (default: `localhost`)
 - `RABBITMQ_PORT` (default: `5672`)
 - `RABBITMQ_DEFAULT_USER` (default: `guest`)
 - `RABBITMQ_DEFAULT_PASS` (default: `guest`)
 - `RABBITMQ_VHOST` (default: `/`)
 - `POCKETHIVE_CONTROL_PLANE_EXCHANGE` (default: `ph.control`)
+- `POCKETHIVE_AUTH_TOKEN` (preferred when you already have a bearer token)
+- `POCKETHIVE_AUTH_USERNAME` (DEV auth bootstrap; the CLI/server will obtain a bearer token from auth-service)
 
 If you run PocketHive via the provided `docker-compose.yml` and port‑forward RabbitMQ / Orchestrator to localhost,
 the defaults should be correct.
@@ -95,12 +99,15 @@ For example, in a JSON‑based MCP client config:
       "args": ["tools/mcp-orchestrator-debug/server.mjs"],
       "env": {
         "ORCHESTRATOR_BASE_URL": "http://localhost:8088/orchestrator",
+        "SCENARIO_MANAGER_BASE_URL": "http://localhost:8088/scenario-manager",
+        "AUTH_SERVICE_BASE_URL": "http://localhost:1083",
         "RABBITMQ_HOST": "localhost",
         "RABBITMQ_PORT": "5672",
         "RABBITMQ_DEFAULT_USER": "guest",
         "RABBITMQ_DEFAULT_PASS": "guest",
         "RABBITMQ_VHOST": "/",
-        "POCKETHIVE_CONTROL_PLANE_EXCHANGE": "ph.control"
+        "POCKETHIVE_CONTROL_PLANE_EXCHANGE": "ph.control",
+        "POCKETHIVE_AUTH_USERNAME": "local-admin"
       }
     }
   }
@@ -124,17 +131,20 @@ Important guardrail:
   - No input.
   - Calls `GET {ORCHESTRATOR_BASE_URL}/api/swarms`.
   - Returns `structuredContent.swarms` (array) plus a pretty‑printed JSON text block.
+  - Requires `POCKETHIVE_AUTH_TOKEN` or `POCKETHIVE_AUTH_USERNAME` when auth is enabled.
 
 - `orchestrator.get-swarm`
   - Input:
     - `swarmId: string`
   - Calls `GET {ORCHESTRATOR_BASE_URL}/api/swarms/{swarmId}`.
   - Returns `structuredContent.swarm` plus text.
+  - Requires `POCKETHIVE_AUTH_TOKEN` or `POCKETHIVE_AUTH_USERNAME` when auth is enabled.
 
 - `scenario.reload-scenarios`
   - No input.
   - Calls `POST {SCENARIO_MANAGER_BASE_URL}/scenarios/reload`.
   - Returns the reload acknowledgement from Scenario Manager plus text.
+  - Requires `POCKETHIVE_AUTH_TOKEN` or `POCKETHIVE_AUTH_USERNAME` when auth is enabled.
 
 - `control.start-recording`
   - Input (optional):

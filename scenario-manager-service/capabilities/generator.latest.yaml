@@ -3,7 +3,6 @@ capabilitiesVersion: "1.2"
 role: generator
 image:
   name: generator
-  tag: latest
 ui:
   label: "Generator"
   color: "#22d3ee"

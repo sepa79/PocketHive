@@ -6,6 +6,7 @@ import io.pockethive.capabilities.CapabilityCatalogueService;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.SwarmTemplate;
 import jakarta.annotation.PostConstruct;
+import org.springframework.http.MediaType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -15,6 +16,8 @@ import org.springframework.stereotype.Service;
 import java.io.IOException;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -33,6 +36,13 @@ public class ScenarioService {
     private static final String DEFAULT_UPLOAD_FOLDER = "bundles";
     private static final String QUARANTINE_FOLDER = "quarantine";
     private static final String UPLOAD_TEMP_PREFIX = "pockethive-scenario-upload-";
+    private static final String NODE_TYPE_DIRECTORY = "directory";
+    private static final String NODE_TYPE_FILE = "file";
+    private static final String EDITOR_KIND_TEXT = "text";
+    private static final String EDITOR_KIND_YAML = "yaml";
+    private static final String EDITOR_KIND_JSON = "json";
+    private static final String EDITOR_KIND_MARKDOWN = "markdown";
+    private static final String EDITOR_KIND_UNSUPPORTED = "unsupported";
 
     private final Path storageDir;
     private final Path testStorageDir;
@@ -173,9 +183,49 @@ public class ScenarioService {
                         entry.defunctReason()))
                 .sorted(Comparator
                         .comparing(BundleTemplateSummary::folderPath, Comparator.nullsFirst(String::compareTo))
-                        .thenComparing(BundleTemplateSummary::name)
-                        .thenComparing(BundleTemplateSummary::bundlePath))
+                .thenComparing(BundleTemplateSummary::name)
+                .thenComparing(BundleTemplateSummary::bundlePath))
                 .toList();
+    }
+
+    public Optional<BundleTemplateSummary> findBundleTemplate(String scenarioId) {
+        if (scenarioId == null || scenarioId.isBlank()) {
+            return Optional.empty();
+        }
+        return bundleCatalog.stream()
+                .filter(entry -> scenarioId.trim().equals(entry.scenarioId()))
+                .findFirst()
+                .map(this::toBundleTemplateSummary);
+    }
+
+    public Optional<ScenarioAccessDescriptor> findScenarioAccess(String scenarioId) {
+        if (scenarioId == null || scenarioId.isBlank()) {
+            return Optional.empty();
+        }
+        String normalizedScenarioId = scenarioId.trim();
+        Optional<ScenarioAccessDescriptor> fromBundleCatalog = bundleCatalog.stream()
+                .filter(entry -> normalizedScenarioId.equals(entry.scenarioId()))
+                .findFirst()
+                .map(this::toAccessDescriptor);
+        if (fromBundleCatalog.isPresent()) {
+            return fromBundleCatalog;
+        }
+        ScenarioRecord record = scenarios.get(normalizedScenarioId);
+        return Optional.ofNullable(record)
+                .map(value -> new ScenarioAccessDescriptor(
+                        normalizedScenarioId,
+                        normalizedScenarioId,
+                        value.folderPath()));
+    }
+
+    public Optional<ScenarioAccessDescriptor> findBundleAccess(String bundleKey) {
+        if (bundleKey == null || bundleKey.isBlank()) {
+            return Optional.empty();
+        }
+        return bundleCatalog.stream()
+                .filter(entry -> bundleKey.trim().equals(entry.bundleKey()))
+                .findFirst()
+                .map(this::toAccessDescriptor);
     }
 
     public Optional<Scenario> find(String id) {
@@ -411,6 +461,154 @@ public class ScenarioService {
         return new BundleDownload(out.toByteArray(), fallbackBundleName(entry.bundlePath()) + "-bundle.zip");
     }
 
+    public synchronized BundleTree readBundleTree(String bundleKey) throws IOException {
+        BundleCatalogEntry entry = bundleEntry(bundleKey);
+        BundleRoot root = bundleRoot(entry);
+        List<BundleTreeNode> nodes = new ArrayList<>();
+        if (root.descriptorOnly()) {
+            Path descriptor = root.descriptorFile();
+            nodes.add(bundleTreeNode(entry.bundleKey(), root.root(), descriptor));
+            return new BundleTree(entry.bundleKey(), nodes);
+        }
+
+        try (Stream<Path> paths = Files.walk(root.root())) {
+            paths
+                    .filter(path -> !path.equals(root.root()))
+                    .sorted(Comparator
+                            .comparing((Path path) -> !Files.isDirectory(path))
+                            .thenComparing(path -> root.root().relativize(path).toString().replace('\\', '/')))
+                    .forEach(path -> nodes.add(bundleTreeNode(entry.bundleKey(), root.root(), path)));
+        }
+        return new BundleTree(entry.bundleKey(), nodes);
+    }
+
+    public synchronized BundleFilePayload readBundleWorkspaceFile(String bundleKey, String relativePath) throws IOException {
+        BundleCatalogEntry entry = bundleEntry(bundleKey);
+        BundleRoot root = bundleRoot(entry);
+        Path file = resolveBundleEntryPath(root, relativePath);
+        if (!Files.isRegularFile(file)) {
+            throw new IllegalArgumentException("Bundle path is not a file");
+        }
+
+        String editorKind = editorKind(file);
+        byte[] bytes = Files.readAllBytes(file);
+        String content = EDITOR_KIND_UNSUPPORTED.equals(editorKind) ? null : Files.readString(file);
+        boolean writable = !EDITOR_KIND_UNSUPPORTED.equals(editorKind);
+        return new BundleFilePayload(
+                entry.bundleKey(),
+                relativeBundlePath(root.root(), file),
+                file.getFileName().toString(),
+                mediaType(file, editorKind),
+                editorKind,
+                writable,
+                bytes.length,
+                "sha256:" + sha256Hex(bytes),
+                content);
+    }
+
+    public synchronized BundleFileWriteResult writeBundleWorkspaceFile(String bundleKey,
+                                                                       String relativePath,
+                                                                       String content,
+                                                                       String expectedRevision) throws IOException {
+        BundleCatalogEntry entry = bundleEntry(bundleKey);
+        BundleRoot root = bundleRoot(entry);
+        Path file = resolveBundleEntryPath(root, relativePath);
+        if (!Files.isRegularFile(file)) {
+            throw new IllegalArgumentException("Bundle path is not a file");
+        }
+        requireEditableBundleFile(file);
+        String currentRevision = "sha256:" + sha256Hex(Files.readAllBytes(file));
+        if (expectedRevision != null && !expectedRevision.isBlank() && !currentRevision.equals(expectedRevision.trim())) {
+            throw new WorkspaceConflictException("File revision is stale");
+        }
+        Files.writeString(file, content != null ? content : "");
+        reload();
+        return new BundleFileWriteResult("sha256:" + sha256Hex(Files.readAllBytes(file)));
+    }
+
+    public synchronized BundleFilePayload createBundleWorkspaceFile(String bundleKey,
+                                                                    String relativePath,
+                                                                    String content) throws IOException {
+        BundleCatalogEntry entry = bundleEntry(bundleKey);
+        BundleRoot root = bundleRoot(entry);
+        if (root.descriptorOnly()) {
+            throw new IllegalArgumentException("Bundle is descriptor-only");
+        }
+        Path file = resolveBundleTargetPath(root, relativePath);
+        requireEditableBundleFile(file);
+        if (Files.exists(file)) {
+            throw new WorkspaceConflictException("Bundle path already exists");
+        }
+        Path parent = file.getParent();
+        if (parent != null) {
+            Files.createDirectories(parent);
+        }
+        Files.writeString(file, content != null ? content : "");
+        reload();
+        return readBundleWorkspaceFile(bundleKey, relativeBundlePath(root.root(), file));
+    }
+
+    public synchronized void createBundleWorkspaceFolder(String bundleKey, String relativePath) throws IOException {
+        BundleCatalogEntry entry = bundleEntry(bundleKey);
+        BundleRoot root = bundleRoot(entry);
+        if (root.descriptorOnly()) {
+            throw new IllegalArgumentException("Bundle is descriptor-only");
+        }
+        Path folder = resolveBundleTargetPath(root, relativePath);
+        if (Files.exists(folder)) {
+            throw new WorkspaceConflictException("Bundle path already exists");
+        }
+        Files.createDirectories(folder);
+        reload();
+    }
+
+    public synchronized void renameBundleWorkspaceEntry(String bundleKey, String relativePath, String name) throws IOException {
+        BundleCatalogEntry entry = bundleEntry(bundleKey);
+        BundleRoot root = bundleRoot(entry);
+        if (root.descriptorOnly()) {
+            throw new IllegalArgumentException("Bundle is descriptor-only");
+        }
+        Path source = resolveBundleEntryPath(root, relativePath);
+        String targetName = normalizeBundleEntryName(name);
+        Path parent = source.getParent();
+        if (parent == null) {
+            throw new IllegalArgumentException("Cannot rename bundle root");
+        }
+        Path target = parent.resolve(targetName).normalize();
+        if (!target.startsWith(root.root())) {
+            throw new IllegalArgumentException("Invalid bundle path");
+        }
+        if (source.equals(target)) {
+            return;
+        }
+        if (Files.exists(target)) {
+            throw new WorkspaceConflictException("Bundle path already exists");
+        }
+        Files.move(source, target);
+        reload();
+    }
+
+    public synchronized void deleteBundleWorkspaceEntry(String bundleKey, String relativePath) throws IOException {
+        BundleCatalogEntry entry = bundleEntry(bundleKey);
+        BundleRoot root = bundleRoot(entry);
+        if (root.descriptorOnly()) {
+            throw new IllegalArgumentException("Bundle is descriptor-only");
+        }
+        Path target = resolveBundleEntryPath(root, relativePath);
+        if (target.equals(root.root())) {
+            throw new IllegalArgumentException("Cannot delete bundle root");
+        }
+        if (Files.isDirectory(target)) {
+            try (Stream<Path> children = Files.list(target)) {
+                if (children.findAny().isPresent()) {
+                    throw new WorkspaceConflictException("Bundle folder is not empty");
+                }
+            }
+        }
+        Files.delete(target);
+        reload();
+    }
+
 	    private Path resolveBundleFolder(String folderPath, boolean allowRoot) {
 	        String trimmed = folderPath == null ? "" : folderPath.trim();
 	        if (trimmed.isEmpty()) {
@@ -442,6 +640,157 @@ public class ScenarioService {
 	        }
 	        return normalized;
 	    }
+
+    private BundleRoot bundleRoot(BundleCatalogEntry entry) {
+        Path bundleDir = entry.bundleDir();
+        if (bundleDir != null && Files.isDirectory(bundleDir)) {
+            return new BundleRoot(bundleDir.toAbsolutePath().normalize(), null, false);
+        }
+        Path descriptor = entry.descriptorFile();
+        if (descriptor == null || !Files.isRegularFile(descriptor)) {
+            throw new IllegalArgumentException("Bundle '%s' not found".formatted(entry.bundleKey()));
+        }
+        Path normalizedDescriptor = descriptor.toAbsolutePath().normalize();
+        return new BundleRoot(normalizedDescriptor.getParent(), normalizedDescriptor, true);
+    }
+
+    private BundleTreeNode bundleTreeNode(String bundleKey, Path root, Path path) {
+        boolean directory = Files.isDirectory(path);
+        String editorKind = directory ? EDITOR_KIND_UNSUPPORTED : editorKind(path);
+        return new BundleTreeNode(
+                bundleKey,
+                relativeBundlePath(root, path),
+                path.getFileName().toString(),
+                directory ? NODE_TYPE_DIRECTORY : NODE_TYPE_FILE,
+                directory ? null : mediaType(path, editorKind),
+                editorKind,
+                !directory && !EDITOR_KIND_UNSUPPORTED.equals(editorKind),
+                directory ? null : safeSize(path));
+    }
+
+    private Path resolveBundleEntryPath(BundleRoot root, String relativePath) {
+        String trimmed = normalizeBundleRelativePath(relativePath);
+        Path resolved = root.root().resolve(trimmed).normalize();
+        if (!resolved.startsWith(root.root())) {
+            throw new IllegalArgumentException("Invalid bundle path");
+        }
+        if (root.descriptorOnly() && !resolved.equals(root.descriptorFile())) {
+            throw new IllegalArgumentException("Bundle path not found");
+        }
+        if (!Files.exists(resolved)) {
+            throw new IllegalArgumentException("Bundle path not found");
+        }
+        return resolved;
+    }
+
+    private Path resolveBundleTargetPath(BundleRoot root, String relativePath) {
+        String trimmed = normalizeBundleRelativePath(relativePath);
+        Path resolved = root.root().resolve(trimmed).normalize();
+        if (!resolved.startsWith(root.root())) {
+            throw new IllegalArgumentException("Invalid bundle path");
+        }
+        return resolved;
+    }
+
+    private String normalizeBundleRelativePath(String relativePath) {
+        String trimmed = relativePath == null ? "" : relativePath.trim();
+        if (trimmed.isEmpty() || trimmed.startsWith("/") || trimmed.contains("\\") || trimmed.contains("..")) {
+            throw new IllegalArgumentException("Invalid bundle path");
+        }
+        for (String segment : trimmed.split("/")) {
+            if (segment.isBlank() || segment.equals(".") || segment.equals("..")) {
+                throw new IllegalArgumentException("Invalid bundle path");
+            }
+        }
+        return trimmed;
+    }
+
+    private String normalizeBundleEntryName(String name) {
+        String trimmed = name == null ? "" : name.trim();
+        if (trimmed.isEmpty()
+                || trimmed.contains("/")
+                || trimmed.contains("\\")
+                || trimmed.equals(".")
+                || trimmed.equals("..")
+                || trimmed.contains("..")) {
+            throw new IllegalArgumentException("Invalid bundle entry name");
+        }
+        return trimmed;
+    }
+
+    private void requireEditableBundleFile(Path file) {
+        if (EDITOR_KIND_UNSUPPORTED.equals(editorKind(file))) {
+            throw new WorkspaceUnsupportedMediaTypeException("Bundle file type is not editable");
+        }
+    }
+
+    private static String relativeBundlePath(Path root, Path path) {
+        return root.relativize(path).toString().replace('\\', '/');
+    }
+
+    private static Long safeSize(Path path) {
+        try {
+            return Files.size(path);
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
+    private static String editorKind(Path path) {
+        String fileName = path.getFileName().toString().toLowerCase(Locale.ROOT);
+        if (fileName.endsWith(".yaml") || fileName.endsWith(".yml")) {
+            return EDITOR_KIND_YAML;
+        }
+        if (fileName.endsWith(".json")) {
+            return EDITOR_KIND_JSON;
+        }
+        if (fileName.endsWith(".md") || fileName.endsWith(".markdown")) {
+            return EDITOR_KIND_MARKDOWN;
+        }
+        if (fileName.endsWith(".txt")
+                || fileName.endsWith(".csv")
+                || fileName.endsWith(".properties")
+                || fileName.endsWith(".env")
+                || fileName.endsWith(".xml")
+                || fileName.endsWith(".http")) {
+            return EDITOR_KIND_TEXT;
+        }
+        return EDITOR_KIND_UNSUPPORTED;
+    }
+
+    private static String mediaType(Path path, String editorKind) {
+        if (EDITOR_KIND_YAML.equals(editorKind)) {
+            return "application/x-yaml";
+        }
+        if (EDITOR_KIND_JSON.equals(editorKind)) {
+            return MediaType.APPLICATION_JSON_VALUE;
+        }
+        if (EDITOR_KIND_MARKDOWN.equals(editorKind)) {
+            return "text/markdown";
+        }
+        if (EDITOR_KIND_TEXT.equals(editorKind)) {
+            return MediaType.TEXT_PLAIN_VALUE;
+        }
+        try {
+            String probed = Files.probeContentType(path);
+            return probed != null && !probed.isBlank() ? probed : "application/octet-stream";
+        } catch (IOException e) {
+            return "application/octet-stream";
+        }
+    }
+
+    private static String sha256Hex(byte[] bytes) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(bytes);
+            StringBuilder hex = new StringBuilder(digest.length * 2);
+            for (byte b : digest) {
+                hex.append(String.format("%02x", b));
+            }
+            return hex.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 digest is unavailable", e);
+        }
+    }
 
     private Set<Path> scenarioBundleRoots() {
         Set<Path> roots = new LinkedHashSet<>();
@@ -531,7 +880,7 @@ public class ScenarioService {
             return scenario;
         }
 
-        String controllerImage = appendDefaultTag(template.image());
+        String controllerImage = applyDefaultTag(template.image());
         boolean changed = !Objects.equals(controllerImage, template.image());
 
         List<Bee> bees = template.bees();
@@ -539,7 +888,7 @@ public class ScenarioService {
         if (bees != null && !bees.isEmpty()) {
             updatedBees = new ArrayList<>(bees.size());
             for (Bee bee : bees) {
-                String updatedImage = appendDefaultTag(bee.image());
+                String updatedImage = applyDefaultTag(bee.image());
                 if (!Objects.equals(updatedImage, bee.image())) {
                     changed = true;
                     updatedBees.add(new Bee(
@@ -573,7 +922,7 @@ public class ScenarioService {
         );
     }
 
-    private String appendDefaultTag(String imageReference) {
+    private String applyDefaultTag(String imageReference) {
         if (defaultImageTag == null || imageReference == null) {
             return imageReference;
         }
@@ -581,23 +930,26 @@ public class ScenarioService {
         if (trimmed.isEmpty()) {
             return imageReference;
         }
-        if (hasTagOrDigest(trimmed)) {
+        if (hasDigest(trimmed)) {
             return trimmed;
         }
-        return trimmed + ":" + defaultImageTag;
+        return imageNameWithoutTag(trimmed) + ":" + defaultImageTag;
     }
 
-    private static boolean hasTagOrDigest(String imageReference) {
+    private static boolean hasDigest(String imageReference) {
         if (imageReference == null || imageReference.isBlank()) {
             return false;
         }
-        int digestSep = imageReference.indexOf('@');
-        if (digestSep >= 0) {
-            return true;
-        }
+        return imageReference.indexOf('@') >= 0;
+    }
+
+    private static String imageNameWithoutTag(String imageReference) {
         int lastColon = imageReference.lastIndexOf(':');
         int lastSlash = imageReference.lastIndexOf('/');
-        return lastColon > lastSlash;
+        if (lastColon > lastSlash) {
+            return imageReference.substring(0, lastColon);
+        }
+        return imageReference;
     }
 
     private static String normalizeTag(String value) {
@@ -622,22 +974,12 @@ public class ScenarioService {
         Optional<io.pockethive.capabilities.CapabilityCatalogueService.CapabilityResolution> resolution =
                 capabilities.resolveByImageReference(imageReference);
         if (resolution.isPresent()) {
-            io.pockethive.capabilities.CapabilityCatalogueService.CapabilityResolution matched = resolution.get();
-            if (matched.fallbackUsed()) {
-                logger.warn(
-                        "Scenario '{}' {} image '{}' is using fallback capability manifest tag '{}' instead of requested tag '{}'",
-                        scenarioId,
-                        component,
-                        imageReference,
-                        matched.resolvedTag(),
-                        matched.requestedTag());
-            }
             return;
         }
 
         if (capabilities.findByImageReference(imageReference).isEmpty()) {
             logger.warn("Scenario '{}' missing capability manifest for {} image '{}'", scenarioId, component, imageReference);
-            reasons.add("No capability manifest found for image '" + imageReference + "' (" + component + "). Check that this image version is installed.");
+            reasons.add("No capability manifest found for image '" + imageReference + "' (" + component + "). Check that this image is installed.");
         }
     }
 
@@ -2524,11 +2866,15 @@ public class ScenarioService {
         }
     }
 
+    private record BundleRoot(Path root, Path descriptorFile, boolean descriptorOnly) { }
+
     private record ScenarioDescriptor(Scenario scenario, Path rootDir) { }
 
     private record UploadedBundle(Scenario scenario, Path rootDir, Path tempRoot) { }
 
     public record BundleBeeSummary(String role, String image) { }
+
+    public record ScenarioAccessDescriptor(String scenarioId, String bundlePath, String folderPath) { }
 
     public record BundleTemplateSummary(
         String bundleKey,
@@ -2542,6 +2888,27 @@ public class ScenarioService {
         boolean defunct,
         String defunctReason
     ) { }
+
+    private BundleTemplateSummary toBundleTemplateSummary(BundleCatalogEntry entry) {
+        return new BundleTemplateSummary(
+                entry.bundleKey(),
+                entry.bundlePath(),
+                entry.folderPath(),
+                entry.scenarioId(),
+                entry.name(),
+                entry.description(),
+                entry.controllerImage(),
+                entry.bees(),
+                entry.defunct(),
+                entry.defunctReason());
+    }
+
+    private ScenarioAccessDescriptor toAccessDescriptor(BundleCatalogEntry entry) {
+        return new ScenarioAccessDescriptor(
+                entry.scenarioId(),
+                entry.bundlePath(),
+                entry.folderPath());
+    }
 
     public record BundleDownload(byte[] bytes, String fileName) { }
 
@@ -2572,6 +2939,45 @@ public class ScenarioService {
         List<String> referencedCallIds,
         List<String> definedCallIds
     ) { }
+
+    public record BundleTree(String bundleKey, List<BundleTreeNode> nodes) { }
+
+    public record BundleFileWriteResult(String revision) { }
+
+    public record BundleTreeNode(
+        String bundleKey,
+        String path,
+        String name,
+        String nodeType,
+        String mediaType,
+        String editorKind,
+        boolean writable,
+        Long size
+    ) { }
+
+    public record BundleFilePayload(
+        String bundleKey,
+        String path,
+        String name,
+        String mediaType,
+        String editorKind,
+        boolean writable,
+        long size,
+        String revision,
+        String content
+    ) { }
+
+    public static class WorkspaceConflictException extends RuntimeException {
+        public WorkspaceConflictException(String message) {
+            super(message);
+        }
+    }
+
+    public static class WorkspaceUnsupportedMediaTypeException extends RuntimeException {
+        public WorkspaceUnsupportedMediaTypeException(String message) {
+            super(message);
+        }
+    }
 
     public record VariablesValidationResult(List<String> warnings) { }
 

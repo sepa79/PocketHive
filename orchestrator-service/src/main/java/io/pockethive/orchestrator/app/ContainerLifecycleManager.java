@@ -53,6 +53,8 @@ public class ContainerLifecycleManager {
     private String datasourceUsername;
     @Value("${spring.datasource.password:}")
     private String datasourcePassword;
+    @Value("${POCKETHIVE_DOCKER_SWARM_PLACEMENT_CONSTRAINTS:}")
+    private String swarmPlacementConstraints;
     private volatile ComputeAdapterType resolvedAdapterType = ComputeAdapterType.DOCKER_SINGLE;
 
     public ContainerLifecycleManager(
@@ -171,6 +173,7 @@ public class ContainerLifecycleManager {
             resolvedAdapterType = ComputeAdapterType.DOCKER_SINGLE;
         }
         env.put("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_DOCKER_COMPUTE_ADAPTER", resolvedAdapterType.name());
+        putEnvIfMissing(env, DockerSwarmServiceComputeAdapter.PLACEMENT_CONSTRAINTS_ENV, normalizeRuntimeRoot(swarmPlacementConstraints));
         env.put("POCKETHIVE_RUNTIME_IMAGE", resolvedImage);
         if (templateMetadata == null) {
             throw new IllegalStateException("templateMetadata must not be null");

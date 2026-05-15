@@ -3,6 +3,7 @@ package io.pockethive.orchestrator.app;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.ControlScope;
+import io.pockethive.orchestrator.auth.OrchestratorEndpointAuthorization;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import java.nio.file.Files;
@@ -40,14 +41,19 @@ public class SwarmJournalController {
     private final ObjectMapper json;
     private final JdbcTemplate jdbc;
     private final SwarmStore store;
+    private final OrchestratorEndpointAuthorization endpointAuthorization;
 
     @Value("${pockethive.journal.sink:postgres}")
     private String journalSink;
 
-    public SwarmJournalController(ObjectMapper json, JdbcTemplate jdbc, SwarmStore store) {
+    public SwarmJournalController(ObjectMapper json,
+                                  JdbcTemplate jdbc,
+                                  SwarmStore store,
+                                  OrchestratorEndpointAuthorization endpointAuthorization) {
         this.json = json;
         this.jdbc = jdbc;
         this.store = store;
+        this.endpointAuthorization = endpointAuthorization;
     }
 
     /**
@@ -61,6 +67,7 @@ public class SwarmJournalController {
                                                              @RequestParam(required = false) String runId) {
         String path = "/api/swarms/" + swarmId + "/journal";
         logRestRequest("GET", path, null);
+        endpointAuthorization.requireReadSwarm(swarmId);
         ResponseEntity<List<Map<String, Object>>> response;
         try {
             List<Map<String, Object>> entries = readJournalEntries(swarmId, runId);
@@ -94,6 +101,7 @@ public class SwarmJournalController {
                                                            @RequestParam(required = false) String correlationId) {
         String path = "/api/swarms/" + swarmId + "/journal/page";
         logRestRequest("GET", path, null);
+        endpointAuthorization.requireReadSwarm(swarmId);
         if (!"postgres".equalsIgnoreCase(journalSink)) {
             ResponseEntity<JournalPageResponse> response = ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
             logRestResponse("GET", path, response);
@@ -134,6 +142,7 @@ public class SwarmJournalController {
     public ResponseEntity<List<JournalRunSummary>> journalRuns(@PathVariable String swarmId) {
         String path = "/api/swarms/" + swarmId + "/journal/runs";
         logRestRequest("GET", path, null);
+        endpointAuthorization.requireReadSwarm(swarmId);
         if (!"postgres".equalsIgnoreCase(journalSink)) {
             ResponseEntity<List<JournalRunSummary>> response = ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
             logRestResponse("GET", path, response);
@@ -235,6 +244,7 @@ public class SwarmJournalController {
                                                              @RequestBody(required = false) PinRunRequest request) {
         String path = "/api/swarms/" + swarmId + "/journal/pin";
         logRestRequest("POST", path, request);
+        endpointAuthorization.requireManageSwarm(swarmId);
         if (!"postgres".equalsIgnoreCase(journalSink)) {
             ResponseEntity<PinRunResponse> response = ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
             logRestResponse("POST", path, response);

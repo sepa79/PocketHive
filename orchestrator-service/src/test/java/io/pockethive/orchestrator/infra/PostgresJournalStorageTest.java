@@ -6,7 +6,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.ControlScope;
 import io.pockethive.orchestrator.app.JournalController;
 import io.pockethive.orchestrator.app.JournalPageResponse;
+import io.pockethive.orchestrator.app.ScenarioClient;
 import io.pockethive.orchestrator.app.SwarmJournalController;
+import io.pockethive.orchestrator.auth.OrchestratorAuthorization;
+import io.pockethive.orchestrator.auth.OrchestratorEndpointAuthorization;
 import io.pockethive.orchestrator.domain.HiveJournal;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmStore;
@@ -51,6 +54,56 @@ class PostgresJournalStorageTest {
     jdbc = new JdbcTemplate(ds);
     mapper = new ObjectMapper().findAndRegisterModules();
     store = new SwarmStore();
+  }
+
+  private static OrchestratorEndpointAuthorization endpointAuthorization(SwarmStore swarmStore) {
+    return new OrchestratorEndpointAuthorization(
+        new OrchestratorAuthorization(),
+        scenarioClient(),
+        swarmStore);
+  }
+
+  private static ScenarioClient scenarioClient() {
+    return new ScenarioClient() {
+      @Override
+      public io.pockethive.orchestrator.domain.ScenarioPlan fetchScenario(String templateId) {
+        throw new UnsupportedOperationException();
+      }
+
+      @Override
+      public ScenarioTemplateDescriptor fetchScenarioTemplate(String templateId) {
+        return new ScenarioTemplateDescriptor(templateId, "bundles/" + templateId, "bundles", false);
+      }
+
+      @Override
+      public String prepareScenarioRuntime(String templateId, String swarmId) {
+        throw new UnsupportedOperationException();
+      }
+
+      @Override
+      public io.pockethive.swarm.model.SutEnvironment fetchScenarioSut(String templateId,
+                                                                       String sutId,
+                                                                       String correlationId,
+                                                                       String idempotencyKey) {
+        throw new UnsupportedOperationException();
+      }
+
+      @Override
+      public ResolvedVariables resolveScenarioVariables(String templateId,
+                                                       String profileId,
+                                                       String sutId,
+                                                       String correlationId,
+                                                       String idempotencyKey) {
+        throw new UnsupportedOperationException();
+      }
+
+      @Override
+      public io.pockethive.swarm.model.NetworkProfile fetchNetworkProfile(String profileId,
+                                                                          String correlationId,
+                                                                          String idempotencyKey) {
+        throw new UnsupportedOperationException();
+      }
+    };
   }
 
   @Test
@@ -105,7 +158,7 @@ class PostgresJournalStorageTest {
           "c-" + i);
     }
 
-    JournalController ctrl = new JournalController(jdbc, mapper);
+    JournalController ctrl = new JournalController(jdbc, mapper, endpointAuthorization(store));
     ReflectionTestUtils.setField(ctrl, "journalSink", "postgres");
 
     JournalPageResponse first = ctrl.hiveJournalPage("s1", "run-1", null, null, null, 2).getBody();
@@ -202,7 +255,7 @@ class PostgresJournalStorageTest {
         "run-1",
         "t-2");
 
-    SwarmJournalController ctrl = new SwarmJournalController(mapper, jdbc, store);
+    SwarmJournalController ctrl = new SwarmJournalController(mapper, jdbc, store, endpointAuthorization(store));
     ReflectionTestUtils.setField(ctrl, "journalSink", "postgres");
 
     JournalPageResponse page = ctrl.journalPage("sw1", null, null, 10, "run-1", null).getBody();
@@ -375,7 +428,7 @@ class PostgresJournalStorageTest {
           "{\"x\":" + i + "}");
     }
 
-    SwarmJournalController ctrl = new SwarmJournalController(mapper, jdbc, store);
+    SwarmJournalController ctrl = new SwarmJournalController(mapper, jdbc, store, endpointAuthorization(store));
     ReflectionTestUtils.setField(ctrl, "journalSink", "postgres");
 
     ResponseEntity<SwarmJournalController.PinRunResponse> pinned =
@@ -435,7 +488,7 @@ class PostgresJournalStorageTest {
         "sw1",
         "run-1");
 
-    SwarmJournalController ctrl = new SwarmJournalController(mapper, jdbc, store);
+    SwarmJournalController ctrl = new SwarmJournalController(mapper, jdbc, store, endpointAuthorization(store));
     ReflectionTestUtils.setField(ctrl, "journalSink", "postgres");
 
     ctrl.pinSwarmJournalRun("sw1", new SwarmJournalController.PinRunRequest("run-1", "FULL", null));

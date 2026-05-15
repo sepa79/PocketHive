@@ -165,13 +165,15 @@ Desired:
 These docs exist and contain editor-related plans or promises; they should be
 treated as **inputs**, not as “current behaviour”:
 
-- `docs/toBeReviewed/scenario-sut-editor-plan.md`
-  - Contains a React Flow + side-panel editor plan. Some ideas exist in the
+- `docs/ui-v2/SCENARIO_WORKSPACE_PLAN.md`
+  - Current forward-looking plan for the UI v2 Scenarios workspace.
+- `docs/archive/scenario-editor-plans/scenario-sut-editor-plan.md`
+  - Historical React Flow + side-panel editor plan. Some ideas exist in the
     current editor, but the plan is not implemented as written.
 - `docs/archive/pockethive_scenario_builder_mvp/*`
   - A consolidated MVP archive (contract + plans). It is useful for historical
-    context, but is not aligned with the current Scenarios editor (the old
-    micro-frontend UI plan subfolder was removed to avoid confusion).
+  context, but is not aligned with the current Scenarios editor (the old
+  micro-frontend UI plan subfolder was removed to avoid confusion).
 - `docs/archive/MVP_ROADMAP.md`
   - Historical roadmap that includes a “Scenario Editor UI” phase; superseded by
     this document for editor status.

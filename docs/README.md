@@ -6,6 +6,8 @@ Welcome to the PocketHive documentation hub. Use these resources to understand t
 - [System Architecture](ARCHITECTURE.md)
 - [SUT + Dataset + Simulation Model (proposal)](architecture/sut-dataset-simulation-model.md)
 - [Network Proxy Plan](inProgress/network-proxy-plan.md)
+- [Auth API Rollout Plan](archive/auth-api-rollout-plan.md)
+- [E2E API Framework Mini-Plan](inProgress/e2e-api-framework-mini-plan.md)
 
 ## Roadmap
 - [Release Notes](../CHANGELOG.md)
@@ -20,6 +22,7 @@ Welcome to the PocketHive documentation hub. Use these resources to understand t
 - [Workers Advanced](guides/workers-advanced.md)
 - [Templating Basics](guides/templating-basics.md)
 - [Templating Advanced](guides/templating-advanced.md)
+- [Proxmox Docker Swarm Runtime](guides/proxmox-swarm.md)
 
 ## Services
 - [Orchestrator](../orchestrator-service/README.md)
@@ -42,7 +45,15 @@ Welcome to the PocketHive documentation hub. Use these resources to understand t
 - [Scenario contract](scenarios/SCENARIO_CONTRACT.md)
 - [Scenario patterns](scenarios/SCENARIO_PATTERNS.md)
 - [Scenario templating (moved)](scenarios/SCENARIO_TEMPLATING.md)
+- [Scenario bundle workspace API spec](scenarios/SCENARIO_BUNDLE_WORKSPACE_API_SPEC.md)
+
+## UI v2
+- [UI v2 shell and flow](ui-v2/UI_V2_FLOW.md)
+- [Scenario workspace plan](ui-v2/SCENARIO_WORKSPACE_PLAN.md)
+- [Scenario workspace UI spec](ui-v2/SCENARIO_WORKSPACE_UI_SPEC.md)
+- [Monaco offline spec](ui-v2/MONACO_OFFLINE_SPEC.md)
 
 ## Contributing
 - [Contributor Guide](../CONTRIBUTING.md)
+- [HiveMind Workflow for Agents](ai/HIVEMIND_WORKFLOW.md)
 - [Control Plane Testing Playbook](ci/control-plane-testing.md)

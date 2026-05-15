@@ -35,9 +35,14 @@ const ORCHESTRATOR_BASE_URL =
 const SCENARIO_MANAGER_BASE_URL =
   process.env.SCENARIO_MANAGER_BASE_URL ||
   "http://localhost:8088/scenario-manager";
+const AUTH_SERVICE_BASE_URL =
+  process.env.AUTH_SERVICE_BASE_URL || "http://localhost:1083";
 const RABBIT_MGMT_BASE_URL =
   process.env.RABBITMQ_MANAGEMENT_BASE_URL ||
   "http://localhost:15672/rabbitmq/api";
+const AUTH_DEV_USERNAME = process.env.POCKETHIVE_AUTH_USERNAME || "";
+const AUTH_BEARER_TOKEN = process.env.POCKETHIVE_AUTH_TOKEN || "";
+let cachedAuthHeader = null;
 
 function printUsage() {
   console.error(
@@ -85,7 +90,10 @@ function printUsage() {
       "  node tools/mcp-orchestrator-debug/client.mjs swarm-journal-pin foo --runId <runId> --mode SLIM\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs hive-journal --swarmId foo --runId <runId>\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs commands\n" +
-      "  node tools/mcp-orchestrator-debug/client.mjs get-recorded\n"
+      "  node tools/mcp-orchestrator-debug/client.mjs get-recorded\n\n" +
+      "Auth env:\n" +
+      "  POCKETHIVE_AUTH_TOKEN=<bearer-token>\n" +
+      "  or POCKETHIVE_AUTH_USERNAME=<dev-username>\n"
   );
 }
 
@@ -681,6 +689,11 @@ async function httpJson(path, options = {}) {
         : JSON.stringify(options.body);
   }
 
+  const authorizationHeader = await resolveAuthorizationHeader();
+  if (authorizationHeader && !init.headers.authorization && !init.headers.Authorization) {
+    init.headers.authorization = authorizationHeader;
+  }
+
   const res = await fetch(url, init);
   const text = await res.text();
   if (!res.ok) {
@@ -696,6 +709,43 @@ async function httpJson(path, options = {}) {
   } catch {
     return text;
   }
+}
+
+async function resolveAuthorizationHeader() {
+  if (AUTH_BEARER_TOKEN.trim()) {
+    return AUTH_BEARER_TOKEN.startsWith("Bearer ")
+      ? AUTH_BEARER_TOKEN
+      : `Bearer ${AUTH_BEARER_TOKEN}`;
+  }
+  if (!AUTH_DEV_USERNAME.trim()) {
+    return null;
+  }
+  if (cachedAuthHeader) {
+    return cachedAuthHeader;
+  }
+  const base = AUTH_SERVICE_BASE_URL.replace(/\/+$/, "");
+  const response = await fetch(`${base}/api/auth/dev/login`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "accept": "application/json",
+    },
+    body: JSON.stringify({ username: AUTH_DEV_USERNAME.trim() }),
+    signal: AbortSignal.timeout?.(10_000),
+  });
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(
+      `Auth login failed for ${base}/api/auth/dev/login: HTTP ${response.status} ${response.statusText}: ${text || "<empty>"}`
+    );
+  }
+  const payload = text ? JSON.parse(text) : null;
+  const accessToken = payload && typeof payload.accessToken === "string" ? payload.accessToken.trim() : "";
+  if (!accessToken) {
+    throw new Error("Auth login returned empty accessToken");
+  }
+  cachedAuthHeader = `Bearer ${accessToken}`;
+  return cachedAuthHeader;
 }
 
 function randomIdempotencyKey() {

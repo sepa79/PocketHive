@@ -10,6 +10,7 @@ import io.pockethive.controlplane.messaging.SignalMessage;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.observability.ControlPlaneJson;
+import io.pockethive.orchestrator.auth.OrchestratorEndpointAuthorization;
 import io.pockethive.orchestrator.domain.IdempotencyStore;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmStore;
@@ -46,15 +47,18 @@ public class SwarmManagerController {
 	    private final ControlPlanePublisher controlPublisher;
 	    private final IdempotencyStore idempotency;
 	    private final String originInstanceId;
+        private final OrchestratorEndpointAuthorization endpointAuthorization;
 
 	    public SwarmManagerController(SwarmStore store,
 	                                  ControlPlanePublisher controlPublisher,
 	                                  IdempotencyStore idempotency,
-	                                  ControlPlaneProperties controlPlaneProperties) {
+	                                  ControlPlaneProperties controlPlaneProperties,
+                                      OrchestratorEndpointAuthorization endpointAuthorization) {
 	        this.store = store;
 	        this.controlPublisher = controlPublisher;
 	        this.idempotency = idempotency;
 	        this.originInstanceId = requireOrigin(controlPlaneProperties);
+            this.endpointAuthorization = endpointAuthorization;
 	    }
 
     /**
@@ -75,6 +79,7 @@ public class SwarmManagerController {
     public ResponseEntity<FanoutControlResponse> updateAll(@RequestBody ToggleRequest request) {
         String path = "/api/swarm-managers/enabled";
         logRestRequest("POST", path, request);
+        endpointAuthorization.requireManageDeployment();
         FanoutControlResponse body = dispatch(store.all(), request);
         ResponseEntity<FanoutControlResponse> response = ResponseEntity.accepted().body(body);
         logRestResponse("POST", path, response);
@@ -93,6 +98,7 @@ public class SwarmManagerController {
                                                            @RequestBody ToggleRequest request) {
         String path = "/api/swarm-managers/" + swarmId + "/enabled";
         logRestRequest("POST", path, request);
+        endpointAuthorization.requireManageSwarm(swarmId);
         ResponseEntity<FanoutControlResponse> response = store.find(swarmId)
             .map(swarm -> ResponseEntity.accepted().body(dispatch(List.of(swarm), request)))
             .orElseGet(() -> ResponseEntity.notFound().build());

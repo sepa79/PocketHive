@@ -6,11 +6,14 @@ import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.web.context.WebApplicationContext;
 
+import io.pockethive.auth.client.AuthServiceClient;
 import io.pockethive.capabilities.CapabilityCatalogueService;
 
 import java.io.ByteArrayOutputStream;
@@ -23,8 +26,11 @@ import java.util.zip.ZipOutputStream;
 import java.util.stream.Stream;
 
 import static org.hamcrest.Matchers.hasSize;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.springframework.test.web.servlet.setup.MockMvcBuilders.webAppContextSetup;
 
 @SpringBootTest(properties = "rabbitmq.logging.enabled=false")
 @AutoConfigureMockMvc
@@ -35,6 +41,12 @@ class ScenarioControllerTest {
 
     @Autowired
     CapabilityCatalogueService capabilityCatalogue;
+
+    @Autowired
+    WebApplicationContext webApplicationContext;
+
+    @MockBean
+    AuthServiceClient authServiceClient;
 
     @TempDir
     static Path tempDir;
@@ -53,6 +65,10 @@ class ScenarioControllerTest {
 
     @BeforeEach
     void setUpManifests() throws Exception {
+        when(authServiceClient.resolve(anyString())).thenReturn(AuthTestUsers.admin());
+        mvc = webAppContextSetup(webApplicationContext)
+                .defaultRequest(get("/").header(org.springframework.http.HttpHeaders.AUTHORIZATION, AuthTestUsers.TEST_BEARER))
+                .build();
         cleanDirectory(scenariosDir);
         cleanDirectory(capabilitiesDir);
         writeCapabilityManifest("ctrl", "ctrl-image");
@@ -137,6 +153,58 @@ class ScenarioControllerTest {
         mvc.perform(get("/scenarios/2").accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.name").value("Yaml"));
+    }
+
+    @Test
+    void bundleWorkspaceReadApiListsTreeAndReadsFilesByBundleKey() throws Exception {
+        Path bundle = scenariosDir.resolve("tcp").resolve("demo");
+        Files.createDirectories(bundle.resolve("templates/http"));
+        Files.writeString(bundle.resolve("scenario.yaml"), """
+                id: tcp-demo
+                name: TCP Demo
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - role: worker
+                      image: worker-image:latest
+                      work:
+                        in:
+                          in: a
+                        out:
+                          out: b
+                """);
+        Files.writeString(bundle.resolve("templates/http/request.yaml"), "method: GET\npath: /health\n");
+        Files.write(bundle.resolve("payload.bin"), new byte[] {0, 1, 2});
+
+        mvc.perform(post("/scenarios/reload"))
+                .andExpect(status().isNoContent());
+
+        mvc.perform(get("/scenarios/bundles/tree")
+                        .param("bundleKey", "tcp/demo")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.bundleKey").value("tcp/demo"))
+                .andExpect(jsonPath("$.nodes[?(@.path == 'scenario.yaml')].editorKind").value(org.hamcrest.Matchers.hasItem("yaml")))
+                .andExpect(jsonPath("$.nodes[?(@.path == 'templates')].nodeType").value(org.hamcrest.Matchers.hasItem("directory")))
+                .andExpect(jsonPath("$.nodes[?(@.path == 'templates/http/request.yaml')].editorKind").value(org.hamcrest.Matchers.hasItem("yaml")))
+                .andExpect(jsonPath("$.nodes[?(@.path == 'payload.bin')].editorKind").value(org.hamcrest.Matchers.hasItem("unsupported")));
+
+        mvc.perform(get("/scenarios/bundles/file")
+                        .param("bundleKey", "tcp/demo")
+                        .param("path", "templates/http/request.yaml")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.bundleKey").value("tcp/demo"))
+                .andExpect(jsonPath("$.path").value("templates/http/request.yaml"))
+                .andExpect(jsonPath("$.editorKind").value("yaml"))
+                .andExpect(jsonPath("$.revision").value(org.hamcrest.Matchers.startsWith("sha256:")))
+                .andExpect(jsonPath("$.content").value("method: GET\npath: /health\n"));
+
+        mvc.perform(get("/scenarios/bundles/file")
+                        .param("bundleKey", "tcp/demo")
+                        .param("path", "../scenario.yaml")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -460,6 +528,30 @@ class ScenarioControllerTest {
         mvc.perform(get("/scenarios").accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(0)));
+    }
+
+    @Test
+    void runtimePreparationRejectsDefunctScenarioBundle() throws Exception {
+        Path quarantinedBundle = Files.createDirectories(scenariosDir.resolve("quarantine").resolve("defunct-runtime"));
+        Files.writeString(quarantinedBundle.resolve("scenario.yaml"), """
+                id: defunct-runtime
+                name: Defunct Runtime
+                template:
+                  image: ctrl-image:latest
+                  bees: []
+                """);
+
+        mvc.perform(post("/scenarios/reload"))
+                .andExpect(status().isNoContent());
+
+        mvc.perform(post("/scenarios/defunct-runtime/runtime")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                            {
+                              "swarmId": "sw1"
+                            }
+                            """))
+                .andExpect(status().isNotFound());
     }
 
     @Test

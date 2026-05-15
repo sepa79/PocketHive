@@ -14,6 +14,10 @@ logging:
   config: classpath:logback-spring.xml
 
 pockethive:
+  auth:
+    service-url: ${POCKETHIVE_AUTH_SERVICE_URL:http://auth-service:8080}
+    connect-timeout: ${POCKETHIVE_AUTH_CONNECT_TIMEOUT:PT2S}
+    read-timeout: ${POCKETHIVE_AUTH_READ_TIMEOUT:PT5S}
   control-plane:
     swarm-id: default
     instance-id: scenario-manager

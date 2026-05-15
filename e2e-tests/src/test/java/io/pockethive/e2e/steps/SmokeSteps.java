@@ -9,6 +9,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.cucumber.java.en.Given;
 import io.cucumber.java.en.Then;
 import io.cucumber.java.en.When;
+import io.pockethive.e2e.clients.AuthServiceClient;
 import io.pockethive.e2e.clients.OrchestratorClient;
 import io.pockethive.e2e.clients.RabbitSubscriptions;
 import io.pockethive.e2e.clients.ScenarioManagerClient;
@@ -38,6 +39,7 @@ public class SmokeSteps {
   private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
   private ServiceEndpoints endpoints;
+  private AuthServiceClient authServiceClient;
   private OrchestratorClient orchestratorClient;
   private ScenarioManagerClient scenarioManagerClient;
   private RabbitSubscriptions rabbitSubscriptions;
@@ -65,12 +67,15 @@ public class SmokeSteps {
       Assumptions.assumeTrue(false, () -> "Skipping smoke checks: configure UI_BASE_URL or UI_WEBSOCKET_URI");
     }
 
+    authServiceClient = AuthServiceClient.create(endpoints.auth().authServiceBaseUrl());
+    String bearerToken = endpoints.auth().accessToken()
+        .orElseGet(() -> authServiceClient.devLogin(endpoints.auth().username()));
     orchestratorBaseUrl = endpoints.orchestratorBaseUrl();
     scenarioManagerBaseUrl = endpoints.scenarioManagerBaseUrl();
     uiBaseUrl = maybeUiBase.orElseThrow();
 
-    orchestratorClient = OrchestratorClient.create(orchestratorBaseUrl);
-    scenarioManagerClient = ScenarioManagerClient.create(scenarioManagerBaseUrl);
+    orchestratorClient = OrchestratorClient.create(orchestratorBaseUrl, bearerToken);
+    scenarioManagerClient = ScenarioManagerClient.create(scenarioManagerBaseUrl, bearerToken);
     rabbitSubscriptions = RabbitSubscriptions.from(endpoints.rabbitMq(), endpoints.controlPlane());
     uiWebClient = WebClient.builder().baseUrl(uiBaseUrl.toString()).build();
 

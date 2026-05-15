@@ -3,7 +3,6 @@ capabilitiesVersion: "1.2"
 role: swarm-controller
 image:
   name: swarm-controller
-  tag: latest
 ui:
   label: "Swarm Controller"
   color: "#f97316"

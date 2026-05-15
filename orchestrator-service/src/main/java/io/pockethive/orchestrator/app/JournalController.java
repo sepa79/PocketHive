@@ -3,6 +3,7 @@ package io.pockethive.orchestrator.app;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.ControlScope;
+import io.pockethive.orchestrator.auth.OrchestratorEndpointAuthorization;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -35,13 +36,17 @@ public class JournalController {
 
   private final JdbcTemplate jdbc;
   private final ObjectMapper json;
+  private final OrchestratorEndpointAuthorization endpointAuthorization;
 
   @Value("${pockethive.journal.sink:postgres}")
   private String journalSink;
 
-  public JournalController(JdbcTemplate jdbc, ObjectMapper json) {
+  public JournalController(JdbcTemplate jdbc,
+                           ObjectMapper json,
+                           OrchestratorEndpointAuthorization endpointAuthorization) {
     this.jdbc = Objects.requireNonNull(jdbc, "jdbc");
     this.json = Objects.requireNonNull(json, "json").findAndRegisterModules();
+    this.endpointAuthorization = Objects.requireNonNull(endpointAuthorization, "endpointAuthorization");
   }
 
   /**
@@ -60,6 +65,11 @@ public class JournalController {
       @RequestParam(required = false) Integer limit) {
     String path = "/api/journal/hive/page";
     log.info("[REST] GET {}", path);
+    if (swarmId == null || swarmId.isBlank()) {
+      endpointAuthorization.requireReadDeployment();
+    } else {
+      endpointAuthorization.requireReadSwarm(swarmId);
+    }
     if (!"postgres".equalsIgnoreCase(journalSink)) {
       return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
     }
@@ -176,6 +186,7 @@ public class JournalController {
                                                                 Instant afterTs) {
     String path = "/api/journal/swarm/runs";
     log.info("[REST] GET {}", path);
+    endpointAuthorization.requireReadDeployment();
     if (!"postgres".equalsIgnoreCase(journalSink)) {
       return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
     }
@@ -354,6 +365,7 @@ public class JournalController {
                                                            @RequestBody(required = false) SwarmRunMetadataUpdate update) {
     String path = "/api/journal/swarm/runs/" + runId + "/meta";
     log.info("[REST] POST {}", path);
+    endpointAuthorization.requireManageDeployment();
     if (!"postgres".equalsIgnoreCase(journalSink)) {
       return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
     }

@@ -9,9 +9,18 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import io.pockethive.auth.client.AuthServiceClient;
+import io.pockethive.auth.contract.AuthGrantDto;
+import io.pockethive.auth.contract.AuthProduct;
+import io.pockethive.auth.contract.AuthProvider;
+import io.pockethive.auth.contract.AuthenticatedUserDto;
+import io.pockethive.auth.contract.PocketHivePermissionIds;
+import io.pockethive.auth.contract.PocketHiveResourceSelectors;
+import io.pockethive.auth.contract.PocketHiveResourceTypes;
 import io.pockethive.swarm.model.NetworkProfile;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -19,7 +28,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.MockMvc;
 
 @SpringBootTest
@@ -28,6 +39,9 @@ class NetworkBindingControllerTest {
 
     @Autowired
     MockMvc mvc;
+
+    @MockBean
+    AuthServiceClient authServiceClient;
 
     @MockBean
     NetworkProfileClient profileClient;
@@ -40,6 +54,8 @@ class NetworkBindingControllerTest {
 
     @BeforeEach
     void setUp() throws Exception {
+        when(authServiceClient.resolve("Bearer test-token")).thenReturn(userWith(PocketHivePermissionIds.ALL));
+        when(authServiceClient.resolve("Bearer viewer-token")).thenReturn(userWith(PocketHivePermissionIds.VIEW));
         when(profileClient.fetch(eq("passthrough")))
             .thenReturn(new NetworkProfile("passthrough", "Passthrough", List.of(), List.of("payments")));
         when(toxiproxy.listProxies()).thenReturn(Map.of());
@@ -52,7 +68,7 @@ class NetworkBindingControllerTest {
 
     @Test
     void bindAndClearFlow() throws Exception {
-        mvc.perform(post("/api/network/bindings/swarm-a")
+        mvc.perform(withAdmin(post("/api/network/bindings/swarm-a"))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                     {
@@ -80,11 +96,11 @@ class NetworkBindingControllerTest {
             .andExpect(jsonPath("$.networkMode").value("PROXIED"))
             .andExpect(jsonPath("$.affectedEndpoints[0].endpointId").value("payments"));
 
-        mvc.perform(get("/api/network/proxies"))
+        mvc.perform(withAdmin(get("/api/network/proxies")))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$[0].swarmId").value("swarm-a"));
 
-        mvc.perform(post("/api/network/bindings/swarm-a/clear")
+        mvc.perform(withAdmin(post("/api/network/bindings/swarm-a/clear"))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                     {
@@ -95,17 +111,17 @@ class NetworkBindingControllerTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.networkMode").value("DIRECT"));
 
-        mvc.perform(get("/api/network/bindings/swarm-a"))
+        mvc.perform(withAdmin(get("/api/network/bindings/swarm-a")))
             .andExpect(status().isNotFound());
     }
 
     @Test
     void manualOverrideEndpointsWork() throws Exception {
-        mvc.perform(get("/api/network/manual-override"))
+        mvc.perform(withAdmin(get("/api/network/manual-override")))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.enabled").value(false));
 
-        mvc.perform(put("/api/network/manual-override")
+        mvc.perform(withAdmin(put("/api/network/manual-override"))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                     {
@@ -126,7 +142,7 @@ class NetworkBindingControllerTest {
             .andExpect(jsonPath("$.slowCloseDelayMs").value(1200))
             .andExpect(jsonPath("$.limitDataBytes").value(65536));
 
-        mvc.perform(post("/api/network/manual-override/drop-connections")
+        mvc.perform(withAdmin(post("/api/network/manual-override/drop-connections"))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                     {
@@ -140,7 +156,7 @@ class NetworkBindingControllerTest {
 
     @Test
     void clearReturnsBadRequestForMismatchedSutId() throws Exception {
-        mvc.perform(post("/api/network/bindings/swarm-a")
+        mvc.perform(withAdmin(post("/api/network/bindings/swarm-a"))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                     {
@@ -165,7 +181,7 @@ class NetworkBindingControllerTest {
                     """))
             .andExpect(status().isOk());
 
-        mvc.perform(post("/api/network/bindings/swarm-a/clear")
+        mvc.perform(withAdmin(post("/api/network/bindings/swarm-a/clear"))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                     {
@@ -178,7 +194,7 @@ class NetworkBindingControllerTest {
 
     @Test
     void clearReturnsNotFoundForMissingBinding() throws Exception {
-        mvc.perform(post("/api/network/bindings/missing-swarm/clear")
+        mvc.perform(withAdmin(post("/api/network/bindings/missing-swarm/clear"))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                     {
@@ -191,7 +207,7 @@ class NetworkBindingControllerTest {
 
     @Test
     void bindReturnsBadRequestWhenChangingSutForExistingSwarm() throws Exception {
-        mvc.perform(post("/api/network/bindings/swarm-a")
+        mvc.perform(withAdmin(post("/api/network/bindings/swarm-a"))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                     {
@@ -216,7 +232,7 @@ class NetworkBindingControllerTest {
                     """))
             .andExpect(status().isOk());
 
-        mvc.perform(post("/api/network/bindings/swarm-a")
+        mvc.perform(withAdmin(post("/api/network/bindings/swarm-a"))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                     {
@@ -240,5 +256,55 @@ class NetworkBindingControllerTest {
                     }
                     """))
             .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void apiRequiresAuthorizationHeader() throws Exception {
+        mvc.perform(get("/api/network/proxies"))
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.message").value("Missing Authorization header"));
+    }
+
+    @Test
+    void readEndpointsAllowViewerButMutationsDoNot() throws Exception {
+        mvc.perform(withViewer(get("/api/network/manual-override")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.requestedBy").exists());
+
+        mvc.perform(withViewer(put("/api/network/manual-override"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "enabled": true,
+                      "requestedBy": "viewer",
+                      "reason": "should be blocked"
+                    }
+                    """))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.message").value("PocketHive ALL permission required"));
+    }
+
+    private static MockHttpServletRequestBuilder withAdmin(MockHttpServletRequestBuilder builder) {
+        return builder.header(HttpHeaders.AUTHORIZATION, "Bearer test-token");
+    }
+
+    private static MockHttpServletRequestBuilder withViewer(MockHttpServletRequestBuilder builder) {
+        return builder.header(HttpHeaders.AUTHORIZATION, "Bearer viewer-token");
+    }
+
+    private static AuthenticatedUserDto userWith(String permission) {
+        return new AuthenticatedUserDto(
+            UUID.fromString("11111111-1111-1111-1111-111111111111"),
+            "local-user",
+            "Local User",
+            true,
+            AuthProvider.DEV,
+            List.of(new AuthGrantDto(
+                AuthProduct.POCKETHIVE,
+                permission,
+                PocketHiveResourceTypes.DEPLOYMENT,
+                PocketHiveResourceSelectors.GLOBAL
+            ))
+        );
     }
 }

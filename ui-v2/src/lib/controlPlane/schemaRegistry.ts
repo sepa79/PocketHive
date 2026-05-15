@@ -1,6 +1,7 @@
 import Ajv from 'ajv/dist/2020'
 import addFormats from 'ajv-formats'
 import type { AnySchema, ValidateFunction } from 'ajv'
+import { readStoredAccessToken } from '../auth'
 import { CONTROL_PLANE_SCHEMA_URL } from './config'
 
 type SchemaStatus = 'idle' | 'loading' | 'ready' | 'error'
@@ -16,6 +17,7 @@ type SchemaListener = (state: SchemaState) => void
 
 let state: SchemaState = { status: 'idle' }
 let inflight: Promise<SchemaState> | null = null
+let generation = 0
 const listeners = new Set<SchemaListener>()
 
 export function getSchemaState() {
@@ -33,13 +35,21 @@ export function getControlPlaneValidator() {
 }
 
 export async function loadControlPlaneSchema(signal?: AbortSignal) {
+  if (!readStoredAccessToken()) {
+    resetControlPlaneSchema()
+    return state
+  }
   if (inflight) {
     return inflight
   }
+  const requestGeneration = generation
   state = { ...state, status: 'loading', error: undefined }
   notify()
   inflight = fetchSchema(signal)
     .then((next) => {
+      if (generation !== requestGeneration || !readStoredAccessToken()) {
+        return state
+      }
       state = next
       return state
     })
@@ -48,6 +58,12 @@ export async function loadControlPlaneSchema(signal?: AbortSignal) {
       notify()
     })
   return inflight
+}
+
+export function resetControlPlaneSchema() {
+  generation += 1
+  state = { status: 'idle' }
+  notify()
 }
 
 async function fetchSchema(signal?: AbortSignal): Promise<SchemaState> {

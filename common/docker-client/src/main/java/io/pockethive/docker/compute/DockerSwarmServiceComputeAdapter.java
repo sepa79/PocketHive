@@ -16,8 +16,12 @@ import com.github.dockerjava.api.model.TaskState;
 import io.pockethive.manager.ports.ComputeAdapter;
 import io.pockethive.manager.runtime.ManagerSpec;
 import io.pockethive.manager.runtime.WorkerSpec;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HexFormat;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -41,6 +45,8 @@ import org.slf4j.LoggerFactory;
 public final class DockerSwarmServiceComputeAdapter implements ComputeAdapter {
 
   private static final Logger log = LoggerFactory.getLogger(DockerSwarmServiceComputeAdapter.class);
+  public static final String PLACEMENT_CONSTRAINTS_ENV = "POCKETHIVE_DOCKER_SWARM_PLACEMENT_CONSTRAINTS";
+  static final int DOCKER_SERVICE_NAME_MAX_LENGTH = 63;
 
   private final DockerClient dockerClient;
   private final Supplier<String> controlNetworkSupplier;
@@ -68,8 +74,10 @@ public final class DockerSwarmServiceComputeAdapter implements ComputeAdapter {
     List<String> volumes = spec.volumes() == null ? List.of() : List.copyOf(spec.volumes());
     String swarmId = extractSwarmId(env);
 
-    log.info("Creating Swarm service for manager {} using image {} in swarm {}", id, image, swarmId);
-    ServiceSpec serviceSpec = buildServiceSpec(id, image, env, volumes, swarmId, true);
+    String serviceName = dockerServiceName(id);
+    log.info("Creating Swarm service {} for manager {} using image {} in swarm {}",
+        serviceName, id, image, swarmId);
+    ServiceSpec serviceSpec = buildServiceSpec(serviceName, id, image, env, volumes, swarmId, true);
     CreateServiceResponse response = dockerClient.createServiceCmd(serviceSpec).exec();
     String serviceId = response.getId();
     managerServices.put(id, serviceId);
@@ -121,7 +129,8 @@ public final class DockerSwarmServiceComputeAdapter implements ComputeAdapter {
           : List.copyOf(worker.volumes());
       log.info("Creating Swarm service for worker {} in topology {} using image {}",
           workerId, resolvedTopology, image);
-      ServiceSpec spec = buildServiceSpec(workerId, image, env, volumes, resolvedTopology, false);
+      String serviceName = dockerServiceName(workerId);
+      ServiceSpec spec = buildServiceSpec(serviceName, workerId, image, env, volumes, resolvedTopology, false);
       CreateServiceResponse response = dockerClient.createServiceCmd(spec).exec();
       serviceIds.add(response.getId());
     }
@@ -203,7 +212,8 @@ public final class DockerSwarmServiceComputeAdapter implements ComputeAdapter {
     }
   }
 
-  private ServiceSpec buildServiceSpec(String name,
+  private ServiceSpec buildServiceSpec(String serviceName,
+                                       String logicalName,
                                        String image,
                                        Map<String, String> env,
                                        List<String> volumes,
@@ -221,9 +231,10 @@ public final class DockerSwarmServiceComputeAdapter implements ComputeAdapter {
     TaskSpec taskSpec = new TaskSpec()
         .withContainerSpec(containerSpec);
 
-    if (managerOnly) {
+    List<String> constraints = placementConstraints(managerOnly);
+    if (!constraints.isEmpty()) {
       ServicePlacement placement = new ServicePlacement()
-          .withConstraints(List.of("node.role == manager"));
+          .withConstraints(constraints);
       taskSpec = taskSpec.withPlacement(placement);
     }
 
@@ -234,9 +245,10 @@ public final class DockerSwarmServiceComputeAdapter implements ComputeAdapter {
     String stackNamespace = stackNamespace(swarmId);
     labels.put("com.docker.stack.namespace", stackNamespace);
     labels.put("ph.swarmId", swarmId);
+    labels.put("ph.logicalName", logicalName);
 
     ServiceSpec serviceSpec = new ServiceSpec()
-        .withName(name)
+        .withName(serviceName)
         .withTaskTemplate(taskSpec)
         .withMode(mode)
         .withLabels(labels);
@@ -245,10 +257,11 @@ public final class DockerSwarmServiceComputeAdapter implements ComputeAdapter {
     if (network != null && !network.isBlank()) {
       NetworkAttachmentConfig attachment = new NetworkAttachmentConfig()
           .withTarget(network);
+      taskSpec = taskSpec.withNetworks(List.of(attachment));
       serviceSpec = serviceSpec.withNetworks(List.of(attachment));
     }
 
-    return serviceSpec;
+    return serviceSpec.withTaskTemplate(taskSpec);
   }
 
   private List<String> toEnvList(Map<String, String> env) {
@@ -256,8 +269,32 @@ public final class DockerSwarmServiceComputeAdapter implements ComputeAdapter {
       return List.of();
     }
     return env.entrySet().stream()
-        .map(e -> e.getKey() + "=" + e.getValue())
+        .map(e -> e.getKey() + "=" + escapeDockerTemplateDelimiters(e.getValue()))
         .toList();
+  }
+
+  static String escapeDockerTemplateDelimiters(String value) {
+    if (value == null || value.isEmpty()) {
+      return value;
+    }
+    StringBuilder escaped = new StringBuilder(value.length());
+    for (int i = 0; i < value.length(); i++) {
+      if (i + 1 < value.length()) {
+        String pair = value.substring(i, i + 2);
+        if ("{{".equals(pair)) {
+          escaped.append("{{ \"{{\" }}");
+          i++;
+          continue;
+        }
+        if ("}}".equals(pair)) {
+          escaped.append("{{ \"}}\" }}");
+          i++;
+          continue;
+        }
+      }
+      escaped.append(value.charAt(i));
+    }
+    return escaped.toString();
   }
 
   private List<Mount> toMounts(List<String> volumes) {
@@ -286,6 +323,24 @@ public final class DockerSwarmServiceComputeAdapter implements ComputeAdapter {
     return mounts;
   }
 
+  private static List<String> placementConstraints(boolean managerOnly) {
+    List<String> constraints = new ArrayList<>();
+    if (managerOnly) {
+      constraints.add("node.role == manager");
+    }
+    String configured = System.getenv(PLACEMENT_CONSTRAINTS_ENV);
+    if (configured == null || configured.isBlank()) {
+      return List.copyOf(constraints);
+    }
+    for (String raw : configured.split(",")) {
+      String constraint = raw.trim();
+      if (!constraint.isEmpty()) {
+        constraints.add(constraint);
+      }
+    }
+    return List.copyOf(constraints);
+  }
+
   private static String requireNonBlank(String value, String name) {
     if (value == null || value.isBlank()) {
       throw new IllegalArgumentException(name + " must not be blank");
@@ -307,5 +362,25 @@ public final class DockerSwarmServiceComputeAdapter implements ComputeAdapter {
   private static String stackNamespace(String swarmId) {
     String normalized = requireNonBlank(swarmId, "swarmId");
     return "ph-" + normalized.toLowerCase(Locale.ROOT);
+  }
+
+  static String dockerServiceName(String requestedName) {
+    String normalized = requireNonBlank(requestedName, "requestedName").toLowerCase(Locale.ROOT);
+    if (normalized.length() <= DOCKER_SERVICE_NAME_MAX_LENGTH) {
+      return normalized;
+    }
+    String suffix = digestSuffix(normalized);
+    int prefixLength = DOCKER_SERVICE_NAME_MAX_LENGTH - suffix.length() - 1;
+    return normalized.substring(0, prefixLength) + "-" + suffix;
+  }
+
+  private static String digestSuffix(String value) {
+    try {
+      MessageDigest digest = MessageDigest.getInstance("SHA-256");
+      byte[] bytes = digest.digest(value.getBytes(StandardCharsets.UTF_8));
+      return HexFormat.of().formatHex(bytes, 0, 5);
+    } catch (NoSuchAlgorithmException e) {
+      throw new IllegalStateException("SHA-256 digest is unavailable", e);
+    }
   }
 }

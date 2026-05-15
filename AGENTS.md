@@ -32,6 +32,10 @@ This file is a **navigation and guardrails** page for both human and AI contribu
 - **Git safety (agents):**
   - **No pushes:** agents must not run `git push` (ever).
   - **No commits by default:** agents must not create commits unless a human makes an **EXPLICIT REQUEST TO COMMIT**.
+- **Tests must use only official ingress/API paths.**
+  - Do not point tests, E2E checks, or test diagnostics at direct service ports as a substitute for the supported entrypoint.
+  - Use the official public path/interface for the environment under test (for example the UI ingress / documented API base), not backend container ports.
+  - Direct service ports may be used only when the test explicitly exists to verify that specific service interface itself, with explicit human approval.
 
 ---
 
@@ -59,6 +63,7 @@ This file is a **navigation and guardrails** page for both human and AI contribu
 
 ### 1.5 Tests & CI
 - Follow the **control‑plane testing** strategy in `docs/ci/control-plane-testing.md` (Testcontainers, RabbitMQ, WireMock, etc.).
+- For PocketHive stack verification, treat direct container/service ports as implementation detail, not test target, unless explicitly approved.
 - For usage/dev commands, **do not copy here**—use `docs/USAGE.md`.
 
 ---
@@ -121,17 +126,19 @@ This file is a **navigation and guardrails** page for both human and AI contribu
 
 ## 6) Local orchestration tools (for AIs)
 
-- `build-hive.sh` in the repo root is the **canonical entrypoint** for building worker images and standing up the local PocketHive stack with `docker-compose`. Prefer using it over ad‑hoc `docker`/`mvn` commands.
+- PocketHive agent work should use the globally configured HiveMind project memory when available. Use the workflow in `docs/ai/HIVEMIND_WORKFLOW.md` with `project_id=pockethive`; do not create repo-local HiveMind storage or start a local HiveMind API as an implicit fallback.
+- `build-hive.sh` in the repo root is the **canonical entrypoint** for local PocketHive rebuild/redeploy cycles: it rebuilds worker/service artifacts as needed and restarts the local `docker-compose` stack. Prefer using it over ad‑hoc `docker`/`mvn` commands when you want a full local refresh.
 - `tools/mcp-orchestrator-debug/` contains both a **debug CLI** and the **actual MCP server** for Orchestrator / Scenario Manager / RabbitMQ:
   - `client.mjs` talks directly to the Orchestrator REST API, Scenario Manager API, and control‑plane via AMQP (no MCP needed).
   - `server.mjs` is the stdio MCP server wrapper for editor/agent integration. Prefer using it when the client supports MCP tools.
   - Typical usage from repo root:
-    - `node tools/mcp-orchestrator-debug/client.mjs list-swarms`
-    - `node tools/mcp-orchestrator-debug/client.mjs get-swarm <swarmId>`
-    - `node tools/mcp-orchestrator-debug/client.mjs swarm-snapshot <swarmId>`
-    - `node tools/mcp-orchestrator-debug/client.mjs worker-configs <swarmId>`
-    - `node tools/mcp-orchestrator-debug/client.mjs reload-scenarios`
+    - `POCKETHIVE_AUTH_USERNAME=local-admin node tools/mcp-orchestrator-debug/client.mjs list-swarms`
+    - `POCKETHIVE_AUTH_USERNAME=local-admin node tools/mcp-orchestrator-debug/client.mjs get-swarm <swarmId>`
+    - `POCKETHIVE_AUTH_USERNAME=local-admin node tools/mcp-orchestrator-debug/client.mjs swarm-snapshot <swarmId>`
+    - `POCKETHIVE_AUTH_USERNAME=local-admin node tools/mcp-orchestrator-debug/client.mjs worker-configs <swarmId>`
+    - `POCKETHIVE_AUTH_USERNAME=local-admin node tools/mcp-orchestrator-debug/client.mjs reload-scenarios`
   - MCP server notes:
     - start with `node tools/mcp-orchestrator-debug/server.mjs`
     - includes `scenario.reload-scenarios` for Scenario Manager refresh
+    - when auth is enabled, export `POCKETHIVE_AUTH_USERNAME` or `POCKETHIVE_AUTH_TOKEN` for the spawned server/client process
   - Use these tools to inspect **running swarms, worker configs, queues, control‑plane traffic, and scenario reloads** instead of hand‑crafting `curl`/`rabbitmqctl` calls.

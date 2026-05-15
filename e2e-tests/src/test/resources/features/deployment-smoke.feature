@@ -1,3 +1,4 @@
+@group-smoke
 Feature: Deployment smoke checks
   Validates that a freshly deployed PocketHive stack is reachable before running deeper suites.
 

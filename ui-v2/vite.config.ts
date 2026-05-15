@@ -1,7 +1,15 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-const pluginMode = process.env.PLUGIN_MODE === 'true';
+const pluginMode = process.env.PLUGIN_MODE === 'true'
+const proxyTarget = process.env.VITE_POCKETHIVE_DEV_PROXY_TARGET?.trim()
+const backendProxy = proxyTarget
+  ? {
+      target: proxyTarget,
+      changeOrigin: true,
+      secure: false,
+    }
+  : undefined
 
 export default defineConfig({
   // In plugin mode: relative base so webview can load assets from the filesystem.
@@ -9,11 +17,22 @@ export default defineConfig({
   base: pluginMode ? './' : '/v2/',
   plugins: [react()],
   define: {
-    // Exposes __PLUGIN_MODE__ as a compile-time constant consumed by pluginBridge.ts
     __PLUGIN_MODE__: pluginMode,
   },
-  build: pluginMode ? {
-    outDir: '../vscode-pockethive/resources/dist-plugin',
-    emptyOutDir: true,
-  } : undefined,
+  build: pluginMode
+    ? {
+        outDir: '../vscode-pockethive/resources/dist-plugin',
+        emptyOutDir: true,
+      }
+    : undefined,
+  server: backendProxy
+    ? {
+        proxy: {
+          '/auth-service': backendProxy,
+          '/scenario-manager': backendProxy,
+          '/orchestrator': backendProxy,
+          '/network-proxy-manager': backendProxy,
+        },
+      }
+    : undefined,
 })

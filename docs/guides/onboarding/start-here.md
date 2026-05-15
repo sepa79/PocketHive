@@ -6,7 +6,7 @@ against a SUT, and emit telemetry.
 
 ## What you do in practice
 
-1. Run the local stack (`./build-hive.sh`).
+1. Bootstrap or redeploy the local stack (`./build-hive.sh`).
 2. Create a swarm from a scenario.
 3. Start it and observe queues/metrics/journal.
 4. Iterate by editing scenario bundles and applying plan/config updates.

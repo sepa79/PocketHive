@@ -62,13 +62,28 @@ by the UI under `/docs/...` as part of the runtime image.
 - `docs/archive/scenario-bundle-runtime-plan.md`
   (Status: implemented / archived) – directory-based scenario bundles and
   per-swarm runtimes (historical implementation plan).
-- `docs/toBeReviewed/scenario-sut-editor-plan.md` (Status: to be reviewed) –
-  SUT/scenario editor plan pending review against SUT environment plan.
+- `docs/architecture/tenancy-foundation-plan.md` (Status: planned / proposal) –
+  PocketHive-specific access-control model built on shared auth.
+- `docs/architecture/AUTH_SERVICE_FOUNDATION_PLAN.md` (Status: planned / proposal) –
+  standalone shared `auth-service` direction for PocketHive + HiveWatch,
+  with `DEV` first and room for `LDAP` later.
+- `docs/architecture/AUTH_SERVICE_API_SPEC.md` (Status: planned / spec draft) –
+  MVP HTTP contract for shared `auth-service`, bearer token resolution, and
+  product integration.
+- `docs/archive/auth-api-rollout-plan.md` (Status: completed / archived) –
+  service-by-service auth/authz rollout checklist for PocketHive HTTP APIs,
+  including e2e and verification tracking.
+- `docs/ui-v2/SCENARIO_WORKSPACE_PLAN.md` (Status: planned) –
+  UI v2 Scenarios workspace plan for bundle explorer, offline Monaco, permissions,
+  and guided editors.
 - `docs/toBeReviewed/ui-v2-control-plane-adoption.md` (Status: to be reviewed) –
   UI-v2 control-plane adoption plan with review findings pending alignment.
 - `docs/inProgress/network-proxy-plan.md` (Status: in progress) –
   shared-per-SUT network proxying, secure traffic routing, and runtime fault
   profiles.
+- `docs/inProgress/e2e-api-framework-mini-plan.md` (Status: completed) –
+  incremental plan for extracting a reusable API/E2E support layer from the
+  current ingress auth pack.
 
 ## Specs & Tools
 

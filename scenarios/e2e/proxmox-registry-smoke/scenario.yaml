@@ -1,0 +1,23 @@
+id: proxmox-registry-smoke
+name: Proxmox Registry Smoke
+description: Remote smoke scenario using the deployment-selected image tag.
+template:
+  image: swarm-controller:latest
+  bees:
+    - role: generator
+      image: generator:latest
+      work:
+        out:
+          out: gen
+    - role: processor
+      image: processor:latest
+      work:
+        in:
+          in: gen
+        out:
+          out: final
+    - role: postprocessor
+      image: postprocessor:latest
+      work:
+        in:
+          in: final
