@@ -79,6 +79,7 @@ phase: 1
 | `scenario.*` | Public operational | `MCP-SERVER.md` | Runtime scenario import/read |
 | `scenario.contracts.get`, `scenario.capabilities.get`, `scenario.templates.catalog` | Public read-only contract discovery | Scenario Manager API | Read-only HTTP calls |
 | `swarm.*` | Public operational | `MCP-SERVER.md` | Runtime swarm lifecycle |
+| `component.config-preview` | Public operational | `MCP-SERVER.md`, `ORCHESTRATOR-REST.md` | Read-only runtime config merge preview |
 | `component.config-update` | Public operational | `MCP-SERVER.md`, `ORCHESTRATOR-REST.md` | Runtime control-plane config update |
 | `debug.*` | Public operational | `MCP-SERVER.md`, `EVIDENCE.md` | Runtime read/tap lifecycle only |
 | `evidence.summary` | Public operational | `EVIDENCE.md`, `MCP-APPS.md` | Read-only aggregate evidence model |
@@ -388,9 +389,48 @@ own runtime calls or contain separate evidence logic.
 
 ## Real-Time Component Control
 
-`component.config-update` is the operational tool for controlled real-time
-worker tuning during debug or test runs. It uses the same Orchestrator API as
-the web UI and does not publish AMQP messages directly.
+`component.config-preview` and `component.config-update` provide controlled
+real-time worker tuning during debug or test runs. They use the same
+Orchestrator evidence and write APIs as the web UI and do not publish AMQP
+messages directly.
+
+```yaml
+name: component.config-preview
+class: public operational
+purpose: Preview a merge-with-current-config plan for one running component without sending an update.
+input:
+  required:
+    swarmId: string
+    role: string
+    instanceId: string
+    patch: object
+  optional:
+    allowEmptyPatch: boolean
+    refreshStatus: boolean
+    includeMergedConfig: boolean
+output:
+  required:
+    sideEffect: no-config-write
+    target: object
+    mode: merge-with-current-config
+    currentConfig: object
+    patchSummary: object
+    mergedConfigSummary: object
+sideEffects:
+  files: none
+  runtime: may request fresh status snapshots; does not publish config-update
+allowedSources:
+  - PocketHive Orchestrator: POST /api/control-plane/refresh
+  - PocketHive Orchestrator: GET /api/swarms/{swarmId}/journal/page
+  - PocketHive control-plane event stream: event.metric.status-full.{swarmId}.{role}.{instance}
+writeScope: none
+evidenceValue: Shows exactly which current config snapshot would be used and which top-level keys the merged config contains.
+failureModes:
+  - CURRENT_CONFIG_UNAVAILABLE
+  - EMPTY_PATCH_REJECTED
+  - ORCHESTRATOR_UNAVAILABLE
+phase: 1.6
+```
 
 ```yaml
 name: component.config-update
@@ -426,6 +466,7 @@ sideEffects:
 allowedSources:
   - PocketHive Orchestrator: POST /api/control-plane/refresh
   - PocketHive Orchestrator: GET /api/swarms/{swarmId}/journal/page
+  - PocketHive control-plane event stream: event.metric.status-full.{swarmId}.{role}.{instance}
   - PocketHive Orchestrator: POST /api/components/{role}/{instance}/config
 writeScope:
   - runtime component config for the targeted swarm/role/instance
@@ -438,10 +479,15 @@ phase: 1.6
 ```
 
 The tool must read the latest exact `status-full` config for the target
-component before sending an update. It deep-merges the requested `patch` into
-that current config and sends the merged config as the Orchestrator request
-patch. If no current config is available for the exact `swarmId`, `role`, and
-`instanceId`, the tool must fail closed with `CURRENT_CONFIG_UNAVAILABLE`.
+component before sending an update. It may use journaled Orchestrator evidence
+when available, or bind to the control-plane status stream and request a fresh
+status refresh when worker config snapshots are only available on the stream.
+It deep-merges the requested `patch` into that current config and sends the
+merged config as the Orchestrator request patch. If no current config is
+available for the exact `swarmId`, `role`, and `instanceId`, the tool must fail
+closed with `CURRENT_CONFIG_UNAVAILABLE`.
+The preview and update tools must share the same merge logic, and that logic
+must be covered by automated tests.
 
 Agents must treat `accepted=true` as dispatch evidence only. To prove the
 component applied the update, follow the returned watch topics, read

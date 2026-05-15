@@ -1,0 +1,425 @@
+{
+  "runId": "2026-05-15T16-56-44-683Z",
+  "startedAt": "2026-05-15T16:56:44.683Z",
+  "scenarios": {
+    "auth-proof-http-rb": {
+      "scenarioId": "auth-proving-http-request-builder",
+      "swarmId": "auth-proof-http-rb",
+      "status": "unknown",
+      "wiremockCounts": [
+        {
+          "name": "rb-oauth-client",
+          "count": 2,
+          "min": 1
+        },
+        {
+          "name": "rb-oauth-password",
+          "count": 2,
+          "min": 1
+        },
+        {
+          "name": "rb-static-bearer",
+          "count": 2,
+          "min": 1
+        },
+        {
+          "name": "rb-basic",
+          "count": 2,
+          "min": 1
+        },
+        {
+          "name": "rb-api-key",
+          "count": 2,
+          "min": 1
+        },
+        {
+          "name": "rb-query",
+          "count": 2,
+          "min": 1
+        },
+        {
+          "name": "rb-hmac",
+          "count": 2,
+          "min": 1
+        },
+        {
+          "name": "rb-aws",
+          "count": 2,
+          "min": 1
+        },
+        {
+          "name": "rb-oauth-client-token",
+          "count": 1,
+          "min": 1
+        },
+        {
+          "name": "rb-oauth-password-token",
+          "count": 1,
+          "min": 1
+        }
+      ],
+      "redisKeys": [
+        "ph:tokens:auth-proof-http-rb:due",
+        "ph:tokens:auth-proof-http-rb:record:<tokenKey>",
+        "ph:tokens:auth-proof-http-rb:record:<tokenKey>"
+      ],
+      "pass": true
+    },
+    "auth-proof-http-rb:stop-start": {
+      "scenarioId": "auth-proving-http-request-builder",
+      "swarmId": "auth-proof-http-rb",
+      "action": "stop/start same swarm",
+      "wiremockCounts": [
+        {
+          "name": "rb-oauth-client",
+          "count": 2,
+          "min": 1
+        },
+        {
+          "name": "rb-oauth-password",
+          "count": 2,
+          "min": 1
+        },
+        {
+          "name": "rb-static-bearer",
+          "count": 2,
+          "min": 1
+        },
+        {
+          "name": "rb-basic",
+          "count": 2,
+          "min": 1
+        },
+        {
+          "name": "rb-api-key",
+          "count": 2,
+          "min": 1
+        },
+        {
+          "name": "rb-query",
+          "count": 2,
+          "min": 1
+        },
+        {
+          "name": "rb-hmac",
+          "count": 2,
+          "min": 1
+        },
+        {
+          "name": "rb-aws",
+          "count": 2,
+          "min": 1
+        },
+        {
+          "name": "rb-oauth-client-token-after-restart",
+          "count": 0,
+          "min": 0
+        },
+        {
+          "name": "rb-oauth-password-token-after-restart",
+          "count": 0,
+          "min": 0
+        }
+      ],
+      "redisKeys": [
+        "ph:tokens:auth-proof-http-rb:due",
+        "ph:tokens:auth-proof-http-rb:record:<tokenKey>",
+        "ph:tokens:auth-proof-http-rb:record:<tokenKey>"
+      ],
+      "pass": true
+    },
+    "auth-proof-http-seq": {
+      "scenarioId": "auth-proving-http-sequence",
+      "swarmId": "auth-proof-http-seq",
+      "wiremockCounts": [
+        {
+          "name": "sequence-oauth-shared",
+          "count": 2,
+          "min": 2
+        },
+        {
+          "name": "sequence-basic",
+          "count": 1,
+          "min": 1
+        },
+        {
+          "name": "sequence-query",
+          "count": 1,
+          "min": 1
+        },
+        {
+          "name": "sequence-static-final",
+          "count": 1,
+          "min": 1
+        },
+        {
+          "name": "sequence-oauth-token",
+          "count": 1,
+          "min": 1
+        }
+      ],
+      "redisKeys": [
+        "ph:tokens:auth-proof-http-seq:due",
+        "ph:tokens:auth-proof-http-seq:record:<tokenKey>"
+      ],
+      "pass": true
+    },
+    "auth-proof-tcp-iso-mtls": {
+      "scenarioId": "auth-proving-tcp-iso-mtls",
+      "swarmId": "auth-proof-tcp-iso-mtls",
+      "tcpCaptureCounts": {
+        "tcpPrefix": 1,
+        "isoMac": 1,
+        "mtls": 1
+      },
+      "pass": true
+    },
+    "auth-proof-failure": {
+      "scenarioId": "auth-proving-failure",
+      "swarmId": "auth-proof-failure",
+      "wiremockCounts": [
+        {
+          "name": "failure-should-not-send",
+          "count": 0,
+          "min": 0
+        }
+      ],
+      "journalEntriesScanned": 16,
+      "authFailureJournalEntries": 1,
+      "authRuntimeExceptionJournalEntries": 1,
+      "uniqueAuthFailureSignatures": 1,
+      "secretLeakedToJournal": false,
+      "authJournalPreview": [
+        {
+          "eventId": 1768,
+          "timestamp": "2026-05-15T16:57:32.937209Z",
+          "swarmId": "auth-proof-failure",
+          "runId": "2706e0ad-ed87-428c-9e6f-0667de8a5ca1",
+          "severity": "ERROR",
+          "direction": "IN",
+          "kind": "event",
+          "type": "alert",
+          "origin": "auth-proof-failure-composer-bee-honey-flutter-6784",
+          "scope": {
+            "swarmId": "auth-proof-failure",
+            "role": "request-builder",
+            "instance": "auth-proof-failure-composer-bee-honey-flutter-6784"
+          },
+          "correlationId": null,
+          "idempotencyKey": null,
+          "routingKey": "event.alert.alert.auth-proof-failure.request-builder.auth-proof-failure-composer-bee-honey-flutter-6784",
+          "data": {
+            "code": "runtime.exception",
+            "level": "error",
+            "context": {
+              "phase": "work",
+              "callId": "bad-query-auth",
+              "worker": "requestBuilderWorker",
+              "traceId": "fb90a314-0125-4194-a818-f535f22ba988",
+              "messageId": "08902814-29b2-4ef2-8a2d-9b24b3967f6a"
+            },
+            "message": "HTTP_QUERY_PARAM auth requires authRef.queryParam or profile queryParam",
+            "errorType": "io.pockethive.worker.sdk.auth.AuthFailureException",
+            "errorDetail": "HTTP_QUERY_PARAM auth requires authRef.queryParam or profile queryParam"
+          },
+          "raw": {
+            "data": {
+              "code": "runtime.exception",
+              "level": "error",
+              "context": {
+                "phase": "work",
+                "callId": "bad-query-auth",
+                "worker": "requestBuilderWorker",
+                "traceId": "fb90a314-0125-4194-a818-f535f22ba988",
+                "messageId": "08902814-29b2-4ef2-8a2d-9b24b3967f6a"
+              },
+              "message": "HTTP_QUERY_PARAM auth requires authRef.queryParam or profile queryParam",
+              "errorType": "io.pockethive.worker.sdk.auth.AuthFailureException",
+              "errorDetail": "HTTP_QUERY_PARAM auth requires authRef.queryParam or profile queryParam"
+            },
+            "kind": "event",
+            "type": "alert",
+            "scope": {
+              "role": "request-builder",
+              "swarmId": "auth-proof-failure",
+              "instance": "auth-proof-failure-composer-bee-honey-flutter-6784"
+            },
+            "origin": "auth-proof-failure-composer-bee-honey-flutter-6784",
+            "runtime": {
+              "image": "request-builder:latest",
+              "runId": "2706e0ad-ed87-428c-9e6f-0667de8a5ca1",
+              "stackName": "ph-auth-proof-failure",
+              "templateId": "auth-proving-failure",
+              "containerId": "498c66403623"
+            },
+            "version": "1",
+            "timestamp": "2026-05-15T16:57:32.937209285Z",
+            "correlationId": null,
+            "idempotencyKey": null
+          },
+          "extra": null
+        }
+      ],
+      "pass": true
+    },
+    "auth-proof-profile-collision": {
+      "scenarioId": "auth-proving-profile-collision",
+      "swarmId": "auth-proof-profile-collision",
+      "wiremockCounts": [
+        {
+          "name": "collision-should-not-send",
+          "count": 0,
+          "min": 0
+        },
+        {
+          "name": "collision-other-should-not-send",
+          "count": 0,
+          "min": 0
+        },
+        {
+          "name": "collision-token-one",
+          "count": 0,
+          "min": 0
+        },
+        {
+          "name": "collision-token-two",
+          "count": 0,
+          "min": 0
+        }
+      ],
+      "redisKeys": [],
+      "journalEntriesScanned": 16,
+      "authFailureJournalEntries": 1,
+      "authRuntimeExceptionJournalEntries": 1,
+      "uniqueAuthFailureSignatures": 1,
+      "secretLeakedToJournal": false,
+      "authJournalPreview": [
+        {
+          "eventId": 1791,
+          "timestamp": "2026-05-15T16:57:56.446165Z",
+          "swarmId": "auth-proof-profile-collision",
+          "runId": "5c475446-7c6c-4338-a8ef-d33d597339cd",
+          "severity": "ERROR",
+          "direction": "IN",
+          "kind": "event",
+          "type": "alert",
+          "origin": "auth-proof-profile-collision-composer-bee-sprightly-puff-41db",
+          "scope": {
+            "swarmId": "auth-proof-profile-collision",
+            "role": "request-builder",
+            "instance": "auth-proof-profile-collision-composer-bee-sprightly-puff-41db"
+          },
+          "correlationId": null,
+          "idempotencyKey": null,
+          "routingKey": "event.alert.alert.auth-proof-profile-collision.request-builder.auth-proof-profile-collision-composer-bee-sprightly-puff-41db",
+          "data": {
+            "code": "runtime.exception",
+            "level": "error",
+            "context": {
+              "phase": "work",
+              "callId": "token-key-collision",
+              "worker": "requestBuilderWorker",
+              "traceId": "4440795a-53dd-4832-ae26-7fc52cfddb98",
+              "messageId": "50bfa3b4-a516-4aec-a429-9989020ff778"
+            },
+            "message": "authProfiles.yaml declares tokenKey 'shared-collision-token' with multiple configs",
+            "errorType": "io.pockethive.worker.sdk.auth.AuthFailureException",
+            "errorDetail": "authProfiles.yaml declares tokenKey 'shared-collision-token' with multiple configs"
+          },
+          "raw": {
+            "data": {
+              "code": "runtime.exception",
+              "level": "error",
+              "context": {
+                "phase": "work",
+                "callId": "token-key-collision",
+                "worker": "requestBuilderWorker",
+                "traceId": "4440795a-53dd-4832-ae26-7fc52cfddb98",
+                "messageId": "50bfa3b4-a516-4aec-a429-9989020ff778"
+              },
+              "message": "authProfiles.yaml declares tokenKey 'shared-collision-token' with multiple configs",
+              "errorType": "io.pockethive.worker.sdk.auth.AuthFailureException",
+              "errorDetail": "authProfiles.yaml declares tokenKey 'shared-collision-token' with multiple configs"
+            },
+            "kind": "event",
+            "type": "alert",
+            "scope": {
+              "role": "request-builder",
+              "swarmId": "auth-proof-profile-collision",
+              "instance": "auth-proof-profile-collision-composer-bee-sprightly-puff-41db"
+            },
+            "origin": "auth-proof-profile-collision-composer-bee-sprightly-puff-41db",
+            "runtime": {
+              "image": "request-builder:latest",
+              "runId": "5c475446-7c6c-4338-a8ef-d33d597339cd",
+              "stackName": "ph-auth-proof-profile-collision",
+              "templateId": "auth-proving-profile-collision",
+              "containerId": "9a4214d0ccf2"
+            },
+            "version": "1",
+            "timestamp": "2026-05-15T16:57:56.446164649Z",
+            "correlationId": null,
+            "idempotencyKey": null
+          },
+          "extra": null
+        }
+      ],
+      "pass": true
+    },
+    "auth-proof-no-auth": {
+      "scenarioId": "auth-proving-no-auth",
+      "swarmId": "auth-proof-no-auth",
+      "wiremockCounts": [
+        {
+          "name": "no-auth-plain",
+          "count": 1,
+          "min": 1
+        }
+      ],
+      "workerConfigCount": 0,
+      "workerConfigSource": "debug-cli-empty-or-unavailable",
+      "snapshotStatus": "RUNNING",
+      "snapshotWorkerRoles": [
+        "generator",
+        "postprocessor",
+        "processor",
+        "request-builder"
+      ],
+      "workerConfigsMentionAuthRuntime": false,
+      "redisKeys": [],
+      "pass": true
+    }
+  },
+  "redis": {
+    "auth-proof-http-rb": [
+      "ph:tokens:auth-proof-http-rb:due",
+      "ph:tokens:auth-proof-http-rb:record:<tokenKey>",
+      "ph:tokens:auth-proof-http-rb:record:<tokenKey>"
+    ],
+    "auth-proof-http-seq": [
+      "ph:tokens:auth-proof-http-seq:due",
+      "ph:tokens:auth-proof-http-seq:record:<tokenKey>"
+    ],
+    "auth-proof-profile-collision": [],
+    "auth-proof-no-auth": []
+  },
+  "stack": {
+    "health": {
+      "orchestratorSwarms": 1,
+      "scenarioCount": 43,
+      "wiremock": "healthy",
+      "tcpMock": "UP",
+      "tcpMockTls": "UP"
+    }
+  },
+  "notes": [
+    "remove auth-proof-http-rb ignored: POST http://localhost:8088/orchestrator/api/swarms/auth-proof-http-rb/remove -> 404: {\"timestamp\":\"2026-05-15T16:56:45.113+00:00\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/api/swarms/auth-proof-http-rb/remove\"}",
+    "remove auth-proof-http-seq ignored: POST http://localhost:8088/orchestrator/api/swarms/auth-proof-http-seq/remove -> 404: {\"timestamp\":\"2026-05-15T16:57:05.051+00:00\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/api/swarms/auth-proof-http-seq/remove\"}",
+    "remove auth-proof-tcp-iso-mtls ignored: POST http://localhost:8088/orchestrator/api/swarms/auth-proof-tcp-iso-mtls/remove -> 404: {\"timestamp\":\"2026-05-15T16:57:13.631+00:00\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/api/swarms/auth-proof-tcp-iso-mtls/remove\"}",
+    "remove auth-proof-failure ignored: POST http://localhost:8088/orchestrator/api/swarms/auth-proof-failure/remove -> 404: {\"timestamp\":\"2026-05-15T16:57:26.298+00:00\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/api/swarms/auth-proof-failure/remove\"}",
+    "remove auth-proof-profile-collision ignored: POST http://localhost:8088/orchestrator/api/swarms/auth-proof-profile-collision/remove -> 404: {\"timestamp\":\"2026-05-15T16:57:49.695+00:00\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/api/swarms/auth-proof-profile-collision/remove\"}",
+    "remove auth-proof-no-auth ignored: POST http://localhost:8088/orchestrator/api/swarms/auth-proof-no-auth/remove -> 404: {\"timestamp\":\"2026-05-15T16:58:13.382+00:00\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/api/swarms/auth-proof-no-auth/remove\"}",
+    "command failed (node tools/mcp-orchestrator-debug/client.mjs worker-configs auth-proof-no-auth): Command failed: node tools/mcp-orchestrator-debug/client.mjs worker-configs auth-proof-no-auth\nnode:events:486\n      throw er; // Unhandled 'error' event\n      ^\n\nError: Channel closed by server: 406 (PRECONDITION-FAILED) with message \"PREC"
+  ],
+  "finishedAt": "2026-05-15T16:58:23.249Z"
+}

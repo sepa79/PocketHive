@@ -192,7 +192,7 @@ Keep and improve API/file-backed tools:
 | Bundle files | `bundle.list`, `bundle.read`, `bundle.check`, `bundle.validate`, `bundle.validate.result`, `bundle.diff` |
 | Scenario lifecycle | `scenario.deploy`, `scenario.list`, `scenario.get` |
 | Swarm lifecycle | `swarm.list`, `swarm.get`, `swarm.create`, `swarm.wait-ready`, `swarm.start`, `swarm.stop`, `swarm.remove` |
-| Real-time control | `component.config-update` through Orchestrator only; read current component config from Orchestrator journal/status evidence, deep-merge requested changes, then send the merged update |
+| Real-time control | `component.config-preview` read-only merge plan and `component.config-update` through Orchestrator only; read current component config from Orchestrator journal/status evidence, deep-merge requested changes, then send the merged update |
 | Debug evidence | `debug.queues`, `debug.tap`, `debug.tap.read`, `debug.tap.close`, `debug.journal`, `debug.config-update` compatibility alias, `debug.prometheus`, `evidence.summary`, PocketHive-provided log tools if/when exposed by PocketHive APIs |
 | Mocks | `mock.wiremock.*`, `mock.tcp.*`, `mock.save`, `mock.load` |
 | Datasets | `dataset.seed`, `dataset.check`, `dataset.save` |

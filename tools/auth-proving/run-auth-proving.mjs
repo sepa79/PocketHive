@@ -7,6 +7,9 @@ import { resolve } from "node:path";
 const repoRoot = resolve(new URL("../..", import.meta.url).pathname);
 const ORCHESTRATOR = process.env.ORCHESTRATOR_BASE_URL || "http://localhost:8088/orchestrator";
 const SCENARIO_MANAGER = process.env.SCENARIO_MANAGER_BASE_URL || "http://localhost:8088/scenario-manager";
+const AUTH_SERVICE = process.env.AUTH_SERVICE_BASE_URL || "http://localhost:1083";
+const AUTH_DEV_USERNAME = process.env.POCKETHIVE_AUTH_USERNAME || "";
+const AUTH_BEARER_TOKEN = process.env.POCKETHIVE_AUTH_TOKEN || "";
 const WIREMOCK = process.env.WIREMOCK_BASE_URL || "http://localhost:8080";
 const TCP_MOCK = process.env.TCP_MOCK_BASE_URL || "http://localhost:8083";
 const TCP_MOCK_TLS = process.env.TCP_MOCK_TLS_BASE_URL || "http://localhost:8084";
@@ -26,6 +29,7 @@ const evidence = {
   stack: {},
   notes: [],
 };
+let cachedAuthHeader = null;
 
 async function main() {
   await requireHealthy();
@@ -519,6 +523,12 @@ async function waitFor(label, fn, timeoutMs) {
 
 async function httpJson(url, options = {}) {
   const headers = { ...(options.headers || {}) };
+  if (!headers.authorization && !headers.Authorization && needsPocketHiveAuth(url)) {
+    const authorization = await resolveAuthorizationHeader();
+    if (authorization) {
+      headers.authorization = authorization;
+    }
+  }
   let body = options.body;
   if (body !== undefined && typeof body !== "string") {
     headers["content-type"] = headers["content-type"] || "application/json";
@@ -537,6 +547,44 @@ async function httpJson(url, options = {}) {
   } catch {
     return text;
   }
+}
+
+function needsPocketHiveAuth(url) {
+  return String(url).startsWith(ORCHESTRATOR) || String(url).startsWith(SCENARIO_MANAGER);
+}
+
+async function resolveAuthorizationHeader() {
+  if (AUTH_BEARER_TOKEN.trim()) {
+    return AUTH_BEARER_TOKEN.startsWith("Bearer ")
+      ? AUTH_BEARER_TOKEN
+      : `Bearer ${AUTH_BEARER_TOKEN}`;
+  }
+  if (!AUTH_DEV_USERNAME.trim()) {
+    return null;
+  }
+  if (cachedAuthHeader) {
+    return cachedAuthHeader;
+  }
+  const base = AUTH_SERVICE.replace(/\/+$/, "");
+  const response = await fetch(`${base}/api/auth/dev/login`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "accept": "application/json",
+    },
+    body: JSON.stringify({ username: AUTH_DEV_USERNAME.trim() }),
+  });
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`Auth login failed for ${base}/api/auth/dev/login: HTTP ${response.status}: ${text || "<empty>"}`);
+  }
+  const payload = text ? JSON.parse(text) : null;
+  const accessToken = payload && typeof payload.accessToken === "string" ? payload.accessToken.trim() : "";
+  if (!accessToken) {
+    throw new Error("Auth login returned empty accessToken");
+  }
+  cachedAuthHeader = `Bearer ${accessToken}`;
+  return cachedAuthHeader;
 }
 
 async function tcpJson(baseUrl, path, options = {}) {

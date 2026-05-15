@@ -121,6 +121,20 @@ async function waitForLine(child, pattern, timeoutMs = 5000) {
   });
 }
 
+async function retryStep(label, fn, timeoutMs = 30000, intervalMs = 2000) {
+  const deadline = Date.now() + timeoutMs;
+  let lastError = null;
+  while (Date.now() < deadline) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      await new Promise(resolveRetry => setTimeout(resolveRetry, intervalMs));
+    }
+  }
+  throw new Error(`${label} did not succeed within ${timeoutMs}ms: ${lastError?.message || "unknown error"}`);
+}
+
 async function runHttpResourceSmoke() {
   const port = Number(process.env.PH_POC_HTTP_PORT) || await freePort();
   const child = spawn("node", [SERVER], {
@@ -199,6 +213,13 @@ async function runOfflinePoc() {
     if (!widget) throw new Error("Evidence widget resource is not listed in stdio mode");
     log("widget resource listed", widget.uri);
 
+    const tools = await client.listTools();
+    const toolNames = new Set(tools.tools.map(tool => tool.name));
+    for (const requiredTool of ["component.config-preview", "component.config-update"]) {
+      if (!toolNames.has(requiredTool)) throw new Error(`${requiredTool} is not listed`);
+    }
+    log("real-time control tools listed", "component.config-preview + component.config-update");
+
     if (LIVE_MODE) {
       const health = await call(client, "health.check");
       log("health.check", JSON.stringify(health));
@@ -207,7 +228,12 @@ async function runOfflinePoc() {
       log("scenario.deploy", BUNDLE_ID);
 
       const swarmId = process.env.PH_POC_SWARM_ID || `${BUNDLE_ID}-swarm`;
-      await call(client, "swarm.create", { swarmId, templateId: BUNDLE_ID, sutId: "wiremock-local" });
+      await call(client, "swarm.create", {
+        swarmId,
+        templateId: BUNDLE_ID,
+        sutId: "wiremock-local",
+        variablesProfileId: "default",
+      });
       log("swarm.create", swarmId);
 
       await call(client, "swarm.wait-ready", { swarmId, timeoutSec: Number(process.env.PH_POC_READY_TIMEOUT_SEC || 45) });
@@ -215,6 +241,37 @@ async function runOfflinePoc() {
 
       await call(client, "swarm.start", { swarmId });
       log("swarm.start", swarmId);
+
+      const status = await call(client, "swarm.get", { swarmId });
+      const workers = status.envelope?.data?.context?.workers || status.context?.workers || [];
+      const generator = workers.find(worker => worker.role === "generator");
+      if (!generator?.instance) throw new Error("Could not locate generator instance for config update proof");
+      const ratePatch = { inputs: { scheduler: { ratePerSec: 1 } } };
+      const preview = await retryStep("component.config-preview", () => call(client, "component.config-preview", {
+          swarmId,
+          role: "generator",
+          instanceId: generator.instance,
+          patch: ratePatch,
+          includeMergedConfig: true,
+        }),
+      );
+      if (preview.sideEffect !== "no-config-write") throw new Error("component.config-preview had unexpected side effect marker");
+      if (preview.mergedConfig?.inputs?.scheduler?.ratePerSec !== 1) {
+        throw new Error(`component.config-preview did not merge rate patch: ${JSON.stringify(preview.mergedConfig)}`);
+      }
+      log("component.config-preview", generator.instance);
+
+      const configUpdate = await call(client, "component.config-update", {
+        swarmId,
+        role: "generator",
+        instanceId: generator.instance,
+        patch: ratePatch,
+        notes: "PocketHive MCP live POC rate update proof",
+      });
+      if (!configUpdate.accepted || !configUpdate.watch) {
+        throw new Error(`component.config-update was not accepted: ${JSON.stringify(configUpdate)}`);
+      }
+      log("component.config-update", generator.instance);
 
       const evidence = await call(client, "evidence.summary", { swarmId, includeTapSample: false });
       log("evidence.summary", `${evidence.sources.filter(source => source.status === "ok").length}/${evidence.sources.length} sources available`);

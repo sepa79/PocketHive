@@ -169,14 +169,17 @@ changed fingerprint.
 - `swarm.wait-ready`, `swarm.stop`, `swarm.remove`
 
 ### Real-time component control
+- `component.config-preview` — reads the current runtime config and returns the
+  merge plan without sending an update.
 - `component.config-update` — sends a targeted runtime config-update through
   Orchestrator `POST /api/components/{role}/{instance}/config`.
 
 This is the same write path used by the web UI. Before sending the update, the
-MCP tool requests fresh control-plane status, reads the latest exact
-`status-full` entry for the target component from
-`GET /api/swarms/{swarmId}/journal/page`, deep-merges the requested `patch` into
-that current config, and sends the merged config to Orchestrator. This prevents
+MCP tool reads the latest exact `status-full` config for the target component.
+It first checks Orchestrator journal evidence and, when worker config snapshots
+are not journaled, binds to the control-plane status stream and requests a fresh
+status refresh before proceeding. It then deep-merges the requested `patch` into
+that current config and sends the merged config to Orchestrator. This prevents
 sparse updates from accidentally dropping existing config fields.
 
 It is useful for debug and live tuning, for example changing a generator input
@@ -199,6 +202,9 @@ rate:
 
 If the current config cannot be read for the exact `role` and `instanceId`, the
 tool fails with `CURRENT_CONFIG_UNAVAILABLE` instead of sending a partial patch.
+Use `component.config-preview` when an agent or human wants to inspect the
+planned merge first; it uses the same read and merge logic but does not publish
+a config update.
 The returned Orchestrator `202 Accepted` response and watch topics are dispatch
 evidence only; agents should follow with `debug.journal`, status-full snapshots,
 queue depth, or metrics to prove the component applied the update.

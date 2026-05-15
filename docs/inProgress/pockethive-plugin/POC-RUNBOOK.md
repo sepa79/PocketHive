@@ -11,7 +11,9 @@ This runbook proves the current POC path end to end:
 4. Start the same server in Streamable HTTP mode.
 5. Confirm the read-only evidence widget resource is discoverable and uses
    `text/html;profile=mcp-app`.
-6. Optionally deploy/run against a live PocketHive stack and call
+6. Confirm real-time control tools are exposed:
+   `component.config-preview` and `component.config-update`.
+7. Optionally deploy/run against a live PocketHive stack and call
    `evidence.summary`.
 
 ## Offline POC
@@ -36,12 +38,36 @@ PocketHive MCP POC runner
 ✓ bundle files scenario.yaml + templates/http/default/onboarding.yaml + docs/mock artifacts
 ✓ bundle.check ok
 ✓ widget resource listed ui://pockethive/evidence-summary-v1.html
+✓ real-time control tools listed component.config-preview + component.config-update
 ✓ HTTP/App resource smoke ui://pockethive/evidence-summary-v1.html
 POC runner completed.
 ```
 
 This proves the local authoring loop and App-resource packaging without needing
 RabbitMQ, Scenario Manager, Orchestrator, Prometheus, or mock servers.
+
+## Wizard Acceptance Suite
+
+The wizard acceptance suite is the maturity gate for bundle authoring. It runs
+through multiple novice intents and proves that the generated bundles are
+structurally valid without requiring a live PocketHive stack.
+
+```bash
+cd tools/pockethive-mcp
+npm run acceptance:wizard
+```
+
+Covered flows:
+
+- REST + WireMock + result rules
+- HTTP sequence + external SUT + OAuth client credentials
+- TCP + TCP mock + mTLS auth reference
+- Redis dataset backed REST loop
+- Invalid input guard for incompatible protocol/target choices
+
+Each accepted bundle must pass `wizard.start`, `wizard.summary`,
+`wizard.complete`, generated artifact checks, `bundle.check`, and
+`bundle.validate` with `validator: local-structural`.
 
 ## Live Stack POC
 
@@ -60,7 +86,22 @@ The live path continues after the offline checks:
 3. `swarm.create`
 4. `swarm.wait-ready`
 5. `swarm.start`
-6. `evidence.summary`
+6. `component.config-preview`
+7. `component.config-update`
+8. `evidence.summary`
+
+Use `component.config-preview` before `component.config-update` for live tuning
+changes such as rate updates. The preview reads the current component config
+from Orchestrator journal/status evidence or the live control-plane status
+stream, deep-merges the requested patch, and shows the planned merged config
+shape without publishing a control-plane update.
+
+When the local stack has auth enabled, run with either `POCKETHIVE_AUTH_TOKEN`
+or `POCKETHIVE_AUTH_USERNAME` available to the spawned MCP process. For example:
+
+```bash
+POCKETHIVE_AUTH_USERNAME=local-admin npm run poc:live
+```
 
 The runner intentionally does not remove the swarm afterwards. Use the normal
 PocketHive lifecycle tools or UI to stop/remove it when the demo is finished.
@@ -100,6 +141,12 @@ Runtime contract validation is explicit:
 ```bash
 # Local structural validation only
 npm run poc
+
+# Wizard maturity acceptance suite
+npm run acceptance:wizard
+
+# Pure regression tests for real-time config merge behavior
+npm test --prefix tools/pockethive-mcp
 
 # Against a running Scenario Manager, use the MCP tool:
 bundle.validate { "bundle": "<bundleId>", "validator": "scenario-manager-upload" }

@@ -19,9 +19,16 @@ import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { platform } from "node:os";
 import { z } from "zod";
+import amqplib from "amqplib";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import {
+  configFromJournalEntry,
+  latestComponentConfigFromJournalPage,
+  planComponentConfigUpdate,
+  summarizePatch,
+} from "./config-update.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -52,6 +59,8 @@ try {
 let BUNDLES_ROOT = process.env.BUNDLES_ROOT || "";
 const ORCH_URL = process.env.ORCHESTRATOR_BASE_URL || `${BASE_URL}/orchestrator`;
 const SM_URL = process.env.SCENARIO_MANAGER_BASE_URL || `${BASE_URL}/scenario-manager`;
+const AUTH_SERVICE_URL = process.env.AUTH_SERVICE_BASE_URL || `${BASE_URL}/auth-service`;
+const POCKETHIVE_AUTH_USERNAME = process.env.POCKETHIVE_AUTH_USERNAME || "";
 const RABBIT_MGMT = process.env.RABBITMQ_MANAGEMENT_BASE_URL || `${BASE_URL}/rabbitmq/api`;
 const PROM_URL = process.env.PROMETHEUS_BASE_URL || `${BASE_URL}/prometheus`;
 // TCP_MOCK_BASE_URL and WIREMOCK_BASE_URL can be set explicitly to override
@@ -74,15 +83,56 @@ function bundleDir(bundle) {
 
 // ── HTTP helper ───────────────────────────────────────────────────────────────
 
+let cachedAuthHeader = null;
+
+async function resolveAuthorizationHeader() {
+  if (POCKETHIVE_AUTH_TOKEN.trim()) {
+    return POCKETHIVE_AUTH_TOKEN.startsWith("Bearer ")
+      ? POCKETHIVE_AUTH_TOKEN
+      : `Bearer ${POCKETHIVE_AUTH_TOKEN}`;
+  }
+  if (!POCKETHIVE_AUTH_USERNAME.trim()) {
+    return null;
+  }
+  if (cachedAuthHeader) {
+    return cachedAuthHeader;
+  }
+  const base = AUTH_SERVICE_URL.replace(/\/+$/, "");
+  const response = await fetch(`${base}/api/auth/dev/login`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "accept": "application/json",
+    },
+    body: JSON.stringify({ username: POCKETHIVE_AUTH_USERNAME.trim() }),
+  });
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`Auth login failed for ${base}/api/auth/dev/login: HTTP ${response.status}: ${text || "<empty>"}`);
+  }
+  const payload = text ? JSON.parse(text) : null;
+  const accessToken = payload && typeof payload.accessToken === "string" ? payload.accessToken.trim() : "";
+  if (!accessToken) {
+    throw new Error("Auth login returned empty accessToken");
+  }
+  cachedAuthHeader = `Bearer ${accessToken}`;
+  return cachedAuthHeader;
+}
+
+function needsPocketHiveAuth(url) {
+  return String(url).startsWith(ORCH_URL) || String(url).startsWith(SM_URL);
+}
+
 async function httpJson(url, opts = {}) {
   const full = url.startsWith("http") ? url : `${ORCH_URL}${url}`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), opts.timeoutMs || 30000);
+  const authHeader = needsPocketHiveAuth(full) ? await resolveAuthorizationHeader() : null;
   const init = {
     method: opts.method || "GET",
     headers: {
       "content-type": "application/json",
-      ...(POCKETHIVE_AUTH_TOKEN ? { authorization: `Bearer ${POCKETHIVE_AUTH_TOKEN}` } : {}),
+      ...(authHeader ? { authorization: authHeader } : {}),
       ...(opts.headers || {}),
     },
     signal: controller.signal,
@@ -113,6 +163,20 @@ function rabbitAuth() {
   const user = process.env.RABBITMQ_DEFAULT_USER || "guest";
   const pass = process.env.RABBITMQ_DEFAULT_PASS || "guest";
   return "Basic " + Buffer.from(`${user}:${pass}`).toString("base64");
+}
+
+function rabbitUrl() {
+  const host = process.env.RABBITMQ_HOST || "localhost";
+  const port = Number(process.env.RABBITMQ_PORT || "5672");
+  const user = process.env.RABBITMQ_DEFAULT_USER || "guest";
+  const pass = process.env.RABBITMQ_DEFAULT_PASS || "guest";
+  const vhost = process.env.RABBITMQ_VHOST || "/";
+  const encodedVhost = vhost === "/" ? "%2F" : encodeURIComponent(vhost);
+  return `amqp://${encodeURIComponent(user)}:${encodeURIComponent(pass)}@${host}:${port}/${encodedVhost}`;
+}
+
+function controlExchange() {
+  return process.env.POCKETHIVE_CONTROL_PLANE_EXCHANGE || "ph.control";
 }
 
 // ── MCP Server ────────────────────────────────────────────────────────────────
@@ -1778,94 +1842,169 @@ reg("debug.journal", "Read swarm journal (timeline of control-plane events)", {
   return await httpJson(`/api/swarms/${encodeURIComponent(swarmId)}/journal/page?limit=${limit}`);
 });
 
-function summarizePatch(patch) {
-  if (!patch || typeof patch !== "object" || Array.isArray(patch)) {
-    return { empty: true, topLevelKeys: [] };
-  }
-  return {
-    empty: Object.keys(patch).length === 0,
-    topLevelKeys: Object.keys(patch).sort(),
-  };
-}
-
-function isPlainObject(value) {
-  return !!value && typeof value === "object" && !Array.isArray(value);
-}
-
-function cloneJson(value) {
-  return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
-}
-
-function deepMergeConfig(current, updates) {
-  const merged = isPlainObject(current) ? cloneJson(current) : {};
-  for (const [key, value] of Object.entries(updates || {})) {
-    if (isPlainObject(value) && isPlainObject(merged[key])) {
-      merged[key] = deepMergeConfig(merged[key], value);
-    } else {
-      merged[key] = cloneJson(value);
-    }
-  }
-  return merged;
-}
-
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function textValue(value) {
-  return typeof value === "string" && value.trim() ? value.trim() : "";
+function controlScope({ swarmId, role, instanceId }) {
+  return {
+    swarmId,
+    role,
+    instance: instanceId,
+  };
 }
 
-function journalItems(page) {
-  if (Array.isArray(page)) return page;
-  if (Array.isArray(page?.items)) return page.items;
-  return [];
+function controlRouting(signal, { swarmId, role, instanceId }) {
+  return `signal.${signal}.${swarmId}.${role}.${instanceId}`;
 }
 
-function scopedJournalEntry(entry, { role, instanceId }) {
-  const scope = isPlainObject(entry?.scope) ? entry.scope : {};
-  return textValue(scope.role) === role && textValue(scope.instance) === instanceId;
+function metricRouting(metric, { swarmId, role, instanceId }) {
+  return `event.metric.${metric}.${swarmId}.${role}.${instanceId}`;
 }
 
-function configFromJournalEntry(entry) {
-  const data = isPlainObject(entry?.data) ? entry.data : {};
-  const raw = isPlainObject(entry?.raw) ? entry.raw : {};
-  const rawData = isPlainObject(raw.data) ? raw.data : {};
-  if (isPlainObject(data.config)) return data.config;
-  if (isPlainObject(rawData.config)) return rawData.config;
-  return null;
+async function requestComponentStatusConfig({ swarmId, role, instanceId, timeoutMs = 10000 }) {
+  const conn = await amqplib.connect(rabbitUrl());
+  const ch = await conn.createChannel();
+  const exchange = controlExchange();
+  const target = { swarmId, role, instanceId };
+  const statusRoutingKey = metricRouting("status-full", target);
+  const requestRoutingKey = controlRouting("status-request", target);
+  const correlationId = idempotencyKey();
+  const requestKey = `status-request:${correlationId}`;
+
+  try {
+    await ch.assertExchange(exchange, "topic", { durable: true });
+    const queue = await ch.assertQueue("", { exclusive: true, autoDelete: true });
+    await ch.bindQueue(queue.queue, exchange, statusRoutingKey);
+
+    const statusPromise = new Promise((resolveStatus, rejectStatus) => {
+      const timer = setTimeout(() => {
+        rejectStatus(new Error(`Timed out waiting for ${statusRoutingKey}`));
+      }, timeoutMs);
+
+      ch.consume(queue.queue, (msg) => {
+        if (!msg) return;
+        let payload = null;
+        try {
+          payload = JSON.parse(msg.content.toString("utf8"));
+        } catch {
+          return;
+        }
+        const scope = payload?.scope || {};
+        const config = configFromJournalEntry(payload);
+        if (
+          payload?.kind === "metric" &&
+          payload?.type === "status-full" &&
+          scope.swarmId === swarmId &&
+          scope.role === role &&
+          scope.instance === instanceId &&
+          config
+        ) {
+          clearTimeout(timer);
+          resolveStatus({
+            matchedRole: role,
+            matchedInstanceId: instanceId,
+            receivedAt: payload.timestamp || null,
+            runId: payload.runtime?.runId || null,
+            config,
+          });
+        }
+      }, { noAck: true }).catch((error) => {
+        clearTimeout(timer);
+        rejectStatus(error);
+      });
+    });
+
+    const signal = {
+      version: "1",
+      kind: "signal",
+      type: "status-request",
+      origin: "pockethive-mcp",
+      scope: controlScope(target),
+      correlationId,
+      idempotencyKey: requestKey,
+      data: {},
+    };
+    ch.publish(exchange, requestRoutingKey, Buffer.from(JSON.stringify(signal)), {
+      contentType: "application/json",
+    });
+    const swarmSignal = {
+      ...signal,
+      scope: { swarmId, role: "ALL", instance: "ALL" },
+    };
+    ch.publish(exchange, controlRouting("status-request", { swarmId, role: "ALL", instanceId: "ALL" }), Buffer.from(JSON.stringify(swarmSignal)), {
+      contentType: "application/json",
+    });
+    const refresh = await httpJson("/api/control-plane/refresh", { method: "POST", timeoutMs: 10000 }).catch(() => null);
+    if (refresh?.throttled) {
+      await sleep(2200);
+      await httpJson("/api/control-plane/refresh", { method: "POST", timeoutMs: 10000 }).catch(() => null);
+    }
+
+    const selected = await statusPromise;
+    return {
+      source: `${exchange}:${statusRoutingKey}`,
+      refreshRequested: true,
+      ...selected,
+    };
+  } finally {
+    try { await ch.close(); } catch { /* ignore */ }
+    try { await conn.close(); } catch { /* ignore */ }
+  }
 }
 
 async function currentComponentConfig({ swarmId, role, instanceId, refreshStatus = true, journalLimit = 500 }) {
-  if (refreshStatus) {
-    await httpJson("/api/control-plane/refresh", { method: "POST", timeoutMs: 10000 });
-    await sleep(500);
-  }
-
   const endpoint = `/api/swarms/${encodeURIComponent(swarmId)}/journal/page?limit=${journalLimit}`;
   const page = await httpJson(endpoint, { timeoutMs: 10000 });
-  const selected = journalItems(page).find((entry) =>
-    textValue(entry?.type) === "status-full" &&
-    scopedJournalEntry(entry, { role, instanceId }) &&
-    configFromJournalEntry(entry)
-  );
+  const selected = latestComponentConfigFromJournalPage(page, { role, instanceId });
 
-  if (!selected) {
+  if (selected) {
+    return {
+      source: `${ORCH_URL}${endpoint}`,
+      refreshRequested: refreshStatus,
+      ...selected,
+    };
+  }
+
+  if (refreshStatus) {
+    try {
+      return await requestComponentStatusConfig({ swarmId, role, instanceId });
+    } catch {
+      // Fall through to the explicit unavailable error below.
+    }
+  }
+
+  {
     throw new Error(
       `CURRENT_CONFIG_UNAVAILABLE: no latest status-full config found for ${role}/${instanceId} in swarm ${swarmId}. ` +
       "Request a fresh control-plane status snapshot and retry, or use the exact instance id from the UI component stream."
     );
   }
+}
 
-  const config = configFromJournalEntry(selected);
+async function planLiveComponentConfigUpdate({ swarmId, role, instanceId, patch, allowEmptyPatch = false, refreshStatus = true }) {
+  const current = await currentComponentConfig({ swarmId, role, instanceId, refreshStatus });
   return {
-    source: `${ORCH_URL}${endpoint}`,
-    refreshRequested: refreshStatus,
-    matchedRole: textValue(selected.scope?.role),
-    matchedInstanceId: textValue(selected.scope?.instance),
-    receivedAt: selected.timestamp || null,
-    runId: selected.runId || null,
-    config: cloneJson(config),
+    current,
+    ...planComponentConfigUpdate({ currentConfig: current.config, patch, allowEmptyPatch }),
+  };
+}
+
+function configUpdatePlanResponse({ current, patchSummary, mergedConfigSummary, mergedConfig, includeMergedConfig = false }) {
+  return {
+    mode: "merge-with-current-config",
+    currentConfig: {
+      source: current.source,
+      refreshRequested: current.refreshRequested,
+      matchedRole: current.matchedRole,
+      matchedInstanceId: current.matchedInstanceId,
+      receivedAt: current.receivedAt,
+      runId: current.runId,
+      topLevelKeys: summarizePatch(current.config).topLevelKeys,
+    },
+    patchSummary,
+    mergedConfigSummary,
+    ...(includeMergedConfig ? { mergedConfig } : {}),
   };
 }
 
@@ -1882,18 +2021,12 @@ async function sendComponentConfigUpdate({
   if (!patch || typeof patch !== "object" || Array.isArray(patch)) {
     throw new Error("patch must be an object");
   }
-  const patchSummary = summarizePatch(patch);
-  if (patchSummary.empty && !allowEmptyPatch) {
-    throw new Error("EMPTY_PATCH_REJECTED: pass allowEmptyPatch=true only when an explicit empty config-update is intended");
-  }
-  const current = await currentComponentConfig({ swarmId, role, instanceId, refreshStatus });
-  const mergedConfig = deepMergeConfig(current.config, patch);
-  const mergedSummary = summarizePatch(mergedConfig);
+  const plan = await planLiveComponentConfigUpdate({ swarmId, role, instanceId, patch, allowEmptyPatch, refreshStatus });
   const key = providedIdempotencyKey || idempotencyKey();
   const endpoint = `/api/components/${encodeURIComponent(role)}/${encodeURIComponent(instanceId)}/config`;
   const body = {
     idempotencyKey: key,
-    patch: mergedConfig,
+    patch: plan.mergedConfig,
     swarmId,
     ...(notes ? { notes } : {}),
   };
@@ -1907,18 +2040,7 @@ async function sendComponentConfigUpdate({
     endpoint: `${ORCH_URL}${endpoint}`,
     target: { swarmId, role, instanceId },
     idempotencyKey: key,
-    mode: "merge-with-current-config",
-    currentConfig: {
-      source: current.source,
-      refreshRequested: current.refreshRequested,
-      matchedRole: current.matchedRole,
-      matchedInstanceId: current.matchedInstanceId,
-      receivedAt: current.receivedAt,
-      runId: current.runId,
-      topLevelKeys: summarizePatch(current.config).topLevelKeys,
-    },
-    patchSummary,
-    mergedConfigSummary: mergedSummary,
+    ...configUpdatePlanResponse(plan),
     response,
     watch: response?.watch || null,
     evidenceNext: [
@@ -1945,6 +2067,23 @@ async function sendComponentConfigUpdate({
     ],
   };
 }
+
+reg("component.config-preview", "Preview the merge-with-current-config plan for a running component without sending an update.", {
+  swarmId: z.string(),
+  role: z.string(),
+  instanceId: z.string(),
+  patch: z.record(z.any()).describe("Config patch object, e.g. {enabled: true, ratePerSec: 10}"),
+  allowEmptyPatch: z.boolean().optional().describe("Defaults false. Set true only when an explicit empty config-update/reset is intended."),
+  refreshStatus: z.boolean().optional().describe("Defaults true. Requests fresh status-full snapshots before reading the current config from the journal."),
+  includeMergedConfig: z.boolean().optional().describe("Defaults false. Set true to include the full merged config in the response for review."),
+}, async ({ swarmId, role, instanceId, patch, allowEmptyPatch = false, refreshStatus = true, includeMergedConfig = false }) => {
+  const plan = await planLiveComponentConfigUpdate({ swarmId, role, instanceId, patch, allowEmptyPatch, refreshStatus });
+  return {
+    sideEffect: "no-config-write",
+    target: { swarmId, role, instanceId },
+    ...configUpdatePlanResponse({ ...plan, includeMergedConfig }),
+  };
+});
 
 reg("component.config-update", "Send a real-time config-update signal to one running component through the Orchestrator API used by the UI.", {
   swarmId: z.string(),
@@ -2359,6 +2498,7 @@ reg("context.get", "Return the current active configuration context. Call at ses
     activeEnvironment: process.env.PH_ACTIVE_ENVIRONMENT || "",
     baseUrl: BASE_URL,
     hasAuthToken: Boolean(POCKETHIVE_AUTH_TOKEN),
+    hasAuthUsername: Boolean(POCKETHIVE_AUTH_USERNAME),
     mcpVersion: "1.0.0",
     platform: platform(),
     allBundlesRoots: _bundlesRoots,
@@ -2395,6 +2535,7 @@ reg("env.current", "Return the active environment details injected into this MCP
     activeEnvironment: process.env.PH_ACTIVE_ENVIRONMENT || "",
     baseUrl: BASE_URL,
     hasAuthToken: Boolean(POCKETHIVE_AUTH_TOKEN),
+    hasAuthUsername: Boolean(POCKETHIVE_AUTH_USERNAME),
     rabbitUser: process.env.RABBITMQ_DEFAULT_USER || "guest",
     tcpMockUrl: TCP_MOCK_URL,
     wiremockUrl: WIREMOCK_URL,

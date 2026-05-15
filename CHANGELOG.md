@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.15.19]
+Timestamp: 2026-05-15T16:21:00Z
+
+- MCP / IDE plugin POC: mature the PocketHive MCP server into an API-backed integration layer with guarded bundle-file access, explicit tool contracts, no shell/devops tools, and a documented developer/POC runbook.
+- MCP wizard and Apps: add a novice `wizard.*` authoring path that generates scenario bundles plus docs/mock artifacts, and expose a read-only MCP App evidence widget backed by `evidence.summary`.
+- Scenario Manager integration: document and wire contract-first authoring flows around Scenario Manager capabilities, authoring contracts, dry-run validation, and cached contract reads for maintainable wizard behavior.
+- Runtime control: add `component.config-preview` and harden `component.config-update` so runtime tuning reads the current exact component config from Orchestrator evidence or the live control-plane status stream, deep-merges requested changes, and fails closed instead of sending partial config that could drop existing fields.
+- Tooling quality: add MCP POC coverage for wizard/App/control-tool discovery and live config preview/update, a wizard acceptance suite for REST/WireMock, sequence/OAuth, TCP/mTLS, Redis dataset, and invalid-input guard flows, focused Node tests for config merge behavior, plus auth-proving runner support for token/dev-login secured local stacks.
+
 ## [0.15.18]
 Timestamp: 2026-05-08T16:25:51Z
 
