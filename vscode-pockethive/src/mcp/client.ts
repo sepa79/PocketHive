@@ -1,31 +1,26 @@
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-
 export class McpClient {
-  private client: Client;
-  private transport: StdioClientTransport;
+  private client: import('@modelcontextprotocol/sdk/client/index.js').Client | null = null;
+  private transport: import('@modelcontextprotocol/sdk/client/stdio.js').StdioClientTransport | null = null;
 
-  /**
-   * @param serverPath  Absolute path to server.mjs
-   * @param env         Environment variables to inject at spawn time
-   */
-  constructor(serverPath: string, env: NodeJS.ProcessEnv) {
+  constructor(private readonly serverPath: string, private readonly env: NodeJS.ProcessEnv) {}
+
+  async connect(): Promise<void> {
+    const { Client } = await import('@modelcontextprotocol/sdk/client/index.js');
+    const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
     this.transport = new StdioClientTransport({
       command: 'node',
-      args: [serverPath],
-      env: env as Record<string, string>,
+      args: [this.serverPath],
+      env: this.env as Record<string, string>,
     });
     this.client = new Client(
       { name: 'pockethive-vscode', version: '1.0.0' },
       { capabilities: {} }
     );
-  }
-
-  async connect(): Promise<void> {
     await this.client.connect(this.transport);
   }
 
   async callTool(name: string, args: Record<string, unknown> = {}): Promise<unknown> {
+    if (!this.client) throw new Error('MCP client not connected');
     const result = await this.client.callTool({ name, arguments: args });
     if (result.isError) {
       throw new Error(String((result.content as Array<{ text?: string }>)?.[0]?.text ?? 'MCP tool error'));
@@ -38,6 +33,6 @@ export class McpClient {
   }
 
   async close(): Promise<void> {
-    await this.client.close().catch(() => {});
+    await this.client?.close().catch(() => {});
   }
 }

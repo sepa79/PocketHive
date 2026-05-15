@@ -1147,62 +1147,72 @@ reg("git.diff", "Show git diff for a specific bundle or the whole repo", {
   return { diff: await shell(`git -C '${repoWsl}' diff -- "${path}"`) };
 });
 
-// ── Dev tools ─────────────────────────────────────────────────────────────────
+// ── Safe dev tools (sandboxed replacements) ──────────────────────────────────
 
-function toolResult(label, result) {
-  return { tool: label, success: result.success, exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr };
-}
+// Allowlist of service names that stack.rebuild accepts.
+const REBUILD_ALLOWLIST = new Set([
+  "generator", "moderator", "processor", "postprocessor",
+  "request-builder", "http-sequence", "swarm-controller",
+  "scenario-manager", "orchestrator", "clearing-export", "trigger",
+]);
 
-reg("docker.execute", "Execute Docker commands (build, run, ps, logs, stop, inspect, cp, etc.)", {
-  command: z.string().describe("Docker command (build, run, ps, images, logs, stop, rm, pull, push, inspect, exec, compose, cp)"),
-  args: z.array(z.string()).optional().describe("Command arguments"),
-  workingDir: z.string().optional().describe("Working directory"),
-}, async ({ command, args = [], workingDir }) => {
-  const result = await dockerTool.execute(command, args, workingDir || REPO_ROOT);
-  return toolResult(`docker ${command}`, result);
-});
-
-reg("docker.compose", "Execute Docker Compose commands (up, down, build, logs, ps, stop, restart)", {
-  command: z.string().describe("Compose command (up, down, build, logs, ps, stop, restart)"),
-  args: z.array(z.string()).optional().describe("Command arguments"),
-  workingDir: z.string().optional().describe("Working directory (must contain docker-compose.yml)"),
-}, async ({ command, args = [], workingDir }) => {
-  const result = await dockerTool.composeExecute(command, args, workingDir || REPO_ROOT);
-  return toolResult(`docker compose ${command}`, result);
-});
-
-reg("git.execute", "Execute Git commands with safety guards (status, log, diff, add, commit, push, branch, stash, etc.)", {
-  command: z.string().describe("Git command (status, log, diff, branch, checkout, add, commit, push, pull, fetch, merge, rebase, stash, tag, show, blame)"),
-  args: z.array(z.string()).optional().describe("Command arguments"),
-  workingDir: z.string().optional().describe("Working directory"),
-}, async ({ command, args = [], workingDir }) => {
-  const result = await gitTool.execute(command, args, workingDir || REPO_ROOT);
-  return toolResult(`git ${command}`, result);
-});
-
-reg("maven.execute", "Execute Maven commands (clean, compile, test, package, install, verify)", {
-  command: z.string().describe("Maven command (clean, compile, test, package, install, verify)"),
-  workingDir: z.string().optional().describe("Working directory (must contain pom.xml)"),
-}, async ({ command, workingDir }) => {
-  const result = await mavenTool.execute(command, workingDir || POCKETHIVE_ROOT || REPO_ROOT);
-  return toolResult(`mvn ${command}`, result);
-});
-
-reg("npm.execute", "Execute NPM commands (install, test, build, run, audit, etc.)", {
-  command: z.string().describe("NPM command (install, ci, run, test, build, audit, etc.)"),
-  args: z.array(z.string()).optional().describe("Command arguments"),
-  workingDir: z.string().optional().describe("Working directory"),
-}, async ({ command, args = [], workingDir }) => {
-  const result = await npmTool.execute(command, args, workingDir || REPO_ROOT);
-  return toolResult(`npm ${command}`, result);
-});
-
-reg("tools.check", "Check which development tools are available on the system", {}, async () => {
-  const checks = {};
-  for (const [name, tool] of [["docker", dockerTool], ["git", gitTool], ["maven", mavenTool], ["npm", npmTool]]) {
-    try { checks[name] = await tool.isAvailable(); } catch { checks[name] = false; }
+reg("stack.rebuild", "Rebuild one PocketHive service image and restart it. Safe replacement for maven.execute + docker.execute. Only pre-approved service names are accepted.", {
+  service: z.string().describe(`Service to rebuild. Allowed: ${[...REBUILD_ALLOWLIST].join(", ")}`),
+}, async ({ service }) => {
+  if (!REBUILD_ALLOWLIST.has(service)) {
+    throw new Error(`Service '${service}' is not in the rebuild allowlist. Allowed: ${[...REBUILD_ALLOWLIST].join(", ")}`);
   }
-  return checks;
+  if (!POCKETHIVE_ROOT) throw new Error("POCKETHIVE_ROOT not set.");
+  const prWsl = await toWslPathAsync(POCKETHIVE_ROOT);
+  // Fire and forget — build-hive.sh --quick --service <name> runs in background
+  const proc = spawn(WSL_EXE, ["bash", "-lc", `cd '${prWsl}' && bash build-hive.sh --quick --service ${service}`],
+    { stdio: "ignore", detached: true });
+  proc.unref();
+  return {
+    started: true,
+    service,
+    message: `Rebuild of '${service}' launched in background. Poll health.check every 15s to confirm the service comes back up.`,
+  };
+});
+
+reg("bundle.commit", "Stage and commit the active bundle to git. Scoped to the active bundles folder only — no push, no force, no cross-repo writes.", {
+  bundle: z.string().describe("Bundle name to commit"),
+  message: z.string().describe("Commit message"),
+}, async ({ bundle, message }) => {
+  const bundleDir = resolve(getBundlesDir(), bundle);
+  if (!existsSync(bundleDir)) throw new Error(`Bundle '${bundle}' not found at ${bundleDir}`);
+  const repoWsl = await toWslPathAsync(getBundlesDir());
+  const bundleWsl = await toWslPathAsync(bundleDir);
+  // Only stage the specific bundle directory — nothing else
+  const addOut = await shell(`git -C '${repoWsl}' add '${bundleWsl}'`);
+  const commitOut = await shell(`git -C '${repoWsl}' commit -m ${JSON.stringify(message)}`);
+  return { committed: true, bundle, message, output: commitOut };
+});
+
+// Read-only debug shell — only available when POCKETHIVE_DEBUG_SHELL=true
+// Scoped to containers matching swarmId prefix. Read-only commands only.
+const DEBUG_SHELL_ALLOWED_CMDS = new Set(["logs", "inspect", "ps", "stats", "top"]);
+
+reg("debug.shell", "Read-only Docker inspection for local debugging. Only available when POCKETHIVE_DEBUG_SHELL=true in .env. Scoped to swarmId containers. Read-only commands only (logs, inspect, ps, stats, top).", {
+  swarmId: z.string().describe("Swarm ID — only containers matching this prefix are accessible"),
+  command: z.string().describe(`Docker command. Allowed: ${[...DEBUG_SHELL_ALLOWED_CMDS].join(", ")}`),
+  args: z.array(z.string()).optional().describe("Command arguments"),
+}, async ({ swarmId, command, args = [] }) => {
+  if (process.env.POCKETHIVE_DEBUG_SHELL !== "true") {
+    throw new Error("debug.shell is disabled. Set POCKETHIVE_DEBUG_SHELL=true in .env to enable local debugging.");
+  }
+  if (!DEBUG_SHELL_ALLOWED_CMDS.has(command)) {
+    throw new Error(`Command '${command}' is not allowed. Allowed: ${[...DEBUG_SHELL_ALLOWED_CMDS].join(", ")}`);
+  }
+  // Validate all args reference containers scoped to swarmId
+  for (const arg of args) {
+    if (arg.startsWith("-")) continue; // flags are fine
+    if (!arg.startsWith(swarmId)) {
+      throw new Error(`Argument '${arg}' does not match swarmId prefix '${swarmId}'. Only containers for this swarm are accessible.`);
+    }
+  }
+  const result = await shell(`docker ${command} ${args.join(" ")}`);
+  return { command: `docker ${command}`, args, output: result };
 });
 
 // ── GitHub Issues ────────────────────────────────────────────────────────────

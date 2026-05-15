@@ -3,7 +3,7 @@
     "pockethive-bundles": {
       "command": "node",
       "args": [
-        "C:\\Private\\projects\\PocketHiveClean\\tools\\mcp-server\\start.cjs"
+        "tools/pockethive-mcp/start.cjs"
       ],
       "disabled": false
     },
@@ -19,11 +19,12 @@
     "hivemind": {
       "command": "node",
       "args": [
-        "C:\\Users\\tday\\AppData\\Local\\Temp\\1\\hivemind-mcp-0.1.2\\src\\server.mjs"
+        "c:\\Users\\tday\\IdeaProjects\\HiveMind\\hivemind-mcp\\src\\server.mjs"
       ],
       "env": {
         "HIVEMIND_API_BASE_URL": "http://localhost:4010"
       },
+      "timeout": 60000,
       "disabled": false
     }
   }

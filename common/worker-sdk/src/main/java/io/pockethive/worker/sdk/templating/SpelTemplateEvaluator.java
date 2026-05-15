@@ -113,6 +113,9 @@ final class SpelTemplateEvaluator {
   private static final Method RESET_SEQUENCE_METHOD = Objects.requireNonNull(
     ReflectionUtils.findMethod(SpelFunctions.class, "resetSequence", String.class),
     "resetSequence method missing");
+  private static final Method DATETIME_OFFSET_METHOD = Objects.requireNonNull(
+    ReflectionUtils.findMethod(SpelFunctions.class, "datetimeOffset", String.class, String.class),
+    "datetimeOffset method missing");
 
   Object evaluate(String expression, Map<String, Object> rootValues) {
     if (expression == null || expression.isBlank()) {
@@ -140,6 +143,7 @@ final class SpelTemplateEvaluator {
     context.registerFunction("sequence", SEQUENCE_METHOD);
     context.registerFunction("sequenceWith", SEQUENCE_WITH_METHOD);
     context.registerFunction("resetSequence", RESET_SEQUENCE_METHOD);
+    context.registerFunction("datetime_offset", DATETIME_OFFSET_METHOD);
 
     return PARSER.parseExpression(expression).getValue(context);
   }
@@ -331,6 +335,32 @@ final class SpelTemplateEvaluator {
     static boolean resetSequence(String key) {
       if (key == null || key.isBlank()) throw new IllegalArgumentException("key required");
       return RedisSequenceGenerator.getDefaultInstance().reset(key);
+    }
+
+    static String datetimeOffset(String offset, String pattern) {
+      Objects.requireNonNull(offset, "offset");
+      Objects.requireNonNull(pattern, "pattern");
+      OffsetDateTime base = OffsetDateTime.now(ZoneOffset.UTC);
+      Matcher m = Pattern.compile("^([+-]?)(\\d+)\\s*(s|sec|seconds?|m|min|minutes?|h|hours?|d|days?|w|weeks?|M|months?|y|years?)$")
+          .matcher(offset.trim());
+      if (!m.matches()) {
+        throw new IllegalArgumentException("Invalid offset: '" + offset + "'. Use e.g. '+2d', '-1month', '3h'");
+      }
+      int sign = "-".equals(m.group(1)) ? -1 : 1;
+      long amount = Long.parseLong(m.group(2)) * sign;
+      String unit = m.group(3);
+      OffsetDateTime target = switch (unit.charAt(0)) {
+        case 's' -> base.plusSeconds(amount);
+        case 'h' -> base.plusHours(amount);
+        case 'd' -> base.plusDays(amount);
+        case 'w' -> base.plusWeeks(amount);
+        case 'y' -> base.plusYears(amount);
+        case 'M' -> base.plusMonths(amount);
+        default -> unit.startsWith("mo") || unit.equals("M")
+            ? base.plusMonths(amount)
+            : base.plusMinutes(amount);
+      };
+      return DateTimeFormatter.ofPattern(pattern).format(target);
     }
 
   }

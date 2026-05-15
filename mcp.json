@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "pockethive-bundles": {
+      "command": "node",
+      "args": [
+        "tools/pockethive-mcp/start.cjs"
+      ]
+    }
+  }
+}

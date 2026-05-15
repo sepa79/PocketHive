@@ -1,4 +1,8 @@
 **/*.ts
 **/*.map
-node_modules/**
+node_modules/.bin/**
+node_modules/@vscode/**
+node_modules/@types/**
+node_modules/typescript/**
+node_modules/@vscode/vsce/**
 .vscode/**
