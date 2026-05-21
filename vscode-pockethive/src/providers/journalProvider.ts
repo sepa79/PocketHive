@@ -1,10 +1,10 @@
 import * as vscode from 'vscode';
 
-import { requestJson } from '../api';
-import { resolveServiceConfig } from '../config';
 import { describeTimeWindow, filterEntriesByTime, getTimeWindowOptions, sortEntriesNewestFirst } from '../filters';
 import { formatEntryDescription, formatEntryLabel, formatError, formatSwarmDescription } from '../format';
-import { JournalEntry, SwarmSummary } from '../types';
+import { JournalEntry, JournalPage, SwarmSummary } from '../types';
+import { isMcpRunning } from '../mcp/manager';
+import { debugJournal, swarmList } from '../mcp/tools';
 
 type JournalNode =
   | { kind: 'filter' }
@@ -78,14 +78,13 @@ export class JournalProvider implements vscode.TreeDataProvider<JournalNode> {
     }
 
     const filterNode: JournalNode = { kind: 'filter' };
-    const config = resolveServiceConfig('orchestratorUrl');
-    if ('error' in config) {
-      return [filterNode, { kind: 'message', message: config.error }];
+    if (!isMcpRunning()) {
+      return [filterNode, { kind: 'message', message: 'MCP server not running. Check Settings.' }];
     }
 
     if (!element) {
       try {
-        const swarms = await requestJson<SwarmSummary[]>(config.baseUrl, config.authToken, 'GET', '/api/swarms');
+        const swarms = await swarmList();
         if (!swarms.length) {
           return [filterNode, { kind: 'message', message: 'No swarms found.' }];
         }
@@ -100,12 +99,8 @@ export class JournalProvider implements vscode.TreeDataProvider<JournalNode> {
     }
 
     try {
-      const entries = await requestJson<JournalEntry[]>(
-        config.baseUrl,
-        config.authToken,
-        'GET',
-        `/api/swarms/${encodeURIComponent(element.swarm.id)}/journal`
-      );
+      const page = await debugJournal(element.swarm.id, 50) as JournalPage | JournalEntry[];
+      const entries = Array.isArray(page) ? page : (Array.isArray(page.items) ? page.items : []);
       const filtered = filterEntriesByTime(entries, this.timeWindowMs);
       const sorted = sortEntriesNewestFirst(filtered).slice(0, 50);
       if (!sorted.length) {

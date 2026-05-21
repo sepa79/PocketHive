@@ -3,7 +3,6 @@ capabilitiesVersion: "1.3"
 role: moderator
 image:
   name: moderator
-  tag: latest
 ui:
   label: "Moderator"
   color: "#f472b6"

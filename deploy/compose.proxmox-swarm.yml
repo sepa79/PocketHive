@@ -1,0 +1,346 @@
+# Proxmox Swarm deployment override.
+#
+# Use with docker-compose.yml after preparing POCKETHIVE_SWARM_ROOT on the
+# labelled node. This file intentionally uses explicit bind mounts and
+# placement constraints so stateful services do not schedule onto nodes without
+# the required host paths.
+
+x-storage-placement: &storage-placement
+  placement:
+    constraints:
+      - node.labels.pockethive.storage == true
+
+x-scenarios-placement: &scenarios-placement
+  placement:
+    constraints:
+      - node.labels.pockethive.scenarios == true
+
+x-manager-scenarios-placement: &manager-scenarios-placement
+  placement:
+    constraints:
+      - node.role == manager
+      - node.labels.pockethive.scenarios == true
+
+x-sut-placement: &sut-placement
+  placement:
+    constraints:
+      - node.labels.pockethive.sut == true
+
+x-proxy-placement: &proxy-placement
+  placement:
+    constraints:
+      - node.labels.pockethive.proxy == true
+
+x-manager-placement: &manager-placement
+  placement:
+    constraints:
+      - node.role == manager
+
+services:
+  rabbitmq:
+    networks:
+      default:
+        aliases:
+          - rabbitmq
+    ports: !override
+      - target: 5672
+        published: 5672
+        protocol: tcp
+        mode: host
+      - target: 15672
+        published: 15672
+        protocol: tcp
+        mode: host
+      - target: 15674
+        published: 15674
+        protocol: tcp
+        mode: host
+    volumes: !override
+      - ${POCKETHIVE_SWARM_ROOT:?set swarm root}/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ${POCKETHIVE_SWARM_ROOT:?set swarm root}/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
+      - ${POCKETHIVE_SWARM_ROOT:?set swarm root}/rabbitmq/data:/var/lib/rabbitmq
+    deploy: *storage-placement
+
+  postgres:
+    networks:
+      default:
+        aliases:
+          - postgres
+    volumes: !override
+      - ${POCKETHIVE_SWARM_ROOT:?set swarm root}/postgres/data:/var/lib/postgresql/data
+    deploy: *storage-placement
+
+  clickhouse:
+    networks:
+      default:
+        aliases:
+          - clickhouse
+    ports: !override
+      - target: 8123
+        published: 8123
+        protocol: tcp
+        mode: host
+    volumes: !override
+      - ${POCKETHIVE_SWARM_ROOT:?set swarm root}/clickhouse/data:/var/lib/clickhouse
+      - ${POCKETHIVE_SWARM_ROOT:?set swarm root}/clickhouse/init:/docker-entrypoint-initdb.d:ro
+    deploy:
+      <<: *storage-placement
+      endpoint_mode: dnsrr
+
+  prometheus:
+    networks:
+      default:
+        aliases:
+          - prometheus
+    volumes: !override
+      - ${POCKETHIVE_SWARM_ROOT:?set swarm root}/prometheus/config.yml:/etc/prometheus/prometheus.yml:ro
+      - ${POCKETHIVE_SWARM_ROOT:?set swarm root}/prometheus/data:/prometheus
+    deploy: *storage-placement
+
+  grafana:
+    networks:
+      default:
+        aliases:
+          - grafana
+    volumes: !override
+      - ${POCKETHIVE_SWARM_ROOT:?set swarm root}/grafana/config/grafana.ini:/etc/grafana/grafana.ini:ro
+      - ${POCKETHIVE_SWARM_ROOT:?set swarm root}/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ${POCKETHIVE_SWARM_ROOT:?set swarm root}/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ${POCKETHIVE_SWARM_ROOT:?set swarm root}/grafana/data:/var/lib/grafana
+    deploy: *storage-placement
+
+  loki:
+    networks:
+      default:
+        aliases:
+          - loki
+    volumes: !override
+      - ${POCKETHIVE_SWARM_ROOT:?set swarm root}/loki/config.yml:/etc/loki/config.yml:ro
+      - ${POCKETHIVE_SWARM_ROOT:?set swarm root}/loki/data:/var/lib/loki
+    deploy: *storage-placement
+
+  scenario-manager:
+    networks:
+      default:
+        aliases:
+          - scenario-manager
+    depends_on: !override
+      - log-aggregator
+    environment:
+      RABBITMQ_HOST: tasks.rabbitmq
+      SPRING_RABBITMQ_HOST: tasks.rabbitmq
+      POCKETHIVE_AUTH_SERVICE_URL: http://tasks.auth-service:8080
+      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL: http://tasks.pushgateway:9091
+    volumes: !override
+      - ${POCKETHIVE_SWARM_ROOT:?set swarm root}/scenarios:/app/scenarios
+      - ${POCKETHIVE_SCENARIOS_RUNTIME_ROOT:?set shared scenarios runtime root}:/app/scenarios-runtime
+    deploy: *scenarios-placement
+
+  orchestrator:
+    networks:
+      default:
+        aliases:
+          - orchestrator
+    depends_on: !override
+      - rabbitmq
+      - log-aggregator
+      - postgres
+      - network-proxy-manager
+    environment:
+      RABBITMQ_HOST: tasks.rabbitmq
+      SPRING_RABBITMQ_HOST: tasks.rabbitmq
+      POCKETHIVE_AUTH_SERVICE_URL: http://tasks.auth-service:8080
+      POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_SCENARIO_MANAGER_URL: http://tasks.scenario-manager:8080
+      POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_NETWORK_PROXY_MANAGER_URL: http://tasks.network-proxy-manager:8080
+      POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_DOCKER_COMPUTE_ADAPTER: SWARM_STACK
+      POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_IMAGE_REPOSITORY_PREFIX: ${POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_IMAGE_REPOSITORY_PREFIX:?set registry image prefix}
+      POCKETHIVE_SCENARIOS_RUNTIME_ROOT: ${POCKETHIVE_SCENARIOS_RUNTIME_ROOT:?set shared scenarios runtime root}
+      POCKETHIVE_DOCKER_SWARM_PLACEMENT_CONSTRAINTS: node.labels.pockethive.scenarios == true
+      SPRING_DATASOURCE_URL: jdbc:postgresql://tasks.postgres:5432/pockethive
+      POCKETHIVE_SINK_CLICKHOUSE_ENDPOINT: http://tasks.clickhouse:8123
+    volumes: !override
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${POCKETHIVE_SCENARIOS_RUNTIME_ROOT:?set shared scenarios runtime root}:/app/scenarios-runtime
+    deploy: *manager-scenarios-placement
+
+  wiremock:
+    networks:
+      default:
+        aliases:
+          - wiremock
+    ports: !override
+      - target: 8080
+        published: 8080
+        protocol: tcp
+        mode: host
+    volumes: !override
+      - ${POCKETHIVE_SWARM_ROOT:?set swarm root}/wiremock/mappings:/home/wiremock/mappings
+      - ${POCKETHIVE_SWARM_ROOT:?set swarm root}/wiremock/__files:/home/wiremock/__files
+    deploy:
+      <<: *sut-placement
+      endpoint_mode: dnsrr
+
+  tcp-mock-server:
+    networks:
+      default:
+        aliases:
+          - tcp-mock-server
+    ports: !override
+      - target: 8080
+        published: 8083
+        protocol: tcp
+        mode: host
+      - target: 9090
+        published: 9090
+        protocol: tcp
+        mode: host
+    volumes: !override
+      - ${POCKETHIVE_SWARM_ROOT:?set swarm root}/tcp-mock/mappings:/app/mappings:ro
+      - ${POCKETHIVE_SWARM_ROOT:?set swarm root}/tcp-mock/__files:/app/__files:ro
+      - ${POCKETHIVE_SWARM_ROOT:?set swarm root}/tcp-mock/data:/app/data
+    environment:
+      RABBITMQ_HOST: tasks.rabbitmq
+      SPRING_RABBITMQ_HOST: tasks.rabbitmq
+    deploy:
+      <<: *sut-placement
+      endpoint_mode: dnsrr
+
+  tcp-mock-server-tls:
+    networks:
+      default:
+        aliases:
+          - tcp-mock-server-tls
+    ports: !override
+      - target: 8080
+        published: 8084
+        protocol: tcp
+        mode: host
+      - target: 9090
+        published: 9091
+        protocol: tcp
+        mode: host
+    volumes: !override
+      - ${POCKETHIVE_SWARM_ROOT:?set swarm root}/tcp-mock/mappings:/app/mappings:ro
+      - ${POCKETHIVE_SWARM_ROOT:?set swarm root}/tcp-mock/__files:/app/__files:ro
+      - ${POCKETHIVE_SWARM_ROOT:?set swarm root}/tcp-mock/tls-data:/app/data
+    environment:
+      RABBITMQ_HOST: tasks.rabbitmq
+      SPRING_RABBITMQ_HOST: tasks.rabbitmq
+    deploy:
+      <<: *sut-placement
+      endpoint_mode: dnsrr
+
+  haproxy:
+    networks:
+      default:
+        aliases:
+          - haproxy
+    volumes: !override
+      - ${POCKETHIVE_SWARM_ROOT:?set swarm root}/haproxy/runtime:/opt/haproxy-runtime
+    deploy:
+      <<: *proxy-placement
+      endpoint_mode: dnsrr
+
+  network-proxy-manager:
+    networks:
+      default:
+        aliases:
+          - network-proxy-manager
+    depends_on: !override
+      - scenario-manager
+      - toxiproxy
+      - haproxy
+    volumes: !override
+      - ${POCKETHIVE_SWARM_ROOT:?set swarm root}/haproxy/runtime:/opt/haproxy-runtime
+    environment:
+      POCKETHIVE_AUTH_SERVICE_URL: http://tasks.auth-service:8080
+      POCKETHIVE_NETWORK_PROXY_MANAGER_SCENARIO_MANAGER_URL: http://tasks.scenario-manager:8080
+      POCKETHIVE_NETWORK_PROXY_MANAGER_TOXIPROXY_URL: http://tasks.toxiproxy:8474
+      POCKETHIVE_NETWORK_PROXY_MANAGER_HAPROXY_BACKEND_HOST: tasks.toxiproxy
+    deploy: *proxy-placement
+
+  auth-service:
+    networks:
+      default:
+        aliases:
+          - auth-service
+    deploy: *manager-placement
+
+  log-aggregator:
+    networks:
+      default:
+        aliases:
+          - log-aggregator
+    depends_on: !override
+      - rabbitmq
+      - loki
+    environment:
+      RABBITMQ_HOST: tasks.rabbitmq
+      SPRING_RABBITMQ_HOST: tasks.rabbitmq
+      POCKETHIVE_LOKI_URL: http://tasks.loki:3100
+      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL: http://tasks.pushgateway:9091
+    deploy: *manager-placement
+
+  pushgateway:
+    networks:
+      default:
+        aliases:
+          - pushgateway
+    deploy: *manager-placement
+
+  redis:
+    networks:
+      default:
+        aliases:
+          - redis
+    ports: !override
+      - target: 6379
+        published: 6379
+        protocol: tcp
+        mode: host
+    deploy:
+      <<: *proxy-placement
+      endpoint_mode: dnsrr
+
+  redis-commander:
+    networks:
+      default:
+        aliases:
+          - redis-commander
+    depends_on: !override
+      - redis
+    environment:
+      REDIS_HOSTS: local:tasks.redis:6379
+    deploy: *manager-placement
+
+  toxiproxy:
+    networks:
+      default:
+        aliases:
+          - toxiproxy
+    deploy: *proxy-placement
+
+  ui:
+    networks:
+      default:
+        aliases:
+          - ui
+    depends_on: !override
+      - scenario-manager
+    ports: !override
+      - target: 8088
+        published: 8088
+        protocol: tcp
+        mode: host
+    volumes: !override
+      - ${POCKETHIVE_SWARM_ROOT:?set swarm root}/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    deploy: *proxy-placement
+
+  ui-v2:
+    networks:
+      default:
+        aliases:
+          - ui-v2
+    depends_on: !override
+      - ui
+    deploy: *manager-placement

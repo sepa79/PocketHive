@@ -53,6 +53,41 @@ export type BundleDownload = {
   fileName: string
 }
 
+export type BundleTreeNodeType = 'directory' | 'file'
+export type BundleEditorKind = 'text' | 'yaml' | 'json' | 'markdown' | 'unsupported'
+
+export type BundleTreeNode = {
+  bundleKey: string
+  path: string
+  name: string
+  nodeType: BundleTreeNodeType
+  mediaType: string | null
+  editorKind: BundleEditorKind
+  writable: boolean
+  size: number | null
+}
+
+export type BundleTree = {
+  bundleKey: string
+  nodes: BundleTreeNode[]
+}
+
+export type BundleFilePayload = {
+  bundleKey: string
+  path: string
+  name: string
+  mediaType: string
+  editorKind: BundleEditorKind
+  writable: boolean
+  size: number
+  revision: string
+  content: string | null
+}
+
+export type BundleFileWriteResult = {
+  revision: string
+}
+
 function normalizeScenarioSummary(input: unknown): ScenarioSummary | null {
   if (!isRecord(input)) return null
   const id = asString(input['id'])
@@ -87,6 +122,73 @@ function normalizeBundleTemplateEntry(input: unknown): BundleTemplateEntry | nul
   return { bundleKey, bundlePath, folderPath, id, name, description, controllerImage, bees, defunct, defunctReason }
 }
 
+function normalizeEditorKind(value: unknown): BundleEditorKind {
+  return value === 'text' || value === 'yaml' || value === 'json' || value === 'markdown' || value === 'unsupported'
+    ? value
+    : 'unsupported'
+}
+
+function normalizeNodeType(value: unknown): BundleTreeNodeType {
+  return value === 'directory' ? 'directory' : 'file'
+}
+
+function normalizeBundleTreeNode(input: unknown): BundleTreeNode | null {
+  if (!isRecord(input)) return null
+  const bundleKey = asString(input['bundleKey'])
+  const path = asString(input['path'])
+  const name = asString(input['name'])
+  if (!bundleKey || !path || !name) return null
+  const size = typeof input['size'] === 'number' && Number.isFinite(input['size']) ? input['size'] : null
+  return {
+    bundleKey,
+    path,
+    name,
+    nodeType: normalizeNodeType(input['nodeType']),
+    mediaType: asString(input['mediaType']),
+    editorKind: normalizeEditorKind(input['editorKind']),
+    writable: input['writable'] === true,
+    size,
+  }
+}
+
+function normalizeBundleTree(input: unknown): BundleTree {
+  if (!isRecord(input)) return { bundleKey: '', nodes: [] }
+  const bundleKey = asString(input['bundleKey']) ?? ''
+  const nodes = Array.isArray(input['nodes'])
+    ? input['nodes']
+        .map((entry) => normalizeBundleTreeNode(entry))
+        .filter((entry): entry is BundleTreeNode => entry !== null)
+    : []
+  return { bundleKey, nodes }
+}
+
+function normalizeBundleFile(input: unknown): BundleFilePayload | null {
+  if (!isRecord(input)) return null
+  const bundleKey = asString(input['bundleKey'])
+  const path = asString(input['path'])
+  const name = asString(input['name'])
+  const mediaType = asString(input['mediaType'])
+  const revision = asString(input['revision'])
+  if (!bundleKey || !path || !name || !mediaType || !revision) return null
+  return {
+    bundleKey,
+    path,
+    name,
+    mediaType,
+    editorKind: normalizeEditorKind(input['editorKind']),
+    writable: input['writable'] === true,
+    size: typeof input['size'] === 'number' && Number.isFinite(input['size']) ? input['size'] : 0,
+    revision,
+    content: typeof input['content'] === 'string' ? input['content'] : null,
+  }
+}
+
+function normalizeBundleFileWriteResult(input: unknown): BundleFileWriteResult | null {
+  if (!isRecord(input)) return null
+  const revision = asString(input['revision'])
+  return revision ? { revision } : null
+}
+
 export async function listScenarios(opts?: { includeDefunct?: boolean }): Promise<ScenarioSummary[]> {
   const includeDefunct = opts?.includeDefunct ?? true
   const params = new URLSearchParams({ includeDefunct: includeDefunct ? 'true' : 'false' })
@@ -119,6 +221,106 @@ export async function listBundleTemplates(): Promise<BundleTemplateEntry[]> {
   } catch {
     return []
   }
+}
+
+export async function listBundleWorkspaces(): Promise<BundleTemplateEntry[]> {
+  const response = await fetch('/scenario-manager/scenarios/bundles/workspaces', {
+    headers: { Accept: 'application/json' },
+  })
+  await ensureOk(response, 'Failed to load scenario workspaces')
+  try {
+    const payload = (await response.json()) as unknown
+    if (!Array.isArray(payload)) return []
+    return payload
+      .map((entry) => normalizeBundleTemplateEntry(entry))
+      .filter((entry): entry is BundleTemplateEntry => entry !== null)
+  } catch {
+    return []
+  }
+}
+
+export async function readBundleTree(bundleKey: string): Promise<BundleTree> {
+  const params = new URLSearchParams({ bundleKey })
+  const response = await fetch(`/scenario-manager/scenarios/bundles/tree?${params.toString()}`, {
+    headers: { Accept: 'application/json' },
+  })
+  await ensureOk(response, 'Failed to load bundle tree')
+  const payload = (await response.json()) as unknown
+  return normalizeBundleTree(payload)
+}
+
+export async function readBundleFile(bundleKey: string, path: string): Promise<BundleFilePayload> {
+  const params = new URLSearchParams({ bundleKey, path })
+  const response = await fetch(`/scenario-manager/scenarios/bundles/file?${params.toString()}`, {
+    headers: { Accept: 'application/json' },
+  })
+  await ensureOk(response, 'Failed to load bundle file')
+  const payload = (await response.json()) as unknown
+  const normalized = normalizeBundleFile(payload)
+  if (!normalized) {
+    throw new Error('Invalid bundle file response')
+  }
+  return normalized
+}
+
+export async function writeBundleFile(bundleKey: string, path: string, content: string, expectedRevision: string): Promise<BundleFileWriteResult> {
+  const params = new URLSearchParams({ bundleKey, path })
+  const response = await fetch(`/scenario-manager/scenarios/bundles/file?${params.toString()}`, {
+    method: 'PUT',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content, expectedRevision }),
+  })
+  await ensureOk(response, 'Failed to write bundle file')
+  const payload = (await response.json()) as unknown
+  const normalized = normalizeBundleFileWriteResult(payload)
+  if (!normalized) {
+    throw new Error('Invalid bundle file write response')
+  }
+  return normalized
+}
+
+export async function createBundleFile(bundleKey: string, path: string, content = ''): Promise<BundleFilePayload> {
+  const params = new URLSearchParams({ bundleKey })
+  const response = await fetch(`/scenario-manager/scenarios/bundles/files?${params.toString()}`, {
+    method: 'POST',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path, content }),
+  })
+  await ensureOk(response, 'Failed to create bundle file')
+  const payload = (await response.json()) as unknown
+  const normalized = normalizeBundleFile(payload)
+  if (!normalized) {
+    throw new Error('Invalid bundle file response')
+  }
+  return normalized
+}
+
+export async function createBundleFolder(bundleKey: string, path: string): Promise<void> {
+  const params = new URLSearchParams({ bundleKey })
+  const response = await fetch(`/scenario-manager/scenarios/bundles/folders?${params.toString()}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path }),
+  })
+  await ensureOk(response, 'Failed to create bundle folder')
+}
+
+export async function renameBundleEntry(bundleKey: string, path: string, name: string): Promise<void> {
+  const params = new URLSearchParams({ bundleKey })
+  const response = await fetch(`/scenario-manager/scenarios/bundles/entries/rename?${params.toString()}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path, name }),
+  })
+  await ensureOk(response, 'Failed to rename bundle entry')
+}
+
+export async function deleteBundleEntry(bundleKey: string, path: string): Promise<void> {
+  const params = new URLSearchParams({ bundleKey, path })
+  const response = await fetch(`/scenario-manager/scenarios/bundles/entry?${params.toString()}`, {
+    method: 'DELETE',
+  })
+  await ensureOk(response, 'Failed to delete bundle entry')
 }
 
 export async function listScenarioFolders(): Promise<string[]> {

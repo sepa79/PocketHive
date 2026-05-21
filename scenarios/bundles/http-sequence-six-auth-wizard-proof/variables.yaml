@@ -1,0 +1,49 @@
+version: 1
+definitions:
+  - name: ratePerSec
+    scope: global
+    type: float
+    required: true
+  - name: runDuration
+    scope: global
+    type: string
+    required: true
+  - name: trafficShape
+    scope: global
+    type: string
+    required: true
+  - name: targetBaseUrl
+    scope: sut
+    type: string
+    required: true
+profiles:
+  - id: smoke
+    name: Smoke
+  - id: default
+    name: Default
+  - id: nft
+    name: NFT
+values:
+  global:
+    smoke:
+      ratePerSec: 1
+      runDuration: 10s
+      trafficShape: smoke
+    default:
+      ratePerSec: 1
+      runDuration: 10s
+      trafficShape: smoke
+    nft:
+      ratePerSec: 1
+      runDuration: 10s
+      trafficShape: smoke
+  sut:
+    smoke:
+      wiremock-local:
+        targetBaseUrl: http://wiremock:8080
+    default:
+      wiremock-local:
+        targetBaseUrl: http://wiremock:8080
+    nft:
+      wiremock-local:
+        targetBaseUrl: http://wiremock:8080

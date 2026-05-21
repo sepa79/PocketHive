@@ -1,0 +1,12 @@
+serviceId: sequence
+callId: session-update
+protocol: HTTP
+method: PUT
+pathTemplate: /api/six-auth/session
+headersTemplate:
+  content-type: application/json
+  x-ph-proof-run: http-sequence-six-auth-flow
+bodyTemplate: '{"step":"session-update","state":"confirmed"}'
+authRef:
+  profileId: wizard-auth
+  applyAs: HTTP_AUTHORIZATION_BEARER

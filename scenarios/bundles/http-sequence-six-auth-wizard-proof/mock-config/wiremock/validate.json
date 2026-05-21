@@ -1,0 +1,29 @@
+{
+  "name": "wizard-proof-validate-auth-body-required",
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/wizard-proof/validate",
+    "headers": {
+      "Authorization": {
+        "equalTo": "Bearer wizard-proof-token"
+      }
+    },
+    "bodyPatterns": [
+      {
+        "equalToJson": "{\"step\":\"validate\",\"customerId\":\"CUST-WIZ-1001\",\"journeyId\":\"JRN-WIZ-9001\",\"sessionId\":\"SES-WIZ-9001\",\"profileVersion\":\"PROFILE-V2\"}"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "ok": true,
+      "callId": "validate",
+      "validationId": "VAL-WIZ-9001"
+    }
+  },
+  "priority": 1
+}

@@ -1,6 +1,8 @@
 package io.pockethive.orchestrator.infra.scenario;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.auth.client.AuthServiceServiceTokenProvider;
 import io.pockethive.orchestrator.app.ScenarioClient;
 import io.pockethive.orchestrator.config.OrchestratorProperties;
 import io.pockethive.orchestrator.domain.ScenarioPlan;
@@ -31,8 +33,11 @@ public class ScenarioManagerClient implements ScenarioClient {
     private final ObjectMapper json;
     private final String baseUrl;
     private final Duration requestTimeout;
+    private final AuthServiceServiceTokenProvider serviceTokenProvider;
 
-    public ScenarioManagerClient(ObjectMapper json, OrchestratorProperties properties) {
+    public ScenarioManagerClient(ObjectMapper json,
+                                 OrchestratorProperties properties,
+                                 org.springframework.beans.factory.ObjectProvider<AuthServiceServiceTokenProvider> serviceTokenProvider) {
         this.json = json;
         OrchestratorProperties.ScenarioManager scenario = properties.getScenarioManager();
         Objects.requireNonNull(scenario, "scenario");
@@ -44,6 +49,7 @@ public class ScenarioManagerClient implements ScenarioClient {
         this.baseUrl = requireBaseUrl(scenario.getUrl());
         this.requestTimeout = resolveTimeout(
             scenario.getHttp().getReadTimeout(), DEFAULT_REQUEST_TIMEOUT);
+        this.serviceTokenProvider = serviceTokenProvider.getIfAvailable();
     }
 
     @Override
@@ -54,6 +60,18 @@ public class ScenarioManagerClient implements ScenarioClient {
         String url = baseUrl + "/scenarios/" + templateId;
         HttpResponse<String> resp = sendGet(url, "template " + templateId);
         return json.readValue(resp.body(), ScenarioPlan.class);
+    }
+
+    @Override
+    public ScenarioTemplateDescriptor fetchScenarioTemplate(String templateId) throws Exception {
+        String trimmedTemplate = templateId == null ? null : templateId.trim();
+        if (trimmedTemplate == null || trimmedTemplate.isEmpty()) {
+            throw new IllegalArgumentException("templateId must not be null or blank");
+        }
+        String url = baseUrl + "/api/templates/" + trimmedTemplate;
+        HttpResponse<String> resp = sendGet(url, "template-metadata " + trimmedTemplate);
+        ScenarioTemplateResponse body = json.readValue(resp.body(), ScenarioTemplateResponse.class);
+        return new ScenarioTemplateDescriptor(body.id(), body.bundlePath(), body.folderPath(), body.defunct());
     }
 
     @Override
@@ -161,19 +179,12 @@ public class ScenarioManagerClient implements ScenarioClient {
 
     private HttpResponse<String> sendGet(String url, String label, String correlationId, String idempotencyKey) throws Exception {
         log.info("fetching {} from {}", label, url);
-        HttpRequest.Builder builder = HttpRequest.newBuilder()
-            .uri(URI.create(url))
-            .header("Accept", "application/json")
-            .timeout(requestTimeout)
-            ;
-        if (correlationId != null && !correlationId.isBlank()) {
-            builder.header("X-Correlation-Id", correlationId);
+        String authorizationHeader = currentAuthorizationHeader(false);
+        HttpResponse<String> resp = sendGetOnce(url, authorizationHeader, correlationId, idempotencyKey);
+        if (resp.statusCode() == 401 && serviceTokenProvider != null && authorizationHeader != null) {
+            log.warn("{} returned 401; refreshing service token and retrying once", label);
+            resp = sendGetOnce(url, currentAuthorizationHeader(true), correlationId, idempotencyKey);
         }
-        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
-            builder.header("X-Idempotency-Key", idempotencyKey);
-        }
-        HttpRequest req = builder.build();
-        HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
         log.info("{} response status {} length {}", label, resp.statusCode(),
             resp.body() != null ? resp.body().length() : 0);
         if (resp.statusCode() != 200) {
@@ -184,20 +195,47 @@ public class ScenarioManagerClient implements ScenarioClient {
 
     private HttpResponse<String> sendPost(String url, String label, String body) throws Exception {
         log.info("posting {} to {}", label, url);
-        HttpRequest req = HttpRequest.newBuilder()
-            .uri(URI.create(url))
-            .header("Accept", "application/json")
-            .header("Content-Type", "application/json")
-            .timeout(requestTimeout)
-            .POST(HttpRequest.BodyPublishers.ofString(body))
-            .build();
-        HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+        String authorizationHeader = currentAuthorizationHeader(false);
+        HttpResponse<String> resp = sendPostOnce(url, authorizationHeader, body);
+        if (resp.statusCode() == 401 && serviceTokenProvider != null && authorizationHeader != null) {
+            log.warn("{} returned 401 on POST; refreshing service token and retrying once", label);
+            resp = sendPostOnce(url, currentAuthorizationHeader(true), body);
+        }
         log.info("{} response status {} length {}", label, resp.statusCode(),
             resp.body() != null ? resp.body().length() : 0);
         if (resp.statusCode() != 200) {
             throw new IllegalStateException(label + " POST status " + resp.statusCode());
         }
         return resp;
+    }
+
+    private HttpResponse<String> sendGetOnce(String url,
+                                             String authorizationHeader,
+                                             String correlationId,
+                                             String idempotencyKey) throws Exception {
+        HttpRequest.Builder builder = HttpRequest.newBuilder()
+            .uri(URI.create(url))
+            .header("Accept", "application/json")
+            .timeout(requestTimeout);
+        applyAuthorization(builder, authorizationHeader);
+        if (correlationId != null && !correlationId.isBlank()) {
+            builder.header("X-Correlation-Id", correlationId);
+        }
+        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+            builder.header("X-Idempotency-Key", idempotencyKey);
+        }
+        return http.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    private HttpResponse<String> sendPostOnce(String url, String authorizationHeader, String body) throws Exception {
+        HttpRequest.Builder builder = HttpRequest.newBuilder()
+            .uri(URI.create(url))
+            .header("Accept", "application/json")
+            .header("Content-Type", "application/json")
+            .timeout(requestTimeout)
+            .POST(HttpRequest.BodyPublishers.ofString(body));
+        applyAuthorization(builder, authorizationHeader);
+        return http.send(builder.build(), HttpResponse.BodyHandlers.ofString());
     }
 
     private static Duration resolveTimeout(Duration candidate, Duration fallback) {
@@ -215,10 +253,29 @@ public class ScenarioManagerClient implements ScenarioClient {
         return baseUrl;
     }
 
+    private void applyAuthorization(HttpRequest.Builder builder, String authorizationHeader) {
+        if (authorizationHeader != null) {
+            builder.header("Authorization", authorizationHeader);
+        }
+    }
+
+    private String currentAuthorizationHeader(boolean forceRefresh) {
+        if (serviceTokenProvider == null) {
+            return null;
+        }
+        return forceRefresh
+            ? serviceTokenProvider.refreshAuthorizationHeader()
+            : serviceTokenProvider.getAuthorizationHeader();
+    }
+
     public record RuntimeRequest(String swarmId) {
     }
 
     public record ScenarioRuntimeResponse(String scenarioId, String swarmId, String runtimeDir) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record ScenarioTemplateResponse(String id, String bundlePath, String folderPath, boolean defunct) {
     }
 
     public record ScenarioVariablesResolveResponse(String profileId, String sutId, Map<String, Object> vars, java.util.List<String> warnings) {

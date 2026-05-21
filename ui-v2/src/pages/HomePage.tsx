@@ -1,6 +1,8 @@
 import { Link } from 'react-router-dom'
+import { useAuth } from '../lib/authContext'
 
 export function HomePage() {
+  const auth = useAuth()
   const fullLogoSrc = `${import.meta.env.BASE_URL}logo.svg`
   return (
     <div className="page homePage">
@@ -12,22 +14,36 @@ export function HomePage() {
       </div>
 
       <div className="tileGrid" style={{ marginTop: 14 }}>
-        <Link className="tile" to="/scenarios">
-          <div className="tileTitle">Scenarios</div>
-          <div className="tileDesc">Browse, inspect, and edit scenario bundles.</div>
-        </Link>
-        <Link className="tile" to="/hive">
-          <div className="tileTitle">Hive</div>
-          <div className="tileDesc">Manage swarms and runtime state.</div>
-        </Link>
-        <Link className="tile" to="/journal">
-          <div className="tileTitle">Journal</div>
-          <div className="tileDesc">History and current runs.</div>
-        </Link>
-        <Link className="tile" to="/health">
-          <div className="tileTitle">Connectivity</div>
-          <div className="tileDesc">Backend health + connection details.</div>
-        </Link>
+        {auth.canAccessPocketHive ? (
+          <Link className="tile" to="/scenarios">
+            <div className="tileTitle">Scenarios</div>
+            <div className="tileDesc">Browse, inspect, and edit scenario bundles.</div>
+          </Link>
+        ) : null}
+        {auth.canAccessPocketHive ? (
+          <Link className="tile" to="/hive">
+            <div className="tileTitle">Hive</div>
+            <div className="tileDesc">Manage swarms and runtime state.</div>
+          </Link>
+        ) : null}
+        {auth.canAccessPocketHive ? (
+          <Link className="tile" to="/journal">
+            <div className="tileTitle">Journal</div>
+            <div className="tileDesc">History and current runs.</div>
+          </Link>
+        ) : null}
+        {auth.canAccessPocketHive ? (
+          <Link className="tile" to="/health">
+            <div className="tileTitle">Connectivity</div>
+            <div className="tileDesc">Backend health + connection details.</div>
+          </Link>
+        ) : null}
+        {auth.isAuthAdmin ? (
+          <Link className="tile" to="/users">
+            <div className="tileTitle">Users</div>
+            <div className="tileDesc">Manage auth-service users and grant assignments.</div>
+          </Link>
+        ) : null}
       </div>
     </div>
   )

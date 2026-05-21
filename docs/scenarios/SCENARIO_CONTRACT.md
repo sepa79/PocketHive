@@ -184,10 +184,12 @@ This mirrors how workers bind properties:
   - Keys under this section are specific to each role and are documented
     in the worker SDK and capability manifests.
 
-The **capabilities** files under
-`scenario-manager-service/capabilities/*.latest.yaml` are the
-authoritative list of user‑tunable fields per worker and IO type. Each
-entry maps a UI field to a path in `config`.
+The **capabilities** files under `scenario-manager-service/capabilities/` are
+the authoritative list of user-tunable fields per worker and IO type.
+Capability lookup uses the canonical image name without registry, namespace,
+tag, or digest, so `processor:0.15`, `processor:latest`, and
+`registry.example.lan:5000/pockethive/processor:dev-*` all resolve the
+`processor` manifest. Each entry maps a UI field to a path in `config`.
 
 ### IO configuration examples
 

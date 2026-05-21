@@ -44,6 +44,11 @@
       <artifactId>swarm-model</artifactId>
       <version>${project.version}</version>
     </dependency>
+    <dependency>
+      <groupId>io.pockethive</groupId>
+      <artifactId>worker-sdk</artifactId>
+      <version>${project.version}</version>
+    </dependency>
   </dependencies>
   <build>
     <plugins>

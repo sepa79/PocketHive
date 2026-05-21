@@ -6,23 +6,31 @@ import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.web.context.WebApplicationContext;
 
+import io.pockethive.auth.client.AuthServiceClient;
 import io.pockethive.capabilities.CapabilityCatalogueService;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
+import java.util.zip.ZipOutputStream;
 import java.util.stream.Stream;
 
 import static org.hamcrest.Matchers.hasSize;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.springframework.test.web.servlet.setup.MockMvcBuilders.webAppContextSetup;
 
 @SpringBootTest(properties = "rabbitmq.logging.enabled=false")
 @AutoConfigureMockMvc
@@ -33,6 +41,12 @@ class ScenarioControllerTest {
 
     @Autowired
     CapabilityCatalogueService capabilityCatalogue;
+
+    @Autowired
+    WebApplicationContext webApplicationContext;
+
+    @MockBean
+    AuthServiceClient authServiceClient;
 
     @TempDir
     static Path tempDir;
@@ -51,6 +65,10 @@ class ScenarioControllerTest {
 
     @BeforeEach
     void setUpManifests() throws Exception {
+        when(authServiceClient.resolve(anyString())).thenReturn(AuthTestUsers.admin());
+        mvc = webAppContextSetup(webApplicationContext)
+                .defaultRequest(get("/").header(org.springframework.http.HttpHeaders.AUTHORIZATION, AuthTestUsers.TEST_BEARER))
+                .build();
         cleanDirectory(scenariosDir);
         cleanDirectory(capabilitiesDir);
         writeCapabilityManifest("ctrl", "ctrl-image");
@@ -135,6 +153,58 @@ class ScenarioControllerTest {
         mvc.perform(get("/scenarios/2").accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.name").value("Yaml"));
+    }
+
+    @Test
+    void bundleWorkspaceReadApiListsTreeAndReadsFilesByBundleKey() throws Exception {
+        Path bundle = scenariosDir.resolve("tcp").resolve("demo");
+        Files.createDirectories(bundle.resolve("templates/http"));
+        Files.writeString(bundle.resolve("scenario.yaml"), """
+                id: tcp-demo
+                name: TCP Demo
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - role: worker
+                      image: worker-image:latest
+                      work:
+                        in:
+                          in: a
+                        out:
+                          out: b
+                """);
+        Files.writeString(bundle.resolve("templates/http/request.yaml"), "method: GET\npath: /health\n");
+        Files.write(bundle.resolve("payload.bin"), new byte[] {0, 1, 2});
+
+        mvc.perform(post("/scenarios/reload"))
+                .andExpect(status().isNoContent());
+
+        mvc.perform(get("/scenarios/bundles/tree")
+                        .param("bundleKey", "tcp/demo")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.bundleKey").value("tcp/demo"))
+                .andExpect(jsonPath("$.nodes[?(@.path == 'scenario.yaml')].editorKind").value(org.hamcrest.Matchers.hasItem("yaml")))
+                .andExpect(jsonPath("$.nodes[?(@.path == 'templates')].nodeType").value(org.hamcrest.Matchers.hasItem("directory")))
+                .andExpect(jsonPath("$.nodes[?(@.path == 'templates/http/request.yaml')].editorKind").value(org.hamcrest.Matchers.hasItem("yaml")))
+                .andExpect(jsonPath("$.nodes[?(@.path == 'payload.bin')].editorKind").value(org.hamcrest.Matchers.hasItem("unsupported")));
+
+        mvc.perform(get("/scenarios/bundles/file")
+                        .param("bundleKey", "tcp/demo")
+                        .param("path", "templates/http/request.yaml")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.bundleKey").value("tcp/demo"))
+                .andExpect(jsonPath("$.path").value("templates/http/request.yaml"))
+                .andExpect(jsonPath("$.editorKind").value("yaml"))
+                .andExpect(jsonPath("$.revision").value(org.hamcrest.Matchers.startsWith("sha256:")))
+                .andExpect(jsonPath("$.content").value("method: GET\npath: /health\n"));
+
+        mvc.perform(get("/scenarios/bundles/file")
+                        .param("bundleKey", "tcp/demo")
+                        .param("path", "../scenario.yaml")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -436,6 +506,117 @@ class ScenarioControllerTest {
     }
 
     @Test
+    void dryRunBundleValidationDoesNotImportBundle() throws Exception {
+        byte[] zip = bundleZip("scenario.yaml", """
+                id: dry-run-demo
+                name: Dry run demo
+                template:
+                  image: ctrl-image:latest
+                  bees: []
+                """);
+
+        mvc.perform(post("/scenarios/bundles/validate")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(true))
+                .andExpect(jsonPath("$.source").value("uploaded-zip"))
+                .andExpect(jsonPath("$.scenarioId").value("dry-run-demo"))
+                .andExpect(jsonPath("$.findings", hasSize(0)));
+
+        mvc.perform(get("/scenarios").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(0)));
+    }
+
+    @Test
+    void runtimePreparationRejectsDefunctScenarioBundle() throws Exception {
+        Path quarantinedBundle = Files.createDirectories(scenariosDir.resolve("quarantine").resolve("defunct-runtime"));
+        Files.writeString(quarantinedBundle.resolve("scenario.yaml"), """
+                id: defunct-runtime
+                name: Defunct Runtime
+                template:
+                  image: ctrl-image:latest
+                  bees: []
+                """);
+
+        mvc.perform(post("/scenarios/reload"))
+                .andExpect(status().isNoContent());
+
+        mvc.perform(post("/scenarios/defunct-runtime/runtime")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                            {
+                              "swarmId": "sw1"
+                            }
+                            """))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void dryRunBundleValidationReturnsStructuredFindings() throws Exception {
+        byte[] zip = bundleZip("note.txt", "no scenario here");
+
+        mvc.perform(post("/scenarios/bundles/validate")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings[0].code").value("SCENARIO_DESCRIPTOR_INVALID"))
+                .andExpect(jsonPath("$.findings[0].severity").value("error"))
+                .andExpect(jsonPath("$.findings[0].path").value("scenario.yaml"));
+    }
+
+    @Test
+    void templateValidationReportsMissingCallId() throws Exception {
+        Path bundleDir = scenariosDir.resolve("template-ref-demo");
+        Files.createDirectories(bundleDir);
+        Files.writeString(bundleDir.resolve("scenario.yaml"), """
+                id: template-ref-demo
+                name: Template reference demo
+                template:
+                  image: ctrl-image:latest
+                  bees: []
+                plan:
+                  steps:
+                    - action: config-update
+                      config:
+                        worker:
+                          config:
+                            message:
+                              headers:
+                                x-ph-call-id: login
+                """);
+
+        mvc.perform(post("/scenarios/reload"))
+                .andExpect(status().isNoContent());
+
+        mvc.perform(post("/scenarios/template-ref-demo/templates/validate")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.referencedCallIds[0]").value("login"))
+                .andExpect(jsonPath("$.findings[0].code").value("TEMPLATE_CALL_ID_MISSING"));
+    }
+
+    @Test
+    void authoringContractExposesFingerprintAndValidationEndpoints() throws Exception {
+        mvc.perform(get("/api/authoring-contract").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.contractVersion").value("scenario-authoring.v1"))
+                .andExpect(jsonPath("$.fingerprint").exists())
+                .andExpect(jsonPath("$.endpoints.validateBundle").value("/scenarios/bundles/validate"))
+                .andExpect(jsonPath("$.cache.sessionCacheable").value(true));
+
+        mvc.perform(get("/api/authoring-contract/fingerprint").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.contractVersion").value("scenario-authoring.v1"))
+                .andExpect(jsonPath("$.fingerprint").exists());
+    }
+
+    @Test
     void validationFailure() throws Exception {
         mvc.perform(post("/scenarios").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"id\":\"\",\"name\":\"\"}"))
@@ -481,5 +662,15 @@ class ScenarioControllerTest {
                 }
                 """.formatted(prefix, imageName);
         Files.writeString(capabilitiesDir.resolve(prefix + "-manifest.json"), manifest);
+    }
+
+    private static byte[] bundleZip(String entryName, String content) throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try (ZipOutputStream zip = new ZipOutputStream(out)) {
+            zip.putNextEntry(new ZipEntry(entryName));
+            zip.write(content.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            zip.closeEntry();
+        }
+        return out.toByteArray();
     }
 }

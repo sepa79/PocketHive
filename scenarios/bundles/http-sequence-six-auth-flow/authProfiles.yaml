@@ -1,0 +1,12 @@
+profiles:
+  wizard-auth:
+    type: OAUTH2_CLIENT_CREDENTIALS
+    storage:
+      mode: REDIS
+      tokenKey: http-sequence-six-auth-flow.wizard-auth
+    refresh:
+      refreshAheadSeconds: 60
+      leaseSeconds: 15
+    tokenUrl: http://wiremock:8080/oauth/token/six-step
+    clientId: six-step-client
+    clientSecret: local-dummy-six-step-secret

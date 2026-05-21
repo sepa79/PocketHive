@@ -3,7 +3,6 @@ capabilitiesVersion: "1.4"
 role: processor
 image:
   name: processor
-  tag: latest
 ui:
   label: "Processor"
   color: "#a855f7"

@@ -21,6 +21,12 @@ import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import io.pockethive.controlplane.messaging.SignalMessage;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
+import io.pockethive.auth.contract.AuthGrantDto;
+import io.pockethive.auth.contract.AuthProduct;
+import io.pockethive.auth.contract.AuthProvider;
+import io.pockethive.auth.contract.AuthenticatedUserDto;
+import io.pockethive.auth.contract.PocketHivePermissionIds;
+import io.pockethive.auth.contract.PocketHiveResourceTypes;
 import io.pockethive.orchestrator.domain.IdempotencyStore;
 import io.pockethive.orchestrator.domain.ScenarioPlan;
 import io.pockethive.orchestrator.domain.Swarm;
@@ -35,6 +41,9 @@ import io.pockethive.orchestrator.domain.SwarmLifecycleStatus;
 import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
 import io.pockethive.orchestrator.domain.HiveJournal;
 import io.pockethive.orchestrator.infra.InMemoryIdempotencyStore;
+import io.pockethive.orchestrator.auth.OrchestratorAuthorization;
+import io.pockethive.orchestrator.auth.OrchestratorCurrentUserHolder;
+import io.pockethive.orchestrator.auth.OrchestratorEndpointAuthorization;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.NetworkBinding;
 import io.pockethive.swarm.model.NetworkBindingClearRequest;
@@ -71,6 +80,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.server.ResponseStatusException;
 
 @ExtendWith(MockitoExtension.class)
 class SwarmControllerTest {
@@ -125,6 +135,148 @@ class SwarmControllerTest {
                 new ConfirmationScope("sw1", "swarm-controller", "inst")));
         assertThat(tracker.complete("sw1", Phase.START)).isPresent();
         assertThat(registry.find("sw1").get().getStatus()).isEqualTo(SwarmLifecycleStatus.STARTING);
+    }
+
+    @Test
+    void createRejectsRunUserOutsideGrantedFolderScope() throws Exception {
+        SwarmCreateTracker tracker = new SwarmCreateTracker();
+        SwarmStore registry = new SwarmStore();
+        SwarmController ctrl = controller(tracker, registry, new SwarmPlanRegistry());
+        when(scenarioClient.fetchScenarioTemplate("tpl-1"))
+            .thenReturn(new ScenarioClient.ScenarioTemplateDescriptor("tpl-1", "prod/tpl-1", "prod", false));
+
+        try {
+            OrchestratorCurrentUserHolder.set(userWith(
+                PocketHivePermissionIds.RUN,
+                PocketHiveResourceTypes.FOLDER,
+                "demo"));
+            assertThatThrownBy(() -> ctrl.create("sw1", new SwarmCreateRequest("tpl-1", "idem", null, null, null, null, NetworkMode.DIRECT, null)))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("403 FORBIDDEN");
+        } finally {
+            OrchestratorCurrentUserHolder.clear();
+        }
+
+        verifyNoInteractions(publisher);
+    }
+
+    @Test
+    void createRejectsRunUserOutsideGrantedBundleScope() throws Exception {
+        SwarmCreateTracker tracker = new SwarmCreateTracker();
+        SwarmStore registry = new SwarmStore();
+        SwarmController ctrl = controller(tracker, registry, new SwarmPlanRegistry());
+        when(scenarioClient.fetchScenarioTemplate("tpl-1"))
+            .thenReturn(new ScenarioClient.ScenarioTemplateDescriptor("tpl-1", "e2e/local-rest-defaults", "e2e", false));
+
+        try {
+            OrchestratorCurrentUserHolder.set(userWith(
+                PocketHivePermissionIds.RUN,
+                PocketHiveResourceTypes.BUNDLE,
+                "e2e/local-rest"));
+            assertThatThrownBy(() -> ctrl.create("sw1", new SwarmCreateRequest("tpl-1", "idem", null, null, null, null, NetworkMode.DIRECT, null)))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("403 FORBIDDEN");
+        } finally {
+            OrchestratorCurrentUserHolder.clear();
+        }
+
+        verifyNoInteractions(publisher);
+    }
+
+    @Test
+    void createRejectsDefunctTemplateBeforeLaunch() throws Exception {
+        SwarmCreateTracker tracker = new SwarmCreateTracker();
+        SwarmStore registry = new SwarmStore();
+        SwarmController ctrl = controller(tracker, registry, new SwarmPlanRegistry());
+        when(scenarioClient.fetchScenarioTemplate("tpl-1"))
+            .thenReturn(new ScenarioClient.ScenarioTemplateDescriptor("tpl-1", "e2e/local-rest", "e2e", true));
+
+        assertThatThrownBy(() -> ctrl.create("sw1", new SwarmCreateRequest("tpl-1", "idem", null)))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("409 CONFLICT")
+            .hasMessageContaining("defunct");
+
+        verifyNoInteractions(publisher, lifecycle);
+    }
+
+    @Test
+    void listFiltersSwarmsOutsideGrantedFolderScope() {
+        SwarmCreateTracker tracker = new SwarmCreateTracker();
+        SwarmStore registry = new SwarmStore();
+        Swarm allowed = new Swarm("demo-swarm", "inst-a", "c1", "run-a");
+        allowed.attachTemplate(new SwarmTemplateMetadata("tpl-demo", "ctrl-image", List.of(), "demo/tpl-demo", "demo"));
+        registry.register(allowed);
+        cacheStatusFull(registry, "demo-swarm", "tpl-demo", "run-a", "inst-a");
+        Swarm blocked = new Swarm("prod-swarm", "inst-b", "c2", "run-b");
+        blocked.attachTemplate(new SwarmTemplateMetadata("tpl-prod", "ctrl-image", List.of(), "prod/tpl-prod", "prod"));
+        registry.register(blocked);
+        cacheStatusFull(registry, "prod-swarm", "tpl-prod", "run-b", "inst-b");
+        SwarmController ctrl = controller(tracker, registry, new SwarmPlanRegistry());
+
+        try {
+            OrchestratorCurrentUserHolder.set(userWith(
+                PocketHivePermissionIds.RUN,
+                PocketHiveResourceTypes.FOLDER,
+                "demo"));
+            ResponseEntity<List<SwarmController.SwarmSummary>> response = ctrl.list();
+            assertThat(response.getBody()).extracting(SwarmController.SwarmSummary::id).containsExactly("demo-swarm");
+        } finally {
+            OrchestratorCurrentUserHolder.clear();
+        }
+    }
+
+    @Test
+    void startRejectsRunUserOutsideGrantedFolderScope() {
+        SwarmCreateTracker tracker = new SwarmCreateTracker();
+        SwarmStore registry = new SwarmStore();
+        Swarm swarm = new Swarm("sw1", "inst", "c", "run-1");
+        swarm.attachTemplate(new SwarmTemplateMetadata("tpl-prod", "swarm-controller:latest", List.of(), "prod/tpl-prod", "prod"));
+        registry.register(swarm);
+        registry.updateStatus("sw1", SwarmLifecycleStatus.CREATING);
+        registry.updateStatus("sw1", SwarmLifecycleStatus.READY);
+        cacheStatusFull(registry, "sw1", "tpl-prod", "run-1", "inst");
+        SwarmController ctrl = controller(tracker, registry, new SwarmPlanRegistry());
+
+        try {
+            OrchestratorCurrentUserHolder.set(userWith(
+                PocketHivePermissionIds.RUN,
+                PocketHiveResourceTypes.FOLDER,
+                "demo"));
+            assertThatThrownBy(() -> ctrl.start("sw1", new SwarmController.ControlRequest("idem", null)))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("403 FORBIDDEN");
+        } finally {
+            OrchestratorCurrentUserHolder.clear();
+        }
+
+        verifyNoInteractions(publisher);
+    }
+
+    @Test
+    void stopRejectsAllUserOutsideGrantedFolderScope() {
+        SwarmCreateTracker tracker = new SwarmCreateTracker();
+        SwarmStore registry = new SwarmStore();
+        Swarm swarm = new Swarm("sw1", "inst", "c", "run-1");
+        swarm.attachTemplate(new SwarmTemplateMetadata("tpl-prod", "swarm-controller:latest", List.of(), "prod/tpl-prod", "prod"));
+        registry.register(swarm);
+        registry.updateStatus("sw1", SwarmLifecycleStatus.CREATING);
+        registry.updateStatus("sw1", SwarmLifecycleStatus.READY);
+        cacheStatusFull(registry, "sw1", "tpl-prod", "run-1", "inst");
+        SwarmController ctrl = controller(tracker, registry, new SwarmPlanRegistry());
+
+        try {
+            OrchestratorCurrentUserHolder.set(userWith(
+                PocketHivePermissionIds.ALL,
+                PocketHiveResourceTypes.FOLDER,
+                "demo"));
+            assertThatThrownBy(() -> ctrl.stop("sw1", new SwarmController.ControlRequest("idem", null)))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("403 FORBIDDEN");
+        } finally {
+            OrchestratorCurrentUserHolder.clear();
+        }
+
+        verifyNoInteractions(publisher);
     }
 
     @Test
@@ -1102,6 +1254,12 @@ class SwarmControllerTest {
             lenient().when(scenarioClient.resolveScenarioVariables(
                 anyString(), any(), any(), any(), any()))
                 .thenReturn(new ScenarioClient.ResolvedVariables(null, null, Map.of(), List.of()));
+            lenient().when(scenarioClient.fetchScenarioTemplate(anyString()))
+                .thenAnswer(invocation -> new ScenarioClient.ScenarioTemplateDescriptor(
+                    invocation.getArgument(0),
+                    "bundles/" + invocation.getArgument(0),
+                    "bundles",
+                    false));
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -1120,6 +1278,7 @@ class SwarmControllerTest {
                 publisher,
                 controlPlaneProperties()),
             HiveJournal.noop(),
+            new OrchestratorAuthorization(),
             plans,
             new ScenarioTimelineRegistry(),
             controlPlaneProperties());
@@ -1128,7 +1287,11 @@ class SwarmControllerTest {
     }
 
     private SwarmJournalController journalController(SwarmStore registry) {
-        return new SwarmJournalController(mapper, jdbc, registry);
+        return new SwarmJournalController(
+            mapper,
+            jdbc,
+            registry,
+            new OrchestratorEndpointAuthorization(new OrchestratorAuthorization(), scenarioClient, registry));
     }
 
     private static ControlPlaneProperties controlPlaneProperties() {
@@ -1139,6 +1302,22 @@ class SwarmControllerTest {
         properties.setInstanceId("orch-instance");
         properties.getManager().setRole("orchestrator");
         return properties;
+    }
+
+    private static AuthenticatedUserDto userWith(String permission, String resourceType, String resourceSelector) {
+        return new AuthenticatedUserDto(
+            java.util.UUID.fromString("11111111-1111-1111-1111-111111111111"),
+            "local-user",
+            "Local User",
+            true,
+            AuthProvider.DEV,
+            List.of(new AuthGrantDto(
+                AuthProduct.POCKETHIVE,
+                permission,
+                resourceType,
+                resourceSelector
+            ))
+        );
     }
 
     private void cacheStatusFull(SwarmStore store,

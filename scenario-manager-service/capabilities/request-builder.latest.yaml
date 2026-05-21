@@ -3,7 +3,6 @@ capabilitiesVersion: "1.1"
 role: request-builder
 image:
   name: request-builder
-  tag: latest
 ui:
   label: "Request Builder"
   color: "#6366f1"

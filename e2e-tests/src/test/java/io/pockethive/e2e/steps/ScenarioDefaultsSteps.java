@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import io.cucumber.java.en.Given;
 import io.cucumber.java.en.Then;
 import io.cucumber.java.en.When;
+import io.pockethive.e2e.clients.AuthServiceClient;
 import io.pockethive.e2e.clients.ScenarioManagerClient;
 import io.pockethive.e2e.clients.ScenarioManagerClient.ScenarioDetails;
 import io.pockethive.e2e.config.EnvironmentConfig;
@@ -30,7 +31,10 @@ public class ScenarioDefaultsSteps {
   public void theScenarioDefaultsHarnessIsInitialised() {
     try {
       var endpoints = EnvironmentConfig.loadServiceEndpoints();
-      scenarioManagerClient = ScenarioManagerClient.create(endpoints.scenarioManagerBaseUrl());
+      AuthServiceClient authServiceClient = AuthServiceClient.create(endpoints.auth().authServiceBaseUrl());
+      String bearerToken = endpoints.auth().accessToken()
+          .orElseGet(() -> authServiceClient.devLogin(endpoints.auth().username()));
+      scenarioManagerClient = ScenarioManagerClient.create(endpoints.scenarioManagerBaseUrl(), bearerToken);
     } catch (IllegalStateException ex) {
       Assumptions.assumeTrue(false, () -> "Skipping scenario defaults checks: " + ex.getMessage());
     }

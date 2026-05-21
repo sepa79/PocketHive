@@ -71,9 +71,84 @@ and duplicate-id bundles in the current step.
 - `download`
 - `move`
 - `delete`
+- `validate-existing`
 
 Repair editing is intentionally out of scope for bundles whose `scenario.id` is missing
 or not uniquely addressable.
+
+---
+
+## Validation endpoints
+
+Validation endpoints are side-effect-free unless explicitly documented
+otherwise. They return structured findings so editor and MCP clients can show
+actionable repair guidance without parsing free-text errors.
+
+Finding shape:
+
+```json
+{
+  "code": "TEMPLATE_CALL_ID_MISSING",
+  "severity": "error",
+  "path": "scenario.yaml:plan",
+  "message": "Scenario references HTTP callId 'login' but no matching template exists.",
+  "fix": "Add templates/http/<service>/login.yaml or update the x-ph-call-id reference."
+}
+```
+
+### Dry-run validate an uploaded bundle
+
+`POST /scenarios/bundles/validate` → request `application/zip`, response
+`application/json`
+
+- Unpacks and validates in temporary storage.
+- Does not import, replace, move, delete, or persist the bundle.
+- Validates the scenario descriptor, capability references, `variables.yaml`,
+  bundle-local `sut/**/sut.yaml`, and template call references that Scenario
+  Manager can inspect.
+
+Response:
+
+```json
+{
+  "ok": true,
+  "source": "uploaded-zip",
+  "scenarioId": "webauth-demo",
+  "bundleKey": null,
+  "bundlePath": null,
+  "findings": [],
+  "templates": ["templates/http/default/login.yaml"],
+  "schemas": ["schemas/body.schema.json"]
+}
+```
+
+### Validate an existing scenario by id
+
+`POST /scenarios/{scenarioId}/validate` → response `application/json`
+
+- Validates the loaded scenario bundle addressed by `scenarioId`.
+- Returns `404` when the scenario id is unknown.
+
+### Validate an existing bundle by bundle key
+
+`POST /scenarios/bundles/validate-existing?bundleKey={bundleKey}` → response
+`application/json`
+
+- Validates a catalog entry from `GET /api/templates`.
+- Works for malformed bundles and duplicate-id bundles that cannot be safely
+  addressed by `scenarioId`.
+
+### Validate bundle templates
+
+`POST /scenarios/{scenarioId}/templates/validate` → response
+`application/json`
+
+- Validates HTTP template files under `templates/http/**`.
+- Verifies required template fields: `protocol`, `serviceId`, `callId`,
+  `method`, `pathTemplate`.
+- Reports duplicate template `callId` values.
+- Reports `x-ph-call-id` references in `scenario.yaml` that do not have a
+  matching HTTP template.
 
 ---
 

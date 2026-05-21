@@ -75,6 +75,7 @@ Callers should link here rather than re‑describing the contract.
 
 Status tracking:
 - `SCENARIO_EDITOR_STATUS.md` – what the Scenarios editor does today vs what is missing/buggy.
+- `SCENARIO_BUNDLE_WORKSPACE_API_SPEC.md` – generic bundle tree/file API for the UI v2 workspace.
 
 ---
 

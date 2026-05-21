@@ -1,8 +1,7 @@
 import * as vscode from 'vscode';
 import { isMap, isSeq, parseDocument, stringify, YAMLMap, YAMLSeq } from 'yaml';
 
-import { requestJson } from '../api';
-import { resolveServiceConfig } from '../config';
+import { scenarioCapabilities } from '../mcp/tools';
 
 type ScenarioFormData = {
   id: string;
@@ -551,22 +550,8 @@ function formatError(error: unknown): string {
 }
 
 async function sendCapabilities(webview: vscode.Webview): Promise<void> {
-  const config = resolveServiceConfig('scenarioManagerUrl');
-  if ('error' in config) {
-    webview.postMessage({
-      type: 'capabilities',
-      ok: false,
-      error: config.error
-    } satisfies ScenarioStateMessage);
-    return;
-  }
   try {
-    const manifests = await requestJson<unknown[]>(
-      config.baseUrl,
-      config.authToken,
-      'GET',
-      '/api/capabilities?all=true'
-    );
+    const manifests = await scenarioCapabilities(true);
     webview.postMessage({
       type: 'capabilities',
       ok: true,
@@ -1326,41 +1311,49 @@ function getScenarioEditorHtml(webview: vscode.Webview): string {
 
     function buildManifestIndex(list) {
       const byDigest = new Map();
-      const byNameAndTag = new Map();
+      const byImageName = new Map();
       list.forEach((manifest) => {
         const digest = manifest.image && typeof manifest.image.digest === 'string' ? manifest.image.digest.trim().toLowerCase() : '';
         if (digest) {
           byDigest.set(digest, manifest);
         }
         const name = manifest.image && typeof manifest.image.name === 'string' ? manifest.image.name.trim().toLowerCase() : '';
-        const tag = manifest.image && typeof manifest.image.tag === 'string' ? manifest.image.tag.trim() : '';
-        if (name && tag) {
-          byNameAndTag.set(name + ':::' + tag, manifest);
+        const canonicalName = canonicalImageName(name);
+        if (canonicalName) {
+          byImageName.set(canonicalName, manifest);
         }
       });
-      return { byDigest, byNameAndTag };
+      return { byDigest, byImageName };
     }
 
     function findManifestForImage(image, index) {
       const reference = parseImageReference(image);
       if (!reference) return null;
-      if (reference.digest) {
-        const manifest = index.byDigest.get(reference.digest);
-        if (manifest) return manifest;
-      }
-      if (reference.name && reference.tag) {
-        const directKey = reference.name + ':::' + reference.tag;
-        const direct = index.byNameAndTag.get(directKey);
-        if (direct) return direct;
-        const lastSlash = reference.name.lastIndexOf('/');
-        if (lastSlash >= 0 && lastSlash < reference.name.length - 1) {
-          const simpleName = reference.name.slice(lastSlash + 1);
-          const simpleKey = simpleName + ':::' + reference.tag;
-          const simple = index.byNameAndTag.get(simpleKey);
-          if (simple) return simple;
-        }
+      if (reference.name) {
+        const key = canonicalImageName(reference.name);
+        return key ? index.byImageName.get(key) || null : null;
       }
       return null;
+    }
+
+    function canonicalImageName(name) {
+      if (!name || typeof name !== 'string') return null;
+      let normalized = name.trim().toLowerCase();
+      if (!normalized) return null;
+      const digestIndex = normalized.indexOf('@');
+      if (digestIndex >= 0) {
+        normalized = normalized.slice(0, digestIndex);
+      }
+      const lastColon = normalized.lastIndexOf(':');
+      const lastSlash = normalized.lastIndexOf('/');
+      if (lastColon > lastSlash) {
+        normalized = normalized.slice(0, lastColon);
+      }
+      const normalizedLastSlash = normalized.lastIndexOf('/');
+      if (normalizedLastSlash >= 0 && normalizedLastSlash < normalized.length - 1) {
+        return normalized.slice(normalizedLastSlash + 1);
+      }
+      return normalized;
     }
 
     function parseImageReference(image) {

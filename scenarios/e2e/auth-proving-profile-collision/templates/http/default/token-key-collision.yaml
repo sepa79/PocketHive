@@ -1,0 +1,11 @@
+serviceId: default
+callId: token-key-collision
+protocol: HTTP
+method: POST
+pathTemplate: /api/auth-proof/collision/should-not-send
+bodyTemplate: "{{ payload }}"
+headersTemplate:
+  content-type: application/json
+authRef:
+  profileId: collision-one
+  applyAs: HTTP_AUTHORIZATION_BEARER

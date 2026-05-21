@@ -15,6 +15,8 @@ From repo root:
 ./build-hive.sh --quick
 ```
 
+`--quick` is a faster local rebuild/redeploy path. It skips tests and Maven cache cleanup, but it still stops and restarts the compose stack for a full-stack run.
+
 Open:
 
 - UI: `http://localhost:8088`

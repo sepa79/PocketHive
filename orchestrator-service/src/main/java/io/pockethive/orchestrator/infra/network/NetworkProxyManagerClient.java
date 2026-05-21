@@ -1,6 +1,7 @@
 package io.pockethive.orchestrator.infra.network;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.auth.client.AuthServiceServiceTokenProvider;
 import io.pockethive.orchestrator.app.NetworkProxyClient;
 import io.pockethive.orchestrator.config.OrchestratorProperties;
 import io.pockethive.swarm.model.NetworkBinding;
@@ -26,8 +27,11 @@ public class NetworkProxyManagerClient implements NetworkProxyClient {
     private final ObjectMapper json;
     private final String baseUrl;
     private final Duration requestTimeout;
+    private final AuthServiceServiceTokenProvider serviceTokenProvider;
 
-    public NetworkProxyManagerClient(ObjectMapper json, OrchestratorProperties properties) {
+    public NetworkProxyManagerClient(ObjectMapper json,
+                                     OrchestratorProperties properties,
+                                     org.springframework.beans.factory.ObjectProvider<AuthServiceServiceTokenProvider> serviceTokenProvider) {
         this.json = json;
         OrchestratorProperties.NetworkProxyManager networkProxyManager = properties.getNetworkProxyManager();
         Objects.requireNonNull(networkProxyManager, "networkProxyManager");
@@ -40,6 +44,7 @@ public class NetworkProxyManagerClient implements NetworkProxyClient {
             "pockethive.control-plane.orchestrator.network-proxy-manager.url");
         this.requestTimeout = resolveTimeout(
             networkProxyManager.getHttp().getReadTimeout(), DEFAULT_REQUEST_TIMEOUT);
+        this.serviceTokenProvider = serviceTokenProvider.getIfAvailable();
     }
 
     @Override
@@ -69,25 +74,39 @@ public class NetworkProxyManagerClient implements NetworkProxyClient {
                                     String idempotencyKey) throws Exception {
         String body = json.writeValueAsString(payload);
         log.info("posting {} to {}", label, url);
-        HttpRequest.Builder builder = HttpRequest.newBuilder()
-            .uri(URI.create(url))
-            .header("Accept", "application/json")
-            .header("Content-Type", "application/json")
-            .timeout(requestTimeout)
-            .POST(HttpRequest.BodyPublishers.ofString(body));
-        if (correlationId != null && !correlationId.isBlank()) {
-            builder.header("X-Correlation-Id", correlationId);
+        String authorizationHeader = currentAuthorizationHeader(false);
+        HttpResponse<String> response = sendPostOnce(url, body, correlationId, idempotencyKey, authorizationHeader);
+        if (response.statusCode() == 401 && serviceTokenProvider != null && authorizationHeader != null) {
+            log.warn("{} returned 401 on POST; refreshing service token and retrying once", label);
+            response = sendPostOnce(url, body, correlationId, idempotencyKey, currentAuthorizationHeader(true));
         }
-        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
-            builder.header("X-Idempotency-Key", idempotencyKey);
-        }
-        HttpResponse<String> response = http.send(builder.build(), HttpResponse.BodyHandlers.ofString());
         log.info("{} response status {} length {}", label, response.statusCode(),
             response.body() != null ? response.body().length() : 0);
         if (response.statusCode() != 200) {
             throw new IllegalStateException(label + " POST status " + response.statusCode());
         }
         return json.readValue(response.body(), NetworkBinding.class);
+    }
+
+    private HttpResponse<String> sendPostOnce(String url,
+                                              String body,
+                                              String correlationId,
+                                              String idempotencyKey,
+                                              String authorizationHeader) throws Exception {
+        HttpRequest.Builder builder = HttpRequest.newBuilder()
+            .uri(URI.create(url))
+            .header("Accept", "application/json")
+            .header("Content-Type", "application/json")
+            .timeout(requestTimeout)
+            .POST(HttpRequest.BodyPublishers.ofString(body));
+        applyAuthorization(builder, authorizationHeader);
+        if (correlationId != null && !correlationId.isBlank()) {
+            builder.header("X-Correlation-Id", correlationId);
+        }
+        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+            builder.header("X-Idempotency-Key", idempotencyKey);
+        }
+        return http.send(builder.build(), HttpResponse.BodyHandlers.ofString());
     }
 
     private static Duration resolveTimeout(Duration candidate, Duration fallback) {
@@ -102,6 +121,21 @@ public class NetworkProxyManagerClient implements NetworkProxyClient {
             throw new IllegalStateException(propertyName + " must not be null or blank");
         }
         return baseUrl;
+    }
+
+    private void applyAuthorization(HttpRequest.Builder builder, String authorizationHeader) {
+        if (authorizationHeader != null) {
+            builder.header("Authorization", authorizationHeader);
+        }
+    }
+
+    private String currentAuthorizationHeader(boolean forceRefresh) {
+        if (serviceTokenProvider == null) {
+            return null;
+        }
+        return forceRefresh
+            ? serviceTokenProvider.refreshAuthorizationHeader()
+            : serviceTokenProvider.getAuthorizationHeader();
     }
 
     private static String requireText(String value, String field) {

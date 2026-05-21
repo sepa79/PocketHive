@@ -1,0 +1,11 @@
+serviceId: sequence
+callId: basic-step
+protocol: HTTP
+method: POST
+pathTemplate: /api/auth-proof/sequence/basic
+bodyTemplate: '{"step":"basic","journey":"{{ payload.journey }}"}'
+headersTemplate:
+  content-type: application/json
+authRef:
+  profileId: sequence-basic
+  applyAs: HTTP_HEADER

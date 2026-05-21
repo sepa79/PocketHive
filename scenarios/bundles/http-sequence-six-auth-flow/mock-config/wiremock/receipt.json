@@ -1,0 +1,24 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPath": "/api/six-auth/receipt",
+    "headers": {
+      "Authorization": {
+        "equalTo": "Bearer six-step-token"
+      },
+      "x-ph-proof-run": {
+        "equalTo": "http-sequence-six-auth-flow"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "ok": true,
+      "callId": "receipt"
+    }
+  }
+}

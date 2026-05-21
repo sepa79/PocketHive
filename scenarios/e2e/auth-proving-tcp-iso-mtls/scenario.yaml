@@ -1,0 +1,148 @@
+id: auth-proving-tcp-iso-mtls
+name: Auth Proving - TCP ISO8583 mTLS
+description: Proves TCP payload auth, ISO8583 MAC application, and processor-stage mTLS client certificate auth metadata.
+template:
+  image: swarm-controller:latest
+  bees:
+    - role: gen-tcp-prefix
+      image: generator:latest
+      config:
+        inputs:
+          type: SCHEDULER
+          scheduler:
+            ratePerSec: 1
+            maxMessages: 1
+        worker:
+          message:
+            bodyType: SIMPLE
+            body: 'PAYLOAD|tcp-prefix|AUTH-PROOF'
+            headers:
+              x-ph-call-id: tcp-prefix
+      work:
+        out:
+          out: build-tcp
+    - role: rb-tcp-prefix
+      image: request-builder:latest
+      config:
+        worker:
+          templateRoot: /app/scenario/templates/tcp
+          serviceId: default
+          passThroughOnMissingTemplate: false
+      work:
+        in:
+          in: build-tcp
+        out:
+          out: proc-tcp
+    - role: proc-tcp-prefix
+      image: processor:latest
+      config:
+        worker:
+          baseUrl: "{{ sut.endpoints['tcp-server'].baseUrl }}"
+          tcpTransport:
+            type: socket
+            connectionReuse: NONE
+            maxRetries: 1
+            connectTimeoutMs: 2000
+            readTimeoutMs: 3000
+      work:
+        in:
+          in: proc-tcp
+        out:
+          out: post
+    - role: gen-iso-mac
+      image: generator:latest
+      config:
+        inputs:
+          type: SCHEDULER
+          scheduler:
+            ratePerSec: 1
+            maxMessages: 1
+        worker:
+          message:
+            bodyType: SIMPLE
+            body: '{"scenario":"auth-proving-tcp-iso-mtls","call":"iso-mac"}'
+            headers:
+              x-ph-call-id: iso-mac
+      work:
+        out:
+          out: build-iso
+    - role: rb-iso-mac
+      image: request-builder:latest
+      config:
+        worker:
+          templateRoot: /app/scenario/templates/tcp
+          serviceId: default
+          passThroughOnMissingTemplate: false
+      work:
+        in:
+          in: build-iso
+        out:
+          out: proc-iso
+    - role: proc-iso-mac
+      image: processor:latest
+      config:
+        worker:
+          baseUrl: "{{ sut.endpoints['tcp-server'].baseUrl }}"
+          tcpTransport:
+            type: socket
+            connectionReuse: NONE
+            maxRetries: 1
+            connectTimeoutMs: 2000
+            readTimeoutMs: 3000
+            maxBytes: 8192
+      work:
+        in:
+          in: proc-iso
+        out:
+          out: post
+    - role: gen-mtls
+      image: generator:latest
+      config:
+        inputs:
+          type: SCHEDULER
+          scheduler:
+            ratePerSec: 1
+            maxMessages: 1
+        worker:
+          message:
+            bodyType: SIMPLE
+            body: '{"sessionId":"MTLS-AUTH-PROOF","timestamp":"2026-05-08T00:00:00Z","encryptedData":"dummy","signature":"dummy"}'
+            headers:
+              x-ph-call-id: mtls-secure
+      work:
+        out:
+          out: build-mtls
+    - role: rb-mtls
+      image: request-builder:latest
+      config:
+        worker:
+          templateRoot: /app/scenario/templates/tcp
+          serviceId: default
+          passThroughOnMissingTemplate: false
+      work:
+        in:
+          in: build-mtls
+        out:
+          out: proc-mtls
+    - role: proc-mtls
+      image: processor:latest
+      config:
+        worker:
+          baseUrl: "{{ sut.endpoints['tcps-server'].baseUrl }}"
+          tcpTransport:
+            type: socket
+            connectionReuse: NONE
+            maxRetries: 1
+            connectTimeoutMs: 5000
+            readTimeoutMs: 8000
+            sslVerify: false
+      work:
+        in:
+          in: proc-mtls
+        out:
+          out: post
+    - role: postprocessor
+      image: postprocessor:latest
+      work:
+        in:
+          in: post

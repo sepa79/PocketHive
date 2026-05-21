@@ -869,18 +869,6 @@ export default function ComponentDetail({ component, onClose }: Props) {
           ))}
         </div>
       )}
-      {manifestResolution.kind === 'fallback_tag' && manifest && (
-        <div className="mb-4 rounded border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
-          Capability fallback active: runtime image tag
-          {' '}
-          <code>{manifestResolution.requestedTag ?? 'unknown'}</code>
-          {' '}
-          is using capability manifest tag
-          {' '}
-          <code>{manifestResolution.resolvedTag ?? manifest.image.tag ?? 'unknown'}</code>.
-          Update the capability manifest for this component version if the config surface changed.
-        </div>
-      )}
       {normalizedRole === 'swarm-controller' && (
         <div className="space-y-2 mb-4 text-sm">
           <div className="text-white/70 font-semibold">Scenario controls</div>

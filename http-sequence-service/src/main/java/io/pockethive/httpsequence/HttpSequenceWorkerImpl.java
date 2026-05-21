@@ -5,7 +5,6 @@ import io.pockethive.requesttemplates.TemplateLoader;
 import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
 import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerContext;
-import io.pockethive.worker.sdk.auth.AuthHeaderGenerator;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
 import io.pockethive.worker.sdk.config.WorkerCapability;
 import io.pockethive.worker.sdk.config.RedisSequenceProperties;
@@ -15,7 +14,6 @@ import org.apache.hc.client5.http.classic.HttpClient;
 import org.apache.hc.client5.http.impl.classic.HttpClients;
 import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManager;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Component;
 
 @Component("httpSequenceWorker")
@@ -36,8 +34,7 @@ class HttpSequenceWorkerImpl implements PocketHiveWorkerFunction {
       ObjectMapper mapper,
       HttpSequenceWorkerProperties properties,
       TemplateRenderer templateRenderer,
-      RedisSequenceProperties redisProperties,
-      @Nullable AuthHeaderGenerator authHeaderGenerator
+      RedisSequenceProperties redisProperties
   ) {
     HttpClient pooled = newPooledClient();
     this.properties = properties;
@@ -47,8 +44,7 @@ class HttpSequenceWorkerImpl implements PocketHiveWorkerFunction {
         templateRenderer,
         new TemplateLoader(),
         new ApacheHttpCallExecutor(pooled),
-        redisProperties,
-        authHeaderGenerator
+        redisProperties
     );
   }
 

@@ -7,7 +7,7 @@
   <packaging>pom</packaging>
     <properties>
     <!-- Flatten plugin resolves this CI-friendly revision into published POMs; see build plugins below. -->
-    <revision>0.15.17</revision>
+    <revision>0.15.19</revision>
     <logstash.logback.version>8.1</logstash.logback.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
@@ -16,6 +16,8 @@
   <modules>
     <module>observability</module>
     <module>common/topology-core</module>
+    <module>common/auth-contracts</module>
+    <module>common/auth-client</module>
     <module>common/control-plane-core</module>
     <module>common/control-plane-spring</module>
     <module>common/manager-sdk</module>
@@ -32,6 +34,7 @@
     <module>postprocessor-service</module>
     <module>clearing-export-service</module>
     <module>processor-service</module>
+    <module>auth-service</module>
     <module>swarm-controller-service</module>
     <module>trigger-service</module>
     <module>scenario-manager-service</module>

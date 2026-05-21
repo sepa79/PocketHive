@@ -1,0 +1,19 @@
+{
+  "name": "wizard-proof-oauth-token-short-ttl",
+  "request": {
+    "method": "POST",
+    "urlPath": "/oauth/token/wizard-proof"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "access_token": "wizard-proof-token",
+      "token_type": "Bearer",
+      "expires_in": 1
+    }
+  },
+  "priority": 1
+}

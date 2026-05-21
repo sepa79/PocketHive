@@ -1,0 +1,10 @@
+serviceId: sequence
+callId: receipt
+protocol: HTTP
+method: GET
+pathTemplate: /api/wizard-proof/receipt?journeyId={{ payload.journeyId }}&confirmationId={{ payload.confirmationId }}
+headersTemplate:
+  content-type: application/json
+authRef:
+  profileId: wizard-auth
+  applyAs: HTTP_AUTHORIZATION_BEARER

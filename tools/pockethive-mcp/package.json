@@ -1,0 +1,37 @@
+{
+  "name": "@pockethive/mcp-server",
+  "version": "0.15.19",
+  "description": "PocketHive MCP server — full lifecycle tools for scenario authoring and swarm management",
+  "type": "module",
+  "bin": {
+    "pockethive-mcp": "./server.mjs"
+  },
+  "main": "./server.mjs",
+  "files": [
+    "config-update.mjs",
+    "server.mjs",
+    "start.cjs",
+    "poc-runner.mjs",
+    "smoke-test.mjs",
+    "wizard-acceptance.mjs"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "poc": "node poc-runner.mjs",
+    "poc:live": "cross-env PH_POC_LIVE=1 node poc-runner.mjs",
+    "acceptance:wizard": "node wizard-acceptance.mjs",
+    "start": "node server.mjs",
+    "start:http": "cross-env PH_MCP_HTTP_PORT=3100 node server.mjs",
+    "test": "node --test config-update.test.mjs target-input.test.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.25.1",
+    "amqplib": "^0.10.4",
+    "archiver": "^7.0.1",
+    "cross-env": "^7.0.3",
+    "yaml": "^2.8.2",
+    "zod": "^3.24.1"
+  }
+}

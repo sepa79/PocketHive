@@ -1,0 +1,11 @@
+serviceId: sequence
+callId: oauth-shared
+protocol: HTTP
+method: POST
+pathTemplate: /api/auth-proof/sequence/oauth-shared
+bodyTemplate: '{"step":"oauth-shared","journey":"{{ payload.journey }}"}'
+headersTemplate:
+  content-type: application/json
+authRef:
+  profileId: sequence-oauth
+  applyAs: HTTP_AUTHORIZATION_BEARER

@@ -21,7 +21,6 @@ import type { CapabilityManifest } from '../types/capabilities'
 export interface CapabilitiesContextValue {
   manifests: CapabilityManifest[]
   manifestIndex: ManifestIndex
-  capabilityFallbackTag: string | null
   ensureCapabilities: () => Promise<CapabilityManifest[]>
   refreshCapabilities: () => Promise<CapabilityManifest[]>
   getManifestForImage: (image: string | null | undefined) => CapabilityManifest | null
@@ -33,7 +32,6 @@ const defaultManifestIndex = buildManifestIndex([])
 const defaultValue: CapabilitiesContextValue = {
   manifests: [],
   manifestIndex: defaultManifestIndex,
-  capabilityFallbackTag: null,
   ensureCapabilities: async () => [],
   refreshCapabilities: async () => [],
   getManifestForImage: () => null,
@@ -57,7 +55,6 @@ interface Props {
 
 export function CapabilitiesProvider({ children }: Props) {
   const [manifests, setManifests] = useState<CapabilityManifest[]>([])
-  const [capabilityFallbackTag, setCapabilityFallbackTag] = useState<string | null>(null)
   const [hasLoaded, setHasLoaded] = useState(false)
   const hasLoadedRef = useRef(false)
   const inFlightRef = useRef<Promise<CapabilityManifest[]> | null>(null)
@@ -80,12 +77,6 @@ export function CapabilitiesProvider({ children }: Props) {
       }
       const payload = await response.json()
       const normalized = normalizeManifests(payload)
-      const fallbackTagHeader = response.headers.get('X-Pockethive-Capability-Fallback-Tag')
-      setCapabilityFallbackTag(
-        typeof fallbackTagHeader === 'string' && fallbackTagHeader.trim().length > 0
-          ? fallbackTagHeader.trim()
-          : null,
-      )
       setManifests(normalized)
       setHasLoaded(true)
       return normalized
@@ -95,7 +86,6 @@ export function CapabilitiesProvider({ children }: Props) {
       .catch((error) => {
         if (!hasLoadedRef.current) {
           setManifests([])
-          setCapabilityFallbackTag(null)
         }
         console.error('Failed to load capabilities', error)
         return [] as CapabilityManifest[]
@@ -126,9 +116,9 @@ export function CapabilitiesProvider({ children }: Props) {
   const getManifestForImage = useCallback(
     (image: string | null | undefined) => {
       if (!image) return null
-      return resolveManifestForImage(image, manifestIndex, capabilityFallbackTag).manifest
+      return resolveManifestForImage(image, manifestIndex).manifest
     },
-    [capabilityFallbackTag, manifestIndex],
+    [manifestIndex],
   )
 
   const resolveManifestForImageFromContext = useCallback(
@@ -141,16 +131,15 @@ export function CapabilitiesProvider({ children }: Props) {
           resolvedTag: null,
         } satisfies ManifestResolution
       }
-      return resolveManifestForImage(image, manifestIndex, capabilityFallbackTag)
+      return resolveManifestForImage(image, manifestIndex)
     },
-    [capabilityFallbackTag, manifestIndex],
+    [manifestIndex],
   )
 
   const value = useMemo<CapabilitiesContextValue>(
     () => ({
       manifests,
       manifestIndex,
-      capabilityFallbackTag,
       ensureCapabilities,
       refreshCapabilities,
       getManifestForImage,
@@ -159,7 +148,6 @@ export function CapabilitiesProvider({ children }: Props) {
     [
       manifests,
       manifestIndex,
-      capabilityFallbackTag,
       ensureCapabilities,
       refreshCapabilities,
       getManifestForImage,

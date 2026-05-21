@@ -1,4 +1,8 @@
-export function Icon({ name }: { name: 'home' | 'hive' | 'proxy' | 'journal' | 'scenarios' | 'other' | 'user' | 'buzz' }) {
+export function Icon({
+  name,
+}: {
+  name: 'home' | 'hive' | 'proxy' | 'journal' | 'scenarios' | 'other' | 'user' | 'buzz' | 'users' | 'edit' | 'trash'
+}) {
   const common = { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', xmlns: 'http://www.w3.org/2000/svg' }
   switch (name) {
     case 'home':
@@ -64,6 +68,31 @@ export function Icon({ name }: { name: 'home' | 'hive' | 'proxy' | 'journal' | '
             strokeWidth="1.6"
             strokeLinecap="round"
           />
+        </svg>
+      )
+    case 'users':
+      return (
+        <svg {...common}>
+          <path d="M9 11a3 3 0 1 0-3-3 3 3 0 0 0 3 3Z" stroke="currentColor" strokeWidth="1.6" />
+          <path d="M16 10a2.5 2.5 0 1 0-2.5-2.5A2.5 2.5 0 0 0 16 10Z" stroke="currentColor" strokeWidth="1.6" />
+          <path d="M3.8 19a5.2 5.2 0 0 1 10.4 0" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          <path d="M14.2 19a4.1 4.1 0 0 1 5-2.8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        </svg>
+      )
+    case 'edit':
+      return (
+        <svg {...common}>
+          <path d="M4.5 19.5h4.2L18.6 9.6a2.1 2.1 0 0 0 0-3L17.4 5.4a2.1 2.1 0 0 0-3 0L4.5 15.3v4.2Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+          <path d="M13.2 6.6l4.2 4.2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        </svg>
+      )
+    case 'trash':
+      return (
+        <svg {...common}>
+          <path d="M5 7h14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          <path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7" stroke="currentColor" strokeWidth="1.6" />
+          <path d="M7.2 7l.8 12a1.5 1.5 0 0 0 1.5 1.4h5a1.5 1.5 0 0 0 1.5-1.4l.8-12" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+          <path d="M10.5 11v5M13.5 11v5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
         </svg>
       )
   }

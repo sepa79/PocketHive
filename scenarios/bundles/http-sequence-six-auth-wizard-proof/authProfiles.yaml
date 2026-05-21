@@ -1,0 +1,13 @@
+profiles:
+  wizard-auth:
+    type: OAUTH2_CLIENT_CREDENTIALS
+    storage:
+      mode: REDIS
+      tokenKey: http-sequence-six-auth-wizard-proof.wizard-auth
+    refresh:
+      refreshAheadSeconds: 60
+      leaseSeconds: 15
+    tokenUrl: http://wiremock:8080/oauth/token/wizard-proof
+    clientId: wizard-proof-client
+    clientSecret:
+      env: WIZARD_PROOF_CLIENT_SECRET

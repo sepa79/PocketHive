@@ -9,6 +9,5 @@ Current plans:
 
 - `docs/toBeReviewed/worker-configurable-io-plan.md`
 - `docs/toBeReviewed/ScenarioPlan.md`
-- `docs/toBeReviewed/scenario-sut-editor-plan.md`
 - `docs/toBeReviewed/sut-environments-plan.md`
 - `docs/toBeReviewed/ui-v2-control-plane-adoption.md`

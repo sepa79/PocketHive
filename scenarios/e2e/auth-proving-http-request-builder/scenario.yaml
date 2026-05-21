@@ -1,0 +1,177 @@
+id: auth-proving-http-request-builder
+name: Auth Proving - HTTP Request Builder
+description: Proves request-builder HTTP authRef application for OAuth, static bearer, basic, API key, query token, HMAC, and AWS signing.
+template:
+  image: swarm-controller:latest
+  bees:
+    - role: gen-oauth-client
+      image: generator:latest
+      config:
+        inputs:
+          type: SCHEDULER
+          scheduler:
+            ratePerSec: 1
+            maxMessages: 0
+        worker:
+          message:
+            bodyType: SIMPLE
+            body: '{"scenario":"auth-proving-http-request-builder","call":"oauth-client"}'
+            headers:
+              content-type: application/json
+              x-ph-call-id: oauth-client
+      work:
+        out:
+          out: build
+    - role: gen-oauth-password
+      image: generator:latest
+      config:
+        inputs:
+          type: SCHEDULER
+          scheduler:
+            ratePerSec: 1
+            maxMessages: 0
+        worker:
+          message:
+            bodyType: SIMPLE
+            body: '{"scenario":"auth-proving-http-request-builder","call":"oauth-password"}'
+            headers:
+              content-type: application/json
+              x-ph-call-id: oauth-password
+      work:
+        out:
+          out: build
+    - role: gen-static-bearer
+      image: generator:latest
+      config:
+        inputs:
+          type: SCHEDULER
+          scheduler:
+            ratePerSec: 1
+            maxMessages: 0
+        worker:
+          message:
+            bodyType: SIMPLE
+            body: '{"scenario":"auth-proving-http-request-builder","call":"static-bearer"}'
+            headers:
+              content-type: application/json
+              x-ph-call-id: static-bearer
+      work:
+        out:
+          out: build
+    - role: gen-basic
+      image: generator:latest
+      config:
+        inputs:
+          type: SCHEDULER
+          scheduler:
+            ratePerSec: 1
+            maxMessages: 0
+        worker:
+          message:
+            bodyType: SIMPLE
+            body: '{"scenario":"auth-proving-http-request-builder","call":"basic-auth"}'
+            headers:
+              content-type: application/json
+              x-ph-call-id: basic-auth
+      work:
+        out:
+          out: build
+    - role: gen-api-key
+      image: generator:latest
+      config:
+        inputs:
+          type: SCHEDULER
+          scheduler:
+            ratePerSec: 1
+            maxMessages: 0
+        worker:
+          message:
+            bodyType: SIMPLE
+            body: '{"scenario":"auth-proving-http-request-builder","call":"api-key"}'
+            headers:
+              content-type: application/json
+              x-ph-call-id: api-key
+      work:
+        out:
+          out: build
+    - role: gen-query-token
+      image: generator:latest
+      config:
+        inputs:
+          type: SCHEDULER
+          scheduler:
+            ratePerSec: 1
+            maxMessages: 0
+        worker:
+          message:
+            bodyType: SIMPLE
+            body: '{"scenario":"auth-proving-http-request-builder","call":"query-token"}'
+            headers:
+              content-type: application/json
+              x-ph-call-id: query-token
+      work:
+        out:
+          out: build
+    - role: gen-hmac
+      image: generator:latest
+      config:
+        inputs:
+          type: SCHEDULER
+          scheduler:
+            ratePerSec: 1
+            maxMessages: 0
+        worker:
+          message:
+            bodyType: SIMPLE
+            body: '{"scenario":"auth-proving-http-request-builder","call":"hmac"}'
+            headers:
+              content-type: application/json
+              x-ph-call-id: hmac
+      work:
+        out:
+          out: build
+    - role: gen-aws
+      image: generator:latest
+      config:
+        inputs:
+          type: SCHEDULER
+          scheduler:
+            ratePerSec: 1
+            maxMessages: 0
+        worker:
+          message:
+            bodyType: SIMPLE
+            body: '{"scenario":"auth-proving-http-request-builder","call":"aws"}'
+            headers:
+              content-type: application/json
+              x-ph-call-id: aws
+      work:
+        out:
+          out: build
+    - role: request-builder
+      image: request-builder:latest
+      config:
+        worker:
+          templateRoot: /app/scenario/templates/http
+          serviceId: default
+          passThroughOnMissingTemplate: false
+      work:
+        in:
+          in: build
+        out:
+          out: proc
+    - role: processor
+      image: processor:latest
+      config:
+        worker:
+          baseUrl: "{{ sut.endpoints['default'].baseUrl }}"
+      work:
+        in:
+          in: proc
+        out:
+          out: post
+    - role: postprocessor
+      image: postprocessor:latest
+      work:
+        in:
+          in: post

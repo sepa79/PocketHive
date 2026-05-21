@@ -1,0 +1,12 @@
+serviceId: sequence
+callId: query-step
+protocol: HTTP
+method: POST
+pathTemplate: /api/auth-proof/sequence/query
+bodyTemplate: '{"step":"query","journey":"{{ payload.journey }}"}'
+headersTemplate:
+  content-type: application/json
+authRef:
+  profileId: sequence-query
+  applyAs: HTTP_QUERY_PARAM
+  queryParam: access_token

@@ -4,7 +4,7 @@ Feature: WorkItem history policy configuration
   Background:
     Given the scenario defaults harness is initialised
 
-  @history-policy
+  @history-policy @group-contracts
   Scenario: Scenario templates can choose WorkItem history policies per worker
     When I fetch the "history-policy-demo" scenario template
     Then the "generator" bee has history policy "FULL"
@@ -12,7 +12,7 @@ Feature: WorkItem history policy configuration
     And the "processor" bee has history policy "DISABLED"
     And the "postprocessor" bee has history policy "DISABLED"
 
-  @history-policy-runtime
+  @history-policy-runtime @group-lifecycle
   Scenario: Worker statuses advertise configured history policies
     Given the swarm lifecycle harness is initialised
     And the "history-policy-demo" scenario template is requested

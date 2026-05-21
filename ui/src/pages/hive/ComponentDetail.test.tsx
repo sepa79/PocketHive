@@ -173,7 +173,6 @@ describe('ComponentDetail dynamic config', () => {
     const providerValue: CapabilitiesContextValue = {
       manifests: [manifest],
       manifestIndex: buildManifestIndex([manifest]),
-      capabilityFallbackTag: null,
       ensureCapabilities: vi.fn().mockResolvedValue([manifest]),
       refreshCapabilities: vi.fn().mockResolvedValue([manifest]),
       getManifestForImage: vi.fn().mockReturnValue(manifest),
@@ -252,7 +251,6 @@ describe('ComponentDetail dynamic config', () => {
     const providerValue: CapabilitiesContextValue = {
       manifests: [],
       manifestIndex: buildManifestIndex([]),
-      capabilityFallbackTag: null,
       ensureCapabilities: vi.fn().mockResolvedValue([]),
       refreshCapabilities: vi.fn().mockResolvedValue([]),
       getManifestForImage: vi.fn().mockReturnValue(null),
@@ -304,7 +302,6 @@ describe('ComponentDetail dynamic config', () => {
     const providerValue: CapabilitiesContextValue = {
       manifests: [manifest],
       manifestIndex: buildManifestIndex([manifest]),
-      capabilityFallbackTag: null,
       ensureCapabilities: vi.fn().mockResolvedValue([manifest]),
       refreshCapabilities: vi.fn().mockResolvedValue([manifest]),
       getManifestForImage: vi.fn().mockImplementation((image) =>
@@ -357,64 +354,5 @@ describe('ComponentDetail dynamic config', () => {
     expect(
       screen.getByText('No configurable options'),
     ).toBeInTheDocument()
-  })
-
-  it('shows a warning when capability fallback resolves a different tag', async () => {
-    const manifest: CapabilityManifest = {
-      schemaVersion: '1.0',
-      capabilitiesVersion: '1.0',
-      role: 'generator',
-      image: { name: 'gen', tag: 'latest', digest: null },
-      config: [],
-      actions: [],
-      panels: [],
-    }
-
-    const providerValue: CapabilitiesContextValue = {
-      manifests: [manifest],
-      manifestIndex: buildManifestIndex([manifest]),
-      capabilityFallbackTag: 'latest',
-      ensureCapabilities: vi.fn().mockResolvedValue([manifest]),
-      refreshCapabilities: vi.fn().mockResolvedValue([manifest]),
-      getManifestForImage: vi.fn().mockReturnValue(manifest),
-      resolveManifestForImage: vi.fn().mockReturnValue({
-        manifest,
-        kind: 'fallback_tag',
-        requestedTag: 'experimental',
-        resolvedTag: 'latest',
-      }),
-    }
-
-    const component: Component = {
-      id: 'gen-exp',
-      name: 'gen-exp',
-      role: 'generator',
-      image: 'gen:experimental',
-      lastHeartbeat: baseTimestamp,
-      queues: [],
-      config: {},
-    }
-
-    const swarmValue: SwarmMetadataContextValue = {
-      swarms: [],
-      ensureSwarms: vi.fn().mockResolvedValue([]),
-      refreshSwarms: vi.fn().mockResolvedValue([]),
-      getBeeImage: vi.fn().mockReturnValue(null),
-      getControllerImage: vi.fn().mockReturnValue(null),
-      findSwarm: vi.fn().mockReturnValue(null),
-    }
-
-    render(
-      <SwarmMetadataContext.Provider value={swarmValue}>
-        <CapabilitiesContext.Provider value={providerValue}>
-          <ComponentDetail component={component} onClose={() => {}} />
-        </CapabilitiesContext.Provider>
-      </SwarmMetadataContext.Provider>,
-    )
-
-    expect(await screen.findByText(/Capability fallback active/i)).toBeInTheDocument()
-    expect(screen.getByText(/runtime image tag/i)).toBeInTheDocument()
-    expect(screen.getByText('experimental')).toBeInTheDocument()
-    expect(screen.getByText('latest')).toBeInTheDocument()
   })
 })

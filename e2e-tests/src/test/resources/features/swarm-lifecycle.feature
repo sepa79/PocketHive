@@ -3,7 +3,7 @@ Feature: Swarm lifecycle golden path
   Background:
     Given the swarm lifecycle harness is initialised
 
-  @golden-path
+  @golden-path @group-lifecycle
   Scenario: Operators can drive the swarm lifecycle via REST and confirmations
     And the "local-rest-defaults" scenario template is requested
     When I create the swarm from that template
@@ -18,7 +18,7 @@ Feature: Swarm lifecycle golden path
     When I remove the swarm
     Then the swarm is removed and lifecycle confirmations are recorded
 
-  @gating
+  @gating @group-lifecycle
   Scenario: Swarm stop is rejected before running
     And the "local-rest-defaults" scenario template is requested
     When I create the swarm from that template
@@ -32,7 +32,7 @@ Feature: Swarm lifecycle golden path
     When I remove the swarm
     Then the swarm is removed after the early stop
 
-  @templated-generator
+  @templated-generator @group-lifecycle
   Scenario: Templated generator works end to end
     And the "templated-rest" scenario template is requested
     When I create the swarm from that template
@@ -42,7 +42,7 @@ Feature: Swarm lifecycle golden path
     And I start generator traffic
     Then the final queue receives the default generator response
 
-  @http-proxy
+  @http-proxy @group-proxy
   Scenario: HTTP processor traffic can be routed through the managed proxy
     And the "http-proxy-demo" scenario template is requested
     When I create the swarm from that template
@@ -59,7 +59,7 @@ Feature: Swarm lifecycle golden path
     Then the swarm is removed and lifecycle confirmations are recorded
     And the network binding is cleared
 
-  @https-proxy
+  @https-proxy @group-proxy
   Scenario: HTTPS processor traffic can be routed through the managed proxy
     And the "https-proxy-demo" scenario template is requested
     When I create the swarm from that template
@@ -76,7 +76,7 @@ Feature: Swarm lifecycle golden path
     Then the swarm is removed and lifecycle confirmations are recorded
     And the network binding is cleared
 
-  @tcps-proxy
+  @tcps-proxy @group-proxy
   Scenario: TCPS processor traffic can be routed through the managed proxy
     And the "tcp-ssl-demo" scenario template is requested
     When I create the swarm from that template
@@ -93,7 +93,7 @@ Feature: Swarm lifecycle golden path
     Then the swarm is removed and lifecycle confirmations are recorded
     And the network binding is cleared
 
-  @scenario-variables
+  @scenario-variables @group-lifecycle
   Scenario: Scenario variables are resolved and visible in template rendering
     And the "variables-demo" scenario template is requested
     When I create the swarm from that template
@@ -103,7 +103,7 @@ Feature: Swarm lifecycle golden path
     And I start generator traffic
     Then the final queue receives the default generator response
 
-  @tcp-timeout
+  @tcp-timeout @group-data
   Scenario: TCP processor reports timeout when tcp-mock delays response
     And the TCP mock server has the following mappings:
       """
@@ -131,6 +131,7 @@ Feature: Swarm lifecycle golden path
     When I remove the swarm
     Then the swarm is removed and lifecycle confirmations are recorded
 
+  @group-contracts
   Scenario: Worker runtime config matches service defaults when scenario provides none
     And the "local-rest-defaults" scenario template is requested
     When I create the swarm from that template
@@ -144,6 +145,7 @@ Feature: Swarm lifecycle golden path
     And the processor runtime config matches the service defaults
     And the postprocessor runtime config matches the service defaults
 
+  @group-contracts
   Scenario: Worker runtime config matches overrides from local-rest
     And the "local-rest" scenario template is requested
     When I create the swarm from that template
@@ -156,7 +158,7 @@ Feature: Swarm lifecycle golden path
     And the processor runtime config matches the local-rest scenario
     And the postprocessor runtime config matches the local-rest scenario
 
-  @redis-dataset-demo
+  @redis-dataset-demo @group-data
   Scenario: Redis dataset demo flows through Request Builder and Processor
     And the "redis-dataset-demo" scenario template is requested
     When I create the swarm from that template
@@ -170,7 +172,7 @@ Feature: Swarm lifecycle golden path
     When I remove the swarm
     Then the swarm is removed and lifecycle confirmations are recorded
 
-  @redis-dataset-payloads
+  @redis-dataset-payloads @group-data
   Scenario: Redis dataset demo renders payloads and templates end to end
     And the "redis-dataset-demo" scenario template is requested
     When I create the swarm from that template
@@ -184,7 +186,7 @@ Feature: Swarm lifecycle golden path
     When I remove the swarm
     Then the swarm is removed and lifecycle confirmations are recorded
 
-  @clickhouse-tx-outcomes
+  @clickhouse-tx-outcomes @group-data
   Scenario: Postprocessor writes tx outcomes to ClickHouse
     And the "local-rest-defaults" scenario template is requested
     When I create the swarm from that template
@@ -200,7 +202,7 @@ Feature: Swarm lifecycle golden path
     When I remove the swarm
     Then the swarm is removed and lifecycle confirmations are recorded
 
-  @webauth-loop
+  @webauth-loop @group-data
   Scenario: WebAuth 5-customers loop processes Redis traffic through processor
     And the TCP mock request journal is cleared
     And the Redis keys are cleared:
@@ -245,7 +247,7 @@ Feature: Swarm lifecycle golden path
     When I remove the swarm
     Then the swarm is removed and lifecycle confirmations are recorded
 
-  @plan-demo
+  @plan-demo @group-lifecycle
   Scenario: Scenario plan drives swarm lifecycle
     And the "local-rest-plan-demo" scenario template is requested
     When I create the swarm from that template
@@ -254,7 +256,7 @@ Feature: Swarm lifecycle golden path
     Then the swarm reports running
     And the plan demo scenario plan drives the swarm lifecycle
 
-  @clearing-export-demo
+  @clearing-export-demo @group-exports
   Scenario: Clearing export batches 20 transactions into 2 files
     And the "clearing-export-demo" scenario template is requested
     When I create the swarm from that template
@@ -268,7 +270,7 @@ Feature: Swarm lifecycle golden path
     When I remove the swarm
     Then the swarm is removed and lifecycle confirmations are recorded
 
-  @clearing-export-structured-demo
+  @clearing-export-structured-demo @group-exports
   Scenario: Clearing export structured mode batches 20 transactions into XML files
     And the "clearing-export-structured-demo" scenario template is requested
     When I create the swarm from that template
@@ -283,7 +285,7 @@ Feature: Swarm lifecycle golden path
     When I remove the swarm
     Then the swarm is removed and lifecycle confirmations are recorded
 
-  @clearing-export-streaming-demo
+  @clearing-export-streaming-demo @group-exports
   Scenario: Clearing export streaming mode finalizes one file by time window
     And the "clearing-export-streaming-demo" scenario template is requested
     When I create the swarm from that template

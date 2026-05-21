@@ -1,0 +1,51 @@
+id: auth-proving-profile-collision
+name: Auth Proving - Profile Collision
+description: Proves shared Redis token keys with different resolved auth profile config fail explicitly, do not send traffic, and do not spam the journal.
+template:
+  image: swarm-controller:latest
+  bees:
+    - role: generator
+      image: generator:latest
+      config:
+        inputs:
+          type: SCHEDULER
+          scheduler:
+            ratePerSec: 1
+            maxMessages: 3
+        worker:
+          message:
+            bodyType: SIMPLE
+            body: '{"scenario":"auth-proving-profile-collision","call":"token-key-collision"}'
+            headers:
+              content-type: application/json
+              x-ph-call-id: token-key-collision
+      work:
+        out:
+          out: build
+    - role: request-builder
+      image: request-builder:latest
+      config:
+        worker:
+          templateRoot: /app/scenario/templates/http
+          serviceId: default
+          passThroughOnMissingTemplate: false
+      work:
+        in:
+          in: build
+        out:
+          out: proc
+    - role: processor
+      image: processor:latest
+      config:
+        worker:
+          baseUrl: "{{ sut.endpoints['default'].baseUrl }}"
+      work:
+        in:
+          in: proc
+        out:
+          out: post
+    - role: postprocessor
+      image: postprocessor:latest
+      work:
+        in:
+          in: post

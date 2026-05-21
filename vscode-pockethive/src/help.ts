@@ -10,7 +10,7 @@ type HelpContent = {
 const HELP_CONTENT: Record<HelpTopic, HelpContent> = {
   settings: {
     title: 'PocketHive: Settings panel',
-    body: `# Settings panel\n\nManage Hive base URLs for PocketHive.\n\n- Add Hive URL\n- Click an entry to set it active\n- Delete unused instances from the context menu\n\nThe extension derives Orchestrator and Scenario Manager endpoints from the active Hive URL.\n`
+    body: `# Settings panel\n\nManage PocketHive environments, bundle folders, and the local MCP server.\n\n- Add an environment profile\n- Click an environment to set it active\n- Add a bundles folder for local scenario authoring\n\nThe extension passes the active environment and bundles folder into the PocketHive MCP server.\n`
   },
   hive: {
     title: 'PocketHive: Hive panel',

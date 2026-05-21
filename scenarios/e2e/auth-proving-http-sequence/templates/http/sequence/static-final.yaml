@@ -1,0 +1,11 @@
+serviceId: sequence
+callId: static-final
+protocol: HTTP
+method: POST
+pathTemplate: /api/auth-proof/sequence/static-final
+bodyTemplate: '{"step":"static-final","journey":"{{ payload.journey }}"}'
+headersTemplate:
+  content-type: application/json
+authRef:
+  profileId: sequence-static
+  applyAs: HTTP_AUTHORIZATION_BEARER

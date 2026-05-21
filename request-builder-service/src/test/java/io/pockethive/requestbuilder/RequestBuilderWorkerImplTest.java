@@ -13,6 +13,9 @@ import io.pockethive.worker.sdk.api.StatusPublisher;
 import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.api.WorkerInfo;
+import io.pockethive.worker.sdk.auth.AuthApplyAs;
+import io.pockethive.worker.sdk.auth.AuthFailureException;
+import io.pockethive.worker.sdk.auth.AuthRef;
 import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
 import io.pockethive.worker.sdk.templating.PebbleTemplateRenderer;
 import io.pockethive.worker.sdk.templating.TemplateRenderer;
@@ -105,6 +108,114 @@ class RequestBuilderWorkerImplTest {
 	  }
 
   @Test
+  void appliesHttpHeaderAndQueryAuthFromAuthProfiles() throws Exception {
+    Path dir = Files.createTempDirectory("templates-http-auth");
+    Files.createDirectories(dir.resolve("default"));
+    Files.writeString(dir.resolve("authProfiles.yaml"), """
+        profiles:
+          bearer:
+            type: STATIC_TOKEN
+            storage:
+              mode: NONE
+            token: header-token
+          query:
+            type: API_KEY
+            storage:
+              mode: NONE
+            key: query-token
+            queryParam: api_key
+        """);
+    Files.writeString(dir.resolve("default/header-call.yaml"), """
+        serviceId: default
+        callId: header
+        protocol: HTTP
+        method: GET
+        pathTemplate: /header
+        bodyTemplate: ""
+        headersTemplate: {}
+        authRef:
+          profileId: bearer
+          applyAs: HTTP_AUTHORIZATION_BEARER
+        """);
+    Files.writeString(dir.resolve("default/query-call.yaml"), """
+        serviceId: default
+        callId: query
+        protocol: HTTP
+        method: GET
+        pathTemplate: /query?existing=1
+        bodyTemplate: ""
+        headersTemplate: {}
+        authRef:
+          profileId: query
+          applyAs: HTTP_QUERY_PARAM
+        """);
+
+    properties.setConfig(Map.of(
+        "templateRoot", dir.toString(),
+        "serviceId", "default",
+        "passThroughOnMissingTemplate", true
+    ));
+    RequestBuilderWorkerImpl worker =
+        new RequestBuilderWorkerImpl(properties, templateRenderer, new TemplateLoader(), null);
+    RequestBuilderWorkerConfig config = new RequestBuilderWorkerConfig(
+        dir.toString(), "default", true, Map.of());
+    WorkerContext context = new TestWorkerContext(config);
+
+    WorkItem headerSeed = WorkItem.text(SEED_INFO, "").header("x-ph-call-id", "header").build();
+    JsonNode headerEnvelope = new ObjectMapper().readTree(worker.onMessage(headerSeed, context).asString());
+    assertThat(headerEnvelope.get("request").get("headers").get("Authorization").asText())
+        .isEqualTo("Bearer header-token");
+
+    WorkItem querySeed = WorkItem.text(SEED_INFO, "").header("x-ph-call-id", "query").build();
+    JsonNode queryEnvelope = new ObjectMapper().readTree(worker.onMessage(querySeed, context).asString());
+    assertThat(queryEnvelope.get("request").get("path").asText())
+        .isEqualTo("/query?existing=1&api_key=query-token");
+  }
+
+  @Test
+  void authFailuresThrowOnceThenDropRepeatedFailures() throws Exception {
+    Path dir = Files.createTempDirectory("templates-http-auth-failure");
+    Files.createDirectories(dir.resolve("default"));
+    Files.writeString(dir.resolve("authProfiles.yaml"), """
+        profiles:
+          bad-query:
+            type: STATIC_TOKEN
+            storage:
+              mode: NONE
+            token: failure-token-that-must-not-be-logged
+        """);
+    Files.writeString(dir.resolve("default/bad-query-auth.yaml"), """
+        serviceId: default
+        callId: bad-query-auth
+        protocol: HTTP
+        method: POST
+        pathTemplate: /should-not-send
+        bodyTemplate: "{{ payload }}"
+        headersTemplate: {}
+        authRef:
+          profileId: bad-query
+          applyAs: HTTP_QUERY_PARAM
+        """);
+
+    properties.setConfig(Map.of(
+        "templateRoot", dir.toString(),
+        "serviceId", "default",
+        "passThroughOnMissingTemplate", false
+    ));
+    RequestBuilderWorkerImpl worker =
+        new RequestBuilderWorkerImpl(properties, templateRenderer, new TemplateLoader(), null);
+    RequestBuilderWorkerConfig config = new RequestBuilderWorkerConfig(
+        dir.toString(), "default", false, Map.of());
+    WorkerContext context = new TestWorkerContext(config);
+    WorkItem seed = WorkItem.text(SEED_INFO, "{}").header("x-ph-call-id", "bad-query-auth").build();
+
+    assertThatThrownBy(() -> worker.onMessage(seed, context))
+        .isInstanceOf(AuthFailureException.class)
+        .hasMessageContaining("HTTP_QUERY_PARAM auth requires");
+    assertThat(worker.onMessage(seed, context)).isNull();
+  }
+
+  @Test
   void dropsMessageWhenCallIdMissingAndPassThroughDisabled() {
     Path dir = Path.of("does-not-matter");
     properties.setConfig(Map.of(
@@ -187,6 +298,76 @@ class RequestBuilderWorkerImplTest {
     assertThat(envelope.get("request").get("body").asText()).isEqualTo("test-data");
     assertThat(envelope.get("request").get("endTag").asText()).isEqualTo("</Document>");
     assertThat(envelope.get("request").get("maxBytes").asInt()).isEqualTo(8192);
+  }
+
+  @Test
+  void buildsTcpEnvelopeWithPayloadAuthAndProcessorStageMetadata() throws Exception {
+    Path dir = Files.createTempDirectory("tcp-templates-auth");
+    Files.createDirectories(dir.resolve("default"));
+    Files.writeString(dir.resolve("authProfiles.yaml"), """
+        profiles:
+          prefix:
+            type: MESSAGE_FIELD_AUTH
+            storage:
+              mode: NONE
+            value: "AUTH:"
+          mtls:
+            type: TLS_CLIENT_CERT
+            storage:
+              mode: NONE
+            keyStorePath: /certs/client.p12
+            keyStorePassword: changeit
+        """);
+    Files.writeString(dir.resolve("default/tcp-prefix.yaml"), """
+        serviceId: default
+        callId: tcp-prefix
+        protocol: TCP
+        behavior: REQUEST_RESPONSE
+        bodyTemplate: "{{ payload }}"
+        headersTemplate: {}
+        endTag: "</Document>"
+        maxBytes: 8192
+        authRef:
+          profileId: prefix
+          applyAs: TCP_PAYLOAD_PREFIX
+        """);
+    Files.writeString(dir.resolve("default/tcp-mtls.yaml"), """
+        serviceId: default
+        callId: tcp-mtls
+        protocol: TCP
+        behavior: REQUEST_RESPONSE
+        bodyTemplate: "{{ payload }}"
+        headersTemplate: {}
+        maxBytes: 8192
+        authRef:
+          profileId: mtls
+          applyAs: MTLS_CLIENT_CERT
+        """);
+
+    properties.setConfig(Map.of(
+        "templateRoot", dir.toString(),
+        "serviceId", "default",
+        "passThroughOnMissingTemplate", true
+    ));
+    RequestBuilderWorkerImpl worker =
+        new RequestBuilderWorkerImpl(properties, templateRenderer, new TemplateLoader(), null);
+    RequestBuilderWorkerConfig config = new RequestBuilderWorkerConfig(
+        dir.toString(), "default", true, Map.of());
+    WorkerContext context = new TestWorkerContext(config);
+
+    WorkItem prefixSeed = WorkItem.text(SEED_INFO, "payload").header("x-ph-call-id", "tcp-prefix").build();
+    JsonNode prefixEnvelope = new ObjectMapper().readTree(worker.onMessage(prefixSeed, context).asString());
+    assertThat(prefixEnvelope.get("request").get("body").asText()).isEqualTo("AUTH:payload");
+    assertThat(prefixEnvelope.get("request").get("authApplications")).isEmpty();
+
+    WorkItem mtlsSeed = WorkItem.text(SEED_INFO, "payload").header("x-ph-call-id", "tcp-mtls").build();
+    JsonNode mtlsEnvelope = new ObjectMapper().readTree(worker.onMessage(mtlsSeed, context).asString());
+    assertThat(mtlsEnvelope.get("request").get("body").asText()).isEqualTo("payload");
+    assertThat(mtlsEnvelope.get("request").get("authApplications")).hasSize(1);
+    assertThat(mtlsEnvelope.get("request").get("authApplications").get(0).get("profileId").asText())
+        .isEqualTo("mtls");
+    assertThat(mtlsEnvelope.get("request").get("authApplications").get(0).get("applyAs").asText())
+        .isEqualTo("MTLS_CLIENT_CERT");
   }
 
   @Test

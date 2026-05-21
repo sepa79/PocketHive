@@ -1,0 +1,8 @@
+serviceId: default
+callId: plain
+protocol: HTTP
+method: POST
+pathTemplate: /api/auth-proof/no-auth/plain
+bodyTemplate: "{{ payload }}"
+headersTemplate:
+  content-type: application/json

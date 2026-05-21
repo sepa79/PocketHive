@@ -1,0 +1,60 @@
+profiles:
+  oauth-client:
+    type: OAUTH2_CLIENT_CREDENTIALS
+    storage:
+      mode: REDIS
+      tokenKey: http-rb-oauth-client
+    refresh:
+      refreshAheadSeconds: 30
+      leaseSeconds: 10
+    tokenUrl: http://wiremock:8080/oauth/token/rb-client
+    clientId: rb-client
+    clientSecret: local-dummy-client-secret
+    scope: proving
+  oauth-password:
+    type: OAUTH2_PASSWORD_GRANT
+    storage:
+      mode: REDIS
+      tokenKey: http-rb-oauth-password
+    refresh:
+      refreshAheadSeconds: 30
+      leaseSeconds: 10
+    tokenUrl: http://wiremock:8080/oauth/token/rb-password
+    username: rb-user
+    password: local-dummy-password
+    clientId: rb-password-client
+  static-bearer:
+    type: STATIC_TOKEN
+    storage:
+      mode: NONE
+    token: rb-static-token
+  basic:
+    type: BASIC_AUTH
+    storage:
+      mode: NONE
+    username: rb-user
+    password: rb-password
+  api-key:
+    type: API_KEY
+    storage:
+      mode: NONE
+    key: rb-api-key
+  query-token:
+    type: STATIC_TOKEN
+    storage:
+      mode: NONE
+    token: rb-query-token
+    queryParam: access_token
+  hmac:
+    type: HMAC_SIGNATURE
+    storage:
+      mode: NONE
+    secretKey: rb-hmac-secret
+  aws:
+    type: AWS_SIGNATURE_V4
+    storage:
+      mode: NONE
+    accessKeyId: RBACCESS
+    secretAccessKey: rb-aws-secret
+    region: eu-west-1
+    service: execute-api

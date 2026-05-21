@@ -20,6 +20,8 @@ import io.pockethive.worker.sdk.api.StatusPublisher;
 import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.api.WorkerInfo;
+import io.pockethive.worker.sdk.auth.AuthApplyAs;
+import io.pockethive.worker.sdk.auth.AuthRef;
 import io.pockethive.worker.sdk.config.WorkInputConfig;
 import io.pockethive.worker.sdk.config.WorkOutputConfig;
 import io.pockethive.worker.sdk.config.WorkerCapability;
@@ -38,10 +40,13 @@ import java.lang.reflect.Field;
 import java.net.URI;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -59,6 +64,7 @@ import org.apache.hc.core5.http.io.entity.StringEntity;
 import org.apache.hc.core5.http.message.BasicClassicHttpResponse;
 import org.apache.hc.core5.http.message.BasicHeader;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -449,6 +455,69 @@ class ProcessorTest {
     }
 
     @Test
+    void workerAppliesTcpAuthApplicationsAndMtlsTransportOptions(@TempDir Path scenarioRoot) throws Exception {
+        Files.writeString(scenarioRoot.resolve("authProfiles.yaml"), """
+            profiles:
+              tcp-hmac:
+                type: HMAC_SIGNATURE
+                storage:
+                  mode: NONE
+                secretKey: signing-secret
+              mtls:
+                type: TLS_CLIENT_CERT
+                storage:
+                  mode: NONE
+                keyStorePath: /certs/client.p12
+                keyStorePassword: changeit
+                keyStoreType: PKCS12
+            """);
+        ProcessorWorkerProperties properties = newProcessorWorkerProperties();
+        properties.setConfig(Map.of("baseUrl", "tcp://tcp.example:9100"));
+        HttpClient httpClient = mock(HttpClient.class);
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC());
+        AtomicReference<TcpRequest> capturedRequest = new AtomicReference<>();
+        injectGlobalTransport(worker, "TCP", new TcpTransport() {
+            @Override
+            public TcpResponse execute(TcpRequest request, TcpBehavior behavior) {
+                capturedRequest.set(request);
+                return new TcpResponse(200, "pong".getBytes(java.nio.charset.StandardCharsets.UTF_8), 0L);
+            }
+
+            @Override
+            public void close() {
+            }
+        });
+        ProcessorWorkerConfig config = new ProcessorWorkerConfig("tcp://tcp.example:9100", null, 0, 0.0, null, null, null, null, null);
+        TestWorkerContext context = new TestWorkerContext(config);
+        WorkerInfo info = new WorkerInfo("ingress", "swarm", "ingress-instance", null, null);
+        WorkItem inbound = WorkItem.json(info, TcpRequestEnvelope.of(new TcpRequestEnvelope.TcpRequest(
+            "request_response",
+            "ping",
+            Map.of("X-Test", "true"),
+            null,
+            1024,
+            List.of(
+                new AuthRef("mtls", AuthApplyAs.MTLS_CLIENT_CERT, null, null, null),
+                new AuthRef("tcp-hmac", AuthApplyAs.HMAC_PAYLOAD_FIELD, null, null, "mac")
+            )
+        ))).build();
+
+        withScenarioRoot(scenarioRoot, () -> worker.onMessage(inbound, context));
+
+        TcpRequest request = capturedRequest.get();
+        assertThat(request).isNotNull();
+        assertThat(new String(request.payload(), java.nio.charset.StandardCharsets.UTF_8))
+            .matches("ping\\nmac=[0-9a-f]{64}");
+        assertThat(request.options())
+            .containsEntry("ssl", true)
+            .containsEntry("keyStorePath", "/certs/client.p12")
+            .containsEntry("keyStorePassword", "changeit")
+            .containsEntry("keyStoreType", "PKCS12");
+        assertThat(request.options()).doesNotContainKey("Authorization");
+        verify(httpClient, never()).execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class));
+    }
+
+    @Test
     void workerEmitsIso8583ResultEnvelope() throws Exception {
         byte[] requestPayload = hex("0200A1B2C3D4");
         byte[] responsePayload = hex("0210CAFEBABE");
@@ -495,6 +564,58 @@ class ProcessorTest {
             assertThat(server.lastRequestPayload()).containsExactly(requestPayload);
             verify(httpClient, never()).execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class));
         }
+    }
+
+    @Test
+    void workerAppliesIso8583MacAuthBeforeFraming(@TempDir Path scenarioRoot) throws Exception {
+        Files.writeString(scenarioRoot.resolve("authProfiles.yaml"), """
+            profiles:
+              iso-mac:
+                type: ISO8583_MAC
+                storage:
+                  mode: NONE
+                macKey: iso-secret
+            """);
+        ProcessorWorkerProperties properties = newProcessorWorkerProperties();
+        properties.setConfig(Map.of("baseUrl", "tcp://iso.example:5000"));
+        HttpClient httpClient = mock(HttpClient.class);
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC());
+        AtomicReference<TcpRequest> capturedRequest = new AtomicReference<>();
+        injectGlobalTransport(worker, "ISO8583", new TcpTransport() {
+            @Override
+            public TcpResponse execute(TcpRequest request, TcpBehavior behavior) {
+                capturedRequest.set(request);
+                return new TcpResponse(200, hex("0210CAFEBABE"), 0L);
+            }
+
+            @Override
+            public void close() {
+            }
+        });
+        ProcessorWorkerConfig config = new ProcessorWorkerConfig("tcp://iso.example:5000", null, 0, 0.0, null, null, null, null, null);
+        TestWorkerContext context = new TestWorkerContext(config);
+        WorkerInfo info = new WorkerInfo("ingress", "swarm", "ingress-instance", null, null);
+        WorkItem inbound = WorkItem.json(info, Iso8583RequestEnvelope.of(new Iso8583RequestEnvelope.Iso8583Request(
+            "MC_2BYTE_LEN_BIN_BITMAP",
+            "RAW_HEX",
+            "0200A1B2C3D4",
+            Map.of(),
+            null,
+            List.of(new AuthRef("iso-mac", AuthApplyAs.ISO8583_MAC_FIELD, null, null, null))
+        ))).build();
+
+        WorkItem result = withScenarioRoot(scenarioRoot, () -> worker.onMessage(inbound, context));
+
+        TcpRequest request = capturedRequest.get();
+        assertThat(request).isNotNull();
+        byte[] framed = request.payload();
+        int length = ((framed[0] & 0xFF) << 8) | (framed[1] & 0xFF);
+        assertThat(length).isEqualTo(38);
+        assertThat(framed).hasSize(40);
+        assertThat(Arrays.copyOfRange(framed, 2, 8)).containsExactly(hex("0200A1B2C3D4"));
+        JsonNode payload = MAPPER.readTree(result.asString());
+        assertThat(payload.path("request").path("payloadBytes").asInt()).isEqualTo(38);
+        verify(httpClient, never()).execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class));
     }
 
     @Test
@@ -951,12 +1072,18 @@ class ProcessorTest {
     @SuppressWarnings("unchecked")
     private static void injectGlobalTcpTransport(ProcessorWorkerImpl worker, TcpTransport transport)
         throws ReflectiveOperationException {
+        injectGlobalTransport(worker, "TCP", transport);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void injectGlobalTransport(ProcessorWorkerImpl worker, String protocol, TcpTransport transport)
+        throws ReflectiveOperationException {
         Field protocolHandlersField = ProcessorWorkerImpl.class.getDeclaredField("protocolHandlers");
         protocolHandlersField.setAccessible(true);
         Map<String, Object> protocolHandlers = (Map<String, Object>) protocolHandlersField.get(worker);
-        Object tcpHandler = protocolHandlers.get("TCP");
+        Object tcpHandler = protocolHandlers.get(protocol);
         if (tcpHandler == null) {
-            throw new IllegalStateException("TCP handler not registered");
+            throw new IllegalStateException(protocol + " handler not registered");
         }
 
         Field globalTransportField = tcpHandler.getClass().getDeclaredField("globalTransport");
@@ -966,6 +1093,25 @@ class ProcessorTest {
             previousTransport.close();
         }
         globalTransportField.set(tcpHandler, transport);
+    }
+
+    private static <T> T withScenarioRoot(Path scenarioRoot, ThrowingSupplier<T> action) throws Exception {
+        String previous = System.getProperty("pockethive.scenario.root");
+        System.setProperty("pockethive.scenario.root", scenarioRoot.toString());
+        try {
+            return action.get();
+        } finally {
+            if (previous == null) {
+                System.clearProperty("pockethive.scenario.root");
+            } else {
+                System.setProperty("pockethive.scenario.root", previous);
+            }
+        }
+    }
+
+    @FunctionalInterface
+    private interface ThrowingSupplier<T> {
+        T get() throws Exception;
     }
 
     private static WorkerDefinition processorDefinition() {

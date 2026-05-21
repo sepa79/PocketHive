@@ -17,6 +17,7 @@ import io.pockethive.worker.sdk.config.RabbitInputProperties;
 import io.pockethive.worker.sdk.config.RabbitOutputProperties;
 import io.pockethive.worker.sdk.config.RedisOutputProperties;
 import io.pockethive.worker.sdk.config.RedisDataSetInputProperties;
+import io.pockethive.worker.sdk.config.RedisSequenceProperties;
 import io.pockethive.worker.sdk.input.csv.CsvDataSetInputProperties;
 import io.pockethive.worker.sdk.config.SchedulerInputProperties;
 import io.pockethive.worker.sdk.config.WorkInputConfig;
@@ -95,7 +96,8 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 @EnableConfigurationProperties({
     PrometheusPushGatewayProperties.class,
     WorkerInputTypeProperties.class,
-    WorkerOutputTypeProperties.class
+    WorkerOutputTypeProperties.class,
+    RedisSequenceProperties.class
 })
 @Import({
     ControlPlaneCommonAutoConfiguration.class,

@@ -5,7 +5,6 @@ import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
-import java.nio.charset.StandardCharsets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,11 +37,8 @@ public class NioTransport implements TcpTransport {
             channel.socket().connect(new InetSocketAddress(request.host(), request.port()), connectTimeoutMs);
             channel.socket().setSoTimeout(readTimeoutMs);
 
-            if (logger.isDebugEnabled()) {
-                logger.debug("TCP_SEND host={} port={} bytes={} payload={}",
-                    request.host(), request.port(), request.payload().length,
-                    new String(request.payload(), StandardCharsets.UTF_8));
-            }
+            logger.debug("TCP_SEND host={} port={} bytes={} payload=<redacted>",
+                request.host(), request.port(), request.payload().length);
 
             ByteBuffer writeBuffer = ByteBuffer.wrap(request.payload());
             while (writeBuffer.hasRemaining()) {
@@ -57,11 +53,8 @@ public class NioTransport implements TcpTransport {
             byte[] response = ResponseReader.forBehavior(behavior).read(in, request);
             long latency = System.currentTimeMillis() - start;
 
-            if (logger.isDebugEnabled()) {
-                logger.debug("TCP_RECV host={} port={} bytes={} latency={}ms payload={}",
-                    request.host(), request.port(), response.length, latency,
-                    new String(response, StandardCharsets.UTF_8));
-            }
+            logger.debug("TCP_RECV host={} port={} bytes={} latency={}ms payload=<redacted>",
+                request.host(), request.port(), response.length, latency);
 
             return new TcpResponse(200, response, latency);
 

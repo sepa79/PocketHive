@@ -1,0 +1,17 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/oauth/token/six-step"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "access_token": "six-step-token",
+      "token_type": "Bearer",
+      "expires_in": 3600
+    }
+  }
+}

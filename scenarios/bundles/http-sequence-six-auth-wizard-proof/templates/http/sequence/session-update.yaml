@@ -1,0 +1,11 @@
+serviceId: sequence
+callId: session-update
+protocol: HTTP
+method: PUT
+pathTemplate: /api/wizard-proof/session
+headersTemplate:
+  content-type: application/json
+bodyTemplate: '{"step":"session-update","journeyId":"{{ payload.journeyId }}","sessionId":"{{ payload.sessionId }}","validationId":"{{ payload.validationId }}","state":"confirmed"}'
+authRef:
+  profileId: wizard-auth
+  applyAs: HTTP_AUTHORIZATION_BEARER

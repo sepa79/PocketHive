@@ -97,6 +97,11 @@ public class DebugTapService {
         return tap.snapshot();
     }
 
+    public DebugTapResponse describe(String tapId) {
+        cleanupExpired(Instant.now());
+        return requireTap(tapId).snapshot();
+    }
+
     public DebugTapResponse close(String tapId) {
         DebugTap tap = taps.remove(tapId);
         if (tap == null) {

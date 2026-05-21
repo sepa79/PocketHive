@@ -30,6 +30,7 @@ function buildCrumbs(pathname: string): Crumb[] {
   if (section === 'health') return [{ label: 'Home', to: '/' }, { label: 'Connectivity', to: '/health' }]
   if (section === 'help') return [{ label: 'Help', to: '/help' }]
   if (section === 'login') return [{ label: 'Login', to: '/login' }]
+  if (section === 'users') return [{ label: 'Users', to: '/users' }, ...parts.slice(1).map((p) => ({ label: p }))]
 
   return parts.map((p) => ({ label: p }))
 }

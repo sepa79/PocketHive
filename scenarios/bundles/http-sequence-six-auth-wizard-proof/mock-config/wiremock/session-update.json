@@ -1,0 +1,29 @@
+{
+  "name": "wizard-proof-session-auth-body-required",
+  "request": {
+    "method": "PUT",
+    "urlPath": "/api/wizard-proof/session",
+    "headers": {
+      "Authorization": {
+        "equalTo": "Bearer wizard-proof-token"
+      }
+    },
+    "bodyPatterns": [
+      {
+        "equalToJson": "{\"step\":\"session-update\",\"journeyId\":\"JRN-WIZ-9001\",\"sessionId\":\"SES-WIZ-9001\",\"validationId\":\"VAL-WIZ-9001\",\"state\":\"confirmed\"}"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "ok": true,
+      "callId": "session-update",
+      "sessionVersion": "SESSION-V3"
+    }
+  },
+  "priority": 1
+}

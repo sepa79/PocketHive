@@ -1,0 +1,11 @@
+serviceId: default
+callId: basic-auth
+protocol: HTTP
+method: POST
+pathTemplate: /api/auth-proof/request-builder/basic
+bodyTemplate: "{{ payload }}"
+headersTemplate:
+  content-type: application/json
+authRef:
+  profileId: basic
+  applyAs: HTTP_HEADER

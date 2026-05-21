@@ -1,0 +1,11 @@
+serviceId: sequence
+callId: profile
+protocol: HTTP
+method: GET
+pathTemplate: /api/six-auth/profile
+headersTemplate:
+  content-type: application/json
+  x-ph-proof-run: http-sequence-six-auth-flow
+authRef:
+  profileId: wizard-auth
+  applyAs: HTTP_AUTHORIZATION_BEARER

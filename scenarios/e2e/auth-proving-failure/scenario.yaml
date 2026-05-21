@@ -1,0 +1,51 @@
+id: auth-proving-failure
+name: Auth Proving - Failure Dedupe
+description: Proves auth failures fail explicitly and are bounded/redacted when the same worker repeats the same auth error.
+template:
+  image: swarm-controller:latest
+  bees:
+    - role: generator
+      image: generator:latest
+      config:
+        inputs:
+          type: SCHEDULER
+          scheduler:
+            ratePerSec: 1
+            maxMessages: 3
+        worker:
+          message:
+            bodyType: SIMPLE
+            body: '{"scenario":"auth-proving-failure","call":"bad-query-auth"}'
+            headers:
+              content-type: application/json
+              x-ph-call-id: bad-query-auth
+      work:
+        out:
+          out: build
+    - role: request-builder
+      image: request-builder:latest
+      config:
+        worker:
+          templateRoot: /app/scenario/templates/http
+          serviceId: default
+          passThroughOnMissingTemplate: false
+      work:
+        in:
+          in: build
+        out:
+          out: proc
+    - role: processor
+      image: processor:latest
+      config:
+        worker:
+          baseUrl: "{{ sut.endpoints['default'].baseUrl }}"
+      work:
+        in:
+          in: proc
+        out:
+          out: post
+    - role: postprocessor
+      image: postprocessor:latest
+      work:
+        in:
+          in: post

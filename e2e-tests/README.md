@@ -11,7 +11,7 @@ src/
   main/java/io/pockethive/e2e/
     config/              # Environment & credential handling
     clients/             # HTTP, messaging, and websocket clients
-    support/             # Shared assertions, polling helpers, and fixtures
+    support/             # Shared assertions, polling helpers, API helpers, and fixtures
   test/java/io/pockethive/e2e/
     CucumberE2ETest.java # JUnit Platform entry-point for Cucumber
     hooks/               # Before/After hooks for environment lifecycle management
@@ -51,8 +51,31 @@ start-e2e-tests.bat           # Windows
 Both wrappers accept additional Maven arguments, which are forwarded to the underlying `./mvnw verify -pl e2e-tests -am`
 command. When invoked without extra configuration, the scripts seed the environment with defaults that mirror the
 service container configuration (e.g. `http://localhost:8088/orchestrator`, `http://localhost:8088/scenario-manager`,
-`rabbitmq:5672` with the `guest/guest` account, and `ws://localhost:8088/ws`). Override any of these values by exporting
-the environment variables before launching the helper.
+`http://localhost:1083` for auth-service, `rabbitmq:5672` with the `guest/guest` account, and `ws://localhost:8088/ws`).
+Override any of these values by exporting the environment variables before launching the helper.
+
+The Unix helper also supports grouped execution so you do not need to rerun the entire 20-minute pack while iterating:
+
+```bash
+./start-e2e-tests.sh --list-groups
+./start-e2e-tests.sh --group smoke
+./start-e2e-tests.sh --group lifecycle,proxy
+./start-e2e-tests.sh --group data --tags @tcp-timeout
+```
+
+Available groups:
+
+| Group | Coverage |
+| --- | --- |
+| `smoke` | Platform health, auth smoke, and fast template/default contract checks |
+| `auth` | Authentication and scoped-access scenarios |
+| `contracts` | Template defaults, runtime-config, and contract verification |
+| `lifecycle` | Core swarm lifecycle and control-plane behaviour |
+| `proxy` | HTTP / HTTPS / TCPS proxy scenarios |
+| `data` | Timeout, Redis, ClickHouse, WebAuth, and other heavier data-plane scenarios |
+| `exports` | Clearing export scenarios |
+| `wip` | Work-in-progress scenarios only |
+| `all` | Entire pack except `@wip` |
 
 The deployment smoke feature runs automatically once the required environment variables are present; otherwise the
 scenario is skipped via JUnit assumptions so local builds without a running stack still succeed. The harness skeleton
@@ -67,6 +90,10 @@ Environment variables will be referenced by the harness once the step implementa
 | --- | --- |
 | `ORCHESTRATOR_BASE_URL` | Base URL (e.g. `http://localhost:8080`) for orchestrator REST calls. |
 | `SCENARIO_MANAGER_BASE_URL` | Base URL for querying available templates via the Scenario Manager. |
+| `NETWORK_PROXY_MANAGER_BASE_URL` | Base URL for querying proxy bindings. |
+| `AUTH_SERVICE_BASE_URL` | Base URL for the standalone auth-service used to obtain test bearer tokens. |
+| `POCKETHIVE_AUTH_USERNAME` | Default dev-login username for authenticated e2e scenarios (defaults to `local-admin`). |
+| `POCKETHIVE_AUTH_TOKEN` | Optional fixed bearer token to use instead of dev login. |
 | `RABBITMQ_HOST` | RabbitMQ hostname to probe (defaults to `rabbitmq`). |
 | `RABBITMQ_PORT` | RabbitMQ port (defaults to `5672`). |
 | `RABBITMQ_DEFAULT_USER` | Username used for AMQP connectivity checks (defaults to `guest`). |
@@ -83,6 +110,60 @@ Environment variables will be referenced by the harness once the step implementa
 The harness consumes the same RabbitMQ environment variables as the orchestrator's Spring Boot configuration. Configure
 them once (for example in your shell profile or deployment manifest) and both the service and the smoke checks will
 point at the same broker.
+
+## Auth/API rollout pack
+
+`features/auth-access.feature` is the ingress-based pack for auth rollout coverage. Treat it as the default place to
+add coverage when a new protected API surface is introduced or an auth policy changes.
+
+Support structure for this pack:
+
+- `support/api/ApiService` is the canonical mapping from pack-visible service names to ingress base URLs.
+- `support/api/IngressApiDriver` owns raw authenticated or unauthenticated HTTP execution over official ingress paths.
+- `support/api/ApiPlaceholderResolver` owns scenario-local placeholders like `{{swarm:...}}` and `{{value:...}}`.
+- `support/auth/AuthRolloutFixtures` owns reusable auth rollout users and grants used by the pack.
+- Step classes should compose these support types rather than adding new local service-switches or ad-hoc `WebClient` wiring.
+
+Rules for extending it:
+
+- Use the generic raw-call steps in `AuthSteps` before adding new bespoke client helpers.
+- Every new protected surface should cover at least one allowed request and one denied or unauthenticated request.
+- Keep calls on the official ingress/base URLs exposed through `EnvironmentConfig`; do not point scenarios at direct
+  service container ports.
+- Prefer stable API paths and compact JSON bodies so scenarios stay readable and diff-friendly.
+- If the endpoint needs a live swarm, create one with the existing auth steps and reuse it inside the same scenario.
+- If you need new auth test users or grants, add them in `AuthRolloutFixtures` instead of inlining user provisioning in a step class.
+- If you need a new ingress-visible service, add it to `ApiService` rather than branching on raw strings inside steps.
+- If a scenario starts needing complex setup or response parsing, extract a focused support helper first; keep feature files declarative.
+
+Reusable placeholders supported by the raw-call steps:
+
+- `{{swarm:<alias>}}` resolves a swarm id created earlier in the scenario via `I try to create swarm "<alias>" ...`.
+- `{{value:<key>}}` resolves a dynamic value captured from a previous JSON response.
+
+Reusable extraction step:
+
+- `I remember the last response value at JSON pointer "<pointer>" as "<key>"`
+- Use JSON Pointer syntax such as `/tapId`, `/envelope/scope/instance`, or `/0/runId`.
+
+Scenario Manager workspace note:
+
+- `POST /scenarios/folders` and related folder mutations cannot target reserved workspace roots like `e2e/`; the service rejects those paths by design.
+- When you need a folder-scoped write test, provision a user for a writable folder such as `bundles` and keep the scenario path under that scope.
+
+Recommended workflow for adding a new API row:
+
+1. Pick the closest existing auth scenario in `auth-access.feature`, or add a new one if the surface has different
+   lifecycle/setup needs.
+2. Add a denied or unauthenticated raw call first so the protection boundary is explicit.
+3. Add an allowed raw call that reaches business logic for the intended scope.
+4. If the endpoint needs runtime values like `runId` or controller instance ids, capture them with the JSON Pointer
+   step and reuse them through `{{value:...}}`.
+5. Only add a dedicated client/helper method when the generic raw-call step becomes unreadable or the same payload
+   shape repeats across multiple scenarios.
+
+This pack is intentionally small and data-driven so it can grow into a more dedicated PocketHive API auth framework
+without throwing away the existing Cucumber coverage.
 
 ## Phase roadmap reference
 

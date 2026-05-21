@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.15.19]
+Timestamp: 2026-05-15T16:21:00Z
+
+- MCP / IDE plugin POC: mature the PocketHive MCP server into an API-backed integration layer with guarded bundle-file access, explicit tool contracts, no shell/devops tools, and a documented developer/POC runbook.
+- MCP wizard and Apps: add a novice `wizard.*` authoring path that generates scenario bundles plus docs/mock artifacts, and expose a read-only MCP App evidence widget backed by `evidence.summary`.
+- VS Code plugin MCP routing: route Buzz, Journal, scenario file IO, scenario preview, swarm commands, and scenario capability reads through the local MCP server so PocketHive API auth is handled in one place.
+- VS Code plugin environment UX: add MCP-backed environment status checks so configured profiles show active, inactive, inaccessible, degraded, auth-required, or invalid states in the Settings view.
+- MCP client setup: align repo-level MCP configs for Codex-compatible root config, Cursor, Windsurf, and Amazon Q with the local PocketHive environment, auth username, bundles root, and environment metadata.
+- Scenario bundle ownership: document that authoring bundles should normally live in a separate scenario-bundles repository, with in-repo `scenarios/bundles` treated as legacy/example smoke content.
+- Scenario Manager integration: document and wire contract-first authoring flows around Scenario Manager capabilities, authoring contracts, dry-run validation, and cached contract reads for maintainable wizard behavior.
+- Runtime control: add `component.config-preview` and harden `component.config-update` so runtime tuning reads the current exact component config from Orchestrator evidence or the live control-plane status stream, deep-merges requested changes, and fails closed instead of sending partial config that could drop existing fields.
+- Tooling quality: add MCP POC coverage for wizard/App/control-tool discovery and live config preview/update, a wizard acceptance suite for REST/WireMock, sequence/OAuth, TCP/mTLS, Redis dataset, and invalid-input guard flows, focused Node tests for config merge behavior, plus auth-proving runner support for token/dev-login secured local stacks.
+
+## [0.15.18]
+Timestamp: 2026-05-08T16:25:51Z
+
+- **BREAKING** Auth: replace legacy global/inline template auth with worker-scoped `authProfiles.yaml` plus template `authRef`, rejecting inline `auth:`, duplicate profile keys, missing profiles, and unsupported apply modes explicitly.
+- Auth lifecycle: add Redis-only durable token records, leases, due-index scheduling, profile fingerprint collision checks, and Testcontainers-backed Redis lifecycle coverage for environments without a local Redis.
+- Auth application: apply token material through typed HTTP, TCP, ISO8583, and mTLS paths across request-builder, HTTP sequence, and processor workers, with redacted failures and first-failure journal dedupe.
+- Auth proving: add committed E2E auth proving scenarios, evidence docs, and a runner covering HTTP, sequence, TCP, ISO8583, mTLS, auth failure dedupe, token-key collisions, no-auth worker cleanliness, and stop/start token reuse.
+- UI v2 / Hive create-swarm: replace the hand-built scenario folder list with a `react-arborist` explorer-style tree for scenario selection, keeping folder/file visual distinction explicit without reusing the Scenarios admin view.
+- UI v2 / Hive create-swarm UX: stabilize scenario-tree interactions so selection no longer remounts the tree, folders stay open while browsing, defunct badges stop flickering, and parent folders open for the selected scenario without resetting the whole list.
+- UI v2 / Hive create-swarm form: keep `Bundle SUT` mounted at all times with an explicit unavailable state, rename template-oriented copy to scenario-oriented copy, surface defunct scenarios with muted titles, and move the `Pull images` toggle next to the `Create` action with stronger visual emphasis.
+
 ## [0.15.17]
 Timestamp: 2026-04-14T16:14:56Z
 

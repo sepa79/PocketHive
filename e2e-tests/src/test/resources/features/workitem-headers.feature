@@ -1,3 +1,4 @@
+@group-lifecycle
 Feature: WorkItem header separation
 
   Background:

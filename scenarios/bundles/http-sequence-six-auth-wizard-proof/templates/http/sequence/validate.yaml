@@ -1,0 +1,11 @@
+serviceId: sequence
+callId: validate
+protocol: HTTP
+method: POST
+pathTemplate: /api/wizard-proof/validate
+headersTemplate:
+  content-type: application/json
+bodyTemplate: '{"step":"validate","customerId":"{{ payload.customerId }}","journeyId":"{{ payload.journeyId }}","sessionId":"{{ payload.sessionId }}","profileVersion":"{{ payload.profileVersion }}"}'
+authRef:
+  profileId: wizard-auth
+  applyAs: HTTP_AUTHORIZATION_BEARER

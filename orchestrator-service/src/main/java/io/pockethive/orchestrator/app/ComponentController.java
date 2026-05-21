@@ -10,6 +10,7 @@ import io.pockethive.controlplane.messaging.SignalMessage;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.observability.ControlPlaneJson;
+import io.pockethive.orchestrator.auth.OrchestratorEndpointAuthorization;
 import io.pockethive.orchestrator.domain.IdempotencyStore;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import org.slf4j.Logger;
@@ -38,16 +39,19 @@ public class ComponentController {
 	    private final IdempotencyStore idempotency;
 	    private final String originInstanceId;
 	    private final SwarmStore store;
+        private final OrchestratorEndpointAuthorization endpointAuthorization;
 
 	    public ComponentController(
 	        ControlPlanePublisher controlPublisher,
 	        IdempotencyStore idempotency,
 	        SwarmStore store,
-	        ControlPlaneProperties controlPlaneProperties) {
+	        ControlPlaneProperties controlPlaneProperties,
+            OrchestratorEndpointAuthorization endpointAuthorization) {
 	        this.controlPublisher = controlPublisher;
 	        this.idempotency = idempotency;
 	        this.store = store;
 	        this.originInstanceId = requireOrigin(controlPlaneProperties);
+            this.endpointAuthorization = endpointAuthorization;
 	    }
 
     @PostMapping("/{role}/{instance}/config")
@@ -57,6 +61,11 @@ public class ComponentController {
         String path = "/api/components/" + role + "/" + instance + "/config";
         logRestRequest("POST", path, request);
         String swarmId = request.swarmId();
+        if (swarmId == null || swarmId.isBlank()) {
+            endpointAuthorization.requireManageDeployment();
+        } else {
+            endpointAuthorization.requireManageSwarm(swarmId);
+        }
         String scope = scope(role, instance, swarmId);
         String swarmSegment = segmentOrAll(swarmId);
         String newCorrelation = UUID.randomUUID().toString();

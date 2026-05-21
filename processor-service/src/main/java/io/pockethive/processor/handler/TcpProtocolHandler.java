@@ -16,8 +16,13 @@ import com.fasterxml.jackson.databind.ObjectReader;
 import io.pockethive.worker.sdk.api.TcpRequestEnvelope;
 import io.pockethive.worker.sdk.api.TcpResultEnvelope;
 import io.pockethive.processor.transport.*;
+import io.pockethive.worker.sdk.auth.AuthApplyAs;
+import io.pockethive.worker.sdk.auth.AuthRef;
+import io.pockethive.worker.sdk.auth.AuthRuntime;
 import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerContext;
+import io.pockethive.worker.sdk.config.RedisSequenceProperties;
+import io.pockethive.worker.sdk.templating.TemplateRenderer;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.util.LinkedHashMap;
@@ -34,6 +39,8 @@ public class TcpProtocolHandler implements ProtocolHandler {
   private final CallMetricsRecorder metricsRecorder;
   private final TcpTransportConfig defaultConfig;
   private final AtomicLong nextAllowedTimeNanos;
+  private final TemplateRenderer templateRenderer;
+  private final RedisSequenceProperties redisProperties;
   private final Object transportLock = new Object();
 
   private volatile TcpTransportConfig activeConfig;
@@ -44,7 +51,9 @@ public class TcpProtocolHandler implements ProtocolHandler {
                             Clock clock,
                             CallMetricsRecorder metricsRecorder,
                             TcpTransportConfig defaultConfig,
-                            AtomicLong nextAllowedTimeNanos) {
+                            AtomicLong nextAllowedTimeNanos,
+                            TemplateRenderer templateRenderer,
+                            RedisSequenceProperties redisProperties) {
     this.mapper = mapper;
     this.strictEnvelopeReader = mapper.readerFor(TcpRequestEnvelope.class)
         .with(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
@@ -52,6 +61,8 @@ public class TcpProtocolHandler implements ProtocolHandler {
     this.metricsRecorder = metricsRecorder;
     this.defaultConfig = defaultConfig == null ? TcpTransportConfig.defaults() : defaultConfig;
     this.nextAllowedTimeNanos = nextAllowedTimeNanos == null ? new AtomicLong(0L) : nextAllowedTimeNanos;
+    this.templateRenderer = templateRenderer;
+    this.redisProperties = redisProperties;
     reloadTransports(this.defaultConfig);
   }
 
@@ -104,6 +115,19 @@ public class TcpProtocolHandler implements ProtocolHandler {
     }
     String endTag = request.endTag();
     Integer maxBytes = request.maxBytes();
+    String requestBody = body.get();
+    Map<String, Object> authTransportOptions = Map.of();
+    if (request.authApplications() != null && !request.authApplications().isEmpty()) {
+      AuthRuntime authRuntime = AuthRuntime.forApplications(
+          request.authApplications(), Map.of(), context, templateRenderer, redisProperties);
+      for (AuthRef authRef : request.authApplications()) {
+        if (authRef.applyAs() == AuthApplyAs.MTLS_CLIENT_CERT) {
+          authTransportOptions = authRuntime.transportOptions(authRef, context);
+        } else {
+          requestBody = authRuntime.applyTcpBody(authRef, requestBody, message, context);
+        }
+      }
+    }
 
     long start = clock.millis();
     long pacingMillis = 0L;
@@ -122,7 +146,8 @@ public class TcpProtocolHandler implements ProtocolHandler {
       options.put("maxBytes", maxBytes != null ? maxBytes : config.maxBytes());
       options.put("ssl", useSsl);
       options.put("sslVerify", config.sslVerify());
-      TcpRequest tcpRequest = new TcpRequest(host, port, body.get().getBytes(StandardCharsets.UTF_8), options);
+      options.putAll(authTransportOptions);
+      TcpRequest tcpRequest = new TcpRequest(host, port, requestBody.getBytes(StandardCharsets.UTF_8), options);
 
       // Connection reuse strategy
       transport = switch (config.connectionReuse()) {
@@ -177,7 +202,7 @@ public class TcpProtocolHandler implements ProtocolHandler {
       String responseBody = new String(response.body(), StandardCharsets.UTF_8);
       Map<String, Object> extractionHeaders = ResultRulesExtractor.extract(
           requestEnvelope.resultRules(),
-          body.get(),
+          requestBody,
           request.headers(),
           responseBody,
           Map.of()

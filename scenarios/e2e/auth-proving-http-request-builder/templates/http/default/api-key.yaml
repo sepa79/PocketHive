@@ -1,0 +1,12 @@
+serviceId: default
+callId: api-key
+protocol: HTTP
+method: POST
+pathTemplate: /api/auth-proof/request-builder/api-key
+bodyTemplate: "{{ payload }}"
+headersTemplate:
+  content-type: application/json
+authRef:
+  profileId: api-key
+  applyAs: HTTP_HEADER
+  headerName: X-Api-Key

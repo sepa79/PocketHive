@@ -223,10 +223,10 @@ Keep configuration **explicit**—favor declaring values over hidden defaults.
 
 ### Local Development
 1. Install Docker and Java 21.
-2. Run `./build-hive.sh` to clean previous runs, build the jars + images and launch RabbitMQ, services and the UI in one go.
-   - Alternatively run `docker compose up -d` directly to start the stack with your existing images.
+2. Run `./build-hive.sh` to rebuild the local jars + images and redeploy RabbitMQ, services and the UI in one go.
+   - Alternatively run `docker compose up -d` directly when you only want to start the stack with your existing images.
    - Useful flags:
-     - `--quick` skips tests during Maven build.
+     - `--quick` skips tests during Maven build, but for full-stack runs it still tears down and restarts the local compose stack.
      - `--service <name>` or `--module <module>` rebuilds targeted services (e.g., `--service generator --module orchestrator-service`), independent of `--restart`.
 3. Open <http://localhost:8088>. Only the Orchestrator (Queen) runs initially. Create and start swarms from the Hive view by selecting a scenario.
 

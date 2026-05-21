@@ -3,7 +3,6 @@ capabilitiesVersion: "1.2"
 role: io-redis-dataset
 image:
   name: io-redis-dataset
-  tag: latest
 ui:
   label: "Redis dataset IO"
   ioType: "REDIS_DATASET"

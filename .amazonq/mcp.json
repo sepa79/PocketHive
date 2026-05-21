@@ -1,0 +1,40 @@
+{
+  "mcpServers": {
+    "pockethive-bundles": {
+      "command": "node",
+      "args": [
+        "tools/pockethive-mcp/start.cjs"
+      ],
+      "env": {
+        "POCKETHIVE_BASE_URL": "http://localhost:8088",
+        "POCKETHIVE_AUTH_USERNAME": "local-admin",
+        "POCKETHIVE_ROOT": ".",
+        "BUNDLES_ROOT": "../pockethive-scenario-bundles",
+        "PH_BUNDLES_ROOTS": "[\"../pockethive-scenario-bundles\"]",
+        "PH_ACTIVE_ENVIRONMENT": "local",
+        "PH_ENVIRONMENTS": "[{\"name\":\"local\",\"baseUrl\":\"http://localhost:8088\",\"authUsername\":\"local-admin\",\"rabbitUser\":\"guest\",\"tcpMockUrl\":\"http://localhost:8083\",\"wiremockUrl\":\"http://localhost:8080\"}]"
+      },
+      "disabled": false
+    },
+    "atlassian": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "https://mcp.atlassian.com/v1/mcp"
+      ],
+      "disabled": true
+    },
+    "hivemind": {
+      "command": "node",
+      "args": [
+        "../../HiveMind/HiveMind/hivemind-mcp/src/server.mjs"
+      ],
+      "env": {
+        "HIVEMIND_API_BASE_URL": "http://localhost:4010"
+      },
+      "timeout": 60000,
+      "disabled": false
+    }
+  }
+}

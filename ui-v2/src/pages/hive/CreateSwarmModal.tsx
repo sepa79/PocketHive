@@ -1,5 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import YAML from 'yaml'
+import { MonacoEditorHost } from '../../components/MonacoEditorHost'
+import { BundleFileTree } from '../../components/scenarios/BundleFileTree'
+import { ScenarioTree } from '../../components/scenarios/ScenarioTree'
+import { useAuth } from '../../lib/authContext'
+import { monacoLanguageForBundleFile } from '../../lib/bundleEditor'
+import { readBundleFile, readBundleTree, type BundleFilePayload, type BundleTreeNode } from '../../lib/scenariosApi'
+import { newUuid } from '../../lib/uuid'
 
 type BeeSummary = {
   role: string
@@ -42,10 +49,7 @@ const ORCHESTRATOR_BASE = '/orchestrator/api'
 const TEMPLATES_ENDPOINT = '/scenario-manager/api/templates'
 
 function createIdempotencyKey() {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-    return crypto.randomUUID()
-  }
-  return `ph-${Date.now()}-${Math.random().toString(16).slice(2)}`
+  return `ph-${newUuid()}`
 }
 
 async function readErrorMessage(response: Response): Promise<string> {
@@ -106,70 +110,10 @@ function normalizeTemplates(data: unknown): ScenarioTemplate[] {
     .filter((template): template is ScenarioTemplate => template !== null)
 }
 
-type TemplateFolderNode = {
-  name: string
-  path: string
-  children: TemplateFolderNode[]
-  templates: ScenarioTemplate[]
-}
-
 function templateMatchesNeedle(template: ScenarioTemplate, needle: string): boolean {
   if (!needle) return true
   const haystack = `${template.folderPath ?? ''} ${template.bundlePath} ${template.id ?? ''} ${template.name} ${template.description ?? ''}`.toLowerCase()
   return haystack.includes(needle)
-}
-
-function buildTemplateFolderTree(templates: ScenarioTemplate[]): { folders: TemplateFolderNode[]; rootTemplates: ScenarioTemplate[] } {
-  const rootTemplates: ScenarioTemplate[] = []
-  type MutableNode = { name: string; path: string; children: Map<string, MutableNode>; templates: ScenarioTemplate[] }
-  type RootNode = { children: Map<string, MutableNode>; templates: ScenarioTemplate[] }
-  const root: RootNode = { children: new Map(), templates: [] }
-
-  const ensureNode = (parent: RootNode | MutableNode, name: string, path: string): MutableNode => {
-    const existing = parent.children.get(name)
-    if (existing) return existing
-    const created: MutableNode = { name, path, children: new Map<string, MutableNode>(), templates: [] }
-    parent.children.set(name, created)
-    return created
-  }
-
-  for (const template of templates) {
-    const folderPath = template.folderPath
-    if (!folderPath) {
-      rootTemplates.push(template)
-      continue
-    }
-    const segments = folderPath.split('/').map((seg) => seg.trim()).filter((seg) => seg.length > 0)
-    if (segments.length === 0) {
-      rootTemplates.push(template)
-      continue
-    }
-    let current: RootNode | MutableNode = root
-    let currentPath = ''
-    for (const segment of segments) {
-      currentPath = currentPath ? `${currentPath}/${segment}` : segment
-      current = ensureNode(current, segment, currentPath)
-    }
-    current.templates.push(template)
-  }
-
-  const finalize = (node: any): TemplateFolderNode => {
-    const children = Array.from(node.children.values()).map(finalize).sort((a, b) => a.name.localeCompare(b.name))
-    const templatesSorted = [...node.templates].sort((a, b) => a.name.localeCompare(b.name))
-    return { name: node.name, path: node.path, children, templates: templatesSorted }
-  }
-
-  const folders = Array.from(root.children.values()).map(finalize).sort((a, b) => a.name.localeCompare(b.name))
-  rootTemplates.sort((a, b) => a.name.localeCompare(b.name))
-  return { folders, rootTemplates }
-}
-
-function countTemplates(node: TemplateFolderNode): number {
-  let count = node.templates.length
-  for (const child of node.children) {
-    count += countTemplates(child)
-  }
-  return count
 }
 
 function extractVariablesMeta(yamlText: string): VariablesMeta {
@@ -215,10 +159,18 @@ export function CreateSwarmModal({
   onClose: () => void
   onCreated: () => void
 }) {
+  const auth = useAuth()
   const [templates, setTemplates] = useState<ScenarioTemplate[]>([])
   const [templatesLoaded, setTemplatesLoaded] = useState(false)
   const [templateFilter, setTemplateFilter] = useState('')
   const [selectedBundleKey, setSelectedBundleKey] = useState('')
+  const [bundleTreeNodes, setBundleTreeNodes] = useState<BundleTreeNode[]>([])
+  const [bundleTreeLoading, setBundleTreeLoading] = useState(false)
+  const [bundleTreeError, setBundleTreeError] = useState<string | null>(null)
+  const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null)
+  const [selectedFile, setSelectedFile] = useState<BundleFilePayload | null>(null)
+  const [selectedFileLoading, setSelectedFileLoading] = useState(false)
+  const [selectedFileError, setSelectedFileError] = useState<string | null>(null)
   const [swarmId, setSwarmId] = useState('')
   const [autoPullImages, setAutoPullImages] = useState(false)
 
@@ -390,14 +342,95 @@ export function CreateSwarmModal({
     return templates.filter((template) => templateMatchesNeedle(template, needle))
   }, [templateFilter, templates])
 
-  const selectedTemplate = useMemo(
-    () => templates.find((template) => template.bundleKey === selectedBundleKey) ?? null,
-    [selectedBundleKey, templates],
+  const runnableTemplates = useMemo(
+    () =>
+      filteredTemplates.filter((template) => auth.canRunBundle(template.bundlePath, template.folderPath)),
+    [auth, filteredTemplates],
   )
 
-  const hasAnyFolder = useMemo(() => templates.some((template) => Boolean(template.folderPath)), [templates])
+  const selectedTemplate = useMemo(
+    () => runnableTemplates.find((template) => template.bundleKey === selectedBundleKey) ?? null,
+    [runnableTemplates, selectedBundleKey],
+  )
 
-  const tree = useMemo(() => buildTemplateFolderTree(filteredTemplates), [filteredTemplates])
+  useEffect(() => {
+    if (!open || !selectedTemplate) {
+      setBundleTreeNodes([])
+      setBundleTreeError(null)
+      setBundleTreeLoading(false)
+      setSelectedFilePath(null)
+      setSelectedFile(null)
+      setSelectedFileError(null)
+      setSelectedFileLoading(false)
+      return
+    }
+
+    let cancelled = false
+    setBundleTreeLoading(true)
+    setBundleTreeError(null)
+    setBundleTreeNodes([])
+    setSelectedFilePath(null)
+    setSelectedFile(null)
+    setSelectedFileError(null)
+
+    readBundleTree(selectedTemplate.bundleKey)
+      .then((tree) => {
+        if (cancelled) return
+        setBundleTreeNodes(tree.nodes)
+        const preferred = tree.nodes.find((node) => node.nodeType === 'file' && node.path === 'scenario.yaml')
+          ?? tree.nodes.find((node) => node.nodeType === 'file' && node.editorKind !== 'unsupported')
+          ?? tree.nodes.find((node) => node.nodeType === 'file')
+          ?? null
+        setSelectedFilePath(preferred?.path ?? null)
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return
+        setBundleTreeNodes([])
+        setBundleTreeError(err instanceof Error ? err.message : 'Failed to load bundle files')
+      })
+      .finally(() => {
+        if (!cancelled) setBundleTreeLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [open, selectedTemplate])
+
+  useEffect(() => {
+    if (!open || !selectedTemplate || !selectedFilePath) {
+      setSelectedFile(null)
+      setSelectedFileError(null)
+      setSelectedFileLoading(false)
+      return
+    }
+
+    let cancelled = false
+    setSelectedFileLoading(true)
+    setSelectedFileError(null)
+    setSelectedFile(null)
+
+    readBundleFile(selectedTemplate.bundleKey, selectedFilePath)
+      .then((file) => {
+        if (!cancelled) setSelectedFile(file)
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setSelectedFileError(err instanceof Error ? err.message : 'Failed to load bundle file')
+      })
+      .finally(() => {
+        if (!cancelled) setSelectedFileLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [open, selectedTemplate, selectedFilePath])
+
+  useEffect(() => {
+    if (!selectedBundleKey) return
+    if (runnableTemplates.some((template) => template.bundleKey === selectedBundleKey)) return
+    setSelectedBundleKey('')
+  }, [runnableTemplates, selectedBundleKey])
 
   const openFolderPaths = useMemo(() => {
     const needle = templateFilter.trim()
@@ -417,44 +450,6 @@ export function CreateSwarmModal({
   const requiresProfile = variablesMeta.exists && (variablesMeta.hasGlobalVars || variablesMeta.hasSutVars)
   const requiresSut = variablesMeta.exists && variablesMeta.hasSutVars
 
-  const renderTemplateButton = (template: ScenarioTemplate) => (
-    <button
-      key={template.bundleKey}
-      type="button"
-      className={template.bundleKey === selectedBundleKey ? 'swarmTemplateItem swarmTemplateItemSelected' : 'swarmTemplateItem'}
-      onClick={() => setSelectedBundleKey(template.bundleKey)}
-      aria-label={template.name}
-      title={template.defunct ? (template.defunctReason ?? 'This bundle is defunct') : undefined}
-      style={template.defunct ? { opacity: 0.55 } : undefined}
-    >
-      <div className="row between">
-        <div className="swarmTemplateTitle">{template.name}</div>
-        {template.defunct ? <span className="pill pillBad" style={{ fontSize: 10 }}>DEFUNCT</span> : null}
-      </div>
-      <div className="swarmTemplateId">
-        {template.bundlePath}
-      </div>
-      <div className="swarmTemplateDesc">
-        {template.defunct ? (template.defunctReason ?? 'This bundle is unavailable') : (template.description ?? 'No description')}
-      </div>
-    </button>
-  )
-
-  const renderFolderNode = (node: TemplateFolderNode): React.ReactNode => {
-    const open = openFolderPaths === null ? true : openFolderPaths.has(node.path)
-    return (
-      <details key={node.path} open={open}>
-        <summary aria-label={`folder ${node.path}`} className="muted" style={{ cursor: 'pointer', padding: '6px 8px' }}>
-          {node.name} <span className="muted">({countTemplates(node)})</span>
-        </summary>
-        <div style={{ marginLeft: 12 }}>
-          {node.children.map((child) => renderFolderNode(child))}
-          {node.templates.map((template) => renderTemplateButton(template))}
-        </div>
-      </details>
-    )
-  }
-
   const handleCreate = useCallback(
     async (event: React.FormEvent) => {
       event.preventDefault()
@@ -463,14 +458,14 @@ export function CreateSwarmModal({
       setMessage(null)
 
       const trimmedSwarmId = swarmId.trim()
-      const selectedTemplate = templates.find((template) => template.bundleKey === selectedBundleKey) ?? null
+      const selectedTemplate = runnableTemplates.find((template) => template.bundleKey === selectedBundleKey) ?? null
       const trimmedTemplateId = selectedTemplate?.id?.trim() ?? ''
       const trimmedSutId = sutId.trim()
       const trimmedProfileId = variablesProfileId.trim()
       const trimmedNetworkProfileId = networkProfileId.trim()
 
       if (!selectedTemplate) {
-        setError('Swarm ID and template are required.')
+        setError('Swarm ID and scenario are required.')
         return
       }
       if (selectedTemplate.defunct) {
@@ -478,7 +473,7 @@ export function CreateSwarmModal({
         return
       }
       if (!trimmedSwarmId || !trimmedTemplateId) {
-        setError('Swarm ID and template are required.')
+        setError('Swarm ID and scenario are required.')
         return
       }
 
@@ -522,6 +517,9 @@ export function CreateSwarmModal({
         setSwarmId('')
         setSelectedBundleKey('')
         setTemplateFilter('')
+        setBundleTreeNodes([])
+        setSelectedFilePath(null)
+        setSelectedFile(null)
         setAutoPullImages(false)
         setSutIds([])
         setSutId('')
@@ -537,7 +535,7 @@ export function CreateSwarmModal({
         setBusy(false)
       }
     },
-    [autoPullImages, busy, networkMode, networkProfileId, networkProfiles.length, onClose, onCreated, requiresProfile, requiresSut, selectedBundleKey, swarmId, sutId, templates, variablesProfileId],
+    [autoPullImages, busy, networkMode, networkProfileId, networkProfiles.length, onClose, onCreated, requiresProfile, requiresSut, runnableTemplates, selectedBundleKey, swarmId, sutId, variablesProfileId],
   )
 
   if (!open) return null
@@ -548,7 +546,7 @@ export function CreateSwarmModal({
         <div className="modalHeader">
           <div>
             <div className="h2">Create swarm</div>
-            <div className="muted">Provision a controller from a scenario template.</div>
+            <div className="muted">Provision a controller from a scenario bundle.</div>
           </div>
           <button type="button" className="actionButton actionButtonGhost" onClick={onClose}>
             Close
@@ -585,21 +583,22 @@ export function CreateSwarmModal({
               </select>
             </label>
 
-            {hasBundleSuts || requiresSut ? (
-              <label className="field">
-                <span className="fieldLabel">Bundle SUT{requiresSut ? ' (required)' : ''}</span>
-                <select className="textInput" value={sutId} onChange={(event) => setSutId(event.target.value)}>
-                  <option value="">(none)</option>
-                  {sutIds.map((id) => (
-                    <option key={id} value={id}>
-                      {id}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : (
-              <div />
-            )}
+            <label className="field">
+              <span className="fieldLabel">Bundle SUT{requiresSut ? ' (required)' : ''}</span>
+              <select
+                className="textInput"
+                value={sutId}
+                onChange={(event) => setSutId(event.target.value)}
+                disabled={!hasBundleSuts}
+              >
+                <option value="">{hasBundleSuts ? '(none)' : '(none available)'}</option>
+                {sutIds.map((id) => (
+                  <option key={id} value={id}>
+                    {id}
+                  </option>
+                ))}
+              </select>
+            </label>
 
             {networkMode === 'PROXIED' ? (
               <label className="field">
@@ -649,42 +648,38 @@ export function CreateSwarmModal({
           <div className="swarmTemplatePicker swarmTemplatePickerGrow" style={{ marginTop: 12 }}>
             <div className="swarmTemplateList">
               <div className="swarmTemplateListHeader">
-                <span>Templates</span>
+                <span>Scenarios</span>
                 <input
                   className="textInput textInputCompact"
                   value={templateFilter}
                   onChange={(event) => setTemplateFilter(event.target.value)}
-                  placeholder="Filter"
-                  aria-label="Template filter"
+                  placeholder="Filter scenarios"
+                  aria-label="Scenario filter"
                 />
               </div>
               <div className="swarmTemplateListBody">
                 {!templatesLoaded ? (
-                  <div className="muted">Loading templates…</div>
-                ) : filteredTemplates.length === 0 ? (
-                  <div className="muted">No templates found.</div>
+                  <div className="muted">Loading scenarios…</div>
+                ) : runnableTemplates.length === 0 ? (
+                  <div className="muted">
+                    {auth.canRunPocketHive ? 'No runnable scenarios found.' : 'PocketHive RUN permission required.'}
+                  </div>
                 ) : (
                   <>
-                    {templates.some((template) => template.defunct) ? (
+                    {runnableTemplates.some((template) => template.defunct) ? (
                       <div className="muted" style={{ fontSize: 11, padding: '4px 0' }}>
-                        {templates.filter((template) => template.defunct).length} bundle(s) are defunct and shown as non-runnable
+                        {runnableTemplates.filter((template) => template.defunct).length} bundle(s) are defunct and shown as non-runnable
                       </div>
                     ) : null}
-                    {hasAnyFolder ? (
-                      <div>
-                        {tree.folders.map((folder) => renderFolderNode(folder))}
-                        {tree.rootTemplates.length > 0 ? (
-                          <details open={openFolderPaths === null || Boolean(selectedTemplate && !selectedTemplate.folderPath)}>
-                            <summary className="muted" style={{ cursor: 'pointer', padding: '6px 8px' }}>
-                              (root) <span className="muted">({tree.rootTemplates.length})</span>
-                            </summary>
-                            <div style={{ marginLeft: 12 }}>{tree.rootTemplates.map((template) => renderTemplateButton(template))}</div>
-                          </details>
-                        ) : null}
-                      </div>
-                    ) : (
-                      filteredTemplates.map((template) => renderTemplateButton(template))
-                    )}
+                    <ScenarioTree
+                      items={runnableTemplates}
+                      selectedBundleKey={selectedBundleKey}
+                      onSelectBundle={setSelectedBundleKey}
+                      searchTerm={templateFilter}
+                      openPaths={openFolderPaths}
+                      rowHeight={30}
+                      emptyMessage="No scenarios found."
+                    />
                   </>
                 )}
               </div>
@@ -692,7 +687,9 @@ export function CreateSwarmModal({
             <div className="swarmTemplateDetail">
               {selectedTemplate ? (
                 <>
-                  <div className="swarmTemplateTitle">{selectedTemplate.name}</div>
+                  <div className={selectedTemplate.defunct ? 'swarmTemplateTitle swarmTemplateTitleDefunct' : 'swarmTemplateTitle'}>
+                    {selectedTemplate.name}
+                  </div>
                   <div className="swarmTemplateId">
                     {selectedTemplate.bundlePath}
                   </div>
@@ -719,24 +716,75 @@ export function CreateSwarmModal({
                       </div>
                     </div>
                   </div>
+                  <div className="swarmTemplateMeta bundleWorkspacePreviewGrid">
+                    <div>
+                      <span className="fieldLabel">Bundle files</span>
+                      {bundleTreeLoading ? (
+                        <div className="muted" style={{ marginTop: 8 }}>Loading files…</div>
+                      ) : bundleTreeError ? (
+                        <div className="warningText" style={{ marginTop: 8 }}>{bundleTreeError}</div>
+                      ) : (
+                        <BundleFileTree
+                          nodes={bundleTreeNodes}
+                          selectedPath={selectedFilePath}
+                          onSelectFile={setSelectedFilePath}
+                          height={190}
+                        />
+                      )}
+                    </div>
+                    <div className="scenarioFilePreview">
+                      <div className="scenarioFilePreviewHeader">
+                        <div className="scenarioTreeTitle">{selectedFilePath ?? 'No file selected'}</div>
+                        {selectedFile ? <div className="pill pillInfo">{selectedFile.editorKind}</div> : null}
+                      </div>
+                      {selectedFileLoading ? (
+                        <div className="scenarioFileUnsupported">Loading file…</div>
+                      ) : selectedFileError ? (
+                        <div className="scenarioFileUnsupported warningText">{selectedFileError}</div>
+                      ) : selectedFile && selectedFile.content !== null ? (
+                        <div className="scenarioFilePreviewBody">
+                          <MonacoEditorHost
+                            className="monacoSurface"
+                            value={selectedFile.content}
+                            language={monacoLanguageForBundleFile(selectedFile.editorKind)}
+                            theme="vs-dark"
+                            options={{
+                              readOnly: true,
+                              automaticLayout: true,
+                              minimap: { enabled: false },
+                              scrollBeyondLastLine: false,
+                              wordWrap: 'on',
+                              fontSize: 12,
+                            }}
+                          />
+                        </div>
+                      ) : selectedFile ? (
+                        <div className="scenarioFileUnsupported">
+                          This file is not editable or previewable in New Swarm.
+                        </div>
+                      ) : (
+                        <div className="scenarioFileUnsupported">Select a file to preview it.</div>
+                      )}
+                    </div>
+                  </div>
                 </>
               ) : (
-                <div className="muted">Select a template to see details.</div>
+                <div className="muted">Select a scenario to see details.</div>
               )}
             </div>
           </div>
 
-          <div className="row between" style={{ marginTop: 12 }}>
-            <label className="muted" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div className="swarmCreateActions" style={{ marginTop: 12 }}>
+            <label className={autoPullImages ? 'swarmCreateToggle swarmCreateToggleChecked' : 'swarmCreateToggle'}>
               <input
                 type="checkbox"
                 checked={autoPullImages}
                 onChange={(event) => setAutoPullImages(event.target.checked)}
-                disabled={busy}
+                disabled={busy || !auth.canRunPocketHive}
               />
-              Pull images on create
+              <span>Pull images</span>
             </label>
-            <button type="submit" className="actionButton" disabled={busy}>
+            <button type="submit" className="actionButton" disabled={busy || !selectedTemplate || selectedTemplate.defunct}>
               {busy ? 'Creating…' : 'Create'}
             </button>
           </div>

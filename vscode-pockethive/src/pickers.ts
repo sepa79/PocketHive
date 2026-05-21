@@ -1,16 +1,16 @@
 import * as vscode from 'vscode';
 
-import { requestJson } from './api';
 import { formatError } from './format';
 import { getOutputChannel } from './output';
 import { ScenarioSummary, SwarmSummary } from './types';
+import { scenarioList, swarmList } from './mcp/tools';
 
-export async function pickSwarmId(baseUrl: string, authToken: string | undefined): Promise<string | undefined> {
+export async function pickSwarmId(): Promise<string | undefined> {
   let swarms: SwarmSummary[] = [];
   const outputChannel = getOutputChannel();
 
   try {
-    swarms = await requestJson<SwarmSummary[]>(baseUrl, authToken, 'GET', '/api/swarms');
+    swarms = await swarmList();
   } catch (error) {
     outputChannel.appendLine(`[${new Date().toISOString()}] WARN ${formatError(error)}`);
   }
@@ -40,12 +40,12 @@ export async function pickSwarmId(baseUrl: string, authToken: string | undefined
   return manual?.trim();
 }
 
-export async function pickScenarioId(baseUrl: string, authToken: string | undefined): Promise<string | undefined> {
+export async function pickScenarioId(): Promise<string | undefined> {
   let scenarios: ScenarioSummary[] = [];
   const outputChannel = getOutputChannel();
 
   try {
-    scenarios = await requestJson<ScenarioSummary[]>(baseUrl, authToken, 'GET', '/scenarios');
+    scenarios = await scenarioList();
   } catch (error) {
     outputChannel.appendLine(`[${new Date().toISOString()}] WARN ${formatError(error)}`);
   }

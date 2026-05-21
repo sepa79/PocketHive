@@ -136,6 +136,50 @@ class HttpSequenceRunnerTest {
         .hasMessageContaining("Missing HTTP template");
   }
 
+  @Test
+  void appliesAuthRefHeadersPerSequenceStep() throws Exception {
+    Path templates = Files.createDirectories(tempDir.resolve("templates"));
+    Files.writeString(tempDir.resolve("authProfiles.yaml"), """
+        profiles:
+          "api:static":
+            type: STATIC_TOKEN
+            storage:
+              mode: NONE
+            token: sequence-token
+        """);
+    Files.writeString(templates.resolve("A.yaml"), """
+        protocol: HTTP
+        callId: A
+        method: GET
+        pathTemplate: /a
+        headersTemplate: {}
+        bodyTemplate: ""
+        authRef:
+          profileId: "api:static"
+          applyAs: HTTP_AUTHORIZATION_BEARER
+        """);
+
+    RecordingExecutor executor = new RecordingExecutor();
+    HttpSequenceRunner runner = newRunner(executor);
+    WorkerInfo info = new WorkerInfo("http-sequence", "swarm-1", "inst-1", null, null);
+    WorkItem seed = WorkItem.text(info, "{\"seed\":true}").contentType("application/json").build();
+
+    HttpSequenceWorkerConfig config = new HttpSequenceWorkerConfig(
+        "http://sut",
+        templates.toString(),
+        "default",
+        1,
+        List.of(new HttpSequenceWorkerConfig.Step("s1", "A", null, false, null, List.of(), List.of())),
+        new HttpSequenceWorkerConfig.DebugCapture(HttpSequenceWorkerConfig.DebugCaptureMode.NONE, 0.0, 1, 1, false, false, 0, 1),
+        Map.of()
+    );
+
+    runner.run(seed, new TestWorkerContext(info), config);
+
+    assertThat(executor.calls()).singleElement()
+        .satisfies(call -> assertThat(call.headers()).containsEntry("Authorization", "Bearer sequence-token"));
+  }
+
   private HttpSequenceRunner newRunner(RecordingExecutor executor) {
     ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
     TemplateRenderer templateRenderer = (template, context) -> template == null ? "" : template;
@@ -147,8 +191,7 @@ class HttpSequenceRunnerTest {
         templateRenderer,
         new TemplateLoader(),
         executor,
-        redis,
-        null
+        redis
     );
   }
 

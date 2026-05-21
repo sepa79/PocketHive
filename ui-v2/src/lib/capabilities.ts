@@ -17,12 +17,12 @@ export type CapabilityManifest = {
 
 type ManifestIndex = {
   byDigest: Map<string, CapabilityManifest>
-  byNameAndTag: Map<string, CapabilityManifest>
+  byImageName: Map<string, CapabilityManifest>
 }
 
 export type ManifestResolution = {
   manifest: CapabilityManifest | null
-  kind: 'exact' | 'fallback_tag' | 'none'
+  kind: 'exact' | 'none'
   requestedTag: string | null
   resolvedTag: string | null
 }
@@ -70,7 +70,7 @@ function normalizeManifest(entry: unknown): CapabilityManifest | null {
 
 export function buildManifestIndex(list: CapabilityManifest[]): ManifestIndex {
   const byDigest = new Map<string, CapabilityManifest>()
-  const byNameAndTag = new Map<string, CapabilityManifest>()
+  const byImageName = new Map<string, CapabilityManifest>()
 
   list.forEach((manifest) => {
     const digest = manifest.image?.digest?.trim().toLowerCase()
@@ -79,13 +79,13 @@ export function buildManifestIndex(list: CapabilityManifest[]): ManifestIndex {
     }
 
     const name = manifest.image?.name?.trim().toLowerCase()
-    const tag = manifest.image?.tag?.trim()
-    if (name && tag) {
-      byNameAndTag.set(`${name}:::${tag}`, manifest)
+    const canonicalName = canonicalImageName(name)
+    if (canonicalName) {
+      byImageName.set(canonicalName, manifest)
     }
   })
 
-  return { byDigest, byNameAndTag }
+  return { byDigest, byImageName }
 }
 
 export function findManifestForImage(image: string, index: ManifestIndex): CapabilityManifest | null {
@@ -95,47 +95,20 @@ export function findManifestForImage(image: string, index: ManifestIndex): Capab
 export function resolveManifestForImage(
   image: string,
   index: ManifestIndex,
-  fallbackTag?: string | null,
 ): ManifestResolution {
   const reference = parseImageReference(image)
   if (!reference) {
     return { manifest: null, kind: 'none', requestedTag: null, resolvedTag: null }
   }
 
-  if (reference.digest) {
-    const manifest = index.byDigest.get(reference.digest)
-    if (manifest) {
-      return {
-        manifest,
-        kind: 'exact',
-        requestedTag: reference.tag,
-        resolvedTag: manifest.image?.tag?.trim() ?? null,
-      }
-    }
-  }
-
-  if (reference.name && reference.tag) {
-    const exact = lookupManifestByNameAndTag(reference.name, reference.tag, index)
+  if (reference.name) {
+    const exact = lookupManifestByImageName(reference.name, index)
     if (exact) {
       return {
         manifest: exact,
         kind: 'exact',
         requestedTag: reference.tag,
         resolvedTag: exact.image?.tag?.trim() ?? null,
-      }
-    }
-
-    const normalizedFallbackTag =
-      typeof fallbackTag === 'string' && fallbackTag.trim().length > 0 ? fallbackTag.trim() : null
-    if (normalizedFallbackTag && normalizedFallbackTag !== reference.tag) {
-      const fallback = lookupManifestByNameAndTag(reference.name, normalizedFallbackTag, index)
-      if (fallback) {
-        return {
-          manifest: fallback,
-          kind: 'fallback_tag',
-          requestedTag: reference.tag,
-          resolvedTag: fallback.image?.tag?.trim() ?? normalizedFallbackTag,
-        }
       }
     }
   }
@@ -194,22 +167,30 @@ function parseImageReference(image: string): ImageReference | null {
   }
 }
 
-function lookupManifestByNameAndTag(
+function canonicalImageName(name: string | null | undefined): string | null {
+  if (!name) return null
+  let normalized = name.trim().toLowerCase()
+  if (!normalized) return null
+  const digestIndex = normalized.indexOf('@')
+  if (digestIndex >= 0) {
+    normalized = normalized.slice(0, digestIndex)
+  }
+  const lastColon = normalized.lastIndexOf(':')
+  const lastSlash = normalized.lastIndexOf('/')
+  if (lastColon > lastSlash) {
+    normalized = normalized.slice(0, lastColon)
+  }
+  const normalizedLastSlash = normalized.lastIndexOf('/')
+  if (normalizedLastSlash >= 0 && normalizedLastSlash < normalized.length - 1) {
+    return normalized.slice(normalizedLastSlash + 1)
+  }
+  return normalized
+}
+
+function lookupManifestByImageName(
   name: string,
-  tag: string,
   index: ManifestIndex,
 ): CapabilityManifest | null {
-  const directKey = `${name}:::${tag}`
-  const direct = index.byNameAndTag.get(directKey)
-  if (direct) return direct
-
-  const lastSlash = name.lastIndexOf('/')
-  if (lastSlash >= 0 && lastSlash < name.length - 1) {
-    const simpleName = name.slice(lastSlash + 1)
-    const simpleKey = `${simpleName}:::${tag}`
-    const simple = index.byNameAndTag.get(simpleKey)
-    if (simple) return simple
-  }
-
-  return null
+  const key = canonicalImageName(name)
+  return key ? index.byImageName.get(key) ?? null : null
 }
