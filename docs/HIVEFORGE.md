@@ -13,10 +13,15 @@ implemented path yet.
 
 - `single-full` - deploys the existing local Docker Compose stack on a single
   Docker host by running `./build-hive.sh --quick`.
+- `swarm-reduced` - prepares the Docker Swarm runtime with runtime config and
+  state under the shared HiveForge project root.
+- `swarm-full` - prepares the Docker Swarm runtime with Postgres and ClickHouse
+  data under explicit service-owned roots and placement labels; the remaining
+  runtime config and state stays under the shared HiveForge project root.
 
-The profile intentionally maps to the existing canonical local PocketHive
-entrypoint instead of inventing a second compose orchestration path. The Ansible
-playbooks fail unless HiveForge passes `HIVEFORGE_PROFILE=single-full`.
+The `single-full` profile intentionally maps to the existing canonical local
+PocketHive entrypoint instead of inventing a second compose orchestration path.
+The Ansible playbooks fail unless HiveForge passes `HIVEFORGE_PROFILE=single-full`.
 
 ## Component
 
@@ -73,7 +78,7 @@ environments:
 
 ## Known Gap
 
-This is not yet the target release-driven PocketHive deployment contract. A
-production-ready HiveForge deployment still needs explicit release/image-tag
-inputs, registry-qualified image rendering, and runtime stack artifacts that do
-not build images during deploy.
+PocketHive now declares explicit release/image-tag runtime artifacts and managed
+runtime files for HiveForge. The remaining gap is on the HiveForge action side:
+executing the prepared release stack for each runtime profile is still evolving
+outside this repository.

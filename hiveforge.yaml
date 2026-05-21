@@ -28,6 +28,15 @@ project:
           shared: true
         capabilities:
           - placement
+    - id: swarm-full
+      runtime: docker-swarm
+      serviceSet: full
+      requires:
+        managedRoot:
+          required: true
+          shared: true
+        capabilities:
+          - placement
 components:
   - name: stack
     manifest: deploy/hiveforge/components/stack/hiveforge.yaml
@@ -45,6 +54,10 @@ artifacts:
       source: deploy/hiveforge/runtime/compose.swarm.yml
       target: artifacts/pockethive-runtime/compose/compose.swarm.yml
       mode: replace
+    - name: runtime-compose-swarm-full
+      source: deploy/hiveforge/runtime/compose.swarm-full.yml
+      target: artifacts/pockethive-runtime/compose/compose.swarm-full.yml
+      mode: replace
     - name: runtime-compose-reduced
       source: deploy/hiveforge/runtime/compose.reduced.yml
       target: artifacts/pockethive-runtime/compose/compose.reduced.yml
@@ -56,6 +69,26 @@ artifacts:
     - name: runtime-nginx-reduced
       source: deploy/hiveforge/runtime/nginx.reduced.conf
       target: artifacts/pockethive-runtime/config/nginx/nginx.reduced.conf
+      mode: replace
+    - name: runtime-rabbitmq
+      source: rabbitmq
+      target: artifacts/pockethive-runtime/config/rabbitmq
+      mode: replace
+    - name: runtime-prometheus
+      source: prometheus
+      target: artifacts/pockethive-runtime/config/prometheus
+      mode: replace
+    - name: runtime-grafana
+      source: grafana
+      target: artifacts/pockethive-runtime/config/grafana
+      mode: replace
+    - name: runtime-loki
+      source: loki
+      target: artifacts/pockethive-runtime/config/loki
+      mode: replace
+    - name: runtime-clickhouse-init
+      source: clickhouse/init
+      target: artifacts/pockethive-runtime/config/clickhouse/init
       mode: replace
     - name: runtime-scenarios
       source: scenarios

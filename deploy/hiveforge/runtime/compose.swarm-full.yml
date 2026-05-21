@@ -1,0 +1,29 @@
+# HiveForge Swarm full-profile storage override.
+#
+# Use on top of docker-compose.yml and deploy/hiveforge/runtime/compose.swarm.yml.
+# Only database data directories leave the shared HiveForge project root. The
+# placement labels below must point at nodes that have those directories.
+
+x-postgres-placement: &postgres-placement
+  placement:
+    constraints:
+      - node.labels.pockethive.postgres == true
+
+x-clickhouse-placement: &clickhouse-placement
+  placement:
+    constraints:
+      - node.labels.pockethive.clickhouse == true
+
+services:
+  postgres:
+    volumes: !override
+      - ${POCKETHIVE_POSTGRES_ROOT:?set Postgres root}/data:/var/lib/postgresql/data
+    deploy: *postgres-placement
+
+  clickhouse:
+    volumes: !override
+      - ${POCKETHIVE_CLICKHOUSE_ROOT:?set ClickHouse root}/data:/var/lib/clickhouse
+      - ${HIVEFORGE_PROJECT_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/config/clickhouse/init:/docker-entrypoint-initdb.d:ro
+    deploy:
+      <<: *clickhouse-placement
+      endpoint_mode: dnsrr

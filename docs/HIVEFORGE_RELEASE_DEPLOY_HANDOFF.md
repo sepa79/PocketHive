@@ -41,6 +41,15 @@ release.imageTag=dev-YYYYMMDD-HHMM-g<sha>
 PocketHive builds and pushes images outside HiveForge. HiveForge consumes those
 image refs and must not build or push images.
 
+Runtime profile storage model:
+
+- `swarm-reduced` keeps all runtime config and state under the shared
+  HiveForge-managed project root.
+- `swarm-full` keeps Postgres and ClickHouse data under explicit service-owned
+  roots and uses placement labels so those services schedule only where their
+  directories exist. The rest of the runtime config and state stays under the
+  shared HiveForge-managed project root.
+
 ## Existing Build/Push Tooling
 
 Use the existing local registry tooling:
@@ -130,7 +139,10 @@ Expected first required files for `deploy_release`:
 ```text
 artifacts/pockethive-runtime/compose/docker-compose.yml
 artifacts/pockethive-runtime/compose/compose.swarm.yml
+artifacts/pockethive-runtime/compose/compose.swarm-full.yml
 artifacts/pockethive-runtime/compose/compose.reduced.yml
+artifacts/pockethive-runtime/config/rabbitmq/rabbitmq.conf
+artifacts/pockethive-runtime/config/clickhouse/init/01-ph-tx-outcome-v1.sql
 artifacts/pockethive-runtime/scenarios
 ```
 
