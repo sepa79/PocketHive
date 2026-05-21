@@ -1,6 +1,6 @@
 {
   "name": "@pockethive/mcp-server",
-  "version": "0.15.19",
+  "version": "0.15.20",
   "description": "PocketHive MCP server — full lifecycle tools for scenario authoring and swarm management",
   "type": "module",
   "bin": {

@@ -2,8 +2,8 @@
 FROM node:20-alpine AS build
 
 WORKDIR /app
-COPY ui-v2/package.json ./
-RUN npm install
+COPY ui-v2/package.json ui-v2/package-lock.json ./
+RUN npm ci
 COPY ui-v2/ .
 RUN npm run build
 

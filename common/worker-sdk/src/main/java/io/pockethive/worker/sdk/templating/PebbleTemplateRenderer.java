@@ -1,8 +1,8 @@
 package io.pockethive.worker.sdk.templating;
 
-import com.mitchellbosecke.pebble.PebbleEngine;
-import com.mitchellbosecke.pebble.error.PebbleException;
-import com.mitchellbosecke.pebble.template.PebbleTemplate;
+import io.pebbletemplates.pebble.PebbleEngine;
+import io.pebbletemplates.pebble.error.PebbleException;
+import io.pebbletemplates.pebble.template.PebbleTemplate;
 import java.io.IOException;
 import java.io.StringWriter;
 import java.io.Writer;

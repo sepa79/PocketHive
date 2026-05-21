@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.15.20]
+Timestamp: 2026-05-21T12:17:49Z
+
+- Supply-chain hardening: refresh vulnerable Maven and npm dependency trees across backend services, shared libraries, UI packages, docs-site, and the VS Code extension so npm audit and Maven OSV checks report no vulnerable external dependencies.
+- Build reproducibility: switch the UI v2 container build to install from `package-lock.json` with `npm ci`.
+- Dependency cleanup: remove the unused jPOS dependency from `tcp-mock-server`, eliminating stale transitive crypto/SSHD dependencies from the Maven graph.
+- Verification: rebuild the local stack with `build-hive.sh --quick` and run smoke E2E through `start-e2e-tests.sh --group smoke`; dependency scans are clean, with two remaining Network Proxy Manager auth/authz smoke failures tracked as runtime security findings.
+
 ## [0.15.19]
 Timestamp: 2026-05-15T16:21:00Z
 

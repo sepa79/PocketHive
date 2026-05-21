@@ -9,10 +9,10 @@
   <artifactId>swarm-controller-service</artifactId>
   <properties>
     <java.version>21</java.version>
-    <spring.boot.version>3.3.2</spring.boot.version>
+    <spring.boot.version>3.5.14</spring.boot.version>
     <docker-java.version>3.7.0</docker-java.version>
     <httpcomponents.version>5.4</httpcomponents.version>
-    <httpclient5.version>5.6</httpclient5.version>
+    <httpclient5.version>5.6.1</httpclient5.version>
     <testcontainers.version>2.0.3</testcontainers.version>
   </properties>
   <dependencyManagement>

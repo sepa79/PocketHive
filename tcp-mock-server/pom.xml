@@ -18,8 +18,8 @@
         <java.version>21</java.version>
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
-        <netty.version>4.1.104.Final</netty.version>
-        <spring-boot.version>3.2.0</spring-boot.version>
+        <netty.version>4.1.134.Final</netty.version>
+        <spring-boot.version>3.5.14</spring-boot.version>
     </properties>
 
     <dependencyManagement>
@@ -60,12 +60,12 @@
         <dependency>
             <groupId>org.bouncycastle</groupId>
             <artifactId>bcprov-jdk18on</artifactId>
-            <version>1.78.1</version>
+            <version>1.84</version>
         </dependency>
         <dependency>
             <groupId>org.bouncycastle</groupId>
             <artifactId>bcpkix-jdk18on</artifactId>
-            <version>1.78.1</version>
+            <version>1.84</version>
         </dependency>
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
@@ -91,11 +91,6 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-validation</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.jpos</groupId>
-            <artifactId>jpos</artifactId>
-            <version>2.1.9</version>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>

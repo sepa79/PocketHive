@@ -12,8 +12,12 @@
   "engines": {
     "vscode": "^1.85.0"
   },
-  "categories": ["Other"],
-  "activationEvents": ["onStartupFinished"],
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "viewsContainers": {
@@ -27,11 +31,26 @@
     },
     "views": {
       "pockethive": [
-        { "id": "pockethive.hive",     "name": "Hive" },
-        { "id": "pockethive.buzz",     "name": "Buzz" },
-        { "id": "pockethive.journal",  "name": "Journal" },
-        { "id": "pockethive.scenario", "name": "Scenarios" },
-        { "id": "pockethive.settings", "name": "Settings" }
+        {
+          "id": "pockethive.hive",
+          "name": "Hive"
+        },
+        {
+          "id": "pockethive.buzz",
+          "name": "Buzz"
+        },
+        {
+          "id": "pockethive.journal",
+          "name": "Journal"
+        },
+        {
+          "id": "pockethive.scenario",
+          "name": "Scenarios"
+        },
+        {
+          "id": "pockethive.settings",
+          "name": "Settings"
+        }
       ]
     },
     "customEditors": [
@@ -39,82 +58,367 @@
         "viewType": "pockethive.scenarioEditor",
         "displayName": "PocketHive Scenario",
         "selector": [
-          { "scheme": "pockethive-scenario", "filenamePattern": "**/scenario.yaml" },
-          { "scheme": "pockethive-scenario", "filenamePattern": "**/scenario.yml" }
+          {
+            "scheme": "pockethive-scenario",
+            "filenamePattern": "**/scenario.yaml"
+          },
+          {
+            "scheme": "pockethive-scenario",
+            "filenamePattern": "**/scenario.yml"
+          }
         ],
         "priority": "default"
       }
     ],
     "commands": [
-      { "command": "pockethive.listSwarms",             "title": "List swarms",             "category": "PocketHive" },
-      { "command": "pockethive.startAllSwarms",         "title": "Start all swarms",        "category": "PocketHive", "icon": "$(play)" },
-      { "command": "pockethive.stopAllSwarms",          "title": "Stop all swarms",         "category": "PocketHive", "icon": "$(debug-stop)" },
-      { "command": "pockethive.openSwarmDetails",       "title": "Open swarm details",      "category": "PocketHive" },
-      { "command": "pockethive.startSwarm",             "title": "Start swarm",             "category": "PocketHive" },
-      { "command": "pockethive.stopSwarm",              "title": "Stop swarm",              "category": "PocketHive" },
-      { "command": "pockethive.removeSwarm",            "title": "Remove swarm",            "category": "PocketHive" },
-      { "command": "pockethive.openUi",                 "title": "Open UI",                 "category": "PocketHive" },
-      { "command": "pockethive.openScenarioRaw",        "title": "Open scenario",           "category": "PocketHive" },
-      { "command": "pockethive.openScenarioFile",       "title": "Open scenario file",      "category": "PocketHive" },
-      { "command": "pockethive.previewScenario",        "title": "Preview scenario",        "category": "PocketHive" },
-      { "command": "pockethive.showEntry",              "title": "Show entry",              "category": "PocketHive" },
-      { "command": "pockethive.refreshHive",            "title": "Refresh Hive",            "category": "PocketHive", "icon": "$(refresh)" },
-      { "command": "pockethive.refreshBuzz",            "title": "Refresh Buzz",            "category": "PocketHive", "icon": "$(refresh)" },
-      { "command": "pockethive.refreshJournal",         "title": "Refresh Journal",         "category": "PocketHive", "icon": "$(refresh)" },
-      { "command": "pockethive.refreshScenario",        "title": "Refresh Scenarios",       "category": "PocketHive", "icon": "$(refresh)" },
-      { "command": "pockethive.filterBuzz",             "title": "Filter Buzz",             "category": "PocketHive", "icon": "$(filter)" },
-      { "command": "pockethive.filterJournal",          "title": "Filter Journal",          "category": "PocketHive", "icon": "$(filter)" },
-      { "command": "pockethive.helpHive",               "title": "Help: Hive",              "category": "PocketHive", "icon": "$(question)" },
-      { "command": "pockethive.helpBuzz",               "title": "Help: Buzz",              "category": "PocketHive", "icon": "$(question)" },
-      { "command": "pockethive.helpJournal",            "title": "Help: Journal",           "category": "PocketHive", "icon": "$(question)" },
-      { "command": "pockethive.helpScenario",           "title": "Help: Scenarios",         "category": "PocketHive", "icon": "$(question)" },
-      { "command": "pockethive.helpSettings",           "title": "Help: Settings",          "category": "PocketHive", "icon": "$(question)" },
-      { "command": "pockethive.addEnvironment",         "title": "Add Environment",         "category": "PocketHive", "icon": "$(add)" },
-      { "command": "pockethive.setActiveEnvironment",   "title": "Use Environment",         "category": "PocketHive" },
-      { "command": "pockethive.removeEnvironment",      "title": "Remove Environment",      "category": "PocketHive", "icon": "$(trash)" },
-      { "command": "pockethive.addBundlesFolder",       "title": "Add Bundles Folder",      "category": "PocketHive", "icon": "$(add)" },
-      { "command": "pockethive.setActiveBundlesFolder", "title": "Use Bundles Folder",      "category": "PocketHive" },
-      { "command": "pockethive.validateBundle",         "title": "Validate Bundle",         "category": "PocketHive", "icon": "$(check)" },
-      { "command": "pockethive.deployBundle",           "title": "Deploy Bundle",           "category": "PocketHive", "icon": "$(cloud-upload)" },
-      { "command": "pockethive.startSwarmMcp",          "title": "Start Swarm",             "category": "PocketHive", "icon": "$(play)" },
-      { "command": "pockethive.stopSwarmMcp",           "title": "Stop Swarm",              "category": "PocketHive", "icon": "$(debug-stop)" },
-      { "command": "pockethive.removeSwarmMcp",         "title": "Remove Swarm",            "category": "PocketHive" },
-      { "command": "pockethive.openSwarmDetailsMcp",    "title": "View Swarm",              "category": "PocketHive", "icon": "$(eye)" },
-      { "command": "pockethive.openJournal",            "title": "Open Journal",            "category": "PocketHive", "icon": "$(list-unordered)" },
-      { "command": "pockethive.openQueueMonitor",       "title": "Open Queue Monitor",      "category": "PocketHive", "icon": "$(pulse)" },
-      { "command": "pockethive.restartMcpServer",       "title": "Restart MCP Server",      "category": "PocketHive" },
-      { "command": "pockethive.showSettings",           "title": "Show Settings",           "category": "PocketHive" }
+      {
+        "command": "pockethive.listSwarms",
+        "title": "List swarms",
+        "category": "PocketHive"
+      },
+      {
+        "command": "pockethive.startAllSwarms",
+        "title": "Start all swarms",
+        "category": "PocketHive",
+        "icon": "$(play)"
+      },
+      {
+        "command": "pockethive.stopAllSwarms",
+        "title": "Stop all swarms",
+        "category": "PocketHive",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "pockethive.openSwarmDetails",
+        "title": "Open swarm details",
+        "category": "PocketHive"
+      },
+      {
+        "command": "pockethive.startSwarm",
+        "title": "Start swarm",
+        "category": "PocketHive"
+      },
+      {
+        "command": "pockethive.stopSwarm",
+        "title": "Stop swarm",
+        "category": "PocketHive"
+      },
+      {
+        "command": "pockethive.removeSwarm",
+        "title": "Remove swarm",
+        "category": "PocketHive"
+      },
+      {
+        "command": "pockethive.openUi",
+        "title": "Open UI",
+        "category": "PocketHive"
+      },
+      {
+        "command": "pockethive.openScenarioRaw",
+        "title": "Open scenario",
+        "category": "PocketHive"
+      },
+      {
+        "command": "pockethive.openScenarioFile",
+        "title": "Open scenario file",
+        "category": "PocketHive"
+      },
+      {
+        "command": "pockethive.previewScenario",
+        "title": "Preview scenario",
+        "category": "PocketHive"
+      },
+      {
+        "command": "pockethive.showEntry",
+        "title": "Show entry",
+        "category": "PocketHive"
+      },
+      {
+        "command": "pockethive.refreshHive",
+        "title": "Refresh Hive",
+        "category": "PocketHive",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "pockethive.refreshBuzz",
+        "title": "Refresh Buzz",
+        "category": "PocketHive",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "pockethive.refreshJournal",
+        "title": "Refresh Journal",
+        "category": "PocketHive",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "pockethive.refreshScenario",
+        "title": "Refresh Scenarios",
+        "category": "PocketHive",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "pockethive.filterBuzz",
+        "title": "Filter Buzz",
+        "category": "PocketHive",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "pockethive.filterJournal",
+        "title": "Filter Journal",
+        "category": "PocketHive",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "pockethive.helpHive",
+        "title": "Help: Hive",
+        "category": "PocketHive",
+        "icon": "$(question)"
+      },
+      {
+        "command": "pockethive.helpBuzz",
+        "title": "Help: Buzz",
+        "category": "PocketHive",
+        "icon": "$(question)"
+      },
+      {
+        "command": "pockethive.helpJournal",
+        "title": "Help: Journal",
+        "category": "PocketHive",
+        "icon": "$(question)"
+      },
+      {
+        "command": "pockethive.helpScenario",
+        "title": "Help: Scenarios",
+        "category": "PocketHive",
+        "icon": "$(question)"
+      },
+      {
+        "command": "pockethive.helpSettings",
+        "title": "Help: Settings",
+        "category": "PocketHive",
+        "icon": "$(question)"
+      },
+      {
+        "command": "pockethive.addEnvironment",
+        "title": "Add Environment",
+        "category": "PocketHive",
+        "icon": "$(add)"
+      },
+      {
+        "command": "pockethive.setActiveEnvironment",
+        "title": "Use Environment",
+        "category": "PocketHive"
+      },
+      {
+        "command": "pockethive.removeEnvironment",
+        "title": "Remove Environment",
+        "category": "PocketHive",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "pockethive.addBundlesFolder",
+        "title": "Add Bundles Folder",
+        "category": "PocketHive",
+        "icon": "$(add)"
+      },
+      {
+        "command": "pockethive.setActiveBundlesFolder",
+        "title": "Use Bundles Folder",
+        "category": "PocketHive"
+      },
+      {
+        "command": "pockethive.validateBundle",
+        "title": "Validate Bundle",
+        "category": "PocketHive",
+        "icon": "$(check)"
+      },
+      {
+        "command": "pockethive.deployBundle",
+        "title": "Deploy Bundle",
+        "category": "PocketHive",
+        "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "pockethive.startSwarmMcp",
+        "title": "Start Swarm",
+        "category": "PocketHive",
+        "icon": "$(play)"
+      },
+      {
+        "command": "pockethive.stopSwarmMcp",
+        "title": "Stop Swarm",
+        "category": "PocketHive",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "pockethive.removeSwarmMcp",
+        "title": "Remove Swarm",
+        "category": "PocketHive"
+      },
+      {
+        "command": "pockethive.openSwarmDetailsMcp",
+        "title": "View Swarm",
+        "category": "PocketHive",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "pockethive.openJournal",
+        "title": "Open Journal",
+        "category": "PocketHive",
+        "icon": "$(list-unordered)"
+      },
+      {
+        "command": "pockethive.openQueueMonitor",
+        "title": "Open Queue Monitor",
+        "category": "PocketHive",
+        "icon": "$(pulse)"
+      },
+      {
+        "command": "pockethive.restartMcpServer",
+        "title": "Restart MCP Server",
+        "category": "PocketHive"
+      },
+      {
+        "command": "pockethive.showSettings",
+        "title": "Show Settings",
+        "category": "PocketHive"
+      }
     ],
     "menus": {
       "view/title": [
-        { "command": "pockethive.helpHive",        "when": "view == pockethive.hive",     "group": "navigation" },
-        { "command": "pockethive.startAllSwarms",  "when": "view == pockethive.hive",     "group": "navigation" },
-        { "command": "pockethive.stopAllSwarms",   "when": "view == pockethive.hive",     "group": "navigation" },
-        { "command": "pockethive.refreshHive",     "when": "view == pockethive.hive",     "group": "navigation" },
-        { "command": "pockethive.openUi",          "when": "view == pockethive.hive",     "group": "navigation" },
-        { "command": "pockethive.helpBuzz",        "when": "view == pockethive.buzz",     "group": "navigation" },
-        { "command": "pockethive.refreshBuzz",     "when": "view == pockethive.buzz",     "group": "navigation" },
-        { "command": "pockethive.helpJournal",     "when": "view == pockethive.journal",  "group": "navigation" },
-        { "command": "pockethive.refreshJournal",  "when": "view == pockethive.journal",  "group": "navigation" },
-        { "command": "pockethive.helpScenario",    "when": "view == pockethive.scenario", "group": "navigation" },
-        { "command": "pockethive.refreshScenario", "when": "view == pockethive.scenario", "group": "navigation" },
-        { "command": "pockethive.addBundlesFolder","when": "view == pockethive.scenario", "group": "navigation" },
-        { "command": "pockethive.helpSettings",    "when": "view == pockethive.settings", "group": "navigation" },
-        { "command": "pockethive.addEnvironment",  "when": "view == pockethive.settings", "group": "navigation" }
+        {
+          "command": "pockethive.helpHive",
+          "when": "view == pockethive.hive",
+          "group": "navigation"
+        },
+        {
+          "command": "pockethive.startAllSwarms",
+          "when": "view == pockethive.hive",
+          "group": "navigation"
+        },
+        {
+          "command": "pockethive.stopAllSwarms",
+          "when": "view == pockethive.hive",
+          "group": "navigation"
+        },
+        {
+          "command": "pockethive.refreshHive",
+          "when": "view == pockethive.hive",
+          "group": "navigation"
+        },
+        {
+          "command": "pockethive.openUi",
+          "when": "view == pockethive.hive",
+          "group": "navigation"
+        },
+        {
+          "command": "pockethive.helpBuzz",
+          "when": "view == pockethive.buzz",
+          "group": "navigation"
+        },
+        {
+          "command": "pockethive.refreshBuzz",
+          "when": "view == pockethive.buzz",
+          "group": "navigation"
+        },
+        {
+          "command": "pockethive.helpJournal",
+          "when": "view == pockethive.journal",
+          "group": "navigation"
+        },
+        {
+          "command": "pockethive.refreshJournal",
+          "when": "view == pockethive.journal",
+          "group": "navigation"
+        },
+        {
+          "command": "pockethive.helpScenario",
+          "when": "view == pockethive.scenario",
+          "group": "navigation"
+        },
+        {
+          "command": "pockethive.refreshScenario",
+          "when": "view == pockethive.scenario",
+          "group": "navigation"
+        },
+        {
+          "command": "pockethive.addBundlesFolder",
+          "when": "view == pockethive.scenario",
+          "group": "navigation"
+        },
+        {
+          "command": "pockethive.helpSettings",
+          "when": "view == pockethive.settings",
+          "group": "navigation"
+        },
+        {
+          "command": "pockethive.addEnvironment",
+          "when": "view == pockethive.settings",
+          "group": "navigation"
+        }
       ],
       "view/item/context": [
-        { "command": "pockethive.setActiveEnvironment",   "when": "view == pockethive.settings && viewItem == environment",        "group": "inline" },
-        { "command": "pockethive.removeEnvironment",      "when": "view == pockethive.settings && viewItem =~ /^environment/",     "group": "inline" },
-        { "command": "pockethive.setActiveBundlesFolder", "when": "view == pockethive.settings && viewItem == bundlesFolder",      "group": "inline" },
-        { "command": "pockethive.startSwarmMcp",          "when": "view == pockethive.hive && viewItem =~ /^swarm/",              "group": "inline@1" },
-        { "command": "pockethive.stopSwarmMcp",           "when": "view == pockethive.hive && viewItem =~ /^swarm/",              "group": "inline@2" },
-        { "command": "pockethive.openSwarmDetailsMcp",    "when": "view == pockethive.hive && viewItem =~ /^swarm/",              "group": "inline@3" },
-        { "command": "pockethive.openJournal",            "when": "view == pockethive.hive && viewItem =~ /^swarm/",              "group": "inline@4" },
-        { "command": "pockethive.openQueueMonitor",       "when": "view == pockethive.hive && viewItem =~ /^swarm/",              "group": "inline@5" },
-        { "command": "pockethive.removeSwarmMcp",         "when": "view == pockethive.hive && viewItem =~ /^swarm/",              "group": "navigation@1" },
-        { "command": "pockethive.validateBundle",         "when": "view == pockethive.scenario && viewItem =~ /^bundle/",         "group": "inline@1" },
-        { "command": "pockethive.deployBundle",           "when": "view == pockethive.scenario && viewItem =~ /^bundle/",         "group": "inline@2" },
-        { "command": "pockethive.previewScenario",        "when": "view == pockethive.scenario && viewItem == scenarioItem",      "group": "navigation" }
+        {
+          "command": "pockethive.setActiveEnvironment",
+          "when": "view == pockethive.settings && viewItem == environment",
+          "group": "inline"
+        },
+        {
+          "command": "pockethive.removeEnvironment",
+          "when": "view == pockethive.settings && viewItem =~ /^environment/",
+          "group": "inline"
+        },
+        {
+          "command": "pockethive.setActiveBundlesFolder",
+          "when": "view == pockethive.settings && viewItem == bundlesFolder",
+          "group": "inline"
+        },
+        {
+          "command": "pockethive.startSwarmMcp",
+          "when": "view == pockethive.hive && viewItem =~ /^swarm/",
+          "group": "inline@1"
+        },
+        {
+          "command": "pockethive.stopSwarmMcp",
+          "when": "view == pockethive.hive && viewItem =~ /^swarm/",
+          "group": "inline@2"
+        },
+        {
+          "command": "pockethive.openSwarmDetailsMcp",
+          "when": "view == pockethive.hive && viewItem =~ /^swarm/",
+          "group": "inline@3"
+        },
+        {
+          "command": "pockethive.openJournal",
+          "when": "view == pockethive.hive && viewItem =~ /^swarm/",
+          "group": "inline@4"
+        },
+        {
+          "command": "pockethive.openQueueMonitor",
+          "when": "view == pockethive.hive && viewItem =~ /^swarm/",
+          "group": "inline@5"
+        },
+        {
+          "command": "pockethive.removeSwarmMcp",
+          "when": "view == pockethive.hive && viewItem =~ /^swarm/",
+          "group": "navigation@1"
+        },
+        {
+          "command": "pockethive.validateBundle",
+          "when": "view == pockethive.scenario && viewItem =~ /^bundle/",
+          "group": "inline@1"
+        },
+        {
+          "command": "pockethive.deployBundle",
+          "when": "view == pockethive.scenario && viewItem =~ /^bundle/",
+          "group": "inline@2"
+        },
+        {
+          "command": "pockethive.previewScenario",
+          "when": "view == pockethive.scenario && viewItem == scenarioItem",
+          "group": "navigation"
+        }
       ]
     },
     "configuration": {
@@ -126,15 +430,39 @@
           "description": "Named PocketHive environment profiles.",
           "items": {
             "type": "object",
-            "required": ["name", "baseUrl"],
+            "required": [
+              "name",
+              "baseUrl"
+            ],
             "properties": {
-              "name":        { "type": "string" },
-              "baseUrl":     { "type": "string" },
-              "authToken":   { "type": "string", "default": "", "description": "Optional PocketHive bearer token for this environment." },
-              "authUsername": { "type": "string", "default": "", "description": "Optional local/dev auth username. Passed to MCP as POCKETHIVE_AUTH_USERNAME when authToken is blank." },
-              "rabbitUser":  { "type": "string", "default": "guest" },
-              "tcpMockUrl":  { "type": "string", "default": "" },
-              "wiremockUrl": { "type": "string", "default": "" }
+              "name": {
+                "type": "string"
+              },
+              "baseUrl": {
+                "type": "string"
+              },
+              "authToken": {
+                "type": "string",
+                "default": "",
+                "description": "Optional PocketHive bearer token for this environment."
+              },
+              "authUsername": {
+                "type": "string",
+                "default": "",
+                "description": "Optional local/dev auth username. Passed to MCP as POCKETHIVE_AUTH_USERNAME when authToken is blank."
+              },
+              "rabbitUser": {
+                "type": "string",
+                "default": "guest"
+              },
+              "tcpMockUrl": {
+                "type": "string",
+                "default": ""
+              },
+              "wiremockUrl": {
+                "type": "string",
+                "default": ""
+              }
             }
           }
         },
@@ -147,7 +475,9 @@
           "type": "array",
           "default": [],
           "description": "Paths to scenario bundle folders.",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         },
         "pockethive.activeBundlesFolder": {
           "type": "string",
@@ -211,14 +541,14 @@
   "devDependencies": {
     "@types/node": "^20.12.7",
     "@types/vscode": "^1.85.0",
-    "@vscode/vsce": "2.24.0",
+    "@vscode/vsce": "^3.9.1",
     "typescript": "^5.4.5"
   },
   "overrides": {
     "cheerio": "1.0.0-rc.12"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.25.1",
-    "yaml": "^2.4.5"
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "yaml": "^2.9.0"
   }
 }

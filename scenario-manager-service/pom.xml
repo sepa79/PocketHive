@@ -9,7 +9,7 @@
   <artifactId>scenario-manager-service</artifactId>
   <properties>
     <java.version>21</java.version>
-    <spring.boot.version>3.3.2</spring.boot.version>
+    <spring.boot.version>3.5.14</spring.boot.version>
     <archunit.version>1.2.1</archunit.version>
   </properties>
   <dependencyManagement>

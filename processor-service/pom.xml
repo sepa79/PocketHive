@@ -9,7 +9,7 @@
   <artifactId>processor-service</artifactId>
   <properties>
     <java.version>21</java.version>
-    <spring.boot.version>3.3.2</spring.boot.version>
+    <spring.boot.version>3.5.14</spring.boot.version>
   </properties>
   <dependencyManagement>
     <dependencies>
@@ -58,7 +58,7 @@
     <dependency>
       <groupId>io.netty</groupId>
       <artifactId>netty-all</artifactId>
-      <version>4.1.104.Final</version>
+      <version>4.1.134.Final</version>
     </dependency>
     <dependency>
       <groupId>org.apache.httpcomponents.client5</groupId>
@@ -81,13 +81,13 @@
     <dependency>
       <groupId>org.bouncycastle</groupId>
       <artifactId>bcpkix-jdk18on</artifactId>
-      <version>1.78.1</version>
+      <version>1.84</version>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.bouncycastle</groupId>
       <artifactId>bcprov-jdk18on</artifactId>
-      <version>1.78.1</version>
+      <version>1.84</version>
       <scope>test</scope>
     </dependency>
   </dependencies>

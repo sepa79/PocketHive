@@ -10,8 +10,8 @@
   <artifactId>control-plane-core</artifactId>
   <properties>
     <java.version>21</java.version>
-    <jackson.version>2.17.1</jackson.version>
-    <spring.amqp.version>3.1.4</spring.amqp.version>
+    <jackson.version>2.21.3</jackson.version>
+    <spring.amqp.version>3.2.10</spring.amqp.version>
     <junit.jupiter.version>5.10.2</junit.jupiter.version>
   </properties>
   <build>
