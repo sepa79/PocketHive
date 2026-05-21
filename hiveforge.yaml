@@ -19,6 +19,57 @@ project:
           required: true
           shared: false
           node: local-docker
+    - id: swarm-reduced
+      runtime: docker-swarm
+      serviceSet: reduced
+      requires:
+        managedRoot:
+          required: true
+          shared: true
+        capabilities:
+          - placement
 components:
   - name: stack
     manifest: deploy/hiveforge/components/stack/hiveforge.yaml
+artifacts:
+  managedPaths:
+    - name: runtime-compose-base
+      source: docker-compose.yml
+      target: artifacts/pockethive-runtime/compose/docker-compose.yml
+      mode: replace
+    - name: runtime-compose-single-node
+      source: deploy/compose.proxmox-single-node.yml
+      target: artifacts/pockethive-runtime/compose/compose.single-node.yml
+      mode: replace
+    - name: runtime-compose-swarm
+      source: deploy/compose.proxmox-swarm.yml
+      target: artifacts/pockethive-runtime/compose/compose.swarm.yml
+      mode: replace
+    - name: runtime-compose-reduced
+      source: deploy/compose.proxmox-reduced.yml
+      target: artifacts/pockethive-runtime/compose/compose.reduced.yml
+      mode: replace
+    - name: runtime-nginx-swarm
+      source: deploy/nginx.proxmox-swarm.conf
+      target: artifacts/pockethive-runtime/config/nginx/nginx.swarm.conf
+      mode: replace
+    - name: runtime-nginx-reduced
+      source: deploy/nginx.proxmox-reduced.conf
+      target: artifacts/pockethive-runtime/config/nginx/nginx.reduced.conf
+      mode: replace
+    - name: runtime-scenarios
+      source: scenarios
+      target: artifacts/pockethive-runtime/scenarios
+      mode: replace
+    - name: runtime-wiremock
+      source: wiremock
+      target: artifacts/pockethive-runtime/wiremock
+      mode: replace
+    - name: runtime-tcp-mock-mappings
+      source: tcp-mock-server/mappings
+      target: artifacts/pockethive-runtime/tcp-mock/mappings
+      mode: replace
+    - name: runtime-tcp-mock-files
+      source: tcp-mock-server/__files
+      target: artifacts/pockethive-runtime/tcp-mock/__files
+      mode: replace

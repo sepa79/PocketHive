@@ -64,6 +64,8 @@ Notes:
 
 ### PH Slice 1 - GHCR And Docs Hygiene
 
+Status: done.
+
 - Keep `.github/workflows/publish-images.yml` aligned with
   `tools/docker/image-manifest.sh`.
 - Keep `docs/GHCR_SETUP.md` aligned with the real workflow triggers and image
@@ -72,6 +74,8 @@ Notes:
   modes.
 
 ### PH Slice 2 - Release Artifact Shape
+
+Status: done for HiveForge prepare/deploy input.
 
 Create the PocketHive deployment artifact/templates that HiveForge can render.
 
@@ -90,6 +94,45 @@ ${POCKETHIVE_VERSION:-latest}
 ```
 
 in the HiveForge release/test deploy path.
+
+The current artifact template is:
+
+```text
+deploy/hiveforge/release-artifact.json
+```
+
+It lists PocketHive-owned runtime images and worker images with explicit
+`{{ imageRepository.project }}` and `{{ release.imageTag }}` templates. Keep
+this file aligned with `tools/docker/image-manifest.sh` when adding/removing
+published application images.
+
+### PH Slice 2.5 - Managed Runtime Files
+
+Status: done for HiveForge checkout-backed prepare.
+
+`hiveforge.yaml` declares `artifacts.managedPaths` for:
+
+- base, single-node, swarm, and reduced Compose files,
+- reduced/swarm nginx configs,
+- scenario bundles,
+- WireMock files,
+- TCP mock mappings/files.
+
+HiveForge copies those files from the checked-out repo into its managed project
+root under:
+
+```text
+HIVEFORGE_PROJECT_DIR/artifacts/pockethive-runtime/
+```
+
+Expected first required files for `deploy_release`:
+
+```text
+artifacts/pockethive-runtime/compose/docker-compose.yml
+artifacts/pockethive-runtime/compose/compose.swarm.yml
+artifacts/pockethive-runtime/compose/compose.reduced.yml
+artifacts/pockethive-runtime/scenarios
+```
 
 ### PH Slice 3 - Replace POC Build Action
 

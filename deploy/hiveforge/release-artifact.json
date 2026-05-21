@@ -1,0 +1,99 @@
+{
+  "env": {
+    "DOCKER_REGISTRY": "{{ imageRepository.project }}/",
+    "POCKETHIVE_VERSION": "{{ release.imageTag }}",
+    "POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_IMAGE_REPOSITORY_PREFIX": "{{ imageRepository.project }}"
+  },
+  "images": [
+    {
+      "name": "log-aggregator",
+      "image": "{{ imageRepository.project }}/log-aggregator:{{ release.imageTag }}",
+      "application": true
+    },
+    {
+      "name": "auth-service",
+      "image": "{{ imageRepository.project }}/auth-service:{{ release.imageTag }}",
+      "application": true
+    },
+    {
+      "name": "scenario-manager",
+      "image": "{{ imageRepository.project }}/scenario-manager:{{ release.imageTag }}",
+      "application": true
+    },
+    {
+      "name": "network-proxy-manager",
+      "image": "{{ imageRepository.project }}/network-proxy-manager:{{ release.imageTag }}",
+      "application": true
+    },
+    {
+      "name": "orchestrator",
+      "image": "{{ imageRepository.project }}/orchestrator:{{ release.imageTag }}",
+      "application": true
+    },
+    {
+      "name": "tcp-mock-server",
+      "image": "{{ imageRepository.project }}/tcp-mock-server:{{ release.imageTag }}",
+      "application": true
+    },
+    {
+      "name": "network-proxy-haproxy",
+      "image": "{{ imageRepository.project }}/network-proxy-haproxy:{{ release.imageTag }}",
+      "application": true
+    },
+    {
+      "name": "ui",
+      "image": "{{ imageRepository.project }}/ui:{{ release.imageTag }}",
+      "application": true
+    },
+    {
+      "name": "ui-v2",
+      "image": "{{ imageRepository.project }}/ui-v2:{{ release.imageTag }}",
+      "application": true
+    },
+    {
+      "name": "swarm-controller",
+      "image": "{{ imageRepository.project }}/swarm-controller:{{ release.imageTag }}",
+      "application": true
+    },
+    {
+      "name": "generator",
+      "image": "{{ imageRepository.project }}/generator:{{ release.imageTag }}",
+      "application": true
+    },
+    {
+      "name": "request-builder",
+      "image": "{{ imageRepository.project }}/request-builder:{{ release.imageTag }}",
+      "application": true
+    },
+    {
+      "name": "http-sequence",
+      "image": "{{ imageRepository.project }}/http-sequence:{{ release.imageTag }}",
+      "application": true
+    },
+    {
+      "name": "moderator",
+      "image": "{{ imageRepository.project }}/moderator:{{ release.imageTag }}",
+      "application": true
+    },
+    {
+      "name": "processor",
+      "image": "{{ imageRepository.project }}/processor:{{ release.imageTag }}",
+      "application": true
+    },
+    {
+      "name": "postprocessor",
+      "image": "{{ imageRepository.project }}/postprocessor:{{ release.imageTag }}",
+      "application": true
+    },
+    {
+      "name": "clearing-export",
+      "image": "{{ imageRepository.project }}/clearing-export:{{ release.imageTag }}",
+      "application": true
+    },
+    {
+      "name": "trigger",
+      "image": "{{ imageRepository.project }}/trigger:{{ release.imageTag }}",
+      "application": true
+    }
+  ]
+}
