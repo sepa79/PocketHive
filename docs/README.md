@@ -23,7 +23,6 @@ Welcome to the PocketHive documentation hub. Use these resources to understand t
 - [Workers Advanced](guides/workers-advanced.md)
 - [Templating Basics](guides/templating-basics.md)
 - [Templating Advanced](guides/templating-advanced.md)
-- [Proxmox Docker Swarm Runtime](guides/proxmox-swarm.md)
 
 ## Services
 - [Orchestrator](../orchestrator-service/README.md)

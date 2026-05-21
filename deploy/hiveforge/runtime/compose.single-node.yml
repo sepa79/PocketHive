@@ -1,4 +1,4 @@
-# Remote single-node PocketHive deployment override for the Proxmox Docker node.
+# Remote single-node PocketHive deployment override for a Docker host.
 #
 # Use with docker-compose.yml and an explicit env file. This keeps the first
 # remote runtime on DOCKER_SINGLE while all PocketHive-owned images come from

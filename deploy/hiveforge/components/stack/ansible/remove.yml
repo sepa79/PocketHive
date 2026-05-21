@@ -9,8 +9,8 @@
     - name: Require explicit HiveForge profile
       ansible.builtin.assert:
         that:
-          - pockethive_profile == "local-full"
-        fail_msg: "PocketHive HiveForge POC supports only HIVEFORGE_PROFILE=local-full."
+          - pockethive_profile == "single-full"
+        fail_msg: "PocketHive HiveForge POC supports only HIVEFORGE_PROFILE=single-full."
 
     - name: Stop PocketHive through the canonical local entrypoint
       ansible.builtin.command:

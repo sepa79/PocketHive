@@ -1,4 +1,4 @@
-# Proxmox Swarm deployment override.
+# HiveForge Swarm deployment override.
 #
 # Use with docker-compose.yml after preparing POCKETHIVE_SWARM_ROOT on the
 # labelled node. This file intentionally uses explicit bind mounts and

@@ -10,9 +10,6 @@ Notable in‑progress plans:
 
 - `docs/inProgress/e2e-api-framework-mini-plan.md` – lightweight refactor plan
   for turning the ingress auth pack into a reusable API/E2E support layer.
-- `docs/inProgress/proxmox-remote-swarm-deploy-plan.md` – staged plan for
-  registry-backed Proxmox deployment, remote E2E, and later full Swarm mode.
-
 Recently archived:
 
 - `docs/archive/auth-api-rollout-plan.md` – completed auth/authz rollout

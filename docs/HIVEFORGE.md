@@ -11,12 +11,12 @@ implemented path yet.
 
 ## Current Supported Profile
 
-- `local-full` - deploys the existing local Docker Compose stack on a single
+- `single-full` - deploys the existing local Docker Compose stack on a single
   Docker host by running `./build-hive.sh --quick`.
 
 The profile intentionally maps to the existing canonical local PocketHive
 entrypoint instead of inventing a second compose orchestration path. The Ansible
-playbooks fail unless HiveForge passes `HIVEFORGE_PROFILE=local-full`.
+playbooks fail unless HiveForge passes `HIVEFORGE_PROFILE=single-full`.
 
 ## Component
 
@@ -64,7 +64,7 @@ environments:
       projects:
         - id: pockethive
           profiles:
-            - local-full
+            - single-full
           actions:
             - deploy
             - remove

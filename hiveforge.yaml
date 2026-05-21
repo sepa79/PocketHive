@@ -11,7 +11,7 @@ project:
     extRepository.docker: docker.io
     extRepository.ghcr: ghcr.io
   profiles:
-    - id: local-full
+    - id: single-full
       runtime: docker-single
       serviceSet: full
       requires:
@@ -38,23 +38,23 @@ artifacts:
       target: artifacts/pockethive-runtime/compose/docker-compose.yml
       mode: replace
     - name: runtime-compose-single-node
-      source: deploy/compose.proxmox-single-node.yml
+      source: deploy/hiveforge/runtime/compose.single-node.yml
       target: artifacts/pockethive-runtime/compose/compose.single-node.yml
       mode: replace
     - name: runtime-compose-swarm
-      source: deploy/compose.proxmox-swarm.yml
+      source: deploy/hiveforge/runtime/compose.swarm.yml
       target: artifacts/pockethive-runtime/compose/compose.swarm.yml
       mode: replace
     - name: runtime-compose-reduced
-      source: deploy/compose.proxmox-reduced.yml
+      source: deploy/hiveforge/runtime/compose.reduced.yml
       target: artifacts/pockethive-runtime/compose/compose.reduced.yml
       mode: replace
     - name: runtime-nginx-swarm
-      source: deploy/nginx.proxmox-swarm.conf
+      source: deploy/hiveforge/runtime/nginx.swarm.conf
       target: artifacts/pockethive-runtime/config/nginx/nginx.swarm.conf
       mode: replace
     - name: runtime-nginx-reduced
-      source: deploy/nginx.proxmox-reduced.conf
+      source: deploy/hiveforge/runtime/nginx.reduced.conf
       target: artifacts/pockethive-runtime/config/nginx/nginx.reduced.conf
       mode: replace
     - name: runtime-scenarios

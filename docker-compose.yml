@@ -367,6 +367,8 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/pockethive
       SPRING_DATASOURCE_USERNAME: pockethive
       SPRING_DATASOURCE_PASSWORD: pockethive
+      SPRING_FLYWAY_CONNECT_RETRIES: "30"
+      SPRING_FLYWAY_CONNECT_RETRIES_INTERVAL: 2s
       POCKETHIVE_JOURNAL_SINK: postgres
       POCKETHIVE_TEMPLATE_ID: orchestrator
       POCKETHIVE_JOURNAL_RUN_ID: hive
@@ -390,6 +392,12 @@ services:
         condition: service_healthy
       network-proxy-manager:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/actuator/health | grep -q UP"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
 
   scenario-manager:
     image: ${DOCKER_REGISTRY:-}scenario-manager:${POCKETHIVE_VERSION:-latest}

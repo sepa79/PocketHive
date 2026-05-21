@@ -1,14 +1,14 @@
-# Reduced remote runtime for the first Proxmox single-node smoke pass.
+# Reduced remote runtime for a single-node smoke pass.
 #
-# Use only with docker-compose.yml and deploy/compose.proxmox-single-node.yml.
-# This keeps the first .55 deployment focused on the control-plane and core
-# SUT path, while avoiding optional data/observability services until their
-# placement is explicit.
+# Use only with docker-compose.yml and
+# deploy/hiveforge/runtime/compose.single-node.yml. This keeps the deployment
+# focused on the control-plane and core SUT path while avoiding optional
+# data/observability services until their placement is explicit.
 
 services:
   ui:
     volumes:
-      - ./deploy/nginx.proxmox-reduced.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./deploy/hiveforge/runtime/nginx.reduced.conf:/etc/nginx/conf.d/default.conf:ro
 
   log-aggregator:
     depends_on: !override

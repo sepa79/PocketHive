@@ -187,6 +187,6 @@ container ports unless the check is explicitly for that service interface.
 - No tag inference from branch/ref/dirty state.
 - No fallback to local Docker images.
 - No build or push during HiveForge deploy.
-- No Proxmox/IP/SSH/host-path details in portable PocketHive manifests.
+- No provider/IP/SSH/host-path details in portable PocketHive manifests.
 - Use `tools/docker/image-manifest.sh` as the PocketHive image list source of
   truth.
