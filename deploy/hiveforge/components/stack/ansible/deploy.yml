@@ -1,0 +1,19 @@
+---
+- name: Deploy PocketHive local full stack
+  hosts: localhost
+  gather_facts: false
+  vars:
+    pockethive_repo_root: "{{ playbook_dir }}/../../../../"
+    pockethive_profile: "{{ lookup('env', 'HIVEFORGE_PROFILE') }}"
+  tasks:
+    - name: Require explicit HiveForge profile
+      ansible.builtin.assert:
+        that:
+          - pockethive_profile == "local-full"
+        fail_msg: "PocketHive HiveForge POC supports only HIVEFORGE_PROFILE=local-full."
+
+    - name: Rebuild and start PocketHive through the canonical local entrypoint
+      ansible.builtin.command:
+        cmd: ./build-hive.sh --quick
+        chdir: "{{ pockethive_repo_root }}"
+      changed_when: true

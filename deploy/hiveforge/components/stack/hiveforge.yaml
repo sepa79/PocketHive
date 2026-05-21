@@ -1,0 +1,13 @@
+kind: component
+component:
+  name: stack
+  project: pockethive
+deployment:
+  adapter: ansible
+  actions:
+    deploy:
+      playbook: ansible/deploy.yml
+    remove:
+      playbook: ansible/remove.yml
+    update:
+      playbook: ansible/update.yml

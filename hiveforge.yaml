@@ -1,0 +1,24 @@
+kind: project
+project:
+  name: pockethive
+  repository: https://github.com/sepa79/PocketHive.git
+  actions:
+    - deploy
+    - remove
+    - update
+  vars:
+    imageRepository.project: ghcr.io/pockethive
+    extRepository.docker: docker.io
+    extRepository.ghcr: ghcr.io
+  profiles:
+    - id: local-full
+      runtime: docker-single
+      serviceSet: full
+      requires:
+        managedRoot:
+          required: true
+          shared: false
+          node: local-docker
+components:
+  - name: stack
+    manifest: deploy/hiveforge/components/stack/hiveforge.yaml
