@@ -124,6 +124,9 @@ jobs:
           - name: log-aggregator
             dockerfile: log-aggregator-service/Dockerfile.runtime
             target: ""
+          - name: auth-service
+            dockerfile: auth-service/Dockerfile.runtime
+            target: ""
           - name: scenario-manager
             dockerfile: scenario-manager-service/Dockerfile.runtime
             target: ""
@@ -190,6 +193,7 @@ jobs:
           mkdir -p .local-jars
           for module in \
             log-aggregator-service \
+            auth-service \
             scenario-manager-service \
             network-proxy-manager-service \
             orchestrator-service \

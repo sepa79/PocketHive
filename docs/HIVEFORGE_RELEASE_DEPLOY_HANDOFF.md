@@ -1,0 +1,149 @@
+# HiveForge Release Deploy Handoff
+
+## Purpose
+
+This document records the PocketHive-side follow-up for HiveForge
+release-driven deployment.
+
+HiveForge work is tracked in `/home/sepa/HiveForge/docs/ai/POCKETHIVE_RELEASE_DEPLOY_SLICES.md`.
+
+## Current PocketHive State
+
+PocketHive currently has a minimal HiveForge compatibility bridge:
+
+- `hiveforge.yaml`
+- `deploy/hiveforge/components/stack/hiveforge.yaml`
+- `deploy/hiveforge/components/stack/ansible/deploy.yml`
+- `deploy/hiveforge/components/stack/ansible/update.yml`
+- `deploy/hiveforge/components/stack/ansible/remove.yml`
+
+The current `deploy` and `update` actions run:
+
+```bash
+./build-hive.sh --quick
+```
+
+That is useful for the repo/ref POC, but it is not the target release deploy
+model.
+
+## Target Model
+
+HiveForge deploys already-built PocketHive images from explicit registry/tag
+inputs.
+
+Example release inputs:
+
+```text
+imageRepository.project=192.168.88.54:5000/pockethive
+release.imageTag=dev-YYYYMMDD-HHMM-g<sha>
+```
+
+PocketHive builds and pushes images outside HiveForge. HiveForge consumes those
+image refs and must not build or push images.
+
+## Existing Build/Push Tooling
+
+Use the existing local registry tooling:
+
+```bash
+tools/docker/remote-images.sh \
+  --registry 192.168.88.54:5000 \
+  --namespace pockethive \
+  --tag dev-YYYYMMDD-HHMM-g<sha> \
+  --push
+```
+
+Notes:
+
+- The tool rejects `--tag latest`.
+- The image list source of truth is `tools/docker/image-manifest.sh`.
+- Do not add a second `build-images.sh` / `push-images.sh` convention unless
+  this tool is deliberately replaced.
+
+## PocketHive Follow-up Slices
+
+### PH Slice 1 - GHCR And Docs Hygiene
+
+- Keep `.github/workflows/publish-images.yml` aligned with
+  `tools/docker/image-manifest.sh`.
+- Keep `docs/GHCR_SETUP.md` aligned with the real workflow triggers and image
+  list.
+- Document local registry and GHCR as registry sources, not as HiveForge deploy
+  modes.
+
+### PH Slice 2 - Release Artifact Shape
+
+Create the PocketHive deployment artifact/templates that HiveForge can render.
+
+For current compose compatibility, the key mapping is:
+
+```text
+DOCKER_REGISTRY={{ imageRepository.project }}/
+POCKETHIVE_VERSION={{ release.imageTag }}
+```
+
+Do not rely on:
+
+```text
+${DOCKER_REGISTRY:-}
+${POCKETHIVE_VERSION:-latest}
+```
+
+in the HiveForge release/test deploy path.
+
+### PH Slice 3 - Replace POC Build Action
+
+After HiveForge has a release deploy tool, replace the POC action that runs
+`build-hive.sh --quick` with release deploy artifacts/actions.
+
+Hard rule:
+
+- HiveForge deploy must not call `build-hive.sh --quick`.
+- HiveForge deploy must not call `tools/docker/remote-images.sh`.
+- Build/push remains an operator/CI step before HiveForge deploy.
+
+### PH Slice 4 - External Images
+
+PocketHive currently has third-party infrastructure images in compose that may
+use `latest` or no tag.
+
+Decide explicitly whether the first HiveForge release path:
+
+- validates only PocketHive application images, or
+- also pins/templates all third-party infra images.
+
+Do not mix these validation classes accidentally.
+
+### PH Slice 5 - End-To-End Smoke
+
+Expected local registry smoke:
+
+1. Build/push PocketHive images:
+
+```bash
+tools/docker/remote-images.sh \
+  --registry 192.168.88.54:5000 \
+  --namespace pockethive \
+  --tag dev-YYYYMMDD-HHMM-g<sha> \
+  --push
+```
+
+2. Ask HiveForge MCP to deploy with:
+
+```text
+imageRepository.project=192.168.88.54:5000/pockethive
+release.imageTag=dev-YYYYMMDD-HHMM-g<sha>
+```
+
+3. Verify the running stack through documented ingress/API paths, not direct
+container ports unless the check is explicitly for that service interface.
+
+## Hard Rules
+
+- No implicit `latest`.
+- No tag inference from branch/ref/dirty state.
+- No fallback to local Docker images.
+- No build or push during HiveForge deploy.
+- No Proxmox/IP/SSH/host-path details in portable PocketHive manifests.
+- Use `tools/docker/image-manifest.sh` as the PocketHive image list source of
+  truth.
