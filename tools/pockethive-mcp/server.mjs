@@ -1427,7 +1427,7 @@ reg("wizard.start", "Start a novice bundle creation session. Collects intent and
   authSecretEnvVar: z.string().optional(),
   sutNftUrl: z.string().optional(),
   sutDouble: z.enum(WIZARD_SUT_DOUBLES).optional(),
-  mockEndpoints: z.array(z.any()).optional(),
+  mockEndpoints: z.array(z.unknown()).optional(),
   resultRules: z.union([z.boolean(), z.enum(["yes", "no"])]).optional(),
   resultCodePattern: z.string().optional(),
   successCodes: z.union([z.string(), z.array(z.string())]).optional(),
