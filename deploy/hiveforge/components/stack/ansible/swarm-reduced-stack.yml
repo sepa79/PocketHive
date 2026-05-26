@@ -3,23 +3,25 @@
   ansible.builtin.assert:
     that:
       - pockethive_hiveforge_project_dir | length > 0
+      - pockethive_hiveforge_project_host_dir | length > 0
       - pockethive_hiveforge_stack_dir | length > 0
       - pockethive_docker_registry | length > 0
       - pockethive_version | length > 0
       - pockethive_image_repository_prefix | length > 0
       - pockethive_stack_name | length > 0
-    fail_msg: "swarm-reduced requires HIVEFORGE_PROJECT_DIR, HIVEFORGE_STACK_DIR, DOCKER_REGISTRY, POCKETHIVE_VERSION, POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_IMAGE_REPOSITORY_PREFIX, and POCKETHIVE_STACK_NAME."
+    fail_msg: "swarm-reduced requires HIVEFORGE_PROJECT_DIR, HIVEFORGE_PROJECT_HOST_DIR, HIVEFORGE_STACK_DIR, DOCKER_REGISTRY, POCKETHIVE_VERSION, POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_IMAGE_REPOSITORY_PREFIX, and POCKETHIVE_STACK_NAME."
 
 - name: Validate swarm-reduced image and stack settings
   ansible.builtin.assert:
     that:
       - pockethive_hiveforge_project_dir.startswith("/")
+      - pockethive_hiveforge_project_host_dir.startswith("/")
       - pockethive_hiveforge_stack_dir.startswith("/")
       - pockethive_docker_registry.endswith("/")
       - pockethive_docker_registry == pockethive_image_repository_prefix + "/"
       - pockethive_version != "latest"
       - pockethive_stack_name is match("^[a-z0-9][a-z0-9_-]*$")
-    fail_msg: "swarm-reduced requires absolute HiveForge dirs, DOCKER_REGISTRY with trailing slash matching POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_IMAGE_REPOSITORY_PREFIX, a non-latest POCKETHIVE_VERSION, and a Docker-safe POCKETHIVE_STACK_NAME."
+    fail_msg: "swarm-reduced requires absolute HiveForge container and host dirs, DOCKER_REGISTRY with trailing slash matching POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_IMAGE_REPOSITORY_PREFIX, a non-latest POCKETHIVE_VERSION, and a Docker-safe POCKETHIVE_STACK_NAME."
 
 - name: Check managed runtime compose files
   ansible.builtin.stat:
@@ -66,7 +68,7 @@
       - json
   environment:
     DOCKER_REGISTRY: "{{ pockethive_docker_registry }}"
-    HIVEFORGE_PROJECT_DIR: "{{ pockethive_hiveforge_project_dir }}"
+    HIVEFORGE_PROJECT_DIR: "{{ pockethive_hiveforge_project_host_dir }}"
     POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_IMAGE_REPOSITORY_PREFIX: "{{ pockethive_image_repository_prefix }}"
     POCKETHIVE_VERSION: "{{ pockethive_version }}"
   register: pockethive_compose_config
@@ -77,7 +79,7 @@
     argv:
       - python3
       - "{{ playbook_dir }}/render-stack-config.py"
-    stdin: "{{ pockethive_compose_config.stdout }}"
+    stdin: "{{ pockethive_compose_config.stdout | from_json | to_json }}"
   register: pockethive_stack_config
   changed_when: false
 

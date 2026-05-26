@@ -6,6 +6,7 @@
     pockethive_repo_root: "{{ playbook_dir }}/../../../../"
     pockethive_profile: "{{ lookup('env', 'HIVEFORGE_PROFILE') }}"
     pockethive_hiveforge_project_dir: "{{ lookup('env', 'HIVEFORGE_PROJECT_DIR') }}"
+    pockethive_hiveforge_project_host_dir: "{{ lookup('env', 'HIVEFORGE_PROJECT_HOST_DIR') }}"
     pockethive_hiveforge_stack_dir: "{{ lookup('env', 'HIVEFORGE_STACK_DIR') }}"
     pockethive_docker_registry: "{{ lookup('env', 'DOCKER_REGISTRY') }}"
     pockethive_version: "{{ lookup('env', 'POCKETHIVE_VERSION') }}"

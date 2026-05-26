@@ -127,12 +127,15 @@ Status: done for HiveForge checkout-backed prepare.
 - WireMock files,
 - TCP mock mappings/files.
 
-HiveForge copies those files from the checked-out repo into its managed project
-root under:
+HiveForge copies those files from the checked-out repo into its
+container-visible managed project root under:
 
 ```text
 HIVEFORGE_PROJECT_DIR/artifacts/pockethive-runtime/
 ```
+
+For Docker Stack bind sources, `swarm-reduced` requires the HiveForge-provided
+host-visible equivalent `HIVEFORGE_PROJECT_HOST_DIR`.
 
 Expected first required files for `deploy_release`:
 

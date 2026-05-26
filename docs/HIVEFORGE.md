@@ -98,11 +98,17 @@ concatenates it directly with image names. `POCKETHIVE_VERSION=latest` is
 rejected.
 
 HiveForge copies managed runtime files from the checked-out repo into its
-managed project root under:
+container-visible managed project root under:
 
 ```text
 HIVEFORGE_PROJECT_DIR/artifacts/pockethive-runtime/
 ```
+
+For `swarm-reduced`, HiveForge must also provide `HIVEFORGE_PROJECT_HOST_DIR`.
+PocketHive reads prepared compose/config files through `HIVEFORGE_PROJECT_DIR`,
+but renders Docker Stack bind sources with `HIVEFORGE_PROJECT_HOST_DIR` because
+those paths are resolved by the target Docker daemon, not by the HiveForge
+container.
 
 Expected managed files for `swarm-reduced`:
 

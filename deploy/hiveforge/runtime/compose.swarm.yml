@@ -1,7 +1,8 @@
 # HiveForge Swarm deployment override.
 #
 # Use with docker-compose.yml for the portable swarm-reduced runtime shape.
-# All bind mounts resolve under HIVEFORGE_PROJECT_DIR, which must be a shared
+# The HiveForge action renders HIVEFORGE_PROJECT_DIR with the host-visible
+# HIVEFORGE_PROJECT_HOST_DIR value. All bind mounts must resolve under a shared
 # HiveForge-managed root visible to every node selected by the profile.
 
 x-storage-placement: &storage-placement {}
