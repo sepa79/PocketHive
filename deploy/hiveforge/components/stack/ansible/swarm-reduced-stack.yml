@@ -54,6 +54,21 @@
     - state/tcp-mock/tls-data
     - state/haproxy/runtime
 
+- name: Apply writable ownership for non-root stateful images
+  ansible.builtin.file:
+    path: "{{ pockethive_hiveforge_project_dir }}/{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "0755"
+  loop:
+    - path: state/grafana/data
+      owner: "472"
+      group: "0"
+    - path: state/prometheus/data
+      owner: "65534"
+      group: "65534"
+
 - name: Render merged Docker Compose config
   ansible.builtin.command:
     argv:
