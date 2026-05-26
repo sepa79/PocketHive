@@ -148,10 +148,12 @@ artifacts/pockethive-runtime/scenarios
 
 ### PH Slice 3 - Replace POC Build Action
 
-After HiveForge has a release deploy tool, replace the POC action that runs
-`build-hive.sh --quick` with release deploy artifacts/actions.
+`swarm-reduced` now renders HiveForge-managed compose artifacts and deploys the
+result with `docker stack deploy` using prebuilt images from explicit runtime
+environment values. `single-full` still uses `build-hive.sh --quick` for local
+developer stacks. `swarm-full` remains declared but not wired.
 
-Hard rule:
+Hard rule for PocketHive application images:
 
 - HiveForge deploy must not call `build-hive.sh --quick`.
 - HiveForge deploy must not call `tools/docker/remote-images.sh`.
@@ -183,19 +185,23 @@ tools/docker/remote-images.sh \
   --push
 ```
 
-2. Ask HiveForge MCP to deploy with:
+2. Set non-secret HiveForge runtime environment for the `swarm-reduced` profile:
 
 ```text
-imageRepository.project=192.168.88.54:5000/pockethive
-release.imageTag=dev-YYYYMMDD-HHMM-g<sha>
+DOCKER_REGISTRY=192.168.88.54:5000/pockethive/
+POCKETHIVE_VERSION=dev-YYYYMMDD-HHMM-g<sha>
+POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_IMAGE_REPOSITORY_PREFIX=192.168.88.54:5000/pockethive
+POCKETHIVE_STACK_NAME=pockethive
 ```
 
-3. Verify the running stack through documented ingress/API paths, not direct
+3. Ask HiveForge MCP to deploy `stack/deploy` with profile `swarm-reduced`.
+
+4. Verify the running stack through documented ingress/API paths, not direct
 container ports unless the check is explicitly for that service interface.
 
 ## Hard Rules
 
-- No implicit `latest`.
+- No implicit `latest` for PocketHive application images.
 - No tag inference from branch/ref/dirty state.
 - No fallback to local Docker images.
 - No build or push during HiveForge deploy.

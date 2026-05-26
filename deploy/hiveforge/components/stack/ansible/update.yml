@@ -1,19 +1,33 @@
 ---
-- name: Update PocketHive local full stack
+- name: Update PocketHive stack
   hosts: localhost
   gather_facts: false
   vars:
     pockethive_repo_root: "{{ playbook_dir }}/../../../../"
     pockethive_profile: "{{ lookup('env', 'HIVEFORGE_PROFILE') }}"
+    pockethive_hiveforge_project_dir: "{{ lookup('env', 'HIVEFORGE_PROJECT_DIR') }}"
+    pockethive_hiveforge_stack_dir: "{{ lookup('env', 'HIVEFORGE_STACK_DIR') }}"
+    pockethive_docker_registry: "{{ lookup('env', 'DOCKER_REGISTRY') }}"
+    pockethive_version: "{{ lookup('env', 'POCKETHIVE_VERSION') }}"
+    pockethive_image_repository_prefix: "{{ lookup('env', 'POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_IMAGE_REPOSITORY_PREFIX') }}"
+    pockethive_stack_name: "{{ lookup('env', 'POCKETHIVE_STACK_NAME') }}"
+    pockethive_compose_base: "{{ pockethive_hiveforge_project_dir }}/artifacts/pockethive-runtime/compose/docker-compose.yml"
+    pockethive_compose_swarm: "{{ pockethive_hiveforge_project_dir }}/artifacts/pockethive-runtime/compose/compose.swarm.yml"
+    pockethive_rendered_stack_file: "{{ pockethive_hiveforge_stack_dir }}/{{ pockethive_stack_name }}-swarm-reduced.yml"
   tasks:
     - name: Require explicit HiveForge profile
       ansible.builtin.assert:
         that:
-          - pockethive_profile == "single-full"
-        fail_msg: "PocketHive HiveForge POC supports only HIVEFORGE_PROFILE=single-full."
+          - pockethive_profile in ["single-full", "swarm-reduced"]
+        fail_msg: "PocketHive HiveForge update supports HIVEFORGE_PROFILE=single-full or HIVEFORGE_PROFILE=swarm-reduced."
 
     - name: Rebuild and restart PocketHive through the canonical local entrypoint
       ansible.builtin.command:
         cmd: ./build-hive.sh --quick
         chdir: "{{ pockethive_repo_root }}"
       changed_when: true
+      when: pockethive_profile == "single-full"
+
+    - name: Update PocketHive through Docker Stack
+      ansible.builtin.include_tasks: swarm-reduced-stack.yml
+      when: pockethive_profile == "swarm-reduced"
