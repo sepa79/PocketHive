@@ -5,6 +5,8 @@
 
 This document defines the setup experience for developers working on
 `pockethive-mcp`, HiveMind-backed agent workflows, and the VS Code plugin.
+For assistant-specific client configuration, see
+`AI-ASSISTANT-SETUP.md`.
 
 ## Setup Goals
 
@@ -108,13 +110,41 @@ bundle for a separate GitHub MCP to post. It should not implement general
 
 ## Doctor Command
 
-Add a developer-facing doctor command. It can be an npm script or a small Node
-script under `tools/pockethive-mcp/`, but it is not an MCP tool.
+Use the developer-facing doctor command before blaming the IDE. It runs as a
+local Node script under `tools/pockethive-mcp/`; it is not exposed as an MCP
+tool.
 
-Suggested command:
+Default command:
 
 ```bash
-npm run doctor
+npm run mcp:doctor
+```
+
+The doctor first loads the same JSON MCP config shape used by assistants. Search
+order is:
+
+1. `--config <path>` or `PH_MCP_CONFIG`
+2. `<repo>/mcp.json`
+3. `<repo>/.amazonq/mcp.json`
+
+It reads the `pockethive-bundles` server by default. Override that with
+`--server <id>` or `PH_MCP_SERVER_ID` if a client uses a different server id.
+Environment variables from the shell override values loaded from the config.
+
+The doctor intentionally fails if the effective `BUNDLES_ROOT` is missing or
+points at a non-directory. To test environment-only setup, bypass config loading
+explicitly:
+
+```bash
+BUNDLES_ROOT=/path/to/pockethive-scenario-bundles \
+PH_BUNDLES_ROOTS='["/path/to/pockethive-scenario-bundles"]' \
+npm run mcp:doctor -- --no-config
+```
+
+To check a specific assistant config:
+
+```bash
+npm run mcp:doctor -- --config .amazonq/mcp.json
 ```
 
 Suggested checks:
@@ -122,14 +152,13 @@ Suggested checks:
 | Check | Failure message should include |
 |---|---|
 | Node.js version | Required version and installed version |
-| Java version | Required Java 21 |
-| Docker availability | Reminder to use dev workflow outside MCP |
-| PocketHive base URL | Current configured URL and reachability |
+| MCP config source | Loaded config path, server id, malformed JSON, disabled server, or missing command/args |
+| MCP dependencies | Whether dependencies were current or installed from lockfile |
 | MCP server startup | Command used and first startup error |
+| MCP input schemas | Tool/schema name when an array schema is missing `items` |
 | Bundle root | Path and whether bundles are found |
-| VS Code extension deps | Missing npm install/build step |
-| HiveMind config | Missing `HIVEMIND_BASE_URL` or unreachable remote |
-| GitHub MCP | Whether issue-only MCP is configured externally |
+| Bundle roots list | Invalid `PH_BUNDLES_ROOTS` JSON or missing directories |
+| Workflow source roots | Invalid `PH_WORKFLOW_SOURCE_ROOTS` JSON or missing directories |
 
 The doctor may run shell commands because it is developer tooling. The MCP
 server must not expose doctor as an MCP tool.

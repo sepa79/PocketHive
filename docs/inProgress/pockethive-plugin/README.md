@@ -48,10 +48,11 @@ runtime examples, and team-owned test content on clean lifecycle boundaries.
 | 6 | `TOOL-CONTRACTS.md` | Tool contract format and current tool ownership |
 | 7 | `EVIDENCE.md` | Runtime evidence taxonomy |
 | 8 | `DEVELOPER-SETUP.md` | Local/team setup for MCP, VS Code, HiveMind, GitHub MCP |
-| 9 | `POC-RUNBOOK.md` | Start-to-finish proof path for the current POC |
-| 10 | `BUNDLE-WIZARD.md` | Novice scenario creation flow |
-| 11 | `VSCODE-PLUGIN.md` / `INTELLIJ-PLUGIN.md` | IDE-specific implementation |
-| 12 | `BUILD-READY-GAPS.md` | Decisions that unblock implementation |
+| 9 | `AI-ASSISTANT-SETUP.md` | Amazon Q, GitHub Copilot, Codex, and GPT-5.5 setup |
+| 10 | `POC-RUNBOOK.md` | Start-to-finish proof path for the current POC |
+| 11 | `BUNDLE-WIZARD.md` | Novice scenario creation flow |
+| 12 | `VSCODE-PLUGIN.md` / `INTELLIJ-PLUGIN.md` | IDE-specific implementation |
+| 13 | `BUILD-READY-GAPS.md` | Decisions that unblock implementation |
 
 `MCP-APPS.md` has a narrow Phase 1.5 spike for a read-only evidence widget.
 The broader MCP Apps dashboard/form platform remains future-facing until client

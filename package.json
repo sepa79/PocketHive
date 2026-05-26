@@ -6,8 +6,8 @@
   "scripts": {
     "build": "echo \"no build step\"",
     "lint": "eslint -c ui/eslint.config.js \"ui/src/**/*.{ts,tsx}\"",
-    "mcp:doctor": "npm run doctor --prefix tools/pockethive-mcp",
-    "mcp:setup": "npm ci --prefix tools/pockethive-mcp && npm run doctor --prefix tools/pockethive-mcp",
+    "mcp:doctor": "npm --prefix tools/pockethive-mcp run doctor --",
+    "mcp:setup": "npm ci --prefix tools/pockethive-mcp && npm --prefix tools/pockethive-mcp run doctor --",
     "mcp:start": "node tools/pockethive-mcp/start.cjs",
     "mcp:test": "npm test --prefix tools/pockethive-mcp",
     "mcp:workflow-acceptance": "npm run acceptance:workflow --prefix tools/pockethive-mcp",
