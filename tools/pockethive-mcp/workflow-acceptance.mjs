@@ -1,0 +1,176 @@
+#!/usr/bin/env node
+
+import assert from "node:assert/strict";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const START = resolve(__dirname, "start.cjs");
+const BUNDLES_ROOT = process.env.PH_WORKFLOW_ACCEPTANCE_BUNDLES_ROOT || mkdtempSync(join(tmpdir(), "pockethive-workflow-acceptance-"));
+const BASE_URL = process.env.POCKETHIVE_BASE_URL || "http://127.0.0.1:9";
+const LIVE = process.env.PH_WORKFLOW_ACCEPTANCE_LIVE === "1";
+
+function log(step, detail) {
+  console.log(`OK ${step}${detail ? ` - ${detail}` : ""}`);
+}
+
+async function withClient(fn) {
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: [START],
+    env: {
+      ...process.env,
+      POCKETHIVE_BASE_URL: BASE_URL,
+      ORCHESTRATOR_BASE_URL: process.env.ORCHESTRATOR_BASE_URL || `${BASE_URL}/orchestrator`,
+      SCENARIO_MANAGER_BASE_URL: process.env.SCENARIO_MANAGER_BASE_URL || `${BASE_URL}/scenario-manager`,
+      RABBITMQ_MANAGEMENT_BASE_URL: process.env.RABBITMQ_MANAGEMENT_BASE_URL || `${BASE_URL}/rabbitmq/api`,
+      POCKETHIVE_AUTH_TOKEN: process.env.POCKETHIVE_AUTH_TOKEN || "",
+      POCKETHIVE_AUTH_USERNAME: process.env.POCKETHIVE_AUTH_USERNAME || "",
+      BUNDLES_ROOT,
+      PH_BUNDLES_ROOTS: JSON.stringify([BUNDLES_ROOT]),
+    },
+  });
+  const client = new Client({ name: "workflow-acceptance", version: "1.0.0" }, { capabilities: {} });
+  await client.connect(transport);
+  try {
+    await fn(client);
+  } finally {
+    await client.close();
+  }
+}
+
+async function call(client, name, args = {}) {
+  const result = await client.callTool({ name, arguments: args });
+  if (result.isError) throw new Error(result.content?.[0]?.text || `${name} failed`);
+  return JSON.parse(result.content[0].text);
+}
+
+function writeSource(name, content) {
+  const path = resolve(BUNDLES_ROOT, "sources", name);
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, content, "utf8");
+  return path;
+}
+
+function basePlan(bundleId) {
+  return {
+    bundleId,
+    protocol: "REST",
+    target: "wiremock-local",
+    endpoints: [{ method: "GET", path: "/hello", callId: "hello" }],
+    traffic: { ratePerSec: 2, shape: "flat", duration: "30s" },
+    dataset: { strategy: "SCHEDULER" },
+    mock: { strategy: "wiremock" },
+    observability: { goal: "Stakeholder proof needs worker health, queue drain, mock match, and latency.", grafanaDashboard: "rtt_overview" },
+    successCriteria: { resultRules: false, summary: "No unmatched mock requests and successful responses." },
+  };
+}
+
+async function generateValidateReport(client, workflowId, bundleId) {
+  const generated = await call(client, "workflow.generate", { workflowId });
+  assert.equal(generated.ok, true, `${bundleId} generation failed`);
+  const validated = await call(client, "workflow.validate", { workflowId, validator: "local-structural" });
+  assert.equal(validated.ok, true, `${bundleId} validation failed`);
+  const report = await call(client, "workflow.report", { workflowId });
+  assert.equal(report.ok, true, `${bundleId} report failed`);
+  assert.equal(existsSync(resolve(BUNDLES_ROOT, bundleId, "WORKFLOW_EVIDENCE.md")), true);
+}
+
+async function minimalHttpCase(client) {
+  const sourcePath = writeSource("minimal.jmx", "<jmeterTestPlan><HTTPSamplerProxy testname='GET /hello'/></jmeterTestPlan>");
+  const start = await call(client, "workflow.start", { sourceType: "jmeter", sourcePath });
+  assert.ok(start.nextQuestions.length > 0, "workflow.start should return required questions");
+  await call(client, "workflow.update", { workflowId: start.workflowId, plan: basePlan("accept-workflow-minimal") });
+  await generateValidateReport(client, start.workflowId, "accept-workflow-minimal");
+  log("minimal source workflow", start.workflowId);
+}
+
+async function datasetQuestionCase(client) {
+  const start = await call(client, "workflow.start", {
+    sourceType: "plain-instructions",
+    instructions: "Create a CSV-backed checkout flow with customerId and accountId rotation.",
+  });
+  const incomplete = {
+    ...basePlan("accept-workflow-dataset"),
+    dataset: { strategy: "CSV_DATASET" },
+  };
+  const status = await call(client, "workflow.update", { workflowId: start.workflowId, plan: incomplete });
+  assert.ok(status.nextQuestions.some(question => question.id === "plan.csvColumns"));
+  await call(client, "workflow.update", {
+    workflowId: start.workflowId,
+    plan: { dataset: { strategy: "CSV_DATASET", csvColumns: ["customerId", "accountId"] } },
+  });
+  await generateValidateReport(client, start.workflowId, "accept-workflow-dataset");
+  log("dataset question workflow", start.workflowId);
+}
+
+async function mockBackedCase(client) {
+  const sourcePath = writeSource("mock-backed.postman.json", JSON.stringify({ item: [{ name: "GET /hello" }] }));
+  const start = await call(client, "workflow.start", { sourceType: "postman", sourcePath });
+  const plan = {
+    ...basePlan("accept-workflow-mock"),
+    mock: {
+      strategy: "wiremock",
+      endpoints: [{ method: "GET", path: "/hello", callId: "hello", status: 202, responseBody: { accepted: true } }],
+    },
+  };
+  await call(client, "workflow.update", { workflowId: start.workflowId, plan });
+  await generateValidateReport(client, start.workflowId, "accept-workflow-mock");
+  assert.equal(existsSync(resolve(BUNDLES_ROOT, "accept-workflow-mock", "mock-config", "wiremock", "hello.json")), true);
+  log("mock-backed workflow", start.workflowId);
+}
+
+async function failingPatchCase(client) {
+  const sourcePath = writeSource("patch.k6.js", "export default function () { http.get('/hello') }");
+  const start = await call(client, "workflow.start", { sourceType: "k6", sourcePath });
+  await call(client, "workflow.update", { workflowId: start.workflowId, plan: basePlan("accept-workflow-patch") });
+  await call(client, "workflow.generate", { workflowId: start.workflowId });
+  const scenarioPath = resolve(BUNDLES_ROOT, "accept-workflow-patch", "scenario.yaml");
+  const originalScenario = readFileSync(scenarioPath, "utf8");
+  await call(client, "workflow.patch", { workflowId: start.workflowId, changes: [{ file: "scenario.yaml", content: "not: [valid" }] });
+  const failed = await call(client, "workflow.validate", { workflowId: start.workflowId });
+  assert.equal(failed.ok, false);
+  await call(client, "workflow.patch", { workflowId: start.workflowId, changes: [{ file: "scenario.yaml", content: originalScenario }] });
+  const fixed = await call(client, "workflow.validate", { workflowId: start.workflowId });
+  assert.equal(fixed.ok, true);
+  const status = await call(client, "workflow.status", { workflowId: start.workflowId });
+  assert.deepEqual(status.history.filter(entry => entry.action === "validate").map(entry => entry.ok), [false, true]);
+  log("agent patch workflow", start.workflowId);
+}
+
+async function liveCase(client) {
+  if (!LIVE) {
+    console.log("SKIP live workflow acceptance. Set PH_WORKFLOW_ACCEPTANCE_LIVE=1 with a configured PocketHive stack.");
+    return;
+  }
+  const start = await call(client, "workflow.start", {
+    sourceType: "plain-instructions",
+    instructions: "Create a live smoke proof for GET /hello.",
+  });
+  await call(client, "workflow.update", { workflowId: start.workflowId, plan: basePlan("accept-workflow-live") });
+  await generateValidateReport(client, start.workflowId, "accept-workflow-live");
+  const deploy = await call(client, "workflow.deploy", { workflowId: start.workflowId, swarmId: "accept-workflow-live-swarm" });
+  assert.equal(deploy.ok, true, "live workflow deploy failed");
+  const verify = await call(client, "workflow.verify", { workflowId: start.workflowId, includeTapSample: false });
+  assert.equal(verify.ok, true, "live workflow verify failed");
+  log("live workflow proof", start.workflowId);
+}
+
+console.log("PocketHive agent workflow acceptance");
+console.log(`Bundles root: ${BUNDLES_ROOT}`);
+console.log(`Base URL: ${BASE_URL}`);
+
+await withClient(async (client) => {
+  await minimalHttpCase(client);
+  await datasetQuestionCase(client);
+  await mockBackedCase(client);
+  await failingPatchCase(client);
+  await liveCase(client);
+});
+
+console.log("Workflow acceptance passed.");

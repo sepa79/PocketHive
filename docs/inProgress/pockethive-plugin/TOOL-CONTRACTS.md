@@ -83,6 +83,7 @@ phase: 1
 | `component.config-update` | Public operational | `MCP-SERVER.md`, `ORCHESTRATOR-REST.md` | Runtime control-plane config update |
 | `debug.*` | Public operational | `MCP-SERVER.md`, `EVIDENCE.md` | Runtime read/tap lifecycle only |
 | `evidence.summary` | Public operational | `EVIDENCE.md`, `MCP-APPS.md` | Read-only aggregate evidence model |
+| `workflow.*` | Public novice / agent-guided delivery | This document | Session state; generated bundle writes; optional runtime calls |
 | `mock.*` | Public operational | `MCP-IMPROVEMENT-SPEC.md` | Mock admin state and optional bundle mock-config writes |
 | `dataset.*` | Public operational | `MCP-IMPROVEMENT-SPEC.md` | Dataset seed/check/save |
 | `wizard.*` | Public novice | `BUNDLE-WIZARD.md`, `MCP-IMPROVEMENT-SPEC.md` | Session state; files only on complete |
@@ -417,6 +418,278 @@ report:
 
 The optional MCP App widget renders this exact output as a report. It must not
 perform its own runtime calls or contain separate evidence logic.
+
+## Agent-Managed Workflow Tools
+
+`workflow.*` is the deterministic control surface for agent-guided delivery
+flows. The MCP server owns workflow state, gates, artifact writes, validation,
+deployment calls, and evidence capture. The external agent owns source
+interpretation, debug strategy, and retry count. Sources may be JMeter, Postman,
+OpenAPI, k6, Gatling, cURL, plain instructions, or any other test description
+the external agent can convert into a normalized PocketHive plan.
+
+IDE plugins may use the workflow MCP surface only for configuration discovery
+and status display. They may render `nextQuestions` as unanswered intake items,
+but they must not answer those questions or call mutating workflow tools such as
+`workflow.update`, `workflow.generate`, `workflow.validate`, `workflow.deploy`,
+`workflow.verify`, `workflow.patch`, or `workflow.report`.
+
+```yaml
+name: workflow.config.get
+class: public operational
+purpose: Return sanitized workflow defaults and configured roots for plugin/status display.
+input: none
+sideEffects:
+  files: none
+  runtime: read-only
+writeScope: none
+phase: 2
+```
+
+```yaml
+name: workflow.config.validate
+class: public operational
+purpose: Validate local workflow configuration without creating files or calling runtime services.
+input: none
+output:
+  required:
+    ok: boolean
+    checks: array
+    missing: array
+sideEffects:
+  files: none
+  runtime: read-only
+writeScope: none
+phase: 2
+```
+
+```yaml
+name: workflow.list
+class: public operational
+purpose: List in-memory workflow sessions for status display without returning answers or normalized plans.
+input:
+  optional:
+    state: string
+    includeQuestions: boolean
+output:
+  required:
+    workflows: array
+    count: number
+sideEffects:
+  files: none
+  runtime: read-only
+writeScope: none
+phase: 2
+```
+
+```yaml
+name: workflow.start
+class: public novice
+purpose: Start an agent-to-pockethive workflow from a local source file or plain instructions.
+input:
+  required:
+    sourceType: string
+  optional:
+    sourcePath: string
+    instructions: string
+    workflowType: agent-to-pockethive
+output:
+  required:
+    workflowId: string
+    state: source_ready
+    source:
+      type: string
+      path: string | null
+      sha256: string
+      bytes: number
+    missing: string[]
+    nextQuestions: array
+    allowedActions: string[]
+sideEffects:
+  files: none
+  runtime: in-memory workflow session only
+writeScope: none
+failureModes:
+  - WORKFLOW_SOURCE_NOT_FOUND
+  - WORKFLOW_SOURCE_OUTSIDE_ALLOWED_ROOTS
+  - WORKFLOW_SOURCE_REQUIRED
+phase: 2
+```
+
+```yaml
+name: workflow.source.read
+class: public novice
+purpose: Return bounded source content or instructions for the external agent to interpret.
+input:
+  required:
+    workflowId: string
+  optional:
+    maxBytes: number
+sideEffects:
+  files: none
+  runtime: read-only
+writeScope: none
+phase: 2
+```
+
+```yaml
+name: workflow.update
+class: public novice
+purpose: Record user answers and/or the agent-produced normalized conversion plan.
+input:
+  required:
+    workflowId: string
+  optional:
+    answers: object
+    plan: object
+sideEffects:
+  files: none
+  runtime: updates in-memory workflow session only
+writeScope: none
+phase: 2
+```
+
+```yaml
+name: workflow.status
+class: public novice
+purpose: Return current state, missing fields, required next questions, evidence gaps, allowed actions, and attempt history.
+input:
+  required:
+    workflowId: string
+sideEffects:
+  files: none
+  runtime: read-only
+writeScope: none
+phase: 2
+```
+
+Agents must treat `nextQuestions` as the authoritative intake checklist. If
+required questions are present, the agent should ask the user or update the
+workflow with an agent-derived answer before calling `workflow.generate`,
+`workflow.validate`, `workflow.deploy`, or `workflow.verify`.
+
+```yaml
+name: workflow.preview
+class: public novice
+purpose: Preview generated bundle artifacts without writing files.
+input:
+  required:
+    workflowId: string
+sideEffects:
+  files: none
+  runtime: read-only
+writeScope: none
+phase: 2
+```
+
+```yaml
+name: workflow.generate
+class: public novice
+purpose: Generate the bundle after required fields are complete.
+input:
+  required:
+    workflowId: string
+sideEffects:
+  files: creates a generated bundle under BUNDLES_ROOT
+  runtime: records workflow attempt/evidence
+writeScope:
+  - <BUNDLES_ROOT>/<bundleId>/**
+failureModes:
+  - WORKFLOW_PLAN_INCOMPLETE
+  - BUNDLE_ALREADY_EXISTS
+phase: 2
+```
+
+```yaml
+name: workflow.validate
+class: public novice
+purpose: Validate the generated bundle and record structured validation evidence.
+input:
+  required:
+    workflowId: string
+  optional:
+    validator: local-structural | scenario-manager-dry-run
+output:
+  required:
+    ok: boolean
+    code: string
+    evidence: object
+sideEffects:
+  files: none
+  runtime: records workflow attempt/evidence; scenario-manager-dry-run calls Scenario Manager without writes
+writeScope: none
+phase: 2
+```
+
+```yaml
+name: workflow.deploy
+class: public novice
+purpose: Deploy the generated bundle and create/wait/start a swarm through official PocketHive APIs.
+input:
+  required:
+    workflowId: string
+  optional:
+    swarmId: string
+    sutId: string
+    variablesProfileId: string
+    readyTimeoutSec: number
+sideEffects:
+  files: none
+  runtime: Scenario Manager upload/replace and Orchestrator swarm lifecycle calls
+writeScope: none
+phase: 2
+```
+
+```yaml
+name: workflow.verify
+class: public novice
+purpose: Collect runtime proof for the workflow swarm from existing evidence sources.
+input:
+  required:
+    workflowId: string
+  optional:
+    includeTapSample: boolean
+sideEffects:
+  files: none
+  runtime: records workflow attempt/evidence
+writeScope: none
+phase: 2
+```
+
+```yaml
+name: workflow.patch
+class: public novice
+purpose: Apply explicit agent-provided file fixes inside the generated workflow bundle.
+input:
+  required:
+    workflowId: string
+    changes: array<{ file: string, content: string }>
+sideEffects:
+  files: writes only inside the generated workflow bundle
+  runtime: records workflow attempt
+writeScope:
+  - <BUNDLES_ROOT>/<bundleId>/**
+failureModes:
+  - WORKFLOW_PATCH_OUTSIDE_BUNDLE
+phase: 2
+```
+
+```yaml
+name: workflow.report
+class: public novice
+purpose: Return canonical JSON workflow evidence and write a stakeholder Markdown handoff.
+input:
+  required:
+    workflowId: string
+  optional:
+    file: string
+sideEffects:
+  files: writes report Markdown inside the generated workflow bundle
+  runtime: records workflow attempt
+writeScope:
+  - <BUNDLES_ROOT>/<bundleId>/**
+phase: 2
+```
 
 ## Real-Time Component Control
 

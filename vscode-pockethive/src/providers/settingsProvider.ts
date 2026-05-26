@@ -1,7 +1,15 @@
 import * as vscode from 'vscode';
 import { getEnvironments, getActiveEnvironmentName, getBundlesFolders, getActiveBundlesFolder } from '../config';
 import { isMcpRunning, onMcpStatusChange } from '../mcp/manager';
-import { envStatus, type EnvironmentStatus } from '../mcp/tools';
+import {
+  envStatus,
+  workflowConfigValidate,
+  workflowList,
+  type EnvironmentStatus,
+  type WorkflowConfigValidation,
+  type WorkflowQuestion,
+  type WorkflowSummary,
+} from '../mcp/tools';
 
 type SettingsNode =
   | { kind: 'section'; label: string }
@@ -10,6 +18,9 @@ type SettingsNode =
   | { kind: 'folder'; path: string; active: boolean }
   | { kind: 'add-folder' }
   | { kind: 'mcp-status'; running: boolean }
+  | { kind: 'workflow-config'; validation: WorkflowConfigValidation | null }
+  | { kind: 'workflow'; workflow: WorkflowSummary }
+  | { kind: 'workflow-question'; question: WorkflowQuestion }
   | { kind: 'message'; message: string };
 
 type EnvironmentViewState = EnvironmentStatus['state'] | 'unchecked';
@@ -86,24 +97,73 @@ export class SettingsProvider implements vscode.TreeDataProvider<SettingsNode> {
         item.contextValue = 'mcp-status';
         return item;
       }
+      case 'workflow-config': {
+        const ok = node.validation?.ok ?? false;
+        const item = new vscode.TreeItem(
+          `Workflow config: ${ok ? 'Ready' : 'Needs attention'}`,
+          vscode.TreeItemCollapsibleState.None
+        );
+        item.description = node.validation?.config.bundleRoot;
+        item.tooltip = node.validation
+          ? workflowConfigTooltip(node.validation)
+          : 'MCP server is not running';
+        item.iconPath = ok
+          ? new vscode.ThemeIcon('check', new vscode.ThemeColor('testing.iconPassed'))
+          : new vscode.ThemeIcon('warning', new vscode.ThemeColor('testing.iconQueued'));
+        return item;
+      }
+      case 'workflow': {
+        const questions = node.workflow.nextQuestions.length;
+        const item = new vscode.TreeItem(
+          node.workflow.workflowId,
+          questions ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None
+        );
+        item.description = `${node.workflow.state}  ${node.workflow.source.type}`;
+        item.tooltip = workflowTooltip(node.workflow);
+        item.iconPath = workflowIcon(node.workflow.state, questions);
+        item.contextValue = 'workflow-status';
+        return item;
+      }
+      case 'workflow-question': {
+        const item = new vscode.TreeItem(node.question.prompt, vscode.TreeItemCollapsibleState.None);
+        item.description = node.question.id;
+        item.tooltip = node.question.options?.length
+          ? `${node.question.id}\nOptions: ${node.question.options.join(', ')}`
+          : node.question.id;
+        item.iconPath = new vscode.ThemeIcon('question');
+        return item;
+      }
       case 'message': {
         return new vscode.TreeItem(node.message, vscode.TreeItemCollapsibleState.None);
       }
     }
   }
 
-  async getChildren(): Promise<SettingsNode[]> {
+  async getChildren(node?: SettingsNode): Promise<SettingsNode[]> {
+    if (node?.kind === 'workflow') {
+      return node.workflow.nextQuestions.map(question => ({ kind: 'workflow-question', question }));
+    }
+
     const envs = getEnvironments();
     const activeName = getActiveEnvironmentName();
     const folders = getBundlesFolders();
     const activeFolder = getActiveBundlesFolder();
     let statuses = new Map<string, EnvironmentStatus>();
+    let workflowValidation: WorkflowConfigValidation | null = null;
+    let workflows: WorkflowSummary[] = [];
     if (isMcpRunning()) {
       try {
         const result = await envStatus();
         statuses = new Map(result.environments.map(env => [env.name, env]));
       } catch {
         statuses = new Map();
+      }
+      try {
+        workflowValidation = await workflowConfigValidate();
+        workflows = (await workflowList(true)).workflows;
+      } catch {
+        workflowValidation = null;
+        workflows = [];
       }
     }
 
@@ -129,6 +189,9 @@ export class SettingsProvider implements vscode.TreeDataProvider<SettingsNode> {
       { kind: 'add-folder' },
       { kind: 'section', label: 'MCP SERVER' },
       { kind: 'mcp-status', running: isMcpRunning() },
+      { kind: 'section', label: 'WORKFLOWS' },
+      { kind: 'workflow-config', validation: workflowValidation },
+      ...workflows.map(workflow => ({ kind: 'workflow' as const, workflow })),
     ];
 
     return nodes;
@@ -165,4 +228,30 @@ function statusMessage(status: EnvironmentStatus | undefined): string | undefine
     return `${name}: ${suffix}`;
   });
   return parts.length ? parts.join('\n') : undefined;
+}
+
+function workflowConfigTooltip(validation: WorkflowConfigValidation): string {
+  const lines = [
+    `Bundle root: ${validation.config.bundleRoot}`,
+    `Source roots: ${validation.config.allowedSourceRoots.join(', ') || 'none'}`,
+  ];
+  if (!validation.ok) lines.push(`Missing: ${validation.missing.join(', ')}`);
+  return lines.join('\n');
+}
+
+function workflowTooltip(workflow: WorkflowSummary): string {
+  const lines = [
+    `State: ${workflow.state}`,
+    `Source: ${workflow.source.path ?? workflow.source.type}`,
+    `Bundle: ${workflow.bundle?.id ?? 'not generated'}`,
+    `Remaining questions: ${workflow.nextQuestions.length}`,
+  ];
+  return lines.join('\n');
+}
+
+function workflowIcon(state: string, questionCount: number): vscode.ThemeIcon {
+  if (questionCount > 0) return new vscode.ThemeIcon('question', new vscode.ThemeColor('testing.iconQueued'));
+  if (state === 'verified' || state === 'reported') return new vscode.ThemeIcon('check', new vscode.ThemeColor('testing.iconPassed'));
+  if (state === 'generated' || state === 'validated' || state === 'deployed') return new vscode.ThemeIcon('beaker');
+  return new vscode.ThemeIcon('checklist');
 }

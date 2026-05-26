@@ -5,22 +5,22 @@
 
 ## Overview
 
-The MCP server currently lives in the bundles repo at
-`tools/mcp-server/server.mjs`. This spec covers:
+The MCP server lives in the PocketHive repo at
+`tools/pockethive-mcp/server.mjs`. This spec covers:
 
-1. Migration into the PocketHive repo at `tools/pockethive-mcp/`
+1. Maintaining the migrated server at `tools/pockethive-mcp/`
 2. Decoupling from the bundles repo (BUNDLES_ROOT becomes configurable)
 3. New tools for context switching and environment management
 4. Publishing as `@pockethive/mcp-server` npm package
 5. Adding HTTP/SSE transport alongside existing stdio
 6. Removing shell/devops/log-scraping responsibilities from the MCP surface
 7. Removing general GitHub issue tools from the PocketHive MCP surface
+8. Exposing deterministic workflow state/configuration without embedding an LLM
 
 ## Source location
 
 ```
-Current:  <bundles-repo>/tools/mcp-server/server.mjs
-Target:   PocketHive/tools/pockethive-mcp/server.mjs
+Current:  PocketHive/tools/pockethive-mcp/server.mjs
 ```
 
 ## What changes
@@ -136,6 +136,22 @@ implemented or changed.
 - `wizard.answer` — records one answer and returns the next required question
 - `wizard.summary` — previews the generated plan; no file writes
 - `wizard.complete` — creates a new bundle and runs `bundle.check`
+
+### Agent-managed workflows
+- `workflow.start/source.read/update/status/preview/generate/validate/deploy/verify/patch/report`
+  provide the deterministic control surface for external-agent test conversion
+  workflows. The MCP owns state, gates, generated artifacts, official API calls,
+  and evidence. The external agent owns source interpretation and debug/fix
+  choices.
+- `workflow.config.get`, `workflow.config.validate`, and `workflow.list` are
+  read-only plugin-facing tools for configuration and status display. Plugins
+  may render remaining `nextQuestions`, but must not answer them or call
+  mutating workflow tools.
+
+Workflow registration lives in `tools/pockethive-mcp/workflow-tools.mjs`; the
+main `server.mjs` injects shared PocketHive helpers into that module. This keeps
+the workflow surface maintainable without creating duplicate bundle-generation
+or validation logic.
 
 ### Scenario Manager contracts
 - `scenario.contracts.get` — reads Scenario Manager capability/template/scenario

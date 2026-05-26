@@ -113,6 +113,7 @@ async function buildMcpEnv(context: vscode.ExtensionContext): Promise<NodeJS.Pro
   const bundlesFolder = cfg.get<string>('activeBundlesFolder') ?? '';
   const pockethiveRoot = cfg.get<string>('pockethiveRoot') ?? '';
   const allFolders = cfg.get<string[]>('bundlesFolders') ?? [];
+  const workflowSourceRoots = cfg.get<string[]>('workflowSourceRoots') ?? [];
 
   const rabbitPass = env ? (await context.secrets.get(`ph.env.${env.name}.rabbitPass`) ?? 'guest') : 'guest';
   return {
@@ -127,6 +128,7 @@ async function buildMcpEnv(context: vscode.ExtensionContext): Promise<NodeJS.Pro
     PH_ACTIVE_ENVIRONMENT: env?.name ?? '',
     PH_ENVIRONMENTS: JSON.stringify(safeEnvs),
     PH_BUNDLES_ROOTS: JSON.stringify(allFolders),
+    PH_WORKFLOW_SOURCE_ROOTS: JSON.stringify(workflowSourceRoots),
     ...(env?.tcpMockUrl ? { TCP_MOCK_BASE_URL: env.tcpMockUrl } : {}),
     ...(env?.wiremockUrl ? { WIREMOCK_BASE_URL: env.wiremockUrl } : {}),
   };

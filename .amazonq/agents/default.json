@@ -6,7 +6,7 @@
     "pockethive-bundles": {
       "command": "node",
       "args": [
-        "tools/mcp-server/start.cjs"
+        "tools/pockethive-mcp/start.cjs"
       ]
     }
   },

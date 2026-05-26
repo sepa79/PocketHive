@@ -114,6 +114,24 @@ export async function evidenceSummary(swarmId: unknown, includeTapSample = false
   return call('evidence.summary', { swarmId: requireSwarmId(swarmId), includeTapSample }) as Promise<EvidenceSummary>;
 }
 
+// ── Workflow Status/Config ───────────────────────────────────────────────────
+
+export async function workflowConfigGet(): Promise<WorkflowConfig> {
+  return call('workflow.config.get') as Promise<WorkflowConfig>;
+}
+
+export async function workflowConfigValidate(): Promise<WorkflowConfigValidation> {
+  return call('workflow.config.validate') as Promise<WorkflowConfigValidation>;
+}
+
+export async function workflowList(includeQuestions = true): Promise<WorkflowListResult> {
+  return call('workflow.list', { includeQuestions }) as Promise<WorkflowListResult>;
+}
+
+export async function workflowStatus(workflowId: string): Promise<WorkflowStatus> {
+  return call('workflow.status', { workflowId }) as Promise<WorkflowStatus>;
+}
+
 // ── Health ────────────────────────────────────────────────────────────────────
 
 export async function healthCheck(): Promise<HealthResult> {
@@ -338,6 +356,72 @@ export interface EvidenceSummary {
   datasets: Record<string, unknown>;
   missingEvidence: Array<{ source: string; reason?: string }>;
   sources: Array<{ name: string; status: string; error?: string }>;
+}
+
+export interface WorkflowConfig {
+  workflowType: string;
+  sessionTtlMs: number;
+  sourceMaxBytes: number;
+  supportedSourceTypes: string[];
+  bundleRoot: string;
+  allowedSourceRoots: string[];
+  runtime: Record<string, string>;
+  pluginBoundary: {
+    mayAnswerQuestions: false;
+    readOnlyTools: string[];
+    mutatingTools: string;
+  };
+}
+
+export interface WorkflowConfigValidation {
+  ok: boolean;
+  checks: Array<{ id: string; ok: boolean; value?: unknown; message: string }>;
+  missing: string[];
+  config: WorkflowConfig;
+}
+
+export interface WorkflowQuestion {
+  id: string;
+  prompt: string;
+  type: string;
+  options?: string[];
+}
+
+export interface WorkflowSummary {
+  workflowId: string;
+  workflowType: string;
+  state: string;
+  source: { type: string; path: string | null; sha256: string; bytes: number };
+  bundle: { id: string; path: string } | null;
+  generated: { bundleId: string; path: string } | null;
+  missing: string[];
+  nextQuestions: WorkflowQuestion[];
+  allowedActions: string[];
+  evidenceGaps: Array<{ id: string; status: string }>;
+  historyCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WorkflowListResult {
+  workflows: WorkflowSummary[];
+  count: number;
+}
+
+export interface WorkflowStatus {
+  workflowId: string;
+  workflowType: string;
+  state: string;
+  source: { type: string; path: string | null; sha256: string; bytes: number };
+  plan: Record<string, unknown> | null;
+  bundle: { id: string; path: string } | null;
+  generated: { bundleId: string; path: string } | null;
+  missing: string[];
+  nextQuestions: WorkflowQuestion[];
+  allowedActions: string[];
+  evidenceGaps: Array<{ id: string; status: string }>;
+  evidence: Record<string, unknown>;
+  history: Array<Record<string, unknown>>;
 }
 
 export interface ContextInfo {

@@ -8,14 +8,14 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const SERVER = resolve(__dirname, "server.mjs");
+const START = resolve(__dirname, "start.cjs");
 const UNUSED_BASE_URL = "http://127.0.0.1:9";
 const BUNDLES_ROOT = tmpdir();
 
 async function withClient(fn) {
   const transport = new StdioClientTransport({
     command: "node",
-    args: [SERVER],
+    args: [START],
     env: {
       ...process.env,
       POCKETHIVE_BASE_URL: UNUSED_BASE_URL,

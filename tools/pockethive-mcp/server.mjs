@@ -30,11 +30,11 @@ import {
   planComponentConfigUpdate,
   summarizePatch,
 } from "./config-update.mjs";
+import { registerWorkflowTools } from "./workflow-tools.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 // When running from tools/pockethive-mcp/, REPO_ROOT is two levels up.
-// When running from tools/mcp-server/ (legacy), also two levels up.
 const REPO_ROOT = resolve(__dirname, "../..");
 // BUNDLES_DIR: resolved bundle directory used by all bundle.* tools.
 // Priority: BUNDLES_ROOT (plugin injection) > POCKETHIVE_BUNDLES_DIR (legacy) > repo-relative default.
@@ -300,8 +300,8 @@ const HANDLER_TIMEOUT_MS = 150000; // 2.5 min max per tool call
 const APP_RESOURCE_MIME_TYPE = "text/html;profile=mcp-app";
 const EVIDENCE_WIDGET_URI = "ui://pockethive/evidence-summary-v1.html";
 
-function reg(name, desc, schema, handler) {
-  server.registerTool(name, { title: name, description: desc, inputSchema: schema }, async (input = {}) => {
+function reg(name, desc, schema, handler, options = {}) {
+  server.registerTool(name, { title: name, description: desc, inputSchema: schema, ...options }, async (input = {}) => {
     try {
       const result = await Promise.race([
         handler(input),
@@ -1391,6 +1391,37 @@ async function writeWizardBundle(session) {
   };
 }
 
+registerWorkflowTools({
+  z,
+  reg,
+  BASE_URL,
+  ORCH_URL,
+  SM_URL,
+  RABBIT_MGMT,
+  PROM_URL,
+  POCKETHIVE_ROOT,
+  REPO_ROOT,
+  getBundlesDir,
+  bundleDir,
+  ensureInside,
+  SWARM_ID_ARG,
+  WIZARD_TRAFFIC_SHAPES,
+  WIZARD_DATA_SOURCES,
+  WIZARD_SUT_DOUBLES,
+  wizardMissingQuestions,
+  wizardAnswersWithDefaults,
+  wizardTarget,
+  wizardPattern,
+  wizardMockEndpoints,
+  writeWizardBundle,
+  runBundleCheck,
+  scenarioManagerDryRunValidateBundle,
+  scenarioManagerUploadBundle,
+  httpJson,
+  idempotencyKey,
+  buildEvidenceSummary,
+});
+
 reg("wizard.start", "Start a novice bundle creation session. Collects intent and explicit answers; it does not write files.", {
   intent: z.string().describe("Natural-language description of the bundle the user wants."),
   bundleId: z.string().optional(),
@@ -1427,7 +1458,7 @@ reg("wizard.start", "Start a novice bundle creation session. Collects intent and
   authSecretEnvVar: z.string().optional(),
   sutNftUrl: z.string().optional(),
   sutDouble: z.enum(WIZARD_SUT_DOUBLES).optional(),
-  mockEndpoints: z.array(z.any()).optional(),
+  mockEndpoints: z.array(z.union([z.string(), z.object({}).passthrough()])).optional(),
   resultRules: z.union([z.boolean(), z.enum(["yes", "no"])]).optional(),
   resultCodePattern: z.string().optional(),
   successCodes: z.union([z.string(), z.array(z.string())]).optional(),
