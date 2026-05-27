@@ -33,6 +33,7 @@ const effectiveEnv = {
 const envBaseDir = config?.baseDir || process.cwd();
 const CONFIGURED_BUNDLES_ROOT = effectiveEnv.BUNDLES_ROOT?.trim() || "";
 const SMOKE_BUNDLES_ROOT = CONFIGURED_BUNDLES_ROOT ? resolvePath(envBaseDir, CONFIGURED_BUNDLES_ROOT) : tmpdir();
+const USE_HTTP_CONFIG = Boolean(config?.server?.url);
 
 const checks = [];
 
@@ -110,7 +111,7 @@ function loadMcpConfig(configPath) {
     throw new Error(`MCP config ${path} does not define server '${MCP_SERVER_ID}'`);
   }
 
-  const baseDir = path.startsWith(REPO_ROOT) ? REPO_ROOT : dirname(path);
+  const baseDir = inferConfigBaseDir(path);
   const cwd = server.cwd ? resolvePath(baseDir, server.cwd) : baseDir;
   return {
     path,
@@ -132,8 +133,23 @@ function uniquePaths(paths) {
   return [...new Set(paths)];
 }
 
+function inferConfigBaseDir(path) {
+  const configDir = dirname(path);
+  const configDirName = basename(configDir);
+  if ([".amazonq", ".codex", ".cursor", ".vscode", ".windsurf"].includes(configDirName)) {
+    return dirname(configDir);
+  }
+  return path.startsWith(REPO_ROOT) ? REPO_ROOT : configDir;
+}
+
+function expandConfigVariables(value, baseDir) {
+  return String(value || "")
+    .replaceAll("${workspaceFolder}", baseDir)
+    .replaceAll("${workspaceFolderBasename}", basename(baseDir));
+}
+
 function resolvePath(baseDir, value) {
-  const path = String(value || "").trim();
+  const path = expandConfigVariables(value, baseDir).trim();
   return isAbsolute(path) ? path : resolve(baseDir, path);
 }
 
@@ -162,7 +178,14 @@ function assertDirectory(path, label) {
 }
 
 function assertMcpServerConfig() {
-  assert.equal(config.server.disabled === true, false, `MCP server '${MCP_SERVER_ID}' is disabled in ${config.path}`);
+  assert.equal(config.server.disabled, false, `MCP server '${MCP_SERVER_ID}' must set disabled: false in ${config.path}`);
+  const configuredUrl = expandConfigVariables(config.server.url || "", config.baseDir).trim();
+  if (configuredUrl) {
+    const parsedUrl = new URL(configuredUrl);
+    assert.ok(["http:", "https:"].includes(parsedUrl.protocol), `MCP server '${MCP_SERVER_ID}' url must use http or https`);
+    assert.ok(parsedUrl.pathname.endsWith("/mcp"), `MCP server '${MCP_SERVER_ID}' url must point at the /mcp endpoint`);
+    return;
+  }
   assert.equal(typeof config.server.command, "string", `MCP server '${MCP_SERVER_ID}' must define command`);
   const commandName = basename(config.server.command).toLowerCase();
   assert.ok(commandName === "node" || commandName === "node.exe", `MCP server '${MCP_SERVER_ID}' command must be node`);
@@ -180,30 +203,55 @@ function assertMcpServerConfig() {
   );
 }
 
-async function listTools() {
-  const [{ Client }, { StdioClientTransport }] = await Promise.all([
+function parseToolJson(result, toolName) {
+  if (result?.isError) {
+    throw new Error(`${toolName} failed: ${result.content?.[0]?.text || "unknown error"}`);
+  }
+  const text = result?.content?.find(item => item.type === "text")?.text;
+  assert.ok(text, `${toolName} returned no text content`);
+  return JSON.parse(text);
+}
+
+async function connectClient() {
+  const [{ Client }] = await Promise.all([
     import("@modelcontextprotocol/sdk/client/index.js"),
-    import("@modelcontextprotocol/sdk/client/stdio.js"),
   ]);
-  const transport = new StdioClientTransport({
-    command: process.execPath,
-    args: [START],
-    env: {
-      ...effectiveEnv,
-      POCKETHIVE_BASE_URL: effectiveEnv.POCKETHIVE_BASE_URL || UNUSED_BASE_URL,
-      ORCHESTRATOR_BASE_URL: effectiveEnv.ORCHESTRATOR_BASE_URL || `${UNUSED_BASE_URL}/orchestrator`,
-      SCENARIO_MANAGER_BASE_URL: effectiveEnv.SCENARIO_MANAGER_BASE_URL || `${UNUSED_BASE_URL}/scenario-manager`,
-      RABBITMQ_MANAGEMENT_BASE_URL: effectiveEnv.RABBITMQ_MANAGEMENT_BASE_URL || `${UNUSED_BASE_URL}/rabbitmq/api`,
-      POCKETHIVE_AUTH_TOKEN: effectiveEnv.POCKETHIVE_AUTH_TOKEN || "",
-      POCKETHIVE_AUTH_USERNAME: effectiveEnv.POCKETHIVE_AUTH_USERNAME || "",
-      BUNDLES_ROOT: SMOKE_BUNDLES_ROOT,
-      PH_BUNDLES_ROOTS: effectiveEnv.PH_BUNDLES_ROOTS || JSON.stringify([SMOKE_BUNDLES_ROOT]),
-    },
-  });
+  let transport;
+  const configuredUrl = config?.server?.url
+    ? expandConfigVariables(config.server.url, config.baseDir).trim()
+    : "";
+  if (configuredUrl) {
+    const { StreamableHTTPClientTransport } = await import("@modelcontextprotocol/sdk/client/streamableHttp.js");
+    transport = new StreamableHTTPClientTransport(new URL(configuredUrl));
+  } else {
+    const { StdioClientTransport } = await import("@modelcontextprotocol/sdk/client/stdio.js");
+    transport = new StdioClientTransport({
+      command: process.execPath,
+      args: [START],
+      env: {
+        ...effectiveEnv,
+        POCKETHIVE_BASE_URL: effectiveEnv.POCKETHIVE_BASE_URL || UNUSED_BASE_URL,
+        ORCHESTRATOR_BASE_URL: effectiveEnv.ORCHESTRATOR_BASE_URL || `${UNUSED_BASE_URL}/orchestrator`,
+        SCENARIO_MANAGER_BASE_URL: effectiveEnv.SCENARIO_MANAGER_BASE_URL || `${UNUSED_BASE_URL}/scenario-manager`,
+        RABBITMQ_MANAGEMENT_BASE_URL: effectiveEnv.RABBITMQ_MANAGEMENT_BASE_URL || `${UNUSED_BASE_URL}/rabbitmq/api`,
+        POCKETHIVE_AUTH_TOKEN: effectiveEnv.POCKETHIVE_AUTH_TOKEN || "",
+        POCKETHIVE_AUTH_USERNAME: effectiveEnv.POCKETHIVE_AUTH_USERNAME || "",
+        BUNDLES_ROOT: SMOKE_BUNDLES_ROOT,
+        PH_BUNDLES_ROOTS: effectiveEnv.PH_BUNDLES_ROOTS || JSON.stringify([SMOKE_BUNDLES_ROOT]),
+      },
+    });
+  }
   const client = new Client({ name: "pockethive-mcp-doctor", version: "1.0.0" }, { capabilities: {} });
   await client.connect(transport);
+  return client;
+}
+
+async function inspectMcp() {
+  const client = await connectClient();
   try {
-    return (await client.listTools()).tools;
+    const tools = (await client.listTools()).tools;
+    const context = parseToolJson(await client.callTool({ name: "context_get", arguments: {} }), "context_get");
+    return { tools, context };
   } finally {
     await client.close();
   }
@@ -229,8 +277,11 @@ await runCheck("MCP dependencies", () => {
 });
 
 let tools = [];
-await runCheck("MCP stdio startup", async () => {
-  tools = await listTools();
+let mcpContext = null;
+await runCheck(USE_HTTP_CONFIG ? "MCP Streamable HTTP startup" : "MCP stdio startup", async () => {
+  const inspected = await inspectMcp();
+  tools = inspected.tools;
+  mcpContext = inspected.context;
   assert.ok(tools.length > 0, "tools/list returned no tools");
   return `${tools.length} tools`;
 });
@@ -243,14 +294,29 @@ await runCheck("MCP input schemas", () => {
   return "all array schemas declare items";
 });
 
+await runCheck("MCP tool names", () => {
+  const invalid = tools
+    .map((tool) => tool.name)
+    .filter((name) => !/^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/.test(name));
+  assert.deepEqual(invalid, []);
+  return "all tool names are underscore-safe";
+});
+
 await runCheck("Bundle root config", () => {
-  assert.ok(CONFIGURED_BUNDLES_ROOT, "BUNDLES_ROOT is not set. Configure it to a separate scenario-bundles checkout.");
-  const root = resolvePath(envBaseDir, CONFIGURED_BUNDLES_ROOT);
+  const root = USE_HTTP_CONFIG
+    ? mcpContext?.bundlesRoot
+    : (CONFIGURED_BUNDLES_ROOT ? resolvePath(envBaseDir, CONFIGURED_BUNDLES_ROOT) : "");
+  assert.ok(root, "BUNDLES_ROOT is not set. Configure it to a separate scenario-bundles checkout.");
   assertDirectory(root, "BUNDLES_ROOT");
   return root;
 });
 
 await runCheck("Bundle roots list config", () => {
+  if (USE_HTTP_CONFIG && Array.isArray(mcpContext?.allBundlesRoots)) {
+    if (!mcpContext.allBundlesRoots.length) return "not set; MCP will use BUNDLES_ROOT";
+    for (const root of mcpContext.allBundlesRoots) assertDirectory(root, "PH_BUNDLES_ROOTS entry");
+    return mcpContext.allBundlesRoots.join(", ");
+  }
   const { configured, values } = parseJsonStringArrayEnv("PH_BUNDLES_ROOTS");
   if (!configured) return "not set; MCP will use BUNDLES_ROOT";
   assert.ok(values.length > 0, "PH_BUNDLES_ROOTS must include at least one bundle root when set");

@@ -12,7 +12,8 @@ Thumbs.db
 # --- IDEs / Editors ---
 .idea/
 *.iml
-.vscode/
+.vscode/*
+!.vscode/mcp.json
 !vscode-pockethive/.vscode/
 !vscode-pockethive/.vscode/launch.json
 vscode-pockethive/*.vsix

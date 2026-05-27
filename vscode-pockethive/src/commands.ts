@@ -15,6 +15,26 @@ import { renderScenarioPreviewHtml } from './scenarioPreview';
 import { ScenarioDetail, ScenarioSummary } from './types';
 import { restartMcpServer } from './mcp/manager';
 import * as McpTools from './mcp/tools';
+import {
+  resolveBundleName as resolveBundleNameTarget,
+  resolveEnvironmentName as resolveEnvironmentNameTarget,
+  resolveFolderPath as resolveFolderPathTarget,
+  resolveScenarioId as resolveScenarioIdTarget,
+  resolveSwarmId as resolveSwarmIdTarget,
+} from './targetResolver';
+import {
+  extractLifecycleCorrelationId,
+  findLifecycleOutcome,
+  formatLifecycleOutcome,
+  formatLifecycleState,
+  formatReadyResult,
+  isExpectedLifecycleState,
+  shouldWaitForStartReadiness,
+  summarizeSwarmLifecycle,
+  summarizeReadyResult,
+  type SwarmLifecycleAction,
+  type SwarmLifecycleState,
+} from './swarmLifecycle';
 
 // ── Environment management ────────────────────────────────────────────────────
 
@@ -175,31 +195,65 @@ export async function deployBundleCommand(bundleTarget: unknown): Promise<void> 
 
 // ── Swarm actions (MCP) ───────────────────────────────────────────────────────
 
-export async function startSwarmMcp(swarmTarget: unknown): Promise<void> {
-  const swarmId = resolveSwarmId(swarmTarget);
-  if (!swarmId) {
-    vscode.window.showErrorMessage('PocketHive: swarm id is required.');
-    return;
-  }
-  try {
-    await McpTools.swarmStart(swarmId);
-    vscode.window.showInformationMessage(`PocketHive: Swarm '${swarmId}' started.`);
-  } catch (err) {
-    vscode.window.showErrorMessage(`PocketHive: Start failed — ${String(err)}`);
-  }
+export async function startSwarmMcp(swarmTarget: unknown, hiveProvider?: { refresh(): void }): Promise<void> {
+  await runSingleSwarmLifecycle('start', swarmTarget, hiveProvider);
 }
 
-export async function stopSwarmMcp(swarmTarget: unknown): Promise<void> {
+export async function stopSwarmMcp(swarmTarget: unknown, hiveProvider?: { refresh(): void }): Promise<void> {
+  await runSingleSwarmLifecycle('stop', swarmTarget, hiveProvider);
+}
+
+async function runSingleSwarmLifecycle(
+  action: SwarmLifecycleAction,
+  swarmTarget: unknown,
+  hiveProvider?: { refresh(): void }
+): Promise<void> {
   const swarmId = resolveSwarmId(swarmTarget);
   if (!swarmId) {
     vscode.window.showErrorMessage('PocketHive: swarm id is required.');
     return;
   }
   try {
-    await McpTools.swarmStop(swarmId);
-    vscode.window.showInformationMessage(`PocketHive: Swarm '${swarmId}' stopped.`);
+    const verb = action === 'start' ? 'Starting' : 'Stopping';
+    await vscode.window.withProgress({
+      location: vscode.ProgressLocation.Notification,
+      title: `PocketHive: ${verb} swarm '${swarmId}'`,
+      cancellable: false,
+    }, async (progress) => {
+      if (action === 'start') {
+        const current = summarizeSwarmLifecycle(await McpTools.swarmGet(swarmId));
+        if (shouldWaitForStartReadiness(current)) {
+          progress.report({ message: 'Waiting for readiness' });
+          const ready = summarizeReadyResult(await McpTools.swarmWaitReady(swarmId, 300));
+          if (ready.ready !== true) {
+            vscode.window.showWarningMessage(
+              `PocketHive: Swarm '${swarmId}' is ${formatReadyResult(ready)}. Start was not sent.`
+            );
+            return;
+          }
+        }
+      }
+      progress.report({ message: `${verb} requested` });
+      const commandResponse = action === 'start'
+        ? await McpTools.swarmStart(swarmId)
+        : await McpTools.swarmStop(swarmId);
+      hiveProvider?.refresh();
+      const state = await waitForSwarmLifecycle(action, swarmId, hiveProvider);
+      const description = formatLifecycleState(state);
+      if (isExpectedLifecycleState(action, state)) {
+        vscode.window.showInformationMessage(`PocketHive: Swarm '${swarmId}' is ${description}.`);
+      } else {
+        const noun = action === 'start' ? 'Start' : 'Stop';
+        const outcome = await latestLifecycleOutcome(action, swarmId, commandResponse);
+        const outcomeText = outcome ? ` Runtime outcome: ${formatLifecycleOutcome(outcome)}.` : '';
+        vscode.window.showWarningMessage(
+          `PocketHive: ${noun} requested for swarm '${swarmId}', current state is ${description}.${outcomeText} Refresh Hive again in a few seconds.`
+        );
+      }
+    });
   } catch (err) {
-    vscode.window.showErrorMessage(`PocketHive: Stop failed — ${String(err)}`);
+    const label = action === 'start' ? 'Start' : 'Stop';
+    vscode.window.showErrorMessage(`PocketHive: ${label} failed — ${String(err)}`);
   }
 }
 
@@ -280,7 +334,7 @@ export async function listSwarms(): Promise<void> {
   await withMcp(async () => {
     const swarms = await McpTools.swarmList();
     const outputChannel = getOutputChannel();
-    outputChannel.appendLine(`[${new Date().toISOString()}] MCP swarm.list`);
+    outputChannel.appendLine(`[${new Date().toISOString()}] MCP swarm_list`);
     outputChannel.appendLine(JSON.stringify(swarms, null, 2));
     outputChannel.show(true);
     vscode.window.showInformationMessage(`PocketHive: ${swarms.length} swarms listed.`);
@@ -303,7 +357,7 @@ export async function runSwarmCommand(action: 'start' | 'stop' | 'remove', swarm
         ? await McpTools.swarmStop(target)
         : await McpTools.swarmRemove(target);
     const outputChannel = getOutputChannel();
-    outputChannel.appendLine(`[${new Date().toISOString()}] MCP swarm.${action} ${target}`);
+    outputChannel.appendLine(`[${new Date().toISOString()}] MCP swarm_${action} ${target}`);
     outputChannel.appendLine(JSON.stringify(response, null, 2));
     outputChannel.show(true);
     vscode.window.showInformationMessage(`PocketHive: ${action} accepted for swarm '${target}'.`);
@@ -410,128 +464,51 @@ async function withMcp<T>(action: () => Promise<T>): Promise<T | undefined> {
 }
 
 function resolveScenarioId(arg: unknown): string | undefined {
-  if (!arg) return undefined;
-  if (typeof arg === 'string') return nonBlank(arg);
-  if (typeof arg === 'object') {
-    if ('id' in arg && typeof (arg as { id?: unknown }).id === 'string') return nonBlank((arg as { id: string }).id);
-    if ('label' in arg) {
-      const label = (arg as { label?: unknown }).label;
-      if (typeof label === 'string') return nonBlank(label);
-      if (label && typeof label === 'object' && 'label' in label) {
-        const nested = (label as { label?: unknown }).label;
-        if (typeof nested === 'string') return nonBlank(nested);
-      }
-    }
-    if ('command' in arg) {
-      const command = (arg as { command?: { arguments?: unknown[] } }).command;
-      const first = command?.arguments?.[0];
-      if (typeof first === 'string') return nonBlank(first);
-    }
-    if ('scenario' in arg) {
-      const s = (arg as { scenario?: unknown }).scenario;
-      const id = resolveScenarioId(s);
-      if (id) return id;
-    }
-  }
-  return undefined;
+  return resolveScenarioIdTarget(arg);
 }
 
 function resolveEnvironmentName(arg: unknown): string | undefined {
-  if (!arg) return undefined;
-  if (typeof arg === 'string') return nonBlank(arg);
-  if (typeof arg === 'object') {
-    if ('name' in arg && typeof (arg as { name?: unknown }).name === 'string') return nonBlank((arg as { name: string }).name);
-    if ('id' in arg && typeof (arg as { id?: unknown }).id === 'string') return nonBlank((arg as { id: string }).id);
-    if ('command' in arg) {
-      const command = (arg as { command?: { arguments?: unknown[] } }).command;
-      const first = command?.arguments?.[0];
-      if (typeof first === 'string') return nonBlank(first);
-    }
-    if ('label' in arg) {
-      const label = (arg as { label?: unknown }).label;
-      if (typeof label === 'string') return nonBlank(label);
-      if (label && typeof label === 'object' && 'label' in label) {
-        const nested = (label as { label?: unknown }).label;
-        if (typeof nested === 'string') return nonBlank(nested);
-      }
-    }
-  }
-  return undefined;
+  return resolveEnvironmentNameTarget(arg);
 }
 
 function resolveFolderPath(arg: unknown): string | undefined {
-  if (!arg) return undefined;
-  if (typeof arg === 'string') return nonBlank(arg);
-  if (typeof arg === 'object') {
-    if ('path' in arg && typeof (arg as { path?: unknown }).path === 'string') return nonBlank((arg as { path: string }).path);
-    if ('id' in arg && typeof (arg as { id?: unknown }).id === 'string') return nonBlank((arg as { id: string }).id);
-    if ('command' in arg) {
-      const command = (arg as { command?: { arguments?: unknown[] } }).command;
-      const first = command?.arguments?.[0];
-      if (typeof first === 'string') return nonBlank(first);
-    }
-  }
-  return undefined;
+  return resolveFolderPathTarget(arg);
 }
 
 function resolveBundleName(arg: unknown): string | undefined {
-  if (!arg) return undefined;
-  if (typeof arg === 'string') return nonBlank(arg);
-  if (typeof arg === 'object') {
-    if ('name' in arg && typeof (arg as { name?: unknown }).name === 'string') return nonBlank((arg as { name: string }).name);
-    if ('id' in arg && typeof (arg as { id?: unknown }).id === 'string') return nonBlank((arg as { id: string }).id);
-    if ('label' in arg) {
-      const label = (arg as { label?: unknown }).label;
-      if (typeof label === 'string') return nonBlank(label);
-      if (label && typeof label === 'object' && 'label' in label) {
-        const nested = (label as { label?: unknown }).label;
-        if (typeof nested === 'string') return nonBlank(nested);
-      }
-    }
-    if ('command' in arg) {
-      const command = (arg as { command?: { arguments?: unknown[] } }).command;
-      const first = command?.arguments?.[0];
-      if (typeof first === 'string') return nonBlank(first);
-    }
-    if ('bundle' in arg) {
-      const bundle = (arg as { bundle?: unknown }).bundle;
-      const name = resolveBundleName(bundle);
-      if (name) return name;
-    }
-  }
-  return undefined;
+  return resolveBundleNameTarget(arg);
 }
 
 function resolveSwarmId(arg: unknown): string | undefined {
-  if (!arg) return undefined;
-  if (typeof arg === 'string') return nonBlank(arg);
-  if (typeof arg === 'object') {
-    if ('id' in arg && typeof (arg as { id?: unknown }).id === 'string') return nonBlank((arg as { id: string }).id);
-    if ('label' in arg) {
-      const label = (arg as { label?: unknown }).label;
-      if (typeof label === 'string') return nonBlank(label);
-      if (label && typeof label === 'object' && 'label' in label) {
-        const nested = (label as { label?: unknown }).label;
-        if (typeof nested === 'string') return nonBlank(nested);
-      }
-    }
-    if ('command' in arg) {
-      const command = (arg as { command?: { arguments?: unknown[] } }).command;
-      const first = command?.arguments?.[0];
-      if (typeof first === 'string') return nonBlank(first);
-    }
-    if ('swarm' in arg) {
-      const s = (arg as { swarm?: unknown }).swarm;
-      if (s && typeof s === 'object' && 'id' in s) {
-        const id = (s as { id?: unknown }).id;
-        return typeof id === 'string' ? nonBlank(id) : undefined;
-      }
-    }
-  }
-  return undefined;
+  return resolveSwarmIdTarget(arg);
 }
 
-function nonBlank(value: string): string | undefined {
-  const trimmed = value.trim();
-  return trimmed ? trimmed : undefined;
+async function waitForSwarmLifecycle(
+  action: SwarmLifecycleAction,
+  swarmId: string,
+  hiveProvider?: { refresh(): void }
+): Promise<SwarmLifecycleState> {
+  let latest: SwarmLifecycleState = { status: 'UNKNOWN' };
+  for (let attempt = 0; attempt < 10; attempt++) {
+    await new Promise(resolve => setTimeout(resolve, attempt === 0 ? 750 : 1500));
+    const detail = await McpTools.swarmGet(swarmId);
+    latest = summarizeSwarmLifecycle(detail);
+    hiveProvider?.refresh();
+    if (isExpectedLifecycleState(action, latest)) return latest;
+  }
+  return latest;
+}
+
+async function latestLifecycleOutcome(
+  action: SwarmLifecycleAction,
+  swarmId: string,
+  commandResponse: unknown
+) {
+  try {
+    const correlationId = extractLifecycleCorrelationId(commandResponse);
+    const journal = await McpTools.debugJournal(swarmId, 50);
+    return findLifecycleOutcome(journal, action, correlationId);
+  } catch {
+    return undefined;
+  }
 }

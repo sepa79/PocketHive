@@ -4,16 +4,16 @@
 `IN PROGRESS`
 
 This guide shows how to connect common coding assistants to the PocketHive MCP
-server. It is intentionally explicit: each assistant starts the same local
-`tools/pockethive-mcp/start.cjs` stdio server, passes local environment values,
-and follows the same tool-permission boundary.
+server. It is intentionally explicit: each assistant connects to the same local
+Streamable HTTP endpoint, and the locally started server owns the PocketHive
+environment values and tool-permission boundary.
 
 ## Shared Prerequisites
 
 From the PocketHive repo root, install the MCP dependencies first:
 
 ```bash
-npm ci --prefix tools/pockethive-mcp
+npm run mcp:setup
 ```
 
 Then run the doctor after `mcp.json`, `.amazonq/mcp.json`, or your shell
@@ -33,26 +33,34 @@ Required local values:
 | `POCKETHIVE_AUTH_USERNAME` | Local dev auth username | `local-admin` |
 | `PH_BUNDLES_ROOTS` | JSON array of configured bundle roots | `["/home/me/work/pockethive-scenario-bundles"]` |
 | `PH_WORKFLOW_SOURCE_ROOTS` | JSON array of extra source roots for JMeter/Postman/OpenAPI/etc. | `["/home/me/test-sources"]` |
+| `PH_WORKFLOW_PROFILES_PATH` | Optional custom workflow profiles JSON | `/home/me/work/PocketHive/workflow-profiles.json` |
+| `PH_WORKFLOW_PERSISTENCE` | Workflow-session persistence mode | `local` |
+| `HIVEMIND_MCP_URL` | Optional HiveMind enrichment MCP endpoint | `https://hivemind.example.com/mcp` |
 
-Use absolute paths in IDE integrations unless the tool explicitly documents its
-working directory. On Windows, use Windows-native paths for Windows-native IDEs:
-
-```json
-"C:\\Users\\me\\IdeaProjects\\PocketHive\\tools\\pockethive-mcp\\start.cjs"
-```
-
-Use WSL/Linux paths only when the assistant process runs inside WSL/Linux.
+Use absolute paths for the server process environment. The assistant configs in
+this repo use `http://localhost:3100/mcp`, so Windows, WSL, Linux, and JetBrains
+clients all connect through the same local HTTP boundary.
 
 ## PocketHive MCP Server
 
-All assistant configurations point to the same command:
+Start the MCP server once from the PocketHive repo root:
 
-```text
-node <absolute-path-to-PocketHive>/tools/pockethive-mcp/start.cjs
+```bash
+POCKETHIVE_BASE_URL=http://localhost:8088 \
+POCKETHIVE_AUTH_USERNAME=local-admin \
+POCKETHIVE_ROOT=/absolute/path/to/PocketHive \
+BUNDLES_ROOT=/absolute/path/to/pockethive-scenario-bundles \
+PH_BUNDLES_ROOTS='["/absolute/path/to/pockethive-scenario-bundles"]' \
+npm run mcp:start:http
 ```
 
-`start.cjs` ensures `tools/pockethive-mcp` dependencies are installed before it
-imports the ESM server. If startup fails, run:
+All assistant configurations point to:
+
+```text
+http://localhost:3100/mcp
+```
+
+If startup or tool discovery fails, run:
 
 ```bash
 npm run mcp:doctor
@@ -64,9 +72,9 @@ For all assistants, prefer three permission tiers.
 
 | Tier | Tools | Use when |
 |---|---|---|
-| Read/status | `workflow.config.get`, `workflow.config.validate`, `workflow.list`, `workflow.status`, `health.check`, `context.get`, `env.status`, `bundle.list`, `bundle.read` | Normal inspection and IDE status |
-| Authoring | `workflow.start`, `workflow.source.read`, `workflow.update`, `workflow.preview`, `workflow.generate`, `workflow.validate`, `workflow.patch`, `workflow.report`, `bundle.check` | The user asks the assistant to create/fix a test workflow |
-| Live runtime | `workflow.deploy`, `workflow.verify`, `scenario.*`, `swarm.*`, `debug.*`, `evidence.summary`, `mock.*`, `dataset.*` | The user explicitly wants deployment/runtime evidence |
+| Read/status | `workflow_config_get`, `workflow_config_validate`, `workflow_examples_list`, `workflow_examples_get`, `workflow_examples_recommend`, `workflow_profiles_list`, `workflow_profiles_get`, `workflow_list`, `workflow_status`, `workflow_evidence_render`, `health_check`, `context_get`, `env_status`, `bundle_list`, `bundle_read` | Normal inspection and IDE/chat status |
+| Authoring | `workflow_start`, `workflow_source_read`, `workflow_update`, `workflow_role_check`, `workflow_preview`, `workflow_generate`, `workflow_validate`, `workflow_patch`, `workflow_report`, `bundle_check` | The user asks the assistant to create/fix a test workflow |
+| Live/runtime/enrichment | `workflow_deploy_start`, `workflow_deploy_status`, `workflow_deploy_resume`, `workflow_verify_start`, `workflow_verify_status`, `workflow_verify_resume`, `workflow_deploy`, `workflow_verify`, `workflow_hivemind_enrich`, `scenario_*`, `swarm_*`, `debug_*`, `evidence_summary`, `mock_*`, `dataset_*` | The user explicitly wants deployment/runtime evidence or HiveMind enrichment |
 
 Assistants must ask the user to fill required `nextQuestions` before generating
 or deploying. The VS Code/IntelliJ plugin surfaces may display unanswered
@@ -91,20 +99,8 @@ Recommended local `.amazonq/mcp.json`:
 {
   "mcpServers": {
     "pockethive-bundles": {
-      "command": "node",
-      "args": [
-        "/absolute/path/to/PocketHive/tools/pockethive-mcp/start.cjs"
-      ],
-      "env": {
-        "POCKETHIVE_BASE_URL": "http://localhost:8088",
-        "POCKETHIVE_AUTH_USERNAME": "local-admin",
-        "POCKETHIVE_ROOT": "/absolute/path/to/PocketHive",
-        "BUNDLES_ROOT": "/absolute/path/to/pockethive-scenario-bundles",
-        "PH_BUNDLES_ROOTS": "[\"/absolute/path/to/pockethive-scenario-bundles\"]",
-        "PH_WORKFLOW_SOURCE_ROOTS": "[]",
-        "PH_ACTIVE_ENVIRONMENT": "local"
-      },
-      "timeout": 60000,
+      "url": "http://localhost:3100/mcp",
+      "timeout": 300000,
       "disabled": false
     }
   }
@@ -117,7 +113,7 @@ JetBrains flow:
 2. Sign in with Builder ID or IAM Identity Center.
 3. Open the Amazon Q panel, then Chat.
 4. Open the tools/MCP configuration UI.
-5. Add or review the `pockethive-bundles` stdio server.
+5. Add or review the `pockethive-bundles` Streamable HTTP server.
 6. Enable the read/status and authoring tools. Enable live runtime tools only
    for users who are allowed to deploy/start swarms.
 
@@ -137,19 +133,9 @@ PocketHive local MCP example:
 {
   "servers": {
     "pockethive-bundles": {
-      "type": "stdio",
-      "command": "node",
-      "args": [
-        "/absolute/path/to/PocketHive/tools/pockethive-mcp/start.cjs"
-      ],
-      "env": {
-        "POCKETHIVE_BASE_URL": "http://localhost:8088",
-        "POCKETHIVE_AUTH_USERNAME": "local-admin",
-        "POCKETHIVE_ROOT": "/absolute/path/to/PocketHive",
-        "BUNDLES_ROOT": "/absolute/path/to/pockethive-scenario-bundles",
-        "PH_BUNDLES_ROOTS": "[\"/absolute/path/to/pockethive-scenario-bundles\"]",
-        "PH_WORKFLOW_SOURCE_ROOTS": "[]"
-      }
+      "type": "http",
+      "url": "http://localhost:3100/mcp",
+      "disabled": false
     }
   }
 }
@@ -201,40 +187,35 @@ approval_policy = "on-request"
 sandbox_mode = "workspace-write"
 
 [mcp_servers.pockethive-bundles]
-command = "node"
-args = ["/absolute/path/to/PocketHive/tools/pockethive-mcp/start.cjs"]
-cwd = "/absolute/path/to/PocketHive"
+url = "http://localhost:3100/mcp"
 startup_timeout_sec = 60
-tool_timeout_sec = 150
+tool_timeout_sec = 300
 enabled = true
 enabled_tools = [
-  "workflow.config.get",
-  "workflow.config.validate",
-  "workflow.list",
-  "workflow.start",
-  "workflow.source.read",
-  "workflow.update",
-  "workflow.status",
-  "workflow.preview",
-  "workflow.generate",
-  "workflow.validate",
-  "workflow.patch",
-  "workflow.report",
-  "bundle.list",
-  "bundle.read",
-  "bundle.check",
-  "health.check",
-  "context.get",
-  "env.status"
+  "workflow_config_get",
+  "workflow_config_validate",
+  "workflow_examples_list",
+  "workflow_examples_get",
+  "workflow_examples_recommend",
+  "workflow_list",
+  "workflow_start",
+  "workflow_source_read",
+  "workflow_update",
+  "workflow_role_check",
+  "workflow_status",
+  "workflow_evidence_render",
+  "workflow_preview",
+  "workflow_generate",
+  "workflow_validate",
+  "workflow_patch",
+  "workflow_report",
+  "bundle_list",
+  "bundle_read",
+  "bundle_check",
+  "health_check",
+  "context_get",
+  "env_status"
 ]
-
-[mcp_servers.pockethive-bundles.env]
-POCKETHIVE_BASE_URL = "http://localhost:8088"
-POCKETHIVE_AUTH_USERNAME = "local-admin"
-POCKETHIVE_ROOT = "/absolute/path/to/PocketHive"
-BUNDLES_ROOT = "/absolute/path/to/pockethive-scenario-bundles"
-PH_BUNDLES_ROOTS = "[\"/absolute/path/to/pockethive-scenario-bundles\"]"
-PH_WORKFLOW_SOURCE_ROOTS = "[]"
 ```
 
 For live deployment/evidence work, add these tools only for a profile where the
@@ -242,21 +223,28 @@ developer is allowed to mutate the stack:
 
 ```toml
 enabled_tools = [
-  "workflow.deploy",
-  "workflow.verify",
-  "scenario.deploy",
-  "scenario.list",
-  "scenario.get",
-  "swarm.list",
-  "swarm.get",
-  "swarm.create",
-  "swarm.wait-ready",
-  "swarm.start",
-  "swarm.stop",
-  "swarm.remove",
-  "debug.queues",
-  "debug.journal",
-  "evidence.summary"
+  "workflow_deploy",
+  "workflow_deploy_start",
+  "workflow_deploy_status",
+  "workflow_deploy_resume",
+  "workflow_verify",
+  "workflow_verify_start",
+  "workflow_verify_status",
+  "workflow_verify_resume",
+  "workflow_hivemind_enrich",
+  "scenario_deploy",
+  "scenario_list",
+  "scenario_get",
+  "swarm_list",
+  "swarm_get",
+  "swarm_create",
+  "swarm_wait_ready",
+  "swarm_start",
+  "swarm_stop",
+  "swarm_remove",
+  "debug_queues",
+  "debug_journal",
+  "evidence_summary"
 ]
 ```
 
@@ -271,12 +259,16 @@ PocketHive test workflow:
 
 ```text
 Use the pockethive-bundles MCP workflow tools.
-Start from my source file or instructions, then inspect workflow.status.
+Start from my source file or instructions, inspect workflow_status, and use
+workflow_examples_list/recommend for concrete scenario bundle examples.
 Ask me every remaining nextQuestion before generating artifacts.
+Treat validationIssues with severity error as blocking.
 After generation, validate. If validation/deployment/verification fails,
 debug and patch explicitly, preserving attempt history.
-Before completion, report evidence including bundle validation, deployment
-state if run, runtime verification if run, evidence gaps, and changed files.
+Before generation, record required answer provenance and complete required
+role checks such as Three Amigos.
+Before completion, report the claim matrix, bundle validation, deployment state
+if run, runtime verification if run, evidence gaps, and changed files.
 ```
 
 ## Quick Diagnostics
@@ -285,10 +277,10 @@ state if run, runtime verification if run, evidence gaps, and changed files.
 |---|---|
 | MCP server does not start | `npm run mcp:doctor`; use `npm run mcp:doctor -- --config .amazonq/mcp.json` for a specific assistant config |
 | Assistant cannot see tools | Confirm the config key shape: Amazon Q uses `mcpServers`; Copilot uses `servers`; Codex uses `[mcp_servers.<id>]` |
-| Path works in terminal but not IDE | Replace relative paths with absolute paths; use Windows paths for Windows-native IDEs |
+| Assistant cannot connect | Confirm the HTTP server is running and the assistant config points at `http://localhost:3100/mcp` |
 | Bundle tools fail with path errors | Check `BUNDLES_ROOT` and `PH_BUNDLES_ROOTS` point to the same explicit scenario-bundles checkout |
 | Workflow cannot read source file | Add its parent folder to `PH_WORKFLOW_SOURCE_ROOTS` |
-| Runtime tools fail | Run `health.check`; confirm `POCKETHIVE_BASE_URL` points at the official ingress/API path |
+| Runtime tools fail | Run `health_check`; confirm `POCKETHIVE_BASE_URL` points at the official ingress/API path |
 | GitHub MCP blocked in Copilot | Ask the org admin to enable the MCP servers in Copilot policy |
 
 ## Official References

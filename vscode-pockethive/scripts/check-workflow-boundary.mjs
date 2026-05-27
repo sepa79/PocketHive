@@ -5,15 +5,15 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 const allowedWorkflowTools = new Set([
-  "workflow.config.get",
-  "workflow.config.validate",
-  "workflow.list",
-  "workflow.status",
+  "workflow_config_get",
+  "workflow_config_validate",
+  "workflow_list",
+  "workflow_status",
 ]);
 const requiredWorkflowTools = new Set([
-  "workflow.config.get",
-  "workflow.config.validate",
-  "workflow.list",
+  "workflow_config_get",
+  "workflow_config_validate",
+  "workflow_list",
 ]);
 const forbiddenWrapperNames = [
   "workflowStart",
@@ -44,7 +44,7 @@ function sourceFiles(root) {
 const seen = new Set();
 for (const file of sourceFiles("src")) {
   const text = readFileSync(file, "utf8");
-  const toolCalls = [...text.matchAll(/call\(['"](workflow\.[^'"]+)['"]/g)].map(match => match[1]);
+  const toolCalls = [...text.matchAll(/call\(['"](workflow_[^'"]+)['"]/g)].map(match => match[1]);
   for (const tool of toolCalls) {
     seen.add(tool);
     assert.ok(allowedWorkflowTools.has(tool), `VS Code plugin must not call mutating workflow tool '${tool}' in ${file}`);

@@ -542,7 +542,7 @@
   },
   "scripts": {
     "build": "tsc -p ./",
-    "test": "node scripts/check-workflow-boundary.mjs",
+    "test": "npm run build && node scripts/check-command-targets.mjs && node scripts/check-workflow-boundary.mjs",
     "watch": "tsc -watch -p ./",
     "package": "vsce package",
     "vscode:prepublish": "npm run build"

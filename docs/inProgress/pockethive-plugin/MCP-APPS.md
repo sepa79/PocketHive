@@ -12,9 +12,10 @@ conversation — not just text.
 `@modelcontextprotocol/ext-apps` is published, so the package-exists blocker is
 gone. Target client support still needs to be verified per client.
 
-The early scope is deliberately small: one read-only `evidence.summary` widget
-that visualises existing evidence tool output. The broader dashboard/form
-platform remains future work.
+The early scope is deliberately small: read-only evidence widgets that
+visualise existing MCP tool output. `evidence_summary` renders runtime swarm
+evidence, and `workflow_evidence_render` renders the agent-managed workflow
+evidence/report. The broader dashboard/form platform remains future work.
 
 **Potential clients:** Claude, Claude Desktop, VS Code GitHub Copilot, Goose,
 Postman, MCPJam. Confirm support before building against any client.
@@ -27,7 +28,7 @@ Postman, MCPJam. Confirm support before building against any client.
 +------------------------------------------------------------------+
 |  AI Chat (Claude, Copilot, Amazon Q, etc.)                       |
 |  User asks: "show evidence for swarm-x"                          |
-|  Agent calls: evidence.summary                                   |
+|  Agent calls: evidence_summary                                   |
 |  Host fetches: ui://pockethive/evidence-summary                  |
 |  Renders: read-only evidence widget in sandboxed iframe          |
 +------------------------------------------------------------------+
@@ -53,8 +54,8 @@ receive the same tool result plus the declared UI resource.
 
 ## Project structure
 
-Phase 1.5 adds only the evidence summary app. Other app folders below are
-future platform candidates.
+Phase 1.5 adds only evidence widgets. Other app folders below are future
+platform candidates.
 
 ```
 tools/pockethive-mcp/
@@ -206,7 +207,7 @@ function registerApp(name, toolName, desc, schema, handler) {
 **Trigger:** User asks "show evidence for swarm X", "did this run prove the
 scenario works?", "what evidence is missing?"
 
-**Tool:** `evidence.summary`
+**Tool:** `evidence_summary`
 
 **Scope:** read-only. The tool returns the canonical evidence model. The widget
 only renders that model.
@@ -239,10 +240,61 @@ only renders that model.
 - No writes.
 - No direct runtime calls from the widget.
 - No shell, Docker logs, or direct Loki.
-- All values come from the `evidence.summary` result.
+- All values come from the `evidence_summary` result.
 - JSON output remains canonical for non-App clients.
 - The report must distinguish full proof, partial proof, and not-applicable
   claims instead of implying evidence that was not collected.
+
+---
+
+## Phase 2 App — Workflow Evidence Report
+
+**Trigger:** User asks "show the workflow evidence", "show the chat report",
+"what questions/gates/evidence are left?", or "prove this generated bundle is
+ready".
+
+**Tool:** `workflow_evidence_render`
+
+**Scope:** read-only. The tool returns the canonical workflow status/evidence
+model and attaches `ui://pockethive/workflow-evidence-v1.html`. The widget only
+renders that model.
+
+**UI:**
+
+```
++------------------------------------------------------------------+
+| Workflow Evidence: wf-123                              VALIDATED  |
+|------------------------------------------------------------------|
+| Bundle       google-smoke              Profile   Novice Builder  |
+| Questions    0                         Evidence gaps  runtime    |
+|------------------------------------------------------------------|
+| Claim matrix                                                     |
+| bundle.exists        SATISFIED       generated bundle exists      |
+| validation.passed    SATISFIED       local bundle check passed    |
+| runtime.deployed     NOT-RUN         deploy not requested         |
+|------------------------------------------------------------------|
+| Role review                                                     |
+| Three Amigos Review: complete                                    |
+| architect: pass | pockethive-sme: pass | tester: pass            |
+|------------------------------------------------------------------|
+| Lifecycle operations                                             |
+| op-deploy-... deploy succeeded complete                          |
+|   wait-ready: 2 attempts | start: WORKFLOW_DEPLOY_STARTED         |
+|------------------------------------------------------------------|
+| Remaining questions / evidence gaps                              |
+| - runtime.verified: run workflow_verify or mark not-run           |
++------------------------------------------------------------------+
+```
+
+**Rules:**
+
+- No writes.
+- No direct runtime calls from the widget.
+- No question answering from the widget.
+- No shell, Docker logs, or direct service-port checks.
+- All values come from the `workflow_evidence_render` result.
+- `workflow_status` remains the data/status tool; `workflow_evidence_render`
+  is the render tool that attaches the MCP App resource.
 
 ---
 
@@ -655,8 +707,9 @@ clients:
 }
 ```
 
-Phase 1.5 registers only `ui://pockethive/evidence-summary-v1.html`. Other app
-bundles are not published until their phase is approved.
+Phase 1.5 registers `ui://pockethive/evidence-summary-v1.html`; Phase 2 also
+registers `ui://pockethive/workflow-evidence-v1.html`. Other app bundles are
+not published until their phase is approved.
 
 ---
 
@@ -694,8 +747,10 @@ Add to `.vscode/mcp.json`:
 ```json
 {
   "servers": {
-    "pockethive": {
-      "url": "http://localhost:3100/mcp"
+    "pockethive-bundles": {
+      "type": "http",
+      "url": "http://localhost:3100/mcp",
+      "disabled": false
     }
   }
 }
@@ -710,6 +765,6 @@ The following docs have been updated to reflect MCP Apps:
 | Doc | Change applied |
 |---|---|
 | ARCHITECTURE.md | Phase 1.5 evidence widget described |
-| MCP-SERVER.md | `evidence.summary` tool and Phase 1.5 App packaging described |
+| MCP-SERVER.md | `evidence_summary` tool and Phase 1.5 App packaging described |
 | AGENT-RULES.md | Phase 1.5 App constraints added |
 | README.md | MCP-APPS.md listed as evidence-widget spike plus future platform |

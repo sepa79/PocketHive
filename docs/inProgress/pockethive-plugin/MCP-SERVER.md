@@ -110,7 +110,9 @@ if (process.env.PH_MCP_HTTP_PORT) {
 Version tracks PocketHive releases (currently `0.15.15`).
 
 Phase 1.5 registers the `evidence-summary` MCP App as an inline resource at
-`ui://pockethive/evidence-summary-v1.html`. Broader MCP Apps remain future
+`ui://pockethive/evidence-summary-v1.html`. Phase 2 also registers the
+workflow evidence report resource at
+`ui://pockethive/workflow-evidence-v1.html`. Broader MCP Apps remain future
 platform work.
 
 ## Tool Surface
@@ -143,6 +145,17 @@ implemented or changed.
   workflows. The MCP owns state, gates, generated artifacts, official API calls,
   and evidence. The external agent owns source interpretation and debug/fix
   choices.
+- `workflow.result` is the compact agent-facing handoff shape for the same
+  workflow: verdict, phase, diagnosis, next action, proof summary, and refs.
+  `workflow.status`, `workflow.report`, `workflow.evidence.render`, and
+  workflow traces include the same `agent` object so agents can stay on one
+  interpretation path and drill into full evidence only when needed.
+- Runtime verification has two explicit proof modes. `accept-partial` is for
+  fast debug loops and accepts partial reports while preserving gaps. Production
+  and live acceptance use `proofMode=strict` with `includeTapSample=true`; this
+  fails missing/partial production proof for queue drain, request handling,
+  flow order, configured auth, mutating payload body assertions, and runtime
+  payload trace.
 - `workflow.config.get`, `workflow.config.validate`, and `workflow.list` are
   read-only plugin-facing tools for configuration and status display. Plugins
   may render remaining `nextQuestions`, but must not answer them or call
@@ -152,6 +165,42 @@ Workflow registration lives in `tools/pockethive-mcp/workflow-tools.mjs`; the
 main `server.mjs` injects shared PocketHive helpers into that module. This keeps
 the workflow surface maintainable without creating duplicate bundle-generation
 or validation logic.
+
+#### Agent fast path
+
+Agents should use `workflow_result` as the first read after every workflow
+mutation. The fast loop is:
+
+```text
+workflow_start
+workflow_update
+workflow_result
+workflow_generate
+workflow_validate
+workflow_deploy
+workflow_verify
+workflow_report
+workflow_evidence_render
+```
+
+When `workflow_result.nextAction.tool` is present, call that tool next unless
+the user changes the goal. Use `workflow_status` only when the compact result
+points to missing fields, role checks, or evidence details that need inspection.
+Use `workflow_evidence_render` for human handoff, not as the agent's primary
+decision surface.
+
+Production proof uses:
+
+```json
+{
+  "proofMode": "strict",
+  "includeTapSample": true
+}
+```
+
+Debug proof may use `proofMode=accept-partial` to keep iteration fast, but the
+result must still surface recorded gaps through `workflow_result.diagnosis`,
+`workflow_result.proof`, and the full evidence report.
 
 ### Scenario Manager contracts
 - `scenario.contracts.get` — reads Scenario Manager capability/template/scenario
@@ -183,6 +232,12 @@ changed fingerprint.
 ### Swarm lifecycle
 - `swarm.list`, `swarm.get`, `swarm.create`, `swarm.start`
 - `swarm.wait-ready`, `swarm.stop`, `swarm.remove`
+- `workflow_deploy_start`, `workflow_deploy_status`, `workflow_deploy_resume`
+  and `workflow_verify_start`, `workflow_verify_status`,
+  `workflow_verify_resume` for slow machines where scenario
+  startup or runtime settlement may take several minutes. These tools persist a
+  lifecycle operation id and advance in short, repeatable calls instead of
+  relying on one long MCP timeout.
 
 ### Real-time component control
 - `component.config-preview` — reads the current runtime config and returns the
@@ -229,7 +284,10 @@ queue depth, or metrics to prove the component applied the update.
 - `debug.queues`, `debug.tap`, `debug.tap.read`, `debug.tap.close`
 - `debug.journal`, `debug.config-update` compatibility alias
 - `debug.prometheus`
-- `evidence.summary` — read-only aggregate evidence model for one swarm
+- `evidence_summary` — read-only aggregate evidence model for one swarm
+- `workflow_result` — compact read-only agent handoff for one workflow
+- `workflow_evidence_render` — read-only MCP App render tool for workflow
+  evidence, claim matrix, role checks, lifecycle operations, and gaps
 - PocketHive-provided log tools may be added later only if backed by
   PocketHive APIs. Direct Docker logs and direct Loki queries are out of scope.
 

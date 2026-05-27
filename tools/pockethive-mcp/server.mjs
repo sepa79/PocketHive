@@ -294,14 +294,50 @@ function controlExchange() {
 
 // ── MCP Server ────────────────────────────────────────────────────────────────
 
-const server = new McpServer({ name: "pockethive-bundles", version: "1.0.0" });
+const SERVER_INFO = { name: "pockethive-bundles", version: "1.0.0" };
+const server = new McpServer(SERVER_INFO);
 
 const HANDLER_TIMEOUT_MS = 150000; // 2.5 min max per tool call
 const APP_RESOURCE_MIME_TYPE = "text/html;profile=mcp-app";
 const EVIDENCE_WIDGET_URI = "ui://pockethive/evidence-summary-v1.html";
+const WORKFLOW_EVIDENCE_WIDGET_URI = "ui://pockethive/workflow-evidence-v1.html";
+const TOOL_NAME_MODES = new Set(["underscore", "legacy", "both"]);
+const MCP_TOOL_NAME_MODE = process.env.PH_MCP_TOOL_NAME_MODE || "underscore";
+if (!TOOL_NAME_MODES.has(MCP_TOOL_NAME_MODE)) {
+  throw new Error(`PH_MCP_TOOL_NAME_MODE must be one of ${[...TOOL_NAME_MODES].join(", ")}`);
+}
+
+function exposedToolName(name) {
+  return String(name).replace(/[.-]/g, "_");
+}
+
+function toolRegistrationNames(name) {
+  const exposed = exposedToolName(name);
+  if (MCP_TOOL_NAME_MODE === "legacy") return [name];
+  if (MCP_TOOL_NAME_MODE === "both" && exposed !== name) return [exposed, name];
+  return [exposed];
+}
+
+function registerMcpTool(name, config, handler) {
+  const names = toolRegistrationNames(name);
+  for (const registeredName of names) {
+    server.registerTool(registeredName, {
+      ...config,
+      title: registeredName,
+      description: registeredName === name
+        ? config.description
+        : `${config.description} Legacy name: ${name}.`,
+      _meta: {
+        ...(config._meta || {}),
+        "pockethive/originalToolName": name,
+      },
+    }, handler);
+  }
+}
 
 function reg(name, desc, schema, handler, options = {}) {
-  server.registerTool(name, { title: name, description: desc, inputSchema: schema, ...options }, async (input = {}) => {
+  const { rawResult = false, ...toolOptions } = options;
+  registerMcpTool(name, { title: name, description: desc, inputSchema: schema, ...toolOptions }, async (input = {}) => {
     try {
       const result = await Promise.race([
         handler(input),
@@ -309,11 +345,26 @@ function reg(name, desc, schema, handler, options = {}) {
           setTimeout(() => reject(new Error(`Tool '${name}' timed out after ${HANDLER_TIMEOUT_MS / 1000}s`)), HANDLER_TIMEOUT_MS)
         ),
       ]);
+      if (rawResult) return result;
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     } catch (err) {
       return { isError: true, content: [{ type: "text", text: `Error: ${err.message || err}` }] };
     }
   });
+}
+
+function cloneRegisteredServer() {
+  const cloned = new McpServer(SERVER_INFO);
+  cloned._registeredTools = { ...server._registeredTools };
+  cloned._registeredResources = { ...server._registeredResources };
+  cloned._registeredResourceTemplates = { ...server._registeredResourceTemplates };
+  cloned._registeredPrompts = { ...server._registeredPrompts };
+  if (Object.keys(cloned._registeredTools).length > 0) cloned.setToolRequestHandlers();
+  if (Object.keys(cloned._registeredResources).length > 0 || Object.keys(cloned._registeredResourceTemplates).length > 0) {
+    cloned.setResourceRequestHandlers();
+  }
+  if (Object.keys(cloned._registeredPrompts).length > 0) cloned.setPromptRequestHandlers();
+  return cloned;
 }
 
 function jsonToolResult(data, extra = {}) {
@@ -514,6 +565,8 @@ const WIZARD_PROTOCOLS = ["REST", "TCP", "SEQUENCE"];
 const WIZARD_TARGETS = ["wiremock-local", "tcp-mock-local", "external"];
 const WIZARD_DATA_SOURCES = ["SCHEDULER", "CSV_DATASET", "REDIS_DATASET"];
 const WIZARD_TRAFFIC_SHAPES = ["smoke", "ramp_steady", "spike", "soak", "flat"];
+const WIZARD_HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"];
+const WIZARD_MUTATING_HTTP_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const WIZARD_AUTH_TYPES = [
   "none",
   "oauth2_client_credentials",
@@ -633,18 +686,42 @@ function slug(value, fallback = "main") {
   return s || fallback;
 }
 
+function plainObject(value) {
+  return value && typeof value === "object" && !Array.isArray(value);
+}
+
+function copyDefinedFields(target, source, fields) {
+  for (const field of fields) {
+    if (source[field] !== undefined) target[field] = source[field];
+  }
+  return target;
+}
+
 function normalizeWizardEndpoint(entry, index = 0) {
   if (typeof entry === "object" && entry !== null) {
     const method = String(entry.method || "").trim().toUpperCase();
     const path = String(entry.path || "").trim();
     if (!method || !path.startsWith("/")) throw new Error("endpoint object must include method and an absolute /path");
-    return {
+    return copyDefinedFields({
       method,
       path,
       callId: slug(entry.callId || `${method}-${path}` || `call-${index + 1}`, `call-${index + 1}`),
       description: entry.description ? String(entry.description).trim() : "",
       bodyTemplate: entry.bodyTemplate !== undefined ? String(entry.bodyTemplate) : undefined,
-    };
+    }, entry, [
+      "headers",
+      "query",
+      "queryParameters",
+      "weight",
+      "expectedStatus",
+      "assertions",
+      "retry",
+      "continueOnNon2xx",
+      "extracts",
+      "captures",
+      "serviceId",
+      "mock",
+    ]);
   }
   const text = String(entry).trim();
   const match = text.match(/^([A-Za-z]+)\s+(\S+)(?:\s+[-–]\s+(.+))?$/);
@@ -670,11 +747,11 @@ function normalizeWizardMockEndpoint(entry, index = 0) {
   if (typeof entry === "object" && entry !== null) {
     if (entry.method || entry.path) {
       const endpoint = normalizeWizardEndpoint(entry, index);
-      return {
+      return copyDefinedFields({
         ...endpoint,
-        status: Number(entry.status || 200),
-        responseBody: entry.responseBody ?? { ok: true, callId: endpoint.callId },
-      };
+        status: Number(entry.status ?? entry.mock?.status ?? 200),
+        responseBody: entry.responseBody ?? entry.mock?.responseBody ?? { ok: true, callId: endpoint.callId },
+      }, entry, ["requestHeaders", "queryParameters", "bodyPatterns", "priority", "responseHeaders"]);
     }
     return entry;
   }
@@ -837,6 +914,39 @@ function validateWizardAnswers(answers) {
   if (answers.protocol === "TCP" && answers.auth && !["none", "iso8583_mac", "mtls"].includes(answers.auth)) {
     errors.push("TCP wizard bundles support auth none, iso8583_mac, or mtls only");
   }
+  if (Array.isArray(answers.endpoints)) {
+    const callIds = new Set();
+    for (const [index, endpoint] of answers.endpoints.entries()) {
+      const prefix = `endpoint ${index + 1}`;
+      if (!WIZARD_HTTP_METHODS.includes(String(endpoint.method || "").toUpperCase())) {
+        errors.push(`${prefix} method must be one of: ${WIZARD_HTTP_METHODS.join(", ")}`);
+      }
+      if (!String(endpoint.path || "").startsWith("/")) {
+        errors.push(`${prefix} path must be an absolute /path`);
+      }
+      const callId = String(endpoint.callId || "").trim();
+      if (!callId) {
+        errors.push(`${prefix} callId is required`);
+      } else if (callIds.has(callId)) {
+        errors.push(`endpoint callId '${callId}' is duplicated`);
+      }
+      callIds.add(callId);
+      for (const field of ["headers", "query", "queryParameters"]) {
+        if (endpoint[field] !== undefined && !plainObject(endpoint[field])) {
+          errors.push(`${prefix} ${field} must be an object`);
+        }
+      }
+      if (endpoint.weight !== undefined && (!Number.isFinite(Number(endpoint.weight)) || Number(endpoint.weight) <= 0)) {
+        errors.push(`${prefix} weight must be a positive number`);
+      }
+      if (endpoint.extracts !== undefined && !Array.isArray(endpoint.extracts)) {
+        errors.push(`${prefix} extracts must be an array`);
+      }
+      if (endpoint.retry !== undefined && !plainObject(endpoint.retry)) {
+        errors.push(`${prefix} retry must be an object`);
+      }
+    }
+  }
   if (answers.resultCodePattern) {
     try {
       const regex = new RegExp(answers.resultCodePattern);
@@ -885,8 +995,8 @@ function wizardMockEndpoints(answers) {
   }
   return (answers.endpoints || []).map((endpoint, index) => ({
     ...endpoint,
-    status: 200,
-    responseBody: { ok: true, callId: endpoint.callId || `call-${index + 1}` },
+    status: endpoint.mock?.status || endpoint.expectedStatus || 200,
+    responseBody: endpoint.mock?.responseBody || endpoint.responseBody || { ok: true, callId: endpoint.callId || `call-${index + 1}` },
   }));
 }
 
@@ -949,6 +1059,126 @@ function wizardAuthRef(answers) {
         ? "HTTP_HEADER"
         : "HTTP_HEADER";
   return { profileId: "wizard-auth", applyAs };
+}
+
+function wizardEndpointQuery(endpoint) {
+  const query = plainObject(endpoint.query) ? endpoint.query : null;
+  return query || {};
+}
+
+function wizardEndpointPathTemplate(endpoint) {
+  const query = wizardEndpointQuery(endpoint);
+  const entries = Object.entries(query).filter(([, value]) => value !== undefined && value !== null && value !== "");
+  if (!entries.length) return endpoint.path;
+  const joiner = endpoint.path.includes("?") ? "&" : "?";
+  return `${endpoint.path}${joiner}${entries.map(([key, value]) => `${key}=${String(value)}`).join("&")}`;
+}
+
+function wizardTemplateHeaders(endpoint, includeJsonDefault = true) {
+  return {
+    ...(includeJsonDefault ? { "content-type": "application/json" } : {}),
+    ...(plainObject(endpoint.headers) ? endpoint.headers : {}),
+  };
+}
+
+function wireMockMatcherMap(value) {
+  const source = plainObject(value) ? value : {};
+  const mapped = {};
+  for (const [key, matcher] of Object.entries(source)) {
+    mapped[key] = plainObject(matcher) ? matcher : { equalTo: String(matcher) };
+  }
+  return mapped;
+}
+
+function objectJsonPathMatchers(value, prefix = "$") {
+  if (!plainObject(value)) return [];
+  const patterns = [];
+  for (const [key, child] of Object.entries(value)) {
+    if (child === undefined || child === null) continue;
+    const path = `${prefix}.${key}`;
+    if (plainObject(child)) {
+      patterns.push(...objectJsonPathMatchers(child, path));
+    } else if (Array.isArray(child)) {
+      patterns.push({ matchesJsonPath: path });
+    } else if (typeof child === "string" && child.includes("{{")) {
+      patterns.push({ matchesJsonPath: path });
+    } else {
+      patterns.push({ matchesJsonPath: { expression: path, equalTo: String(child) } });
+    }
+  }
+  return patterns;
+}
+
+function generatedBodyPatterns(endpoint, answers) {
+  const method = String(endpoint.method || "").toUpperCase();
+  if (!WIZARD_MUTATING_HTTP_METHODS.has(method)) return [];
+  const bodyTemplate = endpoint.bodyTemplate || answers?.requestBody || "";
+  if (!bodyTemplate.trim()) return [];
+  try {
+    const parsed = JSON.parse(bodyTemplate);
+    const jsonPathMatchers = objectJsonPathMatchers(parsed);
+    if (jsonPathMatchers.length) return jsonPathMatchers;
+  } catch {
+    // Template strings can contain placeholders; fall back to a conservative body matcher.
+  }
+  return [{ contains: bodyTemplate.trim().slice(0, 120) }];
+}
+
+function wizardWireMockRequest(endpoint, answers = {}) {
+  const mock = plainObject(endpoint.mock) ? endpoint.mock : {};
+  const request = { method: endpoint.method, urlPath: endpoint.path };
+  const query = plainObject(endpoint.queryParameters)
+    ? endpoint.queryParameters
+    : plainObject(mock.queryParameters)
+      ? mock.queryParameters
+      : wizardEndpointQuery(endpoint);
+  const headers = plainObject(endpoint.requestHeaders)
+    ? endpoint.requestHeaders
+    : plainObject(mock.requestHeaders)
+      ? mock.requestHeaders
+      : null;
+  const bodyPatterns = Array.isArray(endpoint.bodyPatterns)
+    ? endpoint.bodyPatterns
+    : Array.isArray(mock.bodyPatterns)
+      ? mock.bodyPatterns
+      : generatedBodyPatterns(endpoint, answers);
+  if (plainObject(query) && Object.keys(query).length) request.queryParameters = wireMockMatcherMap(query);
+  if (plainObject(headers) && Object.keys(headers).length) request.headers = wireMockMatcherMap(headers);
+  if (bodyPatterns?.length) request.bodyPatterns = bodyPatterns;
+  return request;
+}
+
+function wizardSequenceStep(endpoint, index) {
+  const step = { id: `step-${index + 1}-${endpoint.callId}`, callId: endpoint.callId };
+  for (const field of ["serviceId", "continueOnNon2xx", "retry"]) {
+    if (endpoint[field] !== undefined) step[field] = endpoint[field];
+  }
+  const extracts = Array.isArray(endpoint.extracts)
+    ? endpoint.extracts
+    : Array.isArray(endpoint.captures)
+      ? endpoint.captures
+      : [];
+  if (extracts.length) step.extracts = extracts;
+  return step;
+}
+
+function wizardTopology(bees) {
+  const produced = new Map();
+  const edges = [];
+  for (const bee of bees) {
+    const beeId = bee.id || bee.role;
+    for (const [port, suffix] of Object.entries(bee.work?.out || {})) {
+      if (typeof suffix === "string") produced.set(suffix, { beeId, port });
+    }
+  }
+  for (const bee of bees) {
+    const beeId = bee.id || bee.role;
+    for (const [port, suffix] of Object.entries(bee.work?.in || {})) {
+      const from = produced.get(suffix);
+      if (from) edges.push({ id: `e${edges.length + 1}`, from, to: { beeId, port } });
+    }
+  }
+  return { version: 1, edges };
 }
 
 function wizardFlowDocument(session, answers, target) {
@@ -1070,6 +1300,8 @@ function cleanupWizardSessions() {
 async function writeWizardBundle(session) {
   const { stringify } = await import("yaml").catch(() => ({ stringify: JSON.stringify }));
   const answers = wizardAnswersWithDefaults(session.answers);
+  if (answers.endpoints?.length) answers.endpoints = normalizeWizardEndpoints(answers.endpoints);
+  if (answers.mockEndpoints?.length) answers.mockEndpoints = answers.mockEndpoints.map((entry, index) => normalizeWizardMockEndpoint(entry, index));
   const target = wizardTarget(answers);
   const targetBundleDir = bundleDir(answers.bundleId);
   if (existsSync(targetBundleDir)) throw new Error(`Bundle '${answers.bundleId}' already exists at ${targetBundleDir}`);
@@ -1114,6 +1346,7 @@ async function writeWizardBundle(session) {
   if (answers.protocol === "TCP") {
     bees.push(
       {
+        id: "seed",
         role: "generator",
         image: "generator:latest",
         work: { out: { out: "proc" } },
@@ -1130,22 +1363,25 @@ async function writeWizardBundle(session) {
         },
       },
       {
+        id: "requestBuilder",
         role: "request-builder",
         image: "request-builder:latest",
         work: { in: { in: "proc" }, out: { out: "built" } },
         config: { templateRoot, serviceId },
       },
       {
+        id: "processor",
         role: "processor",
         image: "processor:latest",
         work: { in: { in: "built" }, out: { out: "post" } },
         config: { baseUrl: processorBase, worker: { mode: "THREAD_COUNT", threadCount: 5, tcpTransport: { type: "socket" } } },
       },
-      postprocessor,
+      { id: "resultSink", ...postprocessor },
     );
   } else if (answers.protocol === "SEQUENCE") {
     bees.push(
       {
+        id: "seed",
         role: "generator",
         image: "generator:latest",
         work: { out: { out: "seq" } },
@@ -1156,6 +1392,7 @@ async function writeWizardBundle(session) {
         },
       },
       {
+        id: "httpSequence",
         role: "http-sequence",
         image: "http-sequence:latest",
         work: { in: { in: "seq" }, out: { out: "post" } },
@@ -1165,7 +1402,7 @@ async function writeWizardBundle(session) {
             templateRoot,
             serviceId,
             threadCount: 1,
-            steps: answers.endpoints.map((endpoint, index) => ({ id: `step-${index + 1}-${endpoint.callId}`, callId: endpoint.callId })),
+            steps: answers.endpoints.map((endpoint, index) => wizardSequenceStep(endpoint, index)),
             debugCapture: {
               mode: "ERROR_ONLY",
               includeHeaders: true,
@@ -1176,11 +1413,12 @@ async function writeWizardBundle(session) {
           },
         },
       },
-      postprocessor,
+      { id: "resultSink", ...postprocessor },
     );
   } else {
     bees.push(
       {
+        id: "seed",
         role: "generator",
         image: "generator:latest",
         work: { out: { out: "build" } },
@@ -1197,18 +1435,20 @@ async function writeWizardBundle(session) {
         },
       },
       {
+        id: "requestBuilder",
         role: "request-builder",
         image: "request-builder:latest",
         work: { in: { in: "build" }, out: { out: "proc" } },
         config: { templateRoot, serviceId },
       },
       {
+        id: "processor",
         role: "processor",
         image: "processor:latest",
         work: { in: { in: "proc" }, out: { out: "post" } },
         config: { baseUrl: processorBase, worker: { mode: "THREAD_COUNT", threadCount: 5 } },
       },
-      postprocessor,
+      { id: "resultSink", ...postprocessor },
     );
   }
 
@@ -1217,6 +1457,8 @@ async function writeWizardBundle(session) {
     name: answers.bundleId,
     description: `Generated by wizard.complete from intent: ${session.intent}`,
     template: { image: "swarm-controller:latest", bees },
+    topology: wizardTopology(bees),
+    trafficPolicy: null,
     plan: {
       version: 1,
       source: "wizard.complete",
@@ -1307,8 +1549,8 @@ async function writeWizardBundle(session) {
         callId: endpoint.callId,
         protocol: "HTTP",
         method: endpoint.method,
-        pathTemplate: endpoint.path,
-        headersTemplate: { "content-type": "application/json" },
+        pathTemplate: wizardEndpointPathTemplate(endpoint),
+        headersTemplate: wizardTemplateHeaders(endpoint, true),
       };
       const endpointBody = endpoint.bodyTemplate || answers.requestBody;
       if (endpointBody) template.bodyTemplate = endpointBody;
@@ -1336,12 +1578,13 @@ async function writeWizardBundle(session) {
   if (["wiremock", "wiremock_and_tcp"].includes(answers.sutDouble)) {
     for (const endpoint of wizardMockEndpoints(answers).filter(mock => mock.method && mock.path)) {
       writeGenerated(`mock-config/wiremock/${endpoint.callId}.json`, JSON.stringify({
-        request: { method: endpoint.method, urlPath: endpoint.path },
+        request: wizardWireMockRequest(endpoint, answers),
         response: {
           status: endpoint.status || 200,
-          headers: { "Content-Type": "application/json" },
+          headers: endpoint.responseHeaders || endpoint.mock?.responseHeaders || { "Content-Type": "application/json" },
           jsonBody: endpoint.responseBody || { ok: true, callId: endpoint.callId },
         },
+        ...(endpoint.priority ? { priority: endpoint.priority } : {}),
       }, null, 2));
     }
   }
@@ -1394,6 +1637,7 @@ async function writeWizardBundle(session) {
 registerWorkflowTools({
   z,
   reg,
+  exposedToolName,
   BASE_URL,
   ORCH_URL,
   SM_URL,
@@ -1413,13 +1657,16 @@ registerWorkflowTools({
   wizardTarget,
   wizardPattern,
   wizardMockEndpoints,
+  validateWizardAnswers,
   writeWizardBundle,
   runBundleCheck,
   scenarioManagerDryRunValidateBundle,
   scenarioManagerUploadBundle,
+  loadBundleMockConfig,
   httpJson,
   idempotencyKey,
   buildEvidenceSummary,
+  WORKFLOW_EVIDENCE_WIDGET_URI,
 });
 
 reg("wizard.start", "Start a novice bundle creation session. Collects intent and explicit answers; it does not write files.", {
@@ -1437,7 +1684,7 @@ reg("wizard.start", "Start a novice bundle creation session. Collects intent and
       callId: z.string().optional(),
       description: z.string().optional(),
       bodyTemplate: z.string().optional(),
-    })])),
+    }).passthrough()])),
   ]).optional(),
   requestBody: z.string().optional(),
   tcpPayload: z.string().optional(),
@@ -1535,9 +1782,10 @@ async function runBundleCheck(bundle) {
   addCheck("scenario.exists", true, "scenario.yaml exists");
 
   let scenario;
+  let parseYaml;
   try {
-    const { parse } = await import("yaml");
-    scenario = parse(readFileSync(scenarioPath, "utf8"));
+    ({ parse: parseYaml } = await import("yaml"));
+    scenario = parseYaml(readFileSync(scenarioPath, "utf8"));
     addCheck("scenario.parse", true, "scenario.yaml parses as YAML");
   } catch (e) {
     addCheck("scenario.parse", false, `scenario.yaml parse failed: ${e.message}`);
@@ -1588,6 +1836,8 @@ async function runBundleCheck(bundle) {
   const hasTerminal = roles.has("postprocessor") || roles.has("clearing-export");
   addCheck("pattern.generator", hasGenerator, "Scenario has a generator bee", "warning");
   addCheck("pattern.terminal", hasTerminal, "Scenario has a terminal postprocessor or clearing-export bee", "warning");
+  addCheck("scenario.topology", Object.prototype.hasOwnProperty.call(scenario || {}, "topology"), "scenario.topology is declared", "warning");
+  addCheck("scenario.trafficPolicy", Object.prototype.hasOwnProperty.call(scenario || {}, "trafficPolicy"), "scenario.trafficPolicy is declared", "warning");
 
   const artifacts = {
     templates: existsSync(resolve(targetBundleDir, "templates")),
@@ -1599,6 +1849,64 @@ async function runBundleCheck(bundle) {
     flowDocument: existsSync(resolve(targetBundleDir, "FLOW_DOCUMENT.md")),
     changelog: existsSync(resolve(targetBundleDir, "CHANGELOG.md")),
   };
+
+  const authProfilePath = resolve(targetBundleDir, "authProfiles.yaml");
+  let authProfiles = {};
+  if (existsSync(authProfilePath)) {
+    try {
+      authProfiles = parseYaml(readFileSync(authProfilePath, "utf8"))?.profiles || {};
+      addCheck("authProfiles.parse", true, "authProfiles.yaml parses as YAML");
+    } catch (e) {
+      addCheck("authProfiles.parse", false, `authProfiles.yaml parse failed: ${e.message}`);
+    }
+  }
+
+  const endpoints = Array.isArray(scenario?.plan?.endpoints) ? scenario.plan.endpoints : [];
+  const endpointCallIds = new Set();
+  for (const [index, endpoint] of endpoints.entries()) {
+    const label = `endpoint.${index + 1}`;
+    const method = String(endpoint?.method || "").toUpperCase();
+    const path = String(endpoint?.path || "");
+    const callId = String(endpoint?.callId || "");
+    addCheck(`${label}.method`, WIZARD_HTTP_METHODS.includes(method), `${label} method is supported`);
+    addCheck(`${label}.path`, path.startsWith("/"), `${label} path is absolute`);
+    addCheck(`${label}.callId`, Boolean(callId), `${label} callId is set`);
+    if (callId) {
+      addCheck(`${label}.callId.unique`, !endpointCallIds.has(callId), `${label} callId '${callId}' is unique`);
+      endpointCallIds.add(callId);
+      const serviceId = endpoint.serviceId || (scenario.plan?.pattern === "sequence" ? "sequence" : "default");
+      const templatePath = resolve(targetBundleDir, "templates", "http", serviceId, `${callId}.yaml`);
+      addCheck(`${label}.template.exists`, existsSync(templatePath), `${label} HTTP template exists at templates/http/${serviceId}/${callId}.yaml`);
+      if (existsSync(templatePath)) {
+        try {
+          const template = parseYaml(readFileSync(templatePath, "utf8"));
+          addCheck(`${label}.template.callId`, template?.callId === callId, `${label} template callId matches plan`);
+          addCheck(`${label}.template.method`, String(template?.method || "").toUpperCase() === method, `${label} template method matches plan`);
+          addCheck(`${label}.template.pathTemplate`, typeof template?.pathTemplate === "string" && template.pathTemplate.startsWith(path), `${label} template path starts with plan path`);
+          if (template?.authRef?.profileId) {
+            addCheck(`${label}.template.authRef`, Boolean(authProfiles[template.authRef.profileId]), `${label} authRef profile exists`);
+          }
+        } catch (e) {
+          addCheck(`${label}.template.parse`, false, `${label} template parse failed: ${e.message}`);
+        }
+      }
+    }
+  }
+
+  const mockDir = resolve(targetBundleDir, "mock-config", "wiremock");
+  if (existsSync(mockDir)) {
+    for (const entry of readdirSync(mockDir, { withFileTypes: true })) {
+      if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
+      const path = resolve(mockDir, entry.name);
+      try {
+        const mock = JSON.parse(readFileSync(path, "utf8"));
+        addCheck(`mock.${entry.name}.request`, Boolean(mock?.request?.method && mock?.request?.urlPath), `${entry.name} declares request method and urlPath`);
+        addCheck(`mock.${entry.name}.response`, Number.isFinite(Number(mock?.response?.status)), `${entry.name} declares response status`);
+      } catch (e) {
+        addCheck(`mock.${entry.name}.parse`, false, `${entry.name} parse failed: ${e.message}`);
+      }
+    }
+  }
 
   return {
     ok: errors.length === 0,
@@ -1689,6 +1997,44 @@ async function scenarioManagerDryRunValidateBundle(bundle) {
   } catch (e) {
     throw new Error(`Scenario Manager dry-run validation rejected bundle '${bundle}': ${e.message}`);
   }
+}
+
+async function loadBundleMockConfig(bundle) {
+  const targetBundleDir = bundleDir(bundle);
+  const result = {
+    bundle,
+    wiremock: {
+      attempted: false,
+      loaded: 0,
+      files: [],
+    },
+    requestJournal: {
+      reset: false,
+    },
+  };
+
+  const wiremockDir = resolve(targetBundleDir, "mock-config", "wiremock");
+  if (existsSync(wiremockDir)) {
+    const files = readdirSync(wiremockDir, { withFileTypes: true })
+      .filter(entry => entry.isFile() && entry.name.endsWith(".json"))
+      .map(entry => entry.name)
+      .sort();
+    result.wiremock.attempted = true;
+    for (const file of files) {
+      const relativePath = `mock-config/wiremock/${file}`;
+      const mapping = JSON.parse(readFileSync(resolve(wiremockDir, file), "utf8"));
+      await httpJson(`${WIREMOCK_URL}/__admin/mappings`, { method: "POST", body: mapping, timeoutMs: 10000 });
+      result.wiremock.loaded += 1;
+      result.wiremock.files.push(relativePath);
+    }
+  }
+
+  if (result.wiremock.loaded > 0) {
+    await httpJson(`${WIREMOCK_URL}/__admin/requests`, { method: "DELETE", timeoutMs: 10000 });
+    result.requestJournal.reset = true;
+  }
+
+  return result;
 }
 
 const _scenarioContractCache = new Map(); // baseUrl -> cached authoring contract
@@ -2515,6 +2861,18 @@ function bodyPatternCount(entry) {
   return Array.isArray(patterns) ? patterns.length : 0;
 }
 
+function tapSampleItems(tapSample) {
+  const direct = tapSample?.samples;
+  const read = tapSample?.read?.samples;
+  if (Array.isArray(read)) return read;
+  if (Array.isArray(direct)) return direct;
+  return [];
+}
+
+function tapHasSamples(tapSample) {
+  return tapSampleItems(tapSample).length > 0;
+}
+
 function authMatcherPresent(entry) {
   return !!entry?.stubMapping?.request?.headers?.Authorization;
 }
@@ -2537,6 +2895,18 @@ function selectLatestExpectedSequence(entries, expectedEndpoints) {
 
 function makeClaim(id, label, status, summary, evidence = [], gaps = []) {
   return { id, label, status, summary, evidence, gaps };
+}
+
+const AUTH_REF_FIELDS = new Set(["auth", "authRef", "authProfile", "authProfileId", "authTokenUrl", "authClientId", "Authorization", "authorization"]);
+
+function hasAuthConfiguration(value) {
+  if (!value || typeof value !== "object") return false;
+  if (Array.isArray(value)) return value.some(hasAuthConfiguration);
+  for (const [key, child] of Object.entries(value)) {
+    if (AUTH_REF_FIELDS.has(key) && child !== null && child !== undefined && child !== "" && child !== "none") return true;
+    if (hasAuthConfiguration(child)) return true;
+  }
+  return false;
 }
 
 function reportVerdict(claims) {
@@ -2581,6 +2951,9 @@ function buildReport({ swarmId, scenarioId, sources, queueRows, tapSample, inclu
   const controlQueueMessages = controlQueues.reduce((sum, row) => sum + (Number(row.messages) || 0), 0);
   const expectedSequence = expectedEndpoints.map(endpoint => `${endpoint.method} ${endpoint.path}`);
   const actualSequence = selectedBusinessRequests.map(entry => `${entry?.request?.method} ${pathOnly(entry?.request?.url)}`);
+  const selectedResponseStatuses = selectedBusinessRequests.map(entry => Number(entry?.response?.status || 0));
+  const allSelectedSuccessful = selectedResponseStatuses.length > 0
+    && selectedResponseStatuses.every(status => status >= 200 && status < 400);
   const ordered = expectedSequence.length > 0
     && expectedSequence.length === actualSequence.length
     && expectedSequence.every((value, index) => value === actualSequence[index]);
@@ -2634,6 +3007,8 @@ function buildReport({ swarmId, scenarioId, sources, queueRows, tapSample, inclu
   const dataSource = scenario?.plan?.dataSource;
   const usesRedisDataset = dataSource === "REDIS_DATASET";
   const debugCaptureCount = Number(redisDebug?.count || 0);
+  const authRequired = hasAuthConfiguration(scenario);
+  const tapCaptured = tapHasSamples(tapSample);
 
   const claims = [
     makeClaim(
@@ -2649,10 +3024,13 @@ function buildReport({ swarmId, scenarioId, sources, queueRows, tapSample, inclu
     makeClaim(
       "requests.handled",
       "Requests handled",
-      expectedEndpoints.length > 0 && selectedBusinessRequests.length === expectedEndpoints.length && unmatchedForScenario.length === 0 ? "pass" : "fail",
-      `${selectedBusinessRequests.length}/${expectedEndpoints.length || "unknown"} expected business request(s) matched in the latest flow; ${unmatchedForScenario.length} scenario unmatched request(s).`,
+      expectedEndpoints.length > 0 && selectedBusinessRequests.length === expectedEndpoints.length && allSelectedSuccessful && unmatchedForScenario.length === 0 ? "pass" : "fail",
+      `${selectedBusinessRequests.length}/${expectedEndpoints.length || "unknown"} expected business request(s) matched in the latest flow; ${unmatchedForScenario.length} scenario unmatched request(s); ${selectedResponseStatuses.filter(status => status < 200 || status >= 400).length} non-2xx/3xx response(s).`,
       selectedBusinessRequests.map(entry => `${entry?.request?.method} ${entry?.request?.url} -> ${entry?.response?.status}`),
-      unmatchedForScenario.length ? ["WireMock has unmatched requests for this scenario prefix."] : [],
+      [
+        ...(unmatchedForScenario.length ? ["WireMock has unmatched requests for this scenario prefix."] : []),
+        ...(selectedResponseStatuses.some(status => status < 200 || status >= 400) ? ["Expected every business request to return a 2xx or 3xx response."] : []),
+      ],
     ),
     makeClaim(
       "payloads.valid",
@@ -2681,20 +3059,24 @@ function buildReport({ swarmId, scenarioId, sources, queueRows, tapSample, inclu
     makeClaim(
       "auth.flow",
       "Auth flow",
-      tokenRequests.length > 0 && bearerCount === selectedBusinessRequests.length && authMatchers === selectedBusinessRequests.length ? "pass" : "fail",
-      `${tokenRequests.length} token request(s); ${bearerCount}/${selectedBusinessRequests.length} business request(s) used bearer auth; ${authMatchers}/${selectedBusinessRequests.length} stubs required auth.`,
-      tokenRequests.map(entry => `${entry?.request?.method} ${entry?.request?.url} -> ${entry?.response?.status}`),
-      bearerCount === selectedBusinessRequests.length ? [] : ["Not every business request used bearer auth."],
+      !authRequired ? "not-applicable" : tokenRequests.length > 0 && bearerCount === selectedBusinessRequests.length && authMatchers === selectedBusinessRequests.length ? "pass" : "fail",
+      !authRequired
+        ? "Scenario does not declare auth, so token refresh and bearer propagation are not required."
+        : `${tokenRequests.length} token request(s); ${bearerCount}/${selectedBusinessRequests.length} business request(s) used bearer auth; ${authMatchers}/${selectedBusinessRequests.length} stubs required auth.`,
+      authRequired ? tokenRequests.map(entry => `${entry?.request?.method} ${entry?.request?.url} -> ${entry?.response?.status}`) : [],
+      !authRequired || bearerCount === selectedBusinessRequests.length ? [] : ["Not every business request used bearer auth."],
     ),
     makeClaim(
       "auth.expiry",
       "Auth expiry / refresh",
-      tokenRequests.length > 1 && refreshDue ? "pass" : tokenRequests.length > 1 || refreshDue ? "partial" : "unknown",
-      tokenRequests.length > 1 ? `Token endpoint was called ${tokenRequests.length} times during one flow.` : "Only one token acquisition was observed.",
-      [
+      !authRequired ? "not-applicable" : tokenRequests.length > 1 && refreshDue ? "pass" : tokenRequests.length > 1 || refreshDue ? "partial" : "unknown",
+      !authRequired
+        ? "Scenario does not declare token-based auth."
+        : tokenRequests.length > 1 ? `Token endpoint was called ${tokenRequests.length} times during one flow.` : "Only one token acquisition was observed.",
+      authRequired ? [
         tokenRecord ? `Redis token refreshAt=${tokenRecord.fields?.refreshAt || "unknown"}, expiresAt=${tokenRecord.fields?.expiresAt || "unknown"}` : "No Redis token record",
-      ],
-      tokenRequests.length > 1 && refreshDue ? [] : ["Use a short token TTL proof to exercise refresh/expiry behavior."],
+      ] : [],
+      !authRequired || tokenRequests.length > 1 && refreshDue ? [] : ["Use a short token TTL proof to exercise refresh/expiry behavior."],
     ),
     makeClaim(
       "redis.flows",
@@ -2712,14 +3094,16 @@ function buildReport({ swarmId, scenarioId, sources, queueRows, tapSample, inclu
     makeClaim(
       "payload.trace",
       "Runtime payload trace",
-      tapSample || debugCaptureCount >= expectedEndpoints.length ? "pass" : includeTapSample ? "unknown" : "partial",
-      tapSample
+      tapCaptured || debugCaptureCount >= expectedEndpoints.length ? "pass" : includeTapSample ? "fail" : "partial",
+      tapCaptured
         ? "A postprocessor input tap sample was captured."
         : debugCaptureCount >= expectedEndpoints.length
           ? "Redis debug capture contains one HTTP sequence capture per expected step."
-          : "No runtime payload trace is attached to this summary.",
-      tapSample ? ["debug.tap.postprocessor.in"] : [`${debugCaptureCount} Redis debug capture key(s)`],
-      tapSample || debugCaptureCount >= expectedEndpoints.length ? [] : ["Open the tap before the run or enable HTTP sequence Redis debug capture."],
+          : includeTapSample
+            ? "Tap proof was requested, but no sample was captured."
+            : "No runtime payload trace is attached to this summary.",
+      tapCaptured ? ["debug.tap.postprocessor.in samples>0"] : [`${debugCaptureCount} Redis debug capture key(s)`],
+      tapCaptured || debugCaptureCount >= expectedEndpoints.length ? [] : ["Open the tap before the run or enable HTTP sequence Redis debug capture."],
     ),
   ];
 
@@ -2737,7 +3121,7 @@ function buildReport({ swarmId, scenarioId, sources, queueRows, tapSample, inclu
   };
 }
 
-async function buildEvidenceSummary({ swarmId, includeTapSample, scenarioId }) {
+async function buildEvidenceSummary({ swarmId, includeTapSample, scenarioId, preArmedTap }) {
   const sources = [];
   const swarmSource = await evidenceSource("swarm.get", () => httpJson(`/api/swarms/${encodeURIComponent(swarmId)}`));
   sources.push(swarmSource);
@@ -2774,7 +3158,7 @@ async function buildEvidenceSummary({ swarmId, includeTapSample, scenarioId }) {
   let tapSample = null;
   if (includeTapSample) {
     const tapSource = await evidenceSource("debug.tap.postprocessor.in", async () => {
-      const tap = await httpJson("/api/debug/taps", {
+      const tap = preArmedTap || await httpJson("/api/debug/taps", {
         method: "POST",
         body: { swarmId, role: "postprocessor", direction: "IN", ioName: "in", maxItems: 1, ttlSeconds: 30 },
       });
@@ -2961,6 +3345,118 @@ function evidenceWidgetHtml() {
 </html>`;
 }
 
+function workflowEvidenceWidgetHtml() {
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root { color-scheme: light dark; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    body { margin: 0; padding: 16px; background: Canvas; color: CanvasText; }
+    .wrap { display: grid; gap: 12px; }
+    .top { display: flex; justify-content: space-between; gap: 12px; align-items: start; }
+    h1 { font-size: 18px; line-height: 1.25; margin: 0; }
+    h2 { font-size: 13px; margin: 0 0 8px; text-transform: uppercase; letter-spacing: 0; opacity: .74; }
+    .badge { border: 1px solid color-mix(in srgb, CanvasText 18%, transparent); border-radius: 999px; padding: 4px 8px; font-size: 12px; white-space: nowrap; text-transform: uppercase; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 8px; }
+    .panel { border: 1px solid color-mix(in srgb, CanvasText 16%, transparent); border-radius: 8px; padding: 10px; background: color-mix(in srgb, Canvas 94%, CanvasText 6%); }
+    .table { display: grid; gap: 0; }
+    .row { display: grid; grid-template-columns: minmax(130px, 1fr) 110px minmax(150px, 2fr); gap: 8px; align-items: start; padding: 8px 0; border-top: 1px solid color-mix(in srgb, CanvasText 10%, transparent); }
+    .row:first-child { border-top: 0; }
+    .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0; opacity: .72; margin-bottom: 6px; }
+    .value { font-size: 20px; font-weight: 650; line-height: 1.2; overflow-wrap: anywhere; }
+    .small { font-size: 12px; opacity: .78; margin-top: 4px; overflow-wrap: anywhere; }
+    .pill { display: inline-flex; width: fit-content; border-radius: 999px; padding: 3px 8px; font-size: 11px; font-weight: 700; text-transform: uppercase; border: 1px solid color-mix(in srgb, CanvasText 16%, transparent); }
+    .satisfied, .pass, .complete, .succeeded, .validated, .verified, .reported { color: #12753c; background: color-mix(in srgb, #19a957 14%, Canvas); }
+    .missing, .pending, .running, .not-run, .not_run, .partial { color: #835800; background: color-mix(in srgb, #d99a00 16%, Canvas); }
+    .failed, .fail, .blocked, .error { color: #a11224; background: color-mix(in srgb, #d8243c 13%, Canvas); }
+    .not-applicable, .not_applicable { color: color-mix(in srgb, CanvasText 70%, transparent); background: color-mix(in srgb, CanvasText 7%, Canvas); }
+    ul { margin: 6px 0 0; padding-left: 18px; }
+    li { margin: 3px 0; }
+    @media (max-width: 620px) { .top, .row { grid-template-columns: 1fr; display: grid; } }
+  </style>
+</head>
+<body>
+  <div id="root" class="wrap"></div>
+  <script type="module">
+    const root = document.getElementById("root");
+    const openai = globalThis.openai || {};
+    const data = openai.toolOutput || openai.structuredContent || openai.toolResponseMetadata?.workflowEvidence || {};
+
+    function esc(value) {
+      return String(value ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+    }
+    function cls(status) {
+      return String(status || "unknown").toLowerCase().replace(/[^a-z0-9_-]/g, "_");
+    }
+    function pill(status) {
+      return '<span class="pill ' + esc(cls(status)) + '">' + esc(status || "unknown") + '</span>';
+    }
+    function panel(label, value, small = "") {
+      return '<div class="panel"><div class="label">' + esc(label) + '</div><div class="value">' + esc(value) + '</div>' +
+        (small ? '<div class="small">' + esc(small) + '</div>' : '') + '</div>';
+    }
+    function table(items, empty, row) {
+      if (!Array.isArray(items) || !items.length) return '<div class="small">' + esc(empty) + '</div>';
+      return '<div class="table">' + items.map(row).join('') + '</div>';
+    }
+    function claimRows() {
+      return table(data.claimMatrix, "No claims available.", claim =>
+        '<div class="row"><div><strong>' + esc(claim.id) + '</strong><div class="small">' + esc(claim.claim || claim.label || "") + '</div></div><div>' +
+        pill(claim.status) + '</div><div>' + esc(claim.gap || (Array.isArray(claim.evidence) ? claim.evidence.join("; ") : "")) + '</div></div>'
+      );
+    }
+    function roleRows() {
+      return table(data.reviewStages, "No role checks available.", stage =>
+        '<div class="row"><div><strong>' + esc(stage.label || stage.id) + '</strong></div><div>' + pill(stage.status) + '</div><div>' +
+        esc((stage.requiredRoles || []).map(role => role.roleId + ": " + (role.check?.outcome || role.status)).join(" | ")) + '</div></div>'
+      );
+    }
+    function operationRows() {
+      const operations = Object.values(data.operations || {});
+      return table(operations, "No lifecycle operations recorded.", op => {
+        const timeline = Array.isArray(op.phaseTimeline) ? op.phaseTimeline : [];
+        const summary = timeline.map(phase => phase.phase + ": " + phase.attempts + " attempt(s)" + (phase.lastCode ? " " + phase.lastCode : "")).join(" | ");
+        return '<div class="row"><div><strong>' + esc(op.operationId) + '</strong><div class="small">' + esc(op.type) + '</div></div><div>' +
+          pill(op.status) + '</div><div>' + esc(op.phase) + '<div class="small">' + esc(summary) + '</div></div></div>';
+      });
+    }
+    function questionRows() {
+      const questions = Array.isArray(data.nextQuestions) ? data.nextQuestions : [];
+      if (!questions.length) return '<div class="small">No remaining questions.</div>';
+      return '<ul>' + questions.map(question => '<li><strong>' + esc(question.id) + '</strong>: ' + esc(question.prompt) + '</li>').join('') + '</ul>';
+    }
+    function gapRows() {
+      const gaps = Array.isArray(data.evidenceGaps) ? data.evidenceGaps : [];
+      if (!gaps.length) return '<div class="small">No evidence gaps reported.</div>';
+      return '<ul>' + gaps.map(gap => '<li><strong>' + esc(gap.id) + '</strong>: ' + esc(gap.status) + '</li>').join('') + '</ul>';
+    }
+
+    if (!data.workflowId) {
+      root.innerHTML = '<div class="panel">No workflow evidence was provided.</div>';
+    } else {
+      const summary = data.summary || {};
+      root.innerHTML = [
+        '<div class="top"><h1>Workflow Evidence: ' + esc(data.workflowId) + '</h1><div class="badge">' + esc(data.state) + '</div></div>',
+        '<div class="grid">',
+          panel('Bundle', summary.bundleId || 'not generated', summary.mode || 'create'),
+          panel('Questions', summary.nextQuestionCount ?? 0, 'remaining intake items'),
+          panel('Evidence gaps', summary.evidenceGapCount ?? 0, 'open proof items'),
+          panel('Operations', summary.operationCount ?? 0, 'lifecycle jobs'),
+        '</div>',
+        '<div class="panel"><h2>Claim Matrix</h2>' + claimRows() + '</div>',
+        '<div class="panel"><h2>Role Review</h2>' + roleRows() + '</div>',
+        '<div class="panel"><h2>Lifecycle Operations</h2>' + operationRows() + '</div>',
+        '<div class="panel"><h2>Remaining Questions</h2>' + questionRows() + '</div>',
+        '<div class="panel"><h2>Evidence Gaps</h2>' + gapRows() + '</div>'
+      ].join('');
+    }
+  </script>
+</body>
+</html>`;
+}
+
 server.registerResource(
   "evidence-summary-widget",
   EVIDENCE_WIDGET_URI,
@@ -2987,7 +3483,33 @@ server.registerResource(
   }),
 );
 
-server.registerTool("evidence.summary", {
+server.registerResource(
+  "workflow-evidence-widget",
+  WORKFLOW_EVIDENCE_WIDGET_URI,
+  {
+    title: "PocketHive Workflow Evidence",
+    description: "Read-only workflow evidence and stakeholder report widget.",
+    mimeType: APP_RESOURCE_MIME_TYPE,
+  },
+  async () => ({
+    contents: [{
+      uri: WORKFLOW_EVIDENCE_WIDGET_URI,
+      mimeType: APP_RESOURCE_MIME_TYPE,
+      text: workflowEvidenceWidgetHtml(),
+      _meta: {
+        ui: {
+          prefersBorder: true,
+          csp: { connectDomains: [], resourceDomains: [] },
+        },
+        "openai/widgetDescription": "Read-only PocketHive workflow evidence, questions, role checks, claims, and lifecycle operations.",
+        "openai/widgetPrefersBorder": true,
+        "openai/widgetCSP": { connect_domains: [], resource_domains: [] },
+      },
+    }],
+  }),
+);
+
+registerMcpTool("evidence.summary", {
   title: "evidence.summary",
   description: "Return a read-only aggregate evidence summary for a swarm and render the optional evidence widget for App-capable clients.",
   inputSchema: {
@@ -3387,8 +3909,32 @@ reg("health.check", "Check connectivity to Orchestrator, Scenario Manager, Rabbi
 async function startHttpServer() {
   const port = Number(process.env.PH_MCP_HTTP_PORT);
   if (!Number.isInteger(port) || port <= 0) throw new Error("PH_MCP_HTTP_PORT must be a positive integer");
-  const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: () => crypto.randomUUID() });
-  await server.connect(transport);
+  const sessions = new Map();
+
+  function writeMcpHttpError(res, status, code, message) {
+    if (!res.headersSent) res.writeHead(status, { "content-type": "application/json" });
+    res.end(JSON.stringify({ jsonrpc: "2.0", error: { code, message }, id: null }));
+  }
+
+  async function createSessionTransport() {
+    const sessionServer = cloneRegisteredServer();
+    let transport;
+    transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: () => crypto.randomUUID(),
+      onsessioninitialized: (sessionId) => {
+        sessions.set(sessionId, { transport, server: sessionServer });
+      },
+      onsessionclosed: (sessionId) => {
+        sessions.delete(sessionId);
+      },
+    });
+    transport.onclose = () => {
+      if (transport.sessionId) sessions.delete(transport.sessionId);
+    };
+    await sessionServer.connect(transport);
+    return transport;
+  }
+
   const httpServer = createServer(async (req, res) => {
     try {
       const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
@@ -3397,6 +3943,18 @@ async function startHttpServer() {
         res.end(JSON.stringify({ error: "not_found", message: "Use /mcp for the PocketHive MCP endpoint." }));
         return;
       }
+      const sessionId = req.headers["mcp-session-id"];
+      const normalizedSessionId = Array.isArray(sessionId) ? sessionId[0] : sessionId;
+      const entry = normalizedSessionId ? sessions.get(normalizedSessionId) : null;
+      if (normalizedSessionId && !entry) {
+        writeMcpHttpError(res, 404, -32001, "Session not found");
+        return;
+      }
+      if (!normalizedSessionId && req.method !== "POST") {
+        writeMcpHttpError(res, 400, -32000, "Bad Request: Mcp-Session-Id header is required");
+        return;
+      }
+      const transport = entry?.transport || await createSessionTransport();
       await transport.handleRequest(req, res);
     } catch (err) {
       if (!res.headersSent) res.writeHead(500, { "content-type": "application/json" });

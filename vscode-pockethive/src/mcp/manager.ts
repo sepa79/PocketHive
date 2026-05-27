@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { McpClient } from './client';
+import { getOutputChannel } from '../output';
 
 export type McpStatus = 'starting' | 'running' | 'stopped' | 'error';
 
@@ -10,6 +11,8 @@ export const onMcpStatusChange = _onStatusChange.event;
 
 let _client: McpClient | null = null;
 let _restartAttempts = 0;
+let _status: McpStatus = 'stopped';
+let _statusMessage = 'MCP server has not been started.';
 const MAX_RESTARTS = 3;
 
 export function getMcpClient(): McpClient | null {
@@ -18,6 +21,10 @@ export function getMcpClient(): McpClient | null {
 
 export function isMcpRunning(): boolean {
   return _client !== null;
+}
+
+export function getMcpStatusSnapshot(): { status: McpStatus; running: boolean; message: string } {
+  return { status: _status, running: _client !== null, message: _statusMessage };
 }
 
 export async function startMcpServer(context: vscode.ExtensionContext): Promise<void> {
@@ -31,8 +38,9 @@ export async function startMcpServer(context: vscode.ExtensionContext): Promise<
   try {
     serverPath = resolveServerPath();
   } catch (err) {
-    _onStatusChange.fire('error');
     const msg = err instanceof Error ? err.message : String(err);
+    setStatus('error', msg);
+    logMcpStatus(`MCP server path error: ${msg}`);
     const choice = await vscode.window.showErrorMessage(
       `PocketHive: ${msg}`,
       'Download Node.js'
@@ -44,46 +52,68 @@ export async function startMcpServer(context: vscode.ExtensionContext): Promise<
   }
 
   const env = await buildMcpEnv(context);
-  _onStatusChange.fire('starting');
+  setStatus('starting', `Starting ${serverPath}`);
+  logMcpStatus(`Starting MCP server: ${serverPath}`);
 
   const client = new McpClient(serverPath, env);
   try {
     await client.connect();
     _client = client;
     _restartAttempts = 0;
-    _onStatusChange.fire('running');
+    setStatus('running', `Running ${serverPath}`);
+    logMcpStatus('MCP server running.');
   } catch (err) {
     _client = null;
-    _onStatusChange.fire('error');
+    const msg = err instanceof Error ? err.message : String(err);
+    setStatus('error', msg);
+    logMcpStatus(`MCP server start failed: ${msg}`);
     scheduleRestart(context);
   }
 }
 
 export async function restartMcpServer(context: vscode.ExtensionContext): Promise<void> {
   if (_client) { await _client.close().catch(() => {}); _client = null; }
-  _onStatusChange.fire('stopped');
+  setStatus('stopped', 'Restart requested.');
   await new Promise(r => setTimeout(r, 500));
   await startMcpServer(context);
 }
 
 export async function stopMcpServer(): Promise<void> {
   if (_client) { await _client.close().catch(() => {}); _client = null; }
-  _onStatusChange.fire('stopped');
+  setStatus('stopped', 'Stopped by extension.');
 }
 
 function scheduleRestart(context: vscode.ExtensionContext): void {
   if (_restartAttempts >= MAX_RESTARTS) {
+    setStatus('error', `MCP server failed to start after ${MAX_RESTARTS} attempts. ${_statusMessage}`);
+    logMcpStatus(_statusMessage);
     vscode.window.showErrorMessage(
       'PocketHive: MCP server failed to start after 3 attempts.',
-      'Retry'
+      'Retry',
+      'Show Output'
     ).then(choice => {
       if (choice === 'Retry') { _restartAttempts = 0; startMcpServer(context); }
+      if (choice === 'Show Output') getOutputChannel().show(true);
     });
     return;
   }
   const delayMs = [2000, 4000, 8000][_restartAttempts] ?? 8000;
   _restartAttempts++;
   setTimeout(() => startMcpServer(context), delayMs);
+}
+
+function setStatus(status: McpStatus, message: string): void {
+  _status = status;
+  _statusMessage = message;
+  _onStatusChange.fire(status);
+}
+
+function logMcpStatus(message: string): void {
+  try {
+    getOutputChannel().appendLine(`[${new Date().toISOString()}] ${message}`);
+  } catch {
+    // The output channel is initialized during extension activation.
+  }
 }
 
 function resolveServerPath(): string {

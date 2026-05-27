@@ -66,6 +66,11 @@ The IDE plugin passes these values to `pockethive-mcp` at process spawn:
 | `TCP_MOCK_BASE_URL` | No | Active environment setting |
 | `WIREMOCK_BASE_URL` | No | Active environment setting |
 | `PH_BUNDLES_ROOTS` | No | Configured bundle roots |
+| `PH_WORKFLOW_PROFILES_PATH` | No | Optional team `workflow-profiles.json`; invalid files fail closed |
+| `PH_WORKFLOW_PERSISTENCE` | No | `local` by default; set `memory` to disable local workflow-session persistence |
+| `PH_WORKFLOW_STORE_PATH` | No | Optional explicit local JSON workflow-session store |
+| `PH_MCP_TOOL_NAME_MODE` | No | `underscore` by default for GitHub Copilot/OmniMCP compatibility; `legacy` or `both` only for explicit migration testing |
+| `HIVEMIND_MCP_URL` / `HIVEMIND_BASE_URL` | No | Optional HiveMind MCP endpoint for workflow enrichment only |
 
 GitHub tokens are not passed to `pockethive-mcp`. Configure a separate GitHub
 MCP server with a fine-grained issue-only token.
@@ -110,6 +115,12 @@ bundle for a separate GitHub MCP to post. It should not implement general
 
 ## Doctor Command
 
+Install MCP server dependencies first:
+
+```bash
+npm run mcp:setup
+```
+
 Use the developer-facing doctor command before blaming the IDE. It runs as a
 local Node script under `tools/pockethive-mcp/`; it is not exposed as an MCP
 tool.
@@ -132,8 +143,11 @@ It reads the `pockethive-bundles` server by default. Override that with
 Environment variables from the shell override values loaded from the config.
 
 The doctor intentionally fails if the effective `BUNDLES_ROOT` is missing or
-points at a non-directory. To test environment-only setup, bypass config loading
-explicitly:
+points at a non-directory. This is separate from dependency setup: `mcp:setup`
+can pass on a clean machine before the bundles repo exists, while `mcp:doctor`
+passes only after the bundles checkout is configured.
+
+To test environment-only setup, bypass config loading explicitly:
 
 ```bash
 BUNDLES_ROOT=/path/to/pockethive-scenario-bundles \
@@ -152,13 +166,15 @@ Suggested checks:
 | Check | Failure message should include |
 |---|---|
 | Node.js version | Required version and installed version |
-| MCP config source | Loaded config path, server id, malformed JSON, disabled server, or missing command/args |
+| MCP config source | Loaded config path, server id, malformed JSON, disabled server, missing URL, or missing command/args in stdio mode |
 | MCP dependencies | Whether dependencies were current or installed from lockfile |
 | MCP server startup | Command used and first startup error |
 | MCP input schemas | Tool/schema name when an array schema is missing `items` |
 | Bundle root | Path and whether bundles are found |
 | Bundle roots list | Invalid `PH_BUNDLES_ROOTS` JSON or missing directories |
 | Workflow source roots | Invalid `PH_WORKFLOW_SOURCE_ROOTS` JSON or missing directories |
+| Workflow profiles | Invalid custom workflow profile config |
+| Workflow persistence | Local JSON store path when persistence is enabled |
 
 The doctor may run shell commands because it is developer tooling. The MCP
 server must not expose doctor as an MCP tool.
