@@ -2184,6 +2184,7 @@ export function registerWorkflowTools(deps) {
       traffic: {
         status: checklistStatus(runtimeEvidence, "requests.handled"),
         flow: workflowFlowProof(session),
+        tapFlow: runtimeEvidence?.tapFlow || runtimeEvidence?.report?.tapFlow || null,
       },
       mocks: {
         wiremockRequests: typeof mocks.wiremockRequests === "number" ? mocks.wiremockRequests : null,
@@ -2939,9 +2940,11 @@ export function registerWorkflowTools(deps) {
       claims.get("auth.flow"),
       claims.get("payloads.valid"),
       claims.get("payload.trace"),
+      claims.get("tap.flow"),
     ].filter(Boolean).filter(claim => {
       if (claim.id === "payloads.valid") return ["fail", "partial"].includes(claim.status);
       if (claim.id === "payload.trace") return !["pass", "not-applicable"].includes(claim.status);
+      if (claim.id === "tap.flow") return !["pass", "not-applicable"].includes(claim.status);
       return !["pass", "not-applicable"].includes(claim.status);
     });
     const strict = proofMode === "strict";

@@ -198,6 +198,12 @@ Production proof uses:
 }
 ```
 
+With tap samples enabled, `workflow_verify` and `evidence_summary` interpret
+the tap payload as internal step-flow evidence and compare it with both the
+scenario plan and WireMock request journal. Agents should read
+`workflow_result.proof` first, then drill into `evidence.tapFlow` or the full
+report only when a tap-flow gap is reported.
+
 Debug proof may use `proofMode=accept-partial` to keep iteration fast, but the
 result must still surface recorded gaps through `workflow_result.diagnosis`,
 `workflow_result.proof`, and the full evidence report.

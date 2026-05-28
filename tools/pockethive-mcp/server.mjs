@@ -2873,6 +2873,140 @@ function tapHasSamples(tapSample) {
   return tapSampleItems(tapSample).length > 0;
 }
 
+function knownTapPayloadValue(sample) {
+  if (!sample || typeof sample !== "object") return sample;
+  for (const key of ["body", "payload", "data", "message", "input", "content", "event"]) {
+    if (Object.prototype.hasOwnProperty.call(sample, key)) {
+      const value = sample[key];
+      return typeof value === "string" ? parseJsonLoose(value) || value : value;
+    }
+  }
+  return sample;
+}
+
+function tapPathOnly(value) {
+  const text = String(value || "");
+  if (!text) return "";
+  try {
+    const parsed = new URL(text);
+    return pathOnly(parsed.pathname);
+  } catch {
+    return pathOnly(text);
+  }
+}
+
+function tapPathValue(value) {
+  return tapPathOnly(value?.path || value?.urlPath || value?.url || value?.uri || value?.endpoint);
+}
+
+function tapHeaderValue(headers, name) {
+  if (!headers || typeof headers !== "object") return "";
+  const found = Object.entries(headers).find(([key]) => key.toLowerCase() === name.toLowerCase());
+  return found ? String(found[1] || "") : "";
+}
+
+function tapFlowItem(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const embedded = typeof value.payload === "string" ? parseJsonLoose(value.payload) : null;
+  if (embedded && typeof embedded === "object" && !Array.isArray(embedded)) {
+    const kind = String(embedded.kind || "");
+    if (kind === "http.request" && !embedded.outcome) return null;
+    const request = embedded.request || embedded;
+    const method = String(request.method || request.httpMethod || "").toUpperCase();
+    const path = tapPathOnly(request.path || request.urlPath || request.url || request.uri || request.endpoint);
+    const callId = embedded.callId || request.callId || tapHeaderValue(value.headers, "x-ph-call-id") || tapHeaderValue(value.headers, "ph.call-id") || null;
+    const status = embedded.outcome?.status || embedded.status || embedded.statusCode || null;
+    if (method && path) {
+      return { label: `${method} ${path}`, callId: callId ? String(callId) : null, status };
+    }
+  }
+  const method = String(value.method || value.httpMethod || value.requestMethod || "").toUpperCase();
+  const path = tapPathValue(value);
+  const callId = value.callId || value.stepId || value.id || value.name || null;
+  const status = value.status || value.statusCode || value.responseStatus || value.httpStatus || null;
+  if (method && path) {
+    return { label: `${method} ${pathOnly(path)}`, callId: callId ? String(callId) : null, status };
+  }
+  if (callId && (status || value.request || value.response || value.output || value.result)) {
+    return { label: null, callId: String(callId), status };
+  }
+  return null;
+}
+
+function collectTapFlowItems(value, seen = new WeakSet()) {
+  if (!value || typeof value !== "object") return [];
+  if (seen.has(value)) return [];
+  seen.add(value);
+  if (Array.isArray(value)) {
+    return value.flatMap(item => collectTapFlowItems(item, seen));
+  }
+  const sequenceKeys = ["steps", "calls", "flow", "requests", "results", "items", "outputs"];
+  const rows = [];
+  for (const key of sequenceKeys) {
+    const child = value[key];
+    if (child && typeof child === "object") rows.push(...collectTapFlowItems(child, seen));
+  }
+  if (rows.length) return rows;
+  const item = tapFlowItem(value);
+  if (item) return [item];
+  for (const child of Object.values(value)) {
+    if (child && typeof child === "object") rows.push(...collectTapFlowItems(child, seen));
+  }
+  return rows;
+}
+
+function arraysEqual(left, right) {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+function tapFlowEvidence(tapSample, expectedEndpoints, actualSequence) {
+  const samples = tapSampleItems(tapSample);
+  const expected = expectedEndpoints.map(endpoint => `${endpoint.method} ${endpoint.path}`);
+  const expectedCallIds = expectedEndpoints.map(endpoint => endpoint.callId).filter(Boolean).map(String);
+  const endpointByCallId = new Map(expectedEndpoints.filter(endpoint => endpoint.callId).map(endpoint => [String(endpoint.callId), endpoint]));
+  const endpointByLabel = new Map(expectedEndpoints.map(endpoint => [`${endpoint.method} ${endpoint.path}`, endpoint]));
+  const items = samples
+    .map(knownTapPayloadValue)
+    .flatMap(value => collectTapFlowItems(value));
+  const observedLabels = items
+    .map(item => item.label || (item.callId && endpointByCallId.has(item.callId)
+      ? `${endpointByCallId.get(item.callId).method} ${endpointByCallId.get(item.callId).path}`
+      : null))
+    .filter(Boolean);
+  const observedCallIds = items
+    .map(item => item.callId || (item.label && endpointByLabel.get(item.label)?.callId) || null)
+    .filter(Boolean)
+    .map(String);
+  const wiremockCallIds = actualSequence
+    .map(label => endpointByLabel.get(label)?.callId || null)
+    .filter(Boolean)
+    .map(String);
+  const matchedExpected = expected.length > 0 && (
+    arraysEqual(observedLabels, expected)
+    || (expectedCallIds.length > 0 && arraysEqual(observedCallIds, expectedCallIds))
+  );
+  const agreesWithWireMock = actualSequence.length > 0
+    ? arraysEqual(observedLabels, actualSequence)
+      || (wiremockCallIds.length > 0 && arraysEqual(observedCallIds, wiremockCallIds))
+    : null;
+  const extractable = observedLabels.length > 0 || observedCallIds.length > 0;
+  return {
+    sampleCount: samples.length,
+    extractable,
+    observed: observedLabels.length ? observedLabels : observedCallIds,
+    observedCallIds,
+    expected,
+    expectedCallIds,
+    wiremockObserved: actualSequence,
+    matchedExpected,
+    agreesWithWireMock,
+    evidence: [
+      `${samples.length} tap sample(s)`,
+      ...items.map(item => item.label || item.callId).filter(Boolean),
+    ],
+  };
+}
+
 function authMatcherPresent(entry) {
   return !!entry?.stubMapping?.request?.headers?.Authorization;
 }
@@ -3009,6 +3143,16 @@ function buildReport({ swarmId, scenarioId, sources, queueRows, tapSample, inclu
   const debugCaptureCount = Number(redisDebug?.count || 0);
   const authRequired = hasAuthConfiguration(scenario);
   const tapCaptured = tapHasSamples(tapSample);
+  const tapFlow = tapFlowEvidence(tapSample, expectedEndpoints, actualSequence);
+  const tapFlowStatus = !includeTapSample
+    ? "not-applicable"
+    : !tapCaptured
+      ? "fail"
+      : !tapFlow.extractable
+        ? "unknown"
+        : tapFlow.matchedExpected && tapFlow.agreesWithWireMock !== false
+          ? "pass"
+          : "fail";
 
   const claims = [
     makeClaim(
@@ -3105,6 +3249,26 @@ function buildReport({ swarmId, scenarioId, sources, queueRows, tapSample, inclu
       tapCaptured ? ["debug.tap.postprocessor.in samples>0"] : [`${debugCaptureCount} Redis debug capture key(s)`],
       tapCaptured || debugCaptureCount >= expectedEndpoints.length ? [] : ["Open the tap before the run or enable HTTP sequence Redis debug capture."],
     ),
+    makeClaim(
+      "tap.flow",
+      "Tap step flow",
+      tapFlowStatus,
+      !includeTapSample
+        ? "Tap step-flow proof was not requested."
+        : !tapCaptured
+          ? "Tap proof was requested, but no sample was captured."
+          : !tapFlow.extractable
+            ? "Tap sample was captured, but no step-flow fields were extractable."
+            : tapFlow.matchedExpected && tapFlow.agreesWithWireMock !== false
+              ? "Tap step flow matches the scenario plan and agrees with WireMock."
+              : "Tap step flow does not match the scenario plan or WireMock request sequence.",
+      tapFlow.evidence,
+      tapFlowStatus === "pass" || tapFlowStatus === "not-applicable" ? [] : [
+        !tapFlow.extractable
+          ? "Emit steps, calls, requests, results, or callId/method/path fields in the tapped payload."
+          : `Expected: ${expectedSequence.join(" -> ")}; WireMock: ${actualSequence.join(" -> ")}`,
+      ],
+    ),
   ];
 
   return {
@@ -3112,10 +3276,12 @@ function buildReport({ swarmId, scenarioId, sources, queueRows, tapSample, inclu
     title: `Evidence report for ${swarmId}`,
     generatedAt: new Date().toISOString(),
     lifecycleState,
+    tapFlow,
     checklist: claims,
     sections: [
       { title: "Expected flow", rows: expectedSequence },
       { title: "Observed flow", rows: actualSequence },
+      { title: "Tap flow", rows: tapFlow.observed },
       { title: "Redis debug captures", rows: (redisDebug?.captures || []).map(capture => `${capture.data?.callId || "unknown"} -> ${capture.data?.status || "unknown"} (${capture.key})`) },
     ],
   };
@@ -3235,6 +3401,7 @@ async function buildEvidenceSummary({ swarmId, includeTapSample, scenarioId, pre
       expected: report.sections.find(section => section.title === "Expected flow")?.rows || [],
       observed: report.sections.find(section => section.title === "Observed flow")?.rows || [],
     },
+    tapFlow: report.tapFlow || null,
     auth: report.checklist.find(claim => claim.id === "auth.flow") || null,
     payloads: report.checklist.find(claim => claim.id === "payloads.valid") || null,
     report,

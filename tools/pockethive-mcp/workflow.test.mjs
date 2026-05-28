@@ -228,6 +228,39 @@ async function withFakePocketHiveStack(bundleId, fn, options = {}) {
     });
   }
 
+  function tapSamples() {
+    if (options.tapSamples) {
+      return typeof options.tapSamples === "function" ? options.tapSamples(state) : options.tapSamples;
+    }
+    const steps = state.requests.flatMap(entry => ([
+      {
+        index: 0,
+        payload: JSON.stringify({
+          kind: "http.request",
+          request: {
+            method: entry.request.method,
+            path: String(entry.request.url || "").split("?")[0],
+          },
+        }),
+        headers: { "ph.step.service": "request-builder" },
+      },
+      {
+        index: 1,
+        payload: JSON.stringify({
+          kind: "http.result",
+          request: {
+            method: entry.request.method,
+            path: String(entry.request.url || "").split("?")[0],
+            url: `http://wiremock:8080${String(entry.request.url || "").split("?")[0]}`,
+          },
+          outcome: { status: entry.response.status },
+        }),
+        headers: { "ph.step.service": "processor" },
+      },
+    ]));
+    return steps.length ? [{ body: JSON.stringify({ steps }) }] : [];
+  }
+
   const server = createServer(async (req, res) => {
     const url = new URL(req.url, "http://127.0.0.1");
 
@@ -312,7 +345,7 @@ async function withFakePocketHiveStack(bundleId, fn, options = {}) {
       if (!state.taps.has(tapId)) return send(res, 404, { error: "tap missing" });
       return send(res, 200, {
         tapId,
-        samples: state.requests.length ? [{ body: JSON.stringify({ ok: true, callId: "hello" }) }] : [],
+        samples: tapSamples(),
       });
     }
     if (req.method === "DELETE" && url.pathname.startsWith("/orchestrator/api/debug/taps/")) {
@@ -1154,6 +1187,10 @@ test("workflow deploy loads mock config and verify settles live evidence", async
         assert.equal(verified.evidence.report.checklist.find(claim => claim.id === "requests.handled").status, "pass");
         assert.equal(verified.evidence.report.checklist.find(claim => claim.id === "queues.drained").status, "pass");
         assert.equal(verified.evidence.report.checklist.find(claim => claim.id === "payload.trace").status, "pass");
+        assert.equal(verified.evidence.report.checklist.find(claim => claim.id === "tap.flow").status, "pass");
+        assert.deepEqual(verified.evidence.tapFlow.observed, ["GET /hello"]);
+        assert.equal(verified.evidence.tapFlow.matchedExpected, true);
+        assert.equal(verified.evidence.tapFlow.agreesWithWireMock, true);
         assert.equal(state.tapCreates, 1);
         assert.equal(state.tapReads, 1);
         assert.equal(verified.evidence.report.checklist.find(claim => claim.id === "auth.flow").status, "not-applicable");
@@ -1165,6 +1202,7 @@ test("workflow deploy loads mock config and verify settles live evidence", async
         assert.equal(result.proof.runtime.status, "pass");
         assert.equal(result.proof.traffic.flow.observed[0], "GET /hello");
         assert.equal(result.proof.traffic.flow.matched, true);
+        assert.equal(result.proof.traffic.tapFlow.observed[0], "GET /hello");
         assert.equal(result.proof.mocks.wiremockRequests, 1);
 
         const strict = await call(client, "workflow_verify", {
@@ -1187,6 +1225,61 @@ test("workflow deploy loads mock config and verify settles live evidence", async
         REDIS_HOST: redis.host,
         REDIS_PORT: String(redis.port),
       });
+    });
+  });
+});
+
+test("workflow strict proof fails when tap flow disagrees with WireMock flow", async () => {
+  const root = mkdtempSync(join(tmpdir(), "ph-workflow-root-"));
+
+  await withFakeRedis(async (redis) => {
+    await withFakePocketHiveStack("agent-tap-mismatch", async ({ baseUrl }) => {
+      await withClient(root, async (client) => {
+        const started = await call(client, "workflow_start", {
+          sourceType: "plain-instructions",
+          instructions: "Create a tap mismatch proof.",
+        });
+        await call(client, "workflow_update", {
+          workflowId: started.workflowId,
+          plan: completePlan("agent-tap-mismatch"),
+          provenance: requiredProvenance("user"),
+        });
+        await completeThreeAmigos(client, started.workflowId);
+        await call(client, "workflow_generate", { workflowId: started.workflowId });
+        await call(client, "workflow_validate", { workflowId: started.workflowId });
+        await call(client, "workflow_deploy", {
+          workflowId: started.workflowId,
+          swarmId: "agent-live-stack",
+          readyTimeoutSec: 2,
+        });
+
+        const verified = await call(client, "workflow_verify", {
+          workflowId: started.workflowId,
+          includeTapSample: true,
+          proofMode: "strict",
+          observationTimeoutSec: 2,
+          settleTimeoutSec: 2,
+        });
+        const tapClaim = verified.evidence.report.checklist.find(claim => claim.id === "tap.flow");
+        assert.equal(verified.ok, false);
+        assert.equal(verified.code, "WORKFLOW_RUNTIME_PARTIAL_PROOF");
+        assert.equal(tapClaim.status, "fail");
+        assert.deepEqual(verified.evidence.tapFlow.observed, ["POST /wrong"]);
+        assert.equal(verified.evidence.tapFlow.matchedExpected, false);
+        assert.equal(verified.evidence.tapFlow.agreesWithWireMock, false);
+      }, {
+        POCKETHIVE_BASE_URL: baseUrl,
+        ORCHESTRATOR_BASE_URL: `${baseUrl}/orchestrator`,
+        SCENARIO_MANAGER_BASE_URL: `${baseUrl}/scenario-manager`,
+        RABBITMQ_MANAGEMENT_BASE_URL: `${baseUrl}/rabbitmq/api`,
+        PROMETHEUS_BASE_URL: `${baseUrl}/prometheus`,
+        WIREMOCK_BASE_URL: `${baseUrl}/wiremock`,
+        TCP_MOCK_BASE_URL: `${baseUrl}/tcp-mock`,
+        REDIS_HOST: redis.host,
+        REDIS_PORT: String(redis.port),
+      });
+    }, {
+      tapSamples: [{ body: JSON.stringify({ steps: [{ callId: "wrong", method: "POST", path: "/wrong", status: 200 }] }) }],
     });
   });
 });

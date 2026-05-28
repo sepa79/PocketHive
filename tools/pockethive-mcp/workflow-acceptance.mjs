@@ -109,6 +109,16 @@ async function generateValidateReport(client, workflowId, bundleId) {
   assert.equal(existsSync(resolve(BUNDLES_ROOT, bundleId, "WORKFLOW_EVIDENCE.md")), true);
 }
 
+async function cleanupLiveSwarm(client, swarmId) {
+  if (!swarmId) return;
+  try {
+    await call(client, "swarm_remove", { swarmId });
+    log("live swarm teardown", swarmId);
+  } catch (err) {
+    console.warn(`WARN live swarm teardown failed for ${swarmId}: ${err.message}`);
+  }
+}
+
 async function examplesCase(client) {
   const listed = await call(client, "workflow_examples_list");
   assert.deepEqual(listed.sourceOrder.map(source => source.id), ["repo-examples", "active-bundles-root"]);
@@ -242,14 +252,20 @@ async function liveCase(client) {
     sourceType: "plain-instructions",
     instructions: "Create a live smoke proof for GET /hello.",
   });
-  await call(client, "workflow_update", { workflowId: start.workflowId, plan: basePlan("accept-workflow-live"), provenance: requiredProvenance() });
-  await completeThreeAmigos(client, start.workflowId);
-  await generateValidateReport(client, start.workflowId, "accept-workflow-live");
-  const deploy = await call(client, "workflow_deploy", { workflowId: start.workflowId, swarmId: "accept-workflow-live-swarm" });
-  assert.equal(deploy.ok, true, "live workflow deploy failed");
-  const verify = await call(client, "workflow_verify", { workflowId: start.workflowId, includeTapSample: true, proofMode: "strict" });
-  assert.equal(verify.ok, true, "live workflow verify failed");
-  log("live workflow proof", start.workflowId);
+  const liveBundleId = `accept-workflow-live-${Date.now()}`;
+  const liveSwarmId = `${liveBundleId}-swarm`;
+  try {
+    await call(client, "workflow_update", { workflowId: start.workflowId, plan: basePlan(liveBundleId), provenance: requiredProvenance() });
+    await completeThreeAmigos(client, start.workflowId);
+    await generateValidateReport(client, start.workflowId, liveBundleId);
+    const deploy = await call(client, "workflow_deploy", { workflowId: start.workflowId, swarmId: liveSwarmId });
+    assert.equal(deploy.ok, true, "live workflow deploy failed");
+    const verify = await call(client, "workflow_verify", { workflowId: start.workflowId, includeTapSample: true, proofMode: "strict" });
+    assert.equal(verify.ok, true, "live workflow verify failed");
+    log("live workflow proof", start.workflowId);
+  } finally {
+    await cleanupLiveSwarm(client, liveSwarmId);
+  }
 }
 
 console.log("PocketHive agent workflow acceptance");

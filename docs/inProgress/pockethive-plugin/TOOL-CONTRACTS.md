@@ -423,6 +423,7 @@ output:
     datasets: object
     redis: object
     flow: object
+    tapFlow: object | null
     auth: object
     payloads: object
     report: object
@@ -470,6 +471,13 @@ report:
     - title: string
       rows: array
 ```
+
+When `includeTapSample=true`, the server must interpret readable debug tap
+samples as internal step-flow evidence. The derived `tapFlow` object reports
+the interpreted tap sequence, whether it matches the scenario plan, and whether
+it agrees with the externally observed WireMock request sequence. The report
+checklist includes `tap.flow`; strict runtime proof treats `tap.flow=fail` or
+`tap.flow=unknown` as blocking evidence.
 
 The optional MCP App widget renders this exact output as a report. It must not
 perform its own runtime calls or contain separate evidence logic.
@@ -1200,8 +1208,8 @@ phase: 2
 acceptance must use `proofMode=strict` with `includeTapSample=true`. Strict mode
 allows informational unknowns such as optional data-link extraction, but it
 fails missing or partial production proof for queue drain, request handling,
-flow order, auth when configured, mutating payload body assertions, and runtime
-payload trace.
+flow order, auth when configured, mutating payload body assertions, runtime
+payload trace, and debug tap step-flow interpretation.
 
 ```yaml
 name: workflow_verify_start
