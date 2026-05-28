@@ -1,6 +1,6 @@
 {
   "name": "@pockethive/mcp-server",
-  "version": "0.15.20",
+  "version": "0.15.21",
   "description": "PocketHive MCP server — full lifecycle tools for scenario authoring and swarm management",
   "type": "module",
   "bin": {
@@ -8,6 +8,8 @@
   },
   "main": "./server.mjs",
   "files": [
+    "CHANGELOG.md",
+    "README.md",
     "config-update.mjs",
     "doctor.mjs",
     "server.mjs",
