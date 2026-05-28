@@ -5,6 +5,8 @@
 
 This document defines the setup experience for developers working on
 `pockethive-mcp`, HiveMind-backed agent workflows, and the VS Code plugin.
+For the shortest command-oriented path, start with
+`tools/pockethive-mcp/README.md`.
 For assistant-specific client configuration, see
 `AI-ASSISTANT-SETUP.md`.
 
@@ -191,6 +193,35 @@ server must not expose doctor as an MCP tool.
 4. Developer configures external GitHub MCP with issue-only token if needed.
 5. Developer runs doctor.
 6. Developer launches the VS Code extension host.
+
+## Verification Commands
+
+From the PocketHive repo root:
+
+```bash
+npm run mcp:test
+npm run mcp:workflow-acceptance
+npm run mcp:agentic-evals
+```
+
+To verify against a running local PocketHive stack:
+
+```bash
+PH_WORKFLOW_ACCEPTANCE_LIVE=1 \
+POCKETHIVE_BASE_URL=http://localhost:8088 \
+POCKETHIVE_AUTH_USERNAME=local-admin \
+npm --prefix tools/pockethive-mcp run acceptance:workflow:live
+```
+
+The live acceptance run creates a unique live workflow swarm, verifies it with
+`proofMode=strict` and `includeTapSample=true`, then removes that swarm in a
+teardown block. If the process is interrupted, remove the created swarm through
+`swarm_remove` or:
+
+```bash
+POCKETHIVE_AUTH_USERNAME=local-admin \
+node tools/mcp-orchestrator-debug/client.mjs remove-swarm <swarmId>
+```
 
 ## Definition Of Ready
 

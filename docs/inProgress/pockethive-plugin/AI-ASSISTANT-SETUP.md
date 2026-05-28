@@ -259,7 +259,9 @@ PocketHive test workflow:
 
 ```text
 Use the pockethive-bundles MCP workflow tools.
-Start from my source file or instructions, inspect workflow_status, and use
+Start from my source file or instructions, read workflow_result after each
+workflow mutation, and use workflow_status only when the compact result points
+to missing fields, role checks, validation issues, or evidence details. Use
 workflow_examples_list/recommend for concrete scenario bundle examples.
 Ask me every remaining nextQuestion before generating artifacts.
 Treat validationIssues with severity error as blocking.
@@ -267,8 +269,10 @@ After generation, validate. If validation/deployment/verification fails,
 debug and patch explicitly, preserving attempt history.
 Before generation, record required answer provenance and complete required
 role checks such as Three Amigos.
-Before completion, report the claim matrix, bundle validation, deployment state
-if run, runtime verification if run, evidence gaps, and changed files.
+For production runtime proof, use workflow_verify with proofMode=strict and
+includeTapSample=true. Before completion, report the claim matrix, bundle
+validation, deployment state if run, runtime verification if run, tap.flow
+status, evidence gaps, and changed files.
 ```
 
 ## Quick Diagnostics
