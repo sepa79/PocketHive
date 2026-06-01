@@ -97,6 +97,7 @@ function installDependencies({ stdio = "ignore" } = {}) {
     encoding: "utf8",
     timeout: 120000,
     stdio,
+    shell: process.platform === "win32",
   });
   writeInstallStamp(dependencyFingerprint());
 }

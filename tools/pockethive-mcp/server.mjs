@@ -963,6 +963,20 @@ function wizardNextQuestion(answers) {
   return id ? { id, ...WIZARD_QUESTIONS[id] } : null;
 }
 
+function buildHumanCheckpoint(answers, missing) {
+  if (!missing.length) return null;
+  const agentFilled = Object.keys(answers).length;
+  return {
+    message: "Before generating the bundle, please confirm the following with the user:",
+    questions: missing.map(id => ({
+      id,
+      prompt: WIZARD_QUESTIONS[id]?.prompt,
+      options: WIZARD_QUESTIONS[id]?.options || null,
+    })),
+    agentNote: `Agent pre-filled ${agentFilled} field(s) from context. Only these ${missing.length} field(s) require human confirmation.`,
+  };
+}
+
 function wizardPattern(answers) {
   answers = wizardAnswersWithDefaults(answers);
   if (answers.protocol === "TCP") return "tcp-simple";
@@ -1244,7 +1258,10 @@ function wizardPlan(session) {
   const answers = wizardAnswersWithDefaults(session.answers);
   const missing = wizardMissingQuestions(answers);
   const errors = validateWizardAnswers(answers);
-  const ready = missing.length === 0 && errors.length === 0;
+  const humanCheckpoint = buildHumanCheckpoint(session.answers, missing);
+  // ready is only true when there are no missing fields, no errors,
+  // AND the human has confirmed all checkpoint questions (humanCheckpoint is null).
+  const ready = missing.length === 0 && errors.length === 0 && humanCheckpoint === null;
   const bundleIdValid = answers.bundleId && /^[a-z0-9][a-z0-9-]*$/.test(answers.bundleId);
   const target = answers.target && answers.protocol && (answers.target !== "external" || answers.targetBaseUrl)
     ? wizardTarget(answers)
@@ -1257,6 +1274,8 @@ function wizardPlan(session) {
     missing,
     errors,
     nextQuestion: missing.length ? wizardNextQuestion(answers) : null,
+    nextQuestions: missing.map(id => ({ id, ...WIZARD_QUESTIONS[id] })),
+    humanCheckpoint,
     assumptions: wizardAssumptions(session.answers, answers),
     bundle: bundleIdValid ? { id: answers.bundleId, path: bundleDir(answers.bundleId) } : null,
     scenario: answers.bundleId ? {
@@ -1634,6 +1653,236 @@ async function writeWizardBundle(session) {
   };
 }
 
+// ── Enrich existing bundle with wizard-generated missing artifacts ────────────
+
+async function readExistingBundleAnswers(targetBundleDir, parseYaml) {
+  const answers = {};
+  // Read scenario.yaml for bundleId, endpoints, dataSource, auth hints
+  const scenarioPath = resolve(targetBundleDir, "scenario.yaml");
+  if (existsSync(scenarioPath)) {
+    try {
+      const scenario = parseYaml(readFileSync(scenarioPath, "utf8"));
+      if (scenario?.id) answers.bundleId = scenario.id;
+      // Infer protocol from bees
+      const bees = scenario?.template?.bees || [];
+      const roles = bees.map(b => b?.role).filter(Boolean);
+      if (roles.includes("http-sequence")) answers.protocol = "SEQUENCE";
+      else if (roles.some(r => r.includes("processor"))) answers.protocol = "REST";
+      // Infer dataSource from generator bee
+      const gen = bees.find(b => b?.role === "generator" || b?.config?.inputs);
+      const inputType = gen?.config?.inputs?.type;
+      if (inputType) answers.dataSource = inputType;
+      const ratePerSec = gen?.config?.inputs?.scheduler?.ratePerSec
+        || gen?.config?.inputs?.csv?.ratePerSec
+        || gen?.config?.inputs?.redis?.ratePerSec;
+      if (ratePerSec) answers.defaultRatePerSec = ratePerSec;
+      // Infer endpoints from plan
+      const planEndpoints = scenario?.plan?.endpoints;
+      if (Array.isArray(planEndpoints) && planEndpoints.length) answers.endpoints = planEndpoints;
+      // Infer baseUrl from SUT reference in bees
+      const sutRef = bees.find(b => b?.config?.baseUrl)?.config?.baseUrl || "";
+      if (sutRef && !sutRef.includes("{{")) answers.targetBaseUrl = sutRef;
+    } catch { /* ignore parse errors */ }
+  }
+  // Read authProfiles.yaml for auth type, tokenUrl, clientId, secretEnvVar
+  const authPath = resolve(targetBundleDir, "authProfiles.yaml");
+  if (existsSync(authPath)) {
+    try {
+      const authFile = parseYaml(readFileSync(authPath, "utf8"));
+      const profiles = authFile?.profiles || {};
+      const firstProfile = Object.values(profiles)[0];
+      if (firstProfile) {
+        const typeMap = {
+          OAUTH2_CLIENT_CREDENTIALS: "oauth2_client_credentials",
+          STATIC_TOKEN: "bearer_token_static",
+          BASIC_AUTH: "basic_auth",
+          API_KEY: "api_key",
+          HMAC_SIGNATURE: "hmac",
+          AWS_SIGNATURE_V4: "aws_sig_v4",
+          ISO8583_MAC: "iso8583_mac",
+          TLS_CLIENT_CERT: "mtls",
+        };
+        if (firstProfile.type) answers.auth = typeMap[firstProfile.type] || "none";
+        if (firstProfile.tokenUrl) answers.authTokenUrl = firstProfile.tokenUrl;
+        if (firstProfile.clientId) answers.authClientId = firstProfile.clientId;
+        const secretEnv = firstProfile.clientSecret?.env || firstProfile.token?.env
+          || firstProfile.password?.env || firstProfile.key?.env;
+        if (secretEnv) answers.authSecretEnvVar = secretEnv;
+      }
+    } catch { /* ignore */ }
+  }
+  // Read sut/ to infer target and targetBaseUrl
+  const sutDir = resolve(targetBundleDir, "sut");
+  if (existsSync(sutDir)) {
+    const sutDirs = readdirSync(sutDir, { withFileTypes: true }).filter(d => d.isDirectory());
+    if (sutDirs.length) {
+      const firstSut = sutDirs[0].name;
+      if (firstSut === "wiremock-local") answers.target = "wiremock-local";
+      else if (firstSut === "tcp-mock-local") answers.target = "tcp-mock-local";
+      else answers.target = "external";
+      const sutYaml = resolve(sutDir, firstSut, "sut.yaml");
+      if (existsSync(sutYaml)) {
+        try {
+          const sut = parseYaml(readFileSync(sutYaml, "utf8"));
+          const firstEndpoint = Object.values(sut?.endpoints || {})[0];
+          if (firstEndpoint?.baseUrl && !firstEndpoint.baseUrl.includes("{{")) {
+            answers.targetBaseUrl = firstEndpoint.baseUrl;
+          }
+        } catch { /* ignore */ }
+      }
+    }
+  }
+  return answers;
+}
+
+async function enrichWizardBundle(session, flags = {}) {
+  const { stringify, parse: parseYaml } = await import("yaml").catch(() => ({ stringify: JSON.stringify, parse: JSON.parse }));
+  const answers = wizardAnswersWithDefaults(session.answers);
+  const target = wizardTarget(answers);
+  const targetBundleDir = bundleDir(answers.bundleId);
+  if (!existsSync(targetBundleDir)) throw new Error(`Bundle '${answers.bundleId}' does not exist. Use wizard.complete to create a new bundle.`);
+
+  const filesWritten = [];
+  const filesSkipped = [];
+
+  // Write only if file does not exist, or if the matching force flag is set
+  const writeIfMissing = (relativePath, content, forceFlag = false) => {
+    const fullPath = resolve(targetBundleDir, relativePath);
+    if (!forceFlag && existsSync(fullPath)) {
+      filesSkipped.push(relativePath);
+      return;
+    }
+    mkdirSync(dirname(fullPath), { recursive: true });
+    writeFileSync(fullPath, content, "utf8");
+    filesWritten.push(relativePath);
+  };
+
+  // variables.yaml
+  writeIfMissing("variables.yaml", stringify({
+    version: 1,
+    definitions: [
+      { name: "ratePerSec", scope: "global", type: "float", required: true },
+      { name: "runDuration", scope: "global", type: "string", required: true },
+      { name: "trafficShape", scope: "global", type: "string", required: true },
+      { name: "targetBaseUrl", scope: "sut", type: "string", required: true },
+    ],
+    profiles: [
+      { id: "smoke", name: "Smoke" },
+      { id: "default", name: "Default" },
+      { id: "nft", name: "NFT" },
+    ],
+    values: {
+      global: {
+        smoke: { ratePerSec: 1, runDuration: "10s", trafficShape: "smoke" },
+        default: { ratePerSec: answers.defaultRatePerSec, runDuration: answers.runDuration, trafficShape: answers.trafficShape },
+        nft: {
+          ratePerSec: answers.nftRatePerSec || answers.defaultRatePerSec,
+          runDuration: answers.nftDuration || answers.runDuration,
+          trafficShape: answers.trafficShape,
+        },
+      },
+      sut: {
+        smoke: { [target.id]: { targetBaseUrl: target.baseUrl } },
+        default: { [target.id]: { targetBaseUrl: target.baseUrl } },
+        nft: { [target.id]: { targetBaseUrl: answers.sutNftUrl || target.baseUrl } },
+      },
+    },
+  }));
+
+  // authProfiles.yaml
+  if (answers.auth !== "none") {
+    writeIfMissing("authProfiles.yaml", stringify({ profiles: wizardAuthProfiles(answers) }));
+  }
+
+  // SUT
+  const sutPath = `sut/${target.id}/sut.yaml`;
+  writeIfMissing(sutPath, stringify({
+    id: target.id,
+    name: target.id,
+    type: target.id.includes("local") ? "sandbox" : "external",
+    endpoints: { [target.endpointKey]: { kind: target.kind, baseUrl: target.baseUrl } },
+  }));
+
+  // WireMock stubs — only write stubs for callIds that don't already have a file
+  if (["wiremock", "wiremock_and_tcp"].includes(answers.sutDouble)) {
+    for (const endpoint of wizardMockEndpoints(answers).filter(mock => mock.method && mock.path)) {
+      writeIfMissing(`mock-config/wiremock/${endpoint.callId}.json`, JSON.stringify({
+        request: wizardWireMockRequest(endpoint, answers),
+        response: {
+          status: endpoint.status || 200,
+          headers: endpoint.responseHeaders || { "Content-Type": "application/json" },
+          jsonBody: endpoint.responseBody || { ok: true, callId: endpoint.callId },
+        },
+      }, null, 2));
+    }
+  }
+
+  // HTTP templates — only write templates for callIds that don't already have a file
+  if (answers.protocol !== "TCP" && Array.isArray(answers.endpoints)) {
+    const serviceId = answers.protocol === "SEQUENCE" ? "sequence" : "default";
+    const templateProtocolDir = "http";
+    for (const endpoint of answers.endpoints) {
+      const templatePath = `templates/${templateProtocolDir}/${serviceId}/${endpoint.callId}.yaml`;
+      const template = {
+        serviceId,
+        callId: endpoint.callId,
+        protocol: "HTTP",
+        method: endpoint.method,
+        pathTemplate: wizardEndpointPathTemplate(endpoint),
+        headersTemplate: wizardTemplateHeaders(endpoint, true),
+      };
+      const endpointBody = endpoint.bodyTemplate || answers.requestBody;
+      if (endpointBody) template.bodyTemplate = endpointBody;
+      if (answers.auth !== "none") template.authRef = wizardAuthRef(answers);
+      writeIfMissing(templatePath, stringify(template));
+    }
+  }
+
+  // README.md
+  writeIfMissing("README.md", [
+    `# ${answers.bundleId}`,
+    "",
+    `Enriched by PocketHive wizard from: ${session.intent}`,
+    "",
+    `- Protocol: ${answers.protocol}`,
+    `- Target: ${target.id} (${target.baseUrl})`,
+    `- Pattern: ${wizardPattern(answers)}`,
+    `- Data source: ${answers.dataSource}`,
+    `- Default rate: ${answers.defaultRatePerSec}/s`,
+    `- Auth: ${answers.auth}`,
+  ].join("\n"), flags.forceReadme);
+
+  // FLOW_DOCUMENT.md
+  writeIfMissing("FLOW_DOCUMENT.md", wizardFlowDocument(session, answers, target), flags.forceFlowDoc);
+
+  // CHANGELOG.md — always append an enrich entry; create if missing
+  const changelogPath = resolve(targetBundleDir, "CHANGELOG.md");
+  const enrichEntry = [
+    "",
+    `## ${new Date().toISOString().slice(0, 10)} - Wizard enriched`,
+    "",
+    `- Enriched bundle ${answers.bundleId} from wizard intent.`,
+    `- Files written: ${filesWritten.length > 0 ? filesWritten.join(", ") : "none (all already present)"}.`,
+    `- Files skipped (already exist): ${filesSkipped.length > 0 ? filesSkipped.join(", ") : "none"}.`,
+  ].join("\n");
+  if (flags.forceChangelog || !existsSync(changelogPath)) {
+    writeFileSync(changelogPath, `# Changelog\n${enrichEntry}\n`, "utf8");
+    filesWritten.push("CHANGELOG.md");
+  } else {
+    const existing = readFileSync(changelogPath, "utf8");
+    writeFileSync(changelogPath, existing.trimEnd() + "\n" + enrichEntry + "\n", "utf8");
+    filesWritten.push("CHANGELOG.md (appended)");
+  }
+
+  return {
+    enriched: true,
+    bundleId: answers.bundleId,
+    path: targetBundleDir,
+    filesWritten,
+    filesSkipped,
+  };
+}
+
 registerWorkflowTools({
   z,
   reg,
@@ -1669,9 +1918,10 @@ registerWorkflowTools({
   WORKFLOW_EVIDENCE_WIDGET_URI,
 });
 
-reg("wizard.start", "Start a novice bundle creation session. Collects intent and explicit answers; it does not write files.", {
+reg("wizard.start", "Start a novice bundle creation session. Collects intent and explicit answers; it does not write files. IMPORTANT: if the response contains a non-null humanCheckpoint field, the agent MUST present all humanCheckpoint.questions to the human and collect their answers before calling wizard.answer or wizard.complete. Do not infer or assume answers to humanCheckpoint questions — they require explicit human confirmation.", {
   intent: z.string().describe("Natural-language description of the bundle the user wants."),
   bundleId: z.string().optional(),
+  existingBundleId: z.string().optional().describe("If set, pre-populate answers from the existing bundle at this id before applying any other inputs."),
   protocol: z.enum(["REST", "TCP", "SEQUENCE", "HTTP"]).optional(),
   target: z.enum(["wiremock-local", "tcp-mock-local", "external"]).optional(),
   targetBaseUrl: z.string().optional(),
@@ -1722,18 +1972,43 @@ reg("wizard.start", "Start a novice bundle creation session. Collects intent and
     createdAt: new Date().toISOString(),
     createdAtMs: Date.now(),
   };
+  // Pre-populate from existing bundle if existingBundleId provided
+  if (input.existingBundleId) {
+    try {
+      const { parse: parseYaml } = await import("yaml");
+      const existingDir = bundleDir(input.existingBundleId);
+      if (existsSync(existingDir)) {
+        const inferred = await readExistingBundleAnswers(existingDir, parseYaml);
+        Object.assign(session.answers, inferred);
+      }
+    } catch { /* ignore — best effort pre-population */ }
+  }
   applyWizardAnswers(session.answers, input);
   WIZARD_SESSIONS.set(session.sessionId, session);
   return wizardPlan(session);
 });
 
-reg("wizard.answer", "Answer one question in a novice bundle creation session. Does not write files.", {
+reg("wizard.answer", "Answer one question or a batch of questions in a novice bundle creation session. Does not write files. IMPORTANT: if the returned plan contains a non-null humanCheckpoint, the agent MUST present those questions to the human before calling wizard.complete. Use the batch answers map to submit all human-confirmed answers in a single call.", {
   sessionId: z.string(),
-  questionId: z.enum(WIZARD_QUESTION_IDS),
-  answer: z.any(),
-}, async ({ sessionId, questionId, answer }) => {
+  questionId: z.enum(WIZARD_QUESTION_IDS).optional(),
+  answer: z.any().optional(),
+  answers: z.record(z.any()).optional().describe("Batch answer map — provide multiple question answers at once instead of one at a time."),
+}, async ({ sessionId, questionId, answer, answers: batchAnswers }) => {
   const session = wizardSession(sessionId);
-  session.answers[questionId] = normalizeWizardAnswer(questionId, answer);
+  // Batch path — agent collected all human answers and submits them together
+  if (batchAnswers && typeof batchAnswers === "object" && !Array.isArray(batchAnswers)) {
+    for (const [id, val] of Object.entries(batchAnswers)) {
+      try {
+        session.answers[id] = normalizeWizardAnswer(id, val);
+      } catch (e) {
+        throw new Error(`Invalid answer for '${id}': ${e.message}`);
+      }
+    }
+  }
+  // Single path — backward compatible
+  if (questionId && answer !== undefined) {
+    session.answers[questionId] = normalizeWizardAnswer(questionId, answer);
+  }
   session.updatedAt = new Date().toISOString();
   return wizardPlan(session);
 });
@@ -1742,7 +2017,7 @@ reg("wizard.summary", "Return the current wizard plan, missing inputs, and gener
   sessionId: z.string(),
 }, async ({ sessionId }) => wizardPlan(wizardSession(sessionId)));
 
-reg("wizard.complete", "Complete a wizard session and generate the bundle files. This is the only wizard.* tool that writes files.", {
+reg("wizard.complete", "Complete a wizard session and generate the bundle files. This is the only wizard.* tool that writes files. IMPORTANT: do NOT call this tool if the current plan has a non-null humanCheckpoint — all humanCheckpoint.questions must be answered by the human and submitted via wizard.answer first.", {
   sessionId: z.string(),
 }, async ({ sessionId }) => {
   const session = wizardSession(sessionId);
@@ -1754,6 +2029,23 @@ reg("wizard.complete", "Complete a wizard session and generate the bundle files.
   const structural = await runBundleCheck(generated.bundleId);
   WIZARD_SESSIONS.delete(sessionId);
   return { completed: true, generated, structural };
+});
+
+reg("wizard.enrich", "Enrich an existing bundle with missing artifacts (variables, authProfiles, SUT, mock stubs, templates, README, FLOW_DOCUMENT, CHANGELOG). Never overwrites existing files unless a force flag is set. IMPORTANT: do NOT call this tool if the current plan has a non-null humanCheckpoint — all humanCheckpoint.questions must be answered by the human and submitted via wizard.answer first.", {
+  sessionId: z.string(),
+  forceReadme: z.boolean().optional().default(false).describe("Overwrite README.md even if it already exists."),
+  forceFlowDoc: z.boolean().optional().default(false).describe("Overwrite FLOW_DOCUMENT.md even if it already exists."),
+  forceChangelog: z.boolean().optional().default(false).describe("Replace CHANGELOG.md instead of appending to it."),
+}, async ({ sessionId, forceReadme = false, forceFlowDoc = false, forceChangelog = false }) => {
+  const session = wizardSession(sessionId);
+  const plan = wizardPlan(session);
+  if (!plan.ready) {
+    throw new Error(`Wizard is not complete. Missing: ${plan.missing.join(", ") || "none"}. Errors: ${plan.errors.join("; ") || "none"}`);
+  }
+  const result = await enrichWizardBundle(session, { forceReadme, forceFlowDoc, forceChangelog });
+  const structural = await runBundleCheck(result.bundleId);
+  WIZARD_SESSIONS.delete(sessionId);
+  return { ...result, structural };
 });
 
 async function runBundleCheck(bundle) {
