@@ -1,0 +1,128 @@
+---
+- name: Require swarm-reduced HiveForge runtime environment
+  ansible.builtin.assert:
+    that:
+      - pockethive_hiveforge_project_dir | length > 0
+      - pockethive_hiveforge_project_host_dir | length > 0
+      - pockethive_hiveforge_stack_dir | length > 0
+      - pockethive_docker_registry | length > 0
+      - pockethive_version | length > 0
+      - pockethive_image_repository_prefix | length > 0
+      - pockethive_stack_name | length > 0
+    fail_msg: "swarm-reduced requires HIVEFORGE_PROJECT_DIR, HIVEFORGE_PROJECT_HOST_DIR, HIVEFORGE_STACK_DIR, DOCKER_REGISTRY, POCKETHIVE_VERSION, POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_IMAGE_REPOSITORY_PREFIX, and POCKETHIVE_STACK_NAME."
+
+- name: Validate swarm-reduced image and stack settings
+  ansible.builtin.assert:
+    that:
+      - pockethive_hiveforge_project_dir.startswith("/")
+      - pockethive_hiveforge_project_host_dir.startswith("/")
+      - pockethive_hiveforge_stack_dir.startswith("/")
+      - pockethive_docker_registry.endswith("/")
+      - pockethive_docker_registry == pockethive_image_repository_prefix + "/"
+      - pockethive_version != "latest"
+      - pockethive_stack_name is match("^[a-z0-9][a-z0-9_-]*$")
+    fail_msg: "swarm-reduced requires absolute HiveForge container and host dirs, DOCKER_REGISTRY with trailing slash matching POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_IMAGE_REPOSITORY_PREFIX, a non-latest POCKETHIVE_VERSION, and a Docker-safe POCKETHIVE_STACK_NAME."
+
+- name: Check managed runtime compose files
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ pockethive_compose_base }}"
+    - "{{ pockethive_compose_swarm }}"
+  register: pockethive_compose_files
+
+- name: Require managed runtime compose files
+  ansible.builtin.assert:
+    that:
+      - pockethive_compose_files.results | map(attribute='stat.exists') | min
+    fail_msg: "HiveForge managed runtime compose files are missing under HIVEFORGE_PROJECT_DIR."
+
+- name: Create HiveForge-managed swarm state directories
+  ansible.builtin.file:
+    path: "{{ pockethive_hiveforge_project_dir }}/{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - state/rabbitmq/data
+    - state/postgres/data
+    - state/clickhouse/data
+    - state/prometheus/data
+    - state/grafana/data
+    - state/loki/data
+    - state/scenarios-runtime
+    - state/tcp-mock/data
+    - state/tcp-mock/tls-data
+    - state/haproxy/runtime
+
+- name: Apply writable ownership for non-root stateful images
+  ansible.builtin.file:
+    path: "{{ pockethive_hiveforge_project_dir }}/{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "0755"
+  loop:
+    - path: state/grafana/data
+      owner: "472"
+      group: "0"
+    - path: state/prometheus/data
+      owner: "65534"
+      group: "65534"
+
+- name: Render merged Docker Compose config
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - -f
+      - "{{ pockethive_compose_base }}"
+      - -f
+      - "{{ pockethive_compose_swarm }}"
+      - config
+      - --format
+      - json
+  environment:
+    DOCKER_REGISTRY: "{{ pockethive_docker_registry }}"
+    HIVEFORGE_PROJECT_DIR: "{{ pockethive_hiveforge_project_host_dir }}"
+    POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_IMAGE_REPOSITORY_PREFIX: "{{ pockethive_image_repository_prefix }}"
+    POCKETHIVE_VERSION: "{{ pockethive_version }}"
+  register: pockethive_compose_config
+  changed_when: false
+
+- name: Convert Compose config to Docker Stack config
+  ansible.builtin.command:
+    argv:
+      - python3
+      - "{{ playbook_dir }}/render-stack-config.py"
+    stdin: "{{ pockethive_compose_config.stdout | from_json | to_json }}"
+  register: pockethive_stack_config
+  changed_when: false
+
+- name: Write rendered Docker Stack file
+  ansible.builtin.copy:
+    content: "{{ pockethive_stack_config.stdout }}"
+    dest: "{{ pockethive_rendered_stack_file }}"
+    mode: "0644"
+
+- name: Validate rendered Docker Stack file
+  ansible.builtin.command:
+    argv:
+      - docker
+      - stack
+      - config
+      - -c
+      - "{{ pockethive_rendered_stack_file }}"
+  changed_when: false
+
+- name: Deploy PocketHive swarm-reduced stack
+  ansible.builtin.command:
+    argv:
+      - docker
+      - stack
+      - deploy
+      - --compose-file
+      - "{{ pockethive_rendered_stack_file }}"
+      - --prune
+      - --with-registry-auth
+      - "{{ pockethive_stack_name }}"
+  changed_when: true

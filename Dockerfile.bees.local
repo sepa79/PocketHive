@@ -8,7 +8,6 @@ COPY .local-jars/swarm-controller-service.jar /app/app.jar
 
 FROM bee-runtime AS generator
 COPY .local-jars/generator-service.jar /app/app.jar
-COPY csv-data /app/csv-data
 
 FROM bee-runtime AS request-builder
 COPY .local-jars/request-builder-service.jar /app/app.jar

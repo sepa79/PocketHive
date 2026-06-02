@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.15.21]
+Timestamp: 2026-05-26T22:17:55Z
+
+- HiveForge deployment: wire `swarm-reduced` deploy/update/remove to render
+  managed compose artifacts into a Docker Stack file and deploy prebuilt images
+  from explicit runtime environment values, without building or pushing images
+  during HiveForge actions.
+- Release: bump PocketHive patch version to 0.15.21 for the HiveForge
+  `swarm-reduced` UAT path.
+
 ## [0.15.20]
 Timestamp: 2026-05-21T12:17:49Z
 
