@@ -412,6 +412,52 @@ template.
 > `sutId` when creating the swarm. Missing SUTs or unknown endpoint ids
 > are treated as hard errors (no fallback).
 
+### Auth profiles and SUT context
+
+Bundles may define `authProfiles.yaml` and activate profiles from request
+templates with `authRef.profileId`. Auth profile string fields may reference
+the selected SUT environment directly:
+
+```yaml
+profiles:
+  webauth-oauth:
+    type: OAUTH2_CLIENT_CREDENTIALS
+    storage:
+      mode: REDIS
+      tokenKey: webauth.oauth
+    tokenUrl: "{{ sut.endpoints['default'].baseUrl }}/oauth/token"
+    clientId: webauth-client
+```
+
+At swarm creation time, when a `sutId` is supplied, Orchestrator injects the
+selected SUT into the reserved private worker config path
+`privateConfig.authProfile.sut` for auth-capable workers (`request-builder`,
+`http-sequence`, and `processor`). Worker status, config-update preview, and
+config-update evidence must not expose `privateConfig`. Auth runtime template
+rendering exposes that private map as `sut`, alongside `vars`, `swarm`, and
+`worker`.
+
+The `sut` map contains only non-secret SUT metadata:
+
+```yaml
+privateConfig:
+  authProfile:
+    sut:
+      id: wiremock-local
+      name: wiremock-local
+      type: sandbox
+      endpoints:
+        default:
+          id: default
+          kind: HTTP
+          baseUrl: http://wiremock:8080
+          upstreamBaseUrl: http://backend:8080
+```
+
+> Rule: if an auth profile references `sut.*`, create the swarm with an
+> explicit `sutId`. If no SUT context is available, auth profile rendering must
+> fail explicitly rather than silently substituting another endpoint.
+
 ## Backwards compatibility
 
 - Scenario Manager ignores unknown fields but workers and Swarm

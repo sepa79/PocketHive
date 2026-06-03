@@ -22,6 +22,7 @@ public final class WorkerState {
     private volatile boolean enabled;
     private volatile boolean enableConfigured;
     private final AtomicReference<Map<String, Object>> rawConfigRef = new AtomicReference<>(Map.of());
+    private final AtomicReference<Map<String, Object>> privateConfigRef = new AtomicReference<>(Map.of());
     private final AtomicReference<StatusPublisher> statusPublisherRef = new AtomicReference<>(StatusPublisher.NO_OP);
     private final AtomicReference<Map<String, Object>> statusDataRef = new AtomicReference<>(Map.of());
     private final LongAdder processedMessages = new LongAdder();
@@ -120,6 +121,22 @@ public final class WorkerState {
             rawConfigRef.set(Map.of());
         } else {
             rawConfigRef.set(Map.copyOf(rawConfig));
+        }
+    }
+
+    public Map<String, Object> privateConfig() {
+        Map<String, Object> privateConfig = privateConfigRef.get();
+        if (privateConfig == null || privateConfig.isEmpty()) {
+            return Map.of();
+        }
+        return privateConfig;
+    }
+
+    public void updatePrivateConfig(Map<String, Object> privateConfig) {
+        if (privateConfig == null || privateConfig.isEmpty()) {
+            privateConfigRef.set(Map.of());
+        } else {
+            privateConfigRef.set(Map.copyOf(privateConfig));
         }
     }
 

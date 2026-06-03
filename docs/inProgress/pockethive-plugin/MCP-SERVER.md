@@ -177,8 +177,10 @@ workflow_update
 workflow_result
 workflow_generate
 workflow_validate
-workflow_deploy
-workflow_verify
+workflow_deploy_start
+workflow_deploy_resume
+workflow_verify_start
+workflow_verify_resume
 workflow_report
 workflow_evidence_render
 ```
@@ -188,6 +190,25 @@ the user changes the goal. Use `workflow_status` only when the compact result
 points to missing fields, role checks, or evidence details that need inspection.
 Use `workflow_evidence_render` for human handoff, not as the agent's primary
 decision surface.
+
+For deployment and runtime proof, `workflow_result` prefers resumable lifecycle
+tools. `workflow_deploy_status` and `workflow_verify_status` are read-only;
+`workflow_deploy_resume` and `workflow_verify_resume` advance one bounded step
+and return `nextPollAfterMs` when another poll is needed. Agents should use that
+value as the retry interval instead of blocking a tool call with thread sleeps.
+
+If Scenario Manager dry-run or deploy returns PocketHive API auth failures, the
+workflow records `WORKFLOW_ENV_AUTH_FAILED`, preserves local structural proof,
+and points `workflow_result.nextAction.tool` at `env_status`. That is an
+environment/auth remediation path, not a generated-bundle patch path.
+
+Validation proof is split by level. `workflow_result.proof.validation.status`
+shows the latest validation attempt. The nested
+`workflow_result.proof.validation.structural` field shows local bundle
+structure proof, and `workflow_result.proof.validation.scenarioManager` shows
+Scenario Manager dry-run proof. If structural validation passes and Scenario
+Manager validation fails, agents should treat that as a runtime/auth/Scenario
+Manager gap before editing generated bundle files.
 
 Production proof uses:
 
@@ -207,6 +228,11 @@ report only when a tap-flow gap is reported.
 Debug proof may use `proofMode=accept-partial` to keep iteration fast, but the
 result must still surface recorded gaps through `workflow_result.diagnosis`,
 `workflow_result.proof`, and the full evidence report.
+
+For local dev authentication, `POCKETHIVE_AUTH_USERNAME` produces a cached
+bearer token. PocketHive-owned API calls refresh that username-derived token
+once after a `401`. Explicit `POCKETHIVE_AUTH_TOKEN` values are treated as
+caller-owned and are not refreshed by the MCP.
 
 ### Scenario Manager contracts
 - `scenario.contracts.get` — reads Scenario Manager capability/template/scenario

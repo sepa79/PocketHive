@@ -53,6 +53,14 @@ Auth profile template expressions may reference only scenario-bundle configurati
 - `{{ vars.* }}` from resolved scenario/bundle variables.
 - `{{ sut.* }}` from the selected SUT environment.
 - `{{ swarm.* }}` from resolved swarm/run identity, including `swarm.id`.
+- `{{ worker.* }}` from resolved worker identity, including `worker.id` and `worker.role`.
+
+Orchestrator injects the selected SUT environment into auth-capable worker
+config as the reserved private path `privateConfig.authProfile.sut`. The worker
+SDK preserves `privateConfig` for typed worker config but strips it from public
+raw config, status, config-update preview, config-ready details, and config
+logs. The auth runtime exposes the nested auth profile SUT map as `sut`; it is
+not inferred from worker-local defaults or direct service ports.
 
 Auth profiles must not reference per-work-item values such as `payload`, `headers`, `workItem`, extracted HTTP sequence context, or mutable worker-local vars. Unresolved auth profile expressions fail scenario validation. Fingerprints and token-key conflict checks run after these expressions are resolved.
 

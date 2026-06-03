@@ -156,6 +156,27 @@ advance. Full claim matrices, role checks, operation history, and raw runtime
 evidence remain available through `workflow_status`, `workflow_report`, and
 `workflow_evidence_render`.
 
+`workflow_result.proof.validation` reports the latest validation attempt and
+also exposes validation by level:
+
+```yaml
+proof:
+  validation:
+    status: pass | fail | not-run
+    latestLevel: structural | scenario-manager | null
+    structural:
+      status: pass | fail | not-run
+      code: string | null
+    scenarioManager:
+      status: pass | fail | not-run
+      code: string | null
+      authoritative: boolean
+```
+
+An authoritative Scenario Manager failure must not erase a prior structural
+validation pass. Agents inspect the nested validation level before deciding
+whether the next action is a bundle patch or an environment/auth retry.
+
 ## Wizard Tool Contracts
 
 `wizard_*` is the novice-facing authoring surface. It stores short-lived session
@@ -556,6 +577,12 @@ mock:
   queryParameters: object
   bodyPatterns: array
   responseBody: object
+  jsonBody: object | string
+  body: object | string
+  response:
+    status: number
+    jsonBody: object | string
+    body: object | string
   status: number
 ```
 
@@ -569,6 +596,15 @@ the generator derives conservative `matchesJsonPath` assertions from
 `bodyTemplate` or the workflow `requestBody`; templated string values such as
 `{{customerId}}` assert field presence rather than exact unresolved template
 text.
+
+Generated WireMock responses must preserve explicit body aliases supplied as
+`responseBody`, `jsonBody`, `body`, `response.jsonBody`, `response.body`,
+`mock.responseBody`, `mock.jsonBody`, `mock.body`, `mock.response.jsonBody`, or
+`mock.response.body`. If result rules infer a JSON field from
+`resultCodePattern` and no explicit response body is supplied, the default mock
+body must include that field with a value from `successCodes`. If an explicit
+response body is supplied, wizard validation must reject the plan when the
+inferred field is missing or has a value outside `successCodes`.
 
 Canonical workflow roles:
 
@@ -1051,6 +1087,24 @@ Manager validation. `validator=scenario-manager-dry-run` is authoritative for
 the running Scenario Manager contract and should be used before live deployment
 when a PocketHive stack is configured.
 
+Workflow sessions keep structural validation evidence separately from Scenario
+Manager validation evidence. A later Scenario Manager dry-run failure records
+`validationLevel=scenario-manager` as the latest validation attempt, but the
+`validation.structural` claim remains satisfied when local structural
+validation previously passed.
+
+Failure codes distinguish artifact failures from environment failures:
+
+- `WORKFLOW_VALIDATION_FAILED` means the generated bundle needs a patch before
+  validation can pass.
+- `WORKFLOW_EXTERNAL_VALIDATION_FAILED` means local structural validation
+  passed, but Scenario Manager validation could not complete against the
+  configured stack.
+- `WORKFLOW_ENV_AUTH_FAILED` means PocketHive API auth was rejected, commonly a
+  `401`/expired bearer token. `workflow_result.nextAction.tool` must point to
+  `env_status` and `patchScope` must be empty because generated bundle files
+  are not the first remediation target.
+
 ```yaml
 name: workflow_deploy
 class: public novice
@@ -1070,6 +1124,7 @@ writeScope: none
 failureModes:
   - WORKFLOW_BUNDLE_NOT_GENERATED
   - WORKFLOW_VALIDATION_REQUIRED
+  - WORKFLOW_ENV_AUTH_FAILED
   - WORKFLOW_DEPLOY_FAILED
   - WORKFLOW_DEPLOY_NOT_READY
 phase: 2
@@ -1126,6 +1181,7 @@ output:
     operationType: deploy
     status: running
     phase: upload
+    nextPollAfterMs: number
     nextActions: string[]
 sideEffects:
   files: none
@@ -1148,6 +1204,7 @@ output:
     operationId: string
     status: running | succeeded | failed | cancelled
     phase: upload | mock-config | create | wait-ready | start | complete | failed | cancelled
+    nextPollAfterMs: number
     evidence: object
     lastStep: object | null
     apiActions: array
@@ -1174,6 +1231,7 @@ output:
     operationId: string
     status: running | succeeded | failed
     phase: string
+    nextPollAfterMs: number
     evidence: object
     lastStep: object | null
     apiActions: array
@@ -1185,6 +1243,11 @@ sideEffects:
 writeScope: none
 phase: 2
 ```
+
+Polling semantics are explicit: `status` never advances a lifecycle operation,
+and `resume` advances one bounded phase. When the returned operation or
+`workflow_result.nextAction` contains `nextPollAfterMs`, agents should wait that
+interval before the next `resume` call rather than holding a tool call open.
 
 ```yaml
 name: workflow_verify

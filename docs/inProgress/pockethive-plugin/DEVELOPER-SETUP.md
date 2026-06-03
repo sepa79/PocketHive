@@ -213,14 +213,27 @@ POCKETHIVE_AUTH_USERNAME=local-admin \
 npm --prefix tools/pockethive-mcp run acceptance:workflow:live
 ```
 
-The live acceptance run creates a unique live workflow swarm, verifies it with
-`proofMode=strict` and `includeTapSample=true`, then removes that swarm in a
-teardown block. If the process is interrupted, remove the created swarm through
-`swarm_remove` or:
+The live acceptance run creates a unique live workflow bundle/swarm, verifies
+it with `proofMode=strict` and `includeTapSample=true`, then removes both the
+swarm and uploaded Scenario Manager bundle in a teardown block. If the process
+is interrupted, remove the created swarm through `swarm_remove` or:
 
 ```bash
 POCKETHIVE_AUTH_USERNAME=local-admin \
 node tools/mcp-orchestrator-debug/client.mjs remove-swarm <swarmId>
+```
+
+Remove the uploaded live bundle with:
+
+```bash
+TOKEN=$(curl -s \
+  -H "content-type: application/json" \
+  -d '{"username":"local-admin"}' \
+  "http://localhost:8088/auth-service/api/auth/dev/login" | jq -r .accessToken)
+
+curl -X DELETE \
+  -H "Authorization: Bearer ${TOKEN}" \
+  "http://localhost:8088/scenario-manager/scenarios/<bundleId>"
 ```
 
 ## Definition Of Ready

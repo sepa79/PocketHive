@@ -803,7 +803,7 @@ test("workflow gates generation until a normalized plan is complete, then genera
     assert.equal(validatedResult.verdict, "ready");
     assert.equal(validatedResult.phase, "deployment");
     assert.equal(validatedResult.proof.validation.status, "pass");
-    assert.equal(validatedResult.nextAction.tool, "workflow_deploy");
+    assert.equal(validatedResult.nextAction.tool, "workflow_deploy_start");
 
     const check = await call(client, "bundle_check", { bundle: "agent-complete" });
     assert.equal(check.ok, true);
@@ -920,6 +920,259 @@ test("workflow generation adds conservative WireMock body matchers for mutating 
       { matchesJsonPath: { expression: "$.amount", equalTo: "10" } },
       { matchesJsonPath: { expression: "$.currency", equalTo: "GBP" } },
     ]);
+  });
+});
+
+test("wizard generation preserves WireMock response body aliases and result-rule bodies", async () => {
+  const root = mkdtempSync(join(tmpdir(), "ph-workflow-root-"));
+
+  await withClient(root, async (client) => {
+    const explicit = await call(client, "wizard_start", {
+      intent: "Create a payment POST bundle with explicit mock response body.",
+      bundleId: "wizard-mock-body-alias",
+      protocol: "REST",
+      target: "wiremock-local",
+      endpoints: [{ method: "POST", path: "/api/payments", callId: "create-payment" }],
+      defaultRatePerSec: 2,
+      requestBody: JSON.stringify({ customerId: "{{customerId}}", amount: 10 }),
+      resultRules: "yes",
+      resultCodePattern: "\"status\"\\s*:\\s*\"([A-Z_]+)\"",
+      successCodes: ["ACCEPTED"],
+      mockEndpoints: [{
+        method: "POST",
+        path: "/api/payments",
+        callId: "create-payment",
+        status: 201,
+        body: { paymentId: "P-1001", status: "ACCEPTED" },
+      }],
+    });
+    assert.equal(explicit.ready, true);
+    await call(client, "wizard_complete", { sessionId: explicit.sessionId });
+
+    const explicitMapping = JSON.parse(readFileSync(resolve(root, "wizard-mock-body-alias", "mock-config", "wiremock", "create-payment.json"), "utf8"));
+    assert.equal(explicitMapping.response.status, 201);
+    assert.deepEqual(explicitMapping.response.jsonBody, { paymentId: "P-1001", status: "ACCEPTED" });
+    assert.ok(explicitMapping.request.bodyPatterns?.length > 0, "mutating WireMock stub should assert request body");
+
+    const generated = await call(client, "wizard_start", {
+      intent: "Create a payment POST bundle with generated mock response body.",
+      bundleId: "wizard-result-rule-default-body",
+      protocol: "REST",
+      target: "wiremock-local",
+      endpoints: [{ method: "POST", path: "/api/payments", callId: "create-payment" }],
+      defaultRatePerSec: 2,
+      requestBody: JSON.stringify({ customerId: "{{customerId}}", amount: 10 }),
+      resultRules: "yes",
+      resultCodePattern: "\"status\"\\s*:\\s*\"([A-Z_]+)\"",
+      successCodes: ["ACCEPTED"],
+    });
+    assert.equal(generated.ready, true);
+    await call(client, "wizard_complete", { sessionId: generated.sessionId });
+
+    const generatedMapping = JSON.parse(readFileSync(resolve(root, "wizard-result-rule-default-body", "mock-config", "wiremock", "create-payment.json"), "utf8"));
+    assert.equal(generatedMapping.response.jsonBody.status, "ACCEPTED");
+  });
+});
+
+test("wizard rejects explicit WireMock response bodies that contradict result rules", async () => {
+  const root = mkdtempSync(join(tmpdir(), "ph-workflow-root-"));
+
+  await withClient(root, async (client) => {
+    const plan = await call(client, "wizard_start", {
+      intent: "Create a payment POST bundle with a conflicting mock response body.",
+      bundleId: "wizard-mock-body-conflict",
+      protocol: "REST",
+      target: "wiremock-local",
+      endpoints: [{ method: "POST", path: "/api/payments", callId: "create-payment" }],
+      defaultRatePerSec: 2,
+      requestBody: JSON.stringify({ customerId: "{{customerId}}", amount: 10 }),
+      resultRules: "yes",
+      resultCodePattern: "\"status\"\\s*:\\s*\"([A-Z_]+)\"",
+      successCodes: ["ACCEPTED"],
+      mockEndpoints: [{
+        method: "POST",
+        path: "/api/payments",
+        callId: "create-payment",
+        status: 409,
+        body: { paymentId: "P-1001", status: "CONFLICTED" },
+      }],
+    });
+
+    assert.equal(plan.ready, false);
+    assert.ok(plan.errors.some((message) => message.includes("responseBody.status")));
+    const completeError = await callError(client, "wizard_complete", { sessionId: plan.sessionId });
+    assert.match(completeError, /responseBody\.status/);
+  });
+});
+
+test("Scenario Manager auth refreshes username-derived bearer token once after 401", async () => {
+  const root = mkdtempSync(join(tmpdir(), "ph-workflow-root-"));
+  let loginCalls = 0;
+  let validateCalls = 0;
+  const server = createServer(async (req, res) => {
+    const url = new URL(req.url, "http://127.0.0.1");
+    if (req.method === "POST" && url.pathname === "/auth-service/api/auth/dev/login") {
+      loginCalls += 1;
+      for await (const _ of req) { /* drain */ }
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ accessToken: loginCalls === 1 ? "expired-token" : "fresh-token" }));
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/scenario-manager/scenarios/bundles/validate") {
+      validateCalls += 1;
+      for await (const _ of req) { /* drain zip upload */ }
+      const auth = req.headers.authorization || "";
+      if (auth !== "Bearer fresh-token") {
+        res.writeHead(401, { "content-type": "application/json" });
+        res.end(JSON.stringify({ message: "Invalid or expired bearer token" }));
+        return;
+      }
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: true }));
+      return;
+    }
+    res.writeHead(404, { "content-type": "application/json" });
+    res.end(JSON.stringify({ error: `unhandled ${req.method} ${url.pathname}` }));
+  });
+  await new Promise(resolveListen => server.listen(0, "127.0.0.1", resolveListen));
+  const { port } = server.address();
+  const baseUrl = `http://127.0.0.1:${port}`;
+  try {
+    await withClient(root, async (client) => {
+      const started = await call(client, "workflow_start", {
+        sourceType: "plain-instructions",
+        instructions: "Create a bundle and validate it through Scenario Manager.",
+      });
+      await call(client, "workflow_update", {
+        workflowId: started.workflowId,
+        plan: completePlan("auth-refresh-validation"),
+        provenance: requiredProvenance("user"),
+      });
+      await completeThreeAmigos(client, started.workflowId);
+      await call(client, "workflow_generate", { workflowId: started.workflowId });
+      const validated = await call(client, "workflow_validate", { workflowId: started.workflowId, validator: "scenario-manager-dry-run" });
+      assert.equal(validated.ok, true);
+      assert.equal(validated.authoritative, true);
+    }, {
+      POCKETHIVE_BASE_URL: baseUrl,
+      ORCHESTRATOR_BASE_URL: `${baseUrl}/orchestrator`,
+      SCENARIO_MANAGER_BASE_URL: `${baseUrl}/scenario-manager`,
+      AUTH_SERVICE_BASE_URL: `${baseUrl}/auth-service`,
+      POCKETHIVE_AUTH_USERNAME: "local-admin",
+    });
+    assert.equal(loginCalls, 2);
+    assert.equal(validateCalls, 2);
+  } finally {
+    await new Promise(resolveClose => server.close(resolveClose));
+  }
+});
+
+test("Scenario Manager auth failure is classified as environment auth, not bundle validation", async () => {
+  const root = mkdtempSync(join(tmpdir(), "ph-workflow-root-"));
+  let loginCalls = 0;
+  let validateCalls = 0;
+  const server = createServer(async (req, res) => {
+    const url = new URL(req.url, "http://127.0.0.1");
+    if (req.method === "POST" && url.pathname === "/auth-service/api/auth/dev/login") {
+      loginCalls += 1;
+      for await (const _ of req) { /* drain */ }
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ accessToken: `still-expired-${loginCalls}` }));
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/scenario-manager/scenarios/bundles/validate") {
+      validateCalls += 1;
+      for await (const _ of req) { /* drain zip upload */ }
+      res.writeHead(401, { "content-type": "application/json" });
+      res.end(JSON.stringify({ message: "Invalid or expired bearer token" }));
+      return;
+    }
+    res.writeHead(404, { "content-type": "application/json" });
+    res.end(JSON.stringify({ error: `unhandled ${req.method} ${url.pathname}` }));
+  });
+  await new Promise(resolveListen => server.listen(0, "127.0.0.1", resolveListen));
+  const { port } = server.address();
+  const baseUrl = `http://127.0.0.1:${port}`;
+  try {
+    await withClient(root, async (client) => {
+      const started = await call(client, "workflow_start", {
+        sourceType: "plain-instructions",
+        instructions: "Create a bundle and show auth failure classification.",
+      });
+      await call(client, "workflow_update", {
+        workflowId: started.workflowId,
+        plan: completePlan("auth-failure-classification"),
+        provenance: requiredProvenance("user"),
+      });
+      await completeThreeAmigos(client, started.workflowId);
+      await call(client, "workflow_generate", { workflowId: started.workflowId });
+
+      const failed = await call(client, "workflow_validate", { workflowId: started.workflowId, validator: "scenario-manager-dry-run" });
+      assert.equal(failed.ok, false);
+      assert.equal(failed.code, "WORKFLOW_ENV_AUTH_FAILED");
+      assert.equal(failed.failureCode, "WORKFLOW_ENV_AUTH_FAILED");
+      assert.equal(failed.validationLevel, "scenario-manager");
+      assert.equal(failed.patchScope.length, 0);
+      assert.ok(failed.suggestedNextActions.includes("env_status"));
+
+      const result = await call(client, "workflow_result", { workflowId: started.workflowId });
+      assert.equal(result.phase, "validation");
+      assert.equal(result.diagnosis.code, "WORKFLOW_ENV_AUTH_FAILED");
+      assert.equal(result.nextAction.tool, "env_status");
+      assert.equal(result.nextAction.followUpTool, "workflow_validate");
+      assert.equal(result.proof.validation.structural.status, "pass");
+      assert.equal(result.proof.validation.scenarioManager.status, "fail");
+
+      const status = await call(client, "workflow_status", { workflowId: started.workflowId });
+      assert.equal(status.activeRole.id, "security-reviewer");
+      assert.equal(status.remediation.patchScope.length, 0);
+      assert.equal(status.claimMatrix.find(claim => claim.id === "validation.structural").status, "satisfied");
+    }, {
+      POCKETHIVE_BASE_URL: baseUrl,
+      ORCHESTRATOR_BASE_URL: `${baseUrl}/orchestrator`,
+      SCENARIO_MANAGER_BASE_URL: `${baseUrl}/scenario-manager`,
+      AUTH_SERVICE_BASE_URL: `${baseUrl}/auth-service`,
+      POCKETHIVE_AUTH_USERNAME: "local-admin",
+    });
+    assert.equal(loginCalls, 2);
+    assert.equal(validateCalls, 2);
+  } finally {
+    await new Promise(resolveClose => server.close(resolveClose));
+  }
+});
+
+test("Scenario Manager validation failure does not erase structural validation proof", async () => {
+  const root = mkdtempSync(join(tmpdir(), "ph-workflow-root-"));
+
+  await withClient(root, async (client) => {
+    const started = await call(client, "workflow_start", {
+      sourceType: "plain-instructions",
+      instructions: "Create a bundle and preserve local proof when Scenario Manager is unavailable.",
+    });
+    await call(client, "workflow_update", {
+      workflowId: started.workflowId,
+      plan: completePlan("scenario-manager-fail-keeps-structural"),
+      provenance: requiredProvenance("user"),
+    });
+    await completeThreeAmigos(client, started.workflowId);
+    await call(client, "workflow_generate", { workflowId: started.workflowId });
+    await call(client, "workflow_validate", { workflowId: started.workflowId, validator: "local-structural" });
+
+    const failed = await call(client, "workflow_validate", { workflowId: started.workflowId, validator: "scenario-manager-dry-run" });
+    assert.equal(failed.ok, false);
+    assert.equal(failed.failureCode, "WORKFLOW_EXTERNAL_VALIDATION_FAILED");
+    assert.equal(failed.patchScope.length, 0);
+
+    const result = await call(client, "workflow_result", { workflowId: started.workflowId });
+    assert.equal(result.proof.validation.status, "fail");
+    assert.equal(result.proof.validation.structural.status, "pass");
+    assert.equal(result.proof.validation.scenarioManager.status, "fail");
+    assert.equal(result.nextAction.validator, "scenario-manager-dry-run");
+    assert.equal(result.nextAction.tool, "workflow_validate");
+
+    const status = await call(client, "workflow_status", { workflowId: started.workflowId });
+    assert.equal(status.claimMatrix.find(claim => claim.id === "validation.structural").status, "satisfied");
+    assert.equal(status.evidenceContract.find(claim => claim.id === "validation.structural").status, "satisfied");
   });
 });
 
@@ -1045,7 +1298,7 @@ test("workflow_patch is constrained and validation history preserves failed and 
     const status = await call(client, "workflow_status", { workflowId: started.workflowId });
     assert.equal(status.activeRole.id, "pockethive-sme");
     assert.equal(status.agent.verdict, "ready");
-    assert.equal(status.agent.nextAction.tool, "workflow_deploy");
+    assert.equal(status.agent.nextAction.tool, "workflow_deploy_start");
     const validationAttempts = status.history.filter((entry) => entry.action === "validate");
     assert.equal(validationAttempts.length, 2);
     assert.deepEqual(validationAttempts.map((entry) => entry.ok), [false, true]);
@@ -1329,6 +1582,9 @@ test("workflow async deploy job survives slow readiness without blocking one too
         assert.equal(step.phase, "wait-ready");
         assert.equal(step.ready.ready, false);
         assert.equal(state.startCalls, 0);
+        assert.equal(step.agent.nextAction.tool, "workflow_deploy_resume");
+        assert.equal(step.agent.nextAction.nextPollAfterMs, 4000);
+        assert.equal(step.agent.nextAction.statusTool, "workflow_deploy_status");
 
         step = await call(client, "workflow_deploy_resume", { workflowId: started.workflowId, operationId: created.operationId });
         assert.equal(step.status, "running");
@@ -1370,6 +1626,77 @@ test("workflow async deploy job survives slow readiness without blocking one too
       });
     }, { readyAfterPolls: 2 });
   });
+});
+
+test("workflow deploy auth failure is classified as environment auth", async () => {
+  const root = mkdtempSync(join(tmpdir(), "ph-workflow-root-"));
+  let loginCalls = 0;
+  let uploadCalls = 0;
+  const server = createServer(async (req, res) => {
+    const url = new URL(req.url, "http://127.0.0.1");
+    if (req.method === "POST" && url.pathname === "/auth-service/api/auth/dev/login") {
+      loginCalls += 1;
+      for await (const _ of req) { /* drain */ }
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ accessToken: `deploy-expired-${loginCalls}` }));
+      return;
+    }
+    if (req.method === "GET" && url.pathname === "/scenario-manager/scenarios/deploy-auth-failure") {
+      res.writeHead(404, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: "missing" }));
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/scenario-manager/scenarios/bundles") {
+      uploadCalls += 1;
+      for await (const _ of req) { /* drain zip upload */ }
+      res.writeHead(401, { "content-type": "application/json" });
+      res.end(JSON.stringify({ message: "Invalid or expired bearer token" }));
+      return;
+    }
+    res.writeHead(404, { "content-type": "application/json" });
+    res.end(JSON.stringify({ error: `unhandled ${req.method} ${url.pathname}` }));
+  });
+  await new Promise(resolveListen => server.listen(0, "127.0.0.1", resolveListen));
+  const { port } = server.address();
+  const baseUrl = `http://127.0.0.1:${port}`;
+  try {
+    await withClient(root, async (client) => {
+      const started = await call(client, "workflow_start", {
+        sourceType: "plain-instructions",
+        instructions: "Create a bundle and fail deployment auth.",
+      });
+      await call(client, "workflow_update", {
+        workflowId: started.workflowId,
+        plan: completePlan("deploy-auth-failure"),
+        provenance: requiredProvenance("user"),
+      });
+      await completeThreeAmigos(client, started.workflowId);
+      await call(client, "workflow_generate", { workflowId: started.workflowId });
+      await call(client, "workflow_validate", { workflowId: started.workflowId });
+
+      const operation = await call(client, "workflow_deploy_start", { workflowId: started.workflowId, swarmId: "deploy-auth-swarm" });
+      const failed = await call(client, "workflow_deploy_resume", { workflowId: started.workflowId, operationId: operation.operationId });
+      assert.equal(failed.status, "failed");
+      assert.equal(failed.evidence.deployment.code, "WORKFLOW_ENV_AUTH_FAILED");
+      assert.equal(failed.agent.diagnosis.code, "WORKFLOW_ENV_AUTH_FAILED");
+      assert.equal(failed.agent.nextAction.tool, "env_status");
+      assert.equal(failed.agent.nextAction.followUpTool, "workflow_deploy_start");
+
+      const status = await call(client, "workflow_status", { workflowId: started.workflowId });
+      assert.equal(status.remediation.failureCode, "WORKFLOW_ENV_AUTH_FAILED");
+      assert.equal(status.remediation.patchScope.length, 0);
+    }, {
+      POCKETHIVE_BASE_URL: baseUrl,
+      ORCHESTRATOR_BASE_URL: `${baseUrl}/orchestrator`,
+      SCENARIO_MANAGER_BASE_URL: `${baseUrl}/scenario-manager`,
+      AUTH_SERVICE_BASE_URL: `${baseUrl}/auth-service`,
+      POCKETHIVE_AUTH_USERNAME: "local-admin",
+    });
+    assert.equal(loginCalls, 2);
+    assert.equal(uploadCalls, 2);
+  } finally {
+    await new Promise(resolveClose => server.close(resolveClose));
+  }
 });
 
 test("workflow async verify job observes, stops, and settles in resumable steps", async () => {
@@ -1628,7 +1955,7 @@ test("workflow report includes role completion and evidence gaps", async () => {
     assert.match(report, /## Evidence Gaps/);
     assert.match(report, /## Claim Matrix/);
     assert.match(report, /## Agent Handoff/);
-    assert.match(report, /Next action: workflow_deploy/);
+    assert.match(report, /Next action: workflow_deploy_start/);
   });
 });
 
@@ -1653,9 +1980,9 @@ test("workflow evidence render returns an MCP App widget payload without mutatin
 
     assert.equal(rendered.structuredContent.workflowId, started.workflowId);
     assert.equal(rendered.structuredContent.summary.bundleId, "agent-render-widget");
-    assert.equal(rendered.structuredContent.agent.nextAction.tool, "workflow_deploy");
+    assert.equal(rendered.structuredContent.agent.nextAction.tool, "workflow_deploy_start");
     assert.equal(rendered.structuredContent.summary.verdict, rendered.structuredContent.agent.verdict);
-    assert.equal(rendered.structuredContent.summary.nextAction.tool, "workflow_deploy");
+    assert.equal(rendered.structuredContent.summary.nextAction.tool, "workflow_deploy_start");
     assert.ok(rendered.structuredContent.claimMatrix.some(claim => claim.id === "validation.structural"));
     assert.equal(rendered._meta.ui.resourceUri, "ui://pockethive/workflow-evidence-v1.html");
     assert.equal(rendered._meta["openai/outputTemplate"], "ui://pockethive/workflow-evidence-v1.html");

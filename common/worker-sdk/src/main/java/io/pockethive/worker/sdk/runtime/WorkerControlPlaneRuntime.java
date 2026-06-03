@@ -48,6 +48,7 @@ import org.slf4j.LoggerFactory;
 public final class WorkerControlPlaneRuntime {
 
     private static final Logger log = LoggerFactory.getLogger(WorkerControlPlaneRuntime.class);
+    private static final String PRIVATE_CONFIG_KEY = "privateConfig";
 
     private final WorkerControlPlane workerControlPlane;
     private final WorkerStateStore stateStore;
@@ -342,13 +343,16 @@ public final class WorkerControlPlaneRuntime {
             return;
         }
         Map<String, Object> rawConfig = configMerger.toRawConfig(defaultConfig);
+        Map<String, Object> privateConfig = privateConfigFrom(rawConfig);
+        Map<String, Object> publicRawConfig = publicConfigFrom(rawConfig);
         Boolean enabled = null;
         Object typedConfig = ensureTypedDefault(state.definition(), defaultConfig, rawConfig);
         if (state.seedConfig(typedConfig, enabled)) {
-            state.updateRawConfig(rawConfig);
-            RedisSequenceConfiguration.configureFromWorkerConfig(rawConfig);
+            state.updatePrivateConfig(privateConfig);
+            state.updateRawConfig(publicRawConfig);
+            RedisSequenceConfiguration.configureFromWorkerConfig(publicRawConfig);
             ensureStatusPublisher(state);
-            notifier.logInitialConfig(state, rawConfig, enabled);
+            notifier.logInitialConfig(state, publicRawConfig, enabled);
             notifyStateListeners(state);
         }
     }
@@ -430,7 +434,7 @@ public final class WorkerControlPlaneRuntime {
                 templateRenderer.resetSeededSelections();
             }
             Map<String, Object> filteredUpdate = filtered.values();
-            Map<String, Object> canonicalUpdate = ConfigKeyCanonicalizer.canonicalise(filteredUpdate);
+            Map<String, Object> canonicalUpdate = publicConfigFrom(ConfigKeyCanonicalizer.canonicalise(filteredUpdate));
             boolean previousEnabled = state.enabled();
             try {
                 ConfigMerger.ConfigMergeResult mergeResult = configMerger.merge(
@@ -448,7 +452,10 @@ public final class WorkerControlPlaneRuntime {
                         enabled,
                         canonicalUpdate);
                 }
-                state.updateConfig(mergeResult.typedConfig(), mergeResult.replaced(), enabled);
+                Object typedConfig = mergeResult.replaced() && !mergeResult.rawConfig().isEmpty()
+                    ? configMerger.toTypedConfig(state.definition(), configForTypedWorker(mergeResult.rawConfig(), state.privateConfig()))
+                    : mergeResult.typedConfig();
+                state.updateConfig(typedConfig, mergeResult.replaced(), enabled);
                 state.updateRawConfig(mergeResult.rawConfig());
                 RedisSequenceConfiguration.configureFromWorkerConfig(mergeResult.rawConfig());
                 Map<String, Object> appliedConfig = mergeResult.replaced() ? mergeResult.rawConfig() : Map.of();
@@ -672,6 +679,38 @@ public final class WorkerControlPlaneRuntime {
         return state.rawConfig();
     }
 
+    private static Map<String, Object> publicConfigFrom(Map<String, Object> config) {
+        if (config == null || config.isEmpty() || !config.containsKey(PRIVATE_CONFIG_KEY)) {
+            return config == null || config.isEmpty() ? Map.of() : config;
+        }
+        Map<String, Object> publicConfig = new LinkedHashMap<>(config);
+        publicConfig.remove(PRIVATE_CONFIG_KEY);
+        return publicConfig.isEmpty() ? Map.of() : Map.copyOf(publicConfig);
+    }
+
+    private static Map<String, Object> privateConfigFrom(Map<String, Object> config) {
+        if (config == null || config.isEmpty()) {
+            return Map.of();
+        }
+        Object privateConfig = config.get(PRIVATE_CONFIG_KEY);
+        if (!(privateConfig instanceof Map<?, ?> rawPrivateConfig) || rawPrivateConfig.isEmpty()) {
+            return Map.of();
+        }
+        return Map.of(PRIVATE_CONFIG_KEY, toStringMap(rawPrivateConfig));
+    }
+
+    private static Map<String, Object> configForTypedWorker(Map<String, Object> publicConfig, Map<String, Object> privateConfig) {
+        if (privateConfig == null || privateConfig.isEmpty()) {
+            return publicConfig == null || publicConfig.isEmpty() ? Map.of() : publicConfig;
+        }
+        Map<String, Object> typedConfig = new LinkedHashMap<>();
+        if (publicConfig != null && !publicConfig.isEmpty()) {
+            typedConfig.putAll(publicConfig);
+        }
+        typedConfig.putAll(privateConfig);
+        return Map.copyOf(typedConfig);
+    }
+
     private boolean shouldLogConfigUpdate(
         WorkerConfigPatch patch,
         WorkerConfigCommand command,
@@ -700,7 +739,7 @@ public final class WorkerControlPlaneRuntime {
         }
     }
 
-    private Map<String, Object> toStringMap(Map<?, ?> source) {
+    private static Map<String, Object> toStringMap(Map<?, ?> source) {
         Map<String, Object> copy = new LinkedHashMap<>();
         source.forEach((key, value) -> {
             if (key != null) {

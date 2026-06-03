@@ -65,6 +65,10 @@ http://localhost:3100/mcp
 
 Use explicit values. Do not rely on hidden fallbacks for real environments.
 
+When `POCKETHIVE_AUTH_USERNAME` is used for local dev auth, the MCP caches the
+derived bearer token and refreshes it once after a `401` from PocketHive-owned
+APIs. Explicit `POCKETHIVE_AUTH_TOKEN` values are never refreshed by the MCP.
+
 ## Canonical Agent Workflow
 
 For new scenario work, agents should follow this loop:
@@ -75,8 +79,10 @@ workflow_update
 workflow_result
 workflow_generate
 workflow_validate
-workflow_deploy
-workflow_verify
+workflow_deploy_start
+workflow_deploy_resume
+workflow_verify_start
+workflow_verify_resume
 workflow_report
 workflow_evidence_render
 ```
@@ -86,12 +92,38 @@ compact handoff surface for phase, verdict, next action, claim matrix, and
 proof summary. Use `workflow_status` only when `workflow_result` points to
 missing fields, role checks, validation issues, or detailed evidence.
 
-Slow machines or live stacks may use the resumable forms:
+`workflow_result.proof.validation` separates local structural proof from live
+Scenario Manager proof:
+
+```json
+{
+  "status": "fail",
+  "latestLevel": "scenario-manager",
+  "structural": { "status": "pass" },
+  "scenarioManager": { "status": "fail", "authoritative": false }
+}
+```
+
+If structural validation passes but Scenario Manager validation fails, inspect
+runtime/auth availability before patching bundle files. Agents can continue to
+report the structural proof with the recorded Scenario Manager gap.
+
+Scenario Manager `401` responses are reported as `WORKFLOW_ENV_AUTH_FAILED`,
+with `workflow_result.nextAction.tool=env_status`. This means the active MCP
+environment or auth profile needs attention; generated bundle files are not the
+first fix target.
+
+Slow machines or live stacks should use the resumable forms:
 
 ```text
 workflow_deploy_start -> workflow_deploy_status -> workflow_deploy_resume
 workflow_verify_start -> workflow_verify_status -> workflow_verify_resume
 ```
+
+`workflow_deploy_status` and `workflow_verify_status` are read-only. The
+`resume` tools advance one bounded lifecycle step and return
+`nextPollAfterMs`; agents should call resume after that interval instead of
+sleeping inside a long-running tool call.
 
 ## Strict Runtime Proof
 
@@ -129,6 +161,15 @@ proof has:
 }
 ```
 
+## WireMock Authoring
+
+Generated WireMock mappings preserve explicit response body aliases
+(`responseBody`, `jsonBody`, `body`, and nested `response.*` or `mock.*`
+forms). For mutating HTTP methods, generated stubs include request body
+assertions. When result rules are enabled and no mock response body is supplied,
+the generator adds the inferred result field to the default mock body with a
+value from `successCodes`.
+
 ## Acceptance Commands
 
 Run local tests:
@@ -158,13 +199,27 @@ POCKETHIVE_AUTH_USERNAME=local-admin \
 npm --prefix tools/pockethive-mcp run acceptance:workflow:live
 ```
 
-The live acceptance path creates a unique live swarm, verifies it with strict
-tap proof, and removes that swarm in a `finally` block. If a run is interrupted,
-remove matching test swarms manually:
+The live acceptance path creates a unique live bundle/swarm, verifies it with
+strict tap proof, and removes both the swarm and uploaded Scenario Manager
+bundle in a `finally` block. If a run is interrupted, remove matching test
+swarms manually:
 
 ```bash
 POCKETHIVE_AUTH_USERNAME=local-admin \
 node tools/mcp-orchestrator-debug/client.mjs remove-swarm <swarmId>
+```
+
+Remove matching uploaded live bundles through Scenario Manager:
+
+```bash
+TOKEN=$(curl -s \
+  -H "content-type: application/json" \
+  -d '{"username":"local-admin"}' \
+  "http://localhost:8088/auth-service/api/auth/dev/login" | jq -r .accessToken)
+
+curl -X DELETE \
+  -H "Authorization: Bearer ${TOKEN}" \
+  "http://localhost:8088/scenario-manager/scenarios/<bundleId>"
 ```
 
 ## Troubleshooting

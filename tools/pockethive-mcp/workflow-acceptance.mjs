@@ -14,6 +14,11 @@ const START = resolve(__dirname, "start.cjs");
 const BUNDLES_ROOT = process.env.PH_WORKFLOW_ACCEPTANCE_BUNDLES_ROOT || mkdtempSync(join(tmpdir(), "pockethive-workflow-acceptance-"));
 const BASE_URL = process.env.POCKETHIVE_BASE_URL || "http://127.0.0.1:9";
 const LIVE = process.env.PH_WORKFLOW_ACCEPTANCE_LIVE === "1";
+const SCENARIO_MANAGER_BASE_URL = process.env.SCENARIO_MANAGER_BASE_URL || `${BASE_URL}/scenario-manager`;
+const AUTH_SERVICE_BASE_URL = process.env.AUTH_SERVICE_BASE_URL || `${BASE_URL}/auth-service`;
+const POCKETHIVE_AUTH_TOKEN = process.env.POCKETHIVE_AUTH_TOKEN || "";
+const POCKETHIVE_AUTH_USERNAME = process.env.POCKETHIVE_AUTH_USERNAME || "";
+let cachedAuthHeader = null;
 
 function log(step, detail) {
   console.log(`OK ${step}${detail ? ` - ${detail}` : ""}`);
@@ -48,6 +53,40 @@ async function call(client, name, args = {}) {
   const result = await client.callTool({ name, arguments: args });
   if (result.isError) throw new Error(result.content?.[0]?.text || `${name} failed`);
   return JSON.parse(result.content[0].text);
+}
+
+async function authorizationHeader() {
+  if (POCKETHIVE_AUTH_TOKEN.trim()) {
+    return POCKETHIVE_AUTH_TOKEN.startsWith("Bearer ") ? POCKETHIVE_AUTH_TOKEN : `Bearer ${POCKETHIVE_AUTH_TOKEN}`;
+  }
+  if (!POCKETHIVE_AUTH_USERNAME.trim()) return null;
+  if (cachedAuthHeader) return cachedAuthHeader;
+  const response = await fetch(`${AUTH_SERVICE_BASE_URL}/api/auth/dev/login`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "accept": "application/json" },
+    body: JSON.stringify({ username: POCKETHIVE_AUTH_USERNAME.trim() }),
+  });
+  const text = await response.text();
+  if (!response.ok) throw new Error(`Auth login failed: HTTP ${response.status}: ${text || "<empty>"}`);
+  const payload = text ? JSON.parse(text) : null;
+  if (!payload?.accessToken) throw new Error("Auth login returned empty accessToken");
+  cachedAuthHeader = `Bearer ${payload.accessToken}`;
+  return cachedAuthHeader;
+}
+
+async function scenarioManagerRequest(path, opts = {}) {
+  const auth = await authorizationHeader();
+  const response = await fetch(`${SCENARIO_MANAGER_BASE_URL}${path}`, {
+    method: opts.method || "GET",
+    headers: {
+      "accept": "application/json",
+      ...(auth ? { authorization: auth } : {}),
+      ...(opts.headers || {}),
+    },
+  });
+  const text = await response.text();
+  if (!response.ok) throw new Error(`HTTP ${response.status}: ${text || "<empty>"}`);
+  return text ? JSON.parse(text) : null;
 }
 
 function writeSource(name, content) {
@@ -116,6 +155,16 @@ async function cleanupLiveSwarm(client, swarmId) {
     log("live swarm teardown", swarmId);
   } catch (err) {
     console.warn(`WARN live swarm teardown failed for ${swarmId}: ${err.message}`);
+  }
+}
+
+async function cleanupLiveBundle(bundleId) {
+  if (!bundleId) return;
+  try {
+    await scenarioManagerRequest(`/scenarios/${encodeURIComponent(bundleId)}`, { method: "DELETE" });
+    log("live bundle teardown", bundleId);
+  } catch (err) {
+    console.warn(`WARN live bundle teardown failed for ${bundleId}: ${err.message}`);
   }
 }
 
@@ -265,6 +314,7 @@ async function liveCase(client) {
     log("live workflow proof", start.workflowId);
   } finally {
     await cleanupLiveSwarm(client, liveSwarmId);
+    await cleanupLiveBundle(liveBundleId);
   }
 }
 

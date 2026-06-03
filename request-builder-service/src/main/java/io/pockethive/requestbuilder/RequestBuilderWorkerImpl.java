@@ -104,7 +104,7 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
       }
 
       AuthRuntime authRuntime = AuthRuntime.forTemplates(
-          config.templateRoot(), authRefs(templates), config.vars(), context, templateRenderer, redisProperties);
+          config.templateRoot(), authRefs(templates), config.vars(), config.authProfileSutContext(), context, templateRenderer, redisProperties);
       Object envelope;
       String protocol = definition.protocol();
       if ("TCP".equals(protocol) && definition instanceof TcpTemplateDefinition tcpDef) {

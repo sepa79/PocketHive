@@ -600,7 +600,7 @@ class WorkerControlPlaneRuntimeTest {
     }
 
     @Test
-	    void partialConfigUpdateRetainsSeededDefaults() throws Exception {
+    void partialConfigUpdateRetainsSeededDefaults() throws Exception {
         TestConfig defaults = new TestConfig(true, 7.5);
         runtime.registerDefaultConfig(definition.beanName(), defaults);
         reset(emitter);
@@ -628,6 +628,85 @@ class WorkerControlPlaneRuntimeTest {
             .containsEntry("enabled", true)
             .containsEntry("ratePerSec", 20.0);
         assertThat(runtime.workerConfig(definition.beanName(), TestConfig.class)).contains(new TestConfig(true, 20.0));
+    }
+
+    @Test
+    void privateConfigIsHiddenFromStatusAndPreservedAcrossUpdates() throws Exception {
+        WorkerStateStore privateStateStore = new WorkerStateStore();
+        WorkerDefinition privateDefinition = new WorkerDefinition(
+            "privateWorker",
+            TestWorker.class,
+            WorkerInputType.SCHEDULER,
+            "generator",
+            WorkIoBindings.of(null, "out.queue", "traffic.exchange"),
+            PrivateTestConfig.class,
+            WorkInputConfig.class,
+            WorkOutputConfig.class,
+            WorkerOutputType.RABBITMQ,
+            "Private worker",
+            Set.of(WorkerCapability.SCHEDULER)
+        );
+        privateStateStore.getOrCreate(privateDefinition);
+        WorkerControlPlaneRuntime privateRuntime = new WorkerControlPlaneRuntime(
+            controlPlane,
+            privateStateStore,
+            MAPPER,
+            emitter,
+            IDENTITY,
+            PROPERTIES.getControlPlane()
+        );
+        PrivateTestConfig defaults = new PrivateTestConfig(
+            true,
+            7.5,
+            Map.of("authProfile", Map.of("sut", Map.of("id", "sut-1")))
+        );
+
+        privateRuntime.registerDefaultConfig(privateDefinition.beanName(), defaults);
+
+        assertThat(privateRuntime.workerConfig(privateDefinition.beanName(), PrivateTestConfig.class))
+            .contains(defaults);
+        assertThat(privateRuntime.workerRawConfig(privateDefinition.beanName()))
+            .containsEntry("enabled", true)
+            .containsEntry("ratePerSec", 7.5)
+            .doesNotContainKey("privateConfig");
+
+        reset(emitter);
+        privateRuntime.emitStatusSnapshot();
+        ArgumentCaptor<ControlPlaneEmitter.StatusContext> captor =
+            ArgumentCaptor.forClass(ControlPlaneEmitter.StatusContext.class);
+        verify(emitter).emitStatusSnapshot(captor.capture());
+        Map<String, Object> snapshot = buildSnapshot(captor.getValue());
+        @SuppressWarnings("unchecked")
+        Map<String, Object> data = (Map<String, Object>) snapshot.get("data");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> config = (Map<String, Object>) data.get("config");
+        assertThat(config).doesNotContainKey("privateConfig");
+
+        reset(emitter);
+        ControlSignal signal = ControlSignal.forInstance(
+            "config-update",
+            IDENTITY.swarmId(),
+            IDENTITY.role(),
+            IDENTITY.instanceId(),
+            ORIGIN,
+            UUID.randomUUID().toString(),
+            UUID.randomUUID().toString(),
+            Map.of("ratePerSec", 20.0, "privateConfig", Map.of("attempt", "ignored"))
+        );
+        String routingKey = ControlPlaneRouting.signal("config-update", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
+
+        privateRuntime.handle(MAPPER.writeValueAsString(signal), routingKey);
+
+        assertThat(privateRuntime.workerRawConfig(privateDefinition.beanName()))
+            .containsEntry("enabled", true)
+            .containsEntry("ratePerSec", 20.0)
+            .doesNotContainKey("privateConfig");
+        assertThat(privateRuntime.workerConfig(privateDefinition.beanName(), PrivateTestConfig.class))
+            .contains(new PrivateTestConfig(
+                true,
+                20.0,
+                Map.of("authProfile", Map.of("sut", Map.of("id", "sut-1")))
+            ));
     }
 
     @Test
@@ -835,5 +914,8 @@ class WorkerControlPlaneRuntimeTest {
     }
 
     private record TestConfig(boolean enabled, double ratePerSec) {
+    }
+
+    private record PrivateTestConfig(boolean enabled, double ratePerSec, Map<String, Object> privateConfig) {
     }
 }

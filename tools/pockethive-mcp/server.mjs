@@ -135,7 +135,7 @@ const SWARM_ID_ARG = targetStringSchema("Swarm ID", ["id", "name"]);
 let cachedAuthHeader = null;
 const profileAuthHeaderCache = new Map();
 
-async function resolveAuthorizationHeader() {
+async function resolveAuthorizationHeader({ forceRefresh = false } = {}) {
   if (POCKETHIVE_AUTH_TOKEN.trim()) {
     return POCKETHIVE_AUTH_TOKEN.startsWith("Bearer ")
       ? POCKETHIVE_AUTH_TOKEN
@@ -143,6 +143,9 @@ async function resolveAuthorizationHeader() {
   }
   if (!POCKETHIVE_AUTH_USERNAME.trim()) {
     return null;
+  }
+  if (forceRefresh) {
+    cachedAuthHeader = null;
   }
   if (cachedAuthHeader) {
     return cachedAuthHeader;
@@ -208,64 +211,78 @@ async function resolveProfileAuthorizationHeader(profile) {
 
 async function httpJson(url, opts = {}) {
   const full = url.startsWith("http") ? url : `${ORCH_URL}${url}`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), opts.timeoutMs || 30000);
-  const authHeader = needsPocketHiveAuth(full) ? await resolveAuthorizationHeader() : null;
-  const init = {
-    method: opts.method || "GET",
-    headers: {
-      "content-type": "application/json",
-      ...(authHeader ? { authorization: authHeader } : {}),
-      ...(opts.headers || {}),
-    },
-    signal: controller.signal,
-  };
-  if (opts.body !== undefined) {
-    // Raw Buffer/Uint8Array (e.g. zip upload) — send as-is, don't JSON-stringify
-    if (Buffer.isBuffer(opts.body) || opts.body instanceof Uint8Array) {
-      init.body = opts.body;
-    } else {
-      init.body = typeof opts.body === "string" ? opts.body : JSON.stringify(opts.body);
+  const canRefreshAuth = needsPocketHiveAuth(full) && Boolean(POCKETHIVE_AUTH_USERNAME.trim()) && !POCKETHIVE_AUTH_TOKEN.trim();
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), opts.timeoutMs || 30000);
+    const authHeader = needsPocketHiveAuth(full) ? await resolveAuthorizationHeader({ forceRefresh: attempt > 0 }) : null;
+    const init = {
+      method: opts.method || "GET",
+      headers: {
+        "content-type": "application/json",
+        ...(authHeader ? { Authorization: authHeader } : {}),
+        ...(opts.headers || {}),
+      },
+      signal: controller.signal,
+    };
+    if (opts.body !== undefined) {
+      // Raw Buffer/Uint8Array (e.g. zip upload) — send as-is, don't JSON-stringify
+      if (Buffer.isBuffer(opts.body) || opts.body instanceof Uint8Array) {
+        init.body = opts.body;
+      } else {
+        init.body = typeof opts.body === "string" ? opts.body : JSON.stringify(opts.body);
+      }
+    }
+    try {
+      const res = await fetch(full, init);
+      const text = await res.text();
+      if (res.status === 401 && canRefreshAuth && attempt === 0) {
+        continue;
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status} for ${full}: ${text || "<empty>"}`);
+      return text ? JSON.parse(text) : null;
+    } finally {
+      clearTimeout(timer);
     }
   }
-  try {
-    const res = await fetch(full, init);
-    const text = await res.text();
-    if (!res.ok) throw new Error(`HTTP ${res.status} for ${full}: ${text || "<empty>"}`);
-    return text ? JSON.parse(text) : null;
-  } finally {
-    clearTimeout(timer);
-  }
+  throw new Error(`HTTP auth retry failed for ${full}`);
 }
 
 async function httpText(url, opts = {}) {
   const full = url.startsWith("http") ? url : `${ORCH_URL}${url}`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), opts.timeoutMs || 30000);
-  const authHeader = needsPocketHiveAuth(full) ? await resolveAuthorizationHeader() : null;
-  const init = {
-    method: opts.method || "GET",
-    headers: {
-      "accept": opts.accept || "text/plain",
-      ...(opts.contentType ? { "content-type": opts.contentType } : {}),
-      ...(authHeader ? { authorization: authHeader } : {}),
-      ...(opts.headers || {}),
-    },
-    signal: controller.signal,
-  };
-  if (opts.body !== undefined) {
-    init.body = typeof opts.body === "string" || Buffer.isBuffer(opts.body) || opts.body instanceof Uint8Array
-      ? opts.body
-      : JSON.stringify(opts.body);
+  const canRefreshAuth = needsPocketHiveAuth(full) && Boolean(POCKETHIVE_AUTH_USERNAME.trim()) && !POCKETHIVE_AUTH_TOKEN.trim();
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), opts.timeoutMs || 30000);
+    const authHeader = needsPocketHiveAuth(full) ? await resolveAuthorizationHeader({ forceRefresh: attempt > 0 }) : null;
+    const init = {
+      method: opts.method || "GET",
+      headers: {
+        "accept": opts.accept || "text/plain",
+        ...(opts.contentType ? { "content-type": opts.contentType } : {}),
+        ...(authHeader ? { Authorization: authHeader } : {}),
+        ...(opts.headers || {}),
+      },
+      signal: controller.signal,
+    };
+    if (opts.body !== undefined) {
+      init.body = typeof opts.body === "string" || Buffer.isBuffer(opts.body) || opts.body instanceof Uint8Array
+        ? opts.body
+        : JSON.stringify(opts.body);
+    }
+    try {
+      const res = await fetch(full, init);
+      const text = await res.text();
+      if (res.status === 401 && canRefreshAuth && attempt === 0) {
+        continue;
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status} for ${full}: ${text || "<empty>"}`);
+      return text;
+    } finally {
+      clearTimeout(timer);
+    }
   }
-  try {
-    const res = await fetch(full, init);
-    const text = await res.text();
-    if (!res.ok) throw new Error(`HTTP ${res.status} for ${full}: ${text || "<empty>"}`);
-    return text;
-  } finally {
-    clearTimeout(timer);
-  }
+  throw new Error(`HTTP auth retry failed for ${full}`);
 }
 
 function idempotencyKey() {
@@ -690,6 +707,21 @@ function plainObject(value) {
   return value && typeof value === "object" && !Array.isArray(value);
 }
 
+function firstDefined(...values) {
+  return values.find(value => value !== undefined);
+}
+
+function jsonValueOrString(value) {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  if (!trimmed) return value;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return value;
+  }
+}
+
 function copyDefinedFields(target, source, fields) {
   for (const field of fields) {
     if (source[field] !== undefined) target[field] = source[field];
@@ -747,10 +779,22 @@ function normalizeWizardMockEndpoint(entry, index = 0) {
   if (typeof entry === "object" && entry !== null) {
     if (entry.method || entry.path) {
       const endpoint = normalizeWizardEndpoint(entry, index);
+      const responseBody = firstDefined(
+        entry.responseBody,
+        entry.jsonBody,
+        entry.body,
+        entry.response?.jsonBody,
+        entry.response?.body,
+        entry.mock?.responseBody,
+        entry.mock?.jsonBody,
+        entry.mock?.body,
+        entry.mock?.response?.jsonBody,
+        entry.mock?.response?.body,
+      );
       return copyDefinedFields({
         ...endpoint,
-        status: Number(entry.status ?? entry.mock?.status ?? 200),
-        responseBody: entry.responseBody ?? entry.mock?.responseBody ?? { ok: true, callId: endpoint.callId },
+        status: Number(entry.status ?? entry.response?.status ?? entry.mock?.status ?? entry.mock?.response?.status ?? 200),
+        responseBody: responseBody === undefined ? { ok: true, callId: endpoint.callId } : jsonValueOrString(responseBody),
       }, entry, ["requestHeaders", "queryParameters", "bodyPatterns", "priority", "responseHeaders"]);
     }
     return entry;
@@ -955,6 +999,22 @@ function validateWizardAnswers(answers) {
       errors.push(`resultCodePattern must be a valid regex: ${e.message}`);
     }
   }
+  if (answers.resultRules === "yes" && answers.resultCodePattern && answers.successCodes?.length && ["wiremock", "wiremock_and_tcp"].includes(answers.sutDouble)) {
+    const resultField = resultFieldFromPattern(answers.resultCodePattern);
+    if (resultField) {
+      const allowed = new Set(answers.successCodes.map(String));
+      for (const endpoint of wizardMockEndpoints(answers).filter(mock => mock.method && mock.path)) {
+        const responseBody = defaultWizardMockResponseBody(endpoint, answers);
+        if (plainObject(responseBody)) {
+          if (responseBody[resultField] === undefined) {
+            errors.push(`mock endpoint '${endpoint.callId}' responseBody must include '${resultField}' for resultCodePattern`);
+          } else if (!allowed.has(String(responseBody[resultField]))) {
+            errors.push(`mock endpoint '${endpoint.callId}' responseBody.${resultField} must match one of successCodes: ${answers.successCodes.join(", ")}`);
+          }
+        }
+      }
+    }
+  }
   return errors;
 }
 
@@ -1010,8 +1070,56 @@ function wizardMockEndpoints(answers) {
   return (answers.endpoints || []).map((endpoint, index) => ({
     ...endpoint,
     status: endpoint.mock?.status || endpoint.expectedStatus || 200,
-    responseBody: endpoint.mock?.responseBody || endpoint.responseBody || { ok: true, callId: endpoint.callId || `call-${index + 1}` },
+    responseBody: defaultWizardMockResponseBody(endpoint, answers, index),
   }));
+}
+
+function resultFieldFromPattern(pattern) {
+  const text = String(pattern || "");
+  for (const candidate of [
+    /\\?["']([A-Za-z_][A-Za-z0-9_-]*)\\?["']\s*(?:\\s\*)?\s*:/,
+  ]) {
+    const match = text.match(candidate);
+    if (match?.[1]) return match[1];
+  }
+  return null;
+}
+
+function defaultWizardMockResponseBody(endpoint, answers, index = 0) {
+  const explicit = firstDefined(
+    endpoint.mock?.responseBody,
+    endpoint.mock?.jsonBody,
+    endpoint.mock?.body,
+    endpoint.mock?.response?.jsonBody,
+    endpoint.mock?.response?.body,
+    endpoint.responseBody,
+    endpoint.jsonBody,
+    endpoint.body,
+    endpoint.response?.jsonBody,
+    endpoint.response?.body,
+  );
+  if (explicit !== undefined) return jsonValueOrString(explicit);
+  const callId = endpoint.callId || `call-${index + 1}`;
+  const body = { ok: true, callId };
+  if (answers?.resultRules === "yes" && answers?.resultCodePattern && answers?.successCodes?.length) {
+    const field = resultFieldFromPattern(answers.resultCodePattern);
+    if (field) body[field] = String(answers.successCodes[0]);
+  }
+  return body;
+}
+
+function wizardWireMockResponse(endpoint, answers = {}) {
+  const body = defaultWizardMockResponseBody(endpoint, answers);
+  const response = {
+    status: endpoint.status || endpoint.response?.status || endpoint.mock?.status || endpoint.mock?.response?.status || 200,
+    headers: endpoint.responseHeaders || endpoint.response?.headers || endpoint.mock?.responseHeaders || endpoint.mock?.response?.headers || { "Content-Type": "application/json" },
+  };
+  if (typeof body === "string") {
+    response.body = body;
+  } else {
+    response.jsonBody = body;
+  }
+  return response;
 }
 
 function wizardAuthType(answers) {
@@ -1598,11 +1706,7 @@ async function writeWizardBundle(session) {
     for (const endpoint of wizardMockEndpoints(answers).filter(mock => mock.method && mock.path)) {
       writeGenerated(`mock-config/wiremock/${endpoint.callId}.json`, JSON.stringify({
         request: wizardWireMockRequest(endpoint, answers),
-        response: {
-          status: endpoint.status || 200,
-          headers: endpoint.responseHeaders || endpoint.mock?.responseHeaders || { "Content-Type": "application/json" },
-          jsonBody: endpoint.responseBody || { ok: true, callId: endpoint.callId },
-        },
+        response: wizardWireMockResponse(endpoint, answers),
         ...(endpoint.priority ? { priority: endpoint.priority } : {}),
       }, null, 2));
     }
@@ -1808,11 +1912,7 @@ async function enrichWizardBundle(session, flags = {}) {
     for (const endpoint of wizardMockEndpoints(answers).filter(mock => mock.method && mock.path)) {
       writeIfMissing(`mock-config/wiremock/${endpoint.callId}.json`, JSON.stringify({
         request: wizardWireMockRequest(endpoint, answers),
-        response: {
-          status: endpoint.status || 200,
-          headers: endpoint.responseHeaders || { "Content-Type": "application/json" },
-          jsonBody: endpoint.responseBody || { ok: true, callId: endpoint.callId },
-        },
+        response: wizardWireMockResponse(endpoint, answers),
       }, null, 2));
     }
   }
@@ -3711,10 +3811,15 @@ function evidenceWidgetHtml() {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     :root { color-scheme: light dark; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    :root[data-theme="light"] { color-scheme: light; }
+    :root[data-theme="dark"] { color-scheme: dark; }
     body { margin: 0; padding: 16px; background: Canvas; color: CanvasText; }
     .wrap { display: grid; gap: 12px; }
     .top { display: flex; justify-content: space-between; gap: 12px; align-items: start; }
+    .top-actions { display: flex; align-items: start; gap: 8px; }
     h1 { font-size: 18px; line-height: 1.25; margin: 0; }
+    .theme-toggle { border: 1px solid color-mix(in srgb, CanvasText 18%, transparent); border-radius: 6px; background: color-mix(in srgb, Canvas 92%, CanvasText 8%); color: CanvasText; cursor: pointer; font: inherit; font-size: 12px; font-weight: 700; min-width: 64px; padding: 4px 8px; }
+    .theme-toggle:focus-visible { outline: 2px solid color-mix(in srgb, CanvasText 45%, transparent); outline-offset: 2px; }
     .badge { border: 1px solid color-mix(in srgb, CanvasText 18%, transparent); border-radius: 999px; padding: 4px 8px; font-size: 12px; white-space: nowrap; }
     .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; }
     .panel { border: 1px solid color-mix(in srgb, CanvasText 16%, transparent); border-radius: 8px; padding: 10px; background: color-mix(in srgb, Canvas 94%, CanvasText 6%); }
@@ -3741,6 +3846,9 @@ function evidenceWidgetHtml() {
     const root = document.getElementById("root");
     const openai = globalThis.openai || {};
     const data = openai.toolOutput || openai.structuredContent || openai.toolResponseMetadata?.evidenceSummary || {};
+    const themeKey = "pockethive.evidenceWidget.theme";
+    let activeTheme = readTheme() || (globalThis.matchMedia?.("(prefers-color-scheme: dark)")?.matches ? "dark" : "light");
+    applyTheme(activeTheme);
     const sourceCounts = Array.isArray(data.sources)
       ? { ok: data.sources.filter(s => s.status === "ok").length, total: data.sources.length }
       : { ok: 0, total: 0 };
@@ -3761,6 +3869,39 @@ function evidenceWidgetHtml() {
     function statusPill(status) {
       const cls = String(status || "unknown").replace(/[^a-z_]/g, "");
       return '<span class="status ' + esc(cls) + '">' + esc(status || "unknown") + '</span>';
+    }
+    function readTheme() {
+      try {
+        const theme = globalThis.localStorage?.getItem(themeKey);
+        return theme === "dark" || theme === "light" ? theme : null;
+      } catch {
+        return null;
+      }
+    }
+    function writeTheme(theme) {
+      try { globalThis.localStorage?.setItem(themeKey, theme); } catch { /* storage can be unavailable in some hosts */ }
+    }
+    function themeToggleHtml() {
+      return '<button id="theme-toggle" class="theme-toggle" type="button" title="Toggle light/dark mode"></button>';
+    }
+    function applyTheme(theme) {
+      document.documentElement.dataset.theme = theme;
+      const button = document.getElementById("theme-toggle");
+      if (!button) return;
+      const next = theme === "dark" ? "Light" : "Dark";
+      button.textContent = next;
+      button.setAttribute("aria-label", "Switch to " + next.toLowerCase() + " mode");
+      button.setAttribute("aria-pressed", String(theme === "dark"));
+    }
+    function bindThemeToggle() {
+      const button = document.getElementById("theme-toggle");
+      if (!button) return;
+      button.addEventListener("click", () => {
+        activeTheme = activeTheme === "dark" ? "light" : "dark";
+        writeTheme(activeTheme);
+        applyTheme(activeTheme);
+      });
+      applyTheme(activeTheme);
     }
     function checklistRows() {
       if (!checklist.length) return '<div class="small">No report checklist was provided.</div>';
@@ -3783,7 +3924,7 @@ function evidenceWidgetHtml() {
       root.innerHTML = '<div class="panel">No evidence summary was provided.</div>';
     } else {
       root.innerHTML = [
-        '<div class="top"><h1>Evidence Report: ' + esc(data.swarmId) + '</h1><div class="badge">' + esc(report.verdict || lifecycleStatus) + '</div></div>',
+        '<div class="top"><h1>Evidence Report: ' + esc(data.swarmId) + '</h1><div class="top-actions">' + themeToggleHtml() + '<div class="badge">' + esc(report.verdict || lifecycleStatus) + '</div></div></div>',
         '<div class="grid">',
           panel('Sources', sourceCounts.ok + '/' + sourceCounts.total, 'available evidence feeds'),
           panel('Queues', queues.totalMessages ?? 'n/a', (queues.count ?? 0) + ' queue(s)'),
@@ -3798,6 +3939,7 @@ function evidenceWidgetHtml() {
         '</div>',
         data.tapSample ? '<div class="panel"><div class="label">Tap sample</div><pre>' + esc(JSON.stringify(data.tapSample, null, 2)).slice(0, 4000) + '</pre></div>' : ''
       ].join('');
+      bindThemeToggle();
     }
   </script>
 </body>
@@ -3812,11 +3954,16 @@ function workflowEvidenceWidgetHtml() {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     :root { color-scheme: light dark; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    :root[data-theme="light"] { color-scheme: light; }
+    :root[data-theme="dark"] { color-scheme: dark; }
     body { margin: 0; padding: 16px; background: Canvas; color: CanvasText; }
     .wrap { display: grid; gap: 12px; }
     .top { display: flex; justify-content: space-between; gap: 12px; align-items: start; }
+    .top-actions { display: flex; align-items: start; gap: 8px; }
     h1 { font-size: 18px; line-height: 1.25; margin: 0; }
     h2 { font-size: 13px; margin: 0 0 8px; text-transform: uppercase; letter-spacing: 0; opacity: .74; }
+    .theme-toggle { border: 1px solid color-mix(in srgb, CanvasText 18%, transparent); border-radius: 6px; background: color-mix(in srgb, Canvas 92%, CanvasText 8%); color: CanvasText; cursor: pointer; font: inherit; font-size: 12px; font-weight: 700; min-width: 64px; padding: 4px 8px; }
+    .theme-toggle:focus-visible { outline: 2px solid color-mix(in srgb, CanvasText 45%, transparent); outline-offset: 2px; }
     .badge { border: 1px solid color-mix(in srgb, CanvasText 18%, transparent); border-radius: 999px; padding: 4px 8px; font-size: 12px; white-space: nowrap; text-transform: uppercase; }
     .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 8px; }
     .panel { border: 1px solid color-mix(in srgb, CanvasText 16%, transparent); border-radius: 8px; padding: 10px; background: color-mix(in srgb, Canvas 94%, CanvasText 6%); }
@@ -3842,6 +3989,9 @@ function workflowEvidenceWidgetHtml() {
     const root = document.getElementById("root");
     const openai = globalThis.openai || {};
     const data = openai.toolOutput || openai.structuredContent || openai.toolResponseMetadata?.workflowEvidence || {};
+    const themeKey = "pockethive.evidenceWidget.theme";
+    let activeTheme = readTheme() || (globalThis.matchMedia?.("(prefers-color-scheme: dark)")?.matches ? "dark" : "light");
+    applyTheme(activeTheme);
 
     function esc(value) {
       return String(value ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
@@ -3855,6 +4005,39 @@ function workflowEvidenceWidgetHtml() {
     function panel(label, value, small = "") {
       return '<div class="panel"><div class="label">' + esc(label) + '</div><div class="value">' + esc(value) + '</div>' +
         (small ? '<div class="small">' + esc(small) + '</div>' : '') + '</div>';
+    }
+    function readTheme() {
+      try {
+        const theme = globalThis.localStorage?.getItem(themeKey);
+        return theme === "dark" || theme === "light" ? theme : null;
+      } catch {
+        return null;
+      }
+    }
+    function writeTheme(theme) {
+      try { globalThis.localStorage?.setItem(themeKey, theme); } catch { /* storage can be unavailable in some hosts */ }
+    }
+    function themeToggleHtml() {
+      return '<button id="theme-toggle" class="theme-toggle" type="button" title="Toggle light/dark mode"></button>';
+    }
+    function applyTheme(theme) {
+      document.documentElement.dataset.theme = theme;
+      const button = document.getElementById("theme-toggle");
+      if (!button) return;
+      const next = theme === "dark" ? "Light" : "Dark";
+      button.textContent = next;
+      button.setAttribute("aria-label", "Switch to " + next.toLowerCase() + " mode");
+      button.setAttribute("aria-pressed", String(theme === "dark"));
+    }
+    function bindThemeToggle() {
+      const button = document.getElementById("theme-toggle");
+      if (!button) return;
+      button.addEventListener("click", () => {
+        activeTheme = activeTheme === "dark" ? "light" : "dark";
+        writeTheme(activeTheme);
+        applyTheme(activeTheme);
+      });
+      applyTheme(activeTheme);
     }
     function table(items, empty, row) {
       if (!Array.isArray(items) || !items.length) return '<div class="small">' + esc(empty) + '</div>';
@@ -3897,7 +4080,7 @@ function workflowEvidenceWidgetHtml() {
     } else {
       const summary = data.summary || {};
       root.innerHTML = [
-        '<div class="top"><h1>Workflow Evidence: ' + esc(data.workflowId) + '</h1><div class="badge">' + esc(data.state) + '</div></div>',
+        '<div class="top"><h1>Workflow Evidence: ' + esc(data.workflowId) + '</h1><div class="top-actions">' + themeToggleHtml() + '<div class="badge">' + esc(data.state) + '</div></div></div>',
         '<div class="grid">',
           panel('Bundle', summary.bundleId || 'not generated', summary.mode || 'create'),
           panel('Questions', summary.nextQuestionCount ?? 0, 'remaining intake items'),
@@ -3910,6 +4093,7 @@ function workflowEvidenceWidgetHtml() {
         '<div class="panel"><h2>Remaining Questions</h2>' + questionRows() + '</div>',
         '<div class="panel"><h2>Evidence Gaps</h2>' + gapRows() + '</div>'
       ].join('');
+      bindThemeToggle();
     }
   </script>
 </body>
