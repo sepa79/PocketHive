@@ -75,11 +75,11 @@ function assertBeeRoles(bundleId, expectedRoles) {
 }
 
 async function validateGeneratedBundle(client, bundleId) {
-  const check = await call(client, "bundle.check", { bundle: bundleId });
-  assert(check.ok, `${bundleId} bundle.check failed: ${JSON.stringify(check.errors, null, 2)}`);
+  const check = await call(client, "bundle_check", { bundle: bundleId });
+  assert(check.ok, `${bundleId} bundle_check failed: ${JSON.stringify(check.errors, null, 2)}`);
 
-  const validation = await call(client, "bundle.validate", { bundle: bundleId, validator: "local-structural" });
-  const result = await call(client, "bundle.validate.result", { jobId: validation.jobId });
+  const validation = await call(client, "bundle_validate", { bundle: bundleId, validator: "local-structural" });
+  const result = await call(client, "bundle_validate_result", { jobId: validation.jobId });
   assert(result.status === "done", `${bundleId} validation did not complete: ${JSON.stringify(result)}`);
   assert(result.structural?.ok === true, `${bundleId} local validation failed: ${JSON.stringify(result.structural, null, 2)}`);
 }
@@ -195,14 +195,14 @@ const cases = [
 ];
 
 async function runCase(client, testCase) {
-  const start = await call(client, "wizard.start", testCase.input);
+  const start = await call(client, "wizard_start", testCase.input);
   assert(start.ready, `${testCase.name} should be ready, missing: ${start.missing?.join(", ")}`);
   assert(start.scenario?.pattern, `${testCase.name} did not return a pattern`);
 
-  const summary = await call(client, "wizard.summary", { sessionId: start.sessionId });
+  const summary = await call(client, "wizard_summary", { sessionId: start.sessionId });
   assert(summary.ready, `${testCase.name} summary should be ready`);
 
-  const complete = await call(client, "wizard.complete", { sessionId: start.sessionId });
+  const complete = await call(client, "wizard_complete", { sessionId: start.sessionId });
   assert(complete.completed, `${testCase.name} did not complete`);
   assert(complete.structural?.ok, `${testCase.name} completion structural check failed`);
 
@@ -218,11 +218,11 @@ async function runAcceptance() {
   console.log(`Base URL:     ${BASE_URL}`);
 
   await withClient(async (client) => {
-    const context = await call(client, "context.get");
+    const context = await call(client, "context_get");
     assert(context.bundlesRoot === BUNDLES_ROOT, "MCP context did not use acceptance bundles root");
-    log("context.get", context.bundlesRoot);
+    log("context_get", context.bundlesRoot);
 
-    const invalid = await call(client, "wizard.start", {
+    const invalid = await call(client, "wizard_start", {
       intent: "Invalid mixed protocol target",
       bundleId: "accept-invalid",
       protocol: "TCP",

@@ -12,7 +12,8 @@ Thumbs.db
 # --- IDEs / Editors ---
 .idea/
 *.iml
-.vscode/
+.vscode/*
+!.vscode/mcp.json
 !vscode-pockethive/.vscode/
 !vscode-pockethive/.vscode/launch.json
 vscode-pockethive/*.vsix
@@ -42,6 +43,8 @@ node_modules/
 dist/
 build/
 *.map
+.mcp-server.pid
+tools/pockethive-mcp/.pockethive-mcp-install.lock
 tools/mcp-orchestrator-debug/control-recording.jsonl
 tools/mcp-orchestrator-debug/control-recording-run*.jsonl
 tools/mcp-orchestrator-debug/session-log.jsonl

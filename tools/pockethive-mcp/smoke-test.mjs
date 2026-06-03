@@ -39,48 +39,48 @@ try {
 
   const tools = await client.listTools();
   const toolNames = tools.tools.map(t => t.name);
-  for (const required of ['context.get', 'health.check', 'bundle.list', 'scenario.contracts.get', 'scenario.raw.read', 'debug.hive-journal', 'env.status', 'wizard.start']) {
+  for (const required of ['context_get', 'health_check', 'bundle_list', 'scenario_contracts_get', 'scenario_raw_read', 'debug_hive_journal', 'env_status', 'wizard_start']) {
     if (!toolNames.includes(required)) {
       throw new Error(`Missing MCP tool: ${required}`);
     }
   }
   console.log(`✓ listTools: ${toolNames.length} tools available`);
 
-  const ctx = await client.callTool({ name: 'context.get', arguments: {} });
+  const ctx = await client.callTool({ name: 'context_get', arguments: {} });
   const ctxData = JSON.parse(ctx.content[0].text);
-  console.log('✓ context.get:');
+  console.log('✓ context_get:');
   console.log('  bundlesRoot:', ctxData.bundlesRoot);
   console.log('  baseUrl:    ', ctxData.baseUrl);
   console.log('  platform:   ', ctxData.platform);
 
-  const bundles = await client.callTool({ name: 'bundle.list', arguments: {} });
+  const bundles = await client.callTool({ name: 'bundle_list', arguments: {} });
   const bundleData = JSON.parse(bundles.content[0].text);
-  console.log(`✓ bundle.list: ${bundleData.bundles.length} bundles found`);
+  console.log(`✓ bundle_list: ${bundleData.bundles.length} bundles found`);
   bundleData.bundles.slice(0, 5).forEach(b => console.log(`  - ${b.name}`));
 
-  const health = await client.callTool({ name: 'health.check', arguments: {} });
+  const health = await client.callTool({ name: 'health_check', arguments: {} });
   const healthData = JSON.parse(health.content[0].text);
-  console.log('✓ health.check:');
+  console.log('✓ health_check:');
   console.log('  orchestrator:     ', healthData.orchestrator);
   console.log('  scenario-manager: ', healthData['scenario-manager']);
 
-  const envStatus = await client.callTool({ name: 'env.status', arguments: {} });
+  const envStatus = await client.callTool({ name: 'env_status', arguments: {} });
   const envStatusData = JSON.parse(envStatus.content[0].text);
-  console.log(`✓ env.status: ${envStatusData.environments.length} environment(s) checked`);
+  console.log(`✓ env_status: ${envStatusData.environments.length} environment(s) checked`);
   envStatusData.environments.forEach(env => console.log(`  - ${env.name}: ${env.state}`));
 
-  const buzz = await client.callTool({ name: 'debug.hive-journal', arguments: { limit: 5 } });
+  const buzz = await client.callTool({ name: 'debug_hive_journal', arguments: { limit: 5 } });
   const buzzData = JSON.parse(buzz.content[0].text);
   const buzzItems = Array.isArray(buzzData.items) ? buzzData.items.length : 0;
-  console.log(`✓ debug.hive-journal: ${buzzItems} item(s) returned`);
+  console.log(`✓ debug_hive_journal: ${buzzItems} item(s) returned`);
 
-  const scenarios = await client.callTool({ name: 'scenario.list', arguments: {} });
+  const scenarios = await client.callTool({ name: 'scenario_list', arguments: {} });
   const scenarioData = JSON.parse(scenarios.content[0].text);
   const scenario = Array.isArray(scenarioData) ? scenarioData[0] : null;
   if (scenario?.id) {
-    const raw = await client.callTool({ name: 'scenario.raw.read', arguments: { scenarioId: scenario.id } });
+    const raw = await client.callTool({ name: 'scenario_raw_read', arguments: { scenarioId: scenario.id } });
     const rawData = JSON.parse(raw.content[0].text);
-    console.log(`✓ scenario.raw.read: ${scenario.id} (${rawData.content.length} chars)`);
+    console.log(`✓ scenario_raw_read: ${scenario.id} (${rawData.content.length} chars)`);
   }
 
   await client.close();

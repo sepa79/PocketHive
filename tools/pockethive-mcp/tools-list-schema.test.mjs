@@ -60,8 +60,13 @@ test("tools/list never emits array schemas without items", async () => {
 
     assert.deepEqual(missing, []);
 
-    const wizardStart = tools.find((tool) => tool.name === "wizard.start");
-    assert.ok(wizardStart, "wizard.start tool must be listed");
-    assert.deepEqual(wizardStart.inputSchema.properties.mockEndpoints.items, {});
+    const wizardStart = tools.find((tool) => tool.name === "wizard_start");
+    assert.ok(wizardStart, "wizard_start tool must be listed");
+    const mockEndpoints = wizardStart.inputSchema.properties.mockEndpoints;
+    assert.equal(mockEndpoints.type, "array");
+    assert.deepEqual(
+      mockEndpoints.items.anyOf.map((schema) => schema.type),
+      ["string", "object"]
+    );
   });
 });

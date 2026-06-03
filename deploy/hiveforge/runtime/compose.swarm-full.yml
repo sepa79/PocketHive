@@ -24,6 +24,8 @@ services:
     volumes: !override
       - ${POCKETHIVE_CLICKHOUSE_ROOT:?set ClickHouse root}/data:/var/lib/clickhouse
       - ${HIVEFORGE_PROJECT_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/config/clickhouse/init:/docker-entrypoint-initdb.d:ro
+      - ${HIVEFORGE_PROJECT_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/config/clickhouse/clickhouse-entrypoint.sh:/opt/pockethive/clickhouse-entrypoint.sh:ro
+      - ${HIVEFORGE_PROJECT_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/config/clickhouse/migrate-tx-outcome-v1-to-v2.sh:/opt/pockethive/migrate-tx-outcome-v1-to-v2.sh:ro
     deploy:
       <<: *clickhouse-placement
       endpoint_mode: dnsrr

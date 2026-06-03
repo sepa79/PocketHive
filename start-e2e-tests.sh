@@ -9,34 +9,13 @@ if [[ ! -x ./mvnw ]]; then
   exit 1
 fi
 
-export ORCHESTRATOR_BASE_URL="${ORCHESTRATOR_BASE_URL:-http://localhost:8088/orchestrator}"
-export SCENARIO_MANAGER_BASE_URL="${SCENARIO_MANAGER_BASE_URL:-http://localhost:8088/scenario-manager}"
-export NETWORK_PROXY_MANAGER_BASE_URL="${NETWORK_PROXY_MANAGER_BASE_URL:-http://localhost:8088/network-proxy-manager}"
-export AUTH_SERVICE_BASE_URL="${AUTH_SERVICE_BASE_URL:-http://localhost:1083}"
-export POCKETHIVE_AUTH_USERNAME="${POCKETHIVE_AUTH_USERNAME:-local-admin}"
-export RABBITMQ_HOST="${RABBITMQ_HOST:-localhost}"
-export RABBITMQ_PORT="${RABBITMQ_PORT:-5672}"
-export RABBITMQ_DEFAULT_USER="${RABBITMQ_DEFAULT_USER:-guest}"
-export RABBITMQ_DEFAULT_PASS="${RABBITMQ_DEFAULT_PASS:-guest}"
-export RABBITMQ_VHOST="${RABBITMQ_VHOST:-/}"
-export RABBITMQ_MANAGEMENT_BASE_URL="${RABBITMQ_MANAGEMENT_BASE_URL:-http://localhost:15672/rabbitmq/api}"
-export UI_BASE_URL="${UI_BASE_URL:-http://localhost:8088}"
-export UI_WEBSOCKET_URI="${UI_WEBSOCKET_URI:-ws://localhost:8088/ws}"
-export POCKETHIVE_CONTROL_PLANE_EXCHANGE="${POCKETHIVE_CONTROL_PLANE_EXCHANGE:-ph.control}"
-export POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX="${POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX:-ph.control}"
-export POCKETHIVE_TCP_MOCK_URL="${POCKETHIVE_TCP_MOCK_URL:-http://localhost:8083}"
-export POCKETHIVE_TCP_MOCK_USERNAME="${POCKETHIVE_TCP_MOCK_USERNAME:-admin}"
-export POCKETHIVE_TCP_MOCK_PASSWORD="${POCKETHIVE_TCP_MOCK_PASSWORD:-admin}"
-export POCKETHIVE_CLICKHOUSE_HTTP_URL="${POCKETHIVE_CLICKHOUSE_HTTP_URL:-http://localhost:8123}"
-export POCKETHIVE_CLICKHOUSE_USERNAME="${POCKETHIVE_CLICKHOUSE_USERNAME:-pockethive}"
-export POCKETHIVE_CLICKHOUSE_PASSWORD="${POCKETHIVE_CLICKHOUSE_PASSWORD:-pockethive}"
-
 usage() {
   cat <<'EOF'
-Usage: ./start-e2e-tests.sh [--group <name>[,<name>...]] [--tags <cucumber-tag-expression>] [--name <cucumber-name-regex>] [--list-groups] [--help] [-- <extra maven args>]
+Usage: ./start-e2e-tests.sh [--target <name>] [--group <name>[,<name>...]] [--tags <cucumber-tag-expression>] [--name <cucumber-name-regex>] [--list-groups] [--list-targets] [--help] [-- <extra maven args>]
 
 Examples:
   ./start-e2e-tests.sh
+  ./start-e2e-tests.sh --target local-swarm --group smoke
   ./start-e2e-tests.sh --group smoke
   ./start-e2e-tests.sh --group lifecycle,proxy
   ./start-e2e-tests.sh --tags @tcps-proxy
@@ -50,6 +29,127 @@ CUCUMBER_TAGS=""
 CUCUMBER_NAME=""
 MVN_ARGS=()
 GROUP_NAMES=()
+TARGET_NAME=""
+TARGET_DIR="${SCRIPT_DIR}/deploy/e2e-targets"
+
+allowed_target_key() {
+  local candidate="$1"
+  local allowed_key
+  local allowed_keys=(
+    ORCHESTRATOR_BASE_URL
+    SCENARIO_MANAGER_BASE_URL
+    NETWORK_PROXY_MANAGER_BASE_URL
+    AUTH_SERVICE_BASE_URL
+    POCKETHIVE_AUTH_USERNAME
+    POCKETHIVE_AUTH_TOKEN
+    RABBITMQ_HOST
+    RABBITMQ_PORT
+    RABBITMQ_DEFAULT_USER
+    RABBITMQ_DEFAULT_PASS
+    RABBITMQ_VHOST
+    RABBITMQ_MANAGEMENT_BASE_URL
+    RABBITMQ_MANAGEMENT_PORT
+    UI_BASE_URL
+    UI_WEBSOCKET_URI
+    POCKETHIVE_CONTROL_PLANE_EXCHANGE
+    POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX
+    POCKETHIVE_TCP_MOCK_URL
+    POCKETHIVE_TCP_MOCK_USERNAME
+    POCKETHIVE_TCP_MOCK_PASSWORD
+    POCKETHIVE_REDIS_HOST
+    POCKETHIVE_REDIS_PORT
+    POCKETHIVE_CLICKHOUSE_HTTP_URL
+    POCKETHIVE_CLICKHOUSE_USERNAME
+    POCKETHIVE_CLICKHOUSE_PASSWORD
+    SWARM_ID
+    IDEMPOTENCY_KEY_PREFIX
+  )
+  for allowed_key in "${allowed_keys[@]}"; do
+    if [[ "${candidate}" == "${allowed_key}" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+set_if_unset() {
+  local key="$1"
+  local value="$2"
+  if [[ -z "${!key+x}" || -z "${!key}" ]]; then
+    export "${key}=${value}"
+  fi
+}
+
+load_target_profile() {
+  local target="$1"
+  if [[ -z "${target}" ]]; then
+    return
+  fi
+  if [[ ! "${target}" =~ ^[A-Za-z0-9._-]+$ ]]; then
+    echo "Invalid e2e target name: ${target}" >&2
+    echo "Target names may contain only letters, numbers, dot, underscore, and dash." >&2
+    exit 1
+  fi
+
+  local target_file="${TARGET_DIR}/${target}.env"
+  if [[ ! -f "${target_file}" ]]; then
+    echo "Unknown e2e target: ${target}" >&2
+    echo "Expected target profile at ${target_file}" >&2
+    echo "Use --list-targets to see available targets." >&2
+    exit 1
+  fi
+
+  local line key value
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    line="${line%$'\r'}"
+    [[ -z "${line}" || "${line}" =~ ^[[:space:]]*# ]] && continue
+    if [[ "${line}" != *=* ]]; then
+      echo "Invalid line in ${target_file}: ${line}" >&2
+      exit 1
+    fi
+    key="${line%%=*}"
+    value="${line#*=}"
+    key="${key//[[:space:]]/}"
+    value="${value#"${value%%[![:space:]]*}"}"
+    value="${value%"${value##*[![:space:]]}"}"
+    if [[ "${value}" =~ ^\"(.*)\"$ ]]; then
+      value="${BASH_REMATCH[1]}"
+    elif [[ "${value}" =~ ^\'(.*)\'$ ]]; then
+      value="${BASH_REMATCH[1]}"
+    fi
+    if ! allowed_target_key "${key}"; then
+      echo "Unsupported key in ${target_file}: ${key}" >&2
+      exit 1
+    fi
+    set_if_unset "${key}" "${value}"
+  done < "${target_file}"
+
+  echo "Using e2e target '${target}' from ${target_file}" >&2
+}
+
+apply_default_environment() {
+  export ORCHESTRATOR_BASE_URL="${ORCHESTRATOR_BASE_URL:-http://localhost:8088/orchestrator}"
+  export SCENARIO_MANAGER_BASE_URL="${SCENARIO_MANAGER_BASE_URL:-http://localhost:8088/scenario-manager}"
+  export NETWORK_PROXY_MANAGER_BASE_URL="${NETWORK_PROXY_MANAGER_BASE_URL:-http://localhost:8088/network-proxy-manager}"
+  export AUTH_SERVICE_BASE_URL="${AUTH_SERVICE_BASE_URL:-http://localhost:1083}"
+  export POCKETHIVE_AUTH_USERNAME="${POCKETHIVE_AUTH_USERNAME:-local-admin}"
+  export RABBITMQ_HOST="${RABBITMQ_HOST:-localhost}"
+  export RABBITMQ_PORT="${RABBITMQ_PORT:-5672}"
+  export RABBITMQ_DEFAULT_USER="${RABBITMQ_DEFAULT_USER:-guest}"
+  export RABBITMQ_DEFAULT_PASS="${RABBITMQ_DEFAULT_PASS:-guest}"
+  export RABBITMQ_VHOST="${RABBITMQ_VHOST:-/}"
+  export RABBITMQ_MANAGEMENT_BASE_URL="${RABBITMQ_MANAGEMENT_BASE_URL:-http://localhost:15672/rabbitmq/api}"
+  export UI_BASE_URL="${UI_BASE_URL:-http://localhost:8088}"
+  export UI_WEBSOCKET_URI="${UI_WEBSOCKET_URI:-ws://localhost:8088/ws}"
+  export POCKETHIVE_CONTROL_PLANE_EXCHANGE="${POCKETHIVE_CONTROL_PLANE_EXCHANGE:-ph.control}"
+  export POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX="${POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX:-ph.control}"
+  export POCKETHIVE_TCP_MOCK_URL="${POCKETHIVE_TCP_MOCK_URL:-http://localhost:8083}"
+  export POCKETHIVE_TCP_MOCK_USERNAME="${POCKETHIVE_TCP_MOCK_USERNAME:-admin}"
+  export POCKETHIVE_TCP_MOCK_PASSWORD="${POCKETHIVE_TCP_MOCK_PASSWORD:-admin}"
+  export POCKETHIVE_CLICKHOUSE_HTTP_URL="${POCKETHIVE_CLICKHOUSE_HTTP_URL:-http://localhost:8123}"
+  export POCKETHIVE_CLICKHOUSE_USERNAME="${POCKETHIVE_CLICKHOUSE_USERNAME:-pockethive}"
+  export POCKETHIVE_CLICKHOUSE_PASSWORD="${POCKETHIVE_CLICKHOUSE_PASSWORD:-pockethive}"
+}
 
 group_tag_expression() {
   case "$1" in
@@ -85,8 +185,29 @@ Available e2e groups:
 EOF
 }
 
+print_targets() {
+  if [[ ! -d "${TARGET_DIR}" ]]; then
+    echo "No e2e targets directory found at ${TARGET_DIR}"
+    return
+  fi
+  local found=false
+  for target_file in "${TARGET_DIR}"/*.env; do
+    [[ -e "${target_file}" ]] || continue
+    found=true
+    basename "${target_file}" .env
+  done
+  if [[ "${found}" == false ]]; then
+    echo "No e2e targets found in ${TARGET_DIR}"
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --target)
+      [[ $# -ge 2 ]] || { echo "--target requires a value" >&2; exit 1; }
+      TARGET_NAME="$2"
+      shift 2
+      ;;
     --group)
       [[ $# -ge 2 ]] || { echo "--group requires a value" >&2; exit 1; }
       IFS=',' read -r -a parsed_groups <<< "$2"
@@ -111,6 +232,10 @@ while [[ $# -gt 0 ]]; do
       print_groups
       exit 0
       ;;
+    --list-targets)
+      print_targets
+      exit 0
+      ;;
     --help|-h)
       usage
       exit 0
@@ -126,6 +251,9 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+load_target_profile "${TARGET_NAME}"
+apply_default_environment
 
 GROUP_TAGS=()
 for group_name in "${GROUP_NAMES[@]}"; do

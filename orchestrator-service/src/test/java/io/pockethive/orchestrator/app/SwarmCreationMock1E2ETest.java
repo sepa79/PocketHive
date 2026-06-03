@@ -205,6 +205,9 @@ class SwarmCreationMock1E2ETest {
         registry.add(
             "POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_METRICS_PUSHGATEWAY_GROUPING_KEY_INSTANCE",
             () -> "controller-instance");
+        registry.add(
+            "pockethive.control-plane.orchestrator.docker.compute-adapter",
+            () -> "DOCKER_SINGLE");
         if (!RABBIT.isRunning()) {
             try {
                 RABBIT.start();

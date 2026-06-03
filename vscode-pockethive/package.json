@@ -489,6 +489,14 @@
           "default": "",
           "description": "Path to PocketHive repo checkout (for offline bundle validation)."
         },
+        "pockethive.workflowSourceRoots": {
+          "type": "array",
+          "default": [],
+          "description": "Additional local roots the workflow MCP may read source test files from. The active bundles folder and PocketHive root are included automatically.",
+          "items": {
+            "type": "string"
+          }
+        },
         "pockethive.mcpServerPath": {
           "type": "string",
           "default": "",
@@ -534,6 +542,7 @@
   },
   "scripts": {
     "build": "tsc -p ./",
+    "test": "npm run build && node scripts/check-command-targets.mjs && node scripts/check-workflow-boundary.mjs",
     "watch": "tsc -watch -p ./",
     "package": "vsce package",
     "vscode:prepublish": "npm run build"

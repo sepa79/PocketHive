@@ -32,6 +32,8 @@ import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
 import io.pockethive.orchestrator.auth.OrchestratorAuthorization;
 import io.pockethive.orchestrator.auth.OrchestratorCurrentUserHolder;
+import io.pockethive.swarm.model.BeeConfigKeys;
+import io.pockethive.swarm.model.BeeRoles;
 import io.pockethive.swarm.model.NetworkMode;
 import io.pockethive.swarm.model.NetworkBinding;
 import io.pockethive.swarm.model.NetworkProfile;
@@ -51,6 +53,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -96,6 +99,8 @@ public class SwarmController {
     @Value("${POCKETHIVE_SCENARIOS_RUNTIME_ROOT:}")
     private String scenariosRuntimeRootSource;
     private static final String CREATE_LOCK_KEY = "__create-lock__";
+    private static final Set<String> AUTH_SUT_CONTEXT_ROLES =
+        Set.of(BeeRoles.REQUEST_BUILDER, BeeRoles.HTTP_SEQUENCE, BeeRoles.PROCESSOR);
     private static final Pattern BASE_URL_TEMPLATE =
         Pattern.compile("\\{\\{\\s*sut\\.endpoints\\['([^']+)'\\]\\.baseUrl\\s*}}(.*)");
 
@@ -299,6 +304,9 @@ public class SwarmController {
                             }
                             if (resolvedVars != null && !resolvedVars.isEmpty()) {
                                 config = addScenarioVars(config, resolvedVars);
+                            }
+                            if (finalSutEnvironment != null && AUTH_SUT_CONTEXT_ROLES.contains(bee.role())) {
+                                config = addAuthProfilePrivateContext(config, finalSutEnvironment);
                             }
                             if (finalSutEnvironment != null && config != null && !config.isEmpty()) {
                                 config = applySutConfigTemplates(config, finalSutEnvironment);
@@ -801,6 +809,49 @@ public class SwarmController {
         // Reserved key for scenario variables: config.vars (map).
         // Workers are expected to propagate this into the WorkItem headers so Pebble/SpEL templates can reference it as `vars.*`.
         result.put("vars", vars);
+        return Map.copyOf(result);
+    }
+
+    private static Map<String, Object> addAuthProfilePrivateContext(Map<String, Object> config, SutEnvironment sutEnvironment) {
+        Map<String, Object> result = (config == null || config.isEmpty())
+            ? new LinkedHashMap<>()
+            : new LinkedHashMap<>(config);
+        Map<String, Object> privateConfig = new LinkedHashMap<>();
+        Object existingPrivateConfig = result.get(BeeConfigKeys.PRIVATE_CONFIG);
+        if (existingPrivateConfig instanceof Map<?, ?> rawPrivateConfig) {
+            rawPrivateConfig.forEach((key, value) -> {
+                if (key != null) {
+                    privateConfig.put(key.toString(), value);
+                }
+            });
+        }
+        Map<String, Object> authProfileContext = Map.of(BeeConfigKeys.SUT, sutContext(sutEnvironment));
+        privateConfig.put(BeeConfigKeys.AUTH_PROFILE, authProfileContext);
+        result.put(BeeConfigKeys.PRIVATE_CONFIG, Map.copyOf(privateConfig));
+        return Map.copyOf(result);
+    }
+
+    private static Map<String, Object> sutContext(SutEnvironment sutEnvironment) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("id", sutEnvironment.id());
+        result.put("name", sutEnvironment.name());
+        if (sutEnvironment.type() != null && !sutEnvironment.type().isBlank()) {
+            result.put("type", sutEnvironment.type());
+        }
+        Map<String, Object> endpoints = new LinkedHashMap<>();
+        sutEnvironment.endpoints().forEach((key, endpoint) -> endpoints.put(key, sutEndpointContext(endpoint)));
+        result.put("endpoints", Map.copyOf(endpoints));
+        return Map.copyOf(result);
+    }
+
+    private static Map<String, Object> sutEndpointContext(SutEndpoint endpoint) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("id", endpoint.id());
+        result.put("kind", endpoint.kind());
+        result.put("baseUrl", endpoint.baseUrl());
+        if (endpoint.upstreamBaseUrl() != null && !endpoint.upstreamBaseUrl().isBlank()) {
+            result.put("upstreamBaseUrl", endpoint.upstreamBaseUrl());
+        }
         return Map.copyOf(result);
     }
 

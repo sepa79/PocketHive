@@ -116,6 +116,8 @@ Expected managed files for `swarm-reduced`:
 artifacts/pockethive-runtime/compose/docker-compose.yml
 artifacts/pockethive-runtime/compose/compose.swarm.yml
 artifacts/pockethive-runtime/config/rabbitmq/rabbitmq.conf
-artifacts/pockethive-runtime/config/clickhouse/init/01-ph-tx-outcome-v1.sql
+artifacts/pockethive-runtime/config/clickhouse/init/02-ph-tx-outcome-v2.sql
+artifacts/pockethive-runtime/config/clickhouse/clickhouse-entrypoint.sh
+artifacts/pockethive-runtime/config/clickhouse/migrate-tx-outcome-v1-to-v2.sh
 artifacts/pockethive-runtime/scenarios
 ```

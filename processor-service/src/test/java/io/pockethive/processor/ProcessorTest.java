@@ -467,7 +467,7 @@ class ProcessorTest {
                 type: TLS_CLIENT_CERT
                 storage:
                   mode: NONE
-                keyStorePath: /certs/client.p12
+                keyStorePath: "{{ sut.endpoints['certs'].baseUrl }}/client.p12"
                 keyStorePassword: changeit
                 keyStoreType: PKCS12
             """);
@@ -487,7 +487,19 @@ class ProcessorTest {
             public void close() {
             }
         });
-        ProcessorWorkerConfig config = new ProcessorWorkerConfig("tcp://tcp.example:9100", null, 0, 0.0, null, null, null, null, null);
+        ProcessorWorkerConfig config = new ProcessorWorkerConfig(
+            "tcp://tcp.example:9100",
+            null,
+            0,
+            0.0,
+            null,
+            null,
+            null,
+            null,
+            null,
+            Map.of("authProfile", Map.of("sut", Map.of(
+                "id", "tcp-sut",
+                "endpoints", Map.of("certs", Map.of("baseUrl", "/certs"))))));
         TestWorkerContext context = new TestWorkerContext(config);
         WorkerInfo info = new WorkerInfo("ingress", "swarm", "ingress-instance", null, null);
         WorkItem inbound = WorkItem.json(info, TcpRequestEnvelope.of(new TcpRequestEnvelope.TcpRequest(

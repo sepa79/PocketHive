@@ -1,0 +1,19 @@
+services:
+  pockethive-mcp:
+    build:
+      context: .
+    env_file:
+      - .env
+    ports:
+      - "3100:3100"
+    volumes:
+      # BUNDLES_ROOT: defaults to scenarios/bundles inside the PocketHive repo.
+      # For real scenario authoring, override with your external bundles repo:
+      #   BUNDLES_ROOT=/path/to/your-bundles-repo/bundles docker compose -f docker-compose.mcp.yml up
+      - ${BUNDLES_ROOT:-../../../scenarios/bundles}:/bundles:ro
+      # POCKETHIVE_ROOT: the PocketHive repo root — used for offline bundle validation
+      - ${POCKETHIVE_ROOT:-../../..}:/pockethive:ro
+    extra_hosts:
+      # Allows the container to reach the PocketHive stack running on the host
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped

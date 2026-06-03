@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.15.22]
+Timestamp: 2026-06-03T11:04:40Z
+
+- MCP server: fix strict MCP client validation by giving `wizard_start.inputSchema.properties.mockEndpoints` an explicit array item schema, preserving string and object endpoint forms while avoiding JSON Schema arrays without `items`.
+- MCP tests: add a black-box stdio `tools/list` regression test that fails when any MCP tool input schema emits an array without `items`, and include it in the MCP package test script.
+- MCP workflow: add the agent-guided workflow tool surface, workflow evidence/report helpers, resumable deploy/verify operations, HTTP MCP client configs for common editors, and VS Code workflow commands/settings.
+- Auth/SUT context: pass selected SUT endpoint data to auth-capable workers through reserved `privateConfig.authProfile.sut`, keep it out of public config/status evidence, and allow auth profiles to template against `sut.*` explicitly.
+- Auth/SUT context: centralize the new auth-capable bee roles and reserved private config keys in `swarm-model` constants so runtime injection does not depend on ad-hoc role/config string literals.
+- MCP packaging hygiene: remove an accidental unmapped scenario gitlink and a generated `.pockethive-mcp-install.lock` artifact from the merged branch, and ignore MCP runtime lock/PID files.
+- ClickHouse observability: retire bundled `ph_tx_outcome_v1` Grafana dashboards and make the transaction dashboard suite target `ph_tx_outcome_v2` only.
+- ClickHouse dashboards: replace the v2 tx-outcomes and RTT dashboards with corrected versions that use v2 materialized keys, avoid regex-based variable filters, handle blank call/business labels consistently, and add richer latency, success, throughput, and drill-down panels.
+- ClickHouse dashboards: add a selected-swarm long-term RTT dashboard for wide time ranges and optimize the RTT latency percentile/SLO panels to calculate related series in a single ClickHouse scan.
+- ClickHouse migration: stop creating `ph_tx_outcome_v1` for fresh local volumes, add a ClickHouse entrypoint wrapper that runs the official ClickHouse entrypoint and then migrates legacy v1 data to v2 inside the same container, dropping v1 after a successful full migration.
+- Tooling/docs: add an operator wrapper for manual v1 -> v2 migration recovery and update usage/observability docs to describe v2-only bundled dashboards and legacy v1 migration behavior.
+- E2E tooling: let `start-e2e-tests.sh` load explicit deployment target profiles from `deploy/e2e-targets/<name>.env`, add local and large-swarm profiles, and document `--target` / `--list-targets` usage.
+- Release: bump PocketHive patch version to 0.15.22 for the MCP schema fix and ClickHouse v2 dashboard/migration refresh.
+
 ## [0.15.21]
 Timestamp: 2026-05-26T22:17:55Z
 
@@ -154,7 +171,7 @@ Timestamp: 2026-02-24T00:00:00Z
 Timestamp: 2026-02-16T23:01:40Z
 
 - Postprocessor: remove deprecated `publishAllMetrics` flag from runtime config, status payloads, Scenario Manager capability manifest, and bundled/e2e scenarios.
-- Observability: transaction-level postprocessor analysis is now ClickHouse-first (`ph_tx_outcome_v1`) with dedicated Grafana dashboards for client-side RTT, tail latency, and quality/failure mixes.
+- Observability: transaction-level postprocessor analysis is now ClickHouse-first (`ph_tx_outcome_v2`) with dedicated Grafana dashboards for client-side RTT, tail latency, and quality/failure mixes.
 - Scenario Manager: `updateScenarioFromRaw(...)` persists raw YAML body verbatim (prevents mapper round-trip from rewriting YAML literals such as `body: |`).
 - Grafana/ClickHouse: add tx-outcomes dashboard improvements and new RTT-focused dashboard suite for high-range queries without raw-point overload.
 - **Migration note:** remove `publishAllMetrics` from custom postprocessor scenario configs. Keeping it now causes config binding failure (unknown field) in postprocessor worker config.

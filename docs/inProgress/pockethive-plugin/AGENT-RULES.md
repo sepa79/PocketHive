@@ -273,7 +273,7 @@ specific tests alongside existing ones.
 
 ### Phase 1 — MCP migration (do this first)
 
-1. Copy `tools/mcp-server/` to `tools/pockethive-mcp/`
+1. Maintain the MCP server in `tools/pockethive-mcp/`
 2. Replace `REPO_ROOT` with `BUNDLES_ROOT` throughout `server.mjs`
 3. Remove `.env` file loading from server startup
 4. Add `--env-file` CLI flag for standalone use

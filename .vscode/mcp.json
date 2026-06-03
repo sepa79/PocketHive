@@ -1,0 +1,9 @@
+{
+  "servers": {
+    "pockethive-bundles": {
+      "type": "http",
+      "url": "http://localhost:3100/mcp",
+      "disabled": false
+    }
+  }
+}

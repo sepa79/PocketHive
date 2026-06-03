@@ -86,7 +86,7 @@ final class HttpSequenceRunner {
     try {
       reloadTemplatesIfNeeded(config);
       AuthRuntime authRuntime = AuthRuntime.forTemplates(
-          config.templateRoot(), authRefs(templates), config.vars(), context, templateRenderer, redisProperties);
+          config.templateRoot(), authRefs(templates), config.vars(), config.authProfileSutContext(), context, templateRenderer, redisProperties);
       for (int i = 0; i < config.steps().size(); i++) {
         HttpSequenceWorkerConfig.Step step = config.steps().get(i);
         if (step.callId() == null) {

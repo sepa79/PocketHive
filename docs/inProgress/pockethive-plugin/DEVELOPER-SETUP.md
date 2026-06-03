@@ -5,6 +5,10 @@
 
 This document defines the setup experience for developers working on
 `pockethive-mcp`, HiveMind-backed agent workflows, and the VS Code plugin.
+For the shortest command-oriented path, start with
+`tools/pockethive-mcp/README.md`.
+For assistant-specific client configuration, see
+`AI-ASSISTANT-SETUP.md`.
 
 ## Setup Goals
 
@@ -64,6 +68,11 @@ The IDE plugin passes these values to `pockethive-mcp` at process spawn:
 | `TCP_MOCK_BASE_URL` | No | Active environment setting |
 | `WIREMOCK_BASE_URL` | No | Active environment setting |
 | `PH_BUNDLES_ROOTS` | No | Configured bundle roots |
+| `PH_WORKFLOW_PROFILES_PATH` | No | Optional team `workflow-profiles.json`; invalid files fail closed |
+| `PH_WORKFLOW_PERSISTENCE` | No | `local` by default; set `memory` to disable local workflow-session persistence |
+| `PH_WORKFLOW_STORE_PATH` | No | Optional explicit local JSON workflow-session store |
+| `PH_MCP_TOOL_NAME_MODE` | No | `underscore` by default for GitHub Copilot/OmniMCP compatibility; `legacy` or `both` only for explicit migration testing |
+| `HIVEMIND_MCP_URL` / `HIVEMIND_BASE_URL` | No | Optional HiveMind MCP endpoint for workflow enrichment only |
 
 GitHub tokens are not passed to `pockethive-mcp`. Configure a separate GitHub
 MCP server with a fine-grained issue-only token.
@@ -108,13 +117,50 @@ bundle for a separate GitHub MCP to post. It should not implement general
 
 ## Doctor Command
 
-Add a developer-facing doctor command. It can be an npm script or a small Node
-script under `tools/pockethive-mcp/`, but it is not an MCP tool.
-
-Suggested command:
+Install MCP server dependencies first:
 
 ```bash
-npm run doctor
+npm run mcp:setup
+```
+
+Use the developer-facing doctor command before blaming the IDE. It runs as a
+local Node script under `tools/pockethive-mcp/`; it is not exposed as an MCP
+tool.
+
+Default command:
+
+```bash
+npm run mcp:doctor
+```
+
+The doctor first loads the same JSON MCP config shape used by assistants. Search
+order is:
+
+1. `--config <path>` or `PH_MCP_CONFIG`
+2. `<repo>/mcp.json`
+3. `<repo>/.amazonq/mcp.json`
+
+It reads the `pockethive-bundles` server by default. Override that with
+`--server <id>` or `PH_MCP_SERVER_ID` if a client uses a different server id.
+Environment variables from the shell override values loaded from the config.
+
+The doctor intentionally fails if the effective `BUNDLES_ROOT` is missing or
+points at a non-directory. This is separate from dependency setup: `mcp:setup`
+can pass on a clean machine before the bundles repo exists, while `mcp:doctor`
+passes only after the bundles checkout is configured.
+
+To test environment-only setup, bypass config loading explicitly:
+
+```bash
+BUNDLES_ROOT=/path/to/pockethive-scenario-bundles \
+PH_BUNDLES_ROOTS='["/path/to/pockethive-scenario-bundles"]' \
+npm run mcp:doctor -- --no-config
+```
+
+To check a specific assistant config:
+
+```bash
+npm run mcp:doctor -- --config .amazonq/mcp.json
 ```
 
 Suggested checks:
@@ -122,14 +168,15 @@ Suggested checks:
 | Check | Failure message should include |
 |---|---|
 | Node.js version | Required version and installed version |
-| Java version | Required Java 21 |
-| Docker availability | Reminder to use dev workflow outside MCP |
-| PocketHive base URL | Current configured URL and reachability |
+| MCP config source | Loaded config path, server id, malformed JSON, disabled server, missing URL, or missing command/args in stdio mode |
+| MCP dependencies | Whether dependencies were current or installed from lockfile |
 | MCP server startup | Command used and first startup error |
+| MCP input schemas | Tool/schema name when an array schema is missing `items` |
 | Bundle root | Path and whether bundles are found |
-| VS Code extension deps | Missing npm install/build step |
-| HiveMind config | Missing `HIVEMIND_BASE_URL` or unreachable remote |
-| GitHub MCP | Whether issue-only MCP is configured externally |
+| Bundle roots list | Invalid `PH_BUNDLES_ROOTS` JSON or missing directories |
+| Workflow source roots | Invalid `PH_WORKFLOW_SOURCE_ROOTS` JSON or missing directories |
+| Workflow profiles | Invalid custom workflow profile config |
+| Workflow persistence | Local JSON store path when persistence is enabled |
 
 The doctor may run shell commands because it is developer tooling. The MCP
 server must not expose doctor as an MCP tool.
@@ -146,6 +193,48 @@ server must not expose doctor as an MCP tool.
 4. Developer configures external GitHub MCP with issue-only token if needed.
 5. Developer runs doctor.
 6. Developer launches the VS Code extension host.
+
+## Verification Commands
+
+From the PocketHive repo root:
+
+```bash
+npm run mcp:test
+npm run mcp:workflow-acceptance
+npm run mcp:agentic-evals
+```
+
+To verify against a running local PocketHive stack:
+
+```bash
+PH_WORKFLOW_ACCEPTANCE_LIVE=1 \
+POCKETHIVE_BASE_URL=http://localhost:8088 \
+POCKETHIVE_AUTH_USERNAME=local-admin \
+npm --prefix tools/pockethive-mcp run acceptance:workflow:live
+```
+
+The live acceptance run creates a unique live workflow bundle/swarm, verifies
+it with `proofMode=strict` and `includeTapSample=true`, then removes both the
+swarm and uploaded Scenario Manager bundle in a teardown block. If the process
+is interrupted, remove the created swarm through `swarm_remove` or:
+
+```bash
+POCKETHIVE_AUTH_USERNAME=local-admin \
+node tools/mcp-orchestrator-debug/client.mjs remove-swarm <swarmId>
+```
+
+Remove the uploaded live bundle with:
+
+```bash
+TOKEN=$(curl -s \
+  -H "content-type: application/json" \
+  -d '{"username":"local-admin"}' \
+  "http://localhost:8088/auth-service/api/auth/dev/login" | jq -r .accessToken)
+
+curl -X DELETE \
+  -H "Authorization: Bearer ${TOKEN}" \
+  "http://localhost:8088/scenario-manager/scenarios/<bundleId>"
+```
 
 ## Definition Of Ready
 

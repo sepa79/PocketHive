@@ -1,19 +1,9 @@
 {
   "mcpServers": {
     "pockethive-bundles": {
-      "command": "node",
-      "args": [
-        "tools/pockethive-mcp/start.cjs"
-      ],
-      "env": {
-        "POCKETHIVE_BASE_URL": "http://localhost:8088",
-        "POCKETHIVE_AUTH_USERNAME": "local-admin",
-        "POCKETHIVE_ROOT": ".",
-        "BUNDLES_ROOT": "../pockethive-scenario-bundles",
-        "PH_BUNDLES_ROOTS": "[\"../pockethive-scenario-bundles\"]",
-        "PH_ACTIVE_ENVIRONMENT": "local",
-        "PH_ENVIRONMENTS": "[{\"name\":\"local\",\"baseUrl\":\"http://localhost:8088\",\"authUsername\":\"local-admin\",\"rabbitUser\":\"guest\",\"tcpMockUrl\":\"http://localhost:8083\",\"wiremockUrl\":\"http://localhost:8080\"}]"
-      }
+      "url": "http://localhost:3100/mcp",
+      "timeout": 300000,
+      "disabled": false
     }
   }
 }

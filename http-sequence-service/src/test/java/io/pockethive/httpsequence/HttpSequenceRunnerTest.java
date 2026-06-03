@@ -180,6 +180,60 @@ class HttpSequenceRunnerTest {
         .satisfies(call -> assertThat(call.headers()).containsEntry("Authorization", "Bearer sequence-token"));
   }
 
+  @Test
+  void appliesAuthProfileUsingSutContextPerSequenceStep() throws Exception {
+    Path templates = Files.createDirectories(tempDir.resolve("templates"));
+    Files.writeString(tempDir.resolve("authProfiles.yaml"), """
+        profiles:
+          "api:sut":
+            type: STATIC_TOKEN
+            storage:
+              mode: NONE
+            token: "{{ sut.endpoints['default'].baseUrl }}/sequence-token"
+        """);
+    Files.writeString(templates.resolve("A.yaml"), """
+        protocol: HTTP
+        callId: A
+        method: GET
+        pathTemplate: /a
+        headersTemplate: {}
+        bodyTemplate: ""
+        authRef:
+          profileId: "api:sut"
+          applyAs: HTTP_AUTHORIZATION_BEARER
+        """);
+
+    RecordingExecutor executor = new RecordingExecutor();
+    HttpSequenceRunner runner = new HttpSequenceRunner(
+        new ObjectMapper().findAndRegisterModules(),
+        Clock.systemUTC(),
+        new io.pockethive.worker.sdk.templating.PebbleTemplateRenderer(),
+        new TemplateLoader(),
+        executor,
+        new RedisSequenceProperties());
+    WorkerInfo info = new WorkerInfo("http-sequence", "swarm-1", "inst-1", null, null);
+    WorkItem seed = WorkItem.text(info, "{\"seed\":true}").contentType("application/json").build();
+
+    HttpSequenceWorkerConfig config = new HttpSequenceWorkerConfig(
+        "http://sut",
+        templates.toString(),
+        "default",
+        1,
+        List.of(new HttpSequenceWorkerConfig.Step("s1", "A", null, false, null, List.of(), List.of())),
+        new HttpSequenceWorkerConfig.DebugCapture(HttpSequenceWorkerConfig.DebugCaptureMode.NONE, 0.0, 1, 1, false, false, 0, 1),
+        Map.of(),
+        Map.of("authProfile", Map.of("sut", Map.of(
+            "id", "wiremock-local",
+            "endpoints", Map.of("default", Map.of("baseUrl", "http://wiremock:8080")))))
+    );
+
+    runner.run(seed, new TestWorkerContext(info), config);
+
+    assertThat(executor.calls()).singleElement()
+        .satisfies(call -> assertThat(call.headers())
+            .containsEntry("Authorization", "Bearer http://wiremock:8080/sequence-token"));
+  }
+
   private HttpSequenceRunner newRunner(RecordingExecutor executor) {
     ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
     TemplateRenderer templateRenderer = (template, context) -> template == null ? "" : template;

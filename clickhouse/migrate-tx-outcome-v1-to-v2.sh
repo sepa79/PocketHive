@@ -21,6 +21,10 @@ Options:
   --to <timestamp>           Exclusive upper bound for eventTime.
                              Example: 2026-02-22 or 2026-02-22T00:00:00Z
   --truncate-v2              Explicitly truncate the target table before migration.
+  --drop-source-after-migration
+                             Drop the source table after a successful full migration.
+                             Not allowed together with --from or --to.
+  --skip-if-source-missing   Exit successfully when the source table does not exist.
   --help                     Show this help.
 
 Notes:
@@ -39,6 +43,8 @@ TARGET_TABLE="ph_tx_outcome_v2"
 FROM_TS=""
 TO_TS=""
 TRUNCATE_V2="false"
+DROP_SOURCE_AFTER_MIGRATION="false"
+SKIP_IF_SOURCE_MISSING="false"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -78,6 +84,14 @@ while [[ $# -gt 0 ]]; do
       TRUNCATE_V2="true"
       shift
       ;;
+    --drop-source-after-migration)
+      DROP_SOURCE_AFTER_MIGRATION="true"
+      shift
+      ;;
+    --skip-if-source-missing)
+      SKIP_IF_SOURCE_MISSING="true"
+      shift
+      ;;
     --help)
       usage
       exit 0
@@ -89,6 +103,11 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ "$DROP_SOURCE_AFTER_MIGRATION" == "true" && (-n "$FROM_TS" || -n "$TO_TS") ]]; then
+  echo "--drop-source-after-migration requires a full-table migration; do not combine it with --from or --to" >&2
+  exit 1
+fi
 
 if ! command -v clickhouse-client >/dev/null 2>&1; then
   echo "clickhouse-client not found in PATH" >&2
@@ -212,23 +231,19 @@ build_day_where() {
 }
 
 echo "Checking source table"
-require_table "$SOURCE_TABLE"
+source_exists="$(scalar_query "EXISTS TABLE ${SOURCE_TABLE}")"
+if [[ "$source_exists" != "1" ]]; then
+  if [[ "$SKIP_IF_SOURCE_MISSING" == "true" ]]; then
+    echo "Source table ${SOURCE_TABLE} does not exist; nothing to migrate"
+    exit 0
+  fi
+  echo "Required table does not exist: ${SOURCE_TABLE}" >&2
+  exit 1
+fi
 
 echo "Checking target table"
 create_v2_if_missing
 require_table "$TARGET_TABLE"
-
-if [[ "$TRUNCATE_V2" == "true" ]]; then
-  echo "Truncating ${TARGET_TABLE}"
-  run_query "TRUNCATE TABLE ${TARGET_TABLE}"
-fi
-
-target_count_before="$(scalar_query "SELECT count() FROM ${TARGET_TABLE}")"
-if [[ "$target_count_before" != "0" ]]; then
-  echo "Target table ${TARGET_TABLE} is not empty (${target_count_before} rows)." >&2
-  echo "Refusing to append into a non-empty v2 table. Use --truncate-v2 if this is intentional." >&2
-  exit 1
-fi
 
 global_where="$(build_global_where)"
 day_list_query="
@@ -242,7 +257,23 @@ mapfile -t days < <(run_query "$day_list_query")
 
 if [[ ${#days[@]} -eq 0 ]]; then
   echo "No source rows matched the requested range"
+  if [[ "$DROP_SOURCE_AFTER_MIGRATION" == "true" ]]; then
+    echo "Dropping empty source table ${SOURCE_TABLE}"
+    run_query "DROP TABLE ${SOURCE_TABLE}"
+  fi
   exit 0
+fi
+
+if [[ "$TRUNCATE_V2" == "true" ]]; then
+  echo "Truncating ${TARGET_TABLE}"
+  run_query "TRUNCATE TABLE ${TARGET_TABLE}"
+fi
+
+target_count_before="$(scalar_query "SELECT count() FROM ${TARGET_TABLE}")"
+if [[ "$target_count_before" != "0" ]]; then
+  echo "Target table ${TARGET_TABLE} is not empty (${target_count_before} rows)." >&2
+  echo "Refusing to append into a non-empty v2 table. Use --truncate-v2 if this is intentional." >&2
+  exit 1
 fi
 
 echo "Migrating ${#days[@]} day partition(s) from ${SOURCE_TABLE} to ${TARGET_TABLE}"
@@ -304,6 +335,11 @@ echo "Final totals: source=${final_source_total} target=${final_target_total}"
 if [[ "$final_source_total" != "$final_target_total" ]]; then
   echo "Final count mismatch source=${final_source_total} target=${final_target_total}" >&2
   exit 1
+fi
+
+if [[ "$DROP_SOURCE_AFTER_MIGRATION" == "true" ]]; then
+  echo "Dropping migrated source table ${SOURCE_TABLE}"
+  run_query "DROP TABLE ${SOURCE_TABLE}"
 fi
 
 echo "Migration completed successfully"

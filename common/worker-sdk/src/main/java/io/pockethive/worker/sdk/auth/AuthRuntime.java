@@ -74,6 +74,18 @@ public final class AuthRuntime {
         TemplateRenderer renderer,
         RedisSequenceProperties redisProperties
     ) {
+        return forTemplates(templateRoot, refs, vars, Map.of(), context, renderer, redisProperties);
+    }
+
+    public static AuthRuntime forTemplates(
+        String templateRoot,
+        List<AuthRef> refs,
+        Map<String, Object> vars,
+        Map<String, Object> sut,
+        WorkerContext context,
+        TemplateRenderer renderer,
+        RedisSequenceProperties redisProperties
+    ) {
         if (refs.isEmpty()) {
             return inactive(renderer);
         }
@@ -85,12 +97,23 @@ public final class AuthRuntime {
                 null
             );
         }
-        return fromFile(authProfiles, refs, vars, context, renderer, redisProperties);
+        return fromFile(authProfiles, refs, vars, sut, context, renderer, redisProperties);
     }
 
     public static AuthRuntime forApplications(
         List<AuthRef> refs,
         Map<String, Object> vars,
+        WorkerContext context,
+        TemplateRenderer renderer,
+        RedisSequenceProperties redisProperties
+    ) {
+        return forApplications(refs, vars, Map.of(), context, renderer, redisProperties);
+    }
+
+    public static AuthRuntime forApplications(
+        List<AuthRef> refs,
+        Map<String, Object> vars,
+        Map<String, Object> sut,
         WorkerContext context,
         TemplateRenderer renderer,
         RedisSequenceProperties redisProperties
@@ -106,7 +129,7 @@ public final class AuthRuntime {
                 null
             );
         }
-        return fromFile(authProfiles, refs, vars, context, renderer, redisProperties);
+        return fromFile(authProfiles, refs, vars, sut, context, renderer, redisProperties);
     }
 
     public static AuthRuntime inactive(TemplateRenderer renderer) {
@@ -201,6 +224,7 @@ public final class AuthRuntime {
         Path file,
         List<AuthRef> refs,
         Map<String, Object> vars,
+        Map<String, Object> sut,
         WorkerContext context,
         TemplateRenderer renderer,
         RedisSequenceProperties redisProperties
@@ -215,7 +239,10 @@ public final class AuthRuntime {
                 if (profile == null) {
                     throw new IllegalArgumentException("authRef.profileId '" + ref.profileId() + "' not found in " + file);
                 }
-                AuthProfile resolvedProfile = resolveProfile(profile, vars, context, renderer);
+                if (referencesSut(profile) && (sut == null || sut.isEmpty())) {
+                    throw new IllegalArgumentException("authRef.profileId '" + ref.profileId() + "' references sut but no SUT context was provided");
+                }
+                AuthProfile resolvedProfile = resolveProfile(profile, vars, sut, context, renderer);
                 validateProfile(ref.profileId(), resolvedProfile);
                 String fingerprint = fingerprint(resolvedProfile);
                 resolved.put(ref.profileId(), resolvedProfile);
@@ -400,16 +427,17 @@ public final class AuthRuntime {
     }
 
     @SuppressWarnings("unchecked")
-    private static AuthProfile resolveProfile(AuthProfile profile, Map<String, Object> vars, WorkerContext context, TemplateRenderer renderer) {
+    private static AuthProfile resolveProfile(AuthProfile profile, Map<String, Object> vars, Map<String, Object> sut, WorkerContext context, TemplateRenderer renderer) {
         Map<String, Object> raw = JSON.convertValue(profile, new TypeReference<>() {});
-        Map<String, Object> resolved = (Map<String, Object>) resolveValue(raw, vars, context, renderer);
+        Map<String, Object> resolved = (Map<String, Object>) resolveValue(raw, vars, sut, context, renderer);
         return JSON.convertValue(resolved, AuthProfile.class);
     }
 
-    private static Object resolveValue(Object value, Map<String, Object> vars, WorkerContext context, TemplateRenderer renderer) {
+    private static Object resolveValue(Object value, Map<String, Object> vars, Map<String, Object> sut, WorkerContext context, TemplateRenderer renderer) {
         if (value instanceof String text) {
             return renderer.render(text, Map.of(
                 "vars", vars == null ? Map.of() : vars,
+                "sut", sut == null ? Map.of() : sut,
                 "swarm", Map.of("id", context.info().swarmId()),
                 "worker", Map.of("id", context.info().instanceId(), "role", context.info().role())
             ));
@@ -422,13 +450,31 @@ public final class AuthRuntime {
                 return readFileSecret(String.valueOf(map.get("file")));
             }
             Map<String, Object> resolved = new LinkedHashMap<>();
-            map.forEach((k, v) -> resolved.put(String.valueOf(k), resolveValue(v, vars, context, renderer)));
+            map.forEach((k, v) -> resolved.put(String.valueOf(k), resolveValue(v, vars, sut, context, renderer)));
             return resolved;
         }
         if (value instanceof List<?> list) {
-            return list.stream().map(v -> resolveValue(v, vars, context, renderer)).toList();
+            return list.stream().map(v -> resolveValue(v, vars, sut, context, renderer)).toList();
         }
         return value;
+    }
+
+    private static boolean referencesSut(AuthProfile profile) {
+        Map<String, Object> raw = JSON.convertValue(profile, new TypeReference<>() {});
+        return referencesSutValue(raw);
+    }
+
+    private static boolean referencesSutValue(Object value) {
+        if (value instanceof String text) {
+            return text.contains("{{") && (text.contains("sut.") || text.contains("sut["));
+        }
+        if (value instanceof Map<?, ?> map) {
+            return map.values().stream().anyMatch(AuthRuntime::referencesSutValue);
+        }
+        if (value instanceof List<?> list) {
+            return list.stream().anyMatch(AuthRuntime::referencesSutValue);
+        }
+        return false;
     }
 
     private static void validateProfile(String profileId, AuthProfile profile) {
