@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## [0.15.22] - 2026-06-03
+
 ### Added
 - MCP App evidence widgets now include a local light/dark mode toggle for both
   swarm evidence and workflow evidence reports.

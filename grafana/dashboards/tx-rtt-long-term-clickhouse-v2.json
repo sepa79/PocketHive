@@ -1,0 +1,841 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": false,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 15,
+          "valueSize": 46
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "editorType": "sql",
+          "format": 2,
+          "queryType": "sql",
+          "rawSql": "SELECT now() AS time, count() AS value\nFROM ph_tx_outcome_v2\nPREWHERE swarmId = '${swarm}' AND $__timeFilter(eventTime)\nWHERE ('${callId:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${callId:csv}'), callIdKey))\n  AND ('${businessCode:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${businessCode:csv}'), if(businessCodeKey = '', 'n/a', businessCodeKey)))",
+          "refId": "A"
+        }
+      ],
+      "title": "Total transactions",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 95
+              },
+              {
+                "color": "green",
+                "value": 99
+              }
+            ]
+          },
+          "unit": "percent",
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 15,
+          "valueSize": 46
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "editorType": "sql",
+          "format": 2,
+          "queryType": "sql",
+          "rawSql": "SELECT now() AS time, avg(processorSuccess) * 100 AS value\nFROM ph_tx_outcome_v2\nPREWHERE swarmId = '${swarm}' AND $__timeFilter(eventTime)\nWHERE ('${callId:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${callId:csv}'), callIdKey))\n  AND ('${businessCode:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${businessCode:csv}'), if(businessCodeKey = '', 'n/a', businessCodeKey)))",
+          "refId": "A"
+        }
+      ],
+      "title": "Processor success (%)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 95
+              },
+              {
+                "color": "green",
+                "value": 99
+              }
+            ]
+          },
+          "unit": "percent",
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 15,
+          "valueSize": 46
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "editorType": "sql",
+          "format": 2,
+          "queryType": "sql",
+          "rawSql": "SELECT now() AS time, avg(businessSuccess) * 100 AS value\nFROM ph_tx_outcome_v2\nPREWHERE swarmId = '${swarm}' AND $__timeFilter(eventTime)\nWHERE ('${callId:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${callId:csv}'), callIdKey))\n  AND ('${businessCode:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${businessCode:csv}'), if(businessCodeKey = '', 'n/a', businessCodeKey)))",
+          "refId": "A"
+        }
+      ],
+      "title": "Business success (%)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1000
+              },
+              {
+                "color": "red",
+                "value": 2000
+              }
+            ]
+          },
+          "unit": "ms",
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 15,
+          "valueSize": 46
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "editorType": "sql",
+          "format": 2,
+          "queryType": "sql",
+          "rawSql": "SELECT now() AS time, quantileTDigest(0.95)(processorDurationMs) AS value\nFROM ph_tx_outcome_v2\nPREWHERE swarmId = '${swarm}' AND $__timeFilter(eventTime)\nWHERE ('${callId:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${callId:csv}'), callIdKey))\n  AND ('${businessCode:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${businessCode:csv}'), if(businessCodeKey = '', 'n/a', businessCodeKey)))",
+          "refId": "A"
+        }
+      ],
+      "title": "Processor p95 RTT (ms)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "description": "Long-range transaction volume for the selected swarm.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 4,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 4
+      },
+      "id": 5,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "editorType": "sql",
+          "format": 2,
+          "queryType": "sql",
+          "rawSql": "SELECT\n  toStartOfInterval(eventTime, toIntervalSecond(greatest($__interval_s, 3600))) AS time,\n  'transactions' AS series,\n  count() AS txns\nFROM ph_tx_outcome_v2\nPREWHERE swarmId = '${swarm}' AND $__timeFilter(eventTime)\nWHERE ('${callId:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${callId:csv}'), callIdKey))\n  AND ('${businessCode:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${businessCode:csv}'), if(businessCodeKey = '', 'n/a', businessCodeKey)))\nGROUP BY time\nORDER BY time",
+          "refId": "A"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "prepareTimeSeries",
+          "options": {
+            "format": "many"
+          }
+        },
+        {
+          "id": "renameByRegex",
+          "options": {
+            "regex": "^(.*)\\s(value|value_ms|pct|txns)$",
+            "renamePattern": "$1"
+          }
+        }
+      ],
+      "title": "Hourly transaction volume",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "description": "One-scan p50/p95/p99 RTT trend for the selected swarm.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 4,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 4
+      },
+      "id": 6,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "editorType": "sql",
+          "format": 2,
+          "queryType": "sql",
+          "rawSql": "SELECT time, series, value_ms\nFROM (\n  SELECT\n    time,\n    concat('p', label) AS series,\n    value_ms\n  FROM (\n    SELECT\n      toStartOfInterval(eventTime, toIntervalSecond(greatest($__interval_s, 3600))) AS time,\n      quantilesTDigest(0.50, 0.95, 0.99)(processorDurationMs) AS qs\n    FROM ph_tx_outcome_v2\nPREWHERE swarmId = '${swarm}' AND $__timeFilter(eventTime)\nWHERE ('${callId:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${callId:csv}'), callIdKey))\n  AND ('${businessCode:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${businessCode:csv}'), if(businessCodeKey = '', 'n/a', businessCodeKey)))\n    GROUP BY time\n  )\n  ARRAY JOIN ['50', '95', '99'] AS label, [qs[1], qs[2], qs[3]] AS value_ms\n)\nORDER BY time, series",
+          "refId": "A"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "prepareTimeSeries",
+          "options": {
+            "format": "many"
+          }
+        },
+        {
+          "id": "renameByRegex",
+          "options": {
+            "regex": "^(.*)\\s(value|value_ms|pct|txns)$",
+            "renamePattern": "$1"
+          }
+        }
+      ],
+      "title": "RTT percentiles",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "description": "Processor and business success trends with low series cardinality.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 4,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 12
+      },
+      "id": 7,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "editorType": "sql",
+          "format": 2,
+          "queryType": "sql",
+          "rawSql": "SELECT time, series, pct\nFROM (\n  SELECT\n    time,\n    series,\n    pct\n  FROM (\n    SELECT\n      toStartOfInterval(eventTime, toIntervalSecond(greatest($__interval_s, 3600))) AS time,\n      avg(processorSuccess) * 100 AS processor_success,\n      avg(businessSuccess) * 100 AS business_success\n    FROM ph_tx_outcome_v2\nPREWHERE swarmId = '${swarm}' AND $__timeFilter(eventTime)\nWHERE ('${callId:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${callId:csv}'), callIdKey))\n  AND ('${businessCode:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${businessCode:csv}'), if(businessCodeKey = '', 'n/a', businessCodeKey)))\n    GROUP BY time\n  )\n  ARRAY JOIN ['processor', 'business'] AS series, [processor_success, business_success] AS pct\n)\nORDER BY time, series",
+          "refId": "A"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "prepareTimeSeries",
+          "options": {
+            "format": "many"
+          }
+        },
+        {
+          "id": "renameByRegex",
+          "options": {
+            "regex": "^(.*)\\s(value|value_ms|pct|txns)$",
+            "renamePattern": "$1"
+          }
+        }
+      ],
+      "title": "Success rates",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "description": "Processor status class volume over time.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 4,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 12
+      },
+      "id": 8,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "editorType": "sql",
+          "format": 2,
+          "queryType": "sql",
+          "rawSql": "SELECT\n  toStartOfInterval(eventTime, toIntervalSecond(greatest($__interval_s, 3600))) AS time,\n  processorStatusClass AS series,\n  count() AS txns\nFROM ph_tx_outcome_v2\nPREWHERE swarmId = '${swarm}' AND $__timeFilter(eventTime)\nWHERE ('${callId:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${callId:csv}'), callIdKey))\n  AND ('${businessCode:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${businessCode:csv}'), if(businessCodeKey = '', 'n/a', businessCodeKey)))\nGROUP BY time, processorStatusClass\nORDER BY time, series",
+          "refId": "A"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "prepareTimeSeries",
+          "options": {
+            "format": "many"
+          }
+        },
+        {
+          "id": "renameByRegex",
+          "options": {
+            "regex": "^(.*)\\s(value|value_ms|pct|txns)$",
+            "renamePattern": "$1"
+          }
+        }
+      ],
+      "title": "Processor status classes",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "description": "Limited drill-down table for the selected swarm.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 20
+      },
+      "id": 9,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true
+      },
+      "pluginVersion": "11.6.0",
+      "targets": [
+        {
+          "editorType": "sql",
+          "format": 2,
+          "queryType": "sql",
+          "rawSql": "SELECT\n  if(callIdKey = '', 'unknown', callIdKey) AS callId,\n  if(businessCodeKey = '', 'n/a', businessCodeKey) AS businessCode,\n  count() AS txns,\n  round(avg(processorDurationMs), 1) AS avg_rtt_ms,\n  round(quantileTDigest(0.95)(processorDurationMs), 1) AS p95_rtt_ms,\n  round(quantileTDigest(0.99)(processorDurationMs), 1) AS p99_rtt_ms,\n  max(processorDurationMs) AS max_rtt_ms,\n  round(avg(processorSuccess) * 100, 2) AS processor_success_pct,\n  round(avg(businessSuccess) * 100, 2) AS business_success_pct\nFROM ph_tx_outcome_v2\nPREWHERE swarmId = '${swarm}' AND $__timeFilter(eventTime)\nWHERE ('${callId:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${callId:csv}'), callIdKey))\n  AND ('${businessCode:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${businessCode:csv}'), if(businessCodeKey = '', 'n/a', businessCodeKey)))\nGROUP BY callId, businessCode\nORDER BY txns DESC\nLIMIT 50",
+          "refId": "A"
+        }
+      ],
+      "title": "Top call/business groups by volume",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "description": "Quality-focused drill-down table for the selected swarm.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 20
+      },
+      "id": 10,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true
+      },
+      "pluginVersion": "11.6.0",
+      "targets": [
+        {
+          "editorType": "sql",
+          "format": 2,
+          "queryType": "sql",
+          "rawSql": "SELECT\n  if(callIdKey = '', 'unknown', callIdKey) AS callId,\n  if(businessCodeKey = '', 'n/a', businessCodeKey) AS businessCode,\n  count() AS txns,\n  round((1 - avg(businessSuccess)) * 100, 2) AS business_fail_pct,\n  round((1 - avg(processorSuccess)) * 100, 2) AS processor_fail_pct,\n  round(quantileTDigest(0.95)(processorDurationMs), 1) AS p95_rtt_ms,\n  max(processorDurationMs) AS max_rtt_ms\nFROM ph_tx_outcome_v2\nPREWHERE swarmId = '${swarm}' AND $__timeFilter(eventTime)\nWHERE ('${callId:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${callId:csv}'), callIdKey))\n  AND ('${businessCode:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${businessCode:csv}'), if(businessCodeKey = '', 'n/a', businessCodeKey)))\nGROUP BY callId, businessCode\nHAVING txns >= 20\nORDER BY business_fail_pct DESC, processor_fail_pct DESC, p95_rtt_ms DESC\nLIMIT 50",
+          "refId": "A"
+        }
+      ],
+      "title": "Worst call/business groups by quality",
+      "type": "table"
+    }
+  ],
+  "refresh": "1m",
+  "schemaVersion": 39,
+  "tags": [
+    "pockethive",
+    "clickhouse",
+    "tx-outcome",
+    "client-rtt",
+    "long-term"
+  ],
+  "templating": {
+    "list": [
+      {
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "clickhouse"
+        },
+        "hide": 0,
+        "options": [],
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query",
+        "current": {
+          "selected": false,
+          "text": "Select swarm",
+          "value": ""
+        },
+        "definition": "SELECT swarmId\nFROM (\n  SELECT swarmId, max(eventTime) AS lastSeen\n  FROM ph_tx_outcome_v2\n  WHERE $__timeFilter(eventTime)\n  GROUP BY swarmId\n  ORDER BY lastSeen DESC\n  LIMIT 250\n)\nORDER BY swarmId",
+        "includeAll": false,
+        "label": "Swarm",
+        "multi": false,
+        "name": "swarm",
+        "query": "SELECT swarmId\nFROM (\n  SELECT swarmId, max(eventTime) AS lastSeen\n  FROM ph_tx_outcome_v2\n  WHERE $__timeFilter(eventTime)\n  GROUP BY swarmId\n  ORDER BY lastSeen DESC\n  LIMIT 250\n)\nORDER BY swarmId",
+        "refresh": 1
+      },
+      {
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "clickhouse"
+        },
+        "hide": 0,
+        "options": [],
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query",
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "definition": "SELECT callIdKey\nFROM (\n  SELECT callIdKey, count() AS txns\n  FROM ph_tx_outcome_v2\n  PREWHERE swarmId = '${swarm}' AND $__timeFilter(eventTime)\n  WHERE callIdKey != ''\n  GROUP BY callIdKey\n  ORDER BY txns DESC\n  LIMIT 250\n)\nORDER BY callIdKey",
+        "includeAll": true,
+        "label": "Call ID",
+        "multi": true,
+        "name": "callId",
+        "query": "SELECT callIdKey\nFROM (\n  SELECT callIdKey, count() AS txns\n  FROM ph_tx_outcome_v2\n  PREWHERE swarmId = '${swarm}' AND $__timeFilter(eventTime)\n  WHERE callIdKey != ''\n  GROUP BY callIdKey\n  ORDER BY txns DESC\n  LIMIT 250\n)\nORDER BY callIdKey",
+        "refresh": 2
+      },
+      {
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "clickhouse"
+        },
+        "hide": 0,
+        "options": [],
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query",
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "definition": "SELECT businessCodeLabel\nFROM (\n  SELECT if(businessCodeKey = '', 'n/a', businessCodeKey) AS businessCodeLabel, count() AS txns\n  FROM ph_tx_outcome_v2\n  PREWHERE swarmId = '${swarm}' AND $__timeFilter(eventTime)\n  GROUP BY businessCodeLabel\n  ORDER BY txns DESC\n  LIMIT 250\n)\nORDER BY businessCodeLabel",
+        "includeAll": true,
+        "label": "Business Code",
+        "multi": true,
+        "name": "businessCode",
+        "query": "SELECT businessCodeLabel\nFROM (\n  SELECT if(businessCodeKey = '', 'n/a', businessCodeKey) AS businessCodeLabel, count() AS txns\n  FROM ph_tx_outcome_v2\n  PREWHERE swarmId = '${swarm}' AND $__timeFilter(eventTime)\n  GROUP BY businessCodeLabel\n  ORDER BY txns DESC\n  LIMIT 250\n)\nORDER BY businessCodeLabel",
+        "refresh": 2
+      }
+    ]
+  },
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "Tx RTT Long-Term (ClickHouse v2)",
+  "uid": "ph-tx-rtt-long-term-ch-v2",
+  "version": 1,
+  "weekStart": ""
+}
