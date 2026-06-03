@@ -90,6 +90,14 @@ artifacts:
       source: clickhouse/init
       target: artifacts/pockethive-runtime/config/clickhouse/init
       mode: replace
+    - name: runtime-clickhouse-entrypoint
+      source: clickhouse/clickhouse-entrypoint.sh
+      target: artifacts/pockethive-runtime/config/clickhouse/clickhouse-entrypoint.sh
+      mode: replace
+    - name: runtime-clickhouse-tx-outcome-migration
+      source: clickhouse/migrate-tx-outcome-v1-to-v2.sh
+      target: artifacts/pockethive-runtime/config/clickhouse/migrate-tx-outcome-v1-to-v2.sh
+      mode: replace
     - name: runtime-scenarios
       source: scenarios
       target: artifacts/pockethive-runtime/scenarios
