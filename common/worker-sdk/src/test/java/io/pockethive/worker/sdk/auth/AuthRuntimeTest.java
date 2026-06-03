@@ -61,6 +61,63 @@ class AuthRuntimeTest {
     }
 
     @Test
+    void resolvesSutContextInAuthProfileTemplates() throws Exception {
+        Path templates = profiles("""
+            profiles:
+              "api:sut":
+                type: STATIC_TOKEN
+                storage:
+                  mode: NONE
+                token: "{{ sut.endpoints['default'].baseUrl }}/token"
+            """);
+        AuthRuntime runtime = AuthRuntime.forTemplates(
+            templates.toString(),
+            List.of(new AuthRef("api:sut", AuthApplyAs.HTTP_AUTHORIZATION_BEARER, null, null, null)),
+            Map.of(),
+            Map.of(
+                "id", "wiremock-local",
+                "endpoints", Map.of(
+                    "default", Map.of("baseUrl", "http://wiremock:8080")
+                )
+            ),
+            new TestContext(),
+            new PebbleTemplateRenderer(),
+            new RedisSequenceProperties());
+
+        AuthRuntime.MutableHttpRequest request = new AuthRuntime.MutableHttpRequest("GET", "/accounts", Map.of(), "");
+        runtime.applyHttp(
+            new AuthRef("api:sut", AuthApplyAs.HTTP_AUTHORIZATION_BEARER, null, null, null),
+            request,
+            null,
+            new TestContext());
+
+        assertThat(request.headers()).containsEntry("Authorization", "Bearer http://wiremock:8080/token");
+    }
+
+    @Test
+    void rejectsSutReferencesWhenNoSutContextIsProvided() throws Exception {
+        Path templates = profiles("""
+            profiles:
+              "api:sut":
+                type: STATIC_TOKEN
+                storage:
+                  mode: NONE
+                token: "{{ sut.endpoints['default'].baseUrl }}/token"
+            """);
+
+        assertThatThrownBy(() -> AuthRuntime.forTemplates(
+            templates.toString(),
+            List.of(new AuthRef("api:sut", AuthApplyAs.HTTP_AUTHORIZATION_BEARER, null, null, null)),
+            Map.of(),
+            Map.of(),
+            new TestContext(),
+            new PebbleTemplateRenderer(),
+            new RedisSequenceProperties()))
+            .isInstanceOf(AuthFailureException.class)
+            .hasMessageContaining("references sut but no SUT context was provided");
+    }
+
+    @Test
     void rejectsDuplicateProfileIdsStructurally() throws Exception {
         Path scenario = Files.createTempDirectory("auth-profile-duplicate");
         Path templates = Files.createDirectories(scenario.resolve("templates"));

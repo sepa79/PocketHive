@@ -157,10 +157,15 @@ async function runHttpResourceSmoke() {
       const resources = await client.listResources();
       const widget = resources.resources.find(resource => resource.uri === "ui://pockethive/evidence-summary-v1.html");
       if (!widget) throw new Error("Evidence widget resource is not listed");
+      const workflowWidget = resources.resources.find(resource => resource.uri === "ui://pockethive/workflow-evidence-v1.html");
+      if (!workflowWidget) throw new Error("Workflow evidence widget resource is not listed");
       const resource = await client.readResource({ uri: widget.uri });
       const mimeType = resource.contents?.[0]?.mimeType;
       if (mimeType !== "text/html;profile=mcp-app") throw new Error(`Unexpected widget MIME type: ${mimeType}`);
-      log("HTTP/App resource smoke", widget.uri);
+      const workflowResource = await client.readResource({ uri: workflowWidget.uri });
+      const workflowMimeType = workflowResource.contents?.[0]?.mimeType;
+      if (workflowMimeType !== "text/html;profile=mcp-app") throw new Error(`Unexpected workflow widget MIME type: ${workflowMimeType}`);
+      log("HTTP/App resource smoke", `${widget.uri} + ${workflowWidget.uri}`);
     } finally {
       await client.close().catch(() => {});
     }
@@ -176,22 +181,22 @@ async function runOfflinePoc() {
   console.log(`Base URL:     ${BASE_URL}`);
 
   await withStdioClient(async (client) => {
-    const context = await call(client, "context.get");
+    const context = await call(client, "context_get");
     log("MCP context", context.bundlesRoot);
 
-    const start = await call(client, "wizard.start", wizardInput);
+    const start = await call(client, "wizard_start", wizardInput);
     if (!start.ready) throw new Error(`Wizard should be ready, missing: ${start.missing.join(", ")}`);
-    log("wizard.start", start.sessionId);
+    log("wizard_start", start.sessionId);
 
-    const summary = await call(client, "wizard.summary", { sessionId: start.sessionId });
+    const summary = await call(client, "wizard_summary", { sessionId: start.sessionId });
     if (!summary.ready) throw new Error("Wizard summary is not ready");
-    log("wizard.summary", summary.scenario.pattern);
+    log("wizard_summary", summary.scenario.pattern);
 
-    const complete = await call(client, "wizard.complete", { sessionId: start.sessionId });
+    const complete = await call(client, "wizard_complete", { sessionId: start.sessionId });
     if (!complete.completed || !complete.structural?.ok) {
       throw new Error(`Wizard completion failed: ${JSON.stringify(complete, null, 2)}`);
     }
-    log("wizard.complete", complete.generated.path);
+    log("wizard_complete", complete.generated.path);
 
     const scenarioPath = resolve(BUNDLES_ROOT, BUNDLE_ID, "scenario.yaml");
     const templatePath = resolve(BUNDLES_ROOT, BUNDLE_ID, "templates", "http", "default", "onboarding.yaml");
@@ -204,50 +209,53 @@ async function runOfflinePoc() {
     }
     log("bundle files", "scenario.yaml + templates/http/default/onboarding.yaml + docs/mock artifacts");
 
-    const check = await call(client, "bundle.check", { bundle: BUNDLE_ID });
-    if (!check.ok) throw new Error(`bundle.check failed: ${JSON.stringify(check.errors, null, 2)}`);
-    log("bundle.check", "ok");
+    const check = await call(client, "bundle_check", { bundle: BUNDLE_ID });
+    if (!check.ok) throw new Error(`bundle_check failed: ${JSON.stringify(check.errors, null, 2)}`);
+    log("bundle_check", "ok");
 
     const resources = await client.listResources();
     const widget = resources.resources.find(resource => resource.uri === "ui://pockethive/evidence-summary-v1.html");
     if (!widget) throw new Error("Evidence widget resource is not listed in stdio mode");
+    const workflowWidget = resources.resources.find(resource => resource.uri === "ui://pockethive/workflow-evidence-v1.html");
+    if (!workflowWidget) throw new Error("Workflow evidence widget resource is not listed in stdio mode");
     log("widget resource listed", widget.uri);
+    log("workflow widget resource listed", workflowWidget.uri);
 
     const tools = await client.listTools();
     const toolNames = new Set(tools.tools.map(tool => tool.name));
-    for (const requiredTool of ["component.config-preview", "component.config-update"]) {
+    for (const requiredTool of ["component_config_preview", "component_config_update"]) {
       if (!toolNames.has(requiredTool)) throw new Error(`${requiredTool} is not listed`);
     }
-    log("real-time control tools listed", "component.config-preview + component.config-update");
+    log("real-time control tools listed", "component_config_preview + component_config_update");
 
     if (LIVE_MODE) {
-      const health = await call(client, "health.check");
-      log("health.check", JSON.stringify(health));
+      const health = await call(client, "health_check");
+      log("health_check", JSON.stringify(health));
 
-      await call(client, "scenario.deploy", { bundle: BUNDLE_ID });
-      log("scenario.deploy", BUNDLE_ID);
+      await call(client, "scenario_deploy", { bundle: BUNDLE_ID });
+      log("scenario_deploy", BUNDLE_ID);
 
       const swarmId = process.env.PH_POC_SWARM_ID || `${BUNDLE_ID}-swarm`;
-      await call(client, "swarm.create", {
+      await call(client, "swarm_create", {
         swarmId,
         templateId: BUNDLE_ID,
         sutId: "wiremock-local",
         variablesProfileId: "default",
       });
-      log("swarm.create", swarmId);
+      log("swarm_create", swarmId);
 
-      await call(client, "swarm.wait-ready", { swarmId, timeoutSec: Number(process.env.PH_POC_READY_TIMEOUT_SEC || 45) });
-      log("swarm.wait-ready", swarmId);
+      await call(client, "swarm_wait_ready", { swarmId, timeoutSec: Number(process.env.PH_POC_READY_TIMEOUT_SEC || 45) });
+      log("swarm_wait_ready", swarmId);
 
-      await call(client, "swarm.start", { swarmId });
-      log("swarm.start", swarmId);
+      await call(client, "swarm_start", { swarmId });
+      log("swarm_start", swarmId);
 
-      const status = await call(client, "swarm.get", { swarmId });
+      const status = await call(client, "swarm_get", { swarmId });
       const workers = status.envelope?.data?.context?.workers || status.context?.workers || [];
       const generator = workers.find(worker => worker.role === "generator");
       if (!generator?.instance) throw new Error("Could not locate generator instance for config update proof");
       const ratePatch = { inputs: { scheduler: { ratePerSec: 1 } } };
-      const preview = await retryStep("component.config-preview", () => call(client, "component.config-preview", {
+      const preview = await retryStep("component_config_preview", () => call(client, "component_config_preview", {
           swarmId,
           role: "generator",
           instanceId: generator.instance,
@@ -255,13 +263,13 @@ async function runOfflinePoc() {
           includeMergedConfig: true,
         }),
       );
-      if (preview.sideEffect !== "no-config-write") throw new Error("component.config-preview had unexpected side effect marker");
+      if (preview.sideEffect !== "no-config-write") throw new Error("component_config_preview had unexpected side effect marker");
       if (preview.mergedConfig?.inputs?.scheduler?.ratePerSec !== 1) {
-        throw new Error(`component.config-preview did not merge rate patch: ${JSON.stringify(preview.mergedConfig)}`);
+        throw new Error(`component_config_preview did not merge rate patch: ${JSON.stringify(preview.mergedConfig)}`);
       }
-      log("component.config-preview", generator.instance);
+      log("component_config_preview", generator.instance);
 
-      const configUpdate = await call(client, "component.config-update", {
+      const configUpdate = await call(client, "component_config_update", {
         swarmId,
         role: "generator",
         instanceId: generator.instance,
@@ -269,12 +277,12 @@ async function runOfflinePoc() {
         notes: "PocketHive MCP live POC rate update proof",
       });
       if (!configUpdate.accepted || !configUpdate.watch) {
-        throw new Error(`component.config-update was not accepted: ${JSON.stringify(configUpdate)}`);
+        throw new Error(`component_config_update was not accepted: ${JSON.stringify(configUpdate)}`);
       }
-      log("component.config-update", generator.instance);
+      log("component_config_update", generator.instance);
 
-      const evidence = await call(client, "evidence.summary", { swarmId, includeTapSample: false });
-      log("evidence.summary", `${evidence.sources.filter(source => source.status === "ok").length}/${evidence.sources.length} sources available`);
+      const evidence = await call(client, "evidence_summary", { swarmId, includeTapSample: false });
+      log("evidence_summary", `${evidence.sources.filter(source => source.status === "ok").length}/${evidence.sources.length} sources available`);
     } else {
       console.log("ℹ Live stack steps skipped. Set PH_POC_LIVE=1 to deploy, create/start a swarm, and gather evidence.");
     }

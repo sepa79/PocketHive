@@ -9,4 +9,7 @@
 
 ### Evidence
 
-- Pending first live run.
+- MCP proof run `mcp-six-auth-1778867623757` passed.
+- Evidence file: `evidence/mcp-six-auth-1778867623757.json`.
+- Result: 1 OAuth token request, 6 authenticated business requests, 0 recent unmatched WireMock requests.
+- Cleanup: proof swarm `http-sequence-six-auth-flow-1778867623757` was stopped after evidence collection.

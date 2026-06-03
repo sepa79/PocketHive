@@ -41,17 +41,19 @@ runtime examples, and team-owned test content on clean lifecycle boundaries.
 | Step | Read | Purpose |
 |---|---|---|
 | 1 | `README.md` | Orientation, scope, implementation order |
-| 2 | `AGENT-RULES.md` | Non-negotiable rules for implementation agents |
-| 3 | `ARCHITECTURE.md` | System model and transport model |
-| 4 | `MCP-SERVER.md` | MCP server migration and tool surface |
-| 5 | `MCP-IMPROVEMENT-SPEC.md` | Authoring, validation, mocks, datasets, evidence |
-| 6 | `TOOL-CONTRACTS.md` | Tool contract format and current tool ownership |
-| 7 | `EVIDENCE.md` | Runtime evidence taxonomy |
-| 8 | `DEVELOPER-SETUP.md` | Local/team setup for MCP, VS Code, HiveMind, GitHub MCP |
-| 9 | `POC-RUNBOOK.md` | Start-to-finish proof path for the current POC |
-| 10 | `BUNDLE-WIZARD.md` | Novice scenario creation flow |
-| 11 | `VSCODE-PLUGIN.md` / `INTELLIJ-PLUGIN.md` | IDE-specific implementation |
-| 12 | `BUILD-READY-GAPS.md` | Decisions that unblock implementation |
+| 2 | `../../../tools/pockethive-mcp/README.md` | Developer quickstart, commands, strict proof, live teardown |
+| 3 | `AGENT-RULES.md` | Non-negotiable rules for implementation agents |
+| 4 | `ARCHITECTURE.md` | System model and transport model |
+| 5 | `MCP-SERVER.md` | MCP server migration and tool surface |
+| 6 | `MCP-IMPROVEMENT-SPEC.md` | Authoring, validation, mocks, datasets, evidence |
+| 7 | `TOOL-CONTRACTS.md` | Tool contract format and current tool ownership |
+| 8 | `EVIDENCE.md` | Runtime evidence taxonomy |
+| 9 | `DEVELOPER-SETUP.md` | Local/team setup for MCP, VS Code, HiveMind, GitHub MCP |
+| 10 | `AI-ASSISTANT-SETUP.md` | Amazon Q, GitHub Copilot, Codex, and GPT-5.5 setup |
+| 11 | `POC-RUNBOOK.md` | Start-to-finish proof path for the current POC |
+| 12 | `BUNDLE-WIZARD.md` | Novice scenario creation flow |
+| 13 | `VSCODE-PLUGIN.md` / `INTELLIJ-PLUGIN.md` | IDE-specific implementation |
+| 14 | `BUILD-READY-GAPS.md` | Decisions that unblock implementation |
 
 `MCP-APPS.md` has a narrow Phase 1.5 spike for a read-only evidence widget.
 The broader MCP Apps dashboard/form platform remains future-facing until client

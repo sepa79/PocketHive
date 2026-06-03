@@ -173,6 +173,50 @@ class RequestBuilderWorkerImplTest {
   }
 
   @Test
+  void appliesHttpAuthProfileUsingSutContext() throws Exception {
+    Path dir = Files.createTempDirectory("templates-http-auth-sut");
+    Files.createDirectories(dir.resolve("default"));
+    Files.writeString(dir.resolve("authProfiles.yaml"), """
+        profiles:
+          bearer:
+            type: STATIC_TOKEN
+            storage:
+              mode: NONE
+            token: "{{ sut.endpoints['default'].baseUrl }}/oauth/token"
+        """);
+    Files.writeString(dir.resolve("default/header-call.yaml"), """
+        serviceId: default
+        callId: header
+        protocol: HTTP
+        method: GET
+        pathTemplate: /header
+        bodyTemplate: ""
+        headersTemplate: {}
+        authRef:
+          profileId: bearer
+          applyAs: HTTP_AUTHORIZATION_BEARER
+        """);
+
+    RequestBuilderWorkerImpl worker =
+        new RequestBuilderWorkerImpl(properties, templateRenderer, new TemplateLoader(), null);
+    RequestBuilderWorkerConfig config = new RequestBuilderWorkerConfig(
+        dir.toString(),
+        "default",
+        true,
+        Map.of(),
+        Map.of("authProfile", Map.of("sut", Map.of(
+            "id", "wiremock-local",
+            "endpoints", Map.of("default", Map.of("baseUrl", "http://wiremock:8080"))))));
+    WorkerContext context = new TestWorkerContext(config);
+
+    WorkItem seed = WorkItem.text(SEED_INFO, "").header("x-ph-call-id", "header").build();
+    JsonNode envelope = new ObjectMapper().readTree(worker.onMessage(seed, context).asString());
+
+    assertThat(envelope.get("request").get("headers").get("Authorization").asText())
+        .isEqualTo("Bearer http://wiremock:8080/oauth/token");
+  }
+
+  @Test
   void authFailuresThrowOnceThenDropRepeatedFailures() throws Exception {
     Path dir = Files.createTempDirectory("templates-http-auth-failure");
     Files.createDirectories(dir.resolve("default"));

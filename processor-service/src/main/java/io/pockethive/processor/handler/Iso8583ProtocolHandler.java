@@ -96,7 +96,7 @@ public class Iso8583ProtocolHandler implements ProtocolHandler {
       payloadBytes = decodePayload(request);
       if (request.authApplications() != null && !request.authApplications().isEmpty()) {
         AuthRuntime authRuntime = AuthRuntime.forApplications(
-            request.authApplications(), Map.of(), context, templateRenderer, redisProperties);
+            request.authApplications(), Map.of(), config.authProfileSutContext(), context, templateRenderer, redisProperties);
         String payloadHex = HexFormat.of().withUpperCase().formatHex(payloadBytes);
         for (AuthRef authRef : request.authApplications()) {
           if (authRef.applyAs() == AuthApplyAs.MTLS_CLIENT_CERT) {

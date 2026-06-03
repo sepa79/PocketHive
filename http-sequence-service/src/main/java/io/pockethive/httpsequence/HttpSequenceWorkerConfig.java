@@ -11,8 +11,19 @@ public record HttpSequenceWorkerConfig(
     int threadCount,
     List<Step> steps,
     DebugCapture debugCapture,
-    Map<String, Object> vars
+    Map<String, Object> vars,
+    Map<String, Object> privateConfig
 ) implements MaxInFlightConfig {
+
+  public HttpSequenceWorkerConfig(String baseUrl,
+                                  String templateRoot,
+                                  String serviceId,
+                                  int threadCount,
+                                  List<Step> steps,
+                                  DebugCapture debugCapture,
+                                  Map<String, Object> vars) {
+    this(baseUrl, templateRoot, serviceId, threadCount, steps, debugCapture, vars, Map.of());
+  }
 
   public HttpSequenceWorkerConfig {
     baseUrl = normalise(baseUrl);
@@ -22,6 +33,20 @@ public record HttpSequenceWorkerConfig(
     steps = steps == null ? List.of() : List.copyOf(steps);
     debugCapture = debugCapture == null ? DebugCapture.defaults() : debugCapture;
     vars = vars == null ? Map.of() : Map.copyOf(vars);
+    privateConfig = privateConfig == null ? Map.of() : Map.copyOf(privateConfig);
+  }
+
+  @SuppressWarnings("unchecked")
+  public Map<String, Object> authProfileSutContext() {
+    Object authProfile = privateConfig.get("authProfile");
+    if (!(authProfile instanceof Map<?, ?> rawAuthProfile)) {
+      return Map.of();
+    }
+    Object sut = rawAuthProfile.get("sut");
+    if (sut instanceof Map<?, ?> rawSut) {
+      return (Map<String, Object>) rawSut;
+    }
+    return Map.of();
   }
 
   @Override

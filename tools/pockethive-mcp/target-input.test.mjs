@@ -8,14 +8,14 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const SERVER = resolve(__dirname, "server.mjs");
+const START = resolve(__dirname, "start.cjs");
 const UNUSED_BASE_URL = "http://127.0.0.1:9";
 const BUNDLES_ROOT = tmpdir();
 
 async function withClient(fn) {
   const transport = new StdioClientTransport({
     command: "node",
-    args: [SERVER],
+    args: [START],
     env: {
       ...process.env,
       POCKETHIVE_BASE_URL: UNUSED_BASE_URL,
@@ -53,7 +53,7 @@ async function callWithoutInputValidationError(client, name, args) {
 test("bundle target fields accept VS Code tree item objects", async () => {
   await withClient(async (client) => {
     const bundleName = `__missing_bundle_${Date.now()}__`;
-    const result = await callWithoutInputValidationError(client, "bundle.check", {
+    const result = await callWithoutInputValidationError(client, "bundle_check", {
       bundle: {
         bundle: { name: bundleName },
         label: { label: "Wrong fallback label" },
@@ -71,7 +71,7 @@ test("bundle target fields accept VS Code tree item objects", async () => {
 
 test("swarm target fields accept VS Code tree item objects before runtime calls", async () => {
   await withClient(async (client) => {
-    const result = await callWithoutInputValidationError(client, "swarm.start", {
+    const result = await callWithoutInputValidationError(client, "swarm_start", {
       swarmId: {
         swarm: { id: "__missing_swarm_object_target__" },
         label: { label: "Wrong fallback label" },
@@ -87,7 +87,7 @@ test("swarm target fields accept VS Code tree item objects before runtime calls"
 
 test("scenario target fields accept VS Code tree item objects before runtime calls", async () => {
   await withClient(async (client) => {
-    const result = await callWithoutInputValidationError(client, "scenario.get", {
+    const result = await callWithoutInputValidationError(client, "scenario_get", {
       scenarioId: {
         scenario: { id: "__missing_scenario_object_target__" },
         label: { label: "Wrong fallback label" },
@@ -103,7 +103,7 @@ test("scenario target fields accept VS Code tree item objects before runtime cal
 
 test("optional swarm filters accept VS Code tree item objects", async () => {
   await withClient(async (client) => {
-    const result = await callWithoutInputValidationError(client, "debug.queues", {
+    const result = await callWithoutInputValidationError(client, "debug_queues", {
       swarmId: {
         swarm: { id: "__missing_swarm_object_target__" },
         label: { label: "Wrong fallback label" },

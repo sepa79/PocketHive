@@ -5,22 +5,22 @@
 
 ## Overview
 
-The MCP server currently lives in the bundles repo at
-`tools/mcp-server/server.mjs`. This spec covers:
+The MCP server lives in the PocketHive repo at
+`tools/pockethive-mcp/server.mjs`. This spec covers:
 
-1. Migration into the PocketHive repo at `tools/pockethive-mcp/`
+1. Maintaining the migrated server at `tools/pockethive-mcp/`
 2. Decoupling from the bundles repo (BUNDLES_ROOT becomes configurable)
 3. New tools for context switching and environment management
 4. Publishing as `@pockethive/mcp-server` npm package
 5. Adding HTTP/SSE transport alongside existing stdio
 6. Removing shell/devops/log-scraping responsibilities from the MCP surface
 7. Removing general GitHub issue tools from the PocketHive MCP surface
+8. Exposing deterministic workflow state/configuration without embedding an LLM
 
 ## Source location
 
 ```
-Current:  <bundles-repo>/tools/mcp-server/server.mjs
-Target:   PocketHive/tools/pockethive-mcp/server.mjs
+Current:  PocketHive/tools/pockethive-mcp/server.mjs
 ```
 
 ## What changes
@@ -95,7 +95,7 @@ if (process.env.PH_MCP_HTTP_PORT) {
 ```json
 {
   "name": "@pockethive/mcp-server",
-  "version": "0.15.15",
+  "version": "0.15.21",
   "description": "PocketHive MCP server — full lifecycle tools for scenario authoring and swarm management",
   "bin": { "pockethive-mcp": "./server.mjs" },
   "files": ["server.mjs", "start.cjs"],
@@ -107,10 +107,12 @@ if (process.env.PH_MCP_HTTP_PORT) {
 }
 ```
 
-Version tracks PocketHive releases (currently `0.15.15`).
+Version tracks PocketHive releases (currently `0.15.21`).
 
 Phase 1.5 registers the `evidence-summary` MCP App as an inline resource at
-`ui://pockethive/evidence-summary-v1.html`. Broader MCP Apps remain future
+`ui://pockethive/evidence-summary-v1.html`. Phase 2 also registers the
+workflow evidence report resource at
+`ui://pockethive/workflow-evidence-v1.html`. Broader MCP Apps remain future
 platform work.
 
 ## Tool Surface
@@ -136,6 +138,106 @@ implemented or changed.
 - `wizard.answer` — records one answer and returns the next required question
 - `wizard.summary` — previews the generated plan; no file writes
 - `wizard.complete` — creates a new bundle and runs `bundle.check`
+
+### Agent-managed workflows
+- `workflow.start/source.read/update/status/preview/generate/validate/deploy/verify/patch/report`
+  provide the deterministic control surface for external-agent test conversion
+  workflows. The MCP owns state, gates, generated artifacts, official API calls,
+  and evidence. The external agent owns source interpretation and debug/fix
+  choices.
+- `workflow.result` is the compact agent-facing handoff shape for the same
+  workflow: verdict, phase, diagnosis, next action, proof summary, and refs.
+  `workflow.status`, `workflow.report`, `workflow.evidence.render`, and
+  workflow traces include the same `agent` object so agents can stay on one
+  interpretation path and drill into full evidence only when needed.
+- Runtime verification has two explicit proof modes. `accept-partial` is for
+  fast debug loops and accepts partial reports while preserving gaps. Production
+  and live acceptance use `proofMode=strict` with `includeTapSample=true`; this
+  fails missing/partial production proof for queue drain, request handling,
+  flow order, configured auth, mutating payload body assertions, and runtime
+  payload trace.
+- `workflow.config.get`, `workflow.config.validate`, and `workflow.list` are
+  read-only plugin-facing tools for configuration and status display. Plugins
+  may render remaining `nextQuestions`, but must not answer them or call
+  mutating workflow tools.
+
+Workflow registration lives in `tools/pockethive-mcp/workflow-tools.mjs`; the
+main `server.mjs` injects shared PocketHive helpers into that module. This keeps
+the workflow surface maintainable without creating duplicate bundle-generation
+or validation logic.
+
+#### Agent fast path
+
+Agents should use `workflow_result` as the first read after every workflow
+mutation. The fast loop is:
+
+```text
+workflow_start
+workflow_update
+workflow_result
+workflow_generate
+workflow_validate
+workflow_deploy_start
+workflow_deploy_resume
+workflow_verify_start
+workflow_verify_resume
+workflow_report
+workflow_evidence_render
+```
+
+When `workflow_result.nextAction.tool` is present, call that tool next unless
+the user changes the goal. Use `workflow_status` only when the compact result
+points to missing fields, role checks, or evidence details that need inspection.
+Use `workflow_evidence_render` for human handoff, not as the agent's primary
+decision surface.
+
+The MCP App evidence widgets include a local light/dark mode toggle for human
+readability. The toggle only changes widget presentation and does not mutate
+workflow state, answer questions, call PocketHive APIs, or change the canonical
+JSON result.
+
+For deployment and runtime proof, `workflow_result` prefers resumable lifecycle
+tools. `workflow_deploy_status` and `workflow_verify_status` are read-only;
+`workflow_deploy_resume` and `workflow_verify_resume` advance one bounded step
+and return `nextPollAfterMs` when another poll is needed. Agents should use that
+value as the retry interval instead of blocking a tool call with thread sleeps.
+
+If Scenario Manager dry-run or deploy returns PocketHive API auth failures, the
+workflow records `WORKFLOW_ENV_AUTH_FAILED`, preserves local structural proof,
+and points `workflow_result.nextAction.tool` at `env_status`. That is an
+environment/auth remediation path, not a generated-bundle patch path.
+
+Validation proof is split by level. `workflow_result.proof.validation.status`
+shows the latest validation attempt. The nested
+`workflow_result.proof.validation.structural` field shows local bundle
+structure proof, and `workflow_result.proof.validation.scenarioManager` shows
+Scenario Manager dry-run proof. If structural validation passes and Scenario
+Manager validation fails, agents should treat that as a runtime/auth/Scenario
+Manager gap before editing generated bundle files.
+
+Production proof uses:
+
+```json
+{
+  "proofMode": "strict",
+  "includeTapSample": true
+}
+```
+
+With tap samples enabled, `workflow_verify` and `evidence_summary` interpret
+the tap payload as internal step-flow evidence and compare it with both the
+scenario plan and WireMock request journal. Agents should read
+`workflow_result.proof` first, then drill into `evidence.tapFlow` or the full
+report only when a tap-flow gap is reported.
+
+Debug proof may use `proofMode=accept-partial` to keep iteration fast, but the
+result must still surface recorded gaps through `workflow_result.diagnosis`,
+`workflow_result.proof`, and the full evidence report.
+
+For local dev authentication, `POCKETHIVE_AUTH_USERNAME` produces a cached
+bearer token. PocketHive-owned API calls refresh that username-derived token
+once after a `401`. Explicit `POCKETHIVE_AUTH_TOKEN` values are treated as
+caller-owned and are not refreshed by the MCP.
 
 ### Scenario Manager contracts
 - `scenario.contracts.get` — reads Scenario Manager capability/template/scenario
@@ -167,6 +269,12 @@ changed fingerprint.
 ### Swarm lifecycle
 - `swarm.list`, `swarm.get`, `swarm.create`, `swarm.start`
 - `swarm.wait-ready`, `swarm.stop`, `swarm.remove`
+- `workflow_deploy_start`, `workflow_deploy_status`, `workflow_deploy_resume`
+  and `workflow_verify_start`, `workflow_verify_status`,
+  `workflow_verify_resume` for slow machines where scenario
+  startup or runtime settlement may take several minutes. These tools persist a
+  lifecycle operation id and advance in short, repeatable calls instead of
+  relying on one long MCP timeout.
 
 ### Real-time component control
 - `component.config-preview` — reads the current runtime config and returns the
@@ -213,7 +321,10 @@ queue depth, or metrics to prove the component applied the update.
 - `debug.queues`, `debug.tap`, `debug.tap.read`, `debug.tap.close`
 - `debug.journal`, `debug.config-update` compatibility alias
 - `debug.prometheus`
-- `evidence.summary` — read-only aggregate evidence model for one swarm
+- `evidence_summary` — read-only aggregate evidence model for one swarm
+- `workflow_result` — compact read-only agent handoff for one workflow
+- `workflow_evidence_render` — read-only MCP App render tool for workflow
+  evidence, claim matrix, role checks, lifecycle operations, and gaps
 - PocketHive-provided log tools may be added later only if backed by
   PocketHive APIs. Direct Docker logs and direct Loki queries are out of scope.
 
