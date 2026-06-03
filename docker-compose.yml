@@ -171,6 +171,7 @@ services:
 
   clickhouse:
     image: clickhouse/clickhouse-server:24.8
+    entrypoint: ["/bin/bash", "/opt/pockethive/clickhouse-entrypoint.sh"]
     environment:
       CLICKHOUSE_DB: default
       CLICKHOUSE_USER: pockethive
@@ -182,6 +183,8 @@ services:
     volumes:
       - clickhouse-data:/var/lib/clickhouse
       - ./clickhouse/init:/docker-entrypoint-initdb.d:ro
+      - ./clickhouse/clickhouse-entrypoint.sh:/opt/pockethive/clickhouse-entrypoint.sh:ro
+      - ./clickhouse/migrate-tx-outcome-v1-to-v2.sh:/opt/pockethive/migrate-tx-outcome-v1-to-v2.sh:ro
 
   tcp-mock-server:
     image: ${DOCKER_REGISTRY:-}tcp-mock-server:${POCKETHIVE_VERSION:-latest}

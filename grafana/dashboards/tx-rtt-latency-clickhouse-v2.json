@@ -48,7 +48,7 @@
               }
             ]
           },
-          "unit": "ms"
+          "unit": "suffix: ms"
         },
         "overrides": []
       },
@@ -75,7 +75,7 @@
           "editorType": "sql",
           "format": 2,
           "queryType": "sql",
-          "rawSql": "SELECT\n  time,\n  series,\n  value_ms\nFROM (\n  SELECT\n    toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n    concat(swarmId, ' | ', callIdKey, ' | ', businessCodeKey, ' | p50') AS series,\n    quantileTDigest(0.50)(processorDurationMs) AS value_ms\n  FROM ph_tx_outcome_v2\n  WHERE $__timeFilter(eventTime)\n    AND match(swarmId, '${swarm:regex}')\n    AND match(callIdKey, '${callId:regex}')\n    AND match(businessCodeKey, '${businessCode:regex}')\n  GROUP BY time, swarmId, callIdKey, businessCodeKey\n\n  UNION ALL\n\n  SELECT\n    toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n    concat(swarmId, ' | ', callIdKey, ' | ', businessCodeKey, ' | p95') AS series,\n    quantileTDigest(0.95)(processorDurationMs) AS value_ms\n  FROM ph_tx_outcome_v2\n  WHERE $__timeFilter(eventTime)\n    AND match(swarmId, '${swarm:regex}')\n    AND match(callIdKey, '${callId:regex}')\n    AND match(businessCodeKey, '${businessCode:regex}')\n  GROUP BY time, swarmId, callIdKey, businessCodeKey\n\n  UNION ALL\n\n  SELECT\n    toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n    concat(swarmId, ' | ', callIdKey, ' | ', businessCodeKey, ' | p99') AS series,\n    quantileTDigest(0.99)(processorDurationMs) AS value_ms\n  FROM ph_tx_outcome_v2\n  WHERE $__timeFilter(eventTime)\n    AND match(swarmId, '${swarm:regex}')\n    AND match(callIdKey, '${callId:regex}')\n    AND match(businessCodeKey, '${businessCode:regex}')\n  GROUP BY time, swarmId, callIdKey, businessCodeKey\n)\nORDER BY time, series",
+          "rawSql": "SELECT\n  time,\n  series,\n  value_ms\nFROM (\n  SELECT\n    toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n    concat(swarmId, ' | ', if(callIdKey = '', 'unknown', callIdKey), ' | ', if(businessCodeKey = '', 'n/a', businessCodeKey), ' | p50') AS series,\n    quantileTDigest(0.50)(processorDurationMs) AS value_ms\n  FROM ph_tx_outcome_v2\n  WHERE $__timeFilter(eventTime)\n    AND ('${swarm:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${swarm:csv}'), swarmId))\n    AND ('${callId:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${callId:csv}'), callIdKey))\n    AND ('${businessCode:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${businessCode:csv}'), if(businessCodeKey = '', 'n/a', businessCodeKey)))\n  GROUP BY time, swarmId, callIdKey, businessCodeKey\n\n  UNION ALL\n\n  SELECT\n    toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n    concat(swarmId, ' | ', if(callIdKey = '', 'unknown', callIdKey), ' | ', if(businessCodeKey = '', 'n/a', businessCodeKey), ' | p95') AS series,\n    quantileTDigest(0.95)(processorDurationMs) AS value_ms\n  FROM ph_tx_outcome_v2\n  WHERE $__timeFilter(eventTime)\n    AND ('${swarm:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${swarm:csv}'), swarmId))\n    AND ('${callId:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${callId:csv}'), callIdKey))\n    AND ('${businessCode:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${businessCode:csv}'), if(businessCodeKey = '', 'n/a', businessCodeKey)))\n  GROUP BY time, swarmId, callIdKey, businessCodeKey\n\n  UNION ALL\n\n  SELECT\n    toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n    concat(swarmId, ' | ', if(callIdKey = '', 'unknown', callIdKey), ' | ', if(businessCodeKey = '', 'n/a', businessCodeKey), ' | p99') AS series,\n    quantileTDigest(0.99)(processorDurationMs) AS value_ms\n  FROM ph_tx_outcome_v2\n  WHERE $__timeFilter(eventTime)\n    AND ('${swarm:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${swarm:csv}'), swarmId))\n    AND ('${callId:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${callId:csv}'), callIdKey))\n    AND ('${businessCode:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${businessCode:csv}'), if(businessCodeKey = '', 'n/a', businessCodeKey)))\n  GROUP BY time, swarmId, callIdKey, businessCodeKey\n)\nORDER BY time, series",
           "refId": "A"
         }
       ],
@@ -84,6 +84,13 @@
           "id": "prepareTimeSeries",
           "options": {
             "format": "many"
+          }
+        },
+        {
+          "id": "renameByRegex",
+          "options": {
+            "regex": "^(.*)\\svalue_ms$",
+            "renamePattern": "$1"
           }
         }
       ],
@@ -146,7 +153,7 @@
           "editorType": "sql",
           "format": 2,
           "queryType": "sql",
-          "rawSql": "SELECT\n  time,\n  series,\n  pct\nFROM (\n  SELECT\n    toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n    concat(swarmId, ' | ', callIdKey, ' | ', businessCodeKey, ' | >1s') AS series,\n    avg(if(processorDurationMs > 1000, 1, 0)) * 100 AS pct\n  FROM ph_tx_outcome_v2\n  WHERE $__timeFilter(eventTime)\n    AND match(swarmId, '${swarm:regex}')\n    AND match(callIdKey, '${callId:regex}')\n    AND match(businessCodeKey, '${businessCode:regex}')\n  GROUP BY time, swarmId, callIdKey, businessCodeKey\n\n  UNION ALL\n\n  SELECT\n    toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n    concat(swarmId, ' | ', callIdKey, ' | ', businessCodeKey, ' | >2s') AS series,\n    avg(if(processorDurationMs > 2000, 1, 0)) * 100 AS pct\n  FROM ph_tx_outcome_v2\n  WHERE $__timeFilter(eventTime)\n    AND match(swarmId, '${swarm:regex}')\n    AND match(callIdKey, '${callId:regex}')\n    AND match(businessCodeKey, '${businessCode:regex}')\n  GROUP BY time, swarmId, callIdKey, businessCodeKey\n\n  UNION ALL\n\n  SELECT\n    toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n    concat(swarmId, ' | ', callIdKey, ' | ', businessCodeKey, ' | >5s') AS series,\n    avg(if(processorDurationMs > 5000, 1, 0)) * 100 AS pct\n  FROM ph_tx_outcome_v2\n  WHERE $__timeFilter(eventTime)\n    AND match(swarmId, '${swarm:regex}')\n    AND match(callIdKey, '${callId:regex}')\n    AND match(businessCodeKey, '${businessCode:regex}')\n  GROUP BY time, swarmId, callIdKey, businessCodeKey\n)\nORDER BY time, series",
+          "rawSql": "SELECT\n  time,\n  series,\n  pct\nFROM (\n  SELECT\n    toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n    concat(swarmId, ' | ', if(callIdKey = '', 'unknown', callIdKey), ' | ', if(businessCodeKey = '', 'n/a', businessCodeKey), ' | >1s') AS series,\n    avg(if(processorDurationMs > 1000, 1, 0)) * 100 AS pct\n  FROM ph_tx_outcome_v2\n  WHERE $__timeFilter(eventTime)\n    AND ('${swarm:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${swarm:csv}'), swarmId))\n    AND ('${callId:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${callId:csv}'), callIdKey))\n    AND ('${businessCode:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${businessCode:csv}'), if(businessCodeKey = '', 'n/a', businessCodeKey)))\n  GROUP BY time, swarmId, callIdKey, businessCodeKey\n\n  UNION ALL\n\n  SELECT\n    toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n    concat(swarmId, ' | ', if(callIdKey = '', 'unknown', callIdKey), ' | ', if(businessCodeKey = '', 'n/a', businessCodeKey), ' | >2s') AS series,\n    avg(if(processorDurationMs > 2000, 1, 0)) * 100 AS pct\n  FROM ph_tx_outcome_v2\n  WHERE $__timeFilter(eventTime)\n    AND ('${swarm:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${swarm:csv}'), swarmId))\n    AND ('${callId:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${callId:csv}'), callIdKey))\n    AND ('${businessCode:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${businessCode:csv}'), if(businessCodeKey = '', 'n/a', businessCodeKey)))\n  GROUP BY time, swarmId, callIdKey, businessCodeKey\n\n  UNION ALL\n\n  SELECT\n    toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n    concat(swarmId, ' | ', if(callIdKey = '', 'unknown', callIdKey), ' | ', if(businessCodeKey = '', 'n/a', businessCodeKey), ' | >5s') AS series,\n    avg(if(processorDurationMs > 5000, 1, 0)) * 100 AS pct\n  FROM ph_tx_outcome_v2\n  WHERE $__timeFilter(eventTime)\n    AND ('${swarm:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${swarm:csv}'), swarmId))\n    AND ('${callId:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${callId:csv}'), callIdKey))\n    AND ('${businessCode:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${businessCode:csv}'), if(businessCodeKey = '', 'n/a', businessCodeKey)))\n  GROUP BY time, swarmId, callIdKey, businessCodeKey\n)\nORDER BY time, series",
           "refId": "A"
         }
       ],
@@ -155,6 +162,13 @@
           "id": "prepareTimeSeries",
           "options": {
             "format": "many"
+          }
+        },
+        {
+          "id": "renameByRegex",
+          "options": {
+            "regex": "^(.*)\\spct$",
+            "renamePattern": "$1"
           }
         }
       ],
@@ -190,7 +204,7 @@
               }
             ]
           },
-          "unit": "ms"
+          "unit": "suffix: ms"
         },
         "overrides": []
       },
@@ -217,7 +231,7 @@
           "editorType": "sql",
           "format": 2,
           "queryType": "sql",
-          "rawSql": "SELECT\n  toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n  concat(swarmId, ' | ', callIdKey, ' | ', businessCodeKey) AS segment,\n  max(processorDurationMs) AS max_rtt_ms\nFROM ph_tx_outcome_v2\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callIdKey, '${callId:regex}')\n  AND match(businessCodeKey, '${businessCode:regex}')\nGROUP BY time, swarmId, callIdKey, businessCodeKey\nORDER BY time, segment",
+          "rawSql": "SELECT\n  toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n  concat(swarmId, ' | ', if(callIdKey = '', 'unknown', callIdKey), ' | ', if(businessCodeKey = '', 'n/a', businessCodeKey)) AS segment,\n  max(processorDurationMs) AS max_rtt_ms\nFROM ph_tx_outcome_v2\nWHERE $__timeFilter(eventTime)\n  AND ('${swarm:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${swarm:csv}'), swarmId))\n  AND ('${callId:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${callId:csv}'), callIdKey))\n  AND ('${businessCode:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${businessCode:csv}'), if(businessCodeKey = '', 'n/a', businessCodeKey)))\nGROUP BY time, swarmId, callIdKey, businessCodeKey\nORDER BY time, segment",
           "refId": "A"
         }
       ],
@@ -227,6 +241,13 @@
           "id": "prepareTimeSeries",
           "options": {
             "format": "many"
+          }
+        },
+        {
+          "id": "renameByRegex",
+          "options": {
+            "regex": "^(.*)\\smax_rtt_ms$",
+            "renamePattern": "$1"
           }
         }
       ],
@@ -250,7 +271,32 @@
             ]
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^(p95|p99|max)_rtt_ms$"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "suffix: ms"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^(processor|business)_success_pct$"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 8,
@@ -273,7 +319,7 @@
           "editorType": "sql",
           "format": 1,
           "queryType": "sql",
-          "rawSql": "SELECT\n  swarmId,\n  callIdKey AS call_id,\n  businessCodeKey AS business_code,\n  count() AS txns,\n  quantileTDigest(0.95)(processorDurationMs) AS p95_rtt_ms,\n  quantileTDigest(0.99)(processorDurationMs) AS p99_rtt_ms,\n  max(processorDurationMs) AS max_rtt_ms,\n  avg(processorSuccess) * 100 AS processor_success_pct,\n  avg(businessSuccess) * 100 AS business_success_pct\nFROM ph_tx_outcome_v2\nWHERE $__timeFilter(eventTime)\n  AND match(swarmId, '${swarm:regex}')\n  AND match(callIdKey, '${callId:regex}')\n  AND match(businessCodeKey, '${businessCode:regex}')\nGROUP BY swarmId, callIdKey, businessCodeKey\nORDER BY max_rtt_ms DESC\nLIMIT 100",
+          "rawSql": "SELECT\n  swarmId,\n  if(callIdKey = '', 'unknown', callIdKey) AS call_id,\n  if(businessCodeKey = '', 'n/a', businessCodeKey) AS business_code,\n  count() AS txns,\n  quantileTDigest(0.95)(processorDurationMs) AS p95_rtt_ms,\n  quantileTDigest(0.99)(processorDurationMs) AS p99_rtt_ms,\n  max(processorDurationMs) AS max_rtt_ms,\n  avg(processorSuccess) * 100 AS processor_success_pct,\n  avg(businessSuccess) * 100 AS business_success_pct\nFROM ph_tx_outcome_v2\nWHERE $__timeFilter(eventTime)\n  AND ('${swarm:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${swarm:csv}'), swarmId))\n  AND ('${callId:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${callId:csv}'), callIdKey))\n  AND ('${businessCode:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${businessCode:csv}'), if(businessCodeKey = '', 'n/a', businessCodeKey)))\nGROUP BY swarmId, call_id, business_code\nORDER BY max_rtt_ms DESC\nLIMIT 100",
           "refId": "A"
         }
       ],
@@ -312,7 +358,7 @@
         "name": "swarm",
         "options": [],
         "query": "SELECT DISTINCT swarmId FROM ph_tx_outcome_v2 WHERE $__timeFilter(eventTime) ORDER BY swarmId",
-        "refresh": 2,
+        "refresh": 1,
         "regex": "",
         "skipUrlSync": false,
         "sort": 1,
@@ -329,15 +375,15 @@
           "type": "grafana-clickhouse-datasource",
           "uid": "clickhouse"
         },
-        "definition": "SELECT DISTINCT callIdKey FROM ph_tx_outcome_v2 WHERE $__timeFilter(eventTime) AND callId != '' ORDER BY callIdKey LIMIT 500",
+        "definition": "SELECT DISTINCT callIdKey FROM ph_tx_outcome_v2 WHERE $__timeFilter(eventTime) AND callIdKey != '' ORDER BY callIdKey LIMIT 500",
         "hide": 0,
         "includeAll": true,
         "label": "Call ID",
         "multi": true,
         "name": "callId",
         "options": [],
-        "query": "SELECT DISTINCT callIdKey FROM ph_tx_outcome_v2 WHERE $__timeFilter(eventTime) AND callId != '' ORDER BY callIdKey LIMIT 500",
-        "refresh": 2,
+        "query": "SELECT DISTINCT callIdKey FROM ph_tx_outcome_v2 WHERE $__timeFilter(eventTime) AND callIdKey != '' ORDER BY callIdKey LIMIT 500",
+        "refresh": 1,
         "regex": "",
         "skipUrlSync": false,
         "sort": 1,
@@ -354,15 +400,15 @@
           "type": "grafana-clickhouse-datasource",
           "uid": "clickhouse"
         },
-        "definition": "SELECT DISTINCT businessCodeKey FROM ph_tx_outcome_v2 WHERE $__timeFilter(eventTime) ORDER BY 1 LIMIT 500",
+        "definition": "SELECT DISTINCT if(businessCodeKey = '', 'n/a', businessCodeKey) AS businessCodeLabel FROM ph_tx_outcome_v2 WHERE $__timeFilter(eventTime) ORDER BY businessCodeLabel LIMIT 500",
         "hide": 0,
         "includeAll": true,
         "label": "Business Code",
         "multi": true,
         "name": "businessCode",
         "options": [],
-        "query": "SELECT DISTINCT businessCodeKey FROM ph_tx_outcome_v2 WHERE $__timeFilter(eventTime) ORDER BY 1 LIMIT 500",
-        "refresh": 2,
+        "query": "SELECT DISTINCT if(businessCodeKey = '', 'n/a', businessCodeKey) AS businessCodeLabel FROM ph_tx_outcome_v2 WHERE $__timeFilter(eventTime) ORDER BY businessCodeLabel LIMIT 500",
+        "refresh": 1,
         "regex": "",
         "skipUrlSync": false,
         "sort": 1,
@@ -378,6 +424,6 @@
   "timezone": "",
   "title": "Tx RTT Latency & Tail (ClickHouse v2)",
   "uid": "ph-tx-rtt-latency-ch-v2",
-  "version": 1,
+  "version": 4,
   "weekStart": ""
 }

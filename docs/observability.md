@@ -35,7 +35,7 @@ Operators can correlate these numbers with the `queues` topology block to unders
 
 ## Postprocessor ClickHouse tx-outcomes sink
 
-Per-transaction postprocessor observability now relies on the ClickHouse tx-outcomes sink. The postprocessor continues exporting aggregated service metrics to Prometheus, while transaction-level analysis (latency tails, success ratios, error mixes, segment drill-downs) should be done from `ph_tx_outcome_v2`. The legacy `ph_tx_outcome_v1` table remains read-only as the historical reference source for migration and benchmark work.
+Per-transaction postprocessor observability now relies on the ClickHouse tx-outcomes sink. The postprocessor continues exporting aggregated service metrics to Prometheus, while transaction-level analysis (latency tails, success ratios, error mixes, segment drill-downs) should be done from `ph_tx_outcome_v2`. The bundled Grafana transaction dashboards target `ph_tx_outcome_v2` only. The legacy `ph_tx_outcome_v1` table is no longer created for fresh ClickHouse volumes; when it exists in an old volume, treat it as read-only historical source data for migration and benchmark work.
 
 ## Buffer Guard runbook
 

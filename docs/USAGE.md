@@ -68,16 +68,50 @@ Then rebuild/redeploy the stack via `./build-hive.sh` (or `docker compose down &
 - Dashboards:
   - `PocketHive Journal` (`uid=pockethive-journal`) — Postgres-backed timeline + annotations (WARN/ERROR, lifecycle outcomes, journal backpressure).
   - `Pipeline observability` (`uid=pockethive-pipeline`) — Prometheus panels with Journal annotations overlaid.
+  - ClickHouse transaction dashboards use `ph_tx_outcome_v2`.
 
 ## ClickHouse tx_outcome v1 -> v2 migration
 
-For existing ClickHouse volumes, `ph_tx_outcome_v2` is not created retroactively by Docker init scripts. To migrate historical data, use:
+Fresh ClickHouse volumes create only `ph_tx_outcome_v2`. Existing volumes may still contain the legacy `ph_tx_outcome_v1` table.
+
+The local ClickHouse service uses a small entrypoint wrapper that runs the official ClickHouse entrypoint, waits for ClickHouse readiness, and then runs the v1 -> v2 migration inside the same container. On startup it:
+
+- exits successfully when `ph_tx_outcome_v1` does not exist
+- migrates all `ph_tx_outcome_v1` rows into `ph_tx_outcome_v2` when v1 exists and v2 is empty
+- drops `ph_tx_outcome_v1` after a successful full migration
+- fails the ClickHouse container startup instead of appending into a non-empty v2 table, to avoid duplicate historical rows
+
+For manual migration or recovery, use the local wrapper:
+
+```bash
+bash clickhouse/run-tx-outcome-v1-to-v2-migration.sh
+```
+
+For date-bounded migration:
+
+```bash
+bash clickhouse/run-tx-outcome-v1-to-v2-migration.sh --from 2026-02-01 --to 2026-02-22
+```
+
+For a full rebuild of v2 from v1:
+
+```bash
+bash clickhouse/run-tx-outcome-v1-to-v2-migration.sh --truncate-v2
+```
+
+To manually drop v1 after a successful full-table migration:
+
+```bash
+bash clickhouse/run-tx-outcome-v1-to-v2-migration.sh --drop-source-after-migration
+```
+
+The wrapper copies and runs the underlying migration script inside the running `clickhouse` docker compose service:
 
 - script: `clickhouse/migrate-tx-outcome-v1-to-v2.sh`
 - expected runtime: inside the running ClickHouse container
 - required tooling: `bash` and `clickhouse-client` only
 
-Recommended operator flow:
+Manual operator flow:
 
 1. Upload the script into a path already mounted into the ClickHouse container.
 2. Open a shell in the running ClickHouse container.

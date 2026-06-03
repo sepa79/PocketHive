@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.15.22]
+Timestamp: 2026-06-03T11:04:40Z
+
+- MCP server: fix strict MCP client validation by changing `wizard.start.inputSchema.properties.mockEndpoints` from `z.array(z.any())` to `z.array(z.unknown())`, preserving arbitrary endpoint objects while emitting JSON Schema array `items: {}`.
+- MCP tests: add a black-box stdio `tools/list` regression test that fails when any MCP tool input schema emits an array without `items`, and include it in the MCP package test script.
+- ClickHouse observability: retire bundled `ph_tx_outcome_v1` Grafana dashboards and make the transaction dashboard suite target `ph_tx_outcome_v2` only.
+- ClickHouse dashboards: replace the v2 tx-outcomes and RTT dashboards with corrected versions that use v2 materialized keys, avoid regex-based variable filters, handle blank call/business labels consistently, and add richer latency, success, throughput, and drill-down panels.
+- ClickHouse migration: stop creating `ph_tx_outcome_v1` for fresh local volumes, add a ClickHouse entrypoint wrapper that runs the official ClickHouse entrypoint and then migrates legacy v1 data to v2 inside the same container, dropping v1 after a successful full migration.
+- Tooling/docs: add an operator wrapper for manual v1 -> v2 migration recovery and update usage/observability docs to describe v2-only bundled dashboards and legacy v1 migration behavior.
+- Release: bump PocketHive patch version to 0.15.22 for the MCP schema fix and ClickHouse v2 dashboard/migration refresh.
+
 ## [0.15.21]
 Timestamp: 2026-05-26T22:17:55Z
 
@@ -154,7 +165,7 @@ Timestamp: 2026-02-24T00:00:00Z
 Timestamp: 2026-02-16T23:01:40Z
 
 - Postprocessor: remove deprecated `publishAllMetrics` flag from runtime config, status payloads, Scenario Manager capability manifest, and bundled/e2e scenarios.
-- Observability: transaction-level postprocessor analysis is now ClickHouse-first (`ph_tx_outcome_v1`) with dedicated Grafana dashboards for client-side RTT, tail latency, and quality/failure mixes.
+- Observability: transaction-level postprocessor analysis is now ClickHouse-first (`ph_tx_outcome_v2`) with dedicated Grafana dashboards for client-side RTT, tail latency, and quality/failure mixes.
 - Scenario Manager: `updateScenarioFromRaw(...)` persists raw YAML body verbatim (prevents mapper round-trip from rewriting YAML literals such as `body: |`).
 - Grafana/ClickHouse: add tx-outcomes dashboard improvements and new RTT-focused dashboard suite for high-range queries without raw-point overload.
 - **Migration note:** remove `publishAllMetrics` from custom postprocessor scenario configs. Keeping it now causes config binding failure (unknown field) in postprocessor worker config.
