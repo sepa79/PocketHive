@@ -125,6 +125,10 @@ workflow_verify_start -> workflow_verify_status -> workflow_verify_resume
 `nextPollAfterMs`; agents should call resume after that interval instead of
 sleeping inside a long-running tool call.
 
+The read-only MCP App widgets for `evidence_summary` and
+`workflow_evidence_render` include a local light/dark mode toggle. The toggle
+changes only widget presentation; the JSON MCP result remains canonical.
+
 ## Strict Runtime Proof
 
 Production/live verification should use:

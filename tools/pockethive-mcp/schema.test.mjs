@@ -185,5 +185,14 @@ test("MCP App evidence resources are listed and use Apps SDK MIME type", async (
   const workflowResource = await readResource("ui://pockethive/workflow-evidence-v1.html");
   assert.equal(workflowResource.contents?.[0]?.mimeType, "text/html;profile=mcp-app");
   assert.match(workflowResource.contents?.[0]?.text, /Workflow Evidence/);
+  assert.match(workflowResource.contents?.[0]?.text, /id="theme-toggle"/);
+  assert.match(workflowResource.contents?.[0]?.text, /data-theme/);
   assert.equal(workflowResource.contents?.[0]?._meta.ui.prefersBorder, true);
+
+  const summaryResource = await readResource("ui://pockethive/evidence-summary-v1.html");
+  assert.equal(summaryResource.contents?.[0]?.mimeType, "text/html;profile=mcp-app");
+  assert.match(summaryResource.contents?.[0]?.text, /Evidence Report/);
+  assert.match(summaryResource.contents?.[0]?.text, /id="theme-toggle"/);
+  assert.match(summaryResource.contents?.[0]?.text, /data-theme/);
+  assert.equal(summaryResource.contents?.[0]?._meta.ui.prefersBorder, true);
 });

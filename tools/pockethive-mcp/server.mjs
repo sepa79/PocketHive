@@ -3837,7 +3837,7 @@ function evidenceWidgetHtml() {
     ul { margin: 6px 0 0; padding-left: 18px; }
     li { margin: 3px 0; }
     pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; margin: 0; }
-    @media (max-width: 560px) { .row { grid-template-columns: 1fr; } }
+    @media (max-width: 560px) { .top, .row { display: grid; grid-template-columns: 1fr; } .top-actions { justify-content: space-between; } }
   </style>
 </head>
 <body>
@@ -3921,7 +3921,8 @@ function evidenceWidgetHtml() {
     }
 
     if (!data.swarmId) {
-      root.innerHTML = '<div class="panel">No evidence summary was provided.</div>';
+      root.innerHTML = '<div class="top"><h1>Evidence Report</h1><div class="top-actions">' + themeToggleHtml() + '</div></div><div class="panel">No evidence summary was provided.</div>';
+      bindThemeToggle();
     } else {
       root.innerHTML = [
         '<div class="top"><h1>Evidence Report: ' + esc(data.swarmId) + '</h1><div class="top-actions">' + themeToggleHtml() + '<div class="badge">' + esc(report.verdict || lifecycleStatus) + '</div></div></div>',
@@ -3980,7 +3981,7 @@ function workflowEvidenceWidgetHtml() {
     .not-applicable, .not_applicable { color: color-mix(in srgb, CanvasText 70%, transparent); background: color-mix(in srgb, CanvasText 7%, Canvas); }
     ul { margin: 6px 0 0; padding-left: 18px; }
     li { margin: 3px 0; }
-    @media (max-width: 620px) { .top, .row { grid-template-columns: 1fr; display: grid; } }
+    @media (max-width: 620px) { .top, .row { grid-template-columns: 1fr; display: grid; } .top-actions { justify-content: space-between; } }
   </style>
 </head>
 <body>
@@ -4076,7 +4077,8 @@ function workflowEvidenceWidgetHtml() {
     }
 
     if (!data.workflowId) {
-      root.innerHTML = '<div class="panel">No workflow evidence was provided.</div>';
+      root.innerHTML = '<div class="top"><h1>Workflow Evidence</h1><div class="top-actions">' + themeToggleHtml() + '</div></div><div class="panel">No workflow evidence was provided.</div>';
+      bindThemeToggle();
     } else {
       const summary = data.summary || {};
       root.innerHTML = [

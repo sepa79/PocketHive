@@ -501,7 +501,9 @@ checklist includes `tap.flow`; strict runtime proof treats `tap.flow=fail` or
 `tap.flow=unknown` as blocking evidence.
 
 The optional MCP App widget renders this exact output as a report. It must not
-perform its own runtime calls or contain separate evidence logic.
+perform its own runtime calls or contain separate evidence logic. It may offer
+the same local light/dark theme toggle used by workflow evidence widgets; that
+toggle is presentation-only and must not change the MCP result.
 
 ## Agent-Managed Workflow Tools
 
@@ -1376,11 +1378,18 @@ writeScope: none
 resource:
   uri: ui://pockethive/workflow-evidence-v1.html
   mimeType: text/html;profile=mcp-app
+ui:
+  localThemeToggle: light | dark
+  themePersistence: local widget storage only
 metadata:
   _meta.ui.resourceUri: ui://pockethive/workflow-evidence-v1.html
   _meta["openai/outputTemplate"]: ui://pockethive/workflow-evidence-v1.html
 phase: 2
 ```
+
+The App widget may offer local presentation controls such as the light/dark
+theme toggle. These controls must not answer workflow questions, mutate
+workflow state, call PocketHive APIs, or alter the canonical JSON result.
 
 ```yaml
 name: workflow_patch

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+- MCP App evidence widgets now include a local light/dark mode toggle for both
+  swarm evidence and workflow evidence reports.
+
 ### Changed
 - `workflow_result.proof.validation` now separates latest validation,
   structural validation, and Scenario Manager dry-run validation so agents can

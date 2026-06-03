@@ -191,6 +191,11 @@ points to missing fields, role checks, or evidence details that need inspection.
 Use `workflow_evidence_render` for human handoff, not as the agent's primary
 decision surface.
 
+The MCP App evidence widgets include a local light/dark mode toggle for human
+readability. The toggle only changes widget presentation and does not mutate
+workflow state, answer questions, call PocketHive APIs, or change the canonical
+JSON result.
+
 For deployment and runtime proof, `workflow_result` prefers resumable lifecycle
 tools. `workflow_deploy_status` and `workflow_verify_status` are read-only;
 `workflow_deploy_resume` and `workflow_verify_resume` advance one bounded step

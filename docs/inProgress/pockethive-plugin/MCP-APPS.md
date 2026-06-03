@@ -242,6 +242,7 @@ only renders that model.
 - No shell, Docker logs, or direct Loki.
 - All values come from the `evidence_summary` result.
 - JSON output remains canonical for non-App clients.
+- A local light/dark toggle may change only widget presentation.
 - The report must distinguish full proof, partial proof, and not-applicable
   claims instead of implying evidence that was not collected.
 
@@ -293,6 +294,7 @@ renders that model.
 - No question answering from the widget.
 - No shell, Docker logs, or direct service-port checks.
 - All values come from the `workflow_evidence_render` result.
+- A local light/dark toggle may change only widget presentation.
 - `workflow_status` remains the data/status tool; `workflow_evidence_render`
   is the render tool that attaches the MCP App resource.
 
