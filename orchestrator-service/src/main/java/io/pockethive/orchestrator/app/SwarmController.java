@@ -32,6 +32,8 @@ import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
 import io.pockethive.orchestrator.auth.OrchestratorAuthorization;
 import io.pockethive.orchestrator.auth.OrchestratorCurrentUserHolder;
+import io.pockethive.swarm.model.BeeConfigKeys;
+import io.pockethive.swarm.model.BeeRoles;
 import io.pockethive.swarm.model.NetworkMode;
 import io.pockethive.swarm.model.NetworkBinding;
 import io.pockethive.swarm.model.NetworkProfile;
@@ -98,7 +100,7 @@ public class SwarmController {
     private String scenariosRuntimeRootSource;
     private static final String CREATE_LOCK_KEY = "__create-lock__";
     private static final Set<String> AUTH_SUT_CONTEXT_ROLES =
-        Set.of("request-builder", "http-sequence", "processor");
+        Set.of(BeeRoles.REQUEST_BUILDER, BeeRoles.HTTP_SEQUENCE, BeeRoles.PROCESSOR);
     private static final Pattern BASE_URL_TEMPLATE =
         Pattern.compile("\\{\\{\\s*sut\\.endpoints\\['([^']+)'\\]\\.baseUrl\\s*}}(.*)");
 
@@ -815,7 +817,7 @@ public class SwarmController {
             ? new LinkedHashMap<>()
             : new LinkedHashMap<>(config);
         Map<String, Object> privateConfig = new LinkedHashMap<>();
-        Object existingPrivateConfig = result.get("privateConfig");
+        Object existingPrivateConfig = result.get(BeeConfigKeys.PRIVATE_CONFIG);
         if (existingPrivateConfig instanceof Map<?, ?> rawPrivateConfig) {
             rawPrivateConfig.forEach((key, value) -> {
                 if (key != null) {
@@ -823,9 +825,9 @@ public class SwarmController {
                 }
             });
         }
-        Map<String, Object> authProfileContext = Map.of("sut", sutContext(sutEnvironment));
-        privateConfig.put("authProfile", authProfileContext);
-        result.put("privateConfig", Map.copyOf(privateConfig));
+        Map<String, Object> authProfileContext = Map.of(BeeConfigKeys.SUT, sutContext(sutEnvironment));
+        privateConfig.put(BeeConfigKeys.AUTH_PROFILE, authProfileContext);
+        result.put(BeeConfigKeys.PRIVATE_CONFIG, Map.copyOf(privateConfig));
         return Map.copyOf(result);
     }
 

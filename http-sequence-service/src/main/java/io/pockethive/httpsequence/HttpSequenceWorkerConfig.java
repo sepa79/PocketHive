@@ -1,5 +1,6 @@
 package io.pockethive.httpsequence;
 
+import io.pockethive.swarm.model.BeeConfigKeys;
 import io.pockethive.worker.sdk.config.MaxInFlightConfig;
 import java.util.List;
 import java.util.Map;
@@ -38,11 +39,11 @@ public record HttpSequenceWorkerConfig(
 
   @SuppressWarnings("unchecked")
   public Map<String, Object> authProfileSutContext() {
-    Object authProfile = privateConfig.get("authProfile");
+    Object authProfile = privateConfig.get(BeeConfigKeys.AUTH_PROFILE);
     if (!(authProfile instanceof Map<?, ?> rawAuthProfile)) {
       return Map.of();
     }
-    Object sut = rawAuthProfile.get("sut");
+    Object sut = rawAuthProfile.get(BeeConfigKeys.SUT);
     if (sut instanceof Map<?, ?> rawSut) {
       return (Map<String, Object>) rawSut;
     }

@@ -13,6 +13,7 @@ import io.pockethive.controlplane.worker.WorkerConfigCommand;
 import io.pockethive.controlplane.worker.WorkerControlPlane;
 import io.pockethive.controlplane.worker.WorkerSignalListener;
 import io.pockethive.controlplane.worker.WorkerStatusRequest;
+import io.pockethive.swarm.model.BeeConfigKeys;
 import io.pockethive.worker.sdk.api.StatusPublisher;
 import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
@@ -48,8 +49,6 @@ import org.slf4j.LoggerFactory;
 public final class WorkerControlPlaneRuntime {
 
     private static final Logger log = LoggerFactory.getLogger(WorkerControlPlaneRuntime.class);
-    private static final String PRIVATE_CONFIG_KEY = "privateConfig";
-
     private final WorkerControlPlane workerControlPlane;
     private final WorkerStateStore stateStore;
     private final ObjectMapper objectMapper;
@@ -680,11 +679,11 @@ public final class WorkerControlPlaneRuntime {
     }
 
     private static Map<String, Object> publicConfigFrom(Map<String, Object> config) {
-        if (config == null || config.isEmpty() || !config.containsKey(PRIVATE_CONFIG_KEY)) {
+        if (config == null || config.isEmpty() || !config.containsKey(BeeConfigKeys.PRIVATE_CONFIG)) {
             return config == null || config.isEmpty() ? Map.of() : config;
         }
         Map<String, Object> publicConfig = new LinkedHashMap<>(config);
-        publicConfig.remove(PRIVATE_CONFIG_KEY);
+        publicConfig.remove(BeeConfigKeys.PRIVATE_CONFIG);
         return publicConfig.isEmpty() ? Map.of() : Map.copyOf(publicConfig);
     }
 
@@ -692,11 +691,11 @@ public final class WorkerControlPlaneRuntime {
         if (config == null || config.isEmpty()) {
             return Map.of();
         }
-        Object privateConfig = config.get(PRIVATE_CONFIG_KEY);
+        Object privateConfig = config.get(BeeConfigKeys.PRIVATE_CONFIG);
         if (!(privateConfig instanceof Map<?, ?> rawPrivateConfig) || rawPrivateConfig.isEmpty()) {
             return Map.of();
         }
-        return Map.of(PRIVATE_CONFIG_KEY, toStringMap(rawPrivateConfig));
+        return Map.of(BeeConfigKeys.PRIVATE_CONFIG, toStringMap(rawPrivateConfig));
     }
 
     private static Map<String, Object> configForTypedWorker(Map<String, Object> publicConfig, Map<String, Object> privateConfig) {

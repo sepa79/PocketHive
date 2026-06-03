@@ -58,10 +58,23 @@ The Unix helper also supports grouped execution so you do not need to rerun the 
 
 ```bash
 ./start-e2e-tests.sh --list-groups
+./start-e2e-tests.sh --list-targets
+./start-e2e-tests.sh --target local-swarm --group smoke
 ./start-e2e-tests.sh --group smoke
 ./start-e2e-tests.sh --group lifecycle,proxy
 ./start-e2e-tests.sh --group data --tags @tcp-timeout
 ```
+
+The Unix helper can load deployment target profiles from `deploy/e2e-targets/<name>.env`:
+
+```bash
+./start-e2e-tests.sh --target local-swarm --tags @webauth-loop
+```
+
+Target profiles are plain `KEY=value` files. Values already exported in the shell take precedence over the selected
+profile, and the selected profile takes precedence over built-in wrapper defaults. Keep PocketHive service URLs on the
+deployment ingress where possible; some current E2E helpers still use direct public test-service ports for RabbitMQ,
+Redis, ClickHouse, and TCP mock setup.
 
 Available groups:
 
