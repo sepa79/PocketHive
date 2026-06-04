@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.15.23]
+Timestamp: 2026-06-04T14:42:28Z
+
+- Supply-chain hardening: upgrade root and UI Vitest dev dependencies to 4.1.8 so npm audit no longer reports GHSA-5xrq-8626-4rwp.
+- Release: bump PocketHive patch version to 0.15.23 for the Vitest security refresh.
+
 ## [0.15.22]
 Timestamp: 2026-06-03T11:04:40Z
 
