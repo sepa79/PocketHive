@@ -16,6 +16,9 @@ COPY request-builder-service/templates /app/templates
 FROM bee-runtime AS http-sequence
 COPY .local-jars/http-sequence-service.jar /app/app.jar
 
+FROM bee-runtime AS db-query
+COPY .local-jars/db-query-service.jar /app/app.jar
+
 FROM bee-runtime AS payload-generator
 COPY .local-jars/payload-generator-service.jar /app/app.jar
 

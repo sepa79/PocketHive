@@ -8,6 +8,9 @@ index is a convenience for humans and tools.
 
 Notable in‑progress plans:
 
+- `docs/inProgress/db-query-worker-mvp.md` – MVP contract for the DB-only
+  load worker supporting Postgres/Oracle with explicit JDBC config and a
+  configurable connection pool.
 - `docs/inProgress/e2e-api-framework-mini-plan.md` – lightweight refactor plan
   for turning the ingress auth pack into a reusable API/E2E support layer.
 Recently archived:

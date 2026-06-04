@@ -1,0 +1,27 @@
+serviceId: db
+queryId: update-probe
+adapter: POSTGRES
+statementType: UPDATE
+sqlTemplate: |
+  update db_query_probe
+  set status = :status,
+      remote_marker = :remoteMarker,
+      hit_count = hit_count + 1,
+      updated_at = now()
+  where probe_id = :probeId
+params:
+  - name: probeId
+    source: payload.probeId
+    type: STRING
+  - name: status
+    source: payload.status
+    type: STRING
+  - name: remoteMarker
+    source: payload.remoteMarker
+    type: STRING
+result:
+  mode: UPDATE_COUNT
+validation:
+  minAffectedRows: 1
+  maxAffectedRows: 1
+extracts: []

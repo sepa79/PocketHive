@@ -1,0 +1,177 @@
+version: 1
+definitions:
+  - name: ratePerSec
+    scope: global
+    type: float
+    required: true
+  - name: maxMessages
+    scope: global
+    type: int
+    required: true
+  - name: probeId
+    scope: global
+    type: string
+    required: true
+  - name: status
+    scope: global
+    type: string
+    required: true
+  - name: remoteMarker
+    scope: global
+    type: string
+    required: true
+  - name: queryId
+    scope: global
+    type: string
+    required: true
+  - name: threadCount
+    scope: global
+    type: int
+    required: true
+  - name: queryTimeoutMs
+    scope: global
+    type: int
+    required: true
+  - name: dbJdbcUrl
+    scope: global
+    type: string
+    required: true
+  - name: dbUsername
+    scope: global
+    type: string
+    required: true
+  - name: dbPassword
+    scope: global
+    type: string
+    required: true
+  - name: poolMaxSize
+    scope: global
+    type: int
+    required: true
+  - name: poolMinIdle
+    scope: global
+    type: int
+    required: true
+  - name: poolConnectionTimeoutMs
+    scope: global
+    type: int
+    required: true
+  - name: poolValidationTimeoutMs
+    scope: global
+    type: int
+    required: true
+  - name: poolIdleTimeoutMs
+    scope: global
+    type: int
+    required: true
+  - name: poolMaxLifetimeMs
+    scope: global
+    type: int
+    required: true
+  - name: retryMaxAttempts
+    scope: global
+    type: int
+    required: true
+  - name: retryInitialBackoffMs
+    scope: global
+    type: int
+    required: true
+  - name: retryBackoffMultiplier
+    scope: global
+    type: float
+    required: true
+  - name: retryMaxBackoffMs
+    scope: global
+    type: int
+    required: true
+  - name: txOutcomeSinkMode
+    scope: global
+    type: string
+    required: true
+  - name: dropTxOutcomeWithoutCallId
+    scope: global
+    type: bool
+    required: true
+
+profiles:
+  - id: select
+    name: Select
+  - id: insert
+    name: Insert
+  - id: update
+    name: Update
+
+values:
+  global:
+    select:
+      ratePerSec: 1.0
+      maxMessages: 5
+      probeId: "PH-DB-SMOKE"
+      status: "READY"
+      remoteMarker: "DBLINK-local"
+      queryId: "select-probe"
+      threadCount: 2
+      queryTimeoutMs: 30000
+      dbJdbcUrl: "jdbc:postgresql://tasks.dbquery-test-postgres:5432/dbquery"
+      dbUsername: "dbquery"
+      dbPassword: "dbquery"
+      poolMaxSize: 2
+      poolMinIdle: 1
+      poolConnectionTimeoutMs: 1000
+      poolValidationTimeoutMs: 500
+      poolIdleTimeoutMs: 60000
+      poolMaxLifetimeMs: 1800000
+      retryMaxAttempts: 3
+      retryInitialBackoffMs: 250
+      retryBackoffMultiplier: 2.0
+      retryMaxBackoffMs: 1000
+      txOutcomeSinkMode: "CLICKHOUSE_V2"
+      dropTxOutcomeWithoutCallId: false
+    insert:
+      ratePerSec: 2.0
+      maxMessages: 5
+      probeId: "PH-DB-INSERT"
+      status: "INSERTED"
+      remoteMarker: "DBLINK-insert"
+      queryId: "insert-probe"
+      threadCount: 2
+      queryTimeoutMs: 30000
+      dbJdbcUrl: "jdbc:postgresql://tasks.dbquery-test-postgres:5432/dbquery"
+      dbUsername: "dbquery"
+      dbPassword: "dbquery"
+      poolMaxSize: 4
+      poolMinIdle: 1
+      poolConnectionTimeoutMs: 1000
+      poolValidationTimeoutMs: 500
+      poolIdleTimeoutMs: 60000
+      poolMaxLifetimeMs: 1800000
+      retryMaxAttempts: 3
+      retryInitialBackoffMs: 250
+      retryBackoffMultiplier: 2.0
+      retryMaxBackoffMs: 1000
+      txOutcomeSinkMode: "CLICKHOUSE_V2"
+      dropTxOutcomeWithoutCallId: false
+    update:
+      ratePerSec: 2.0
+      maxMessages: 5
+      probeId: "PH-DB-UPDATE"
+      status: "UPDATED"
+      remoteMarker: "DBLINK-update"
+      queryId: "update-probe"
+      threadCount: 2
+      queryTimeoutMs: 30000
+      dbJdbcUrl: "jdbc:postgresql://tasks.dbquery-test-postgres:5432/dbquery"
+      dbUsername: "dbquery"
+      dbPassword: "dbquery"
+      poolMaxSize: 2
+      poolMinIdle: 1
+      poolConnectionTimeoutMs: 1000
+      poolValidationTimeoutMs: 500
+      poolIdleTimeoutMs: 60000
+      poolMaxLifetimeMs: 1800000
+      retryMaxAttempts: 3
+      retryInitialBackoffMs: 250
+      retryBackoffMultiplier: 2.0
+      retryMaxBackoffMs: 1000
+      txOutcomeSinkMode: "CLICKHOUSE_V2"
+      dropTxOutcomeWithoutCallId: false

@@ -6,6 +6,7 @@ import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.pockethive.observability.Hop;
 import io.pockethive.observability.ObservabilityContext;
+import io.pockethive.swarm.model.OutcomeHeaders;
 import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
 import io.pockethive.worker.sdk.api.StatusPublisher;
 import io.pockethive.worker.sdk.api.WorkItem;
@@ -58,9 +59,9 @@ import org.springframework.stereotype.Component;
 class PostProcessorWorkerImpl implements PocketHiveWorkerFunction {
 
   private static final String ERROR_HEADER = "x-ph-error";
-  private static final String PROCESSOR_DURATION_HEADER = "x-ph-processor-duration-ms";
-  private static final String PROCESSOR_SUCCESS_HEADER = "x-ph-processor-success";
-  private static final String PROCESSOR_STATUS_HEADER = "x-ph-processor-status";
+  private static final String PROCESSOR_DURATION_HEADER = OutcomeHeaders.PROCESSOR_DURATION_MS;
+  private static final String PROCESSOR_SUCCESS_HEADER = OutcomeHeaders.PROCESSOR_SUCCESS;
+  private static final String PROCESSOR_STATUS_HEADER = OutcomeHeaders.PROCESSOR_STATUS;
 
   private final PostProcessorWorkerProperties properties;
   private final TxOutcomeSinkRegistry txOutcomeSinkRegistry;

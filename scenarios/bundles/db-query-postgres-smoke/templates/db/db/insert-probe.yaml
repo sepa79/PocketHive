@@ -1,0 +1,28 @@
+serviceId: db
+queryId: insert-probe
+adapter: POSTGRES
+statementType: INSERT
+sqlTemplate: |
+  insert into db_query_probe (probe_id, status, remote_marker, hit_count, updated_at)
+  values (:probeId, :status, :remoteMarker, 1, now())
+  on conflict (probe_id) do update
+    set status = excluded.status,
+        remote_marker = excluded.remote_marker,
+        hit_count = db_query_probe.hit_count + 1,
+        updated_at = now()
+params:
+  - name: probeId
+    source: payload.probeId
+    type: STRING
+  - name: status
+    source: payload.status
+    type: STRING
+  - name: remoteMarker
+    source: payload.remoteMarker
+    type: STRING
+result:
+  mode: UPDATE_COUNT
+validation:
+  minAffectedRows: 1
+  maxAffectedRows: 1
+extracts: []

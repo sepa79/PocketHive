@@ -7,16 +7,12 @@
 
 x-storage-placement: &storage-placement {}
 
-x-scenarios-placement: &scenarios-placement
-  placement:
-    constraints:
-      - node.labels.pockethive.scenarios == true
+x-scenarios-placement: &scenarios-placement {}
 
 x-manager-scenarios-placement: &manager-scenarios-placement
   placement:
     constraints:
       - node.role == manager
-      - node.labels.pockethive.scenarios == true
 
 x-sut-placement: &sut-placement
   placement:
@@ -154,7 +150,6 @@ services:
       POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_DOCKER_COMPUTE_ADAPTER: SWARM_STACK
       POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_IMAGE_REPOSITORY_PREFIX: ${POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_IMAGE_REPOSITORY_PREFIX:?set registry image prefix}
       POCKETHIVE_SCENARIOS_RUNTIME_ROOT: ${HIVEFORGE_PROJECT_DIR:?set HiveForge project dir}/state/scenarios-runtime
-      POCKETHIVE_DOCKER_SWARM_PLACEMENT_CONSTRAINTS: node.labels.pockethive.scenarios == true
       SPRING_DATASOURCE_URL: jdbc:postgresql://tasks.postgres:5432/pockethive
       POCKETHIVE_SINK_CLICKHOUSE_ENDPOINT: http://tasks.clickhouse:8123
     volumes: !override

@@ -25,6 +25,14 @@ The `swarm-reduced` profile uses `docker compose config` only to render the
 managed compose files, then deploys the rendered stack with `docker stack
 deploy`. It does not build or push images.
 
+For `swarm-reduced`, scenario/runtime workloads assume the HiveForge-managed
+project root is shared and available on every eligible Swarm node. PocketHive
+therefore does not require a `pockethive.scenarios` node label for
+Scenario Manager, Orchestrator, swarm controllers, or dynamically launched
+workers. Swarm controllers still run on manager nodes because they need Docker
+Swarm API access. Proxy/SUT/stateful placement remains explicit where the
+runtime profile declares it.
+
 ## Component
 
 - `stack` - the whole local PocketHive stack.

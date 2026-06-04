@@ -103,6 +103,8 @@ public class SwarmController {
         Set.of(BeeRoles.REQUEST_BUILDER, BeeRoles.HTTP_SEQUENCE, BeeRoles.PROCESSOR);
     private static final Pattern BASE_URL_TEMPLATE =
         Pattern.compile("\\{\\{\\s*sut\\.endpoints\\['([^']+)'\\]\\.baseUrl\\s*}}(.*)");
+    private static final Pattern VARS_TEMPLATE =
+        Pattern.compile("\\{\\{\\s*vars\\.([A-Za-z0-9_.-]+)\\s*}}");
 
     public SwarmController(ControlPlanePublisher controlPublisher,
                            ContainerLifecycleManager lifecycle,
@@ -304,6 +306,7 @@ public class SwarmController {
                             }
                             if (resolvedVars != null && !resolvedVars.isEmpty()) {
                                 config = addScenarioVars(config, resolvedVars);
+                                config = applyScenarioVarTemplates(config, resolvedVars);
                             }
                             if (finalSutEnvironment != null && AUTH_SUT_CONTEXT_ROLES.contains(bee.role())) {
                                 config = addAuthProfilePrivateContext(config, finalSutEnvironment);
@@ -810,6 +813,78 @@ public class SwarmController {
         // Workers are expected to propagate this into the WorkItem headers so Pebble/SpEL templates can reference it as `vars.*`.
         result.put("vars", vars);
         return Map.copyOf(result);
+    }
+
+    private static Map<String, Object> applyScenarioVarTemplates(Map<String, Object> config, Map<String, Object> vars) {
+        if (config == null || config.isEmpty() || vars == null || vars.isEmpty()) {
+            return config;
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        config.forEach((key, value) -> {
+            if ("vars".equals(key)) {
+                result.put(key, value);
+            } else {
+                result.put(key, renderScenarioVarValue(value, vars));
+            }
+        });
+        return Map.copyOf(result);
+    }
+
+    private static Object renderScenarioVarValue(Object value, Map<String, Object> vars) {
+        if (value instanceof String text) {
+            return renderScenarioVarString(text, vars);
+        }
+        if (value instanceof Map<?, ?> rawMap) {
+            Map<String, Object> rendered = new LinkedHashMap<>();
+            rawMap.forEach((key, nestedValue) -> {
+                if (key != null) {
+                    rendered.put(key.toString(), renderScenarioVarValue(nestedValue, vars));
+                }
+            });
+            return Map.copyOf(rendered);
+        }
+        if (value instanceof List<?> rawList) {
+            return rawList.stream()
+                .map(item -> renderScenarioVarValue(item, vars))
+                .toList();
+        }
+        return value;
+    }
+
+    private static Object renderScenarioVarString(String text, Map<String, Object> vars) {
+        Matcher exact = VARS_TEMPLATE.matcher(text.trim());
+        if (exact.matches()) {
+            return resolveScenarioVar(vars, exact.group(1));
+        }
+
+        Matcher matcher = VARS_TEMPLATE.matcher(text);
+        StringBuffer rendered = new StringBuffer();
+        boolean changed = false;
+        while (matcher.find()) {
+            Object value = resolveScenarioVar(vars, matcher.group(1));
+            matcher.appendReplacement(rendered, Matcher.quoteReplacement(Objects.toString(value, "")));
+            changed = true;
+        }
+        if (!changed) {
+            return text;
+        }
+        matcher.appendTail(rendered);
+        return rendered.toString();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Object resolveScenarioVar(Map<String, Object> vars, String path) {
+        Object current = vars;
+        for (String part : path.split("\\.")) {
+            if (!(current instanceof Map<?, ?> rawMap) || !rawMap.containsKey(part)) {
+                throw new IllegalStateException("Unknown scenario variable '%s'".formatted(path));
+            }
+            current = ((Map<String, Object>) rawMap).get(part);
+        }
+        if (current == null) {
+            throw new IllegalStateException("Scenario variable '%s' is null".formatted(path));
+        }
+        return current;
     }
 
     private static Map<String, Object> addAuthProfilePrivateContext(Map<String, Object> config, SutEnvironment sutEnvironment) {

@@ -12,6 +12,8 @@ The rules are forwarded from `request-builder-service` to `processor-service` in
 
 Canonical DTO: `io.pockethive.swarm.model.ResultRules`
 
+Canonical outcome header names: `io.pockethive.swarm.model.OutcomeHeaders`
+
 Forwarded via request envelopes:
 
 - `io.pockethive.worker.sdk.api.HttpRequestEnvelope.resultRules`

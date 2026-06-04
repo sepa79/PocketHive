@@ -1,5 +1,6 @@
 package io.pockethive.processor;
 
+import io.pockethive.swarm.model.OutcomeHeaders;
 import io.pockethive.swarm.model.ResultRules;
 import java.util.LinkedHashMap;
 import java.util.Locale;
@@ -9,9 +10,9 @@ import java.util.regex.Pattern;
 
 public final class ResultRulesExtractor {
 
-  public static final String HEADER_BUSINESS_CODE = "x-ph-business-code";
-  public static final String HEADER_BUSINESS_SUCCESS = "x-ph-business-success";
-  public static final String HEADER_DIMENSION_PREFIX = "x-ph-dim-";
+  public static final String HEADER_BUSINESS_CODE = OutcomeHeaders.BUSINESS_CODE;
+  public static final String HEADER_BUSINESS_SUCCESS = OutcomeHeaders.BUSINESS_SUCCESS;
+  public static final String HEADER_DIMENSION_PREFIX = OutcomeHeaders.DIMENSION_PREFIX;
 
   private ResultRulesExtractor() {
   }
@@ -71,7 +72,7 @@ public final class ResultRulesExtractor {
         if (value == null || value.isBlank()) {
           continue;
         }
-        String key = HEADER_DIMENSION_PREFIX + normaliseDimensionName(dimension.name());
+        String key = OutcomeHeaders.dimension(dimension.name());
         if (extracted.containsKey(key)) {
           throw new IllegalArgumentException("Duplicate ResultRules dimension after normalization: " + key);
         }
@@ -197,8 +198,4 @@ public final class ResultRulesExtractor {
     return String.valueOf(value);
   }
 
-  private static String normaliseDimensionName(String name) {
-    String trimmed = name.trim().toLowerCase(Locale.ROOT);
-    return trimmed.replaceAll("[^a-z0-9_-]", "-");
-  }
 }
