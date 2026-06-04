@@ -163,21 +163,22 @@
   changed_when: false
   when: pockethive_profile == "swarm-full"
 
-- name: Select rendered Docker Compose config
+- name: Select rendered Docker Compose config for swarm-reduced
   ansible.builtin.set_fact:
-    pockethive_compose_config_stdout: >-
-      {{
-        pockethive_compose_config_full.stdout
-        if pockethive_profile == "swarm-full"
-        else pockethive_compose_config_reduced.stdout
-      }}
+    pockethive_compose_config_json: "{{ pockethive_compose_config_reduced.stdout | from_json }}"
+  when: pockethive_profile == "swarm-reduced"
+
+- name: Select rendered Docker Compose config for swarm-full
+  ansible.builtin.set_fact:
+    pockethive_compose_config_json: "{{ pockethive_compose_config_full.stdout | from_json }}"
+  when: pockethive_profile == "swarm-full"
 
 - name: Convert Compose config to Docker Stack config
   ansible.builtin.command:
     argv:
       - python3
       - "{{ playbook_dir }}/render-stack-config.py"
-    stdin: "{{ pockethive_compose_config_stdout | from_json | to_json }}"
+    stdin: "{{ pockethive_compose_config_json | to_json }}"
   register: pockethive_stack_config
   changed_when: false
 
