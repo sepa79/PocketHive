@@ -102,6 +102,18 @@ artifacts:
       source: scenarios
       target: artifacts/pockethive-runtime/scenarios
       mode: replace
+    - name: runtime-scenario-manager-capabilities
+      source: scenario-manager-service/capabilities
+      target: artifacts/pockethive-runtime/scenario-manager/capabilities
+      mode: replace
+    - name: runtime-scenario-manager-network
+      source: scenario-manager-service/network
+      target: artifacts/pockethive-runtime/scenario-manager/network
+      mode: replace
+    - name: runtime-scenario-manager-sut
+      source: scenario-manager-service/sut
+      target: artifacts/pockethive-runtime/scenario-manager/sut
+      mode: replace
     - name: runtime-wiremock
       source: wiremock
       target: artifacts/pockethive-runtime/wiremock

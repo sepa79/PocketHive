@@ -41,9 +41,10 @@ pockethive/
 │   ├── mappings/               # HTTP mock stubs
 │   ├── __files/                # Response templates
 │   └── README.md
-├── scenario-manager/
-│   ├── scenarios/              # Example scenarios (reference)
-│   └── capabilities/           # Worker capabilities (reference)
+├── scenario-manager-service/
+│   ├── capabilities/           # Worker capabilities (reference)
+│   ├── network/                # Network profiles
+│   └── sut/                    # SUT environment definitions
 └── docs/
     ├── GHCR_SETUP.md          # Registry setup
     └── USAGE.md               # Usage guide
@@ -89,7 +90,7 @@ docker compose up -d
 
 ### 📝 Included for Reference Only
 - Scenarios (baked into `scenario-manager` image)
-- Capabilities (baked into `scenario-manager` image)
+- Capabilities, network profiles, and SUT definitions (also baked into `scenario-manager` image)
 
 To use custom scenarios/capabilities, mount them as volumes in `docker-compose.yml`.
 
@@ -101,8 +102,10 @@ Edit `docker-compose.yml`:
 ```yaml
 scenario-manager:
   volumes:
-    - ./scenario-manager/scenarios:/app/scenarios:ro
-    - ./scenario-manager/capabilities:/app/capabilities:ro
+    - ./scenarios:/app/scenarios:ro
+    - ./scenario-manager-service/capabilities:/app/capabilities:ro
+    - ./scenario-manager-service/network:/app/network:ro
+    - ./scenario-manager-service/sut:/app/sut:ro
 ```
 
 ### Custom WireMock Stubs

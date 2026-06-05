@@ -1,6 +1,6 @@
 id: db-query-postgres-smoke
 name: DB Query Postgres Smoke
-description: DB-only smoke scenario for the db-query worker using an explicit JDBC URL and SELECT/INSERT/UPDATE profiles.
+description: DB-only smoke scenario for the db-query worker using an explicit JDBC URL and SELECT/INSERT/UPDATE profiles. The bundled test-postgres compose seeds the rows required by select/update profiles.
 template:
   image: swarm-controller:latest
   bees:

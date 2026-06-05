@@ -219,8 +219,11 @@ Environment:
 - Orchestrator ingress: `http://192.168.88.50:8088/orchestrator`
 - Scenario Manager ingress: `http://192.168.88.50:8088/scenario-manager`
 - Test Postgres service: `dbquery-test-postgres` on `pockethive_default`
+- Test Postgres helper: `scenarios/bundles/db-query-postgres-smoke/test-postgres/`
+  provides compose scripts and seed SQL for the select/update rows. `up.sh`
+  starts the container and reapplies the seed SQL.
 - JDBC URL used by the smoke profiles:
-  `jdbc:postgresql://tasks.dbquery-test-postgres:5432/dbquery`
+  `jdbc:postgresql://dbquery-test-postgres:5432/dbquery`
 
 Runtime images pushed:
 

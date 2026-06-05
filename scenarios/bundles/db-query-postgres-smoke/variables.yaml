@@ -112,7 +112,7 @@ values:
       queryId: "select-probe"
       threadCount: 2
       queryTimeoutMs: 30000
-      dbJdbcUrl: "jdbc:postgresql://tasks.dbquery-test-postgres:5432/dbquery"
+      dbJdbcUrl: "jdbc:postgresql://dbquery-test-postgres:5432/dbquery"
       dbUsername: "dbquery"
       dbPassword: "dbquery"
       poolMaxSize: 2
@@ -136,7 +136,7 @@ values:
       queryId: "insert-probe"
       threadCount: 2
       queryTimeoutMs: 30000
-      dbJdbcUrl: "jdbc:postgresql://tasks.dbquery-test-postgres:5432/dbquery"
+      dbJdbcUrl: "jdbc:postgresql://dbquery-test-postgres:5432/dbquery"
       dbUsername: "dbquery"
       dbPassword: "dbquery"
       poolMaxSize: 4
@@ -160,7 +160,7 @@ values:
       queryId: "update-probe"
       threadCount: 2
       queryTimeoutMs: 30000
-      dbJdbcUrl: "jdbc:postgresql://tasks.dbquery-test-postgres:5432/dbquery"
+      dbJdbcUrl: "jdbc:postgresql://dbquery-test-postgres:5432/dbquery"
       dbUsername: "dbquery"
       dbPassword: "dbquery"
       poolMaxSize: 2

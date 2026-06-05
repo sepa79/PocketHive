@@ -128,6 +128,9 @@ services:
       MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL: http://tasks.pushgateway:9091
     volumes: !override
       - ${HIVEFORGE_PROJECT_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/scenarios:/app/scenarios
+      - ${HIVEFORGE_PROJECT_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/scenario-manager/capabilities:/app/capabilities:ro
+      - ${HIVEFORGE_PROJECT_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/scenario-manager/network:/app/network:ro
+      - ${HIVEFORGE_PROJECT_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/scenario-manager/sut:/app/sut:ro
       - ${HIVEFORGE_PROJECT_DIR:?set HiveForge project dir}/state/scenarios-runtime:/app/scenarios-runtime
     deploy: *scenarios-placement
 

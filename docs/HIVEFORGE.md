@@ -155,6 +155,9 @@ artifacts/pockethive-runtime/config/clickhouse/init/02-ph-tx-outcome-v2.sql
 artifacts/pockethive-runtime/config/clickhouse/clickhouse-entrypoint.sh
 artifacts/pockethive-runtime/config/clickhouse/migrate-tx-outcome-v1-to-v2.sh
 artifacts/pockethive-runtime/scenarios
+artifacts/pockethive-runtime/scenario-manager/capabilities
+artifacts/pockethive-runtime/scenario-manager/network
+artifacts/pockethive-runtime/scenario-manager/sut
 ```
 
 `swarm-full` also requires:
