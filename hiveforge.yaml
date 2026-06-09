@@ -7,7 +7,7 @@ project:
     - remove
     - update
   vars:
-    imageRepository.project: ghcr.io/pockethive
+    imageRepository.project: ghcr.io/sepa79/pockethive
     extRepository.docker: docker.io
     extRepository.ghcr: ghcr.io
   profiles:
