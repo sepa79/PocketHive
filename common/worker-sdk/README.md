@@ -123,6 +123,9 @@ Behaviour:
 
 - `ratePerSec` controls how many seeds are dispatched per second; it can be updated at runtime via
   `config-update` on `inputs.scheduler.ratePerSec`.
+- `maxMessages` accepts either a non-negative integer or a numeric Pebble template resolved from
+  scenario variables, for example `maxMessages: "{{ vars.userCount }}"`. Rendered values must be
+  whole numbers.
 - When `maxMessages > 0`, the scheduler tracks how many seeds have been dispatched for the current
   configuration. Once `dispatched >= maxMessages`, the scheduler stops emitting new seeds but keeps
   honouring config updates and enable/disable commands.

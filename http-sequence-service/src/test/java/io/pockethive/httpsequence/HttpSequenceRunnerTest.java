@@ -83,7 +83,9 @@ class HttpSequenceRunnerTest {
         0,
         1.0,
         0,
-        List.of("5xx")
+        List.of("5xx"),
+        List.of(),
+        List.of()
     );
     HttpSequenceWorkerConfig.Step step = new HttpSequenceWorkerConfig.Step(
         "s1",
@@ -112,6 +114,158 @@ class HttpSequenceRunnerTest {
     assertThat(out.stepHeaders()).containsEntry("x-ph-http-seq-attempts", 3);
     assertThat(out.payload()).contains("result");
     assertThat(out.payload()).contains("location");
+  }
+
+  @Test
+  void retriesWhileJsonBodyPredicateMatchesUntilApproved() throws Exception {
+    writeTemplate("A");
+
+    RecordingExecutor executor = new RecordingExecutor();
+    executor.enqueue(new HttpCallExecutor.HttpCallResult(200, Map.of(), "{\"validationStatus\":\"PENDING\"}", null));
+    executor.enqueue(new HttpCallExecutor.HttpCallResult(200, Map.of(), "{\"validationStatus\":\"APPROVED\"}", null));
+
+    HttpSequenceRunner runner = newRunner(executor);
+    WorkerInfo info = new WorkerInfo("http-sequence", "swarm-1", "inst-1", null, null);
+    WorkItem seed = WorkItem.text(info, "{\"seed\":true}").contentType("application/json").build();
+
+    HttpSequenceWorkerConfig.Retry retry = new HttpSequenceWorkerConfig.Retry(
+        3,
+        0,
+        1.0,
+        0,
+        List.of(),
+        List.of(new HttpSequenceWorkerConfig.JsonBodyPredicate("/validationStatus", "PENDING")),
+        List.of(new HttpSequenceWorkerConfig.JsonBodyPredicate("/validationStatus", "REJECTED"))
+    );
+    HttpSequenceWorkerConfig.Step step = new HttpSequenceWorkerConfig.Step(
+        "s1",
+        "A",
+        null,
+        false,
+        retry,
+        List.of(new HttpSequenceWorkerConfig.Extract("/validationStatus", null, false, "validationStatus", true)),
+        List.of()
+    );
+
+    HttpSequenceWorkerConfig config = new HttpSequenceWorkerConfig(
+        "http://sut",
+        tempDir.toString(),
+        "default",
+        1,
+        List.of(step),
+        new HttpSequenceWorkerConfig.DebugCapture(HttpSequenceWorkerConfig.DebugCaptureMode.NONE, 0.0, 1, 1, false, false, 0, 1),
+        Map.of()
+    );
+
+    WorkItem out = runner.run(seed, new TestWorkerContext(info), config);
+
+    assertThat(executor.calls()).hasSize(2);
+    assertThat(out.stepHeaders()).containsEntry("x-ph-http-seq-status", 200);
+    assertThat(out.stepHeaders()).containsEntry("x-ph-http-seq-attempts", 2);
+    assertThat(out.stepHeaders()).doesNotContainKey("x-ph-http-seq-failure");
+    assertThat(out.payload()).contains("\"validationStatus\":\"APPROVED\"");
+  }
+
+  @Test
+  void stopsWhenJsonRetryConditionIsStillPendingAtMaxAttempts() throws Exception {
+    writeTemplate("A");
+    writeTemplate("B");
+
+    RecordingExecutor executor = new RecordingExecutor();
+    executor.enqueue(new HttpCallExecutor.HttpCallResult(200, Map.of(), "{\"validationStatus\":\"PENDING\"}", null));
+    executor.enqueue(new HttpCallExecutor.HttpCallResult(200, Map.of(), "{\"validationStatus\":\"PENDING\"}", null));
+
+    HttpSequenceRunner runner = newRunner(executor);
+    WorkerInfo info = new WorkerInfo("http-sequence", "swarm-1", "inst-1", null, null);
+    WorkItem seed = WorkItem.text(info, "{\"seed\":true}").contentType("application/json").build();
+
+    HttpSequenceWorkerConfig.Retry retry = new HttpSequenceWorkerConfig.Retry(
+        2,
+        0,
+        1.0,
+        0,
+        List.of(),
+        List.of(new HttpSequenceWorkerConfig.JsonBodyPredicate("/validationStatus", "PENDING")),
+        List.of()
+    );
+
+    HttpSequenceWorkerConfig config = new HttpSequenceWorkerConfig(
+        "http://sut",
+        tempDir.toString(),
+        "default",
+        1,
+        List.of(
+            new HttpSequenceWorkerConfig.Step(
+                "s1",
+                "A",
+                null,
+                false,
+                retry,
+                List.of(new HttpSequenceWorkerConfig.Extract("/validationStatus", null, false, "validationStatus", true)),
+                List.of()
+            ),
+            new HttpSequenceWorkerConfig.Step("s2", "B", null, false, null, List.of(), List.of())
+        ),
+        new HttpSequenceWorkerConfig.DebugCapture(HttpSequenceWorkerConfig.DebugCaptureMode.NONE, 0.0, 1, 1, false, false, 0, 1),
+        Map.of()
+    );
+
+    WorkItem out = runner.run(seed, new TestWorkerContext(info), config);
+
+    assertThat(executor.calls()).hasSize(2);
+    assertThat(out.stepHeaders()).containsEntry("x-ph-http-seq-attempts", 2);
+    assertThat(out.stepHeaders()).containsEntry("x-ph-http-seq-failure", "retry-exhausted");
+    assertThat(out.stepHeaders()).containsEntry("x-ph-http-seq-call-id", "A");
+  }
+
+  @Test
+  void stopsWhenJsonFailurePredicateMatches() throws Exception {
+    writeTemplate("A");
+    writeTemplate("B");
+
+    RecordingExecutor executor = new RecordingExecutor();
+    executor.enqueue(new HttpCallExecutor.HttpCallResult(200, Map.of(), "{\"validationStatus\":\"REJECTED\"}", null));
+
+    HttpSequenceRunner runner = newRunner(executor);
+    WorkerInfo info = new WorkerInfo("http-sequence", "swarm-1", "inst-1", null, null);
+    WorkItem seed = WorkItem.text(info, "{\"seed\":true}").contentType("application/json").build();
+
+    HttpSequenceWorkerConfig.Retry retry = new HttpSequenceWorkerConfig.Retry(
+        3,
+        0,
+        1.0,
+        0,
+        List.of(),
+        List.of(new HttpSequenceWorkerConfig.JsonBodyPredicate("/validationStatus", "PENDING")),
+        List.of(new HttpSequenceWorkerConfig.JsonBodyPredicate("/validationStatus", "REJECTED"))
+    );
+
+    HttpSequenceWorkerConfig config = new HttpSequenceWorkerConfig(
+        "http://sut",
+        tempDir.toString(),
+        "default",
+        1,
+        List.of(
+            new HttpSequenceWorkerConfig.Step(
+                "s1",
+                "A",
+                null,
+                false,
+                retry,
+                List.of(new HttpSequenceWorkerConfig.Extract("/validationStatus", null, false, "validationStatus", true)),
+                List.of()
+            ),
+            new HttpSequenceWorkerConfig.Step("s2", "B", null, false, null, List.of(), List.of())
+        ),
+        new HttpSequenceWorkerConfig.DebugCapture(HttpSequenceWorkerConfig.DebugCaptureMode.NONE, 0.0, 1, 1, false, false, 0, 1),
+        Map.of()
+    );
+
+    WorkItem out = runner.run(seed, new TestWorkerContext(info), config);
+
+    assertThat(executor.calls()).hasSize(1);
+    assertThat(out.stepHeaders()).containsEntry("x-ph-http-seq-failure", "json-failure-condition");
+    assertThat(out.stepHeaders()).containsEntry("x-ph-http-seq-call-id", "A");
   }
 
   @Test

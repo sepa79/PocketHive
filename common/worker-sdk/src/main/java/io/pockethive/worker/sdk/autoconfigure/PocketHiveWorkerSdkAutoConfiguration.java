@@ -222,7 +222,7 @@ public class PocketHiveWorkerSdkAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    WorkerRuntime workerRuntime(
+    WorkerinalSutEnvironmentRuntime workerRuntime(
         WorkerRegistry workerRegistry,
         ConfigurableListableBeanFactory beanFactory,
         WorkerContextFactory workerContextFactory,
@@ -352,10 +352,11 @@ public class PocketHiveWorkerSdkAutoConfiguration {
         WorkerControlPlaneRuntime controlPlaneRuntime,
         @Qualifier("workerControlPlaneIdentity") ControlPlaneIdentity identity,
         ObjectMapper objectMapper,
+        TemplateRenderer templateRenderer,
         ObjectProvider<List<PocketHiveWorkerProperties<?>>> propertiesProvider
     ) {
         List<PocketHiveWorkerProperties<?>> properties = propertiesProvider.getIfAvailable(Collections::emptyList);
-        return new SchedulerWorkInputFactory(workerRuntime, controlPlaneRuntime, identity, objectMapper, properties);
+        return new SchedulerWorkInputFactory(workerRuntime, controlPlaneRuntime, identity, objectMapper, properties, templateRenderer);
     }
 
     @Bean

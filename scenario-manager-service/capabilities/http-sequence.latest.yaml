@@ -1,5 +1,5 @@
 schemaVersion: "1.0"
-capabilitiesVersion: "1.1"
+capabilitiesVersion: "1.2"
 role: http-sequence
 image:
   name: http-sequence
@@ -40,6 +40,7 @@ config:
     ui:
       label: Steps
       group: Journey
+      help: "Per-step retry supports on[] status tokens plus whileJson[] and failJson[] JSON Pointer equality predicates."
   - name: debugCapture
     type: json
     default:

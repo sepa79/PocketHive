@@ -324,6 +324,7 @@ Role-specific notes (hardcoded):
     - "steps[].stepId must be unique within the steps array"
     - "steps[].callId must match a template file callId in the templates/ directory"
     - "extracts[].fromJsonPointer uses JSON Pointer (RFC 6901): /field not $.field"
+    - "retry.whileJson[].fromJsonPointer and retry.failJson[].fromJsonPointer use JSON Pointer scalar equality"
     - "Auth goes in authRef in each template file, not in worker config"
     - "debugCapture.mode: ALWAYS during development, ERROR_ONLY for production runs"
 

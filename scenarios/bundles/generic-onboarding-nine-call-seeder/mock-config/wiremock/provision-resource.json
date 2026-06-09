@@ -1,0 +1,39 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/onboarding/resources/provision",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$.tenantId"
+      },
+      {
+        "matchesJsonPath": "$.userId"
+      },
+      {
+        "matchesJsonPath": "$.accountId"
+      },
+      {
+        "matchesJsonPath": {
+          "expression": "$.resourceType",
+          "equalTo": "CARD"
+        }
+      },
+      {
+        "matchesJsonPath": {
+          "expression": "$.deliveryMode",
+          "equalTo": "DEFERRED_READY"
+        }
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": "{\"ok\":true,\"seedStatus\":\"SEEDED\",\"callId\":\"provision-resource\",\"resourceId\":\"resource-card-{{jsonPath request.body '$.accountId'}}\",\"resourceStatus\":\"ACTIVE\",\"cardId\":\"card-{{jsonPath request.body '$.accountId'}}\",\"cardStatus\":\"ACTIVE\"}",
+    "transformers": [
+      "response-template"
+    ]
+  }
+}

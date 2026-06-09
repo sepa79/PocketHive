@@ -300,7 +300,7 @@ public class SwarmController {
                             if (resolvedVars != null && !resolvedVars.isEmpty()) {
                                 config = addScenarioVars(config, resolvedVars);
                             }
-                            if (finalSutEnvironment != null && config != null && !config.isEmpty()) {
+                            if (config != null && !config.isEmpty()) {
                                 config = applySutConfigTemplates(config, finalSutEnvironment);
                             }
                             return new io.pockethive.swarm.model.Bee(
@@ -1272,8 +1272,8 @@ public class SwarmController {
      * <p>
      * For now this is deliberately small and explicit:
      * <ul>
-     *   <li>If {@code config.baseUrl} is a plain string, it is left unchanged.</li>
-     *   <li>If {@code config.baseUrl} matches
+     *   <li>If any string config value is plain text, it is left unchanged.</li>
+     *   <li>If any string config value matches
      *       {@code {{ sut.endpoints['<id>'].baseUrl }}<suffix>},
      *       we resolve {@code <id>} against the bound {@link SutEnvironment} and replace the
      *       entire value with {@code endpoint.baseUrl + suffix}.</li>
@@ -1282,13 +1282,55 @@ public class SwarmController {
      * </ul>
      */
     private static Map<String, Object> applySutConfigTemplates(Map<String, Object> config, SutEnvironment sutEnvironment) {
-        Object baseUrlObj = config.get("baseUrl");
-        if (!(baseUrlObj instanceof String template)) {
-            return config;
+        Object resolved = applySutConfigTemplateValue(config, sutEnvironment);
+        if (resolved instanceof Map<?, ?> resolvedMap) {
+            Map<String, Object> typed = new LinkedHashMap<>();
+            resolvedMap.forEach((key, value) -> {
+                if (key != null) {
+                    typed.put(key.toString(), value);
+                }
+            });
+            return Map.copyOf(typed);
         }
+        return config;
+    }
+
+    private static Object applySutConfigTemplateValue(Object value, SutEnvironment sutEnvironment) {
+        if (value instanceof String template) {
+            return resolveSutBaseUrlTemplate(template, sutEnvironment);
+        }
+        if (value instanceof Map<?, ?> raw) {
+            boolean changed = false;
+            Map<String, Object> updated = new LinkedHashMap<>();
+            for (Map.Entry<?, ?> entry : raw.entrySet()) {
+                Object key = entry.getKey();
+                if (key == null) {
+                    continue;
+                }
+                Object existing = entry.getValue();
+                Object resolved = applySutConfigTemplateValue(existing, sutEnvironment);
+                changed = changed || resolved != existing;
+                updated.put(key.toString(), resolved);
+            }
+            return changed ? Map.copyOf(updated) : value;
+        }
+        if (value instanceof List<?> raw) {
+            boolean changed = false;
+            List<Object> updated = new ArrayList<>(raw.size());
+            for (Object existing : raw) {
+                Object resolved = applySutConfigTemplateValue(existing, sutEnvironment);
+                changed = changed || resolved != existing;
+                updated.add(resolved);
+            }
+            return changed ? List.copyOf(updated) : value;
+        }
+        return value;
+    }
+
+    private static String resolveSutBaseUrlTemplate(String template, SutEnvironment sutEnvironment) {
         Matcher matcher = BASE_URL_TEMPLATE.matcher(template.trim());
         if (!matcher.matches()) {
-            return config;
+            return template;
         }
         if (sutEnvironment == null) {
             throw new IllegalStateException("SUT-aware baseUrl template used but no sutId was provided");
@@ -1306,8 +1348,6 @@ public class SwarmController {
                 .formatted(endpointId, sutEnvironment.id()));
         }
         String resolved = base.trim() + suffix;
-        Map<String, Object> updated = new java.util.LinkedHashMap<>(config);
-        updated.put("baseUrl", resolved);
-        return Map.copyOf(updated);
+        return resolved;
     }
 }

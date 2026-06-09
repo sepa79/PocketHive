@@ -24,7 +24,6 @@ pockethive:
       templateRoot: /app/templates/http
       serviceId: default
       threadCount: 1
-      steps: []
   control-plane:
     exchange: ${POCKETHIVE_CONTROL_PLANE_EXCHANGE}
     swarm-id: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID}

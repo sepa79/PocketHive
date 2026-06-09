@@ -1,0 +1,42 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/onboarding/accounts/create",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$.tenantId"
+      },
+      {
+        "matchesJsonPath": "$.batchId"
+      },
+      {
+        "matchesJsonPath": "$.userId"
+      },
+      {
+        "matchesJsonPath": "$.profileId"
+      },
+      {
+        "matchesJsonPath": {
+          "expression": "$.validationStatus",
+          "equalTo": "APPROVED"
+        }
+      },
+      {
+        "matchesJsonPath": {
+          "expression": "$.productCode",
+          "equalTo": "CORE_ACCOUNT"
+        }
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": "{\"ok\":true,\"seedStatus\":\"SEEDED\",\"callId\":\"create-account\",\"accountId\":\"acct-{{jsonPath request.body '$.userId'}}\",\"accountStatus\":\"ACTIVE\"}",
+    "transformers": [
+      "response-template"
+    ]
+  }
+}

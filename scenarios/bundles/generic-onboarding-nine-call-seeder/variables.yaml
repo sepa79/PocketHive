@@ -1,0 +1,133 @@
+version: 1
+definitions:
+  - name: tenantId
+    scope: global
+    type: string
+    required: true
+  - name: batchReference
+    scope: global
+    type: string
+    required: true
+  - name: userCount
+    scope: global
+    type: int
+    required: true
+  - name: country
+    scope: global
+    type: string
+    required: true
+  - name: optionalCapability
+    scope: global
+    type: bool
+    required: true
+  - name: seederRunId
+    scope: global
+    type: string
+    required: true
+  - name: outputList
+    scope: global
+    type: string
+    required: true
+profiles:
+  - id: tenant-001
+    name: Tenant 001
+  - id: tenant-002
+    name: Tenant 002
+  - id: tenant-003
+    name: Tenant 003
+  - id: tenant-004
+    name: Tenant 004
+  - id: tenant-005
+    name: Tenant 005
+  - id: tenant-006
+    name: Tenant 006
+  - id: tenant-007
+    name: Tenant 007
+  - id: tenant-008
+    name: Tenant 008
+  - id: tenant-009
+    name: Tenant 009
+  - id: tenant-010
+    name: Tenant 010
+values:
+  global:
+    tenant-001:
+      tenantId: tenant-001
+      batchReference: batch-tenant-001
+      userCount: 10000
+      country: GB
+      optionalCapability: true
+      seederRunId: onboarding-seed-tenant-001
+      outputList: ph:onboarding:approved-active:tenant-001
+    tenant-002:
+      tenantId: tenant-002
+      batchReference: batch-tenant-002
+      userCount: 10000
+      country: GB
+      optionalCapability: true
+      seederRunId: onboarding-seed-tenant-002
+      outputList: ph:onboarding:approved-active:tenant-002
+    tenant-003:
+      tenantId: tenant-003
+      batchReference: batch-tenant-003
+      userCount: 10000
+      country: GB
+      optionalCapability: true
+      seederRunId: onboarding-seed-tenant-003
+      outputList: ph:onboarding:approved-active:tenant-003
+    tenant-004:
+      tenantId: tenant-004
+      batchReference: batch-tenant-004
+      userCount: 10000
+      country: GB
+      optionalCapability: true
+      seederRunId: onboarding-seed-tenant-004
+      outputList: ph:onboarding:approved-active:tenant-004
+    tenant-005:
+      tenantId: tenant-005
+      batchReference: batch-tenant-005
+      userCount: 10000
+      country: GB
+      optionalCapability: true
+      seederRunId: onboarding-seed-tenant-005
+      outputList: ph:onboarding:approved-active:tenant-005
+    tenant-006:
+      tenantId: tenant-006
+      batchReference: batch-tenant-006
+      userCount: 10000
+      country: GB
+      optionalCapability: true
+      seederRunId: onboarding-seed-tenant-006
+      outputList: ph:onboarding:approved-active:tenant-006
+    tenant-007:
+      tenantId: tenant-007
+      batchReference: batch-tenant-007
+      userCount: 10000
+      country: GB
+      optionalCapability: true
+      seederRunId: onboarding-seed-tenant-007
+      outputList: ph:onboarding:approved-active:tenant-007
+    tenant-008:
+      tenantId: tenant-008
+      batchReference: batch-tenant-008
+      userCount: 10000
+      country: GB
+      optionalCapability: true
+      seederRunId: onboarding-seed-tenant-008
+      outputList: ph:onboarding:approved-active:tenant-008
+    tenant-009:
+      tenantId: tenant-009
+      batchReference: batch-tenant-009
+      userCount: 10000
+      country: GB
+      optionalCapability: true
+      seederRunId: onboarding-seed-tenant-009
+      outputList: ph:onboarding:approved-active:tenant-009
+    tenant-010:
+      tenantId: tenant-010
+      batchReference: batch-tenant-010
+      userCount: 10000
+      country: GB
+      optionalCapability: true
+      seederRunId: onboarding-seed-tenant-010
+      outputList: ph:onboarding:approved-active:tenant-010

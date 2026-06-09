@@ -1,0 +1,10 @@
+serviceId: sequence
+callId: initial-funding-setup
+protocol: HTTP
+method: POST
+pathTemplate: /api/onboarding/accounts/setup
+headersTemplate:
+  content-type: application/json
+bodyTemplate: '{"tenantId":"{{ payload.tenantId }}","accountId":"{{
+  payload.accountId
+  }}","initialFunding":{"amount":100,"currency":"GBP"},"limitsProfile":"STANDARD_SEED"}'

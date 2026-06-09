@@ -202,6 +202,7 @@ config:
     scheduler:
       ratePerSec: 50
       maxMessages: 0        # 0 = infinite, >0 = finite run
+      # or maxMessages: "{{ vars.userCount }}" when variables.yaml supplies a numeric value
   outputs:
     type: RABBITMQ
   worker:

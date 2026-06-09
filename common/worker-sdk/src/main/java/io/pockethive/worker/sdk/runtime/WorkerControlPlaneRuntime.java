@@ -17,6 +17,7 @@ import io.pockethive.worker.sdk.api.StatusPublisher;
 import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
 import io.pockethive.worker.sdk.config.RedisSequenceConfiguration;
+import io.pockethive.worker.sdk.config.SchedulerInputConfigValidator;
 import io.pockethive.worker.sdk.config.WorkerCapability;
 import io.pockethive.worker.sdk.config.WorkerInputType;
 import io.pockethive.worker.sdk.config.WorkerOutputType;
@@ -439,6 +440,7 @@ public final class WorkerControlPlaneRuntime {
                     canonicalUpdate,
                     patch.resetRequested()
                 );
+                validateInputConfig(state.definition(), mergeResult.rawConfig());
                 Boolean enabled = command.enabled();
                 if (log.isDebugEnabled()) {
                     log.debug("Applying config-update for worker={} role={} previousEnabled={} requestedEnabled={} data={}",
@@ -503,6 +505,12 @@ public final class WorkerControlPlaneRuntime {
             }
         }
         emitStatusSnapshot();
+    }
+
+    private void validateInputConfig(WorkerDefinition definition, Map<String, Object> rawConfig) {
+        if (definition.input() == WorkerInputType.SCHEDULER) {
+            SchedulerInputConfigValidator.validate(rawConfig, templateRenderer);
+        }
     }
 
     private FilteredConfigUpdate preprocessConfigUpdate(Map<String, Object> source) {

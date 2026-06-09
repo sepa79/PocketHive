@@ -3,6 +3,7 @@ package io.pockethive.orchestrator.domain;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import io.pockethive.orchestrator.app.JacksonConfiguration;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.BeePort;
@@ -108,5 +109,46 @@ class ScenarioPlanTest {
     assertThat(swarmPlan.topology()).isNotNull();
     assertThat(swarmPlan.topology().edges()).hasSize(1);
     assertThat(swarmPlan.bees().getFirst().id()).isEqualTo("genA");
+  }
+
+  @Test
+  void toSwarmPlanAcceptsGenericOnboardingSeederBundle() throws Exception {
+    ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
+    yamlMapper.findAndRegisterModules();
+
+    ScenarioPlan scenarioPlan = yamlMapper.readValue(
+        java.nio.file.Path.of(
+            "..",
+            "scenarios",
+            "bundles",
+            "generic-onboarding-nine-call-seeder",
+            "scenario.yaml").toFile(),
+        ScenarioPlan.class);
+
+    SwarmPlan swarmPlan = scenarioPlan.toSwarmPlan("onb-t001-test");
+
+    assertThat(swarmPlan.bees()).hasSize(3);
+    Bee generator = swarmPlan.bees().stream()
+        .filter(bee -> "generator".equals(bee.role()))
+        .findFirst()
+        .orElseThrow();
+    @SuppressWarnings("unchecked")
+    Map<String, Object> scheduler = (Map<String, Object>) ((Map<String, Object>) generator.config().get("inputs"))
+        .get("scheduler");
+    assertThat(scheduler.get("maxMessages")).isEqualTo("{{ vars.userCount }}");
+
+    Bee sequence = swarmPlan.bees().stream()
+        .filter(bee -> "http-sequence".equals(bee.role()))
+        .findFirst()
+        .orElseThrow();
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> steps = (List<Map<String, Object>>) sequence.config().get("steps");
+    @SuppressWarnings("unchecked")
+    Map<String, Object> retry = (Map<String, Object>) steps.stream()
+        .filter(step -> "poll-validation-result".equals(step.get("callId")))
+        .findFirst()
+        .orElseThrow()
+        .get("retry");
+    assertThat(retry).containsKeys("whileJson", "failJson");
   }
 }

@@ -109,7 +109,9 @@ final class HttpSequenceRunner {
         long durationMs = attempt.totalDurationMs();
         int attempts = attempt.attempts();
 
-        boolean isError = result.statusCode() < 200 || result.statusCode() >= 300;
+        String conditionalFailure = attempt.failure();
+        boolean isHttpError = result.statusCode() < 200 || result.statusCode() >= 300;
+        boolean isError = isHttpError || conditionalFailure != null;
         String sha256 = sha256Hex(result.body());
         String debugRef = null;
         String bodyPreview = preview(result.body(), config.debugCapture().bodyPreviewBytes());
@@ -134,9 +136,9 @@ final class HttpSequenceRunner {
         applySetters(step, payload, current, context);
 
         current = appendResultStep(current, context, i, step, payload, serviceId, step.callId(), result, durationMs,
-            attempts, sha256, debugRef, bodyPreview, null);
+            attempts, sha256, debugRef, bodyPreview, conditionalFailure);
 
-        if (isError && !step.continueOnNon2xx()) {
+        if (conditionalFailure != null || (isHttpError && !step.continueOnNon2xx())) {
           failed = true;
           break;
         }
@@ -263,10 +265,21 @@ final class HttpSequenceRunner {
         last = new HttpCallExecutor.HttpCallResult(-1, Map.of(), "", ex.toString());
       }
 
-      boolean shouldRetry = attempt < maxAttempts && shouldRetry(retry, last);
-      if (!shouldRetry) {
+      String terminalFailure = terminalJsonFailure(retry, last);
+      if (terminalFailure != null) {
         long totalMs = Math.max(0L, clock.millis() - start);
-        return new HttpCallAttempt(attempt, totalMs, last);
+        return new HttpCallAttempt(attempt, totalMs, last, terminalFailure);
+      }
+
+      boolean retryable = shouldRetry(retry, last);
+      if (!retryable) {
+        long totalMs = Math.max(0L, clock.millis() - start);
+        return new HttpCallAttempt(attempt, totalMs, last, null);
+      }
+      if (attempt >= maxAttempts) {
+        long totalMs = Math.max(0L, clock.millis() - start);
+        String failure = last != null && last.statusCode() >= 200 && last.statusCode() < 300 ? "retry-exhausted" : null;
+        return new HttpCallAttempt(attempt, totalMs, last, failure);
       }
 
       long sleepMs = computeBackoffMs(retry, attempt);
@@ -276,16 +289,16 @@ final class HttpSequenceRunner {
         } catch (InterruptedException ie) {
           Thread.currentThread().interrupt();
           long totalMs = Math.max(0L, clock.millis() - start);
-          return new HttpCallAttempt(attempt, totalMs, last);
+          return new HttpCallAttempt(attempt, totalMs, last, "retry-interrupted");
         }
       }
     }
     long totalMs = Math.max(0L, clock.millis() - start);
-    return new HttpCallAttempt(maxAttempts, totalMs, last);
+    return new HttpCallAttempt(maxAttempts, totalMs, last, null);
   }
 
   private boolean shouldRetry(HttpSequenceWorkerConfig.Retry retry, HttpCallExecutor.HttpCallResult result) {
-    if (retry == null || retry.on().isEmpty() || result == null) {
+    if (retry == null || result == null) {
       return false;
     }
     int status = result.statusCode();
@@ -316,6 +329,34 @@ final class HttpSequenceRunner {
           }
         } catch (NumberFormatException ignored) {
         }
+      }
+    }
+    return matchesAnyJsonPredicate(retry.whileJson(), result);
+  }
+
+  private String terminalJsonFailure(HttpSequenceWorkerConfig.Retry retry, HttpCallExecutor.HttpCallResult result) {
+    if (retry == null || result == null || retry.failJson().isEmpty()) {
+      return null;
+    }
+    return matchesAnyJsonPredicate(retry.failJson(), result) ? "json-failure-condition" : null;
+  }
+
+  private boolean matchesAnyJsonPredicate(List<HttpSequenceWorkerConfig.JsonBodyPredicate> predicates,
+                                          HttpCallExecutor.HttpCallResult result) {
+    if (predicates == null || predicates.isEmpty() || result == null) {
+      return false;
+    }
+    JsonNode body = tryParseJson(result.body());
+    if (body == null) {
+      return false;
+    }
+    for (HttpSequenceWorkerConfig.JsonBodyPredicate predicate : predicates) {
+      JsonNode selected = body.at(predicate.fromJsonPointer());
+      if (selected == null || selected.isMissingNode() || selected.isNull() || !selected.isValueNode()) {
+        continue;
+      }
+      if (predicate.equalsValue().equals(selected.asText())) {
+        return true;
       }
     }
     return false;
@@ -694,6 +735,7 @@ final class HttpSequenceRunner {
     }
   }
 
-  private record HttpCallAttempt(int attempts, long totalDurationMs, HttpCallExecutor.HttpCallResult result) {
+  private record HttpCallAttempt(int attempts, long totalDurationMs, HttpCallExecutor.HttpCallResult result,
+                                 String failure) {
   }
 }

@@ -1,5 +1,6 @@
 package io.pockethive.httpsequence;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import io.pockethive.worker.sdk.config.MaxInFlightConfig;
 import java.util.List;
 import java.util.Map;
@@ -54,7 +55,9 @@ public record HttpSequenceWorkerConfig(
       long initialBackoffMs,
       double backoffMultiplier,
       long maxBackoffMs,
-      List<String> on
+      List<String> on,
+      List<JsonBodyPredicate> whileJson,
+      List<JsonBodyPredicate> failJson
   ) {
 
     public Retry {
@@ -63,10 +66,29 @@ public record HttpSequenceWorkerConfig(
       backoffMultiplier = backoffMultiplier <= 0.0 ? 1.0 : backoffMultiplier;
       maxBackoffMs = maxBackoffMs <= 0L ? initialBackoffMs : maxBackoffMs;
       on = on == null ? List.of() : List.copyOf(on);
+      whileJson = whileJson == null ? List.of() : List.copyOf(whileJson);
+      failJson = failJson == null ? List.of() : List.copyOf(failJson);
     }
 
     static Retry defaults() {
-      return new Retry(1, 0L, 1.0, 0L, List.of());
+      return new Retry(1, 0L, 1.0, 0L, List.of(), List.of(), List.of());
+    }
+  }
+
+  public record JsonBodyPredicate(
+      String fromJsonPointer,
+      @JsonProperty("equals") String equalsValue
+  ) {
+
+    public JsonBodyPredicate {
+      fromJsonPointer = normalise(fromJsonPointer);
+      equalsValue = normalise(equalsValue);
+      if (fromJsonPointer == null) {
+        throw new IllegalArgumentException("retry JSON predicate requires fromJsonPointer");
+      }
+      if (equalsValue == null) {
+        throw new IllegalArgumentException("retry JSON predicate requires equals");
+      }
     }
   }
 

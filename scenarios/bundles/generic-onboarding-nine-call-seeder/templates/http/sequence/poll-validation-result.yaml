@@ -1,0 +1,10 @@
+serviceId: sequence
+callId: poll-validation-result
+protocol: HTTP
+method: POST
+pathTemplate: /api/onboarding/users/validation-result
+headersTemplate:
+  content-type: application/json
+bodyTemplate: '{"tenantId":"{{ payload.tenantId }}","batchId":"{{
+  payload.batchId }}","userId":"{{ payload.userId }}","validationId":"{{
+  payload.validationId }}","desiredTerminalState":"APPROVED"}'

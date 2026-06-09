@@ -96,6 +96,12 @@ worker:
         backoffMultiplier: 2.0
         maxBackoffMs: 2000
         on: ["exception", "5xx", "429"]
+        whileJson:
+          - fromJsonPointer: /status
+            equals: PENDING
+        failJson:
+          - fromJsonPointer: /status
+            equals: REJECTED
       extracts:
         - fromJsonPointer: /id
           to: customerId
@@ -107,6 +113,10 @@ worker:
 
 Notes:
 - `retry.on[]` tokens supported by MVP: `exception`, `non2xx`, `4xx`, `5xx`, or an exact status code like `429`.
+- `retry.whileJson[]` retries while any configured JSON Pointer scalar value equals the configured `equals` value.
+- `retry.failJson[]` treats any matching JSON Pointer scalar equality as a terminal step failure.
+- If the final attempt still matches a retry condition while the HTTP status is `2xx`, the step records `retry-exhausted`
+  and the journey stops instead of advancing with a pending response.
 - Response headers are treated case-insensitively in `fromHeader`.
 
 ## Debugging large response bodies without bloating WorkItems

@@ -1,0 +1,36 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/onboarding/features/enable",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$.tenantId"
+      },
+      {
+        "matchesJsonPath": "$.userId"
+      },
+      {
+        "matchesJsonPath": "$.accountId"
+      },
+      {
+        "matchesJsonPath": {
+          "expression": "$.capability",
+          "equalTo": "MOBILE_WALLET"
+        }
+      },
+      {
+        "matchesJsonPath": "$.enabled"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": "{\"ok\":true,\"seedStatus\":\"SEEDED\",\"callId\":\"enable-additional-capability\",\"capabilityId\":\"capability-wallet-{{jsonPath request.body '$.accountId'}}\",\"capabilityStatus\":\"ENABLED\"}",
+    "transformers": [
+      "response-template"
+    ]
+  }
+}

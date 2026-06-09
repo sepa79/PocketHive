@@ -1,0 +1,10 @@
+serviceId: sequence
+callId: enable-additional-capability
+protocol: HTTP
+method: POST
+pathTemplate: /api/onboarding/features/enable
+headersTemplate:
+  content-type: application/json
+bodyTemplate: '{"tenantId":"{{ payload.tenantId }}","userId":"{{ payload.userId
+  }}","accountId":"{{ payload.accountId
+  }}","capability":"MOBILE_WALLET","enabled":{{ payload.optionalCapability }}}'

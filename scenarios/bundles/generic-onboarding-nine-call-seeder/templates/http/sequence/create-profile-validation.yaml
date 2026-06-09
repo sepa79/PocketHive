@@ -1,0 +1,13 @@
+serviceId: sequence
+callId: create-profile-validation
+protocol: HTTP
+method: POST
+pathTemplate: /api/onboarding/users/profile-validation
+headersTemplate:
+  content-type: application/json
+bodyTemplate: '{"tenantId":"{{ payload.tenantId }}","batchId":"{{
+  payload.batchId }}","userReference":"{{ payload.userReference
+  }}","externalUserId":"{{ payload.externalUserId }}","profile":{"givenName":"{{
+  payload.givenName }}","familyName":"{{ payload.familyName }}","email":"{{
+  payload.email }}","country":"{{ payload.country
+  }}"},"screening":"STANDARD_ONBOARDING"}'

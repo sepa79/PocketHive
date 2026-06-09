@@ -1,0 +1,39 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/onboarding/accounts/setup",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$.tenantId"
+      },
+      {
+        "matchesJsonPath": "$.accountId"
+      },
+      {
+        "matchesJsonPath": "$.initialFunding.amount"
+      },
+      {
+        "matchesJsonPath": {
+          "expression": "$.initialFunding.currency",
+          "equalTo": "GBP"
+        }
+      },
+      {
+        "matchesJsonPath": {
+          "expression": "$.limitsProfile",
+          "equalTo": "STANDARD_SEED"
+        }
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": "{\"ok\":true,\"seedStatus\":\"SEEDED\",\"callId\":\"initial-funding-setup\",\"fundingId\":\"funding-{{jsonPath request.body '$.accountId'}}\",\"setupId\":\"setup-{{jsonPath request.body '$.accountId'}}\",\"setupStatus\":\"COMPLETE\"}",
+    "transformers": [
+      "response-template"
+    ]
+  }
+}

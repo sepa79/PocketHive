@@ -1,0 +1,39 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/onboarding/users/validation-result",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$.tenantId"
+      },
+      {
+        "matchesJsonPath": "$.batchId"
+      },
+      {
+        "matchesJsonPath": "$.userId"
+      },
+      {
+        "matchesJsonPath": "$.validationId"
+      },
+      {
+        "matchesJsonPath": {
+          "expression": "$.desiredTerminalState",
+          "equalTo": "APPROVED"
+        }
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": "{\"ok\":true,\"seedStatus\":\"SEEDED\",\"callId\":\"poll-validation-result\",\"validationId\":\"{{jsonPath request.body '$.validationId'}}\",\"validationStatus\":\"APPROVED\",\"approvedAt\":\"2026-06-08T12:00:00Z\"}",
+    "transformers": [
+      "response-template"
+    ]
+  },
+  "scenarioName": "onboarding-validation-poll",
+  "requiredScenarioState": "PendingReturned",
+  "priority": 1
+}

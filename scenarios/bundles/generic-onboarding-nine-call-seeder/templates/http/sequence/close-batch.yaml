@@ -1,0 +1,13 @@
+serviceId: sequence
+callId: close-batch
+protocol: HTTP
+method: POST
+pathTemplate: /api/onboarding/batches/close
+headersTemplate:
+  content-type: application/json
+bodyTemplate: '{"tenantId":"{{ payload.tenantId }}","batchId":"{{
+  payload.batchId }}","expectedUsers":{{ payload.userCount }},"completedUsers":1,"activationMode":"{{
+  payload.activationMode }}","seedArtifactRefs":{"userId":"{{ payload.userId
+  }}","accountId":"{{ payload.accountId }}","resourceId":"{{ payload.resourceId
+  }}","cardId":"{{ payload.cardId
+  }}"}}'

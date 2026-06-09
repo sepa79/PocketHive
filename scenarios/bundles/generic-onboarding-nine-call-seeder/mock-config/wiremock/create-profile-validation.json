@@ -1,0 +1,39 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/onboarding/users/profile-validation",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$.tenantId"
+      },
+      {
+        "matchesJsonPath": "$.batchId"
+      },
+      {
+        "matchesJsonPath": "$.userReference"
+      },
+      {
+        "matchesJsonPath": "$.externalUserId"
+      },
+      {
+        "matchesJsonPath": "$.profile.email"
+      },
+      {
+        "matchesJsonPath": {
+          "expression": "$.screening",
+          "equalTo": "STANDARD_ONBOARDING"
+        }
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": "{\"ok\":true,\"seedStatus\":\"SEEDED\",\"callId\":\"create-profile-validation\",\"userId\":\"{{jsonPath request.body '$.userReference'}}\",\"profileId\":\"profile-{{jsonPath request.body '$.userReference'}}\",\"validationId\":\"validation-{{jsonPath request.body '$.userReference'}}\",\"validationState\":\"PENDING\"}",
+    "transformers": [
+      "response-template"
+    ]
+  }
+}

@@ -1,0 +1,11 @@
+serviceId: sequence
+callId: open-batch
+protocol: HTTP
+method: POST
+pathTemplate: /api/onboarding/batches/open
+headersTemplate:
+  content-type: application/json
+bodyTemplate: '{"tenantId":"{{ payload.tenantId }}","batchReference":"{{
+  payload.batchReference
+  }}","mode":"DATA_SEED","expectedUsers":{{ payload.userCount }},"seederRunId":"{{ payload.seederRunId
+  }}"}'

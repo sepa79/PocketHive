@@ -1,0 +1,10 @@
+serviceId: sequence
+callId: provision-resource
+protocol: HTTP
+method: POST
+pathTemplate: /api/onboarding/resources/provision
+headersTemplate:
+  content-type: application/json
+bodyTemplate: '{"tenantId":"{{ payload.tenantId }}","userId":"{{ payload.userId
+  }}","accountId":"{{ payload.accountId
+  }}","resourceType":"CARD","deliveryMode":"DEFERRED_READY"}'

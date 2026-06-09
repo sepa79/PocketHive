@@ -1,5 +1,5 @@
 schemaVersion: "1.0"
-capabilitiesVersion: "1.1"
+capabilitiesVersion: "1.2"
 role: io-scheduler
 image:
   name: io-scheduler
@@ -17,9 +17,10 @@ config:
       step: 1
       unit: msg/s
   - name: inputs.scheduler.maxMessages
-    type: number
-    default: 0
+    type: string
+    default: "0"
     min: 0
+    description: "Finite scheduler cap. Use a whole number or a numeric scenario-variable template such as {{ vars.userCount }}."
     ui:
       step: 1
       unit: messages

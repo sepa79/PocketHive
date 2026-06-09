@@ -375,6 +375,66 @@ class SwarmControllerTest {
     }
 
     @Test
+    void createResolvesNestedWorkerSutBaseUrlTemplate() throws Exception {
+        SwarmCreateTracker tracker = new SwarmCreateTracker();
+        SwarmPlanRegistry plans = new SwarmPlanRegistry();
+        SwarmTemplate template = new SwarmTemplate("ctrl-image", List.of(
+            new Bee(
+                "http-sequence",
+                "img",
+                Work.ofDefaults("in", "out"),
+                Map.of(),
+                Map.<String, Object>of(
+                    "worker",
+                    Map.<String, Object>of(
+                        "baseUrl",
+                        "{{ sut.endpoints['default'].baseUrl }}/onboarding",
+                        "serviceId",
+                        "sequence")))));
+        when(scenarioClient.fetchScenario("tpl-1")).thenReturn(new ScenarioPlan(template, null, null, null));
+        when(scenarioClient.prepareScenarioRuntime("tpl-1", "sw1")).thenReturn("/tmp/runtime/sw1");
+        when(scenarioClient.fetchScenarioSut(eq("tpl-1"), eq("wiremock-local"), anyString(), eq("idem")))
+            .thenReturn(new SutEnvironment(
+                "wiremock-local",
+                "WireMock Local",
+                "sandbox",
+                Map.of("default", new io.pockethive.swarm.model.SutEndpoint(
+                    "default",
+                    "HTTP",
+                    "http://wiremock:8080",
+                    null))));
+        AtomicReference<String> capturedInstance = new AtomicReference<>();
+        when(lifecycle.startSwarm(
+            eq("sw1"),
+            eq("ctrl-image"),
+            anyString(),
+            any(SwarmTemplateMetadata.class),
+            eq(false),
+            eq("wiremock-local"),
+            any(),
+            any())).thenAnswer(inv -> {
+                String instanceId = inv.getArgument(2);
+                capturedInstance.set(instanceId);
+                return new Swarm("sw1", instanceId, "c1", "run-1");
+            });
+
+        SwarmController ctrl = controller(tracker, new SwarmStore(), plans);
+        ctrl.create("sw1", new SwarmCreateRequest(
+            "tpl-1",
+            "idem",
+            null,
+            false,
+            "wiremock-local",
+            null));
+
+        SwarmPlan plan = plans.find(capturedInstance.get()).orElseThrow();
+        Map<String, Object> config = plan.bees().get(0).config();
+        assertThat(config.get("baseUrl")).isEqualTo("http://wiremock:8080/onboarding");
+        assertThat(config.get("serviceId")).isEqualTo("sequence");
+        assertThat(plan.sutId()).isEqualTo("wiremock-local");
+    }
+
+    @Test
     void createResolvesNetworkProfileWhenProxied() throws Exception {
         SwarmCreateTracker tracker = new SwarmCreateTracker();
         SwarmPlanRegistry plans = new SwarmPlanRegistry();

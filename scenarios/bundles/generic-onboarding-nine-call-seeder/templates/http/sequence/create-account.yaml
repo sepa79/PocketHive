@@ -1,0 +1,11 @@
+serviceId: sequence
+callId: create-account
+protocol: HTTP
+method: POST
+pathTemplate: /api/onboarding/accounts/create
+headersTemplate:
+  content-type: application/json
+bodyTemplate: '{"tenantId":"{{ payload.tenantId }}","batchId":"{{
+  payload.batchId }}","userId":"{{ payload.userId }}","profileId":"{{
+  payload.profileId }}","validationStatus":"{{ payload.validationStatus
+  }}","productCode":"CORE_ACCOUNT"}'

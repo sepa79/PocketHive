@@ -1,0 +1,48 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/onboarding/batches/close",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$.tenantId"
+      },
+      {
+        "matchesJsonPath": "$.batchId"
+      },
+      {
+        "matchesJsonPath": "$.expectedUsers"
+      },
+      {
+        "matchesJsonPath": "$.completedUsers"
+      },
+      {
+        "matchesJsonPath": {
+          "expression": "$.activationMode",
+          "equalTo": "deferred"
+        }
+      },
+      {
+        "matchesJsonPath": "$.seedArtifactRefs.userId"
+      },
+      {
+        "matchesJsonPath": "$.seedArtifactRefs.accountId"
+      },
+      {
+        "matchesJsonPath": "$.seedArtifactRefs.resourceId"
+      },
+      {
+        "matchesJsonPath": "$.seedArtifactRefs.cardId"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": "{\"ok\":true,\"seedStatus\":\"SEEDED\",\"callId\":\"close-batch\",\"batchId\":\"{{jsonPath request.body '$.batchId'}}\",\"batchStatus\":\"CLOSED\",\"datasetArtifactId\":\"dataset-artifact-{{jsonPath request.body '$.tenantId'}}-{{jsonPath request.body '$.seedArtifactRefs.userId'}}\",\"persistedEntityCount\":1,\"activationDeferred\":true}",
+    "transformers": [
+      "response-template"
+    ]
+  }
+}

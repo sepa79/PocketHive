@@ -5,14 +5,18 @@ import io.pockethive.observability.ObservabilityContextUtil;
 import io.pockethive.worker.sdk.api.StatusPublisher;
 import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerInfo;
+import io.pockethive.worker.sdk.config.SchedulerInputConfigValidator;
 import io.pockethive.worker.sdk.config.SchedulerInputProperties;
 import io.pockethive.worker.sdk.runtime.WorkIoBindings;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.runtime.WorkerRuntime;
+import io.pockethive.worker.sdk.templating.PebbleTemplateRenderer;
+import io.pockethive.worker.sdk.templating.TemplateRenderer;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
+import java.util.OptionalLong;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -44,6 +48,7 @@ public final class SchedulerWorkInput<C> implements WorkInput {
     private final BiFunction<WorkerDefinition, ControlPlaneIdentity, WorkItem> seedFactory;
     private final BiConsumer<WorkItem, WorkerDefinition> resultHandler;
     private final Consumer<Exception> dispatchErrorHandler;
+    private final TemplateRenderer templateRenderer;
     private final Logger log;
     private final long initialDelayMs;
     private final long tickIntervalMs;
@@ -65,6 +70,7 @@ public final class SchedulerWorkInput<C> implements WorkInput {
         this.seedFactory = builder.seedFactory;
         this.resultHandler = builder.resultHandler;
         this.dispatchErrorHandler = builder.dispatchErrorHandler;
+        this.templateRenderer = builder.templateRenderer;
         this.log = builder.log;
         this.initialDelayMs = builder.initialDelayMs;
         this.tickIntervalMs = builder.tickIntervalMs;
@@ -234,9 +240,9 @@ public final class SchedulerWorkInput<C> implements WorkInput {
 
         // Finite-run configuration: maxMessages + optional reset flag
         boolean resetRequested = false;
-        Object maxObj = schedulerMap.get("maxMessages");
-        if (maxObj instanceof Number maxNumber) {
-            long newMax = Math.max(0L, maxNumber.longValue());
+        OptionalLong resolvedMaxMessages = resolveMaxMessages(schedulerMap.get("maxMessages"), rawConfig, templateRenderer);
+        if (resolvedMaxMessages.isPresent()) {
+            long newMax = resolvedMaxMessages.getAsLong();
             long currentMax = scheduling.getMaxMessages();
             if (newMax != currentMax) {
                 scheduling.setMaxMessages(newMax);
@@ -265,6 +271,10 @@ public final class SchedulerWorkInput<C> implements WorkInput {
                     workerDefinition.beanName(), before);
             }
         }
+    }
+
+    static OptionalLong resolveMaxMessages(Object rawValue, Map<String, Object> rawConfig, TemplateRenderer renderer) {
+        return SchedulerInputConfigValidator.resolveMaxMessages(rawValue, rawConfig, renderer);
     }
 
     private static WorkItem defaultSeed(WorkerDefinition definition, ControlPlaneIdentity identity) {
@@ -333,6 +343,7 @@ public final class SchedulerWorkInput<C> implements WorkInput {
         private BiFunction<WorkerDefinition, ControlPlaneIdentity, WorkItem> seedFactory = SchedulerWorkInput::defaultSeed;
         private BiConsumer<WorkItem, WorkerDefinition> resultHandler = SchedulerWorkInput::ignoreResult;
         private Consumer<Exception> dispatchErrorHandler = ex -> defaultLog.warn("Scheduler worker invocation failed", ex);
+        private TemplateRenderer templateRenderer = new PebbleTemplateRenderer();
         private Logger log = defaultLog;
         private SchedulerInputProperties scheduling = new SchedulerInputProperties();
         private long initialDelayMs = 0L;
@@ -389,6 +400,11 @@ public final class SchedulerWorkInput<C> implements WorkInput {
 
         public Builder<C> dispatchErrorHandler(Consumer<Exception> dispatchErrorHandler) {
             this.dispatchErrorHandler = Objects.requireNonNull(dispatchErrorHandler, "dispatchErrorHandler");
+            return this;
+        }
+
+        public Builder<C> templateRenderer(TemplateRenderer templateRenderer) {
+            this.templateRenderer = Objects.requireNonNull(templateRenderer, "templateRenderer");
             return this;
         }
 

@@ -215,8 +215,8 @@ class WorkerControlPlaneRuntimeTest {
 	        assertThat(seededRuntime.workerRawConfig(definition.beanName())).doesNotContainKey("templating");
 	    }
 
-	    @Test
-	    void configUpdateValidationFailureEmitsErrorContext() throws Exception {
+    @Test
+    void configUpdateValidationFailureEmitsErrorContext() throws Exception {
 	        String correlationId = UUID.randomUUID().toString();
 	        String idempotencyKey = UUID.randomUUID().toString();
         Map<String, Object> args = Map.of(
@@ -247,6 +247,46 @@ class WorkerControlPlaneRuntimeTest {
         assertThat(ctx.idempotencyKey()).isEqualTo(idempotencyKey);
         assertThat(ctx.phase()).isEqualTo("apply");
         assertThat(ctx.details()).containsEntry("worker", definition.beanName());
+    }
+
+    @Test
+    void schedulerMaxMessagesValidationFailureEmitsErrorContextBeforeReady() throws Exception {
+        String correlationId = UUID.randomUUID().toString();
+        String idempotencyKey = UUID.randomUUID().toString();
+        Map<String, Object> args = Map.of(
+            "vars", Map.of("userCount", "10.5"),
+            "inputs", Map.of(
+                "scheduler", Map.of("maxMessages", "{{ vars.userCount }}")
+            )
+        );
+        ControlSignal signal = ControlSignal.forInstance(
+            "config-update",
+            IDENTITY.swarmId(),
+            IDENTITY.role(),
+            IDENTITY.instanceId(),
+            ORIGIN,
+            correlationId,
+            idempotencyKey,
+            args
+        );
+        String payload = MAPPER.writeValueAsString(signal);
+        String routingKey = ControlPlaneRouting.signal("config-update", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
+
+        boolean handled = runtime.handle(payload, routingKey);
+
+        assertThat(handled).isTrue();
+        ArgumentCaptor<ControlPlaneEmitter.ErrorContext> captor = ArgumentCaptor.forClass(ControlPlaneEmitter.ErrorContext.class);
+        verify(emitter).emitError(captor.capture());
+        verify(emitter, times(0)).emitReady(any(ControlPlaneEmitter.ReadyContext.class));
+        ControlPlaneEmitter.ErrorContext ctx = captor.getValue();
+        assertThat(ctx.signal()).isEqualTo("config-update");
+        assertThat(ctx.correlationId()).isEqualTo(correlationId);
+        assertThat(ctx.idempotencyKey()).isEqualTo(idempotencyKey);
+        assertThat(ctx.phase()).isEqualTo("apply");
+        assertThat(ctx.code()).isEqualTo("IllegalArgumentException");
+        assertThat(ctx.message()).contains("inputs.scheduler.maxMessages", "10.5");
+        assertThat(ctx.details()).containsEntry("worker", definition.beanName());
+        assertThat(runtime.workerRawConfig(definition.beanName())).isEmpty();
     }
 
     @Test

@@ -9,6 +9,7 @@ import io.pockethive.worker.sdk.config.WorkerInputType;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.runtime.WorkerRuntime;
+import io.pockethive.worker.sdk.templating.TemplateRenderer;
 import java.lang.reflect.Constructor;
 import java.util.List;
 import java.util.Map;
@@ -29,19 +30,22 @@ public final class SchedulerWorkInputFactory implements WorkInputFactory, Ordere
     private final ControlPlaneIdentity identity;
     private final ObjectMapper objectMapper;
     private final List<PocketHiveWorkerProperties<?>> workerProperties;
+    private final TemplateRenderer templateRenderer;
 
     public SchedulerWorkInputFactory(
         WorkerRuntime workerRuntime,
         WorkerControlPlaneRuntime controlPlaneRuntime,
         ControlPlaneIdentity identity,
         ObjectMapper objectMapper,
-        List<PocketHiveWorkerProperties<?>> workerProperties
+        List<PocketHiveWorkerProperties<?>> workerProperties,
+        TemplateRenderer templateRenderer
     ) {
         this.workerRuntime = workerRuntime;
         this.controlPlaneRuntime = controlPlaneRuntime;
         this.identity = identity;
         this.objectMapper = objectMapper;
         this.workerProperties = workerProperties == null ? List.of() : List.copyOf(workerProperties);
+        this.templateRenderer = templateRenderer;
     }
 
     @Override
@@ -72,6 +76,7 @@ public final class SchedulerWorkInputFactory implements WorkInputFactory, Ordere
             .identity(identity)
             .schedulerState(schedulerState)
             .scheduling(scheduling)
+            .templateRenderer(templateRenderer)
             .logger(logger)
             .build();
     }
