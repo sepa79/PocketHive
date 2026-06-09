@@ -128,6 +128,7 @@ This file is a **navigation and guardrails** page for both human and AI contribu
 
 - PocketHive agent work should use the globally configured HiveMind project memory when available. Use the workflow in `docs/ai/HIVEMIND_WORKFLOW.md` with `project_id=pockethive`; do not create repo-local HiveMind storage or start a local HiveMind API as an implicit fallback.
 - `build-hive.sh` in the repo root is the **canonical entrypoint** for local PocketHive rebuild/redeploy cycles: it rebuilds worker/service artifacts as needed and restarts the local `docker-compose` stack. Prefer using it over ad‑hoc `docker`/`mvn` commands when you want a full local refresh.
+- For production-like HiveForge swarm deploys, use the `docs/HIVEFORGE.md` Agent MCP Deploy Checklist. Deploy through HiveForge MCP only; do not inspect Proxmox/hosts or run direct Docker/SSH commands as a deployment workaround.
 - `tools/mcp-orchestrator-debug/` contains both a **debug CLI** and the **actual MCP server** for Orchestrator / Scenario Manager / RabbitMQ:
   - `client.mjs` talks directly to the Orchestrator REST API, Scenario Manager API, and control‑plane via AMQP (no MCP needed).
   - `server.mjs` is the stdio MCP server wrapper for editor/agent integration. Prefer using it when the client supports MCP tools.

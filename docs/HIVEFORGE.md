@@ -50,6 +50,72 @@ Actions:
 - `remove` - runs `./build-hive.sh --clean` for `single-full`; removes the
   Docker Stack for `swarm-reduced` and `swarm-full`
 
+## Agent MCP Deploy Checklist
+
+When a human asks an agent to deploy PocketHive through HiveForge, use the
+HiveForge MCP tools only. Do not SSH to hosts, inspect Proxmox, run Docker
+commands locally against the target, or add deployment workarounds. Treat
+HiveForge validation failures as explicit configuration gaps to fix through
+HiveForge MCP configuration.
+
+For the large Docker Swarm environment currently exposed by HiveForge as
+`environmentId=swarm`, the production-like PocketHive stack profile is
+`swarm-full`.
+
+Agent sequence:
+
+1. Use HiveMind MCP for work context with `project_id=pockethive`.
+2. Confirm HiveForge is reachable with `check_health`.
+3. Confirm project/policy with `list_projects` and `list_environments`.
+4. If needed, allow PocketHive on the swarm environment:
+
+   ```text
+   set_environment_project_policy:
+     environmentId: swarm
+     projectId: pockethive
+     profiles: [swarm-full]
+     actions: [deploy, update, remove]
+   ```
+
+5. Set non-secret runtime env before `validate_requirements` or `start_action`.
+   For a release tag such as `v0.15.24`, use `POCKETHIVE_VERSION=0.15.24`
+   without the leading `v`:
+
+   ```text
+   set_project_runtime_env:
+     projectId: pockethive
+     profile: swarm-full
+     values:
+       DOCKER_REGISTRY: ghcr.io/sepa79/pockethive/
+       POCKETHIVE_VERSION: <release version without leading v>
+       POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_IMAGE_REPOSITORY_PREFIX: ghcr.io/sepa79/pockethive
+       POCKETHIVE_STACK_NAME: pockethive
+       POCKETHIVE_RABBITMQ_ROOT: /opt/pockethive-data/rabbitmq
+       POCKETHIVE_POSTGRES_ROOT: /opt/pockethive-data/postgres
+       POCKETHIVE_CLICKHOUSE_ROOT: /opt/pockethive-data/clickhouse
+       POCKETHIVE_PROMETHEUS_ROOT: /opt/pockethive-data/prometheus
+       POCKETHIVE_LOKI_ROOT: /opt/pockethive-data/loki
+       POCKETHIVE_REDIS_ROOT: /opt/pockethive-data/redis
+   ```
+
+6. Start the lifecycle action through HiveForge MCP:
+
+   ```text
+   start_action:
+     projectId: pockethive
+     gitRef: v<release version>
+     component: stack
+     action: update
+     profile: swarm-full
+   ```
+
+7. Poll only through `get_operation`. Verify completion with
+   `list_deployments` and/or `read_journal`.
+
+The synchronous `validate_requirements` and repository inspection calls may
+time out for PocketHive because checkout/managed-artifact preparation is large.
+Prefer `start_action` plus `get_operation` for the actual deployment workflow.
+
 ## Example HiveForge Registry
 
 HiveForge keeps project registry and environment policy outside the project
