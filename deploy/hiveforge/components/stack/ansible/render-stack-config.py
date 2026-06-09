@@ -20,12 +20,13 @@ def main() -> int:
 
 def normalize_stack_config(config: dict[str, Any]) -> None:
     config.pop("name", None)
-    strip_generated_resource_names(config.get("networks"))
+    config.pop("networks", None)
     strip_generated_resource_names(config.get("volumes"))
 
     for service in config.get("services", {}).values():
         if not isinstance(service, dict):
             continue
+        service.pop("networks", None)
         service.pop("depends_on", None)
         stringify_entrypoint(service)
         normalize_ports(service)

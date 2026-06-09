@@ -58,7 +58,6 @@ services:
       - ${HIVEFORGE_PROJECT_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/config/clickhouse/migrate-tx-outcome-v1-to-v2.sh:/opt/pockethive/migrate-tx-outcome-v1-to-v2.sh:ro
     deploy: !override
       <<: *clickhouse-placement
-      endpoint_mode: dnsrr
 
   prometheus:
     volumes: !override
@@ -79,4 +78,3 @@ services:
       - ${POCKETHIVE_REDIS_ROOT:?set Redis root}/data:/data
     deploy: !override
       <<: *redis-placement
-      endpoint_mode: dnsrr
