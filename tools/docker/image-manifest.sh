@@ -54,6 +54,7 @@ register_pockethive_image swarm-controller swarm-controller swarm-controller-ser
 register_pockethive_image generator generator generator-service Dockerfile.bees.local . generator worker
 register_pockethive_image request-builder request-builder request-builder-service Dockerfile.bees.local . request-builder worker
 register_pockethive_image http-sequence http-sequence http-sequence-service Dockerfile.bees.local . http-sequence worker
+register_pockethive_image db-query db-query db-query-service Dockerfile.bees.local . db-query worker
 register_pockethive_image moderator moderator moderator-service Dockerfile.bees.local . moderator worker
 register_pockethive_image processor processor processor-service Dockerfile.bees.local . processor worker
 register_pockethive_image postprocessor postprocessor postprocessor-service Dockerfile.bees.local . postprocessor worker

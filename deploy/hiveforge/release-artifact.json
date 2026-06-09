@@ -71,6 +71,11 @@
       "application": true
     },
     {
+      "name": "db-query",
+      "image": "{{ imageRepository.project }}/db-query:{{ release.imageTag }}",
+      "application": true
+    },
+    {
       "name": "moderator",
       "image": "{{ imageRepository.project }}/moderator:{{ release.imageTag }}",
       "application": true

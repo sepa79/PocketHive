@@ -1,0 +1,28 @@
+serviceId: db
+queryId: select-probe
+adapter: POSTGRES
+statementType: SELECT
+sqlTemplate: |
+  select probe_id, status, remote_marker, hit_count
+  from db_query_probe
+  where probe_id = :probeId
+params:
+  - name: probeId
+    source: payload.probeId
+    type: STRING
+result:
+  mode: FIRST_ROW
+validation:
+  minRows: 1
+  maxRows: 1
+  columns:
+    - name: probe_id
+      notNull: true
+    - name: remote_marker
+      notNull: true
+    - name: remote_marker
+      regex: "^DBLINK-"
+extracts:
+  - fromColumn: remote_marker
+    to: dblinkMarker
+    required: true

@@ -1,5 +1,6 @@
 package io.pockethive.postprocessor;
 
+import io.pockethive.swarm.model.OutcomeHeaders;
 import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.api.WorkerInfo;
@@ -13,13 +14,13 @@ import java.util.Optional;
 
 final class TxOutcomeProjector {
 
-  private static final String CALL_ID_HEADER = "x-ph-call-id";
-  private static final String PROCESSOR_STATUS_HEADER = "x-ph-processor-status";
-  private static final String PROCESSOR_SUCCESS_HEADER = "x-ph-processor-success";
-  private static final String PROCESSOR_DURATION_HEADER = "x-ph-processor-duration-ms";
-  private static final String BUSINESS_CODE_HEADER = "x-ph-business-code";
-  private static final String BUSINESS_SUCCESS_HEADER = "x-ph-business-success";
-  private static final String DIMENSION_PREFIX = "x-ph-dim-";
+  private static final String CALL_ID_HEADER = OutcomeHeaders.CALL_ID;
+  private static final String PROCESSOR_STATUS_HEADER = OutcomeHeaders.PROCESSOR_STATUS;
+  private static final String PROCESSOR_SUCCESS_HEADER = OutcomeHeaders.PROCESSOR_SUCCESS;
+  private static final String PROCESSOR_DURATION_HEADER = OutcomeHeaders.PROCESSOR_DURATION_MS;
+  private static final String BUSINESS_CODE_HEADER = OutcomeHeaders.BUSINESS_CODE;
+  private static final String BUSINESS_SUCCESS_HEADER = OutcomeHeaders.BUSINESS_SUCCESS;
+  private static final String DIMENSION_PREFIX = OutcomeHeaders.DIMENSION_PREFIX;
   private static final DateTimeFormatter EVENT_TIME_FORMAT =
       DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS").withZone(ZoneOffset.UTC);
 
@@ -34,7 +35,7 @@ final class TxOutcomeProjector {
   ) {
     Map<String, Object> headers = item.headers();
     Map<String, Object> stepHeaders = item.stepHeaders();
-    String callId = normalize(readHeader(headers, stepHeaders, CALL_ID_HEADER));
+    String callId = normalize(readHeader(stepHeaders, headers, CALL_ID_HEADER));
     if (dropWithoutCallId && callId.isEmpty()) {
       return Optional.empty();
     }

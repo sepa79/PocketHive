@@ -26,6 +26,22 @@ class CapabilityCatalogueServiceTest {
         assertThat(catalogue.findByImageName("192.168.88.54:5000/pockethive/processor@sha256:abc")).isPresent();
     }
 
+    @Test
+    void bundledDbQueryCapabilityLoads() throws Exception {
+        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(Path.of("capabilities"));
+        catalogue.reload();
+
+        CapabilityManifest manifest = catalogue.findByImageName("db-query").orElseThrow();
+        assertThat(manifest.role()).isEqualTo("db-query");
+        assertThat(manifest.config())
+            .extracting(CapabilityManifest.ConfigEntry::name)
+            .contains(
+                "adapter",
+                "connection.jdbcUrl",
+                "pool.maxSize",
+                "retry.on");
+    }
+
     private void writeManifest(String imageName) throws IOException {
         String body = """
                 schemaVersion: "1.0"

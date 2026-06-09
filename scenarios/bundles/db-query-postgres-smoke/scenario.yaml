@@ -1,0 +1,72 @@
+id: db-query-postgres-smoke
+name: DB Query Postgres Smoke
+description: DB-only smoke scenario for the db-query worker using an explicit JDBC URL and SELECT/INSERT/UPDATE profiles. The bundled test-postgres compose seeds the rows required by select/update profiles.
+template:
+  image: swarm-controller:latest
+  bees:
+    - role: generator
+      image: generator:latest
+      config:
+        inputs:
+          type: SCHEDULER
+          scheduler:
+            ratePerSec: "{{ vars.ratePerSec }}"
+            maxMessages: "{{ vars.maxMessages }}"
+        worker:
+          message:
+            bodyType: SIMPLE
+            body: |
+              {
+                "probeId": "{{ vars.probeId }}",
+                "status": "{{ vars.status }}",
+                "remoteMarker": "{{ vars.remoteMarker }}"
+              }
+            headers:
+              content-type: application/json
+      work:
+        out:
+          out: db
+    - role: db-query
+      image: db-query:latest
+      config:
+        worker:
+          adapter: POSTGRES
+          templateRoot: /app/scenario/templates/db
+          serviceId: db
+          queryId: "{{ vars.queryId }}"
+          threadCount: "{{ vars.threadCount }}"
+          queryTimeoutMs: "{{ vars.queryTimeoutMs }}"
+          connection:
+            jdbcUrl: "{{ vars.dbJdbcUrl }}"
+            username: "{{ vars.dbUsername }}"
+            password: "{{ vars.dbPassword }}"
+          pool:
+            maxSize: "{{ vars.poolMaxSize }}"
+            minIdle: "{{ vars.poolMinIdle }}"
+            connectionTimeoutMs: "{{ vars.poolConnectionTimeoutMs }}"
+            validationTimeoutMs: "{{ vars.poolValidationTimeoutMs }}"
+            idleTimeoutMs: "{{ vars.poolIdleTimeoutMs }}"
+            maxLifetimeMs: "{{ vars.poolMaxLifetimeMs }}"
+          retry:
+            maxAttempts: "{{ vars.retryMaxAttempts }}"
+            initialBackoffMs: "{{ vars.retryInitialBackoffMs }}"
+            backoffMultiplier: "{{ vars.retryBackoffMultiplier }}"
+            maxBackoffMs: "{{ vars.retryMaxBackoffMs }}"
+            on:
+              - SQLSTATE_CLASS_08
+              - SQLSTATE_CLASS_40
+      work:
+        in:
+          in: db
+        out:
+          out: post
+    - role: postprocessor
+      image: postprocessor:latest
+      config:
+        worker:
+          forwardToOutput: false
+          txOutcomeSinkMode: "{{ vars.txOutcomeSinkMode }}"
+          dropTxOutcomeWithoutCallId: "{{ vars.dropTxOutcomeWithoutCallId }}"
+      work:
+        in:
+          in: post

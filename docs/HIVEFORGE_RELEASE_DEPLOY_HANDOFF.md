@@ -124,6 +124,7 @@ Status: done for HiveForge checkout-backed prepare.
 - base, single-node, swarm, and reduced Compose files,
 - reduced/swarm nginx configs,
 - scenario bundles,
+- Scenario Manager capabilities/network/SUT definitions,
 - WireMock files,
 - TCP mock mappings/files.
 
@@ -147,6 +148,9 @@ artifacts/pockethive-runtime/compose/compose.reduced.yml
 artifacts/pockethive-runtime/config/rabbitmq/rabbitmq.conf
 artifacts/pockethive-runtime/config/clickhouse/init/01-ph-tx-outcome-v1.sql
 artifacts/pockethive-runtime/scenarios
+artifacts/pockethive-runtime/scenario-manager/capabilities
+artifacts/pockethive-runtime/scenario-manager/network
+artifacts/pockethive-runtime/scenario-manager/sut
 ```
 
 ### PH Slice 3 - Replace POC Build Action
@@ -154,11 +158,13 @@ artifacts/pockethive-runtime/scenarios
 `swarm-reduced` now renders HiveForge-managed compose artifacts and deploys the
 result with `docker stack deploy` using prebuilt images from explicit runtime
 environment values. `single-full` still uses `build-hive.sh --quick` for local
-developer stacks. `swarm-full` remains declared but not wired.
+developer stacks. `swarm-full` now uses the same Docker Stack render/deploy path
+as `swarm-reduced`, with explicit dedicated service-owned mount roots supplied
+through runtime environment values.
 
-Hard rule for PocketHive application images:
+Hard rule for PocketHive swarm image deployment:
 
-- HiveForge deploy must not call `build-hive.sh --quick`.
+- HiveForge swarm deploy must not call `build-hive.sh --quick`.
 - HiveForge deploy must not call `tools/docker/remote-images.sh`.
 - Build/push remains an operator/CI step before HiveForge deploy.
 

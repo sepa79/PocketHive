@@ -7,16 +7,12 @@
 
 x-storage-placement: &storage-placement {}
 
-x-scenarios-placement: &scenarios-placement
-  placement:
-    constraints:
-      - node.labels.pockethive.scenarios == true
+x-scenarios-placement: &scenarios-placement {}
 
 x-manager-scenarios-placement: &manager-scenarios-placement
   placement:
     constraints:
       - node.role == manager
-      - node.labels.pockethive.scenarios == true
 
 x-sut-placement: &sut-placement
   placement:
@@ -35,23 +31,16 @@ x-manager-placement: &manager-placement
 
 services:
   rabbitmq:
-    networks:
-      default:
-        aliases:
-          - rabbitmq
     ports: !override
       - target: 5672
         published: 5672
         protocol: tcp
-        mode: host
       - target: 15672
         published: 15672
         protocol: tcp
-        mode: host
       - target: 15674
         published: 15674
         protocol: tcp
-        mode: host
     volumes: !override
       - ${HIVEFORGE_PROJECT_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/config/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
       - ${HIVEFORGE_PROJECT_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/config/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
@@ -59,24 +48,15 @@ services:
     deploy: *storage-placement
 
   postgres:
-    networks:
-      default:
-        aliases:
-          - postgres
     volumes: !override
       - ${HIVEFORGE_PROJECT_DIR:?set HiveForge project dir}/state/postgres/data:/var/lib/postgresql/data
     deploy: *storage-placement
 
   clickhouse:
-    networks:
-      default:
-        aliases:
-          - clickhouse
     ports: !override
       - target: 8123
         published: 8123
         protocol: tcp
-        mode: host
     volumes: !override
       - ${HIVEFORGE_PROJECT_DIR:?set HiveForge project dir}/state/clickhouse/data:/var/lib/clickhouse
       - ${HIVEFORGE_PROJECT_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/config/clickhouse/init:/docker-entrypoint-initdb.d:ro
@@ -84,23 +64,14 @@ services:
       - ${HIVEFORGE_PROJECT_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/config/clickhouse/migrate-tx-outcome-v1-to-v2.sh:/opt/pockethive/migrate-tx-outcome-v1-to-v2.sh:ro
     deploy:
       <<: *storage-placement
-      endpoint_mode: dnsrr
 
   prometheus:
-    networks:
-      default:
-        aliases:
-          - prometheus
     volumes: !override
       - ${HIVEFORGE_PROJECT_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ${HIVEFORGE_PROJECT_DIR:?set HiveForge project dir}/state/prometheus/data:/prometheus
     deploy: *storage-placement
 
   grafana:
-    networks:
-      default:
-        aliases:
-          - grafana
     volumes: !override
       - ${HIVEFORGE_PROJECT_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/config/grafana/grafana.ini:/etc/grafana/grafana.ini:ro
       - ${HIVEFORGE_PROJECT_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/config/grafana/provisioning:/etc/grafana/provisioning:ro
@@ -109,142 +80,103 @@ services:
     deploy: *storage-placement
 
   loki:
-    networks:
-      default:
-        aliases:
-          - loki
     volumes: !override
       - ${HIVEFORGE_PROJECT_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/config/loki/config.yml:/etc/loki/config.yml:ro
       - ${HIVEFORGE_PROJECT_DIR:?set HiveForge project dir}/state/loki/data:/var/lib/loki
     deploy: *storage-placement
 
   scenario-manager:
-    networks:
-      default:
-        aliases:
-          - scenario-manager
     depends_on: !override
       - log-aggregator
     environment:
-      RABBITMQ_HOST: tasks.rabbitmq
-      SPRING_RABBITMQ_HOST: tasks.rabbitmq
-      POCKETHIVE_AUTH_SERVICE_URL: http://tasks.auth-service:8080
-      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL: http://tasks.pushgateway:9091
+      RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_HOST: rabbitmq
+      POCKETHIVE_AUTH_SERVICE_URL: http://auth-service:8080
+      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL: http://pushgateway:9091
     volumes: !override
       - ${HIVEFORGE_PROJECT_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/scenarios:/app/scenarios
+      - ${HIVEFORGE_PROJECT_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/scenario-manager/capabilities:/app/capabilities:ro
+      - ${HIVEFORGE_PROJECT_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/scenario-manager/network:/app/network:ro
+      - ${HIVEFORGE_PROJECT_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/scenario-manager/sut:/app/sut:ro
       - ${HIVEFORGE_PROJECT_DIR:?set HiveForge project dir}/state/scenarios-runtime:/app/scenarios-runtime
     deploy: *scenarios-placement
 
   orchestrator:
-    networks:
-      default:
-        aliases:
-          - orchestrator
     depends_on: !override
       - rabbitmq
       - log-aggregator
       - postgres
       - network-proxy-manager
     environment:
-      RABBITMQ_HOST: tasks.rabbitmq
-      SPRING_RABBITMQ_HOST: tasks.rabbitmq
-      POCKETHIVE_AUTH_SERVICE_URL: http://tasks.auth-service:8080
-      POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_SCENARIO_MANAGER_URL: http://tasks.scenario-manager:8080
-      POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_NETWORK_PROXY_MANAGER_URL: http://tasks.network-proxy-manager:8080
+      RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_HOST: rabbitmq
+      POCKETHIVE_AUTH_SERVICE_URL: http://auth-service:8080
+      POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_SCENARIO_MANAGER_URL: http://scenario-manager:8080
+      POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_NETWORK_PROXY_MANAGER_URL: http://network-proxy-manager:8080
       POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_DOCKER_COMPUTE_ADAPTER: SWARM_STACK
       POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_IMAGE_REPOSITORY_PREFIX: ${POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_IMAGE_REPOSITORY_PREFIX:?set registry image prefix}
       POCKETHIVE_SCENARIOS_RUNTIME_ROOT: ${HIVEFORGE_PROJECT_DIR:?set HiveForge project dir}/state/scenarios-runtime
-      POCKETHIVE_DOCKER_SWARM_PLACEMENT_CONSTRAINTS: node.labels.pockethive.scenarios == true
-      SPRING_DATASOURCE_URL: jdbc:postgresql://tasks.postgres:5432/pockethive
-      POCKETHIVE_SINK_CLICKHOUSE_ENDPOINT: http://tasks.clickhouse:8123
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/pockethive
+      POCKETHIVE_SINK_CLICKHOUSE_ENDPOINT: http://clickhouse:8123
     volumes: !override
       - /var/run/docker.sock:/var/run/docker.sock
       - ${HIVEFORGE_PROJECT_DIR:?set HiveForge project dir}/state/scenarios-runtime:/app/scenarios-runtime
     deploy: *manager-scenarios-placement
 
   wiremock:
-    networks:
-      default:
-        aliases:
-          - wiremock
     ports: !override
       - target: 8080
         published: 8080
         protocol: tcp
-        mode: host
     volumes: !override
       - ${HIVEFORGE_PROJECT_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/wiremock/mappings:/home/wiremock/mappings
       - ${HIVEFORGE_PROJECT_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/wiremock/__files:/home/wiremock/__files
     deploy:
       <<: *sut-placement
-      endpoint_mode: dnsrr
 
   tcp-mock-server:
-    networks:
-      default:
-        aliases:
-          - tcp-mock-server
     ports: !override
       - target: 8080
         published: 8083
         protocol: tcp
-        mode: host
       - target: 9090
         published: 9090
         protocol: tcp
-        mode: host
     volumes: !override
       - ${HIVEFORGE_PROJECT_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/tcp-mock/mappings:/app/mappings:ro
       - ${HIVEFORGE_PROJECT_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/tcp-mock/__files:/app/__files:ro
       - ${HIVEFORGE_PROJECT_DIR:?set HiveForge project dir}/state/tcp-mock/data:/app/data
     environment:
-      RABBITMQ_HOST: tasks.rabbitmq
-      SPRING_RABBITMQ_HOST: tasks.rabbitmq
+      RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_HOST: rabbitmq
     deploy:
       <<: *sut-placement
-      endpoint_mode: dnsrr
 
   tcp-mock-server-tls:
-    networks:
-      default:
-        aliases:
-          - tcp-mock-server-tls
     ports: !override
       - target: 8080
         published: 8084
         protocol: tcp
-        mode: host
       - target: 9090
         published: 9091
         protocol: tcp
-        mode: host
     volumes: !override
       - ${HIVEFORGE_PROJECT_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/tcp-mock/mappings:/app/mappings:ro
       - ${HIVEFORGE_PROJECT_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/tcp-mock/__files:/app/__files:ro
       - ${HIVEFORGE_PROJECT_DIR:?set HiveForge project dir}/state/tcp-mock/tls-data:/app/data
     environment:
-      RABBITMQ_HOST: tasks.rabbitmq
-      SPRING_RABBITMQ_HOST: tasks.rabbitmq
+      RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_HOST: rabbitmq
     deploy:
       <<: *sut-placement
-      endpoint_mode: dnsrr
 
   haproxy:
-    networks:
-      default:
-        aliases:
-          - haproxy
     volumes: !override
       - ${HIVEFORGE_PROJECT_DIR:?set HiveForge project dir}/state/haproxy/runtime:/opt/haproxy-runtime
     deploy:
       <<: *proxy-placement
-      endpoint_mode: dnsrr
 
   network-proxy-manager:
-    networks:
-      default:
-        aliases:
-          - network-proxy-manager
     depends_on: !override
       - scenario-manager
       - toxiproxy
@@ -252,94 +184,59 @@ services:
     volumes: !override
       - ${HIVEFORGE_PROJECT_DIR:?set HiveForge project dir}/state/haproxy/runtime:/opt/haproxy-runtime
     environment:
-      POCKETHIVE_AUTH_SERVICE_URL: http://tasks.auth-service:8080
-      POCKETHIVE_NETWORK_PROXY_MANAGER_SCENARIO_MANAGER_URL: http://tasks.scenario-manager:8080
-      POCKETHIVE_NETWORK_PROXY_MANAGER_TOXIPROXY_URL: http://tasks.toxiproxy:8474
-      POCKETHIVE_NETWORK_PROXY_MANAGER_HAPROXY_BACKEND_HOST: tasks.toxiproxy
+      POCKETHIVE_AUTH_SERVICE_URL: http://auth-service:8080
+      POCKETHIVE_NETWORK_PROXY_MANAGER_SCENARIO_MANAGER_URL: http://scenario-manager:8080
+      POCKETHIVE_NETWORK_PROXY_MANAGER_TOXIPROXY_URL: http://toxiproxy:8474
+      POCKETHIVE_NETWORK_PROXY_MANAGER_HAPROXY_BACKEND_HOST: toxiproxy
     deploy: *proxy-placement
 
   auth-service:
-    networks:
-      default:
-        aliases:
-          - auth-service
     deploy: *manager-placement
 
   log-aggregator:
-    networks:
-      default:
-        aliases:
-          - log-aggregator
     depends_on: !override
       - rabbitmq
       - loki
     environment:
-      RABBITMQ_HOST: tasks.rabbitmq
-      SPRING_RABBITMQ_HOST: tasks.rabbitmq
-      POCKETHIVE_LOKI_URL: http://tasks.loki:3100
-      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL: http://tasks.pushgateway:9091
+      RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_HOST: rabbitmq
+      POCKETHIVE_LOKI_URL: http://loki:3100
+      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL: http://pushgateway:9091
     deploy: *manager-placement
 
   pushgateway:
-    networks:
-      default:
-        aliases:
-          - pushgateway
     deploy: *manager-placement
 
   redis:
-    networks:
-      default:
-        aliases:
-          - redis
     ports: !override
       - target: 6379
         published: 6379
         protocol: tcp
-        mode: host
     deploy:
       <<: *proxy-placement
-      endpoint_mode: dnsrr
 
   redis-commander:
-    networks:
-      default:
-        aliases:
-          - redis-commander
     depends_on: !override
       - redis
     environment:
-      REDIS_HOSTS: local:tasks.redis:6379
+      REDIS_HOSTS: local:redis:6379
     deploy: *manager-placement
 
   toxiproxy:
-    networks:
-      default:
-        aliases:
-          - toxiproxy
     deploy: *proxy-placement
 
   ui:
-    networks:
-      default:
-        aliases:
-          - ui
     depends_on: !override
       - scenario-manager
     ports: !override
       - target: 8088
         published: 8088
         protocol: tcp
-        mode: host
     volumes: !override
       - ${HIVEFORGE_PROJECT_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/config/nginx/nginx.swarm.conf:/etc/nginx/conf.d/default.conf:ro
     deploy: *proxy-placement
 
   ui-v2:
-    networks:
-      default:
-        aliases:
-          - ui-v2
     depends_on: !override
       - ui
     deploy: *manager-placement

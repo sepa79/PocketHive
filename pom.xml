@@ -7,12 +7,13 @@
   <packaging>pom</packaging>
     <properties>
     <!-- Flatten plugin resolves this CI-friendly revision into published POMs; see build plugins below. -->
-    <revision>0.15.23</revision>
+    <revision>0.15.24</revision>
     <logstash.logback.version>8.1</logstash.logback.version>
     <tomcat.version>10.1.55</tomcat.version>
     <netty.version>4.1.134.Final</netty.version>
     <bouncycastle.version>1.84</bouncycastle.version>
     <postgresql.version>42.7.11</postgresql.version>
+    <oracle.jdbc.version>23.8.0.25.04</oracle.jdbc.version>
     <commons-lang3.version>3.20.0</commons-lang3.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
@@ -47,6 +48,7 @@
     <module>tcp-mock-server</module>
     <module>request-builder-service</module>
     <module>http-sequence-service</module>
+    <module>db-query-service</module>
     <module>e2e-tests</module>
     <module>tools/scenario-templating-check</module>
   </modules>
@@ -136,6 +138,11 @@
         <groupId>org.postgresql</groupId>
         <artifactId>postgresql</artifactId>
         <version>${postgresql.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.oracle.database.jdbc</groupId>
+        <artifactId>ojdbc11</artifactId>
+        <version>${oracle.jdbc.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.commons</groupId>

@@ -427,6 +427,9 @@ services:
       - "1081:8080"
     volumes:
       - ./scenarios:/app/scenarios
+      - ./scenario-manager-service/capabilities:/app/capabilities:ro
+      - ./scenario-manager-service/network:/app/network:ro
+      - ./scenario-manager-service/sut:/app/sut:ro
       - ${POCKETHIVE_SCENARIOS_RUNTIME_ROOT:-/opt/pockethive/scenarios-runtime}:/app/scenarios-runtime
     depends_on:
       log-aggregator:
@@ -475,3 +478,7 @@ volumes:
   tcp-mock-data:
   tcp-mock-tls-data:
   haproxy-runtime:
+
+networks:
+  default:
+    attachable: true

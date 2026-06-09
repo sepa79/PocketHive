@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.15.24]
+Timestamp: 2026-06-05T00:18:18Z
+
+- DB query worker: add the Postgres smoke helper compose bundle with repeatable seed/reset scripts, align the smoke JDBC URL with the helper service name, and document the MVP smoke setup.
+- HiveForge deployment: manage Scenario Manager capabilities, network profiles, and SUT definitions as explicit runtime artifacts and mount them into Scenario Manager for swarm deployments and deployment packages.
+- HiveForge deployment: remove swarm template networking workarounds by dropping host-mode port publishing, custom service network aliases, DNSRR endpoint mode, and `tasks.*` service references from rendered stack deployments.
+- Swarm deployment hygiene: make the local/default network attachable for helper containers and document the storage migration hazard discovered when moving stateful services from shared HiveForge state to dedicated full-swarm mounts.
+- Verification: migrate the large-swarm Postgres journal data from shared state to the dedicated mount, restart Postgres and Orchestrator, and rerun `./start-e2e-tests.sh --target large-swarm --group auth` successfully.
+- Release: bump PocketHive patch version to 0.15.24 for the db-query smoke/HiveForge artifact refresh.
+
 ## [0.15.23]
 Timestamp: 2026-06-04T14:42:28Z
 

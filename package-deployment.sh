@@ -53,13 +53,15 @@ cp wiremock/mappings/*.json "${DEPLOY_DIR}/wiremock/mappings/" 2>/dev/null || tr
 cp wiremock/__files/* "${DEPLOY_DIR}/wiremock/__files/" 2>/dev/null || true
 cp wiremock/README.md "${DEPLOY_DIR}/wiremock/" 2>/dev/null || true
 
-# Scenario assets and Scenario Manager capabilities/SUT definitions
+# Scenario assets and Scenario Manager capabilities/network/SUT definitions
 mkdir -p "${DEPLOY_DIR}/scenarios"
-mkdir -p "${DEPLOY_DIR}/scenario-manager/capabilities"
-mkdir -p "${DEPLOY_DIR}/scenario-manager/sut"
+mkdir -p "${DEPLOY_DIR}/scenario-manager-service/capabilities"
+mkdir -p "${DEPLOY_DIR}/scenario-manager-service/network"
+mkdir -p "${DEPLOY_DIR}/scenario-manager-service/sut"
 cp -r scenarios/* "${DEPLOY_DIR}/scenarios/" 2>/dev/null || true
-cp scenario-manager-service/capabilities/*.yaml "${DEPLOY_DIR}/scenario-manager/capabilities/" 2>/dev/null || true
-cp scenario-manager-service/sut/sut-environments.yaml "${DEPLOY_DIR}/scenario-manager/sut/" 2>/dev/null || true
+cp scenario-manager-service/capabilities/*.yaml "${DEPLOY_DIR}/scenario-manager-service/capabilities/" 2>/dev/null || true
+cp scenario-manager-service/network/network-profiles.yaml "${DEPLOY_DIR}/scenario-manager-service/network/" 2>/dev/null || true
+cp scenario-manager-service/sut/sut-environments.yaml "${DEPLOY_DIR}/scenario-manager-service/sut/" 2>/dev/null || true
 
 # Documentation
 mkdir -p "${DEPLOY_DIR}/docs"
@@ -121,7 +123,7 @@ with `docker compose down -v` if you need a clean slate.
 - `grafana/` - Dashboards and datasources
 - `wiremock/` - Mock server stubs
 - `scenarios/` - Example Scenario bundles (YAML + assets)
-- `scenario-manager/` - Scenario Manager capabilities and SUT environment definitions
+- `scenario-manager-service/` - Scenario Manager capabilities, network profiles, and SUT environment definitions
 - `docs/` - Deployment guides
 
 ## Configuration
@@ -133,7 +135,8 @@ into the `scenario-manager` container at `/app/scenarios`. Edit or add
 bundles there and reload via the Scenario Manager UI or API.
 
 Capabilities and SUT environment definitions live under
-`./scenario-manager/capabilities` and `./scenario-manager/sut` and are
+`./scenario-manager-service/capabilities`, `./scenario-manager-service/network`,
+and `./scenario-manager-service/sut` and are
 mounted into the container via `docker-compose.yml`.
 
 ### Custom WireMock Stubs

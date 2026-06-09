@@ -14,13 +14,20 @@
     pockethive_stack_name: "{{ lookup('env', 'POCKETHIVE_STACK_NAME') }}"
     pockethive_compose_base: "{{ pockethive_hiveforge_project_dir }}/artifacts/pockethive-runtime/compose/docker-compose.yml"
     pockethive_compose_swarm: "{{ pockethive_hiveforge_project_dir }}/artifacts/pockethive-runtime/compose/compose.swarm.yml"
-    pockethive_rendered_stack_file: "{{ pockethive_hiveforge_stack_dir }}/{{ pockethive_stack_name }}-swarm-reduced.yml"
+    pockethive_compose_swarm_full: "{{ pockethive_hiveforge_project_dir }}/artifacts/pockethive-runtime/compose/compose.swarm-full.yml"
+    pockethive_rendered_stack_file: "{{ pockethive_hiveforge_stack_dir }}/{{ pockethive_stack_name }}-{{ pockethive_profile }}.yml"
+    pockethive_rabbitmq_root: "{{ lookup('env', 'POCKETHIVE_RABBITMQ_ROOT') }}"
+    pockethive_postgres_root: "{{ lookup('env', 'POCKETHIVE_POSTGRES_ROOT') }}"
+    pockethive_clickhouse_root: "{{ lookup('env', 'POCKETHIVE_CLICKHOUSE_ROOT') }}"
+    pockethive_prometheus_root: "{{ lookup('env', 'POCKETHIVE_PROMETHEUS_ROOT') }}"
+    pockethive_loki_root: "{{ lookup('env', 'POCKETHIVE_LOKI_ROOT') }}"
+    pockethive_redis_root: "{{ lookup('env', 'POCKETHIVE_REDIS_ROOT') }}"
   tasks:
     - name: Require explicit HiveForge profile
       ansible.builtin.assert:
         that:
-          - pockethive_profile in ["single-full", "swarm-reduced"]
-        fail_msg: "PocketHive HiveForge deploy supports HIVEFORGE_PROFILE=single-full or HIVEFORGE_PROFILE=swarm-reduced."
+          - pockethive_profile in ["single-full", "swarm-reduced", "swarm-full"]
+        fail_msg: "PocketHive HiveForge deploy supports HIVEFORGE_PROFILE=single-full, HIVEFORGE_PROFILE=swarm-reduced, or HIVEFORGE_PROFILE=swarm-full."
 
     - name: Rebuild and start PocketHive through the canonical local entrypoint
       ansible.builtin.command:
@@ -31,4 +38,4 @@
 
     - name: Deploy PocketHive through Docker Stack
       ansible.builtin.include_tasks: swarm-reduced-stack.yml
-      when: pockethive_profile == "swarm-reduced"
+      when: pockethive_profile in ["swarm-reduced", "swarm-full"]

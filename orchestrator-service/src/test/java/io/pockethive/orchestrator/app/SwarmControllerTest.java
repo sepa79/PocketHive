@@ -326,7 +326,11 @@ class SwarmControllerTest {
                 "img",
                 Work.ofDefaults(null, "out"),
                 Map.of(),
-                java.util.Map.<String, Object>of("worker", java.util.Map.of("x", "y"))
+                java.util.Map.<String, Object>of(
+                    "worker", java.util.Map.of("x", "y"),
+                    "loopCount", "{{ vars.loopCount }}",
+                    "message", java.util.Map.of("body", "customer={{ vars.customerId }}")
+                )
             )
         ));
         when(scenarioClient.fetchScenario("tpl-1")).thenReturn(new ScenarioPlan(template, null, null, null));
@@ -372,6 +376,8 @@ class SwarmControllerTest {
         Map<String, Object> config = plan.bees().get(0).config();
         assertThat(config).containsKey("vars");
         assertThat(config.get("vars")).isEqualTo(Map.of("loopCount", 10, "customerId", "123"));
+        assertThat(config.get("loopCount")).isEqualTo(10);
+        assertThat(config.get("message")).isEqualTo(Map.of("body", "customer=123"));
     }
 
     @Test
