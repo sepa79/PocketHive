@@ -222,7 +222,7 @@ public class PocketHiveWorkerSdkAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    WorkerinalSutEnvironmentRuntime workerRuntime(
+    WorkerRuntime workerRuntime(
         WorkerRegistry workerRegistry,
         ConfigurableListableBeanFactory beanFactory,
         WorkerContextFactory workerContextFactory,
