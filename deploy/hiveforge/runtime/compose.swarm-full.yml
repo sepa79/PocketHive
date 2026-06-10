@@ -40,19 +40,19 @@ services:
     volumes: !override
       - ${HIVEFORGE_PROJECT_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/config/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
       - ${HIVEFORGE_PROJECT_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/config/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
-      - ${POCKETHIVE_RABBITMQ_ROOT:?set RabbitMQ root}/data:/var/lib/rabbitmq
+      - ${POCKETHIVE_RABBITMQ_ROOT:?set RabbitMQ root}:/var/lib/rabbitmq
     deploy: !override
       <<: *rabbitmq-placement
 
   postgres:
     volumes: !override
-      - ${POCKETHIVE_POSTGRES_ROOT:?set Postgres root}/data:/var/lib/postgresql/data
+      - ${POCKETHIVE_POSTGRES_ROOT:?set Postgres root}:/var/lib/postgresql/data
     deploy: !override
       <<: *postgres-placement
 
   clickhouse:
     volumes: !override
-      - ${POCKETHIVE_CLICKHOUSE_ROOT:?set ClickHouse root}/data:/var/lib/clickhouse
+      - ${POCKETHIVE_CLICKHOUSE_ROOT:?set ClickHouse root}:/var/lib/clickhouse
       - ${HIVEFORGE_PROJECT_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/config/clickhouse/init:/docker-entrypoint-initdb.d:ro
       - ${HIVEFORGE_PROJECT_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/config/clickhouse/clickhouse-entrypoint.sh:/opt/pockethive/clickhouse-entrypoint.sh:ro
       - ${HIVEFORGE_PROJECT_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/config/clickhouse/migrate-tx-outcome-v1-to-v2.sh:/opt/pockethive/migrate-tx-outcome-v1-to-v2.sh:ro
@@ -62,19 +62,19 @@ services:
   prometheus:
     volumes: !override
       - ${HIVEFORGE_PROJECT_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ${POCKETHIVE_PROMETHEUS_ROOT:?set Prometheus root}/data:/prometheus
+      - ${POCKETHIVE_PROMETHEUS_ROOT:?set Prometheus root}:/prometheus
     deploy: !override
       <<: *prometheus-placement
 
   loki:
     volumes: !override
       - ${HIVEFORGE_PROJECT_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/config/loki/config.yml:/etc/loki/config.yml:ro
-      - ${POCKETHIVE_LOKI_ROOT:?set Loki root}/data:/var/lib/loki
+      - ${POCKETHIVE_LOKI_ROOT:?set Loki root}:/var/lib/loki
     deploy: !override
       <<: *loki-placement
 
   redis:
     volumes: !override
-      - ${POCKETHIVE_REDIS_ROOT:?set Redis root}/data:/data
+      - ${POCKETHIVE_REDIS_ROOT:?set Redis root}:/data
     deploy: !override
       <<: *redis-placement

@@ -11,3 +11,9 @@ deployment:
       playbook: ansible/remove.yml
     update:
       playbook: ansible/update.yml
+requirements:
+  environment:
+    - DOCKER_REGISTRY
+    - POCKETHIVE_VERSION
+    - POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_IMAGE_REPOSITORY_PREFIX
+    - POCKETHIVE_STACK_NAME

@@ -37,6 +37,30 @@ In `swarm-full`, HiveForge only creates directories under its managed project
 root. It never creates, chmods, or chowns dedicated service mount roots. Those
 paths must already exist on nodes selected by the matching placement labels.
 
+## Declared Runtime Requirements
+
+The `stack` component manifest declares these non-secret runtime environment
+requirements so `validate_requirements` can fail before the playbook starts:
+
+```text
+DOCKER_REGISTRY
+POCKETHIVE_VERSION
+POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_IMAGE_REPOSITORY_PREFIX
+POCKETHIVE_STACK_NAME
+```
+
+`DOCKER_REGISTRY` must include the trailing slash and must equal
+`POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_IMAGE_REPOSITORY_PREFIX + "/"`.
+`POCKETHIVE_VERSION` must be set explicitly. `latest` is allowed only when the
+operator sets it intentionally; HiveForge must not infer it from a missing
+value.
+
+Current HiveForge component requirements are global per component, not
+profile-specific. Because of that, `swarm-full` dedicated root variables are
+documented here and validated by the playbook instead of being declared in
+`requirements.environment`, which would incorrectly make `swarm-reduced`
+require them too.
+
 ## Component
 
 - `stack` - the whole local PocketHive stack.
@@ -90,12 +114,12 @@ Agent sequence:
        POCKETHIVE_VERSION: <release version without leading v>
        POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_IMAGE_REPOSITORY_PREFIX: ghcr.io/sepa79/pockethive
        POCKETHIVE_STACK_NAME: pockethive
-       POCKETHIVE_RABBITMQ_ROOT: /opt/pockethive-data/rabbitmq
-       POCKETHIVE_POSTGRES_ROOT: /opt/pockethive-data/postgres
-       POCKETHIVE_CLICKHOUSE_ROOT: /opt/pockethive-data/clickhouse
-       POCKETHIVE_PROMETHEUS_ROOT: /opt/pockethive-data/prometheus
-       POCKETHIVE_LOKI_ROOT: /opt/pockethive-data/loki
-       POCKETHIVE_REDIS_ROOT: /opt/pockethive-data/redis
+       POCKETHIVE_RABBITMQ_ROOT: /data/rabbitmq
+       POCKETHIVE_POSTGRES_ROOT: /data/postgres
+       POCKETHIVE_CLICKHOUSE_ROOT: /data/clickhouse
+       POCKETHIVE_PROMETHEUS_ROOT: /data/prometheus
+       POCKETHIVE_LOKI_ROOT: /data/loki
+       POCKETHIVE_REDIS_ROOT: /data/redis
    ```
 
 6. Start the lifecycle action through HiveForge MCP:
@@ -173,21 +197,23 @@ POCKETHIVE_STACK_NAME=pockethive
 
 `DOCKER_REGISTRY` must include the trailing slash because the base compose file
 concatenates it directly with image names. `POCKETHIVE_VERSION=latest` is
-rejected.
+allowed only as an explicit operator choice.
 
-`swarm-full` requires the same values plus explicit dedicated mount roots:
+`swarm-full` requires the same values plus explicit dedicated data directories.
+Each value must be the exact host directory mounted into the service container;
+PocketHive does not append another `/data` segment:
 
 ```text
-POCKETHIVE_RABBITMQ_ROOT=/opt/pockethive-data/rabbitmq
-POCKETHIVE_POSTGRES_ROOT=/opt/pockethive-data/postgres
-POCKETHIVE_CLICKHOUSE_ROOT=/opt/pockethive-data/clickhouse
-POCKETHIVE_PROMETHEUS_ROOT=/opt/pockethive-data/prometheus
-POCKETHIVE_LOKI_ROOT=/opt/pockethive-data/loki
-POCKETHIVE_REDIS_ROOT=/opt/pockethive-data/redis
+POCKETHIVE_RABBITMQ_ROOT=/data/rabbitmq
+POCKETHIVE_POSTGRES_ROOT=/data/postgres
+POCKETHIVE_CLICKHOUSE_ROOT=/data/clickhouse
+POCKETHIVE_PROMETHEUS_ROOT=/data/prometheus
+POCKETHIVE_LOKI_ROOT=/data/loki
+POCKETHIVE_REDIS_ROOT=/data/redis
 ```
 
-Those roots are Docker-daemon host paths, not HiveForge container paths. They
-must exist on nodes with the corresponding labels:
+Those directories are Docker-daemon host paths, not HiveForge container paths.
+They must exist on nodes with the corresponding labels:
 
 ```text
 node.labels.pockethive.rabbitmq == true
