@@ -5,17 +5,14 @@
   vars:
     pockethive_repo_root: "{{ playbook_dir }}/../../../../"
     pockethive_profile: "{{ lookup('env', 'HIVEFORGE_PROFILE') }}"
-    pockethive_hiveforge_project_dir: "{{ lookup('env', 'HIVEFORGE_PROJECT_DIR') }}"
-    pockethive_hiveforge_project_host_dir: "{{ lookup('env', 'HIVEFORGE_PROJECT_HOST_DIR') }}"
-    pockethive_hiveforge_stack_dir: "{{ lookup('env', 'HIVEFORGE_STACK_DIR') }}"
+    pockethive_rendered_compose_file: "{{ lookup('env', 'HIVEFORGE_RENDERED_COMPOSE_FILE') }}"
+    pockethive_bind_source_dir: "{{ lookup('env', 'HIVEFORGE_BIND_SOURCE_DIR') }}"
     pockethive_docker_registry: "{{ lookup('env', 'DOCKER_REGISTRY') }}"
     pockethive_version: "{{ lookup('env', 'POCKETHIVE_VERSION') }}"
     pockethive_image_repository_prefix: "{{ lookup('env', 'POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_IMAGE_REPOSITORY_PREFIX') }}"
-    pockethive_stack_name: "{{ lookup('env', 'POCKETHIVE_STACK_NAME') }}"
-    pockethive_compose_base: "{{ pockethive_hiveforge_project_dir }}/artifacts/pockethive-runtime/compose/docker-compose.yml"
-    pockethive_compose_swarm: "{{ pockethive_hiveforge_project_dir }}/artifacts/pockethive-runtime/compose/compose.swarm.yml"
-    pockethive_compose_swarm_full: "{{ pockethive_hiveforge_project_dir }}/artifacts/pockethive-runtime/compose/compose.swarm-full.yml"
-    pockethive_rendered_stack_file: "{{ pockethive_hiveforge_stack_dir }}/{{ pockethive_stack_name }}-{{ pockethive_profile }}.yml"
+    pockethive_compose_base: "{{ pockethive_bind_source_dir }}/artifacts/pockethive-runtime/compose/docker-compose.yml"
+    pockethive_compose_swarm: "{{ pockethive_bind_source_dir }}/artifacts/pockethive-runtime/compose/compose.swarm.yml"
+    pockethive_compose_swarm_full: "{{ pockethive_bind_source_dir }}/artifacts/pockethive-runtime/compose/compose.swarm-full.yml"
     pockethive_rabbitmq_root: "{{ lookup('env', 'POCKETHIVE_RABBITMQ_ROOT') }}"
     pockethive_postgres_root: "{{ lookup('env', 'POCKETHIVE_POSTGRES_ROOT') }}"
     pockethive_clickhouse_root: "{{ lookup('env', 'POCKETHIVE_CLICKHOUSE_ROOT') }}"
@@ -29,13 +26,11 @@
           - pockethive_profile in ["single-full", "swarm-reduced", "swarm-full"]
         fail_msg: "PocketHive HiveForge update supports HIVEFORGE_PROFILE=single-full, HIVEFORGE_PROFILE=swarm-reduced, or HIVEFORGE_PROFILE=swarm-full."
 
-    - name: Rebuild and restart PocketHive through the canonical local entrypoint
-      ansible.builtin.command:
-        cmd: ./build-hive.sh --quick
-        chdir: "{{ pockethive_repo_root }}"
-      changed_when: true
+    - name: Reject single-full until HiveForge owns local Docker Compose execution
+      ansible.builtin.fail:
+        msg: "PocketHive single-full requires HiveForge-owned Docker Compose execution; project Ansible has no Docker access in contract 0.5."
       when: pockethive_profile == "single-full"
 
-    - name: Update PocketHive through Docker Stack
+    - name: Render PocketHive swarm compose for HiveForge-owned Docker deploy
       ansible.builtin.include_tasks: swarm-reduced-stack.yml
       when: pockethive_profile in ["swarm-reduced", "swarm-full"]

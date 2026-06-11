@@ -42,6 +42,38 @@ class CapabilityCatalogueServiceTest {
                 "retry.on");
     }
 
+    @Test
+    void bundledCapabilitiesDoNotNeedCompatibilityTags() throws Exception {
+        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(Path.of("capabilities"));
+        catalogue.reload();
+
+        assertThat(catalogue.allManifests())
+                .isNotEmpty()
+                .allSatisfy(manifest -> assertThat(manifest.image().tag()).isNull());
+    }
+
+    @Test
+    void acceptsManifestWithoutTagOrDigest() throws IOException {
+        String body = """
+                schemaVersion: "1.0"
+                capabilitiesVersion: "1.0"
+                image:
+                  name: "processor"
+                role: "processor"
+                config: []
+                actions: []
+                panels: []
+                """;
+        Files.writeString(capabilitiesDir.resolve("processor.yaml"), body);
+
+        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(capabilitiesDir);
+
+        catalogue.reload();
+
+        assertThat(catalogue.findByImageName("processor")).isPresent();
+        assertThat(catalogue.findByImageName("registry.example/pockethive/processor:0.15")).isPresent();
+    }
+
     private void writeManifest(String imageName) throws IOException {
         String body = """
                 schemaVersion: "1.0"

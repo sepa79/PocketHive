@@ -1,4 +1,5 @@
 kind: project
+version: "0.5"
 project:
   name: pockethive
   repository: https://github.com/sepa79/PocketHive.git

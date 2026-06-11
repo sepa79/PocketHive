@@ -20,8 +20,6 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
       minor: ${{ steps.version.outputs.minor }}
-      channel: ${{ steps.version.outputs.channel }}
-      stable: ${{ steps.version.outputs.stable }}
       runtime_tag: ${{ steps.version.outputs.runtime_tag }}
       sha: ${{ steps.version.outputs.sha }}
 
@@ -64,14 +62,6 @@ jobs:
             exit 1
           fi
           MINOR_TAG="${MAJOR}.${MINOR}"
-          STABLE=false
-          if (( MINOR % 2 == 0 )); then
-            STABLE=true
-          fi
-          CHANNEL="experimental"
-          if [[ "$STABLE" == "true" ]]; then
-            CHANNEL="stable"
-          fi
           SHORT_SHA="${GITHUB_SHA::7}"
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             TAG="${GITHUB_REF#refs/tags/v}"
@@ -86,14 +76,9 @@ jobs:
           TAGS+=("${BASE}:${VERSION}")
           TAGS+=("${BASE}:${VERSION}-${SHORT_SHA}")
           TAGS+=("${BASE}:${MINOR_TAG}")
-          TAGS+=("${BASE}:${CHANNEL}")
-          if [[ "$STABLE" == "true" ]]; then
-            TAGS+=("${BASE}:latest")
-          fi
+          TAGS+=("${BASE}:latest")
           printf "version=%s\n" "$VERSION" >> "$GITHUB_OUTPUT"
           printf "minor=%s\n" "$MINOR_TAG" >> "$GITHUB_OUTPUT"
-          printf "channel=%s\n" "$CHANNEL" >> "$GITHUB_OUTPUT"
-          printf "stable=%s\n" "$STABLE" >> "$GITHUB_OUTPUT"
           printf "runtime_tag=%s\n" "$VERSION" >> "$GITHUB_OUTPUT"
           printf "sha=%s\n" "$SHORT_SHA" >> "$GITHUB_OUTPUT"
           printf "tags<<EOF\n%s\nEOF\n" "$(printf '%s\n' "${TAGS[@]}")" >> "$GITHUB_OUTPUT"
@@ -235,18 +220,13 @@ jobs:
         run: |
           VERSION="${{ needs.build-base.outputs.version }}"
           MINOR_TAG="${{ needs.build-base.outputs.minor }}"
-          CHANNEL="${{ needs.build-base.outputs.channel }}"
-          STABLE="${{ needs.build-base.outputs.stable }}"
           SHORT_SHA="${{ needs.build-base.outputs.sha }}"
           IMAGE="${REGISTRY}/${IMAGE_PREFIX}/${{ matrix.service.name }}"
           TAGS=()
           TAGS+=("${IMAGE}:${VERSION}")
           TAGS+=("${IMAGE}:${VERSION}-${SHORT_SHA}")
           TAGS+=("${IMAGE}:${MINOR_TAG}")
-          TAGS+=("${IMAGE}:${CHANNEL}")
-          if [[ "$STABLE" == "true" ]]; then
-            TAGS+=("${IMAGE}:latest")
-          fi
+          TAGS+=("${IMAGE}:latest")
           printf "tags<<EOF\n%s\nEOF\n" "$(printf '%s\n' "${TAGS[@]}")" >> "$GITHUB_OUTPUT"
 
       - name: Build and push ${{ matrix.service.name }}

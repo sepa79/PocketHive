@@ -2,38 +2,7 @@
 - name: Remove PocketHive stack
   hosts: localhost
   gather_facts: false
-  vars:
-    pockethive_repo_root: "{{ playbook_dir }}/../../../../"
-    pockethive_profile: "{{ lookup('env', 'HIVEFORGE_PROFILE') }}"
-    pockethive_stack_name: "{{ lookup('env', 'POCKETHIVE_STACK_NAME') }}"
   tasks:
-    - name: Require explicit HiveForge profile
-      ansible.builtin.assert:
-        that:
-          - pockethive_profile in ["single-full", "swarm-reduced", "swarm-full"]
-        fail_msg: "PocketHive HiveForge remove supports HIVEFORGE_PROFILE=single-full, HIVEFORGE_PROFILE=swarm-reduced, or HIVEFORGE_PROFILE=swarm-full."
-
-    - name: Stop PocketHive through the canonical local entrypoint
-      ansible.builtin.command:
-        cmd: ./build-hive.sh --clean
-        chdir: "{{ pockethive_repo_root }}"
-      changed_when: true
-      when: pockethive_profile == "single-full"
-
-    - name: Require PocketHive stack name
-      ansible.builtin.assert:
-        that:
-          - pockethive_stack_name | length > 0
-          - pockethive_stack_name is match("^[a-z0-9][a-z0-9_-]*$")
-        fail_msg: "Swarm remove requires a Docker-safe POCKETHIVE_STACK_NAME."
-      when: pockethive_profile in ["swarm-reduced", "swarm-full"]
-
-    - name: Remove PocketHive swarm stack
-      ansible.builtin.command:
-        argv:
-          - docker
-          - stack
-          - rm
-          - "{{ pockethive_stack_name }}"
-      changed_when: true
-      when: pockethive_profile in ["swarm-reduced", "swarm-full"]
+    - name: Reject remove until HiveForge owns Docker remove execution
+      ansible.builtin.fail:
+        msg: "PocketHive remove requires HiveForge-owned Docker remove execution; project Ansible has no Docker access in contract 0.5."

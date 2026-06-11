@@ -189,7 +189,9 @@ the authoritative list of user-tunable fields per worker and IO type.
 Capability lookup uses the canonical image name without registry, namespace,
 tag, or digest, so `processor:0.15`, `processor:latest`, and
 `registry.example.lan:5000/pockethive/processor:dev-*` all resolve the
-`processor` manifest. Each entry maps a UI field to a path in `config`.
+`processor` manifest. Capability manifest `image.tag` is optional compatibility
+metadata, not a deployment tag; runtime image tags come from the scenario or
+deployment environment. Each entry maps a UI field to a path in `config`.
 
 ### IO configuration examples
 

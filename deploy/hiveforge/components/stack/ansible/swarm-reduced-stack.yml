@@ -46,61 +46,34 @@
   ansible.builtin.assert:
     that:
       - pockethive_profile in ["swarm-reduced", "swarm-full"]
-    fail_msg: "Swarm stack deploy only supports HIVEFORGE_PROFILE=swarm-reduced or HIVEFORGE_PROFILE=swarm-full."
+    fail_msg: "Swarm stack render only supports HIVEFORGE_PROFILE=swarm-reduced or HIVEFORGE_PROFILE=swarm-full."
 
-- name: Require HiveForge project directory
+- name: Require HiveForge rendered Compose file
   ansible.builtin.assert:
     that:
-      - pockethive_hiveforge_project_dir | length > 0
-    fail_msg: "HIVEFORGE_PROJECT_DIR must be set by HiveForge for swarm deployments."
+      - pockethive_rendered_compose_file | length > 0
+      - pockethive_rendered_compose_file.startswith("/")
+    fail_msg: "HIVEFORGE_RENDERED_COMPOSE_FILE must be an absolute path set by HiveForge."
 
-- name: Require absolute HiveForge project directory
+- name: Require HiveForge bind source directory
   ansible.builtin.assert:
     that:
-      - pockethive_hiveforge_project_dir.startswith("/")
-    fail_msg: "HIVEFORGE_PROJECT_DIR must be an absolute container path."
-
-- name: Require HiveForge project host directory
-  ansible.builtin.assert:
-    that:
-      - pockethive_hiveforge_project_host_dir | length > 0
-    fail_msg: "HIVEFORGE_PROJECT_HOST_DIR must be set by HiveForge for swarm deployments."
-
-- name: Require absolute HiveForge project host directory
-  ansible.builtin.assert:
-    that:
-      - pockethive_hiveforge_project_host_dir.startswith("/")
-    fail_msg: "HIVEFORGE_PROJECT_HOST_DIR must be an absolute Docker-daemon host path."
-
-- name: Require HiveForge stack directory
-  ansible.builtin.assert:
-    that:
-      - pockethive_hiveforge_stack_dir | length > 0
-    fail_msg: "HIVEFORGE_STACK_DIR must be set by HiveForge for swarm deployments."
-
-- name: Require absolute HiveForge stack directory
-  ansible.builtin.assert:
-    that:
-      - pockethive_hiveforge_stack_dir.startswith("/")
-    fail_msg: "HIVEFORGE_STACK_DIR must be an absolute container path."
+      - pockethive_bind_source_dir | length > 0
+      - pockethive_bind_source_dir.startswith("/")
+    fail_msg: "HIVEFORGE_BIND_SOURCE_DIR must be an absolute path set by HiveForge for swarm deployments."
 
 - name: Require Docker registry prefix
   ansible.builtin.assert:
     that:
       - pockethive_docker_registry | length > 0
-    fail_msg: "DOCKER_REGISTRY must be set in HiveForge runtime env for swarm deployments."
-
-- name: Require Docker registry trailing slash
-  ansible.builtin.assert:
-    that:
       - pockethive_docker_registry.endswith("/")
-    fail_msg: "DOCKER_REGISTRY must include a trailing slash, for example ghcr.io/sepa79/pockethive/."
+    fail_msg: "DOCKER_REGISTRY must be set and include a trailing slash, for example ghcr.io/sepa79/pockethive/."
 
 - name: Require PocketHive image repository prefix
   ansible.builtin.assert:
     that:
       - pockethive_image_repository_prefix | length > 0
-    fail_msg: "POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_IMAGE_REPOSITORY_PREFIX must be set in HiveForge runtime env for swarm deployments."
+    fail_msg: "POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_IMAGE_REPOSITORY_PREFIX must be set in HiveForge runtime env."
 
 - name: Require matching image repository values
   ansible.builtin.assert:
@@ -112,43 +85,12 @@
   ansible.builtin.assert:
     that:
       - pockethive_version | length > 0
-    fail_msg: "POCKETHIVE_VERSION must be set in HiveForge runtime env for swarm deployments."
-
-- name: Require PocketHive stack name
-  ansible.builtin.assert:
-    that:
-      - pockethive_stack_name | length > 0
-    fail_msg: "POCKETHIVE_STACK_NAME must be set in HiveForge runtime env for swarm deployments."
-
-- name: Require Docker-safe PocketHive stack name
-  ansible.builtin.assert:
-    that:
-      - pockethive_stack_name is match("^[a-z0-9][a-z0-9_-]*$")
-    fail_msg: "POCKETHIVE_STACK_NAME must match ^[a-z0-9][a-z0-9_-]*$."
+    fail_msg: "POCKETHIVE_VERSION must be set in HiveForge runtime env."
 
 - name: Require swarm-full dedicated root environment
   ansible.builtin.assert:
     that:
       - item.value | length > 0
-    fail_msg: "{{ item.name }} must be set in HiveForge runtime env for swarm-full."
-  loop:
-    - name: POCKETHIVE_RABBITMQ_ROOT
-      value: "{{ pockethive_rabbitmq_root }}"
-    - name: POCKETHIVE_POSTGRES_ROOT
-      value: "{{ pockethive_postgres_root }}"
-    - name: POCKETHIVE_CLICKHOUSE_ROOT
-      value: "{{ pockethive_clickhouse_root }}"
-    - name: POCKETHIVE_PROMETHEUS_ROOT
-      value: "{{ pockethive_prometheus_root }}"
-    - name: POCKETHIVE_LOKI_ROOT
-      value: "{{ pockethive_loki_root }}"
-    - name: POCKETHIVE_REDIS_ROOT
-      value: "{{ pockethive_redis_root }}"
-  when: pockethive_profile == "swarm-full"
-
-- name: Require absolute swarm-full dedicated root paths
-  ansible.builtin.assert:
-    that:
       - item.value.startswith("/")
     fail_msg: "{{ item.name }} must be an absolute Docker-daemon host path. HiveForge does not create or chmod dedicated swarm-full mount roots."
   loop:
@@ -176,23 +118,29 @@
   ansible.builtin.assert:
     that:
       - pockethive_compose_files.results | map(attribute='stat.exists') | min
-    fail_msg: "HiveForge managed runtime compose files are missing under HIVEFORGE_PROJECT_DIR."
+    fail_msg: "HiveForge managed runtime compose files are missing under HIVEFORGE_BIND_SOURCE_DIR."
 
 - name: Create HiveForge-managed swarm state directories
   ansible.builtin.file:
-    path: "{{ pockethive_hiveforge_project_dir }}/{{ item }}"
+    path: "{{ pockethive_bind_source_dir }}/{{ item }}"
     state: directory
     mode: "0755"
   loop: "{{ pockethive_swarm_state_dirs }}"
 
 - name: Apply writable ownership for HiveForge-managed state directories
   ansible.builtin.file:
-    path: "{{ pockethive_hiveforge_project_dir }}/{{ item.path }}"
+    path: "{{ pockethive_bind_source_dir }}/{{ item.path }}"
     state: directory
     owner: "{{ item.owner }}"
     group: "{{ item.group }}"
     mode: "0755"
   loop: "{{ pockethive_swarm_owned_state_dirs }}"
+
+- name: Ensure rendered Compose directory exists
+  ansible.builtin.file:
+    path: "{{ pockethive_rendered_compose_file | dirname }}"
+    state: directory
+    mode: "0755"
 
 - name: Render merged Docker Compose config for swarm-reduced
   ansible.builtin.command:
@@ -204,11 +152,9 @@
       - -f
       - "{{ pockethive_compose_swarm }}"
       - config
-      - --format
-      - json
   environment:
     DOCKER_REGISTRY: "{{ pockethive_docker_registry }}"
-    HIVEFORGE_PROJECT_DIR: "{{ pockethive_hiveforge_project_host_dir }}"
+    HIVEFORGE_BIND_SOURCE_DIR: "{{ pockethive_bind_source_dir }}"
     POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_IMAGE_REPOSITORY_PREFIX: "{{ pockethive_image_repository_prefix }}"
     POCKETHIVE_VERSION: "{{ pockethive_version }}"
   register: pockethive_compose_config_reduced
@@ -227,11 +173,9 @@
       - -f
       - "{{ pockethive_compose_swarm_full }}"
       - config
-      - --format
-      - json
   environment:
     DOCKER_REGISTRY: "{{ pockethive_docker_registry }}"
-    HIVEFORGE_PROJECT_DIR: "{{ pockethive_hiveforge_project_host_dir }}"
+    HIVEFORGE_BIND_SOURCE_DIR: "{{ pockethive_bind_source_dir }}"
     POCKETHIVE_CLICKHOUSE_ROOT: "{{ pockethive_clickhouse_root }}"
     POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_IMAGE_REPOSITORY_PREFIX: "{{ pockethive_image_repository_prefix }}"
     POCKETHIVE_LOKI_ROOT: "{{ pockethive_loki_root }}"
@@ -244,50 +188,26 @@
   changed_when: false
   when: pockethive_profile == "swarm-full"
 
-- name: Select rendered Docker Compose config for swarm-reduced
-  ansible.builtin.set_fact:
-    pockethive_compose_config_json: "{{ pockethive_compose_config_reduced.stdout | from_json }}"
-  when: pockethive_profile == "swarm-reduced"
-
-- name: Select rendered Docker Compose config for swarm-full
-  ansible.builtin.set_fact:
-    pockethive_compose_config_json: "{{ pockethive_compose_config_full.stdout | from_json }}"
-  when: pockethive_profile == "swarm-full"
-
-- name: Convert Compose config to Docker Stack config
-  ansible.builtin.command:
-    argv:
-      - python3
-      - "{{ playbook_dir }}/render-stack-config.py"
-    stdin: "{{ pockethive_compose_config_json | to_json }}"
-  register: pockethive_stack_config
-  changed_when: false
-
-- name: Write rendered Docker Stack file
+- name: Write rendered Compose file for HiveForge-owned Docker deploy
   ansible.builtin.copy:
-    content: "{{ pockethive_stack_config.stdout }}"
-    dest: "{{ pockethive_rendered_stack_file }}"
+    content: "{{ (pockethive_compose_config_reduced.stdout if pockethive_profile == 'swarm-reduced' else pockethive_compose_config_full.stdout) }}"
+    dest: "{{ pockethive_rendered_compose_file }}"
     mode: "0644"
 
-- name: Validate rendered Docker Stack file
-  ansible.builtin.command:
-    argv:
-      - docker
-      - stack
-      - config
-      - -c
-      - "{{ pockethive_rendered_stack_file }}"
-  changed_when: false
+- name: Normalize numeric published ports for Docker Stack
+  ansible.builtin.replace:
+    path: "{{ pockethive_rendered_compose_file }}"
+    regexp: 'published: "([0-9]+)"'
+    replace: 'published: \1'
 
-- name: Deploy PocketHive swarm stack
-  ansible.builtin.command:
-    argv:
-      - docker
-      - stack
-      - deploy
-      - --compose-file
-      - "{{ pockethive_rendered_stack_file }}"
-      - --prune
-      - --with-registry-auth
-      - "{{ pockethive_stack_name }}"
-  changed_when: true
+- name: Remove top-level Compose project name for Docker Stack
+  ansible.builtin.replace:
+    path: "{{ pockethive_rendered_compose_file }}"
+    regexp: '(?m)^name: .*\n'
+    replace: ''
+
+- name: Remove Compose depends_on blocks for Docker Stack
+  ansible.builtin.replace:
+    path: "{{ pockethive_rendered_compose_file }}"
+    regexp: '(?m)^    depends_on:\n(?:      .*\n)+'
+    replace: ''

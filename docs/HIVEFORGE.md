@@ -37,6 +37,12 @@ In `swarm-full`, HiveForge only creates directories under its managed project
 root. It never creates, chmods, or chowns dedicated service mount roots. Those
 paths must already exist on nodes selected by the matching placement labels.
 
+Both Swarm profiles override the base Postgres healthcheck with a longer
+startup grace period. Fresh Postgres data directories on shared or remote
+storage can spend more than the local-compose default in `initdb`; Swarm must
+not kill that first task before the entrypoint finishes creating the database
+and host authentication rules.
+
 ## Declared Runtime Requirements
 
 The `stack` component manifest declares these non-secret runtime environment

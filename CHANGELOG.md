@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.15.25]
+Timestamp: 2026-06-11T11:42:26Z
+
+- HiveForge deployment: align swarm deploy/update with HiveForge-owned rendered Compose files and bind-source directories, remove the project-side stack renderer, reject unsupported local/remove actions explicitly, and keep Docker execution owned by HiveForge.
+- HiveForge deployment: switch swarm bind mounts from `HIVEFORGE_PROJECT_DIR` to `HIVEFORGE_BIND_SOURCE_DIR` and extend Postgres Swarm healthchecks so fresh remote/shared data directories are not restarted during initial `initdb`.
+- Release images: publish `latest` for every Docker image build without stable/experimental minor-version parity gating.
+- Scenario Manager capabilities: keep capability lookup keyed by canonical image name, make `image.tag` optional compatibility metadata rather than a deployment tag, and verify bundled manifests do not need `latest` tags.
+- Release: bump PocketHive patch version to 0.15.25 for the HiveForge release deployment contract refresh.
+
 ## [0.15.24]
 Timestamp: 2026-06-05T00:18:18Z
 
