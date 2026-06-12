@@ -41,14 +41,14 @@ services:
         published: 15674
         protocol: tcp
     volumes: !override
-      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/config/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
-      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/config/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
-      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge project dir}/state/rabbitmq/data:/var/lib/rabbitmq
+      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge bind source dir}/artifacts/runtime/config/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge bind source dir}/artifacts/runtime/config/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
+      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge bind source dir}/state/rabbitmq/data:/var/lib/rabbitmq
     deploy: *storage-placement
 
   postgres:
     volumes: !override
-      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge project dir}/state/postgres/data:/var/lib/postgresql/data
+      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge bind source dir}/state/postgres/data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U pockethive -d pockethive -h 127.0.0.1 -p 5432"]
       interval: 5s
@@ -63,31 +63,31 @@ services:
         published: 8123
         protocol: tcp
     volumes: !override
-      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge project dir}/state/clickhouse/data:/var/lib/clickhouse
-      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/config/clickhouse/init:/docker-entrypoint-initdb.d:ro
-      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/config/clickhouse/clickhouse-entrypoint.sh:/opt/pockethive/clickhouse-entrypoint.sh:ro
-      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/config/clickhouse/migrate-tx-outcome-v1-to-v2.sh:/opt/pockethive/migrate-tx-outcome-v1-to-v2.sh:ro
+      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge bind source dir}/state/clickhouse/data:/var/lib/clickhouse
+      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge bind source dir}/artifacts/runtime/config/clickhouse/init:/docker-entrypoint-initdb.d:ro
+      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge bind source dir}/artifacts/runtime/config/clickhouse/clickhouse-entrypoint.sh:/opt/pockethive/clickhouse-entrypoint.sh:ro
+      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge bind source dir}/artifacts/runtime/config/clickhouse/migrate-tx-outcome-v1-to-v2.sh:/opt/pockethive/migrate-tx-outcome-v1-to-v2.sh:ro
     deploy:
       <<: *storage-placement
 
   prometheus:
     volumes: !override
-      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge project dir}/state/prometheus/data:/prometheus
+      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge bind source dir}/artifacts/runtime/config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge bind source dir}/state/prometheus/data:/prometheus
     deploy: *storage-placement
 
   grafana:
     volumes: !override
-      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/config/grafana/grafana.ini:/etc/grafana/grafana.ini:ro
-      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/config/grafana/provisioning:/etc/grafana/provisioning:ro
-      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/config/grafana/dashboards:/var/lib/grafana/dashboards:ro
-      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge project dir}/state/grafana/data:/var/lib/grafana
+      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge bind source dir}/artifacts/runtime/config/grafana/grafana.ini:/etc/grafana/grafana.ini:ro
+      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge bind source dir}/artifacts/runtime/config/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge bind source dir}/artifacts/runtime/config/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge bind source dir}/state/grafana/data:/var/lib/grafana
     deploy: *storage-placement
 
   loki:
     volumes: !override
-      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/config/loki/config.yml:/etc/loki/config.yml:ro
-      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge project dir}/state/loki/data:/var/lib/loki
+      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge bind source dir}/artifacts/runtime/config/loki/config.yml:/etc/loki/config.yml:ro
+      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge bind source dir}/state/loki/data:/var/lib/loki
     deploy: *storage-placement
 
   scenario-manager:
@@ -99,11 +99,11 @@ services:
       POCKETHIVE_AUTH_SERVICE_URL: http://auth-service:8080
       MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL: http://pushgateway:9091
     volumes: !override
-      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/scenarios:/app/scenarios
-      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/scenario-manager/capabilities:/app/capabilities:ro
-      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/scenario-manager/network:/app/network:ro
-      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/scenario-manager/sut:/app/sut:ro
-      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge project dir}/state/scenarios-runtime:/app/scenarios-runtime
+      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge bind source dir}/artifacts/runtime/scenarios:/app/scenarios
+      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge bind source dir}/artifacts/runtime/scenario-manager/capabilities:/app/capabilities:ro
+      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge bind source dir}/artifacts/runtime/scenario-manager/network:/app/network:ro
+      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge bind source dir}/artifacts/runtime/scenario-manager/sut:/app/sut:ro
+      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge bind source dir}/state/scenarios-runtime:/app/scenarios-runtime
     deploy: *scenarios-placement
 
   orchestrator:
@@ -120,12 +120,12 @@ services:
       POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_NETWORK_PROXY_MANAGER_URL: http://network-proxy-manager:8080
       POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_DOCKER_COMPUTE_ADAPTER: SWARM_STACK
       POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_IMAGE_REPOSITORY_PREFIX: ${POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_IMAGE_REPOSITORY_PREFIX:?set registry image prefix}
-      POCKETHIVE_SCENARIOS_RUNTIME_ROOT: ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge project dir}/state/scenarios-runtime
+      POCKETHIVE_SCENARIOS_RUNTIME_ROOT: ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge bind source dir}/state/scenarios-runtime
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/pockethive
       POCKETHIVE_SINK_CLICKHOUSE_ENDPOINT: http://clickhouse:8123
     volumes: !override
       - /var/run/docker.sock:/var/run/docker.sock
-      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge project dir}/state/scenarios-runtime:/app/scenarios-runtime
+      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge bind source dir}/state/scenarios-runtime:/app/scenarios-runtime
     deploy: *manager-scenarios-placement
 
   wiremock:
@@ -134,8 +134,8 @@ services:
         published: 8080
         protocol: tcp
     volumes: !override
-      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/wiremock/mappings:/home/wiremock/mappings
-      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/wiremock/__files:/home/wiremock/__files
+      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge bind source dir}/artifacts/runtime/wiremock/mappings:/home/wiremock/mappings
+      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge bind source dir}/artifacts/runtime/wiremock/__files:/home/wiremock/__files
     deploy:
       <<: *sut-placement
 
@@ -148,9 +148,9 @@ services:
         published: 9090
         protocol: tcp
     volumes: !override
-      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/tcp-mock/mappings:/app/mappings:ro
-      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/tcp-mock/__files:/app/__files:ro
-      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge project dir}/state/tcp-mock/data:/app/data
+      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge bind source dir}/artifacts/runtime/tcp-mock/mappings:/app/mappings:ro
+      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge bind source dir}/artifacts/runtime/tcp-mock/__files:/app/__files:ro
+      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge bind source dir}/state/tcp-mock/data:/app/data
     environment:
       RABBITMQ_HOST: rabbitmq
       SPRING_RABBITMQ_HOST: rabbitmq
@@ -166,9 +166,9 @@ services:
         published: 9091
         protocol: tcp
     volumes: !override
-      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/tcp-mock/mappings:/app/mappings:ro
-      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/tcp-mock/__files:/app/__files:ro
-      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge project dir}/state/tcp-mock/tls-data:/app/data
+      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge bind source dir}/artifacts/runtime/tcp-mock/mappings:/app/mappings:ro
+      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge bind source dir}/artifacts/runtime/tcp-mock/__files:/app/__files:ro
+      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge bind source dir}/state/tcp-mock/tls-data:/app/data
     environment:
       RABBITMQ_HOST: rabbitmq
       SPRING_RABBITMQ_HOST: rabbitmq
@@ -177,7 +177,7 @@ services:
 
   haproxy:
     volumes: !override
-      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge project dir}/state/haproxy/runtime:/opt/haproxy-runtime
+      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge bind source dir}/state/haproxy/runtime:/opt/haproxy-runtime
     deploy:
       <<: *proxy-placement
 
@@ -187,7 +187,7 @@ services:
       - toxiproxy
       - haproxy
     volumes: !override
-      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge project dir}/state/haproxy/runtime:/opt/haproxy-runtime
+      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge bind source dir}/state/haproxy/runtime:/opt/haproxy-runtime
     environment:
       POCKETHIVE_AUTH_SERVICE_URL: http://auth-service:8080
       POCKETHIVE_NETWORK_PROXY_MANAGER_SCENARIO_MANAGER_URL: http://scenario-manager:8080
@@ -238,7 +238,7 @@ services:
         published: 8088
         protocol: tcp
     volumes: !override
-      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/config/nginx/nginx.swarm.conf:/etc/nginx/conf.d/default.conf:ro
+      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge bind source dir}/artifacts/runtime/config/nginx/nginx.swarm.conf:/etc/nginx/conf.d/default.conf:ro
     deploy: *proxy-placement
 
   ui-v2:

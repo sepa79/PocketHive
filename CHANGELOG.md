@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.15.26]
+Timestamp: 2026-06-12T13:25:47Z
+
+- Release images: include the `db-query` worker in the GitHub Actions publish matrix and stage `db-query-service` for the Docker build so release tags publish `ghcr.io/sepa79/pockethive/db-query`.
+- HiveForge deployment: update deploy/update actions to the HiveForge 0.5.2 action-root contract by reading managed runtime artifacts from `/hf/artifacts/runtime`, writing rendered Compose to `/hf/stacks/compose.yml`, and keeping `HIVEFORGE_BIND_SOURCE_DIR` only for Docker-daemon bind sources.
+- Release: bump PocketHive patch version to 0.15.26 for the db-query image publication fix.
+
 ## [0.15.25]
 Timestamp: 2026-06-11T11:42:26Z
 

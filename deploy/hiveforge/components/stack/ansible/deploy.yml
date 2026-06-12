@@ -5,14 +5,14 @@
   vars:
     pockethive_repo_root: "{{ playbook_dir }}/../../../../"
     pockethive_profile: "{{ lookup('env', 'HIVEFORGE_PROFILE') }}"
-    pockethive_rendered_compose_file: "{{ lookup('env', 'HIVEFORGE_RENDERED_COMPOSE_FILE') }}"
+    pockethive_rendered_compose_file: /hf/stacks/compose.yml
     pockethive_bind_source_dir: "{{ lookup('env', 'HIVEFORGE_BIND_SOURCE_DIR') }}"
     pockethive_docker_registry: "{{ lookup('env', 'DOCKER_REGISTRY') }}"
     pockethive_version: "{{ lookup('env', 'POCKETHIVE_VERSION') }}"
     pockethive_image_repository_prefix: "{{ lookup('env', 'POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_IMAGE_REPOSITORY_PREFIX') }}"
-    pockethive_compose_base: "{{ pockethive_bind_source_dir }}/artifacts/pockethive-runtime/compose/docker-compose.yml"
-    pockethive_compose_swarm: "{{ pockethive_bind_source_dir }}/artifacts/pockethive-runtime/compose/compose.swarm.yml"
-    pockethive_compose_swarm_full: "{{ pockethive_bind_source_dir }}/artifacts/pockethive-runtime/compose/compose.swarm-full.yml"
+    pockethive_compose_base: /hf/artifacts/runtime/compose/docker-compose.yml
+    pockethive_compose_swarm: /hf/artifacts/runtime/compose/compose.swarm.yml
+    pockethive_compose_swarm_full: /hf/artifacts/runtime/compose/compose.swarm-full.yml
     pockethive_rabbitmq_root: "{{ lookup('env', 'POCKETHIVE_RABBITMQ_ROOT') }}"
     pockethive_postgres_root: "{{ lookup('env', 'POCKETHIVE_POSTGRES_ROOT') }}"
     pockethive_clickhouse_root: "{{ lookup('env', 'POCKETHIVE_CLICKHOUSE_ROOT') }}"

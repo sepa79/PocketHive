@@ -38,8 +38,8 @@ x-redis-placement: &redis-placement
 services:
   rabbitmq:
     volumes: !override
-      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/config/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
-      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/config/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
+      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge bind source dir}/artifacts/runtime/config/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge bind source dir}/artifacts/runtime/config/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
       - ${POCKETHIVE_RABBITMQ_ROOT:?set RabbitMQ root}:/var/lib/rabbitmq
     deploy: !override
       <<: *rabbitmq-placement
@@ -59,22 +59,22 @@ services:
   clickhouse:
     volumes: !override
       - ${POCKETHIVE_CLICKHOUSE_ROOT:?set ClickHouse root}:/var/lib/clickhouse
-      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/config/clickhouse/init:/docker-entrypoint-initdb.d:ro
-      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/config/clickhouse/clickhouse-entrypoint.sh:/opt/pockethive/clickhouse-entrypoint.sh:ro
-      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/config/clickhouse/migrate-tx-outcome-v1-to-v2.sh:/opt/pockethive/migrate-tx-outcome-v1-to-v2.sh:ro
+      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge bind source dir}/artifacts/runtime/config/clickhouse/init:/docker-entrypoint-initdb.d:ro
+      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge bind source dir}/artifacts/runtime/config/clickhouse/clickhouse-entrypoint.sh:/opt/pockethive/clickhouse-entrypoint.sh:ro
+      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge bind source dir}/artifacts/runtime/config/clickhouse/migrate-tx-outcome-v1-to-v2.sh:/opt/pockethive/migrate-tx-outcome-v1-to-v2.sh:ro
     deploy: !override
       <<: *clickhouse-placement
 
   prometheus:
     volumes: !override
-      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge bind source dir}/artifacts/runtime/config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ${POCKETHIVE_PROMETHEUS_ROOT:?set Prometheus root}:/prometheus
     deploy: !override
       <<: *prometheus-placement
 
   loki:
     volumes: !override
-      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge project dir}/artifacts/pockethive-runtime/config/loki/config.yml:/etc/loki/config.yml:ro
+      - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge bind source dir}/artifacts/runtime/config/loki/config.yml:/etc/loki/config.yml:ro
       - ${POCKETHIVE_LOKI_ROOT:?set Loki root}:/var/lib/loki
     deploy: !override
       <<: *loki-placement

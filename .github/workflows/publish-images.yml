@@ -139,6 +139,9 @@ jobs:
           - name: http-sequence
             dockerfile: Dockerfile.bees.local
             target: http-sequence
+          - name: db-query
+            dockerfile: Dockerfile.bees.local
+            target: db-query
           - name: moderator
             dockerfile: Dockerfile.bees.local
             target: moderator
@@ -187,6 +190,7 @@ jobs:
             generator-service \
             request-builder-service \
             http-sequence-service \
+            db-query-service \
             moderator-service \
             processor-service \
             postprocessor-service \

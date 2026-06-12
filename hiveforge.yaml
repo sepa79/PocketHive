@@ -45,85 +45,85 @@ artifacts:
   managedPaths:
     - name: runtime-compose-base
       source: docker-compose.yml
-      target: artifacts/pockethive-runtime/compose/docker-compose.yml
+      target: artifacts/runtime/compose/docker-compose.yml
       mode: replace
     - name: runtime-compose-single-node
       source: deploy/hiveforge/runtime/compose.single-node.yml
-      target: artifacts/pockethive-runtime/compose/compose.single-node.yml
+      target: artifacts/runtime/compose/compose.single-node.yml
       mode: replace
     - name: runtime-compose-swarm
       source: deploy/hiveforge/runtime/compose.swarm.yml
-      target: artifacts/pockethive-runtime/compose/compose.swarm.yml
+      target: artifacts/runtime/compose/compose.swarm.yml
       mode: replace
     - name: runtime-compose-swarm-full
       source: deploy/hiveforge/runtime/compose.swarm-full.yml
-      target: artifacts/pockethive-runtime/compose/compose.swarm-full.yml
+      target: artifacts/runtime/compose/compose.swarm-full.yml
       mode: replace
     - name: runtime-compose-reduced
       source: deploy/hiveforge/runtime/compose.reduced.yml
-      target: artifacts/pockethive-runtime/compose/compose.reduced.yml
+      target: artifacts/runtime/compose/compose.reduced.yml
       mode: replace
     - name: runtime-nginx-swarm
       source: deploy/hiveforge/runtime/nginx.swarm.conf
-      target: artifacts/pockethive-runtime/config/nginx/nginx.swarm.conf
+      target: artifacts/runtime/config/nginx/nginx.swarm.conf
       mode: replace
     - name: runtime-nginx-reduced
       source: deploy/hiveforge/runtime/nginx.reduced.conf
-      target: artifacts/pockethive-runtime/config/nginx/nginx.reduced.conf
+      target: artifacts/runtime/config/nginx/nginx.reduced.conf
       mode: replace
     - name: runtime-rabbitmq
       source: rabbitmq
-      target: artifacts/pockethive-runtime/config/rabbitmq
+      target: artifacts/runtime/config/rabbitmq
       mode: replace
     - name: runtime-prometheus
       source: prometheus
-      target: artifacts/pockethive-runtime/config/prometheus
+      target: artifacts/runtime/config/prometheus
       mode: replace
     - name: runtime-grafana
       source: grafana
-      target: artifacts/pockethive-runtime/config/grafana
+      target: artifacts/runtime/config/grafana
       mode: replace
     - name: runtime-loki
       source: loki
-      target: artifacts/pockethive-runtime/config/loki
+      target: artifacts/runtime/config/loki
       mode: replace
     - name: runtime-clickhouse-init
       source: clickhouse/init
-      target: artifacts/pockethive-runtime/config/clickhouse/init
+      target: artifacts/runtime/config/clickhouse/init
       mode: replace
     - name: runtime-clickhouse-entrypoint
       source: clickhouse/clickhouse-entrypoint.sh
-      target: artifacts/pockethive-runtime/config/clickhouse/clickhouse-entrypoint.sh
+      target: artifacts/runtime/config/clickhouse/clickhouse-entrypoint.sh
       mode: replace
     - name: runtime-clickhouse-tx-outcome-migration
       source: clickhouse/migrate-tx-outcome-v1-to-v2.sh
-      target: artifacts/pockethive-runtime/config/clickhouse/migrate-tx-outcome-v1-to-v2.sh
+      target: artifacts/runtime/config/clickhouse/migrate-tx-outcome-v1-to-v2.sh
       mode: replace
     - name: runtime-scenarios
       source: scenarios
-      target: artifacts/pockethive-runtime/scenarios
+      target: artifacts/runtime/scenarios
       mode: replace
     - name: runtime-scenario-manager-capabilities
       source: scenario-manager-service/capabilities
-      target: artifacts/pockethive-runtime/scenario-manager/capabilities
+      target: artifacts/runtime/scenario-manager/capabilities
       mode: replace
     - name: runtime-scenario-manager-network
       source: scenario-manager-service/network
-      target: artifacts/pockethive-runtime/scenario-manager/network
+      target: artifacts/runtime/scenario-manager/network
       mode: replace
     - name: runtime-scenario-manager-sut
       source: scenario-manager-service/sut
-      target: artifacts/pockethive-runtime/scenario-manager/sut
+      target: artifacts/runtime/scenario-manager/sut
       mode: replace
     - name: runtime-wiremock
       source: wiremock
-      target: artifacts/pockethive-runtime/wiremock
+      target: artifacts/runtime/wiremock
       mode: replace
     - name: runtime-tcp-mock-mappings
       source: tcp-mock-server/mappings
-      target: artifacts/pockethive-runtime/tcp-mock/mappings
+      target: artifacts/runtime/tcp-mock/mappings
       mode: replace
     - name: runtime-tcp-mock-files
       source: tcp-mock-server/__files
-      target: artifacts/pockethive-runtime/tcp-mock/__files
+      target: artifacts/runtime/tcp-mock/__files
       mode: replace

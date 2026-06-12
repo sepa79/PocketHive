@@ -132,25 +132,25 @@ HiveForge copies those files from the checked-out repo into its
 container-visible managed project root under:
 
 ```text
-HIVEFORGE_PROJECT_DIR/artifacts/pockethive-runtime/
+/hf/artifacts/runtime/
 ```
 
 For Docker Stack bind sources, `swarm-reduced` requires the HiveForge-provided
-host-visible equivalent `HIVEFORGE_PROJECT_HOST_DIR`.
+host-visible equivalent `HIVEFORGE_BIND_SOURCE_DIR`.
 
 Expected first required files for `deploy_release`:
 
 ```text
-artifacts/pockethive-runtime/compose/docker-compose.yml
-artifacts/pockethive-runtime/compose/compose.swarm.yml
-artifacts/pockethive-runtime/compose/compose.swarm-full.yml
-artifacts/pockethive-runtime/compose/compose.reduced.yml
-artifacts/pockethive-runtime/config/rabbitmq/rabbitmq.conf
-artifacts/pockethive-runtime/config/clickhouse/init/01-ph-tx-outcome-v1.sql
-artifacts/pockethive-runtime/scenarios
-artifacts/pockethive-runtime/scenario-manager/capabilities
-artifacts/pockethive-runtime/scenario-manager/network
-artifacts/pockethive-runtime/scenario-manager/sut
+artifacts/runtime/compose/docker-compose.yml
+artifacts/runtime/compose/compose.swarm.yml
+artifacts/runtime/compose/compose.swarm-full.yml
+artifacts/runtime/compose/compose.reduced.yml
+artifacts/runtime/config/rabbitmq/rabbitmq.conf
+artifacts/runtime/config/clickhouse/init/01-ph-tx-outcome-v1.sql
+artifacts/runtime/scenarios
+artifacts/runtime/scenario-manager/capabilities
+artifacts/runtime/scenario-manager/network
+artifacts/runtime/scenario-manager/sut
 ```
 
 ### PH Slice 3 - Replace POC Build Action

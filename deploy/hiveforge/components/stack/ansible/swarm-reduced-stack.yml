@@ -48,13 +48,6 @@
       - pockethive_profile in ["swarm-reduced", "swarm-full"]
     fail_msg: "Swarm stack render only supports HIVEFORGE_PROFILE=swarm-reduced or HIVEFORGE_PROFILE=swarm-full."
 
-- name: Require HiveForge rendered Compose file
-  ansible.builtin.assert:
-    that:
-      - pockethive_rendered_compose_file | length > 0
-      - pockethive_rendered_compose_file.startswith("/")
-    fail_msg: "HIVEFORGE_RENDERED_COMPOSE_FILE must be an absolute path set by HiveForge."
-
 - name: Require HiveForge bind source directory
   ansible.builtin.assert:
     that:
@@ -118,7 +111,7 @@
   ansible.builtin.assert:
     that:
       - pockethive_compose_files.results | map(attribute='stat.exists') | min
-    fail_msg: "HiveForge managed runtime compose files are missing under HIVEFORGE_BIND_SOURCE_DIR."
+    fail_msg: "HiveForge managed runtime compose files are missing under /hf/artifacts/runtime."
 
 - name: Create HiveForge-managed swarm state directories
   ansible.builtin.file:

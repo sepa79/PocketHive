@@ -234,32 +234,32 @@ HiveForge copies managed runtime files from the checked-out repo into its
 container-visible managed project root under:
 
 ```text
-HIVEFORGE_PROJECT_DIR/artifacts/pockethive-runtime/
+/hf/artifacts/runtime/
 ```
 
-For `swarm-reduced`, HiveForge must also provide `HIVEFORGE_PROJECT_HOST_DIR`.
-PocketHive reads prepared compose/config files through `HIVEFORGE_PROJECT_DIR`,
-but renders Docker Stack bind sources with `HIVEFORGE_PROJECT_HOST_DIR` because
+For `swarm-reduced`, HiveForge must also provide `HIVEFORGE_BIND_SOURCE_DIR`.
+PocketHive reads prepared compose/config files through `/hf`,
+but renders Docker Stack bind sources with `HIVEFORGE_BIND_SOURCE_DIR` because
 those paths are resolved by the target Docker daemon, not by the HiveForge
 container.
 
 Expected managed files for `swarm-reduced`:
 
 ```text
-artifacts/pockethive-runtime/compose/docker-compose.yml
-artifacts/pockethive-runtime/compose/compose.swarm.yml
-artifacts/pockethive-runtime/config/rabbitmq/rabbitmq.conf
-artifacts/pockethive-runtime/config/clickhouse/init/02-ph-tx-outcome-v2.sql
-artifacts/pockethive-runtime/config/clickhouse/clickhouse-entrypoint.sh
-artifacts/pockethive-runtime/config/clickhouse/migrate-tx-outcome-v1-to-v2.sh
-artifacts/pockethive-runtime/scenarios
-artifacts/pockethive-runtime/scenario-manager/capabilities
-artifacts/pockethive-runtime/scenario-manager/network
-artifacts/pockethive-runtime/scenario-manager/sut
+artifacts/runtime/compose/docker-compose.yml
+artifacts/runtime/compose/compose.swarm.yml
+artifacts/runtime/config/rabbitmq/rabbitmq.conf
+artifacts/runtime/config/clickhouse/init/02-ph-tx-outcome-v2.sql
+artifacts/runtime/config/clickhouse/clickhouse-entrypoint.sh
+artifacts/runtime/config/clickhouse/migrate-tx-outcome-v1-to-v2.sh
+artifacts/runtime/scenarios
+artifacts/runtime/scenario-manager/capabilities
+artifacts/runtime/scenario-manager/network
+artifacts/runtime/scenario-manager/sut
 ```
 
 `swarm-full` also requires:
 
 ```text
-artifacts/pockethive-runtime/compose/compose.swarm-full.yml
+artifacts/runtime/compose/compose.swarm-full.yml
 ```
