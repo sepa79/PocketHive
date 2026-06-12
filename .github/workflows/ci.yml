@@ -19,5 +19,8 @@ jobs:
           java-version: '21'
           cache: maven
 
+      - name: Check HiveForge action-root contract
+        run: bash tools/hiveforge-contract-check.sh
+
       - name: Run Maven tests
         run: mvn -B -ntp test

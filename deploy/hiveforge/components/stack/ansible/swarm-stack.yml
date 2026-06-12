@@ -45,8 +45,9 @@
 - name: Require swarm HiveForge runtime environment
   ansible.builtin.assert:
     that:
+      - hiveforge_root == "/hf"
       - pockethive_profile in ["swarm-reduced", "swarm-full"]
-    fail_msg: "Swarm stack render only supports HIVEFORGE_PROFILE=swarm-reduced or HIVEFORGE_PROFILE=swarm-full."
+    fail_msg: "Swarm stack render requires hiveforge_root=/hf and HIVEFORGE_PROFILE=swarm-reduced or HIVEFORGE_PROFILE=swarm-full."
 
 - name: Require HiveForge bind source directory
   ansible.builtin.assert:
@@ -113,16 +114,16 @@
       - pockethive_compose_files.results | map(attribute='stat.exists') | min
     fail_msg: "HiveForge managed runtime compose files are missing under /hf/artifacts/runtime."
 
-- name: Create HiveForge-managed swarm state directories
+- name: Create HiveForge action-root swarm state directories
   ansible.builtin.file:
-    path: "{{ pockethive_bind_source_dir }}/{{ item }}"
+    path: "{{ hiveforge_root }}/{{ item }}"
     state: directory
     mode: "0755"
   loop: "{{ pockethive_swarm_state_dirs }}"
 
-- name: Apply writable ownership for HiveForge-managed state directories
+- name: Apply writable ownership for HiveForge action-root state directories
   ansible.builtin.file:
-    path: "{{ pockethive_bind_source_dir }}/{{ item.path }}"
+    path: "{{ hiveforge_root }}/{{ item.path }}"
     state: directory
     owner: "{{ item.owner }}"
     group: "{{ item.group }}"

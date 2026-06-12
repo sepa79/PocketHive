@@ -135,8 +135,28 @@ container-visible managed project root under:
 /hf/artifacts/runtime/
 ```
 
-For Docker Stack bind sources, `swarm-reduced` requires the HiveForge-provided
-host-visible equivalent `HIVEFORGE_BIND_SOURCE_DIR`.
+For Docker Stack bind sources, `swarm-reduced` and `swarm-full` require the
+HiveForge-provided host-visible equivalent `HIVEFORGE_BIND_SOURCE_DIR`.
+PocketHive Ansible must not write to that value. It reads and writes the
+action-root constant `/hf`:
+
+```text
+/hf/artifacts/runtime/...  # managed artifacts copied by HiveForge
+/hf/state/...              # shared runtime state created by PocketHive Ansible
+/hf/stacks/compose.yml     # rendered stack file written by PocketHive Ansible
+```
+
+The rendered Compose file uses `HIVEFORGE_BIND_SOURCE_DIR` only for
+Docker-daemon bind sources:
+
+```text
+${HIVEFORGE_BIND_SOURCE_DIR}/state/...
+```
+
+For example, if HiveForge sets
+`HIVEFORGE_BIND_SOURCE_DIR=/opt/hiveforge/data/deployed/pockethive`, Ansible
+creates `/hf/state/haproxy/runtime` and the rendered Docker bind points at
+`/opt/hiveforge/data/deployed/pockethive/state/haproxy/runtime`.
 
 Expected first required files for `deploy_release`:
 

@@ -33,6 +33,48 @@ workers. Swarm controllers still run on manager nodes because they need Docker
 Swarm API access. Proxy/SUT/stateful placement remains explicit where the
 runtime profile declares it.
 
+## HiveForge Path Contract
+
+PocketHive Ansible actions run inside the HiveForge action container. They must
+read and write the project action root, not Docker-daemon host paths.
+
+The action-root constant is:
+
+```yaml
+hiveforge_root: /hf
+```
+
+Use these paths exactly in PocketHive action playbooks:
+
+| Purpose | Path or value | Used by |
+| --- | --- | --- |
+| Action root visible inside the Ansible container | `/hf` | Ansible reads/writes |
+| Managed runtime artifacts copied by `artifacts.managedPaths` | `/hf/artifacts/runtime/...` | Ansible reads |
+| Rendered Docker Stack file | `/hf/stacks/compose.yml` | Ansible writes, HiveForge deploys |
+| HiveForge-managed runtime state dirs | `/hf/state/...` | Ansible creates/chowns |
+| Docker-daemon host-visible bind root | `HIVEFORGE_BIND_SOURCE_DIR` | Compose render only |
+| Dedicated `swarm-full` service data dirs | `POCKETHIVE_*_ROOT` | Compose render only |
+
+`HIVEFORGE_BIND_SOURCE_DIR` is not the path that PocketHive Ansible should write
+to. It is the host-visible equivalent of the same managed project root for the
+target Docker daemon, for example `/opt/hiveforge/data/deployed/pockethive`.
+PocketHive passes it into `docker compose config` so rendered bind mounts point
+at paths Docker can resolve. The Ansible action itself must create shared state
+through `/hf/state/...`.
+
+The mapping is therefore:
+
+```text
+Ansible action path:      /hf/state/haproxy/runtime
+Rendered Docker bind:     ${HIVEFORGE_BIND_SOURCE_DIR}/state/haproxy/runtime
+Example Docker host path: /opt/hiveforge/data/deployed/pockethive/state/haproxy/runtime
+```
+
+`artifacts.managedPaths` only prepares release/runtime files under
+`/hf/artifacts/runtime/...`. Runtime state such as `/hf/state/grafana/data` and
+`/hf/state/tcp-mock/data` is not a managed artifact; the PocketHive action must
+create it before the rendered stack is handed back to HiveForge.
+
 In `swarm-full`, HiveForge only creates directories under its managed project
 root. It never creates, chmods, or chowns dedicated service mount roots. Those
 paths must already exist on nodes selected by the matching placement labels.
@@ -230,18 +272,18 @@ node.labels.pockethive.loki == true
 node.labels.pockethive.redis == true
 ```
 
-HiveForge copies managed runtime files from the checked-out repo into its
-container-visible managed project root under:
+HiveForge copies managed runtime files from the checked-out repo into the
+container-visible action root under:
 
 ```text
 /hf/artifacts/runtime/
 ```
 
-For `swarm-reduced`, HiveForge must also provide `HIVEFORGE_BIND_SOURCE_DIR`.
-PocketHive reads prepared compose/config files through `/hf`,
-but renders Docker Stack bind sources with `HIVEFORGE_BIND_SOURCE_DIR` because
-those paths are resolved by the target Docker daemon, not by the HiveForge
-container.
+For `swarm-reduced` and `swarm-full`, HiveForge must also provide
+`HIVEFORGE_BIND_SOURCE_DIR`. PocketHive reads prepared compose/config files and
+creates shared runtime state through `/hf`, but renders Docker Stack bind
+sources with `HIVEFORGE_BIND_SOURCE_DIR` because those paths are resolved by the
+target Docker daemon, not by the HiveForge action container.
 
 Expected managed files for `swarm-reduced`:
 
