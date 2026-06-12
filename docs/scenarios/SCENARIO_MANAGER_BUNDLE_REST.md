@@ -98,7 +98,7 @@ Finding shape:
 
 ### Dry-run validate an uploaded bundle
 
-`POST /scenarios/bundles/validate` → request `application/zip`, response
+`POST /scenario-bundles/validate` → request `application/zip`, response
 `application/json`
 
 - Unpacks and validates in temporary storage.
@@ -131,7 +131,7 @@ Response:
 
 ### Validate an existing bundle by bundle key
 
-`POST /scenarios/bundles/validate-existing?bundleKey={bundleKey}` → response
+`POST /scenario-bundles/validate-existing?bundleKey={bundleKey}` → response
 `application/json`
 
 - Validates a catalog entry from `GET /api/templates`.

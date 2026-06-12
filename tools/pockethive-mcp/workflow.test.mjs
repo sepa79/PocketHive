@@ -1018,7 +1018,7 @@ test("Scenario Manager auth refreshes username-derived bearer token once after 4
       res.end(JSON.stringify({ accessToken: loginCalls === 1 ? "expired-token" : "fresh-token" }));
       return;
     }
-    if (req.method === "POST" && url.pathname === "/scenario-manager/scenarios/bundles/validate") {
+    if (req.method === "POST" && url.pathname === "/scenario-manager/scenario-bundles/validate") {
       validateCalls += 1;
       for await (const _ of req) { /* drain zip upload */ }
       const auth = req.headers.authorization || "";
@@ -1080,7 +1080,7 @@ test("Scenario Manager auth failure is classified as environment auth, not bundl
       res.end(JSON.stringify({ accessToken: `still-expired-${loginCalls}` }));
       return;
     }
-    if (req.method === "POST" && url.pathname === "/scenario-manager/scenarios/bundles/validate") {
+    if (req.method === "POST" && url.pathname === "/scenario-manager/scenario-bundles/validate") {
       validateCalls += 1;
       for await (const _ of req) { /* drain zip upload */ }
       res.writeHead(401, { "content-type": "application/json" });

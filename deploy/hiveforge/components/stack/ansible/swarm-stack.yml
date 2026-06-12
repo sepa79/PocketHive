@@ -149,6 +149,9 @@
   environment:
     DOCKER_REGISTRY: "{{ pockethive_docker_registry }}"
     HIVEFORGE_BIND_SOURCE_DIR: "{{ pockethive_bind_source_dir }}"
+    HTTP_PROXY: "{{ lookup('env', 'HTTP_PROXY') | default(lookup('env', 'http_proxy'), true) }}"
+    HTTPS_PROXY: "{{ lookup('env', 'HTTPS_PROXY') | default(lookup('env', 'https_proxy'), true) }}"
+    NO_PROXY: "{{ lookup('env', 'NO_PROXY') | default(lookup('env', 'no_proxy'), true) }}"
     POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_IMAGE_REPOSITORY_PREFIX: "{{ pockethive_image_repository_prefix }}"
     POCKETHIVE_VERSION: "{{ pockethive_version }}"
   register: pockethive_compose_config_reduced
@@ -170,6 +173,9 @@
   environment:
     DOCKER_REGISTRY: "{{ pockethive_docker_registry }}"
     HIVEFORGE_BIND_SOURCE_DIR: "{{ pockethive_bind_source_dir }}"
+    HTTP_PROXY: "{{ lookup('env', 'HTTP_PROXY') | default(lookup('env', 'http_proxy'), true) }}"
+    HTTPS_PROXY: "{{ lookup('env', 'HTTPS_PROXY') | default(lookup('env', 'https_proxy'), true) }}"
+    NO_PROXY: "{{ lookup('env', 'NO_PROXY') | default(lookup('env', 'no_proxy'), true) }}"
     POCKETHIVE_CLICKHOUSE_ROOT: "{{ pockethive_clickhouse_root }}"
     POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_IMAGE_REPOSITORY_PREFIX: "{{ pockethive_image_repository_prefix }}"
     POCKETHIVE_LOKI_ROOT: "{{ pockethive_loki_root }}"

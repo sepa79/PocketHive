@@ -27,11 +27,14 @@ deploy`. It does not build or push images.
 
 For `swarm-reduced` and `swarm-full`, scenario/runtime workloads assume the HiveForge-managed
 project root is shared and available on every eligible Swarm node. PocketHive
-therefore does not require a `pockethive.scenarios` node label for
-Scenario Manager, Orchestrator, swarm controllers, or dynamically launched
-workers. Swarm controllers still run on manager nodes because they need Docker
-Swarm API access. Proxy/SUT/stateful placement remains explicit where the
-runtime profile declares it.
+therefore does not require `pockethive.scenarios` or `pockethive.sut` node
+labels for Scenario Manager, Orchestrator, swarm controllers, dynamically
+launched workers, or bundled SUT/mock services. It also does not require a
+`pockethive.proxy` node label for HAProxy, Network Proxy Manager, Toxiproxy,
+Redis, or UI services because their state and config are either shared under
+the HiveForge-managed project root or stateless. Swarm controllers still run on
+manager nodes because they need Docker Swarm API access. Stateful placement
+remains explicit where the runtime profile declares dedicated roots.
 
 ## HiveForge Path Contract
 
@@ -168,7 +171,16 @@ Agent sequence:
        POCKETHIVE_PROMETHEUS_ROOT: /data/prometheus
        POCKETHIVE_LOKI_ROOT: /data/loki
        POCKETHIVE_REDIS_ROOT: /data/redis
+       HTTP_PROXY: http://proxy.example:3128
+       HTTPS_PROXY: http://proxy.example:3128
+       NO_PROXY: localhost,127.0.0.1,::1,prometheus,loki,clickhouse,rabbitmq,postgres,redis,pushgateway,scenario-manager,orchestrator,auth-service,network-proxy-manager,ui,ui-v2
    ```
+
+   Set `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` only when the target
+   environment requires outbound proxy access. PocketHive renders those values
+   into Grafana so `GF_INSTALL_PLUGINS` can download
+   `grafana-clickhouse-datasource`; it also renders lowercase proxy variables
+   from the same uppercase values for tools that read lowercase names.
 
 6. Start the lifecycle action through HiveForge MCP:
 

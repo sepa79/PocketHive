@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+## [0.15.27]
+Timestamp: 2026-06-12T18:07:27Z
+
+- HiveForge deployment: render standard proxy environment variables into
+  Grafana for Swarm profiles so `GF_INSTALL_PLUGINS` can download the
+  ClickHouse datasource plugin behind an outbound proxy.
+- HiveForge deployment: remove the unnecessary `pockethive.sut` placement
+  constraint from bundled SUT/mock services in Swarm profiles.
+- HiveForge deployment: remove the unnecessary `pockethive.proxy` placement
+  constraint from shared-root proxy/UI services; `swarm-full` Redis still uses
+  its dedicated `pockethive.redis` placement.
+- Scenario Manager bundle validation: move dry-run bundle validation endpoints
+  out of the `/scenarios` namespace to `/scenario-bundles/validate` and
+  `/scenario-bundles/validate-existing`, and update MCP/docs/contracts to use
+  the non-conflicting URLs.
+- Release: bump PocketHive patch version to 0.15.27 for the Scenario Manager
+  bundle validation endpoint fix and HiveForge Swarm profile cleanup.
+
 ## [0.15.26]
 Timestamp: 2026-06-12T13:25:47Z
 

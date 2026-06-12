@@ -515,7 +515,7 @@ class ScenarioControllerTest {
                   bees: []
                 """);
 
-        mvc.perform(post("/scenarios/bundles/validate")
+        mvc.perform(post("/scenario-bundles/validate")
                         .contentType("application/zip")
                         .content(zip)
                         .accept(MediaType.APPLICATION_JSON))
@@ -558,7 +558,7 @@ class ScenarioControllerTest {
     void dryRunBundleValidationReturnsStructuredFindings() throws Exception {
         byte[] zip = bundleZip("note.txt", "no scenario here");
 
-        mvc.perform(post("/scenarios/bundles/validate")
+        mvc.perform(post("/scenario-bundles/validate")
                         .contentType("application/zip")
                         .content(zip)
                         .accept(MediaType.APPLICATION_JSON))
@@ -607,7 +607,9 @@ class ScenarioControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.contractVersion").value("scenario-authoring.v1"))
                 .andExpect(jsonPath("$.fingerprint").exists())
-                .andExpect(jsonPath("$.endpoints.validateBundle").value("/scenarios/bundles/validate"))
+                .andExpect(jsonPath("$.endpoints.validateBundle").value("/scenario-bundles/validate"))
+                .andExpect(jsonPath("$.endpoints.validateExistingBundle")
+                        .value("/scenario-bundles/validate-existing?bundleKey={bundleKey}"))
                 .andExpect(jsonPath("$.cache.sessionCacheable").value(true));
 
         mvc.perform(get("/api/authoring-contract/fingerprint").accept(MediaType.APPLICATION_JSON))

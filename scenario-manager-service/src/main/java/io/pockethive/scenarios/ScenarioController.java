@@ -691,33 +691,6 @@ public class ScenarioController {
         }
     }
 
-    @PostMapping(
-            value = "/bundles/validate",
-            consumes = "application/zip",
-            produces = MediaType.APPLICATION_JSON_VALUE)
-    public ScenarioService.BundleValidationResult validateBundle(@RequestBody byte[] body) throws IOException {
-        int size = body != null ? body.length : 0;
-        log.info("[REST] POST /scenarios/bundles/validate contentType=application/zip size={}", size);
-        ScenarioService.BundleValidationResult result = service.validateBundleZip(body);
-        log.info("[REST] POST /scenarios/bundles/validate -> status=200 ok={} findings={}",
-                result.ok(), result.findings().size());
-        return result;
-    }
-
-    @PostMapping(value = "/bundles/validate-existing", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ScenarioService.BundleValidationResult validateExistingBundle(@RequestParam("bundleKey") String bundleKey) throws IOException {
-        log.info("[REST] POST /scenarios/bundles/validate-existing bundleKey={}", bundleKey);
-        try {
-            ScenarioService.BundleValidationResult result = service.validateExistingBundle(bundleKey);
-            log.info("[REST] POST /scenarios/bundles/validate-existing -> status=200 ok={} findings={}",
-                    result.ok(), result.findings().size());
-            return result;
-        } catch (IllegalArgumentException e) {
-            log.warn("[REST] POST /scenarios/bundles/validate-existing -> status=404 bundleKey={} {}", bundleKey, e.getMessage());
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
-        }
-    }
-
     @PostMapping(value = "/{id}/validate", produces = MediaType.APPLICATION_JSON_VALUE)
     public ScenarioService.BundleValidationResult validateScenario(@PathVariable("id") String id) throws IOException {
         log.info("[REST] POST /scenarios/{}/validate", id);

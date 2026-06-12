@@ -97,7 +97,7 @@ Example response:
   "endpoints": {
     "templates": "/api/templates",
     "capabilities": "/api/capabilities",
-    "validateBundle": "/scenarios/bundles/validate",
+    "validateBundle": "/scenario-bundles/validate",
     "validateScenario": "/scenarios/{id}/validate",
     "validateTemplates": "/scenarios/{id}/templates/validate"
   },
@@ -139,7 +139,7 @@ Clients must key automation on `code` and `path`, not on the human-readable
 
 ### Validate an uploaded bundle without importing it
 
-`POST /scenarios/bundles/validate` consumes `application/zip` and returns
+`POST /scenario-bundles/validate` consumes `application/zip` and returns
 `application/json`.
 
 This endpoint unpacks and validates the bundle in temporary storage only. It
@@ -173,7 +173,7 @@ already loaded scenario bundle.
 
 ### Validate an existing bundle by bundle key
 
-`POST /scenarios/bundles/validate-existing?bundleKey={bundleKey}` validates the
+`POST /scenario-bundles/validate-existing?bundleKey={bundleKey}` validates the
 catalog entry identified by `bundleKey`. Use this for malformed bundles,
 duplicate-id bundles, or bundles whose `scenario.id` is not safe to address.
 

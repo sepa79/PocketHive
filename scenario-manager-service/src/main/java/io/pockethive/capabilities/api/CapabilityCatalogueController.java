@@ -147,8 +147,8 @@ public class CapabilityCatalogueController {
                         "capabilities", "/api/capabilities",
                         "authoringContract", "/api/authoring-contract",
                         "authoringContractFingerprint", "/api/authoring-contract/fingerprint",
-                        "validateBundle", "/scenarios/bundles/validate",
-                        "validateExistingBundle", "/scenarios/bundles/validate-existing?bundleKey={bundleKey}",
+                        "validateBundle", "/scenario-bundles/validate",
+                        "validateExistingBundle", "/scenario-bundles/validate-existing?bundleKey={bundleKey}",
                         "validateScenario", "/scenarios/{id}/validate",
                         "validateTemplates", "/scenarios/{id}/templates/validate"
                 ),

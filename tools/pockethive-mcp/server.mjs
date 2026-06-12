@@ -2380,7 +2380,7 @@ async function scenarioManagerUploadBundle(bundle, { replaceExisting = true } = 
 async function scenarioManagerDryRunValidateBundle(bundle) {
   const zipBytes = await createBundleZipBytes(bundle);
   try {
-    return await httpJson(`${SM_URL}/scenarios/bundles/validate`, {
+    return await httpJson(`${SM_URL}/scenario-bundles/validate`, {
       method: "POST",
       body: zipBytes,
       headers: { "content-type": "application/zip" },
