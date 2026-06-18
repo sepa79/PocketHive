@@ -1,6 +1,5 @@
 import { spawn } from "node:child_process";
-import { appendFileSync, existsSync, readFileSync, readdirSync } from "node:fs";
-import { createHash } from "node:crypto";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
@@ -19,6 +18,12 @@ const LABELS = {
   logicalName: "pockethive.logicalName",
   image: "pockethive.image",
   version: "pockethive.version"
+};
+
+const LABEL_VALUES = {
+  managed: "true",
+  worker: "worker",
+  manager: "manager"
 };
 
 const REQUIRED_CLEANUP_LABELS = [
@@ -52,8 +57,6 @@ const runtimeDestructiveWrite = {
 };
 
 export function registerRuntimeTools(reg, options = {}) {
-  const evidenceLogPath = options.evidenceLogPath
-    ?? resolve(__dirname, "runtime-cleanup-evidence.jsonl");
   const cleanupApi = options.httpJson ? runtimeCleanupApi(options.httpJson) : null;
   const sourceOptions = {
     httpJson: options.httpJson ?? null,
@@ -78,14 +81,7 @@ export function registerRuntimeTools(reg, options = {}) {
     includeRunning: z.boolean().optional(),
     includeRabbit: z.boolean().optional()
   }, guarded(async ({ computeAdapter, swarmId, runId, includeRunning = false, includeRabbit }) => {
-    if (cleanupApi) {
-      return await cleanupApi.plan({ computeAdapter, swarmId, runId, includeRunning, includeRabbit });
-    }
-    const resources = await listPocketHiveRuntimeResources(computeAdapter);
-    return {
-      computeAdapter,
-      ...buildCleanupPlan(resources, { swarmId, runId, includeRunning })
-    };
+    return await requireCleanupApi(cleanupApi).plan({ computeAdapter, swarmId, runId, includeRunning, includeRabbit });
   }), runtimeReadOnly);
 
   reg("runtime.tail-worker-logs", "Read recent Docker logs for one label-gated PocketHive worker runtime resource.", {
@@ -227,53 +223,15 @@ export function registerRuntimeTools(reg, options = {}) {
       ...input,
       actor: input.actor ?? actor()
     };
-    if (cleanupApi) {
-      return await cleanupApi.execute(executionInput);
-    }
-    const resources = await listPocketHiveRuntimeResources(input.computeAdapter);
-    const plan = buildCleanupPlan(resources, executionInput);
-    const evidenceEntries = readCleanupEvidence(evidenceLogPath);
-    const validation = validateCleanupExecution(executionInput, plan, evidenceEntries);
-    if (validation.idempotent) {
-      return {
-        idempotent: true,
-        evidence: validation.previous
-      };
-    }
-
-    const startedAt = new Date().toISOString();
-    const resultByCandidate = [];
-    for (const candidate of validation.candidates) {
-      try {
-        await removeRuntimeResource(candidate);
-        resultByCandidate.push({
-          runtimeId: candidate.runtimeId,
-          runtimeType: candidate.runtimeType,
-          status: "removed"
-        });
-      } catch (error) {
-        resultByCandidate.push({
-          runtimeId: candidate.runtimeId,
-          runtimeType: candidate.runtimeType,
-          status: "failed",
-          error: error instanceof Error ? error.message : String(error)
-        });
-      }
-    }
-    const finishedAt = new Date().toISOString();
-    const evidence = cleanupExecutionEvidence(
-      executionInput,
-      resultByCandidate,
-      startedAt,
-      finishedAt
-    );
-    appendCleanupEvidence(evidenceLogPath, evidence);
-
-    return {
-      idempotent: false,
-      evidence
-    };
+    return await requireCleanupApi(cleanupApi).execute(executionInput);
   }), runtimeDestructiveWrite);
+}
+
+function requireCleanupApi(cleanupApi) {
+  if (!cleanupApi) {
+    throw new Error("runtime cleanup requires the Orchestrator runtime cleanup API; local MCP cleanup fallback is disabled");
+  }
+  return cleanupApi;
 }
 
 function runtimeContractGuard(httpJson) {
@@ -342,7 +300,7 @@ async function listDockerContainers() {
     "ps",
     "-a",
     "--filter",
-    "label=pockethive.managed=true",
+    `label=${LABELS.managed}=${LABEL_VALUES.managed}`,
     "--format",
     "{{.ID}}"
   ]);
@@ -370,7 +328,7 @@ async function listDockerServices() {
     "service",
     "ls",
     "--filter",
-    "label=pockethive.managed=true",
+    `label=${LABELS.managed}=${LABEL_VALUES.managed}`,
     "--format",
     "{{.ID}}"
   ]);
@@ -400,18 +358,6 @@ async function inspectRuntimeResource(computeAdapter, runtimeId) {
   const result = await runCommand("docker", args);
   const parsed = JSON.parse(result.stdout);
   return Array.isArray(parsed) ? parsed[0] : parsed;
-}
-
-async function removeRuntimeResource(candidate) {
-  if (candidate.runtimeType === "container") {
-    await runCommand("docker", ["rm", "-f", candidate.runtimeId]);
-    return;
-  }
-  if (candidate.runtimeType === "service") {
-    await runCommand("docker", ["service", "rm", candidate.runtimeId]);
-    return;
-  }
-  throw new Error(`Unsupported runtimeType '${candidate.runtimeType}' for '${candidate.runtimeId}'.`);
 }
 
 async function readWorkerLogs(computeAdapter, target, options = {}) {
@@ -468,58 +414,6 @@ function countLogLines(text) {
   return text.split(/\r?\n/).filter((line) => line.length > 0).length;
 }
 
-export function buildCleanupPlan(resources, input = {}) {
-  const swarmId = requireText(input.swarmId, "swarmId");
-  const runId = optionalText(input.runId);
-  const includeRunning = input.includeRunning === true;
-  const candidates = [];
-  const blocked = [];
-
-  for (const resource of resources ?? []) {
-    const normalized = normalizeRuntimeResource(resource);
-    const labels = normalized.labels;
-    if (labels[LABELS.managed] !== "true") {
-      if (labels[LABELS.swarmId] === swarmId) {
-        blocked.push(blockedResource(normalized, "missing pockethive.managed=true"));
-      }
-      continue;
-    }
-    if (labels[LABELS.swarmId] !== swarmId) {
-      continue;
-    }
-    const missingLabels = REQUIRED_CLEANUP_LABELS.filter((label) => !hasText(labels[label]));
-    if (missingLabels.length > 0) {
-      blocked.push(blockedResource(normalized, `missing required labels: ${missingLabels.join(", ")}`));
-      continue;
-    }
-    if (runId && labels[LABELS.runId] !== runId) {
-      continue;
-    }
-    if (isRunningRuntime(normalized) && !includeRunning) {
-      blocked.push(blockedResource(normalized, "running resource requires includeRunning=true"));
-      continue;
-    }
-    candidates.push(candidateResource(normalized, includeRunning));
-  }
-
-  candidates.sort(compareRuntimeId);
-  blocked.sort(compareRuntimeId);
-
-  const planBase = {
-    swarmId,
-    runId: runId ?? null,
-    includeRunning,
-    candidates,
-    blocked,
-    executionRisk: cleanupExecutionRisk({ runId: runId ?? null, includeRunning, candidates })
-  };
-
-  return {
-    ...planBase,
-    candidateSetHash: cleanupPlanHash(planBase)
-  };
-}
-
 export function buildRuntimeWorkerList(resources, input = {}) {
   const swarmId = requireText(input.swarmId, "swarmId");
   const runId = optionalText(input.runId);
@@ -534,8 +428,8 @@ export function buildRuntimeWorkerList(resources, input = {}) {
     if (labels[LABELS.swarmId] !== swarmId) {
       continue;
     }
-    if (labels[LABELS.managed] !== "true") {
-      blocked.push(blockedResource(normalized, "missing pockethive.managed=true"));
+    if (labels[LABELS.managed] !== LABEL_VALUES.managed) {
+      blocked.push(blockedResource(normalized, `missing ${LABELS.managed}=${LABEL_VALUES.managed}`));
       continue;
     }
     const missingLabels = REQUIRED_CLEANUP_LABELS.filter((label) => !hasText(labels[label]));
@@ -548,14 +442,14 @@ export function buildRuntimeWorkerList(resources, input = {}) {
     }
 
     const entry = runtimeListEntry(normalized);
-    if (entry.resourceKind === "worker") {
+    if (entry.resourceKind === LABEL_VALUES.worker) {
       workers.push(entry);
-    } else if (entry.resourceKind === "manager") {
+    } else if (entry.resourceKind === LABEL_VALUES.manager) {
       if (includeManagers) {
         managers.push(entry);
       }
     } else {
-      blocked.push(blockedResource(normalized, `unsupported pockethive.resourceKind=${entry.resourceKind}`));
+      blocked.push(blockedResource(normalized, `unsupported ${LABELS.resourceKind}=${entry.resourceKind}`));
     }
   }
 
@@ -605,9 +499,11 @@ export async function runtimeDebugContext(input = {}, options = {}) {
     { swarmId, runId, limit: input.journalLimit ?? DEFAULT_JOURNAL_LIMIT },
     options
   );
-  const cleanupPlan = resourcesSource.available
-    ? buildCleanupPlan(resources, { swarmId, runId, includeRunning: true })
-    : null;
+  const cleanupPlanSource = await readCleanupPlan(
+    { computeAdapter, swarmId, runId, includeRunning: true, includeRabbit },
+    options
+  );
+  const cleanupPlan = cleanupPlanSource.available ? cleanupPlanSource.data : null;
 
   return {
     input: {
@@ -621,7 +517,8 @@ export async function runtimeDebugContext(input = {}, options = {}) {
       manifest: sourceSummary(manifest),
       rabbit: sourceSummary(rabbit),
       orchestratorSnapshot: sourceSummary(swarmSnapshot),
-      journal: sourceSummary(journal)
+      journal: sourceSummary(journal),
+      cleanupPlan: sourceSummary(cleanupPlanSource)
     },
     resources,
     manifest: manifest.manifest ?? null,
@@ -660,7 +557,7 @@ export function buildRuntimeDiff(context) {
         .sort(compareRuntimeId)
     : [];
   const stateIssues = actualEntries
-    .filter((entry) => entry.resourceKind === "worker" && !entry.running)
+    .filter((entry) => entry.resourceKind === LABEL_VALUES.worker && !entry.running)
     .map((entry) => ({
       runtimeId: entry.runtimeId,
       role: entry.role,
@@ -713,12 +610,6 @@ export function buildControlPlaneStatus(context) {
   const queuesByName = rabbitQueuesByName(context.rabbit);
   const manifestControlQueues = context.manifest?.rabbit?.controlQueues ?? [];
   const exactQueueNames = new Set(manifestControlQueues);
-  for (const worker of workerList.workers) {
-    exactQueueNames.add(deriveWorkerControlQueue(worker));
-  }
-  for (const manager of workerList.managers) {
-    exactQueueNames.add(deriveManagerControlQueue(manager));
-  }
   const journalEntries = normalizeJournalEntries(context.journal.data);
   const controlQueues = [...exactQueueNames]
     .filter(Boolean)
@@ -730,30 +621,40 @@ export function buildControlPlaneStatus(context) {
     runId: context.input.runId,
     sources: context.sources,
     controlQueues,
-    workers: workerList.workers.map((worker) => ({
-      runtimeId: worker.runtimeId,
-      role: worker.role,
-      instance: worker.instance,
-      state: worker.state,
-      running: worker.running,
-      controlQueue: rabbitQueueSnapshot(deriveWorkerControlQueue(worker), queuesByName.get(deriveWorkerControlQueue(worker))),
-      lastStatusEvent: latestJournalEventForWorker(journalEntries, worker, ["status", "heartbeat"]),
-      lastControlEvent: latestJournalEventForWorker(journalEntries, worker, ["control", "command", "config"])
-    })),
-    managers: workerList.managers.map((manager) => ({
-      runtimeId: manager.runtimeId,
-      role: manager.role,
-      instance: manager.instance,
-      state: manager.state,
-      running: manager.running,
-      controlQueue: rabbitQueueSnapshot(deriveManagerControlQueue(manager), queuesByName.get(deriveManagerControlQueue(manager))),
-      lastStatusEvent: latestJournalEventForWorker(journalEntries, manager, ["status", "heartbeat"])
-    })),
+    workers: workerList.workers.map((worker) => controlPlaneRuntimeStatus(worker, manifestControlQueues, queuesByName, journalEntries)),
+    managers: workerList.managers.map((manager) => controlPlaneRuntimeStatus(manager, manifestControlQueues, queuesByName, journalEntries)),
     recentControlEvents: journalEntries
       .filter((entry) => journalText(entry).match(/control|command|config/i))
       .slice(0, 20)
       .map(summarizeJournalEntry)
   };
+}
+
+function controlPlaneRuntimeStatus(entry, manifestControlQueues, queuesByName, journalEntries) {
+  const controlQueueName = manifestControlQueueFor(entry, manifestControlQueues);
+  return {
+    runtimeId: entry.runtimeId,
+    role: entry.role,
+    instance: entry.instance,
+    state: entry.state,
+    running: entry.running,
+    controlQueue: controlQueueName
+      ? rabbitQueueSnapshot(controlQueueName, queuesByName.get(controlQueueName))
+      : { name: null, present: false, reason: "not present in runtime ownership manifest" },
+    lastStatusEvent: latestJournalEventForWorker(journalEntries, entry, ["status", "heartbeat"]),
+    lastControlEvent: latestJournalEventForWorker(journalEntries, entry, ["control", "command", "config"])
+  };
+}
+
+function manifestControlQueueFor(entry, manifestControlQueues = []) {
+  const role = optionalText(entry.role);
+  const instance = optionalText(entry.instance);
+  if (!role || !instance) {
+    return null;
+  }
+  const suffix = `.${role}.${instance}`;
+  const matches = manifestControlQueues.filter((queue) => String(queue ?? "").endsWith(suffix));
+  return matches.length === 1 ? matches[0] : null;
 }
 
 export function buildRabbitTopologySnapshot(input, manifestSource, rabbitSource) {
@@ -865,7 +766,7 @@ export function buildManifestValidation(context) {
   const manifestIds = new Set(manifestObjects.map((object) => object.runtimeId));
   const unexpectedRuntimeObjects = context.resources
     .map(normalizeRuntimeResource)
-    .filter((resource) => resource.labels[LABELS.managed] === "true")
+    .filter((resource) => resource.labels[LABELS.managed] === LABEL_VALUES.managed)
     .filter((resource) => resource.labels[LABELS.swarmId] === manifest.swarmId)
     .filter((resource) => !context.input.runId || resource.labels[LABELS.runId] === context.input.runId)
     .filter((resource) => !manifestIds.has(resource.runtimeId))
@@ -927,7 +828,7 @@ export function buildWorkerLogTarget(resources, input = {}) {
   for (const resource of resources ?? []) {
     const normalized = normalizeRuntimeResource(resource);
     const labels = normalized.labels;
-    if (labels[LABELS.managed] !== "true") {
+    if (labels[LABELS.managed] !== LABEL_VALUES.managed) {
       continue;
     }
     if (labels[LABELS.swarmId] !== swarmId) {
@@ -936,7 +837,7 @@ export function buildWorkerLogTarget(resources, input = {}) {
     if (runId && labels[LABELS.runId] !== runId) {
       continue;
     }
-    if (labels[LABELS.resourceKind] !== "worker") {
+    if (labels[LABELS.resourceKind] !== LABEL_VALUES.worker) {
       continue;
     }
     if (runtimeId && normalized.runtimeId !== runtimeId) {
@@ -1059,6 +960,20 @@ async function readSwarmJournal(input, options = {}) {
     options.httpJson(`/api/swarms/${encodeURIComponent(input.swarmId)}/journal/page?${params.toString()}`));
   source.limit = input.limit ?? DEFAULT_JOURNAL_LIMIT;
   return source;
+}
+
+async function readCleanupPlan(input, options = {}) {
+  if (!options.httpJson) {
+    return {
+      available: false,
+      skipped: true,
+      reason: "Orchestrator HTTP client is not configured"
+    };
+  }
+  return safeSource("cleanupPlan", () => options.httpJson("/api/runtime/cleanup/plan", {
+    method: "POST",
+    body: cleanApiBody(input)
+  }));
 }
 
 async function safeSource(name, fn) {
@@ -1308,28 +1223,6 @@ function rabbitExactResourceNames(input = {}, manifestSource = {}, resources = [
       exchanges.add(exchange);
     }
   }
-  for (const resource of resources ?? []) {
-    const normalized = normalizeRuntimeResource(resource);
-    const labels = normalized.labels;
-    if (labels[LABELS.managed] !== "true") {
-      continue;
-    }
-    if (labels[LABELS.swarmId] !== input.swarmId) {
-      continue;
-    }
-    if (hasText(input.runId) && labels[LABELS.runId] !== input.runId) {
-      continue;
-    }
-    if (!hasText(labels[LABELS.role]) || !hasText(labels[LABELS.instance])) {
-      continue;
-    }
-    if (labels[LABELS.resourceKind] === "worker") {
-      queues.add(deriveWorkerControlQueue(runtimeListEntry(normalized)));
-    }
-    if (labels[LABELS.resourceKind] === "manager") {
-      queues.add(deriveManagerControlQueue(runtimeListEntry(normalized)));
-    }
-  }
   return { queues, exchanges };
 }
 
@@ -1356,14 +1249,6 @@ function rabbitExchangeUrl(base, vhost, name) {
 function encodeRabbitPathSegment(value) {
   const text = value == null || value === "" ? "/" : String(value);
   return encodeURIComponent(text);
-}
-
-function deriveWorkerControlQueue(worker) {
-  return `ph.control.${worker.swarmId}.${worker.role}.${worker.instance}`;
-}
-
-function deriveManagerControlQueue(manager) {
-  return `ph.control.manager.${manager.swarmId}.${manager.role}.${manager.instance}`;
 }
 
 function normalizeJournalEntries(data) {
@@ -1563,73 +1448,6 @@ export function parseImageReference(value) {
   };
 }
 
-export function validateCleanupExecution(input, plan, evidenceEntries = [], options = {}) {
-  const idempotencyKey = requireText(input.idempotencyKey, "idempotencyKey");
-  const candidateSetHash = requireText(input.candidateSetHash, "candidateSetHash");
-  const candidateIds = requireStringArray(input.candidateIds, "candidateIds");
-  const actor = requireText(input.actor ?? options.actor ?? "unknown", "actor");
-  const previous = findCleanupEvidence(evidenceEntries, {
-    idempotencyKey,
-    candidateSetHash,
-    candidateIds,
-    actor
-  });
-  if (previous) {
-    return {
-      idempotent: true,
-      previous,
-      candidates: []
-    };
-  }
-
-  if (plan.candidateSetHash !== candidateSetHash) {
-    throw new Error("candidateSetHash does not match the current cleanup plan");
-  }
-
-  const planCandidatesById = new Map(plan.candidates.map((candidate) => [candidate.runtimeId, candidate]));
-  const candidates = [];
-  for (const id of candidateIds) {
-    const candidate = planCandidatesById.get(id);
-    if (!candidate) {
-      throw new Error(`candidate '${id}' is no longer in the current cleanup plan`);
-    }
-    candidates.push(candidate);
-  }
-
-  return {
-    idempotent: false,
-    previous: null,
-    candidates
-  };
-}
-
-function appendCleanupEvidence(logPath, evidence) {
-  appendJsonLine(logPath, {
-    kind: "cleanup_evidence",
-    ...evidence
-  });
-}
-
-function readCleanupEvidence(logPath) {
-  return parseJsonLines(logPath).filter((entry) => entry.kind === "cleanup_evidence");
-}
-
-function cleanupExecutionEvidence(input, resultByCandidate, startedAt, finishedAt) {
-  return {
-    toolName: "runtime.cleanup.execute",
-    actor: input.actor ?? "unknown",
-    idempotencyKey: input.idempotencyKey,
-    swarmId: input.swarmId,
-    runId: input.runId ?? null,
-    candidateSetHash: input.candidateSetHash,
-    candidateIds: input.candidateIds,
-    resultByCandidate,
-    startedAt,
-    finishedAt,
-    errors: resultByCandidate.filter((result) => result.status !== "removed")
-  };
-}
-
 function normalizeRuntimeResource(resource) {
   return {
     runtimeId: requireText(resource.runtimeId, "runtimeId"),
@@ -1641,28 +1459,6 @@ function normalizeRuntimeResource(resource) {
     startedAt: optionalText(resource.startedAt),
     finishedAt: optionalText(resource.finishedAt),
     labels: resource.labels && typeof resource.labels === "object" ? resource.labels : {}
-  };
-}
-
-function candidateResource(resource, includeRunning) {
-  const labels = resource.labels;
-  const running = isRunningRuntime(resource);
-  return {
-    runtimeId: resource.runtimeId,
-    runtimeType: resource.runtimeType,
-    name: resource.name,
-    resourceKind: labels[LABELS.resourceKind],
-    swarmId: labels[LABELS.swarmId],
-    runId: labels[LABELS.runId],
-    role: labels[LABELS.role],
-    instance: labels[LABELS.instance],
-    state: resource.state,
-    running,
-    image: resource.image ?? labels[LABELS.image] ?? null,
-    reason: running && includeRunning
-      ? "running PocketHive runtime resource explicitly included"
-      : "stopped or exited PocketHive runtime resource",
-    labels: pockethiveLabelsOnly(labels)
   };
 }
 
@@ -1703,36 +1499,6 @@ function pockethiveLabelsOnly(labels) {
   );
 }
 
-function cleanupPlanHash(plan) {
-  const hashInput = {
-    swarmId: plan.swarmId,
-    runId: plan.runId,
-    includeRunning: plan.includeRunning,
-    candidates: plan.candidates.map((candidate) => ({
-      runtimeId: candidate.runtimeId,
-      runtimeType: candidate.runtimeType,
-      resourceKind: candidate.resourceKind,
-      role: candidate.role,
-      instance: candidate.instance,
-      state: candidate.state,
-      running: candidate.running,
-      image: candidate.image,
-      labels: candidate.labels
-    }))
-  };
-  return `sha256:${createHash("sha256").update(canonicalJson(hashInput)).digest("hex")}`;
-}
-
-function cleanupExecutionRisk(plan) {
-  if ((plan.candidates?.length ?? 0) === 0) {
-    return "none";
-  }
-  if (plan.includeRunning || plan.runId == null || plan.candidates.length > 10) {
-    return "high";
-  }
-  return "standard";
-}
-
 function isRunningRuntime(resource) {
   if (resource.runtimeType === "service") {
     return true;
@@ -1744,59 +1510,6 @@ function isRunningRuntime(resource) {
 
 function compareRuntimeId(left, right) {
   return left.runtimeId.localeCompare(right.runtimeId);
-}
-
-function findCleanupEvidence(entries, input) {
-  const candidateIds = canonicalCandidateIds(input.candidateIds);
-  return entries.find((entry) =>
-    entry.idempotencyKey === input.idempotencyKey &&
-    entry.candidateSetHash === input.candidateSetHash &&
-    canonicalCandidateIds(entry.candidateIds) === candidateIds &&
-    entry.actor === input.actor);
-}
-
-function canonicalCandidateIds(candidateIds) {
-  return [...requireStringArray(candidateIds, "candidateIds")].sort().join("\n");
-}
-
-function parseJsonLines(logPath) {
-  if (!existsSync(logPath)) {
-    return [];
-  }
-  return readFileSync(logPath, "utf8")
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .flatMap((line) => {
-      try {
-        return [JSON.parse(line)];
-      } catch {
-        return [];
-      }
-    });
-}
-
-function appendJsonLine(logPath, payload) {
-  appendFileSync(logPath, `${JSON.stringify(payload)}\n`, "utf8");
-}
-
-function canonicalJson(value) {
-  if (Array.isArray(value)) {
-    return `[${value.map(canonicalJson).join(",")}]`;
-  }
-  if (value && typeof value === "object") {
-    return `{${Object.keys(value).sort()
-      .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
-      .join(",")}}`;
-  }
-  return JSON.stringify(value);
-}
-
-function requireStringArray(value, name) {
-  if (!Array.isArray(value) || value.length === 0) {
-    throw new Error(`${name} must be a non-empty array`);
-  }
-  return value.map((item, index) => requireText(item, `${name}[${index}]`));
 }
 
 function optionalText(value) {

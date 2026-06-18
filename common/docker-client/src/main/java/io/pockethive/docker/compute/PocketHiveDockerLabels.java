@@ -7,20 +7,25 @@ import java.util.Map;
 
 public final class PocketHiveDockerLabels {
 
-  static final String MANAGED = "pockethive.managed";
-  static final String RESOURCE_KIND = "pockethive.resourceKind";
-  static final String OWNER = "pockethive.owner";
-  static final String SWARM_ID = "pockethive.swarmId";
-  static final String RUN_ID = "pockethive.runId";
-  static final String ROLE = "pockethive.role";
-  static final String INSTANCE = "pockethive.instance";
-  static final String LOGICAL_NAME = "pockethive.logicalName";
-  static final String COMPUTE_ADAPTER = "pockethive.computeAdapter";
-  static final String IMAGE = "pockethive.image";
-  static final String VERSION = "pockethive.version";
-  static final String CREATED_AT = "pockethive.createdAt";
-  static final String TEMPLATE_ID = "pockethive.templateId";
-  static final String STACK_NAME = "pockethive.stackName";
+  public static final String MANAGED = "pockethive.managed";
+  public static final String RESOURCE_KIND = "pockethive.resourceKind";
+  public static final String OWNER = "pockethive.owner";
+  public static final String SWARM_ID = "pockethive.swarmId";
+  public static final String RUN_ID = "pockethive.runId";
+  public static final String ROLE = "pockethive.role";
+  public static final String INSTANCE = "pockethive.instance";
+  public static final String LOGICAL_NAME = "pockethive.logicalName";
+  public static final String COMPUTE_ADAPTER = "pockethive.computeAdapter";
+  public static final String IMAGE = "pockethive.image";
+  public static final String VERSION = "pockethive.version";
+  public static final String CREATED_AT = "pockethive.createdAt";
+  public static final String TEMPLATE_ID = "pockethive.templateId";
+  public static final String STACK_NAME = "pockethive.stackName";
+  public static final String MANAGED_VALUE = "true";
+  public static final String RESOURCE_KIND_MANAGER = "manager";
+  public static final String RESOURCE_KIND_WORKER = "worker";
+  public static final String OWNER_ORCHESTRATOR = "orchestrator";
+  public static final String OWNER_SWARM_CONTROLLER = "swarm-controller";
 
   private static final String ENV_SWARM_ID = "POCKETHIVE_CONTROL_PLANE_SWARM_ID";
   private static final String ENV_MANAGER_ROLE = "POCKETHIVE_CONTROL_PLANE_MANAGER_ROLE";
@@ -39,8 +44,8 @@ public final class PocketHiveDockerLabels {
       Map<String, String> env,
       ComputeAdapterType adapterType) {
     return labels(
-        "manager",
-        "orchestrator",
+        RESOURCE_KIND_MANAGER,
+        OWNER_ORCHESTRATOR,
         logicalName,
         image,
         requireEnv(env, ENV_MANAGER_ROLE),
@@ -54,8 +59,8 @@ public final class PocketHiveDockerLabels {
       Map<String, String> env,
       ComputeAdapterType adapterType) {
     return labels(
-        "worker",
-        "swarm-controller",
+        RESOURCE_KIND_WORKER,
+        OWNER_SWARM_CONTROLLER,
         logicalName,
         image,
         requireEnv(env, ENV_WORKER_ROLE),
@@ -72,7 +77,7 @@ public final class PocketHiveDockerLabels {
       Map<String, String> env,
       ComputeAdapterType adapterType) {
     Map<String, String> labels = new LinkedHashMap<>();
-    labels.put(MANAGED, "true");
+    labels.put(MANAGED, MANAGED_VALUE);
     labels.put(RESOURCE_KIND, resourceKind);
     labels.put(OWNER, owner);
     labels.put(SWARM_ID, requireEnv(env, ENV_SWARM_ID));

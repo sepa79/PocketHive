@@ -27,7 +27,8 @@ responsible for PocketHive product runtime.
 - Cleanup must only target resources with PocketHive ownership labels.
 - Cleanup includes both swarm-controller manager runtimes and worker runtimes.
 - RabbitMQ cleanup must only target resources from an exact PocketHive runtime
-  ownership manifest; no queue-prefix guessing.
+  ownership manifest or Orchestrator-derived control-plane topology descriptors
+  fed by exact PocketHive runtime labels; no queue-prefix guessing.
 - No Docker prune, name-prefix guessing, raw broad filters, or implicit fallback cleanup.
 - Native ChatGPT/MCP write-tool confirmation is useful UX, but real approval
   belongs in HiveGate or another governed control plane, not PocketHive MCP.
@@ -57,6 +58,8 @@ Ownership rules:
   candidates when ownership labels match and no active registry entry owns them.
 - Docker labels prove runtime ownership, but RabbitMQ cleanup needs the manifest
   because queues/exchanges do not carry Docker labels.
+- Docker ownership label names are contract constants in `PocketHiveDockerLabels`.
+  Runtime cleanup code must reuse that contract rather than redeclare label strings.
 - The manifest is written during swarm creation/apply and records exact owned
   resource names: controller runtime id, worker runtime ids, controller control
   queue, worker control queues, work queues, work exchange, swarmId, runId,
@@ -93,13 +96,15 @@ MCP role:
 
 - `tools/pockethive-mcp` exposes the tools. HiveGate owns approval UX and
   execution policy when the mutating tool is registered there.
-- Production cleanup tools delegate to Orchestrator's runtime reconciliation API.
+- Cleanup plan and execute tools delegate to Orchestrator's runtime reconciliation
+  API. If Orchestrator HTTP is unavailable, those tools fail closed; MCP must not
+  execute a local cleanup fallback.
+- MCP read-only diagnostics may inspect bounded Docker/RabbitMQ state, but must
+  report source availability and must not make cleanup-authority decisions.
 - When an Orchestrator HTTP client is configured, MCP runtime tools first check
   `GET /api/runtime/debug/capabilities`. If the contract is stale or missing,
   only runtime tools fail closed; existing scenario/workflow/swarm tools keep
   their current behavior.
-- Direct local Docker execution in the MCP is development proof only until the
-  Orchestrator reconciliation service is available.
 
 ## Non-Goals
 
@@ -192,6 +197,8 @@ Performance isolation rules:
 - RabbitMQ diagnostics must use exact manifest-owned queue/exchange reads by
   default. Full RabbitMQ topology scans are allowed only when an operator
   explicitly requests unmanaged diagnostics, and those results are advisory only.
+- MCP control-plane status must display manifest/Orchestrator-provided queue names
+  instead of deriving queue names locally.
 - Docker diagnostics must be bounded metadata/log reads; logs must use finite
   `--tail` and must not follow.
 - Agents must not poll these tools in tight loops during performance runs; use
@@ -416,7 +423,7 @@ Input:
 
 Execution rules:
 
-- Recompute the candidate set before executing.
+- Orchestrator recomputes the candidate set before executing.
 - Use the same `includeRunning` scope as the planned execution; it is part of
   `candidateSetHash`.
 - Reject if the current `candidateSetHash` differs.
@@ -463,11 +470,9 @@ errors
 
 Do not store secrets or full unredacted environment variables.
 
-Local evidence path:
-
-```text
-tools/pockethive-mcp/runtime-cleanup-evidence.jsonl
-```
+Evidence is written by Orchestrator's cleanup evidence store as part of the
+execute API response. MCP clients must not keep a separate cleanup execution
+evidence authority.
 
 ## Implementation Checklist
 
@@ -476,8 +481,10 @@ tools/pockethive-mcp/runtime-cleanup-evidence.jsonl
 - Add Orchestrator read-only plan API for Docker + RabbitMQ reconciliation.
 - Add Orchestrator execute API with plan-hash/idempotency checks.
 - Make PocketHive MCP delegate production cleanup to Orchestrator reconciliation.
+- Remove MCP local cleanup plan/execute fallback paths.
 - Register `runtime.cleanup.execute` in HiveGate as a governed destructive tool.
-- Add canonical labels to controller and worker runtime creation.
+- Add canonical labels to controller and worker runtime creation and reuse those
+  label contract constants in cleanup reconciliation.
 - Add runtime inventory ports for Docker single-node and Docker Swarm service modes.
 - Add RabbitMQ topology inventory/removal ports that operate only on manifest names.
 - Add bounded log/version inspection.

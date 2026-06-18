@@ -1,6 +1,6 @@
 package io.pockethive.swarmcontroller.config;
 
-import io.pockethive.controlplane.topology.TrafficTopology;
+import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory;
 import io.pockethive.manager.runtime.ComputeAdapterType;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -169,22 +169,24 @@ public class SwarmControllerProperties {
 
     @Validated
     public static final class Traffic {
-        private final TrafficTopology topology;
+        private final String hiveExchange;
+        private final String queuePrefix;
 
         public Traffic(@NotBlank String hiveExchange, @NotBlank String queuePrefix) {
-            this.topology = new TrafficTopology(hiveExchange, queuePrefix);
+            this.hiveExchange = requireNonBlank(hiveExchange, "hiveExchange");
+            this.queuePrefix = requireNonBlank(queuePrefix, "queuePrefix");
         }
 
         public String hiveExchange() {
-            return topology.hiveExchange();
+            return hiveExchange;
         }
 
         public String queuePrefix() {
-            return topology.queuePrefix();
+            return queuePrefix;
         }
 
         public String queueName(String suffix) {
-            return topology.queueName(suffix);
+            return ControlPlaneContainerEnvironmentFactory.swarmTrafficQueueName(queuePrefix, suffix);
         }
     }
 

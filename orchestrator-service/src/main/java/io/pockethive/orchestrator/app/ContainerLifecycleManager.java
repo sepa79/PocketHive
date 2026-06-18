@@ -5,7 +5,6 @@ import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.controlplane.topology.ControlQueueDescriptor;
 import io.pockethive.controlplane.topology.SwarmControllerControlPlaneTopologyDescriptor;
-import io.pockethive.controlplane.topology.TrafficTopology;
 import io.pockethive.docker.DockerContainerClient;
 import io.pockethive.docker.compute.DockerSwarmServiceComputeAdapter;
 import io.pockethive.manager.ports.ComputeAdapter;
@@ -284,10 +283,7 @@ public class ContainerLifecycleManager {
             .controlQueue(controllerInstance)
             .map(ControlQueueDescriptor::name)
             .orElse(null);
-        TrafficTopology traffic = new TrafficTopology(
-            controllerSettings.trafficHiveExchange(),
-            controllerSettings.trafficQueuePrefix());
-        List<String> workQueues = traffic.queueNames(workQueueSuffixes(templateMetadata.bees()));
+        List<String> workQueues = controllerSettings.trafficQueueNames(workQueueSuffixes(templateMetadata.bees()));
         List<String> controlQueues = controllerQueue == null || controllerQueue.isBlank()
             ? List.of()
             : List.of(controllerQueue);
@@ -307,7 +303,7 @@ public class ContainerLifecycleManager {
             new RuntimeOwnershipManifest.RabbitResources(
                 controlQueues,
                 workQueues,
-                List.of(traffic.hiveExchange())));
+                List.of(controllerSettings.trafficHiveExchange())));
         manifestStore.save(manifest);
     }
 
@@ -480,10 +476,13 @@ public class ContainerLifecycleManager {
             }
             boolean manifestQueuesDeleted = deleteManifestRabbitResources(swarmId, swarm.getRunId());
             if (!manifestQueuesDeleted) {
-                TrafficTopology legacyTraffic = new TrafficTopology("ph." + swarmId + ".hive", "ph." + swarmId);
-                amqp.deleteQueue(legacyTraffic.queueName("gen"));
-                amqp.deleteQueue(legacyTraffic.queueName("mod"));
-                amqp.deleteQueue(legacyTraffic.queueName("final"));
+                String legacyTrafficPrefix = "ph." + swarmId;
+                amqp.deleteQueue(
+                    ControlPlaneContainerEnvironmentFactory.swarmTrafficQueueName(legacyTrafficPrefix, "gen"));
+                amqp.deleteQueue(
+                    ControlPlaneContainerEnvironmentFactory.swarmTrafficQueueName(legacyTrafficPrefix, "mod"));
+                amqp.deleteQueue(
+                    ControlPlaneContainerEnvironmentFactory.swarmTrafficQueueName(legacyTrafficPrefix, "final"));
             }
             store.updateStatus(swarmId, SwarmLifecycleStatus.REMOVED);
             swarm.clearTemplate();

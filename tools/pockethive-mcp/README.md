@@ -182,11 +182,12 @@ These default names use underscores for client compatibility. Conceptual dotted
 names such as `runtime.cleanup.plan` are available only when
 `PH_MCP_TOOL_NAME_MODE=legacy` or `both`.
 
-Cleanup is always `plan -> execute`. Production cleanup tools delegate to
-Orchestrator's `/api/runtime/cleanup/*` reconciliation API so swarm registry,
-Docker runtime state, RabbitMQ topology, idempotency, and evidence stay in one
-authority path. Register `runtime_cleanup_execute` behind HiveGate for real
-policy, approval when required, and governed execution evidence.
+Cleanup is always `plan -> execute`. Cleanup tools delegate to Orchestrator's
+`/api/runtime/cleanup/*` reconciliation API so swarm registry, Docker runtime
+state, RabbitMQ topology, idempotency, and evidence stay in one authority path.
+If Orchestrator HTTP is unavailable, cleanup tools fail closed instead of running
+a local cleanup fallback. Register `runtime_cleanup_execute` behind HiveGate for
+real policy, approval when required, and governed execution evidence.
 
 When an Orchestrator HTTP client is configured, runtime debug and cleanup tools
 first read `/api/runtime/debug/capabilities`. If the runtime debug contract is
@@ -198,13 +199,6 @@ Orchestrator lifecycle action. Orphaned swarm-controller and worker
 containers/services can be removed as labeled Docker cleanup candidates. RabbitMQ
 queues/exchanges are eligible only when they appear in the exact runtime
 ownership manifest; missing manifests block RabbitMQ cleanup.
-
-When `runtime-tools.mjs` is used without an Orchestrator HTTP client, the local
-development fallback writes evidence to:
-
-```text
-tools/pockethive-mcp/runtime-cleanup-evidence.jsonl
-```
 
 Worker logs are bounded and redacted before returning to the caller. Worker
 version reports use the worker image that Orchestrator/Swarm Controller used to
@@ -218,8 +212,8 @@ runtime ownership manifest, Docker/Swarm state, RabbitMQ topology, and journal:
 - `runtime_inspect_worker` returns a bounded inspect summary for one worker.
 - `runtime_diff_swarm_runtime` compares expected, registered, live, and cleanup
   views.
-- `runtime_control_plane_status` summarizes control queues and recent control
-  events.
+- `runtime_control_plane_status` summarizes manifest/Orchestrator-provided
+  control queues and recent control events.
 - `runtime_rabbit_topology_snapshot` reads exact manifest-owned queues/exchanges.
 - `runtime_swarm_timeline` builds an operator timeline from journal/runtime
   evidence.

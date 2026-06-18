@@ -4,6 +4,7 @@ import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.controlplane.topology.ControlPlaneTopologySettings;
 import io.pockethive.controlplane.topology.ControlQueueDescriptor;
 import io.pockethive.controlplane.topology.WorkerControlPlaneTopologyDescriptor;
+import io.pockethive.docker.compute.PocketHiveDockerLabels;
 import io.pockethive.manager.runtime.ComputeAdapterType;
 import io.pockethive.orchestrator.app.ContainerLifecycleManager;
 import io.pockethive.orchestrator.domain.Swarm;
@@ -45,20 +46,13 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class RuntimeReconciliationService {
-    private static final String LABEL_MANAGED = "pockethive.managed";
-    private static final String LABEL_SWARM_ID = "pockethive.swarmId";
-    private static final String LABEL_RUN_ID = "pockethive.runId";
-    private static final String LABEL_RESOURCE_KIND = "pockethive.resourceKind";
-    private static final String LABEL_ROLE = "pockethive.role";
-    private static final String LABEL_INSTANCE = "pockethive.instance";
-    private static final String LABEL_IMAGE = "pockethive.image";
     private static final Set<String> REQUIRED_LABELS = Set.of(
-        LABEL_MANAGED,
-        LABEL_SWARM_ID,
-        LABEL_RUN_ID,
-        LABEL_RESOURCE_KIND,
-        LABEL_ROLE,
-        LABEL_INSTANCE);
+        PocketHiveDockerLabels.MANAGED,
+        PocketHiveDockerLabels.SWARM_ID,
+        PocketHiveDockerLabels.RUN_ID,
+        PocketHiveDockerLabels.RESOURCE_KIND,
+        PocketHiveDockerLabels.ROLE,
+        PocketHiveDockerLabels.INSTANCE);
     private final SwarmStore swarmStore;
     private final RuntimeOwnershipManifestStore manifestStore;
     private final ComputeRuntimeInventoryPort computeInventory;
@@ -191,13 +185,14 @@ public class RuntimeReconciliationService {
                                          List<Blocked> blocked) {
         for (ComputeRuntimeResource resource : resources) {
             Map<String, String> labels = resource.labels();
-            if (!"true".equals(labels.get(LABEL_MANAGED))) {
-                if (scope.swarmId().equals(labels.get(LABEL_SWARM_ID))) {
-                    blocked.add(blocked(resource, "missing pockethive.managed=true"));
+            if (!PocketHiveDockerLabels.MANAGED_VALUE.equals(labels.get(PocketHiveDockerLabels.MANAGED))) {
+                if (scope.swarmId().equals(labels.get(PocketHiveDockerLabels.SWARM_ID))) {
+                    blocked.add(blocked(resource, "missing " + PocketHiveDockerLabels.MANAGED + "="
+                        + PocketHiveDockerLabels.MANAGED_VALUE));
                 }
                 continue;
             }
-            if (!scope.swarmId().equals(labels.get(LABEL_SWARM_ID))) {
+            if (!scope.swarmId().equals(labels.get(PocketHiveDockerLabels.SWARM_ID))) {
                 continue;
             }
             List<String> missing = REQUIRED_LABELS.stream()
@@ -208,10 +203,11 @@ public class RuntimeReconciliationService {
                 blocked.add(blocked(resource, "missing required labels: " + String.join(", ", missing)));
                 continue;
             }
-            if (scope.runId().isPresent() && !scope.runId().get().equals(labels.get(LABEL_RUN_ID))) {
+            if (scope.runId().isPresent() && !scope.runId().get().equals(labels.get(PocketHiveDockerLabels.RUN_ID))) {
                 continue;
             }
-            if (activeSwarm.isPresent() && "manager".equals(labels.get(LABEL_RESOURCE_KIND))) {
+            if (activeSwarm.isPresent()
+                && PocketHiveDockerLabels.RESOURCE_KIND_MANAGER.equals(labels.get(PocketHiveDockerLabels.RESOURCE_KIND))) {
                 blocked.add(blocked(resource, "registered swarm controller must be removed through lifecycle cleanup"));
                 continue;
             }
@@ -323,20 +319,20 @@ public class RuntimeReconciliationService {
         LinkedHashSet<String> queues = new LinkedHashSet<>();
         for (ComputeRuntimeResource resource : resources) {
             Map<String, String> labels = resource.labels();
-            if (!"true".equals(labels.get(LABEL_MANAGED))) {
+            if (!PocketHiveDockerLabels.MANAGED_VALUE.equals(labels.get(PocketHiveDockerLabels.MANAGED))) {
                 continue;
             }
-            if (!scope.swarmId().equals(labels.get(LABEL_SWARM_ID))) {
+            if (!scope.swarmId().equals(labels.get(PocketHiveDockerLabels.SWARM_ID))) {
                 continue;
             }
-            if (scope.runId().isPresent() && !scope.runId().get().equals(labels.get(LABEL_RUN_ID))) {
+            if (scope.runId().isPresent() && !scope.runId().get().equals(labels.get(PocketHiveDockerLabels.RUN_ID))) {
                 continue;
             }
-            if (!"worker".equals(labels.get(LABEL_RESOURCE_KIND))) {
+            if (!PocketHiveDockerLabels.RESOURCE_KIND_WORKER.equals(labels.get(PocketHiveDockerLabels.RESOURCE_KIND))) {
                 continue;
             }
-            String role = labels.get(LABEL_ROLE);
-            String instance = labels.get(LABEL_INSTANCE);
+            String role = labels.get(PocketHiveDockerLabels.ROLE);
+            String instance = labels.get(PocketHiveDockerLabels.INSTANCE);
             if (!hasText(role) || !hasText(instance)) {
                 continue;
             }
@@ -358,7 +354,7 @@ public class RuntimeReconciliationService {
             RuntimeCleanupAction.LIFECYCLE_REMOVE_SWARM,
             scope.swarmId(),
             "swarm",
-            "manager",
+            PocketHiveDockerLabels.RESOURCE_KIND_MANAGER,
             "swarm-controller",
             swarm.getInstanceId(),
             swarm.getStatus().name(),
@@ -383,11 +379,11 @@ public class RuntimeReconciliationService {
             action,
             resource.runtimeId(),
             resource.runtimeType(),
-            labels.get(LABEL_RESOURCE_KIND),
-            labels.get(LABEL_ROLE),
-            labels.get(LABEL_INSTANCE),
+            labels.get(PocketHiveDockerLabels.RESOURCE_KIND),
+            labels.get(PocketHiveDockerLabels.ROLE),
+            labels.get(PocketHiveDockerLabels.INSTANCE),
             resource.state(),
-            firstText(labels.get(LABEL_IMAGE), resource.image()),
+            firstText(labels.get(PocketHiveDockerLabels.IMAGE), resource.image()),
             null,
             null,
             running,

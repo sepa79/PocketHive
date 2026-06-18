@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.amqp.RabbitProperties;
@@ -117,6 +118,29 @@ class ControlPlaneContainerEnvironmentFactoryTest {
             rabbitProperties))
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("spring.rabbitmq.host");
+    }
+
+    @Test
+    void buildsSwarmTrafficQueueNamesFromControllerEnvironmentContract() {
+        ControlPlaneContainerEnvironmentFactory.ControllerSettings settings =
+            new ControlPlaneContainerEnvironmentFactory.ControllerSettings(
+                "ph.logs",
+                false,
+                new ControlPlaneContainerEnvironmentFactory.PushgatewaySettings(
+                    true,
+                    "http://pushgateway:9091",
+                    Duration.ofSeconds(30),
+                    "DELETE"),
+                "/var/run/docker.sock",
+                "ph.swarm-1",
+                "ph.swarm-1.hive");
+
+        assertThat(settings.trafficQueueName("gen")).isEqualTo("ph.swarm-1.gen");
+        assertThat(settings.trafficQueueNames(List.of("gen", "final", "gen")))
+            .containsExactly("ph.swarm-1.gen", "ph.swarm-1.final");
+        assertThatThrownBy(() -> settings.trafficQueueName(" "))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("traffic queue suffix");
     }
 
     private static RabbitProperties rabbitProperties() {

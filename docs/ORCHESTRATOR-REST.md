@@ -285,10 +285,12 @@ plan -> execute
 ```
 
 RabbitMQ cleanup is allowed only for exact queue/exchange names recorded in the
-runtime ownership manifest. Prefix guessing, Docker prune-style operations, and
-implicit cleanup fallbacks are forbidden. In production, the mutating execute
-operation must be registered behind HiveGate or an equivalent governed control
-plane for policy, human approval when required, and evidence.
+runtime ownership manifest or control queue names derived inside Orchestrator
+from exact PocketHive runtime labels using the shared control-plane topology
+descriptors. Prefix guessing, Docker prune-style operations, and implicit cleanup
+fallbacks are forbidden. In production, the mutating execute operation must be
+registered behind HiveGate or an equivalent governed control plane for policy,
+human approval when required, and evidence.
 
 #### 2.9.1 Runtime debug capabilities
 `GET /api/runtime/debug/capabilities`

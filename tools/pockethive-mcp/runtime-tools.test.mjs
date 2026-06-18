@@ -5,7 +5,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   buildControlPlaneStatus,
-  buildCleanupPlan,
   buildManifestValidation,
   buildRabbitTopologySnapshot,
   buildRuntimeDiff,
@@ -17,132 +16,33 @@ import {
   parseImageReference,
   registerRuntimeTools,
   redactLogText,
-  validateCleanupExecution,
   validateRuntimeDebugCapabilities
 } from "./runtime-tools.mjs";
 
-test("runtime cleanup candidates require stopped PocketHive-owned resources", () => {
-  const plan = buildCleanupPlan(
-    [
-      runtimeResource("c1", { state: "exited" }),
-      runtimeResource("c2", { state: "running" }),
-      {
-        runtimeId: "foreign",
-        runtimeType: "container",
-        state: "exited",
-        labels: { "pockethive.swarmId": "swarm-1" }
-      }
-    ],
-    { swarmId: "swarm-1", runId: "run-1" }
+test("runtime cleanup tools fail closed without Orchestrator cleanup API", async () => {
+  const handlers = new Map();
+  registerRuntimeTools((name, _description, _schema, handler) => {
+    handlers.set(name, handler);
+  });
+
+  await assert.rejects(
+    () => handlers.get("runtime.cleanup.plan")({
+      computeAdapter: "DOCKER_SINGLE",
+      swarmId: "swarm-1"
+    }),
+    /Orchestrator runtime cleanup API/
   );
-
-  assert.deepEqual(plan.candidates.map((candidate) => candidate.runtimeId), ["c1"]);
-  assert.deepEqual(plan.blocked.map((blocked) => blocked.runtimeId), ["c2", "foreign"]);
-  assert.match(plan.candidateSetHash, /^sha256:[a-f0-9]{64}$/);
-});
-
-test("runtime cleanup partitions same-swarm incomplete labels before run filtering", () => {
-  const plan = buildCleanupPlan(
-    [
-      runtimeResource("old-run", { labels: { "pockethive.runId": "run-old" } }),
-      runtimeResource("same-run", { labels: { "pockethive.runId": "run-1" } }),
-      runtimeResource("partial", {
-        labels: {
-          "pockethive.runId": "",
-          "pockethive.role": ""
-        }
-      }),
-      {
-        runtimeId: "unrelated-unmanaged",
-        runtimeType: "container",
-        state: "exited",
-        labels: {}
-      },
-      runtimeResource("other-swarm", { labels: { "pockethive.swarmId": "swarm-2" } })
-    ],
-    { swarmId: "swarm-1", runId: "run-1" }
+  await assert.rejects(
+    () => handlers.get("runtime.cleanup.execute")({
+      computeAdapter: "DOCKER_SINGLE",
+      swarmId: "swarm-1",
+      candidateSetHash: "sha256:abc",
+      candidateIds: ["docker:container:c1"],
+      idempotencyKey: "idem-1",
+      reason: "test"
+    }),
+    /Orchestrator runtime cleanup API/
   );
-
-  assert.deepEqual(plan.candidates.map((candidate) => candidate.runtimeId), ["same-run"]);
-  assert.deepEqual(plan.blocked.map((blocked) => blocked.runtimeId), ["partial"]);
-  assert.match(plan.blocked[0].reason, /missing required labels/);
-});
-
-test("runtime cleanup classifies running or broad cleanup as high risk", () => {
-  const runningPlan = buildCleanupPlan(
-    [runtimeResource("c1", { state: "running" })],
-    { swarmId: "swarm-1", runId: "run-1", includeRunning: true }
-  );
-  const missingRunPlan = buildCleanupPlan(
-    [runtimeResource("c1")],
-    { swarmId: "swarm-1" }
-  );
-  const emptyPlan = buildCleanupPlan(
-    [],
-    { swarmId: "swarm-1", runId: "run-1" }
-  );
-
-  assert.equal(runningPlan.executionRisk, "high");
-  assert.equal(missingRunPlan.executionRisk, "high");
-  assert.equal(emptyPlan.executionRisk, "none");
-});
-
-test("cleanup execution validates current candidates and idempotency", () => {
-  const plan = buildCleanupPlan(
-    [runtimeResource("c1"), runtimeResource("c2")],
-    { swarmId: "swarm-1", runId: "run-1" }
-  );
-  assert.equal(plan.executionRisk, "standard");
-
-  assert.throws(() => validateCleanupExecution({
-    idempotencyKey: "idem-1",
-    candidateSetHash: "sha256:stale",
-    candidateIds: ["c1"],
-    actor: "alice"
-  }, plan, []), /candidateSetHash/);
-
-  assert.throws(() => validateCleanupExecution({
-    idempotencyKey: "idem-1",
-    candidateSetHash: plan.candidateSetHash,
-    candidateIds: ["missing"],
-    actor: "alice"
-  }, plan, []), /no longer in the current cleanup plan/);
-
-  const first = validateCleanupExecution({
-    idempotencyKey: "idem-1",
-    candidateSetHash: plan.candidateSetHash,
-    candidateIds: ["c1"],
-    actor: "alice"
-  }, plan, []);
-  assert.equal(first.idempotent, false);
-  assert.deepEqual(first.candidates.map((candidate) => candidate.runtimeId), ["c1"]);
-
-  const repeat = validateCleanupExecution({
-    idempotencyKey: "idem-1",
-    candidateSetHash: plan.candidateSetHash,
-    candidateIds: ["c1"],
-    actor: "alice"
-  }, plan, [{
-    idempotencyKey: "idem-1",
-    candidateSetHash: plan.candidateSetHash,
-    candidateIds: ["c1"],
-    actor: "alice"
-  }]);
-  assert.equal(repeat.idempotent, true);
-
-  const sameKeyDifferentCandidate = validateCleanupExecution({
-    idempotencyKey: "idem-1",
-    candidateSetHash: plan.candidateSetHash,
-    candidateIds: ["c2"],
-    actor: "alice"
-  }, plan, [{
-    idempotencyKey: "idem-1",
-    candidateSetHash: plan.candidateSetHash,
-    candidateIds: ["c1"],
-    actor: "alice"
-  }]);
-  assert.equal(sameKeyDifferentCandidate.idempotent, false);
-  assert.deepEqual(sameKeyDifferentCandidate.candidates.map((candidate) => candidate.runtimeId), ["c2"]);
 });
 
 test("worker log target selection is label-gated and rejects ambiguity", () => {
@@ -319,7 +219,7 @@ test("runtime diff reports manifest drift and cleanup candidates", () => {
   assert.equal(diff.cleanupPlan.candidates.length, 2);
 });
 
-test("control plane status derives queues and recent worker journal events", () => {
+test("control plane status uses manifest queues and recent worker journal events", () => {
   const context = runtimeContext([runtimeResource("worker-1")], {
     rabbit: {
       available: true,
@@ -347,6 +247,31 @@ test("control plane status derives queues and recent worker journal events", () 
   assert.equal(status.controlQueues[0].name, "ph.control.swarm-1.processor.worker-1");
   assert.equal(status.controlQueues[0].consumers, 1);
   assert.equal(status.workers[0].lastStatusEvent.type, "worker-status");
+});
+
+test("control plane status does not derive queue names missing from manifest", () => {
+  const context = runtimeContext([runtimeResource("worker-1")], {
+    manifest: runtimeManifest({
+      rabbit: {
+        controlQueues: [],
+        workQueues: ["ph.swarm-1.work"],
+        exchanges: ["ph.swarm-1.hive"]
+      }
+    }),
+    rabbit: {
+      available: true,
+      data: {
+        queues: [{ name: "ph.control.swarm-1.processor.worker-1", messages: 0, consumers: 1 }],
+        exchanges: []
+      }
+    }
+  });
+
+  const status = buildControlPlaneStatus(context);
+
+  assert.deepEqual(status.controlQueues, []);
+  assert.equal(status.workers[0].controlQueue.name, null);
+  assert.match(status.workers[0].controlQueue.reason, /manifest/);
 });
 
 test("manifest validation reports label mismatches missing queues and unexpected runtime objects", () => {
@@ -650,10 +575,8 @@ function runtimeContext(resources, overrides = {}) {
     rabbit: overrides.rabbit ?? { available: false, reason: "not configured" },
     swarmSnapshot: null,
     journal: overrides.journal ?? { available: false, reason: "not configured" },
-    cleanupPlan: buildCleanupPlan(resources, {
-      swarmId: "swarm-1",
-      runId: "run-1",
-      includeRunning: true
-    })
+    cleanupPlan: overrides.cleanupPlan ?? {
+      candidates: resources.map((resource) => ({ runtimeId: resource.runtimeId }))
+    }
   };
 }
