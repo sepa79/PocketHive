@@ -5,6 +5,7 @@ import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.controlplane.topology.ControlQueueDescriptor;
 import io.pockethive.controlplane.topology.SwarmControllerControlPlaneTopologyDescriptor;
+import io.pockethive.controlplane.topology.TrafficTopology;
 import io.pockethive.docker.DockerContainerClient;
 import io.pockethive.docker.compute.DockerSwarmServiceComputeAdapter;
 import io.pockethive.manager.ports.ComputeAdapter;
@@ -283,12 +284,10 @@ public class ContainerLifecycleManager {
             .controlQueue(controllerInstance)
             .map(ControlQueueDescriptor::name)
             .orElse(null);
-        String trafficPrefix = controllerSettings.trafficQueuePrefix();
-        String hiveExchange = controllerSettings.trafficHiveExchange();
-        Set<String> workQueues = new LinkedHashSet<>();
-        for (String suffix : workQueueSuffixes(templateMetadata.bees())) {
-            workQueues.add(trafficPrefix + "." + suffix);
-        }
+        TrafficTopology traffic = new TrafficTopology(
+            controllerSettings.trafficHiveExchange(),
+            controllerSettings.trafficQueuePrefix());
+        List<String> workQueues = traffic.queueNames(workQueueSuffixes(templateMetadata.bees()));
         List<String> controlQueues = controllerQueue == null || controllerQueue.isBlank()
             ? List.of()
             : List.of(controllerQueue);
@@ -307,8 +306,8 @@ public class ContainerLifecycleManager {
                 controllerImage)),
             new RuntimeOwnershipManifest.RabbitResources(
                 controlQueues,
-                List.copyOf(workQueues),
-                List.of(hiveExchange)));
+                workQueues,
+                List.of(traffic.hiveExchange())));
         manifestStore.save(manifest);
     }
 
@@ -481,9 +480,10 @@ public class ContainerLifecycleManager {
             }
             boolean manifestQueuesDeleted = deleteManifestRabbitResources(swarmId, swarm.getRunId());
             if (!manifestQueuesDeleted) {
-                amqp.deleteQueue("ph." + swarmId + ".gen");
-                amqp.deleteQueue("ph." + swarmId + ".mod");
-                amqp.deleteQueue("ph." + swarmId + ".final");
+                TrafficTopology legacyTraffic = new TrafficTopology("ph." + swarmId + ".hive", "ph." + swarmId);
+                amqp.deleteQueue(legacyTraffic.queueName("gen"));
+                amqp.deleteQueue(legacyTraffic.queueName("mod"));
+                amqp.deleteQueue(legacyTraffic.queueName("final"));
             }
             store.updateStatus(swarmId, SwarmLifecycleStatus.REMOVED);
             swarm.clearTemplate();
