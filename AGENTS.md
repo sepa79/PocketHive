@@ -129,17 +129,20 @@ This file is a **navigation and guardrails** page for both human and AI contribu
 - PocketHive agent work should use the globally configured HiveMind project memory when available. Use the workflow in `docs/ai/HIVEMIND_WORKFLOW.md` with `project_id=pockethive`; do not create repo-local HiveMind storage or start a local HiveMind API as an implicit fallback.
 - `build-hive.sh` in the repo root is the **canonical entrypoint** for local PocketHive rebuild/redeploy cycles: it rebuilds worker/service artifacts as needed and restarts the local `docker-compose` stack. Prefer using it over ad‑hoc `docker`/`mvn` commands when you want a full local refresh.
 - For production-like HiveForge swarm deploys, use the `docs/HIVEFORGE.md` Agent MCP Deploy Checklist. Deploy through HiveForge MCP only; do not inspect Proxmox/hosts or run direct Docker/SSH commands as a deployment workaround.
-- `tools/mcp-orchestrator-debug/` contains both a **debug CLI** and the **actual MCP server** for Orchestrator / Scenario Manager / RabbitMQ:
+- `tools/pockethive-mcp/` is the **canonical PocketHive MCP server** for agents and IDEs:
+  - Use it for scenario authoring, swarm lifecycle, workflow evidence, environment status, runtime debug, worker logs/version, topology drift, manifest validation, and governed runtime cleanup.
+  - Start stdio with `npm run mcp:start`.
+  - Start Streamable HTTP with `npm run mcp:start:http`; clients connect to `http://localhost:3100/mcp`.
+  - Runtime cleanup tools are exposed here as `runtime_cleanup_plan` and `runtime_cleanup_execute` by default. Register `runtime_cleanup_execute` behind HiveGate for governed approval and execution.
+  - Worker/runtime diagnostics are exposed here as `runtime_tail_worker_logs`, `runtime_get_worker_version`, `runtime_list_workers`, `runtime_inspect_worker`, `runtime_diff_swarm_runtime`, `runtime_control_plane_status`, `runtime_rabbit_topology_snapshot`, `runtime_swarm_timeline`, and `runtime_manifest_validate` by default.
+  - Dotted conceptual names like `runtime.cleanup.plan` require `PH_MCP_TOOL_NAME_MODE=legacy` or `both`; default agent configs should use underscore tool names.
+- `tools/mcp-orchestrator-debug/` is lower-level debug tooling for Orchestrator / Scenario Manager / RabbitMQ:
   - `client.mjs` talks directly to the Orchestrator REST API, Scenario Manager API, and control‑plane via AMQP (no MCP needed).
-  - `server.mjs` is the stdio MCP server wrapper for editor/agent integration. Prefer using it when the client supports MCP tools.
+  - `server.mjs` is legacy/additive debug MCP tooling. Do not configure it as the product PocketHive MCP surface for normal agent work.
   - Typical usage from repo root:
     - `POCKETHIVE_AUTH_USERNAME=local-admin node tools/mcp-orchestrator-debug/client.mjs list-swarms`
     - `POCKETHIVE_AUTH_USERNAME=local-admin node tools/mcp-orchestrator-debug/client.mjs get-swarm <swarmId>`
     - `POCKETHIVE_AUTH_USERNAME=local-admin node tools/mcp-orchestrator-debug/client.mjs swarm-snapshot <swarmId>`
     - `POCKETHIVE_AUTH_USERNAME=local-admin node tools/mcp-orchestrator-debug/client.mjs worker-configs <swarmId>`
     - `POCKETHIVE_AUTH_USERNAME=local-admin node tools/mcp-orchestrator-debug/client.mjs reload-scenarios`
-  - MCP server notes:
-    - start with `node tools/mcp-orchestrator-debug/server.mjs`
-    - includes `scenario.reload-scenarios` for Scenario Manager refresh
-    - when auth is enabled, export `POCKETHIVE_AUTH_USERNAME` or `POCKETHIVE_AUTH_TOKEN` for the spawned server/client process
-  - Use these tools to inspect **running swarms, worker configs, queues, control‑plane traffic, and scenario reloads** instead of hand‑crafting `curl`/`rabbitmqctl` calls.
+  - Use the CLI for emergency/local diagnostics such as **running swarms, worker configs, queues, control‑plane traffic, and scenario reloads** instead of hand‑crafting `curl`/`rabbitmqctl` calls.

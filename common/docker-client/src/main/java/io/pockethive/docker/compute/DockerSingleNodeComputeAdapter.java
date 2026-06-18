@@ -4,6 +4,7 @@ import com.github.dockerjava.api.model.Bind;
 import com.github.dockerjava.api.model.HostConfig;
 import io.pockethive.docker.DockerContainerClient;
 import io.pockethive.manager.ports.ComputeAdapter;
+import io.pockethive.manager.runtime.ComputeAdapterType;
 import io.pockethive.manager.runtime.ManagerSpec;
 import io.pockethive.manager.runtime.WorkerSpec;
 import java.util.ArrayList;
@@ -47,7 +48,12 @@ public final class DockerSingleNodeComputeAdapter implements ComputeAdapter {
       applyBinds(hostConfig, volumes);
       return hostConfig;
     };
-    return docker.createAndStartContainer(image, env, id, hostConfigCustomizer);
+    return docker.createAndStartContainer(
+        image,
+        env,
+        id,
+        hostConfigCustomizer,
+        PocketHiveDockerLabels.managerLabels(id, image, env, ComputeAdapterType.DOCKER_SINGLE));
   }
 
   @Override
@@ -86,7 +92,12 @@ public final class DockerSingleNodeComputeAdapter implements ComputeAdapter {
         applyBinds(hostConfig, volumes);
         return hostConfig;
       };
-      String containerId = docker.createAndStartContainer(image, env, name, hostConfigCustomizer);
+      String containerId = docker.createAndStartContainer(
+          image,
+          env,
+          name,
+          hostConfigCustomizer,
+          PocketHiveDockerLabels.workerLabels(name, image, env, ComputeAdapterType.DOCKER_SINGLE));
       containerIds.add(containerId);
     }
   }
@@ -148,4 +159,3 @@ public final class DockerSingleNodeComputeAdapter implements ComputeAdapter {
     return value;
   }
 }
-

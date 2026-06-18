@@ -175,6 +175,24 @@ test("workflow tools are listed with read/write annotations", async () => {
   assert.equal(toolByName(tools, "workflow_evidence_render")._meta["openai/outputTemplate"], "ui://pockethive/workflow-evidence-v1.html");
 });
 
+test("runtime debug tools are listed with read/write annotations", async () => {
+  const tools = await listTools();
+
+  assert.equal(toolByName(tools, "runtime_cleanup_plan").annotations.readOnlyHint, true);
+  assert.equal(toolByName(tools, "runtime_tail_worker_logs").annotations.readOnlyHint, true);
+  assert.equal(toolByName(tools, "runtime_get_worker_version").annotations.readOnlyHint, true);
+  assert.equal(toolByName(tools, "runtime_list_workers").annotations.readOnlyHint, true);
+  assert.equal(toolByName(tools, "runtime_inspect_worker").annotations.readOnlyHint, true);
+  assert.equal(toolByName(tools, "runtime_diff_swarm_runtime").annotations.readOnlyHint, true);
+  assert.equal(toolByName(tools, "runtime_control_plane_status").annotations.readOnlyHint, true);
+  assert.equal(toolByName(tools, "runtime_rabbit_topology_snapshot").annotations.readOnlyHint, true);
+  assert.equal(toolByName(tools, "runtime_swarm_timeline").annotations.readOnlyHint, true);
+  assert.equal(toolByName(tools, "runtime_manifest_validate").annotations.readOnlyHint, true);
+  assert.equal(tools.some((tool) => tool.name === "runtime_cleanup_approve"), false);
+  assert.equal(toolByName(tools, "runtime_cleanup_execute").annotations.readOnlyHint, false);
+  assert.equal(toolByName(tools, "runtime_cleanup_execute").annotations.destructiveHint, true);
+});
+
 test("MCP App evidence resources are listed and use Apps SDK MIME type", async () => {
   const resources = await listResources();
   const summary = resources.find(resource => resource.uri === "ui://pockethive/evidence-summary-v1.html");

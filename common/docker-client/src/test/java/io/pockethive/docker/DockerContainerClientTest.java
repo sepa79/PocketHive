@@ -100,4 +100,29 @@ class DockerContainerClientTest {
         verify(create).withHostConfig(hostCaptor.capture());
         assertThat(hostCaptor.getValue().getBinds()).containsExactly(Bind.parse("/host:/container"));
     }
+
+    @Test
+    void appliesContainerLabels() {
+        DockerClient docker = mock(DockerClient.class);
+        CreateContainerCmd create = mock(CreateContainerCmd.class);
+        CreateContainerResponse resp = new CreateContainerResponse();
+        resp.setId("cid");
+        when(docker.createContainerCmd("img")).thenReturn(create);
+        when(create.withHostConfig(any())).thenReturn(create);
+        when(create.withEnv(any(String[].class))).thenReturn(create);
+        when(create.withLabels(anyMap())).thenReturn(create);
+        when(create.withName(anyString())).thenReturn(create);
+        when(create.exec()).thenReturn(resp);
+
+        DockerContainerClient client = new DockerContainerClient(docker);
+
+        client.createContainer(
+            "img",
+            Map.of(),
+            "bee-one",
+            null,
+            Map.of("pockethive.managed", "true"));
+
+        verify(create).withLabels(Map.of("pockethive.managed", "true"));
+    }
 }

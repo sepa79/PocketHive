@@ -8,6 +8,8 @@ index is a convenience for humans and tools.
 
 Notable in‑progress plans:
 
+- `docs/inProgress/runtime-debug-mcp-cleanup-spec.md` – concise spec for
+  PocketHive-owned runtime debug MCP tools and HiveGate-governed cleanup.
 - `docs/inProgress/db-query-worker-mvp.md` – MVP contract for the DB-only
   load worker supporting Postgres/Oracle with explicit JDBC config and a
   configurable connection pool.

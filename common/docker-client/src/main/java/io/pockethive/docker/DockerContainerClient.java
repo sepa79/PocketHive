@@ -41,7 +41,15 @@ public class DockerContainerClient {
                                           Map<String, String> env,
                                           String containerName,
                                           UnaryOperator<HostConfig> hostConfigCustomizer) {
-        String id = createContainer(image, env, containerName, hostConfigCustomizer);
+        return createAndStartContainer(image, env, containerName, hostConfigCustomizer, Map.of());
+    }
+
+    public String createAndStartContainer(String image,
+                                          Map<String, String> env,
+                                          String containerName,
+                                          UnaryOperator<HostConfig> hostConfigCustomizer,
+                                          Map<String, String> labels) {
+        String id = createContainer(image, env, containerName, hostConfigCustomizer, labels);
         startContainer(id);
         return id;
     }
@@ -66,12 +74,23 @@ public class DockerContainerClient {
                                   Map<String, String> env,
                                   String containerName,
                                   UnaryOperator<HostConfig> hostConfigCustomizer) {
+        return createContainer(image, env, containerName, hostConfigCustomizer, Map.of());
+    }
+
+    public String createContainer(String image,
+                                  Map<String, String> env,
+                                  String containerName,
+                                  UnaryOperator<HostConfig> hostConfigCustomizer,
+                                  Map<String, String> labels) {
         return callDocker("create container", () -> {
             String[] envArray = toEnvArray(env);
             HostConfig hostConfig = buildHostConfig(hostConfigCustomizer);
             CreateContainerCmd createCmd = dockerClient.createContainerCmd(image)
                 .withHostConfig(hostConfig)
                 .withEnv(envArray);
+            if (labels != null && !labels.isEmpty()) {
+                createCmd = createCmd.withLabels(labels);
+            }
             if (containerName != null && !containerName.isBlank()) {
                 createCmd = createCmd.withName(containerName);
             }

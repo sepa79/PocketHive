@@ -270,6 +270,134 @@ temporary queue bound to the swarm's hive exchange and buffers samples for UI in
 }
 ```
 
+### 2.9 Runtime Cleanup Reconciliation
+
+Runtime cleanup is an operator workflow for stale PocketHive-owned Docker and
+RabbitMQ resources. The Orchestrator is the authority because it owns swarm desired
+state, the swarm registry, AMQP topology access, and runtime ownership manifests.
+MCP clients must call this API instead of deleting Docker/RabbitMQ resources
+directly in production.
+
+Cleanup is always:
+
+```text
+plan -> execute
+```
+
+RabbitMQ cleanup is allowed only for exact queue/exchange names recorded in the
+runtime ownership manifest. Prefix guessing, Docker prune-style operations, and
+implicit cleanup fallbacks are forbidden. In production, the mutating execute
+operation must be registered behind HiveGate or an equivalent governed control
+plane for policy, human approval when required, and evidence.
+
+#### 2.9.1 Runtime debug capabilities
+`GET /api/runtime/debug/capabilities`
+
+Returns the scoped runtime debug/cleanup contract understood by this
+Orchestrator. PocketHive MCP clients use this endpoint before runtime debug or
+cleanup tool execution so stale Orchestrator deployments fail only those runtime
+tools, without impacting existing scenario, workflow, or swarm lifecycle tools.
+
+**Response (200)**
+```json
+{
+  "runtimeDebugContractVersion": "1",
+  "cleanupContractVersion": "1",
+  "cleanupPlanHasExecutionRisk": true,
+  "cleanupPlanUsesApprovalFields": false,
+  "cleanupExecuteRequiresCandidateSetHash": true,
+  "rabbitTopologyExactByDefault": true
+}
+```
+
+#### 2.9.2 Plan cleanup
+`POST /api/runtime/cleanup/plan`
+
+**Request**
+```json
+{
+  "computeAdapter": "DOCKER_SINGLE",
+  "swarmId": "demo",
+  "runId": "optional",
+  "includeRunning": false,
+  "includeRabbit": true
+}
+```
+
+**Response (200)**
+```json
+{
+  "swarmId": "demo",
+  "runId": "run-1",
+  "includeRunning": false,
+  "includeRabbit": true,
+  "candidateSetHash": "sha256:...",
+  "executionRisk": "standard",
+  "candidates": [
+    {
+      "candidateId": "docker:container:abc",
+      "action": "DELETE_DOCKER_CONTAINER",
+      "resourceId": "abc",
+      "resourceType": "container",
+      "resourceKind": "worker",
+      "role": "processor",
+      "instance": "demo-processor-1",
+      "state": "exited",
+      "image": "ghcr.io/pockethive/processor:1.2.3",
+      "reason": "stopped PocketHive runtime resource"
+    }
+  ],
+  "blocked": [
+    {
+      "candidateId": "rabbit:queue:ph.demo.final",
+      "action": "DELETE_RABBIT_QUEUE",
+      "resourceId": "ph.demo.final",
+      "reason": "active swarm shared RabbitMQ resource is protected"
+    }
+  ]
+}
+```
+
+#### 2.9.3 Execute cleanup
+`POST /api/runtime/cleanup/execute`
+
+Recomputes the plan, verifies the candidate hash and idempotency key, then
+executes only the selected candidate ids. This endpoint does not approve itself;
+production access is governed by HiveGate policy outside Orchestrator.
+
+**Request**
+```json
+{
+  "computeAdapter": "DOCKER_SINGLE",
+  "swarmId": "demo",
+  "runId": "run-1",
+  "includeRunning": false,
+  "includeRabbit": true,
+  "candidateSetHash": "sha256:...",
+  "candidateIds": ["docker:container:abc"],
+  "idempotencyKey": "uuid-v4",
+  "reason": "remove stale stopped runtime",
+  "actor": "operator"
+}
+```
+
+**Response (200)**
+```json
+{
+  "idempotent": false,
+  "evidence": {
+    "idempotencyKey": "uuid-v4",
+    "candidateSetHash": "sha256:...",
+    "resultByCandidate": [
+      {
+        "candidateId": "docker:container:abc",
+        "status": "REMOVED"
+      }
+    ]
+  }
+}
+```
+
 #### 2.8.2 Read tap
 `GET /api/debug/taps/{tapId}`
 

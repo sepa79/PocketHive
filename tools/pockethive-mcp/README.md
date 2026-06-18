@@ -50,6 +50,25 @@ Assistant configs should connect to:
 http://localhost:3100/mcp
 ```
 
+Runtime debug tools are exposed through this same PocketHive MCP surface. Do not
+start a separate runtime-debug MCP for normal product use.
+
+## Agent Setup Map
+
+Use this decision table when configuring an agent or IDE:
+
+| Need | Use |
+|---|---|
+| Normal agent/IDE MCP access | `tools/pockethive-mcp` |
+| Streamable HTTP endpoint | `http://localhost:3100/mcp` via `npm run mcp:start:http` |
+| Stdio endpoint | `npm run mcp:start` |
+| Runtime cleanup/log/version tools | `tools/pockethive-mcp` |
+| Low-level terminal diagnostics only | `tools/mcp-orchestrator-debug/client.mjs` |
+
+Default MCP tool names use underscores, for example `runtime_cleanup_plan`.
+Dotted names such as `runtime.cleanup.plan` are conceptual names unless
+`PH_MCP_TOOL_NAME_MODE=legacy` or `both` is set.
+
 ## Core Environment
 
 | Variable | Required | Purpose |
@@ -139,6 +158,80 @@ Production/live verification should use:
   "includeTapSample": true
 }
 ```
+
+## Runtime Debug And Cleanup
+
+The PocketHive MCP exposes label-gated worker runtime diagnostics and governed
+runtime cleanup:
+
+```text
+runtime_cleanup_plan
+runtime_tail_worker_logs
+runtime_get_worker_version
+runtime_list_workers
+runtime_inspect_worker
+runtime_diff_swarm_runtime
+runtime_control_plane_status
+runtime_rabbit_topology_snapshot
+runtime_swarm_timeline
+runtime_manifest_validate
+runtime_cleanup_execute
+```
+
+These default names use underscores for client compatibility. Conceptual dotted
+names such as `runtime.cleanup.plan` are available only when
+`PH_MCP_TOOL_NAME_MODE=legacy` or `both`.
+
+Cleanup is always `plan -> execute`. Production cleanup tools delegate to
+Orchestrator's `/api/runtime/cleanup/*` reconciliation API so swarm registry,
+Docker runtime state, RabbitMQ topology, idempotency, and evidence stay in one
+authority path. Register `runtime_cleanup_execute` behind HiveGate for real
+policy, approval when required, and governed execution evidence.
+
+When an Orchestrator HTTP client is configured, runtime debug and cleanup tools
+first read `/api/runtime/debug/capabilities`. If the runtime debug contract is
+missing or incompatible, only the runtime tools fail closed; existing scenario,
+workflow, and swarm MCP tools are not disabled.
+
+Registered swarm-controller containers/services are removed through the
+Orchestrator lifecycle action. Orphaned swarm-controller and worker
+containers/services can be removed as labeled Docker cleanup candidates. RabbitMQ
+queues/exchanges are eligible only when they appear in the exact runtime
+ownership manifest; missing manifests block RabbitMQ cleanup.
+
+When `runtime-tools.mjs` is used without an Orchestrator HTTP client, the local
+development fallback writes evidence to:
+
+```text
+tools/pockethive-mcp/runtime-cleanup-evidence.jsonl
+```
+
+Worker logs are bounded and redacted before returning to the caller. Worker
+version reports use the worker image that Orchestrator/Swarm Controller used to
+create the runtime object; deployment-wide `POCKETHIVE_VERSION` is not used as a
+worker-version source.
+
+Additional read-only debug tools explain drift across the swarm registry,
+runtime ownership manifest, Docker/Swarm state, RabbitMQ topology, and journal:
+
+- `runtime_list_workers` lists label-gated manager/worker runtimes.
+- `runtime_inspect_worker` returns a bounded inspect summary for one worker.
+- `runtime_diff_swarm_runtime` compares expected, registered, live, and cleanup
+  views.
+- `runtime_control_plane_status` summarizes control queues and recent control
+  events.
+- `runtime_rabbit_topology_snapshot` reads exact manifest-owned queues/exchanges.
+- `runtime_swarm_timeline` builds an operator timeline from journal/runtime
+  evidence.
+- `runtime_manifest_validate` checks manifest drift against live runtime state.
+
+These tools return explicit source availability instead of silently guessing.
+They never expose raw environment variables or mutate runtime resources.
+They are designed for zero scenario-path impact: no scenario queue consumers, no
+message publishing, no worker exec/pause/resume, finite log reads only, and
+RabbitMQ diagnostics use exact manifest-owned resource reads by default. Broad
+RabbitMQ topology scans happen only when unmanaged diagnostics are explicitly
+requested.
 
 Strict proof blocks on missing or failing production evidence:
 

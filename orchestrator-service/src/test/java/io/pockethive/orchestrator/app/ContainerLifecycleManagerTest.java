@@ -16,13 +16,17 @@ import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.orchestrator.domain.SwarmLifecycleStatus;
 import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
 import io.pockethive.orchestrator.infra.JournalRunMetadataWriter;
+import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.RuntimeOwnershipManifestStore;
+import io.pockethive.orchestrator.runtime.RuntimeOwnershipManifest;
 import io.pockethive.sink.clickhouse.ClickHouseSinkProperties;
 import io.pockethive.swarm.model.NetworkMode;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.Work;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -109,6 +113,49 @@ class ContainerLifecycleManagerTest {
         assertNotNull(volumes);
         assertEquals(1, volumes.size());
         assertEquals("/var/run/docker.sock:/var/run/docker.sock", volumes.get(0));
+    }
+
+    @Test
+    void startSwarmWritesRuntimeOwnershipManifestForControllerAndRabbitTopology() {
+        SwarmStore registry = new SwarmStore();
+        OrchestratorProperties properties = defaultProperties();
+        ControlPlaneProperties controlPlane = controlPlaneProperties();
+        RecordingManifestStore manifests = new RecordingManifestStore();
+        when(computeAdapter.startManager(any(ManagerSpec.class))).thenReturn("cid");
+        ContainerLifecycleManager manager = new ContainerLifecycleManager(
+            docker,
+            computeAdapter,
+            registry,
+            amqp,
+            properties,
+            controlPlane,
+            rabbitProperties(),
+            runMetadataWriter,
+            new ClickHouseSinkProperties(),
+            manifests);
+
+        manager.startSwarm(
+            "sw1",
+            "img",
+            "inst1",
+            new SwarmTemplateMetadata(
+                "tpl-1",
+                "img",
+                List.of(new Bee("processor", "processor:latest", Work.ofDefaults("gen", "final"), Map.of()))),
+            false);
+
+        RuntimeOwnershipManifest manifest = manifests.saved.getFirst();
+        assertEquals("sw1", manifest.swarmId());
+        assertEquals("tpl-1", manifest.templateId());
+        assertEquals("DOCKER_SINGLE", manifest.computeAdapter());
+        assertEquals("cid", manifest.runtimeObjects().getFirst().runtimeId());
+        assertEquals("container", manifest.runtimeObjects().getFirst().runtimeType());
+        assertEquals("manager", manifest.runtimeObjects().getFirst().resourceKind());
+        assertEquals("swarm-controller", manifest.runtimeObjects().getFirst().role());
+        assertEquals(List.of("ph.control.manager.sw1.swarm-controller.inst1"), manifest.rabbit().controlQueues());
+        assertTrue(manifest.rabbit().workQueues().contains("ph.sw1.gen"));
+        assertTrue(manifest.rabbit().workQueues().contains("ph.sw1.final"));
+        assertEquals(List.of("ph.sw1.hive"), manifest.rabbit().exchanges());
     }
 
     @Test
@@ -417,5 +464,28 @@ class ContainerLifecycleManagerTest {
         properties.setPassword("guest");
         properties.setVirtualHost("/");
         return properties;
+    }
+
+    private static final class RecordingManifestStore implements RuntimeOwnershipManifestStore {
+        private final List<RuntimeOwnershipManifest> saved = new ArrayList<>();
+
+        @Override
+        public void save(RuntimeOwnershipManifest manifest) {
+            saved.add(manifest);
+        }
+
+        @Override
+        public Optional<RuntimeOwnershipManifest> find(String swarmId, String runId) {
+            return saved.stream()
+                .filter(manifest -> manifest.swarmId().equals(swarmId) && manifest.runId().equals(runId))
+                .findFirst();
+        }
+
+        @Override
+        public Optional<RuntimeOwnershipManifest> findLatest(String swarmId) {
+            return saved.stream()
+                .filter(manifest -> manifest.swarmId().equals(swarmId))
+                .findFirst();
+        }
     }
 }

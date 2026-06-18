@@ -48,7 +48,7 @@ class DockerSwarmServiceComputeAdapterTest {
     adapter.startManager(new ManagerSpec(
         "auth-rollout-swarm-f46d24db-marshal-bee-stingy-puff-2625",
         "swarm-controller:test",
-        Map.of("POCKETHIVE_CONTROL_PLANE_SWARM_ID", "swarm-1"),
+        managerEnv("swarm-1", "auth-rollout-swarm-f46d24db-marshal-bee-stingy-puff-2625"),
         null));
 
     ArgumentCaptor<ServiceSpec> specCaptor = ArgumentCaptor.forClass(ServiceSpec.class);
@@ -58,6 +58,17 @@ class DockerSwarmServiceComputeAdapterTest {
     assertThat(spec.getName()).isEqualTo("auth-rollout-swarm-f46d24db-marshal-bee-stingy-puff-2625");
     assertThat(spec.getLabels()).containsEntry(
         "ph.logicalName", "auth-rollout-swarm-f46d24db-marshal-bee-stingy-puff-2625");
+    assertThat(spec.getLabels()).containsEntry("pockethive.managed", "true");
+    assertThat(spec.getLabels()).containsEntry("pockethive.resourceKind", "manager");
+    assertThat(spec.getLabels()).containsEntry("pockethive.owner", "orchestrator");
+    assertThat(spec.getLabels()).containsEntry("pockethive.swarmId", "swarm-1");
+    assertThat(spec.getLabels()).containsEntry("pockethive.runId", "run-1");
+    assertThat(spec.getLabels()).containsEntry("pockethive.role", "swarm-controller");
+    assertThat(spec.getLabels()).containsEntry(
+        "pockethive.instance", "auth-rollout-swarm-f46d24db-marshal-bee-stingy-puff-2625");
+    assertThat(spec.getLabels()).containsEntry("pockethive.computeAdapter", "SWARM_STACK");
+    assertThat(spec.getLabels()).containsEntry("pockethive.version", "test");
+    assertThat(spec.getLabels()).containsKey("pockethive.createdAt");
     assertNetwork(spec.getNetworks().get(0));
     assertNetwork(spec.getTaskTemplate().getNetworks().get(0));
   }
@@ -78,9 +89,11 @@ class DockerSwarmServiceComputeAdapterTest {
         "postprocessor-worker",
         "postprocessor",
         "postprocessor:test",
-        Map.of(
-            "POCKETHIVE_CONTROL_PLANE_SWARM_ID", "swarm-1",
-            "POCKETHIVE_OUTPUTS_REDIS_TARGETLISTTEMPLATE", "webauth.RED.{{ payloadAsJson.Customer }}"),
+        workerEnv(
+            "swarm-1",
+            "postprocessor-worker",
+            "postprocessor",
+            Map.of("POCKETHIVE_OUTPUTS_REDIS_TARGETLISTTEMPLATE", "webauth.RED.{{ payloadAsJson.Customer }}")),
         null)));
 
     ArgumentCaptor<ServiceSpec> specCaptor = ArgumentCaptor.forClass(ServiceSpec.class);
@@ -91,7 +104,68 @@ class DockerSwarmServiceComputeAdapterTest {
         .contains("POCKETHIVE_OUTPUTS_REDIS_TARGETLISTTEMPLATE=webauth.RED.{{ \"{{\" }} payloadAsJson.Customer {{ \"}}\" }}");
   }
 
+  @Test
+  void labelsWorkerServicesWithPocketHiveOwnership() {
+    DockerClient docker = mock(DockerClient.class);
+    CreateServiceCmd create = mock(CreateServiceCmd.class);
+    CreateServiceResponse response = mock(CreateServiceResponse.class);
+    when(response.getId()).thenReturn("service-id");
+    when(docker.createServiceCmd(any())).thenReturn(create);
+    when(create.exec()).thenReturn(response);
+
+    DockerSwarmServiceComputeAdapter adapter =
+        new DockerSwarmServiceComputeAdapter(docker, () -> "pockethive_default");
+
+    adapter.applyWorkers("swarm-1", List.of(new WorkerSpec(
+        "processor-worker",
+        "processor",
+        "processor:test",
+        workerEnv("swarm-1", "processor-worker", "processor", Map.of()),
+        null)));
+
+    ArgumentCaptor<ServiceSpec> specCaptor = ArgumentCaptor.forClass(ServiceSpec.class);
+    verify(docker).createServiceCmd(specCaptor.capture());
+    ServiceSpec spec = specCaptor.getValue();
+
+    assertThat(spec.getLabels()).containsEntry("pockethive.managed", "true");
+    assertThat(spec.getLabels()).containsEntry("pockethive.resourceKind", "worker");
+    assertThat(spec.getLabels()).containsEntry("pockethive.owner", "swarm-controller");
+    assertThat(spec.getLabels()).containsEntry("pockethive.swarmId", "swarm-1");
+    assertThat(spec.getLabels()).containsEntry("pockethive.runId", "run-1");
+    assertThat(spec.getLabels()).containsEntry("pockethive.role", "processor");
+    assertThat(spec.getLabels()).containsEntry("pockethive.instance", "processor-worker");
+    assertThat(spec.getLabels()).containsEntry("pockethive.computeAdapter", "SWARM_STACK");
+    assertThat(spec.getLabels()).containsEntry("pockethive.image", "processor:test");
+    assertThat(spec.getLabels()).containsEntry("pockethive.version", "test");
+  }
+
   private static void assertNetwork(NetworkAttachmentConfig attachment) {
     assertThat(attachment.getTarget()).isEqualTo("pockethive_default");
+  }
+
+  private static Map<String, String> managerEnv(String swarmId, String instanceId) {
+    return Map.of(
+        "POCKETHIVE_CONTROL_PLANE_SWARM_ID", swarmId,
+        "POCKETHIVE_CONTROL_PLANE_INSTANCE_ID", instanceId,
+        "POCKETHIVE_CONTROL_PLANE_MANAGER_ROLE", "swarm-controller",
+        "POCKETHIVE_JOURNAL_RUN_ID", "run-1",
+        "POCKETHIVE_VERSION", "0.15.27",
+        "POCKETHIVE_TEMPLATE_ID", "template-1");
+  }
+
+  private static Map<String, String> workerEnv(
+      String swarmId,
+      String instanceId,
+      String role,
+      Map<String, String> extra) {
+    java.util.LinkedHashMap<String, String> env = new java.util.LinkedHashMap<>();
+    env.put("POCKETHIVE_CONTROL_PLANE_SWARM_ID", swarmId);
+    env.put("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID", instanceId);
+    env.put("POCKETHIVE_CONTROL_PLANE_WORKER_ROLE", role);
+    env.put("POCKETHIVE_JOURNAL_RUN_ID", "run-1");
+    env.put("POCKETHIVE_VERSION", "0.15.27");
+    env.put("POCKETHIVE_TEMPLATE_ID", "template-1");
+    env.putAll(extra);
+    return Map.copyOf(env);
   }
 }
