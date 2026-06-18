@@ -161,8 +161,8 @@ Production/live verification should use:
 
 ## Runtime Debug And Cleanup
 
-The PocketHive MCP exposes label-gated worker runtime diagnostics and governed
-runtime cleanup:
+The PocketHive MCP exposes label-gated worker/manager runtime diagnostics and
+governed runtime cleanup:
 
 ```text
 runtime_cleanup_plan
@@ -188,28 +188,40 @@ state, RabbitMQ topology, idempotency, and evidence stay in one authority path.
 If Orchestrator HTTP is unavailable, cleanup tools fail closed instead of running
 a local cleanup fallback. Register `runtime_cleanup_execute` behind HiveGate for
 real policy, approval when required, and governed execution evidence.
+Registered pre-run, stopped, and failed swarms are cleanup candidates only
+through Orchestrator lifecycle removal. Running/removing registered swarms are
+blocked by default, and the plan or execute error includes the required lifecycle
+action. Rare break-glass cleanup can set `overrideRegisteredSwarmState=true` on
+both plan and execute; the override is hash-bound, high-risk, and still uses only
+`LIFECYCLE_REMOVE_SWARM`.
 
-When an Orchestrator HTTP client is configured, runtime debug and cleanup tools
-first read `/api/runtime/debug/capabilities`. If the runtime debug contract is
-missing or incompatible, only the runtime tools fail closed; existing scenario,
-workflow, and swarm MCP tools are not disabled.
+Runtime debug and cleanup tools first read `/api/runtime/debug/capabilities`.
+Docker/Swarm list, logs, version, and inspect tools delegate to Orchestrator's
+`/api/runtime/debug/resources/*` API. If Orchestrator HTTP is unavailable or the
+runtime debug contract is incompatible, only the runtime tools fail closed;
+existing scenario, workflow, and swarm MCP tools are not disabled. The MCP does
+not use a local Docker socket fallback.
 
 Registered swarm-controller containers/services are removed through the
 Orchestrator lifecycle action. Orphaned swarm-controller and worker
 containers/services can be removed as labeled Docker cleanup candidates. RabbitMQ
 queues/exchanges are eligible only when they appear in the exact runtime
-ownership manifest; missing manifests block RabbitMQ cleanup.
+ownership manifest; missing manifests block RabbitMQ cleanup. Worker control
+queues derived from exact labels obey the same `includeRunning` gate as the
+worker runtime object.
 
-Worker logs are bounded and redacted before returning to the caller. Worker
-version reports use the worker image that Orchestrator/Swarm Controller used to
-create the runtime object; deployment-wide `POCKETHIVE_VERSION` is not used as a
-worker-version source.
+Worker and swarm-controller manager logs are bounded and redacted by
+Orchestrator before returning to the caller. Version reports use the runtime
+image/labels that Orchestrator or Swarm Controller used to create the runtime
+object; deployment-wide `POCKETHIVE_VERSION` is not used as a runtime-version
+source.
 
 Additional read-only debug tools explain drift across the swarm registry,
 runtime ownership manifest, Docker/Swarm state, RabbitMQ topology, and journal:
 
 - `runtime_list_workers` lists label-gated manager/worker runtimes.
-- `runtime_inspect_worker` returns a bounded inspect summary for one worker.
+- `runtime_inspect_worker` returns a bounded inspect summary for one worker or
+  manager.
 - `runtime_diff_swarm_runtime` compares expected, registered, live, and cleanup
   views.
 - `runtime_control_plane_status` summarizes manifest/Orchestrator-provided

@@ -9,6 +9,7 @@ import static org.mockito.Mockito.verify;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.orchestrator.app.ContainerLifecycleManager;
 import io.pockethive.orchestrator.domain.Swarm;
+import io.pockethive.orchestrator.domain.SwarmLifecycleStatus;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.orchestrator.runtime.RuntimeCleanupContracts.Plan;
 import io.pockethive.orchestrator.runtime.RuntimeCleanupContracts.PlanRequest;
@@ -32,9 +33,147 @@ import org.junit.jupiter.api.Test;
 class RuntimeReconciliationServiceTest {
 
     @Test
-    void activeSwarmUsesLifecycleCandidateAndBlocksDirectControllerDockerDeletion() {
+    void preRunRegisteredSwarmsUseLifecycleCandidateAndBlockRawRuntimeDeletion() {
+        assertLifecycleSafeStatusUsesLifecycleCandidate(SwarmLifecycleStatus.NEW);
+        assertLifecycleSafeStatusUsesLifecycleCandidate(SwarmLifecycleStatus.CREATING);
+        assertLifecycleSafeStatusUsesLifecycleCandidate(SwarmLifecycleStatus.READY);
+    }
+
+    @Test
+    void registeredSwarmsThatAreNotLifecycleSafeAreBlocked() {
+        assertLifecycleUnsafeStatusBlocked(
+            SwarmLifecycleStatus.STARTING,
+            "registered swarm status STARTING must be explicitly stopped before runtime cleanup");
+        assertLifecycleUnsafeStatusBlocked(
+            SwarmLifecycleStatus.RUNNING,
+            "registered swarm status RUNNING must be explicitly stopped before runtime cleanup");
+        assertLifecycleUnsafeStatusBlocked(
+            SwarmLifecycleStatus.STOPPING,
+            "registered swarm status STOPPING must be explicitly stopped before runtime cleanup");
+        assertLifecycleUnsafeStatusBlocked(
+            SwarmLifecycleStatus.REMOVING,
+            "registered swarm status REMOVING requires lifecycle recovery; runtime cleanup cannot bypass lifecycle removal");
+        assertLifecycleUnsafeStatusBlocked(
+            SwarmLifecycleStatus.REMOVED,
+            "registered swarm status REMOVED should not remain registered; reconcile swarm registry before runtime cleanup");
+    }
+
+    private static void assertLifecycleSafeStatusUsesLifecycleCandidate(SwarmLifecycleStatus status) {
         SwarmStore swarms = new SwarmStore();
-        swarms.register(new Swarm("sw1", "controller-1", "manager-container", "run-1"));
+        swarms.register(swarmWithStatus(status));
+        FakeInventory inventory = new FakeInventory(List.of(
+            container("manager-container", "manager", "swarm-controller", "controller-1", "exited")));
+        FakeRabbit rabbit = new FakeRabbit();
+        rabbit.queues.put("ph.sw1.final", new RabbitQueueResource("ph.sw1.final", 0, 0));
+        FakeManifests manifests = new FakeManifests();
+        manifests.save(manifest());
+
+        RuntimeReconciliationService service = service(swarms, manifests, inventory, inventory, rabbit, mock(ContainerLifecycleManager.class));
+
+        Plan plan = service.plan(new PlanRequest("DOCKER_SINGLE", "sw1", "run-1", false, true));
+
+        assertThat(plan.candidates())
+            .extracting("candidateId")
+            .containsExactly("lifecycle:swarm:sw1");
+        assertThat(plan.candidates().get(0).state()).isEqualTo(status.name());
+        assertThat(plan.candidates().get(0).running()).isFalse();
+        assertThat(plan.candidates().get(0).highRisk()).isFalse();
+        assertThat(plan.blocked())
+            .extracting("candidateId")
+            .contains("docker:container:manager-container", "rabbit:queue:ph.sw1.final");
+        assertThat(plan.blocked())
+            .filteredOn(blocked -> blocked.candidateId().equals("lifecycle:swarm:sw1"))
+            .isEmpty();
+        assertThat(plan.candidateSetHash()).startsWith("sha256:");
+    }
+
+    private static void assertLifecycleUnsafeStatusBlocked(SwarmLifecycleStatus status, String expectedReason) {
+        SwarmStore swarms = new SwarmStore();
+        swarms.register(swarmWithStatus(status));
+        FakeInventory inventory = new FakeInventory(List.of(
+            container("manager-container", "manager", "swarm-controller", "controller-1", "exited")));
+        FakeRabbit rabbit = new FakeRabbit();
+        rabbit.queues.put("ph.sw1.final", new RabbitQueueResource("ph.sw1.final", 0, 0));
+        FakeManifests manifests = new FakeManifests();
+        manifests.save(manifest());
+
+        RuntimeReconciliationService service = service(swarms, manifests, inventory, inventory, rabbit, mock(ContainerLifecycleManager.class));
+
+        Plan plan = service.plan(new PlanRequest("DOCKER_SINGLE", "sw1", "run-1", false, true));
+
+        assertThat(plan.candidates()).isEmpty();
+        assertThat(plan.blocked())
+            .extracting("candidateId")
+            .contains("lifecycle:swarm:sw1", "docker:container:manager-container", "rabbit:queue:ph.sw1.final");
+        assertThat(plan.blocked())
+            .filteredOn(blocked -> blocked.candidateId().equals("lifecycle:swarm:sw1"))
+            .extracting("reason")
+            .containsExactly(expectedReason);
+        assertThat(plan.candidateSetHash()).startsWith("sha256:");
+    }
+
+    @Test
+    void emergencyOverrideExposesHighRiskLifecycleCandidateForRunningAndRemovingStates() {
+        assertEmergencyOverrideUsesLifecycleCandidate(SwarmLifecycleStatus.RUNNING);
+        assertEmergencyOverrideUsesLifecycleCandidate(SwarmLifecycleStatus.REMOVING);
+    }
+
+    private static void assertEmergencyOverrideUsesLifecycleCandidate(SwarmLifecycleStatus status) {
+        SwarmStore swarms = new SwarmStore();
+        swarms.register(swarmWithStatus(status));
+        FakeInventory inventory = new FakeInventory(List.of(
+            container("manager-container", "manager", "swarm-controller", "controller-1", "running")));
+        FakeManifests manifests = new FakeManifests();
+        manifests.save(manifest());
+
+        RuntimeReconciliationService service = service(
+            swarms,
+            manifests,
+            inventory,
+            inventory,
+            new FakeRabbit(),
+            mock(ContainerLifecycleManager.class));
+
+        Plan plan = service.plan(new PlanRequest("DOCKER_SINGLE", "sw1", "run-1", false, false, true));
+
+        assertThat(plan.overrideRegisteredSwarmState()).isTrue();
+        assertThat(plan.executionRisk()).isEqualTo("high");
+        assertThat(plan.candidates())
+            .extracting("candidateId")
+            .containsExactly("lifecycle:swarm:sw1");
+        assertThat(plan.candidates().get(0).state()).isEqualTo(status.name());
+        assertThat(plan.candidates().get(0).highRisk()).isTrue();
+        assertThat(plan.candidates().get(0).reason()).contains("emergency override");
+        assertThat(plan.blocked())
+            .filteredOn(blocked -> blocked.candidateId().equals("lifecycle:swarm:sw1"))
+            .isEmpty();
+    }
+
+    @Test
+    void emergencyOverrideDoesNotAllowRemovedRegistryState() {
+        SwarmStore swarms = new SwarmStore();
+        swarms.register(swarmWithStatus(SwarmLifecycleStatus.REMOVED));
+        RuntimeReconciliationService service = service(
+            swarms,
+            new FakeManifests(),
+            new FakeInventory(List.of()),
+            new FakeInventory(List.of()),
+            new FakeRabbit(),
+            mock(ContainerLifecycleManager.class));
+
+        Plan plan = service.plan(new PlanRequest("DOCKER_SINGLE", "sw1", "run-1", false, false, true));
+
+        assertThat(plan.candidates()).isEmpty();
+        assertThat(plan.blocked())
+            .filteredOn(blocked -> blocked.candidateId().equals("lifecycle:swarm:sw1"))
+            .extracting("reason")
+            .containsExactly("registered swarm status REMOVED should not remain registered; reconcile swarm registry before runtime cleanup");
+    }
+
+    @Test
+    void stoppedRegisteredSwarmUsesLifecycleCandidateAndBlocksDirectControllerDockerDeletion() {
+        SwarmStore swarms = new SwarmStore();
+        swarms.register(swarmWithStatus(SwarmLifecycleStatus.STOPPED));
         FakeInventory inventory = new FakeInventory(List.of(container("manager-container", "manager", "swarm-controller", "controller-1", "exited")));
         FakeRabbit rabbit = new FakeRabbit();
         rabbit.queues.put("ph.sw1.final", new RabbitQueueResource("ph.sw1.final", 0, 0));
@@ -80,6 +219,62 @@ class RuntimeReconciliationServiceTest {
         assertThat(plan.candidates().stream()
             .filter(candidate -> candidate.candidateId().equals("rabbit:queue:ph.sw1.final"))
             .findFirst().orElseThrow().highRisk()).isTrue();
+    }
+
+    @Test
+    void unregisteredLabeledWorkerUsesManifestAndDerivedRabbitCandidates() {
+        FakeInventory inventory = new FakeInventory(List.of(
+            container("worker-container", "worker", "processor", "processor-1", "exited")));
+        FakeRabbit rabbit = new FakeRabbit();
+        rabbit.queues.put("ph.control.sw1.processor.processor-1",
+            new RabbitQueueResource("ph.control.sw1.processor.processor-1", 0, 0));
+        rabbit.queues.put("ph.sw1.final", new RabbitQueueResource("ph.sw1.final", 0, 0));
+        FakeManifests manifests = new FakeManifests();
+        manifests.save(manifest());
+
+        RuntimeReconciliationService service = service(
+            new SwarmStore(),
+            manifests,
+            inventory,
+            inventory,
+            rabbit,
+            mock(ContainerLifecycleManager.class));
+
+        Plan plan = service.plan(new PlanRequest("DOCKER_SINGLE", "sw1", "run-1", false, true));
+
+        assertThat(plan.candidates())
+            .extracting("candidateId")
+            .containsExactly(
+                "docker:container:worker-container",
+                "rabbit:queue:ph.control.sw1.processor.processor-1",
+                "rabbit:queue:ph.sw1.final");
+    }
+
+    @Test
+    void unregisteredLabeledWorkerWithoutManifestDoesNotPlanRabbitByPrefixOrLabels() {
+        FakeInventory inventory = new FakeInventory(List.of(
+            container("worker-container", "worker", "processor", "processor-1", "exited")));
+        FakeRabbit rabbit = new FakeRabbit();
+        rabbit.queues.put("ph.control.sw1.processor.processor-1",
+            new RabbitQueueResource("ph.control.sw1.processor.processor-1", 0, 0));
+        rabbit.queues.put("ph.sw1.final", new RabbitQueueResource("ph.sw1.final", 0, 0));
+
+        RuntimeReconciliationService service = service(
+            new SwarmStore(),
+            new FakeManifests(),
+            inventory,
+            inventory,
+            rabbit,
+            mock(ContainerLifecycleManager.class));
+
+        Plan plan = service.plan(new PlanRequest("DOCKER_SINGLE", "sw1", "run-1", false, true));
+
+        assertThat(plan.candidates())
+            .extracting("candidateId")
+            .containsExactly("docker:container:worker-container");
+        assertThat(plan.blocked())
+            .extracting("candidateId")
+            .containsExactly("rabbit:manifest:sw1");
     }
 
     @Test
@@ -136,6 +331,30 @@ class RuntimeReconciliationServiceTest {
         assertThat(plan.candidates().stream()
             .filter(candidate -> candidate.candidateId().equals("rabbit:queue:ph.control.sw1.processor.processor-1"))
             .findFirst().orElseThrow().highRisk()).isTrue();
+    }
+
+    @Test
+    void runningWorkerControlQueueIsNotCandidateWhenRunningCleanupIsExcluded() {
+        SwarmStore swarms = new SwarmStore();
+        swarms.register(swarmWithStatus(SwarmLifecycleStatus.STOPPED));
+        FakeInventory inventory = new FakeInventory(List.of(
+            container("worker-container", "worker", "processor", "processor-1", "running")));
+        FakeRabbit rabbit = new FakeRabbit();
+        rabbit.queues.put("ph.control.sw1.processor.processor-1",
+            new RabbitQueueResource("ph.control.sw1.processor.processor-1", 0, 1));
+        FakeManifests manifests = new FakeManifests();
+        manifests.save(manifest());
+
+        RuntimeReconciliationService service = service(swarms, manifests, inventory, inventory, rabbit, mock(ContainerLifecycleManager.class));
+
+        Plan plan = service.plan(new PlanRequest("DOCKER_SINGLE", "sw1", "run-1", false, true));
+
+        assertThat(plan.candidates())
+            .extracting("candidateId")
+            .doesNotContain("rabbit:queue:ph.control.sw1.processor.processor-1");
+        assertThat(plan.blocked())
+            .extracting("candidateId")
+            .containsExactly("docker:container:worker-container");
     }
 
     @Test
@@ -249,6 +468,102 @@ class RuntimeReconciliationServiceTest {
     }
 
     @Test
+    void executeRejectsStalePlanWhenCurrentCandidatesChanged() {
+        ContainerLifecycleManager lifecycle = mock(ContainerLifecycleManager.class);
+        List<ComputeRuntimeResource> resources = new ArrayList<>();
+        resources.add(container("worker-1", "worker", "processor", "processor-1", "exited"));
+        FakeInventory inventory = new FakeInventory(resources);
+        RuntimeReconciliationService service = service(new SwarmStore(), new FakeManifests(), inventory, inventory, new FakeRabbit(), lifecycle);
+        Plan plan = service.plan(new PlanRequest("DOCKER_SINGLE", "sw1", "run-1", false, false));
+        resources.clear();
+
+        assertThatThrownBy(() -> service.execute(new ExecuteRequest(
+            "DOCKER_SINGLE",
+            "sw1",
+            "run-1",
+            false,
+            false,
+            plan.candidateSetHash(),
+            List.of("docker:container:worker-1"),
+            "idem-1",
+            "remove stopped worker",
+            "alice")))
+            .isInstanceOf(RuntimeCleanupException.class)
+            .hasMessageContaining("candidateSetHash");
+        assertThat(inventory.removed).isEmpty();
+        verifyNoInteractions(lifecycle);
+    }
+
+    @Test
+    void executeDeletesDockerServicesAndRabbitResourcesThroughTheirPorts() {
+        FakeInventory inventory = new FakeInventory(List.of(
+            container("worker-service-1", "worker", "processor", "processor-1", "exited", "sw1", "run-1", "service")));
+        FakeRabbit rabbit = new FakeRabbit();
+        rabbit.queues.put("ph.control.sw1.swarm-controller.controller-1",
+            new RabbitQueueResource("ph.control.sw1.swarm-controller.controller-1", 0, 0));
+        rabbit.exchanges.put("ph.sw1.hive", new RabbitExchangeResource("ph.sw1.hive"));
+        FakeManifests manifests = new FakeManifests();
+        manifests.save(manifest());
+        RuntimeReconciliationService service = service(new SwarmStore(), manifests, inventory, inventory, rabbit, mock(ContainerLifecycleManager.class));
+        Plan plan = service.plan(new PlanRequest("DOCKER_SINGLE", "sw1", "run-1", false, true));
+
+        ExecuteResponse response = service.execute(new ExecuteRequest(
+            "DOCKER_SINGLE",
+            "sw1",
+            "run-1",
+            false,
+            true,
+            plan.candidateSetHash(),
+            List.of(
+                "docker:service:worker-service-1",
+                "rabbit:exchange:ph.sw1.hive",
+                "rabbit:queue:ph.control.sw1.swarm-controller.controller-1"),
+            "idem-1",
+            "remove stale service and topology",
+            "alice"));
+
+        assertThat(response.evidence().resultByCandidate())
+            .extracting("status")
+            .containsOnly(RuntimeCleanupStatus.REMOVED);
+        assertThat(inventory.removed).containsExactly("service:worker-service-1");
+        assertThat(rabbit.deleted).containsExactly(
+            "exchange:ph.sw1.hive",
+            "queue:ph.control.sw1.swarm-controller.controller-1");
+    }
+
+    @Test
+    void planValidatesAdapterAndRequiredRequestFields() {
+        RuntimeReconciliationService service = service(
+            new SwarmStore(),
+            new FakeManifests(),
+            new FakeInventory(List.of()),
+            new FakeInventory(List.of()),
+            new FakeRabbit(),
+            mock(ContainerLifecycleManager.class));
+
+        assertThatThrownBy(() -> service.plan(null))
+            .isInstanceOf(RuntimeCleanupException.class)
+            .hasMessageContaining("request body is required");
+        assertThatThrownBy(() -> service.plan(new PlanRequest("AUTO", "sw1", "run-1", false, false)))
+            .isInstanceOf(RuntimeCleanupException.class)
+            .hasMessageContaining("computeAdapter must be concrete");
+        assertThatThrownBy(() -> service.plan(new PlanRequest("BOGUS", "sw1", "run-1", false, false)))
+            .isInstanceOf(RuntimeCleanupException.class)
+            .hasMessageContaining("unsupported computeAdapter");
+        assertThatThrownBy(() -> service.plan(new PlanRequest("DOCKER_SINGLE", " ", "run-1", false, false)))
+            .isInstanceOf(RuntimeCleanupException.class)
+            .hasMessageContaining("swarmId must not be blank");
+
+        Plan plan = service.plan(new PlanRequest(" DOCKER_SINGLE ", " sw1 ", " run-1 ", null, null));
+
+        assertThat(plan.computeAdapter()).isEqualTo("DOCKER_SINGLE");
+        assertThat(plan.swarmId()).isEqualTo("sw1");
+        assertThat(plan.runId()).isEqualTo("run-1");
+        assertThat(plan.includeRunning()).isFalse();
+        assertThat(plan.includeRabbit()).isTrue();
+    }
+
+    @Test
     void executeIsIdempotentForSameKeyAndExactCleanupInput() {
         FakeInventory inventory = new FakeInventory(List.of(
             container("worker-1", "worker", "processor", "processor-1", "exited"),
@@ -325,9 +640,92 @@ class RuntimeReconciliationServiceTest {
     }
 
     @Test
+    void executeBlockedRunningSwarmCandidateReportsStopFirstReason() {
+        SwarmStore swarms = new SwarmStore();
+        swarms.register(swarmWithStatus(SwarmLifecycleStatus.RUNNING));
+        RuntimeReconciliationService service = service(
+            swarms,
+            new FakeManifests(),
+            new FakeInventory(List.of()),
+            new FakeInventory(List.of()),
+            new FakeRabbit(),
+            mock(ContainerLifecycleManager.class));
+        Plan plan = service.plan(new PlanRequest("DOCKER_SINGLE", "sw1", "run-1", false, false));
+
+        assertThatThrownBy(() -> service.execute(new ExecuteRequest(
+            "DOCKER_SINGLE",
+            "sw1",
+            "run-1",
+            false,
+            false,
+            plan.candidateSetHash(),
+            List.of("lifecycle:swarm:sw1"),
+            "idem-1",
+            "remove running swarm",
+            "alice")))
+            .isInstanceOf(RuntimeCleanupException.class)
+            .hasMessageContaining("registered swarm status RUNNING must be explicitly stopped before runtime cleanup");
+    }
+
+    @Test
+    void executeEmergencyOverrideLifecycleCandidateDeletesThroughLifecycleManager() {
+        SwarmStore swarms = new SwarmStore();
+        swarms.register(swarmWithStatus(SwarmLifecycleStatus.RUNNING));
+        ContainerLifecycleManager lifecycle = mock(ContainerLifecycleManager.class);
+        FakeInventory inventory = new FakeInventory(List.of());
+        RuntimeReconciliationService service = service(swarms, new FakeManifests(), inventory, inventory, new FakeRabbit(), lifecycle);
+        Plan plan = service.plan(new PlanRequest("DOCKER_SINGLE", "sw1", "run-1", false, false, true));
+
+        ExecuteResponse response = service.execute(new ExecuteRequest(
+            "DOCKER_SINGLE",
+            "sw1",
+            "run-1",
+            false,
+            false,
+            true,
+            plan.candidateSetHash(),
+            List.of("lifecycle:swarm:sw1"),
+            "idem-1",
+            "emergency remove stuck running swarm",
+            "alice"));
+
+        assertThat(response.evidence().resultByCandidate().get(0).status()).isEqualTo(RuntimeCleanupStatus.REMOVED);
+        verify(lifecycle).removeSwarm("sw1");
+    }
+
+    @Test
+    void executeEmergencyOverrideRequiresHashFromOverridePlan() {
+        SwarmStore swarms = new SwarmStore();
+        swarms.register(swarmWithStatus(SwarmLifecycleStatus.RUNNING));
+        RuntimeReconciliationService service = service(
+            swarms,
+            new FakeManifests(),
+            new FakeInventory(List.of()),
+            new FakeInventory(List.of()),
+            new FakeRabbit(),
+            mock(ContainerLifecycleManager.class));
+        Plan normalPlan = service.plan(new PlanRequest("DOCKER_SINGLE", "sw1", "run-1", false, false));
+
+        assertThatThrownBy(() -> service.execute(new ExecuteRequest(
+            "DOCKER_SINGLE",
+            "sw1",
+            "run-1",
+            false,
+            false,
+            true,
+            normalPlan.candidateSetHash(),
+            List.of("lifecycle:swarm:sw1"),
+            "idem-1",
+            "emergency remove stuck running swarm",
+            "alice")))
+            .isInstanceOf(RuntimeCleanupException.class)
+            .hasMessageContaining("candidateSetHash");
+    }
+
+    @Test
     void executeLifecycleCandidateDeletesSwarmControllerViaLifecycleManager() {
         SwarmStore swarms = new SwarmStore();
-        swarms.register(new Swarm("sw1", "controller-1", "manager-container", "run-1"));
+        swarms.register(swarmWithStatus(SwarmLifecycleStatus.STOPPED));
         ContainerLifecycleManager lifecycle = mock(ContainerLifecycleManager.class);
         FakeInventory inventory = new FakeInventory(List.of());
         RuntimeReconciliationService service = service(swarms, new FakeManifests(), inventory, inventory, new FakeRabbit(), lifecycle);
@@ -344,6 +742,32 @@ class RuntimeReconciliationServiceTest {
             "idem-1",
             "remove stale controller",
             "alice"));
+        assertThat(response.idempotent()).isFalse();
+        assertThat(response.evidence().resultByCandidate().get(0).status()).isEqualTo(RuntimeCleanupStatus.REMOVED);
+        verify(lifecycle).removeSwarm("sw1");
+    }
+
+    @Test
+    void executePreRunLifecycleCandidateDeletesSwarmControllerViaLifecycleManager() {
+        SwarmStore swarms = new SwarmStore();
+        swarms.register(swarmWithStatus(SwarmLifecycleStatus.READY));
+        ContainerLifecycleManager lifecycle = mock(ContainerLifecycleManager.class);
+        FakeInventory inventory = new FakeInventory(List.of());
+        RuntimeReconciliationService service = service(swarms, new FakeManifests(), inventory, inventory, new FakeRabbit(), lifecycle);
+        Plan plan = service.plan(new PlanRequest("DOCKER_SINGLE", "sw1", "run-1", false, false));
+
+        ExecuteResponse response = service.execute(new ExecuteRequest(
+            "DOCKER_SINGLE",
+            "sw1",
+            "run-1",
+            false,
+            false,
+            plan.candidateSetHash(),
+            List.of("lifecycle:swarm:sw1"),
+            "idem-1",
+            "abort pre-run swarm",
+            "alice"));
+
 
         assertThat(response.idempotent()).isFalse();
         assertThat(response.evidence().resultByCandidate().get(0).status()).isEqualTo(RuntimeCleanupStatus.REMOVED);
@@ -367,6 +791,49 @@ class RuntimeReconciliationServiceTest {
             controlPlaneProperties());
     }
 
+    private static Swarm swarmWithStatus(SwarmLifecycleStatus status) {
+        Swarm swarm = new Swarm("sw1", "controller-1", "manager-container", "run-1");
+        transitionTo(swarm, status);
+        return swarm;
+    }
+
+    private static void transitionTo(Swarm swarm, SwarmLifecycleStatus status) {
+        switch (status) {
+            case NEW -> {
+            }
+            case CREATING -> swarm.transitionTo(SwarmLifecycleStatus.CREATING);
+            case READY -> {
+                transitionTo(swarm, SwarmLifecycleStatus.CREATING);
+                swarm.transitionTo(SwarmLifecycleStatus.READY);
+            }
+            case STARTING -> {
+                transitionTo(swarm, SwarmLifecycleStatus.READY);
+                swarm.transitionTo(SwarmLifecycleStatus.STARTING);
+            }
+            case RUNNING -> {
+                transitionTo(swarm, SwarmLifecycleStatus.STARTING);
+                swarm.transitionTo(SwarmLifecycleStatus.RUNNING);
+            }
+            case STOPPING -> {
+                transitionTo(swarm, SwarmLifecycleStatus.RUNNING);
+                swarm.transitionTo(SwarmLifecycleStatus.STOPPING);
+            }
+            case STOPPED -> {
+                transitionTo(swarm, SwarmLifecycleStatus.STOPPING);
+                swarm.transitionTo(SwarmLifecycleStatus.STOPPED);
+            }
+            case REMOVING -> {
+                transitionTo(swarm, SwarmLifecycleStatus.STOPPED);
+                swarm.transitionTo(SwarmLifecycleStatus.REMOVING);
+            }
+            case REMOVED -> {
+                transitionTo(swarm, SwarmLifecycleStatus.REMOVING);
+                swarm.transitionTo(SwarmLifecycleStatus.REMOVED);
+            }
+            case FAILED -> swarm.transitionTo(SwarmLifecycleStatus.FAILED);
+        }
+    }
+
     private static ControlPlaneProperties controlPlaneProperties() {
         ControlPlaneProperties properties = new ControlPlaneProperties();
         properties.setExchange("ph.control");
@@ -387,9 +854,20 @@ class RuntimeReconciliationServiceTest {
                                                     String state,
                                                     String swarmId,
                                                     String runId) {
+        return container(id, kind, role, instance, state, swarmId, runId, "container");
+    }
+
+    private static ComputeRuntimeResource container(String id,
+                                                    String kind,
+                                                    String role,
+                                                    String instance,
+                                                    String state,
+                                                    String swarmId,
+                                                    String runId,
+                                                    String runtimeType) {
         return new ComputeRuntimeResource(
             id,
-            "container",
+            runtimeType,
             id,
             role + ":test",
             state,

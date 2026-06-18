@@ -18,7 +18,21 @@ Timestamp: 2026-06-18T15:27:35Z
   removing the duplicate `TrafficTopology` naming helper.
 - RabbitMQ cleanup: delete exact manifest-owned queues/exchanges and
   descriptor-derived worker control queues only when worker labels and registry
-  state prove the instance is stale; active registered swarms keep shared queues.
+  state prove the instance is stale; registered swarms that are not explicitly
+  stopped keep shared queues, and derived worker control queues obey the same
+  `includeRunning` gate as their worker runtime object.
+- Runtime cleanup safety: allow pre-run registered swarms to be aborted through
+  `LIFECYCLE_REMOVE_SWARM`, keep running swarms and swarms in `REMOVING` state
+  blocked, and return the required lifecycle action when execute targets a
+  blocked lifecycle candidate.
+- Runtime cleanup emergency path: add hash-bound
+  `overrideRegisteredSwarmState` for rare break-glass lifecycle removal of
+  `STARTING`/`RUNNING`/`STOPPING`/`REMOVING` registered swarms.
+- Runtime debug ownership: move Docker/Swarm list, logs, version, and inspect
+  reads behind Orchestrator runtime debug APIs so PocketHive MCP no longer uses
+  a local Docker socket fallback for worker or swarm-controller manager debug.
+- Docs: condense the runtime debug MCP cleanup spec into ownership, flow,
+  decision table, and verification sections for faster review.
 - Release: bump PocketHive patch version to 0.15.28 for the runtime debug MCP
   cleanup authority hardening.
 

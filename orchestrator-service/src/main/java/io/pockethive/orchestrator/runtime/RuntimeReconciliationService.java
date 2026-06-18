@@ -91,7 +91,7 @@ public class RuntimeReconciliationService {
         List<Candidate> candidates = new ArrayList<>();
         List<Blocked> blocked = new ArrayList<>();
 
-        lifecycleSwarm.ifPresent(swarm -> candidates.add(lifecycleCandidate(scope, swarm)));
+        lifecycleSwarm.ifPresent(swarm -> appendLifecycleCandidate(scope, swarm, candidates, blocked));
         appendComputeCandidates(scope, lifecycleSwarm, computeResources, candidates, blocked);
         appendRabbitCandidates(scope, swarmForId, manifest, computeResources, candidates, blocked);
 
@@ -104,6 +104,7 @@ public class RuntimeReconciliationService {
             scope.runId().orElse(null),
             scope.includeRunning(),
             scope.includeRabbit(),
+            scope.overrideRegisteredSwarmState(),
             "pending",
             executionRisk(scope, candidates),
             List.copyOf(candidates),
@@ -114,6 +115,7 @@ public class RuntimeReconciliationService {
             base.runId(),
             base.includeRunning(),
             base.includeRabbit(),
+            base.overrideRegisteredSwarmState(),
             planHash(base),
             base.executionRisk(),
             base.candidates(),
@@ -139,14 +141,20 @@ public class RuntimeReconciliationService {
             request.swarmId(),
             request.runId(),
             request.includeRunning(),
-            request.includeRabbit()));
+            request.includeRabbit(),
+            request.overrideRegisteredSwarmState()));
         if (!plan.candidateSetHash().equals(candidateSetHash)) {
             throw cleanupError(HttpStatus.CONFLICT, "candidateSetHash does not match the current cleanup plan");
         }
 
         Map<String, Candidate> byId = candidatesById(plan);
+        Map<String, Blocked> blockedById = blockedById(plan);
         for (String id : candidateIds) {
             if (!byId.containsKey(id)) {
+                Blocked blocked = blockedById.get(id);
+                if (blocked != null) {
+                    throw cleanupError(HttpStatus.CONFLICT, "cleanup candidate is blocked: " + blocked.reason());
+                }
                 throw cleanupError(HttpStatus.CONFLICT, "candidate is no longer in the current cleanup plan: " + id);
             }
         }
@@ -331,6 +339,9 @@ public class RuntimeReconciliationService {
             if (!PocketHiveDockerLabels.RESOURCE_KIND_WORKER.equals(labels.get(PocketHiveDockerLabels.RESOURCE_KIND))) {
                 continue;
             }
+            if (isRunningState(resource.state()) && !scope.includeRunning()) {
+                continue;
+            }
             String role = labels.get(PocketHiveDockerLabels.ROLE);
             String instance = labels.get(PocketHiveDockerLabels.INSTANCE);
             if (!hasText(role) || !hasText(instance)) {
@@ -344,11 +355,54 @@ public class RuntimeReconciliationService {
         return List.copyOf(queues);
     }
 
-    private Candidate lifecycleCandidate(CleanupScope scope, Swarm swarm) {
-        boolean highRisk = swarm.getStatus() == SwarmLifecycleStatus.RUNNING
-            || swarm.getStatus() == SwarmLifecycleStatus.STARTING
-            || swarm.getStatus() == SwarmLifecycleStatus.READY
-            || swarm.getStatus() == SwarmLifecycleStatus.CREATING;
+    private void appendLifecycleCandidate(CleanupScope scope,
+                                          Swarm swarm,
+                                          List<Candidate> candidates,
+                                          List<Blocked> blocked) {
+        if (!canCleanupRegisteredSwarm(swarm.getStatus())) {
+            if (scope.overrideRegisteredSwarmState() && canEmergencyOverrideRegisteredSwarm(swarm.getStatus())) {
+                candidates.add(lifecycleCandidate(scope, swarm, true));
+                return;
+            }
+            blocked.add(new Blocked(
+                "lifecycle:swarm:" + scope.swarmId(),
+                RuntimeCleanupAction.LIFECYCLE_REMOVE_SWARM,
+                scope.swarmId(),
+                "swarm",
+                blockedRegisteredSwarmReason(swarm.getStatus()),
+                Map.of()));
+            return;
+        }
+        candidates.add(lifecycleCandidate(scope, swarm, false));
+    }
+
+    private static boolean canCleanupRegisteredSwarm(SwarmLifecycleStatus status) {
+        return switch (status) {
+            case NEW, CREATING, READY, STOPPED, FAILED -> true;
+            case STARTING, RUNNING, STOPPING, REMOVING, REMOVED -> false;
+        };
+    }
+
+    private static boolean canEmergencyOverrideRegisteredSwarm(SwarmLifecycleStatus status) {
+        return switch (status) {
+            case STARTING, RUNNING, STOPPING, REMOVING -> true;
+            case NEW, CREATING, READY, STOPPED, FAILED, REMOVED -> false;
+        };
+    }
+
+    private static String blockedRegisteredSwarmReason(SwarmLifecycleStatus status) {
+        return switch (status) {
+            case STARTING, RUNNING, STOPPING -> "registered swarm status " + status
+                + " must be explicitly stopped before runtime cleanup";
+            case REMOVING -> "registered swarm status REMOVING requires lifecycle recovery; "
+                + "runtime cleanup cannot bypass lifecycle removal";
+            case REMOVED -> "registered swarm status REMOVED should not remain registered; "
+                + "reconcile swarm registry before runtime cleanup";
+            case NEW, CREATING, READY, STOPPED, FAILED -> "registered swarm status " + status + " is cleanup eligible";
+        };
+    }
+
+    private Candidate lifecycleCandidate(CleanupScope scope, Swarm swarm, boolean emergencyOverride) {
         return new Candidate(
             "lifecycle:swarm:" + scope.swarmId(),
             RuntimeCleanupAction.LIFECYCLE_REMOVE_SWARM,
@@ -361,9 +415,12 @@ public class RuntimeReconciliationService {
             swarm.controllerImage(),
             null,
             null,
-            highRisk,
-            highRisk,
-            "registered swarm must be removed through Orchestrator lifecycle",
+            emergencyOverride,
+            emergencyOverride,
+            emergencyOverride
+                ? "emergency override: registered swarm state "
+                    + swarm.getStatus() + " will be removed through Orchestrator lifecycle"
+                : "registered swarm must be removed through Orchestrator lifecycle",
             Map.of());
     }
 
@@ -442,6 +499,11 @@ public class RuntimeReconciliationService {
             .collect(Collectors.toMap(Candidate::candidateId, c -> c, (a, b) -> a, LinkedHashMap::new));
     }
 
+    private static Map<String, Blocked> blockedById(Plan plan) {
+        return plan.blocked().stream()
+            .collect(Collectors.toMap(Blocked::candidateId, b -> b, (a, b) -> a, LinkedHashMap::new));
+    }
+
     private static List<String> requireIds(List<String> ids) {
         if (ids == null || ids.isEmpty()) {
             throw cleanupError(HttpStatus.BAD_REQUEST, "candidateIds must not be empty");
@@ -455,6 +517,7 @@ public class RuntimeReconciliationService {
             + Objects.toString(plan.runId(), "") + "\n"
             + plan.includeRunning() + "\n"
             + plan.includeRabbit() + "\n"
+            + plan.overrideRegisteredSwarmState() + "\n"
             + plan.candidates().stream()
                 .map(c -> c.candidateId() + "|" + c.action() + "|" + c.resourceId() + "|" + c.highRisk())
                 .sorted()
@@ -538,7 +601,8 @@ public class RuntimeReconciliationService {
         String swarmId,
         Optional<String> runId,
         boolean includeRunning,
-        boolean includeRabbit) {
+        boolean includeRabbit,
+        boolean overrideRegisteredSwarmState) {
         static CleanupScope from(PlanRequest request) {
             if (request == null) {
                 throw cleanupError(HttpStatus.BAD_REQUEST, "request body is required");
@@ -558,7 +622,8 @@ public class RuntimeReconciliationService {
                 requireText(request.swarmId(), "swarmId"),
                 hasText(request.runId()) ? Optional.of(request.runId().trim()) : Optional.empty(),
                 Boolean.TRUE.equals(request.includeRunning()),
-                !Boolean.FALSE.equals(request.includeRabbit()));
+                !Boolean.FALSE.equals(request.includeRabbit()),
+                Boolean.TRUE.equals(request.overrideRegisteredSwarmState()));
         }
     }
 }

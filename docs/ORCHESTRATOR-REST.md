@@ -278,19 +278,40 @@ state, the swarm registry, AMQP topology access, and runtime ownership manifests
 MCP clients must call this API instead of deleting Docker/RabbitMQ resources
 directly in production.
 
+Orchestrator also owns Docker/Swarm runtime debug for PocketHive-managed worker
+and swarm-controller manager runtimes. MCP clients must call the runtime debug
+API for Docker/Swarm list, inspect, logs, and version reads instead of using the
+Docker socket directly.
+
 Cleanup is always:
 
 ```text
 plan -> execute
 ```
 
+Registered swarms are cleanup candidates only through `LIFECYCLE_REMOVE_SWARM`.
+`NEW`/`CREATING`/`READY` are allowed as lifecycle remove/abort candidates;
+`STARTING`/`RUNNING`/`STOPPING` must be explicitly stopped first; stuck
+`REMOVING` requires lifecycle recovery.
+For rare break-glass cleanup, clients may set
+`overrideRegisteredSwarmState=true` on both plan and execute. The override is
+part of the `candidateSetHash`, marks lifecycle removal high risk, and still
+uses only `LIFECYCLE_REMOVE_SWARM`.
+
+Unregistered labeled Docker resources are treated as orphan cleanup candidates
+only inside the requested `swarmId`/`runId` scope. They still require
+`pockethive.managed=true` and all required PocketHive labels. RabbitMQ cleanup
+still requires an ownership manifest and never deletes by prefix.
+
 RabbitMQ cleanup is allowed only for exact queue/exchange names recorded in the
 runtime ownership manifest or control queue names derived inside Orchestrator
 from exact PocketHive runtime labels using the shared control-plane topology
-descriptors. Prefix guessing, Docker prune-style operations, and implicit cleanup
-fallbacks are forbidden. In production, the mutating execute operation must be
-registered behind HiveGate or an equivalent governed control plane for policy,
-human approval when required, and evidence.
+descriptors. Derived worker control queues obey the same `includeRunning` gate as
+their worker runtime object, so default cleanup plans do not target a running
+worker's control queue. Prefix guessing, Docker prune-style operations, and
+implicit cleanup fallbacks are forbidden. In production, the mutating execute
+operation must be registered behind HiveGate or an equivalent governed control
+plane for policy, human approval when required, and evidence.
 
 #### 2.9.1 Runtime debug capabilities
 `GET /api/runtime/debug/capabilities`
@@ -303,16 +324,96 @@ tools, without impacting existing scenario, workflow, or swarm lifecycle tools.
 **Response (200)**
 ```json
 {
-  "runtimeDebugContractVersion": "1",
-  "cleanupContractVersion": "1",
+  "runtimeDebugContractVersion": "2",
+  "cleanupContractVersion": "2",
+  "runtimeDebugReadsBackedByOrchestrator": true,
   "cleanupPlanHasExecutionRisk": true,
   "cleanupPlanUsesApprovalFields": false,
   "cleanupExecuteRequiresCandidateSetHash": true,
-  "rabbitTopologyExactByDefault": true
+  "rabbitTopologyExactByDefault": true,
+  "cleanupSupportsRegisteredStateOverride": true
 }
 ```
 
-#### 2.9.2 Plan cleanup
+#### 2.9.2 Runtime resources
+`POST /api/runtime/debug/resources/list`
+
+Lists PocketHive-managed worker and swarm-controller manager runtimes for one
+swarm from Orchestrator-owned Docker/Swarm inventory.
+
+**Request**
+```json
+{
+  "computeAdapter": "DOCKER_SINGLE",
+  "swarmId": "demo",
+  "runId": "optional",
+  "includeManagers": true
+}
+```
+
+**Response (200)**
+```json
+{
+  "computeAdapter": "DOCKER_SINGLE",
+  "swarmId": "demo",
+  "runId": "run-1",
+  "counts": { "workers": 1, "managers": 1, "blocked": 0 },
+  "workers": [],
+  "managers": [],
+  "blocked": []
+}
+```
+
+#### 2.9.3 Runtime target logs
+`POST /api/runtime/debug/resources/logs`
+
+Reads bounded, redacted Docker container logs or Swarm service logs for one
+label-gated `worker` or `manager` runtime. The target must be identified by
+`runtimeId`, `instance`, or `role`; ambiguous targets are rejected.
+
+**Request**
+```json
+{
+  "computeAdapter": "DOCKER_SINGLE",
+  "swarmId": "demo",
+  "runId": "optional",
+  "resourceKind": "manager",
+  "instance": "controller-1",
+  "tailLines": 200,
+  "since": "2026-06-18T12:00:00Z"
+}
+```
+
+**Response (200)**
+```json
+{
+  "target": {
+    "runtimeId": "abc",
+    "runtimeType": "container",
+    "resourceKind": "manager",
+    "role": "swarm-controller",
+    "instance": "controller-1"
+  },
+  "tailLines": 200,
+  "redacted": true,
+  "lineCount": 12,
+  "logs": "..."
+}
+```
+
+#### 2.9.4 Runtime target version
+`POST /api/runtime/debug/resources/version`
+
+Returns the version from the exact runtime image/labels used to create the
+worker or manager. Deployment-wide service versions are not used.
+
+#### 2.9.5 Runtime target inspect
+`POST /api/runtime/debug/resources/inspect`
+
+Returns a bounded inspect summary for one worker or manager runtime. Raw bind
+host paths and environment variables are not returned.
+
+#### 2.9.6 Plan cleanup
 `POST /api/runtime/cleanup/plan`
 
 **Request**
@@ -322,7 +423,8 @@ tools, without impacting existing scenario, workflow, or swarm lifecycle tools.
   "swarmId": "demo",
   "runId": "optional",
   "includeRunning": false,
-  "includeRabbit": true
+  "includeRabbit": true,
+  "overrideRegisteredSwarmState": false
 }
 ```
 
@@ -333,6 +435,7 @@ tools, without impacting existing scenario, workflow, or swarm lifecycle tools.
   "runId": "run-1",
   "includeRunning": false,
   "includeRabbit": true,
+  "overrideRegisteredSwarmState": false,
   "candidateSetHash": "sha256:...",
   "executionRisk": "standard",
   "candidates": [
@@ -360,7 +463,7 @@ tools, without impacting existing scenario, workflow, or swarm lifecycle tools.
 }
 ```
 
-#### 2.9.3 Execute cleanup
+#### 2.9.7 Execute cleanup
 `POST /api/runtime/cleanup/execute`
 
 Recomputes the plan, verifies the candidate hash and idempotency key, then
@@ -375,6 +478,7 @@ production access is governed by HiveGate policy outside Orchestrator.
   "runId": "run-1",
   "includeRunning": false,
   "includeRabbit": true,
+  "overrideRegisteredSwarmState": false,
   "candidateSetHash": "sha256:...",
   "candidateIds": ["docker:container:abc"],
   "idempotencyKey": "uuid-v4",

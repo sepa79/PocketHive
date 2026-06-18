@@ -19,7 +19,7 @@ import {
   validateRuntimeDebugCapabilities
 } from "./runtime-tools.mjs";
 
-test("runtime cleanup tools fail closed without Orchestrator cleanup API", async () => {
+test("runtime tools fail closed without Orchestrator runtime debug API", async () => {
   const handlers = new Map();
   registerRuntimeTools((name, _description, _schema, handler) => {
     handlers.set(name, handler);
@@ -30,7 +30,7 @@ test("runtime cleanup tools fail closed without Orchestrator cleanup API", async
       computeAdapter: "DOCKER_SINGLE",
       swarmId: "swarm-1"
     }),
-    /Orchestrator runtime cleanup API/
+    /Orchestrator runtime debug API/
   );
   await assert.rejects(
     () => handlers.get("runtime.cleanup.execute")({
@@ -41,7 +41,7 @@ test("runtime cleanup tools fail closed without Orchestrator cleanup API", async
       idempotencyKey: "idem-1",
       reason: "test"
     }),
-    /Orchestrator runtime cleanup API/
+    /Orchestrator runtime debug API/
   );
 });
 
@@ -335,11 +335,13 @@ test("runtime cleanup tools delegate to orchestrator cleanup API when httpJson i
     swarmId: "sw1",
     runId: "run-1",
     includeRunning: false,
-    includeRabbit: true
+    includeRabbit: true,
+    overrideRegisteredSwarmState: true
   });
   const execution = await handlers.get("runtime.cleanup.execute")({
     computeAdapter: "DOCKER_SINGLE",
     swarmId: "sw1",
+    overrideRegisteredSwarmState: true,
     candidateSetHash: "sha256:abc",
     candidateIds: ["lifecycle:swarm:sw1"],
     idempotencyKey: "idem-1",
@@ -356,8 +358,83 @@ test("runtime cleanup tools delegate to orchestrator cleanup API when httpJson i
   ]);
   assert.deepEqual(calls.map((call) => call.options.method), ["GET", "POST", "POST"]);
   assert.equal(calls[1].options.body.includeRabbit, true);
+  assert.equal(calls[1].options.body.overrideRegisteredSwarmState, true);
+  assert.equal(calls[2].options.body.overrideRegisteredSwarmState, true);
   assert.equal(calls[2].options.body.actor, "alice");
   assert.equal(calls[2].options.body.idempotencyKey, "idem-1");
+});
+
+test("runtime Docker debug tools delegate to orchestrator runtime debug API", async () => {
+  const handlers = new Map();
+  const calls = [];
+  registerRuntimeTools((name, _description, _schema, handler) => {
+    handlers.set(name, handler);
+  }, {
+    httpJson: async (path, options) => {
+      calls.push({ path, options });
+      if (path === "/api/runtime/debug/capabilities") {
+        return runtimeCapabilities();
+      }
+      return { delegated: true, path, body: options.body };
+    }
+  });
+
+  const list = await handlers.get("runtime.list-workers")({
+    computeAdapter: "DOCKER_SINGLE",
+    swarmId: "sw1",
+    includeManagers: true
+  });
+  const logs = await handlers.get("runtime.tail-worker-logs")({
+    computeAdapter: "DOCKER_SINGLE",
+    swarmId: "sw1",
+    resourceKind: "manager",
+    instance: "controller-1",
+    tailLines: 25
+  });
+  const version = await handlers.get("runtime.get-worker-version")({
+    computeAdapter: "DOCKER_SINGLE",
+    swarmId: "sw1",
+    resourceKind: "manager",
+    instance: "controller-1"
+  });
+  const inspect = await handlers.get("runtime.inspect-worker")({
+    computeAdapter: "DOCKER_SINGLE",
+    swarmId: "sw1",
+    resourceKind: "manager",
+    instance: "controller-1"
+  });
+
+  assert.equal(list.path, "/api/runtime/debug/resources/list");
+  assert.equal(logs.path, "/api/runtime/debug/resources/logs");
+  assert.equal(version.path, "/api/runtime/debug/resources/version");
+  assert.equal(inspect.path, "/api/runtime/debug/resources/inspect");
+  assert.deepEqual(calls.map((call) => call.path), [
+    "/api/runtime/debug/capabilities",
+    "/api/runtime/debug/resources/list",
+    "/api/runtime/debug/resources/logs",
+    "/api/runtime/debug/resources/version",
+    "/api/runtime/debug/resources/inspect"
+  ]);
+  assert.equal(calls[2].options.body.resourceKind, "manager");
+  assert.equal(calls[2].options.body.tailLines, 25);
+  assert.equal(calls[3].options.body.resourceKind, "manager");
+});
+
+test("runtime Docker debug tools fail closed without orchestrator runtime debug API", async () => {
+  const handlers = new Map();
+  registerRuntimeTools((name, _description, _schema, handler) => {
+    handlers.set(name, handler);
+  });
+
+  await assert.rejects(
+    () => handlers.get("runtime.tail-worker-logs")({
+      computeAdapter: "DOCKER_SINGLE",
+      swarmId: "sw1",
+      instance: "controller-1",
+      resourceKind: "manager"
+    }),
+    /Orchestrator runtime debug API/
+  );
 });
 
 test("runtime tools fail closed when orchestrator runtime contract is incompatible", async () => {
@@ -387,7 +464,7 @@ test("runtime tools fail closed when orchestrator runtime contract is incompatib
 });
 
 test("runtime contract validation pins cleanup drift markers", () => {
-  assert.equal(validateRuntimeDebugCapabilities(runtimeCapabilities()).cleanupContractVersion, "1");
+  assert.equal(validateRuntimeDebugCapabilities(runtimeCapabilities()).cleanupContractVersion, "2");
   assert.throws(
     () => validateRuntimeDebugCapabilities(runtimeCapabilities({ cleanupPlanUsesApprovalFields: true })),
     /cleanupPlanUsesApprovalFields/
@@ -545,12 +622,14 @@ function runtimeManifest(overrides = {}) {
 
 function runtimeCapabilities(overrides = {}) {
   return {
-    runtimeDebugContractVersion: "1",
-    cleanupContractVersion: "1",
+    runtimeDebugContractVersion: "2",
+    cleanupContractVersion: "2",
+    runtimeDebugReadsBackedByOrchestrator: true,
     cleanupPlanHasExecutionRisk: true,
     cleanupPlanUsesApprovalFields: false,
     cleanupExecuteRequiresCandidateSetHash: true,
     rabbitTopologyExactByDefault: true,
+    cleanupSupportsRegisteredStateOverride: true,
     ...overrides
   };
 }

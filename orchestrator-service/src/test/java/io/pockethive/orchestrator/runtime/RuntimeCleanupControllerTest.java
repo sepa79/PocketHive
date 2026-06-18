@@ -40,6 +40,7 @@ class RuntimeCleanupControllerTest {
             "run-1",
             true,
             true,
+            true,
             "hash-1",
             "high",
             List.of(new Candidate(
@@ -66,13 +67,15 @@ class RuntimeCleanupControllerTest {
                 .content("""
                     {
                       "computeAdapter": "DOCKER_SINGLE",
-                      "swarmId": "sw1",
-                      "runId": "run-1",
-                      "includeRunning": true,
-                      "includeRabbit": true
-                    }
-                    """))
+	                      "swarmId": "sw1",
+	                      "runId": "run-1",
+	                      "includeRunning": true,
+	                      "includeRabbit": true,
+	                      "overrideRegisteredSwarmState": true
+	                    }
+	                    """))
             .andExpect(status().isOk())
+            .andExpect(jsonPath("$.overrideRegisteredSwarmState").value(true))
             .andExpect(jsonPath("$.candidateSetHash").value("hash-1"))
             .andExpect(jsonPath("$.candidates[0].candidateId").value("lifecycle:swarm:sw1"))
             .andExpect(jsonPath("$.candidates[0].action").value("LIFECYCLE_REMOVE_SWARM"));
@@ -85,6 +88,7 @@ class RuntimeCleanupControllerTest {
         org.assertj.core.api.Assertions.assertThat(request.runId()).isEqualTo("run-1");
         org.assertj.core.api.Assertions.assertThat(request.includeRunning()).isTrue();
         org.assertj.core.api.Assertions.assertThat(request.includeRabbit()).isTrue();
+        org.assertj.core.api.Assertions.assertThat(request.overrideRegisteredSwarmState()).isTrue();
     }
 
     @Test

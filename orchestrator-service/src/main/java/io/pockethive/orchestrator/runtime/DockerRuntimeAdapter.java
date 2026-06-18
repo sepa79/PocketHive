@@ -1,34 +1,45 @@
 package io.pockethive.orchestrator.runtime;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.dockerjava.api.DockerClient;
+import com.github.dockerjava.api.async.ResultCallback;
 import com.github.dockerjava.api.model.Container;
+import com.github.dockerjava.api.model.Frame;
 import com.github.dockerjava.api.model.Service;
+import io.pockethive.manager.runtime.ComputeAdapterType;
 import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.ComputeRuntimeInventoryPort;
 import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.ComputeRuntimeRemovalPort;
 import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.ComputeRuntimeResource;
+import io.pockethive.orchestrator.runtime.RuntimeDebugPorts.ComputeRuntimeDebugPort;
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import org.springframework.stereotype.Component;
 
 @Component
-public class DockerRuntimeAdapter implements ComputeRuntimeInventoryPort, ComputeRuntimeRemovalPort {
-    private static final String DOCKER_SINGLE = "DOCKER_SINGLE";
-    private static final String SWARM_STACK = "SWARM_STACK";
+public class DockerRuntimeAdapter implements ComputeRuntimeInventoryPort, ComputeRuntimeRemovalPort, ComputeRuntimeDebugPort {
+    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
+    };
 
     private final DockerClient dockerClient;
+    private final ObjectMapper objectMapper;
 
-    public DockerRuntimeAdapter(DockerClient dockerClient) {
+    public DockerRuntimeAdapter(DockerClient dockerClient, ObjectMapper objectMapper) {
         this.dockerClient = Objects.requireNonNull(dockerClient, "dockerClient");
+        this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
     }
 
     @Override
     public List<ComputeRuntimeResource> list(String computeAdapter) {
-        return switch (computeAdapter) {
+        return switch (adapterType(computeAdapter)) {
             case DOCKER_SINGLE -> listContainers();
             case SWARM_STACK -> listServices();
-            default -> throw new IllegalArgumentException("unsupported computeAdapter: " + computeAdapter);
+            case AUTO -> throw unsupportedComputeAdapter(computeAdapter);
         };
     }
 
@@ -42,6 +53,62 @@ public class DockerRuntimeAdapter implements ComputeRuntimeInventoryPort, Comput
         dockerClient.removeServiceCmd(runtimeId).exec();
     }
 
+    @Override
+    public Map<String, Object> inspect(String computeAdapter, String runtimeId) {
+        Object response = switch (adapterType(computeAdapter)) {
+            case DOCKER_SINGLE -> dockerClient.inspectContainerCmd(runtimeId).exec();
+            case SWARM_STACK -> dockerClient.inspectServiceCmd(runtimeId).exec();
+            case AUTO -> throw unsupportedComputeAdapter(computeAdapter);
+        };
+        return objectMapper.convertValue(response, MAP_TYPE);
+    }
+
+    @Override
+    public String logs(String computeAdapter, String runtimeId, int tailLines, Integer sinceEpochSeconds) {
+        StringBuilder logs = new StringBuilder();
+        try {
+            ResultCallback.Adapter<Frame> callback = new ResultCallback.Adapter<>() {
+                @Override
+                public void onNext(Frame item) {
+                    if (item != null && item.getPayload() != null) {
+                        logs.append(new String(item.getPayload(), StandardCharsets.UTF_8));
+                    }
+                }
+            };
+            switch (adapterType(computeAdapter)) {
+                case DOCKER_SINGLE -> {
+                    var command = dockerClient.logContainerCmd(runtimeId)
+                        .withStdOut(true)
+                        .withStdErr(true)
+                        .withTimestamps(true)
+                        .withTail(tailLines)
+                        .withFollowStream(false);
+                    if (sinceEpochSeconds != null) {
+                        command.withSince(sinceEpochSeconds);
+                    }
+                    command.exec(callback).awaitCompletion();
+                }
+                case SWARM_STACK -> {
+                    var command = dockerClient.logServiceCmd(runtimeId)
+                        .withStdout(true)
+                        .withStderr(true)
+                        .withTimestamps(true)
+                        .withTail(tailLines)
+                        .withFollow(false);
+                    if (sinceEpochSeconds != null) {
+                        command.withSince(sinceEpochSeconds);
+                    }
+                    command.exec(callback).awaitCompletion();
+                }
+                case AUTO -> throw unsupportedComputeAdapter(computeAdapter);
+            }
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("interrupted while reading runtime logs", ex);
+        }
+        return logs.toString();
+    }
+
     private List<ComputeRuntimeResource> listContainers() {
         List<ComputeRuntimeResource> resources = new ArrayList<>();
         List<Container> containers = dockerClient.listContainersCmd().withShowAll(true).exec();
@@ -49,10 +116,13 @@ public class DockerRuntimeAdapter implements ComputeRuntimeInventoryPort, Comput
             Map<String, String> labels = container.getLabels() == null ? Map.of() : container.getLabels();
             resources.add(new ComputeRuntimeResource(
                 container.getId(),
-                "container",
+                RuntimeCleanupPorts.RUNTIME_TYPE_CONTAINER,
                 firstName(container.getNames()),
                 container.getImage(),
                 container.getState(),
+                epochSeconds(container.getCreated()),
+                null,
+                null,
                 labels));
         }
         return List.copyOf(resources);
@@ -72,10 +142,13 @@ public class DockerRuntimeAdapter implements ComputeRuntimeInventoryPort, Comput
             }
             resources.add(new ComputeRuntimeResource(
                 service.getId(),
-                "service",
+                RuntimeCleanupPorts.RUNTIME_TYPE_SERVICE,
                 spec == null ? null : spec.getName(),
                 image,
-                "service",
+                RuntimeCleanupPorts.RUNTIME_TYPE_SERVICE,
+                instant(service.getCreatedAt()),
+                null,
+                null,
                 labels));
         }
         return List.copyOf(resources);
@@ -90,5 +163,25 @@ public class DockerRuntimeAdapter implements ComputeRuntimeInventoryPort, Comput
             return null;
         }
         return name.startsWith("/") ? name.substring(1) : name;
+    }
+
+    private static String epochSeconds(Long seconds) {
+        return seconds == null ? null : Instant.ofEpochSecond(seconds).toString();
+    }
+
+    private static String instant(Date value) {
+        return value == null ? null : value.toInstant().toString();
+    }
+
+    private static ComputeAdapterType adapterType(String computeAdapter) {
+        try {
+            return ComputeAdapterType.valueOf(computeAdapter);
+        } catch (IllegalArgumentException | NullPointerException ex) {
+            throw unsupportedComputeAdapter(computeAdapter);
+        }
+    }
+
+    private static IllegalArgumentException unsupportedComputeAdapter(String computeAdapter) {
+        return new IllegalArgumentException("unsupported computeAdapter: " + computeAdapter);
     }
 }

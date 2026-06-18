@@ -1,4 +1,3 @@
-import { spawn } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -40,12 +39,14 @@ const MANIFEST_FILE = "runtime-ownership-manifest.json";
 const DEFAULT_JOURNAL_LIMIT = 100;
 const RUNTIME_DEBUG_CAPABILITIES_PATH = "/api/runtime/debug/capabilities";
 const REQUIRED_RUNTIME_DEBUG_CAPABILITIES = Object.freeze({
-  runtimeDebugContractVersion: "1",
-  cleanupContractVersion: "1",
+  runtimeDebugContractVersion: "2",
+  cleanupContractVersion: "2",
+  runtimeDebugReadsBackedByOrchestrator: true,
   cleanupPlanHasExecutionRisk: true,
   cleanupPlanUsesApprovalFields: false,
   cleanupExecuteRequiresCandidateSetHash: true,
-  rabbitTopologyExactByDefault: true
+  rabbitTopologyExactByDefault: true,
+  cleanupSupportsRegisteredStateOverride: true
 });
 
 const runtimeReadOnly = {
@@ -58,6 +59,7 @@ const runtimeDestructiveWrite = {
 
 export function registerRuntimeTools(reg, options = {}) {
   const cleanupApi = options.httpJson ? runtimeCleanupApi(options.httpJson) : null;
+  const runtimeApi = options.httpJson ? runtimeDebugApi(options.httpJson) : null;
   const sourceOptions = {
     httpJson: options.httpJson ?? null,
     rabbitManagementBaseUrl: options.rabbitManagementBaseUrl ?? null,
@@ -79,77 +81,72 @@ export function registerRuntimeTools(reg, options = {}) {
     swarmId: z.string(),
     runId: z.string().optional(),
     includeRunning: z.boolean().optional(),
-    includeRabbit: z.boolean().optional()
-  }, guarded(async ({ computeAdapter, swarmId, runId, includeRunning = false, includeRabbit }) => {
-    return await requireCleanupApi(cleanupApi).plan({ computeAdapter, swarmId, runId, includeRunning, includeRabbit });
+    includeRabbit: z.boolean().optional(),
+    overrideRegisteredSwarmState: z.boolean().optional()
+  }, guarded(async ({
+    computeAdapter,
+    swarmId,
+    runId,
+    includeRunning = false,
+    includeRabbit,
+    overrideRegisteredSwarmState
+  }) => {
+    return await requireCleanupApi(cleanupApi).plan({
+      computeAdapter,
+      swarmId,
+      runId,
+      includeRunning,
+      includeRabbit,
+      overrideRegisteredSwarmState
+    });
   }), runtimeReadOnly);
 
-  reg("runtime.tail-worker-logs", "Read recent Docker logs for one label-gated PocketHive worker runtime resource.", {
+  reg("runtime.tail-worker-logs", "Read recent Orchestrator-backed Docker/Swarm logs for one label-gated PocketHive worker or manager runtime resource.", {
     computeAdapter: COMPUTE_ADAPTER_SCHEMA,
     swarmId: z.string(),
     runId: z.string().optional(),
     runtimeId: z.string().optional(),
     instance: z.string().optional(),
     role: z.string().optional(),
+    resourceKind: z.enum(["worker", "manager"]).optional(),
     tailLines: z.number().int().min(1).max(2000).optional(),
     since: z.string().optional()
   }, guarded(async (input) => {
-    const resources = await listPocketHiveRuntimeResources(input.computeAdapter);
-    const target = buildWorkerLogTarget(resources, input);
     const tailLines = normalizeTailLines(input.tailLines);
-    const logs = await readWorkerLogs(input.computeAdapter, target, {
-      tailLines,
-      since: input.since
-    });
-    const redactedLogs = redactLogText(logs);
-    return {
-      target,
-      tailLines,
-      since: input.since ?? null,
-      redacted: true,
-      lineCount: countLogLines(redactedLogs),
-      logs: redactedLogs
-    };
+    return await requireRuntimeDebugApi(runtimeApi).logs({ ...input, tailLines });
   }), runtimeReadOnly);
 
-  reg("runtime.get-worker-version", "Read version metadata for one label-gated PocketHive worker runtime resource.", {
+  reg("runtime.get-worker-version", "Read Orchestrator-backed version metadata for one label-gated PocketHive worker or manager runtime resource.", {
     computeAdapter: COMPUTE_ADAPTER_SCHEMA,
     swarmId: z.string(),
     runId: z.string().optional(),
     runtimeId: z.string().optional(),
     instance: z.string().optional(),
-    role: z.string().optional()
+    role: z.string().optional(),
+    resourceKind: z.enum(["worker", "manager"]).optional()
   }, guarded(async (input) => {
-    const resources = await listPocketHiveRuntimeResources(input.computeAdapter);
-    const target = buildWorkerLogTarget(resources, input);
-    return buildWorkerVersion(target);
+    return await requireRuntimeDebugApi(runtimeApi).version(input);
   }), runtimeReadOnly);
 
-  reg("runtime.list-workers", "List label-gated PocketHive manager and worker runtime resources for one swarm.", {
+  reg("runtime.list-workers", "List Orchestrator-backed label-gated PocketHive manager and worker runtime resources for one swarm.", {
     computeAdapter: COMPUTE_ADAPTER_SCHEMA,
     swarmId: z.string(),
     runId: z.string().optional(),
     includeManagers: z.boolean().optional()
   }, guarded(async (input) => {
-    const resources = await listPocketHiveRuntimeResources(input.computeAdapter);
-    return {
-      computeAdapter: input.computeAdapter,
-      ...buildRuntimeWorkerList(resources, input)
-    };
+    return await requireRuntimeDebugApi(runtimeApi).list(input);
   }), runtimeReadOnly);
 
-  reg("runtime.inspect-worker", "Read a bounded, redacted inspect summary for one PocketHive worker runtime resource.", {
+  reg("runtime.inspect-worker", "Read an Orchestrator-backed bounded inspect summary for one PocketHive worker or manager runtime resource.", {
     computeAdapter: COMPUTE_ADAPTER_SCHEMA,
     swarmId: z.string(),
     runId: z.string().optional(),
     runtimeId: z.string().optional(),
     instance: z.string().optional(),
-    role: z.string().optional()
+    role: z.string().optional(),
+    resourceKind: z.enum(["worker", "manager"]).optional()
   }, guarded(async (input) => {
-    const resources = await listPocketHiveRuntimeResources(input.computeAdapter);
-    const target = buildWorkerLogTarget(resources, input);
-    const inspect = await safeSource("inspect", () => inspectRuntimeResource(input.computeAdapter, target.runtimeId));
-    return buildWorkerInspection(target, inspect);
+    return await requireRuntimeDebugApi(runtimeApi).inspect(input);
   }), runtimeReadOnly);
 
   reg("runtime.diff-swarm-runtime", "Compare Orchestrator, manifest, Docker/Swarm, RabbitMQ, and cleanup views for one swarm.", {
@@ -213,6 +210,7 @@ export function registerRuntimeTools(reg, options = {}) {
     runId: z.string().optional(),
     includeRunning: z.boolean().optional(),
     includeRabbit: z.boolean().optional(),
+    overrideRegisteredSwarmState: z.boolean().optional(),
     candidateSetHash: z.string(),
     candidateIds: z.array(z.string()),
     idempotencyKey: z.string(),
@@ -234,12 +232,19 @@ function requireCleanupApi(cleanupApi) {
   return cleanupApi;
 }
 
+function requireRuntimeDebugApi(runtimeApi) {
+  if (!runtimeApi) {
+    throw new Error("runtime Docker/Swarm debug requires the Orchestrator runtime debug API; local MCP Docker fallback is disabled");
+  }
+  return runtimeApi;
+}
+
 function runtimeContractGuard(httpJson) {
   let cached = null;
   return {
     async assertCompatible() {
       if (!httpJson) {
-        return null;
+        throw new Error("runtime tools require the Orchestrator runtime debug API; local MCP runtime fallback is disabled");
       }
       if (cached) {
         return cached;
@@ -281,137 +286,29 @@ function runtimeCleanupApi(httpJson) {
   };
 }
 
+function runtimeDebugApi(httpJson) {
+  return {
+    list: (body) => httpJson("/api/runtime/debug/resources/list", {
+      method: "POST",
+      body: cleanApiBody(body)
+    }),
+    logs: (body) => httpJson("/api/runtime/debug/resources/logs", {
+      method: "POST",
+      body: cleanApiBody(body)
+    }),
+    version: (body) => httpJson("/api/runtime/debug/resources/version", {
+      method: "POST",
+      body: cleanApiBody(body)
+    }),
+    inspect: (body) => httpJson("/api/runtime/debug/resources/inspect", {
+      method: "POST",
+      body: cleanApiBody(body)
+    })
+  };
+}
+
 function cleanApiBody(body) {
   return Object.fromEntries(Object.entries(body ?? {}).filter(([, value]) => value !== undefined));
-}
-
-async function listPocketHiveRuntimeResources(computeAdapter) {
-  if (computeAdapter === "DOCKER_SINGLE") {
-    return listDockerContainers();
-  }
-  if (computeAdapter === "SWARM_STACK") {
-    return listDockerServices();
-  }
-  throw new Error(`Unsupported computeAdapter '${computeAdapter}'.`);
-}
-
-async function listDockerContainers() {
-  const idsOutput = await runCommand("docker", [
-    "ps",
-    "-a",
-    "--filter",
-    `label=${LABELS.managed}=${LABEL_VALUES.managed}`,
-    "--format",
-    "{{.ID}}"
-  ]);
-  const ids = idsOutput.stdout.split("\n").map((line) => line.trim()).filter(Boolean);
-  if (ids.length === 0) {
-    return [];
-  }
-  const inspect = await runCommand("docker", ["inspect", ...ids]);
-  const containers = JSON.parse(inspect.stdout);
-  return containers.map((container) => ({
-    runtimeId: container.Id,
-    runtimeType: "container",
-    name: String(container.Name ?? "").replace(/^\//, ""),
-    image: container.Config?.Image ?? container.Image ?? null,
-    state: container.State?.Status ?? "unknown",
-    createdAt: container.Created ?? null,
-    startedAt: container.State?.StartedAt ?? null,
-    finishedAt: container.State?.FinishedAt ?? null,
-    labels: container.Config?.Labels ?? {}
-  }));
-}
-
-async function listDockerServices() {
-  const idsOutput = await runCommand("docker", [
-    "service",
-    "ls",
-    "--filter",
-    `label=${LABELS.managed}=${LABEL_VALUES.managed}`,
-    "--format",
-    "{{.ID}}"
-  ]);
-  const ids = idsOutput.stdout.split("\n").map((line) => line.trim()).filter(Boolean);
-  if (ids.length === 0) {
-    return [];
-  }
-  const inspect = await runCommand("docker", ["service", "inspect", ...ids]);
-  const services = JSON.parse(inspect.stdout);
-  return services.map((service) => ({
-    runtimeId: service.ID,
-    runtimeType: "service",
-    name: service.Spec?.Name ?? null,
-    image: service.Spec?.TaskTemplate?.ContainerSpec?.Image ?? null,
-    state: "service",
-    createdAt: service.CreatedAt ?? null,
-    startedAt: null,
-    finishedAt: null,
-    labels: service.Spec?.Labels ?? {}
-  }));
-}
-
-async function inspectRuntimeResource(computeAdapter, runtimeId) {
-  const args = computeAdapter === "SWARM_STACK"
-    ? ["service", "inspect", runtimeId]
-    : ["inspect", runtimeId];
-  const result = await runCommand("docker", args);
-  const parsed = JSON.parse(result.stdout);
-  return Array.isArray(parsed) ? parsed[0] : parsed;
-}
-
-async function readWorkerLogs(computeAdapter, target, options = {}) {
-  const args = [];
-  if (computeAdapter === "DOCKER_SINGLE") {
-    args.push("logs");
-  } else if (computeAdapter === "SWARM_STACK") {
-    args.push("service", "logs");
-  } else {
-    throw new Error(`Unsupported computeAdapter '${computeAdapter}'.`);
-  }
-  args.push("--timestamps", "--tail", String(options.tailLines));
-  if (options.since != null && String(options.since).trim() !== "") {
-    args.push("--since", String(options.since).trim());
-  }
-  args.push(target.runtimeId);
-  const result = await runCommand("docker", args);
-  return [result.stdout, result.stderr].filter(Boolean).join("\n");
-}
-
-async function runCommand(command, args, options = {}) {
-  return new Promise((resolveCommand, reject) => {
-    const child = spawn(command, args, {
-      cwd: options.cwd ?? REPO_ROOT,
-      env: process.env,
-      stdio: ["ignore", "pipe", "pipe"]
-    });
-
-    let stdout = "";
-    let stderr = "";
-
-    child.stdout.on("data", (chunk) => {
-      stdout += chunk.toString();
-    });
-    child.stderr.on("data", (chunk) => {
-      stderr += chunk.toString();
-    });
-
-    child.on("error", reject);
-    child.on("close", (code) => {
-      if (code !== 0) {
-        reject(new Error(stderr || stdout || `${command} failed with code ${code}`));
-        return;
-      }
-      resolveCommand({ stdout: stdout.trim(), stderr: stderr.trim() });
-    });
-  });
-}
-
-function countLogLines(text) {
-  if (!text) {
-    return 0;
-  }
-  return text.split(/\r?\n/).filter((line) => line.length > 0).length;
 }
 
 export function buildRuntimeWorkerList(resources, input = {}) {
@@ -488,8 +385,8 @@ export async function runtimeDebugContext(input = {}, options = {}) {
   const swarmId = requireText(input.swarmId, "swarmId");
   const runId = optionalText(input.runId);
   const includeRabbit = input.includeRabbit !== false;
-  const resourcesSource = await safeSource("runtimeInventory", () => listPocketHiveRuntimeResources(computeAdapter));
-  const resources = resourcesSource.available ? resourcesSource.data : [];
+  const resourcesSource = await readRuntimeInventory({ computeAdapter, swarmId, runId }, options);
+  const resources = resourcesSource.available ? runtimeResourcesFromListResponse(resourcesSource.data) : [];
   const manifest = readRuntimeOwnershipManifest({ swarmId, runId }, options);
   const rabbit = includeRabbit
     ? await readRabbitTopology({ swarmId, runId }, manifest, options, resources)
@@ -932,6 +829,24 @@ async function readRabbitTopology(input, manifestSource, options = {}, resources
   });
 }
 
+async function readRuntimeInventory(input, options = {}) {
+  if (!options.httpJson) {
+    return {
+      available: false,
+      reason: "Orchestrator runtime debug API is not configured"
+    };
+  }
+  return await safeSource("runtimeInventory", () => options.httpJson("/api/runtime/debug/resources/list", {
+    method: "POST",
+    body: cleanApiBody({
+      computeAdapter: input.computeAdapter,
+      swarmId: input.swarmId,
+      runId: input.runId,
+      includeManagers: true
+    })
+  }));
+}
+
 async function readOrchestratorSnapshot(swarmId, options = {}) {
   if (!options.httpJson) {
     return {
@@ -1003,6 +918,20 @@ function sourceSummary(source = {}) {
     error: source.error ?? undefined,
     path: source.path ?? undefined
   };
+}
+
+function runtimeResourcesFromListResponse(response = {}) {
+  return [...(response.managers ?? []), ...(response.workers ?? [])].map((entry) => ({
+    runtimeId: entry.runtimeId,
+    runtimeType: entry.runtimeType,
+    name: entry.name,
+    image: entry.image,
+    state: entry.state,
+    createdAt: entry.createdAt,
+    startedAt: entry.startedAt,
+    finishedAt: entry.finishedAt,
+    labels: entry.labels ?? {}
+  }));
 }
 
 function runtimeListEntry(resource) {

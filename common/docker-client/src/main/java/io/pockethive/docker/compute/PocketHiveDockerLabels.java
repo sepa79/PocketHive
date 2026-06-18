@@ -7,6 +7,7 @@ import java.util.Map;
 
 public final class PocketHiveDockerLabels {
 
+  public static final String LABEL_PREFIX = "pockethive.";
   public static final String MANAGED = "pockethive.managed";
   public static final String RESOURCE_KIND = "pockethive.resourceKind";
   public static final String OWNER = "pockethive.owner";

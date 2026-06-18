@@ -8,12 +8,24 @@
 - Runtime cleanup plan/execute tools now delegate to Orchestrator's
   `/api/runtime/cleanup/*` reconciliation API and fail closed when that API is
   unavailable.
+- Docker/Swarm runtime debug tools now delegate worker and swarm-controller
+  manager list/logs/version/inspect reads to Orchestrator's
+  `/api/runtime/debug/resources/*` API instead of using a local Docker socket
+  fallback.
 - `runtime_control_plane_status` reports manifest/Orchestrator-provided control
   queues instead of deriving queue names locally.
 
 ### Fixed
 - Removed local cleanup planning/execution fallback behavior so Orchestrator
   remains the single runtime cleanup authority.
+- Confirmed derived worker control queues obey Orchestrator's running-resource
+  cleanup gate instead of becoming RabbitMQ candidates while their worker runtime
+  object is blocked.
+- Documented Orchestrator's lifecycle protection for registered swarms: pre-run
+  swarms can be removed through lifecycle, while running swarms and swarms in
+  `REMOVING` state remain blocked.
+- Added `overrideRegisteredSwarmState` passthrough for governed break-glass
+  runtime cleanup plans and executions.
 - Kept runtime cleanup docs aligned with the PocketHive MCP surface and HiveGate
   governance boundary.
 
