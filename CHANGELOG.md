@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.15.28]
+Timestamp: 2026-06-18T15:27:35Z
+
+- Runtime debug MCP: keep `tools/pockethive-mcp` as the single PocketHive MCP
+  surface for worker logs, worker version, runtime drift, RabbitMQ topology, and
+  runtime cleanup tools.
+- Runtime cleanup architecture: delegate MCP cleanup plan/execute to
+  Orchestrator runtime reconciliation and fail closed when the Orchestrator
+  cleanup API is unavailable.
+- Runtime cleanup safety: reuse canonical Docker label constants and existing
+  control-plane topology descriptors for label-gated Docker/RabbitMQ cleanup,
+  removing the duplicate `TrafficTopology` naming helper.
+- RabbitMQ cleanup: delete exact manifest-owned queues/exchanges and
+  descriptor-derived worker control queues only when worker labels and registry
+  state prove the instance is stale; active registered swarms keep shared queues.
+- Release: bump PocketHive patch version to 0.15.28 for the runtime debug MCP
+  cleanup authority hardening.
+
 ## [0.15.27]
 Timestamp: 2026-06-12T18:07:27Z
 

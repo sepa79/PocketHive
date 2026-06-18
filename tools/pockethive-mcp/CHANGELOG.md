@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+## [0.15.28] - 2026-06-18
+
+### Changed
+- Runtime cleanup plan/execute tools now delegate to Orchestrator's
+  `/api/runtime/cleanup/*` reconciliation API and fail closed when that API is
+  unavailable.
+- `runtime_control_plane_status` reports manifest/Orchestrator-provided control
+  queues instead of deriving queue names locally.
+
+### Fixed
+- Removed local cleanup planning/execution fallback behavior so Orchestrator
+  remains the single runtime cleanup authority.
+- Kept runtime cleanup docs aligned with the PocketHive MCP surface and HiveGate
+  governance boundary.
+
+### Verified
+- `npm test`
+- `mvn -B -pl common/control-plane-core,common/control-plane-spring,common/docker-client,orchestrator-service,swarm-controller-service -am test`
+
 ## [0.15.22] - 2026-06-03
 
 ### Added
