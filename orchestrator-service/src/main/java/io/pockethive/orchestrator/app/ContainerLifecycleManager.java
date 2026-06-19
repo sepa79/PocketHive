@@ -87,13 +87,7 @@ public class ContainerLifecycleManager {
         this.runMetadataWriter = Objects.requireNonNull(runMetadataWriter, "runMetadataWriter");
         this.clickHouseSink = Objects.requireNonNull(clickHouseSink, "clickHouseSink");
         this.manifestStore = Objects.requireNonNull(manifestStore, "manifestStore");
-        // Initialise the resolved adapter type based on the injected adapter so that
-        // status-full events emitted before the first swarm start report the correct mode.
-        if (computeAdapter instanceof DockerSwarmServiceComputeAdapter) {
-            this.resolvedAdapterType = ComputeAdapterType.SWARM_STACK;
-        } else {
-            this.resolvedAdapterType = ComputeAdapterType.DOCKER_SINGLE;
-        }
+        this.resolvedAdapterType = requireConcreteAdapterType(computeAdapter.type());
     }
 
     public ContainerLifecycleManager(
@@ -133,15 +127,19 @@ public class ContainerLifecycleManager {
             });
     }
 
-    public Swarm startSwarm(String swarmId, String image, String instanceId) {
-        return startSwarm(swarmId, image, instanceId, null, false, null, NetworkMode.DIRECT, null);
-    }
-
     public Swarm startSwarm(String swarmId,
                             String image,
                             String instanceId,
                             SwarmTemplateMetadata templateMetadata) {
-        return startSwarm(swarmId, image, instanceId, templateMetadata, false, null, NetworkMode.DIRECT, null);
+        return startSwarm(
+            swarmId,
+            image,
+            instanceId,
+            Objects.requireNonNull(templateMetadata, "templateMetadata"),
+            false,
+            null,
+            NetworkMode.DIRECT,
+            null);
     }
 
     public Swarm startSwarm(String swarmId,
@@ -149,7 +147,15 @@ public class ContainerLifecycleManager {
                             String instanceId,
                             SwarmTemplateMetadata templateMetadata,
                             boolean autoPullImages) {
-        return startSwarm(swarmId, image, instanceId, templateMetadata, autoPullImages, null, NetworkMode.DIRECT, null);
+        return startSwarm(
+            swarmId,
+            image,
+            instanceId,
+            Objects.requireNonNull(templateMetadata, "templateMetadata"),
+            autoPullImages,
+            null,
+            NetworkMode.DIRECT,
+            null);
     }
 
     public Swarm startSwarm(String swarmId,
@@ -160,6 +166,7 @@ public class ContainerLifecycleManager {
                             String sutId,
                             NetworkMode networkMode,
                             String networkProfileId) {
+        Objects.requireNonNull(templateMetadata, "templateMetadata");
         String resolvedInstance = requireNonBlank(instanceId, "controller instance");
         String resolvedSwarmId = requireNonBlank(swarmId, "swarmId");
         String resolvedImage = resolveImage(image);
@@ -213,19 +220,10 @@ public class ContainerLifecycleManager {
         String dockerSocket = properties.getDocker().getSocketPath();
         env.put("DOCKER_SOCKET_PATH", dockerSocket);
         env.put("DOCKER_HOST", "unix://" + dockerSocket);
-        // Propagate the resolved compute adapter choice based on the active adapter
-        // instance so the swarm-controller can provision workers with matching mode.
-        if (computeAdapter instanceof DockerSwarmServiceComputeAdapter) {
-            resolvedAdapterType = ComputeAdapterType.SWARM_STACK;
-        } else {
-            resolvedAdapterType = ComputeAdapterType.DOCKER_SINGLE;
-        }
+        resolvedAdapterType = requireConcreteAdapterType(computeAdapter.type());
         env.put("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_DOCKER_COMPUTE_ADAPTER", resolvedAdapterType.name());
         putEnvIfMissing(env, DockerSwarmServiceComputeAdapter.PLACEMENT_CONSTRAINTS_ENV, normalizeRuntimeRoot(swarmPlacementConstraints));
         env.put("POCKETHIVE_RUNTIME_IMAGE", resolvedImage);
-        if (templateMetadata == null) {
-            throw new IllegalStateException("templateMetadata must not be null");
-        }
         env.put("POCKETHIVE_TEMPLATE_ID", requireText(templateMetadata.templateId(), "templateId"));
         env.put("POCKETHIVE_RUNTIME_STACK_NAME", "ph-" + resolvedSwarmId.toLowerCase(java.util.Locale.ROOT));
         putEnvIfMissing(env, "POCKETHIVE_SUT_ID", normalizeRuntimeRoot(sutId));
@@ -523,7 +521,14 @@ public class ContainerLifecycleManager {
         return value;
     }
 
-    ComputeAdapterType currentComputeAdapterType() {
+    public ComputeAdapterType currentComputeAdapterType() {
         return resolvedAdapterType;
+    }
+
+    private static ComputeAdapterType requireConcreteAdapterType(ComputeAdapterType adapterType) {
+        if (adapterType == null || adapterType == ComputeAdapterType.AUTO) {
+            throw new IllegalStateException("ComputeAdapter must expose a concrete adapter type");
+        }
+        return adapterType;
     }
 }

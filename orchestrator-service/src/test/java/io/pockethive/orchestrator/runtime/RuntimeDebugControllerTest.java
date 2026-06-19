@@ -43,8 +43,8 @@ class RuntimeDebugControllerTest {
     void capabilitiesExposeScopedRuntimeDebugContract() throws Exception {
         mvc().perform(get("/api/runtime/debug/capabilities"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.runtimeDebugContractVersion").value("2"))
-            .andExpect(jsonPath("$.cleanupContractVersion").value("2"))
+            .andExpect(jsonPath("$.runtimeDebugContractVersion").value("3"))
+            .andExpect(jsonPath("$.cleanupContractVersion").value("3"))
             .andExpect(jsonPath("$.runtimeDebugReadsBackedByOrchestrator").value(true))
             .andExpect(jsonPath("$.cleanupPlanHasExecutionRisk").value(true))
             .andExpect(jsonPath("$.cleanupPlanUsesApprovalFields").value(false))
@@ -68,7 +68,6 @@ class RuntimeDebugControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                     {
-                      "computeAdapter": "DOCKER_SINGLE",
                       "swarmId": "sw1",
                       "runId": "run-1",
                       "includeManagers": true
@@ -110,7 +109,6 @@ class RuntimeDebugControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                     {
-                      "computeAdapter": "DOCKER_SINGLE",
                       "swarmId": "sw1",
                       "resourceKind": "manager",
                       "instance": "controller-1",
@@ -150,7 +148,6 @@ class RuntimeDebugControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                     {
-                      "computeAdapter": "DOCKER_SINGLE",
                       "swarmId": "sw1",
                       "runId": "run-1"
                     }
@@ -162,7 +159,7 @@ class RuntimeDebugControllerTest {
 
         ArgumentCaptor<RabbitTopologyRequest> captor = ArgumentCaptor.forClass(RabbitTopologyRequest.class);
         verify(reconciliationService).rabbitTopology(captor.capture());
-        org.assertj.core.api.Assertions.assertThat(captor.getValue().computeAdapter()).isEqualTo("DOCKER_SINGLE");
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().swarmId()).isEqualTo("sw1");
     }
 
     private MockMvc mvc() {

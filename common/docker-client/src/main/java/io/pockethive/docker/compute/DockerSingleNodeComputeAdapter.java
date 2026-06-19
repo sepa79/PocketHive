@@ -36,6 +36,11 @@ public final class DockerSingleNodeComputeAdapter implements ComputeAdapter {
   }
 
   @Override
+  public ComputeAdapterType type() {
+    return ComputeAdapterType.DOCKER_SINGLE;
+  }
+
+  @Override
   public String startManager(ManagerSpec spec) {
     Objects.requireNonNull(spec, "spec");
     String id = requireNonBlank(spec.id(), "spec.id");

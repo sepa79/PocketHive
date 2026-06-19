@@ -4,8 +4,8 @@ import java.util.List;
 import java.util.Map;
 
 public final class RuntimeDebugContracts {
-    public static final String RUNTIME_DEBUG_CONTRACT_VERSION = "2";
-    public static final String CLEANUP_CONTRACT_VERSION = "2";
+    public static final String RUNTIME_DEBUG_CONTRACT_VERSION = "3";
+    public static final String CLEANUP_CONTRACT_VERSION = "3";
 
     private RuntimeDebugContracts() {
     }
@@ -34,14 +34,12 @@ public final class RuntimeDebugContracts {
     }
 
     public record ResourceListRequest(
-        String computeAdapter,
         String swarmId,
         String runId,
         Boolean includeManagers) {
     }
 
     public record RuntimeTargetRequest(
-        String computeAdapter,
         String swarmId,
         String runId,
         String runtimeId,
@@ -51,7 +49,6 @@ public final class RuntimeDebugContracts {
     }
 
     public record RuntimeLogsRequest(
-        String computeAdapter,
         String swarmId,
         String runId,
         String runtimeId,
@@ -63,7 +60,6 @@ public final class RuntimeDebugContracts {
     }
 
     public record RabbitTopologyRequest(
-        String computeAdapter,
         String swarmId,
         String runId) {
     }

@@ -4,6 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.pockethive.docker.compute.PocketHiveDockerLabels;
+import io.pockethive.manager.ports.ComputeAdapter;
+import io.pockethive.manager.runtime.ComputeAdapterType;
+import io.pockethive.manager.runtime.ManagerSpec;
+import io.pockethive.manager.runtime.WorkerSpec;
 import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.ComputeRuntimeInventoryPort;
 import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.ComputeRuntimeResource;
 import io.pockethive.orchestrator.runtime.RuntimeDebugContracts.ResourceListRequest;
@@ -33,7 +37,7 @@ class RuntimeDebugServiceTest {
                     PocketHiveDockerLabels.MANAGED, PocketHiveDockerLabels.MANAGED_VALUE,
                     PocketHiveDockerLabels.SWARM_ID, "sw1"))));
 
-        var response = service(runtime).list(new ResourceListRequest("DOCKER_SINGLE", "sw1", "run-1", true));
+        var response = service(runtime).list(new ResourceListRequest("sw1", "run-1", true));
 
         assertThat(response.workers()).extracting("runtimeId").containsExactly("worker-1");
         assertThat(response.managers()).extracting("runtimeId").containsExactly("manager-1");
@@ -48,13 +52,13 @@ class RuntimeDebugServiceTest {
             runtime("worker-1", "container", "worker", "processor", "processor-1"),
             runtime("worker-old-run", "container", "worker", "processor", "processor-old", "sw1", "run-0")));
 
-        var response = service(runtime).list(new ResourceListRequest(" DOCKER_SINGLE ", "sw1", "run-1", false));
+        var response = service(runtime).list(new ResourceListRequest("sw1", "run-1", false));
 
         assertThat(response.computeAdapter()).isEqualTo("DOCKER_SINGLE");
         assertThat(response.workers()).extracting("runtimeId").containsExactly("worker-1");
         assertThat(response.managers()).isEmpty();
         assertThat(response.counts().workers()).isEqualTo(1);
-        assertThat(runtime.listCalls).containsExactly("DOCKER_SINGLE");
+        assertThat(runtime.listCalls).isEqualTo(1);
     }
 
     @Test
@@ -64,7 +68,6 @@ class RuntimeDebugServiceTest {
         runtime.logs = "Authorization: Bearer clear-token\npassword=open\nok";
 
         var response = service(runtime).logs(new RuntimeLogsRequest(
-            "DOCKER_SINGLE",
             "sw1",
             "run-1",
             null,
@@ -78,7 +81,7 @@ class RuntimeDebugServiceTest {
         assertThat(response.tailLines()).isEqualTo(20);
         assertThat(response.logs()).contains("Authorization: Bearer [REDACTED]");
         assertThat(response.logs()).contains("password=[REDACTED]");
-        assertThat(runtime.logCalls).containsExactly("DOCKER_SINGLE:manager-1:20:1781784000");
+        assertThat(runtime.logCalls).containsExactly("manager-1:20:1781784000");
     }
 
     @Test
@@ -87,23 +90,23 @@ class RuntimeDebugServiceTest {
             runtime("worker-1", "container", "worker", "processor", "processor-1")));
 
         assertThatThrownBy(() -> service(runtime).logs(new RuntimeLogsRequest(
-            "DOCKER_SINGLE", "sw1", "run-1", "worker-1", null, null, "worker", 0, null)))
+            "sw1", "run-1", "worker-1", null, null, "worker", 0, null)))
             .isInstanceOf(RuntimeDebugException.class)
             .hasMessageContaining("tailLines");
         assertThatThrownBy(() -> service(runtime).logs(new RuntimeLogsRequest(
-            "DOCKER_SINGLE", "sw1", "run-1", "worker-1", null, null, "worker", 2001, null)))
+            "sw1", "run-1", "worker-1", null, null, "worker", 2001, null)))
             .isInstanceOf(RuntimeDebugException.class)
             .hasMessageContaining("tailLines");
         assertThatThrownBy(() -> service(runtime).logs(new RuntimeLogsRequest(
-            "DOCKER_SINGLE", "sw1", "run-1", "worker-1", null, null, "worker", 10, "not-a-time")))
+            "sw1", "run-1", "worker-1", null, null, "worker", 10, "not-a-time")))
             .isInstanceOf(RuntimeDebugException.class)
             .hasMessageContaining("since");
         assertThatThrownBy(() -> service(runtime).logs(new RuntimeLogsRequest(
-            "DOCKER_SINGLE", "sw1", "run-1", null, null, null, "worker", 10, null)))
+            "sw1", "run-1", null, null, null, "worker", 10, null)))
             .isInstanceOf(RuntimeDebugException.class)
             .hasMessageContaining("runtimeId, instance, or role");
         assertThatThrownBy(() -> service(runtime).logs(new RuntimeLogsRequest(
-            "DOCKER_SINGLE", "sw1", "run-1", "worker-1", null, null, "sidecar", 10, null)))
+            "sw1", "run-1", "worker-1", null, null, "sidecar", 10, null)))
             .isInstanceOf(RuntimeDebugException.class)
             .hasMessageContaining("resourceKind");
         assertThat(runtime.logCalls).isEmpty();
@@ -116,7 +119,6 @@ class RuntimeDebugServiceTest {
             runtime("worker-2", "container", "worker", "processor", "processor-2")));
 
         assertThatThrownBy(() -> service(runtime).version(new RuntimeTargetRequest(
-            "DOCKER_SINGLE",
             "sw1",
             "run-1",
             null,
@@ -143,7 +145,6 @@ class RuntimeDebugServiceTest {
             labels)));
 
         assertThatThrownBy(() -> service(runtime).version(new RuntimeTargetRequest(
-            "DOCKER_SINGLE",
             "sw1",
             "run-1",
             "worker-partial",
@@ -160,7 +161,6 @@ class RuntimeDebugServiceTest {
             runtime("manager-1", "container", "manager", "swarm-controller", "controller-1")));
 
         var response = service(runtime).version(new RuntimeTargetRequest(
-            "DOCKER_SINGLE",
             "sw1",
             "run-1",
             "manager-1",
@@ -181,9 +181,9 @@ class RuntimeDebugServiceTest {
                 "localhost:5000/pockethive/processor", false)));
 
         var tagged = service(runtime).version(new RuntimeTargetRequest(
-            "DOCKER_SINGLE", "sw1", "run-1", "worker-tagged", null, null, "worker"));
+            "sw1", "run-1", "worker-tagged", null, null, "worker"));
         var untagged = service(runtime).version(new RuntimeTargetRequest(
-            "DOCKER_SINGLE", "sw1", "run-1", "worker-untagged", null, null, "worker"));
+            "sw1", "run-1", "worker-untagged", null, null, "worker"));
 
         assertThat(tagged.reportedVersion()).isEqualTo("0.15.28");
         assertThat(tagged.reportedVersionSource()).isEqualTo("imageTag");
@@ -192,18 +192,12 @@ class RuntimeDebugServiceTest {
     }
 
     @Test
-    void runtimeDebugRequestsValidateAdapterAndBody() {
+    void runtimeDebugRequestsValidateBody() {
         FakeRuntime runtime = new FakeRuntime(List.of());
 
         assertThatThrownBy(() -> service(runtime).list(null))
             .isInstanceOf(RuntimeDebugException.class)
             .hasMessageContaining("request body is required");
-        assertThatThrownBy(() -> service(runtime).list(new ResourceListRequest("AUTO", "sw1", "run-1", true)))
-            .isInstanceOf(RuntimeDebugException.class)
-            .hasMessageContaining("computeAdapter must be concrete");
-        assertThatThrownBy(() -> service(runtime).list(new ResourceListRequest("BOGUS", "sw1", "run-1", true)))
-            .isInstanceOf(RuntimeDebugException.class)
-            .hasMessageContaining("unsupported computeAdapter");
         assertThatThrownBy(() -> service(runtime).version(null))
             .isInstanceOf(RuntimeDebugException.class)
             .hasMessageContaining("request body is required");
@@ -230,7 +224,6 @@ class RuntimeDebugServiceTest {
             "NetworkSettings", Map.of("Networks", Map.of("bridge", Map.of(), "pockethive", Map.of())));
 
         var response = service(runtime).inspect(new RuntimeTargetRequest(
-            "DOCKER_SINGLE",
             "sw1",
             "run-1",
             "worker-1",
@@ -261,7 +254,6 @@ class RuntimeDebugServiceTest {
                     "Networks", List.of(Map.of("Target", "net-worker")))));
 
         var response = service(runtime).inspect(new RuntimeTargetRequest(
-            "DOCKER_SINGLE",
             "sw1",
             "run-1",
             "service-1",
@@ -277,7 +269,7 @@ class RuntimeDebugServiceTest {
     }
 
     private static RuntimeDebugService service(FakeRuntime runtime) {
-        return new RuntimeDebugService(runtime, runtime);
+        return new RuntimeDebugService(runtime, runtime, new FakeComputeAdapter());
     }
 
     private static ComputeRuntimeResource runtime(String runtimeId,
@@ -333,7 +325,7 @@ class RuntimeDebugServiceTest {
 
     private static final class FakeRuntime implements ComputeRuntimeInventoryPort, ComputeRuntimeDebugPort {
         private final List<ComputeRuntimeResource> resources;
-        private final List<String> listCalls = new ArrayList<>();
+        private int listCalls;
         private final List<String> logCalls = new ArrayList<>();
         private String logs = "";
         private Map<String, Object> inspect = Map.of();
@@ -343,20 +335,47 @@ class RuntimeDebugServiceTest {
         }
 
         @Override
-        public List<ComputeRuntimeResource> list(String computeAdapter) {
-            listCalls.add(computeAdapter);
+        public List<ComputeRuntimeResource> list() {
+            listCalls++;
             return resources;
         }
 
         @Override
-        public Map<String, Object> inspect(String computeAdapter, String runtimeId) {
+        public Map<String, Object> inspect(String runtimeId) {
             return inspect;
         }
 
         @Override
-        public String logs(String computeAdapter, String runtimeId, int tailLines, Integer sinceEpochSeconds) {
-            logCalls.add(computeAdapter + ":" + runtimeId + ":" + tailLines + ":" + sinceEpochSeconds);
+        public String logs(String runtimeId, int tailLines, Integer sinceEpochSeconds) {
+            logCalls.add(runtimeId + ":" + tailLines + ":" + sinceEpochSeconds);
             return logs;
+        }
+    }
+
+    private static final class FakeComputeAdapter implements ComputeAdapter {
+        @Override
+        public ComputeAdapterType type() {
+            return ComputeAdapterType.DOCKER_SINGLE;
+        }
+
+        @Override
+        public String startManager(ManagerSpec spec) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public void stopManager(String managerId) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public void applyWorkers(String topologyId, List<WorkerSpec> workers) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public void removeWorkers(String topologyId) {
+            throw new UnsupportedOperationException();
         }
     }
 }

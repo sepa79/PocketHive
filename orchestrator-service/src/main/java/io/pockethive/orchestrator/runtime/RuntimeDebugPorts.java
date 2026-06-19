@@ -7,8 +7,8 @@ public final class RuntimeDebugPorts {
     }
 
     public interface ComputeRuntimeDebugPort {
-        Map<String, Object> inspect(String computeAdapter, String runtimeId);
+        Map<String, Object> inspect(String runtimeId);
 
-        String logs(String computeAdapter, String runtimeId, int tailLines, Integer sinceEpochSeconds);
+        String logs(String runtimeId, int tailLines, Integer sinceEpochSeconds);
     }
 }

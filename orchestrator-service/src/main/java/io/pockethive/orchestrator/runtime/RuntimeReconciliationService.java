@@ -5,7 +5,6 @@ import io.pockethive.controlplane.topology.ControlPlaneTopologySettings;
 import io.pockethive.controlplane.topology.ControlQueueDescriptor;
 import io.pockethive.controlplane.topology.WorkerControlPlaneTopologyDescriptor;
 import io.pockethive.docker.compute.PocketHiveDockerLabels;
-import io.pockethive.manager.runtime.ComputeAdapterType;
 import io.pockethive.orchestrator.app.ContainerLifecycleManager;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmLifecycleStatus;
@@ -87,12 +86,12 @@ public class RuntimeReconciliationService {
     }
 
     public Plan plan(PlanRequest request) {
-        CleanupScope scope = CleanupScope.from(request);
+        CleanupScope scope = CleanupScope.from(request, currentComputeAdapterType());
         Optional<Swarm> swarmForId = swarmStore.find(scope.swarmId());
         Optional<Swarm> lifecycleSwarm = swarmForId
             .filter(swarm -> scope.runId().isEmpty() || scope.runId().get().equals(swarm.getRunId()));
         Optional<RuntimeOwnershipManifest> manifest = manifest(scope);
-        List<ComputeRuntimeResource> computeResources = computeInventory.list(scope.computeAdapter());
+        List<ComputeRuntimeResource> computeResources = computeInventory.list();
         List<Candidate> candidates = new ArrayList<>();
         List<Blocked> blocked = new ArrayList<>();
 
@@ -142,7 +141,6 @@ public class RuntimeReconciliationService {
         }
 
         Plan plan = plan(new PlanRequest(
-            request.computeAdapter(),
             request.swarmId(),
             request.runId(),
             request.includeRunning(),
@@ -193,11 +191,11 @@ public class RuntimeReconciliationService {
 
     public RabbitTopologySnapshot rabbitTopology(RabbitTopologyRequest request) {
         CleanupScope scope = CleanupScope.from(new PlanRequest(
-            request == null ? null : request.computeAdapter(),
             request == null ? null : request.swarmId(),
             request == null ? null : request.runId(),
             true,
-            true));
+            true),
+            currentComputeAdapterType());
         Optional<RuntimeOwnershipManifest> manifest = manifest(scope);
         if (manifest.isEmpty()) {
             return new RabbitTopologySnapshot(
@@ -213,7 +211,7 @@ public class RuntimeReconciliationService {
         }
 
         RuntimeOwnershipManifest.RabbitResources rabbit = manifest.get().rabbit();
-        List<ComputeRuntimeResource> computeResources = computeInventory.list(scope.computeAdapter());
+        List<ComputeRuntimeResource> computeResources = computeInventory.list();
         LinkedHashSet<String> queues = new LinkedHashSet<>(concat(rabbit.controlQueues(), rabbit.workQueues()));
         queues.addAll(derivedWorkerControlQueues(scope, computeResources));
         LinkedHashSet<String> exchanges = new LinkedHashSet<>(rabbit.exchanges());
@@ -537,7 +535,7 @@ public class RuntimeReconciliationService {
             running,
             running,
             running ? "running PocketHive runtime resource" : "stopped PocketHive runtime resource",
-            labels);
+            pockethiveLabelsOnly(labels));
     }
 
     private Blocked blocked(ComputeRuntimeResource resource, String reason) {
@@ -550,7 +548,19 @@ public class RuntimeReconciliationService {
             resource.runtimeId(),
             resource.runtimeType(),
             reason,
-            resource.labels());
+            pockethiveLabelsOnly(resource.labels()));
+    }
+
+    private static Map<String, String> pockethiveLabelsOnly(Map<String, String> labels) {
+        if (labels == null || labels.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, String> safe = new LinkedHashMap<>();
+        labels.entrySet().stream()
+            .filter(entry -> entry.getKey() != null && entry.getKey().startsWith(PocketHiveDockerLabels.LABEL_PREFIX))
+            .sorted(Map.Entry.comparingByKey())
+            .forEach(entry -> safe.put(entry.getKey(), entry.getValue()));
+        return Map.copyOf(safe);
     }
 
     private CandidateResult executeCandidate(Candidate candidate) {
@@ -696,27 +706,21 @@ public class RuntimeReconciliationService {
         boolean includeRunning,
         boolean includeRabbit,
         boolean overrideRegisteredSwarmState) {
-        static CleanupScope from(PlanRequest request) {
+        static CleanupScope from(PlanRequest request, String computeAdapter) {
             if (request == null) {
                 throw cleanupError(HttpStatus.BAD_REQUEST, "request body is required");
             }
-            String computeAdapter = requireText(request.computeAdapter(), "computeAdapter");
-            ComputeAdapterType adapterType;
-            try {
-                adapterType = ComputeAdapterType.valueOf(computeAdapter);
-            } catch (IllegalArgumentException ex) {
-                throw cleanupError(HttpStatus.BAD_REQUEST, "unsupported computeAdapter: " + computeAdapter);
-            }
-            if (adapterType == ComputeAdapterType.AUTO) {
-                throw cleanupError(HttpStatus.BAD_REQUEST, "computeAdapter must be concrete");
-            }
             return new CleanupScope(
-                adapterType.name(),
+                requireText(computeAdapter, "computeAdapter"),
                 requireText(request.swarmId(), "swarmId"),
                 hasText(request.runId()) ? Optional.of(request.runId().trim()) : Optional.empty(),
                 Boolean.TRUE.equals(request.includeRunning()),
                 !Boolean.FALSE.equals(request.includeRabbit()),
                 Boolean.TRUE.equals(request.overrideRegisteredSwarmState()));
         }
+    }
+
+    private String currentComputeAdapterType() {
+        return lifecycleManager.currentComputeAdapterType().name();
     }
 }

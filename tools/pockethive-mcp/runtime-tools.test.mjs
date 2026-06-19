@@ -28,14 +28,12 @@ test("runtime tools fail closed without Orchestrator runtime debug API", async (
 
   await assert.rejects(
     () => handlers.get("runtime.cleanup.plan")({
-      computeAdapter: "DOCKER_SINGLE",
       swarmId: "swarm-1"
     }),
     /Orchestrator runtime debug API/
   );
   await assert.rejects(
     () => handlers.get("runtime.cleanup.execute")({
-      computeAdapter: "DOCKER_SINGLE",
       swarmId: "swarm-1",
       candidateSetHash: "sha256:abc",
       candidateIds: ["docker:container:c1"],
@@ -332,7 +330,6 @@ test("runtime cleanup tools delegate to orchestrator cleanup API when httpJson i
   });
 
   const plan = await handlers.get("runtime.cleanup.plan")({
-    computeAdapter: "DOCKER_SINGLE",
     swarmId: "sw1",
     runId: "run-1",
     includeRunning: false,
@@ -340,7 +337,6 @@ test("runtime cleanup tools delegate to orchestrator cleanup API when httpJson i
     overrideRegisteredSwarmState: true
   });
   const execution = await handlers.get("runtime.cleanup.execute")({
-    computeAdapter: "DOCKER_SINGLE",
     swarmId: "sw1",
     overrideRegisteredSwarmState: true,
     candidateSetHash: "sha256:abc",
@@ -381,25 +377,21 @@ test("runtime Docker debug tools delegate to orchestrator runtime debug API", as
   });
 
   const list = await handlers.get("runtime.list-workers")({
-    computeAdapter: "DOCKER_SINGLE",
     swarmId: "sw1",
     includeManagers: true
   });
   const logs = await handlers.get("runtime.tail-worker-logs")({
-    computeAdapter: "DOCKER_SINGLE",
     swarmId: "sw1",
     resourceKind: "manager",
     instance: "controller-1",
     tailLines: 25
   });
   const version = await handlers.get("runtime.get-worker-version")({
-    computeAdapter: "DOCKER_SINGLE",
     swarmId: "sw1",
     resourceKind: "manager",
     instance: "controller-1"
   });
   const inspect = await handlers.get("runtime.inspect-worker")({
-    computeAdapter: "DOCKER_SINGLE",
     swarmId: "sw1",
     resourceKind: "manager",
     instance: "controller-1"
@@ -429,7 +421,6 @@ test("runtime Docker debug tools fail closed without orchestrator runtime debug 
 
   await assert.rejects(
     () => handlers.get("runtime.tail-worker-logs")({
-      computeAdapter: "DOCKER_SINGLE",
       swarmId: "sw1",
       instance: "controller-1",
       resourceKind: "manager"
@@ -455,7 +446,6 @@ test("runtime tools fail closed when orchestrator runtime contract is incompatib
 
   await assert.rejects(
     () => handlers.get("runtime.cleanup.plan")({
-      computeAdapter: "DOCKER_SINGLE",
       swarmId: "sw1",
       runId: "run-1"
     }),
@@ -465,7 +455,7 @@ test("runtime tools fail closed when orchestrator runtime contract is incompatib
 });
 
 test("runtime contract validation pins cleanup drift markers", () => {
-  assert.equal(validateRuntimeDebugCapabilities(runtimeCapabilities()).cleanupContractVersion, "2");
+  assert.equal(validateRuntimeDebugCapabilities(runtimeCapabilities()).cleanupContractVersion, "3");
   assert.throws(
     () => validateRuntimeDebugCapabilities(runtimeCapabilities({ cleanupPlanUsesApprovalFields: true })),
     /cleanupPlanUsesApprovalFields/
@@ -485,7 +475,7 @@ test("rabbit topology tool delegates exact reads to Orchestrator", async () => {
       }
       if (path === "/api/runtime/debug/rabbit/topology") {
         return {
-          computeAdapter: options.body.computeAdapter,
+          computeAdapter: "DOCKER_SINGLE",
           swarmId: options.body.swarmId,
           runId: options.body.runId,
           manifest: { available: true },
@@ -501,7 +491,6 @@ test("rabbit topology tool delegates exact reads to Orchestrator", async () => {
   });
 
   const snapshot = await handlers.get("runtime.rabbit-topology-snapshot")({
-    computeAdapter: "DOCKER_SINGLE",
     swarmId: "swarm-1",
     runId: "run-1"
   });
@@ -520,7 +509,6 @@ test("rabbit topology tool delegates exact reads to Orchestrator", async () => {
 test("runtime context reads Rabbit topology from Orchestrator", async () => {
   const calls = [];
   const context = await runtimeDebugContext({
-    computeAdapter: "DOCKER_SINGLE",
     swarmId: "swarm-1",
     runId: "run-1",
     includeRabbit: true
@@ -533,7 +521,6 @@ test("runtime context reads Rabbit topology from Orchestrator", async () => {
       }
       if (path === "/api/runtime/debug/rabbit/topology") {
         return {
-          computeAdapter: "DOCKER_SINGLE",
           swarmId: "swarm-1",
           runId: "run-1",
           manifest: { available: true },
@@ -601,7 +588,6 @@ function runtimeManifest(overrides = {}) {
     swarmId: "swarm-1",
     runId: "run-1",
     templateId: "template-1",
-    computeAdapter: "DOCKER_SINGLE",
     createdAt: "2026-01-01T00:00:00Z",
     runtimeObjects: overrides.runtimeObjects ?? [manifestObject("worker-1")],
     rabbit: overrides.rabbit ?? {
@@ -614,8 +600,8 @@ function runtimeManifest(overrides = {}) {
 
 function runtimeCapabilities(overrides = {}) {
   return {
-    runtimeDebugContractVersion: "2",
-    cleanupContractVersion: "2",
+    runtimeDebugContractVersion: "3",
+    cleanupContractVersion: "3",
     runtimeDebugReadsBackedByOrchestrator: true,
     cleanupPlanHasExecutionRisk: true,
     cleanupPlanUsesApprovalFields: false,
@@ -629,7 +615,6 @@ function runtimeCapabilities(overrides = {}) {
 function runtimeContext(resources, overrides = {}) {
   return {
     input: {
-      computeAdapter: "DOCKER_SINGLE",
       swarmId: "swarm-1",
       runId: "run-1",
       includeRabbit: true

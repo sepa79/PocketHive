@@ -9,23 +9,20 @@ public final class RuntimeCleanupContracts {
     }
 
     public record PlanRequest(
-        String computeAdapter,
         String swarmId,
         String runId,
         Boolean includeRunning,
         Boolean includeRabbit,
         Boolean overrideRegisteredSwarmState) {
-        public PlanRequest(String computeAdapter,
-                           String swarmId,
+        public PlanRequest(String swarmId,
                            String runId,
                            Boolean includeRunning,
                            Boolean includeRabbit) {
-            this(computeAdapter, swarmId, runId, includeRunning, includeRabbit, false);
+            this(swarmId, runId, includeRunning, includeRabbit, false);
         }
     }
 
     public record ExecuteRequest(
-        String computeAdapter,
         String swarmId,
         String runId,
         Boolean includeRunning,
@@ -36,8 +33,7 @@ public final class RuntimeCleanupContracts {
         String idempotencyKey,
         String reason,
         String actor) {
-        public ExecuteRequest(String computeAdapter,
-                              String swarmId,
+        public ExecuteRequest(String swarmId,
                               String runId,
                               Boolean includeRunning,
                               Boolean includeRabbit,
@@ -47,7 +43,6 @@ public final class RuntimeCleanupContracts {
                               String reason,
                               String actor) {
             this(
-                computeAdapter,
                 swarmId,
                 runId,
                 includeRunning,

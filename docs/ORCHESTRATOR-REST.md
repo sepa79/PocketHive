@@ -324,8 +324,8 @@ tools, without impacting existing scenario, workflow, or swarm lifecycle tools.
 **Response (200)**
 ```json
 {
-  "runtimeDebugContractVersion": "2",
-  "cleanupContractVersion": "2",
+  "runtimeDebugContractVersion": "3",
+  "cleanupContractVersion": "3",
   "runtimeDebugReadsBackedByOrchestrator": true,
   "cleanupPlanHasExecutionRisk": true,
   "cleanupPlanUsesApprovalFields": false,
@@ -341,13 +341,12 @@ tools, without impacting existing scenario, workflow, or swarm lifecycle tools.
 Lists PocketHive-managed worker and swarm-controller manager runtimes for one
 swarm from Orchestrator-owned Docker/Swarm inventory.
 
-`computeAdapter` must be concrete: `DOCKER_SINGLE` or `SWARM_STACK`; `AUTO`
-and unknown adapters return `400`.
+The compute adapter is not client-controlled. Orchestrator uses its internally
+resolved adapter and reports it in the response as read-only runtime context.
 
 **Request**
 ```json
 {
-  "computeAdapter": "DOCKER_SINGLE",
   "swarmId": "demo",
   "runId": "optional",
   "includeManagers": true
@@ -377,7 +376,6 @@ label-gated `worker` or `manager` runtime. The target must be identified by
 **Request**
 ```json
 {
-  "computeAdapter": "DOCKER_SINGLE",
   "swarmId": "demo",
   "runId": "optional",
   "resourceKind": "manager",
@@ -428,7 +426,6 @@ prefix, or expose a RabbitMQ management fallback in the MCP.
 **Request**
 ```json
 {
-  "computeAdapter": "DOCKER_SINGLE",
   "swarmId": "demo",
   "runId": "optional"
 }
@@ -467,7 +464,6 @@ returns no Rabbit resources instead of guessing by prefix.
 **Request**
 ```json
 {
-  "computeAdapter": "DOCKER_SINGLE",
   "swarmId": "demo",
   "runId": "optional",
   "includeRunning": false,
@@ -479,6 +475,7 @@ returns no Rabbit resources instead of guessing by prefix.
 **Response (200)**
 ```json
 {
+  "computeAdapter": "DOCKER_SINGLE",
   "swarmId": "demo",
   "runId": "run-1",
   "includeRunning": false,
@@ -521,7 +518,6 @@ production access is governed by HiveGate policy outside Orchestrator.
 **Request**
 ```json
 {
-  "computeAdapter": "DOCKER_SINGLE",
   "swarmId": "demo",
   "runId": "run-1",
   "includeRunning": false,
@@ -540,6 +536,7 @@ production access is governed by HiveGate policy outside Orchestrator.
 {
   "idempotent": false,
   "evidence": {
+    "computeAdapter": "DOCKER_SINGLE",
     "idempotencyKey": "uuid-v4",
     "candidateSetHash": "sha256:...",
     "resultByCandidate": [

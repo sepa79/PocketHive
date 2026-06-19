@@ -20,7 +20,7 @@ public final class RuntimeCleanupPorts {
     }
 
     public interface ComputeRuntimeInventoryPort {
-        List<ComputeRuntimeResource> list(String computeAdapter);
+        List<ComputeRuntimeResource> list();
     }
 
     public interface ComputeRuntimeRemovalPort {

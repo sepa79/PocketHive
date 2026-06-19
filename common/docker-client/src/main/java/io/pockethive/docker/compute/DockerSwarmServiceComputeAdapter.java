@@ -67,6 +67,11 @@ public final class DockerSwarmServiceComputeAdapter implements ComputeAdapter {
   }
 
   @Override
+  public ComputeAdapterType type() {
+    return ComputeAdapterType.SWARM_STACK;
+  }
+
+  @Override
   public String startManager(ManagerSpec spec) {
     Objects.requireNonNull(spec, "spec");
     String id = requireNonBlank(spec.id(), "spec.id");

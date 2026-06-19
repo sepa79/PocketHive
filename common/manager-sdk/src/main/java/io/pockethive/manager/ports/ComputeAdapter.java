@@ -1,6 +1,7 @@
 package io.pockethive.manager.ports;
 
 import io.pockethive.manager.runtime.ManagerSpec;
+import io.pockethive.manager.runtime.ComputeAdapterType;
 import io.pockethive.manager.runtime.WorkerSpec;
 import java.util.List;
 
@@ -12,6 +13,11 @@ import java.util.List;
  * is intentionally minimal and free of transport-specific types.
  */
 public interface ComputeAdapter {
+
+  /**
+   * Return the concrete compute adapter mode represented by this instance.
+   */
+  ComputeAdapterType type();
 
   /**
    * Start a manager/controller process for the given specification.
@@ -46,4 +52,3 @@ public interface ComputeAdapter {
    */
   void removeWorkers(String topologyId);
 }
-

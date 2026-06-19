@@ -13,11 +13,11 @@
   `/api/runtime/debug/resources/*` API instead of using a local Docker socket
   fallback.
 - `runtime_rabbit_topology_snapshot` now delegates exact topology reads to
-  Orchestrator's `/api/runtime/debug/rabbit/topology` API and requires a
-  concrete `computeAdapter`, removing MCP-side RabbitMQ ownership derivation.
+  Orchestrator's `/api/runtime/debug/rabbit/topology` API, removing MCP-side
+  RabbitMQ ownership derivation and MCP-side compute adapter selection.
 - Runtime debug requests now fail through Orchestrator's explicit contract
-  checks for missing bodies, unsupported adapters, ambiguous targets, invalid
-  log bounds, and invalid timestamps.
+  checks for missing bodies, ambiguous targets, invalid log bounds, and invalid
+  timestamps.
 - `runtime_control_plane_status` reports manifest/Orchestrator-provided control
   queues instead of deriving queue names locally.
 

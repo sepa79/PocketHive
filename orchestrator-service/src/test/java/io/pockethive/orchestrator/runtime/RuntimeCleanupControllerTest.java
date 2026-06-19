@@ -66,7 +66,6 @@ class RuntimeCleanupControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                     {
-                      "computeAdapter": "DOCKER_SINGLE",
 	                      "swarmId": "sw1",
 	                      "runId": "run-1",
 	                      "includeRunning": true,
@@ -83,7 +82,6 @@ class RuntimeCleanupControllerTest {
         ArgumentCaptor<PlanRequest> captor = ArgumentCaptor.forClass(PlanRequest.class);
         verify(service).plan(captor.capture());
         PlanRequest request = captor.getValue();
-        org.assertj.core.api.Assertions.assertThat(request.computeAdapter()).isEqualTo("DOCKER_SINGLE");
         org.assertj.core.api.Assertions.assertThat(request.swarmId()).isEqualTo("sw1");
         org.assertj.core.api.Assertions.assertThat(request.runId()).isEqualTo("run-1");
         org.assertj.core.api.Assertions.assertThat(request.includeRunning()).isTrue();
@@ -98,7 +96,7 @@ class RuntimeCleanupControllerTest {
 
         mvc().perform(post("/api/runtime/cleanup/plan")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"computeAdapter\":\"DOCKER_SINGLE\",\"swarmId\":\"sw1\"}"))
+                .content("{\"swarmId\":\"sw1\"}"))
             .andExpect(status().isConflict())
             .andExpect(jsonPath("$.message").value("candidateSetHash does not match the current cleanup plan"));
     }

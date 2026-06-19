@@ -7,6 +7,7 @@ import com.github.dockerjava.api.async.ResultCallback;
 import com.github.dockerjava.api.model.Container;
 import com.github.dockerjava.api.model.Frame;
 import com.github.dockerjava.api.model.Service;
+import io.pockethive.manager.ports.ComputeAdapter;
 import io.pockethive.manager.runtime.ComputeAdapterType;
 import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.ComputeRuntimeInventoryPort;
 import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.ComputeRuntimeRemovalPort;
@@ -28,18 +29,20 @@ public class DockerRuntimeAdapter implements ComputeRuntimeInventoryPort, Comput
 
     private final DockerClient dockerClient;
     private final ObjectMapper objectMapper;
+    private final ComputeAdapter computeAdapter;
 
-    public DockerRuntimeAdapter(DockerClient dockerClient, ObjectMapper objectMapper) {
+    public DockerRuntimeAdapter(DockerClient dockerClient, ObjectMapper objectMapper, ComputeAdapter computeAdapter) {
         this.dockerClient = Objects.requireNonNull(dockerClient, "dockerClient");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
+        this.computeAdapter = Objects.requireNonNull(computeAdapter, "computeAdapter");
     }
 
     @Override
-    public List<ComputeRuntimeResource> list(String computeAdapter) {
-        return switch (adapterType(computeAdapter)) {
+    public List<ComputeRuntimeResource> list() {
+        return switch (adapterType()) {
             case DOCKER_SINGLE -> listContainers();
             case SWARM_STACK -> listServices();
-            case AUTO -> throw unsupportedComputeAdapter(computeAdapter);
+            case AUTO -> throw unsupportedComputeAdapter();
         };
     }
 
@@ -54,17 +57,17 @@ public class DockerRuntimeAdapter implements ComputeRuntimeInventoryPort, Comput
     }
 
     @Override
-    public Map<String, Object> inspect(String computeAdapter, String runtimeId) {
-        Object response = switch (adapterType(computeAdapter)) {
+    public Map<String, Object> inspect(String runtimeId) {
+        Object response = switch (adapterType()) {
             case DOCKER_SINGLE -> dockerClient.inspectContainerCmd(runtimeId).exec();
             case SWARM_STACK -> dockerClient.inspectServiceCmd(runtimeId).exec();
-            case AUTO -> throw unsupportedComputeAdapter(computeAdapter);
+            case AUTO -> throw unsupportedComputeAdapter();
         };
         return objectMapper.convertValue(response, MAP_TYPE);
     }
 
     @Override
-    public String logs(String computeAdapter, String runtimeId, int tailLines, Integer sinceEpochSeconds) {
+    public String logs(String runtimeId, int tailLines, Integer sinceEpochSeconds) {
         StringBuilder logs = new StringBuilder();
         try {
             ResultCallback.Adapter<Frame> callback = new ResultCallback.Adapter<>() {
@@ -75,7 +78,7 @@ public class DockerRuntimeAdapter implements ComputeRuntimeInventoryPort, Comput
                     }
                 }
             };
-            switch (adapterType(computeAdapter)) {
+            switch (adapterType()) {
                 case DOCKER_SINGLE -> {
                     var command = dockerClient.logContainerCmd(runtimeId)
                         .withStdOut(true)
@@ -100,7 +103,7 @@ public class DockerRuntimeAdapter implements ComputeRuntimeInventoryPort, Comput
                     }
                     command.exec(callback).awaitCompletion();
                 }
-                case AUTO -> throw unsupportedComputeAdapter(computeAdapter);
+                case AUTO -> throw unsupportedComputeAdapter();
             }
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
@@ -173,15 +176,15 @@ public class DockerRuntimeAdapter implements ComputeRuntimeInventoryPort, Comput
         return value == null ? null : value.toInstant().toString();
     }
 
-    private static ComputeAdapterType adapterType(String computeAdapter) {
-        try {
-            return ComputeAdapterType.valueOf(computeAdapter);
-        } catch (IllegalArgumentException | NullPointerException ex) {
-            throw unsupportedComputeAdapter(computeAdapter);
+    private ComputeAdapterType adapterType() {
+        ComputeAdapterType adapterType = computeAdapter.type();
+        if (adapterType == null || adapterType == ComputeAdapterType.AUTO) {
+            throw unsupportedComputeAdapter();
         }
+        return adapterType;
     }
 
-    private static IllegalArgumentException unsupportedComputeAdapter(String computeAdapter) {
-        return new IllegalArgumentException("unsupported computeAdapter: " + computeAdapter);
+    private static IllegalStateException unsupportedComputeAdapter() {
+        return new IllegalStateException("ComputeAdapter must expose a concrete adapter type");
     }
 }

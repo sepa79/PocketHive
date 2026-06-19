@@ -1,6 +1,7 @@
 package io.pockethive.orchestrator.runtime;
 
 import io.pockethive.docker.compute.PocketHiveDockerLabels;
+import io.pockethive.manager.ports.ComputeAdapter;
 import io.pockethive.manager.runtime.ComputeAdapterType;
 import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.ComputeRuntimeInventoryPort;
 import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.ComputeRuntimeResource;
@@ -52,15 +53,19 @@ public class RuntimeDebugService {
 
     private final ComputeRuntimeInventoryPort inventory;
     private final ComputeRuntimeDebugPort debugPort;
+    private final ComputeAdapter computeAdapter;
 
-    public RuntimeDebugService(ComputeRuntimeInventoryPort inventory, ComputeRuntimeDebugPort debugPort) {
+    public RuntimeDebugService(ComputeRuntimeInventoryPort inventory,
+                               ComputeRuntimeDebugPort debugPort,
+                               ComputeAdapter computeAdapter) {
         this.inventory = Objects.requireNonNull(inventory, "inventory");
         this.debugPort = Objects.requireNonNull(debugPort, "debugPort");
+        this.computeAdapter = Objects.requireNonNull(computeAdapter, "computeAdapter");
     }
 
     public ResourceListResponse list(ResourceListRequest request) {
         requireRequest(request);
-        String computeAdapter = computeAdapter(request.computeAdapter());
+        String adapterType = adapterType();
         String swarmId = requireText(request.swarmId(), "swarmId");
         String runId = optionalText(request.runId());
         boolean includeManagers = request.includeManagers() == null || request.includeManagers();
@@ -68,7 +73,7 @@ public class RuntimeDebugService {
         List<RuntimeEntry> managers = new ArrayList<>();
         List<BlockedResource> blocked = new ArrayList<>();
 
-        for (ComputeRuntimeResource resource : inventory.list(computeAdapter)) {
+        for (ComputeRuntimeResource resource : inventory.list()) {
             Map<String, String> labels = labels(resource);
             if (!swarmId.equals(labels.get(PocketHiveDockerLabels.SWARM_ID))) {
                 continue;
@@ -102,7 +107,7 @@ public class RuntimeDebugService {
         managers.sort(RuntimeDebugService::compareEntry);
         blocked.sort(RuntimeDebugService::compareBlocked);
         return new ResourceListResponse(
-            computeAdapter,
+            adapterType,
             swarmId,
             runId,
             new Counts(workers.size(), managers.size(), blocked.size()),
@@ -113,9 +118,7 @@ public class RuntimeDebugService {
 
     public RuntimeLogsResponse logs(RuntimeLogsRequest request) {
         requireRequest(request);
-        String computeAdapter = computeAdapter(request.computeAdapter());
         RuntimeTarget target = target(new RuntimeTargetRequest(
-            computeAdapter,
             request.swarmId(),
             request.runId(),
             request.runtimeId(),
@@ -124,7 +127,7 @@ public class RuntimeDebugService {
             request.resourceKind()));
         int tailLines = normalizeTailLines(request.tailLines());
         Integer sinceEpochSeconds = sinceEpochSeconds(request.since());
-        String rawLogs = debugPort.logs(computeAdapter, target.runtimeId(), tailLines, sinceEpochSeconds);
+        String rawLogs = debugPort.logs(target.runtimeId(), tailLines, sinceEpochSeconds);
         String logs = redact(rawLogs);
         return new RuntimeLogsResponse(
             target,
@@ -153,9 +156,8 @@ public class RuntimeDebugService {
 
     public RuntimeInspectResponse inspect(RuntimeTargetRequest request) {
         requireRequest(request);
-        String computeAdapter = computeAdapter(request.computeAdapter());
         RuntimeTarget target = target(request);
-        Map<String, Object> raw = debugPort.inspect(computeAdapter, target.runtimeId());
+        Map<String, Object> raw = debugPort.inspect(target.runtimeId());
         Map<String, Object> source = Map.of(
             "available", true,
             INSPECT_SOURCE_OWNER, PocketHiveDockerLabels.OWNER_ORCHESTRATOR);
@@ -166,7 +168,6 @@ public class RuntimeDebugService {
     }
 
     private RuntimeTarget target(RuntimeTargetRequest request) {
-        String computeAdapter = computeAdapter(request.computeAdapter());
         String swarmId = requireText(request.swarmId(), "swarmId");
         String runId = optionalText(request.runId());
         String runtimeId = optionalText(request.runtimeId());
@@ -185,7 +186,7 @@ public class RuntimeDebugService {
         }
 
         List<RuntimeTarget> matches = new ArrayList<>();
-        for (ComputeRuntimeResource resource : inventory.list(computeAdapter)) {
+        for (ComputeRuntimeResource resource : inventory.list()) {
             Map<String, String> labels = labels(resource);
             if (!PocketHiveDockerLabels.MANAGED_VALUE.equals(labels.get(PocketHiveDockerLabels.MANAGED))) {
                 continue;
@@ -549,16 +550,10 @@ public class RuntimeDebugService {
         }
     }
 
-    private static String computeAdapter(String value) {
-        String text = requireText(value, "computeAdapter");
-        ComputeAdapterType adapterType;
-        try {
-            adapterType = ComputeAdapterType.valueOf(text);
-        } catch (IllegalArgumentException ex) {
-            throw error(HttpStatus.BAD_REQUEST, "unsupported computeAdapter: " + text);
-        }
-        if (adapterType == ComputeAdapterType.AUTO) {
-            throw error(HttpStatus.BAD_REQUEST, "computeAdapter must be concrete");
+    private String adapterType() {
+        ComputeAdapterType adapterType = computeAdapter.type();
+        if (adapterType == null || adapterType == ComputeAdapterType.AUTO) {
+            throw error(HttpStatus.INTERNAL_SERVER_ERROR, "ComputeAdapter must expose a concrete adapter type");
         }
         return adapterType.name();
     }

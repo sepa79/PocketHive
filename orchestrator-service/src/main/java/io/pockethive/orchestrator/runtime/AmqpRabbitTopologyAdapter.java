@@ -1,5 +1,7 @@
 package io.pockethive.orchestrator.runtime;
 
+import com.rabbitmq.client.AMQP;
+import com.rabbitmq.client.ShutdownSignalException;
 import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.RabbitQueueResource;
 import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.RabbitExchangeResource;
 import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.RabbitTopologyPort;
@@ -42,7 +44,10 @@ public class AmqpRabbitTopologyAdapter implements RabbitTopologyPort {
             });
             return Optional.of(new RabbitExchangeResource(name));
         } catch (AmqpException ex) {
-            return Optional.empty();
+            if (isNotFound(ex)) {
+                return Optional.empty();
+            }
+            throw ex;
         }
     }
 
@@ -74,5 +79,16 @@ public class AmqpRabbitTopologyAdapter implements RabbitTopologyPort {
             return Integer.parseInt(s.trim());
         }
         return 0;
+    }
+
+    static boolean isNotFound(Throwable throwable) {
+        for (Throwable candidate = throwable; candidate != null; candidate = candidate.getCause()) {
+            if (candidate instanceof ShutdownSignalException shutdown
+                && shutdown.getReason() instanceof AMQP.Channel.Close close
+                && close.getReplyCode() == 404) {
+                return true;
+            }
+        }
+        return false;
     }
 }

@@ -3,10 +3,12 @@ package io.pockethive.orchestrator.runtime;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
+import io.pockethive.manager.runtime.ComputeAdapterType;
 import io.pockethive.orchestrator.app.ContainerLifecycleManager;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmLifecycleStatus;
@@ -70,9 +72,9 @@ class RuntimeReconciliationServiceTest {
         FakeManifests manifests = new FakeManifests();
         manifests.save(manifest());
 
-        RuntimeReconciliationService service = service(swarms, manifests, inventory, inventory, rabbit, mock(ContainerLifecycleManager.class));
+        RuntimeReconciliationService service = service(swarms, manifests, inventory, inventory, rabbit, lifecycle());
 
-        Plan plan = service.plan(new PlanRequest("DOCKER_SINGLE", "sw1", "run-1", false, true));
+        Plan plan = service.plan(new PlanRequest("sw1", "run-1", false, true));
 
         assertThat(plan.candidates())
             .extracting("candidateId")
@@ -99,9 +101,9 @@ class RuntimeReconciliationServiceTest {
         FakeManifests manifests = new FakeManifests();
         manifests.save(manifest());
 
-        RuntimeReconciliationService service = service(swarms, manifests, inventory, inventory, rabbit, mock(ContainerLifecycleManager.class));
+        RuntimeReconciliationService service = service(swarms, manifests, inventory, inventory, rabbit, lifecycle());
 
-        Plan plan = service.plan(new PlanRequest("DOCKER_SINGLE", "sw1", "run-1", false, true));
+        Plan plan = service.plan(new PlanRequest("sw1", "run-1", false, true));
 
         assertThat(plan.candidates()).isEmpty();
         assertThat(plan.blocked())
@@ -136,9 +138,9 @@ class RuntimeReconciliationServiceTest {
             inventory,
             inventory,
             new FakeRabbit(),
-            mock(ContainerLifecycleManager.class));
+            lifecycle());
 
-        Plan plan = service.plan(new PlanRequest("DOCKER_SINGLE", "sw1", "run-1", false, false, true));
+        Plan plan = service.plan(new PlanRequest("sw1", "run-1", false, false, true));
 
         assertThat(plan.overrideRegisteredSwarmState()).isTrue();
         assertThat(plan.executionRisk()).isEqualTo("high");
@@ -163,9 +165,9 @@ class RuntimeReconciliationServiceTest {
             new FakeInventory(List.of()),
             new FakeInventory(List.of()),
             new FakeRabbit(),
-            mock(ContainerLifecycleManager.class));
+            lifecycle());
 
-        Plan plan = service.plan(new PlanRequest("DOCKER_SINGLE", "sw1", "run-1", false, false, true));
+        Plan plan = service.plan(new PlanRequest("sw1", "run-1", false, false, true));
 
         assertThat(plan.candidates()).isEmpty();
         assertThat(plan.blocked())
@@ -184,9 +186,9 @@ class RuntimeReconciliationServiceTest {
         FakeManifests manifests = new FakeManifests();
         manifests.save(manifest());
 
-        RuntimeReconciliationService service = service(swarms, manifests, inventory, inventory, rabbit, mock(ContainerLifecycleManager.class));
+        RuntimeReconciliationService service = service(swarms, manifests, inventory, inventory, rabbit, lifecycle());
 
-        Plan plan = service.plan(new PlanRequest("DOCKER_SINGLE", "sw1", "run-1", false, true));
+        Plan plan = service.plan(new PlanRequest("sw1", "run-1", false, true));
 
         assertThat(plan.candidates())
             .extracting("candidateId")
@@ -208,9 +210,9 @@ class RuntimeReconciliationServiceTest {
         FakeManifests manifests = new FakeManifests();
         manifests.save(manifest());
 
-        RuntimeReconciliationService service = service(new SwarmStore(), manifests, inventory, inventory, rabbit, mock(ContainerLifecycleManager.class));
+        RuntimeReconciliationService service = service(new SwarmStore(), manifests, inventory, inventory, rabbit, lifecycle());
 
-        Plan plan = service.plan(new PlanRequest("DOCKER_SINGLE", "sw1", "run-1", false, true));
+        Plan plan = service.plan(new PlanRequest("sw1", "run-1", false, true));
 
         assertThat(plan.candidates())
             .extracting("candidateId")
@@ -242,9 +244,9 @@ class RuntimeReconciliationServiceTest {
             inventory,
             inventory,
             rabbit,
-            mock(ContainerLifecycleManager.class));
+            lifecycle());
 
-        Plan plan = service.plan(new PlanRequest("DOCKER_SINGLE", "sw1", "run-1", false, true));
+        Plan plan = service.plan(new PlanRequest("sw1", "run-1", false, true));
 
         assertThat(plan.candidates())
             .extracting("candidateId")
@@ -269,9 +271,9 @@ class RuntimeReconciliationServiceTest {
             inventory,
             inventory,
             rabbit,
-            mock(ContainerLifecycleManager.class));
+            lifecycle());
 
-        Plan plan = service.plan(new PlanRequest("DOCKER_SINGLE", "sw1", "run-1", false, true));
+        Plan plan = service.plan(new PlanRequest("sw1", "run-1", false, true));
 
         assertThat(plan.candidates())
             .extracting("candidateId")
@@ -295,9 +297,9 @@ class RuntimeReconciliationServiceTest {
         FakeManifests manifests = new FakeManifests();
         manifests.save(manifest());
 
-        RuntimeReconciliationService service = service(swarms, manifests, inventory, inventory, rabbit, mock(ContainerLifecycleManager.class));
+        RuntimeReconciliationService service = service(swarms, manifests, inventory, inventory, rabbit, lifecycle());
 
-        Plan plan = service.plan(new PlanRequest("DOCKER_SINGLE", "sw1", "run-1", false, true));
+        Plan plan = service.plan(new PlanRequest("sw1", "run-1", false, true));
 
         assertThat(plan.candidates())
             .extracting("candidateId")
@@ -323,9 +325,9 @@ class RuntimeReconciliationServiceTest {
         FakeManifests manifests = new FakeManifests();
         manifests.save(manifest());
 
-        RuntimeReconciliationService service = service(swarms, manifests, inventory, inventory, rabbit, mock(ContainerLifecycleManager.class));
+        RuntimeReconciliationService service = service(swarms, manifests, inventory, inventory, rabbit, lifecycle());
 
-        Plan plan = service.plan(new PlanRequest("DOCKER_SINGLE", "sw1", "run-1", true, true));
+        Plan plan = service.plan(new PlanRequest("sw1", "run-1", true, true));
 
         assertThat(plan.candidates())
             .extracting("candidateId")
@@ -356,9 +358,9 @@ class RuntimeReconciliationServiceTest {
             inventory,
             inventory,
             rabbit,
-            mock(ContainerLifecycleManager.class));
+            lifecycle());
 
-        RabbitTopologySnapshot snapshot = service.rabbitTopology(new RabbitTopologyRequest("DOCKER_SINGLE", "sw1", "run-1"));
+        RabbitTopologySnapshot snapshot = service.rabbitTopology(new RabbitTopologyRequest("sw1", "run-1"));
 
         assertThat(snapshot.computeAdapter()).isEqualTo("DOCKER_SINGLE");
         assertThat(snapshot.exactOnly()).isTrue();
@@ -395,9 +397,9 @@ class RuntimeReconciliationServiceTest {
         FakeManifests manifests = new FakeManifests();
         manifests.save(manifest());
 
-        RuntimeReconciliationService service = service(swarms, manifests, inventory, inventory, rabbit, mock(ContainerLifecycleManager.class));
+        RuntimeReconciliationService service = service(swarms, manifests, inventory, inventory, rabbit, lifecycle());
 
-        Plan plan = service.plan(new PlanRequest("DOCKER_SINGLE", "sw1", "run-1", false, true));
+        Plan plan = service.plan(new PlanRequest("sw1", "run-1", false, true));
 
         assertThat(plan.candidates())
             .extracting("candidateId")
@@ -418,9 +420,9 @@ class RuntimeReconciliationServiceTest {
         FakeManifests manifests = new FakeManifests();
         manifests.save(manifest());
 
-        RuntimeReconciliationService service = service(new SwarmStore(), manifests, inventory, inventory, rabbit, mock(ContainerLifecycleManager.class));
+        RuntimeReconciliationService service = service(new SwarmStore(), manifests, inventory, inventory, rabbit, lifecycle());
 
-        Plan plan = service.plan(new PlanRequest("DOCKER_SINGLE", "sw1", "run-1", false, false));
+        Plan plan = service.plan(new PlanRequest("sw1", "run-1", false, false));
 
         assertThat(plan.includeRabbit()).isFalse();
         assertThat(plan.candidates()).isEmpty();
@@ -436,12 +438,49 @@ class RuntimeReconciliationServiceTest {
             inventory,
             inventory,
             new FakeRabbit(),
-            mock(ContainerLifecycleManager.class));
+            lifecycle());
 
-        Plan plan = service.plan(new PlanRequest("DOCKER_SINGLE", "sw1", "run-1", false, true));
+        Plan plan = service.plan(new PlanRequest("sw1", "run-1", false, true));
 
         assertThat(plan.candidates()).extracting("candidateId").containsExactly("docker:container:worker-1");
         assertThat(plan.blocked()).extracting("candidateId").containsExactly("rabbit:manifest:sw1");
+    }
+
+    @Test
+    void cleanupPlanReturnsOnlyPocketHiveLabelsForDockerEvidence() {
+        Map<String, String> candidateLabels = new LinkedHashMap<>();
+        candidateLabels.put("pockethive.managed", "true");
+        candidateLabels.put("pockethive.swarmId", "sw1");
+        candidateLabels.put("pockethive.runId", "run-1");
+        candidateLabels.put("pockethive.resourceKind", "worker");
+        candidateLabels.put("pockethive.role", "processor");
+        candidateLabels.put("pockethive.instance", "processor-1");
+        candidateLabels.put("pockethive.image", "processor:test");
+        candidateLabels.put("com.vendor.secret", "do-not-return");
+        Map<String, String> blockedLabels = new LinkedHashMap<>(candidateLabels);
+        blockedLabels.put("pockethive.instance", "processor-2");
+        blockedLabels.put("com.vendor.token", "do-not-return");
+        FakeInventory inventory = new FakeInventory(List.of(
+            new ComputeRuntimeResource("worker-1", "container", "worker-1", "processor:test", "exited", candidateLabels),
+            new ComputeRuntimeResource("worker-2", "container", "worker-2", "processor:test", "running", blockedLabels)));
+        RuntimeReconciliationService service = service(
+            new SwarmStore(),
+            new FakeManifests(),
+            inventory,
+            inventory,
+            new FakeRabbit(),
+            lifecycle());
+
+        Plan plan = service.plan(new PlanRequest("sw1", "run-1", false, false));
+
+        assertThat(plan.candidates()).hasSize(1);
+        assertThat(plan.candidates().getFirst().labels())
+            .containsEntry("pockethive.instance", "processor-1")
+            .doesNotContainKeys("com.vendor.secret", "com.vendor.token");
+        assertThat(plan.blocked()).hasSize(1);
+        assertThat(plan.blocked().getFirst().labels())
+            .containsEntry("pockethive.instance", "processor-2")
+            .doesNotContainKeys("com.vendor.secret", "com.vendor.token");
     }
 
     @Test
@@ -459,9 +498,9 @@ class RuntimeReconciliationServiceTest {
             inventory,
             inventory,
             new FakeRabbit(),
-            mock(ContainerLifecycleManager.class));
+            lifecycle());
 
-        Plan plan = service.plan(new PlanRequest("DOCKER_SINGLE", "sw1", "run-1", false, false));
+        Plan plan = service.plan(new PlanRequest("sw1", "run-1", false, false));
 
         assertThat(plan.candidates()).isEmpty();
         assertThat(plan.blocked())
@@ -484,10 +523,10 @@ class RuntimeReconciliationServiceTest {
             inventory,
             inventory,
             new FakeRabbit(),
-            mock(ContainerLifecycleManager.class));
+            lifecycle());
 
-        Plan defaultPlan = service.plan(new PlanRequest("DOCKER_SINGLE", "sw1", "run-1", false, false));
-        Plan runningPlan = service.plan(new PlanRequest("DOCKER_SINGLE", "sw1", "run-1", true, false));
+        Plan defaultPlan = service.plan(new PlanRequest("sw1", "run-1", false, false));
+        Plan runningPlan = service.plan(new PlanRequest("sw1", "run-1", true, false));
 
         assertThat(defaultPlan.candidates()).isEmpty();
         assertThat(defaultPlan.blocked()).extracting("candidateId").containsExactly("docker:container:worker-paused");
@@ -496,13 +535,11 @@ class RuntimeReconciliationServiceTest {
 
     @Test
     void executeRejectsHashMismatchBeforeMutating() {
-        ContainerLifecycleManager lifecycle = mock(ContainerLifecycleManager.class);
+        ContainerLifecycleManager lifecycle = lifecycle();
         FakeInventory inventory = new FakeInventory(List.of(container("worker-1", "worker", "processor", "processor-1", "exited")));
         RuntimeReconciliationService service = service(new SwarmStore(), new FakeManifests(), inventory, inventory, new FakeRabbit(), lifecycle);
 
-        assertThatThrownBy(() -> service.execute(new ExecuteRequest(
-            "DOCKER_SINGLE",
-            "sw1",
+        assertThatThrownBy(() -> service.execute(new ExecuteRequest("sw1",
             "run-1",
             false,
             false,
@@ -514,22 +551,20 @@ class RuntimeReconciliationServiceTest {
             .isInstanceOf(RuntimeCleanupException.class)
             .hasMessageContaining("candidateSetHash");
         assertThat(inventory.removed).isEmpty();
-        verifyNoInteractions(lifecycle);
+        verify(lifecycle, never()).removeSwarm("sw1");
     }
 
     @Test
     void executeRejectsStalePlanWhenCurrentCandidatesChanged() {
-        ContainerLifecycleManager lifecycle = mock(ContainerLifecycleManager.class);
+        ContainerLifecycleManager lifecycle = lifecycle();
         List<ComputeRuntimeResource> resources = new ArrayList<>();
         resources.add(container("worker-1", "worker", "processor", "processor-1", "exited"));
         FakeInventory inventory = new FakeInventory(resources);
         RuntimeReconciliationService service = service(new SwarmStore(), new FakeManifests(), inventory, inventory, new FakeRabbit(), lifecycle);
-        Plan plan = service.plan(new PlanRequest("DOCKER_SINGLE", "sw1", "run-1", false, false));
+        Plan plan = service.plan(new PlanRequest("sw1", "run-1", false, false));
         resources.clear();
 
-        assertThatThrownBy(() -> service.execute(new ExecuteRequest(
-            "DOCKER_SINGLE",
-            "sw1",
+        assertThatThrownBy(() -> service.execute(new ExecuteRequest("sw1",
             "run-1",
             false,
             false,
@@ -541,7 +576,7 @@ class RuntimeReconciliationServiceTest {
             .isInstanceOf(RuntimeCleanupException.class)
             .hasMessageContaining("candidateSetHash");
         assertThat(inventory.removed).isEmpty();
-        verifyNoInteractions(lifecycle);
+        verify(lifecycle, never()).removeSwarm("sw1");
     }
 
     @Test
@@ -554,12 +589,10 @@ class RuntimeReconciliationServiceTest {
         rabbit.exchanges.put("ph.sw1.hive", new RabbitExchangeResource("ph.sw1.hive"));
         FakeManifests manifests = new FakeManifests();
         manifests.save(manifest());
-        RuntimeReconciliationService service = service(new SwarmStore(), manifests, inventory, inventory, rabbit, mock(ContainerLifecycleManager.class));
-        Plan plan = service.plan(new PlanRequest("DOCKER_SINGLE", "sw1", "run-1", false, true));
+        RuntimeReconciliationService service = service(new SwarmStore(), manifests, inventory, inventory, rabbit, lifecycle());
+        Plan plan = service.plan(new PlanRequest("sw1", "run-1", false, true));
 
-        ExecuteResponse response = service.execute(new ExecuteRequest(
-            "DOCKER_SINGLE",
-            "sw1",
+        ExecuteResponse response = service.execute(new ExecuteRequest("sw1",
             "run-1",
             false,
             true,
@@ -582,29 +615,23 @@ class RuntimeReconciliationServiceTest {
     }
 
     @Test
-    void planValidatesAdapterAndRequiredRequestFields() {
+    void planValidatesRequiredRequestFields() {
         RuntimeReconciliationService service = service(
             new SwarmStore(),
             new FakeManifests(),
             new FakeInventory(List.of()),
             new FakeInventory(List.of()),
             new FakeRabbit(),
-            mock(ContainerLifecycleManager.class));
+            lifecycle());
 
         assertThatThrownBy(() -> service.plan(null))
             .isInstanceOf(RuntimeCleanupException.class)
             .hasMessageContaining("request body is required");
-        assertThatThrownBy(() -> service.plan(new PlanRequest("AUTO", "sw1", "run-1", false, false)))
-            .isInstanceOf(RuntimeCleanupException.class)
-            .hasMessageContaining("computeAdapter must be concrete");
-        assertThatThrownBy(() -> service.plan(new PlanRequest("BOGUS", "sw1", "run-1", false, false)))
-            .isInstanceOf(RuntimeCleanupException.class)
-            .hasMessageContaining("unsupported computeAdapter");
-        assertThatThrownBy(() -> service.plan(new PlanRequest("DOCKER_SINGLE", " ", "run-1", false, false)))
+        assertThatThrownBy(() -> service.plan(new PlanRequest(" ", "run-1", false, false)))
             .isInstanceOf(RuntimeCleanupException.class)
             .hasMessageContaining("swarmId must not be blank");
 
-        Plan plan = service.plan(new PlanRequest(" DOCKER_SINGLE ", " sw1 ", " run-1 ", null, null));
+        Plan plan = service.plan(new PlanRequest(" sw1 ", " run-1 ", null, null));
 
         assertThat(plan.computeAdapter()).isEqualTo("DOCKER_SINGLE");
         assertThat(plan.swarmId()).isEqualTo("sw1");
@@ -624,12 +651,10 @@ class RuntimeReconciliationServiceTest {
             inventory,
             inventory,
             new FakeRabbit(),
-            mock(ContainerLifecycleManager.class));
-        Plan plan = service.plan(new PlanRequest("DOCKER_SINGLE", "sw1", "run-1", false, false));
+            lifecycle());
+        Plan plan = service.plan(new PlanRequest("sw1", "run-1", false, false));
 
-        ExecuteRequest request = new ExecuteRequest(
-            "DOCKER_SINGLE",
-            "sw1",
+        ExecuteRequest request = new ExecuteRequest("sw1",
             "run-1",
             false,
             false,
@@ -645,9 +670,7 @@ class RuntimeReconciliationServiceTest {
         assertThat(first.idempotent()).isFalse();
         assertThat(repeat.idempotent()).isTrue();
         assertThat(inventory.removed).containsExactly("container:worker-1");
-        assertThatThrownBy(() -> service.execute(new ExecuteRequest(
-            "DOCKER_SINGLE",
-            "sw1",
+        assertThatThrownBy(() -> service.execute(new ExecuteRequest("sw1",
             "run-1",
             false,
             false,
@@ -670,12 +693,10 @@ class RuntimeReconciliationServiceTest {
             inventory,
             inventory,
             new FakeRabbit(),
-            mock(ContainerLifecycleManager.class));
-        Plan plan = service.plan(new PlanRequest("DOCKER_SINGLE", "sw1", "run-1", false, false));
+            lifecycle());
+        Plan plan = service.plan(new PlanRequest("sw1", "run-1", false, false));
 
-        ExecuteResponse response = service.execute(new ExecuteRequest(
-            "DOCKER_SINGLE",
-            "sw1",
+        ExecuteResponse response = service.execute(new ExecuteRequest("sw1",
             "run-1",
             false,
             false,
@@ -699,12 +720,10 @@ class RuntimeReconciliationServiceTest {
             new FakeInventory(List.of()),
             new FakeInventory(List.of()),
             new FakeRabbit(),
-            mock(ContainerLifecycleManager.class));
-        Plan plan = service.plan(new PlanRequest("DOCKER_SINGLE", "sw1", "run-1", false, false));
+            lifecycle());
+        Plan plan = service.plan(new PlanRequest("sw1", "run-1", false, false));
 
-        assertThatThrownBy(() -> service.execute(new ExecuteRequest(
-            "DOCKER_SINGLE",
-            "sw1",
+        assertThatThrownBy(() -> service.execute(new ExecuteRequest("sw1",
             "run-1",
             false,
             false,
@@ -721,14 +740,12 @@ class RuntimeReconciliationServiceTest {
     void executeEmergencyOverrideLifecycleCandidateDeletesThroughLifecycleManager() {
         SwarmStore swarms = new SwarmStore();
         swarms.register(swarmWithStatus(SwarmLifecycleStatus.RUNNING));
-        ContainerLifecycleManager lifecycle = mock(ContainerLifecycleManager.class);
+        ContainerLifecycleManager lifecycle = lifecycle();
         FakeInventory inventory = new FakeInventory(List.of());
         RuntimeReconciliationService service = service(swarms, new FakeManifests(), inventory, inventory, new FakeRabbit(), lifecycle);
-        Plan plan = service.plan(new PlanRequest("DOCKER_SINGLE", "sw1", "run-1", false, false, true));
+        Plan plan = service.plan(new PlanRequest("sw1", "run-1", false, false, true));
 
-        ExecuteResponse response = service.execute(new ExecuteRequest(
-            "DOCKER_SINGLE",
-            "sw1",
+        ExecuteResponse response = service.execute(new ExecuteRequest("sw1",
             "run-1",
             false,
             false,
@@ -753,12 +770,10 @@ class RuntimeReconciliationServiceTest {
             new FakeInventory(List.of()),
             new FakeInventory(List.of()),
             new FakeRabbit(),
-            mock(ContainerLifecycleManager.class));
-        Plan normalPlan = service.plan(new PlanRequest("DOCKER_SINGLE", "sw1", "run-1", false, false));
+            lifecycle());
+        Plan normalPlan = service.plan(new PlanRequest("sw1", "run-1", false, false));
 
-        assertThatThrownBy(() -> service.execute(new ExecuteRequest(
-            "DOCKER_SINGLE",
-            "sw1",
+        assertThatThrownBy(() -> service.execute(new ExecuteRequest("sw1",
             "run-1",
             false,
             false,
@@ -776,14 +791,12 @@ class RuntimeReconciliationServiceTest {
     void executeLifecycleCandidateDeletesSwarmControllerViaLifecycleManager() {
         SwarmStore swarms = new SwarmStore();
         swarms.register(swarmWithStatus(SwarmLifecycleStatus.STOPPED));
-        ContainerLifecycleManager lifecycle = mock(ContainerLifecycleManager.class);
+        ContainerLifecycleManager lifecycle = lifecycle();
         FakeInventory inventory = new FakeInventory(List.of());
         RuntimeReconciliationService service = service(swarms, new FakeManifests(), inventory, inventory, new FakeRabbit(), lifecycle);
-        Plan plan = service.plan(new PlanRequest("DOCKER_SINGLE", "sw1", "run-1", false, false));
+        Plan plan = service.plan(new PlanRequest("sw1", "run-1", false, false));
 
-        ExecuteResponse response = service.execute(new ExecuteRequest(
-            "DOCKER_SINGLE",
-            "sw1",
+        ExecuteResponse response = service.execute(new ExecuteRequest("sw1",
             "run-1",
             false,
             false,
@@ -801,14 +814,12 @@ class RuntimeReconciliationServiceTest {
     void executePreRunLifecycleCandidateDeletesSwarmControllerViaLifecycleManager() {
         SwarmStore swarms = new SwarmStore();
         swarms.register(swarmWithStatus(SwarmLifecycleStatus.READY));
-        ContainerLifecycleManager lifecycle = mock(ContainerLifecycleManager.class);
+        ContainerLifecycleManager lifecycle = lifecycle();
         FakeInventory inventory = new FakeInventory(List.of());
         RuntimeReconciliationService service = service(swarms, new FakeManifests(), inventory, inventory, new FakeRabbit(), lifecycle);
-        Plan plan = service.plan(new PlanRequest("DOCKER_SINGLE", "sw1", "run-1", false, false));
+        Plan plan = service.plan(new PlanRequest("sw1", "run-1", false, false));
 
-        ExecuteResponse response = service.execute(new ExecuteRequest(
-            "DOCKER_SINGLE",
-            "sw1",
+        ExecuteResponse response = service.execute(new ExecuteRequest("sw1",
             "run-1",
             false,
             false,
@@ -839,6 +850,12 @@ class RuntimeReconciliationServiceTest {
             new RuntimeCleanupEvidenceStore(),
             lifecycle,
             controlPlaneProperties());
+    }
+
+    private static ContainerLifecycleManager lifecycle() {
+        ContainerLifecycleManager lifecycle = mock(ContainerLifecycleManager.class);
+        when(lifecycle.currentComputeAdapterType()).thenReturn(ComputeAdapterType.DOCKER_SINGLE);
+        return lifecycle;
     }
 
     private static Swarm swarmWithStatus(SwarmLifecycleStatus status) {
@@ -961,7 +978,7 @@ class RuntimeReconciliationServiceTest {
         }
 
         @Override
-        public List<ComputeRuntimeResource> list(String computeAdapter) {
+        public List<ComputeRuntimeResource> list() {
             return resources;
         }
 

@@ -34,13 +34,12 @@ const REQUIRED_CLEANUP_LABELS = [
   LABELS.instance
 ];
 
-const COMPUTE_ADAPTER_SCHEMA = z.enum(["DOCKER_SINGLE", "SWARM_STACK"]);
 const MANIFEST_FILE = "runtime-ownership-manifest.json";
 const DEFAULT_JOURNAL_LIMIT = 100;
 const RUNTIME_DEBUG_CAPABILITIES_PATH = "/api/runtime/debug/capabilities";
 const REQUIRED_RUNTIME_DEBUG_CAPABILITIES = Object.freeze({
-  runtimeDebugContractVersion: "2",
-  cleanupContractVersion: "2",
+  runtimeDebugContractVersion: "3",
+  cleanupContractVersion: "3",
   runtimeDebugReadsBackedByOrchestrator: true,
   cleanupPlanHasExecutionRisk: true,
   cleanupPlanUsesApprovalFields: false,
@@ -74,14 +73,12 @@ export function registerRuntimeTools(reg, options = {}) {
   const actor = () => process.env.USER || "mcp-user";
 
   reg("runtime.cleanup.plan", "Create a read-only, label-gated cleanup plan for stale PocketHive runtime resources.", {
-    computeAdapter: COMPUTE_ADAPTER_SCHEMA,
     swarmId: z.string(),
     runId: z.string().optional(),
     includeRunning: z.boolean().optional(),
     includeRabbit: z.boolean().optional(),
     overrideRegisteredSwarmState: z.boolean().optional()
   }, guarded(async ({
-    computeAdapter,
     swarmId,
     runId,
     includeRunning = false,
@@ -89,7 +86,6 @@ export function registerRuntimeTools(reg, options = {}) {
     overrideRegisteredSwarmState
   }) => {
     return await requireCleanupApi(cleanupApi).plan({
-      computeAdapter,
       swarmId,
       runId,
       includeRunning,
@@ -99,7 +95,6 @@ export function registerRuntimeTools(reg, options = {}) {
   }), runtimeReadOnly);
 
   reg("runtime.tail-worker-logs", "Read recent Orchestrator-backed Docker/Swarm logs for one label-gated PocketHive worker or manager runtime resource.", {
-    computeAdapter: COMPUTE_ADAPTER_SCHEMA,
     swarmId: z.string(),
     runId: z.string().optional(),
     runtimeId: z.string().optional(),
@@ -114,7 +109,6 @@ export function registerRuntimeTools(reg, options = {}) {
   }), runtimeReadOnly);
 
   reg("runtime.get-worker-version", "Read Orchestrator-backed version metadata for one label-gated PocketHive worker or manager runtime resource.", {
-    computeAdapter: COMPUTE_ADAPTER_SCHEMA,
     swarmId: z.string(),
     runId: z.string().optional(),
     runtimeId: z.string().optional(),
@@ -126,7 +120,6 @@ export function registerRuntimeTools(reg, options = {}) {
   }), runtimeReadOnly);
 
   reg("runtime.list-workers", "List Orchestrator-backed label-gated PocketHive manager and worker runtime resources for one swarm.", {
-    computeAdapter: COMPUTE_ADAPTER_SCHEMA,
     swarmId: z.string(),
     runId: z.string().optional(),
     includeManagers: z.boolean().optional()
@@ -135,7 +128,6 @@ export function registerRuntimeTools(reg, options = {}) {
   }), runtimeReadOnly);
 
   reg("runtime.inspect-worker", "Read an Orchestrator-backed bounded inspect summary for one PocketHive worker or manager runtime resource.", {
-    computeAdapter: COMPUTE_ADAPTER_SCHEMA,
     swarmId: z.string(),
     runId: z.string().optional(),
     runtimeId: z.string().optional(),
@@ -147,7 +139,6 @@ export function registerRuntimeTools(reg, options = {}) {
   }), runtimeReadOnly);
 
   reg("runtime.diff-swarm-runtime", "Compare Orchestrator, manifest, Docker/Swarm, RabbitMQ, and cleanup views for one swarm.", {
-    computeAdapter: COMPUTE_ADAPTER_SCHEMA,
     swarmId: z.string(),
     runId: z.string().optional(),
     includeRabbit: z.boolean().optional(),
@@ -158,7 +149,6 @@ export function registerRuntimeTools(reg, options = {}) {
   }), runtimeReadOnly);
 
   reg("runtime.control-plane-status", "Summarize control queues and recent control-plane events for one swarm.", {
-    computeAdapter: COMPUTE_ADAPTER_SCHEMA,
     swarmId: z.string(),
     runId: z.string().optional(),
     journalLimit: z.number().int().min(1).max(1000).optional()
@@ -168,7 +158,6 @@ export function registerRuntimeTools(reg, options = {}) {
   }), runtimeReadOnly);
 
   reg("runtime.rabbit-topology-snapshot", "Read Orchestrator-backed exact RabbitMQ queues and exchanges for one swarm.", {
-    computeAdapter: COMPUTE_ADAPTER_SCHEMA,
     swarmId: z.string(),
     runId: z.string().optional()
   }, guarded(async (input) => {
@@ -176,7 +165,6 @@ export function registerRuntimeTools(reg, options = {}) {
   }), runtimeReadOnly);
 
   reg("runtime.swarm-timeline", "Build a read-only swarm timeline from Orchestrator journal and runtime state.", {
-    computeAdapter: COMPUTE_ADAPTER_SCHEMA,
     swarmId: z.string(),
     runId: z.string().optional(),
     limit: z.number().int().min(1).max(1000).optional()
@@ -190,7 +178,6 @@ export function registerRuntimeTools(reg, options = {}) {
   }), runtimeReadOnly);
 
   reg("runtime.manifest-validate", "Validate the runtime ownership manifest against live runtime and RabbitMQ state.", {
-    computeAdapter: COMPUTE_ADAPTER_SCHEMA,
     swarmId: z.string(),
     runId: z.string().optional(),
     includeRabbit: z.boolean().optional()
@@ -200,7 +187,6 @@ export function registerRuntimeTools(reg, options = {}) {
   }), runtimeReadOnly);
 
   reg("runtime.cleanup.execute", "Remove PocketHive runtime cleanup candidates by exact candidate hash after external governance permits execution.", {
-    computeAdapter: COMPUTE_ADAPTER_SCHEMA,
     swarmId: z.string(),
     runId: z.string().optional(),
     includeRunning: z.boolean().optional(),
@@ -380,15 +366,14 @@ export function buildWorkerInspection(target, inspectSource = { available: false
 }
 
 export async function runtimeDebugContext(input = {}, options = {}) {
-  const computeAdapter = requireText(input.computeAdapter, "computeAdapter");
   const swarmId = requireText(input.swarmId, "swarmId");
   const runId = optionalText(input.runId);
   const includeRabbit = input.includeRabbit !== false;
-  const resourcesSource = await readRuntimeInventory({ computeAdapter, swarmId, runId }, options);
+  const resourcesSource = await readRuntimeInventory({ swarmId, runId }, options);
   const resources = resourcesSource.available ? runtimeResourcesFromListResponse(resourcesSource.data) : [];
   const manifest = readRuntimeOwnershipManifest({ swarmId, runId }, options);
   const rabbit = includeRabbit
-    ? await readRabbitTopology({ computeAdapter, swarmId, runId }, manifest, options, resources)
+    ? await readRabbitTopology({ swarmId, runId }, manifest, options, resources)
     : { available: false, skipped: true, reason: "includeRabbit=false" };
   const swarmSnapshot = await readOrchestratorSnapshot(swarmId, options);
   const journal = await readSwarmJournal(
@@ -396,14 +381,13 @@ export async function runtimeDebugContext(input = {}, options = {}) {
     options
   );
   const cleanupPlanSource = await readCleanupPlan(
-    { computeAdapter, swarmId, runId, includeRunning: true, includeRabbit },
+    { swarmId, runId, includeRunning: true, includeRabbit },
     options
   );
   const cleanupPlan = cleanupPlanSource.available ? cleanupPlanSource.data : null;
 
   return {
     input: {
-      computeAdapter,
       swarmId,
       runId: runId ?? null,
       includeRabbit
@@ -823,7 +807,6 @@ async function readRabbitTopology(input, manifestSource, options = {}, resources
   return await safeSource("rabbit", () => options.httpJson("/api/runtime/debug/rabbit/topology", {
     method: "POST",
     body: cleanApiBody({
-      computeAdapter: input.computeAdapter,
       swarmId: input.swarmId,
       runId: input.runId
     })
@@ -840,7 +823,6 @@ async function readRuntimeInventory(input, options = {}) {
   return await safeSource("runtimeInventory", () => options.httpJson("/api/runtime/debug/resources/list", {
     method: "POST",
     body: cleanApiBody({
-      computeAdapter: input.computeAdapter,
       swarmId: input.swarmId,
       runId: input.runId,
       includeManagers: true
