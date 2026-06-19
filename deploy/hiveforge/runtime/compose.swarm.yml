@@ -215,8 +215,3 @@ services:
         protocol: tcp
     volumes: !override
       - ${HIVEFORGE_BIND_SOURCE_DIR:?set HiveForge bind source dir}/artifacts/runtime/config/nginx/nginx.swarm.conf:/etc/nginx/conf.d/default.conf:ro
-
-  ui-v2:
-    depends_on: !override
-      - ui
-    deploy: *manager-placement

@@ -13,8 +13,8 @@ const backendProxy = proxyTarget
 
 export default defineConfig({
   // In plugin mode: relative base so webview can load assets from the filesystem.
-  // In normal mode: absolute base under the gateway prefix.
-  base: pluginMode ? './' : '/v2/',
+  // In normal mode: serve as the primary gateway UI.
+  base: pluginMode ? './' : '/',
   plugins: [react()],
   define: {
     __PLUGIN_MODE__: pluginMode,

@@ -46,11 +46,6 @@
       "application": true
     },
     {
-      "name": "ui-v2",
-      "image": "{{ imageRepository.project }}/ui-v2:{{ release.imageTag }}",
-      "application": true
-    },
-    {
       "name": "swarm-controller",
       "image": "{{ imageRepository.project }}/swarm-controller:{{ release.imageTag }}",
       "application": true

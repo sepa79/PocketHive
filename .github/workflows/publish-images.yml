@@ -158,9 +158,6 @@ jobs:
             dockerfile: Dockerfile.bees.local
             target: trigger
           - name: ui
-            dockerfile: ui/Dockerfile
-            target: ""
-          - name: ui-v2
             dockerfile: ui-v2/Dockerfile
             target: ""
 

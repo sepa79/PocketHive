@@ -42,8 +42,6 @@ Options:
 Environment:
   LOCAL_ARTIFACTS_DIR      Directory for staged jars (default: .local-jars).
   MAVEN_CLI_OPTS           Extra Maven flags appended to package command.
-  VITE_STOMP_READONLY_USER Build arg for ui image (default: ph-observer).
-  VITE_STOMP_READONLY_PASSCODE Build arg for ui image (default: ph-observer).
 USAGE
 }
 
@@ -104,7 +102,7 @@ needs_java_package() {
   local image
   while IFS= read -r image; do
     case "${image}" in
-      jvm-base|network-proxy-haproxy|ui|ui-v2)
+      jvm-base|network-proxy-haproxy|ui)
         ;;
       *)
         return 0
@@ -220,14 +218,7 @@ build_image() {
         --build-arg "RUNTIME_IMAGE=${runtime_ref}" -t "${target_ref}" "${context}"
       ;;
     ui)
-      if [[ "${image}" == "ui" ]]; then
-        run_cmd docker build -f "${dockerfile}" \
-          --build-arg "VITE_STOMP_READONLY_USER=${VITE_STOMP_READONLY_USER:-ph-observer}" \
-          --build-arg "VITE_STOMP_READONLY_PASSCODE=${VITE_STOMP_READONLY_PASSCODE:-ph-observer}" \
-          -t "${target_ref}" "${context}"
-      else
-        run_cmd docker build -f "${dockerfile}" -t "${target_ref}" "${context}"
-      fi
+      run_cmd docker build -f "${dockerfile}" -t "${target_ref}" "${context}"
       ;;
     *)
       fail "unsupported image kind for ${image}: ${kind}"

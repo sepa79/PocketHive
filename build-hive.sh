@@ -109,17 +109,9 @@ compose_build_services() {
           -t "${image}:latest" "${context}"
         ;;
       ui)
-        if [[ "${image}" == "ui" ]]; then
-          docker build \
-            -f "${dockerfile}" \
-            --build-arg VITE_STOMP_READONLY_USER="${VITE_STOMP_READONLY_USER:-ph-observer}" \
-            --build-arg VITE_STOMP_READONLY_PASSCODE="${VITE_STOMP_READONLY_PASSCODE:-ph-observer}" \
-            -t "${image}:latest" "${context}"
-        else
-          docker build \
-            -f "${dockerfile}" \
-            -t "${image}:latest" "${context}"
-        fi
+        docker build \
+          -f "${dockerfile}" \
+          -t "${image}:latest" "${context}"
         ;;
       *)
         echo "Unsupported image kind '${kind}' for ${image}" >&2
