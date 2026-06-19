@@ -1,6 +1,7 @@
 package io.pockethive.orchestrator.runtime;
 
 import io.pockethive.docker.compute.PocketHiveDockerLabels;
+import io.pockethive.manager.runtime.ComputeAdapterType;
 import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.ComputeRuntimeInventoryPort;
 import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.ComputeRuntimeResource;
 import io.pockethive.orchestrator.runtime.RuntimeDebugContracts.BlockedResource;
@@ -58,7 +59,8 @@ public class RuntimeDebugService {
     }
 
     public ResourceListResponse list(ResourceListRequest request) {
-        String computeAdapter = requireText(request.computeAdapter(), "computeAdapter");
+        requireRequest(request);
+        String computeAdapter = computeAdapter(request.computeAdapter());
         String swarmId = requireText(request.swarmId(), "swarmId");
         String runId = optionalText(request.runId());
         boolean includeManagers = request.includeManagers() == null || request.includeManagers();
@@ -110,8 +112,10 @@ public class RuntimeDebugService {
     }
 
     public RuntimeLogsResponse logs(RuntimeLogsRequest request) {
+        requireRequest(request);
+        String computeAdapter = computeAdapter(request.computeAdapter());
         RuntimeTarget target = target(new RuntimeTargetRequest(
-            request.computeAdapter(),
+            computeAdapter,
             request.swarmId(),
             request.runId(),
             request.runtimeId(),
@@ -120,7 +124,7 @@ public class RuntimeDebugService {
             request.resourceKind()));
         int tailLines = normalizeTailLines(request.tailLines());
         Integer sinceEpochSeconds = sinceEpochSeconds(request.since());
-        String rawLogs = debugPort.logs(requireText(request.computeAdapter(), "computeAdapter"), target.runtimeId(), tailLines, sinceEpochSeconds);
+        String rawLogs = debugPort.logs(computeAdapter, target.runtimeId(), tailLines, sinceEpochSeconds);
         String logs = redact(rawLogs);
         return new RuntimeLogsResponse(
             target,
@@ -132,6 +136,7 @@ public class RuntimeDebugService {
     }
 
     public RuntimeVersionResponse version(RuntimeTargetRequest request) {
+        requireRequest(request);
         RuntimeTarget target = target(request);
         ImageReference image = parseImageReference(target.image());
         String declaredVersion = optionalText(target.labels().get(PocketHiveDockerLabels.VERSION));
@@ -147,8 +152,10 @@ public class RuntimeDebugService {
     }
 
     public RuntimeInspectResponse inspect(RuntimeTargetRequest request) {
+        requireRequest(request);
+        String computeAdapter = computeAdapter(request.computeAdapter());
         RuntimeTarget target = target(request);
-        Map<String, Object> raw = debugPort.inspect(requireText(request.computeAdapter(), "computeAdapter"), target.runtimeId());
+        Map<String, Object> raw = debugPort.inspect(computeAdapter, target.runtimeId());
         Map<String, Object> source = Map.of(
             "available", true,
             INSPECT_SOURCE_OWNER, PocketHiveDockerLabels.OWNER_ORCHESTRATOR);
@@ -159,7 +166,7 @@ public class RuntimeDebugService {
     }
 
     private RuntimeTarget target(RuntimeTargetRequest request) {
-        String computeAdapter = requireText(request.computeAdapter(), "computeAdapter");
+        String computeAdapter = computeAdapter(request.computeAdapter());
         String swarmId = requireText(request.swarmId(), "swarmId");
         String runId = optionalText(request.runId());
         String runtimeId = optionalText(request.runtimeId());
@@ -534,6 +541,26 @@ public class RuntimeDebugService {
             throw error(HttpStatus.BAD_REQUEST, name + " must not be blank");
         }
         return text;
+    }
+
+    private static void requireRequest(Object request) {
+        if (request == null) {
+            throw error(HttpStatus.BAD_REQUEST, "request body is required");
+        }
+    }
+
+    private static String computeAdapter(String value) {
+        String text = requireText(value, "computeAdapter");
+        ComputeAdapterType adapterType;
+        try {
+            adapterType = ComputeAdapterType.valueOf(text);
+        } catch (IllegalArgumentException ex) {
+            throw error(HttpStatus.BAD_REQUEST, "unsupported computeAdapter: " + text);
+        }
+        if (adapterType == ComputeAdapterType.AUTO) {
+            throw error(HttpStatus.BAD_REQUEST, "computeAdapter must be concrete");
+        }
+        return adapterType.name();
     }
 
     private static String optionalText(String value) {

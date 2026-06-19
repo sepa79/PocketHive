@@ -31,6 +31,12 @@ Timestamp: 2026-06-18T15:27:35Z
 - Runtime debug ownership: move Docker/Swarm list, logs, version, and inspect
   reads behind Orchestrator runtime debug APIs so PocketHive MCP no longer uses
   a local Docker socket fallback for worker or swarm-controller manager debug.
+- Runtime debug ownership: move exact RabbitMQ topology snapshots behind
+  Orchestrator runtime debug APIs so PocketHive MCP no longer derives queue or
+  exchange ownership from a local RabbitMQ management path.
+- Runtime debug QA: validate runtime debug request bodies and concrete compute
+  adapters before Docker/Swarm access, and extend decision-table coverage for
+  logs, version, inspect, run filtering, and emergency lifecycle override.
 - Docs: condense the runtime debug MCP cleanup spec into ownership, flow,
   decision table, and verification sections for faster review.
 - Release: bump PocketHive patch version to 0.15.28 for the runtime debug MCP

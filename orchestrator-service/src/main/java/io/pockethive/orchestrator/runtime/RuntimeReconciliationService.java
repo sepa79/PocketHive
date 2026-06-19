@@ -25,6 +25,11 @@ import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.RabbitExchangeReso
 import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.RabbitQueueResource;
 import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.RabbitTopologyPort;
 import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.RuntimeOwnershipManifestStore;
+import io.pockethive.orchestrator.runtime.RuntimeDebugContracts.RabbitExchangeSnapshot;
+import io.pockethive.orchestrator.runtime.RuntimeDebugContracts.RabbitQueueSnapshot;
+import io.pockethive.orchestrator.runtime.RuntimeDebugContracts.RabbitTopologyRequest;
+import io.pockethive.orchestrator.runtime.RuntimeDebugContracts.RabbitTopologySnapshot;
+import io.pockethive.orchestrator.runtime.RuntimeDebugContracts.SourceSummary;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -184,6 +189,45 @@ public class RuntimeReconciliationService {
             List.copyOf(errors));
         evidenceStore.saveEvidence(evidence);
         return new ExecuteResponse(false, evidence);
+    }
+
+    public RabbitTopologySnapshot rabbitTopology(RabbitTopologyRequest request) {
+        CleanupScope scope = CleanupScope.from(new PlanRequest(
+            request == null ? null : request.computeAdapter(),
+            request == null ? null : request.swarmId(),
+            request == null ? null : request.runId(),
+            true,
+            true));
+        Optional<RuntimeOwnershipManifest> manifest = manifest(scope);
+        if (manifest.isEmpty()) {
+            return new RabbitTopologySnapshot(
+                scope.computeAdapter(),
+                scope.swarmId(),
+                scope.runId().orElse(null),
+                SourceSummary.missing("runtime ownership manifest was not found"),
+                SourceSummary.present(),
+                true,
+                List.of(),
+                List.of(),
+                List.of());
+        }
+
+        RuntimeOwnershipManifest.RabbitResources rabbit = manifest.get().rabbit();
+        List<ComputeRuntimeResource> computeResources = computeInventory.list(scope.computeAdapter());
+        LinkedHashSet<String> queues = new LinkedHashSet<>(concat(rabbit.controlQueues(), rabbit.workQueues()));
+        queues.addAll(derivedWorkerControlQueues(scope, computeResources));
+        LinkedHashSet<String> exchanges = new LinkedHashSet<>(rabbit.exchanges());
+
+        return new RabbitTopologySnapshot(
+            scope.computeAdapter(),
+            scope.swarmId(),
+            scope.runId().orElse(null),
+            SourceSummary.present(),
+            SourceSummary.present(),
+            true,
+            queues.stream().sorted().map(this::queueSnapshot).toList(),
+            exchanges.stream().sorted().map(this::exchangeSnapshot).toList(),
+            List.of());
     }
 
     private void appendComputeCandidates(CleanupScope scope,
@@ -355,6 +399,53 @@ public class RuntimeReconciliationService {
         return List.copyOf(queues);
     }
 
+    private RabbitQueueSnapshot queueSnapshot(String name) {
+        Optional<RabbitQueueResource> queue = rabbitTopology.queue(name);
+        if (queue.isEmpty()) {
+            return new RabbitQueueSnapshot(
+                name,
+                false,
+                null,
+                null,
+                null,
+                null,
+                null,
+                false,
+                "not found");
+        }
+        RabbitQueueResource resource = queue.get();
+        return new RabbitQueueSnapshot(
+            name,
+            true,
+            resource.depth(),
+            resource.consumers(),
+            null,
+            null,
+            null,
+            false,
+            null);
+    }
+
+    private RabbitExchangeSnapshot exchangeSnapshot(String name) {
+        Optional<RabbitExchangeResource> exchange = rabbitTopology.exchange(name);
+        if (exchange.isEmpty()) {
+            return new RabbitExchangeSnapshot(
+                name,
+                false,
+                null,
+                null,
+                null,
+                "not found");
+        }
+        return new RabbitExchangeSnapshot(
+            name,
+            true,
+            null,
+            null,
+            null,
+            null);
+    }
+
     private void appendLifecycleCandidate(CleanupScope scope,
                                           Swarm swarm,
                                           List<Candidate> candidates,
@@ -427,8 +518,8 @@ public class RuntimeReconciliationService {
     private Candidate candidate(ComputeRuntimeResource resource, boolean running) {
         Map<String, String> labels = resource.labels();
         RuntimeCleanupAction action = switch (resource.runtimeType()) {
-            case "container" -> RuntimeCleanupAction.DELETE_DOCKER_CONTAINER;
-            case "service" -> RuntimeCleanupAction.DELETE_DOCKER_SERVICE;
+            case RuntimeCleanupPorts.RUNTIME_TYPE_CONTAINER -> RuntimeCleanupAction.DELETE_DOCKER_CONTAINER;
+            case RuntimeCleanupPorts.RUNTIME_TYPE_SERVICE -> RuntimeCleanupAction.DELETE_DOCKER_SERVICE;
             default -> throw cleanupError(HttpStatus.BAD_REQUEST, "unsupported compute runtime type: " + resource.runtimeType());
         };
         return new Candidate(
@@ -450,7 +541,7 @@ public class RuntimeReconciliationService {
     }
 
     private Blocked blocked(ComputeRuntimeResource resource, String reason) {
-        RuntimeCleanupAction action = "service".equals(resource.runtimeType())
+        RuntimeCleanupAction action = RuntimeCleanupPorts.RUNTIME_TYPE_SERVICE.equals(resource.runtimeType())
             ? RuntimeCleanupAction.DELETE_DOCKER_SERVICE
             : RuntimeCleanupAction.DELETE_DOCKER_CONTAINER;
         return new Blocked(
@@ -541,7 +632,9 @@ public class RuntimeReconciliationService {
     }
 
     private static String dockerCandidateId(RuntimeCleanupAction action, String runtimeId) {
-        String type = action == RuntimeCleanupAction.DELETE_DOCKER_SERVICE ? "service" : "container";
+        String type = action == RuntimeCleanupAction.DELETE_DOCKER_SERVICE
+            ? RuntimeCleanupPorts.RUNTIME_TYPE_SERVICE
+            : RuntimeCleanupPorts.RUNTIME_TYPE_CONTAINER;
         return "docker:" + type + ":" + runtimeId;
     }
 
@@ -559,7 +652,7 @@ public class RuntimeReconciliationService {
             || normalized.equals("created")
             || normalized.equals("paused")
             || normalized.equals("restarting")
-            || normalized.equals("service");
+            || normalized.equals(RuntimeCleanupPorts.RUNTIME_TYPE_SERVICE);
     }
 
     private static String requireText(String value, String label) {

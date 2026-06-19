@@ -1,6 +1,8 @@
 package io.pockethive.orchestrator.runtime;
 
 import io.pockethive.orchestrator.runtime.RuntimeDebugContracts.Capabilities;
+import io.pockethive.orchestrator.runtime.RuntimeDebugContracts.RabbitTopologyRequest;
+import io.pockethive.orchestrator.runtime.RuntimeDebugContracts.RabbitTopologySnapshot;
 import io.pockethive.orchestrator.runtime.RuntimeDebugContracts.ResourceListRequest;
 import io.pockethive.orchestrator.runtime.RuntimeDebugContracts.ResourceListResponse;
 import io.pockethive.orchestrator.runtime.RuntimeDebugContracts.RuntimeInspectResponse;
@@ -21,9 +23,11 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/runtime/debug")
 public class RuntimeDebugController {
     private final RuntimeDebugService service;
+    private final RuntimeReconciliationService reconciliationService;
 
-    public RuntimeDebugController(RuntimeDebugService service) {
+    public RuntimeDebugController(RuntimeDebugService service, RuntimeReconciliationService reconciliationService) {
         this.service = service;
+        this.reconciliationService = reconciliationService;
     }
 
     @GetMapping("/capabilities")
@@ -51,8 +55,18 @@ public class RuntimeDebugController {
         return ResponseEntity.ok(service.inspect(request));
     }
 
+    @PostMapping("/rabbit/topology")
+    public ResponseEntity<RabbitTopologySnapshot> rabbitTopology(@RequestBody RabbitTopologyRequest request) {
+        return ResponseEntity.ok(reconciliationService.rabbitTopology(request));
+    }
+
     @ExceptionHandler(RuntimeDebugException.class)
     public ResponseEntity<Map<String, String>> debugError(RuntimeDebugException ex) {
         return ResponseEntity.status(ex.status()).body(Map.of("error", ex.getMessage()));
+    }
+
+    @ExceptionHandler(RuntimeCleanupException.class)
+    public ResponseEntity<Map<String, String>> cleanupError(RuntimeCleanupException ex) {
+        return ResponseEntity.status(ex.status()).body(Map.of("message", ex.getMessage()));
     }
 }

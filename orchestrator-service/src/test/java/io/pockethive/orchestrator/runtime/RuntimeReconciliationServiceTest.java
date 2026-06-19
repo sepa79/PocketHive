@@ -22,6 +22,8 @@ import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.RabbitExchangeReso
 import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.RabbitQueueResource;
 import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.RabbitTopologyPort;
 import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.RuntimeOwnershipManifestStore;
+import io.pockethive.orchestrator.runtime.RuntimeDebugContracts.RabbitTopologyRequest;
+import io.pockethive.orchestrator.runtime.RuntimeDebugContracts.RabbitTopologySnapshot;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -114,7 +116,9 @@ class RuntimeReconciliationServiceTest {
 
     @Test
     void emergencyOverrideExposesHighRiskLifecycleCandidateForRunningAndRemovingStates() {
+        assertEmergencyOverrideUsesLifecycleCandidate(SwarmLifecycleStatus.STARTING);
         assertEmergencyOverrideUsesLifecycleCandidate(SwarmLifecycleStatus.RUNNING);
+        assertEmergencyOverrideUsesLifecycleCandidate(SwarmLifecycleStatus.STOPPING);
         assertEmergencyOverrideUsesLifecycleCandidate(SwarmLifecycleStatus.REMOVING);
     }
 
@@ -331,6 +335,52 @@ class RuntimeReconciliationServiceTest {
         assertThat(plan.candidates().stream()
             .filter(candidate -> candidate.candidateId().equals("rabbit:queue:ph.control.sw1.processor.processor-1"))
             .findFirst().orElseThrow().highRisk()).isTrue();
+    }
+
+    @Test
+    void rabbitTopologySnapshotUsesOrchestratorManifestRuntimeLabelsAndRabbitPort() {
+        FakeInventory inventory = new FakeInventory(List.of(
+            container("worker-container", "worker", "processor", "processor-1", "running")));
+        FakeRabbit rabbit = new FakeRabbit();
+        rabbit.queues.put("ph.control.sw1.swarm-controller.controller-1",
+            new RabbitQueueResource("ph.control.sw1.swarm-controller.controller-1", 0, 0));
+        rabbit.queues.put("ph.control.sw1.processor.processor-1",
+            new RabbitQueueResource("ph.control.sw1.processor.processor-1", 0, 1));
+        rabbit.exchanges.put("ph.sw1.hive", new RabbitExchangeResource("ph.sw1.hive"));
+        FakeManifests manifests = new FakeManifests();
+        manifests.save(manifest());
+
+        RuntimeReconciliationService service = service(
+            new SwarmStore(),
+            manifests,
+            inventory,
+            inventory,
+            rabbit,
+            mock(ContainerLifecycleManager.class));
+
+        RabbitTopologySnapshot snapshot = service.rabbitTopology(new RabbitTopologyRequest("DOCKER_SINGLE", "sw1", "run-1"));
+
+        assertThat(snapshot.computeAdapter()).isEqualTo("DOCKER_SINGLE");
+        assertThat(snapshot.exactOnly()).isTrue();
+        assertThat(snapshot.manifest().available()).isTrue();
+        assertThat(snapshot.queues())
+            .extracting("name")
+            .containsExactly(
+                "ph.control.sw1.processor.processor-1",
+                "ph.control.sw1.swarm-controller.controller-1",
+                "ph.sw1.final");
+        assertThat(snapshot.queues())
+            .filteredOn(queue -> queue.name().equals("ph.control.sw1.processor.processor-1"))
+            .extracting("present", "messages", "consumers")
+            .containsExactly(org.assertj.core.groups.Tuple.tuple(true, 0L, 1));
+        assertThat(snapshot.queues())
+            .filteredOn(queue -> queue.name().equals("ph.sw1.final"))
+            .extracting("present", "reason")
+            .containsExactly(org.assertj.core.groups.Tuple.tuple(false, "not found"));
+        assertThat(snapshot.exchanges())
+            .extracting("name", "present")
+            .containsExactly(org.assertj.core.groups.Tuple.tuple("ph.sw1.hive", true));
+        assertThat(snapshot.unmanagedDiagnostics()).isEmpty();
     }
 
     @Test

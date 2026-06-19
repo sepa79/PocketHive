@@ -62,9 +62,6 @@ export function registerRuntimeTools(reg, options = {}) {
   const runtimeApi = options.httpJson ? runtimeDebugApi(options.httpJson) : null;
   const sourceOptions = {
     httpJson: options.httpJson ?? null,
-    rabbitManagementBaseUrl: options.rabbitManagementBaseUrl ?? null,
-    rabbitAuth: options.rabbitAuth ?? null,
-    rabbitVhost: options.rabbitVhost ?? process.env.RABBITMQ_VHOST ?? "/",
     manifestRoot: options.manifestRoot
       ?? process.env.POCKETHIVE_SCENARIOS_RUNTIME_ROOT
       ?? resolve(REPO_ROOT, "scenarios-runtime")
@@ -170,14 +167,12 @@ export function registerRuntimeTools(reg, options = {}) {
     return buildControlPlaneStatus(context);
   }), runtimeReadOnly);
 
-  reg("runtime.rabbit-topology-snapshot", "Read exact manifest-owned RabbitMQ queues and exchanges for one swarm.", {
+  reg("runtime.rabbit-topology-snapshot", "Read Orchestrator-backed exact RabbitMQ queues and exchanges for one swarm.", {
+    computeAdapter: COMPUTE_ADAPTER_SCHEMA,
     swarmId: z.string(),
-    runId: z.string().optional(),
-    includeUnmanagedDiagnostics: z.boolean().optional()
+    runId: z.string().optional()
   }, guarded(async (input) => {
-    const manifest = readRuntimeOwnershipManifest(input, sourceOptions);
-    const rabbit = await readRabbitTopology(input, manifest, sourceOptions);
-    return buildRabbitTopologySnapshot(input, manifest, rabbit);
+    return await requireRuntimeDebugApi(runtimeApi).rabbitTopology(input);
   }), runtimeReadOnly);
 
   reg("runtime.swarm-timeline", "Build a read-only swarm timeline from Orchestrator journal and runtime state.", {
@@ -303,6 +298,10 @@ function runtimeDebugApi(httpJson) {
     inspect: (body) => httpJson("/api/runtime/debug/resources/inspect", {
       method: "POST",
       body: cleanApiBody(body)
+    }),
+    rabbitTopology: (body) => httpJson("/api/runtime/debug/rabbit/topology", {
+      method: "POST",
+      body: cleanApiBody(body)
     })
   };
 }
@@ -389,7 +388,7 @@ export async function runtimeDebugContext(input = {}, options = {}) {
   const resources = resourcesSource.available ? runtimeResourcesFromListResponse(resourcesSource.data) : [];
   const manifest = readRuntimeOwnershipManifest({ swarmId, runId }, options);
   const rabbit = includeRabbit
-    ? await readRabbitTopology({ swarmId, runId }, manifest, options, resources)
+    ? await readRabbitTopology({ computeAdapter, swarmId, runId }, manifest, options, resources)
     : { available: false, skipped: true, reason: "includeRabbit=false" };
   const swarmSnapshot = await readOrchestratorSnapshot(swarmId, options);
   const journal = await readSwarmJournal(
@@ -504,12 +503,19 @@ export function buildControlPlaneStatus(context) {
     runId: context.input.runId,
     includeManagers: true
   });
-  const queuesByName = rabbitQueuesByName(context.rabbit);
-  const manifestControlQueues = context.manifest?.rabbit?.controlQueues ?? [];
-  const exactQueueNames = new Set(manifestControlQueues);
+  const rabbitSnapshot = buildRabbitTopologySnapshot(
+    { swarmId: context.input.swarmId, runId: context.input.runId },
+    context.sources.manifest.available
+      ? { available: true, manifest: context.manifest }
+      : { available: false, error: context.sources.manifest.error },
+    context.rabbit
+  );
+  const queuesByName = new Map(rabbitSnapshot.queues.map((queue) => [queue.name, queue]));
+  const controlQueueNames = rabbitSnapshot.queues
+    .map((queue) => queue.name)
+    .filter((name) => isControlQueueName(name, context.input.swarmId));
   const journalEntries = normalizeJournalEntries(context.journal.data);
-  const controlQueues = [...exactQueueNames]
-    .filter(Boolean)
+  const controlQueues = controlQueueNames
     .sort()
     .map((name) => rabbitQueueSnapshot(name, queuesByName.get(name)));
 
@@ -518,8 +524,8 @@ export function buildControlPlaneStatus(context) {
     runId: context.input.runId,
     sources: context.sources,
     controlQueues,
-    workers: workerList.workers.map((worker) => controlPlaneRuntimeStatus(worker, manifestControlQueues, queuesByName, journalEntries)),
-    managers: workerList.managers.map((manager) => controlPlaneRuntimeStatus(manager, manifestControlQueues, queuesByName, journalEntries)),
+    workers: workerList.workers.map((worker) => controlPlaneRuntimeStatus(worker, controlQueueNames, queuesByName, journalEntries)),
+    managers: workerList.managers.map((manager) => controlPlaneRuntimeStatus(manager, controlQueueNames, queuesByName, journalEntries)),
     recentControlEvents: journalEntries
       .filter((entry) => journalText(entry).match(/control|command|config/i))
       .slice(0, 20)
@@ -557,6 +563,20 @@ function manifestControlQueueFor(entry, manifestControlQueues = []) {
 export function buildRabbitTopologySnapshot(input, manifestSource, rabbitSource) {
   const swarmId = requireText(input.swarmId, "swarmId");
   const runId = optionalText(input.runId);
+  const upstream = rabbitTopologySnapshotData(rabbitSource);
+  if (upstream) {
+    return {
+      ...upstream,
+      swarmId,
+      runId: runId ?? upstream.runId ?? null,
+      manifest: upstream.manifest ?? sourceSummary(manifestSource),
+      rabbit: upstream.rabbit ?? sourceSummary(rabbitSource),
+      exactOnly: upstream.exactOnly !== false,
+      queues: Array.isArray(upstream.queues) ? upstream.queues : [],
+      exchanges: Array.isArray(upstream.exchanges) ? upstream.exchanges : [],
+      unmanagedDiagnostics: Array.isArray(upstream.unmanagedDiagnostics) ? upstream.unmanagedDiagnostics : []
+    };
+  }
   const manifest = manifestSource.manifest ?? null;
   const queuesByName = rabbitQueuesByName(rabbitSource);
   const exchangesByName = rabbitExchangesByName(rabbitSource);
@@ -794,39 +814,20 @@ export function readRuntimeOwnershipManifest(input = {}, options = {}) {
 }
 
 async function readRabbitTopology(input, manifestSource, options = {}, resources = []) {
-  if (!options.httpJson || !options.rabbitManagementBaseUrl) {
+  if (!options.httpJson) {
     return {
       available: false,
-      reason: "RabbitMQ management client is not configured"
+      reason: "Orchestrator runtime debug API is not configured"
     };
   }
-  return await safeSource("rabbit", async () => {
-    const base = String(options.rabbitManagementBaseUrl).replace(/\/+$/, "");
-    const authorization = typeof options.rabbitAuth === "function"
-      ? options.rabbitAuth()
-      : options.rabbitAuth;
-    const headers = authorization ? { authorization } : {};
-    const names = rabbitExactResourceNames(input, manifestSource, resources);
-    const [queues, exchanges, unmanagedQueues] = await Promise.all([
-      Promise.all([...names.queues].sort().map(async (name) =>
-        await readRabbitManagementObject(options.httpJson, rabbitQueueUrl(base, options.rabbitVhost, name), headers)
-          .then((queue) => queue ? { ...queue, name: queue.name ?? name } : null))),
-      Promise.all([...names.exchanges].sort().map(async (name) =>
-        await readRabbitManagementObject(options.httpJson, rabbitExchangeUrl(base, options.rabbitVhost, name), headers)
-          .then((exchange) => exchange ? { ...exchange, name: exchange.name ?? name } : null))),
-      input.includeUnmanagedDiagnostics === true
-        ? options.httpJson(`${base}/queues`, { headers })
-        : Promise.resolve([])
-    ]);
-    return {
-      queues: queues.filter(Boolean),
-      exchanges: exchanges.filter(Boolean),
-      unmanagedQueues: Array.isArray(unmanagedQueues) ? unmanagedQueues : [],
-      exactQueueNames: [...names.queues].sort(),
-      exactExchangeNames: [...names.exchanges].sort(),
-      manifestAvailable: manifestSource.available === true
-    };
-  });
+  return await safeSource("rabbit", () => options.httpJson("/api/runtime/debug/rabbit/topology", {
+    method: "POST",
+    body: cleanApiBody({
+      computeAdapter: input.computeAdapter,
+      swarmId: input.swarmId,
+      runId: input.runId
+    })
+  }));
 }
 
 async function readRuntimeInventory(input, options = {}) {
@@ -1104,25 +1105,36 @@ function rabbitExchangesByName(rabbitSource = {}) {
   return new Map((Array.isArray(exchanges) ? exchanges : []).map((exchange) => [exchange.name, exchange]));
 }
 
+function rabbitTopologySnapshotData(rabbitSource = {}) {
+  const data = rabbitSource.data ?? rabbitSource;
+  if (data?.exactOnly !== undefined && Array.isArray(data?.queues) && Array.isArray(data?.exchanges)) {
+    return data;
+  }
+  return null;
+}
+
 function rabbitQueueSnapshot(name, queue) {
   return {
     name,
-    present: Boolean(queue),
+    present: typeof queue?.present === "boolean" ? queue.present : Boolean(queue),
     messages: queue?.messages ?? queue?.messages_ready ?? null,
     consumers: queue?.consumers ?? null,
     state: queue?.state ?? null,
     durable: queue?.durable ?? null,
-    autoDelete: queue?.auto_delete ?? null
+    autoDelete: queue?.autoDelete ?? queue?.auto_delete ?? null,
+    diagnosticOnly: queue?.diagnosticOnly ?? null,
+    reason: queue?.reason ?? null
   };
 }
 
 function rabbitExchangeSnapshot(name, exchange) {
   return {
     name,
-    present: Boolean(exchange),
+    present: typeof exchange?.present === "boolean" ? exchange.present : Boolean(exchange),
     type: exchange?.type ?? null,
     durable: exchange?.durable ?? null,
-    autoDelete: exchange?.auto_delete ?? null
+    autoDelete: exchange?.autoDelete ?? exchange?.auto_delete ?? null,
+    reason: exchange?.reason ?? null
   };
 }
 
@@ -1133,51 +1145,8 @@ function isSwarmRabbitDiagnosticName(name, swarmId) {
     || text.includes(`.${swarmId}.`);
 }
 
-function rabbitExactResourceNames(input = {}, manifestSource = {}, resources = []) {
-  const queues = new Set();
-  const exchanges = new Set();
-  const manifest = manifestSource.manifest ?? null;
-  for (const queue of manifest?.rabbit?.controlQueues ?? []) {
-    if (hasText(queue)) {
-      queues.add(queue);
-    }
-  }
-  for (const queue of manifest?.rabbit?.workQueues ?? []) {
-    if (hasText(queue)) {
-      queues.add(queue);
-    }
-  }
-  for (const exchange of manifest?.rabbit?.exchanges ?? []) {
-    if (hasText(exchange)) {
-      exchanges.add(exchange);
-    }
-  }
-  return { queues, exchanges };
-}
-
-async function readRabbitManagementObject(httpJson, url, headers) {
-  try {
-    return await httpJson(url, { headers });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (message.includes("HTTP 404")) {
-      return null;
-    }
-    throw error;
-  }
-}
-
-function rabbitQueueUrl(base, vhost, name) {
-  return `${base}/queues/${encodeRabbitPathSegment(vhost)}/${encodeRabbitPathSegment(name)}`;
-}
-
-function rabbitExchangeUrl(base, vhost, name) {
-  return `${base}/exchanges/${encodeRabbitPathSegment(vhost)}/${encodeRabbitPathSegment(name)}`;
-}
-
-function encodeRabbitPathSegment(value) {
-  const text = value == null || value === "" ? "/" : String(value);
-  return encodeURIComponent(text);
+function isControlQueueName(name, swarmId) {
+  return String(name ?? "").startsWith(`ph.control.${swarmId}.`);
 }
 
 function normalizeJournalEntries(data) {

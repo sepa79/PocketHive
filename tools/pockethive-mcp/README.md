@@ -196,11 +196,12 @@ both plan and execute; the override is hash-bound, high-risk, and still uses onl
 `LIFECYCLE_REMOVE_SWARM`.
 
 Runtime debug and cleanup tools first read `/api/runtime/debug/capabilities`.
-Docker/Swarm list, logs, version, and inspect tools delegate to Orchestrator's
-`/api/runtime/debug/resources/*` API. If Orchestrator HTTP is unavailable or the
-runtime debug contract is incompatible, only the runtime tools fail closed;
-existing scenario, workflow, and swarm MCP tools are not disabled. The MCP does
-not use a local Docker socket fallback.
+Docker/Swarm list, logs, version, inspect, and exact Rabbit topology tools
+delegate to Orchestrator's `/api/runtime/debug/*` API. If Orchestrator HTTP is
+unavailable or the runtime debug contract is incompatible, only the runtime
+tools fail closed; existing scenario, workflow, and swarm MCP tools are not
+disabled. The MCP does not use a local Docker socket or Rabbit topology fallback
+for runtime debug/cleanup.
 
 Registered swarm-controller containers/services are removed through the
 Orchestrator lifecycle action. Orphaned swarm-controller and worker
@@ -224,9 +225,10 @@ runtime ownership manifest, Docker/Swarm state, RabbitMQ topology, and journal:
   manager.
 - `runtime_diff_swarm_runtime` compares expected, registered, live, and cleanup
   views.
-- `runtime_control_plane_status` summarizes manifest/Orchestrator-provided
-  control queues and recent control events.
-- `runtime_rabbit_topology_snapshot` reads exact manifest-owned queues/exchanges.
+- `runtime_control_plane_status` summarizes Orchestrator-provided exact control
+  queues and recent control events.
+- `runtime_rabbit_topology_snapshot` reads Orchestrator-backed exact
+  queues/exchanges for a concrete compute adapter.
 - `runtime_swarm_timeline` builds an operator timeline from journal/runtime
   evidence.
 - `runtime_manifest_validate` checks manifest drift against live runtime state.
@@ -235,9 +237,7 @@ These tools return explicit source availability instead of silently guessing.
 They never expose raw environment variables or mutate runtime resources.
 They are designed for zero scenario-path impact: no scenario queue consumers, no
 message publishing, no worker exec/pause/resume, finite log reads only, and
-RabbitMQ diagnostics use exact manifest-owned resource reads by default. Broad
-RabbitMQ topology scans happen only when unmanaged diagnostics are explicitly
-requested.
+RabbitMQ diagnostics use exact Orchestrator-owned metadata reads only.
 
 Strict proof blocks on missing or failing production evidence:
 

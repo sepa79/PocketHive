@@ -19,7 +19,9 @@ HiveForge stays deployment-scope only. It must not clean individual bees.
 | Swarm registry and desired state | Orchestrator | Cleanup plans start here |
 | Worker topology and worker runtime labels | Swarm Controller | Creates labeled workers |
 | Docker/Swarm read-only diagnostics | Orchestrator | Owns Docker socket and runtime log/inspect access |
-| Rabbit/journal read-only diagnostics | `tools/pockethive-mcp` | Aggregates exact Rabbit reads and Orchestrator APIs |
+| RabbitMQ exact topology diagnostics | Orchestrator | Owns manifest/descriptor-based Rabbit reads |
+| Journal persistence and read-model APIs | Orchestrator | Owns journal storage/query contracts |
+| Agent-facing runtime summaries | `tools/pockethive-mcp` | Composes Orchestrator APIs for agents |
 | Cleanup plan/execute | Orchestrator | Single runtime cleanup authority |
 | MCP tool surface | `tools/pockethive-mcp` | Agent facade, not runtime authority |
 | Cleanup approval/policy | HiveGate | Governs destructive execute in production |
@@ -32,8 +34,8 @@ flowchart LR
   Operator[Operator or Agent] --> MCP[PocketHive MCP]
   MCP --> DebugAPI[Orchestrator runtime debug API]
   DebugAPI --> Docker[Docker or Swarm metadata/log reads]
-  MCP --> RabbitRead[RabbitMQ exact topology reads]
-  MCP --> Journal[Orchestrator journal/API reads]
+  DebugAPI --> RabbitRead[RabbitMQ exact topology reads]
+  MCP --> Journal[Orchestrator journal/read-model APIs]
 
   MCP --> Plan[runtime_cleanup_plan]
   MCP --> Execute[runtime_cleanup_execute]
@@ -57,6 +59,7 @@ flowchart LR
 | Cleanup is always `plan -> execute` | Prevents surprise deletion |
 | MCP delegates cleanup to Orchestrator | Keeps one authority path |
 | MCP delegates Docker/Swarm runtime debug to Orchestrator | Keeps Docker socket access out of MCP |
+| MCP delegates exact Rabbit topology reads to Orchestrator | Prevents queue-name drift |
 | MCP fails closed without required Orchestrator runtime APIs | No local Docker cleanup/debug fallback |
 | Docker cleanup requires PocketHive labels | Avoids deleting foreign resources |
 | RabbitMQ cleanup uses exact manifest/descriptor names | No prefix guessing |
@@ -128,7 +131,7 @@ Default tool names use underscores. Dotted names are legacy/conceptual unless
 | `runtime_inspect_worker` | No | Orchestrator-backed bounded inspect summary |
 | `runtime_diff_swarm_runtime` | No | Registry/manifest/runtime/Rabbit diff |
 | `runtime_control_plane_status` | No | Manifest-provided queues and recent events |
-| `runtime_rabbit_topology_snapshot` | No | Exact manifest-owned Rabbit resources |
+| `runtime_rabbit_topology_snapshot` | No | Orchestrator-backed exact Rabbit resources |
 | `runtime_swarm_timeline` | No | Journal/runtime timeline |
 | `runtime_manifest_validate` | No | Manifest drift validation |
 
@@ -208,8 +211,7 @@ still require an ownership manifest; labels do not authorize prefix deletion.
   inside Orchestrator from exact worker labels.
 - Derive worker control queues with shared control-plane topology descriptors.
 - Never delete by prefix or broad RabbitMQ scan.
-- Broad RabbitMQ reads are allowed only for explicit unmanaged diagnostics, and
-  those results are advisory only.
+- MCP runtime tools must not read RabbitMQ directly for topology ownership.
 - Deleting a queue removes its bindings; do not add separate binding cleanup
   unless exact binding identity becomes part of the contract.
 
@@ -221,7 +223,7 @@ Runtime debug must have zero scenario-path impact.
 - Do not publish control/data messages.
 - Do not exec into, pause, resume, or mutate workers.
 - Logs are finite `tail` reads; no follow/streaming.
-- RabbitMQ diagnostics read exact manifest-owned resources by default.
+- RabbitMQ diagnostics read exact Orchestrator-owned metadata only.
 - Debug taps, when used, must use separate temporary queues.
 - Agents should not tight-loop diagnostics during benchmark runs; rate-limit via
   client/HiveGate policy.
@@ -259,9 +261,12 @@ Do not store secrets or full unredacted environment variables.
 
 Required tests cover:
 
+- Runtime debug rejects missing bodies, `AUTO`/unknown adapters, invalid
+  targets, invalid timestamps, and out-of-bound log tails.
 - MCP fails closed without Orchestrator cleanup API.
 - MCP delegates plan/execute to Orchestrator when available.
 - MCP delegates Docker/Swarm list/logs/version/inspect to Orchestrator.
+- MCP delegates exact Rabbit topology reads to Orchestrator.
 - Incompatible runtime debug capabilities fail only runtime tools.
 - Missing manifest blocks RabbitMQ cleanup.
 - Active shared RabbitMQ resources are protected.

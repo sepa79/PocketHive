@@ -62,6 +62,12 @@ public final class RuntimeDebugContracts {
         String since) {
     }
 
+    public record RabbitTopologyRequest(
+        String computeAdapter,
+        String swarmId,
+        String runId) {
+    }
+
     public record ResourceListResponse(
         String computeAdapter,
         String swarmId,
@@ -151,5 +157,51 @@ public final class RuntimeDebugContracts {
         String restartPolicy,
         List<Map<String, Object>> mounts,
         List<String> networks) {
+    }
+
+    public record RabbitTopologySnapshot(
+        String computeAdapter,
+        String swarmId,
+        String runId,
+        SourceSummary manifest,
+        SourceSummary rabbit,
+        boolean exactOnly,
+        List<RabbitQueueSnapshot> queues,
+        List<RabbitExchangeSnapshot> exchanges,
+        List<RabbitQueueSnapshot> unmanagedDiagnostics) {
+    }
+
+    public record SourceSummary(
+        boolean available,
+        String reason,
+        String error) {
+        public static SourceSummary present() {
+            return new SourceSummary(true, null, null);
+        }
+
+        public static SourceSummary missing(String reason) {
+            return new SourceSummary(false, reason, null);
+        }
+    }
+
+    public record RabbitQueueSnapshot(
+        String name,
+        boolean present,
+        Long messages,
+        Integer consumers,
+        String state,
+        Boolean durable,
+        Boolean autoDelete,
+        Boolean diagnosticOnly,
+        String reason) {
+    }
+
+    public record RabbitExchangeSnapshot(
+        String name,
+        boolean present,
+        String type,
+        Boolean durable,
+        Boolean autoDelete,
+        String reason) {
     }
 }

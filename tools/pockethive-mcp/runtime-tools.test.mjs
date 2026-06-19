@@ -15,6 +15,7 @@ import {
   normalizeTailLines,
   parseImageReference,
   registerRuntimeTools,
+  runtimeDebugContext,
   redactLogText,
   validateRuntimeDebugCapabilities
 } from "./runtime-tools.mjs";
@@ -471,105 +472,96 @@ test("runtime contract validation pins cleanup drift markers", () => {
   );
 });
 
-test("rabbit topology tool reads exact manifest resources by default", async () => {
-  const manifestRoot = mkdtempSync(join(tmpdir(), "ph-runtime-manifest-"));
-  try {
-    const manifestDir = join(manifestRoot, "swarm-1", "run-1");
-    mkdirSync(manifestDir, { recursive: true });
-    writeFileSync(join(manifestDir, "runtime-ownership-manifest.json"), JSON.stringify(runtimeManifest()), "utf8");
-
-    const handlers = new Map();
-    const calls = [];
-    registerRuntimeTools((name, _description, _schema, handler) => {
-      handlers.set(name, handler);
-    }, {
-      manifestRoot,
-      rabbitManagementBaseUrl: "http://rabbit/api",
-      rabbitVhost: "/",
-      rabbitAuth: "Basic test",
-      httpJson: async (path, options) => {
-        calls.push({ path, options });
-        if (path === "/api/runtime/debug/capabilities") {
-          return runtimeCapabilities();
-        }
-        if (path.includes("/queues/%2F/")) {
-          return {
-            name: decodeURIComponent(path.split("/queues/%2F/")[1]),
-            messages: 0,
-            consumers: 0
-          };
-        }
-        if (path.includes("/exchanges/%2F/")) {
-          return {
-            name: decodeURIComponent(path.split("/exchanges/%2F/")[1]),
-            type: "direct"
-          };
-        }
-        throw new Error(`unexpected call ${path}`);
+test("rabbit topology tool delegates exact reads to Orchestrator", async () => {
+  const handlers = new Map();
+  const calls = [];
+  registerRuntimeTools((name, _description, _schema, handler) => {
+    handlers.set(name, handler);
+  }, {
+    httpJson: async (path, options) => {
+      calls.push({ path, options });
+      if (path === "/api/runtime/debug/capabilities") {
+        return runtimeCapabilities();
       }
-    });
+      if (path === "/api/runtime/debug/rabbit/topology") {
+        return {
+          computeAdapter: options.body.computeAdapter,
+          swarmId: options.body.swarmId,
+          runId: options.body.runId,
+          manifest: { available: true },
+          rabbit: { available: true },
+          exactOnly: true,
+          queues: [{ name: "ph.control.swarm-1.processor.worker-1", present: true, messages: 0, consumers: 1 }],
+          exchanges: [{ name: "ph.swarm-1.hive", present: true }],
+          unmanagedDiagnostics: []
+        };
+      }
+      throw new Error(`unexpected call ${path}`);
+    }
+  });
 
-    const snapshot = await handlers.get("runtime.rabbit-topology-snapshot")({
-      swarmId: "swarm-1",
-      runId: "run-1"
-    });
+  const snapshot = await handlers.get("runtime.rabbit-topology-snapshot")({
+    computeAdapter: "DOCKER_SINGLE",
+    swarmId: "swarm-1",
+    runId: "run-1"
+  });
 
-    assert.equal(snapshot.queues.length, 2);
-    assert.equal(snapshot.exchanges.length, 1);
-    assert.equal(calls.some((call) => call.path === "http://rabbit/api/queues"), false);
-    assert.equal(calls.some((call) => call.path === "http://rabbit/api/exchanges"), false);
-    assert.ok(calls
-      .filter((call) => call.path.startsWith("http://rabbit/api/"))
-      .every((call) => call.options.headers.authorization === "Basic test"));
-  } finally {
-    rmSync(manifestRoot, { recursive: true, force: true });
-  }
+  assert.equal(snapshot.computeAdapter, "DOCKER_SINGLE");
+  assert.equal(snapshot.queues.length, 1);
+  assert.equal(snapshot.queues[0].consumers, 1);
+  assert.deepEqual(calls.map((call) => call.path), [
+    "/api/runtime/debug/capabilities",
+    "/api/runtime/debug/rabbit/topology"
+  ]);
+  const directRabbitPrefix = "http://rabbit" + "/api/";
+  assert.equal(calls.some((call) => String(call.path).startsWith(directRabbitPrefix)), false);
 });
 
-test("rabbit topology unmanaged diagnostics explicitly perform broad queue scan", async () => {
-  const manifestRoot = mkdtempSync(join(tmpdir(), "ph-runtime-manifest-"));
-  try {
-    const manifestDir = join(manifestRoot, "swarm-1", "run-1");
-    mkdirSync(manifestDir, { recursive: true });
-    writeFileSync(join(manifestDir, "runtime-ownership-manifest.json"), JSON.stringify(runtimeManifest()), "utf8");
-
-    const handlers = new Map();
-    const calls = [];
-    registerRuntimeTools((name, _description, _schema, handler) => {
-      handlers.set(name, handler);
-    }, {
-      manifestRoot,
-      rabbitManagementBaseUrl: "http://rabbit/api",
-      rabbitVhost: "/",
-      httpJson: async (path) => {
-        calls.push(path);
-        if (path === "/api/runtime/debug/capabilities") {
-          return runtimeCapabilities();
-        }
-        if (path === "http://rabbit/api/queues") {
-          return [{ name: "ph.swarm-1.legacy", messages: 1, consumers: 0 }];
-        }
-        if (path.includes("/queues/%2F/")) {
-          return null;
-        }
-        if (path.includes("/exchanges/%2F/")) {
-          return null;
-        }
-        throw new Error(`unexpected call ${path}`);
+test("runtime context reads Rabbit topology from Orchestrator", async () => {
+  const calls = [];
+  const context = await runtimeDebugContext({
+    computeAdapter: "DOCKER_SINGLE",
+    swarmId: "swarm-1",
+    runId: "run-1",
+    includeRabbit: true
+  }, {
+    manifestRoot: "__missing_manifest_root__",
+    httpJson: async (path, options) => {
+      calls.push({ path, options });
+      if (path === "/api/runtime/debug/resources/list") {
+        return { workers: [], managers: [], blocked: [] };
       }
-    });
+      if (path === "/api/runtime/debug/rabbit/topology") {
+        return {
+          computeAdapter: "DOCKER_SINGLE",
+          swarmId: "swarm-1",
+          runId: "run-1",
+          manifest: { available: true },
+          rabbit: { available: true },
+          exactOnly: true,
+          queues: [{ name: "ph.control.swarm-1.processor.worker-1", present: true, messages: 0, consumers: 1 }],
+          exchanges: [],
+          unmanagedDiagnostics: []
+        };
+      }
+      if (path === "/api/swarms/swarm-1") {
+        return {};
+      }
+      if (path.startsWith("/api/swarms/swarm-1/journal/page")) {
+        return { items: [] };
+      }
+      if (path === "/api/runtime/cleanup/plan") {
+        return { candidates: [] };
+      }
+      throw new Error(`unexpected call ${path}`);
+    }
+  });
 
-    const snapshot = await handlers.get("runtime.rabbit-topology-snapshot")({
-      swarmId: "swarm-1",
-      runId: "run-1",
-      includeUnmanagedDiagnostics: true
-    });
-
-    assert.ok(calls.includes("http://rabbit/api/queues"));
-    assert.deepEqual(snapshot.unmanagedDiagnostics.map((queue) => queue.name), ["ph.swarm-1.legacy"]);
-  } finally {
-    rmSync(manifestRoot, { recursive: true, force: true });
-  }
+  assert.equal(context.sources.rabbit.available, true);
+  assert.equal(context.rabbit.data.queues[0].name, "ph.control.swarm-1.processor.worker-1");
+  assert.ok(calls.some((call) => call.path === "/api/runtime/debug/rabbit/topology"));
+  const directRabbitPrefix = "http://rabbit" + "/api/";
+  assert.equal(calls.some((call) => String(call.path).startsWith(directRabbitPrefix)), false);
 });
 
 function runtimeResource(runtimeId, overrides = {}) {

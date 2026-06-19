@@ -341,6 +341,9 @@ tools, without impacting existing scenario, workflow, or swarm lifecycle tools.
 Lists PocketHive-managed worker and swarm-controller manager runtimes for one
 swarm from Orchestrator-owned Docker/Swarm inventory.
 
+`computeAdapter` must be concrete: `DOCKER_SINGLE` or `SWARM_STACK`; `AUTO`
+and unknown adapters return `400`.
+
 **Request**
 ```json
 {
@@ -413,7 +416,52 @@ worker or manager. Deployment-wide service versions are not used.
 Returns a bounded inspect summary for one worker or manager runtime. Raw bind
 host paths and environment variables are not returned.
 
-#### 2.9.6 Plan cleanup
+#### 2.9.6 Rabbit topology snapshot
+`POST /api/runtime/debug/rabbit/topology`
+
+Reads exact RabbitMQ topology for one PocketHive swarm through Orchestrator.
+The response is based on the runtime ownership manifest plus control queues
+derived inside Orchestrator from exact worker labels and shared control-plane
+topology descriptors. It does not consume queues, publish messages, scan by
+prefix, or expose a RabbitMQ management fallback in the MCP.
+
+**Request**
+```json
+{
+  "computeAdapter": "DOCKER_SINGLE",
+  "swarmId": "demo",
+  "runId": "optional"
+}
+```
+
+**Response (200)**
+```json
+{
+  "computeAdapter": "DOCKER_SINGLE",
+  "swarmId": "demo",
+  "runId": "run-1",
+  "manifest": { "available": true },
+  "rabbit": { "available": true },
+  "exactOnly": true,
+  "queues": [
+    {
+      "name": "ph.control.demo.processor.demo-processor-1",
+      "present": true,
+      "messages": 0,
+      "consumers": 1
+    }
+  ],
+  "exchanges": [
+    { "name": "ph.demo.hive", "present": true }
+  ],
+  "unmanagedDiagnostics": []
+}
+```
+
+When the ownership manifest is missing, the response is still exact-only and
+returns no Rabbit resources instead of guessing by prefix.
+
+#### 2.9.7 Plan cleanup
 `POST /api/runtime/cleanup/plan`
 
 **Request**
@@ -463,7 +511,7 @@ host paths and environment variables are not returned.
 }
 ```
 
-#### 2.9.7 Execute cleanup
+#### 2.9.8 Execute cleanup
 `POST /api/runtime/cleanup/execute`
 
 Recomputes the plan, verifies the candidate hash and idempotency key, then
