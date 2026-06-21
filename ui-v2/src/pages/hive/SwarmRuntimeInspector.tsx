@@ -74,6 +74,7 @@ export function SwarmRuntimeInspector({ swarmId, runId }: RuntimeInspectorProps)
   const [version, setVersion] = useState<RuntimeVersionResponse | null>(null)
   const [inspect, setInspect] = useState<RuntimeInspectResponse | null>(null)
   const loadSequence = useRef(0)
+  const actionSequence = useRef(0)
   const lastSwarmId = useRef<string | null>(null)
 
   const resources = useMemo(() => {
@@ -93,6 +94,7 @@ export function SwarmRuntimeInspector({ swarmId, runId }: RuntimeInspectorProps)
 
   const selectedRuntimeId = selectedResource?.runtimeId?.trim() ?? ''
   const selectedResourceKind = selectedResource?.resourceKind ?? null
+  const selectedResourceKey = selectedResource ? runtimeKey(selectedResource) : ''
 
   const loadInspector = useCallback(async () => {
     const sequence = loadSequence.current + 1
@@ -139,9 +141,20 @@ export function SwarmRuntimeInspector({ swarmId, runId }: RuntimeInspectorProps)
     void loadInspector()
   }, [loadInspector, swarmId])
 
+  useEffect(() => {
+    actionSequence.current += 1
+    setActionBusy(null)
+    setActionError(null)
+    setLogs(null)
+    setVersion(null)
+    setInspect(null)
+  }, [selectedResourceKey])
+
   const runAction = useCallback(
     async (action: InspectorAction) => {
       if (!selectedRuntimeId) return
+      const sequence = actionSequence.current + 1
+      actionSequence.current = sequence
       setActionBusy(action)
       setActionError(null)
       try {
@@ -153,6 +166,7 @@ export function SwarmRuntimeInspector({ swarmId, runId }: RuntimeInspectorProps)
             resourceKind: selectedResourceKind,
             tailLines,
           })
+          if (actionSequence.current !== sequence) return
           setLogs(nextLogs)
         } else if (action === 'version') {
           const nextVersion = await getRuntimeVersion({
@@ -161,6 +175,7 @@ export function SwarmRuntimeInspector({ swarmId, runId }: RuntimeInspectorProps)
             runtimeId: selectedRuntimeId,
             resourceKind: selectedResourceKind,
           })
+          if (actionSequence.current !== sequence) return
           setVersion(nextVersion)
         } else {
           const nextInspect = await inspectRuntime({
@@ -169,12 +184,16 @@ export function SwarmRuntimeInspector({ swarmId, runId }: RuntimeInspectorProps)
             runtimeId: selectedRuntimeId,
             resourceKind: selectedResourceKind,
           })
+          if (actionSequence.current !== sequence) return
           setInspect(nextInspect)
         }
       } catch (err) {
+        if (actionSequence.current !== sequence) return
         setActionError(err instanceof Error ? err.message : `Failed to run ${action}`)
       } finally {
-        setActionBusy(null)
+        if (actionSequence.current === sequence) {
+          setActionBusy(null)
+        }
       }
     },
     [runId, selectedResourceKind, selectedRuntimeId, swarmId, tailLines],
