@@ -21,9 +21,9 @@ runtime environment values.
 
 The `single-full` profile intentionally maps to the existing canonical local
 PocketHive entrypoint instead of inventing a second compose orchestration path.
-The `swarm-reduced` profile uses `docker compose config` only to render the
-managed compose files, then deploys the rendered stack with `docker stack
-deploy`. It does not build or push images.
+The `swarm-reduced` and `swarm-full` profiles render a Docker Stack compose file
+from the Ansible Jinja2 template, then HiveForge deploys the rendered stack with
+`docker stack deploy`. They do not build or push images.
 
 For `swarm-reduced` and `swarm-full`, scenario/runtime workloads assume the HiveForge-managed
 project root is shared and available on every eligible Swarm node. PocketHive
@@ -55,13 +55,13 @@ Use these paths exactly in PocketHive action playbooks:
 | Managed runtime artifacts copied by `artifacts.managedPaths` | `/hf/artifacts/runtime/...` | Ansible reads |
 | Rendered Docker Stack file | `/hf/stacks/compose.yml` | Ansible writes, HiveForge deploys |
 | HiveForge-managed runtime state dirs | `/hf/state/...` | Ansible creates/chowns |
-| Docker-daemon host-visible bind root | `HIVEFORGE_BIND_SOURCE_DIR` | Compose render only |
-| Dedicated `swarm-full` service data dirs | `POCKETHIVE_*_ROOT` | Compose render only |
+| Docker-daemon host-visible bind root | `HIVEFORGE_BIND_SOURCE_DIR` | Stack template render only |
+| Dedicated `swarm-full` service data dirs | `POCKETHIVE_*_ROOT` | Stack template render only |
 
 `HIVEFORGE_BIND_SOURCE_DIR` is not the path that PocketHive Ansible should write
 to. It is the host-visible equivalent of the same managed project root for the
 target Docker daemon, for example `/opt/hiveforge/data/deployed/pockethive`.
-PocketHive passes it into `docker compose config` so rendered bind mounts point
+PocketHive passes it into the Ansible Stack template so rendered bind mounts point
 at paths Docker can resolve. The Ansible action itself must create shared state
 through `/hf/state/...`.
 
@@ -292,7 +292,7 @@ container-visible action root under:
 ```
 
 For `swarm-reduced` and `swarm-full`, HiveForge must also provide
-`HIVEFORGE_BIND_SOURCE_DIR`. PocketHive reads prepared compose/config files and
+`HIVEFORGE_BIND_SOURCE_DIR`. PocketHive reads prepared runtime config files and
 creates shared runtime state through `/hf`, but renders Docker Stack bind
 sources with `HIVEFORGE_BIND_SOURCE_DIR` because those paths are resolved by the
 target Docker daemon, not by the HiveForge action container.
@@ -300,8 +300,6 @@ target Docker daemon, not by the HiveForge action container.
 Expected managed files for `swarm-reduced`:
 
 ```text
-artifacts/runtime/compose/docker-compose.yml
-artifacts/runtime/compose/compose.swarm.yml
 artifacts/runtime/config/rabbitmq/rabbitmq.conf
 artifacts/runtime/config/clickhouse/init/02-ph-tx-outcome-v2.sql
 artifacts/runtime/config/clickhouse/clickhouse-entrypoint.sh
@@ -310,10 +308,4 @@ artifacts/runtime/scenarios
 artifacts/runtime/scenario-manager/capabilities
 artifacts/runtime/scenario-manager/network
 artifacts/runtime/scenario-manager/sut
-```
-
-`swarm-full` also requires:
-
-```text
-artifacts/runtime/compose/compose.swarm-full.yml
 ```

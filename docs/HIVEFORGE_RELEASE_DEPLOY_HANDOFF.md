@@ -161,10 +161,6 @@ creates `/hf/state/haproxy/runtime` and the rendered Docker bind points at
 Expected first required files for `deploy_release`:
 
 ```text
-artifacts/runtime/compose/docker-compose.yml
-artifacts/runtime/compose/compose.swarm.yml
-artifacts/runtime/compose/compose.swarm-full.yml
-artifacts/runtime/compose/compose.reduced.yml
 artifacts/runtime/config/rabbitmq/rabbitmq.conf
 artifacts/runtime/config/clickhouse/init/01-ph-tx-outcome-v1.sql
 artifacts/runtime/scenarios

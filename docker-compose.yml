@@ -475,4 +475,5 @@ volumes:
 
 networks:
   default:
+    name: pockethive
     attachable: true
