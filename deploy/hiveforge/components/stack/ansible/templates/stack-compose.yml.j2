@@ -31,7 +31,7 @@ services:
         constraints:
           - node.labels.pockethive.rabbitmq == true
 {% else %}
-      - {{ hiveforge_root }}/state/rabbitmq/data:/var/lib/rabbitmq
+      - {{ pockethive_bind_source_dir }}/state/rabbitmq/data:/var/lib/rabbitmq
 {% endif %}
     healthcheck:
       test: ["CMD-SHELL", "nc -z 127.0.0.1 5672"]
@@ -100,7 +100,7 @@ services:
         constraints:
           - node.labels.pockethive.prometheus == true
 {% else %}
-      - {{ hiveforge_root }}/state/prometheus/data:/prometheus
+      - {{ pockethive_bind_source_dir }}/state/prometheus/data:/prometheus
 {% endif %}
 
   grafana:
@@ -113,7 +113,7 @@ services:
       - {{ pockethive_bind_source_dir }}/artifacts/runtime/config/grafana/grafana.ini:/etc/grafana/grafana.ini:ro
       - {{ pockethive_bind_source_dir }}/artifacts/runtime/config/grafana/provisioning:/etc/grafana/provisioning:ro
       - {{ pockethive_bind_source_dir }}/artifacts/runtime/config/grafana/dashboards:/var/lib/grafana/dashboards:ro
-      - {{ hiveforge_root }}/state/grafana/data:/var/lib/grafana
+      - {{ pockethive_bind_source_dir }}/state/grafana/data:/var/lib/grafana
 
   loki:
     image: grafana/loki:2.9.1
@@ -134,7 +134,7 @@ services:
         constraints:
           - node.labels.pockethive.loki == true
 {% else %}
-      - {{ hiveforge_root }}/state/loki/data:/var/lib/loki
+      - {{ pockethive_bind_source_dir }}/state/loki/data:/var/lib/loki
 {% endif %}
 
   pushgateway:
@@ -196,7 +196,7 @@ services:
         constraints:
           - node.labels.pockethive.postgres == true
 {% else %}
-      - {{ hiveforge_root }}/state/postgres/data:/var/lib/postgresql/data
+      - {{ pockethive_bind_source_dir }}/state/postgres/data:/var/lib/postgresql/data
 {% endif %}
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U pockethive -d pockethive -h 127.0.0.1 -p 5432"]
@@ -221,7 +221,7 @@ services:
 {% if pockethive_profile == "swarm-full" %}
       - {{ pockethive_clickhouse_root }}:/var/lib/clickhouse
 {% else %}
-      - {{ hiveforge_root }}/state/clickhouse/data:/var/lib/clickhouse
+      - {{ pockethive_bind_source_dir }}/state/clickhouse/data:/var/lib/clickhouse
 {% endif %}
       - {{ pockethive_bind_source_dir }}/artifacts/runtime/config/clickhouse/init:/docker-entrypoint-initdb.d:ro
       - {{ pockethive_bind_source_dir }}/artifacts/runtime/config/clickhouse/clickhouse-entrypoint.sh:/opt/pockethive/clickhouse-entrypoint.sh:ro
@@ -260,7 +260,7 @@ services:
     volumes:
       - {{ pockethive_bind_source_dir }}/artifacts/runtime/tcp-mock/mappings:/app/mappings:ro
       - {{ pockethive_bind_source_dir }}/artifacts/runtime/tcp-mock/__files:/app/__files:ro
-      - {{ hiveforge_root }}/state/tcp-mock/data:/app/data
+      - {{ pockethive_bind_source_dir }}/state/tcp-mock/data:/app/data
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
       interval: 30s
@@ -295,7 +295,7 @@ services:
     volumes:
       - {{ pockethive_bind_source_dir }}/artifacts/runtime/tcp-mock/mappings:/app/mappings:ro
       - {{ pockethive_bind_source_dir }}/artifacts/runtime/tcp-mock/__files:/app/__files:ro
-      - {{ hiveforge_root }}/state/tcp-mock/tls-data:/app/data
+      - {{ pockethive_bind_source_dir }}/state/tcp-mock/tls-data:/app/data
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
       interval: 30s
@@ -322,7 +322,7 @@ services:
     environment:
       HAPROXY_CONFIG_FILE: /opt/haproxy-runtime/haproxy.cfg
     volumes:
-      - {{ hiveforge_root }}/state/haproxy/runtime:/opt/haproxy-runtime
+      - {{ pockethive_bind_source_dir }}/state/haproxy/runtime:/opt/haproxy-runtime
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8404/healthz | grep -q ok"]
       interval: 5s
@@ -398,7 +398,7 @@ services:
     image: {{ pockethive_docker_registry }}orchestrator:{{ pockethive_version }}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - {{ hiveforge_root }}/state/scenarios-runtime:/app/scenarios-runtime
+      - {{ pockethive_bind_source_dir }}/state/scenarios-runtime:/app/scenarios-runtime
     environment:
       MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL: http://pushgateway:9091
       MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED: "true"
@@ -409,7 +409,7 @@ services:
       POCKETHIVE_AUTH_SERVICE_URL: http://auth-service:8080
       POCKETHIVE_AUTH_SERVICE_PRINCIPAL_NAME: orchestrator-service
       POCKETHIVE_AUTH_SERVICE_PRINCIPAL_SECRET: orchestrator-local-secret
-      POCKETHIVE_SCENARIOS_RUNTIME_ROOT: {{ hiveforge_root }}/state/scenarios-runtime
+      POCKETHIVE_SCENARIOS_RUNTIME_ROOT: {{ pockethive_bind_source_dir }}/state/scenarios-runtime
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/pockethive
       SPRING_DATASOURCE_USERNAME: pockethive
       SPRING_DATASOURCE_PASSWORD: pockethive
@@ -471,7 +471,7 @@ services:
       - {{ pockethive_bind_source_dir }}/artifacts/runtime/scenario-manager/capabilities:/app/capabilities:ro
       - {{ pockethive_bind_source_dir }}/artifacts/runtime/scenario-manager/network:/app/network:ro
       - {{ pockethive_bind_source_dir }}/artifacts/runtime/scenario-manager/sut:/app/sut:ro
-      - {{ hiveforge_root }}/state/scenarios-runtime:/app/scenarios-runtime
+      - {{ pockethive_bind_source_dir }}/state/scenarios-runtime:/app/scenarios-runtime
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/actuator/health | grep -q UP"]
       interval: 5s
@@ -495,7 +495,7 @@ services:
         published: 1082
         protocol: tcp
     volumes:
-      - {{ hiveforge_root }}/state/haproxy/runtime:/opt/haproxy-runtime
+      - {{ pockethive_bind_source_dir }}/state/haproxy/runtime:/opt/haproxy-runtime
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/actuator/health | grep -q UP"]
       interval: 5s
