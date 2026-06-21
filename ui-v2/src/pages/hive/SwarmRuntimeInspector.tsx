@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   getRabbitTopology,
   getRuntimeLogs,
@@ -66,13 +66,15 @@ export function SwarmRuntimeInspector({ swarmId, runId }: RuntimeInspectorProps)
   const [rabbit, setRabbit] = useState<RabbitTopologySnapshot | null>(null)
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [tailLines, setTailLines] = useState(200)
-  const [loading, setLoading] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [actionBusy, setActionBusy] = useState<InspectorAction | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [logs, setLogs] = useState<RuntimeLogsResponse | null>(null)
   const [version, setVersion] = useState<RuntimeVersionResponse | null>(null)
   const [inspect, setInspect] = useState<RuntimeInspectResponse | null>(null)
+  const loadSequence = useRef(0)
+  const lastSwarmId = useRef<string | null>(null)
 
   const resources = useMemo(() => {
     const managers = inventory?.managers ?? []
@@ -93,13 +95,16 @@ export function SwarmRuntimeInspector({ swarmId, runId }: RuntimeInspectorProps)
   const selectedResourceKind = selectedResource?.resourceKind ?? null
 
   const loadInspector = useCallback(async () => {
-    setLoading(true)
+    const sequence = loadSequence.current + 1
+    loadSequence.current = sequence
+    setRefreshing(true)
     setError(null)
     try {
       const [nextInventory, nextRabbit] = await Promise.all([
         listRuntimeResources(swarmId, runId),
         getRabbitTopology(swarmId, runId),
       ])
+      if (loadSequence.current !== sequence) return
       setInventory(nextInventory)
       setRabbit(nextRabbit)
       const nextResources = [...(nextInventory.managers ?? []), ...(nextInventory.workers ?? [])]
@@ -110,22 +115,29 @@ export function SwarmRuntimeInspector({ swarmId, runId }: RuntimeInspectorProps)
         return nextResources[0] ? runtimeKey(nextResources[0]) : null
       })
     } catch (err) {
+      if (loadSequence.current !== sequence) return
       setError(err instanceof Error ? err.message : 'Failed to load runtime inspector data')
     } finally {
-      setLoading(false)
+      if (loadSequence.current === sequence) {
+        setRefreshing(false)
+      }
     }
   }, [runId, swarmId])
 
   useEffect(() => {
-    setInventory(null)
-    setRabbit(null)
-    setSelectedKey(null)
-    setLogs(null)
-    setVersion(null)
-    setInspect(null)
-    setActionError(null)
+    const swarmChanged = lastSwarmId.current !== swarmId
+    lastSwarmId.current = swarmId
+    if (swarmChanged) {
+      setInventory(null)
+      setRabbit(null)
+      setSelectedKey(null)
+      setLogs(null)
+      setVersion(null)
+      setInspect(null)
+      setActionError(null)
+    }
     void loadInspector()
-  }, [loadInspector])
+  }, [loadInspector, swarmId])
 
   const runAction = useCallback(
     async (action: InspectorAction) => {
@@ -169,7 +181,7 @@ export function SwarmRuntimeInspector({ swarmId, runId }: RuntimeInspectorProps)
   )
 
   return (
-    <div className="card runtimeInspector">
+    <div className="card runtimeInspector" aria-busy={refreshing}>
       <div className="row between">
         <div>
           <div className="h2">Runtime inspector</div>
@@ -181,7 +193,7 @@ export function SwarmRuntimeInspector({ swarmId, runId }: RuntimeInspectorProps)
           type="button"
           className="actionButton actionButtonGhost"
           onClick={() => void loadInspector()}
-          disabled={loading}
+          disabled={refreshing && inventory === null}
         >
           Refresh
         </button>
@@ -233,7 +245,7 @@ export function SwarmRuntimeInspector({ swarmId, runId }: RuntimeInspectorProps)
               )
             })
           ) : (
-            <div className="muted">{loading ? 'Loading runtimes...' : 'No runtime resources.'}</div>
+            <div className="runtimeResourceEmpty">No runtime resources.</div>
           )}
         </div>
 

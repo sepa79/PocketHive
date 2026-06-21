@@ -2349,6 +2349,19 @@ select.textInputCompact option {
   min-width: 0;
 }
 
+.runtimeResourceList,
+.runtimeInspectorPanels {
+  min-height: 180px;
+}
+
+.runtimeResourceEmpty {
+  min-height: 72px;
+  display: flex;
+  align-items: center;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .runtimeResourceItem {
   appearance: none;
   border: 1px solid var(--border2);
