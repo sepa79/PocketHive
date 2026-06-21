@@ -1188,7 +1188,6 @@ export function HivePage() {
 	                  <div className="swarmDetail">
 	                    <SwarmIssueBox
 	                      issue={selectedSwarmIssue}
-	                      loading={swarmJournalLoading}
 	                      error={swarmJournalError}
 	                      onOpenJournal={openSelectedSwarmJournal}
 	                    />
