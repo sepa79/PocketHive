@@ -2393,16 +2393,26 @@ public class ScenarioService {
         if (entry == null || (!entry.duplicateIdConflict() && !entry.quarantined())) {
             return List.of();
         }
-        List<String> reasons = new ArrayList<>();
+        List<ValidationFinding> findings = new ArrayList<>();
         if (entry.duplicateIdConflict()) {
-            reasons.add(duplicateScenarioReason(entry.scenarioId()));
+            findings.add(finding(
+                ValidationCategory.SCENARIO,
+                ValidationCodes.DUPLICATE_SCENARIO_ID,
+                ValidationSeverity.ERROR,
+                "scenario.yaml:id",
+                duplicateScenarioReason(entry.scenarioId()),
+                "Rename one scenario id or move one conflicting bundle to quarantine."));
         }
         if (entry.quarantined()) {
-            reasons.add(quarantineReason());
+            findings.add(finding(
+                ValidationCategory.BUNDLE,
+                ValidationCodes.BUNDLE_DEFUNCT,
+                ValidationSeverity.ERROR,
+                entry.bundlePath() != null ? entry.bundlePath() : "bundle",
+                quarantineReason(),
+                "Move the bundle out of quarantine before using it to create a swarm."));
         }
-        return reasons.isEmpty()
-            ? List.of()
-            : List.of(defunctFinding(String.join("; ", reasons)));
+        return List.copyOf(findings);
     }
 
     private String duplicateScenarioReason(String scenarioId) {
@@ -3070,6 +3080,9 @@ public class ScenarioService {
         if (text.contains("capability manifest")) {
             return ValidationCodes.CAPABILITY_MANIFEST_MISSING;
         }
+        if (text.contains("duplicate")) {
+            return ValidationCodes.DUPLICATE_SCENARIO_ID;
+        }
         if (text.contains("scenario id") || text.contains("scenario descriptor") || text.contains("scenario.yaml")) {
             return ValidationCodes.SCENARIO_DESCRIPTOR_INVALID;
         }
@@ -3081,9 +3094,6 @@ public class ScenarioService {
         }
         if (text.contains("template")) {
             return ValidationCodes.TEMPLATE_INVALID;
-        }
-        if (text.contains("duplicate")) {
-            return ValidationCodes.DUPLICATE_SCENARIO_ID;
         }
         if (text.contains("defunct") || text.contains("quarantine")) {
             return ValidationCodes.BUNDLE_DEFUNCT;

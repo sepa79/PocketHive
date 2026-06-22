@@ -1103,6 +1103,39 @@ class ScenarioControllerTest {
     }
 
     @Test
+    void existingBundleValidationReportsDuplicateScenarioIdCode() throws Exception {
+        Path first = Files.createDirectories(scenariosDir.resolve("duplicate-a"));
+        Files.writeString(first.resolve("scenario.yaml"), """
+                id: duplicate-existing
+                name: Duplicate A
+                template:
+                  image: ctrl-image:latest
+                  bees: []
+                """);
+        Path second = Files.createDirectories(scenariosDir.resolve("duplicate-b"));
+        Files.writeString(second.resolve("scenario.yaml"), """
+                id: duplicate-existing
+                name: Duplicate B
+                template:
+                  image: ctrl-image:latest
+                  bees: []
+                """);
+
+        mvc.perform(post("/scenarios/reload"))
+                .andExpect(status().isNoContent());
+
+        mvc.perform(post("/validation/scenario-bundles/existing")
+                        .param("bundleKey", "duplicate-a")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.summary.errors").value(1))
+                .andExpect(jsonPath("$.findings", hasSize(1)))
+                .andExpect(jsonPath("$.findings[0].category").value("scenario"))
+                .andExpect(jsonPath("$.findings[0].code").value("DUPLICATE_SCENARIO_ID"));
+    }
+
+    @Test
     void existingBundleValidationReportsDefunctFindingOnce() throws Exception {
         Path bundle = Files.createDirectories(scenariosDir.resolve("missing-capability-demo"));
         Files.writeString(bundle.resolve("scenario.yaml"), """
