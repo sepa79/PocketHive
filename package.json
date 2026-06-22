@@ -1,6 +1,6 @@
 {
   "name": "pockethive",
-  "version": "0.15.28",
+  "version": "0.15.29",
   "private": true,
   "description": "Development tooling for PocketHive",
   "scripts": {

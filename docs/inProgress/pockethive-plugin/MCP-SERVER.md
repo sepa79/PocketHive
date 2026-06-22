@@ -95,7 +95,7 @@ if (process.env.PH_MCP_HTTP_PORT) {
 ```json
 {
   "name": "@pockethive/mcp-server",
-  "version": "0.15.28",
+  "version": "0.15.29",
   "description": "PocketHive MCP server — full lifecycle tools for scenario authoring and swarm management",
   "bin": { "pockethive-mcp": "./server.mjs" },
   "files": ["server.mjs", "start.cjs"],
@@ -107,7 +107,7 @@ if (process.env.PH_MCP_HTTP_PORT) {
 }
 ```
 
-Version tracks PocketHive releases (currently `0.15.28`).
+Version tracks PocketHive releases (currently `0.15.29`).
 
 Phase 1.5 registers the `evidence-summary` MCP App as an inline resource at
 `ui://pockethive/evidence-summary-v1.html`. Phase 2 also registers the

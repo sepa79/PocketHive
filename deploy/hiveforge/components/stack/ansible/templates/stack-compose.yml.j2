@@ -109,6 +109,12 @@ services:
       GF_SECURITY_ADMIN_USER: pockethive
       GF_SECURITY_ADMIN_PASSWORD: pockethive
       GF_INSTALL_PLUGINS: grafana-clickhouse-datasource
+      HTTP_PROXY: "{{ lookup('env', 'HTTP_PROXY') }}"
+      HTTPS_PROXY: "{{ lookup('env', 'HTTPS_PROXY') }}"
+      NO_PROXY: "{{ lookup('env', 'NO_PROXY') | default('localhost,127.0.0.1,::1,prometheus,loki,clickhouse,rabbitmq,postgres,redis,pushgateway,scenario-manager,orchestrator,auth-service,network-proxy-manager,ui', true) }}"
+      http_proxy: "{{ lookup('env', 'HTTP_PROXY') }}"
+      https_proxy: "{{ lookup('env', 'HTTPS_PROXY') }}"
+      no_proxy: "{{ lookup('env', 'NO_PROXY') | default('localhost,127.0.0.1,::1,prometheus,loki,clickhouse,rabbitmq,postgres,redis,pushgateway,scenario-manager,orchestrator,auth-service,network-proxy-manager,ui', true) }}"
     volumes:
       - {{ pockethive_bind_source_dir }}/artifacts/runtime/config/grafana/grafana.ini:/etc/grafana/grafana.ini:ro
       - {{ pockethive_bind_source_dir }}/artifacts/runtime/config/grafana/provisioning:/etc/grafana/provisioning:ro

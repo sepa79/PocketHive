@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+## [0.15.29] - 2026-06-21
+
+### Changed
+- Runtime debug tools no longer accept caller-selected compute adapters; the
+  Orchestrator runtime debug API now reports the concrete adapter selected by
+  the deployed service.
+- Runtime debug capability checks now require contract version `3`.
+
+### Fixed
+- Kept MCP runtime debug calls aligned with the Orchestrator-owned adapter
+  contract for worker list, logs, version, inspect, Rabbit topology, runtime
+  diff, timeline, manifest validation, and cleanup tools.
+
+### Verified
+- `npm test`
+- `mvn -pl orchestrator-service -am -Dtest='RuntimeDebugServiceTest,RuntimeDebugControllerTest,RuntimeReconciliationServiceTest,RuntimeCleanupControllerTest,AmqpRabbitTopologyAdapterTest,ContainerLifecycleManagerTest' -Dsurefire.failIfNoSpecifiedTests=false test`
+
 ## [0.15.28] - 2026-06-18
 
 ### Changed

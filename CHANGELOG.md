@@ -4,6 +4,28 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.15.29]
+Timestamp: 2026-06-21T23:59:05Z
+
+- HiveForge deployment: replace project-side Compose merge/post-processing with
+  an explicit Ansible Jinja2 Docker Stack template, keep the public
+  `pockethive` network explicit, and validate the rendered manifest with
+  `docker stack config`.
+- HiveForge deployment: preserve Grafana outbound proxy settings in the stack
+  template, including uppercase/lowercase proxy variables and an internal
+  `NO_PROXY` list for PocketHive service names.
+- Runtime debug MCP/UI: remove client-selected compute adapters from runtime
+  debug contracts so Orchestrator remains the single owner of Docker/Swarm
+  adapter selection.
+- UI: fold the runtime inspector into the Hive detail view, keep inspector
+  refreshes layout-stable, remove transient diagnostics loading cards, and clear
+  logs/version/inspect output when switching runtime targets.
+- E2E: mark the delayed-registration auth rollout scenario as
+  `@wip @known-flaky` so the default full pack skips it while it remains
+  runnable explicitly.
+- Release: bump PocketHive patch version to 0.15.29 for the HiveForge stack
+  template and runtime inspector stabilization.
+
 ## [0.15.28]
 Timestamp: 2026-06-18T15:27:35Z
 
