@@ -2,6 +2,60 @@
 
 ## Unreleased
 
+## [0.15.29] - 2026-06-21
+
+### Changed
+- Runtime debug tools no longer accept caller-selected compute adapters; the
+  Orchestrator runtime debug API now reports the concrete adapter selected by
+  the deployed service.
+- Runtime debug capability checks now require contract version `3`.
+
+### Fixed
+- Kept MCP runtime debug calls aligned with the Orchestrator-owned adapter
+  contract for worker list, logs, version, inspect, Rabbit topology, runtime
+  diff, timeline, manifest validation, and cleanup tools.
+
+### Verified
+- `npm test`
+- `mvn -pl orchestrator-service -am -Dtest='RuntimeDebugServiceTest,RuntimeDebugControllerTest,RuntimeReconciliationServiceTest,RuntimeCleanupControllerTest,AmqpRabbitTopologyAdapterTest,ContainerLifecycleManagerTest' -Dsurefire.failIfNoSpecifiedTests=false test`
+
+## [0.15.28] - 2026-06-18
+
+### Changed
+- Runtime cleanup plan/execute tools now delegate to Orchestrator's
+  `/api/runtime/cleanup/*` reconciliation API and fail closed when that API is
+  unavailable.
+- Docker/Swarm runtime debug tools now delegate worker and swarm-controller
+  manager list/logs/version/inspect reads to Orchestrator's
+  `/api/runtime/debug/resources/*` API instead of using a local Docker socket
+  fallback.
+- `runtime_rabbit_topology_snapshot` now delegates exact topology reads to
+  Orchestrator's `/api/runtime/debug/rabbit/topology` API, removing MCP-side
+  RabbitMQ ownership derivation and MCP-side compute adapter selection.
+- Runtime debug requests now fail through Orchestrator's explicit contract
+  checks for missing bodies, ambiguous targets, invalid log bounds, and invalid
+  timestamps.
+- `runtime_control_plane_status` reports manifest/Orchestrator-provided control
+  queues instead of deriving queue names locally.
+
+### Fixed
+- Removed local cleanup planning/execution fallback behavior so Orchestrator
+  remains the single runtime cleanup authority.
+- Confirmed derived worker control queues obey Orchestrator's running-resource
+  cleanup gate instead of becoming RabbitMQ candidates while their worker runtime
+  object is blocked.
+- Documented Orchestrator's lifecycle protection for registered swarms: pre-run
+  swarms can be removed through lifecycle, while running swarms and swarms in
+  `REMOVING` state remain blocked.
+- Added `overrideRegisteredSwarmState` passthrough for governed break-glass
+  runtime cleanup plans and executions.
+- Kept runtime cleanup docs aligned with the PocketHive MCP surface and HiveGate
+  governance boundary.
+
+### Verified
+- `npm test`
+- `mvn -B -pl common/control-plane-core,common/control-plane-spring,common/docker-client,orchestrator-service,swarm-controller-service -am test`
+
 ## [0.15.22] - 2026-06-03
 
 ### Added

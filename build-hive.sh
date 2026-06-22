@@ -109,17 +109,9 @@ compose_build_services() {
           -t "${image}:latest" "${context}"
         ;;
       ui)
-        if [[ "${image}" == "ui" ]]; then
-          docker build \
-            -f "${dockerfile}" \
-            --build-arg VITE_STOMP_READONLY_USER="${VITE_STOMP_READONLY_USER:-ph-observer}" \
-            --build-arg VITE_STOMP_READONLY_PASSCODE="${VITE_STOMP_READONLY_PASSCODE:-ph-observer}" \
-            -t "${image}:latest" "${context}"
-        else
-          docker build \
-            -f "${dockerfile}" \
-            -t "${image}:latest" "${context}"
-        fi
+        docker build \
+          -f "${dockerfile}" \
+          -t "${image}:latest" "${context}"
         ;;
       *)
         echo "Unsupported image kind '${kind}' for ${image}" >&2
@@ -292,12 +284,28 @@ stage_artifacts() {
   rm -rf "${LOCAL_ARTIFACTS_DIR}"
   mkdir -p "${LOCAL_ARTIFACTS_DIR}"
   for module in "${modules[@]}"; do
-    local jar_path
-    jar_path=$(find "${module}/target" -maxdepth 1 -type f -name '*-exec.jar' \
-      ! -name '*-sources.jar' ! -name '*-javadoc.jar' ! -name 'original-*.jar' | head -n 1 || true)
-    if [[ -z "$jar_path" ]]; then
-      jar_path=$(find "${module}/target" -maxdepth 1 -type f -name '*.jar' \
-        ! -name '*-sources.jar' ! -name '*-javadoc.jar' ! -name 'original-*.jar' | head -n 1 || true)
+    local pom_props="${module}/target/maven-archiver/pom.properties"
+    if [[ ! -f "${pom_props}" ]]; then
+      echo "Unable to locate Maven metadata for ${module} at ${pom_props}" >&2
+      exit 1
+    fi
+    local artifact_id version jar_path exec_jar plain_jar
+    artifact_id=$(sed -n 's/^artifactId=//p' "${pom_props}" | head -n 1)
+    version=$(sed -n 's/^version=//p' "${pom_props}" | head -n 1)
+    if [[ -z "${artifact_id}" || -z "${version}" ]]; then
+      echo "Maven metadata for ${module} is missing artifactId or version" >&2
+      exit 1
+    fi
+
+    exec_jar="${module}/target/${artifact_id}-${version}-exec.jar"
+    plain_jar="${module}/target/${artifact_id}-${version}.jar"
+    if [[ -f "${exec_jar}" ]]; then
+      jar_path="${exec_jar}"
+    elif [[ -f "${plain_jar}" ]]; then
+      jar_path="${plain_jar}"
+    else
+      echo "Unable to locate packaged jar for ${module} version ${version}" >&2
+      exit 1
     fi
     if [[ -z "$jar_path" ]]; then
       echo "Unable to locate packaged jar for ${module}" >&2

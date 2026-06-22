@@ -19,9 +19,6 @@
       - path: state/prometheus/data
         owner: "65534"
         group: "65534"
-    pockethive_managed_compose_files:
-      - "{{ pockethive_compose_base }}"
-      - "{{ pockethive_compose_swarm }}"
   when: pockethive_profile == "swarm-reduced"
 
 - name: Select HiveForge-managed state for swarm-full
@@ -36,10 +33,6 @@
       - path: state/grafana/data
         owner: "472"
         group: "0"
-    pockethive_managed_compose_files:
-      - "{{ pockethive_compose_base }}"
-      - "{{ pockethive_compose_swarm }}"
-      - "{{ pockethive_compose_swarm_full }}"
   when: pockethive_profile == "swarm-full"
 
 - name: Require swarm HiveForge runtime environment
@@ -102,18 +95,6 @@
       value: "{{ pockethive_redis_root }}"
   when: pockethive_profile == "swarm-full"
 
-- name: Check managed runtime compose files
-  ansible.builtin.stat:
-    path: "{{ item }}"
-  loop: "{{ pockethive_managed_compose_files }}"
-  register: pockethive_compose_files
-
-- name: Require managed runtime compose files
-  ansible.builtin.assert:
-    that:
-      - pockethive_compose_files.results | map(attribute='stat.exists') | min
-    fail_msg: "HiveForge managed runtime compose files are missing under /hf/artifacts/runtime."
-
 - name: Create HiveForge action-root swarm state directories
   ansible.builtin.file:
     path: "{{ hiveforge_root }}/{{ item }}"
@@ -136,78 +117,23 @@
     state: directory
     mode: "0755"
 
-- name: Render merged Docker Compose config for swarm-reduced
-  ansible.builtin.command:
-    argv:
-      - docker
-      - compose
-      - -f
-      - "{{ pockethive_compose_base }}"
-      - -f
-      - "{{ pockethive_compose_swarm }}"
-      - config
-  environment:
-    DOCKER_REGISTRY: "{{ pockethive_docker_registry }}"
-    HIVEFORGE_BIND_SOURCE_DIR: "{{ pockethive_bind_source_dir }}"
-    HTTP_PROXY: "{{ lookup('env', 'HTTP_PROXY') | default(lookup('env', 'http_proxy'), true) }}"
-    HTTPS_PROXY: "{{ lookup('env', 'HTTPS_PROXY') | default(lookup('env', 'https_proxy'), true) }}"
-    NO_PROXY: "{{ lookup('env', 'NO_PROXY') | default(lookup('env', 'no_proxy'), true) }}"
-    POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_IMAGE_REPOSITORY_PREFIX: "{{ pockethive_image_repository_prefix }}"
-    POCKETHIVE_VERSION: "{{ pockethive_version }}"
-  register: pockethive_compose_config_reduced
-  changed_when: false
-  when: pockethive_profile == "swarm-reduced"
-
-- name: Render merged Docker Compose config for swarm-full
-  ansible.builtin.command:
-    argv:
-      - docker
-      - compose
-      - -f
-      - "{{ pockethive_compose_base }}"
-      - -f
-      - "{{ pockethive_compose_swarm }}"
-      - -f
-      - "{{ pockethive_compose_swarm_full }}"
-      - config
-  environment:
-    DOCKER_REGISTRY: "{{ pockethive_docker_registry }}"
-    HIVEFORGE_BIND_SOURCE_DIR: "{{ pockethive_bind_source_dir }}"
-    HTTP_PROXY: "{{ lookup('env', 'HTTP_PROXY') | default(lookup('env', 'http_proxy'), true) }}"
-    HTTPS_PROXY: "{{ lookup('env', 'HTTPS_PROXY') | default(lookup('env', 'https_proxy'), true) }}"
-    NO_PROXY: "{{ lookup('env', 'NO_PROXY') | default(lookup('env', 'no_proxy'), true) }}"
-    POCKETHIVE_CLICKHOUSE_ROOT: "{{ pockethive_clickhouse_root }}"
-    POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_IMAGE_REPOSITORY_PREFIX: "{{ pockethive_image_repository_prefix }}"
-    POCKETHIVE_LOKI_ROOT: "{{ pockethive_loki_root }}"
-    POCKETHIVE_POSTGRES_ROOT: "{{ pockethive_postgres_root }}"
-    POCKETHIVE_PROMETHEUS_ROOT: "{{ pockethive_prometheus_root }}"
-    POCKETHIVE_RABBITMQ_ROOT: "{{ pockethive_rabbitmq_root }}"
-    POCKETHIVE_REDIS_ROOT: "{{ pockethive_redis_root }}"
-    POCKETHIVE_VERSION: "{{ pockethive_version }}"
-  register: pockethive_compose_config_full
-  changed_when: false
-  when: pockethive_profile == "swarm-full"
-
 - name: Write rendered Compose file for HiveForge-owned Docker deploy
-  ansible.builtin.copy:
-    content: "{{ (pockethive_compose_config_reduced.stdout if pockethive_profile == 'swarm-reduced' else pockethive_compose_config_full.stdout) }}"
+  ansible.builtin.template:
+    src: stack-compose.yml.j2
     dest: "{{ pockethive_rendered_compose_file }}"
     mode: "0644"
+  environment:
+    HIVEFORGE_BIND_SOURCE_DIR: "{{ pockethive_bind_source_dir }}"
 
-- name: Normalize numeric published ports for Docker Stack
-  ansible.builtin.replace:
-    path: "{{ pockethive_rendered_compose_file }}"
-    regexp: 'published: "([0-9]+)"'
-    replace: 'published: \1'
-
-- name: Remove top-level Compose project name for Docker Stack
-  ansible.builtin.replace:
-    path: "{{ pockethive_rendered_compose_file }}"
-    regexp: '(?m)^name: .*\n'
-    replace: ''
-
-- name: Remove Compose depends_on blocks for Docker Stack
-  ansible.builtin.replace:
-    path: "{{ pockethive_rendered_compose_file }}"
-    regexp: '(?m)^    depends_on:\n(?:      .*\n)+'
-    replace: ''
+- name: Validate rendered Docker Stack compose
+  ansible.builtin.command:
+    argv:
+      - docker
+      - stack
+      - config
+      - -c
+      - "{{ pockethive_rendered_compose_file }}"
+  environment:
+    HIVEFORGE_BIND_SOURCE_DIR: "{{ pockethive_bind_source_dir }}"
+  register: pockethive_stack_compose_validation
+  changed_when: false

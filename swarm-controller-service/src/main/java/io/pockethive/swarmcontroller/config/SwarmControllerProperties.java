@@ -1,5 +1,6 @@
 package io.pockethive.swarmcontroller.config;
 
+import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory;
 import io.pockethive.manager.runtime.ComputeAdapterType;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -185,8 +186,7 @@ public class SwarmControllerProperties {
         }
 
         public String queueName(String suffix) {
-            String resolvedSuffix = requireNonBlank(suffix, "suffix");
-            return queuePrefix + "." + resolvedSuffix;
+            return ControlPlaneContainerEnvironmentFactory.swarmTrafficQueueName(queuePrefix, suffix);
         }
     }
 

@@ -1,0 +1,515 @@
+networks:
+  default:
+    name: pockethive
+    attachable: true
+
+services:
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    command:
+      - sh
+      - -c
+      - rabbitmq-plugins enable --offline rabbitmq_web_stomp && rabbitmq-server
+    environment: {}
+    ports:
+      - target: 5672
+        published: 5672
+        protocol: tcp
+      - target: 15672
+        published: 15672
+        protocol: tcp
+      - target: 15674
+        published: 15674
+        protocol: tcp
+    volumes:
+      - {{ pockethive_bind_source_dir }}/artifacts/runtime/config/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - {{ pockethive_bind_source_dir }}/artifacts/runtime/config/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
+{% if pockethive_profile == "swarm-full" %}
+      - {{ pockethive_rabbitmq_root }}:/var/lib/rabbitmq
+    deploy:
+      placement:
+        constraints:
+          - node.labels.pockethive.rabbitmq == true
+{% else %}
+      - {{ pockethive_bind_source_dir }}/state/rabbitmq/data:/var/lib/rabbitmq
+{% endif %}
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 5672"]
+      interval: 5s
+      timeout: 10s
+      retries: 24
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    ports:
+      - target: 6379
+        published: 6379
+        protocol: tcp
+    volumes:
+{% if pockethive_profile == "swarm-full" %}
+      - {{ pockethive_redis_root }}:/data
+    deploy:
+      placement:
+        constraints:
+          - node.labels.pockethive.redis == true
+{% else %}
+      - redis-data:/data
+{% endif %}
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    environment:
+      REDIS_HOSTS: local:redis:6379
+    ports:
+      - target: 8081
+        published: 8081
+        protocol: tcp
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8081"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  prometheus:
+    image: prom/prometheus:latest
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=3y
+      - --web.external-url=http://localhost:8088/prometheus/
+      - --web.route-prefix=/prometheus
+    volumes:
+      - {{ pockethive_bind_source_dir }}/artifacts/runtime/config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+{% if pockethive_profile == "swarm-full" %}
+      - {{ pockethive_prometheus_root }}:/prometheus
+    deploy:
+      placement:
+        constraints:
+          - node.labels.pockethive.prometheus == true
+{% else %}
+      - {{ pockethive_bind_source_dir }}/state/prometheus/data:/prometheus
+{% endif %}
+
+  grafana:
+    image: grafana/grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: pockethive
+      GF_SECURITY_ADMIN_PASSWORD: pockethive
+      GF_INSTALL_PLUGINS: grafana-clickhouse-datasource
+      HTTP_PROXY: "{{ lookup('env', 'HTTP_PROXY') }}"
+      HTTPS_PROXY: "{{ lookup('env', 'HTTPS_PROXY') }}"
+      NO_PROXY: "{{ lookup('env', 'NO_PROXY') | default('localhost,127.0.0.1,::1,prometheus,loki,clickhouse,rabbitmq,postgres,redis,pushgateway,scenario-manager,orchestrator,auth-service,network-proxy-manager,ui', true) }}"
+      http_proxy: "{{ lookup('env', 'HTTP_PROXY') }}"
+      https_proxy: "{{ lookup('env', 'HTTPS_PROXY') }}"
+      no_proxy: "{{ lookup('env', 'NO_PROXY') | default('localhost,127.0.0.1,::1,prometheus,loki,clickhouse,rabbitmq,postgres,redis,pushgateway,scenario-manager,orchestrator,auth-service,network-proxy-manager,ui', true) }}"
+    volumes:
+      - {{ pockethive_bind_source_dir }}/artifacts/runtime/config/grafana/grafana.ini:/etc/grafana/grafana.ini:ro
+      - {{ pockethive_bind_source_dir }}/artifacts/runtime/config/grafana/provisioning:/etc/grafana/provisioning:ro
+      - {{ pockethive_bind_source_dir }}/artifacts/runtime/config/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - {{ pockethive_bind_source_dir }}/state/grafana/data:/var/lib/grafana
+
+  loki:
+    image: grafana/loki:2.9.1
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        chown -R 10001:10001 /var/lib/loki
+        exec su -s /bin/sh loki -c "/usr/bin/loki -config.file=/etc/loki/config.yml"
+    user: "0"
+    volumes:
+      - {{ pockethive_bind_source_dir }}/artifacts/runtime/config/loki/config.yml:/etc/loki/config.yml:ro
+{% if pockethive_profile == "swarm-full" %}
+      - {{ pockethive_loki_root }}:/var/lib/loki
+    deploy:
+      placement:
+        constraints:
+          - node.labels.pockethive.loki == true
+{% else %}
+      - {{ pockethive_bind_source_dir }}/state/loki/data:/var/lib/loki
+{% endif %}
+
+  pushgateway:
+    image: prom/pushgateway:latest
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9091/-/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  wiremock:
+    image: holomekc/wiremock-gui:latest
+    command:
+      - --verbose
+      - --disable-banner
+      - --https-port=8443
+      - --async-response-enabled
+      - --global-response-templating
+      - --record-mappings
+      - --max-request-journal-entries=1000
+      - --enable-stub-cors
+    environment:
+      LANG: en_US.UTF-8
+      JAVA_OPTS: >-
+        -XX:+UseG1GC
+        -XX:+ParallelRefProcEnabled
+        -XX:MaxRAMPercentage=75
+        -XX:+HeapDumpOnOutOfMemoryError
+        -Djava.net.preferIPv4Stack=true
+        -Djava.awt.headless=true
+    ports:
+      - target: 8080
+        published: 8080
+        protocol: tcp
+    volumes:
+      - {{ pockethive_bind_source_dir }}/artifacts/runtime/wiremock/mappings:/home/wiremock/mappings
+      - {{ pockethive_bind_source_dir }}/artifacts/runtime/wiremock/__files:/home/wiremock/__files
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: pockethive
+      POSTGRES_USER: pockethive
+      POSTGRES_PASSWORD: pockethive
+    ports:
+      - target: 5432
+        published: 5432
+        protocol: tcp
+    volumes:
+{% if pockethive_profile == "swarm-full" %}
+      - {{ pockethive_postgres_root }}:/var/lib/postgresql/data
+    deploy:
+      placement:
+        constraints:
+          - node.labels.pockethive.postgres == true
+{% else %}
+      - {{ pockethive_bind_source_dir }}/state/postgres/data:/var/lib/postgresql/data
+{% endif %}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pockethive -d pockethive -h 127.0.0.1 -p 5432"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 120s
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8
+    entrypoint: ["/bin/bash", "/opt/pockethive/clickhouse-entrypoint.sh"]
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: pockethive
+      CLICKHOUSE_PASSWORD: pockethive
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    ports:
+      - target: 8123
+        published: 8123
+        protocol: tcp
+    volumes:
+{% if pockethive_profile == "swarm-full" %}
+      - {{ pockethive_clickhouse_root }}:/var/lib/clickhouse
+{% else %}
+      - {{ pockethive_bind_source_dir }}/state/clickhouse/data:/var/lib/clickhouse
+{% endif %}
+      - {{ pockethive_bind_source_dir }}/artifacts/runtime/config/clickhouse/init:/docker-entrypoint-initdb.d:ro
+      - {{ pockethive_bind_source_dir }}/artifacts/runtime/config/clickhouse/clickhouse-entrypoint.sh:/opt/pockethive/clickhouse-entrypoint.sh:ro
+      - {{ pockethive_bind_source_dir }}/artifacts/runtime/config/clickhouse/migrate-tx-outcome-v1-to-v2.sh:/opt/pockethive/migrate-tx-outcome-v1-to-v2.sh:ro
+{% if pockethive_profile == "swarm-full" %}
+    deploy:
+      placement:
+        constraints:
+          - node.labels.pockethive.clickhouse == true
+{% endif %}
+
+  tcp-mock-server:
+    image: {{ pockethive_docker_registry }}tcp-mock-server:{{ pockethive_version }}
+    ports:
+      - target: 8080
+        published: 8083
+        protocol: tcp
+      - target: 9090
+        published: 9090
+        protocol: tcp
+    environment:
+      SERVER_PORT: 8080
+      POCKETHIVE_TCP_MOCK_PORT: 9090
+      POCKETHIVE_TCP_MOCK_NODE_ID: tcp-mock-1
+      POCKETHIVE_TCP_MOCK_DASHBOARD_ENABLED: "true"
+      POCKETHIVE_TCP_MOCK_DASHBOARD_USERNAME: admin
+      POCKETHIVE_TCP_MOCK_DASHBOARD_PASSWORD: admin
+      POCKETHIVE_TCP_MOCK_SSL_ENABLED: "false"
+      POCKETHIVE_TCP_MOCK_VALIDATION_ENABLED: "true"
+      POCKETHIVE_TCP_MOCK_FILTERING_ENABLED: "true"
+      POCKETHIVE_LOGS_RABBIT_ENABLED: "true"
+      POCKETHIVE_LOGS_EXCHANGE: ph.logs
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics,prometheus
+      RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_HOST: rabbitmq
+    volumes:
+      - {{ pockethive_bind_source_dir }}/artifacts/runtime/tcp-mock/mappings:/app/mappings:ro
+      - {{ pockethive_bind_source_dir }}/artifacts/runtime/tcp-mock/__files:/app/__files:ro
+      - {{ pockethive_bind_source_dir }}/state/tcp-mock/data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  tcp-mock-server-tls:
+    image: {{ pockethive_docker_registry }}tcp-mock-server:{{ pockethive_version }}
+    ports:
+      - target: 8080
+        published: 8084
+        protocol: tcp
+      - target: 9090
+        published: 9091
+        protocol: tcp
+    environment:
+      SERVER_PORT: 8080
+      POCKETHIVE_TCP_MOCK_PORT: 9090
+      POCKETHIVE_TCP_MOCK_NODE_ID: tcp-mock-tls-1
+      POCKETHIVE_TCP_MOCK_DASHBOARD_ENABLED: "true"
+      POCKETHIVE_TCP_MOCK_DASHBOARD_USERNAME: admin
+      POCKETHIVE_TCP_MOCK_DASHBOARD_PASSWORD: admin
+      POCKETHIVE_TCP_MOCK_SSL_ENABLED: "true"
+      POCKETHIVE_TCP_MOCK_VALIDATION_ENABLED: "true"
+      POCKETHIVE_TCP_MOCK_FILTERING_ENABLED: "true"
+      POCKETHIVE_LOGS_RABBIT_ENABLED: "true"
+      POCKETHIVE_LOGS_EXCHANGE: ph.logs
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics,prometheus
+      RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_HOST: rabbitmq
+    volumes:
+      - {{ pockethive_bind_source_dir }}/artifacts/runtime/tcp-mock/mappings:/app/mappings:ro
+      - {{ pockethive_bind_source_dir }}/artifacts/runtime/tcp-mock/__files:/app/__files:ro
+      - {{ pockethive_bind_source_dir }}/state/tcp-mock/tls-data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy:2.11.0
+    command: ["-host", "0.0.0.0"]
+    ports:
+      - target: 8474
+        published: 18474
+        protocol: tcp
+    healthcheck:
+      test: ["CMD", "/toxiproxy-cli", "list"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  haproxy:
+    image: {{ pockethive_docker_registry }}network-proxy-haproxy:{{ pockethive_version }}
+    environment:
+      HAPROXY_CONFIG_FILE: /opt/haproxy-runtime/haproxy.cfg
+    volumes:
+      - {{ pockethive_bind_source_dir }}/state/haproxy/runtime:/opt/haproxy-runtime
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8404/healthz | grep -q ok"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+      start_period: 10s
+
+  ui:
+    image: {{ pockethive_docker_registry }}ui:{{ pockethive_version }}
+    ports:
+      - target: 8088
+        published: 8088
+        protocol: tcp
+    volumes:
+      - {{ pockethive_bind_source_dir }}/artifacts/runtime/config/nginx/nginx.swarm.conf:/etc/nginx/conf.d/default.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8088/healthz | grep -q ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 5s
+
+  log-aggregator:
+    image: {{ pockethive_docker_registry }}log-aggregator:{{ pockethive_version }}
+    environment:
+      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL: http://pushgateway:9091
+      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED: "true"
+      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_JOB: swarm1
+      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE: 10s
+      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION: DELETE
+      MANAGEMENT_METRICS_TAGS_SWARM: swarm1
+      RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_HOST: rabbitmq
+      POCKETHIVE_LOGS_EXCHANGE: ph.logs
+      POCKETHIVE_LOGS_QUEUE: ph.logs.agg
+      POCKETHIVE_LOKI_URL: http://loki:3100
+      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE: log-aggregator
+      MANAGEMENT_METRICS_TAGS_INSTANCE: log-aggregator
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/pockethive-ready"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  auth-service:
+    image: {{ pockethive_docker_registry }}auth-service:{{ pockethive_version }}
+    environment:
+      POCKETHIVE_AUTH_SERVICE_PROVIDER: DEV
+      POCKETHIVE_AUTH_SERVICE_SESSION_TTL: PT8H
+      POCKETHIVE_AUTH_SERVICE_ACCOUNT_ORCHESTRATOR_SECRET: orchestrator-local-secret
+      POCKETHIVE_AUTH_SERVICE_ACCOUNT_NETWORK_PROXY_MANAGER_SECRET: network-proxy-manager-local-secret
+    ports:
+      - target: 8080
+        published: 1083
+        protocol: tcp
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/actuator/health | grep -q UP"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+
+  orchestrator:
+    image: {{ pockethive_docker_registry }}orchestrator:{{ pockethive_version }}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - {{ pockethive_bind_source_dir }}/state/scenarios-runtime:/app/scenarios-runtime
+    environment:
+      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL: http://pushgateway:9091
+      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED: "true"
+      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_JOB: swarm1
+      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE: 10s
+      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION: DELETE
+      MANAGEMENT_METRICS_TAGS_SWARM: swarm1
+      POCKETHIVE_AUTH_SERVICE_URL: http://auth-service:8080
+      POCKETHIVE_AUTH_SERVICE_PRINCIPAL_NAME: orchestrator-service
+      POCKETHIVE_AUTH_SERVICE_PRINCIPAL_SECRET: orchestrator-local-secret
+      POCKETHIVE_SCENARIOS_RUNTIME_ROOT: {{ pockethive_bind_source_dir }}/state/scenarios-runtime
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/pockethive
+      SPRING_DATASOURCE_USERNAME: pockethive
+      SPRING_DATASOURCE_PASSWORD: pockethive
+      SPRING_FLYWAY_CONNECT_RETRIES: "30"
+      SPRING_FLYWAY_CONNECT_RETRIES_INTERVAL: 2s
+      POCKETHIVE_JOURNAL_SINK: postgres
+      POCKETHIVE_TEMPLATE_ID: orchestrator
+      POCKETHIVE_JOURNAL_RUN_ID: hive
+      POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_RABBIT_LOGGING_ENABLED: "true"
+      POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_RABBIT_LOGS_EXCHANGE: ph.logs
+      POCKETHIVE_SINK_CLICKHOUSE_ENDPOINT: http://clickhouse:8123
+      POCKETHIVE_SINK_CLICKHOUSE_TABLE: ph_tx_outcome_v2
+      POCKETHIVE_SINK_CLICKHOUSE_USERNAME: pockethive
+      POCKETHIVE_SINK_CLICKHOUSE_PASSWORD: pockethive
+      RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_HOST: rabbitmq
+      POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_SCENARIO_MANAGER_URL: http://scenario-manager:8080
+      POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_NETWORK_PROXY_MANAGER_URL: http://network-proxy-manager:8080
+      POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_DOCKER_COMPUTE_ADAPTER: SWARM_STACK
+      POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_IMAGE_REPOSITORY_PREFIX: {{ pockethive_image_repository_prefix }}
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/actuator/health | grep -q UP"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+
+  scenario-manager:
+    image: {{ pockethive_docker_registry }}scenario-manager:{{ pockethive_version }}
+    environment:
+      POCKETHIVE_IMAGES_DEFAULT_TAG: {{ pockethive_version }}
+      POCKETHIVE_AUTH_SERVICE_URL: http://auth-service:8080
+      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL: http://pushgateway:9091
+      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED: "true"
+      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_JOB: swarm1
+      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE: 10s
+      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION: DELETE
+      MANAGEMENT_METRICS_TAGS_SWARM: swarm1
+      RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_HOST: rabbitmq
+      RABBITMQ_LOGGING_ENABLED: "true"
+      POCKETHIVE_LOGS_EXCHANGE: ph.logs
+      POCKETHIVE_CONTROL_PLANE_SWARM_ID: hive
+      POCKETHIVE_CONTROL_PLANE_INSTANCE_ID: scenario-manager
+      POCKETHIVE_CONTROL_PLANE_MANAGER_ROLE: scenario-manager
+      POCKETHIVE_LOGS_QUEUE: ph.logs.agg
+      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE: scenario-manager
+      MANAGEMENT_METRICS_TAGS_INSTANCE: scenario-manager
+    ports:
+      - target: 8080
+        published: 1081
+        protocol: tcp
+    volumes:
+      - {{ pockethive_bind_source_dir }}/artifacts/runtime/scenarios:/app/scenarios
+      - {{ pockethive_bind_source_dir }}/artifacts/runtime/scenario-manager/capabilities:/app/capabilities:ro
+      - {{ pockethive_bind_source_dir }}/artifacts/runtime/scenario-manager/network:/app/network:ro
+      - {{ pockethive_bind_source_dir }}/artifacts/runtime/scenario-manager/sut:/app/sut:ro
+      - {{ pockethive_bind_source_dir }}/state/scenarios-runtime:/app/scenarios-runtime
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/actuator/health | grep -q UP"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  network-proxy-manager:
+    image: {{ pockethive_docker_registry }}network-proxy-manager:{{ pockethive_version }}
+    environment:
+      POCKETHIVE_AUTH_SERVICE_URL: http://auth-service:8080
+      POCKETHIVE_AUTH_SERVICE_PRINCIPAL_NAME: network-proxy-manager
+      POCKETHIVE_AUTH_SERVICE_PRINCIPAL_SECRET: network-proxy-manager-local-secret
+      POCKETHIVE_NETWORK_PROXY_MANAGER_SCENARIO_MANAGER_URL: http://scenario-manager:8080
+      POCKETHIVE_NETWORK_PROXY_MANAGER_TOXIPROXY_URL: http://toxiproxy:8474
+      POCKETHIVE_NETWORK_PROXY_MANAGER_HAPROXY_CONFIG_FILE: /opt/haproxy-runtime/haproxy.cfg
+      POCKETHIVE_NETWORK_PROXY_MANAGER_HAPROXY_BACKEND_HOST: toxiproxy
+      POCKETHIVE_NETWORK_PROXY_MANAGER_TOXIPROXY_LISTEN_PORT_OFFSET: 10000
+    ports:
+      - target: 8080
+        published: 1082
+        protocol: tcp
+    volumes:
+      - {{ pockethive_bind_source_dir }}/state/haproxy/runtime:/opt/haproxy-runtime
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/actuator/health | grep -q UP"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+
+{% if pockethive_profile == "swarm-reduced" %}
+volumes:
+  redis-data:
+{% endif %}

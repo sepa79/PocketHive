@@ -42,9 +42,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.Map;
 import java.util.UUID;
 import java.util.List;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
@@ -268,6 +270,8 @@ class SwarmCreationMock1E2ETest {
         if (POSTGRES.isRunning()) {
             POSTGRES.stop();
         }
+        deleteRecursively(scenarioRuntimeRoot);
+        scenarioRuntimeRoot = null;
     }
 
     @Test
@@ -275,7 +279,7 @@ class SwarmCreationMock1E2ETest {
         Assumptions.assumeTrue(dockerAvailable, "Docker is required to run this test");
 
         when(docker.resolveControlNetwork()).thenReturn("ph-test-net");
-        when(docker.createAndStartContainer(anyString(), anyMap(), anyString(), any()))
+        when(docker.createAndStartContainer(anyString(), anyMap(), anyString(), any(), anyMap()))
             .thenReturn("container-123");
 
         RabbitAdmin admin = new RabbitAdmin(connectionFactory);
@@ -310,7 +314,7 @@ class SwarmCreationMock1E2ETest {
 
         assertThat(swarmPlanRegistry.find(instanceId)).isPresent();
 
-        verify(docker).createAndStartContainer(eq("swarm-controller:latest"), anyMap(), eq(instanceId), any());
+        verify(docker).createAndStartContainer(eq("swarm-controller:latest"), anyMap(), eq(instanceId), any(), anyMap());
 
         AnonymousQueue captureQueue = new AnonymousQueue();
         String captureName = admin.declareQueue(captureQueue);
@@ -373,8 +377,7 @@ class SwarmCreationMock1E2ETest {
         assertThat(controlSignal.data()).isNotNull();
 
         SwarmPlan publishedPlan = objectMapper.convertValue(controlSignal.data(), SwarmPlan.class);
-        String runtimeVolume = locateScenariosDirectory()
-            .resolve("runtime")
+        String runtimeVolume = scenarioRuntimeRoot
             .resolve(swarmId)
             .toAbsolutePath()
             .normalize()
@@ -669,12 +672,12 @@ class SwarmCreationMock1E2ETest {
         }
         int port = findFreePort();
         Path scenariosDir = locateScenariosDirectory();
-        Path runtimeRoot = scenariosDir.resolve("runtime");
         Path capabilitiesDir = locateCapabilitiesDirectory();
+        Path runtimeRoot;
         try {
-            Files.createDirectories(runtimeRoot);
+            runtimeRoot = Files.createTempDirectory("pockethive-scenarios-runtime-");
         } catch (IOException e) {
-            throw new IllegalStateException("Unable to create runtime root directory at " + runtimeRoot, e);
+            throw new IllegalStateException("Unable to create temporary runtime root directory", e);
         }
         scenarioManagerContext = new SpringApplicationBuilder(ScenarioManagerTestApplication.class)
             .properties(Map.of(
@@ -700,6 +703,23 @@ class SwarmCreationMock1E2ETest {
             return candidate;
         }
         throw new IllegalStateException("Unable to locate test scenarios directory at " + candidate);
+    }
+
+    private static void deleteRecursively(Path root) {
+        if (root == null || !Files.exists(root)) {
+            return;
+        }
+        try (Stream<Path> paths = Files.walk(root)) {
+            paths.sorted(Comparator.reverseOrder()).forEach(path -> {
+                try {
+                    Files.deleteIfExists(path);
+                } catch (IOException e) {
+                    throw new IllegalStateException("Unable to delete generated runtime test path " + path, e);
+                }
+            });
+        } catch (IOException e) {
+            throw new IllegalStateException("Unable to delete generated runtime test root " + root, e);
+        }
     }
 
     private static Path locateCapabilitiesDirectory() {

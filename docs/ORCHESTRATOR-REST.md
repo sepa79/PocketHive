@@ -270,6 +270,285 @@ temporary queue bound to the swarm's hive exchange and buffers samples for UI in
 }
 ```
 
+### 2.9 Runtime Cleanup Reconciliation
+
+Runtime cleanup is an operator workflow for stale PocketHive-owned Docker and
+RabbitMQ resources. The Orchestrator is the authority because it owns swarm desired
+state, the swarm registry, AMQP topology access, and runtime ownership manifests.
+MCP clients must call this API instead of deleting Docker/RabbitMQ resources
+directly in production.
+
+Orchestrator also owns Docker/Swarm runtime debug for PocketHive-managed worker
+and swarm-controller manager runtimes. MCP clients must call the runtime debug
+API for Docker/Swarm list, inspect, logs, and version reads instead of using the
+Docker socket directly.
+
+Cleanup is always:
+
+```text
+plan -> execute
+```
+
+Registered swarms are cleanup candidates only through `LIFECYCLE_REMOVE_SWARM`.
+`NEW`/`CREATING`/`READY` are allowed as lifecycle remove/abort candidates;
+`STARTING`/`RUNNING`/`STOPPING` must be explicitly stopped first; stuck
+`REMOVING` requires lifecycle recovery.
+For rare break-glass cleanup, clients may set
+`overrideRegisteredSwarmState=true` on both plan and execute. The override is
+part of the `candidateSetHash`, marks lifecycle removal high risk, and still
+uses only `LIFECYCLE_REMOVE_SWARM`.
+
+Unregistered labeled Docker resources are treated as orphan cleanup candidates
+only inside the requested `swarmId`/`runId` scope. They still require
+`pockethive.managed=true` and all required PocketHive labels. RabbitMQ cleanup
+still requires an ownership manifest and never deletes by prefix.
+
+RabbitMQ cleanup is allowed only for exact queue/exchange names recorded in the
+runtime ownership manifest or control queue names derived inside Orchestrator
+from exact PocketHive runtime labels using the shared control-plane topology
+descriptors. Derived worker control queues obey the same `includeRunning` gate as
+their worker runtime object, so default cleanup plans do not target a running
+worker's control queue. Prefix guessing, Docker prune-style operations, and
+implicit cleanup fallbacks are forbidden. In production, the mutating execute
+operation must be registered behind HiveGate or an equivalent governed control
+plane for policy, human approval when required, and evidence.
+
+#### 2.9.1 Runtime debug capabilities
+`GET /api/runtime/debug/capabilities`
+
+Returns the scoped runtime debug/cleanup contract understood by this
+Orchestrator. PocketHive MCP clients use this endpoint before runtime debug or
+cleanup tool execution so stale Orchestrator deployments fail only those runtime
+tools, without impacting existing scenario, workflow, or swarm lifecycle tools.
+
+**Response (200)**
+```json
+{
+  "runtimeDebugContractVersion": "3",
+  "cleanupContractVersion": "3",
+  "runtimeDebugReadsBackedByOrchestrator": true,
+  "cleanupPlanHasExecutionRisk": true,
+  "cleanupPlanUsesApprovalFields": false,
+  "cleanupExecuteRequiresCandidateSetHash": true,
+  "rabbitTopologyExactByDefault": true,
+  "cleanupSupportsRegisteredStateOverride": true
+}
+```
+
+#### 2.9.2 Runtime resources
+`POST /api/runtime/debug/resources/list`
+
+Lists PocketHive-managed worker and swarm-controller manager runtimes for one
+swarm from Orchestrator-owned Docker/Swarm inventory.
+
+The compute adapter is not client-controlled. Orchestrator uses its internally
+resolved adapter and reports it in the response as read-only runtime context.
+
+**Request**
+```json
+{
+  "swarmId": "demo",
+  "runId": "optional",
+  "includeManagers": true
+}
+```
+
+**Response (200)**
+```json
+{
+  "computeAdapter": "DOCKER_SINGLE",
+  "swarmId": "demo",
+  "runId": "run-1",
+  "counts": { "workers": 1, "managers": 1, "blocked": 0 },
+  "workers": [],
+  "managers": [],
+  "blocked": []
+}
+```
+
+#### 2.9.3 Runtime target logs
+`POST /api/runtime/debug/resources/logs`
+
+Reads bounded, redacted Docker container logs or Swarm service logs for one
+label-gated `worker` or `manager` runtime. The target must be identified by
+`runtimeId`, `instance`, or `role`; ambiguous targets are rejected.
+
+**Request**
+```json
+{
+  "swarmId": "demo",
+  "runId": "optional",
+  "resourceKind": "manager",
+  "instance": "controller-1",
+  "tailLines": 200,
+  "since": "2026-06-18T12:00:00Z"
+}
+```
+
+**Response (200)**
+```json
+{
+  "target": {
+    "runtimeId": "abc",
+    "runtimeType": "container",
+    "resourceKind": "manager",
+    "role": "swarm-controller",
+    "instance": "controller-1"
+  },
+  "tailLines": 200,
+  "redacted": true,
+  "lineCount": 12,
+  "logs": "..."
+}
+```
+
+#### 2.9.4 Runtime target version
+`POST /api/runtime/debug/resources/version`
+
+Returns the version from the exact runtime image/labels used to create the
+worker or manager. Deployment-wide service versions are not used.
+
+#### 2.9.5 Runtime target inspect
+`POST /api/runtime/debug/resources/inspect`
+
+Returns a bounded inspect summary for one worker or manager runtime. Raw bind
+host paths and environment variables are not returned.
+
+#### 2.9.6 Rabbit topology snapshot
+`POST /api/runtime/debug/rabbit/topology`
+
+Reads exact RabbitMQ topology for one PocketHive swarm through Orchestrator.
+The response is based on the runtime ownership manifest plus control queues
+derived inside Orchestrator from exact worker labels and shared control-plane
+topology descriptors. It does not consume queues, publish messages, scan by
+prefix, or expose a RabbitMQ management fallback in the MCP.
+
+**Request**
+```json
+{
+  "swarmId": "demo",
+  "runId": "optional"
+}
+```
+
+**Response (200)**
+```json
+{
+  "computeAdapter": "DOCKER_SINGLE",
+  "swarmId": "demo",
+  "runId": "run-1",
+  "manifest": { "available": true },
+  "rabbit": { "available": true },
+  "exactOnly": true,
+  "queues": [
+    {
+      "name": "ph.control.demo.processor.demo-processor-1",
+      "present": true,
+      "messages": 0,
+      "consumers": 1
+    }
+  ],
+  "exchanges": [
+    { "name": "ph.demo.hive", "present": true }
+  ],
+  "unmanagedDiagnostics": []
+}
+```
+
+When the ownership manifest is missing, the response is still exact-only and
+returns no Rabbit resources instead of guessing by prefix.
+
+#### 2.9.7 Plan cleanup
+`POST /api/runtime/cleanup/plan`
+
+**Request**
+```json
+{
+  "swarmId": "demo",
+  "runId": "optional",
+  "includeRunning": false,
+  "includeRabbit": true,
+  "overrideRegisteredSwarmState": false
+}
+```
+
+**Response (200)**
+```json
+{
+  "computeAdapter": "DOCKER_SINGLE",
+  "swarmId": "demo",
+  "runId": "run-1",
+  "includeRunning": false,
+  "includeRabbit": true,
+  "overrideRegisteredSwarmState": false,
+  "candidateSetHash": "sha256:...",
+  "executionRisk": "standard",
+  "candidates": [
+    {
+      "candidateId": "docker:container:abc",
+      "action": "DELETE_DOCKER_CONTAINER",
+      "resourceId": "abc",
+      "resourceType": "container",
+      "resourceKind": "worker",
+      "role": "processor",
+      "instance": "demo-processor-1",
+      "state": "exited",
+      "image": "ghcr.io/pockethive/processor:1.2.3",
+      "reason": "stopped PocketHive runtime resource"
+    }
+  ],
+  "blocked": [
+    {
+      "candidateId": "rabbit:queue:ph.demo.final",
+      "action": "DELETE_RABBIT_QUEUE",
+      "resourceId": "ph.demo.final",
+      "reason": "active swarm shared RabbitMQ resource is protected"
+    }
+  ]
+}
+```
+
+#### 2.9.8 Execute cleanup
+`POST /api/runtime/cleanup/execute`
+
+Recomputes the plan, verifies the candidate hash and idempotency key, then
+executes only the selected candidate ids. This endpoint does not approve itself;
+production access is governed by HiveGate policy outside Orchestrator.
+
+**Request**
+```json
+{
+  "swarmId": "demo",
+  "runId": "run-1",
+  "includeRunning": false,
+  "includeRabbit": true,
+  "overrideRegisteredSwarmState": false,
+  "candidateSetHash": "sha256:...",
+  "candidateIds": ["docker:container:abc"],
+  "idempotencyKey": "uuid-v4",
+  "reason": "remove stale stopped runtime",
+  "actor": "operator"
+}
+```
+
+**Response (200)**
+```json
+{
+  "idempotent": false,
+  "evidence": {
+    "computeAdapter": "DOCKER_SINGLE",
+    "idempotencyKey": "uuid-v4",
+    "candidateSetHash": "sha256:...",
+    "resultByCandidate": [
+      {
+        "candidateId": "docker:container:abc",
+        "status": "REMOVED"
+      }
+    ]
+  }
+}
+```
+
 #### 2.8.2 Read tap
 `GET /api/debug/taps/{tapId}`
 

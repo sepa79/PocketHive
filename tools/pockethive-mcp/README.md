@@ -50,6 +50,25 @@ Assistant configs should connect to:
 http://localhost:3100/mcp
 ```
 
+Runtime debug tools are exposed through this same PocketHive MCP surface. Do not
+start a separate runtime-debug MCP for normal product use.
+
+## Agent Setup Map
+
+Use this decision table when configuring an agent or IDE:
+
+| Need | Use |
+|---|---|
+| Normal agent/IDE MCP access | `tools/pockethive-mcp` |
+| Streamable HTTP endpoint | `http://localhost:3100/mcp` via `npm run mcp:start:http` |
+| Stdio endpoint | `npm run mcp:start` |
+| Runtime cleanup/log/version tools | `tools/pockethive-mcp` |
+| Low-level terminal diagnostics only | `tools/mcp-orchestrator-debug/client.mjs` |
+
+Default MCP tool names use underscores, for example `runtime_cleanup_plan`.
+Dotted names such as `runtime.cleanup.plan` are conceptual names unless
+`PH_MCP_TOOL_NAME_MODE=legacy` or `both` is set.
+
 ## Core Environment
 
 | Variable | Required | Purpose |
@@ -139,6 +158,86 @@ Production/live verification should use:
   "includeTapSample": true
 }
 ```
+
+## Runtime Debug And Cleanup
+
+The PocketHive MCP exposes label-gated worker/manager runtime diagnostics and
+governed runtime cleanup:
+
+```text
+runtime_cleanup_plan
+runtime_tail_worker_logs
+runtime_get_worker_version
+runtime_list_workers
+runtime_inspect_worker
+runtime_diff_swarm_runtime
+runtime_control_plane_status
+runtime_rabbit_topology_snapshot
+runtime_swarm_timeline
+runtime_manifest_validate
+runtime_cleanup_execute
+```
+
+These default names use underscores for client compatibility. Conceptual dotted
+names such as `runtime.cleanup.plan` are available only when
+`PH_MCP_TOOL_NAME_MODE=legacy` or `both`.
+
+Cleanup is always `plan -> execute`. Cleanup tools delegate to Orchestrator's
+`/api/runtime/cleanup/*` reconciliation API so swarm registry, Docker runtime
+state, RabbitMQ topology, idempotency, and evidence stay in one authority path.
+If Orchestrator HTTP is unavailable, cleanup tools fail closed instead of running
+a local cleanup fallback. Register `runtime_cleanup_execute` behind HiveGate for
+real policy, approval when required, and governed execution evidence.
+Registered pre-run, stopped, and failed swarms are cleanup candidates only
+through Orchestrator lifecycle removal. Running/removing registered swarms are
+blocked by default, and the plan or execute error includes the required lifecycle
+action. Rare break-glass cleanup can set `overrideRegisteredSwarmState=true` on
+both plan and execute; the override is hash-bound, high-risk, and still uses only
+`LIFECYCLE_REMOVE_SWARM`.
+
+Runtime debug and cleanup tools first read `/api/runtime/debug/capabilities`.
+Docker/Swarm list, logs, version, inspect, and exact Rabbit topology tools
+delegate to Orchestrator's `/api/runtime/debug/*` API. If Orchestrator HTTP is
+unavailable or the runtime debug contract is incompatible, only the runtime
+tools fail closed; existing scenario, workflow, and swarm MCP tools are not
+disabled. The MCP does not use a local Docker socket or Rabbit topology fallback
+for runtime debug/cleanup.
+
+Registered swarm-controller containers/services are removed through the
+Orchestrator lifecycle action. Orphaned swarm-controller and worker
+containers/services can be removed as labeled Docker cleanup candidates. RabbitMQ
+queues/exchanges are eligible only when they appear in the exact runtime
+ownership manifest; missing manifests block RabbitMQ cleanup. Worker control
+queues derived from exact labels obey the same `includeRunning` gate as the
+worker runtime object.
+
+Worker and swarm-controller manager logs are bounded and redacted by
+Orchestrator before returning to the caller. Version reports use the runtime
+image/labels that Orchestrator or Swarm Controller used to create the runtime
+object; deployment-wide `POCKETHIVE_VERSION` is not used as a runtime-version
+source.
+
+Additional read-only debug tools explain drift across the swarm registry,
+runtime ownership manifest, Docker/Swarm state, RabbitMQ topology, and journal:
+
+- `runtime_list_workers` lists label-gated manager/worker runtimes.
+- `runtime_inspect_worker` returns a bounded inspect summary for one worker or
+  manager.
+- `runtime_diff_swarm_runtime` compares expected, registered, live, and cleanup
+  views.
+- `runtime_control_plane_status` summarizes Orchestrator-provided exact control
+  queues and recent control events.
+- `runtime_rabbit_topology_snapshot` reads Orchestrator-backed exact
+  queues/exchanges for a concrete compute adapter.
+- `runtime_swarm_timeline` builds an operator timeline from journal/runtime
+  evidence.
+- `runtime_manifest_validate` checks manifest drift against live runtime state.
+
+These tools return explicit source availability instead of silently guessing.
+They never expose raw environment variables or mutate runtime resources.
+They are designed for zero scenario-path impact: no scenario queue consumers, no
+message publishing, no worker exec/pause/resume, finite log reads only, and
+RabbitMQ diagnostics use exact Orchestrator-owned metadata reads only.
 
 Strict proof blocks on missing or failing production evidence:
 

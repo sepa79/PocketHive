@@ -47,7 +47,6 @@ includes:
 - `tcp-mock-server`
 - `network-proxy-haproxy`
 - `ui`
-- `ui-v2`
 - `swarm-controller`
 - `generator`
 - `request-builder`

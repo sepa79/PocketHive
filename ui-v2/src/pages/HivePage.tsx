@@ -5,6 +5,7 @@ import { useToolsBar } from '../components/ToolsBarContext'
 import { useNavigate, useParams } from 'react-router-dom'
 import { CreateSwarmModal } from './hive/CreateSwarmModal'
 import { useAuth } from '../lib/authContext'
+import { SwarmRuntimeInspector } from './hive/SwarmRuntimeInspector'
 import {
   buildManifestIndex,
   normalizeManifests,
@@ -117,9 +118,16 @@ type ScenarioDefinition = {
 }
 
 type SwarmAction = 'start' | 'stop' | 'remove'
+type SwarmDetailTab = 'snapshot' | 'network' | 'scenario' | 'inspector'
 
 const ORCHESTRATOR_BASE = '/orchestrator/api'
 const CAPABILITIES_ENDPOINT = '/scenario-manager/api/capabilities?all=true'
+const SWARM_DETAIL_TABS: Array<{ id: SwarmDetailTab; label: string }> = [
+  { id: 'snapshot', label: 'Snapshot' },
+  { id: 'network', label: 'Network' },
+  { id: 'scenario', label: 'Scenario' },
+  { id: 'inspector', label: 'Inspector' },
+]
 
 function createIdempotencyKey() {
   return `ph-${newUuid()}`
@@ -479,6 +487,7 @@ export function HivePage() {
   const [swarmJournalEntries, setSwarmJournalEntries] = useState<SwarmJournalEntry[]>([])
   const [swarmJournalLoading, setSwarmJournalLoading] = useState(false)
   const [swarmJournalError, setSwarmJournalError] = useState<string | null>(null)
+  const [detailTab, setDetailTab] = useState<SwarmDetailTab>('snapshot')
 
   const tapBusyKey = useCallback((role: string, direction: 'IN' | 'OUT', ioName: string | null) => {
     return `${role}::${direction}::${ioName ?? ''}`
@@ -704,6 +713,10 @@ export function HivePage() {
   useEffect(() => {
     void loadSwarms()
   }, [loadSwarms])
+
+  useEffect(() => {
+    setDetailTab('snapshot')
+  }, [selectedSwarmId])
 
   useEffect(() => {
     void loadTemplateEntries()
@@ -1173,23 +1186,36 @@ export function HivePage() {
                 </div>
 	                {selectedSwarmId === swarm.id && (
 	                  <div className="swarmDetail">
-	                    {snapshotLoading && !snapshotView && (
-	                      <div className="muted" style={{ marginTop: 8 }}>
-	                        Loading runtime snapshot…
-	                      </div>
-                    )}
-                    {snapshotError && (
-                      <div className="card swarmMessage" style={{ marginTop: 8 }}>
-                        {snapshotError}
-                      </div>
-                    )}
 	                    <SwarmIssueBox
 	                      issue={selectedSwarmIssue}
-	                      loading={swarmJournalLoading}
 	                      error={swarmJournalError}
 	                      onOpenJournal={openSelectedSwarmJournal}
 	                    />
-	                    {snapshotView && (
+                      <div className="detailTabStrip" role="tablist" aria-label="Swarm detail panels">
+                        {SWARM_DETAIL_TABS.map((tab) => (
+                          <button
+                            key={tab.id}
+                            type="button"
+                            role="tab"
+                            aria-selected={detailTab === tab.id}
+                            className={detailTab === tab.id ? 'detailTabButton detailTabButtonActive' : 'detailTabButton'}
+                            onClick={() => setDetailTab(tab.id)}
+                          >
+                            {tab.label}
+                          </button>
+                        ))}
+                      </div>
+	                    {detailTab === 'snapshot' && snapshotLoading && !snapshotView && (
+	                      <div className="muted" style={{ marginTop: 8 }}>
+	                        Loading runtime snapshot…
+	                      </div>
+                      )}
+                      {detailTab === 'snapshot' && snapshotError && (
+                        <div className="card swarmMessage" style={{ marginTop: 8 }}>
+                          {snapshotError}
+                        </div>
+                      )}
+	                    {detailTab === 'snapshot' && snapshotView && (
 	                      <div className="card" style={{ marginTop: 10 }}>
 	                        <div className="row between">
 	                          <div className="h2">Runtime snapshot</div>
@@ -1257,6 +1283,7 @@ export function HivePage() {
 	                      </div>
 	                    )}
 
+                      {detailTab === 'network' && (
                       <div className="card" style={{ marginTop: 10 }}>
                         <div className="row between">
                           <div>
@@ -1408,7 +1435,14 @@ export function HivePage() {
                           </div>
                         )}
                       </div>
+                      )}
 
+                      {detailTab === 'inspector' && (
+                        <SwarmRuntimeInspector swarmId={selectedSwarmId} runId={selectedRunId} />
+                      )}
+
+                      {detailTab === 'scenario' && (
+                      <>
 	                    {scenarioLoading && <div className="muted">Loading scenario topology…</div>}
 	                    {scenarioError && <div className="muted">{scenarioError}</div>}
 	                    {!scenarioLoading && !scenarioError && selectedScenario && (
@@ -1898,6 +1932,8 @@ export function HivePage() {
                     )}
                     {!scenarioLoading && !scenarioError && !selectedScenario && (
                       <div className="muted">Scenario details unavailable.</div>
+                    )}
+                    </>
                     )}
                   </div>
                 )}

@@ -1,4 +1,13 @@
-# PocketHive UI
+# PocketHive UI v1 (archived)
+
+This directory contains the legacy PocketHive UI v1 source. It is kept for
+reference only and is not wired into CI image publishing, `build-hive.sh`,
+HiveForge release artifacts, or compose deployment.
+
+The primary PocketHive UI is built from `ui-v2/` and published as the `ui`
+image.
+
+## Historical notes
 
 PocketHive's UI is a web console for monitoring and controlling swarms in the PocketHive ecosystem. It connects to the control plane over STOMP and renders the Hive topology with React Flow, letting you inspect components and stream logs in real time.
 

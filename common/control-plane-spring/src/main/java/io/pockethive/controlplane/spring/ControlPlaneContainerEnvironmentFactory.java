@@ -1,7 +1,10 @@
 package io.pockethive.controlplane.spring;
 
 import java.time.Duration;
+import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import org.springframework.boot.autoconfigure.amqp.RabbitProperties;
@@ -94,6 +97,23 @@ public final class ControlPlaneContainerEnvironmentFactory {
         return env;
     }
 
+    public static String swarmTrafficQueueName(String queuePrefix, String suffix) {
+        return requireArgument(queuePrefix, "traffic queue prefix")
+            + "."
+            + requireArgument(suffix, "traffic queue suffix");
+    }
+
+    public static List<String> swarmTrafficQueueNames(String queuePrefix, Collection<String> suffixes) {
+        if (suffixes == null || suffixes.isEmpty()) {
+            return List.of();
+        }
+        LinkedHashSet<String> names = new LinkedHashSet<>();
+        for (String suffix : suffixes) {
+            names.add(swarmTrafficQueueName(queuePrefix, suffix));
+        }
+        return List.copyOf(names);
+    }
+
     private static void populateRabbitEnv(Map<String, String> env, RabbitProperties rabbitProperties) {
         Objects.requireNonNull(rabbitProperties, "rabbitProperties");
         env.put("SPRING_RABBITMQ_HOST",
@@ -173,6 +193,14 @@ public final class ControlPlaneContainerEnvironmentFactory {
             Objects.requireNonNull(metrics, "metrics");
             requireArgument(logsExchange, "logsExchange");
             requireArgument(dockerSocketPath, "dockerSocketPath");
+        }
+
+        public String trafficQueueName(String suffix) {
+            return swarmTrafficQueueName(trafficQueuePrefix, suffix);
+        }
+
+        public List<String> trafficQueueNames(Collection<String> suffixes) {
+            return swarmTrafficQueueNames(trafficQueuePrefix, suffixes);
         }
     }
 

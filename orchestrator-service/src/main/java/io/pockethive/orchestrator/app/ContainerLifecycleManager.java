@@ -16,15 +16,22 @@ import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.orchestrator.domain.SwarmLifecycleStatus;
 import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
 import io.pockethive.orchestrator.infra.JournalRunMetadataWriter;
+import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.RuntimeOwnershipManifestStore;
+import io.pockethive.orchestrator.runtime.RuntimeOwnershipManifest;
 import io.pockethive.sink.clickhouse.ClickHouseSinkProperties;
 import io.pockethive.swarm.model.NetworkMode;
+import io.pockethive.swarm.model.Bee;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.AmqpAdmin;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.amqp.RabbitProperties;
 import org.springframework.stereotype.Service;
@@ -43,6 +50,7 @@ public class ContainerLifecycleManager {
     private final RabbitProperties rabbitProperties;
     private final JournalRunMetadataWriter runMetadataWriter;
     private final ClickHouseSinkProperties clickHouseSink;
+    private final RuntimeOwnershipManifestStore manifestStore;
     @Value("${POCKETHIVE_SCENARIOS_RUNTIME_ROOT:}")
     private String scenariosRuntimeRootSource;
     @Value("${pockethive.journal.sink:postgres}")
@@ -57,6 +65,31 @@ public class ContainerLifecycleManager {
     private String swarmPlacementConstraints;
     private volatile ComputeAdapterType resolvedAdapterType = ComputeAdapterType.DOCKER_SINGLE;
 
+    @Autowired
+    public ContainerLifecycleManager(
+        DockerContainerClient docker,
+        ComputeAdapter computeAdapter,
+        SwarmStore store,
+        AmqpAdmin amqp,
+        OrchestratorProperties properties,
+        ControlPlaneProperties controlPlaneProperties,
+        RabbitProperties rabbitProperties,
+        JournalRunMetadataWriter runMetadataWriter,
+        ClickHouseSinkProperties clickHouseSink,
+        RuntimeOwnershipManifestStore manifestStore) {
+        this.docker = Objects.requireNonNull(docker, "docker");
+        this.computeAdapter = Objects.requireNonNull(computeAdapter, "computeAdapter");
+        this.store = Objects.requireNonNull(store, "store");
+        this.amqp = Objects.requireNonNull(amqp, "amqp");
+        this.properties = Objects.requireNonNull(properties, "properties");
+        this.controlPlaneProperties = Objects.requireNonNull(controlPlaneProperties, "controlPlaneProperties");
+        this.rabbitProperties = Objects.requireNonNull(rabbitProperties, "rabbitProperties");
+        this.runMetadataWriter = Objects.requireNonNull(runMetadataWriter, "runMetadataWriter");
+        this.clickHouseSink = Objects.requireNonNull(clickHouseSink, "clickHouseSink");
+        this.manifestStore = Objects.requireNonNull(manifestStore, "manifestStore");
+        this.resolvedAdapterType = requireConcreteAdapterType(computeAdapter.type());
+    }
+
     public ContainerLifecycleManager(
         DockerContainerClient docker,
         ComputeAdapter computeAdapter,
@@ -67,33 +100,46 @@ public class ContainerLifecycleManager {
         RabbitProperties rabbitProperties,
         JournalRunMetadataWriter runMetadataWriter,
         ClickHouseSinkProperties clickHouseSink) {
-        this.docker = Objects.requireNonNull(docker, "docker");
-        this.computeAdapter = Objects.requireNonNull(computeAdapter, "computeAdapter");
-        this.store = Objects.requireNonNull(store, "store");
-        this.amqp = Objects.requireNonNull(amqp, "amqp");
-        this.properties = Objects.requireNonNull(properties, "properties");
-        this.controlPlaneProperties = Objects.requireNonNull(controlPlaneProperties, "controlPlaneProperties");
-        this.rabbitProperties = Objects.requireNonNull(rabbitProperties, "rabbitProperties");
-        this.runMetadataWriter = Objects.requireNonNull(runMetadataWriter, "runMetadataWriter");
-        this.clickHouseSink = Objects.requireNonNull(clickHouseSink, "clickHouseSink");
-        // Initialise the resolved adapter type based on the injected adapter so that
-        // status-full events emitted before the first swarm start report the correct mode.
-        if (computeAdapter instanceof DockerSwarmServiceComputeAdapter) {
-            this.resolvedAdapterType = ComputeAdapterType.SWARM_STACK;
-        } else {
-            this.resolvedAdapterType = ComputeAdapterType.DOCKER_SINGLE;
-        }
-    }
+        this(
+            docker,
+            computeAdapter,
+            store,
+            amqp,
+            properties,
+            controlPlaneProperties,
+            rabbitProperties,
+            runMetadataWriter,
+            clickHouseSink,
+            new RuntimeOwnershipManifestStore() {
+                @Override
+                public void save(RuntimeOwnershipManifest manifest) {
+                }
 
-    public Swarm startSwarm(String swarmId, String image, String instanceId) {
-        return startSwarm(swarmId, image, instanceId, null, false, null, NetworkMode.DIRECT, null);
+                @Override
+                public java.util.Optional<RuntimeOwnershipManifest> find(String swarmId, String runId) {
+                    return java.util.Optional.empty();
+                }
+
+                @Override
+                public java.util.Optional<RuntimeOwnershipManifest> findLatest(String swarmId) {
+                    return java.util.Optional.empty();
+                }
+            });
     }
 
     public Swarm startSwarm(String swarmId,
                             String image,
                             String instanceId,
                             SwarmTemplateMetadata templateMetadata) {
-        return startSwarm(swarmId, image, instanceId, templateMetadata, false, null, NetworkMode.DIRECT, null);
+        return startSwarm(
+            swarmId,
+            image,
+            instanceId,
+            Objects.requireNonNull(templateMetadata, "templateMetadata"),
+            false,
+            null,
+            NetworkMode.DIRECT,
+            null);
     }
 
     public Swarm startSwarm(String swarmId,
@@ -101,7 +147,15 @@ public class ContainerLifecycleManager {
                             String instanceId,
                             SwarmTemplateMetadata templateMetadata,
                             boolean autoPullImages) {
-        return startSwarm(swarmId, image, instanceId, templateMetadata, autoPullImages, null, NetworkMode.DIRECT, null);
+        return startSwarm(
+            swarmId,
+            image,
+            instanceId,
+            Objects.requireNonNull(templateMetadata, "templateMetadata"),
+            autoPullImages,
+            null,
+            NetworkMode.DIRECT,
+            null);
     }
 
     public Swarm startSwarm(String swarmId,
@@ -112,6 +166,7 @@ public class ContainerLifecycleManager {
                             String sutId,
                             NetworkMode networkMode,
                             String networkProfileId) {
+        Objects.requireNonNull(templateMetadata, "templateMetadata");
         String resolvedInstance = requireNonBlank(instanceId, "controller instance");
         String resolvedSwarmId = requireNonBlank(swarmId, "swarmId");
         String resolvedImage = resolveImage(image);
@@ -165,19 +220,10 @@ public class ContainerLifecycleManager {
         String dockerSocket = properties.getDocker().getSocketPath();
         env.put("DOCKER_SOCKET_PATH", dockerSocket);
         env.put("DOCKER_HOST", "unix://" + dockerSocket);
-        // Propagate the resolved compute adapter choice based on the active adapter
-        // instance so the swarm-controller can provision workers with matching mode.
-        if (computeAdapter instanceof DockerSwarmServiceComputeAdapter) {
-            resolvedAdapterType = ComputeAdapterType.SWARM_STACK;
-        } else {
-            resolvedAdapterType = ComputeAdapterType.DOCKER_SINGLE;
-        }
+        resolvedAdapterType = requireConcreteAdapterType(computeAdapter.type());
         env.put("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_DOCKER_COMPUTE_ADAPTER", resolvedAdapterType.name());
         putEnvIfMissing(env, DockerSwarmServiceComputeAdapter.PLACEMENT_CONSTRAINTS_ENV, normalizeRuntimeRoot(swarmPlacementConstraints));
         env.put("POCKETHIVE_RUNTIME_IMAGE", resolvedImage);
-        if (templateMetadata == null) {
-            throw new IllegalStateException("templateMetadata must not be null");
-        }
         env.put("POCKETHIVE_TEMPLATE_ID", requireText(templateMetadata.templateId(), "templateId"));
         env.put("POCKETHIVE_RUNTIME_STACK_NAME", "ph-" + resolvedSwarmId.toLowerCase(java.util.Locale.ROOT));
         putEnvIfMissing(env, "POCKETHIVE_SUT_ID", normalizeRuntimeRoot(sutId));
@@ -210,8 +256,66 @@ public class ContainerLifecycleManager {
             swarm.attachTemplate(templateMetadata);
         }
         store.register(swarm);
+        writeRuntimeOwnershipManifest(
+            resolvedSwarmId,
+            runId,
+            resolvedInstance,
+            resolvedImage,
+            containerId,
+            templateMetadata,
+            controllerSettings);
         store.updateStatus(resolvedSwarmId, SwarmLifecycleStatus.CREATING);
         return swarm;
+    }
+
+    private void writeRuntimeOwnershipManifest(String swarmId,
+                                               String runId,
+                                               String controllerInstance,
+                                               String controllerImage,
+                                               String controllerRuntimeId,
+                                               SwarmTemplateMetadata templateMetadata,
+                                               ControlPlaneContainerEnvironmentFactory.ControllerSettings controllerSettings) {
+        String controllerQueue = new SwarmControllerControlPlaneTopologyDescriptor(
+            swarmId,
+            controlPlaneProperties.getControlQueuePrefix())
+            .controlQueue(controllerInstance)
+            .map(ControlQueueDescriptor::name)
+            .orElse(null);
+        List<String> workQueues = controllerSettings.trafficQueueNames(workQueueSuffixes(templateMetadata.bees()));
+        List<String> controlQueues = controllerQueue == null || controllerQueue.isBlank()
+            ? List.of()
+            : List.of(controllerQueue);
+        RuntimeOwnershipManifest manifest = new RuntimeOwnershipManifest(
+            swarmId,
+            runId,
+            templateMetadata.templateId(),
+            resolvedAdapterType.name(),
+            java.time.Instant.now(),
+            List.of(new RuntimeOwnershipManifest.RuntimeObject(
+                controllerRuntimeId,
+                resolvedAdapterType == ComputeAdapterType.SWARM_STACK ? "service" : "container",
+                "manager",
+                SWARM_CONTROLLER_ROLE,
+                controllerInstance,
+                controllerImage)),
+            new RuntimeOwnershipManifest.RabbitResources(
+                controlQueues,
+                workQueues,
+                List.of(controllerSettings.trafficHiveExchange())));
+        manifestStore.save(manifest);
+    }
+
+    private static Set<String> workQueueSuffixes(List<Bee> bees) {
+        Set<String> suffixes = new LinkedHashSet<>();
+        for (Bee bee : bees == null ? List.<Bee>of() : bees) {
+            if (bee == null || bee.work() == null) {
+                continue;
+            }
+            suffixes.addAll(bee.work().in().values());
+            suffixes.addAll(bee.work().out().values());
+        }
+        suffixes.removeIf(value -> value == null || value.isBlank());
+        return suffixes;
     }
 
     private void applyClickHouseSinkEnv(Map<String, String> targetEnv) {
@@ -368,13 +472,46 @@ public class ContainerLifecycleManager {
             } catch (Exception ex) {
                 log.warn("Failed to delete swarm-controller control queue for swarm {}: {}", swarmId, ex.getMessage());
             }
-            amqp.deleteQueue("ph." + swarmId + ".gen");
-            amqp.deleteQueue("ph." + swarmId + ".mod");
-            amqp.deleteQueue("ph." + swarmId + ".final");
+            boolean manifestQueuesDeleted = deleteManifestRabbitResources(swarmId, swarm.getRunId());
+            if (!manifestQueuesDeleted) {
+                String legacyTrafficPrefix = "ph." + swarmId;
+                amqp.deleteQueue(
+                    ControlPlaneContainerEnvironmentFactory.swarmTrafficQueueName(legacyTrafficPrefix, "gen"));
+                amqp.deleteQueue(
+                    ControlPlaneContainerEnvironmentFactory.swarmTrafficQueueName(legacyTrafficPrefix, "mod"));
+                amqp.deleteQueue(
+                    ControlPlaneContainerEnvironmentFactory.swarmTrafficQueueName(legacyTrafficPrefix, "final"));
+            }
             store.updateStatus(swarmId, SwarmLifecycleStatus.REMOVED);
             swarm.clearTemplate();
             store.remove(swarmId);
         });
+    }
+
+    private boolean deleteManifestRabbitResources(String swarmId, String runId) {
+        return manifestStore.find(swarmId, runId)
+            .map(manifest -> {
+                RuntimeOwnershipManifest.RabbitResources rabbit = manifest.rabbit();
+                for (String queue : rabbit.controlQueues()) {
+                    deleteQueueIfPresent(queue);
+                }
+                for (String queue : rabbit.workQueues()) {
+                    deleteQueueIfPresent(queue);
+                }
+                for (String exchange : rabbit.exchanges()) {
+                    if (exchange != null && !exchange.isBlank()) {
+                        amqp.deleteExchange(exchange);
+                    }
+                }
+                return true;
+            })
+            .orElse(false);
+    }
+
+    private void deleteQueueIfPresent(String queue) {
+        if (queue != null && !queue.isBlank()) {
+            amqp.deleteQueue(queue);
+        }
     }
 
     private static String requireNonBlank(String value, String description) {
@@ -384,7 +521,14 @@ public class ContainerLifecycleManager {
         return value;
     }
 
-    ComputeAdapterType currentComputeAdapterType() {
+    public ComputeAdapterType currentComputeAdapterType() {
         return resolvedAdapterType;
+    }
+
+    private static ComputeAdapterType requireConcreteAdapterType(ComputeAdapterType adapterType) {
+        if (adapterType == null || adapterType == ComputeAdapterType.AUTO) {
+            throw new IllegalStateException("ComputeAdapter must expose a concrete adapter type");
+        }
+        return adapterType;
     }
 }

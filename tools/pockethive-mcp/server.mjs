@@ -30,6 +30,7 @@ import {
   planComponentConfigUpdate,
   summarizePatch,
 } from "./config-update.mjs";
+import { registerRuntimeTools } from "./runtime-tools.mjs";
 import { registerWorkflowTools } from "./workflow-tools.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -2770,6 +2771,13 @@ reg("debug.hive-journal", "Read hive-level journal entries through Orchestrator.
   limit: z.number().optional().default(50),
 }, async ({ limit }) => {
   return await httpJson(`/api/journal/hive/page?limit=${limit}`);
+});
+
+registerRuntimeTools(reg, {
+  httpJson,
+  rabbitManagementBaseUrl: RABBIT_MGMT,
+  rabbitAuth,
+  rabbitVhost: process.env.RABBITMQ_VHOST || "/"
 });
 
 function sleep(ms) {

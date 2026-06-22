@@ -1,6 +1,6 @@
 {
   "name": "@pockethive/mcp-server",
-  "version": "0.15.22",
+  "version": "0.15.28",
   "description": "PocketHive MCP server — full lifecycle tools for scenario authoring and swarm management",
   "type": "module",
   "bin": {
@@ -12,6 +12,7 @@
     "README.md",
     "config-update.mjs",
     "doctor.mjs",
+    "runtime-tools.mjs",
     "server.mjs",
     "workflow-tools.mjs",
     "setup.cjs",
@@ -33,9 +34,11 @@
     "acceptance:workflow:live": "cross-env PH_WORKFLOW_ACCEPTANCE_LIVE=1 node workflow-acceptance.mjs",
     "acceptance:wizard": "node wizard-acceptance.mjs",
     "doctor": "node doctor.mjs",
+    "mcp:start": "npm run start",
+    "mcp:start:http": "npm run start:http",
     "start": "node server.mjs",
     "start:http": "cross-env PH_MCP_HTTP_PORT=3100 node server.mjs",
-    "test": "node --test config-update.test.mjs target-input.test.mjs tools-list-schema.test.mjs schema.test.mjs workflow.test.mjs workflow-invariants.test.mjs doctor.test.mjs"
+    "test": "node --test config-update.test.mjs target-input.test.mjs tools-list-schema.test.mjs schema.test.mjs runtime-tools.test.mjs workflow.test.mjs workflow-invariants.test.mjs doctor.test.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.1",

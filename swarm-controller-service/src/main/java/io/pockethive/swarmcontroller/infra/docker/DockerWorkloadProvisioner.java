@@ -2,6 +2,8 @@ package io.pockethive.swarmcontroller.infra.docker;
 
 import com.github.dockerjava.api.model.Bind;
 import io.pockethive.docker.DockerContainerClient;
+import io.pockethive.docker.compute.PocketHiveDockerLabels;
+import io.pockethive.manager.runtime.ComputeAdapterType;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -28,9 +30,12 @@ public final class DockerWorkloadProvisioner implements WorkloadProvisioner {
     Objects.requireNonNull(environment, "environment");
     log.info("creating container {} using image {}", name, image);
     log.info("container env for {}: {}", name, environment);
-    String containerId = docker.createContainer(image, environment, name);
-    log.info("starting container {} ({})", containerId, name);
-    docker.startContainer(containerId);
+    String containerId = docker.createAndStartContainer(
+        image,
+        environment,
+        name,
+        null,
+        PocketHiveDockerLabels.workerLabels(name, image, environment, ComputeAdapterType.DOCKER_SINGLE));
     return containerId;
   }
 
@@ -63,7 +68,8 @@ public final class DockerWorkloadProvisioner implements WorkloadProvisioner {
             }
           }
           return hostConfig;
-        });
+        },
+        PocketHiveDockerLabels.workerLabels(name, image, environment, ComputeAdapterType.DOCKER_SINGLE));
   }
 
   @Override

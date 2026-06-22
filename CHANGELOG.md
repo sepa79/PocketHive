@@ -4,6 +4,66 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.15.29]
+Timestamp: 2026-06-21T23:59:05Z
+
+- HiveForge deployment: replace project-side Compose merge/post-processing with
+  an explicit Ansible Jinja2 Docker Stack template, keep the public
+  `pockethive` network explicit, and validate the rendered manifest with
+  `docker stack config`.
+- HiveForge deployment: preserve Grafana outbound proxy settings in the stack
+  template, including uppercase/lowercase proxy variables and an internal
+  `NO_PROXY` list for PocketHive service names.
+- Runtime debug MCP/UI: remove client-selected compute adapters from runtime
+  debug contracts so Orchestrator remains the single owner of Docker/Swarm
+  adapter selection.
+- UI: fold the runtime inspector into the Hive detail view, keep inspector
+  refreshes layout-stable, remove transient diagnostics loading cards, and clear
+  logs/version/inspect output when switching runtime targets.
+- E2E: mark the delayed-registration auth rollout scenario as
+  `@wip @known-flaky` so the default full pack skips it while it remains
+  runnable explicitly.
+- Release: bump PocketHive patch version to 0.15.29 for the HiveForge stack
+  template and runtime inspector stabilization.
+
+## [0.15.28]
+Timestamp: 2026-06-18T15:27:35Z
+
+- Runtime debug MCP: keep `tools/pockethive-mcp` as the single PocketHive MCP
+  surface for worker logs, worker version, runtime drift, RabbitMQ topology, and
+  runtime cleanup tools.
+- Runtime cleanup architecture: delegate MCP cleanup plan/execute to
+  Orchestrator runtime reconciliation and fail closed when the Orchestrator
+  cleanup API is unavailable.
+- Runtime cleanup safety: reuse canonical Docker label constants and existing
+  control-plane topology descriptors for label-gated Docker/RabbitMQ cleanup,
+  removing the duplicate `TrafficTopology` naming helper.
+- RabbitMQ cleanup: delete exact manifest-owned queues/exchanges and
+  descriptor-derived worker control queues only when worker labels and registry
+  state prove the instance is stale; registered swarms that are not explicitly
+  stopped keep shared queues, and derived worker control queues obey the same
+  `includeRunning` gate as their worker runtime object.
+- Runtime cleanup safety: allow pre-run registered swarms to be aborted through
+  `LIFECYCLE_REMOVE_SWARM`, keep running swarms and swarms in `REMOVING` state
+  blocked, and return the required lifecycle action when execute targets a
+  blocked lifecycle candidate.
+- Runtime cleanup emergency path: add hash-bound
+  `overrideRegisteredSwarmState` for rare break-glass lifecycle removal of
+  `STARTING`/`RUNNING`/`STOPPING`/`REMOVING` registered swarms.
+- Runtime debug ownership: move Docker/Swarm list, logs, version, and inspect
+  reads behind Orchestrator runtime debug APIs so PocketHive MCP no longer uses
+  a local Docker socket fallback for worker or swarm-controller manager debug.
+- Runtime debug ownership: move exact RabbitMQ topology snapshots behind
+  Orchestrator runtime debug APIs so PocketHive MCP no longer derives queue or
+  exchange ownership from a local RabbitMQ management path.
+- Runtime debug QA: validate runtime debug request bodies and concrete compute
+  adapters before Docker/Swarm access, and extend decision-table coverage for
+  logs, version, inspect, run filtering, and emergency lifecycle override.
+- Docs: condense the runtime debug MCP cleanup spec into ownership, flow,
+  decision table, and verification sections for faster review.
+- Release: bump PocketHive patch version to 0.15.28 for the runtime debug MCP
+  cleanup authority hardening.
+
 ## [0.15.27]
 Timestamp: 2026-06-12T18:07:27Z
 

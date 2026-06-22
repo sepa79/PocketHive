@@ -1,0 +1,20 @@
+{
+  "swarmId" : "mock-swarm",
+  "runId" : "445d868e-e930-4be1-b6e1-d7b1f306a4ce",
+  "templateId" : "local-rest",
+  "computeAdapter" : "DOCKER_SINGLE",
+  "createdAt" : "2026-06-17T16:26:10.993145791Z",
+  "runtimeObjects" : [ {
+    "runtimeId" : "container-123",
+    "runtimeType" : "container",
+    "resourceKind" : "manager",
+    "role" : "swarm-controller",
+    "instance" : "mock-swarm-marshal-bee-honey-shine-7417",
+    "image" : "swarm-controller:latest"
+  } ],
+  "rabbit" : {
+    "controlQueues" : [ "ph.control.mock-swarm.swarm-controller.mock-swarm-marshal-bee-honey-shine-7417" ],
+    "workQueues" : [ "ph.mock-swarm.gen", "ph.mock-swarm.mod", "ph.mock-swarm.final" ],
+    "exchanges" : [ "ph.mock-swarm.hive" ]
+  }
+}

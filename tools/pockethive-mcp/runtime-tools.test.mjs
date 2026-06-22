@@ -1,0 +1,638 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  buildControlPlaneStatus,
+  buildManifestValidation,
+  buildRabbitTopologySnapshot,
+  buildRuntimeDiff,
+  buildRuntimeWorkerList,
+  buildWorkerLogTarget,
+  buildWorkerInspection,
+  buildWorkerVersion,
+  normalizeTailLines,
+  parseImageReference,
+  registerRuntimeTools,
+  runtimeDebugContext,
+  redactLogText,
+  validateRuntimeDebugCapabilities
+} from "./runtime-tools.mjs";
+
+test("runtime tools fail closed without Orchestrator runtime debug API", async () => {
+  const handlers = new Map();
+  registerRuntimeTools((name, _description, _schema, handler) => {
+    handlers.set(name, handler);
+  });
+
+  await assert.rejects(
+    () => handlers.get("runtime.cleanup.plan")({
+      swarmId: "swarm-1"
+    }),
+    /Orchestrator runtime debug API/
+  );
+  await assert.rejects(
+    () => handlers.get("runtime.cleanup.execute")({
+      swarmId: "swarm-1",
+      candidateSetHash: "sha256:abc",
+      candidateIds: ["docker:container:c1"],
+      idempotencyKey: "idem-1",
+      reason: "test"
+    }),
+    /Orchestrator runtime debug API/
+  );
+});
+
+test("worker log target selection is label-gated and rejects ambiguity", () => {
+  const target = buildWorkerLogTarget(
+    [
+      runtimeResource("manager-1", {
+        labels: {
+          "pockethive.resourceKind": "manager",
+          "pockethive.role": "swarm-controller"
+        }
+      }),
+      runtimeResource("worker-1", { labels: { "pockethive.instance": "processor-1" } })
+    ],
+    { swarmId: "swarm-1", runId: "run-1", instance: "processor-1" }
+  );
+
+  assert.equal(target.runtimeId, "worker-1");
+  assert.equal(target.resourceKind, "worker");
+
+  assert.throws(() => buildWorkerLogTarget(
+    [
+      runtimeResource("worker-1", { labels: { "pockethive.role": "processor" } }),
+      runtimeResource("worker-2", { labels: { "pockethive.role": "processor" } })
+    ],
+    { swarmId: "swarm-1", runId: "run-1", role: "processor" }
+  ), /ambiguous/);
+});
+
+test("runtime log helpers bound and redact output", () => {
+  assert.equal(normalizeTailLines(undefined), 200);
+  assert.equal(normalizeTailLines(25), 25);
+  assert.throws(() => normalizeTailLines(2001), /2000/);
+
+  const logs = redactLogText("Authorization: Bearer abc123 token=clear password=\"open\"");
+  assert.match(logs, /Authorization: Bearer \[REDACTED\]/);
+  assert.match(logs, /token=\[REDACTED\]/);
+  assert.match(logs, /password=\[REDACTED\]/);
+});
+
+test("worker version derives from declared label and image reference", () => {
+  const target = buildWorkerLogTarget(
+    [
+      runtimeResource("worker-1", {
+        image: "ghcr.io/pockethive/processor:0.15.27@sha256:abc",
+        labels: {
+          "pockethive.instance": "processor-1",
+          "pockethive.image": "ghcr.io/pockethive/processor:0.15.27@sha256:abc",
+          "pockethive.version": "0.15.27"
+        }
+      })
+    ],
+    { swarmId: "swarm-1", runId: "run-1", instance: "processor-1" }
+  );
+
+  const version = buildWorkerVersion(target);
+
+  assert.equal(version.declaredVersion, "0.15.27");
+  assert.equal(version.imageTag, "0.15.27");
+  assert.equal(version.imageDigest, "sha256:abc");
+  assert.equal(version.reportedVersion, "0.15.27");
+  assert.equal(version.reportedVersionSource, "pockethive.version");
+});
+
+test("runtime worker list partitions managers workers and blocked label issues", () => {
+  const list = buildRuntimeWorkerList([
+    runtimeResource("manager-1", {
+      labels: {
+        "pockethive.resourceKind": "manager",
+        "pockethive.role": "swarm-controller"
+      }
+    }),
+    runtimeResource("worker-1"),
+    runtimeResource("bad-1", { labels: { "pockethive.instance": "" } }),
+    runtimeResource("other", { labels: { "pockethive.swarmId": "other-swarm" } })
+  ], { swarmId: "swarm-1", runId: "run-1" });
+
+  assert.deepEqual(list.managers.map((entry) => entry.runtimeId), ["manager-1"]);
+  assert.deepEqual(list.workers.map((entry) => entry.runtimeId), ["worker-1"]);
+  assert.deepEqual(list.blocked.map((entry) => entry.runtimeId), ["bad-1"]);
+  assert.equal(list.workers[0].reportedVersion, "0.15.27");
+});
+
+test("worker inspection summarizes runtime details without raw bind host paths", () => {
+  const target = buildWorkerLogTarget(
+    [runtimeResource("worker-1", { labels: { "pockethive.instance": "processor-1" } })],
+    { swarmId: "swarm-1", runId: "run-1", instance: "processor-1" }
+  );
+
+  const inspection = buildWorkerInspection(target, {
+    available: true,
+    data: {
+      Created: "2026-01-01T00:00:00Z",
+      RestartCount: 2,
+      State: {
+        Status: "exited",
+        Running: false,
+        ExitCode: 137,
+        Error: "",
+        StartedAt: "2026-01-01T00:01:00Z",
+        FinishedAt: "2026-01-01T00:02:00Z",
+        Health: { Status: "unhealthy" }
+      },
+      HostConfig: { RestartPolicy: { Name: "on-failure" } },
+      Mounts: [
+        { Type: "bind", Source: "/host/secret/path", Destination: "/app/scenario", Mode: "ro", RW: false },
+        { Type: "volume", Name: "ph-data", Source: "/var/lib/docker/volumes/ph-data/_data", Destination: "/data", RW: true }
+      ],
+      NetworkSettings: { Networks: { pockethive: {}, bridge: {} } }
+    }
+  });
+
+  assert.equal(inspection.state.exitCode, 137);
+  assert.equal(inspection.restartCount, 2);
+  assert.equal(inspection.mounts[0].source, "[REDACTED]");
+  assert.equal(inspection.mounts[1].name, "ph-data");
+  assert.deepEqual(inspection.networks, ["bridge", "pockethive"]);
+});
+
+test("rabbit topology snapshot uses exact manifest resources and marks missing objects", () => {
+  const snapshot = buildRabbitTopologySnapshot(
+    { swarmId: "swarm-1", runId: "run-1", includeUnmanagedDiagnostics: true },
+    { available: true, manifest: runtimeManifest() },
+    {
+      available: true,
+      data: {
+        queues: [
+          { name: "ph.control.swarm-1.processor.worker-1", messages: 0, consumers: 1, state: "running" }
+        ],
+        unmanagedQueues: [
+          { name: "ph.swarm-1.extra", messages: 1, consumers: 0, state: "running" }
+        ],
+        exchanges: []
+      }
+    }
+  );
+
+  assert.deepEqual(snapshot.queues.map((queue) => [queue.name, queue.present]), [
+    ["ph.control.swarm-1.processor.worker-1", true],
+    ["ph.swarm-1.work", false]
+  ]);
+  assert.deepEqual(snapshot.exchanges.map((exchange) => [exchange.name, exchange.present]), [
+    ["ph.swarm-1.hive", false]
+  ]);
+  assert.deepEqual(snapshot.unmanagedDiagnostics.map((queue) => queue.name), ["ph.swarm-1.extra"]);
+});
+
+test("runtime diff reports manifest drift and cleanup candidates", () => {
+  const resources = [
+    runtimeResource("worker-1"),
+    runtimeResource("unexpected-worker", { labels: { "pockethive.instance": "unexpected-worker" } })
+  ];
+  const context = runtimeContext(resources, {
+    manifest: runtimeManifest({
+      runtimeObjects: [
+        manifestObject("worker-1"),
+        manifestObject("missing-worker", { instance: "missing-worker" })
+      ]
+    }),
+    rabbit: {
+      available: true,
+      data: {
+        queues: [{ name: "ph.control.swarm-1.processor.worker-1", messages: 0, consumers: 1 }],
+        exchanges: [{ name: "ph.swarm-1.hive", type: "direct" }]
+      }
+    }
+  });
+
+  const diff = buildRuntimeDiff(context);
+
+  assert.equal(diff.summary.missingManifestRuntime, 1);
+  assert.equal(diff.summary.unexpectedRuntime, 1);
+  assert.deepEqual(diff.drift.missingManifestRuntime.map((entry) => entry.runtimeId), ["missing-worker"]);
+  assert.deepEqual(diff.drift.unexpectedRuntime.map((entry) => entry.runtimeId), ["unexpected-worker"]);
+  assert.equal(diff.cleanupPlan.candidates.length, 2);
+});
+
+test("control plane status uses manifest queues and recent worker journal events", () => {
+  const context = runtimeContext([runtimeResource("worker-1")], {
+    rabbit: {
+      available: true,
+      data: {
+        queues: [{ name: "ph.control.swarm-1.processor.worker-1", messages: 0, consumers: 1 }],
+        exchanges: []
+      }
+    },
+    journal: {
+      available: true,
+      data: {
+        items: [{
+          timestamp: "2026-01-01T00:00:00Z",
+          kind: "status-full",
+          type: "worker-status",
+          scope: { swarmId: "swarm-1", role: "processor", instance: "worker-1" },
+          data: { type: "heartbeat" }
+        }]
+      }
+    }
+  });
+
+  const status = buildControlPlaneStatus(context);
+
+  assert.equal(status.controlQueues[0].name, "ph.control.swarm-1.processor.worker-1");
+  assert.equal(status.controlQueues[0].consumers, 1);
+  assert.equal(status.workers[0].lastStatusEvent.type, "worker-status");
+});
+
+test("control plane status does not derive queue names missing from manifest", () => {
+  const context = runtimeContext([runtimeResource("worker-1")], {
+    manifest: runtimeManifest({
+      rabbit: {
+        controlQueues: [],
+        workQueues: ["ph.swarm-1.work"],
+        exchanges: ["ph.swarm-1.hive"]
+      }
+    }),
+    rabbit: {
+      available: true,
+      data: {
+        queues: [{ name: "ph.control.swarm-1.processor.worker-1", messages: 0, consumers: 1 }],
+        exchanges: []
+      }
+    }
+  });
+
+  const status = buildControlPlaneStatus(context);
+
+  assert.deepEqual(status.controlQueues, []);
+  assert.equal(status.workers[0].controlQueue.name, null);
+  assert.match(status.workers[0].controlQueue.reason, /manifest/);
+});
+
+test("manifest validation reports label mismatches missing queues and unexpected runtime objects", () => {
+  const context = runtimeContext([
+    runtimeResource("worker-1", { labels: { "pockethive.role": "generator" } }),
+    runtimeResource("extra-worker", { labels: { "pockethive.instance": "extra-worker" } })
+  ], {
+    manifest: runtimeManifest({
+      runtimeObjects: [manifestObject("worker-1")]
+    }),
+    rabbit: {
+      available: true,
+      data: {
+        queues: [],
+        exchanges: [{ name: "ph.swarm-1.hive", type: "direct" }]
+      }
+    }
+  });
+
+  const validation = buildManifestValidation(context);
+
+  assert.equal(validation.status, "drift");
+  assert.equal(validation.labelMismatches[0].runtimeId, "worker-1");
+  assert.deepEqual(validation.unexpectedRuntimeObjects.map((entry) => entry.runtimeId), ["extra-worker"]);
+  assert.deepEqual(validation.rabbit.missingQueues.map((queue) => queue.name), [
+    "ph.control.swarm-1.processor.worker-1",
+    "ph.swarm-1.work"
+  ]);
+});
+
+test("image parser does not treat registry ports as tags", () => {
+  assert.deepEqual(parseImageReference("localhost:5000/pockethive/processor:0.15.27"), {
+    image: "localhost:5000/pockethive/processor:0.15.27",
+    imageTag: "0.15.27",
+    imageDigest: null
+  });
+  assert.deepEqual(parseImageReference("localhost:5000/pockethive/processor"), {
+    image: "localhost:5000/pockethive/processor",
+    imageTag: null,
+    imageDigest: null
+  });
+});
+
+test("runtime cleanup tools delegate to orchestrator cleanup API when httpJson is provided", async () => {
+  const handlers = new Map();
+  const calls = [];
+  registerRuntimeTools((name, _description, _schema, handler) => {
+    handlers.set(name, handler);
+  }, {
+    httpJson: async (path, options) => {
+      calls.push({ path, options });
+      if (path === "/api/runtime/debug/capabilities") {
+        return runtimeCapabilities();
+      }
+      return { delegated: true, path, body: options.body };
+    }
+  });
+
+  const plan = await handlers.get("runtime.cleanup.plan")({
+    swarmId: "sw1",
+    runId: "run-1",
+    includeRunning: false,
+    includeRabbit: true,
+    overrideRegisteredSwarmState: true
+  });
+  const execution = await handlers.get("runtime.cleanup.execute")({
+    swarmId: "sw1",
+    overrideRegisteredSwarmState: true,
+    candidateSetHash: "sha256:abc",
+    candidateIds: ["lifecycle:swarm:sw1"],
+    idempotencyKey: "idem-1",
+    reason: "test",
+    actor: "alice"
+  });
+
+  assert.equal(plan.path, "/api/runtime/cleanup/plan");
+  assert.equal(execution.path, "/api/runtime/cleanup/execute");
+  assert.deepEqual(calls.map((call) => call.path), [
+    "/api/runtime/debug/capabilities",
+    "/api/runtime/cleanup/plan",
+    "/api/runtime/cleanup/execute"
+  ]);
+  assert.deepEqual(calls.map((call) => call.options.method), ["GET", "POST", "POST"]);
+  assert.equal(calls[1].options.body.includeRabbit, true);
+  assert.equal(calls[1].options.body.overrideRegisteredSwarmState, true);
+  assert.equal(calls[2].options.body.overrideRegisteredSwarmState, true);
+  assert.equal(calls[2].options.body.actor, "alice");
+  assert.equal(calls[2].options.body.idempotencyKey, "idem-1");
+});
+
+test("runtime Docker debug tools delegate to orchestrator runtime debug API", async () => {
+  const handlers = new Map();
+  const calls = [];
+  registerRuntimeTools((name, _description, _schema, handler) => {
+    handlers.set(name, handler);
+  }, {
+    httpJson: async (path, options) => {
+      calls.push({ path, options });
+      if (path === "/api/runtime/debug/capabilities") {
+        return runtimeCapabilities();
+      }
+      return { delegated: true, path, body: options.body };
+    }
+  });
+
+  const list = await handlers.get("runtime.list-workers")({
+    swarmId: "sw1",
+    includeManagers: true
+  });
+  const logs = await handlers.get("runtime.tail-worker-logs")({
+    swarmId: "sw1",
+    resourceKind: "manager",
+    instance: "controller-1",
+    tailLines: 25
+  });
+  const version = await handlers.get("runtime.get-worker-version")({
+    swarmId: "sw1",
+    resourceKind: "manager",
+    instance: "controller-1"
+  });
+  const inspect = await handlers.get("runtime.inspect-worker")({
+    swarmId: "sw1",
+    resourceKind: "manager",
+    instance: "controller-1"
+  });
+
+  assert.equal(list.path, "/api/runtime/debug/resources/list");
+  assert.equal(logs.path, "/api/runtime/debug/resources/logs");
+  assert.equal(version.path, "/api/runtime/debug/resources/version");
+  assert.equal(inspect.path, "/api/runtime/debug/resources/inspect");
+  assert.deepEqual(calls.map((call) => call.path), [
+    "/api/runtime/debug/capabilities",
+    "/api/runtime/debug/resources/list",
+    "/api/runtime/debug/resources/logs",
+    "/api/runtime/debug/resources/version",
+    "/api/runtime/debug/resources/inspect"
+  ]);
+  assert.equal(calls[2].options.body.resourceKind, "manager");
+  assert.equal(calls[2].options.body.tailLines, 25);
+  assert.equal(calls[3].options.body.resourceKind, "manager");
+});
+
+test("runtime Docker debug tools fail closed without orchestrator runtime debug API", async () => {
+  const handlers = new Map();
+  registerRuntimeTools((name, _description, _schema, handler) => {
+    handlers.set(name, handler);
+  });
+
+  await assert.rejects(
+    () => handlers.get("runtime.tail-worker-logs")({
+      swarmId: "sw1",
+      instance: "controller-1",
+      resourceKind: "manager"
+    }),
+    /Orchestrator runtime debug API/
+  );
+});
+
+test("runtime tools fail closed when orchestrator runtime contract is incompatible", async () => {
+  const handlers = new Map();
+  const calls = [];
+  registerRuntimeTools((name, _description, _schema, handler) => {
+    handlers.set(name, handler);
+  }, {
+    httpJson: async (path, options) => {
+      calls.push({ path, options });
+      if (path === "/api/runtime/debug/capabilities") {
+        return runtimeCapabilities({ cleanupPlanHasExecutionRisk: false });
+      }
+      return { shouldNotDelegate: true };
+    }
+  });
+
+  await assert.rejects(
+    () => handlers.get("runtime.cleanup.plan")({
+      swarmId: "sw1",
+      runId: "run-1"
+    }),
+    /Incompatible Orchestrator runtime debug contract/
+  );
+  assert.deepEqual(calls.map((call) => call.path), ["/api/runtime/debug/capabilities"]);
+});
+
+test("runtime contract validation pins cleanup drift markers", () => {
+  assert.equal(validateRuntimeDebugCapabilities(runtimeCapabilities()).cleanupContractVersion, "3");
+  assert.throws(
+    () => validateRuntimeDebugCapabilities(runtimeCapabilities({ cleanupPlanUsesApprovalFields: true })),
+    /cleanupPlanUsesApprovalFields/
+  );
+});
+
+test("rabbit topology tool delegates exact reads to Orchestrator", async () => {
+  const handlers = new Map();
+  const calls = [];
+  registerRuntimeTools((name, _description, _schema, handler) => {
+    handlers.set(name, handler);
+  }, {
+    httpJson: async (path, options) => {
+      calls.push({ path, options });
+      if (path === "/api/runtime/debug/capabilities") {
+        return runtimeCapabilities();
+      }
+      if (path === "/api/runtime/debug/rabbit/topology") {
+        return {
+          computeAdapter: "DOCKER_SINGLE",
+          swarmId: options.body.swarmId,
+          runId: options.body.runId,
+          manifest: { available: true },
+          rabbit: { available: true },
+          exactOnly: true,
+          queues: [{ name: "ph.control.swarm-1.processor.worker-1", present: true, messages: 0, consumers: 1 }],
+          exchanges: [{ name: "ph.swarm-1.hive", present: true }],
+          unmanagedDiagnostics: []
+        };
+      }
+      throw new Error(`unexpected call ${path}`);
+    }
+  });
+
+  const snapshot = await handlers.get("runtime.rabbit-topology-snapshot")({
+    swarmId: "swarm-1",
+    runId: "run-1"
+  });
+
+  assert.equal(snapshot.computeAdapter, "DOCKER_SINGLE");
+  assert.equal(snapshot.queues.length, 1);
+  assert.equal(snapshot.queues[0].consumers, 1);
+  assert.deepEqual(calls.map((call) => call.path), [
+    "/api/runtime/debug/capabilities",
+    "/api/runtime/debug/rabbit/topology"
+  ]);
+  const directRabbitPrefix = "http://rabbit" + "/api/";
+  assert.equal(calls.some((call) => String(call.path).startsWith(directRabbitPrefix)), false);
+});
+
+test("runtime context reads Rabbit topology from Orchestrator", async () => {
+  const calls = [];
+  const context = await runtimeDebugContext({
+    swarmId: "swarm-1",
+    runId: "run-1",
+    includeRabbit: true
+  }, {
+    manifestRoot: "__missing_manifest_root__",
+    httpJson: async (path, options) => {
+      calls.push({ path, options });
+      if (path === "/api/runtime/debug/resources/list") {
+        return { workers: [], managers: [], blocked: [] };
+      }
+      if (path === "/api/runtime/debug/rabbit/topology") {
+        return {
+          swarmId: "swarm-1",
+          runId: "run-1",
+          manifest: { available: true },
+          rabbit: { available: true },
+          exactOnly: true,
+          queues: [{ name: "ph.control.swarm-1.processor.worker-1", present: true, messages: 0, consumers: 1 }],
+          exchanges: [],
+          unmanagedDiagnostics: []
+        };
+      }
+      if (path === "/api/swarms/swarm-1") {
+        return {};
+      }
+      if (path.startsWith("/api/swarms/swarm-1/journal/page")) {
+        return { items: [] };
+      }
+      if (path === "/api/runtime/cleanup/plan") {
+        return { candidates: [] };
+      }
+      throw new Error(`unexpected call ${path}`);
+    }
+  });
+
+  assert.equal(context.sources.rabbit.available, true);
+  assert.equal(context.rabbit.data.queues[0].name, "ph.control.swarm-1.processor.worker-1");
+  assert.ok(calls.some((call) => call.path === "/api/runtime/debug/rabbit/topology"));
+  const directRabbitPrefix = "http://rabbit" + "/api/";
+  assert.equal(calls.some((call) => String(call.path).startsWith(directRabbitPrefix)), false);
+});
+
+function runtimeResource(runtimeId, overrides = {}) {
+  return {
+    runtimeId,
+    runtimeType: "container",
+    name: runtimeId,
+    image: overrides.image ?? "processor:0.15.27",
+    state: overrides.state ?? "exited",
+    labels: {
+      "pockethive.managed": "true",
+      "pockethive.swarmId": "swarm-1",
+      "pockethive.runId": "run-1",
+      "pockethive.resourceKind": "worker",
+      "pockethive.role": "processor",
+      "pockethive.instance": runtimeId,
+      "pockethive.image": overrides.image ?? "processor:0.15.27",
+      "pockethive.version": "0.15.27",
+      ...(overrides.labels ?? {})
+    }
+  };
+}
+
+function manifestObject(runtimeId, overrides = {}) {
+  return {
+    runtimeId,
+    runtimeType: overrides.runtimeType ?? "container",
+    resourceKind: overrides.resourceKind ?? "worker",
+    role: overrides.role ?? "processor",
+    instance: overrides.instance ?? runtimeId,
+    image: overrides.image ?? "processor:0.15.27"
+  };
+}
+
+function runtimeManifest(overrides = {}) {
+  return {
+    swarmId: "swarm-1",
+    runId: "run-1",
+    templateId: "template-1",
+    createdAt: "2026-01-01T00:00:00Z",
+    runtimeObjects: overrides.runtimeObjects ?? [manifestObject("worker-1")],
+    rabbit: overrides.rabbit ?? {
+      controlQueues: ["ph.control.swarm-1.processor.worker-1"],
+      workQueues: ["ph.swarm-1.work"],
+      exchanges: ["ph.swarm-1.hive"]
+    }
+  };
+}
+
+function runtimeCapabilities(overrides = {}) {
+  return {
+    runtimeDebugContractVersion: "3",
+    cleanupContractVersion: "3",
+    runtimeDebugReadsBackedByOrchestrator: true,
+    cleanupPlanHasExecutionRisk: true,
+    cleanupPlanUsesApprovalFields: false,
+    cleanupExecuteRequiresCandidateSetHash: true,
+    rabbitTopologyExactByDefault: true,
+    cleanupSupportsRegisteredStateOverride: true,
+    ...overrides
+  };
+}
+
+function runtimeContext(resources, overrides = {}) {
+  return {
+    input: {
+      swarmId: "swarm-1",
+      runId: "run-1",
+      includeRabbit: true
+    },
+    sources: {
+      runtimeInventory: { available: true },
+      manifest: { available: overrides.manifest !== null },
+      rabbit: { available: overrides.rabbit?.available === true },
+      orchestratorSnapshot: { available: false, reason: "not configured" },
+      journal: { available: overrides.journal?.available === true }
+    },
+    resources,
+    manifest: overrides.manifest === undefined ? runtimeManifest() : overrides.manifest,
+    rabbit: overrides.rabbit ?? { available: false, reason: "not configured" },
+    swarmSnapshot: null,
+    journal: overrides.journal ?? { available: false, reason: "not configured" },
+    cleanupPlan: overrides.cleanupPlan ?? {
+      candidates: resources.map((resource) => ({ runtimeId: resource.runtimeId }))
+    }
+  };
+}

@@ -14,6 +14,7 @@ import com.github.dockerjava.api.model.Task;
 import com.github.dockerjava.api.model.TaskSpec;
 import com.github.dockerjava.api.model.TaskState;
 import io.pockethive.manager.ports.ComputeAdapter;
+import io.pockethive.manager.runtime.ComputeAdapterType;
 import io.pockethive.manager.runtime.ManagerSpec;
 import io.pockethive.manager.runtime.WorkerSpec;
 import java.nio.charset.StandardCharsets;
@@ -66,6 +67,11 @@ public final class DockerSwarmServiceComputeAdapter implements ComputeAdapter {
   }
 
   @Override
+  public ComputeAdapterType type() {
+    return ComputeAdapterType.SWARM_STACK;
+  }
+
+  @Override
   public String startManager(ManagerSpec spec) {
     Objects.requireNonNull(spec, "spec");
     String id = requireNonBlank(spec.id(), "spec.id");
@@ -77,7 +83,15 @@ public final class DockerSwarmServiceComputeAdapter implements ComputeAdapter {
     String serviceName = dockerServiceName(id);
     log.info("Creating Swarm service {} for manager {} using image {} in swarm {}",
         serviceName, id, image, swarmId);
-    ServiceSpec serviceSpec = buildServiceSpec(serviceName, id, image, env, volumes, swarmId, true);
+    ServiceSpec serviceSpec = buildServiceSpec(
+        serviceName,
+        id,
+        image,
+        env,
+        volumes,
+        swarmId,
+        true,
+        PocketHiveDockerLabels.managerLabels(id, image, env, ComputeAdapterType.SWARM_STACK));
     CreateServiceResponse response = dockerClient.createServiceCmd(serviceSpec).exec();
     String serviceId = response.getId();
     managerServices.put(id, serviceId);
@@ -130,7 +144,15 @@ public final class DockerSwarmServiceComputeAdapter implements ComputeAdapter {
       log.info("Creating Swarm service for worker {} in topology {} using image {}",
           workerId, resolvedTopology, image);
       String serviceName = dockerServiceName(workerId);
-      ServiceSpec spec = buildServiceSpec(serviceName, workerId, image, env, volumes, resolvedTopology, false);
+      ServiceSpec spec = buildServiceSpec(
+          serviceName,
+          workerId,
+          image,
+          env,
+          volumes,
+          resolvedTopology,
+          false,
+          PocketHiveDockerLabels.workerLabels(workerId, image, env, ComputeAdapterType.SWARM_STACK));
       CreateServiceResponse response = dockerClient.createServiceCmd(spec).exec();
       serviceIds.add(response.getId());
     }
@@ -218,7 +240,8 @@ public final class DockerSwarmServiceComputeAdapter implements ComputeAdapter {
                                        Map<String, String> env,
                                        List<String> volumes,
                                        String swarmId,
-                                       boolean managerOnly) {
+                                       boolean managerOnly,
+                                       Map<String, String> ownershipLabels) {
     ContainerSpec containerSpec = new ContainerSpec()
         .withImage(image)
         .withEnv(toEnvList(env));
@@ -246,6 +269,9 @@ public final class DockerSwarmServiceComputeAdapter implements ComputeAdapter {
     labels.put("com.docker.stack.namespace", stackNamespace);
     labels.put("ph.swarmId", swarmId);
     labels.put("ph.logicalName", logicalName);
+    if (ownershipLabels != null && !ownershipLabels.isEmpty()) {
+      labels.putAll(ownershipLabels);
+    }
 
     ServiceSpec serviceSpec = new ServiceSpec()
         .withName(serviceName)

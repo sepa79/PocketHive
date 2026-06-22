@@ -43,26 +43,6 @@ components:
     manifest: deploy/hiveforge/components/stack/hiveforge.yaml
 artifacts:
   managedPaths:
-    - name: runtime-compose-base
-      source: docker-compose.yml
-      target: artifacts/runtime/compose/docker-compose.yml
-      mode: replace
-    - name: runtime-compose-single-node
-      source: deploy/hiveforge/runtime/compose.single-node.yml
-      target: artifacts/runtime/compose/compose.single-node.yml
-      mode: replace
-    - name: runtime-compose-swarm
-      source: deploy/hiveforge/runtime/compose.swarm.yml
-      target: artifacts/runtime/compose/compose.swarm.yml
-      mode: replace
-    - name: runtime-compose-swarm-full
-      source: deploy/hiveforge/runtime/compose.swarm-full.yml
-      target: artifacts/runtime/compose/compose.swarm-full.yml
-      mode: replace
-    - name: runtime-compose-reduced
-      source: deploy/hiveforge/runtime/compose.reduced.yml
-      target: artifacts/runtime/compose/compose.reduced.yml
-      mode: replace
     - name: runtime-nginx-swarm
       source: deploy/hiveforge/runtime/nginx.swarm.conf
       target: artifacts/runtime/config/nginx/nginx.swarm.conf
