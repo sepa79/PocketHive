@@ -844,6 +844,19 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
         putEnvIfPresent(env, "POCKETHIVE_INPUTS_REDIS_INITIALDELAYMS", redisMap.get("initialDelayMs"));
         putEnvIfPresent(env, "POCKETHIVE_INPUTS_REDIS_TICKINTERVALMS", redisMap.get("tickIntervalMs"));
       }
+
+      Object csv = inputsMap.get("csv");
+      if (csv instanceof Map<?, ?> csvMap) {
+        putEnvIfPresent(env, "POCKETHIVE_INPUTS_CSV_FILEPATH", csvMap.get("filePath"));
+        putEnvIfPresent(env, "POCKETHIVE_INPUTS_CSV_RATEPERSEC", csvMap.get("ratePerSec"));
+        putEnvIfPresent(env, "POCKETHIVE_INPUTS_CSV_ROTATE", csvMap.get("rotate"));
+        putEnvIfPresent(env, "POCKETHIVE_INPUTS_CSV_SKIPHEADER", csvMap.get("skipHeader"));
+        putEnvIfPresent(env, "POCKETHIVE_INPUTS_CSV_DELIMITER", csvMap.get("delimiter"));
+        putEnvIfPresent(env, "POCKETHIVE_INPUTS_CSV_CHARSET", csvMap.get("charset"));
+        putEnvIfPresent(env, "POCKETHIVE_INPUTS_CSV_STARTUPDELAYSECONDS", csvMap.get("startupDelaySeconds"));
+        putEnvIfPresent(env, "POCKETHIVE_INPUTS_CSV_TICKINTERVALMS", csvMap.get("tickIntervalMs"));
+        putEnvIfPresent(env, "POCKETHIVE_INPUTS_CSV_ENABLED", csvMap.get("enabled"));
+      }
     }
 
     Object outputs = config.get("outputs");

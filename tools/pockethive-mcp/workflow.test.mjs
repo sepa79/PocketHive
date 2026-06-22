@@ -1176,7 +1176,7 @@ test("Scenario Manager validation failure does not erase structural validation p
   });
 });
 
-test("workflow CSV datasets create authoring evidence without claiming runtime rotation", async () => {
+test("workflow CSV datasets generate runtime CSV input config and sample artifact", async () => {
   const root = mkdtempSync(join(tmpdir(), "ph-workflow-root-"));
 
   await withClient(root, async (client) => {
@@ -1200,6 +1200,10 @@ test("workflow CSV datasets create authoring evidence without claiming runtime r
     const generated = await call(client, "workflow_generate", { workflowId: started.workflowId });
     assert.equal(generated.ok, true);
     assert.ok(generated.generated.filesCreated.includes("datasets/sample.csv"));
+    const scenario = readFileSync(join(root, "agent-csv-evidence", "scenario.yaml"), "utf8");
+    assert.match(scenario, /inputs:\n\s+type: CSV_DATASET\n\s+csv:/);
+    assert.match(scenario, /filePath: \/app\/scenario\/datasets\/sample\.csv/);
+    assert.doesNotMatch(scenario, /outputs:\n\s+type: CSV_DATASET/);
   });
 });
 

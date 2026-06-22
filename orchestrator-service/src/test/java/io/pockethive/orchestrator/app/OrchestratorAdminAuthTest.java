@@ -101,7 +101,7 @@ class OrchestratorAdminAuthTest {
                 PocketHivePermissionIds.VIEW,
                 PocketHiveResourceTypes.FOLDER,
                 "demo"));
-            assertThatThrownBy(() -> controller.journal("prod-swarm", null))
+            assertThatThrownBy(() -> controller.journal("prod-swarm", null, null))
                 .hasMessageContaining("403 FORBIDDEN");
         } finally {
             OrchestratorCurrentUserHolder.clear();

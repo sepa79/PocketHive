@@ -905,7 +905,7 @@ function wizardAssumptions(rawAnswers, answers) {
     assumptions.push("mockEndpoints generated from endpoints");
   }
   if (answers.dataSource === "CSV_DATASET") {
-    assumptions.push("CSV sample artifact generated; runtime still uses Scheduler because the current generator capability manifest exposes SCHEDULER and REDIS_DATASET inputs");
+    assumptions.push("CSV sample artifact generated and wired as generator CSV_DATASET input");
   }
   return assumptions;
 }
@@ -1454,7 +1454,19 @@ async function writeWizardBundle(session) {
     : answers.endpoints?.length > 1
       ? `{{ pickWeighted(${answers.endpoints.map(endpoint => `'${endpoint.callId}', 1`).join(", ")}) }}`
       : primaryCallId;
-  const generatorInputConfig = answers.dataSource === "REDIS_DATASET"
+  const usesDatasetInput = answers.dataSource === "REDIS_DATASET" || answers.dataSource === "CSV_DATASET";
+  const datasetPayloadBody = usesDatasetInput ? "{{ payload }}" : null;
+  const generatorInputConfig = answers.dataSource === "CSV_DATASET"
+    ? {
+        type: "CSV_DATASET",
+        csv: {
+          filePath: "/app/scenario/datasets/sample.csv",
+          ratePerSec: answers.defaultRatePerSec,
+          skipHeader: true,
+          rotate: false,
+        },
+      }
+    : answers.dataSource === "REDIS_DATASET"
     ? {
         type: "REDIS_DATASET",
         redis: answers.redisLists.length === 1
@@ -1484,7 +1496,7 @@ async function writeWizardBundle(session) {
           worker: {
             message: {
               bodyType: "SIMPLE",
-              body: answers.dataSource === "REDIS_DATASET" ? "{{ payload }}" : answers.tcpPayload,
+              body: datasetPayloadBody ?? answers.tcpPayload,
               headers: { "x-ph-call-id": primaryCallId },
             },
           },
@@ -1516,7 +1528,7 @@ async function writeWizardBundle(session) {
         config: {
           inputs: generatorInputConfig,
           outputs: { type: "RABBITMQ" },
-          worker: { message: { bodyType: "SIMPLE", body: answers.dataSource === "REDIS_DATASET" ? "{{ payload }}" : (answers.requestBody || "{}") } },
+          worker: { message: { bodyType: "SIMPLE", body: datasetPayloadBody ?? (answers.requestBody || "{}") } },
         },
       },
       {
@@ -1556,7 +1568,7 @@ async function writeWizardBundle(session) {
           worker: {
             message: {
               bodyType: "SIMPLE",
-              body: answers.dataSource === "REDIS_DATASET" ? "{{ payload }}" : "{}",
+              body: datasetPayloadBody ?? "{}",
               headers: { "x-ph-call-id": callIdTemplate, "x-ph-service-id": serviceId },
             },
           },
@@ -2763,8 +2775,12 @@ reg("debug.tap.close", "Close and delete a debug tap", {
 reg("debug.journal", "Read swarm journal (timeline of control-plane events)", {
   swarmId: SWARM_ID_ARG,
   limit: z.number().optional().default(50),
-}, async ({ swarmId, limit }) => {
-  return await httpJson(`/api/swarms/${encodeURIComponent(swarmId)}/journal/page?limit=${limit}`);
+  severity: z.enum(["ERROR", "WARN", "INFO"]).optional(),
+}, async ({ swarmId, limit, severity }) => {
+  const query = new URLSearchParams();
+  query.set("limit", String(limit));
+  if (severity !== undefined) query.set("severity", severity);
+  return await httpJson(`/api/swarms/${encodeURIComponent(swarmId)}/journal/page?${query.toString()}`);
 });
 
 reg("debug.hive-journal", "Read hive-level journal entries through Orchestrator.", {

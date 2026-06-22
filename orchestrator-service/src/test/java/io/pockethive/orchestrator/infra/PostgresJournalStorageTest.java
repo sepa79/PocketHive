@@ -106,6 +106,42 @@ class PostgresJournalStorageTest {
     };
   }
 
+  private static void insertSwarmJournalEvent(Instant ts, String swarmId, String runId, String severity, String type) {
+    jdbc.update(
+        """
+            INSERT INTO journal_event (
+              ts,
+              scope,
+              swarm_id,
+              run_id,
+              scope_role,
+              scope_instance,
+              severity,
+              direction,
+              kind,
+              type,
+              origin
+            ) VALUES (
+              ?,
+              'SWARM',
+              ?,
+              ?,
+              'swarm-controller',
+              'inst-1',
+              ?,
+              'IN',
+              'signal',
+              ?,
+              'origin'
+            )
+            """,
+        java.sql.Timestamp.from(ts),
+        swarmId,
+        runId,
+        severity,
+        type);
+  }
+
   @Test
   void hiveJournalPagePaginatesByCursorAndFiltersByCorrelation() {
     jdbc.update("DELETE FROM journal_event");
@@ -258,11 +294,28 @@ class PostgresJournalStorageTest {
     SwarmJournalController ctrl = new SwarmJournalController(mapper, jdbc, store, endpointAuthorization(store));
     ReflectionTestUtils.setField(ctrl, "journalSink", "postgres");
 
-    JournalPageResponse page = ctrl.journalPage("sw1", null, null, 10, "run-1", null).getBody();
+    JournalPageResponse page = ctrl.journalPage("sw1", null, null, 10, "run-1", null, null).getBody();
     assertThat(page).isNotNull();
     assertThat(page.items()).hasSize(2);
     assertThat(page.items().get(0).get("type")).isEqualTo("t-2");
     assertThat(page.items().get(1).get("type")).isEqualTo("t-1");
+  }
+
+  @Test
+  void swarmJournalPageFiltersBySeverity() {
+    jdbc.update("DELETE FROM journal_event");
+    Instant base = Instant.parse("2025-01-01T00:00:00Z");
+    insertSwarmJournalEvent(base, "sw-filter", "run-filter", "INFO", "info-event");
+    insertSwarmJournalEvent(base.plusSeconds(1), "sw-filter", "run-filter", "ERROR", "error-event");
+
+    SwarmJournalController ctrl = new SwarmJournalController(mapper, jdbc, store, endpointAuthorization(store));
+    ReflectionTestUtils.setField(ctrl, "journalSink", "postgres");
+
+    JournalPageResponse page = ctrl.journalPage("sw-filter", null, null, 10, "run-filter", null, "ERROR").getBody();
+    assertThat(page).isNotNull();
+    assertThat(page.items()).hasSize(1);
+    assertThat(page.items().get(0).get("severity")).isEqualTo("ERROR");
+    assertThat(page.items().get(0).get("type")).isEqualTo("error-event");
   }
 
   @Test
@@ -440,7 +493,7 @@ class PostgresJournalStorageTest {
 
     jdbc.update("DELETE FROM journal_event WHERE scope='SWARM' AND swarm_id='sw1' AND run_id='run-1'");
 
-    JournalPageResponse page = ctrl.journalPage("sw1", null, null, 10, "run-1", null).getBody();
+    JournalPageResponse page = ctrl.journalPage("sw1", null, null, 10, "run-1", null, null).getBody();
     assertThat(page).isNotNull();
     assertThat(page.items()).hasSize(3);
     Map<String, Object> first = (Map<String, Object>) page.items().get(0);
@@ -494,7 +547,7 @@ class PostgresJournalStorageTest {
     ctrl.pinSwarmJournalRun("sw1", new SwarmJournalController.PinRunRequest("run-1", "FULL", null));
     jdbc.update("DELETE FROM journal_event WHERE scope='SWARM' AND swarm_id='sw1' AND run_id='run-1'");
 
-    JournalPageResponse page = ctrl.journalPage("sw1", null, null, 10, null, null).getBody();
+    JournalPageResponse page = ctrl.journalPage("sw1", null, null, 10, null, null, null).getBody();
     assertThat(page).isNotNull();
     assertThat(page.items()).hasSize(1);
   }

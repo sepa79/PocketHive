@@ -42,3 +42,5 @@ export interface SwarmJournalEntry {
   raw: Record<string, unknown> | null
   extra: Record<string, unknown> | null
 }
+
+export type JournalSeverityFilter = 'ERROR' | 'WARN' | 'INFO'

@@ -16,6 +16,7 @@ config:
     options:
       - "SCHEDULER"
       - "REDIS_DATASET"
+      - "CSV_DATASET"
     ui:
       label: Input type
       group: IO

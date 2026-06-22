@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { JournalEntriesCard } from '../../components/journal/JournalEntriesCard'
 import { getSwarmJournalPage } from '../../lib/journalApi'
-import type { JournalCursor, SwarmJournalEntry } from '../../lib/journal'
+import type { JournalCursor, JournalSeverityFilter, SwarmJournalEntry } from '../../lib/journal'
 
 function normalizeQueryParam(value: string | null): string {
   const trimmed = value?.trim()
@@ -19,6 +19,7 @@ export function SwarmJournalPage() {
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [errorsOnly, setErrorsOnly] = useState(false)
+  const [severityFilter, setSeverityFilter] = useState<JournalSeverityFilter | ''>('')
   const [runId, setRunId] = useState('')
   const [draftRunId, setDraftRunId] = useState('')
   const [cursor, setCursor] = useState<JournalCursor | null>(null)
@@ -47,6 +48,7 @@ export function SwarmJournalPage() {
     try {
       const page = await getSwarmJournalPage(resolvedSwarmId, {
         runId: runId || null,
+        severity: severityFilter || null,
         limit: 100,
       })
       setEntries(page?.items ?? [])
@@ -57,7 +59,7 @@ export function SwarmJournalPage() {
     } finally {
       setLoading(false)
     }
-  }, [resolvedSwarmId, runId])
+  }, [resolvedSwarmId, runId, severityFilter])
 
   useEffect(() => {
     void loadLatest()
@@ -73,6 +75,7 @@ export function SwarmJournalPage() {
     try {
       const page = await getSwarmJournalPage(resolvedSwarmId, {
         runId: runId || null,
+        severity: severityFilter || null,
         limit: 300,
         before: cursor,
       })
@@ -84,7 +87,7 @@ export function SwarmJournalPage() {
     } finally {
       setLoadingMore(false)
     }
-  }, [cursor, loadingMore, resolvedSwarmId, runId])
+  }, [cursor, loadingMore, resolvedSwarmId, runId, severityFilter])
 
   const subtitle = useMemo(() => {
     if (runId) return `Journal for swarm '${resolvedSwarmId}' and run '${runId}'.`
@@ -136,11 +139,13 @@ export function SwarmJournalPage() {
         error={error}
         search={search}
         errorsOnly={errorsOnly}
+        severityFilter={severityFilter}
         hasMore={hasMore}
         loadingMore={loadingMore}
         emptyMessage="Journal is empty so far for this swarm."
         onSearchChange={setSearch}
         onErrorsOnlyChange={setErrorsOnly}
+        onSeverityFilterChange={setSeverityFilter}
         onLoadMore={loadOlder}
       />
     </div>

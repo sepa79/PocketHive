@@ -1702,7 +1702,7 @@ export function registerWorkflowTools(deps) {
       claims.push(claim("mock.matched", "Mock matched requests and unmatched requests are evidenced.", "runtime", runtimeRequired, "workflow.verify", ["plan.mock.strategy"]));
     }
     if (datasetStrategy === "CSV_DATASET") {
-      claims.push(claim("dataset.sample-artifact", "CSV sample dataset artifact is generated for authoring review; runtime rotation is not claimed.", "authoring", false, "workflow.generate", ["plan.dataset.strategy", "plan.dataset.csvColumns"]));
+      claims.push(claim("dataset.sample-artifact", "CSV sample dataset artifact is generated for runtime CSV_DATASET input.", "authoring", false, "workflow.generate", ["plan.dataset.strategy", "plan.dataset.csvColumns"]));
     }
     if (datasetStrategy === "REDIS_DATASET") {
       claims.push(claim("dataset.rotated", "Dataset rotation or consumption is evidenced.", "runtime", runtimeRequired, "workflow.verify", ["plan.dataset.strategy"]));
@@ -1816,7 +1816,7 @@ export function registerWorkflowTools(deps) {
         datasetStrategy && datasetStrategy !== "SCHEDULER" ? "satisfied" : datasetStrategy === "SCHEDULER" ? "not-applicable" : "missing",
         Boolean(datasetStrategy && datasetStrategy !== "SCHEDULER"),
         datasetStrategy ? [`dataset=${datasetStrategy}`] : [],
-        datasetStrategy === "CSV_DATASET" ? "CSV creates a sample artifact; runtime rotation is not claimed." : datasetStrategy ? null : "No dataset strategy is recorded.",
+        datasetStrategy === "CSV_DATASET" ? "CSV creates a sample artifact consumed by the runtime CSV_DATASET input." : datasetStrategy ? null : "No dataset strategy is recorded.",
       ),
       claim(
         "dataset.sample-artifact",

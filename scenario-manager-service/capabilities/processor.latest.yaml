@@ -53,7 +53,7 @@ config:
     options:
       - "RABBITMQ"
       - "REDIS"
-      - "NOOP"
+      - "NONE"
     ui:
       label: Output type
       group: IO

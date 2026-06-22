@@ -1,0 +1,68 @@
+schemaVersion: "1.0"
+capabilitiesVersion: "1.0"
+role: io-csv-dataset
+image:
+  name: io-csv-dataset
+ui:
+  label: "CSV dataset IO"
+  ioType: "CSV_DATASET"
+  ioScope: "INPUT"
+config:
+  - name: inputs.csv.filePath
+    type: string
+    default: "/app/scenario/datasets/sample.csv"
+    ui:
+      label: CSV file path
+      group: CSV
+  - name: inputs.csv.ratePerSec
+    type: number
+    default: 1
+    min: 0
+    max: 1000
+    ui:
+      label: Rate
+      group: CSV
+      step: 1
+      unit: msg/s
+  - name: inputs.csv.rotate
+    type: boolean
+    default: false
+    ui:
+      label: Rotate rows
+      group: CSV
+  - name: inputs.csv.skipHeader
+    type: boolean
+    default: true
+    ui:
+      label: First row is header
+      group: CSV
+  - name: inputs.csv.delimiter
+    type: string
+    default: ","
+    ui:
+      label: Delimiter
+      group: CSV
+  - name: inputs.csv.charset
+    type: string
+    default: "UTF-8"
+    ui:
+      label: Charset
+      group: CSV
+  - name: inputs.csv.startupDelaySeconds
+    type: number
+    default: 0
+    min: 0
+    ui:
+      label: Startup delay
+      group: CSV
+      unit: s
+  - name: inputs.csv.tickIntervalMs
+    type: number
+    default: 1000
+    min: 100
+    ui:
+      label: Tick interval
+      group: CSV
+      unit: ms
+actions: []
+panels: []

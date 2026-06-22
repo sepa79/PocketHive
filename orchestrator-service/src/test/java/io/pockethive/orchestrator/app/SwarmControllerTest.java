@@ -1292,7 +1292,7 @@ class SwarmControllerTest {
 
         Files.writeString(journal, mapper.writeValueAsString(entry) + "\n");
 
-        ResponseEntity<List<Map<String, Object>>> response = ctrl.journal("sw1", "run-1");
+        ResponseEntity<List<Map<String, Object>>> response = ctrl.journal("sw1", "run-1", null);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isNotNull();
@@ -1308,6 +1308,45 @@ class SwarmControllerTest {
         Map<String, Object> parsedScope = (Map<String, Object>) parsed.get("scope");
         assertThat(parsedScope.get("swarmId")).isEqualTo("sw1");
         assertThat(parsedScope.get("role")).isEqualTo("swarm-controller");
+    }
+
+    @Test
+    void journalFiltersRuntimeRootEntriesBySeverity() throws Exception {
+        SwarmJournalController ctrl = journalController(new SwarmStore());
+        Path root = Path.of("scenarios-runtime").toAbsolutePath().normalize();
+        Path swarmDir = root.resolve("sw-severity").resolve("run-1");
+        Files.createDirectories(swarmDir);
+        Path journal = swarmDir.resolve("journal.ndjson");
+
+        Map<String, Object> info = new LinkedHashMap<>();
+        info.put("timestamp", "2025-01-01T00:00:00Z");
+        info.put("swarmId", "sw-severity");
+        info.put("severity", "INFO");
+        info.put("kind", "signal");
+
+        Map<String, Object> error = new LinkedHashMap<>();
+        error.put("timestamp", "2025-01-01T00:00:01Z");
+        error.put("swarmId", "sw-severity");
+        error.put("severity", "ERROR");
+        error.put("kind", "signal");
+
+        Files.writeString(journal, mapper.writeValueAsString(info) + "\n" + mapper.writeValueAsString(error) + "\n");
+
+        ResponseEntity<List<Map<String, Object>>> response = ctrl.journal("sw-severity", "run-1", "ERROR");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody()).hasSize(1);
+        assertThat(response.getBody().get(0).get("severity")).isEqualTo("ERROR");
+    }
+
+    @Test
+    void journalRejectsInvalidSeverityFilter() {
+        SwarmJournalController ctrl = journalController(new SwarmStore());
+
+        ResponseEntity<List<Map<String, Object>>> response = ctrl.journal("sw-severity", "run-1", "DEBUG");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     }
 
     private SwarmController controller(

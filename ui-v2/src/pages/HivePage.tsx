@@ -597,7 +597,7 @@ export function HivePage() {
     }
     setSwarmJournalLoading(true)
     try {
-      const page = await getSwarmJournalPage(selectedSwarmId, { limit: 50 })
+      const page = await getSwarmJournalPage(selectedSwarmId, { limit: 50, severity: 'ERROR' })
       setSwarmJournalEntries(page?.items ?? [])
       setSwarmJournalError(null)
     } catch (err) {

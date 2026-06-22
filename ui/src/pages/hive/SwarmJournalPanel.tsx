@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getSwarmJournal, getSwarmJournalPage } from '../../lib/orchestratorApi'
-import type { SwarmJournalEntry } from '../../types/orchestrator'
+import type { JournalSeverityFilter, SwarmJournalEntry } from '../../types/orchestrator'
 
 export interface SwarmJournalPanelProps {
   swarmId: string
@@ -12,6 +12,7 @@ export default function SwarmJournalPanel({ swarmId }: SwarmJournalPanelProps) {
   const [entries, setEntries] = useState<SwarmJournalEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [severity, setSeverity] = useState<JournalSeverityFilter | ''>('ERROR')
 
   useEffect(() => {
     let cancelled = false
@@ -25,12 +26,15 @@ export default function SwarmJournalPanel({ swarmId }: SwarmJournalPanelProps) {
       try {
         let result: SwarmJournalEntry[] = []
         try {
-          const page = await getSwarmJournalPage(swarmId, { limit: 50 })
+          const page = await getSwarmJournalPage(swarmId, {
+            limit: 50,
+            severity: severity || null,
+          })
           result = page?.items ? [...page.items] : []
         } catch (err) {
           const status = err instanceof Error ? (err as Error & { status?: number }).status : undefined
           if (status === 501) {
-            const timeline = await getSwarmJournal(swarmId)
+            const timeline = await getSwarmJournal(swarmId, { severity: severity || null })
             result = [...timeline].reverse()
           } else {
             throw err
@@ -63,7 +67,7 @@ export default function SwarmJournalPanel({ swarmId }: SwarmJournalPanelProps) {
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [swarmId])
+  }, [severity, swarmId])
 
   if (loading && !entries.length && !error) {
     return (
@@ -153,16 +157,29 @@ export default function SwarmJournalPanel({ swarmId }: SwarmJournalPanelProps) {
     <div className="mt-3 rounded-md border border-white/10 bg-slate-950/60 px-3 py-2">
       <div className="mb-2 flex items-center justify-between text-xs text-white/60">
         <span className="font-semibold uppercase tracking-wide">Swarm Journal (last {latest.length})</span>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation()
-            navigate(`/journal/swarms/${encodeURIComponent(swarmId)}`)
-          }}
-          className="rounded border border-white/20 bg-white/5 px-2 py-0.5 text-[10px] font-medium text-white/80 hover:bg-white/10"
-        >
-          Open full view
-        </button>
+        <div className="flex items-center gap-2">
+          <select
+            aria-label="Journal severity"
+            value={severity}
+            onChange={(e) => setSeverity(e.currentTarget.value as JournalSeverityFilter | '')}
+            className="h-6 rounded border border-white/20 bg-slate-950 px-2 text-[10px] font-medium text-white/80 focus:outline-none focus:ring-1 focus:ring-sky-300/50"
+          >
+            <option value="">All</option>
+            <option value="ERROR">ERROR</option>
+            <option value="WARN">WARN</option>
+            <option value="INFO">INFO</option>
+          </select>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              navigate(`/journal/swarms/${encodeURIComponent(swarmId)}`)
+            }}
+            className="h-6 rounded border border-white/20 bg-white/5 px-2 text-[10px] font-medium text-white/80 hover:bg-white/10"
+          >
+            Open full view
+          </button>
+        </div>
       </div>
       <ul className="space-y-1 max-h-48 overflow-y-auto text-xs">
         {latest.map((row, index) => {
