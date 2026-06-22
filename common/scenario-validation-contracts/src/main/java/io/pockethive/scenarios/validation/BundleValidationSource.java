@@ -1,5 +1,6 @@
 package io.pockethive.scenarios.validation;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
 
 public enum BundleValidationSource {
@@ -10,6 +11,16 @@ public enum BundleValidationSource {
 
     BundleValidationSource(String wireValue) {
         this.wireValue = wireValue;
+    }
+
+    @JsonCreator
+    public static BundleValidationSource fromWireValue(String wireValue) {
+        for (BundleValidationSource source : values()) {
+            if (source.wireValue.equals(wireValue)) {
+                return source;
+            }
+        }
+        throw new IllegalArgumentException("Unknown bundle validation source: " + wireValue);
     }
 
     @JsonValue

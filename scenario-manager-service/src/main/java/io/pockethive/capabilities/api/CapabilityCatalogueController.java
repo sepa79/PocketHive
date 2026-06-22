@@ -3,6 +3,7 @@ package io.pockethive.capabilities.api;
 import io.pockethive.capabilities.CapabilityCatalogueService;
 import io.pockethive.capabilities.CapabilityManifest;
 import io.pockethive.auth.contract.AuthenticatedUserDto;
+import io.pockethive.scenarios.ScenarioBundleLayout;
 import io.pockethive.scenarios.ScenarioService;
 import io.pockethive.scenarios.auth.ScenarioManagerAuthorization;
 import io.pockethive.scenarios.auth.ScenarioManagerCurrentUserHolder;
@@ -151,29 +152,29 @@ public class CapabilityCatalogueController {
                         "validateExistingBundle", "/validation/scenario-bundles/existing?bundleKey={bundleKey}"
                 ),
                 Map.of(
-                        "descriptorNames", List.of("scenario.yaml", "scenario.yml", "scenario.json"),
+                        "descriptorNames", List.of(ScenarioBundleLayout.SCENARIO_DESCRIPTOR_FILE),
                         "requiredTopLevelFields", List.of("id", "name", "template"),
                         "templateField", "template",
                         "trafficPolicyField", "trafficPolicy",
                         "planField", "plan"
                 ),
                 Map.of(
-                        "root", "templates",
-                        "httpRoot", "templates/http",
+                        "root", ScenarioBundleLayout.TEMPLATES_ROOT,
+                        "httpRoot", ScenarioBundleLayout.HTTP_TEMPLATES_ROOT,
                         "httpRequiredFields", List.of("protocol", "serviceId", "callId", "method", "pathTemplate")
                 ),
                 Map.of(
-                        "file", "variables.yaml",
+                        "file", ScenarioBundleLayout.VARIABLES_FILE,
                         "version", 1,
                         "definitionScopes", List.of("GLOBAL", "SUT"),
                         "definitionTypes", List.of("STRING", "INT", "FLOAT", "BOOL", "OBJECT")
                 ),
                 Map.of(
-                        "root", "sut/<sutId>/sut.yaml",
+                        "root", ScenarioBundleLayout.SUT_DESCRIPTOR_PATTERN,
                         "idRule", "sut.yaml id must match the sut/<sutId> directory name"
                 ),
                 Map.of(
-                        "file", "authProfiles.yaml",
+                        "file", ScenarioBundleLayout.AUTH_PROFILES_FILE,
                         "referenceField", "authRef",
                         "inlineAuthBlocks", "not supported"
                 ),

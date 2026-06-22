@@ -155,6 +155,40 @@ async function withFakeRedis(fn) {
   }
 }
 
+async function withScenarioManagerValidationClient(bundlesRoot, fn, options = {}) {
+  const responses = Array.isArray(options.responses) && options.responses.length
+    ? options.responses
+    : [{ ok: true, source: "uploaded-zip", scenarioId: "test-bundle", summary: { errors: 0, warnings: 0 }, findings: [] }];
+  let validationCalls = 0;
+  const server = createServer(async (req, res) => {
+    const url = new URL(req.url, "http://127.0.0.1");
+    if (req.method === "POST" && url.pathname === "/scenario-manager/validation/scenario-bundles") {
+      validationCalls += 1;
+      for await (const _ of req) { /* drain zip upload */ }
+      const response = responses[Math.min(validationCalls - 1, responses.length - 1)];
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify(typeof response === "function" ? response(validationCalls) : response));
+      return;
+    }
+    res.writeHead(404, { "content-type": "application/json" });
+    res.end(JSON.stringify({ error: `unhandled ${req.method} ${url.pathname}` }));
+  });
+  await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address();
+  const baseUrl = `http://127.0.0.1:${port}`;
+  try {
+    await withClient(bundlesRoot, fn, {
+      POCKETHIVE_BASE_URL: baseUrl,
+      ORCHESTRATOR_BASE_URL: `${baseUrl}/orchestrator`,
+      SCENARIO_MANAGER_BASE_URL: `${baseUrl}/scenario-manager`,
+      ...(options.env || {}),
+    });
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+  return validationCalls;
+}
+
 async function withFakePocketHiveStack(bundleId, fn, options = {}) {
   const readyAfterPolls = options.readyAfterPolls ?? 1;
   const requestOnStart = options.requestOnStart ?? true;
@@ -272,6 +306,10 @@ async function withFakePocketHiveStack(bundleId, fn, options = {}) {
       state.uploaded = true;
       return send(res, 200, scenario);
     }
+    if (req.method === "POST" && url.pathname === "/scenario-manager/validation/scenario-bundles") {
+      for await (const _ of req) { /* drain zip upload */ }
+      return send(res, 200, { ok: true, source: "uploaded-zip", scenarioId: bundleId, summary: { errors: 0, warnings: 0 }, findings: [] });
+    }
     if (req.method === "POST" && url.pathname === "/wiremock/__admin/mappings") {
       const mapping = await requestJson(req);
       state.mappings.push(mapping);
@@ -371,9 +409,34 @@ test("workflow_start rejects source paths outside allowed roots", async () => {
   const outside = resolve(tmpdir(), `ph-workflow-outside-${Date.now()}.jmx`);
   writeFileSync(outside, "<jmeterTestPlan/>", "utf8");
 
-  await withClient(root, async (client) => {
+  await withScenarioManagerValidationClient(root, async (client) => {
     const error = await callError(client, "workflow_start", { sourceType: "jmeter", sourcePath: outside });
     assert.match(error, /WORKFLOW_SOURCE_OUTSIDE_ALLOWED_ROOTS/);
+  }, {
+    responses: [
+      {
+        ok: false,
+        source: "uploaded-zip",
+        scenarioId: "agent-stuck",
+        summary: { errors: 1, warnings: 0 },
+        findings: [{ category: "scenario", code: "SCENARIO_DESCRIPTOR_INVALID", severity: "error", path: "scenario.yaml", message: "Invalid scenario descriptor.", fix: "Repair scenario.yaml." }],
+      },
+      {
+        ok: false,
+        source: "uploaded-zip",
+        scenarioId: "agent-stuck",
+        summary: { errors: 1, warnings: 0 },
+        findings: [{ category: "scenario", code: "SCENARIO_DESCRIPTOR_INVALID", severity: "error", path: "scenario.yaml", message: "Invalid scenario descriptor.", fix: "Repair scenario.yaml." }],
+      },
+      {
+        ok: false,
+        source: "uploaded-zip",
+        scenarioId: "agent-stuck",
+        summary: { errors: 1, warnings: 0 },
+        findings: [{ category: "scenario", code: "SCENARIO_DESCRIPTOR_INVALID", severity: "error", path: "scenario.yaml", message: "Invalid scenario descriptor.", fix: "Repair scenario.yaml." }],
+      },
+      { ok: true, source: "uploaded-zip", scenarioId: "agent-stuck", summary: { errors: 0, warnings: 0 }, findings: [] },
+    ],
   });
 });
 
@@ -381,7 +444,7 @@ test("workflow_start accepts file and instruction sources", async () => {
   const root = mkdtempSync(join(tmpdir(), "ph-workflow-root-"));
   const sourcePath = writeSource(root);
 
-  await withClient(root, async (client) => {
+  await withScenarioManagerValidationClient(root, async (client) => {
     const fromFile = await call(client, "workflow_start", { sourceType: "jmeter", sourcePath });
     assert.equal(fromFile.state, "source_ready");
     assert.equal(fromFile.source.type, "jmeter");
@@ -410,7 +473,7 @@ test("workflow examples list canonical repo examples before active bundle exampl
   mkdirSync(teamBundle, { recursive: true });
   writeFileSync(resolve(teamBundle, "scenario.yaml"), "id: local-rest-schema-demo\nname: Team override\n", "utf8");
 
-  await withClient(root, async (client) => {
+  await withScenarioManagerValidationClient(root, async (client) => {
     const listed = await call(client, "workflow_examples_list");
     assert.deepEqual(listed.sourceOrder.map(source => source.id), ["repo-examples", "active-bundles-root"]);
     const canonical = listed.examples.find(example => example.bundleId === "local-rest-schema-demo" && example.source === "repo-examples");
@@ -434,7 +497,7 @@ test("workflow config and list are read-only plugin status surfaces", async () =
   const root = mkdtempSync(join(tmpdir(), "ph-workflow-root-"));
   const sourcePath = writeSource(root);
 
-  await withClient(root, async (client) => {
+  await withScenarioManagerValidationClient(root, async (client) => {
     const config = await call(client, "workflow_config_get");
     assert.equal(config.workflowType, "agent-to-pockethive");
     assert.equal(config.bundleRoot, root);
@@ -475,7 +538,7 @@ test("workflow config and list are read-only plugin status surfaces", async () =
 test("workflow profiles expose canonical agent hats without granting permissions", async () => {
   const root = mkdtempSync(join(tmpdir(), "ph-workflow-root-"));
 
-  await withClient(root, async (client) => {
+  await withScenarioManagerValidationClient(root, async (client) => {
     const tools = (await client.listTools()).tools;
     for (const name of ["workflow_profiles_list", "workflow_profiles_get"]) {
       const tool = tools.find((candidate) => candidate.name === name);
@@ -525,7 +588,7 @@ test("workflow profiles expose canonical agent hats without granting permissions
 test("workflow profile evidence gates and provenance policies are profile-driven", async () => {
   const root = mkdtempSync(join(tmpdir(), "ph-workflow-root-"));
 
-  await withClient(root, async (client) => {
+  await withScenarioManagerValidationClient(root, async (client) => {
     const start = await call(client, "workflow_start", {
       sourceType: "plain-instructions",
       instructions: "Create a performance test for GET /hello.",
@@ -559,13 +622,38 @@ test("workflow profile evidence gates and provenance policies are profile-driven
     await completeThreeAmigos(client, start.workflowId, ["architect", "performance-testing-specialist", "tester"]);
     const generated = await call(client, "workflow_generate", { workflowId: start.workflowId });
     assert.equal(generated.ok, true);
+  }, {
+    responses: [
+      {
+        ok: false,
+        source: "uploaded-zip",
+        scenarioId: "agent-stuck",
+        summary: { errors: 1, warnings: 0 },
+        findings: [{ category: "scenario", code: "SCENARIO_DESCRIPTOR_INVALID", severity: "error", path: "scenario.yaml", message: "Invalid scenario descriptor.", fix: "Repair scenario.yaml." }],
+      },
+      {
+        ok: false,
+        source: "uploaded-zip",
+        scenarioId: "agent-stuck",
+        summary: { errors: 1, warnings: 0 },
+        findings: [{ category: "scenario", code: "SCENARIO_DESCRIPTOR_INVALID", severity: "error", path: "scenario.yaml", message: "Invalid scenario descriptor.", fix: "Repair scenario.yaml." }],
+      },
+      {
+        ok: false,
+        source: "uploaded-zip",
+        scenarioId: "agent-stuck",
+        summary: { errors: 1, warnings: 0 },
+        findings: [{ category: "scenario", code: "SCENARIO_DESCRIPTOR_INVALID", severity: "error", path: "scenario.yaml", message: "Invalid scenario descriptor.", fix: "Repair scenario.yaml." }],
+      },
+      { ok: true, source: "uploaded-zip", scenarioId: "agent-stuck", summary: { errors: 0, warnings: 0 }, findings: [] },
+    ],
   });
 });
 
 test("workflow answer validation blocks unsafe or vague generation", async () => {
   const root = mkdtempSync(join(tmpdir(), "ph-workflow-root-"));
 
-  await withClient(root, async (client) => {
+  await withScenarioManagerValidationClient(root, async (client) => {
     const start = await call(client, "workflow_start", {
       sourceType: "plain-instructions",
       instructions: "I want to create a scenario bundle to test Google.",
@@ -610,7 +698,7 @@ test("workflow source fidelity gates lossy conversions with resolvable questions
   const root = mkdtempSync(join(tmpdir(), "ph-workflow-root-"));
   const sourcePath = writeSource(root);
 
-  await withClient(root, async (client) => {
+  await withScenarioManagerValidationClient(root, async (client) => {
     const start = await call(client, "workflow_start", { sourceType: "jmeter", sourcePath });
     const lossyPlan = completePlan("agent-source-fidelity");
     delete lossyPlan.sourceFidelity;
@@ -654,7 +742,7 @@ test("workflow source fidelity gates lossy conversions with resolvable questions
 test("workflow answer validation catches duplicate call ids and invalid endpoint semantics", async () => {
   const root = mkdtempSync(join(tmpdir(), "ph-workflow-root-"));
 
-  await withClient(root, async (client) => {
+  await withScenarioManagerValidationClient(root, async (client) => {
     const start = await call(client, "workflow_start", {
       sourceType: "plain-instructions",
       instructions: "Create a scenario with two calls.",
@@ -741,7 +829,7 @@ test("workflow gates generation until a normalized plan is complete, then genera
   const root = mkdtempSync(join(tmpdir(), "ph-workflow-root-"));
   const sourcePath = writeSource(root);
 
-  await withClient(root, async (client) => {
+  await withScenarioManagerValidationClient(root, async (client) => {
     const started = await call(client, "workflow_start", { sourceType: "postman", sourcePath });
     await call(client, "workflow_update", { workflowId: started.workflowId, plan: { bundleId: "agent-incomplete" } });
     const incompleteResult = await call(client, "workflow_result", { workflowId: started.workflowId });
@@ -794,19 +882,17 @@ test("workflow gates generation until a normalized plan is complete, then genera
     assert.equal(generatedStatus.agent.nextAction.tool, "workflow_validate");
     assert.equal(generatedStatus.reviewStages.find((stage) => stage.id === "three-amigos").status, "complete");
 
-    const localValidated = await call(client, "workflow_validate", { workflowId: started.workflowId });
-    assert.equal(localValidated.ok, true);
-    assert.equal(localValidated.code, "WORKFLOW_STRUCTURAL_VALIDATED");
-    assert.equal(localValidated.authoritative, false);
-    assert.equal(localValidated.validationLevel, "structural");
+    const validated = await call(client, "workflow_validate", { workflowId: started.workflowId });
+    assert.equal(validated.ok, true);
+    assert.equal(validated.code, "WORKFLOW_VALIDATED");
+    assert.equal(validated.authoritative, true);
+    assert.equal(validated.validationLevel, "scenario-manager");
     const validatedResult = await call(client, "workflow_result", { workflowId: started.workflowId });
     assert.equal(validatedResult.verdict, "ready");
     assert.equal(validatedResult.phase, "deployment");
     assert.equal(validatedResult.proof.validation.status, "pass");
+    assert.equal(validatedResult.proof.validation.scenarioManager.status, "pass");
     assert.equal(validatedResult.nextAction.tool, "workflow_deploy_start");
-
-    const check = await call(client, "bundle_check", { bundle: "agent-complete" });
-    assert.equal(check.ok, true);
   });
 });
 
@@ -1120,13 +1206,12 @@ test("Scenario Manager auth failure is classified as environment auth, not bundl
       assert.equal(result.diagnosis.code, "WORKFLOW_ENV_AUTH_FAILED");
       assert.equal(result.nextAction.tool, "env_status");
       assert.equal(result.nextAction.followUpTool, "workflow_validate");
-      assert.equal(result.proof.validation.structural.status, "pass");
       assert.equal(result.proof.validation.scenarioManager.status, "fail");
 
       const status = await call(client, "workflow_status", { workflowId: started.workflowId });
       assert.equal(status.activeRole.id, "security-reviewer");
       assert.equal(status.remediation.patchScope.length, 0);
-      assert.equal(status.claimMatrix.find(claim => claim.id === "validation.structural").status, "satisfied");
+      assert.equal(status.claimMatrix.find(claim => claim.id === "validation.scenario-manager").status, "failed");
     }, {
       POCKETHIVE_BASE_URL: baseUrl,
       ORCHESTRATOR_BASE_URL: `${baseUrl}/orchestrator`,
@@ -1141,38 +1226,36 @@ test("Scenario Manager auth failure is classified as environment auth, not bundl
   }
 });
 
-test("Scenario Manager validation failure does not erase structural validation proof", async () => {
+test("Scenario Manager validation unavailable is classified without patch scope", async () => {
   const root = mkdtempSync(join(tmpdir(), "ph-workflow-root-"));
 
   await withClient(root, async (client) => {
     const started = await call(client, "workflow_start", {
       sourceType: "plain-instructions",
-      instructions: "Create a bundle and preserve local proof when Scenario Manager is unavailable.",
+      instructions: "Create a bundle and show Scenario Manager unavailable classification.",
     });
     await call(client, "workflow_update", {
       workflowId: started.workflowId,
-      plan: completePlan("scenario-manager-fail-keeps-structural"),
+      plan: completePlan("scenario-manager-unavailable"),
       provenance: requiredProvenance("user"),
     });
     await completeThreeAmigos(client, started.workflowId);
     await call(client, "workflow_generate", { workflowId: started.workflowId });
-    await call(client, "workflow_validate", { workflowId: started.workflowId, validator: "local-structural" });
 
-    const failed = await call(client, "workflow_validate", { workflowId: started.workflowId, validator: "scenario-manager-dry-run" });
+    const failed = await call(client, "workflow_validate", { workflowId: started.workflowId });
     assert.equal(failed.ok, false);
     assert.equal(failed.failureCode, "WORKFLOW_EXTERNAL_VALIDATION_FAILED");
     assert.equal(failed.patchScope.length, 0);
 
     const result = await call(client, "workflow_result", { workflowId: started.workflowId });
     assert.equal(result.proof.validation.status, "fail");
-    assert.equal(result.proof.validation.structural.status, "pass");
     assert.equal(result.proof.validation.scenarioManager.status, "fail");
     assert.equal(result.nextAction.validator, "scenario-manager-dry-run");
     assert.equal(result.nextAction.tool, "workflow_validate");
 
     const status = await call(client, "workflow_status", { workflowId: started.workflowId });
-    assert.equal(status.claimMatrix.find(claim => claim.id === "validation.structural").status, "satisfied");
-    assert.equal(status.evidenceContract.find(claim => claim.id === "validation.structural").status, "satisfied");
+    assert.equal(status.claimMatrix.find(claim => claim.id === "validation.scenario-manager").status, "failed");
+    assert.equal(status.evidenceContract.find(claim => claim.id === "validation.scenario-manager").status, "failed");
   });
 });
 
@@ -1210,7 +1293,7 @@ test("workflow CSV datasets generate runtime CSV input config and sample artifac
 test("workflow evidence contract is available before build and trace links intent to evidence", async () => {
   const root = mkdtempSync(join(tmpdir(), "ph-workflow-root-"));
 
-  await withClient(root, async (client) => {
+  await withScenarioManagerValidationClient(root, async (client) => {
     const started = await call(client, "workflow_start", {
       sourceType: "plain-instructions",
       instructions: "Create a mock-backed Google smoke scenario with stakeholder evidence.",
@@ -1223,7 +1306,7 @@ test("workflow evidence contract is available before build and trace links inten
 
     const ready = await call(client, "workflow_status", { workflowId: started.workflowId });
     assert.ok(ready.evidenceContract.some(claim => claim.id === "bundle.generated" && claim.required === true));
-    assert.ok(ready.evidenceContract.some(claim => claim.id === "validation.structural" && claim.required === true));
+    assert.ok(ready.evidenceContract.some(claim => claim.id === "validation.scenario-manager" && claim.required === true));
     assert.ok(ready.evidenceContract.some(claim => claim.id === "mock.matched" && claim.required === false));
     assert.ok(ready.evidenceContract.some(claim => claim.id === "traffic.shape" && claim.required === false));
     assert.deepEqual(ready.unresolvableBlockers, []);
@@ -1243,7 +1326,7 @@ test("workflow evidence contract is available before build and trace links inten
     assert.ok(trace.answeredFields.includes("plan.traffic.ratePerSec"));
     assert.ok(trace.provenanceFields.includes("plan.successCriteria"));
     assert.ok(trace.generatedFiles.includes("scenario.yaml"));
-    assert.ok(trace.evidenceContract.some(claim => claim.id === "validation.structural"));
+    assert.ok(trace.evidenceContract.some(claim => claim.id === "validation.scenario-manager"));
     assert.ok(trace.claimMatrix.some(claim => claim.id === "stakeholder.report"));
     const report = readFileSync(resolve(root, "agent-trace", "WORKFLOW_EVIDENCE.md"), "utf8");
     assert.match(report, /## Agent Handoff/);
@@ -1255,7 +1338,7 @@ test("workflow_patch is constrained and validation history preserves failed and 
   const root = mkdtempSync(join(tmpdir(), "ph-workflow-root-"));
   const sourcePath = writeSource(root);
 
-  await withClient(root, async (client) => {
+  await withScenarioManagerValidationClient(root, async (client) => {
     const started = await call(client, "workflow_start", { sourceType: "k6", sourcePath });
     await call(client, "workflow_update", { workflowId: started.workflowId, plan: completePlan("agent-patch") });
     await call(client, "workflow_update", { workflowId: started.workflowId, provenance: requiredProvenance("user") });
@@ -1274,7 +1357,7 @@ test("workflow_patch is constrained and validation history preserves failed and 
       workflowId: started.workflowId,
       changes: [{ file: "scenario.yaml", content: "not: [valid" }],
     });
-    const failed = await call(client, "workflow_validate", { workflowId: started.workflowId, validator: "local-structural" });
+    const failed = await call(client, "workflow_validate", { workflowId: started.workflowId });
     assert.equal(failed.ok, false);
     assert.equal(failed.code, "WORKFLOW_VALIDATION_FAILED");
     assert.equal(failed.failureCode, "WORKFLOW_VALIDATION_FAILED");
@@ -1296,7 +1379,7 @@ test("workflow_patch is constrained and validation history preserves failed and 
       workflowId: started.workflowId,
       changes: [{ file: "scenario.yaml", content: originalScenario }],
     });
-    const fixed = await call(client, "workflow_validate", { workflowId: started.workflowId, validator: "local-structural" });
+    const fixed = await call(client, "workflow_validate", { workflowId: started.workflowId });
     assert.equal(fixed.ok, true);
 
     const status = await call(client, "workflow_status", { workflowId: started.workflowId });
@@ -1306,6 +1389,17 @@ test("workflow_patch is constrained and validation history preserves failed and 
     const validationAttempts = status.history.filter((entry) => entry.action === "validate");
     assert.equal(validationAttempts.length, 2);
     assert.deepEqual(validationAttempts.map((entry) => entry.ok), [false, true]);
+  }, {
+    responses: [
+      {
+        ok: false,
+        source: "uploaded-zip",
+        scenarioId: "agent-patch",
+        summary: { errors: 1, warnings: 0 },
+        findings: [{ category: "scenario", code: "SCENARIO_DESCRIPTOR_INVALID", severity: "error", path: "scenario.yaml", message: "Invalid scenario descriptor.", fix: "Repair scenario.yaml." }],
+      },
+      { ok: true, source: "uploaded-zip", scenarioId: "agent-patch", summary: { errors: 0, warnings: 0 }, findings: [] },
+    ],
   });
 });
 
@@ -1313,7 +1407,7 @@ test("workflow detects repeated unchanged failures without creating an unresolva
   const root = mkdtempSync(join(tmpdir(), "ph-workflow-root-"));
   const sourcePath = writeSource(root);
 
-  await withClient(root, async (client) => {
+  await withScenarioManagerValidationClient(root, async (client) => {
     const started = await call(client, "workflow_start", { sourceType: "k6", sourcePath });
     await call(client, "workflow_update", { workflowId: started.workflowId, plan: completePlan("agent-stuck") });
     await call(client, "workflow_update", { workflowId: started.workflowId, provenance: requiredProvenance("user") });
@@ -1348,13 +1442,38 @@ test("workflow detects repeated unchanged failures without creating an unresolva
     assert.equal(fixed.ok, true);
     const resolved = await call(client, "workflow_status", { workflowId: started.workflowId });
     assert.equal(resolved.stuckState.stuck, false);
+  }, {
+    responses: [
+      {
+        ok: false,
+        source: "uploaded-zip",
+        scenarioId: "agent-stuck",
+        summary: { errors: 1, warnings: 0 },
+        findings: [{ category: "scenario", code: "SCENARIO_DESCRIPTOR_INVALID", severity: "error", path: "scenario.yaml", message: "Invalid scenario descriptor.", fix: "Repair scenario.yaml." }],
+      },
+      {
+        ok: false,
+        source: "uploaded-zip",
+        scenarioId: "agent-stuck",
+        summary: { errors: 1, warnings: 0 },
+        findings: [{ category: "scenario", code: "SCENARIO_DESCRIPTOR_INVALID", severity: "error", path: "scenario.yaml", message: "Invalid scenario descriptor.", fix: "Repair scenario.yaml." }],
+      },
+      {
+        ok: false,
+        source: "uploaded-zip",
+        scenarioId: "agent-stuck",
+        summary: { errors: 1, warnings: 0 },
+        findings: [{ category: "scenario", code: "SCENARIO_DESCRIPTOR_INVALID", severity: "error", path: "scenario.yaml", message: "Invalid scenario descriptor.", fix: "Repair scenario.yaml." }],
+      },
+      { ok: true, source: "uploaded-zip", scenarioId: "agent-stuck", summary: { errors: 0, warnings: 0 }, findings: [] },
+    ],
   });
 });
 
 test("workflow modify mode patches and validates an existing active-root bundle", async () => {
   const root = mkdtempSync(join(tmpdir(), "ph-workflow-root-"));
 
-  await withClient(root, async (client) => {
+  await withScenarioManagerValidationClient(root, async (client) => {
     await call(client, "bundle_scaffold", { bundleId: "agent-modify", pattern: "rest-simple", sutType: "none" });
 
     const missingBundle = await callError(client, "workflow_start", {
@@ -1385,8 +1504,8 @@ test("workflow modify mode patches and validates an existing active-root bundle"
       workflowId: started.workflowId,
       plan: {
         changeSummary: "Add a clearer README while preserving the existing scenario contract.",
-        observability: { goal: "Show that the modified bundle remains structurally valid for reviewers." },
-        successCriteria: { summary: "Bundle check passes after the change." },
+        observability: { goal: "Show that the modified bundle passes Scenario Manager validation for reviewers." },
+        successCriteria: { summary: "Scenario Manager validation passes after the change." },
       },
     });
     assert.deepEqual(updated.validationIssues.filter(issue => issue.severity === "error"), []);
@@ -1400,7 +1519,7 @@ test("workflow modify mode patches and validates an existing active-root bundle"
     assert.equal(validated.ok, true);
     const status = await call(client, "workflow_status", { workflowId: started.workflowId });
     assert.equal(status.claimMatrix.find(claim => claim.id === "bundle.exists").status, "satisfied");
-    assert.equal(status.claimMatrix.find(claim => claim.id === "validation.structural").status, "satisfied");
+    assert.equal(status.claimMatrix.find(claim => claim.id === "validation.scenario-manager").status, "satisfied");
   });
 });
 
@@ -1650,6 +1769,12 @@ test("workflow deploy auth failure is classified as environment auth", async () 
       res.end(JSON.stringify({ error: "missing" }));
       return;
     }
+    if (req.method === "POST" && url.pathname === "/scenario-manager/validation/scenario-bundles") {
+      for await (const _ of req) { /* drain zip upload */ }
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: true, source: "uploaded-zip", scenarioId: "deploy-auth-failure", summary: { errors: 0, warnings: 0 }, findings: [] }));
+      return;
+    }
     if (req.method === "POST" && url.pathname === "/scenario-manager/scenarios/bundles") {
       uploadCalls += 1;
       for await (const _ of req) { /* drain zip upload */ }
@@ -1782,7 +1907,7 @@ test("workflow sessions persist across MCP restarts with local JSON persistence"
   let workflowId = "";
   let operationId = "";
 
-  await withClient(root, async (client) => {
+  await withScenarioManagerValidationClient(root, async (client) => {
     const started = await call(client, "workflow_start", { sourceType: "openapi", sourcePath });
     workflowId = started.workflowId;
     await call(client, "workflow_update", {
@@ -1791,11 +1916,13 @@ test("workflow sessions persist across MCP restarts with local JSON persistence"
       provenance: { "plan.bundleId": { source: "user", note: "Named by test." } },
     });
   }, {
-    PH_WORKFLOW_PERSISTENCE: "local",
-    PH_WORKFLOW_STORE_PATH: storePath,
+    env: {
+      PH_WORKFLOW_PERSISTENCE: "local",
+      PH_WORKFLOW_STORE_PATH: storePath,
+    },
   });
 
-  await withClient(root, async (client) => {
+  await withScenarioManagerValidationClient(root, async (client) => {
     await call(client, "workflow_update", {
       workflowId,
       plan: completePlan("persisted-workflow"),
@@ -1808,8 +1935,10 @@ test("workflow sessions persist across MCP restarts with local JSON persistence"
     operationId = operation.operationId;
     assert.equal(operation.phase, "upload");
   }, {
-    PH_WORKFLOW_PERSISTENCE: "local",
-    PH_WORKFLOW_STORE_PATH: storePath,
+    env: {
+      PH_WORKFLOW_PERSISTENCE: "local",
+      PH_WORKFLOW_STORE_PATH: storePath,
+    },
   });
 
   await withClient(root, async (client) => {
@@ -1936,7 +2065,7 @@ test("workflow report includes role completion and evidence gaps", async () => {
   const root = mkdtempSync(join(tmpdir(), "ph-workflow-root-"));
   const sourcePath = writeSource(root);
 
-  await withClient(root, async (client) => {
+  await withScenarioManagerValidationClient(root, async (client) => {
     const started = await call(client, "workflow_start", { sourceType: "postman", sourcePath });
     await call(client, "workflow_update", {
       workflowId: started.workflowId,
@@ -1967,7 +2096,7 @@ test("workflow evidence render returns an MCP App widget payload without mutatin
   const root = mkdtempSync(join(tmpdir(), "ph-workflow-root-"));
   const sourcePath = writeSource(root);
 
-  await withClient(root, async (client) => {
+  await withScenarioManagerValidationClient(root, async (client) => {
     const started = await call(client, "workflow_start", { sourceType: "postman", sourcePath });
     await call(client, "workflow_update", {
       workflowId: started.workflowId,
@@ -1987,7 +2116,7 @@ test("workflow evidence render returns an MCP App widget payload without mutatin
     assert.equal(rendered.structuredContent.agent.nextAction.tool, "workflow_deploy_start");
     assert.equal(rendered.structuredContent.summary.verdict, rendered.structuredContent.agent.verdict);
     assert.equal(rendered.structuredContent.summary.nextAction.tool, "workflow_deploy_start");
-    assert.ok(rendered.structuredContent.claimMatrix.some(claim => claim.id === "validation.structural"));
+    assert.ok(rendered.structuredContent.claimMatrix.some(claim => claim.id === "validation.scenario-manager"));
     assert.equal(rendered._meta.ui.resourceUri, "ui://pockethive/workflow-evidence-v1.html");
     assert.equal(rendered._meta["openai/outputTemplate"], "ui://pockethive/workflow-evidence-v1.html");
     assert.equal(after.history.length, before.history.length, "rendering evidence must not record a workflow attempt");

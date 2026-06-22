@@ -7,7 +7,7 @@ This runbook proves the current POC path end to end:
 
 1. Start the MCP server through a real MCP client.
 2. Create a bundle through `wizard.start` -> `wizard.summary` -> `wizard.complete`.
-3. Validate the generated bundle with `bundle.check`.
+3. Run generated artifact checks from `wizard.complete`.
 4. Start the same server in Streamable HTTP mode.
 5. Confirm the read-only evidence widget resource is discoverable and uses
    `text/html;profile=mcp-app`.
@@ -36,7 +36,7 @@ PocketHive MCP POC runner
 ✓ wizard.summary rest-rbuilder
 ✓ wizard.complete ...
 ✓ bundle files scenario.yaml + templates/http/default/onboarding.yaml + docs/mock artifacts
-✓ bundle.check ok
+✓ bundle generation sanity ok
 ✓ widget resource listed ui://pockethive/evidence-summary-v1.html
 ✓ real-time control tools listed component.config-preview + component.config-update
 ✓ HTTP/App resource smoke ui://pockethive/evidence-summary-v1.html
@@ -66,8 +66,8 @@ Covered flows:
 - Invalid input guard for incompatible protocol/target choices
 
 Each accepted bundle must pass `wizard.start`, `wizard.summary`,
-`wizard.complete`, generated artifact checks, `bundle.check`, and
-`bundle.validate` with `validator: local-structural`.
+`wizard.complete`, generated artifact checks, and Scenario Manager validation
+through `bundle.validate`.
 
 ## Live Stack POC
 
@@ -125,7 +125,7 @@ This is enough for a POC because it proves the architecture is joined up:
 ```text
 wizard.* tools
   -> generated bundle files
-  -> bundle.check
+  -> generation sanity checks
   -> Streamable HTTP MCP endpoint
   -> App-capable evidence widget resource
   -> optional live evidence.summary
@@ -139,7 +139,7 @@ artifacts, and generated README/FLOW/CHANGELOG files.
 Runtime contract validation is explicit:
 
 ```bash
-# Local structural validation only
+# Local generation sanity only
 npm run poc
 
 # Wizard maturity acceptance suite

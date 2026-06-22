@@ -217,6 +217,24 @@ UI tests/build:
 - `npm run build --prefix ui-v2`
 - optional component/API normalization tests if validation result parsing grows
 
+## Review Repair Plan
+
+Current review findings to close before this refactor is considered complete:
+
+1. MCP/tooling must not expose or default to local scenario bundle validation. `bundle.validate` and workflow validation must use Scenario Manager validation as the canonical static validation source. Local authoring sanity checks may exist only as generation diagnostics and must not be reported as bundle validation or gate runtime deployment.
+2. Orchestrator admission/runtime preflight must consume Scenario Manager validation before runtime preparation. Runtime preparation must reject invalid bundles before touching existing runtime directories.
+3. `ScenarioBundleValidator.validate(...)` must keep collecting independent findings where possible even when `scenario.yaml` is malformed or missing required fields.
+4. Uploaded ZIP dry-run and upload/replace gates must not parse/validate descriptor/id outside the canonical validator path.
+5. UI TypeScript mirrors of `BundleValidationResult` must either be generated from the public contract or covered by a contract test against Scenario Manager response shape.
+6. Active diagnostics docs must describe only the actual wire contract (`error|warning`, no `summary.infos`) unless the Java contract is extended deliberately.
+
+MCP follow-up findings from the first repair pass:
+
+1. Public MCP authoring outputs still expose local generation sanity as `structural` (`wizard.complete`, `wizard.enrich`, `workflow.generate`). Rename/recontract this to `generationSanity` so local checks cannot be confused with validation proof.
+2. `workflow_validate` currently classifies local bundle packaging failures, such as missing `scenario.yaml` before ZIP creation, as `WORKFLOW_EXTERNAL_VALIDATION_FAILED`. Local packaging defects should be classified as bundle validation/generation defects with patch scope, while real Scenario Manager connectivity/auth failures remain external/env failures.
+3. `workflow_result.agent.diagnosis.causes` for `WORKFLOW_VALIDATION_FAILED` should surface canonical Scenario Manager findings (`code`, `path`, `message`, `fix`) instead of only local normalized-plan validation issues.
+4. Clean minor docs formatting drift in `docs/inProgress/pockethive-plugin/TOOL-CONTRACTS.md` around the `evidenceContract` paragraph.
+
 ## Migration
 
 Current endpoints to revisit:

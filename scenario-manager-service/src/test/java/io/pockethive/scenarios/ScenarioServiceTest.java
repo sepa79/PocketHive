@@ -5,6 +5,7 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import io.pockethive.capabilities.CapabilityCatalogueService;
+import io.pockethive.scenarios.validation.ScenarioBundleValidator;
 import io.pockethive.swarm.model.Bee;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -46,7 +47,7 @@ class ScenarioServiceTest {
         writeManifest("worker", "worker-image");
         capabilities.reload();
 
-        writeScenario("available.yaml", """
+        writeScenario("available", """
                 id: available
                 name: Available Scenario
                 template:
@@ -68,6 +69,32 @@ class ScenarioServiceTest {
                 .containsExactly("available");
         assertThat(service.listDefunctSummaries()).isEmpty();
         assertThat(service.findAvailable("available")).isPresent();
+    }
+
+    @Test
+    void flatScenarioDescriptorsAreIgnored() throws IOException {
+        writeManifest("ctrl", "ctrl-image");
+        capabilities.reload();
+
+        Files.writeString(scenariosDir.resolve("flat.yaml"), """
+                id: flat
+                name: Flat Scenario
+                template:
+                  image: ctrl-image:latest
+                  bees: []
+                """);
+        Files.writeString(scenariosDir.resolve("scenario.yaml"), """
+                id: root
+                name: Root Scenario
+                template:
+                  image: ctrl-image:latest
+                  bees: []
+                """);
+
+        service.reload();
+
+        assertThat(service.listAllSummaries()).isEmpty();
+        assertThat(service.listBundleTemplates()).isEmpty();
     }
 
     @Test
@@ -105,7 +132,7 @@ class ScenarioServiceTest {
         writeManifest("ctrl", "ctrl-image");
         capabilities.reload();
 
-        writeScenario("defunct.yaml", """
+        writeScenario("defunct", """
                 id: defunct
                 name: Defunct Scenario
                 template:
@@ -120,7 +147,7 @@ class ScenarioServiceTest {
                           out: b
                 """);
 
-        Logger logger = (Logger) LoggerFactory.getLogger(ScenarioService.class);
+        Logger logger = (Logger) LoggerFactory.getLogger(ScenarioBundleValidator.class);
         ListAppender<ILoggingEvent> appender = new ListAppender<>();
         appender.start();
         logger.addAppender(appender);
@@ -147,7 +174,7 @@ class ScenarioServiceTest {
         writeManifest("worker", "worker-image");
         capabilities.reload();
 
-        writeScenario("healthy.yaml", """
+        writeScenario("healthy", """
                 id: healthy
                 name: Healthy Scenario
                 template:
@@ -162,7 +189,7 @@ class ScenarioServiceTest {
                           out: b
                 """);
 
-        writeScenario("broken.yaml", """
+        writeScenario("broken", """
                 id: broken
                 name: Broken Scenario
                 template:
@@ -308,7 +335,7 @@ class ScenarioServiceTest {
         writeManifest("worker", "worker-image");
         capabilities.reload();
 
-        writeScenario("guarded.yaml", """
+        writeScenario("guarded", """
                 id: guarded
                 name: Guarded Scenario
                 trafficPolicy:
@@ -353,7 +380,7 @@ class ScenarioServiceTest {
         capabilities.reload();
         service = new ScenarioService(scenariosDir.toString(), "experimental", capabilities);
 
-        writeScenario("defaulted.yaml", """
+        writeScenario("defaulted", """
                 id: defaulted
                 name: Defaulted Scenario
                 template:
@@ -384,7 +411,7 @@ class ScenarioServiceTest {
         capabilities.reload();
         service = new ScenarioService(scenariosDir.toString(), "runtime", capabilities);
 
-        writeScenario("runtime-tagged.yaml", """
+        writeScenario("runtime-tagged", """
                 id: runtime-tagged
                 name: Runtime Tagged Scenario
                 template:
@@ -416,7 +443,7 @@ class ScenarioServiceTest {
         capabilities.reload();
         service = new ScenarioService(scenariosDir.toString(), capabilities);
 
-        writeScenario("experimental.yaml", """
+        writeScenario("experimental", """
                 id: experimental
                 name: Experimental Scenario
                 template:
@@ -478,9 +505,8 @@ class ScenarioServiceTest {
     @Test
     void variablesValidationEmitsCoverageWarningsForRequiredVariables() throws IOException {
         writeBundleScenario("scenario-1");
-        Path bundle = service.bundleDir("scenario-1");
-        Files.createDirectories(bundle.resolve("sut").resolve("sut-A"));
-        Files.createDirectories(bundle.resolve("sut").resolve("sut-B"));
+        writeBundleSut("scenario-1", "sut-A");
+        writeBundleSut("scenario-1", "sut-B");
         service.reload();
 
         String raw = """
@@ -522,6 +548,36 @@ class ScenarioServiceTest {
                 "profile 'france' sut 'sut-A' is missing required sut variables: customerId",
                 "profile 'france' sut 'sut-B' is missing required sut variables: customerId"
         );
+    }
+
+    @Test
+    void variablesValidationRejectsUnknownCanonicalSut() throws IOException {
+        writeBundleScenario("scenario-1");
+        writeBundleSut("scenario-1", "sut-A");
+        service.reload();
+
+        String raw = """
+                version: 1
+                definitions:
+                  - name: customerId
+                    scope: sut
+                    type: string
+                profiles:
+                  - id: default
+                    name: Default
+                values:
+                  sut:
+                    default:
+                      ghost:
+                        customerId: "123"
+                """;
+
+        ScenarioService.VariablesDocument doc = service.parseVariables(raw);
+
+        assertThatThrownBy(() -> service.validateVariables("scenario-1", doc))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("values.sut[default] references unknown sutId 'ghost'")
+                .hasMessageContaining("sut/<sutId>/sut.yaml");
     }
 
     @Test
@@ -572,19 +628,24 @@ class ScenarioServiceTest {
         assertThatThrownBy(() -> service.readBundleSut("scenario-1", "sut-json"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("has no sut.yaml");
-        assertThat(service.listSutIds("scenario-1"))
-                .doesNotContain("sut-yml", "sut-json");
+        assertThatThrownBy(() -> service.listSutIds("scenario-1"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Failed to parse bundle-local SUT 'sut-yml'")
+                .hasMessageContaining("has no sut.yaml");
 
+        writeBundleScenario("scenario-2");
+        sutRoot = service.bundleDir("scenario-2").resolve("sut");
         Path wrongIdSut = Files.createDirectories(sutRoot.resolve("sut-wrong-id"));
         Files.writeString(wrongIdSut.resolve("sut.yaml"), """
                 id: different-id
                 name: Wrong ID SUT
                 """);
+        service.reload();
 
-        assertThatThrownBy(() -> service.readBundleSut("scenario-1", "sut-wrong-id"))
+        assertThatThrownBy(() -> service.readBundleSut("scenario-2", "sut-wrong-id"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("does not match directory name");
-        assertThatThrownBy(() -> service.listSutIds("scenario-1"))
+        assertThatThrownBy(() -> service.listSutIds("scenario-2"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Failed to parse bundle-local SUT 'sut-wrong-id'")
                 .hasMessageContaining("does not match directory name");
@@ -593,8 +654,7 @@ class ScenarioServiceTest {
     @Test
     void variablesSupportObjectTypeForSutScope() throws IOException {
         writeBundleScenario("scenario-1");
-        Path bundle = service.bundleDir("scenario-1");
-        Files.createDirectories(bundle.resolve("sut").resolve("webauth-local"));
+        writeBundleSut("scenario-1", "webauth-local");
         service.reload();
 
         String raw = """
@@ -637,8 +697,7 @@ class ScenarioServiceTest {
     @Test
     void variablesRejectNonObjectValueWhenTypeIsObject() throws IOException {
         writeBundleScenario("scenario-1");
-        Path bundle = service.bundleDir("scenario-1");
-        Files.createDirectories(bundle.resolve("sut").resolve("webauth-local"));
+        writeBundleSut("scenario-1", "webauth-local");
         service.reload();
 
         String raw = """
@@ -682,20 +741,29 @@ class ScenarioServiceTest {
         Files.writeString(capabilitiesDir.resolve(prefix + "-manifest.json"), manifest);
     }
 
-    private void writeScenario(String fileName, String content) throws IOException {
-        Files.writeString(scenariosDir.resolve(fileName), content);
+    private void writeScenario(String bundleName, String content) throws IOException {
+        Path bundle = Files.createDirectories(scenariosDir.resolve(bundleName));
+        Files.writeString(bundle.resolve(ScenarioBundleLayout.SCENARIO_DESCRIPTOR_FILE), content);
     }
 
-	    private void writeBundleScenario(String scenarioId) throws IOException {
-	        Path bundle = scenariosDir.resolve(scenarioId);
-	        Files.createDirectories(bundle);
-	        Files.writeString(bundle.resolve("scenario.yaml"), """
-	                id: %s
-	                name: %s
+    private void writeBundleScenario(String scenarioId) throws IOException {
+        Path bundle = scenariosDir.resolve(scenarioId);
+        Files.createDirectories(bundle);
+        Files.writeString(bundle.resolve("scenario.yaml"), """
+                id: %s
+                name: %s
                 template:
                   image: ctrl-image:latest
                   bees: []
                 """.formatted(scenarioId, scenarioId));
+    }
+
+    private void writeBundleSut(String scenarioId, String sutId) throws IOException {
+        Path sutDir = Files.createDirectories(service.bundleDir(scenarioId).resolve("sut").resolve(sutId));
+        Files.writeString(sutDir.resolve("sut.yaml"), """
+                id: %s
+                name: %s
+                """.formatted(sutId, sutId));
     }
 
     private byte[] scenarioBundleZip(String scenarioYaml) throws IOException {

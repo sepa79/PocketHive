@@ -143,7 +143,7 @@ class SwarmControllerTest {
         SwarmStore registry = new SwarmStore();
         SwarmController ctrl = controller(tracker, registry, new SwarmPlanRegistry());
         when(scenarioClient.fetchScenarioTemplate("tpl-1"))
-            .thenReturn(new ScenarioClient.ScenarioTemplateDescriptor("tpl-1", "prod/tpl-1", "prod", false));
+            .thenReturn(new ScenarioClient.ScenarioTemplateDescriptor("tpl-1", "prod/tpl-1", "prod/tpl-1", "prod", false));
 
         try {
             OrchestratorCurrentUserHolder.set(userWith(
@@ -166,7 +166,7 @@ class SwarmControllerTest {
         SwarmStore registry = new SwarmStore();
         SwarmController ctrl = controller(tracker, registry, new SwarmPlanRegistry());
         when(scenarioClient.fetchScenarioTemplate("tpl-1"))
-            .thenReturn(new ScenarioClient.ScenarioTemplateDescriptor("tpl-1", "e2e/local-rest-defaults", "e2e", false));
+            .thenReturn(new ScenarioClient.ScenarioTemplateDescriptor("tpl-1", "e2e/local-rest-defaults", "e2e/local-rest-defaults", "e2e", false));
 
         try {
             OrchestratorCurrentUserHolder.set(userWith(
@@ -189,7 +189,7 @@ class SwarmControllerTest {
         SwarmStore registry = new SwarmStore();
         SwarmController ctrl = controller(tracker, registry, new SwarmPlanRegistry());
         when(scenarioClient.fetchScenarioTemplate("tpl-1"))
-            .thenReturn(new ScenarioClient.ScenarioTemplateDescriptor("tpl-1", "e2e/local-rest", "e2e", true));
+            .thenReturn(new ScenarioClient.ScenarioTemplateDescriptor("tpl-1", "e2e/local-rest", "e2e/local-rest", "e2e", true));
 
         assertThatThrownBy(() -> ctrl.create("sw1", new SwarmCreateRequest("tpl-1", "idem", null)))
             .isInstanceOf(ResponseStatusException.class)
@@ -1369,6 +1369,7 @@ class SwarmControllerTest {
             lenient().when(scenarioClient.fetchScenarioTemplate(anyString()))
                 .thenAnswer(invocation -> new ScenarioClient.ScenarioTemplateDescriptor(
                     invocation.getArgument(0),
+                    "bundles/" + invocation.getArgument(0),
                     "bundles/" + invocation.getArgument(0),
                     "bundles",
                     false));

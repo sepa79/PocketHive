@@ -592,6 +592,9 @@ class ScenarioManagerAuthFilterTest {
 
     @Test
     void bundleUploadRequiresManageAccessToUploadFolder() throws Exception {
+        writeCapabilityManifest("swarm-controller", "swarm-controller");
+        capabilityCatalogue.reload();
+
         when(authServiceClient.resolve(anyString())).thenReturn(userWith(
             PocketHivePermissionIds.ALL,
             PocketHiveResourceTypes.FOLDER,

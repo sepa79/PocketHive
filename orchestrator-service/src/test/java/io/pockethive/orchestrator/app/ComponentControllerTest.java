@@ -215,7 +215,7 @@ class ComponentControllerTest {
 
             @Override
             public ScenarioTemplateDescriptor fetchScenarioTemplate(String templateId) {
-                return new ScenarioTemplateDescriptor(templateId, "demo/" + templateId, "demo", false);
+                return new ScenarioTemplateDescriptor(templateId, "demo/" + templateId, "demo/" + templateId, "demo", false);
             }
 
             @Override

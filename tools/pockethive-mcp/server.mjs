@@ -1317,7 +1317,7 @@ function wizardFlowDocument(session, answers, target) {
     "",
     "- Scenario shape follows `docs/scenarios/SCENARIO_CONTRACT.md` and `io.pockethive.scenarios.Scenario`.",
     "- Worker fields follow Scenario Manager capability manifests from `/api/capabilities`.",
-    "- Runtime validation should use `bundle.validate` with `validator: scenario-manager-dry-run` when Scenario Manager is available.",
+    "- Runtime validation must use `bundle.validate`; Scenario Manager is the canonical static bundle validator.",
     "",
     "## Target",
     "",
@@ -2322,13 +2322,9 @@ async function runBundleCheck(bundle) {
     errors,
     warnings,
     artifacts,
-    source: "bundle.check.structural",
+    source: "bundle.generation-sanity",
   };
 }
-
-reg("bundle.check", "Run a fast structural check on a bundle without shelling out.", {
-  bundle: BUNDLE_ARG,
-}, async ({ bundle }) => runBundleCheck(bundle));
 
 async function createBundleZipBytes(bundle) {
   const targetBundleDir = bundleDir(bundle);
@@ -2503,45 +2499,30 @@ setInterval(() => {
   }
 }, 60_000).unref();
 
-reg("bundle.validate", "Start async validation of a bundle. Returns a jobId immediately. Poll with bundle.validate.result.", {
+reg("bundle.validate", "Start async Scenario Manager validation of a bundle. Returns a jobId immediately. Poll with bundle.validate.result.", {
   bundle: BUNDLE_ARG,
-  validator: z.enum(["local-structural", "scenario-manager-dry-run", "scenario-manager-upload"]).optional().describe("local-structural runs bundle.check only. scenario-manager-dry-run validates through Scenario Manager without writes. scenario-manager-upload validates through Scenario Manager upload/replace and has write side effects."),
+  validator: z.enum(["scenario-manager-dry-run", "scenario-manager-upload"]).optional().default("scenario-manager-dry-run").describe("scenario-manager-dry-run validates through Scenario Manager without writes. scenario-manager-upload validates through Scenario Manager upload/replace and has write side effects."),
   replaceExisting: z.boolean().optional().describe("Only for scenario-manager-upload. Allows replacing an existing Scenario Manager bundle."),
-}, async ({ bundle, validator = "local-structural", replaceExisting = true }) => {
-  const check = await runBundleCheck(bundle);
-  if (!check.ok) {
-    throw new Error(`Bundle '${bundle}' failed structural check: ${check.errors.map(e => e.message).join("; ")}`);
-  }
-
+}, async ({ bundle, validator = "scenario-manager-dry-run", replaceExisting = true }) => {
   const jobId = `${bundle}-${validator}-${Date.now()}`;
   _validateJobs.set(jobId, { status: "running", result: null, error: null, startedAt: Date.now() });
 
   (async () => {
     try {
-      const structural = await runBundleCheck(bundle);
       let result;
       if (validator === "scenario-manager-dry-run") {
         result = {
           mode: validator,
           source: "scenario-manager-api",
-          structural,
           scenarioManager: await scenarioManagerDryRunValidateBundle(bundle),
           note: "Scenario Manager dry-run validation uses the running Scenario Manager contract without importing or replacing the bundle.",
-        };
-      } else if (validator === "scenario-manager-upload") {
-        result = {
-          mode: validator,
-          source: "scenario-manager-api",
-          structural,
-          scenarioManager: await scenarioManagerUploadBundle(bundle, { replaceExisting }),
-          note: "Scenario Manager upload/replace validates using the running Scenario Manager contract and stores/replaces the bundle there.",
         };
       } else {
         result = {
           mode: validator,
-          source: "bundle.check",
-          structural,
-          note: "Local structural validation only. Use validator=scenario-manager-dry-run when live Scenario Manager validation is intended.",
+          source: "scenario-manager-api",
+          scenarioManager: await scenarioManagerUploadBundle(bundle, { replaceExisting }),
+          note: "Scenario Manager upload/replace validates using the running Scenario Manager contract and stores/replaces the bundle there.",
         };
       }
       _validateJobs.set(jobId, { status: "done", result, error: null, startedAt: _validateJobs.get(jobId).startedAt });

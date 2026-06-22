@@ -72,7 +72,7 @@ class PostgresJournalStorageTest {
 
       @Override
       public ScenarioTemplateDescriptor fetchScenarioTemplate(String templateId) {
-        return new ScenarioTemplateDescriptor(templateId, "bundles/" + templateId, "bundles", false);
+        return new ScenarioTemplateDescriptor(templateId, "bundles/" + templateId, "bundles/" + templateId, "bundles", false);
       }
 
       @Override

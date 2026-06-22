@@ -73,7 +73,7 @@ For all assistants, prefer three permission tiers.
 | Tier | Tools | Use when |
 |---|---|---|
 | Read/status | `workflow_config_get`, `workflow_config_validate`, `workflow_examples_list`, `workflow_examples_get`, `workflow_examples_recommend`, `workflow_profiles_list`, `workflow_profiles_get`, `workflow_list`, `workflow_status`, `workflow_evidence_render`, `health_check`, `context_get`, `env_status`, `bundle_list`, `bundle_read` | Normal inspection and IDE/chat status |
-| Authoring | `workflow_start`, `workflow_source_read`, `workflow_update`, `workflow_role_check`, `workflow_preview`, `workflow_generate`, `workflow_validate`, `workflow_patch`, `workflow_report`, `bundle_check` | The user asks the assistant to create/fix a test workflow |
+| Authoring | `workflow_start`, `workflow_source_read`, `workflow_update`, `workflow_role_check`, `workflow_preview`, `workflow_generate`, `workflow_validate`, `workflow_patch`, `workflow_report` | The user asks the assistant to create/fix a test workflow |
 | Live/runtime/enrichment | `workflow_deploy_start`, `workflow_deploy_status`, `workflow_deploy_resume`, `workflow_verify_start`, `workflow_verify_status`, `workflow_verify_resume`, `workflow_deploy`, `workflow_verify`, `workflow_hivemind_enrich`, `scenario_*`, `swarm_*`, `debug_*`, `evidence_summary`, `mock_*`, `dataset_*` | The user explicitly wants deployment/runtime evidence or HiveMind enrichment |
 
 Assistants must ask the user to fill required `nextQuestions` before generating
@@ -211,7 +211,6 @@ enabled_tools = [
   "workflow_report",
   "bundle_list",
   "bundle_read",
-  "bundle_check",
   "health_check",
   "context_get",
   "env_status"

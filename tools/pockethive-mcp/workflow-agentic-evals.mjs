@@ -150,8 +150,9 @@ async function deterministicNoviceAgent(client) {
   const generated = await call(client, "workflow_generate", { workflowId: started.workflowId });
   assert.equal(generated.ok, true);
   const validated = await call(client, "workflow_validate", { workflowId: started.workflowId });
-  assert.equal(validated.code, "WORKFLOW_STRUCTURAL_VALIDATED");
-  assert.equal(validated.authoritative, false);
+  assert.equal(validated.code, "WORKFLOW_VALIDATED");
+  assert.equal(validated.authoritative, true);
+  assert.equal(validated.validationLevel, "scenario-manager");
   const report = await call(client, "workflow_report", { workflowId: started.workflowId });
   assert.equal(report.ok, true);
   assert.equal(report.claimMatrix.find(claim => claim.id === "workflow.questions").status, "satisfied");

@@ -53,7 +53,7 @@ public class ScenarioController {
                                            @RequestHeader(HttpHeaders.CONTENT_TYPE) String contentType) throws IOException {
         log.info("[REST] POST /scenarios contentType={} scenario={}", contentType, safeJson(scenarioSummary(scenario)));
         requireManageAllFolders();
-        Scenario created = service.create(scenario, ScenarioService.formatFrom(contentType));
+        Scenario created = service.create(scenario);
         log.info("[REST] POST /scenarios -> status=201 scenario={}", safeJson(scenarioSummary(created)));
         return ResponseEntity.status(HttpStatus.CREATED)
                 .contentType(MediaType.APPLICATION_JSON)
@@ -323,7 +323,7 @@ public class ScenarioController {
                            @RequestHeader(HttpHeaders.CONTENT_TYPE) String contentType) throws IOException {
         log.info("[REST] PUT /scenarios/{} contentType={} scenario={}", id, contentType, safeJson(scenarioSummary(scenario)));
         requireManageScenario(id);
-        Scenario updated = service.update(id, scenario, ScenarioService.formatFrom(contentType));
+        Scenario updated = service.update(id, scenario);
         log.info("[REST] PUT /scenarios/{} -> status=200 scenario={}", id, safeJson(scenarioSummary(updated)));
         return updated;
     }
@@ -384,7 +384,9 @@ public class ScenarioController {
         requireReadScenario(id);
         String text = service.readVariablesRaw(id);
         if (text == null) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "variables.yaml not found");
+            throw new ResponseStatusException(
+                HttpStatus.NOT_FOUND,
+                ScenarioBundleLayout.VARIABLES_FILE + " not found");
         }
         log.info("[REST] GET /scenarios/{}/variables -> status=200 ({} chars)", id, text.length());
         return ResponseEntity.ok()

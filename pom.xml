@@ -23,6 +23,7 @@
     <module>observability</module>
     <module>common/topology-core</module>
     <module>common/auth-contracts</module>
+    <module>common/scenario-validation-contracts</module>
     <module>common/auth-client</module>
     <module>common/control-plane-core</module>
     <module>common/control-plane-spring</module>

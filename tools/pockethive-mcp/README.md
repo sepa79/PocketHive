@@ -111,21 +111,20 @@ compact handoff surface for phase, verdict, next action, claim matrix, and
 proof summary. Use `workflow_status` only when `workflow_result` points to
 missing fields, role checks, validation issues, or detailed evidence.
 
-`workflow_result.proof.validation` separates local structural proof from live
-Scenario Manager proof:
+`workflow_result.proof.validation` records Scenario Manager validation as the
+canonical static bundle proof:
 
 ```json
 {
   "status": "fail",
   "latestLevel": "scenario-manager",
-  "structural": { "status": "pass" },
   "scenarioManager": { "status": "fail", "authoritative": false }
 }
 ```
 
-If structural validation passes but Scenario Manager validation fails, inspect
-runtime/auth availability before patching bundle files. Agents can continue to
-report the structural proof with the recorded Scenario Manager gap.
+If Scenario Manager validation cannot complete, inspect runtime/auth
+availability before patching bundle files. Generated bundle sanity checks are
+not workflow validation evidence.
 
 Scenario Manager `401` responses are reported as `WORKFLOW_ENV_AUTH_FAILED`,
 with `workflow_result.nextAction.tool=env_status`. This means the active MCP

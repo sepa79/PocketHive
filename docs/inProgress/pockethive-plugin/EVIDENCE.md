@@ -35,7 +35,7 @@ as `pockethive_logs`.
 
 | Level | Required for | Minimum evidence |
 |---|---|---|
-| Structural | Generated bundle | `bundle.check` and contract source metadata |
+| Generated | Generated bundle | generation sanity result and contract source metadata |
 | Deployable | Imported scenario | `bundle.validate`, `scenario.deploy`, `scenario.get` |
 | Runnable | Started swarm | `swarm.create`, `swarm.start`, `swarm.get`, `debug.journal` |
 | Flow-proven | End-to-end data path | Runnable evidence plus `debug.tap` and mock/dataset evidence |
@@ -56,7 +56,7 @@ as `pockethive_logs`.
 ```yaml
 evidence:
   bundle:
-    check: "<bundle.check summary>"
+    generationSanity: "<wizard/generation sanity summary>"
     validate: "<bundle.validate summary>"
   runtime:
     swarmId: "<swarm id>"

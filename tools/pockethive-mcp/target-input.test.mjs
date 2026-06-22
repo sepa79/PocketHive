@@ -53,7 +53,7 @@ async function callWithoutInputValidationError(client, name, args) {
 test("bundle target fields accept VS Code tree item objects", async () => {
   await withClient(async (client) => {
     const bundleName = `__missing_bundle_${Date.now()}__`;
-    const result = await callWithoutInputValidationError(client, "bundle_check", {
+    const result = await callWithoutInputValidationError(client, "bundle_validate", {
       bundle: {
         bundle: { name: bundleName },
         label: { label: "Wrong fallback label" },
@@ -63,9 +63,8 @@ test("bundle target fields accept VS Code tree item objects", async () => {
 
     assert.equal(result.isError, undefined);
     const payload = JSON.parse(result.content[0].text);
-    assert.equal(payload.bundle, bundleName);
-    assert.equal(payload.ok, false);
-    assert.equal(payload.checks[0].id, "bundle.exists");
+    assert.equal(payload.status, "running");
+    assert.ok(payload.jobId);
   });
 });
 

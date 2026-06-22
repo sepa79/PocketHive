@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 
-import { SCENARIO_FILE_NAMES, SCENARIO_SCHEME } from '../constants';
+import { SCENARIO_FILE_NAME, SCENARIO_FILE_NAMES, SCENARIO_SCHEME } from '../constants';
 import { ScenarioSummary } from '../types';
 import { scenarioList, scenarioRawRead, scenarioRawWrite } from '../mcp/tools';
 
@@ -44,7 +44,7 @@ export class ScenarioFileSystemProvider implements vscode.FileSystemProvider {
     }
 
     if (parsed.kind === 'scenario') {
-      return [['scenario.yaml', vscode.FileType.File]];
+      return [[SCENARIO_FILE_NAME, vscode.FileType.File]];
     }
 
     return [];
@@ -98,7 +98,7 @@ export class ScenarioFileSystemProvider implements vscode.FileSystemProvider {
 }
 
 export function scenarioUri(scenarioId: string): vscode.Uri {
-  return vscode.Uri.from({ scheme: SCENARIO_SCHEME, path: `/${scenarioId}/scenario.yaml` });
+  return vscode.Uri.from({ scheme: SCENARIO_SCHEME, path: `/${scenarioId}/${SCENARIO_FILE_NAME}` });
 }
 
 type ParsedScenarioPath =

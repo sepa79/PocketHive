@@ -1,24 +1,15 @@
 package io.pockethive.scenarios;
 
-import com.fasterxml.jackson.core.JsonFactory;
-import com.fasterxml.jackson.core.StreamReadFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import io.pockethive.capabilities.CapabilityCatalogueService;
 import io.pockethive.scenarios.validation.BundleValidationException;
+import io.pockethive.scenarios.validation.BundleValidationInput;
 import io.pockethive.scenarios.validation.BundleValidationResult;
 import io.pockethive.scenarios.validation.BundleValidationSource;
-import io.pockethive.scenarios.validation.TemplateValidationResult;
-import io.pockethive.scenarios.validation.ValidationCategory;
-import io.pockethive.scenarios.validation.ValidationCodes;
+import io.pockethive.scenarios.validation.ScenarioBundleValidator;
 import io.pockethive.scenarios.validation.ValidationFinding;
-import io.pockethive.scenarios.validation.ValidationSeverity;
-import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.SwarmTemplate;
-import io.pockethive.worker.sdk.auth.AuthApplyAs;
-import io.pockethive.worker.sdk.auth.AuthStorageMode;
-import io.pockethive.worker.sdk.auth.AuthTokenKeys;
-import io.pockethive.worker.sdk.auth.AuthType;
 import jakarta.annotation.PostConstruct;
 import org.springframework.http.MediaType;
 import org.slf4j.Logger;
@@ -35,8 +26,6 @@ import java.security.NoSuchAlgorithmException;
 import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -45,8 +34,6 @@ import io.pockethive.swarm.model.SutEnvironment;
 
 @Service
 public class ScenarioService {
-    public enum Format { JSON, YAML }
-
     private static final Logger logger = LoggerFactory.getLogger(ScenarioService.class);
     private static final String SCENARIOS_RUNTIME_ROOT = "scenarios-runtime";
     private static final String DEFAULT_UPLOAD_FOLDER = "bundles";
@@ -59,28 +46,15 @@ public class ScenarioService {
     private static final String EDITOR_KIND_JSON = "json";
     private static final String EDITOR_KIND_MARKDOWN = "markdown";
     private static final String EDITOR_KIND_UNSUPPORTED = "unsupported";
-    private static final String SUT_DESCRIPTOR_FILE = "sut.yaml";
-    private static final String AUTH_PROFILES_FILE = "authProfiles.yaml";
-    private static final Pattern VAR_REFERENCE_PATTERN =
-        Pattern.compile("\\bvars\\.([A-Za-z_][A-Za-z0-9_]*)\\b");
-
     private final Path storageDir;
     private final Path testStorageDir;
     private final Path bundleRootDir;
     private final Path runtimeRootDir;
     private final boolean showTestScenarios;
-    private final ObjectMapper jsonMapper = new ObjectMapper();
     private final ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
-    private final ObjectMapper strictJsonMapper = new ObjectMapper(JsonFactory.builder()
-        .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
-        .build());
-    private final ObjectMapper strictYamlMapper = new ObjectMapper(YAMLFactory.builder()
-        .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
-        .build());
-    private final CapabilityCatalogueService capabilities;
+    private final ScenarioBundleValidator bundleValidator;
     private final Map<String, ScenarioRecord> scenarios = new ConcurrentHashMap<>();
     private volatile List<BundleCatalogEntry> bundleCatalog = List.of();
-    private final String defaultImageTag;
     private final Object variablesLock = new Object();
 
     @Autowired
@@ -110,27 +84,26 @@ public class ScenarioService {
              capabilities);
     }
 
-	    private ScenarioService(Path dir,
-	                            Path runtimeRoot,
-	                            boolean showTestScenarios,
-	                            String defaultImageTag,
-	                            CapabilityCatalogueService capabilities) throws IOException {
-	        Path normalizedDir = dir.toAbsolutePath().normalize();
-	        this.storageDir = normalizedDir;
-	        this.testStorageDir = normalizedDir.resolve("e2e");
-	        this.bundleRootDir = normalizedDir;
-	        this.runtimeRootDir = runtimeRoot.toAbsolutePath().normalize();
-	        this.showTestScenarios = showTestScenarios;
-	        this.defaultImageTag = defaultImageTag;
-	        Files.createDirectories(this.storageDir);
-	        if (this.showTestScenarios) {
-	            Files.createDirectories(this.testStorageDir);
-	        }
-	        Files.createDirectories(this.bundleRootDir);
-	        Files.createDirectories(this.bundleRootDir.resolve(QUARANTINE_FOLDER));
-	        Files.createDirectories(this.runtimeRootDir);
-	        this.capabilities = capabilities;
-	    }
+    private ScenarioService(Path dir,
+                            Path runtimeRoot,
+                            boolean showTestScenarios,
+                            String defaultImageTag,
+                            CapabilityCatalogueService capabilities) throws IOException {
+        Path normalizedDir = dir.toAbsolutePath().normalize();
+        this.storageDir = normalizedDir;
+        this.testStorageDir = normalizedDir.resolve("e2e");
+        this.bundleRootDir = normalizedDir;
+        this.runtimeRootDir = runtimeRoot.toAbsolutePath().normalize();
+        this.showTestScenarios = showTestScenarios;
+        Files.createDirectories(this.storageDir);
+        if (this.showTestScenarios) {
+            Files.createDirectories(this.testStorageDir);
+        }
+        Files.createDirectories(this.bundleRootDir);
+        Files.createDirectories(this.bundleRootDir.resolve(QUARANTINE_FOLDER));
+        Files.createDirectories(this.runtimeRootDir);
+        this.bundleValidator = new ScenarioBundleValidator(capabilities, defaultImageTag);
+    }
 
     @PostConstruct
     void init() throws IOException {
@@ -142,10 +115,6 @@ public class ScenarioService {
         List<ScannedBundle> discovered = new ArrayList<>();
         Set<Path> visitedDescriptors = new HashSet<>();
 
-        loadFromDirectory(storageDir, discovered, visitedDescriptors);
-        if (showTestScenarios && Files.isDirectory(testStorageDir)) {
-            loadFromDirectory(testStorageDir, discovered, visitedDescriptors);
-        }
         loadFromBundles(bundleRootDir, discovered, visitedDescriptors);
         if (showTestScenarios && Files.isDirectory(testStorageDir)) {
             loadFromBundles(testStorageDir, discovered, visitedDescriptors);
@@ -272,26 +241,26 @@ public class ScenarioService {
         return record != null && record.defunct();
     }
 
-    public Scenario create(Scenario scenario, Format format) throws IOException {
-        Scenario resolved = applyDefaultImageTag(scenario);
+    public Scenario create(Scenario scenario) throws IOException {
+        Scenario resolved = bundleValidator.applyDefaultImageTag(scenario);
         String id = resolved.getId();
         Path bundleDir = bundleDir(id);
         if (hasDiscoveredScenarioId(id)) {
             throw new IllegalArgumentException("Scenario already exists");
         }
 
-        writeDescriptor(resolved, format, bundleDir);
+        writeDescriptor(resolved, bundleDir);
         reload();
         ScenarioRecord record = scenarios.get(id);
         return record != null ? record.scenario() : resolved;
     }
 
-    public Scenario update(String id, Scenario scenario, Format format) throws IOException {
+    public Scenario update(String id, Scenario scenario) throws IOException {
         scenario.setId(id);
-        Scenario resolved = applyDefaultImageTag(scenario);
+        Scenario resolved = bundleValidator.applyDefaultImageTag(scenario);
         ScenarioRecord existing = scenarios.get(id);
         Path bundleDir = existing != null && existing.bundleDir() != null ? existing.bundleDir() : bundleDir(id);
-        writeDescriptor(resolved, format, bundleDir);
+        writeDescriptor(resolved, bundleDir);
         reload();
         ScenarioRecord record = scenarios.get(id);
         return record != null ? record.scenario() : resolved;
@@ -409,48 +378,28 @@ public class ScenarioService {
         Files.createDirectories(targetParent);
 
         Path currentDir = entry.bundleDir();
-        if (currentDir != null && Files.isDirectory(currentDir)) {
-            Path targetDir = targetParent.resolve(currentDir.getFileName()).toAbsolutePath().normalize();
-            if (targetDir.equals(currentDir.toAbsolutePath().normalize())) {
-                return;
-            }
-            if (Files.exists(targetDir)) {
-                throw new IllegalArgumentException("Target already exists");
-            }
-            Files.move(currentDir, targetDir);
-            reload();
+        if (currentDir == null || !Files.isDirectory(currentDir)) {
+            throw new IllegalArgumentException("Bundle '%s' not found".formatted(bundleKey));
+        }
+        Path targetDir = targetParent.resolve(currentDir.getFileName()).toAbsolutePath().normalize();
+        if (targetDir.equals(currentDir.toAbsolutePath().normalize())) {
             return;
         }
-
-        Path descriptor = entry.descriptorFile();
-        if (descriptor == null || !Files.isRegularFile(descriptor)) {
-            throw new IllegalArgumentException("Bundle '%s' has no descriptor file".formatted(bundleKey));
-        }
-        Path targetFile = targetParent.resolve(descriptor.getFileName()).toAbsolutePath().normalize();
-        if (targetFile.equals(descriptor.toAbsolutePath().normalize())) {
-            return;
-        }
-        if (Files.exists(targetFile)) {
+        if (Files.exists(targetDir)) {
             throw new IllegalArgumentException("Target already exists");
         }
-        Files.move(descriptor, targetFile);
+        Files.move(currentDir, targetDir);
         reload();
     }
 
     public synchronized void deleteBundle(String bundleKey) throws IOException {
         BundleCatalogEntry entry = bundleEntry(bundleKey);
         Path bundleDir = entry.bundleDir();
-        if (bundleDir != null && Files.isDirectory(bundleDir)) {
-            clearDirectory(bundleDir);
-            Files.deleteIfExists(bundleDir);
-            reload();
-            return;
-        }
-        Path descriptor = entry.descriptorFile();
-        if (descriptor == null || !Files.isRegularFile(descriptor)) {
+        if (bundleDir == null || !Files.isDirectory(bundleDir)) {
             throw new IllegalArgumentException("Bundle '%s' not found".formatted(bundleKey));
         }
-        Files.deleteIfExists(descriptor);
+        clearDirectory(bundleDir);
+        Files.deleteIfExists(bundleDir);
         reload();
     }
 
@@ -458,29 +407,19 @@ public class ScenarioService {
         BundleCatalogEntry entry = bundleEntry(bundleKey);
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         Path bundleDir = entry.bundleDir();
-        if (bundleDir != null && Files.isDirectory(bundleDir)) {
-            try (ZipOutputStream zip = new ZipOutputStream(out);
-                 Stream<Path> paths = Files.walk(bundleDir)) {
-                for (Path path : (Iterable<Path>) paths::iterator) {
-                    if (Files.isDirectory(path)) {
-                        continue;
-                    }
-                    Path relative = bundleDir.relativize(path);
-                    String entryName = relative.toString().replace('\\', '/');
-                    zip.putNextEntry(new ZipEntry(entryName));
-                    Files.copy(path, zip);
-                    zip.closeEntry();
+        if (bundleDir == null || !Files.isDirectory(bundleDir)) {
+            throw new IllegalArgumentException("Bundle '%s' not found".formatted(bundleKey));
+        }
+        try (ZipOutputStream zip = new ZipOutputStream(out);
+             Stream<Path> paths = Files.walk(bundleDir)) {
+            for (Path path : (Iterable<Path>) paths::iterator) {
+                if (Files.isDirectory(path)) {
+                    continue;
                 }
-            }
-        } else {
-            Path descriptor = entry.descriptorFile();
-            if (descriptor == null || !Files.isRegularFile(descriptor)) {
-                throw new IllegalArgumentException("Bundle '%s' not found".formatted(bundleKey));
-            }
-            try (ZipOutputStream zip = new ZipOutputStream(out)) {
-                String entryName = descriptor.getFileName() != null ? descriptor.getFileName().toString() : "scenario.yaml";
+                Path relative = bundleDir.relativize(path);
+                String entryName = relative.toString().replace('\\', '/');
                 zip.putNextEntry(new ZipEntry(entryName));
-                Files.copy(descriptor, zip);
+                Files.copy(path, zip);
                 zip.closeEntry();
             }
         }
@@ -491,12 +430,6 @@ public class ScenarioService {
         BundleCatalogEntry entry = bundleEntry(bundleKey);
         BundleRoot root = bundleRoot(entry);
         List<BundleTreeNode> nodes = new ArrayList<>();
-        if (root.descriptorOnly()) {
-            Path descriptor = root.descriptorFile();
-            nodes.add(bundleTreeNode(entry.bundleKey(), root.root(), descriptor));
-            return new BundleTree(entry.bundleKey(), nodes);
-        }
-
         try (Stream<Path> paths = Files.walk(root.root())) {
             paths
                     .filter(path -> !path.equals(root.root()))
@@ -557,9 +490,6 @@ public class ScenarioService {
                                                                     String content) throws IOException {
         BundleCatalogEntry entry = bundleEntry(bundleKey);
         BundleRoot root = bundleRoot(entry);
-        if (root.descriptorOnly()) {
-            throw new IllegalArgumentException("Bundle is descriptor-only");
-        }
         Path file = resolveBundleTargetPath(root, relativePath);
         requireEditableBundleFile(file);
         if (Files.exists(file)) {
@@ -577,9 +507,6 @@ public class ScenarioService {
     public synchronized void createBundleWorkspaceFolder(String bundleKey, String relativePath) throws IOException {
         BundleCatalogEntry entry = bundleEntry(bundleKey);
         BundleRoot root = bundleRoot(entry);
-        if (root.descriptorOnly()) {
-            throw new IllegalArgumentException("Bundle is descriptor-only");
-        }
         Path folder = resolveBundleTargetPath(root, relativePath);
         if (Files.exists(folder)) {
             throw new WorkspaceConflictException("Bundle path already exists");
@@ -591,9 +518,6 @@ public class ScenarioService {
     public synchronized void renameBundleWorkspaceEntry(String bundleKey, String relativePath, String name) throws IOException {
         BundleCatalogEntry entry = bundleEntry(bundleKey);
         BundleRoot root = bundleRoot(entry);
-        if (root.descriptorOnly()) {
-            throw new IllegalArgumentException("Bundle is descriptor-only");
-        }
         Path source = resolveBundleEntryPath(root, relativePath);
         String targetName = normalizeBundleEntryName(name);
         Path parent = source.getParent();
@@ -617,9 +541,6 @@ public class ScenarioService {
     public synchronized void deleteBundleWorkspaceEntry(String bundleKey, String relativePath) throws IOException {
         BundleCatalogEntry entry = bundleEntry(bundleKey);
         BundleRoot root = bundleRoot(entry);
-        if (root.descriptorOnly()) {
-            throw new IllegalArgumentException("Bundle is descriptor-only");
-        }
         Path target = resolveBundleEntryPath(root, relativePath);
         if (target.equals(root.root())) {
             throw new IllegalArgumentException("Cannot delete bundle root");
@@ -669,15 +590,10 @@ public class ScenarioService {
 
     private BundleRoot bundleRoot(BundleCatalogEntry entry) {
         Path bundleDir = entry.bundleDir();
-        if (bundleDir != null && Files.isDirectory(bundleDir)) {
-            return new BundleRoot(bundleDir.toAbsolutePath().normalize(), null, false);
-        }
-        Path descriptor = entry.descriptorFile();
-        if (descriptor == null || !Files.isRegularFile(descriptor)) {
+        if (bundleDir == null || !Files.isDirectory(bundleDir)) {
             throw new IllegalArgumentException("Bundle '%s' not found".formatted(entry.bundleKey()));
         }
-        Path normalizedDescriptor = descriptor.toAbsolutePath().normalize();
-        return new BundleRoot(normalizedDescriptor.getParent(), normalizedDescriptor, true);
+        return new BundleRoot(bundleDir.toAbsolutePath().normalize());
     }
 
     private BundleTreeNode bundleTreeNode(String bundleKey, Path root, Path path) {
@@ -699,9 +615,6 @@ public class ScenarioService {
         Path resolved = root.root().resolve(trimmed).normalize();
         if (!resolved.startsWith(root.root())) {
             throw new IllegalArgumentException("Invalid bundle path");
-        }
-        if (root.descriptorOnly() && !resolved.equals(root.descriptorFile())) {
-            throw new IllegalArgumentException("Bundle path not found");
         }
         if (!Files.exists(resolved)) {
             throw new IllegalArgumentException("Bundle path not found");
@@ -867,117 +780,6 @@ public class ScenarioService {
 	        return runtimeRoot != null && runtimeRoot.startsWith(root) && normalized.startsWith(runtimeRoot);
 	    }
 
-    private DefunctResult determineDefunct(Scenario scenario) {
-        String scenarioId = scenario.getId();
-        if (scenarioId == null || scenarioId.isBlank()) {
-            return DefunctResult.because("Scenario is missing a required 'id' field");
-        }
-
-        SwarmTemplate template = scenario.getTemplate();
-        if (template == null) {
-            logger.warn("Scenario '{}' has no swarm template defined; marking as defunct", scenarioId);
-            return DefunctResult.because("Scenario has no swarm template defined");
-        }
-
-        List<String> reasons = new ArrayList<>();
-        checkImageReference(scenarioId, "controller", template.image(), reasons);
-
-        if (template.bees() != null) {
-            for (Bee bee : template.bees()) {
-                checkImageReference(scenarioId, "bee '" + bee.role() + "'", bee.image(), reasons);
-            }
-        }
-
-        if (!reasons.isEmpty()) {
-            String reason = String.join("; ", reasons);
-            logger.warn("Scenario '{}' marked as defunct: {}", scenarioId, reason);
-            return DefunctResult.because(reason);
-        }
-
-        return DefunctResult.ok();
-    }
-
-    private Scenario applyDefaultImageTag(Scenario scenario) {
-        if (defaultImageTag == null || scenario == null) {
-            return scenario;
-        }
-        SwarmTemplate template = scenario.getTemplate();
-        if (template == null) {
-            return scenario;
-        }
-
-        String controllerImage = applyDefaultTag(template.image());
-        boolean changed = !Objects.equals(controllerImage, template.image());
-
-        List<Bee> bees = template.bees();
-        List<Bee> updatedBees = bees;
-        if (bees != null && !bees.isEmpty()) {
-            updatedBees = new ArrayList<>(bees.size());
-            for (Bee bee : bees) {
-                String updatedImage = applyDefaultTag(bee.image());
-                if (!Objects.equals(updatedImage, bee.image())) {
-                    changed = true;
-                    updatedBees.add(new Bee(
-                            bee.id(),
-                            bee.role(),
-                            updatedImage,
-                            bee.work(),
-                            bee.ports(),
-                            bee.env(),
-                            bee.config()
-                    ));
-                } else {
-                    updatedBees.add(bee);
-                }
-            }
-        }
-
-        if (!changed) {
-            return scenario;
-        }
-
-        SwarmTemplate updatedTemplate = new SwarmTemplate(controllerImage, updatedBees);
-        return new Scenario(
-                scenario.getId(),
-                scenario.getName(),
-                scenario.getDescription(),
-                updatedTemplate,
-                scenario.getTopology(),
-                scenario.getTrafficPolicy(),
-                scenario.getPlan()
-        );
-    }
-
-    private String applyDefaultTag(String imageReference) {
-        if (defaultImageTag == null || imageReference == null) {
-            return imageReference;
-        }
-        String trimmed = imageReference.trim();
-        if (trimmed.isEmpty()) {
-            return imageReference;
-        }
-        if (hasDigest(trimmed)) {
-            return trimmed;
-        }
-        return imageNameWithoutTag(trimmed) + ":" + defaultImageTag;
-    }
-
-    private static boolean hasDigest(String imageReference) {
-        if (imageReference == null || imageReference.isBlank()) {
-            return false;
-        }
-        return imageReference.indexOf('@') >= 0;
-    }
-
-    private static String imageNameWithoutTag(String imageReference) {
-        int lastColon = imageReference.lastIndexOf(':');
-        int lastSlash = imageReference.lastIndexOf('/');
-        if (lastColon > lastSlash) {
-            return imageReference.substring(0, lastColon);
-        }
-        return imageReference;
-    }
-
     private static String normalizeTag(String value) {
         if (value == null) {
             return null;
@@ -986,74 +788,17 @@ public class ScenarioService {
         return trimmed.isEmpty() ? null : trimmed;
     }
 
-    private void checkImageReference(String scenarioId,
-                                     String component,
-                                     String imageReference,
-                                     List<String> reasons) {
-        if (imageReference == null || imageReference.isBlank()) {
-            logger.warn("Scenario '{}' {} image reference is missing", scenarioId, component);
-            String label = component.startsWith("bee") ? component + " has no image defined" : "Controller image is not defined";
-            reasons.add(label);
-            return;
-        }
-
-        Optional<io.pockethive.capabilities.CapabilityCatalogueService.CapabilityResolution> resolution =
-                capabilities.resolveByImageReference(imageReference);
-        if (resolution.isPresent()) {
-            return;
-        }
-
-        if (capabilities.findByImageReference(imageReference).isEmpty()) {
-            logger.warn("Scenario '{}' missing capability manifest for {} image '{}'", scenarioId, component, imageReference);
-            reasons.add("No capability manifest found for image '" + imageReference + "' (" + component + "). Check that this image is installed.");
-        }
-    }
-
-    private Format detectFormat(Path path) {
-        String lower = path.getFileName().toString().toLowerCase(Locale.ROOT);
-        if (lower.endsWith(".json")) {
-            return Format.JSON;
-        }
-        return Format.YAML;
-    }
-
-    private ObjectMapper strictMapperFor(Format format) {
-        return format == Format.JSON ? strictJsonMapper : strictYamlMapper;
-    }
-
-    private Scenario readScenario(Path path, Format format) throws IOException {
-        return strictMapperFor(format).readValue(path.toFile(), Scenario.class);
-    }
-
-    private Scenario readScenarioContent(String content, Format format) throws IOException {
-        return strictMapperFor(format).readValue(content, Scenario.class);
-    }
-
-    private VariablesDocument readVariablesDocument(String raw) throws IOException {
-        return strictYamlMapper.readValue(raw, VariablesDocument.class);
-    }
-
-    private SutEnvironment readSutEnvironment(Path file) throws IOException {
-        return strictMapperFor(detectFormat(file)).readValue(file.toFile(), SutEnvironment.class);
-    }
-
-    private SutEnvironment readSutEnvironmentYaml(String raw) throws IOException {
-        return strictYamlMapper.readValue(raw, SutEnvironment.class);
-    }
-
-    private void writeDescriptor(Scenario scenario, Format format, Path bundleDir) throws IOException {
+    private void writeDescriptor(Scenario scenario, Path bundleDir) throws IOException {
         String id = scenario.getId();
         if (id == null || id.isBlank()) {
             throw new IllegalArgumentException("Scenario id must not be null or blank");
         }
         Files.createDirectories(bundleDir);
-        Path descriptor = descriptorFile(bundleDir, format);
+        Path descriptor = scenarioDescriptorFile(bundleDir);
         if (!descriptor.startsWith(bundleDir)) {
             throw new IllegalArgumentException("Invalid scenario id");
         }
-        (format == Format.JSON ? jsonMapper : yamlMapper)
-            .writerWithDefaultPrettyPrinter()
-            .writeValue(descriptor.toFile(), scenario);
+        yamlMapper.writerWithDefaultPrettyPrinter().writeValue(descriptor.toFile(), scenario);
     }
 
     private ScenarioSummary toSummary(ScenarioRecord record) {
@@ -1082,9 +827,8 @@ public class ScenarioService {
         return bundleDir;
     }
 
-    private Path descriptorFile(Path bundleDir, Format format) {
-        String fileName = (format == Format.JSON) ? "scenario.json" : "scenario.yaml";
-        return bundleDir.resolve(fileName).normalize();
+    private Path scenarioDescriptorFile(Path bundleDir) {
+        return ScenarioBundleLayout.scenarioDescriptorFile(bundleDir);
     }
 
     private String folderPath(Path bundleDir) {
@@ -1104,12 +848,12 @@ public class ScenarioService {
         return path.isEmpty() ? null : path;
     }
 
-    private ScenarioRecord recordForLoaded(Scenario scenario, Format format, Path descriptorFile, Path bundleDir) {
-        Scenario resolved = applyDefaultImageTag(scenario);
-        DefunctResult defunct = determineDefunct(resolved);
+    private ScenarioRecord recordForLoaded(Scenario scenario, Path descriptorFile, Path bundleDir) {
+        Scenario resolved = bundleValidator.applyDefaultImageTag(scenario);
+        Optional<String> defunct = bundleValidator.defunctReason(resolved);
         Path descriptor = descriptorFile != null ? descriptorFile.toAbsolutePath().normalize() : null;
         Path bundle = bundleDir != null ? bundleDir.toAbsolutePath().normalize() : null;
-        return new ScenarioRecord(resolved, format, defunct.defunct(), defunct.reason(), descriptor, bundle, folderPath(bundle));
+        return new ScenarioRecord(resolved, defunct.isPresent(), defunct.orElse(null), descriptor, bundle, folderPath(bundle));
     }
 
     Path runtimeDir(String swarmId) {
@@ -1179,21 +923,6 @@ public class ScenarioService {
         }
     }
 
-    private void loadFromDirectory(Path directory, List<ScannedBundle> target, Set<Path> visitedDescriptors) throws IOException {
-        if (!Files.isDirectory(directory)) {
-            return;
-        }
-        try (DirectoryStream<Path> stream = Files.newDirectoryStream(directory, "*.{json,yaml,yml}")) {
-            for (Path path : stream) {
-                Path normalized = path.toAbsolutePath().normalize();
-                if (!visitedDescriptors.add(normalized)) {
-                    continue;
-                }
-                scanDescriptor(path, null, target);
-            }
-        }
-    }
-
     private void loadFromBundles(Path bundleRoot, List<ScannedBundle> target, Set<Path> visitedDescriptors) throws IOException {
         if (!Files.isDirectory(bundleRoot)) {
             return;
@@ -1216,10 +945,11 @@ public class ScenarioService {
                 if (!Files.isRegularFile(path)) {
                     continue;
                 }
-                String name = path.getFileName().toString();
-                if (!name.equals("scenario.yaml")
-                    && !name.equals("scenario.yml")
-                    && !name.equals("scenario.json")) {
+                if (!ScenarioBundleLayout.isScenarioDescriptor(path)) {
+                    continue;
+                }
+                Path parent = normalized.getParent();
+                if (parent == null || parent.equals(normalizedRoot)) {
                     continue;
                 }
                 if (!visitedDescriptors.add(normalized)) {
@@ -1232,17 +962,15 @@ public class ScenarioService {
 
     private void scanDescriptor(Path descriptorFile, Path bundleDir, List<ScannedBundle> target) {
         String bundlePath = relativeEntryPath(bundleDir != null ? bundleDir : descriptorFile);
-        String folderPath = folderPathForBundleEntry(bundlePath, bundleDir == null);
+        String folderPath = folderPathForBundleEntry(bundlePath);
         String fallbackName = fallbackBundleName(bundlePath);
         try {
-            Format format = detectFormat(descriptorFile);
-            Scenario scenario = readScenario(descriptorFile, format);
+            Scenario scenario = bundleValidator.readScenarioDescriptor(descriptorFile);
             target.add(new ScannedBundle(
                     bundlePath,
                     bundlePath,
                     folderPath,
                     fallbackName,
-                    format,
                     descriptorFile.toAbsolutePath().normalize(),
                     bundleDir != null ? bundleDir.toAbsolutePath().normalize() : null,
                     scenario,
@@ -1254,7 +982,6 @@ public class ScenarioService {
                     bundlePath,
                     folderPath,
                     fallbackName,
-                    detectFormat(descriptorFile),
                     descriptorFile.toAbsolutePath().normalize(),
                     bundleDir != null ? bundleDir.toAbsolutePath().normalize() : null,
                     null,
@@ -1289,7 +1016,7 @@ public class ScenarioService {
                 continue;
             }
 
-            ScenarioRecord record = recordForLoaded(scanned.scenario(), scanned.format(), scanned.descriptorFile(), scanned.bundleDir());
+            ScenarioRecord record = recordForLoaded(scanned.scenario(), scanned.descriptorFile(), scanned.bundleDir());
             Scenario scenario = record.scenario();
             String scenarioId = scenario.getId();
             String name = scenario.getName() != null && !scenario.getName().isBlank() ? scenario.getName().trim() : scanned.fallbackName();
@@ -1370,15 +1097,12 @@ public class ScenarioService {
         }
     }
 
-    private String folderPathForBundleEntry(String bundlePath, boolean descriptorOnly) {
+    private String folderPathForBundleEntry(String bundlePath) {
         if (bundlePath == null || bundlePath.isBlank()) {
             return null;
         }
         int slashIndex = bundlePath.lastIndexOf('/');
         if (slashIndex < 0) {
-            return null;
-        }
-        if (!descriptorOnly && slashIndex == bundlePath.length() - 1) {
             return null;
         }
         String path = bundlePath.substring(0, slashIndex).trim();
@@ -1432,15 +1156,6 @@ public class ScenarioService {
         return "Bundle is quarantined under 'quarantine/' and cannot be used to create a swarm";
     }
 
-    private Path pathFor(String id, Format format) {
-        String fileName = sanitize(id) + (format == Format.JSON ? ".json" : ".yaml");
-        Path path = storageDir.resolve(fileName).normalize();
-        if (!path.startsWith(storageDir)) {
-            throw new IllegalArgumentException("Invalid scenario id");
-        }
-        return path;
-    }
-
     private String sanitize(String id) {
         String cleaned = Paths.get(id).getFileName().toString();
         if (!cleaned.equals(id) || cleaned.contains("..") || cleaned.isBlank()) {
@@ -1458,13 +1173,6 @@ public class ScenarioService {
             return false;
         }
         return bundleCatalog.stream().anyMatch(entry -> scenarioId.equals(entry.scenarioId()));
-    }
-
-    public static Format formatFrom(String contentType) {
-        if (contentType != null && contentType.toLowerCase().contains("yaml")) {
-            return Format.YAML;
-        }
-        return Format.JSON;
     }
 
     public Map<String, Object> getPlan(String id) {
@@ -1495,10 +1203,9 @@ public class ScenarioService {
         }
 
         Path file = scenarioDescriptorFile(id);
-        Format format = detectFormat(file);
         Scenario scenario;
         try {
-            scenario = readScenarioContent(trimmed, format);
+            scenario = bundleValidator.readScenarioDescriptorContent(trimmed);
         } catch (IOException e) {
             throw new IOException("Failed to parse scenario content: " + e.getMessage(), e);
         }
@@ -1518,8 +1225,7 @@ public class ScenarioService {
 
     public Scenario updatePlan(String id, Map<String, Object> plan) throws IOException {
         Path file = scenarioDescriptorFile(id);
-        Format format = detectFormat(file);
-        Scenario scenario = readScenario(file, format);
+        Scenario scenario = bundleValidator.readScenarioDescriptor(file);
         if (scenario.getId() == null || scenario.getId().isBlank()) {
             throw new IllegalArgumentException("Scenario id must not be null or blank");
         }
@@ -1531,9 +1237,7 @@ public class ScenarioService {
         Map<String, Object> effectivePlan = plan == null || plan.isEmpty() ? null : plan;
         scenario.setPlan(effectivePlan);
 
-        (format == Format.JSON ? jsonMapper : yamlMapper)
-            .writerWithDefaultPrettyPrinter()
-            .writeValue(file.toFile(), scenario);
+        yamlMapper.writerWithDefaultPrettyPrinter().writeValue(file.toFile(), scenario);
 
         reload();
         ScenarioRecord record = scenarios.get(id);
@@ -1683,11 +1387,6 @@ public class ScenarioService {
         Files.delete(file);
     }
 
-    /**
-     * Reads {@code variables.yaml} for a scenario bundle.
-     *
-     * @return raw YAML if present, otherwise {@code null}
-     */
     public String readVariablesRaw(String id) throws IOException {
         ScenarioRecord record = scenarios.get(id);
         if (record == null) {
@@ -1697,7 +1396,7 @@ public class ScenarioService {
         if (bundle == null || !Files.isDirectory(bundle)) {
             return null;
         }
-        Path file = bundle.resolve("variables.yaml").normalize();
+        Path file = ScenarioBundleLayout.variablesFile(bundle);
         if (!file.startsWith(bundle)) {
             throw new IllegalArgumentException("Invalid variables path");
         }
@@ -1708,247 +1407,11 @@ public class ScenarioService {
     }
 
     public VariablesDocument parseVariables(String raw) {
-        if (raw == null || raw.isBlank()) {
-            throw new IllegalArgumentException("variables.yaml must not be empty");
-        }
-        try {
-            VariablesDocument doc = readVariablesDocument(raw);
-            if (doc == null) {
-                throw new IllegalArgumentException("variables.yaml parsed as null");
-            }
-            return doc;
-        } catch (Exception e) {
-            throw new IllegalArgumentException("Failed to parse variables.yaml", e);
-        }
+        return bundleValidator.parseVariables(raw);
     }
 
     public VariablesValidationResult validateVariables(String scenarioId, VariablesDocument doc) throws IOException {
-        Objects.requireNonNull(doc, "doc");
-        List<String> warnings = new ArrayList<>();
-
-        if (doc.version() != 1) {
-            throw new IllegalArgumentException("variables.yaml version must be 1");
-        }
-        List<VariablesDocument.VariableDefinition> definitions =
-            doc.definitions() == null ? List.of() : doc.definitions();
-        if (definitions.isEmpty()) {
-            throw new IllegalArgumentException("variables.yaml must contain non-empty definitions[]");
-        }
-
-        Map<String, VariablesDocument.VariableDefinition> byName = new LinkedHashMap<>();
-        for (VariablesDocument.VariableDefinition def : definitions) {
-            if (def == null || def.name() == null || def.name().isBlank()) {
-                throw new IllegalArgumentException("variables.yaml definitions[].name must not be blank");
-            }
-            String name = def.name().trim();
-            if (byName.put(name, def) != null) {
-                throw new IllegalArgumentException("Duplicate variable definition name '%s'".formatted(name));
-            }
-            VariablesDocument.Scope scope = def.scope();
-            if (scope == null) {
-                throw new IllegalArgumentException("Variable '%s' missing scope".formatted(name));
-            }
-            VariablesDocument.Type type = def.type();
-            if (type == null) {
-                throw new IllegalArgumentException("Variable '%s' missing type".formatted(name));
-            }
-        }
-
-        List<VariablesDocument.Profile> profiles = doc.profiles() == null ? List.of() : doc.profiles();
-        Map<String, VariablesDocument.Profile> profilesById = new LinkedHashMap<>();
-        for (VariablesDocument.Profile profile : profiles) {
-            if (profile == null || profile.id() == null || profile.id().isBlank()) {
-                throw new IllegalArgumentException("variables.yaml profiles[].id must not be blank");
-            }
-            String id = profile.id().trim();
-            if (profilesById.put(id, profile) != null) {
-                throw new IllegalArgumentException("Duplicate profile id '%s'".formatted(id));
-            }
-        }
-
-        VariablesDocument.Values values = doc.values();
-        Map<String, Map<String, Object>> global =
-            values == null || values.global() == null ? Map.of() : values.global();
-        Map<String, Map<String, Map<String, Object>>> sut =
-            values == null || values.sut() == null ? Map.of() : values.sut();
-
-        Set<String> knownProfiles = profilesById.keySet();
-        if (!knownProfiles.isEmpty()) {
-            for (String profileId : global.keySet()) {
-                if (!knownProfiles.contains(profileId)) {
-                    throw new IllegalArgumentException(
-                        "values.global contains unknown profile '%s' (not present in profiles[])".formatted(profileId));
-                }
-            }
-            for (String profileId : sut.keySet()) {
-                if (!knownProfiles.contains(profileId)) {
-                    throw new IllegalArgumentException(
-                        "values.sut contains unknown profile '%s' (not present in profiles[])".formatted(profileId));
-                }
-            }
-        }
-
-        Set<String> allowedSutIds = new LinkedHashSet<>(listBundleSutDirectoryIds(scenarioId, false));
-        for (Map.Entry<String, Map<String, Map<String, Object>>> entry : sut.entrySet()) {
-            String profileId = entry.getKey();
-            Map<String, Map<String, Object>> perSut = entry.getValue() == null ? Map.of() : entry.getValue();
-            for (String sutId : perSut.keySet()) {
-                if (!allowedSutIds.contains(sutId)) {
-                    warnings.add("values.sut[%s] references unknown sutId '%s' (not present in bundle sut/)".formatted(
-                        profileId, sutId));
-                }
-            }
-        }
-
-        // Reject unknown variable keys and enforce types.
-        validateValueMaps(byName, global, "values.global");
-        for (Map.Entry<String, Map<String, Map<String, Object>>> entry : sut.entrySet()) {
-            String profileId = entry.getKey();
-            Map<String, Map<String, Object>> perSut = entry.getValue() == null ? Map.of() : entry.getValue();
-            for (Map.Entry<String, Map<String, Object>> sutEntry : perSut.entrySet()) {
-                validateValueMap(byName, sutEntry.getValue(), "values.sut[%s][%s]".formatted(profileId, sutEntry.getKey()));
-            }
-        }
-
-        boolean hasGlobal = byName.values().stream().anyMatch(d -> d.scope() == VariablesDocument.Scope.GLOBAL);
-        boolean hasSut = byName.values().stream().anyMatch(d -> d.scope() == VariablesDocument.Scope.SUT);
-        if ((hasGlobal || hasSut) && profilesById.isEmpty()) {
-            throw new IllegalArgumentException("variables.yaml must declare profiles[] when definitions[] are present");
-        }
-
-        List<String> requiredGlobalVars = byName.values().stream()
-            .filter(def -> def.scope() == VariablesDocument.Scope.GLOBAL)
-            .filter(def -> Boolean.TRUE.equals(def.required()))
-            .map(def -> def.name().trim())
-            .toList();
-        List<String> requiredSutVars = byName.values().stream()
-            .filter(def -> def.scope() == VariablesDocument.Scope.SUT)
-            .filter(def -> Boolean.TRUE.equals(def.required()))
-            .map(def -> def.name().trim())
-            .toList();
-
-        if (!profilesById.isEmpty()) {
-            for (String profileId : profilesById.keySet()) {
-                if (!requiredGlobalVars.isEmpty()) {
-                    Map<String, Object> perProfile = global.getOrDefault(profileId, Map.of());
-                    List<String> missing = requiredGlobalVars.stream()
-                        .filter(name -> perProfile.get(name) == null)
-                        .toList();
-                    if (!missing.isEmpty()) {
-                        warnings.add("profile '%s' is missing required global variables: %s".formatted(
-                            profileId, String.join(", ", missing)));
-                    }
-                }
-                if (!requiredSutVars.isEmpty()) {
-                    Map<String, Map<String, Object>> perProfile = sut.getOrDefault(profileId, Map.of());
-                    for (String sutId : allowedSutIds) {
-                        Map<String, Object> perSut = perProfile.getOrDefault(sutId, Map.of());
-                        List<String> missing = requiredSutVars.stream()
-                            .filter(name -> perSut.get(name) == null)
-                            .toList();
-                        if (!missing.isEmpty()) {
-                            warnings.add("profile '%s' sut '%s' is missing required sut variables: %s".formatted(
-                                profileId, sutId, String.join(", ", missing)));
-                        }
-                    }
-                }
-            }
-        }
-
-        return new VariablesValidationResult(List.copyOf(warnings));
-    }
-
-    private void validateValueMaps(
-        Map<String, VariablesDocument.VariableDefinition> byName,
-        Map<String, Map<String, Object>> valuesByProfile,
-        String label
-    ) {
-        if (valuesByProfile == null || valuesByProfile.isEmpty()) {
-            return;
-        }
-        for (Map.Entry<String, Map<String, Object>> entry : valuesByProfile.entrySet()) {
-            validateValueMap(byName, entry.getValue(), "%s[%s]".formatted(label, entry.getKey()));
-        }
-    }
-
-    private void validateValueMap(
-        Map<String, VariablesDocument.VariableDefinition> byName,
-        Map<String, Object> values,
-        String label
-    ) {
-        Map<String, Object> map = values == null ? Map.of() : values;
-        for (Map.Entry<String, Object> entry : map.entrySet()) {
-            String key = entry.getKey();
-            if (key == null || key.isBlank()) {
-                throw new IllegalArgumentException("%s contains blank variable name".formatted(label));
-            }
-            VariablesDocument.VariableDefinition def = byName.get(key);
-            if (def == null) {
-                throw new IllegalArgumentException("%s contains unknown variable '%s'".formatted(label, key));
-            }
-            Object value = entry.getValue();
-            if (value == null) {
-                continue;
-            }
-            requireType(def, value, "%s.%s".formatted(label, key));
-        }
-    }
-
-    private void requireType(VariablesDocument.VariableDefinition def, Object value, String label) {
-        VariablesDocument.Type type = def.type();
-        switch (type) {
-            case STRING -> {
-                if (!(value instanceof String)) {
-                    throw new IllegalArgumentException("%s must be a string".formatted(label));
-                }
-            }
-            case BOOL -> {
-                if (!(value instanceof Boolean)) {
-                    throw new IllegalArgumentException("%s must be a bool".formatted(label));
-                }
-            }
-            case INT -> {
-                if (!isIntValue(value)) {
-                    throw new IllegalArgumentException("%s must be an int".formatted(label));
-                }
-            }
-            case FLOAT -> {
-                if (!(value instanceof Number)) {
-                    throw new IllegalArgumentException("%s must be a float".formatted(label));
-                }
-            }
-            case OBJECT -> {
-                if (!(value instanceof Map<?, ?>)) {
-                    throw new IllegalArgumentException("%s must be an object".formatted(label));
-                }
-            }
-        }
-    }
-
-    private static boolean isIntValue(Object value) {
-        if (!(value instanceof Number number)) {
-            return false;
-        }
-        if (number instanceof Integer || number instanceof Short || number instanceof Byte) {
-            return true;
-        }
-        if (number instanceof Long l) {
-            return l >= Integer.MIN_VALUE && l <= Integer.MAX_VALUE;
-        }
-        if (number instanceof java.math.BigInteger bigInteger) {
-            return bigInteger.compareTo(java.math.BigInteger.valueOf(Integer.MIN_VALUE)) >= 0
-                && bigInteger.compareTo(java.math.BigInteger.valueOf(Integer.MAX_VALUE)) <= 0;
-        }
-        if (number instanceof java.math.BigDecimal bigDecimal) {
-            java.math.BigDecimal normalized = bigDecimal.stripTrailingZeros();
-            if (normalized.scale() > 0) {
-                return false;
-            }
-            return normalized.compareTo(java.math.BigDecimal.valueOf(Integer.MIN_VALUE)) >= 0
-                && normalized.compareTo(java.math.BigDecimal.valueOf(Integer.MAX_VALUE)) <= 0;
-        }
-        // Reject Float/Double and other exotic Number impls to keep int strict.
-        return false;
+        return bundleValidator.validateVariables(doc, listCanonicalBundleSutIds(scenarioId));
     }
 
     public VariablesResolutionResult resolveVariables(
@@ -2023,13 +1486,13 @@ public class ScenarioService {
     public VariablesValidationResult writeVariables(String scenarioId, String raw) throws IOException {
         synchronized (variablesLock) {
             if (raw == null || raw.isBlank()) {
-                throw new IllegalArgumentException("variables.yaml must not be empty");
+                throw new IllegalArgumentException("%s must not be empty".formatted(ScenarioBundleLayout.VARIABLES_FILE));
             }
             VariablesDocument doc = parseVariables(raw);
             VariablesValidationResult validation = validateVariables(scenarioId, doc);
 
             Path bundle = bundleDirFor(scenarioId);
-            Path file = bundle.resolve("variables.yaml").normalize();
+            Path file = ScenarioBundleLayout.variablesFile(bundle);
             if (!file.startsWith(bundle)) {
                 throw new IllegalArgumentException("Invalid variables path");
             }
@@ -2040,40 +1503,15 @@ public class ScenarioService {
     }
 
     public List<String> listSutIds(String scenarioId) throws IOException {
-        return listBundleSutDirectoryIds(scenarioId, true);
+        return listCanonicalBundleSutIds(scenarioId);
     }
 
-    private List<String> listBundleSutDirectoryIds(String scenarioId, boolean requireDescriptor) throws IOException {
-        Path bundle = bundleDirFor(scenarioId);
-        Path sutDir = bundle.resolve("sut").normalize();
-        if (!sutDir.startsWith(bundle) || !Files.isDirectory(sutDir)) {
-            return List.of();
-        }
-        List<String> ids = new ArrayList<>();
-        try (DirectoryStream<Path> stream = Files.newDirectoryStream(sutDir)) {
-            for (Path path : stream) {
-                if (!Files.isDirectory(path)) {
-                    continue;
-                }
-                String id = path.getFileName().toString();
-                if (id.isBlank()) {
-                    continue;
-                }
-                if (requireDescriptor) {
-                    if (!hasBundleSutDescriptor(path)) {
-                        continue;
-                    }
-                    try {
-                        readBundleSutDescriptor(path, id);
-                    } catch (IllegalArgumentException e) {
-                        throw invalidBundleSutDescriptor(scenarioId, id, e);
-                    }
-                }
-                ids.add(id);
-            }
-        }
-        ids.sort(String::compareTo);
-        return List.copyOf(ids);
+    private List<String> listCanonicalBundleSutIds(String scenarioId) throws IOException {
+        return listCanonicalBundleSutIds(bundleDirFor(scenarioId), scenarioId);
+    }
+
+    private List<String> listCanonicalBundleSutIds(Path bundle, String scenarioId) throws IOException {
+        return bundleValidator.listCanonicalBundleSutIds(bundle, scenarioId);
     }
 
     public SutEnvironment readBundleSut(String scenarioId, String sutId) throws IOException {
@@ -2090,48 +1528,11 @@ public class ScenarioService {
             throw new IllegalArgumentException("SUT '%s' not found in bundle for scenario '%s'".formatted(sutId, scenarioId));
         }
         try {
-            return readBundleSutDescriptor(sutDir, sutId);
+            return bundleValidator.readBundleSutDescriptor(sutDir, sutId);
         } catch (IllegalArgumentException e) {
             throw new IllegalArgumentException(
                 "Failed to parse SUT '%s' for scenario '%s': %s".formatted(sutId, scenarioId, e.getMessage()), e);
         }
-    }
-
-    private boolean hasBundleSutDescriptor(Path sutDir) {
-        Path file = sutDir.resolve(SUT_DESCRIPTOR_FILE).normalize();
-        return file.startsWith(sutDir) && Files.isRegularFile(file);
-    }
-
-    private SutEnvironment readBundleSutDescriptor(Path sutDir, String sutId) {
-        Path file = sutDir.resolve(SUT_DESCRIPTOR_FILE).normalize();
-        if (!file.startsWith(sutDir) || !Files.isRegularFile(file)) {
-            throw new IllegalArgumentException("SUT '%s' has no sut.yaml".formatted(sutId));
-        }
-        try {
-            SutEnvironment env = readSutEnvironment(file);
-            if (env == null) {
-                throw new IllegalArgumentException("sut.yaml parsed as null");
-            }
-            if (env.id() == null || env.id().isBlank()) {
-                throw new IllegalArgumentException("sut.yaml id must not be blank");
-            }
-            if (!sutId.equals(env.id())) {
-                throw new IllegalArgumentException(
-                    "sut.yaml id '%s' does not match directory name '%s'".formatted(env.id(), sutId));
-            }
-            return env;
-        } catch (IOException e) {
-            throw new IllegalArgumentException("Failed to parse sut.yaml", e);
-        }
-    }
-
-    private IllegalArgumentException invalidBundleSutDescriptor(String scenarioId, String sutId, IllegalArgumentException cause) {
-        return new IllegalArgumentException(
-            "Failed to parse bundle-local SUT '%s' in scenario '%s': %s".formatted(
-                sutId,
-                scenarioId,
-                cause.getMessage()),
-            cause);
     }
 
     /**
@@ -2152,7 +1553,7 @@ public class ScenarioService {
         if (!Files.isDirectory(sutDir)) {
             return null;
         }
-        Path file = sutDir.resolve(SUT_DESCRIPTOR_FILE).normalize();
+        Path file = ScenarioBundleLayout.sutDescriptorFile(sutDir);
         if (!file.startsWith(sutDir) || !Files.isRegularFile(file)) {
             return null;
         }
@@ -2170,16 +1571,11 @@ public class ScenarioService {
 
         SutEnvironment env;
         try {
-            env = readSutEnvironmentYaml(raw);
+            env = bundleValidator.readSutEnvironmentYaml(raw);
         } catch (Exception e) {
             throw new IllegalArgumentException("Failed to parse sut.yaml", e);
         }
-        if (env == null || env.id() == null || env.id().isBlank()) {
-            throw new IllegalArgumentException("sut.yaml id must not be blank");
-        }
-        if (!sutId.equals(env.id())) {
-            throw new IllegalArgumentException("sut.yaml id '%s' does not match directory name '%s'".formatted(env.id(), sutId));
-        }
+        bundleValidator.requireCanonicalSutDescriptor(env, sutId);
 
         Path bundle = bundleDirFor(scenarioId);
         Path sutDir = bundle.resolve("sut").resolve(sutId).normalize();
@@ -2187,7 +1583,7 @@ public class ScenarioService {
             throw new IllegalArgumentException("Invalid sutId");
         }
         Files.createDirectories(sutDir);
-        Path file = sutDir.resolve(SUT_DESCRIPTOR_FILE).normalize();
+        Path file = ScenarioBundleLayout.sutDescriptorFile(sutDir);
         if (!file.startsWith(sutDir)) {
             throw new IllegalArgumentException("Invalid sut.yaml path");
         }
@@ -2237,7 +1633,7 @@ public class ScenarioService {
                 throw new IllegalArgumentException("Scenario id must not be null or blank");
             }
             if (hasDiscoveredScenarioId(id)) {
-                throw new BundleValidationException(duplicateScenarioValidationResult(id));
+                throw new BundleValidationException(bundleValidator.duplicateScenarioValidationResult(id));
             }
             writeBundle(uploaded, defaultUploadBundleDir(id));
             reload();
@@ -2259,12 +1655,9 @@ public class ScenarioService {
         }
         Path bundleDir = record.bundleDir();
         if (bundleDir != null && Files.isDirectory(bundleDir)) {
-            List<String> candidates = List.of("scenario.yaml", "scenario.yml", "scenario.json");
-            for (String name : candidates) {
-                Path candidate = bundleDir.resolve(name);
-                if (Files.isRegularFile(candidate)) {
-                    return candidate;
-                }
+            Path candidate = scenarioDescriptorFile(bundleDir);
+            if (Files.isRegularFile(candidate)) {
+                return candidate;
             }
         }
         throw new IllegalArgumentException("Scenario descriptor not found for scenario '%s'".formatted(id));
@@ -2299,7 +1692,7 @@ public class ScenarioService {
         try {
             return unpackBundle(zipBytes, expectedId);
         } catch (IllegalArgumentException e) {
-            throw new BundleValidationException(uploadedBundleValidationResult(e));
+            throw new BundleValidationException(bundleValidator.uploadedBundleValidationResult(e));
         }
     }
 
@@ -2315,45 +1708,12 @@ public class ScenarioService {
                 null,
                 List.of());
         } catch (IllegalArgumentException e) {
-            return uploadedBundleValidationResult(e);
+            return bundleValidator.uploadedBundleValidationResult(e);
         } finally {
             if (uploaded != null) {
                 cleanupUploaded(uploaded);
             }
         }
-    }
-
-    private BundleValidationResult uploadedBundleValidationResult(Exception e) {
-        String message = e == null ? null : e.getMessage();
-        ValidationFinding finding = finding(
-            validationCategory(validationCode(message)),
-            validationCode(message),
-            ValidationSeverity.ERROR,
-            validationPath(message),
-            cleanError(message),
-            validationFix(message));
-        return BundleValidationResult.of(
-            BundleValidationSource.UPLOADED_ZIP,
-            null,
-            null,
-            null,
-            List.of(finding));
-    }
-
-    private BundleValidationResult duplicateScenarioValidationResult(String scenarioId) {
-        ValidationFinding finding = finding(
-            ValidationCategory.SCENARIO,
-            ValidationCodes.DUPLICATE_SCENARIO_ID,
-            ValidationSeverity.ERROR,
-            "scenario.yaml:id",
-            "Scenario '%s' already exists.".formatted(scenarioId),
-            "Rename the scenario id or replace the existing bundle explicitly.");
-        return BundleValidationResult.of(
-            BundleValidationSource.UPLOADED_ZIP,
-            null,
-            null,
-            scenarioId,
-            List.of(finding));
     }
 
     public BundleValidationResult validateExistingBundle(String bundleKey) throws IOException {
@@ -2364,13 +1724,7 @@ public class ScenarioService {
 
         ScenarioRecord record = entry.scenarioRecord();
         if (record == null) {
-            ValidationFinding finding = finding(
-                ValidationCategory.BUNDLE,
-                ValidationCodes.BUNDLE_DEFUNCT,
-                ValidationSeverity.ERROR,
-                entry.bundlePath() != null ? entry.bundlePath() : "bundle",
-                cleanError(entry.defunctReason()),
-                "Repair the scenario descriptor, then reload Scenario Manager.");
+            ValidationFinding finding = bundleValidator.defunctBundleFinding(entry.bundlePath(), entry.defunctReason());
             return BundleValidationResult.of(
                 BundleValidationSource.SCENARIO_MANAGER,
                 entry.bundleKey(),
@@ -2395,22 +1749,10 @@ public class ScenarioService {
         }
         List<ValidationFinding> findings = new ArrayList<>();
         if (entry.duplicateIdConflict()) {
-            findings.add(finding(
-                ValidationCategory.SCENARIO,
-                ValidationCodes.DUPLICATE_SCENARIO_ID,
-                ValidationSeverity.ERROR,
-                "scenario.yaml:id",
-                duplicateScenarioReason(entry.scenarioId()),
-                "Rename one scenario id or move one conflicting bundle to quarantine."));
+            findings.add(bundleValidator.duplicateScenarioFinding(entry.scenarioId(), duplicateScenarioReason(entry.scenarioId())));
         }
         if (entry.quarantined()) {
-            findings.add(finding(
-                ValidationCategory.BUNDLE,
-                ValidationCodes.BUNDLE_DEFUNCT,
-                ValidationSeverity.ERROR,
-                entry.bundlePath() != null ? entry.bundlePath() : "bundle",
-                quarantineReason(),
-                "Move the bundle out of quarantine before using it to create a swarm."));
+            findings.add(bundleValidator.quarantinedFinding(entry.bundlePath(), quarantineReason()));
         }
         return List.copyOf(findings);
     }
@@ -2433,610 +1775,13 @@ public class ScenarioService {
         String bundlePath,
         List<ValidationFinding> seedFindings
     ) throws IOException {
-        List<ValidationFinding> findings = new ArrayList<>(seedFindings == null ? List.of() : seedFindings);
-        Scenario resolved = applyDefaultImageTag(scenario);
-        String scenarioId = resolved != null ? resolved.getId() : null;
-
-        if (resolved == null) {
-            findings.add(finding(
-                ValidationCategory.SCENARIO,
-                ValidationCodes.SCENARIO_DESCRIPTOR_INVALID,
-                ValidationSeverity.ERROR,
-                "scenario.yaml",
-                "Scenario descriptor could not be parsed.",
-                "Create a valid scenario.yaml or scenario.json descriptor."));
-        } else {
-            DefunctResult defunct = determineDefunct(resolved);
-            if (defunct.defunct()) {
-                findings.add(defunctFinding(defunct.reason()));
-            }
-        }
-
-        if (bundleRoot != null && Files.isDirectory(bundleRoot) && scenarioId != null && !scenarioId.isBlank()) {
-            try {
-                validateBundleExtras(scenarioId, bundleRoot);
-            } catch (IllegalArgumentException e) {
-                findings.add(finding(
-                    validationCategory(validationCode(e.getMessage())),
-                    validationCode(e.getMessage()),
-                    ValidationSeverity.ERROR,
-                    validationPath(e.getMessage()),
-                    cleanError(e.getMessage()),
-                    validationFix(e.getMessage())));
-            }
-            TemplateValidationResult templates = validateTemplates(resolved, bundleRoot);
-            findings.addAll(templates.findings());
-            findings.addAll(validateVariableReferences(bundleRoot));
-            findings.addAll(validateAuthContracts(bundleRoot));
-        }
-
-        return BundleValidationResult.of(
+        return bundleValidator.validate(new BundleValidationInput(
             source,
+            bundleRoot,
             bundleKey,
             bundlePath,
-            scenarioId,
-            List.copyOf(findings));
-    }
-
-    private TemplateValidationResult validateTemplates(Scenario scenario, Path bundleRoot) throws IOException {
-        List<ValidationFinding> findings = new ArrayList<>();
-        if (bundleRoot == null || !Files.isDirectory(bundleRoot)) {
-            findings.add(finding(
-                ValidationCategory.BUNDLE,
-                ValidationCodes.BUNDLE_DIRECTORY_MISSING,
-                ValidationSeverity.ERROR,
-                "bundle",
-                "Scenario bundle directory is missing.",
-                "Restore the bundle directory or re-import the scenario bundle."));
-            return new TemplateValidationResult(false, scenario != null ? scenario.getId() : null, List.copyOf(findings), List.of(), List.of());
-        }
-
-        List<String> templateFiles = listRelativeFiles(bundleRoot, "templates/http");
-        Map<String, List<String>> callIds = new LinkedHashMap<>();
-        for (String relativePath : templateFiles) {
-            Path file = bundleRoot.resolve(relativePath).normalize();
-            Map<?, ?> doc;
-            try {
-                doc = readStructuredMap(file);
-            } catch (Exception e) {
-                findings.add(finding(
-                    ValidationCategory.TEMPLATES,
-                    ValidationCodes.TEMPLATE_PARSE_ERROR,
-                    ValidationSeverity.ERROR,
-                    relativePath,
-                    "Template could not be parsed: " + cleanError(e.getMessage()),
-                    "Fix the template YAML/JSON syntax."));
-                continue;
-            }
-
-            for (String field : List.of("protocol", "serviceId", "callId", "method", "pathTemplate")) {
-                Object value = doc.get(field);
-                if (!(value instanceof String text) || text.isBlank()) {
-                    findings.add(finding(
-                        ValidationCategory.TEMPLATES,
-                        ValidationCodes.TEMPLATE_REQUIRED_FIELD_MISSING,
-                        ValidationSeverity.ERROR,
-                        relativePath + ":" + field,
-                        "HTTP template is missing required field '" + field + "'.",
-                        "Add '" + field + "' to the HTTP template."));
-                }
-            }
-
-            Object protocol = doc.get("protocol");
-            if (protocol instanceof String text && !text.equalsIgnoreCase("HTTP")) {
-                findings.add(finding(
-                    ValidationCategory.TEMPLATES,
-                    ValidationCodes.TEMPLATE_PROTOCOL_MISMATCH,
-                    ValidationSeverity.ERROR,
-                    relativePath + ":protocol",
-                    "Template under templates/http must declare protocol HTTP.",
-                    "Set protocol: HTTP or move the template under the matching protocol folder."));
-            }
-
-            Object callId = doc.get("callId");
-            if (callId instanceof String text && !text.isBlank()) {
-                callIds.computeIfAbsent(text.trim(), ignored -> new ArrayList<>()).add(relativePath);
-            }
-        }
-
-        for (Map.Entry<String, List<String>> entry : callIds.entrySet()) {
-            if (entry.getValue().size() > 1) {
-                findings.add(finding(
-                    ValidationCategory.TEMPLATES,
-                    ValidationCodes.TEMPLATE_CALL_ID_DUPLICATE,
-                    ValidationSeverity.ERROR,
-                    String.join(", ", entry.getValue()),
-                    "HTTP template callId '" + entry.getKey() + "' is defined more than once.",
-                    "Keep one template per callId or rename the duplicate callIds."));
-            }
-        }
-
-        Set<String> referenced = referencedHttpCallIds(scenario);
-        Set<String> defined = callIds.keySet();
-        for (String callId : referenced) {
-            if (!defined.contains(callId)) {
-                findings.add(finding(
-                    ValidationCategory.TEMPLATES,
-                    ValidationCodes.TEMPLATE_CALL_ID_MISSING,
-                    ValidationSeverity.ERROR,
-                    "scenario.yaml:plan",
-                    "Scenario references HTTP callId '" + callId + "' but no matching template exists.",
-                    "Add templates/http/<service>/" + callId + ".yaml or update the x-ph-call-id reference."));
-            }
-        }
-
-        boolean ok = findings.stream().noneMatch(f -> f.severity() == ValidationSeverity.ERROR);
-        return new TemplateValidationResult(
-            ok,
-            scenario != null ? scenario.getId() : null,
-            List.copyOf(findings),
-            List.copyOf(referenced),
-            List.copyOf(defined));
-    }
-
-    private List<ValidationFinding> validateVariableReferences(Path bundleRoot) throws IOException {
-        if (bundleRoot == null || !Files.isDirectory(bundleRoot)) {
-            return List.of();
-        }
-
-        Map<String, Set<String>> referencesByPath = collectVariableReferences(bundleRoot);
-        if (referencesByPath.isEmpty()) {
-            return List.of();
-        }
-
-        Path variablesFile = bundleRoot.resolve("variables.yaml").normalize();
-        if (!variablesFile.startsWith(bundleRoot) || !Files.isRegularFile(variablesFile)) {
-            Set<String> references = flattenReferences(referencesByPath);
-            return List.of(finding(
-                ValidationCategory.VARIABLES,
-                ValidationCodes.VARIABLES_MISSING,
-                ValidationSeverity.ERROR,
-                "variables.yaml",
-                "Bundle references vars.%s but variables.yaml is missing.".formatted(String.join(", vars.", references)),
-                "Create variables.yaml with definitions for the referenced vars."));
-        }
-
-        Set<String> defined;
-        try {
-            VariablesDocument doc = parseVariables(Files.readString(variablesFile));
-            defined = doc.definitions() == null
-                ? Set.of()
-                : doc.definitions().stream()
-                    .filter(Objects::nonNull)
-                    .map(VariablesDocument.VariableDefinition::name)
-                    .filter(Objects::nonNull)
-                    .map(String::trim)
-                    .filter(name -> !name.isBlank())
-                    .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
-        } catch (RuntimeException e) {
-            return List.of();
-        }
-
-        List<ValidationFinding> findings = new ArrayList<>();
-        for (Map.Entry<String, Set<String>> entry : referencesByPath.entrySet()) {
-            for (String reference : entry.getValue()) {
-                if (!defined.contains(reference)) {
-                    findings.add(finding(
-                        ValidationCategory.VARIABLES,
-                        ValidationCodes.VARIABLE_REFERENCE_UNKNOWN,
-                        ValidationSeverity.ERROR,
-                        entry.getKey(),
-                        "vars.%s is not defined in variables.yaml.".formatted(reference),
-                        "Add a variables.yaml definition named '%s' or correct the vars reference.".formatted(reference)));
-                }
-            }
-        }
-        return List.copyOf(findings);
-    }
-
-    private Map<String, Set<String>> collectVariableReferences(Path bundleRoot) throws IOException {
-        Map<String, Set<String>> referencesByPath = new LinkedHashMap<>();
-        for (String relativePath : bundleValidationTextFiles(bundleRoot)) {
-            Path file = bundleRoot.resolve(relativePath).normalize();
-            String text = Files.readString(file);
-            Matcher matcher = VAR_REFERENCE_PATTERN.matcher(text);
-            while (matcher.find()) {
-                referencesByPath
-                    .computeIfAbsent(relativePath, ignored -> new LinkedHashSet<>())
-                    .add(matcher.group(1));
-            }
-        }
-        return referencesByPath;
-    }
-
-    private Set<String> flattenReferences(Map<String, Set<String>> referencesByPath) {
-        Set<String> references = new LinkedHashSet<>();
-        referencesByPath.values().forEach(references::addAll);
-        return references;
-    }
-
-    private List<ValidationFinding> validateAuthContracts(Path bundleRoot) throws IOException {
-        if (bundleRoot == null || !Files.isDirectory(bundleRoot)) {
-            return List.of();
-        }
-
-        List<AuthRefUsage> refs = new ArrayList<>();
-        List<ValidationFinding> findings = new ArrayList<>();
-        for (String relativePath : listRelativeFiles(bundleRoot, "templates")) {
-            if (!isStructuredBundleFile(relativePath)) {
-                continue;
-            }
-            Path file = bundleRoot.resolve(relativePath).normalize();
-            Map<?, ?> doc;
-            try {
-                doc = readStructuredMap(file);
-            } catch (Exception e) {
-                if (!relativePath.startsWith("templates/http/")) {
-                    findings.add(finding(
-                        ValidationCategory.TEMPLATES,
-                        ValidationCodes.TEMPLATE_PARSE_ERROR,
-                        ValidationSeverity.ERROR,
-                        relativePath,
-                        "Template could not be parsed: " + cleanError(e.getMessage()),
-                        "Fix the template YAML/JSON syntax."));
-                }
-                continue;
-            }
-            boolean hasInlineAuth = doc.containsKey("auth");
-            boolean hasAuthRef = doc.containsKey("authRef");
-            if (hasInlineAuth) {
-                findings.add(finding(
-                    ValidationCategory.AUTH,
-                    ValidationCodes.AUTH_REF_INLINE_NOT_ALLOWED,
-                    ValidationSeverity.ERROR,
-                    relativePath + ":auth",
-                    "Template uses inline auth, but bundle auth must use authRef.",
-                    "Replace auth with authRef and declare the profile in authProfiles.yaml."));
-            }
-            if (hasInlineAuth && hasAuthRef) {
-                findings.add(finding(
-                    ValidationCategory.AUTH,
-                    ValidationCodes.AUTH_REF_INLINE_NOT_ALLOWED,
-                    ValidationSeverity.ERROR,
-                    relativePath + ":authRef",
-                    "Template declares both auth and authRef.",
-                    "Keep authRef only and remove inline auth."));
-            }
-            if (hasAuthRef) {
-                refs.add(authRefUsage(relativePath, doc.get("authRef"), findings));
-            }
-        }
-
-        refs.removeIf(Objects::isNull);
-        Path authProfiles = resolveAuthProfilesFile(bundleRoot);
-        if (!refs.isEmpty() && authProfiles == null) {
-            findings.add(finding(
-                ValidationCategory.AUTH,
-                ValidationCodes.AUTH_PROFILES_MISSING,
-                ValidationSeverity.ERROR,
-                "authProfiles.yaml",
-                "Templates declare authRef but authProfiles.yaml is missing.",
-                "Create authProfiles.yaml in the bundle root with a profiles map."));
-            return List.copyOf(findings);
-        }
-        if (authProfiles == null) {
-            return List.copyOf(findings);
-        }
-
-        AuthProfilesInfo profiles = readAuthProfiles(authProfiles, bundleRoot, findings);
-        if (profiles == null) {
-            return List.copyOf(findings);
-        }
-
-        for (AuthRefUsage ref : refs) {
-            if (ref.profileId() == null || ref.profileId().isBlank() || !profiles.profileIds().contains(ref.profileId())) {
-                findings.add(finding(
-                    ValidationCategory.AUTH,
-                    ValidationCodes.AUTH_REF_PROFILE_MISSING,
-                    ValidationSeverity.ERROR,
-                    ref.path() + ":authRef.profileId",
-                    "authRef.profileId '%s' is not declared in authProfiles.yaml.".formatted(nullToBlank(ref.profileId())),
-                    "Add profile '%s' to authProfiles.yaml or correct authRef.profileId.".formatted(nullToBlank(ref.profileId()))));
-            }
-        }
-        return List.copyOf(findings);
-    }
-
-    private AuthRefUsage authRefUsage(String relativePath, Object value, List<ValidationFinding> findings) {
-        if (!(value instanceof Map<?, ?> map)) {
-            findings.add(finding(
-                ValidationCategory.AUTH,
-                ValidationCodes.AUTH_REF_PROFILE_MISSING,
-                ValidationSeverity.ERROR,
-                relativePath + ":authRef",
-                "authRef must be an object with profileId and applyAs.",
-                "Use authRef.profileId and authRef.applyAs."));
-            return null;
-        }
-        String profileId = stringValue(map.get("profileId"));
-        String applyAs = stringValue(map.get("applyAs"));
-        if (profileId == null || profileId.isBlank()) {
-            findings.add(finding(
-                ValidationCategory.AUTH,
-                ValidationCodes.AUTH_REF_PROFILE_MISSING,
-                ValidationSeverity.ERROR,
-                relativePath + ":authRef.profileId",
-                "authRef.profileId must not be blank.",
-                "Set authRef.profileId to a profile declared in authProfiles.yaml."));
-        }
-        try {
-            AuthApplyAs.parse(applyAs);
-        } catch (IllegalArgumentException e) {
-            findings.add(finding(
-                ValidationCategory.AUTH,
-                ValidationCodes.AUTH_REF_APPLY_AS_INVALID,
-                ValidationSeverity.ERROR,
-                relativePath + ":authRef.applyAs",
-                "authRef.applyAs '%s' is not supported.".formatted(nullToBlank(applyAs)),
-                "Use one of: %s.".formatted(String.join(", ", supportedAuthApplyAsValues()))));
-        }
-        return new AuthRefUsage(relativePath, profileId);
-    }
-
-    private AuthProfilesInfo readAuthProfiles(Path authProfiles, Path bundleRoot, List<ValidationFinding> findings) {
-        String relativePath = bundleRoot.relativize(authProfiles).toString().replace('\\', '/');
-        Map<?, ?> doc;
-        try {
-            doc = readStructuredMap(authProfiles);
-        } catch (Exception e) {
-            findings.add(finding(
-                ValidationCategory.AUTH,
-                ValidationCodes.AUTH_PROFILES_INVALID,
-                ValidationSeverity.ERROR,
-                relativePath,
-                "authProfiles.yaml could not be parsed: " + cleanError(e.getMessage()),
-                "Fix authProfiles.yaml YAML syntax and duplicate keys."));
-            return null;
-        }
-
-        Object profilesValue = doc.get("profiles");
-        if (!(profilesValue instanceof Map<?, ?> profiles) || profiles.isEmpty()) {
-            findings.add(finding(
-                ValidationCategory.AUTH,
-                ValidationCodes.AUTH_PROFILES_INVALID,
-                ValidationSeverity.ERROR,
-                relativePath + ":profiles",
-                "authProfiles.yaml must declare a non-empty profiles map.",
-                "Add profiles.<profileId> entries."));
-            return new AuthProfilesInfo(Set.of());
-        }
-
-        Set<String> profileIds = new LinkedHashSet<>();
-        for (Map.Entry<?, ?> entry : profiles.entrySet()) {
-            String profileId = String.valueOf(entry.getKey());
-            profileIds.add(profileId);
-            if (!(entry.getValue() instanceof Map<?, ?> profile)) {
-                findings.add(finding(
-                    ValidationCategory.AUTH,
-                    ValidationCodes.AUTH_PROFILES_INVALID,
-                    ValidationSeverity.ERROR,
-                    relativePath + ":profiles." + profileId,
-                    "Auth profile '%s' must be an object.".formatted(profileId),
-                    "Declare type and storage for profile '%s'.".formatted(profileId)));
-                continue;
-            }
-            validateAuthProfileStorage(relativePath, profileId, profile, findings);
-        }
-        return new AuthProfilesInfo(Set.copyOf(profileIds));
-    }
-
-    private void validateAuthProfileStorage(
-        String relativePath,
-        String profileId,
-        Map<?, ?> profile,
-        List<ValidationFinding> findings
-    ) {
-        String rawType = stringValue(profile.get("type"));
-        AuthType type;
-        try {
-            type = AuthType.parse(rawType);
-        } catch (IllegalArgumentException e) {
-            findings.add(finding(
-                ValidationCategory.AUTH,
-                ValidationCodes.AUTH_PROFILES_INVALID,
-                ValidationSeverity.ERROR,
-                relativePath + ":profiles." + profileId + ".type",
-                "Auth profile '%s' declares unsupported type '%s'.".formatted(profileId, nullToBlank(rawType)),
-                "Use one of: %s.".formatted(String.join(", ", supportedAuthTypeValues()))));
-            return;
-        }
-        if (type == AuthType.NONE) {
-            findings.add(finding(
-                ValidationCategory.AUTH,
-                ValidationCodes.AUTH_PROFILES_INVALID,
-                ValidationSeverity.ERROR,
-                relativePath + ":profiles." + profileId + ".type",
-                "Auth profile '%s' must declare type.".formatted(profileId),
-                "Set a concrete auth profile type."));
-            return;
-        }
-
-        Object storageValue = profile.get("storage");
-        Map<?, ?> storage = storageValue instanceof Map<?, ?> map ? map : Map.of();
-        String rawMode = stringValue(storage.get("mode"));
-        AuthStorageMode mode = AuthStorageMode.NONE;
-        if (rawMode != null && !rawMode.isBlank()) {
-            try {
-                mode = AuthStorageMode.valueOf(normalizeEnumName(rawMode));
-            } catch (IllegalArgumentException e) {
-                findings.add(finding(
-                    ValidationCategory.AUTH,
-                    ValidationCodes.AUTH_STORAGE_INVALID,
-                    ValidationSeverity.ERROR,
-                    relativePath + ":profiles." + profileId + ".storage.mode",
-                    "Auth profile '%s' declares unsupported storage.mode '%s'.".formatted(profileId, rawMode),
-                    "Use one of: %s.".formatted(String.join(", ", supportedAuthStorageModeValues()))));
-                return;
-            }
-        }
-        boolean refreshable = type == AuthType.OAUTH2_CLIENT_CREDENTIALS
-            || type == AuthType.OAUTH2_PASSWORD_GRANT;
-        if (refreshable && mode != AuthStorageMode.REDIS) {
-            findings.add(finding(
-                ValidationCategory.AUTH,
-                ValidationCodes.AUTH_STORAGE_INVALID,
-                ValidationSeverity.ERROR,
-                relativePath + ":profiles." + profileId + ".storage.mode",
-                "Refreshable auth profile '%s' must use storage.mode=REDIS.".formatted(profileId),
-                "Set storage.mode: REDIS and provide a tokenKey."));
-        }
-        if (mode == AuthStorageMode.REDIS) {
-            String tokenKey = stringValue(storage.get("tokenKey"));
-            try {
-                AuthTokenKeys.validateTokenKey(tokenKey);
-            } catch (IllegalArgumentException e) {
-                findings.add(finding(
-                    ValidationCategory.AUTH,
-                    ValidationCodes.AUTH_STORAGE_INVALID,
-                    ValidationSeverity.ERROR,
-                    relativePath + ":profiles." + profileId + ".storage.tokenKey",
-                    "Auth profile '%s' must declare a valid storage.tokenKey.".formatted(profileId),
-                    "Use a non-blank tokenKey matching [A-Za-z0-9._:-]{1,128} without '..'."));
-            }
-        }
-        if (!refreshable && mode != AuthStorageMode.NONE) {
-            findings.add(finding(
-                ValidationCategory.AUTH,
-                ValidationCodes.AUTH_STORAGE_INVALID,
-                ValidationSeverity.ERROR,
-                relativePath + ":profiles." + profileId + ".storage.mode",
-                "Non-refresh auth profile '%s' must use storage.mode=NONE.".formatted(profileId),
-                "Set storage.mode: NONE."));
-        }
-    }
-
-    private Path resolveAuthProfilesFile(Path bundleRoot) {
-        Path candidate = bundleRoot.resolve(AUTH_PROFILES_FILE).normalize();
-        if (candidate.startsWith(bundleRoot) && Files.isRegularFile(candidate)) {
-            return candidate;
-        }
-        return null;
-    }
-
-    private Map<?, ?> readStructuredMap(Path file) throws IOException {
-        ObjectMapper mapper = detectFormat(file) == Format.JSON ? strictJsonMapper : strictYamlMapper;
-        Object value = mapper.readValue(file.toFile(), Map.class);
-        return value instanceof Map<?, ?> map ? map : Map.of();
-    }
-
-    private List<String> bundleValidationTextFiles(Path bundleRoot) throws IOException {
-        List<String> files = new ArrayList<>();
-        for (String relativePath : listRelativeFiles(bundleRoot, "")) {
-            if (isStructuredBundleFile(relativePath)) {
-                files.add(relativePath);
-            }
-        }
-        return List.copyOf(files);
-    }
-
-    private boolean isStructuredBundleFile(String relativePath) {
-        String name = relativePath == null ? "" : relativePath.toLowerCase(Locale.ROOT);
-        return name.endsWith(".yaml") || name.endsWith(".yml") || name.endsWith(".json");
-    }
-
-    private String stringValue(Object value) {
-        return value instanceof String text ? text.trim() : null;
-    }
-
-    private String normalizeEnumName(String value) {
-        return value == null ? null : value.trim().toUpperCase(Locale.ROOT).replace('-', '_');
-    }
-
-    private List<String> supportedAuthApplyAsValues() {
-        return Arrays.stream(AuthApplyAs.values()).map(Enum::name).toList();
-    }
-
-    private List<String> supportedAuthTypeValues() {
-        return Arrays.stream(AuthType.values()).filter(type -> type != AuthType.NONE).map(AuthType::key).toList();
-    }
-
-    private List<String> supportedAuthStorageModeValues() {
-        return Arrays.stream(AuthStorageMode.values()).map(Enum::name).toList();
-    }
-
-    private String nullToBlank(String value) {
-        return value == null ? "" : value;
-    }
-
-    private Set<String> referencedHttpCallIds(Scenario scenario) {
-        if (scenario == null) {
-            return Set.of();
-        }
-        Object tree = jsonMapper.convertValue(scenario, Object.class);
-        Set<String> callIds = new LinkedHashSet<>();
-        collectCallIds(tree, callIds);
-        return callIds;
-    }
-
-    @SuppressWarnings("unchecked")
-    private void collectCallIds(Object value, Set<String> callIds) {
-        if (value instanceof Map<?, ?> map) {
-            for (Map.Entry<?, ?> entry : map.entrySet()) {
-                if ("x-ph-call-id".equals(String.valueOf(entry.getKey()))) {
-                    callIds.addAll(extractCallIds(entry.getValue()));
-                } else {
-                    collectCallIds(entry.getValue(), callIds);
-                }
-            }
-            return;
-        }
-        if (value instanceof Iterable<?> iterable) {
-            for (Object item : iterable) {
-                collectCallIds(item, callIds);
-            }
-        }
-    }
-
-    private Set<String> extractCallIds(Object value) {
-        if (!(value instanceof String text)) {
-            return Set.of();
-        }
-        String trimmed = text.trim();
-        if (trimmed.isEmpty()) {
-            return Set.of();
-        }
-        Set<String> ids = new LinkedHashSet<>();
-        int from = 0;
-        while (from < trimmed.length()) {
-            int open = trimmed.indexOf('\'', from);
-            if (open < 0) {
-                break;
-            }
-            int close = trimmed.indexOf('\'', open + 1);
-            if (close < 0) {
-                break;
-            }
-            String token = trimmed.substring(open + 1, close).trim();
-            if (!token.isEmpty()) {
-                ids.add(token);
-            }
-            from = close + 1;
-        }
-        if (ids.isEmpty() && !trimmed.contains("{{")) {
-            ids.add(trimmed);
-        }
-        return ids;
-    }
-
-    private List<String> listRelativeFiles(Path bundleRoot, String relativeDir) throws IOException {
-        if (bundleRoot == null || !Files.isDirectory(bundleRoot)) {
-            return List.of();
-        }
-        Path root = bundleRoot.resolve(relativeDir).normalize();
-        if (!root.startsWith(bundleRoot) || !Files.isDirectory(root)) {
-            return List.of();
-        }
-        List<String> files = new ArrayList<>();
-        try (Stream<Path> stream = Files.walk(root)) {
-            for (Path path : (Iterable<Path>) stream::iterator) {
-                if (!Files.isRegularFile(path)) {
-                    continue;
-                }
-                files.add(bundleRoot.relativize(path).toString().replace('\\', '/'));
-            }
-        }
-        files.sort(String::compareTo);
-        return files;
+            scenario,
+            seedFindings));
     }
 
     private List<BundleBeeSummary> bundleBees(Scenario scenario) {
@@ -3046,114 +1791,6 @@ public class ScenarioService {
         return scenario.getTemplate().bees().stream()
             .map(bee -> new BundleBeeSummary(bee.role(), bee.image()))
             .toList();
-    }
-
-    private ValidationFinding defunctFinding(String reason) {
-        return finding(
-            validationCategory(validationCode(reason)),
-            validationCode(reason),
-            ValidationSeverity.ERROR,
-            "scenario.yaml",
-            cleanError(reason),
-            validationFix(reason));
-    }
-
-    private ValidationFinding finding(
-        ValidationCategory category,
-        String code,
-        ValidationSeverity severity,
-        String path,
-        String message,
-        String fix
-    ) {
-        return new ValidationFinding(
-            category != null ? category : ValidationCategory.BUNDLE,
-            code != null && !code.isBlank() ? code : ValidationCodes.BUNDLE_INVALID,
-            severity != null ? severity : ValidationSeverity.ERROR,
-            path != null && !path.isBlank() ? path : "bundle",
-            message != null && !message.isBlank() ? message : "Validation failed.",
-            fix != null && !fix.isBlank() ? fix : "Review the bundle contract and repair the reported path.");
-    }
-
-    private String validationCode(String message) {
-        String text = message == null ? "" : message.toLowerCase(Locale.ROOT);
-        if (text.contains("capability manifest")) {
-            return ValidationCodes.CAPABILITY_MANIFEST_MISSING;
-        }
-        if (text.contains("duplicate")) {
-            return ValidationCodes.DUPLICATE_SCENARIO_ID;
-        }
-        if (text.contains("scenario id") || text.contains("scenario descriptor") || text.contains("scenario.yaml")) {
-            return ValidationCodes.SCENARIO_DESCRIPTOR_INVALID;
-        }
-        if (text.contains("variables.yaml") || text.contains("variable")) {
-            return ValidationCodes.VARIABLES_INVALID;
-        }
-        if (text.contains("sut")) {
-            return ValidationCodes.SUT_INVALID;
-        }
-        if (text.contains("template")) {
-            return ValidationCodes.TEMPLATE_INVALID;
-        }
-        if (text.contains("defunct") || text.contains("quarantine")) {
-            return ValidationCodes.BUNDLE_DEFUNCT;
-        }
-        return ValidationCodes.BUNDLE_INVALID;
-    }
-
-    private ValidationCategory validationCategory(String code) {
-        return switch (code) {
-            case ValidationCodes.CAPABILITY_MANIFEST_MISSING -> ValidationCategory.CAPABILITIES;
-            case ValidationCodes.SCENARIO_DESCRIPTOR_INVALID,
-                 ValidationCodes.DUPLICATE_SCENARIO_ID -> ValidationCategory.SCENARIO;
-            case ValidationCodes.VARIABLES_INVALID,
-                 ValidationCodes.VARIABLES_MISSING,
-                 ValidationCodes.VARIABLE_REFERENCE_UNKNOWN -> ValidationCategory.VARIABLES;
-            case ValidationCodes.SUT_INVALID -> ValidationCategory.SUT;
-            case ValidationCodes.TEMPLATE_INVALID,
-                 ValidationCodes.TEMPLATE_CALL_ID_DUPLICATE,
-                 ValidationCodes.TEMPLATE_CALL_ID_MISSING,
-                 ValidationCodes.TEMPLATE_PARSE_ERROR,
-                 ValidationCodes.TEMPLATE_PROTOCOL_MISMATCH,
-                 ValidationCodes.TEMPLATE_REQUIRED_FIELD_MISSING -> ValidationCategory.TEMPLATES;
-            case ValidationCodes.AUTH_PROFILES_INVALID,
-                 ValidationCodes.AUTH_PROFILES_MISSING,
-                 ValidationCodes.AUTH_REF_INLINE_NOT_ALLOWED,
-                 ValidationCodes.AUTH_REF_PROFILE_MISSING,
-                 ValidationCodes.AUTH_REF_APPLY_AS_INVALID,
-                 ValidationCodes.AUTH_STORAGE_INVALID -> ValidationCategory.AUTH;
-            default -> ValidationCategory.BUNDLE;
-        };
-    }
-
-    private String validationPath(String message) {
-        String text = message == null ? "" : message.toLowerCase(Locale.ROOT);
-        if (text.contains("variables.yaml") || text.contains("variable")) {
-            return "variables.yaml";
-        }
-        if (text.contains("sut")) {
-            return "sut";
-        }
-        if (text.contains("template")) {
-            return "templates";
-        }
-        if (text.contains("scenario")) {
-            return "scenario.yaml";
-        }
-        return "bundle";
-    }
-
-    private String validationFix(String message) {
-        String code = validationCode(message);
-        return switch (code) {
-            case ValidationCodes.CAPABILITY_MANIFEST_MISSING -> "Install the matching capability manifest or update the image reference.";
-            case ValidationCodes.SCENARIO_DESCRIPTOR_INVALID -> "Repair scenario.yaml so it has a valid id and swarm template.";
-            case ValidationCodes.VARIABLES_INVALID -> "Repair variables.yaml according to Scenario Variables v1.";
-            case ValidationCodes.SUT_INVALID -> "Repair sut/<sutId>/sut.yaml and ensure its id matches the directory name.";
-            case ValidationCodes.DUPLICATE_SCENARIO_ID -> "Rename one scenario id or move one conflicting bundle to quarantine.";
-            case ValidationCodes.BUNDLE_DEFUNCT -> "Repair or move the bundle before using it to create a swarm.";
-            default -> "Review the bundle contract and repair the reported path.";
-        };
     }
 
     private UploadedBundle unpackBundle(byte[] zipBytes, String expectedId) throws IOException {
@@ -3186,7 +1823,7 @@ public class ScenarioService {
                 }
             }
 
-            ScenarioDescriptor descriptor = findScenarioDescriptor(tempRoot);
+            ScenarioBundleValidator.ScenarioDescriptor descriptor = bundleValidator.findScenarioDescriptor(tempRoot);
             Scenario scenario = descriptor.scenario();
             String id = scenario.getId();
             if (id == null || id.isBlank()) {
@@ -3194,7 +1831,7 @@ public class ScenarioService {
             }
             if (expectedId != null && !expectedId.equals(id)) {
                 throw new IllegalArgumentException(
-                        "Scenario id '%s' in bundle does not match expected id '%s'".formatted(id, expectedId));
+                    "Scenario id '%s' in bundle does not match expected id '%s'".formatted(id, expectedId));
             }
             return new UploadedBundle(scenario, descriptor.rootDir(), tempRoot);
         } catch (IOException | RuntimeException e) {
@@ -3202,115 +1839,6 @@ public class ScenarioService {
             Files.deleteIfExists(tempRoot);
             throw e;
         }
-    }
-
-    private void validateBundleExtras(String scenarioId, Path bundleRoot) throws IOException {
-        if (bundleRoot == null || !Files.isDirectory(bundleRoot)) {
-            return;
-        }
-        Path variables = bundleRoot.resolve("variables.yaml").normalize();
-        if (variables.startsWith(bundleRoot) && Files.isRegularFile(variables)) {
-            String raw = Files.readString(variables);
-            VariablesDocument doc = parseVariables(raw);
-            if (doc.version() != 1) {
-                throw new IllegalArgumentException("variables.yaml version must be 1");
-            }
-            List<VariablesDocument.VariableDefinition> definitions =
-                doc.definitions() == null ? List.of() : doc.definitions();
-            if (definitions.isEmpty()) {
-                throw new IllegalArgumentException("variables.yaml must contain non-empty definitions[]");
-            }
-
-            Map<String, VariablesDocument.VariableDefinition> byName = new LinkedHashMap<>();
-            for (VariablesDocument.VariableDefinition def : definitions) {
-                if (def == null || def.name() == null || def.name().isBlank()) {
-                    throw new IllegalArgumentException("variables.yaml definitions[].name must not be blank");
-                }
-                String name = def.name().trim();
-                if (byName.put(name, def) != null) {
-                    throw new IllegalArgumentException("Duplicate variable definition name '%s'".formatted(name));
-                }
-                if (def.scope() == null) {
-                    throw new IllegalArgumentException("Variable '%s' missing scope".formatted(name));
-                }
-                if (def.type() == null) {
-                    throw new IllegalArgumentException("Variable '%s' missing type".formatted(name));
-                }
-            }
-
-            VariablesDocument.Values values = doc.values();
-            Map<String, Map<String, Object>> global =
-                values == null || values.global() == null ? Map.of() : values.global();
-            Map<String, Map<String, Map<String, Object>>> sut =
-                values == null || values.sut() == null ? Map.of() : values.sut();
-
-            validateValueMaps(byName, global, "values.global");
-            for (Map.Entry<String, Map<String, Map<String, Object>>> entry : sut.entrySet()) {
-                String profileId = entry.getKey();
-                Map<String, Map<String, Object>> perSut = entry.getValue() == null ? Map.of() : entry.getValue();
-                for (Map.Entry<String, Map<String, Object>> sutEntry : perSut.entrySet()) {
-                    validateValueMap(byName, sutEntry.getValue(), "values.sut[%s][%s]".formatted(profileId, sutEntry.getKey()));
-                }
-            }
-        }
-
-        Path sutDir = bundleRoot.resolve("sut").normalize();
-        if (!sutDir.startsWith(bundleRoot) || !Files.isDirectory(sutDir)) {
-            return;
-        }
-        try (DirectoryStream<Path> stream = Files.newDirectoryStream(sutDir)) {
-            for (Path path : stream) {
-                if (!Files.isDirectory(path)) {
-                    continue;
-                }
-                String sutId = path.getFileName().toString();
-                if (sutId == null || sutId.isBlank()) {
-                    continue;
-                }
-                if (!hasBundleSutDescriptor(path)) {
-                    continue;
-                }
-                try {
-                    readBundleSutDescriptor(path, sutId);
-                } catch (IllegalArgumentException e) {
-                    throw invalidBundleSutDescriptor(scenarioId, sutId, e);
-                }
-            }
-        }
-    }
-
-    private ScenarioDescriptor findScenarioDescriptor(Path root) throws IOException {
-        ScenarioDescriptor found = null;
-        try (Stream<Path> stream = Files.walk(root)) {
-            for (Path path : (Iterable<Path>) stream::iterator) {
-                if (!Files.isRegularFile(path)) {
-                    continue;
-                }
-                String name = path.getFileName().toString();
-                if (!name.equals("scenario.yaml")
-                    && !name.equals("scenario.yml")
-                    && !name.equals("scenario.json")) {
-                    continue;
-                }
-                Format format = detectFormat(path);
-                Scenario scenario;
-                try {
-                    scenario = readScenario(path, format);
-                } catch (IOException | RuntimeException e) {
-                    throw new IllegalArgumentException(
-                        "Scenario descriptor could not be parsed: " + cleanError(e.getMessage()),
-                        e);
-                }
-                if (found != null) {
-                    throw new IllegalArgumentException("Bundle contains multiple scenario descriptors");
-                }
-                found = new ScenarioDescriptor(scenario, path.getParent());
-            }
-        }
-        if (found == null) {
-            throw new IllegalArgumentException("Bundle does not contain a scenario.yaml, scenario.yml or scenario.json");
-        }
-        return found;
     }
 
     private void writeBundle(UploadedBundle uploaded, Path targetDir) throws IOException {
@@ -3339,7 +1867,6 @@ public class ScenarioService {
 
     private record ScenarioRecord(
         Scenario scenario,
-        Format format,
         boolean defunct,
         String defunctReason,
         Path descriptorFile,
@@ -3347,26 +1874,11 @@ public class ScenarioService {
         String folderPath
     ) { }
 
-    private record DefunctResult(boolean defunct, String reason) {
-        static DefunctResult ok() {
-            return new DefunctResult(false, null);
-        }
-
-        static DefunctResult because(String reason) {
-            return new DefunctResult(true, reason);
-        }
-    }
-
-    private record AuthRefUsage(String path, String profileId) { }
-
-    private record AuthProfilesInfo(Set<String> profileIds) { }
-
     private record ScannedBundle(
         String bundleKey,
         String bundlePath,
         String folderPath,
         String fallbackName,
-        Format format,
         Path descriptorFile,
         Path bundleDir,
         Scenario scenario,
@@ -3410,9 +1922,7 @@ public class ScenarioService {
         }
     }
 
-    private record BundleRoot(Path root, Path descriptorFile, boolean descriptorOnly) { }
-
-    private record ScenarioDescriptor(Scenario scenario, Path rootDir) { }
+    private record BundleRoot(Path root) { }
 
     private record UploadedBundle(Scenario scenario, Path rootDir, Path tempRoot) { }
 

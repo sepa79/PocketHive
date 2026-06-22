@@ -20,6 +20,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -575,6 +576,31 @@ class ScenarioControllerTest {
     }
 
     @Test
+    void bundleValidationDoesNotAcceptScenarioDescriptorFallbackNames() throws Exception {
+        for (String descriptorName : List.of("scenario.yml", "scenario.json")) {
+            byte[] zip = bundleZip(descriptorName, """
+                    id: fallback-descriptor-demo
+                    name: Fallback descriptor demo
+                    template:
+                      image: ctrl-image:latest
+                      bees: []
+                    """);
+
+            mvc.perform(post("/validation/scenario-bundles")
+                            .contentType("application/zip")
+                            .content(zip)
+                            .accept(MediaType.APPLICATION_JSON))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.ok").value(false))
+                    .andExpect(jsonPath("$.findings[0].category").value("scenario"))
+                    .andExpect(jsonPath("$.findings[0].code").value("SCENARIO_DESCRIPTOR_INVALID"))
+                    .andExpect(jsonPath("$.findings[0].path").value("scenario.yaml"))
+                    .andExpect(jsonPath("$.findings[0].message")
+                            .value(org.hamcrest.Matchers.containsString("Bundle does not contain a scenario.yaml")));
+        }
+    }
+
+    @Test
     void dryRunBundleValidationReturnsStructuredFindingsForMalformedDescriptor() throws Exception {
         byte[] zip = bundleZip("scenario.yaml", """
                 id: [not-a-string]
@@ -671,6 +697,70 @@ class ScenarioControllerTest {
                 .andExpect(jsonPath("$.findings[0].category").value("sut"))
                 .andExpect(jsonPath("$.findings[0].code").value("SUT_INVALID"))
                 .andExpect(jsonPath("$.findings[0].path").value("sut"));
+    }
+
+    @Test
+    void bundleValidationReportsMissingCanonicalSutYaml() throws Exception {
+        byte[] zip = bundleZip(Map.of(
+                "scenario.yaml", """
+                    id: missing-canonical-sut-demo
+                    name: Missing canonical SUT demo
+                    template:
+                      image: ctrl-image:latest
+                      bees: []
+                    """,
+                "sut/default/sut.yml", """
+                    id: default
+                    name: Default SUT
+                    """));
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings[0].category").value("sut"))
+                .andExpect(jsonPath("$.findings[0].code").value("SUT_INVALID"))
+                .andExpect(jsonPath("$.findings[0].message").value(org.hamcrest.Matchers.containsString("has no sut.yaml")));
+    }
+
+    @Test
+    void bundleValidationReportsValuesSutWithoutCanonicalSutYaml() throws Exception {
+        byte[] zip = bundleZip(Map.of(
+                "scenario.yaml", """
+                    id: values-sut-missing-canonical-demo
+                    name: Values SUT missing canonical demo
+                    template:
+                      image: ctrl-image:latest
+                      bees: []
+                    """,
+                "variables.yaml", """
+                    version: 1
+                    definitions:
+                      - name: customerId
+                        scope: sut
+                        type: string
+                    profiles:
+                      - id: default
+                        name: Default
+                    values:
+                      sut:
+                        default:
+                          ghost:
+                            customerId: "123"
+                    """));
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings[0].category").value("variables"))
+                .andExpect(jsonPath("$.findings[0].code").value("VARIABLES_INVALID"))
+                .andExpect(jsonPath("$.findings[0].path").value("variables.yaml"))
+                .andExpect(jsonPath("$.findings[0].message").value(org.hamcrest.Matchers.containsString("unknown sutId 'ghost'")));
     }
 
     @Test
@@ -1204,6 +1294,9 @@ class ScenarioControllerTest {
                         .value("/validation/scenario-bundles/existing?bundleKey={bundleKey}"))
                 .andExpect(jsonPath("$.endpoints.validateScenario").doesNotExist())
                 .andExpect(jsonPath("$.endpoints.validateTemplates").doesNotExist())
+                .andExpect(jsonPath("$.scenario.descriptorNames", hasSize(1)))
+                .andExpect(jsonPath("$.scenario.descriptorNames[0]").value("scenario.yaml"))
+                .andExpect(jsonPath("$.sut.root").value("sut/<sutId>/sut.yaml"))
                 .andExpect(jsonPath("$.cache.sessionCacheable").value(true));
 
         mvc.perform(get("/api/authoring-contract/fingerprint").accept(MediaType.APPLICATION_JSON))

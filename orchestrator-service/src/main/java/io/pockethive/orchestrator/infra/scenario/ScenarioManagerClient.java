@@ -6,10 +6,15 @@ import io.pockethive.auth.client.AuthServiceServiceTokenProvider;
 import io.pockethive.orchestrator.app.ScenarioClient;
 import io.pockethive.orchestrator.config.OrchestratorProperties;
 import io.pockethive.orchestrator.domain.ScenarioPlan;
+import io.pockethive.scenarios.validation.BundleValidationResult;
+import io.pockethive.scenarios.validation.ValidationFinding;
 import io.pockethive.swarm.model.NetworkProfile;
 import io.pockethive.swarm.model.SutEnvironment;
-import java.util.Objects;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -71,13 +76,11 @@ public class ScenarioManagerClient implements ScenarioClient {
         String url = baseUrl + "/api/templates/" + trimmedTemplate;
         HttpResponse<String> resp = sendGet(url, "template-metadata " + trimmedTemplate);
         ScenarioTemplateResponse body = json.readValue(resp.body(), ScenarioTemplateResponse.class);
-        return new ScenarioTemplateDescriptor(body.id(), body.bundlePath(), body.folderPath(), body.defunct());
+        return new ScenarioTemplateDescriptor(body.id(), body.bundleKey(), body.bundlePath(), body.folderPath(), body.defunct());
     }
 
     @Override
     public String prepareScenarioRuntime(String templateId, String swarmId) throws Exception {
-        // NOTE: This continues the direct id-based create path and does not check /api/templates.
-        // Tooling and agents should validate template usability via bundle diagnostics first.
         String trimmedTemplate = templateId == null ? null : templateId.trim();
         if (trimmedTemplate == null || trimmedTemplate.isEmpty()) {
             throw new IllegalArgumentException("templateId must not be null or blank");
@@ -86,6 +89,7 @@ public class ScenarioManagerClient implements ScenarioClient {
         if (trimmedSwarm == null || trimmedSwarm.isEmpty()) {
             throw new IllegalArgumentException("swarmId must not be null or blank");
         }
+        validateExistingBundle(trimmedTemplate);
         String url = baseUrl + "/scenarios/" + trimmedTemplate + "/runtime";
         RuntimeRequest body = new RuntimeRequest(trimmedSwarm);
         String jsonBody = json.writeValueAsString(body);
@@ -98,6 +102,48 @@ public class ScenarioManagerClient implements ScenarioClient {
                     .formatted(trimmedTemplate, trimmedSwarm));
         }
         return runtimeDir;
+    }
+
+    private void validateExistingBundle(String templateId) throws Exception {
+        ScenarioTemplateDescriptor descriptor = fetchScenarioTemplate(templateId);
+        String bundleKey = descriptor.bundleKey() == null ? null : descriptor.bundleKey().trim();
+        if (bundleKey == null || bundleKey.isEmpty()) {
+            throw new IllegalStateException("Scenario template '%s' returned empty bundleKey".formatted(templateId));
+        }
+        String url = baseUrl + "/validation/scenario-bundles/existing?bundleKey="
+            + URLEncoder.encode(bundleKey, StandardCharsets.UTF_8);
+        HttpResponse<String> resp = sendPost(url, "scenario-bundle-validation " + bundleKey, "");
+        BundleValidationResult validation = json.readValue(resp.body(), BundleValidationResult.class);
+        if (validation == null || !validation.ok()) {
+            throw new IllegalStateException(validationFailureMessage(templateId, bundleKey, validation));
+        }
+    }
+
+    private static String validationFailureMessage(String templateId,
+                                                   String bundleKey,
+                                                   BundleValidationResult validation) {
+        int errors = validation == null || validation.summary() == null ? 0 : validation.summary().errors();
+        int warnings = validation == null || validation.summary() == null ? 0 : validation.summary().warnings();
+        List<ValidationFinding> findings = validation == null ? List.of() : validation.findings();
+        String firstFinding = findings == null || findings.isEmpty()
+            ? "no findings returned"
+            : summarizeFinding(findings.getFirst());
+        return "Scenario bundle validation failed for template '%s' bundleKey '%s' (errors=%d, warnings=%d): %s"
+            .formatted(templateId, bundleKey, errors, warnings, firstFinding);
+    }
+
+    private static String summarizeFinding(ValidationFinding finding) {
+        if (finding == null) {
+            return "empty finding";
+        }
+        String code = textOrFallback(finding.code(), "UNKNOWN");
+        String path = textOrFallback(finding.path(), "<bundle>");
+        String message = textOrFallback(finding.message(), "no message");
+        return "%s at %s: %s".formatted(code, path, message);
+    }
+
+    private static String textOrFallback(String text, String fallback) {
+        return text == null || text.isBlank() ? fallback : text;
     }
 
     @Override
@@ -275,7 +321,7 @@ public class ScenarioManagerClient implements ScenarioClient {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record ScenarioTemplateResponse(String id, String bundlePath, String folderPath, boolean defunct) {
+    public record ScenarioTemplateResponse(String id, String bundleKey, String bundlePath, String folderPath, boolean defunct) {
     }
 
     public record ScenarioVariablesResolveResponse(String profileId, String sutId, Map<String, Object> vars, java.util.List<String> warnings) {

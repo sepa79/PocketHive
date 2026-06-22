@@ -54,7 +54,7 @@ Request body:
 `GET /scenarios/bundles/download?bundleKey={bundleKey}` → `application/zip`
 
 - Returns a zip for the selected bundle.
-- For descriptor-only bundles, the zip contains the descriptor file.
+- The selected bundle is a directory containing canonical `scenario.yaml`.
 
 ### Delete bundle
 

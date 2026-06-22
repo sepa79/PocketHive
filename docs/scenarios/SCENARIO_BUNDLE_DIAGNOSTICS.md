@@ -150,7 +150,7 @@ Response:
 ```json
 {
   "ok": false,
-  "source": "UPLOADED_ZIP",
+  "source": "uploaded-zip",
   "scenarioId": "webauth-demo",
   "bundleKey": null,
   "bundlePath": null,

@@ -1,5 +1,6 @@
 package io.pockethive.scenarios.validation;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
 
 public enum ValidationCategory {
@@ -15,6 +16,16 @@ public enum ValidationCategory {
 
     ValidationCategory(String wireValue) {
         this.wireValue = wireValue;
+    }
+
+    @JsonCreator
+    public static ValidationCategory fromWireValue(String wireValue) {
+        for (ValidationCategory category : values()) {
+            if (category.wireValue.equals(wireValue)) {
+                return category;
+            }
+        }
+        throw new IllegalArgumentException("Unknown validation category: " + wireValue);
     }
 
     @JsonValue

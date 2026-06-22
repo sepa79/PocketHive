@@ -61,10 +61,6 @@
           {
             "scheme": "pockethive-scenario",
             "filenamePattern": "**/scenario.yaml"
-          },
-          {
-            "scheme": "pockethive-scenario",
-            "filenamePattern": "**/scenario.yml"
           }
         ],
         "priority": "default"

@@ -63,8 +63,8 @@
   swarm evidence and workflow evidence reports.
 
 ### Changed
-- `workflow_result.proof.validation` now separates latest validation,
-  structural validation, and Scenario Manager dry-run validation so agents can
+- `workflow_result.proof.validation` now records Scenario Manager dry-run
+  validation as the canonical workflow validation proof so agents can
   distinguish bundle issues from runtime/auth validation gaps.
 - `workflow_result.nextAction` now prefers resumable deploy/verify lifecycle
   tools and includes poll timing for running operations, steering agents away
@@ -78,8 +78,8 @@
 - Scenario Manager dry-run and deploy `401` failures are now classified as
   `WORKFLOW_ENV_AUTH_FAILED` with empty patch scope, so agents inspect
   environment/auth state instead of patching generated bundles.
-- Scenario Manager dry-run validation failures no longer erase a prior local
-  structural validation pass in workflow evidence.
+- Scenario Manager dry-run validation failures are preserved in workflow
+  evidence without treating local generation sanity as validation proof.
 - Generated WireMock stubs for mutating calls preserve request body assertions
   while honoring explicit response bodies.
 - Wizard validation now rejects explicit WireMock response bodies that conflict

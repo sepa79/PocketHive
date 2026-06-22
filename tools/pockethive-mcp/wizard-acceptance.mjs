@@ -75,13 +75,15 @@ function assertBeeRoles(bundleId, expectedRoles) {
 }
 
 async function validateGeneratedBundle(client, bundleId) {
-  const check = await call(client, "bundle_check", { bundle: bundleId });
-  assert(check.ok, `${bundleId} bundle_check failed: ${JSON.stringify(check.errors, null, 2)}`);
-
-  const validation = await call(client, "bundle_validate", { bundle: bundleId, validator: "local-structural" });
-  const result = await call(client, "bundle_validate_result", { jobId: validation.jobId });
+  const validation = await call(client, "bundle_validate", { bundle: bundleId });
+  let result = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    result = await call(client, "bundle_validate_result", { jobId: validation.jobId });
+    if (result.status !== "running") break;
+    await new Promise(resolveWait => setTimeout(resolveWait, 250));
+  }
   assert(result.status === "done", `${bundleId} validation did not complete: ${JSON.stringify(result)}`);
-  assert(result.structural?.ok === true, `${bundleId} local validation failed: ${JSON.stringify(result.structural, null, 2)}`);
+  assert(result.scenarioManager?.ok === true, `${bundleId} Scenario Manager validation failed: ${JSON.stringify(result.scenarioManager, null, 2)}`);
 }
 
 const cases = [

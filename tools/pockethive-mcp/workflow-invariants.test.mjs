@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
 import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -12,7 +13,7 @@ const __dirname = dirname(__filename);
 const START = resolve(__dirname, "start.cjs");
 const UNUSED_BASE_URL = "http://127.0.0.1:9";
 
-async function withClient(bundlesRoot, fn) {
+async function withClient(bundlesRoot, fn, envOverrides = {}) {
   const transport = new StdioClientTransport({
     command: process.execPath,
     args: [START],
@@ -27,6 +28,7 @@ async function withClient(bundlesRoot, fn) {
       BUNDLES_ROOT: bundlesRoot,
       PH_BUNDLES_ROOTS: JSON.stringify([bundlesRoot]),
       PH_WORKFLOW_PERSISTENCE: "memory",
+      ...envOverrides,
     },
   });
   const client = new Client({ name: "workflow-invariants-test", version: "1.0.0" }, { capabilities: {} });
@@ -36,6 +38,39 @@ async function withClient(bundlesRoot, fn) {
   } finally {
     await client.close();
   }
+}
+
+async function withScenarioManagerValidationClient(bundlesRoot, fn, options = {}) {
+  const responses = Array.isArray(options.responses) && options.responses.length
+    ? options.responses
+    : [{ ok: true, source: "uploaded-zip", scenarioId: "test-bundle", summary: { errors: 0, warnings: 0 }, findings: [] }];
+  let validationCalls = 0;
+  const server = createServer(async (req, res) => {
+    const url = new URL(req.url, "http://127.0.0.1");
+    if (req.method === "POST" && url.pathname === "/scenario-manager/validation/scenario-bundles") {
+      validationCalls += 1;
+      for await (const _ of req) { /* drain zip upload */ }
+      const response = responses[Math.min(validationCalls - 1, responses.length - 1)];
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify(typeof response === "function" ? response(validationCalls) : response));
+      return;
+    }
+    res.writeHead(404, { "content-type": "application/json" });
+    res.end(JSON.stringify({ error: `unhandled ${req.method} ${url.pathname}` }));
+  });
+  await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address();
+  const baseUrl = `http://127.0.0.1:${port}`;
+  try {
+    await withClient(bundlesRoot, fn, {
+      POCKETHIVE_BASE_URL: baseUrl,
+      ORCHESTRATOR_BASE_URL: `${baseUrl}/orchestrator`,
+      SCENARIO_MANAGER_BASE_URL: `${baseUrl}/scenario-manager`,
+    });
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+  return validationCalls;
 }
 
 async function call(client, name, args = {}) {
@@ -114,7 +149,7 @@ test("blocked workflow states always expose resolvable next actions", async () =
   const root = mkdtempSync(join(tmpdir(), "ph-agentic-invariants-"));
   const sourcePath = writeSource(root, "sources/lossy.jmx", "<jmeterTestPlan><JSR223PostProcessor/></jmeterTestPlan>");
 
-  await withClient(root, async (client) => {
+  await withScenarioManagerValidationClient(root, async (client) => {
     const cases = [
       {
         name: "missing source fidelity",
@@ -211,7 +246,7 @@ test("blocked workflow states always expose resolvable next actions", async () =
 test("adversarial agent cannot skip provenance, role, patch, or validation gates", async () => {
   const root = mkdtempSync(join(tmpdir(), "ph-agentic-adversarial-"));
 
-  await withClient(root, async (client) => {
+  await withScenarioManagerValidationClient(root, async (client) => {
     const started = await call(client, "workflow_start", {
       sourceType: "plain-instructions",
       instructions: "Create a low-rate live public target test.",
@@ -261,18 +296,18 @@ test("adversarial agent cannot skip provenance, role, patch, or validation gates
 
     const validation = await call(client, "workflow_validate", { workflowId: started.workflowId });
     assert.equal(validation.ok, true);
-    assert.equal(validation.authoritative, false);
-    assert.equal(validation.validationLevel, "structural");
+    assert.equal(validation.authoritative, true);
+    assert.equal(validation.validationLevel, "scenario-manager");
   });
 });
 
-test("semantic validation and claim matrix react to artifact mutation", async () => {
+test("Scenario Manager validation and claim matrix react to artifact mutation", async () => {
   const root = mkdtempSync(join(tmpdir(), "ph-agentic-mutation-"));
 
-  await withClient(root, async (client) => {
+  await withScenarioManagerValidationClient(root, async (client) => {
     const mockStarted = await call(client, "workflow_start", {
       sourceType: "plain-instructions",
-      instructions: "Create a mock-backed scenario and prove local semantic validation.",
+      instructions: "Create a mock-backed scenario and prove Scenario Manager validation.",
     });
     await call(client, "workflow_update", {
       workflowId: mockStarted.workflowId,
@@ -291,7 +326,7 @@ test("semantic validation and claim matrix react to artifact mutation", async ()
     const failed = await call(client, "workflow_validate", { workflowId: mockStarted.workflowId });
     assert.equal(failed.ok, false);
     const failedStatus = await call(client, "workflow_status", { workflowId: mockStarted.workflowId });
-    assert.equal(failedStatus.claimMatrix.find(claim => claim.id === "validation.structural").status, "failed");
+    assert.equal(failedStatus.claimMatrix.find(claim => claim.id === "validation.scenario-manager").status, "failed");
 
     await call(client, "workflow_patch", {
       workflowId: mockStarted.workflowId,
@@ -324,5 +359,23 @@ test("semantic validation and claim matrix react to artifact mutation", async ()
     csvStatus = await call(client, "workflow_status", { workflowId: csvStarted.workflowId });
     assert.equal(csvStatus.claimMatrix.find(claim => claim.id === "dataset.sample-artifact").status, "missing");
     assert.equal(csvStatus.evidenceContract.find(claim => claim.id === "dataset.sample-artifact").status, "pending");
+  }, {
+    responses: [
+      {
+        ok: false,
+        source: "uploaded-zip",
+        scenarioId: "invariant-mock-mutation",
+        summary: { errors: 1, warnings: 0 },
+        findings: [{
+          category: "mock",
+          code: "MOCK_CONFIG_INVALID",
+          severity: "error",
+          path: "mock-config/wiremock/hello.json",
+          message: "Invalid WireMock mapping JSON.",
+          fix: "Repair the WireMock mapping JSON.",
+        }],
+      },
+      { ok: true, source: "uploaded-zip", scenarioId: "invariant-mock-mutation", summary: { errors: 0, warnings: 0 }, findings: [] },
+    ],
   });
 });

@@ -127,9 +127,7 @@ implemented or changed.
 - `bundle.list` — lists bundles in `BUNDLES_ROOT/bundles/`
 - `bundle.read` — reads a file from a bundle
 - `bundle.scaffold` — quick-pick bundle scaffold for IDE users
-- `bundle.check` — fast structural validation
-- `bundle.validate` — async validation through an in-process validator or
-  PocketHive validation API; never a shell command
+- `bundle.validate` — async validation through Scenario Manager; never a shell command
 - `bundle.validate.result` — polls validation job result
 - `bundle.diff` — preview generated/session changes before export
 
@@ -137,7 +135,7 @@ implemented or changed.
 - `wizard.start` — starts a novice bundle design session; no file writes
 - `wizard.answer` — records one answer and returns the next required question
 - `wizard.summary` — previews the generated plan; no file writes
-- `wizard.complete` — creates a new bundle and runs `bundle.check`
+- `wizard.complete` — creates a new bundle and runs generation sanity checks
 
 ### Agent-managed workflows
 - `workflow.start/source.read/update/status/preview/generate/validate/deploy/verify/patch/report`
@@ -203,17 +201,16 @@ and return `nextPollAfterMs` when another poll is needed. Agents should use that
 value as the retry interval instead of blocking a tool call with thread sleeps.
 
 If Scenario Manager dry-run or deploy returns PocketHive API auth failures, the
-workflow records `WORKFLOW_ENV_AUTH_FAILED`, preserves local structural proof,
-and points `workflow_result.nextAction.tool` at `env_status`. That is an
-environment/auth remediation path, not a generated-bundle patch path.
+workflow records `WORKFLOW_ENV_AUTH_FAILED` and points
+`workflow_result.nextAction.tool` at `env_status`. That is an environment/auth
+remediation path, not a generated-bundle patch path.
 
-Validation proof is split by level. `workflow_result.proof.validation.status`
-shows the latest validation attempt. The nested
-`workflow_result.proof.validation.structural` field shows local bundle
-structure proof, and `workflow_result.proof.validation.scenarioManager` shows
-Scenario Manager dry-run proof. If structural validation passes and Scenario
-Manager validation fails, agents should treat that as a runtime/auth/Scenario
-Manager gap before editing generated bundle files.
+Validation proof is Scenario Manager-owned.
+`workflow_result.proof.validation.status` shows the latest Scenario Manager
+validation attempt and `workflow_result.proof.validation.scenarioManager` shows
+the dry-run proof. If Scenario Manager validation cannot complete, agents should
+treat that as a runtime/auth/Scenario Manager gap before editing generated
+bundle files.
 
 Production proof uses:
 
@@ -253,9 +250,8 @@ cached contract unless the caller passes `forceRefresh: true`, or passes
 `checkFingerprint: true` and `/api/authoring-contract/fingerprint` reports a
 changed fingerprint.
 
-`bundle.validate` supports three explicit validators:
+`bundle.validate` supports two explicit validators:
 
-- `local-structural` — local `bundle.check` only; no Scenario Manager writes
 - `scenario-manager-dry-run` — validates a zip through
   `POST /validation/scenario-bundles`; no Scenario Manager writes
 - `scenario-manager-upload` — validates by uploading/replacing the bundle
