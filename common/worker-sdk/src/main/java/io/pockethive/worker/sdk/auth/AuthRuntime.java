@@ -39,6 +39,7 @@ public final class AuthRuntime {
     private static final ObjectMapper YAML = new ObjectMapper(YAMLFactory.builder()
         .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
         .build()).findAndRegisterModules();
+    private static final String AUTH_PROFILES_FILE = "authProfiles.yaml";
     private static final String SCENARIO_ROOT_PROPERTY = "pockethive.scenario.root";
     private static final String SCENARIO_ROOT_ENV = "POCKETHIVE_SCENARIO_ROOT";
     private static final Duration CLEANUP_GRACE = Duration.ofMinutes(5);
@@ -121,7 +122,7 @@ public final class AuthRuntime {
         if (refs == null || refs.isEmpty()) {
             return inactive(renderer);
         }
-        Path authProfiles = scenarioRoot().resolve("authProfiles.yaml");
+        Path authProfiles = scenarioRoot().resolve(AUTH_PROFILES_FILE);
         if (!Files.isRegularFile(authProfiles)) {
             throw AuthFailureException.configuration(
                 "missing-auth-profiles",
@@ -401,12 +402,11 @@ public final class AuthRuntime {
         if (templateRoot != null && !templateRoot.isBlank()) {
             Path cursor = Path.of(templateRoot).toAbsolutePath().normalize();
             while (cursor != null) {
-                candidates.add(cursor.resolve("authProfiles.yaml"));
-                candidates.add(cursor.resolve("authProfiles.yml"));
+                candidates.add(cursor.resolve(AUTH_PROFILES_FILE));
                 cursor = cursor.getParent();
             }
         }
-        candidates.add(Path.of("/app/scenario/authProfiles.yaml"));
+        candidates.add(Path.of("/app/scenario").resolve(AUTH_PROFILES_FILE));
         for (Path candidate : candidates) {
             if (Files.isRegularFile(candidate)) {
                 return candidate;

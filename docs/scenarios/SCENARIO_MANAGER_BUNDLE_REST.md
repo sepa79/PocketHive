@@ -88,6 +88,7 @@ Finding shape:
 
 ```json
 {
+  "category": "templates",
   "code": "TEMPLATE_CALL_ID_MISSING",
   "severity": "error",
   "path": "scenario.yaml:plan",
@@ -98,7 +99,7 @@ Finding shape:
 
 ### Dry-run validate an uploaded bundle
 
-`POST /scenario-bundles/validate` → request `application/zip`, response
+`POST /validation/scenario-bundles` → request `application/zip`, response
 `application/json`
 
 - Unpacks and validates in temporary storage.
@@ -116,39 +117,24 @@ Response:
   "scenarioId": "webauth-demo",
   "bundleKey": null,
   "bundlePath": null,
-  "findings": [],
-  "templates": ["templates/http/default/login.yaml"],
-  "schemas": ["schemas/body.schema.json"]
+  "summary": {
+    "errors": 0,
+    "warnings": 0
+  },
+  "findings": []
 }
 ```
 
-### Validate an existing scenario by id
-
-`POST /scenarios/{scenarioId}/validate` → response `application/json`
-
-- Validates the loaded scenario bundle addressed by `scenarioId`.
-- Returns `404` when the scenario id is unknown.
-
 ### Validate an existing bundle by bundle key
 
-`POST /scenario-bundles/validate-existing?bundleKey={bundleKey}` → response
+`POST /validation/scenario-bundles/existing?bundleKey={bundleKey}` → response
 `application/json`
 
 - Validates a catalog entry from `GET /api/templates`.
 - Works for malformed bundles and duplicate-id bundles that cannot be safely
   addressed by `scenarioId`.
-
-### Validate bundle templates
-
-`POST /scenarios/{scenarioId}/templates/validate` → response
-`application/json`
-
-- Validates HTTP template files under `templates/http/**`.
-- Verifies required template fields: `protocol`, `serviceId`, `callId`,
-  `method`, `pathTemplate`.
-- Reports duplicate template `callId` values.
-- Reports `x-ph-call-id` references in `scenario.yaml` that do not have a
-  matching HTTP template.
+- Uses the same `BundleValidationResult` response shape as uploaded-bundle
+  dry-run validation.
 
 ---
 
@@ -208,6 +194,8 @@ The JSON/YAML model is `io.pockethive.swarm.model.SutEnvironment`.
 ### List SUT ids in a bundle
 
 `GET /scenarios/{scenarioId}/suts` → `application/json`
+
+- Returns canonical bundle-local SUTs only: `sut/<sutId>/sut.yaml` must parse and `sut.yaml.id` must match `{sutId}`.
 
 Response (200):
 ```json

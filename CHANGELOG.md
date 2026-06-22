@@ -76,8 +76,8 @@ Timestamp: 2026-06-12T18:07:27Z
   constraint from shared-root proxy/UI services; `swarm-full` Redis still uses
   its dedicated `pockethive.redis` placement.
 - Scenario Manager bundle validation: move dry-run bundle validation endpoints
-  out of the `/scenarios` namespace to `/scenario-bundles/validate` and
-  `/scenario-bundles/validate-existing`, and update MCP/docs/contracts to use
+  out of the `/scenarios` namespace to `/validation/scenario-bundles` and
+  `/validation/scenario-bundles/existing`, and update MCP/docs/contracts to use
   the non-conflicting URLs.
 - Release: bump PocketHive patch version to 0.15.27 for the Scenario Manager
   bundle validation endpoint fix and HiveForge Swarm profile cleanup.

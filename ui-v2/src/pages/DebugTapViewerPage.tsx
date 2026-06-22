@@ -101,8 +101,19 @@ function safeStringify(value: unknown): string {
 }
 
 function metaFromTap(tap: DebugTap): TapMeta {
-  const { samples: _samples, lastReadAt: _lastReadAt, ...meta } = tap
-  return meta
+  return {
+    tapId: tap.tapId,
+    swarmId: tap.swarmId,
+    role: tap.role,
+    direction: tap.direction,
+    ioName: tap.ioName,
+    exchange: tap.exchange,
+    routingKey: tap.routingKey,
+    queue: tap.queue,
+    maxItems: tap.maxItems,
+    ttlSeconds: tap.ttlSeconds,
+    createdAt: tap.createdAt,
+  }
 }
 
 function metaSignature(meta: TapMeta | null): string {

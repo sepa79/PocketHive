@@ -34,7 +34,7 @@ curl -X POST "http://localhost:8080/api/components/ingest/ingest-1/config" \
   }'
 ```
 
-Refer to the [Orchestrator REST API guide](../docs/ORCHESTRATOR-REST.md) for the complete list of lifecycle and configuration endpoints.
+Refer to the [Orchestrator REST API guide](../../docs/ORCHESTRATOR-REST.md) for the complete list of lifecycle and configuration endpoints.
 
 ## Getting Started
 

@@ -40,7 +40,7 @@ behaviour.
 
 ### 3.1 Extract a pure topology builder
 
-- [ ] Add `ui/src/pages/hive/TopologyBuilder.ts`:
+- [ ] Add `ui-v2/src/pages/hive/TopologyBuilder.ts`:
   - [ ] `buildGraph(topology: Topology, componentsById: Record<string,Component>, swarmId?: string): { nodes: GraphNode[]; links: GraphLink[] }`
     - Filters / orders nodes (generator‑first BFS, unconnected tail).
     - Applies swarm filtering (`swarmId` vs “all swarms” view).

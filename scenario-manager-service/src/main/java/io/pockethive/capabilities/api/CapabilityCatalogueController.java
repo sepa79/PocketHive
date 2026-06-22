@@ -147,10 +147,8 @@ public class CapabilityCatalogueController {
                         "capabilities", "/api/capabilities",
                         "authoringContract", "/api/authoring-contract",
                         "authoringContractFingerprint", "/api/authoring-contract/fingerprint",
-                        "validateBundle", "/scenario-bundles/validate",
-                        "validateExistingBundle", "/scenario-bundles/validate-existing?bundleKey={bundleKey}",
-                        "validateScenario", "/scenarios/{id}/validate",
-                        "validateTemplates", "/scenarios/{id}/templates/validate"
+                        "validateBundle", "/validation/scenario-bundles",
+                        "validateExistingBundle", "/validation/scenario-bundles/existing?bundleKey={bundleKey}"
                 ),
                 Map.of(
                         "descriptorNames", List.of("scenario.yaml", "scenario.yml", "scenario.json"),

@@ -97,9 +97,8 @@ Example response:
   "endpoints": {
     "templates": "/api/templates",
     "capabilities": "/api/capabilities",
-    "validateBundle": "/scenario-bundles/validate",
-    "validateScenario": "/scenarios/{id}/validate",
-    "validateTemplates": "/scenarios/{id}/templates/validate"
+    "validateBundle": "/validation/scenario-bundles",
+    "validateExistingBundle": "/validation/scenario-bundles/existing?bundleKey={bundleKey}"
   },
   "cache": {
     "sessionCacheable": true,
@@ -116,6 +115,7 @@ Validation endpoints return findings in a machine-readable shape:
 
 ```json
 {
+  "category": "templates",
   "code": "TEMPLATE_CALL_ID_MISSING",
   "severity": "error",
   "path": "scenario.yaml:plan",
@@ -139,7 +139,7 @@ Clients must key automation on `code` and `path`, not on the human-readable
 
 ### Validate an uploaded bundle without importing it
 
-`POST /scenario-bundles/validate` consumes `application/zip` and returns
+`POST /validation/scenario-bundles` consumes `application/zip` and returns
 `application/json`.
 
 This endpoint unpacks and validates the bundle in temporary storage only. It
@@ -150,12 +150,18 @@ Response:
 ```json
 {
   "ok": false,
-  "source": "uploaded-zip",
+  "source": "UPLOADED_ZIP",
   "scenarioId": "webauth-demo",
   "bundleKey": null,
   "bundlePath": null,
+  "summary": {
+    "errors": 1,
+    "warnings": 0,
+    "infos": 0
+  },
   "findings": [
     {
+      "category": "capabilities",
       "code": "CAPABILITY_MANIFEST_MISSING",
       "severity": "error",
       "path": "scenario.yaml:template",
@@ -166,21 +172,11 @@ Response:
 }
 ```
 
-### Validate an existing scenario by id
-
-`POST /scenarios/{id}/validate` returns the same validation result shape for an
-already loaded scenario bundle.
-
 ### Validate an existing bundle by bundle key
 
-`POST /scenario-bundles/validate-existing?bundleKey={bundleKey}` validates the
+`POST /validation/scenario-bundles/existing?bundleKey={bundleKey}` validates the
 catalog entry identified by `bundleKey`. Use this for malformed bundles,
 duplicate-id bundles, or bundles whose `scenario.id` is not safe to address.
-
-### Validate template call contracts
-
-`POST /scenarios/{id}/templates/validate` checks bundle-local template files
-against the scenario references that Scenario Manager can inspect.
 
 Initial checks include:
 
@@ -191,7 +187,8 @@ Initial checks include:
 - `x-ph-call-id` references in `scenario.yaml` that have no matching template.
 
 Future renderer-backed checks may extend this endpoint, but clients should treat
-the endpoint as the canonical template validation surface now.
+the `/validation/scenario-bundles*` endpoints as the canonical bundle validation
+surface now.
 
 ---
 

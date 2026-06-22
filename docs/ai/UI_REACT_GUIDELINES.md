@@ -1,6 +1,6 @@
 # UI (React) Guidelines — PocketHive
 
-Scope: contributions to the PocketHive web UI(s) (`ui/` and `ui-v2/`).
+Scope: contributions to the PocketHive web UI (`ui-v2/`) and archived legacy UI (`archive/legacy-ui/`).
 
 Goals:
 - Keep the UI predictable on 1080p and smaller screens.
@@ -10,10 +10,10 @@ Goals:
 
 ## 1) Codebase reality (read this first)
 
-- `ui/` is the **current/legacy** UI. It mixes Tailwind with legacy global CSS imported via `ui/src/styles/globals.css`.
-- `ui-v2/` is the **new** UI served under `/v2/*` and should remain clean (no global CSS imports from `/css/*`).
+- `ui-v2/` is the active UI served under `/v2/*` and should remain clean (no global CSS imports from `/css/*`).
+- `archive/legacy-ui/` is the archived UI v1 source. Do not add new product functionality there.
 
-Rule: when adding new UI functionality, prefer implementing it in `ui-v2/` unless the task is explicitly “fix legacy UI”.
+Rule: when adding new UI functionality, implement it in `ui-v2/` unless a human explicitly asks for an archive-only legacy UI change.
 
 ## 2) Layout & responsiveness (must-follow)
 
@@ -28,7 +28,6 @@ Rule: when adding new UI functionality, prefer implementing it in `ui-v2/` unles
 - Avoid hard-coded fixed widths unless you also provide breakpoints:
   - Prefer `max-w-*`, `min-w-0`, `overflow-*`, `flex-wrap`, and `grid` with `minmax(0, 1fr)`.
 - Avoid “layout by global CSS”.
-  - `ui/`: do not introduce new global selectors that affect `header`, `main`, `body`, etc.
   - `ui-v2/`: keep styling local to the app; do not import legacy `/css/*`.
 - Modals must not rely on ancestor layout/overflow:
   - Render modals via a portal (`document.body`) or an equivalent top-level container.
@@ -36,8 +35,8 @@ Rule: when adding new UI functionality, prefer implementing it in `ui-v2/` unles
 
 ## 3) Component structure (keep it small)
 
-- Do not add new logic to mega-files (e.g. `ui/src/pages/ScenariosPage.tsx`) unless unavoidable.
-  - Prefer extracting to `ui/src/components/...` or `ui/src/pages/<area>/...`.
+- Do not add new logic to mega-files unless unavoidable.
+  - Prefer extracting to `ui-v2/src/components/...` or `ui-v2/src/pages/<area>/...`.
 - Prefer “thin pages, thick components/hooks”:
   - Page: routing, data fetching, composition.
   - Components: rendering + local interactions.
@@ -47,7 +46,7 @@ Rule: when adding new UI functionality, prefer implementing it in `ui-v2/` unles
 ## 4) State, data fetching, and side effects
 
 - Prefer **React Query** for server state (fetch/cache/retry).
-- Prefer **Zustand** (`ui/src/store.ts`) for cross-page UI state (panels, toasts, docking).
+- Prefer the existing `ui-v2` state patterns for cross-page UI state.
 - Routing (`ui-v2/`):
   - Prefer **path-based routes** (`/v2/scenarios/:id/edit`) over query params (`?id=...`) for app navigation state.
   - `Back` must always work (use browser history semantics; don’t require “special” state to return to a usable screen).
@@ -71,8 +70,7 @@ Rule: when adding new UI functionality, prefer implementing it in `ui-v2/` unles
 
 - Prefer Tailwind utilities for local layout/spacing.
 - Use CSS Modules only when Tailwind becomes unreadable or when you need complex selectors/animations.
-- In `ui/`, be extra careful with legacy CSS under `ui/assets/css/*`:
-  - Do not add new global selectors unless the change is explicitly about the global theme.
+- Do not add new global selectors unless the change is explicitly about the active UI theme.
 
 ## 7) Accessibility & UX baseline
 
@@ -93,7 +91,7 @@ Rule: when adding new UI functionality, prefer implementing it in `ui-v2/` unles
 
 ## 9) PR hygiene checklist (UI)
 
-- Builds with Docker Node 20 (`ui/Dockerfile`, `ui-v2/Dockerfile`).
+- Builds with Docker Node 20 (`ui-v2/Dockerfile`).
 - No new global CSS regressions (layout doesn’t change on unrelated pages).
 - Responsive smoke check: 1366×768 and 1920×1080.
 - No data loss when editing scenarios/templates/plans.

@@ -15,7 +15,28 @@ async function ensureOk(response: Response, fallback: string) {
   let message = ''
   try {
     const text = await response.text()
-    message = text ? text : message
+    if (text) {
+      try {
+        const data = JSON.parse(text) as { message?: unknown; summary?: unknown; findings?: unknown }
+        if (isRecord(data) && typeof data.message === 'string' && data.message.trim()) {
+          message = data.message.trim()
+        } else if (isRecord(data) && Array.isArray(data.findings) && data.findings.length > 0) {
+          const [first] = data.findings
+          const firstMessage = isRecord(first) && typeof first.message === 'string' ? first.message : null
+          const summary = isRecord(data.summary) ? data.summary : null
+          const errors = summary && typeof summary.errors === 'number' ? summary.errors : null
+          message = firstMessage
+            ? errors && errors > 1
+              ? `${firstMessage} (${errors} validation errors)`
+              : firstMessage
+            : 'Scenario bundle validation failed'
+        } else {
+          message = text
+        }
+      } catch {
+        message = text
+      }
+    }
   } catch {
     // ignore
   }
@@ -86,6 +107,30 @@ export type BundleFilePayload = {
 
 export type BundleFileWriteResult = {
   revision: string
+}
+
+export type BundleValidationSeverity = 'error' | 'warning'
+
+export type BundleValidationFinding = {
+  category: string
+  code: string
+  severity: BundleValidationSeverity
+  path: string
+  message: string
+  fix: string
+}
+
+export type BundleValidationResult = {
+  ok: boolean
+  source: string
+  bundleKey: string | null
+  bundlePath: string | null
+  scenarioId: string | null
+  summary: {
+    errors: number
+    warnings: number
+  }
+  findings: BundleValidationFinding[]
 }
 
 function normalizeScenarioSummary(input: unknown): ScenarioSummary | null {
@@ -189,6 +234,46 @@ function normalizeBundleFileWriteResult(input: unknown): BundleFileWriteResult |
   return revision ? { revision } : null
 }
 
+function normalizeValidationFinding(input: unknown): BundleValidationFinding | null {
+  if (!isRecord(input)) return null
+  const severityRaw = asString(input['severity'])
+  return {
+    category: asString(input['category']) ?? 'bundle',
+    code: asString(input['code']) ?? 'BUNDLE_INVALID',
+    severity: severityRaw === 'warning' ? 'warning' : 'error',
+    path: asString(input['path']) ?? 'bundle',
+    message: asString(input['message']) ?? 'Validation failed.',
+    fix: asString(input['fix']) ?? 'Review the bundle contract and repair the reported path.',
+  }
+}
+
+function normalizeValidationResult(input: unknown): BundleValidationResult {
+  if (!isRecord(input)) {
+    throw new Error('Invalid bundle validation response')
+  }
+  const findings = Array.isArray(input['findings'])
+    ? input['findings']
+        .map((entry) => normalizeValidationFinding(entry))
+        .filter((entry): entry is BundleValidationFinding => entry !== null)
+    : []
+  const summary = isRecord(input['summary']) ? input['summary'] : {}
+  const errors = typeof summary['errors'] === 'number'
+    ? summary['errors']
+    : findings.filter((finding) => finding.severity === 'error').length
+  const warnings = typeof summary['warnings'] === 'number'
+    ? summary['warnings']
+    : findings.filter((finding) => finding.severity === 'warning').length
+  return {
+    ok: input['ok'] === true,
+    source: asString(input['source']) ?? 'scenario-manager',
+    bundleKey: asString(input['bundleKey']),
+    bundlePath: asString(input['bundlePath']),
+    scenarioId: asString(input['scenarioId']),
+    summary: { errors, warnings },
+    findings,
+  }
+}
+
 export async function listScenarios(opts?: { includeDefunct?: boolean }): Promise<ScenarioSummary[]> {
   const includeDefunct = opts?.includeDefunct ?? true
   const params = new URLSearchParams({ includeDefunct: includeDefunct ? 'true' : 'false' })
@@ -237,6 +322,23 @@ export async function listBundleWorkspaces(): Promise<BundleTemplateEntry[]> {
   } catch {
     return []
   }
+}
+
+export async function reloadScenarioManager(): Promise<void> {
+  const response = await fetch('/scenario-manager/scenarios/reload', {
+    method: 'POST',
+  })
+  await ensureOk(response, 'Failed to reload Scenario Manager')
+}
+
+export async function validateExistingScenarioBundle(bundleKey: string): Promise<BundleValidationResult> {
+  const params = new URLSearchParams({ bundleKey })
+  const response = await fetch(`/scenario-manager/validation/scenario-bundles/existing?${params.toString()}`, {
+    method: 'POST',
+    headers: { Accept: 'application/json' },
+  })
+  await ensureOk(response, 'Failed to validate scenario bundle')
+  return normalizeValidationResult((await response.json()) as unknown)
 }
 
 export async function readBundleTree(bundleKey: string): Promise<BundleTree> {

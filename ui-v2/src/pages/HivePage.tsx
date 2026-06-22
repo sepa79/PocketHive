@@ -1189,6 +1189,7 @@ export function HivePage() {
 	                    <SwarmIssueBox
 	                      issue={selectedSwarmIssue}
 	                      error={swarmJournalError}
+	                      loading={swarmJournalLoading}
 	                      onOpenJournal={openSelectedSwarmJournal}
 	                    />
                       <div className="detailTabStrip" role="tablist" aria-label="Swarm detail panels">

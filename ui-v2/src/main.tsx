@@ -13,6 +13,12 @@ import { installAuthenticatedFetch } from './lib/auth'
 
 declare const __PLUGIN_MODE__: boolean
 
+declare global {
+  interface Window {
+    __phPluginConfig?: unknown
+  }
+}
+
 installTheme()
 installAuthenticatedFetch()
 
@@ -33,7 +39,7 @@ if (isPlugin) {
     window.removeEventListener('message', onConfig)
 
     const { route = '/' } = msg.payload ?? {}
-    ;(window as any).__phPluginConfig = msg.payload
+    window.__phPluginConfig = msg.payload
 
     bootstrapControlPlane()
     startControlPlaneHealth()

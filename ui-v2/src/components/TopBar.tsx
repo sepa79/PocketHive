@@ -16,6 +16,16 @@ type TopBarNotice = {
   receivedAt: string
 }
 
+type WindowFind = (
+  string: string,
+  caseSensitive?: boolean,
+  backwards?: boolean,
+  wrapAround?: boolean,
+  wholeWord?: boolean,
+  searchInFrames?: boolean,
+  showDialog?: boolean,
+) => boolean
+
 const MAX_NOTICES = 3
 
 function readString(value: unknown): string | null {
@@ -113,7 +123,7 @@ function TopBarSearch() {
   const [miss, setMiss] = useState(false)
 
   const runFind = (needle: string, backward: boolean) => {
-    const finder = (window as Window & { find?: (...args: any[]) => boolean }).find
+    const finder = (window as Window & { find?: WindowFind }).find
     if (!finder) return false
     return finder(needle, false, backward, true, false, false, false)
   }

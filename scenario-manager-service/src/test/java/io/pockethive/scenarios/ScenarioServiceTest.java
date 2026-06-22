@@ -443,6 +443,10 @@ class ScenarioServiceTest {
 
     @Test
     void createBundleFromZipStoresNewBundlesUnderBundlesFolder() throws IOException {
+        writeManifest("ctrl", "ctrl-image");
+        writeManifest("worker", "worker-image");
+        capabilities.reload();
+
         byte[] zipBytes = scenarioBundleZip("""
                 id: uploaded-demo
                 name: Uploaded Demo
@@ -545,6 +549,45 @@ class ScenarioServiceTest {
 
         assertThat(service.readBundleSutRaw("scenario-1", sutId)).isNull();
         assertThat(service.listSutIds("scenario-1")).doesNotContain("sut-A");
+    }
+
+    @Test
+    void bundleLocalSutReadRequiresCanonicalSutYaml() throws IOException {
+        writeBundleScenario("scenario-1");
+        service.reload();
+        Path sutRoot = service.bundleDir("scenario-1").resolve("sut");
+        Path ymlSut = Files.createDirectories(sutRoot.resolve("sut-yml"));
+        Files.writeString(ymlSut.resolve("sut.yml"), """
+                id: sut-yml
+                name: SUT YML
+                """);
+        Path jsonSut = Files.createDirectories(sutRoot.resolve("sut-json"));
+        Files.writeString(jsonSut.resolve("sut.json"), """
+                {"id":"sut-json","name":"SUT JSON"}
+                """);
+
+        assertThatThrownBy(() -> service.readBundleSut("scenario-1", "sut-yml"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("has no sut.yaml");
+        assertThatThrownBy(() -> service.readBundleSut("scenario-1", "sut-json"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("has no sut.yaml");
+        assertThat(service.listSutIds("scenario-1"))
+                .doesNotContain("sut-yml", "sut-json");
+
+        Path wrongIdSut = Files.createDirectories(sutRoot.resolve("sut-wrong-id"));
+        Files.writeString(wrongIdSut.resolve("sut.yaml"), """
+                id: different-id
+                name: Wrong ID SUT
+                """);
+
+        assertThatThrownBy(() -> service.readBundleSut("scenario-1", "sut-wrong-id"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("does not match directory name");
+        assertThatThrownBy(() -> service.listSutIds("scenario-1"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Failed to parse bundle-local SUT 'sut-wrong-id'")
+                .hasMessageContaining("does not match directory name");
     }
 
     @Test

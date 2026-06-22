@@ -143,7 +143,7 @@ Goal: add a compact, non-flickering “zoomed-in” view per swarm (similar inte
 
 ### What UI v1 Hive had (features to carry over)
 
-From `ui/src/pages/hive/*`:
+From archived UI v1 (`archive/legacy-ui/src/pages/hive/*`):
 - Graph view (React Flow) with stable node ids:
   - per-swarm filter mode + overview mode
   - queue depth influences edge color/width

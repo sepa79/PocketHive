@@ -5,6 +5,8 @@ import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import io.pockethive.auth.contract.AuthenticatedUserDto;
 import io.pockethive.scenarios.auth.ScenarioManagerAuthorization;
 import io.pockethive.scenarios.auth.ScenarioManagerCurrentUserHolder;
+import io.pockethive.scenarios.validation.BundleValidationException;
+import io.pockethive.scenarios.validation.BundleValidationResult;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -691,39 +693,11 @@ public class ScenarioController {
         }
     }
 
-    @PostMapping(value = "/{id}/validate", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ScenarioService.BundleValidationResult validateScenario(@PathVariable("id") String id) throws IOException {
-        log.info("[REST] POST /scenarios/{}/validate", id);
-        try {
-            ScenarioService.BundleValidationResult result = service.validateExistingScenario(id);
-            log.info("[REST] POST /scenarios/{}/validate -> status=200 ok={} findings={}",
-                    id, result.ok(), result.findings().size());
-            return result;
-        } catch (IllegalArgumentException e) {
-            log.warn("[REST] POST /scenarios/{}/validate -> status=404 {}", id, e.getMessage());
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
-        }
-    }
-
-    @PostMapping(value = "/{id}/templates/validate", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ScenarioService.TemplateValidationResult validateTemplates(@PathVariable("id") String id) throws IOException {
-        log.info("[REST] POST /scenarios/{}/templates/validate", id);
-        try {
-            ScenarioService.TemplateValidationResult result = service.validateScenarioTemplates(id);
-            log.info("[REST] POST /scenarios/{}/templates/validate -> status=200 ok={} findings={}",
-                    id, result.ok(), result.findings().size());
-            return result;
-        } catch (IllegalArgumentException e) {
-            log.warn("[REST] POST /scenarios/{}/templates/validate -> status=404 {}", id, e.getMessage());
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
-        }
-    }
-
     @PostMapping(
             value = "/bundles",
             consumes = "application/zip",
             produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<Scenario> uploadBundle(@RequestBody byte[] body) throws IOException {
+    public ResponseEntity<?> uploadBundle(@RequestBody byte[] body) throws IOException {
         int size = body != null ? body.length : 0;
         log.info("[REST] POST /scenarios/bundles contentType=application/zip size={}", size);
         requireManageFolder("bundles");
@@ -738,14 +712,23 @@ public class ScenarioController {
             value = "/{id}/bundle",
             consumes = "application/zip",
             produces = MediaType.APPLICATION_JSON_VALUE)
-    public Scenario replaceBundle(@PathVariable("id") String id,
-                                  @RequestBody byte[] body) throws IOException {
+    public ResponseEntity<?> replaceBundle(@PathVariable("id") String id,
+                                           @RequestBody byte[] body) throws IOException {
         int size = body != null ? body.length : 0;
         log.info("[REST] PUT /scenarios/{}/bundle contentType=application/zip size={}", id, size);
         requireManageScenario(id);
         Scenario updated = service.replaceBundleFromZip(id, body);
         log.info("[REST] PUT /scenarios/{}/bundle -> status=200 body={}", id, safeJson(updated));
-        return updated;
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(updated);
+    }
+
+    @ExceptionHandler(BundleValidationException.class)
+    ResponseEntity<BundleValidationResult> invalidBundle(BundleValidationException e) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(e.result());
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

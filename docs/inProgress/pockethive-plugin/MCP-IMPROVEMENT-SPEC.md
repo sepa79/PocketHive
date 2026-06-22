@@ -261,10 +261,8 @@ The Scenario Manager is the preferred runtime source for the PocketHive contract
 Expand the Scenario Manager API with:
 - `GET /api/authoring-contract` — full authoring manifest from live Scenario Manager sources
 - `GET /api/authoring-contract/fingerprint` — lightweight cache freshness check
-- `POST /scenario-bundles/validate` — side-effect-free bundle validation with structured findings
-- `POST /scenarios/{id}/validate` — validate an existing loaded scenario bundle
-- `POST /scenario-bundles/validate-existing?bundleKey=...` — validate a catalog entry by bundle identity
-- `POST /scenarios/{id}/templates/validate` — bundle-local template call validation
+- `POST /validation/scenario-bundles` — side-effect-free bundle validation with structured findings
+- `POST /validation/scenario-bundles/existing?bundleKey=...` — validate a catalog entry by bundle identity
 
 MCP should call the authoring contract once per server session and cache it.
 It should call again only when `forceRefresh` is explicit or when a fingerprint

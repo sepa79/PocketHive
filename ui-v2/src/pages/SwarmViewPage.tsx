@@ -12,6 +12,7 @@ import {
   applyNodeChanges,
   type Edge,
   type Node,
+  type NodeProps,
   type NodeTypes,
   type OnEdgesChange,
   type OnNodesChange,
@@ -143,7 +144,9 @@ type FlowNodeData = {
   dim: boolean
 }
 
-function WorkerNode({ data, selected }: { data: FlowNodeData; selected: boolean }) {
+type WorkerFlowNode = Node<FlowNodeData, 'worker'>
+
+function WorkerNode({ data, selected }: NodeProps<WorkerFlowNode>) {
   const cls = selected
     ? 'swarmFlowNode swarmFlowNodeSelected'
     : data.dim
@@ -161,7 +164,7 @@ function WorkerNode({ data, selected }: { data: FlowNodeData; selected: boolean 
   )
 }
 
-const nodeTypes: NodeTypes = { worker: WorkerNode as any }
+const nodeTypes: NodeTypes = { worker: WorkerNode }
 
 function loadStoredPositions(swarmId: string) {
   if (!swarmId) return {} as Record<string, { x: number; y: number }>

@@ -2823,6 +2823,58 @@ select.textInputCompact option {
   background: rgba(255, 95, 95, 0.12);
 }
 
+.scenarioValidationPanel {
+  margin-top: 14px;
+  min-height: 136px;
+  border: 1px solid var(--border2);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.025);
+  padding: 12px;
+}
+
+.scenarioValidationSummary {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.scenarioValidationMessage {
+  margin-top: 12px;
+  font-size: 12px;
+}
+
+.scenarioValidationFindings {
+  margin-top: 10px;
+  max-height: 190px;
+  overflow-y: auto;
+  display: grid;
+  gap: 8px;
+  padding-right: 4px;
+}
+
+.scenarioValidationFinding {
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.16);
+  padding: 8px;
+  font-size: 12px;
+}
+
+.scenarioValidationFindingHeader {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 4px;
+  font-size: 11px;
+}
+
+.scenarioValidationWarning {
+  color: rgba(255, 218, 120, 0.92);
+}
+
 .scenarioWorkspaceActions {
   margin-top: 14px;
   display: flex;

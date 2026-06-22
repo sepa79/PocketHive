@@ -95,6 +95,30 @@ class AuthRuntimeTest {
     }
 
     @Test
+    void rejectsAuthProfilesYmlFallback() throws Exception {
+        Path scenario = Files.createTempDirectory("auth-profile-yml");
+        Path templates = Files.createDirectories(scenario.resolve("templates"));
+        Files.writeString(scenario.resolve("authProfiles.yml"), """
+            profiles:
+              "api:static":
+                type: STATIC_TOKEN
+                storage:
+                  mode: NONE
+                token: test-token
+            """);
+
+        assertThatThrownBy(() -> AuthRuntime.forTemplates(
+            templates.toString(),
+            List.of(new AuthRef("api:static", AuthApplyAs.HTTP_AUTHORIZATION_BEARER, null, null, null)),
+            Map.of(),
+            new TestContext(),
+            (template, context) -> template,
+            new RedisSequenceProperties()))
+            .isInstanceOf(AuthFailureException.class)
+            .hasMessageContaining("authProfiles.yaml was not found");
+    }
+
+    @Test
     void rejectsSutReferencesWhenNoSutContextIsProvided() throws Exception {
         Path templates = profiles("""
             profiles:

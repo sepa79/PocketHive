@@ -14,7 +14,8 @@ COPY docs-site/package.json docs-site/package-lock.json ./
 RUN npm ci
 COPY docs-site/ ./
 COPY docs/ /workspace/docs/
-COPY ui/assets/ /workspace/ui/assets/
+COPY archive/legacy-ui/assets/ /workspace/ui/assets/
+COPY archive/legacy-ui/assets/ /workspace/archive/legacy-ui/assets/
 ENV DOCS_URL=http://localhost:8088
 ENV DOCS_BASE_URL=/docs/
 RUN npm run build

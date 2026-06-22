@@ -15,7 +15,7 @@ async function fetchHealth(url: string, signal: AbortSignal): Promise<boolean> {
   if (!response.ok) return false
   const json = (await response.json()) as unknown
   if (typeof json !== 'object' || json === null) return true
-  const status = (json as any).status
+  const status = (json as { status?: unknown }).status
   return typeof status === 'string' ? status.toUpperCase() === 'UP' : true
 }
 
@@ -89,7 +89,6 @@ export function ConnectivityIndicator() {
       controller.abort()
       if (timerRef.current) window.clearTimeout(timerRef.current)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {

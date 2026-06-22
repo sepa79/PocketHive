@@ -169,11 +169,7 @@ public final class RedisTokenStore implements TokenStore {
     }
 
     public static String validateTokenKey(String tokenKey) {
-        String normalized = requireTokenSegment(tokenKey, "tokenKey");
-        if (!normalized.matches("[A-Za-z0-9._:-]{1,128}") || normalized.contains("..")) {
-            throw new IllegalArgumentException("Invalid auth tokenKey");
-        }
-        return normalized;
+        return AuthTokenKeys.validateTokenKey(tokenKey);
     }
 
     private String recordKey(String tokenKey) {

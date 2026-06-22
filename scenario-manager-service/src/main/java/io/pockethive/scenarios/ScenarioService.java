@@ -1,10 +1,24 @@
 package io.pockethive.scenarios;
 
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.StreamReadFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import io.pockethive.capabilities.CapabilityCatalogueService;
+import io.pockethive.scenarios.validation.BundleValidationException;
+import io.pockethive.scenarios.validation.BundleValidationResult;
+import io.pockethive.scenarios.validation.BundleValidationSource;
+import io.pockethive.scenarios.validation.TemplateValidationResult;
+import io.pockethive.scenarios.validation.ValidationCategory;
+import io.pockethive.scenarios.validation.ValidationCodes;
+import io.pockethive.scenarios.validation.ValidationFinding;
+import io.pockethive.scenarios.validation.ValidationSeverity;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.SwarmTemplate;
+import io.pockethive.worker.sdk.auth.AuthApplyAs;
+import io.pockethive.worker.sdk.auth.AuthStorageMode;
+import io.pockethive.worker.sdk.auth.AuthTokenKeys;
+import io.pockethive.worker.sdk.auth.AuthType;
 import jakarta.annotation.PostConstruct;
 import org.springframework.http.MediaType;
 import org.slf4j.Logger;
@@ -21,6 +35,8 @@ import java.security.NoSuchAlgorithmException;
 import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -43,6 +59,10 @@ public class ScenarioService {
     private static final String EDITOR_KIND_JSON = "json";
     private static final String EDITOR_KIND_MARKDOWN = "markdown";
     private static final String EDITOR_KIND_UNSUPPORTED = "unsupported";
+    private static final String SUT_DESCRIPTOR_FILE = "sut.yaml";
+    private static final String AUTH_PROFILES_FILE = "authProfiles.yaml";
+    private static final Pattern VAR_REFERENCE_PATTERN =
+        Pattern.compile("\\bvars\\.([A-Za-z_][A-Za-z0-9_]*)\\b");
 
     private final Path storageDir;
     private final Path testStorageDir;
@@ -51,6 +71,12 @@ public class ScenarioService {
     private final boolean showTestScenarios;
     private final ObjectMapper jsonMapper = new ObjectMapper();
     private final ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
+    private final ObjectMapper strictJsonMapper = new ObjectMapper(JsonFactory.builder()
+        .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
+        .build());
+    private final ObjectMapper strictYamlMapper = new ObjectMapper(YAMLFactory.builder()
+        .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
+        .build());
     private final CapabilityCatalogueService capabilities;
     private final Map<String, ScenarioRecord> scenarios = new ConcurrentHashMap<>();
     private volatile List<BundleCatalogEntry> bundleCatalog = List.of();
@@ -991,8 +1017,28 @@ public class ScenarioService {
         return Format.YAML;
     }
 
-    private Scenario read(Path path, Format format) throws IOException {
-        return (format == Format.JSON ? jsonMapper : yamlMapper).readValue(path.toFile(), Scenario.class);
+    private ObjectMapper strictMapperFor(Format format) {
+        return format == Format.JSON ? strictJsonMapper : strictYamlMapper;
+    }
+
+    private Scenario readScenario(Path path, Format format) throws IOException {
+        return strictMapperFor(format).readValue(path.toFile(), Scenario.class);
+    }
+
+    private Scenario readScenarioContent(String content, Format format) throws IOException {
+        return strictMapperFor(format).readValue(content, Scenario.class);
+    }
+
+    private VariablesDocument readVariablesDocument(String raw) throws IOException {
+        return strictYamlMapper.readValue(raw, VariablesDocument.class);
+    }
+
+    private SutEnvironment readSutEnvironment(Path file) throws IOException {
+        return strictMapperFor(detectFormat(file)).readValue(file.toFile(), SutEnvironment.class);
+    }
+
+    private SutEnvironment readSutEnvironmentYaml(String raw) throws IOException {
+        return strictYamlMapper.readValue(raw, SutEnvironment.class);
     }
 
     private void writeDescriptor(Scenario scenario, Format format, Path bundleDir) throws IOException {
@@ -1190,7 +1236,7 @@ public class ScenarioService {
         String fallbackName = fallbackBundleName(bundlePath);
         try {
             Format format = detectFormat(descriptorFile);
-            Scenario scenario = read(descriptorFile, format);
+            Scenario scenario = readScenario(descriptorFile, format);
             target.add(new ScannedBundle(
                     bundlePath,
                     bundlePath,
@@ -1452,7 +1498,7 @@ public class ScenarioService {
         Format format = detectFormat(file);
         Scenario scenario;
         try {
-            scenario = (format == Format.JSON ? jsonMapper : yamlMapper).readValue(trimmed, Scenario.class);
+            scenario = readScenarioContent(trimmed, format);
         } catch (IOException e) {
             throw new IOException("Failed to parse scenario content: " + e.getMessage(), e);
         }
@@ -1473,7 +1519,7 @@ public class ScenarioService {
     public Scenario updatePlan(String id, Map<String, Object> plan) throws IOException {
         Path file = scenarioDescriptorFile(id);
         Format format = detectFormat(file);
-        Scenario scenario = read(file, format);
+        Scenario scenario = readScenario(file, format);
         if (scenario.getId() == null || scenario.getId().isBlank()) {
             throw new IllegalArgumentException("Scenario id must not be null or blank");
         }
@@ -1666,7 +1712,7 @@ public class ScenarioService {
             throw new IllegalArgumentException("variables.yaml must not be empty");
         }
         try {
-            VariablesDocument doc = yamlMapper.readValue(raw, VariablesDocument.class);
+            VariablesDocument doc = readVariablesDocument(raw);
             if (doc == null) {
                 throw new IllegalArgumentException("variables.yaml parsed as null");
             }
@@ -1742,7 +1788,7 @@ public class ScenarioService {
             }
         }
 
-        Set<String> allowedSutIds = new LinkedHashSet<>(listSutIds(scenarioId));
+        Set<String> allowedSutIds = new LinkedHashSet<>(listBundleSutDirectoryIds(scenarioId, false));
         for (Map.Entry<String, Map<String, Map<String, Object>>> entry : sut.entrySet()) {
             String profileId = entry.getKey();
             Map<String, Map<String, Object>> perSut = entry.getValue() == null ? Map.of() : entry.getValue();
@@ -1994,6 +2040,10 @@ public class ScenarioService {
     }
 
     public List<String> listSutIds(String scenarioId) throws IOException {
+        return listBundleSutDirectoryIds(scenarioId, true);
+    }
+
+    private List<String> listBundleSutDirectoryIds(String scenarioId, boolean requireDescriptor) throws IOException {
         Path bundle = bundleDirFor(scenarioId);
         Path sutDir = bundle.resolve("sut").normalize();
         if (!sutDir.startsWith(bundle) || !Files.isDirectory(sutDir)) {
@@ -2008,6 +2058,16 @@ public class ScenarioService {
                 String id = path.getFileName().toString();
                 if (id.isBlank()) {
                     continue;
+                }
+                if (requireDescriptor) {
+                    if (!hasBundleSutDescriptor(path)) {
+                        continue;
+                    }
+                    try {
+                        readBundleSutDescriptor(path, id);
+                    } catch (IllegalArgumentException e) {
+                        throw invalidBundleSutDescriptor(scenarioId, id, e);
+                    }
                 }
                 ids.add(id);
             }
@@ -2029,21 +2089,26 @@ public class ScenarioService {
         if (!Files.isDirectory(sutDir)) {
             throw new IllegalArgumentException("SUT '%s' not found in bundle for scenario '%s'".formatted(sutId, scenarioId));
         }
-        List<String> candidates = List.of("sut.yaml", "sut.yml", "sut.json");
-        Path file = null;
-        for (String candidate : candidates) {
-            Path path = sutDir.resolve(candidate);
-            if (Files.isRegularFile(path)) {
-                file = path;
-                break;
-            }
+        try {
+            return readBundleSutDescriptor(sutDir, sutId);
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException(
+                "Failed to parse SUT '%s' for scenario '%s': %s".formatted(sutId, scenarioId, e.getMessage()), e);
         }
-        if (file == null) {
-            throw new IllegalArgumentException("SUT '%s' in scenario '%s' has no sut.yaml".formatted(sutId, scenarioId));
+    }
+
+    private boolean hasBundleSutDescriptor(Path sutDir) {
+        Path file = sutDir.resolve(SUT_DESCRIPTOR_FILE).normalize();
+        return file.startsWith(sutDir) && Files.isRegularFile(file);
+    }
+
+    private SutEnvironment readBundleSutDescriptor(Path sutDir, String sutId) {
+        Path file = sutDir.resolve(SUT_DESCRIPTOR_FILE).normalize();
+        if (!file.startsWith(sutDir) || !Files.isRegularFile(file)) {
+            throw new IllegalArgumentException("SUT '%s' has no sut.yaml".formatted(sutId));
         }
         try {
-            ObjectMapper mapper = detectFormat(file) == Format.JSON ? jsonMapper : yamlMapper;
-            SutEnvironment env = mapper.readValue(file.toFile(), SutEnvironment.class);
+            SutEnvironment env = readSutEnvironment(file);
             if (env == null) {
                 throw new IllegalArgumentException("sut.yaml parsed as null");
             }
@@ -2055,10 +2120,18 @@ public class ScenarioService {
                     "sut.yaml id '%s' does not match directory name '%s'".formatted(env.id(), sutId));
             }
             return env;
-        } catch (Exception e) {
-            throw new IllegalArgumentException(
-                "Failed to parse SUT '%s' for scenario '%s'".formatted(sutId, scenarioId), e);
+        } catch (IOException e) {
+            throw new IllegalArgumentException("Failed to parse sut.yaml", e);
         }
+    }
+
+    private IllegalArgumentException invalidBundleSutDescriptor(String scenarioId, String sutId, IllegalArgumentException cause) {
+        return new IllegalArgumentException(
+            "Failed to parse bundle-local SUT '%s' in scenario '%s': %s".formatted(
+                sutId,
+                scenarioId,
+                cause.getMessage()),
+            cause);
     }
 
     /**
@@ -2079,7 +2152,7 @@ public class ScenarioService {
         if (!Files.isDirectory(sutDir)) {
             return null;
         }
-        Path file = sutDir.resolve("sut.yaml").normalize();
+        Path file = sutDir.resolve(SUT_DESCRIPTOR_FILE).normalize();
         if (!file.startsWith(sutDir) || !Files.isRegularFile(file)) {
             return null;
         }
@@ -2097,7 +2170,7 @@ public class ScenarioService {
 
         SutEnvironment env;
         try {
-            env = yamlMapper.readValue(raw, SutEnvironment.class);
+            env = readSutEnvironmentYaml(raw);
         } catch (Exception e) {
             throw new IllegalArgumentException("Failed to parse sut.yaml", e);
         }
@@ -2114,7 +2187,7 @@ public class ScenarioService {
             throw new IllegalArgumentException("Invalid sutId");
         }
         Files.createDirectories(sutDir);
-        Path file = sutDir.resolve("sut.yaml").normalize();
+        Path file = sutDir.resolve(SUT_DESCRIPTOR_FILE).normalize();
         if (!file.startsWith(sutDir)) {
             throw new IllegalArgumentException("Invalid sut.yaml path");
         }
@@ -2147,14 +2220,24 @@ public class ScenarioService {
     }
 
     public Scenario createBundleFromZip(byte[] zipBytes) throws IOException {
-        UploadedBundle uploaded = unpackBundle(zipBytes, null);
+        UploadedBundle uploaded = unpackUploadedBundle(zipBytes, null);
         try {
+            BundleValidationResult validation = validateScenarioBundle(
+                uploaded.scenario(),
+                uploaded.rootDir(),
+                BundleValidationSource.UPLOADED_ZIP,
+                null,
+                null,
+                List.of());
+            if (!validation.ok()) {
+                throw new BundleValidationException(validation);
+            }
             String id = uploaded.scenario().getId();
             if (id == null || id.isBlank()) {
                 throw new IllegalArgumentException("Scenario id must not be null or blank");
             }
             if (hasDiscoveredScenarioId(id)) {
-                throw new IllegalArgumentException("Scenario '%s' already exists".formatted(id));
+                throw new BundleValidationException(duplicateScenarioValidationResult(id));
             }
             writeBundle(uploaded, defaultUploadBundleDir(id));
             reload();
@@ -2188,8 +2271,18 @@ public class ScenarioService {
     }
 
     public Scenario replaceBundleFromZip(String expectedId, byte[] zipBytes) throws IOException {
-        UploadedBundle uploaded = unpackBundle(zipBytes, expectedId);
+        UploadedBundle uploaded = unpackUploadedBundle(zipBytes, expectedId);
         try {
+            BundleValidationResult validation = validateScenarioBundle(
+                uploaded.scenario(),
+                uploaded.rootDir(),
+                BundleValidationSource.UPLOADED_ZIP,
+                null,
+                null,
+                List.of());
+            if (!validation.ok()) {
+                throw new BundleValidationException(validation);
+            }
             String id = uploaded.scenario().getId();
             ScenarioRecord existing = scenarios.get(id);
             Path targetDir = existing != null && existing.bundleDir() != null ? existing.bundleDir() : bundleDir(id);
@@ -2202,6 +2295,14 @@ public class ScenarioService {
         }
     }
 
+    private UploadedBundle unpackUploadedBundle(byte[] zipBytes, String expectedId) throws IOException {
+        try {
+            return unpackBundle(zipBytes, expectedId);
+        } catch (IllegalArgumentException e) {
+            throw new BundleValidationException(uploadedBundleValidationResult(e));
+        }
+    }
+
     public BundleValidationResult validateBundleZip(byte[] zipBytes) throws IOException {
         UploadedBundle uploaded = null;
         try {
@@ -2209,27 +2310,12 @@ public class ScenarioService {
             return validateScenarioBundle(
                 uploaded.scenario(),
                 uploaded.rootDir(),
-                "uploaded-zip",
+                BundleValidationSource.UPLOADED_ZIP,
                 null,
                 null,
                 List.of());
         } catch (IllegalArgumentException e) {
-            ValidationFinding finding = finding(
-                validationCode(e.getMessage()),
-                "error",
-                validationPath(e.getMessage()),
-                cleanError(e.getMessage()),
-                validationFix(e.getMessage()));
-            return new BundleValidationResult(
-                false,
-                "uploaded-zip",
-                null,
-                null,
-                null,
-                List.of(finding),
-                List.of(),
-                List.of(),
-                List.of());
+            return uploadedBundleValidationResult(e);
         } finally {
             if (uploaded != null) {
                 cleanupUploaded(uploaded);
@@ -2237,24 +2323,37 @@ public class ScenarioService {
         }
     }
 
-    public BundleValidationResult validateExistingScenario(String id) throws IOException {
-        ScenarioRecord record = scenarios.get(id);
-        if (record == null) {
-            throw new IllegalArgumentException("Scenario '%s' not found".formatted(id));
-        }
-        BundleCatalogEntry catalogEntry = bundleCatalog.stream()
-            .filter(entry -> id.equals(entry.scenarioId()))
-            .findFirst()
-            .orElse(null);
-        return validateScenarioBundle(
-            record.scenario(),
-            record.bundleDir(),
-            "scenario-manager",
-            catalogEntry != null ? catalogEntry.bundleKey() : null,
-            catalogEntry != null ? catalogEntry.bundlePath() : record.folderPath(),
-            catalogEntry != null && catalogEntry.defunct()
-                ? List.of(defunctFinding(catalogEntry.defunctReason()))
-                : List.of());
+    private BundleValidationResult uploadedBundleValidationResult(Exception e) {
+        String message = e == null ? null : e.getMessage();
+        ValidationFinding finding = finding(
+            validationCategory(validationCode(message)),
+            validationCode(message),
+            ValidationSeverity.ERROR,
+            validationPath(message),
+            cleanError(message),
+            validationFix(message));
+        return BundleValidationResult.of(
+            BundleValidationSource.UPLOADED_ZIP,
+            null,
+            null,
+            null,
+            List.of(finding));
+    }
+
+    private BundleValidationResult duplicateScenarioValidationResult(String scenarioId) {
+        ValidationFinding finding = finding(
+            ValidationCategory.SCENARIO,
+            ValidationCodes.DUPLICATE_SCENARIO_ID,
+            ValidationSeverity.ERROR,
+            "scenario.yaml:id",
+            "Scenario '%s' already exists.".formatted(scenarioId),
+            "Rename the scenario id or replace the existing bundle explicitly.");
+        return BundleValidationResult.of(
+            BundleValidationSource.UPLOADED_ZIP,
+            null,
+            null,
+            scenarioId,
+            List.of(finding));
     }
 
     public BundleValidationResult validateExistingBundle(String bundleKey) throws IOException {
@@ -2266,47 +2365,60 @@ public class ScenarioService {
         ScenarioRecord record = entry.scenarioRecord();
         if (record == null) {
             ValidationFinding finding = finding(
-                "BUNDLE_DEFUNCT",
-                "error",
+                ValidationCategory.BUNDLE,
+                ValidationCodes.BUNDLE_DEFUNCT,
+                ValidationSeverity.ERROR,
                 entry.bundlePath() != null ? entry.bundlePath() : "bundle",
                 cleanError(entry.defunctReason()),
                 "Repair the scenario descriptor, then reload Scenario Manager.");
-            return new BundleValidationResult(
-                false,
-                "scenario-manager",
-                null,
+            return BundleValidationResult.of(
+                BundleValidationSource.SCENARIO_MANAGER,
                 entry.bundleKey(),
                 entry.bundlePath(),
-                List.of(finding),
-                List.of(),
-                List.of(),
-                List.of());
+                null,
+                List.of(finding));
         }
 
-        List<ValidationFinding> seedFindings = entry.defunct()
-            ? List.of(defunctFinding(entry.defunctReason()))
-            : List.of();
+        List<ValidationFinding> seedFindings = catalogOnlyDefunctFindings(entry);
         return validateScenarioBundle(
             record.scenario(),
             record.bundleDir(),
-            "scenario-manager",
+            BundleValidationSource.SCENARIO_MANAGER,
             entry.bundleKey(),
             entry.bundlePath(),
             seedFindings);
     }
 
-    public TemplateValidationResult validateScenarioTemplates(String id) throws IOException {
-        ScenarioRecord record = scenarios.get(id);
-        if (record == null) {
-            throw new IllegalArgumentException("Scenario '%s' not found".formatted(id));
+    private List<ValidationFinding> catalogOnlyDefunctFindings(BundleCatalogEntry entry) {
+        if (entry == null || (!entry.duplicateIdConflict() && !entry.quarantined())) {
+            return List.of();
         }
-        return validateTemplates(record.scenario(), record.bundleDir());
+        List<String> reasons = new ArrayList<>();
+        if (entry.duplicateIdConflict()) {
+            reasons.add(duplicateScenarioReason(entry.scenarioId()));
+        }
+        if (entry.quarantined()) {
+            reasons.add(quarantineReason());
+        }
+        return reasons.isEmpty()
+            ? List.of()
+            : List.of(defunctFinding(String.join("; ", reasons)));
+    }
+
+    private String duplicateScenarioReason(String scenarioId) {
+        List<String> paths = bundleCatalog.stream()
+            .filter(entry -> Objects.equals(entry.scenarioId(), scenarioId))
+            .map(BundleCatalogEntry::bundlePath)
+            .filter(Objects::nonNull)
+            .sorted()
+            .toList();
+        return "Duplicate scenario id '%s' found in bundles: %s".formatted(scenarioId, String.join(", ", paths));
     }
 
     private BundleValidationResult validateScenarioBundle(
         Scenario scenario,
         Path bundleRoot,
-        String source,
+        BundleValidationSource source,
         String bundleKey,
         String bundlePath,
         List<ValidationFinding> seedFindings
@@ -2317,8 +2429,9 @@ public class ScenarioService {
 
         if (resolved == null) {
             findings.add(finding(
-                "SCENARIO_DESCRIPTOR_INVALID",
-                "error",
+                ValidationCategory.SCENARIO,
+                ValidationCodes.SCENARIO_DESCRIPTOR_INVALID,
+                ValidationSeverity.ERROR,
                 "scenario.yaml",
                 "Scenario descriptor could not be parsed.",
                 "Create a valid scenario.yaml or scenario.json descriptor."));
@@ -2334,37 +2447,34 @@ public class ScenarioService {
                 validateBundleExtras(scenarioId, bundleRoot);
             } catch (IllegalArgumentException e) {
                 findings.add(finding(
+                    validationCategory(validationCode(e.getMessage())),
                     validationCode(e.getMessage()),
-                    "error",
+                    ValidationSeverity.ERROR,
                     validationPath(e.getMessage()),
                     cleanError(e.getMessage()),
                     validationFix(e.getMessage())));
             }
             TemplateValidationResult templates = validateTemplates(resolved, bundleRoot);
             findings.addAll(templates.findings());
+            findings.addAll(validateVariableReferences(bundleRoot));
+            findings.addAll(validateAuthContracts(bundleRoot));
         }
 
-        List<String> templates = listRelativeFiles(bundleRoot, "templates");
-        List<String> schemas = listRelativeFiles(bundleRoot, "schemas");
-        boolean ok = findings.stream().noneMatch(f -> "error".equals(f.severity()));
-        return new BundleValidationResult(
-            ok,
+        return BundleValidationResult.of(
             source,
-            scenarioId,
             bundleKey,
             bundlePath,
-            List.copyOf(findings),
-            bundleBees(resolved),
-            templates,
-            schemas);
+            scenarioId,
+            List.copyOf(findings));
     }
 
     private TemplateValidationResult validateTemplates(Scenario scenario, Path bundleRoot) throws IOException {
         List<ValidationFinding> findings = new ArrayList<>();
         if (bundleRoot == null || !Files.isDirectory(bundleRoot)) {
             findings.add(finding(
-                "BUNDLE_DIRECTORY_MISSING",
-                "error",
+                ValidationCategory.BUNDLE,
+                ValidationCodes.BUNDLE_DIRECTORY_MISSING,
+                ValidationSeverity.ERROR,
                 "bundle",
                 "Scenario bundle directory is missing.",
                 "Restore the bundle directory or re-import the scenario bundle."));
@@ -2377,11 +2487,12 @@ public class ScenarioService {
             Path file = bundleRoot.resolve(relativePath).normalize();
             Map<?, ?> doc;
             try {
-                doc = (detectFormat(file) == Format.JSON ? jsonMapper : yamlMapper).readValue(file.toFile(), Map.class);
+                doc = readStructuredMap(file);
             } catch (Exception e) {
                 findings.add(finding(
-                    "TEMPLATE_PARSE_ERROR",
-                    "error",
+                    ValidationCategory.TEMPLATES,
+                    ValidationCodes.TEMPLATE_PARSE_ERROR,
+                    ValidationSeverity.ERROR,
                     relativePath,
                     "Template could not be parsed: " + cleanError(e.getMessage()),
                     "Fix the template YAML/JSON syntax."));
@@ -2392,8 +2503,9 @@ public class ScenarioService {
                 Object value = doc.get(field);
                 if (!(value instanceof String text) || text.isBlank()) {
                     findings.add(finding(
-                        "TEMPLATE_REQUIRED_FIELD_MISSING",
-                        "error",
+                        ValidationCategory.TEMPLATES,
+                        ValidationCodes.TEMPLATE_REQUIRED_FIELD_MISSING,
+                        ValidationSeverity.ERROR,
                         relativePath + ":" + field,
                         "HTTP template is missing required field '" + field + "'.",
                         "Add '" + field + "' to the HTTP template."));
@@ -2403,8 +2515,9 @@ public class ScenarioService {
             Object protocol = doc.get("protocol");
             if (protocol instanceof String text && !text.equalsIgnoreCase("HTTP")) {
                 findings.add(finding(
-                    "TEMPLATE_PROTOCOL_MISMATCH",
-                    "error",
+                    ValidationCategory.TEMPLATES,
+                    ValidationCodes.TEMPLATE_PROTOCOL_MISMATCH,
+                    ValidationSeverity.ERROR,
                     relativePath + ":protocol",
                     "Template under templates/http must declare protocol HTTP.",
                     "Set protocol: HTTP or move the template under the matching protocol folder."));
@@ -2419,8 +2532,9 @@ public class ScenarioService {
         for (Map.Entry<String, List<String>> entry : callIds.entrySet()) {
             if (entry.getValue().size() > 1) {
                 findings.add(finding(
-                    "TEMPLATE_CALL_ID_DUPLICATE",
-                    "error",
+                    ValidationCategory.TEMPLATES,
+                    ValidationCodes.TEMPLATE_CALL_ID_DUPLICATE,
+                    ValidationSeverity.ERROR,
                     String.join(", ", entry.getValue()),
                     "HTTP template callId '" + entry.getKey() + "' is defined more than once.",
                     "Keep one template per callId or rename the duplicate callIds."));
@@ -2432,21 +2546,406 @@ public class ScenarioService {
         for (String callId : referenced) {
             if (!defined.contains(callId)) {
                 findings.add(finding(
-                    "TEMPLATE_CALL_ID_MISSING",
-                    "error",
+                    ValidationCategory.TEMPLATES,
+                    ValidationCodes.TEMPLATE_CALL_ID_MISSING,
+                    ValidationSeverity.ERROR,
                     "scenario.yaml:plan",
                     "Scenario references HTTP callId '" + callId + "' but no matching template exists.",
                     "Add templates/http/<service>/" + callId + ".yaml or update the x-ph-call-id reference."));
             }
         }
 
-        boolean ok = findings.stream().noneMatch(f -> "error".equals(f.severity()));
+        boolean ok = findings.stream().noneMatch(f -> f.severity() == ValidationSeverity.ERROR);
         return new TemplateValidationResult(
             ok,
             scenario != null ? scenario.getId() : null,
             List.copyOf(findings),
             List.copyOf(referenced),
             List.copyOf(defined));
+    }
+
+    private List<ValidationFinding> validateVariableReferences(Path bundleRoot) throws IOException {
+        if (bundleRoot == null || !Files.isDirectory(bundleRoot)) {
+            return List.of();
+        }
+
+        Map<String, Set<String>> referencesByPath = collectVariableReferences(bundleRoot);
+        if (referencesByPath.isEmpty()) {
+            return List.of();
+        }
+
+        Path variablesFile = bundleRoot.resolve("variables.yaml").normalize();
+        if (!variablesFile.startsWith(bundleRoot) || !Files.isRegularFile(variablesFile)) {
+            Set<String> references = flattenReferences(referencesByPath);
+            return List.of(finding(
+                ValidationCategory.VARIABLES,
+                ValidationCodes.VARIABLES_MISSING,
+                ValidationSeverity.ERROR,
+                "variables.yaml",
+                "Bundle references vars.%s but variables.yaml is missing.".formatted(String.join(", vars.", references)),
+                "Create variables.yaml with definitions for the referenced vars."));
+        }
+
+        Set<String> defined;
+        try {
+            VariablesDocument doc = parseVariables(Files.readString(variablesFile));
+            defined = doc.definitions() == null
+                ? Set.of()
+                : doc.definitions().stream()
+                    .filter(Objects::nonNull)
+                    .map(VariablesDocument.VariableDefinition::name)
+                    .filter(Objects::nonNull)
+                    .map(String::trim)
+                    .filter(name -> !name.isBlank())
+                    .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+        } catch (RuntimeException e) {
+            return List.of();
+        }
+
+        List<ValidationFinding> findings = new ArrayList<>();
+        for (Map.Entry<String, Set<String>> entry : referencesByPath.entrySet()) {
+            for (String reference : entry.getValue()) {
+                if (!defined.contains(reference)) {
+                    findings.add(finding(
+                        ValidationCategory.VARIABLES,
+                        ValidationCodes.VARIABLE_REFERENCE_UNKNOWN,
+                        ValidationSeverity.ERROR,
+                        entry.getKey(),
+                        "vars.%s is not defined in variables.yaml.".formatted(reference),
+                        "Add a variables.yaml definition named '%s' or correct the vars reference.".formatted(reference)));
+                }
+            }
+        }
+        return List.copyOf(findings);
+    }
+
+    private Map<String, Set<String>> collectVariableReferences(Path bundleRoot) throws IOException {
+        Map<String, Set<String>> referencesByPath = new LinkedHashMap<>();
+        for (String relativePath : bundleValidationTextFiles(bundleRoot)) {
+            Path file = bundleRoot.resolve(relativePath).normalize();
+            String text = Files.readString(file);
+            Matcher matcher = VAR_REFERENCE_PATTERN.matcher(text);
+            while (matcher.find()) {
+                referencesByPath
+                    .computeIfAbsent(relativePath, ignored -> new LinkedHashSet<>())
+                    .add(matcher.group(1));
+            }
+        }
+        return referencesByPath;
+    }
+
+    private Set<String> flattenReferences(Map<String, Set<String>> referencesByPath) {
+        Set<String> references = new LinkedHashSet<>();
+        referencesByPath.values().forEach(references::addAll);
+        return references;
+    }
+
+    private List<ValidationFinding> validateAuthContracts(Path bundleRoot) throws IOException {
+        if (bundleRoot == null || !Files.isDirectory(bundleRoot)) {
+            return List.of();
+        }
+
+        List<AuthRefUsage> refs = new ArrayList<>();
+        List<ValidationFinding> findings = new ArrayList<>();
+        for (String relativePath : listRelativeFiles(bundleRoot, "templates")) {
+            if (!isStructuredBundleFile(relativePath)) {
+                continue;
+            }
+            Path file = bundleRoot.resolve(relativePath).normalize();
+            Map<?, ?> doc;
+            try {
+                doc = readStructuredMap(file);
+            } catch (Exception e) {
+                if (!relativePath.startsWith("templates/http/")) {
+                    findings.add(finding(
+                        ValidationCategory.TEMPLATES,
+                        ValidationCodes.TEMPLATE_PARSE_ERROR,
+                        ValidationSeverity.ERROR,
+                        relativePath,
+                        "Template could not be parsed: " + cleanError(e.getMessage()),
+                        "Fix the template YAML/JSON syntax."));
+                }
+                continue;
+            }
+            boolean hasInlineAuth = doc.containsKey("auth");
+            boolean hasAuthRef = doc.containsKey("authRef");
+            if (hasInlineAuth) {
+                findings.add(finding(
+                    ValidationCategory.AUTH,
+                    ValidationCodes.AUTH_REF_INLINE_NOT_ALLOWED,
+                    ValidationSeverity.ERROR,
+                    relativePath + ":auth",
+                    "Template uses inline auth, but bundle auth must use authRef.",
+                    "Replace auth with authRef and declare the profile in authProfiles.yaml."));
+            }
+            if (hasInlineAuth && hasAuthRef) {
+                findings.add(finding(
+                    ValidationCategory.AUTH,
+                    ValidationCodes.AUTH_REF_INLINE_NOT_ALLOWED,
+                    ValidationSeverity.ERROR,
+                    relativePath + ":authRef",
+                    "Template declares both auth and authRef.",
+                    "Keep authRef only and remove inline auth."));
+            }
+            if (hasAuthRef) {
+                refs.add(authRefUsage(relativePath, doc.get("authRef"), findings));
+            }
+        }
+
+        refs.removeIf(Objects::isNull);
+        Path authProfiles = resolveAuthProfilesFile(bundleRoot);
+        if (!refs.isEmpty() && authProfiles == null) {
+            findings.add(finding(
+                ValidationCategory.AUTH,
+                ValidationCodes.AUTH_PROFILES_MISSING,
+                ValidationSeverity.ERROR,
+                "authProfiles.yaml",
+                "Templates declare authRef but authProfiles.yaml is missing.",
+                "Create authProfiles.yaml in the bundle root with a profiles map."));
+            return List.copyOf(findings);
+        }
+        if (authProfiles == null) {
+            return List.copyOf(findings);
+        }
+
+        AuthProfilesInfo profiles = readAuthProfiles(authProfiles, bundleRoot, findings);
+        if (profiles == null) {
+            return List.copyOf(findings);
+        }
+
+        for (AuthRefUsage ref : refs) {
+            if (ref.profileId() == null || ref.profileId().isBlank() || !profiles.profileIds().contains(ref.profileId())) {
+                findings.add(finding(
+                    ValidationCategory.AUTH,
+                    ValidationCodes.AUTH_REF_PROFILE_MISSING,
+                    ValidationSeverity.ERROR,
+                    ref.path() + ":authRef.profileId",
+                    "authRef.profileId '%s' is not declared in authProfiles.yaml.".formatted(nullToBlank(ref.profileId())),
+                    "Add profile '%s' to authProfiles.yaml or correct authRef.profileId.".formatted(nullToBlank(ref.profileId()))));
+            }
+        }
+        return List.copyOf(findings);
+    }
+
+    private AuthRefUsage authRefUsage(String relativePath, Object value, List<ValidationFinding> findings) {
+        if (!(value instanceof Map<?, ?> map)) {
+            findings.add(finding(
+                ValidationCategory.AUTH,
+                ValidationCodes.AUTH_REF_PROFILE_MISSING,
+                ValidationSeverity.ERROR,
+                relativePath + ":authRef",
+                "authRef must be an object with profileId and applyAs.",
+                "Use authRef.profileId and authRef.applyAs."));
+            return null;
+        }
+        String profileId = stringValue(map.get("profileId"));
+        String applyAs = stringValue(map.get("applyAs"));
+        if (profileId == null || profileId.isBlank()) {
+            findings.add(finding(
+                ValidationCategory.AUTH,
+                ValidationCodes.AUTH_REF_PROFILE_MISSING,
+                ValidationSeverity.ERROR,
+                relativePath + ":authRef.profileId",
+                "authRef.profileId must not be blank.",
+                "Set authRef.profileId to a profile declared in authProfiles.yaml."));
+        }
+        try {
+            AuthApplyAs.parse(applyAs);
+        } catch (IllegalArgumentException e) {
+            findings.add(finding(
+                ValidationCategory.AUTH,
+                ValidationCodes.AUTH_REF_APPLY_AS_INVALID,
+                ValidationSeverity.ERROR,
+                relativePath + ":authRef.applyAs",
+                "authRef.applyAs '%s' is not supported.".formatted(nullToBlank(applyAs)),
+                "Use one of: %s.".formatted(String.join(", ", supportedAuthApplyAsValues()))));
+        }
+        return new AuthRefUsage(relativePath, profileId);
+    }
+
+    private AuthProfilesInfo readAuthProfiles(Path authProfiles, Path bundleRoot, List<ValidationFinding> findings) {
+        String relativePath = bundleRoot.relativize(authProfiles).toString().replace('\\', '/');
+        Map<?, ?> doc;
+        try {
+            doc = readStructuredMap(authProfiles);
+        } catch (Exception e) {
+            findings.add(finding(
+                ValidationCategory.AUTH,
+                ValidationCodes.AUTH_PROFILES_INVALID,
+                ValidationSeverity.ERROR,
+                relativePath,
+                "authProfiles.yaml could not be parsed: " + cleanError(e.getMessage()),
+                "Fix authProfiles.yaml YAML syntax and duplicate keys."));
+            return null;
+        }
+
+        Object profilesValue = doc.get("profiles");
+        if (!(profilesValue instanceof Map<?, ?> profiles) || profiles.isEmpty()) {
+            findings.add(finding(
+                ValidationCategory.AUTH,
+                ValidationCodes.AUTH_PROFILES_INVALID,
+                ValidationSeverity.ERROR,
+                relativePath + ":profiles",
+                "authProfiles.yaml must declare a non-empty profiles map.",
+                "Add profiles.<profileId> entries."));
+            return new AuthProfilesInfo(Set.of());
+        }
+
+        Set<String> profileIds = new LinkedHashSet<>();
+        for (Map.Entry<?, ?> entry : profiles.entrySet()) {
+            String profileId = String.valueOf(entry.getKey());
+            profileIds.add(profileId);
+            if (!(entry.getValue() instanceof Map<?, ?> profile)) {
+                findings.add(finding(
+                    ValidationCategory.AUTH,
+                    ValidationCodes.AUTH_PROFILES_INVALID,
+                    ValidationSeverity.ERROR,
+                    relativePath + ":profiles." + profileId,
+                    "Auth profile '%s' must be an object.".formatted(profileId),
+                    "Declare type and storage for profile '%s'.".formatted(profileId)));
+                continue;
+            }
+            validateAuthProfileStorage(relativePath, profileId, profile, findings);
+        }
+        return new AuthProfilesInfo(Set.copyOf(profileIds));
+    }
+
+    private void validateAuthProfileStorage(
+        String relativePath,
+        String profileId,
+        Map<?, ?> profile,
+        List<ValidationFinding> findings
+    ) {
+        String rawType = stringValue(profile.get("type"));
+        AuthType type;
+        try {
+            type = AuthType.parse(rawType);
+        } catch (IllegalArgumentException e) {
+            findings.add(finding(
+                ValidationCategory.AUTH,
+                ValidationCodes.AUTH_PROFILES_INVALID,
+                ValidationSeverity.ERROR,
+                relativePath + ":profiles." + profileId + ".type",
+                "Auth profile '%s' declares unsupported type '%s'.".formatted(profileId, nullToBlank(rawType)),
+                "Use one of: %s.".formatted(String.join(", ", supportedAuthTypeValues()))));
+            return;
+        }
+        if (type == AuthType.NONE) {
+            findings.add(finding(
+                ValidationCategory.AUTH,
+                ValidationCodes.AUTH_PROFILES_INVALID,
+                ValidationSeverity.ERROR,
+                relativePath + ":profiles." + profileId + ".type",
+                "Auth profile '%s' must declare type.".formatted(profileId),
+                "Set a concrete auth profile type."));
+            return;
+        }
+
+        Object storageValue = profile.get("storage");
+        Map<?, ?> storage = storageValue instanceof Map<?, ?> map ? map : Map.of();
+        String rawMode = stringValue(storage.get("mode"));
+        AuthStorageMode mode = AuthStorageMode.NONE;
+        if (rawMode != null && !rawMode.isBlank()) {
+            try {
+                mode = AuthStorageMode.valueOf(normalizeEnumName(rawMode));
+            } catch (IllegalArgumentException e) {
+                findings.add(finding(
+                    ValidationCategory.AUTH,
+                    ValidationCodes.AUTH_STORAGE_INVALID,
+                    ValidationSeverity.ERROR,
+                    relativePath + ":profiles." + profileId + ".storage.mode",
+                    "Auth profile '%s' declares unsupported storage.mode '%s'.".formatted(profileId, rawMode),
+                    "Use one of: %s.".formatted(String.join(", ", supportedAuthStorageModeValues()))));
+                return;
+            }
+        }
+        boolean refreshable = type == AuthType.OAUTH2_CLIENT_CREDENTIALS
+            || type == AuthType.OAUTH2_PASSWORD_GRANT;
+        if (refreshable && mode != AuthStorageMode.REDIS) {
+            findings.add(finding(
+                ValidationCategory.AUTH,
+                ValidationCodes.AUTH_STORAGE_INVALID,
+                ValidationSeverity.ERROR,
+                relativePath + ":profiles." + profileId + ".storage.mode",
+                "Refreshable auth profile '%s' must use storage.mode=REDIS.".formatted(profileId),
+                "Set storage.mode: REDIS and provide a tokenKey."));
+        }
+        if (mode == AuthStorageMode.REDIS) {
+            String tokenKey = stringValue(storage.get("tokenKey"));
+            try {
+                AuthTokenKeys.validateTokenKey(tokenKey);
+            } catch (IllegalArgumentException e) {
+                findings.add(finding(
+                    ValidationCategory.AUTH,
+                    ValidationCodes.AUTH_STORAGE_INVALID,
+                    ValidationSeverity.ERROR,
+                    relativePath + ":profiles." + profileId + ".storage.tokenKey",
+                    "Auth profile '%s' must declare a valid storage.tokenKey.".formatted(profileId),
+                    "Use a non-blank tokenKey matching [A-Za-z0-9._:-]{1,128} without '..'."));
+            }
+        }
+        if (!refreshable && mode != AuthStorageMode.NONE) {
+            findings.add(finding(
+                ValidationCategory.AUTH,
+                ValidationCodes.AUTH_STORAGE_INVALID,
+                ValidationSeverity.ERROR,
+                relativePath + ":profiles." + profileId + ".storage.mode",
+                "Non-refresh auth profile '%s' must use storage.mode=NONE.".formatted(profileId),
+                "Set storage.mode: NONE."));
+        }
+    }
+
+    private Path resolveAuthProfilesFile(Path bundleRoot) {
+        Path candidate = bundleRoot.resolve(AUTH_PROFILES_FILE).normalize();
+        if (candidate.startsWith(bundleRoot) && Files.isRegularFile(candidate)) {
+            return candidate;
+        }
+        return null;
+    }
+
+    private Map<?, ?> readStructuredMap(Path file) throws IOException {
+        ObjectMapper mapper = detectFormat(file) == Format.JSON ? strictJsonMapper : strictYamlMapper;
+        Object value = mapper.readValue(file.toFile(), Map.class);
+        return value instanceof Map<?, ?> map ? map : Map.of();
+    }
+
+    private List<String> bundleValidationTextFiles(Path bundleRoot) throws IOException {
+        List<String> files = new ArrayList<>();
+        for (String relativePath : listRelativeFiles(bundleRoot, "")) {
+            if (isStructuredBundleFile(relativePath)) {
+                files.add(relativePath);
+            }
+        }
+        return List.copyOf(files);
+    }
+
+    private boolean isStructuredBundleFile(String relativePath) {
+        String name = relativePath == null ? "" : relativePath.toLowerCase(Locale.ROOT);
+        return name.endsWith(".yaml") || name.endsWith(".yml") || name.endsWith(".json");
+    }
+
+    private String stringValue(Object value) {
+        return value instanceof String text ? text.trim() : null;
+    }
+
+    private String normalizeEnumName(String value) {
+        return value == null ? null : value.trim().toUpperCase(Locale.ROOT).replace('-', '_');
+    }
+
+    private List<String> supportedAuthApplyAsValues() {
+        return Arrays.stream(AuthApplyAs.values()).map(Enum::name).toList();
+    }
+
+    private List<String> supportedAuthTypeValues() {
+        return Arrays.stream(AuthType.values()).filter(type -> type != AuthType.NONE).map(AuthType::key).toList();
+    }
+
+    private List<String> supportedAuthStorageModeValues() {
+        return Arrays.stream(AuthStorageMode.values()).map(Enum::name).toList();
+    }
+
+    private String nullToBlank(String value) {
+        return value == null ? "" : value;
     }
 
     private Set<String> referencedHttpCallIds(Scenario scenario) {
@@ -2541,17 +3040,26 @@ public class ScenarioService {
 
     private ValidationFinding defunctFinding(String reason) {
         return finding(
+            validationCategory(validationCode(reason)),
             validationCode(reason),
-            "error",
+            ValidationSeverity.ERROR,
             "scenario.yaml",
             cleanError(reason),
             validationFix(reason));
     }
 
-    private ValidationFinding finding(String code, String severity, String path, String message, String fix) {
+    private ValidationFinding finding(
+        ValidationCategory category,
+        String code,
+        ValidationSeverity severity,
+        String path,
+        String message,
+        String fix
+    ) {
         return new ValidationFinding(
-            code != null && !code.isBlank() ? code : "BUNDLE_INVALID",
-            severity != null && !severity.isBlank() ? severity : "error",
+            category != null ? category : ValidationCategory.BUNDLE,
+            code != null && !code.isBlank() ? code : ValidationCodes.BUNDLE_INVALID,
+            severity != null ? severity : ValidationSeverity.ERROR,
             path != null && !path.isBlank() ? path : "bundle",
             message != null && !message.isBlank() ? message : "Validation failed.",
             fix != null && !fix.isBlank() ? fix : "Review the bundle contract and repair the reported path.");
@@ -2560,27 +3068,52 @@ public class ScenarioService {
     private String validationCode(String message) {
         String text = message == null ? "" : message.toLowerCase(Locale.ROOT);
         if (text.contains("capability manifest")) {
-            return "CAPABILITY_MANIFEST_MISSING";
+            return ValidationCodes.CAPABILITY_MANIFEST_MISSING;
         }
         if (text.contains("scenario id") || text.contains("scenario descriptor") || text.contains("scenario.yaml")) {
-            return "SCENARIO_DESCRIPTOR_INVALID";
+            return ValidationCodes.SCENARIO_DESCRIPTOR_INVALID;
         }
         if (text.contains("variables.yaml") || text.contains("variable")) {
-            return "VARIABLES_INVALID";
+            return ValidationCodes.VARIABLES_INVALID;
         }
         if (text.contains("sut")) {
-            return "SUT_INVALID";
+            return ValidationCodes.SUT_INVALID;
         }
         if (text.contains("template")) {
-            return "TEMPLATE_INVALID";
+            return ValidationCodes.TEMPLATE_INVALID;
         }
         if (text.contains("duplicate")) {
-            return "DUPLICATE_SCENARIO_ID";
+            return ValidationCodes.DUPLICATE_SCENARIO_ID;
         }
         if (text.contains("defunct") || text.contains("quarantine")) {
-            return "BUNDLE_DEFUNCT";
+            return ValidationCodes.BUNDLE_DEFUNCT;
         }
-        return "BUNDLE_INVALID";
+        return ValidationCodes.BUNDLE_INVALID;
+    }
+
+    private ValidationCategory validationCategory(String code) {
+        return switch (code) {
+            case ValidationCodes.CAPABILITY_MANIFEST_MISSING -> ValidationCategory.CAPABILITIES;
+            case ValidationCodes.SCENARIO_DESCRIPTOR_INVALID,
+                 ValidationCodes.DUPLICATE_SCENARIO_ID -> ValidationCategory.SCENARIO;
+            case ValidationCodes.VARIABLES_INVALID,
+                 ValidationCodes.VARIABLES_MISSING,
+                 ValidationCodes.VARIABLE_REFERENCE_UNKNOWN -> ValidationCategory.VARIABLES;
+            case ValidationCodes.SUT_INVALID -> ValidationCategory.SUT;
+            case ValidationCodes.TEMPLATE_INVALID,
+                 ValidationCodes.TEMPLATE_CALL_ID_DUPLICATE,
+                 ValidationCodes.TEMPLATE_CALL_ID_MISSING,
+                 ValidationCodes.TEMPLATE_PARSE_ERROR,
+                 ValidationCodes.TEMPLATE_PROTOCOL_MISMATCH,
+                 ValidationCodes.TEMPLATE_REQUIRED_FIELD_MISSING -> ValidationCategory.TEMPLATES;
+            case ValidationCodes.AUTH_PROFILES_INVALID,
+                 ValidationCodes.AUTH_PROFILES_MISSING,
+                 ValidationCodes.AUTH_REF_INLINE_NOT_ALLOWED,
+                 ValidationCodes.AUTH_REF_PROFILE_MISSING,
+                 ValidationCodes.AUTH_REF_APPLY_AS_INVALID,
+                 ValidationCodes.AUTH_STORAGE_INVALID -> ValidationCategory.AUTH;
+            default -> ValidationCategory.BUNDLE;
+        };
     }
 
     private String validationPath(String message) {
@@ -2603,12 +3136,12 @@ public class ScenarioService {
     private String validationFix(String message) {
         String code = validationCode(message);
         return switch (code) {
-            case "CAPABILITY_MANIFEST_MISSING" -> "Install the matching capability manifest or update the image reference.";
-            case "SCENARIO_DESCRIPTOR_INVALID" -> "Repair scenario.yaml so it has a valid id and swarm template.";
-            case "VARIABLES_INVALID" -> "Repair variables.yaml according to Scenario Variables v1.";
-            case "SUT_INVALID" -> "Repair sut/<sutId>/sut.yaml and ensure its id matches the directory name.";
-            case "DUPLICATE_SCENARIO_ID" -> "Rename one scenario id or move one conflicting bundle to quarantine.";
-            case "BUNDLE_DEFUNCT" -> "Repair or move the bundle before using it to create a swarm.";
+            case ValidationCodes.CAPABILITY_MANIFEST_MISSING -> "Install the matching capability manifest or update the image reference.";
+            case ValidationCodes.SCENARIO_DESCRIPTOR_INVALID -> "Repair scenario.yaml so it has a valid id and swarm template.";
+            case ValidationCodes.VARIABLES_INVALID -> "Repair variables.yaml according to Scenario Variables v1.";
+            case ValidationCodes.SUT_INVALID -> "Repair sut/<sutId>/sut.yaml and ensure its id matches the directory name.";
+            case ValidationCodes.DUPLICATE_SCENARIO_ID -> "Rename one scenario id or move one conflicting bundle to quarantine.";
+            case ValidationCodes.BUNDLE_DEFUNCT -> "Repair or move the bundle before using it to create a swarm.";
             default -> "Review the bundle contract and repair the reported path.";
         };
     }
@@ -2653,7 +3186,6 @@ public class ScenarioService {
                 throw new IllegalArgumentException(
                         "Scenario id '%s' in bundle does not match expected id '%s'".formatted(id, expectedId));
             }
-            validateBundleExtras(id, descriptor.rootDir());
             return new UploadedBundle(scenario, descriptor.rootDir(), tempRoot);
         } catch (IOException | RuntimeException e) {
             clearDirectory(tempRoot);
@@ -2725,22 +3257,13 @@ public class ScenarioService {
                 if (sutId == null || sutId.isBlank()) {
                     continue;
                 }
-                Path file = path.resolve("sut.yaml");
-                if (!Files.isRegularFile(file)) {
+                if (!hasBundleSutDescriptor(path)) {
                     continue;
                 }
                 try {
-                    SutEnvironment env = yamlMapper.readValue(file.toFile(), SutEnvironment.class);
-                    if (env == null || env.id() == null || env.id().isBlank()) {
-                        throw new IllegalArgumentException("sut.yaml id must not be blank");
-                    }
-                    if (!sutId.equals(env.id())) {
-                        throw new IllegalArgumentException(
-                            "sut/%s/sut.yaml id '%s' does not match directory name".formatted(sutId, env.id()));
-                    }
-                } catch (Exception e) {
-                    throw new IllegalArgumentException(
-                        "Failed to parse bundle-local SUT '%s' in scenario '%s'".formatted(sutId, scenarioId), e);
+                    readBundleSutDescriptor(path, sutId);
+                } catch (IllegalArgumentException e) {
+                    throw invalidBundleSutDescriptor(scenarioId, sutId, e);
                 }
             }
         }
@@ -2760,7 +3283,14 @@ public class ScenarioService {
                     continue;
                 }
                 Format format = detectFormat(path);
-                Scenario scenario = read(path, format);
+                Scenario scenario;
+                try {
+                    scenario = readScenario(path, format);
+                } catch (IOException | RuntimeException e) {
+                    throw new IllegalArgumentException(
+                        "Scenario descriptor could not be parsed: " + cleanError(e.getMessage()),
+                        e);
+                }
                 if (found != null) {
                     throw new IllegalArgumentException("Bundle contains multiple scenario descriptors");
                 }
@@ -2816,6 +3346,10 @@ public class ScenarioService {
             return new DefunctResult(true, reason);
         }
     }
+
+    private record AuthRefUsage(String path, String profileId) { }
+
+    private record AuthProfilesInfo(Set<String> profileIds) { }
 
     private record ScannedBundle(
         String bundleKey,
@@ -2911,34 +3445,6 @@ public class ScenarioService {
     }
 
     public record BundleDownload(byte[] bytes, String fileName) { }
-
-    public record ValidationFinding(
-        String code,
-        String severity,
-        String path,
-        String message,
-        String fix
-    ) { }
-
-    public record BundleValidationResult(
-        boolean ok,
-        String source,
-        String scenarioId,
-        String bundleKey,
-        String bundlePath,
-        List<ValidationFinding> findings,
-        List<BundleBeeSummary> bees,
-        List<String> templates,
-        List<String> schemas
-    ) { }
-
-    public record TemplateValidationResult(
-        boolean ok,
-        String scenarioId,
-        List<ValidationFinding> findings,
-        List<String> referencedCallIds,
-        List<String> definedCallIds
-    ) { }
 
     public record BundleTree(String bundleKey, List<BundleTreeNode> nodes) { }
 

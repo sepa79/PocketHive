@@ -257,7 +257,7 @@ changed fingerprint.
 
 - `local-structural` — local `bundle.check` only; no Scenario Manager writes
 - `scenario-manager-dry-run` — validates a zip through
-  `POST /scenario-bundles/validate`; no Scenario Manager writes
+  `POST /validation/scenario-bundles`; no Scenario Manager writes
 - `scenario-manager-upload` — validates by uploading/replacing the bundle
   through Scenario Manager. This has Scenario Manager write side effects.
 
