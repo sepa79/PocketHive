@@ -122,6 +122,8 @@
     src: stack-compose.yml.j2
     dest: "{{ pockethive_rendered_compose_file }}"
     mode: "0644"
+  environment:
+    HIVEFORGE_BIND_SOURCE_DIR: "{{ pockethive_bind_source_dir }}"
 
 - name: Validate rendered Docker Stack compose
   ansible.builtin.command:
@@ -131,5 +133,7 @@
       - config
       - -c
       - "{{ pockethive_rendered_compose_file }}"
+  environment:
+    HIVEFORGE_BIND_SOURCE_DIR: "{{ pockethive_bind_source_dir }}"
   register: pockethive_stack_compose_validation
   changed_when: false
