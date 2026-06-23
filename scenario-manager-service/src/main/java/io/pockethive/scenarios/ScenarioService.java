@@ -75,6 +75,12 @@ public class ScenarioService {
     }
 
     ScenarioService(String dir,
+                    Path runtimeRoot,
+                    CapabilityCatalogueService capabilities) throws IOException {
+        this(Paths.get(dir), runtimeRoot, true, null, capabilities);
+    }
+
+    ScenarioService(String dir,
                     String defaultImageTag,
                     CapabilityCatalogueService capabilities) throws IOException {
         this(Paths.get(dir),
@@ -872,26 +878,67 @@ public class ScenarioService {
         if (swarmId == null || swarmId.isBlank()) {
             throw new IllegalArgumentException("swarmId must not be null or blank");
         }
-        if (!scenarios.containsKey(scenarioId)) {
-            throw new IllegalArgumentException("Scenario '%s' not found".formatted(scenarioId));
+        String normalizedScenarioId = scenarioId.trim();
+        RuntimeBundle bundle = runtimeBundleForScenario(normalizedScenarioId);
+        if (bundle == null) {
+            throw new IllegalArgumentException("Scenario '%s' not found".formatted(normalizedScenarioId));
         }
-
         Path target = runtimeDir(swarmId);
+        requireRuntimeBundleValid(normalizedScenarioId, bundle);
         if (Files.exists(target)) {
             clearDirectory(target);
         }
         Files.createDirectories(target);
 
-        ScenarioRecord record = scenarios.get(scenarioId);
-        Path source = record != null ? record.bundleDir() : null;
+        ScenarioRecord record = bundle.record();
+        Path source = record != null ? record.bundleDir() : bundle.entry().bundleDir();
         if (source != null && Files.isDirectory(source)) {
             copyDirectory(source, target);
         } else {
             logger.info("No bundle directory found for scenario '{}'; runtime directory {} will be empty",
-                scenarioId, target);
+                normalizedScenarioId, target);
         }
 
         return target;
+    }
+
+    private void requireRuntimeBundleValid(String scenarioId, RuntimeBundle bundle) throws IOException {
+        BundleCatalogEntry entry = bundle.entry();
+        ScenarioRecord record = bundle.record();
+        Path bundleDir = record != null ? record.bundleDir() : entry.bundleDir();
+        BundleValidationResult validation = validateScenarioBundle(
+            null,
+            bundleDir,
+            BundleValidationSource.SCENARIO_MANAGER,
+            entry != null ? entry.bundleKey() : null,
+            entry != null ? entry.bundlePath() : null,
+            entry != null ? catalogOnlyDefunctFindings(entry) : List.of());
+        validation = bundleValidator.requireScenarioId(validation, scenarioId);
+        if (!validation.ok()) {
+            throw new BundleValidationException(validation);
+        }
+    }
+
+    private RuntimeBundle runtimeBundleForScenario(String scenarioId) {
+        ScenarioRecord record = scenarios.get(scenarioId);
+        if (record != null) {
+            return new RuntimeBundle(record, bundleEntryForRecord(record));
+        }
+        return bundleCatalog.stream()
+            .filter(entry -> Objects.equals(entry.scenarioId(), scenarioId))
+            .findFirst()
+            .map(entry -> new RuntimeBundle(entry.scenarioRecord(), entry))
+            .orElse(null);
+    }
+
+    private BundleCatalogEntry bundleEntryForRecord(ScenarioRecord record) {
+        if (record == null) {
+            return null;
+        }
+        return bundleCatalog.stream()
+            .filter(entry -> entry.scenarioRecord() == record)
+            .findFirst()
+            .orElse(null);
     }
 
     void clearDirectory(Path directory) throws IOException {
@@ -1921,6 +1968,8 @@ public class ScenarioService {
                     bundleDir);
         }
     }
+
+    private record RuntimeBundle(ScenarioRecord record, BundleCatalogEntry entry) { }
 
     private record BundleRoot(Path root) { }
 

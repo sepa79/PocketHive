@@ -3,8 +3,10 @@ package io.pockethive.orchestrator.app;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -54,6 +56,7 @@ import io.pockethive.swarm.model.SutEnvironment;
 import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.SwarmTemplate;
 import io.pockethive.swarm.model.Work;
+import io.pockethive.util.BeeNameGenerator;
 import java.util.List;
 import java.util.Map;
 import java.nio.file.Files;
@@ -75,6 +78,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.StringHttpMessageConverter;
 import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
@@ -588,7 +592,6 @@ class SwarmControllerTest {
             new Bee("generator", "img", Work.ofDefaults(null, "out"), java.util.Map.of())
         ));
         when(scenarioClient.fetchScenario("tpl-1")).thenReturn(new ScenarioPlan(template, null, null, null));
-        when(scenarioClient.prepareScenarioRuntime("tpl-1", "sw1")).thenReturn("/tmp/runtime/sw1");
         when(scenarioClient.fetchNetworkProfile(eq("missing-profile"), anyString(), eq("idem")))
             .thenThrow(new IllegalStateException("missing profile missing-profile"));
         SwarmController ctrl = controller(tracker, new SwarmStore(), plans);
@@ -606,6 +609,7 @@ class SwarmControllerTest {
             .hasMessageContaining("Failed to resolve network profile 'missing-profile'");
 
         verify(scenarioClient).fetchNetworkProfile(eq("missing-profile"), anyString(), eq("idem"));
+        verify(scenarioClient, never()).prepareScenarioRuntime(anyString(), anyString());
         verifyNoInteractions(networkProxyClient);
         verifyNoInteractions(lifecycle);
     }
@@ -618,7 +622,6 @@ class SwarmControllerTest {
             new Bee("processor", "img", Work.ofDefaults("in", "out"), java.util.Map.of())
         ));
         when(scenarioClient.fetchScenario("tpl-1")).thenReturn(new ScenarioPlan(template, null, null, null));
-        when(scenarioClient.prepareScenarioRuntime("tpl-1", "sw1")).thenReturn("/tmp/runtime/sw1");
         when(scenarioClient.fetchNetworkProfile(eq("passthrough"), anyString(), eq("idem")))
             .thenReturn(new NetworkProfile("passthrough", "Passthrough", List.of(), List.of("default")));
         when(scenarioClient.fetchScenarioSut(eq("tpl-1"), eq("sut-A"), anyString(), eq("idem")))
@@ -645,6 +648,7 @@ class SwarmControllerTest {
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("Unsupported SUT endpoint scheme 'smtp'");
 
+        verify(scenarioClient, never()).prepareScenarioRuntime(anyString(), anyString());
         verifyNoInteractions(networkProxyClient);
         verifyNoInteractions(lifecycle);
     }
@@ -657,7 +661,6 @@ class SwarmControllerTest {
             new Bee("processor", "img", Work.ofDefaults("in", "out"), java.util.Map.of())
         ));
         when(scenarioClient.fetchScenario("tpl-1")).thenReturn(new ScenarioPlan(template, null, null, null));
-        when(scenarioClient.prepareScenarioRuntime("tpl-1", "sw1")).thenReturn("/tmp/runtime/sw1");
         when(scenarioClient.fetchNetworkProfile(eq("passthrough"), anyString(), eq("idem")))
             .thenReturn(new NetworkProfile("passthrough", "Passthrough", List.of(), List.of("default")));
         when(scenarioClient.fetchScenarioSut(eq("tpl-1"), eq("sut-A"), anyString(), eq("idem")))
@@ -684,6 +687,7 @@ class SwarmControllerTest {
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("endpoint.upstreamBaseUrl must be provided when networkMode=PROXIED");
 
+        verify(scenarioClient, never()).prepareScenarioRuntime(anyString(), anyString());
         verifyNoInteractions(networkProxyClient);
         verifyNoInteractions(lifecycle);
     }
@@ -1235,6 +1239,66 @@ class SwarmControllerTest {
 
         verifyNoInteractions(lifecycle);
         verifyNoInteractions(scenarioClient);
+    }
+
+    @Test
+    void createPropagatesScenarioRuntimeRefusalBody() throws Exception {
+        SwarmCreateTracker tracker = new SwarmCreateTracker();
+        SwarmPlanRegistry plans = new SwarmPlanRegistry();
+        SwarmTemplate template = new SwarmTemplate("ctrl-image", List.of(
+            new Bee("generator", "img", Work.ofDefaults(null, "out"), Map.of())
+        ));
+        String validationBody = """
+            {
+              "ok": false,
+              "source": "scenario-manager",
+              "summary": { "errors": 1, "warnings": 0 },
+              "findings": [
+                {
+                  "category": "scenario",
+                  "code": "SCENARIO_DESCRIPTOR_INVALID",
+                  "severity": "error",
+                  "path": "scenario.yaml",
+                  "message": "Invalid scenario descriptor.",
+                  "fix": "Repair scenario.yaml."
+                }
+              ]
+            }
+            """;
+        when(scenarioClient.fetchScenario("tpl-1")).thenReturn(new ScenarioPlan(template, null, null, null));
+        when(scenarioClient.prepareScenarioRuntime("tpl-1", "sw1"))
+            .thenThrow(new ScenarioClientException(
+                "scenario-runtime tpl-1/sw1 POST",
+                400,
+                validationBody,
+                MediaType.APPLICATION_JSON_VALUE));
+        SwarmController ctrl = controller(tracker, new SwarmStore(), plans);
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(ctrl)
+            .setMessageConverters(
+                new StringHttpMessageConverter(),
+                new MappingJackson2HttpMessageConverter(mapper))
+            .build();
+
+        mvc.perform(post("/api/swarms/sw1/create")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"templateId\":\"tpl-1\",\"idempotencyKey\":\"idem\"}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(result -> assertThat(result.getResponse().getContentType())
+                .startsWith(MediaType.APPLICATION_JSON_VALUE))
+            .andExpect(result -> assertThat(result.getResponse().getContentAsString())
+                .contains("\"code\": \"SCENARIO_DESCRIPTOR_INVALID\""));
+
+        verify(lifecycle, never()).startSwarm(
+            anyString(),
+            anyString(),
+            anyString(),
+            any(SwarmTemplateMetadata.class),
+            anyBoolean(),
+            any(),
+            any(),
+            any());
+        assertThat(plans.find(BeeNameGenerator.generate("swarm-controller", "sw1"))).isEmpty();
     }
 
     @Test

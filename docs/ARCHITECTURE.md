@@ -658,9 +658,11 @@ sequenceDiagram
 ### 12.1 Validation ownership (authoring vs admission)
 
 - **Scenario Manager** is responsible for **static authoring validation** of scenario/template contracts
-  (shape/schema, required fields, and contract-level references).
+  (shape/schema, required fields, and contract-level references). Its runtime preparation endpoint is
+  also the final static-bundle gate before materializing runtime files.
 - **Orchestrator** is responsible for **admission/runtime validation** as the final gate before execution
-  (deployment policy, composition constraints, and run eligibility).
+  (deployment policy, composition constraints, and run eligibility), but it must not duplicate or preflight
+  Scenario Manager static bundle validation.
 - Shared compatibility rules should live in one reusable validation module/profile set so Scenario Manager
   and Orchestrator do not diverge.
 

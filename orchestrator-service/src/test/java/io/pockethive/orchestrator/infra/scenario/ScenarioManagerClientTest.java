@@ -8,6 +8,7 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import io.pockethive.auth.client.AuthServiceServiceTokenProvider;
 import io.pockethive.manager.runtime.ComputeAdapterType;
+import io.pockethive.orchestrator.app.ScenarioClientException;
 import io.pockethive.orchestrator.config.OrchestratorProperties;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -18,7 +19,6 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.support.StaticListableBeanFactory;
@@ -63,37 +63,10 @@ class ScenarioManagerClientTest {
     }
 
     @Test
-    void prepareScenarioRuntimeValidatesExistingBundleBeforeRuntimePreparation() throws Exception {
+    void prepareScenarioRuntimeCallsRuntimeEndpointDirectly() throws Exception {
         List<String> calls = new CopyOnWriteArrayList<>();
 
         server = HttpServer.create(new InetSocketAddress(0), 0);
-        server.createContext("/api/templates/local-rest", exchange -> {
-            calls.add("template");
-            respondJson(exchange, """
-                {
-                  "id": "local-rest",
-                  "bundleKey": "e2e/local-rest",
-                  "bundlePath": "e2e/local-rest",
-                  "folderPath": "e2e",
-                  "defunct": false
-                }
-                """);
-        });
-        server.createContext("/validation/scenario-bundles/existing", exchange -> {
-            calls.add("validation");
-            assertThat(exchange.getRequestURI().getRawQuery()).isEqualTo("bundleKey=e2e%2Flocal-rest");
-            respondJson(exchange, """
-                {
-                  "ok": true,
-                  "source": "scenario-manager",
-                  "bundleKey": "e2e/local-rest",
-                  "bundlePath": "e2e/local-rest",
-                  "scenarioId": "local-rest",
-                  "summary": { "errors": 0, "warnings": 0 },
-                  "findings": []
-                }
-                """);
-        });
         server.createContext("/scenarios/local-rest/runtime", exchange -> {
             calls.add("runtime");
             respondJson(exchange, """
@@ -109,61 +82,29 @@ class ScenarioManagerClientTest {
         String runtimeDir = client().prepareScenarioRuntime(" local-rest ", " sw1 ");
 
         assertThat(runtimeDir).isEqualTo("/tmp/runtime/sw1");
-        assertThat(calls).containsExactly("template", "validation", "runtime");
+        assertThat(calls).containsExactly("runtime");
     }
 
     @Test
-    void prepareScenarioRuntimeDoesNotCallRuntimePreparationWhenBundleValidationFails() throws Exception {
-        AtomicInteger runtimeCalls = new AtomicInteger();
-
+    void prepareScenarioRuntimePropagatesRuntimeEndpointFailure() throws Exception {
         server = HttpServer.create(new InetSocketAddress(0), 0);
-        server.createContext("/api/templates/local-rest", exchange -> respondJson(exchange, """
-            {
-              "id": "local-rest",
-              "bundleKey": "e2e/local-rest",
-              "bundlePath": "e2e/local-rest",
-              "folderPath": "e2e",
-              "defunct": false
-            }
-            """));
-        server.createContext("/validation/scenario-bundles/existing", exchange -> respondJson(exchange, """
-            {
-              "ok": false,
-              "source": "scenario-manager",
-              "bundleKey": "e2e/local-rest",
-              "bundlePath": "e2e/local-rest",
-              "scenarioId": "local-rest",
-              "summary": { "errors": 1, "warnings": 0 },
-              "findings": [
-                {
-                  "category": "scenario",
-                  "code": "SCENARIO_DESCRIPTOR_INVALID",
-                  "severity": "error",
-                  "path": "scenario.yaml",
-                  "message": "Invalid scenario descriptor.",
-                  "fix": "Repair scenario.yaml."
-                }
-              ]
-            }
-            """));
-        server.createContext("/scenarios/local-rest/runtime", exchange -> {
-            runtimeCalls.incrementAndGet();
-            respondJson(exchange, """
-                {
-                  "scenarioId": "local-rest",
-                  "swarmId": "sw1",
-                  "runtimeDir": "/tmp/runtime/sw1"
-                }
-                """);
-        });
+        server.createContext("/scenarios/local-rest/runtime", exchange ->
+            respondJson(exchange, 400, """
+                    {
+                      "ok": false
+                    }
+                    """));
         server.start();
 
         assertThatThrownBy(() -> client().prepareScenarioRuntime("local-rest", "sw1"))
-            .isInstanceOf(IllegalStateException.class)
-            .hasMessageContaining("Scenario bundle validation failed")
-            .hasMessageContaining("SCENARIO_DESCRIPTOR_INVALID")
-            .hasMessageContaining("scenario.yaml");
-        assertThat(runtimeCalls).hasValue(0);
+            .isInstanceOf(ScenarioClientException.class)
+            .hasMessageContaining("scenario-runtime local-rest/sw1 POST status 400")
+            .satisfies(error -> {
+                ScenarioClientException failure = (ScenarioClientException) error;
+                assertThat(failure.statusCode()).isEqualTo(400);
+                assertThat(failure.responseBody()).contains("\"ok\": false");
+                assertThat(failure.contentType()).contains("application/json");
+            });
     }
 
     private ScenarioManagerClient client() {
@@ -198,9 +139,13 @@ class ScenarioManagerClientTest {
     }
 
     private static void respondJson(HttpExchange exchange, String body) throws IOException {
+        respondJson(exchange, 200, body);
+    }
+
+    private static void respondJson(HttpExchange exchange, int status, String body) throws IOException {
         byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().add("Content-Type", "application/json");
-        exchange.sendResponseHeaders(200, bytes.length);
+        exchange.sendResponseHeaders(status, bytes.length);
         try (OutputStream output = exchange.getResponseBody()) {
             output.write(bytes);
         }

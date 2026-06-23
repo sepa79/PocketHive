@@ -555,7 +555,43 @@ class ScenarioControllerTest {
                               "swarmId": "sw1"
                             }
                             """))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.source").value("scenario-manager"))
+                .andExpect(jsonPath("$.scenarioId").value("defunct-runtime"))
+                .andExpect(jsonPath("$.summary.errors").value(1))
+                .andExpect(jsonPath("$.findings[0].code").value("BUNDLE_DEFUNCT"));
+    }
+
+    @Test
+    void runtimePreparationRejectsBundleBrokenAfterLoad() throws Exception {
+        Path bundle = Files.createDirectories(scenariosDir.resolve("runtime-broken-after-load"));
+        Files.writeString(bundle.resolve("scenario.yaml"), """
+                id: runtime-broken-after-load
+                name: Runtime Broken After Load
+                template:
+                  image: ctrl-image:latest
+                  bees: []
+                """);
+
+        mvc.perform(post("/scenarios/reload"))
+                .andExpect(status().isNoContent());
+
+        Files.writeString(bundle.resolve("scenario.yaml"), "id: [not valid yaml");
+
+        mvc.perform(post("/scenarios/runtime-broken-after-load/runtime")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                            {
+                              "swarmId": "sw1"
+                            }
+                            """)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.source").value("scenario-manager"))
+                .andExpect(jsonPath("$.summary.errors").value(1))
+                .andExpect(jsonPath("$.findings[0].code").value("SCENARIO_DESCRIPTOR_INVALID"));
     }
 
     @Test

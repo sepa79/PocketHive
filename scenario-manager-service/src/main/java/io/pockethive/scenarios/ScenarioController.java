@@ -306,7 +306,7 @@ public class ScenarioController {
     public Scenario one(@PathVariable("id") String id) {
         // NOTE: This endpoint still resolves by raw scenario id via service.find(id).
         // That means direct callers can currently fetch defunct scenarios even though
-        // UI create flows are expected to preflight against /api/templates first.
+        // runnability is surfaced by /api/templates and enforced by the runtime endpoint.
         log.info("[REST] GET /scenarios/{}", id);
         requireReadScenario(id);
         Scenario scenario = service.find(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
@@ -744,9 +744,10 @@ public class ScenarioController {
         String swarmId = request != null ? request.swarmId() : null;
         log.info("[REST] POST /scenarios/{}/runtime swarmId={}", id, swarmId);
         requireRunScenario(id);
-        Scenario scenario = service.findAvailable(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        Path runtimeDir = service.prepareRuntimeDirectory(scenario.getId(), swarmId);
-        ScenarioRuntimeResponse body = new ScenarioRuntimeResponse(scenario.getId(), swarmId, runtimeDir.toString());
+        ScenarioService.ScenarioAccessDescriptor access = service.findScenarioAccess(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        Path runtimeDir = service.prepareRuntimeDirectory(access.scenarioId(), swarmId);
+        ScenarioRuntimeResponse body = new ScenarioRuntimeResponse(access.scenarioId(), swarmId, runtimeDir.toString());
         log.info("[REST] POST /scenarios/{}/runtime -> status=200 body={}", id, safeJson(body));
         return ResponseEntity.ok(body);
     }

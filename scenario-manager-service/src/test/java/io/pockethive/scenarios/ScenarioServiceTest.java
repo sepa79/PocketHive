@@ -5,6 +5,7 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import io.pockethive.capabilities.CapabilityCatalogueService;
+import io.pockethive.scenarios.validation.BundleValidationException;
 import io.pockethive.scenarios.validation.ScenarioBundleValidator;
 import io.pockethive.swarm.model.Bee;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,7 +39,7 @@ class ScenarioServiceTest {
         scenariosDir = Files.createDirectories(tempDir.resolve("scenarios"));
         capabilitiesDir = Files.createDirectories(tempDir.resolve("capabilities"));
         capabilities = new CapabilityCatalogueService(capabilitiesDir.toString());
-        service = new ScenarioService(scenariosDir.toString(), capabilities);
+        service = new ScenarioService(scenariosDir.toString(), tempDir.resolve("runtime"), capabilities);
     }
 
     @Test
@@ -649,6 +650,29 @@ class ScenarioServiceTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Failed to parse bundle-local SUT 'sut-wrong-id'")
                 .hasMessageContaining("does not match directory name");
+    }
+
+    @Test
+    void prepareRuntimeDirectoryRejectsCurrentBrokenBundleBeforeClearingTarget() throws IOException {
+        writeManifest("ctrl", "ctrl-image");
+        capabilities.reload();
+        writeBundleScenario("scenario-1");
+        service.reload();
+
+        Path runtimeDir = service.runtimeDir("sw1");
+        Files.createDirectories(runtimeDir);
+        Path sentinel = runtimeDir.resolve("sentinel.txt");
+        Files.writeString(sentinel, "keep");
+
+        Path sutDir = Files.createDirectories(service.bundleDir("scenario-1").resolve("sut").resolve("wrong-id"));
+        Files.writeString(sutDir.resolve("sut.yaml"), """
+                id: different-id
+                name: Wrong ID
+                """);
+
+        assertThatThrownBy(() -> service.prepareRuntimeDirectory("scenario-1", "sw1"))
+                .isInstanceOf(BundleValidationException.class);
+        assertThat(Files.readString(sentinel)).isEqualTo("keep");
     }
 
     @Test

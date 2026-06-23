@@ -229,6 +229,32 @@ public final class ScenarioBundleValidator {
             List.of(finding));
     }
 
+    public BundleValidationResult requireScenarioId(BundleValidationResult validation, String expectedScenarioId) {
+        String expected = expectedScenarioId == null ? null : expectedScenarioId.trim();
+        String actual = validation == null || validation.scenarioId() == null ? null : validation.scenarioId().trim();
+        if (expected == null || expected.isEmpty() || actual == null || actual.isEmpty() || expected.equals(actual)) {
+            return validation;
+        }
+
+        List<ValidationFinding> findings = new ArrayList<>(validation.findings());
+        findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
+            ValidationSeverity.ERROR,
+            ScenarioBundleLayout.SCENARIO_DESCRIPTOR_FILE + ":id",
+            "%s id '%s' does not match requested scenario '%s'.".formatted(
+                ScenarioBundleLayout.SCENARIO_DESCRIPTOR_FILE,
+                actual,
+                expected),
+            "Restore %s id to '%s' or reload Scenario Manager after moving the bundle.".formatted(
+                ScenarioBundleLayout.SCENARIO_DESCRIPTOR_FILE,
+                expected)));
+        return BundleValidationResult.of(
+            validation.source(),
+            validation.bundleKey(),
+            validation.bundlePath(),
+            validation.scenarioId(),
+            findings);
+    }
+
     public ValidationFinding duplicateScenarioFinding(String scenarioId, String reason) {
         return ValidationIssue.DUPLICATE_SCENARIO_ID.finding(
             ValidationSeverity.ERROR,

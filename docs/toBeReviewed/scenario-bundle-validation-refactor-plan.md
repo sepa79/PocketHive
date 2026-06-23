@@ -11,7 +11,7 @@ Validation must have one canonical execution path that is used by:
 - uploaded ZIP validation
 - existing bundle validation
 - upload/replace gates
-- Orchestrator admission/runtime preflight as an input signal
+- Scenario Manager runtime preparation gate
 - UI and MCP diagnostics
 
 The validator must return structured findings for user-correctable bundle problems. It must not throw halfway through validation for malformed scenario/template/auth/vars content.
@@ -25,7 +25,7 @@ This plan follows `docs/ARCHITECTURE.md` §12.1:
 Implementation choice for this refactor:
 
 - Scenario Manager is the only implementation of static scenario bundle validation.
-- Orchestrator must not duplicate static bundle rules. It should call Scenario Manager validation or consume a Scenario Manager validation result as an admission input.
+- Orchestrator must not duplicate static bundle rules or call static bundle validation as a preflight. It should call Scenario Manager runtime preparation and propagate Scenario Manager refusal.
 - If Orchestrator later needs offline static validation without Scenario Manager, that is a separate design change and must move shared rules into a reusable module/profile set.
 
 ## Non-Goals
@@ -166,13 +166,19 @@ Upload/replace flow:
 3. if `ok=false`, return/rethrow a validation failure that carries `BundleValidationResult`
 4. if `ok=true`, write bundle and reload
 
-Orchestrator admission/runtime preflight flow:
+Scenario Manager runtime preparation gate:
 
-1. locate the Scenario Manager bundle or fetch the validation result from Scenario Manager
-2. use canonical Scenario Manager static validation as one admission input
-3. run Orchestrator-owned admission/runtime policy checks
-4. if any required validation/admission result is not OK, reject before touching runtime dirs
-5. if OK, prepare runtime dir using the existing copy flow
+1. locate the loaded Scenario Manager bundle by scenario id
+2. run canonical Scenario Manager static validation against the current bundle files
+3. if `ok=false`, reject with `BundleValidationResult` before touching runtime dirs
+4. if `ok=true`, prepare runtime dir using the existing copy flow
+
+Orchestrator runtime flow:
+
+1. run only Orchestrator-owned admission/runtime policy checks
+2. call Scenario Manager runtime preparation
+3. if Scenario Manager refuses runtime preparation, propagate its HTTP status/body as an opaque failure
+4. do not parse or interpret Scenario Manager validation findings in Orchestrator
 
 Runtime prepare should not validate by copying to the normal runtime target. A temp staging dir is only needed if later runtime materialization does transformations that must be validated separately.
 
@@ -222,7 +228,7 @@ UI tests/build:
 Current review findings to close before this refactor is considered complete:
 
 1. MCP/tooling must not expose or default to local scenario bundle validation. `bundle.validate` and workflow validation must use Scenario Manager validation as the canonical static validation source. Local authoring sanity checks may exist only as generation diagnostics and must not be reported as bundle validation or gate runtime deployment.
-2. Orchestrator admission/runtime preflight must consume Scenario Manager validation before runtime preparation. Runtime preparation must reject invalid bundles before touching existing runtime directories.
+2. Scenario Manager runtime preparation must reject invalid bundles before touching existing runtime directories. Orchestrator must not run a separate static bundle validation preflight.
 3. `ScenarioBundleValidator.validate(...)` must keep collecting independent findings where possible even when `scenario.yaml` is malformed or missing required fields.
 4. Uploaded ZIP dry-run and upload/replace gates must not parse/validate descriptor/id outside the canonical validator path.
 5. UI TypeScript mirrors of `BundleValidationResult` must either be generated from the public contract or covered by a contract test against Scenario Manager response shape.
