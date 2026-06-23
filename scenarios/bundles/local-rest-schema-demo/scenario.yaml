@@ -5,6 +5,7 @@ template:
   image: swarm-controller:latest
   bees:
     - role: generator
+      id: generator
       image: generator:latest
       config:
         inputs:
@@ -30,7 +31,10 @@ template:
       work:
         out:
           out: genQ
+      ports:
+        - { id: out, direction: out }
     - role: processor
+      id: processor
       image: processor:latest
       config:
         worker:
@@ -40,10 +44,26 @@ template:
           in: genQ
         out:
           out: finalQ
+      ports:
+        - { id: in, direction: in }
+        - { id: out, direction: out }
     - role: postprocessor
+      id: postprocessor
       image: postprocessor:latest
       work:
         in:
           in: finalQ
+      ports:
+        - { id: in, direction: in }
 trafficPolicy: null
 plan: null
+
+topology:
+  version: 1
+  edges:
+    - id: e1
+      from: { beeId: generator, port: out }
+      to: { beeId: processor, port: in }
+    - id: e2
+      from: { beeId: processor, port: out }
+      to: { beeId: postprocessor, port: in }

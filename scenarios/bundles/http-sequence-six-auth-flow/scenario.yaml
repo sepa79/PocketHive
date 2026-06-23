@@ -7,10 +7,13 @@ template:
   image: swarm-controller:latest
   bees:
     - role: generator
+      id: generator
       image: generator:latest
       work:
         out:
           out: seq
+      ports:
+        - { id: out, direction: out }
       config:
         inputs:
           type: SCHEDULER
@@ -24,12 +27,16 @@ template:
             bodyType: SIMPLE
             body: "{}"
     - role: http-sequence
+      id: http-sequence
       image: http-sequence:latest
       work:
         in:
           in: seq
         out:
           out: post
+      ports:
+        - { id: in, direction: in }
+        - { id: out, direction: out }
       config:
         worker:
           baseUrl: "{{ sut.endpoints['default'].baseUrl }}"
@@ -56,10 +63,13 @@ template:
             bodyPreviewBytes: 4096
             redisTtlSeconds: 120
     - role: postprocessor
+      id: postprocessor
       image: postprocessor:latest
       work:
         in:
           in: post
+      ports:
+        - { id: in, direction: in }
 plan:
   version: 1
   source: wizard.complete
@@ -112,3 +122,13 @@ plan:
     grafanaDashboard: rtt_overview
     performanceObjective: null
     resultRules: null
+
+topology:
+  version: 1
+  edges:
+    - id: e1
+      from: { beeId: generator, port: out }
+      to: { beeId: http-sequence, port: in }
+    - id: e2
+      from: { beeId: http-sequence, port: out }
+      to: { beeId: postprocessor, port: in }

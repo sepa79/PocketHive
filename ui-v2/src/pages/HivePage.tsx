@@ -12,7 +12,6 @@ import {
   resolveManifestForImage,
   type CapabilityManifest,
 } from '../lib/capabilities'
-import { detectUiBasename } from '../lib/routing/basename'
 import { listBundleTemplates, type BundleTemplateEntry } from '../lib/scenariosApi'
 import { newUuid } from '../lib/uuid'
 import {
@@ -519,10 +518,9 @@ export function HivePage() {
       if (!tapId) {
         throw new Error('Tap created but tapId is missing in response.')
       }
-      const base = detectUiBasename(window.location.pathname)
-      window.open(`${base}/debug/taps/${encodeURIComponent(tapId)}`, '_blank', 'noopener,noreferrer')
+      navigate(`/debug/taps/${encodeURIComponent(tapId)}`)
     },
-    [selectedSwarmId],
+    [navigate, selectedSwarmId],
   )
 
   const loadSwarms = useCallback(async () => {
@@ -1637,7 +1635,7 @@ export function HivePage() {
 		                                              ? 'Tap requires bee.role to be set in scenario template.'
 		                                              : !hasOut
 		                                                ? 'No outputs configured for this worker (work.out is empty).'
-		                                                : `Open Debug Tap Viewer (OUT, ioName=${ioNameOut}). Creates an ephemeral tap queue and opens the viewer in a new tab.`
+		                                                : `Open Debug Tap Viewer (OUT, ioName=${ioNameOut}). Creates an ephemeral tap queue and opens the viewer.`
 	                              }
 		                                          disabled={!canTapOut || (tapOutKey ? tapBusy[tapOutKey] === true : false)}
 		                                          onClick={() => {
@@ -1705,7 +1703,7 @@ export function HivePage() {
 		                                              ? 'Tap requires bee.role to be set in scenario template.'
 		                                              : !hasIn
 		                                                ? 'No inputs configured for this worker (work.in is empty).'
-		                                                : `Open Debug Tap Viewer (IN, ioName=${ioNameIn}). Creates an ephemeral tap queue and opens the viewer in a new tab.`
+		                                                : `Open Debug Tap Viewer (IN, ioName=${ioNameIn}). Creates an ephemeral tap queue and opens the viewer.`
 		                                          }
 		                                          disabled={!canTapIn || (tapInKey ? tapBusy[tapInKey] === true : false)}
 		                                          onClick={() => {
