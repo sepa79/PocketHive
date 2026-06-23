@@ -128,7 +128,6 @@ Validation endpoints return findings in a machine-readable shape:
 
 - `error` — bundle should not be deployed or used for swarm creation.
 - `warning` — bundle can be saved, but authoring should review the issue.
-- `info` — explanatory context only.
 
 Clients must key automation on `code` and `path`, not on the human-readable
 `message` text.
@@ -156,8 +155,7 @@ Response:
   "bundlePath": null,
   "summary": {
     "errors": 1,
-    "warnings": 0,
-    "infos": 0
+    "warnings": 0
   },
   "findings": [
     {

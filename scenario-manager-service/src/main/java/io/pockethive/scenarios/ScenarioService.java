@@ -912,8 +912,8 @@ public class ScenarioService {
             BundleValidationSource.SCENARIO_MANAGER,
             entry != null ? entry.bundleKey() : null,
             entry != null ? entry.bundlePath() : null,
-            entry != null ? catalogOnlyDefunctFindings(entry) : List.of());
-        validation = bundleValidator.requireScenarioId(validation, scenarioId);
+            entry != null ? catalogOnlyDefunctFindings(entry) : List.of(),
+            scenarioId);
         if (!validation.ok()) {
             throw new BundleValidationException(validation);
         }
@@ -1663,29 +1663,21 @@ public class ScenarioService {
     }
 
     public Scenario createBundleFromZip(byte[] zipBytes) throws IOException {
-        UploadedBundle uploaded = unpackUploadedBundle(zipBytes, null);
+        UploadedBundle uploaded = unpackUploadedBundle(zipBytes);
         try {
-            BundleValidationResult validation = validateScenarioBundle(
-                uploaded.scenario(),
-                uploaded.rootDir(),
-                BundleValidationSource.UPLOADED_ZIP,
-                null,
-                null,
-                List.of());
-            if (!validation.ok()) {
-                throw new BundleValidationException(validation);
+            ScenarioBundleValidator.ValidationRun validation = validateUploadedBundle(uploaded, null);
+            if (!validation.result().ok()) {
+                throw new BundleValidationException(validation.result());
             }
-            String id = uploaded.scenario().getId();
-            if (id == null || id.isBlank()) {
-                throw new IllegalArgumentException("Scenario id must not be null or blank");
-            }
+            Scenario scenario = validatedScenario(validation);
+            String id = scenario.getId();
             if (hasDiscoveredScenarioId(id)) {
                 throw new BundleValidationException(bundleValidator.duplicateScenarioValidationResult(id));
             }
-            writeBundle(uploaded, defaultUploadBundleDir(id));
+            writeBundle(validatedBundleRoot(validation), defaultUploadBundleDir(id));
             reload();
             ScenarioRecord record = scenarios.get(id);
-            return record != null ? record.scenario() : uploaded.scenario();
+            return record != null ? record.scenario() : scenario;
         } finally {
             cleanupUploaded(uploaded);
         }
@@ -1711,33 +1703,31 @@ public class ScenarioService {
     }
 
     public Scenario replaceBundleFromZip(String expectedId, byte[] zipBytes) throws IOException {
-        UploadedBundle uploaded = unpackUploadedBundle(zipBytes, expectedId);
+        if (expectedId == null || expectedId.isBlank()) {
+            throw new IllegalArgumentException("Scenario id must not be null or blank");
+        }
+        UploadedBundle uploaded = unpackUploadedBundle(zipBytes);
         try {
-            BundleValidationResult validation = validateScenarioBundle(
-                uploaded.scenario(),
-                uploaded.rootDir(),
-                BundleValidationSource.UPLOADED_ZIP,
-                null,
-                null,
-                List.of());
-            if (!validation.ok()) {
-                throw new BundleValidationException(validation);
+            ScenarioBundleValidator.ValidationRun validation = validateUploadedBundle(uploaded, expectedId);
+            if (!validation.result().ok()) {
+                throw new BundleValidationException(validation.result());
             }
-            String id = uploaded.scenario().getId();
+            Scenario scenario = validatedScenario(validation);
+            String id = scenario.getId();
             ScenarioRecord existing = scenarios.get(id);
             Path targetDir = existing != null && existing.bundleDir() != null ? existing.bundleDir() : bundleDir(id);
-            writeBundle(uploaded, targetDir);
+            writeBundle(validatedBundleRoot(validation), targetDir);
             reload();
             ScenarioRecord record = scenarios.get(id);
-            return record != null ? record.scenario() : uploaded.scenario();
+            return record != null ? record.scenario() : scenario;
         } finally {
             cleanupUploaded(uploaded);
         }
     }
 
-    private UploadedBundle unpackUploadedBundle(byte[] zipBytes, String expectedId) throws IOException {
+    private UploadedBundle unpackUploadedBundle(byte[] zipBytes) throws IOException {
         try {
-            return unpackBundle(zipBytes, expectedId);
+            return unpackBundle(zipBytes);
         } catch (IllegalArgumentException e) {
             throw new BundleValidationException(bundleValidator.uploadedBundleValidationResult(e));
         }
@@ -1746,14 +1736,8 @@ public class ScenarioService {
     public BundleValidationResult validateBundleZip(byte[] zipBytes) throws IOException {
         UploadedBundle uploaded = null;
         try {
-            uploaded = unpackBundle(zipBytes, null);
-            return validateScenarioBundle(
-                uploaded.scenario(),
-                uploaded.rootDir(),
-                BundleValidationSource.UPLOADED_ZIP,
-                null,
-                null,
-                List.of());
+            uploaded = unpackBundle(zipBytes);
+            return validateUploadedBundle(uploaded, null).result();
         } catch (IllegalArgumentException e) {
             return bundleValidator.uploadedBundleValidationResult(e);
         } finally {
@@ -1822,13 +1806,59 @@ public class ScenarioService {
         String bundlePath,
         List<ValidationFinding> seedFindings
     ) throws IOException {
-        return bundleValidator.validate(new BundleValidationInput(
+        return validateScenarioBundle(scenario, bundleRoot, source, bundleKey, bundlePath, seedFindings, null);
+    }
+
+    private BundleValidationResult validateScenarioBundle(
+        Scenario scenario,
+        Path bundleRoot,
+        BundleValidationSource source,
+        String bundleKey,
+        String bundlePath,
+        List<ValidationFinding> seedFindings,
+        String expectedScenarioId
+    ) throws IOException {
+        return validateScenarioBundleWithContext(
+            scenario,
+            bundleRoot,
+            source,
+            bundleKey,
+            bundlePath,
+            seedFindings,
+            expectedScenarioId).result();
+    }
+
+    private ScenarioBundleValidator.ValidationRun validateScenarioBundleWithContext(
+        Scenario scenario,
+        Path bundleRoot,
+        BundleValidationSource source,
+        String bundleKey,
+        String bundlePath,
+        List<ValidationFinding> seedFindings,
+        String expectedScenarioId
+    ) throws IOException {
+        return bundleValidator.validateWithContext(new BundleValidationInput(
             source,
             bundleRoot,
             bundleKey,
             bundlePath,
             scenario,
-            seedFindings));
+            seedFindings,
+            expectedScenarioId));
+    }
+
+    private ScenarioBundleValidator.ValidationRun validateUploadedBundle(
+        UploadedBundle uploaded,
+        String expectedScenarioId
+    ) throws IOException {
+        return validateScenarioBundleWithContext(
+            null,
+            uploaded.extractedRoot(),
+            BundleValidationSource.UPLOADED_ZIP,
+            null,
+            null,
+            List.of(),
+            expectedScenarioId);
     }
 
     private List<BundleBeeSummary> bundleBees(Scenario scenario) {
@@ -1840,7 +1870,7 @@ public class ScenarioService {
             .toList();
     }
 
-    private UploadedBundle unpackBundle(byte[] zipBytes, String expectedId) throws IOException {
+    private UploadedBundle unpackBundle(byte[] zipBytes) throws IOException {
         if (zipBytes == null || zipBytes.length == 0) {
             throw new IllegalArgumentException("Zip payload must not be empty");
         }
@@ -1869,18 +1899,7 @@ public class ScenarioService {
                     Files.copy(zis, dest, StandardCopyOption.REPLACE_EXISTING);
                 }
             }
-
-            ScenarioBundleValidator.ScenarioDescriptor descriptor = bundleValidator.findScenarioDescriptor(tempRoot);
-            Scenario scenario = descriptor.scenario();
-            String id = scenario.getId();
-            if (id == null || id.isBlank()) {
-                throw new IllegalArgumentException("Scenario id must not be null or blank");
-            }
-            if (expectedId != null && !expectedId.equals(id)) {
-                throw new IllegalArgumentException(
-                    "Scenario id '%s' in bundle does not match expected id '%s'".formatted(id, expectedId));
-            }
-            return new UploadedBundle(scenario, descriptor.rootDir(), tempRoot);
+            return new UploadedBundle(tempRoot);
         } catch (IOException | RuntimeException e) {
             clearDirectory(tempRoot);
             Files.deleteIfExists(tempRoot);
@@ -1888,8 +1907,23 @@ public class ScenarioService {
         }
     }
 
-    private void writeBundle(UploadedBundle uploaded, Path targetDir) throws IOException {
-        Path sourceDir = uploaded.rootDir();
+    private Scenario validatedScenario(ScenarioBundleValidator.ValidationRun validation) {
+        Scenario scenario = validation.scenario();
+        if (scenario == null || scenario.getId() == null || scenario.getId().isBlank()) {
+            throw new IllegalStateException("Canonical bundle validation returned ok without a scenario id");
+        }
+        return scenario;
+    }
+
+    private Path validatedBundleRoot(ScenarioBundleValidator.ValidationRun validation) {
+        Path root = validation.bundleRoot();
+        if (root == null || !Files.isDirectory(root)) {
+            throw new IllegalStateException("Canonical bundle validation returned ok without a bundle root");
+        }
+        return root;
+    }
+
+    private void writeBundle(Path sourceDir, Path targetDir) throws IOException {
         if (Files.exists(targetDir)) {
             clearDirectory(targetDir);
         }
@@ -1907,7 +1941,7 @@ public class ScenarioService {
     }
 
     private void cleanupUploaded(UploadedBundle uploaded) throws IOException {
-        Path tempRoot = uploaded.tempRoot();
+        Path tempRoot = uploaded.extractedRoot();
         clearDirectory(tempRoot);
         Files.deleteIfExists(tempRoot);
     }
@@ -1973,7 +2007,7 @@ public class ScenarioService {
 
     private record BundleRoot(Path root) { }
 
-    private record UploadedBundle(Scenario scenario, Path rootDir, Path tempRoot) { }
+    private record UploadedBundle(Path extractedRoot) { }
 
     public record BundleBeeSummary(String role, String image) { }
 

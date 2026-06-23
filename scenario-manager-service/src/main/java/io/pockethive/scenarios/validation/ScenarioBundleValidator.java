@@ -59,14 +59,20 @@ public final class ScenarioBundleValidator {
     }
 
     public BundleValidationResult validate(BundleValidationInput input) throws IOException {
+        return validateWithContext(input).result();
+    }
+
+    public ValidationRun validateWithContext(BundleValidationInput input) throws IOException {
         Objects.requireNonNull(input, "input");
         List<ValidationFinding> findings = new ArrayList<>(input.seedFindings());
         Path bundleRoot = input.bundleRoot();
         Scenario scenario = input.scenario();
+        Scenario descriptorScenario = scenario;
         if (scenario == null && bundleRoot != null && Files.isDirectory(bundleRoot)) {
             try {
                 ScenarioDescriptor descriptor = findScenarioDescriptor(bundleRoot);
                 scenario = descriptor.scenario();
+                descriptorScenario = descriptor.scenario();
                 bundleRoot = descriptor.rootDir();
             } catch (IllegalArgumentException e) {
                 findings.add(findingForException(e));
@@ -86,6 +92,7 @@ public final class ScenarioBundleValidator {
             Optional<String> defunctReason = defunctReason(resolved);
             defunctReason.ifPresent(reason -> findings.add(defunctFinding(reason)));
         }
+        expectedScenarioIdFinding(scenarioId, input.expectedScenarioId()).ifPresent(findings::add);
 
         if (bundleRoot != null && Files.isDirectory(bundleRoot) && scenarioId != null && !scenarioId.isBlank()) {
             try {
@@ -99,12 +106,13 @@ public final class ScenarioBundleValidator {
             findings.addAll(validateAuthContracts(bundleRoot));
         }
 
-        return BundleValidationResult.of(
+        BundleValidationResult result = BundleValidationResult.of(
             input.source(),
             input.bundleKey(),
             input.bundlePath(),
             scenarioId,
             List.copyOf(findings));
+        return new ValidationRun(result, descriptorScenario, bundleRoot);
     }
 
     public Scenario applyDefaultImageTag(Scenario scenario) {
@@ -229,15 +237,14 @@ public final class ScenarioBundleValidator {
             List.of(finding));
     }
 
-    public BundleValidationResult requireScenarioId(BundleValidationResult validation, String expectedScenarioId) {
+    private Optional<ValidationFinding> expectedScenarioIdFinding(String actualScenarioId, String expectedScenarioId) {
         String expected = expectedScenarioId == null ? null : expectedScenarioId.trim();
-        String actual = validation == null || validation.scenarioId() == null ? null : validation.scenarioId().trim();
+        String actual = actualScenarioId == null ? null : actualScenarioId.trim();
         if (expected == null || expected.isEmpty() || actual == null || actual.isEmpty() || expected.equals(actual)) {
-            return validation;
+            return Optional.empty();
         }
 
-        List<ValidationFinding> findings = new ArrayList<>(validation.findings());
-        findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
+        return Optional.of(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
             ValidationSeverity.ERROR,
             ScenarioBundleLayout.SCENARIO_DESCRIPTOR_FILE + ":id",
             "%s id '%s' does not match requested scenario '%s'.".formatted(
@@ -247,12 +254,6 @@ public final class ScenarioBundleValidator {
             "Restore %s id to '%s' or reload Scenario Manager after moving the bundle.".formatted(
                 ScenarioBundleLayout.SCENARIO_DESCRIPTOR_FILE,
                 expected)));
-        return BundleValidationResult.of(
-            validation.source(),
-            validation.bundleKey(),
-            validation.bundlePath(),
-            validation.scenarioId(),
-            findings);
     }
 
     public ValidationFinding duplicateScenarioFinding(String scenarioId, String reason) {
@@ -1323,6 +1324,8 @@ public final class ScenarioBundleValidator {
         }
         return message.replace('\n', ' ').replace('\r', ' ').trim();
     }
+
+    public record ValidationRun(BundleValidationResult result, Scenario scenario, Path bundleRoot) { }
 
     public record ScenarioDescriptor(Scenario scenario, Path rootDir) { }
 

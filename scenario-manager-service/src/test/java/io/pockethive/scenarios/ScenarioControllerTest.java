@@ -881,6 +881,41 @@ class ScenarioControllerTest {
     }
 
     @Test
+    void bundleReplaceReturnsCanonicalValidationBodyWhenScenarioIdMismatches() throws Exception {
+        Path existing = Files.createDirectories(scenariosDir.resolve("replace-target"));
+        Files.writeString(existing.resolve("scenario.yaml"), """
+                id: replace-target
+                name: Replace target
+                template:
+                  image: ctrl-image:latest
+                  bees: []
+                """);
+        mvc.perform(post("/scenarios/reload"))
+                .andExpect(status().isNoContent());
+
+        byte[] zip = bundleZip("scenario.yaml", """
+                id: uploaded-other
+                name: Uploaded other
+                template:
+                  image: ctrl-image:latest
+                  bees: []
+                """);
+
+        mvc.perform(put("/scenarios/replace-target/bundle")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.source").value("uploaded-zip"))
+                .andExpect(jsonPath("$.scenarioId").value("uploaded-other"))
+                .andExpect(jsonPath("$.findings[0].code").value("SCENARIO_DESCRIPTOR_INVALID"))
+                .andExpect(jsonPath("$.findings[0].path").value("scenario.yaml:id"))
+                .andExpect(jsonPath("$.findings[0].message")
+                        .value(org.hamcrest.Matchers.containsString("does not match requested scenario")));
+    }
+
+    @Test
     void templateValidationReportsMissingCallId() throws Exception {
         Path bundleDir = scenariosDir.resolve("template-ref-demo");
         Files.createDirectories(bundleDir);

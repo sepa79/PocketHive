@@ -504,6 +504,53 @@ class ScenarioServiceTest {
     }
 
     @Test
+    void createBundleFromZipCopiesValidatedDescriptorRootFromNestedZip() throws IOException {
+        writeManifest("ctrl", "ctrl-image");
+        writeManifest("worker", "worker-image");
+        capabilities.reload();
+
+        byte[] zipBytes = scenarioBundleZip(Map.of(
+                "top-level/scenario.yaml", """
+                    id: nested-upload-demo
+                    name: Nested Upload Demo
+                    template:
+                      image: ctrl-image:latest
+                      bees:
+                        - role: worker
+                          image: worker-image:latest
+                          work:
+                            in:
+                              in: a
+                            out:
+                              out: b
+                    """,
+                "top-level/note.txt", "copied from validated root"));
+
+        Scenario created = service.createBundleFromZip(zipBytes);
+
+        Path targetDir = scenariosDir.resolve("bundles").resolve("nested-upload-demo");
+        assertThat(created.getId()).isEqualTo("nested-upload-demo");
+        assertThat(targetDir.resolve("scenario.yaml")).exists();
+        assertThat(targetDir.resolve("note.txt")).hasContent("copied from validated root");
+        assertThat(targetDir.resolve("top-level")).doesNotExist();
+    }
+
+    @Test
+    void replaceBundleFromZipRequiresExplicitExpectedScenarioId() throws IOException {
+        byte[] zipBytes = scenarioBundleZip("""
+                id: uploaded-demo
+                name: Uploaded Demo
+                template:
+                  image: ctrl-image:latest
+                  bees: []
+                """);
+
+        assertThatThrownBy(() -> service.replaceBundleFromZip(" ", zipBytes))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Scenario id must not be null or blank");
+    }
+
+    @Test
     void variablesValidationEmitsCoverageWarningsForRequiredVariables() throws IOException {
         writeBundleScenario("scenario-1");
         writeBundleSut("scenario-1", "sut-A");
@@ -791,11 +838,17 @@ class ScenarioServiceTest {
     }
 
     private byte[] scenarioBundleZip(String scenarioYaml) throws IOException {
+        return scenarioBundleZip(Map.of("scenario.yaml", scenarioYaml));
+    }
+
+    private byte[] scenarioBundleZip(Map<String, String> entries) throws IOException {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         try (ZipOutputStream zip = new ZipOutputStream(out)) {
-            zip.putNextEntry(new ZipEntry("scenario.yaml"));
-            zip.write(scenarioYaml.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-            zip.closeEntry();
+            for (Map.Entry<String, String> entry : entries.entrySet()) {
+                zip.putNextEntry(new ZipEntry(entry.getKey()));
+                zip.write(entry.getValue().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                zip.closeEntry();
+            }
         }
         return out.toByteArray();
     }
