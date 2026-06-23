@@ -238,6 +238,14 @@ MCP follow-up findings from the first repair pass, closed in the MCP repair:
 
 1. [x] Public MCP authoring outputs expose local generation sanity as `generationSanity` (`wizard.complete`, `wizard.enrich`, `workflow.generate`) so local checks cannot be confused with validation proof.
 2. [x] `workflow_validate` classifies local bundle packaging failures, such as missing `scenario.yaml` before ZIP creation, as patchable validation/generation defects with patch scope, while real Scenario Manager connectivity/auth failures remain external/env failures.
+
+Template validation follow-up from TCP/E2E repair:
+
+1. Static template reference validation must mirror the runtime worker view. Do not scan only `templates/http`, and do not resolve references against every file under `templates/**`.
+2. For every template-consuming worker, read the normalized worker config (`templateRoot`, `serviceId`) and resolve only bundle-local roots under `/app/scenario`. Examples: `/app/scenario/templates/tcp` maps to `templates/tcp`; `/app/scenario/templates/redemption` maps to `templates/redemption`.
+3. Template directory names are author-defined namespaces, not protocol selectors. Protocol comes from the template contract field (`protocol`) or from the specific worker/template contract, not from the path segment.
+4. Missing and duplicate template checks must use the same effective lookup key as runtime: `serviceId::callId` for request-template workers. Duplicate IDs in an unused sibling directory must not fail a worker that cannot see that directory.
+5. Validation errors must name the worker role, configured `templateRoot`, and effective `serviceId::callId`; messages and fixes must not tell users to add files under `templates/http` unless that is the worker's configured root.
 3. [x] `workflow_result.agent.diagnosis.causes` for `WORKFLOW_VALIDATION_FAILED` surfaces canonical Scenario Manager findings (`code`, `path`, `message`, `fix`) when Scenario Manager returns them.
 4. [x] Cleaned minor docs formatting drift in `docs/inProgress/pockethive-plugin/TOOL-CONTRACTS.md` around the validation evidence contract paragraph.
 

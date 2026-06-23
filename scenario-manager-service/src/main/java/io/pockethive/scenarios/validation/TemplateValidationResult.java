@@ -6,12 +6,12 @@ public record TemplateValidationResult(
     boolean ok,
     String scenarioId,
     List<ValidationFinding> findings,
-    List<String> referencedCallIds,
-    List<String> definedCallIds
+    List<String> referencedTemplateKeys,
+    List<String> definedTemplateKeys
 ) {
     public TemplateValidationResult {
         findings = findings == null ? List.of() : List.copyOf(findings);
-        referencedCallIds = referencedCallIds == null ? List.of() : List.copyOf(referencedCallIds);
-        definedCallIds = definedCallIds == null ? List.of() : List.copyOf(definedCallIds);
+        referencedTemplateKeys = referencedTemplateKeys == null ? List.of() : List.copyOf(referencedTemplateKeys);
+        definedTemplateKeys = definedTemplateKeys == null ? List.of() : List.copyOf(definedTemplateKeys);
     }
 }

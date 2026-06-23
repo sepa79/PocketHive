@@ -75,6 +75,8 @@ class ScenarioControllerTest {
         cleanDirectory(capabilitiesDir);
         writeCapabilityManifest("ctrl", "ctrl-image");
         writeCapabilityManifest("worker", "worker-image");
+        writeCapabilityManifest("generator", "generator");
+        writeCapabilityManifest("request-builder", "request-builder");
         capabilityCatalogue.reload();
         mvc.perform(post("/scenarios/reload"))
                 .andExpect(status().isNoContent());
@@ -924,16 +926,28 @@ class ScenarioControllerTest {
                 name: Template reference demo
                 template:
                   image: ctrl-image:latest
-                  bees: []
-                plan:
-                  steps:
-                    - action: config-update
+                  bees:
+                    - role: generator
+                      image: generator:latest
                       config:
                         worker:
-                          config:
-                            message:
-                              headers:
-                                x-ph-call-id: login
+                          message:
+                            headers:
+                              x-ph-call-id: login
+                      work:
+                        out:
+                          out: build
+                    - role: request-builder
+                      image: request-builder:latest
+                      config:
+                        worker:
+                          templateRoot: /app/scenario/templates/redemption
+                          serviceId: auth
+                      work:
+                        in:
+                          in: build
+                        out:
+                          out: proc
                 """);
 
         mvc.perform(post("/scenarios/reload"))
@@ -946,6 +960,166 @@ class ScenarioControllerTest {
                 .andExpect(jsonPath("$.ok").value(false))
                 .andExpect(jsonPath("$.findings[0].category").value("templates"))
                 .andExpect(jsonPath("$.findings[0].code").value("TEMPLATE_CALL_ID_MISSING"));
+    }
+
+    @Test
+    void templateValidationUsesWorkerTemplateRootForTcpTemplates() throws Exception {
+        byte[] zip = bundleZip(Map.of(
+                "scenario.yaml", """
+                    id: tcp-template-ref-demo
+                    name: TCP template reference demo
+                    template:
+                      image: ctrl-image:latest
+                      bees:
+                        - role: generator
+                          image: generator:latest
+                          config:
+                            worker:
+                              message:
+                                headers:
+                                  x-ph-call-id: tcp-request
+                          work:
+                            out:
+                              out: build
+                        - role: request-builder
+                          image: request-builder:latest
+                          config:
+                            worker:
+                              templateRoot: /app/scenario/templates/tcp
+                              serviceId: banking
+                          work:
+                            in:
+                              in: build
+                            out:
+                              out: proc
+                    """,
+                "templates/tcp/banking/tcp-request.yaml", """
+                    protocol: TCP
+                    serviceId: banking
+                    callId: tcp-request
+                    bodyTemplate: "{{ payload }}"
+                    """));
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(true))
+                .andExpect(jsonPath("$.findings", hasSize(0)));
+    }
+
+    @Test
+    void templateValidationIgnoresDuplicateCallIdOutsideWorkerTemplateRoot() throws Exception {
+        byte[] zip = bundleZip(Map.of(
+                "scenario.yaml", """
+                    id: template-root-scope-demo
+                    name: Template root scope demo
+                    template:
+                      image: ctrl-image:latest
+                      bees:
+                        - role: generator
+                          image: generator:latest
+                          config:
+                            worker:
+                              message:
+                                headers:
+                                  x-ph-call-id: redeem
+                          work:
+                            out:
+                              out: build
+                        - role: request-builder
+                          image: request-builder:latest
+                          config:
+                            worker:
+                              templateRoot: /app/scenario/templates/redemption
+                              serviceId: default
+                          work:
+                            in:
+                              in: build
+                            out:
+                              out: proc
+                    """,
+                "templates/redemption/redeem.yaml", """
+                    protocol: HTTP
+                    serviceId: default
+                    callId: redeem
+                    method: POST
+                    pathTemplate: /redeem
+                    """,
+                "templates/auth/redeem.yaml", """
+                    protocol: HTTP
+                    serviceId: default
+                    callId: redeem
+                    method: POST
+                    pathTemplate: /auth/redeem
+                    """));
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(true))
+                .andExpect(jsonPath("$.findings", hasSize(0)));
+    }
+
+    @Test
+    void templateValidationReportsDuplicateVisibleTemplateKey() throws Exception {
+        byte[] zip = bundleZip(Map.of(
+                "scenario.yaml", """
+                    id: duplicate-visible-template-demo
+                    name: Duplicate visible template demo
+                    template:
+                      image: ctrl-image:latest
+                      bees:
+                        - role: generator
+                          image: generator:latest
+                          config:
+                            worker:
+                              message:
+                                headers:
+                                  x-ph-call-id: redeem
+                          work:
+                            out:
+                              out: build
+                        - role: request-builder
+                          image: request-builder:latest
+                          config:
+                            worker:
+                              templateRoot: /app/scenario/templates/redemption
+                              serviceId: default
+                          work:
+                            in:
+                              in: build
+                            out:
+                              out: proc
+                    """,
+                "templates/redemption/redeem-a.yaml", """
+                    protocol: HTTP
+                    serviceId: default
+                    callId: redeem
+                    method: POST
+                    pathTemplate: /redeem/a
+                    """,
+                "templates/redemption/nested/redeem-b.yaml", """
+                    protocol: HTTP
+                    serviceId: default
+                    callId: redeem
+                    method: POST
+                    pathTemplate: /redeem/b
+                    """));
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings[0].category").value("templates"))
+                .andExpect(jsonPath("$.findings[0].code").value("TEMPLATE_CALL_ID_DUPLICATE"))
+                .andExpect(jsonPath("$.findings[0].message")
+                        .value(org.hamcrest.Matchers.containsString("default::redeem")));
     }
 
     @Test
