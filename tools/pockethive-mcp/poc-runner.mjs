@@ -193,7 +193,7 @@ async function runOfflinePoc() {
     log("wizard_summary", summary.scenario.pattern);
 
     const complete = await call(client, "wizard_complete", { sessionId: start.sessionId });
-    if (!complete.completed || !complete.structural?.ok) {
+    if (!complete.completed || !complete.generationSanity?.ok) {
       throw new Error(`Wizard completion failed: ${JSON.stringify(complete, null, 2)}`);
     }
     log("wizard_complete", complete.generated.path);

@@ -157,25 +157,24 @@ evidence remain available through `workflow_status`, `workflow_report`, and
 `workflow_evidence_render`.
 
 `workflow_result.proof.validation` reports the latest validation attempt and
-also exposes validation by level:
+the Scenario Manager validation state:
 
 ```yaml
 proof:
   validation:
     status: pass | fail | not-run
-    latestLevel: structural | scenario-manager | null
-    structural:
-      status: pass | fail | not-run
-      code: string | null
+    latestLevel: scenario-manager | null
     scenarioManager:
       status: pass | fail | not-run
       code: string | null
       authoritative: boolean
 ```
 
-An authoritative Scenario Manager failure must not erase a prior structural
-validation pass. Agents inspect the nested validation level before deciding
-whether the next action is a bundle patch or an environment/auth retry.
+Local generation sanity is exposed by `wizard_complete`, `wizard_enrich`, and
+`workflow_generate` as `generationSanity`. It is generation diagnostics, not
+bundle validation proof. Agents use `workflow_result.nextAction` and
+`diagnosis.causes` to decide whether the next step is a bundle patch or an
+environment/auth retry.
 
 ## Wizard Tool Contracts
 
@@ -988,8 +987,8 @@ should prefer a mock-backed scenario unless the user explicitly confirms a
 low-rate live/public target.
 
 `evidenceContract` is created before generation and describes the claims the
-  workflow will later try to prove. It must include required claims such as
-  generation, Scenario Manager validation, and stakeholder report. Runtime claims
+workflow will later try to prove. It must include required claims such as
+generation, Scenario Manager validation, and stakeholder report. Runtime claims
 such as workers healthy, queues drained, mock matched requests, traffic shape,
 dataset rotation, auth refresh, and observability output are included when
 relevant and marked `required` only when the plan/profile requires live proof.
@@ -1089,7 +1088,8 @@ the single workflow validation proof.
 Failure codes distinguish artifact failures from environment failures:
 
 - `WORKFLOW_VALIDATION_FAILED` means the generated bundle needs a patch before
-  validation can pass.
+  validation can pass. Canonical Scenario Manager findings are exposed in
+  `workflow_result.diagnosis.causes` when Scenario Manager returned them.
 - `WORKFLOW_EXTERNAL_VALIDATION_FAILED` means Scenario Manager validation could
   not complete against the configured stack.
 - `WORKFLOW_ENV_AUTH_FAILED` means PocketHive API auth was rejected, commonly a

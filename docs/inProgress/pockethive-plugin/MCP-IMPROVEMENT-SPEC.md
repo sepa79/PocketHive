@@ -915,7 +915,7 @@ Output:
   {
     completed: true,
     generated: { created, bundleId, path, pattern, target },
-    structural: GenerationSanityResult
+    generationSanity: GenerationSanityResult
   }
 ```
 

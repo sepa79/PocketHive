@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -873,7 +873,7 @@ test("workflow gates generation until a normalized plan is complete, then genera
 
     const generated = await call(client, "workflow_generate", { workflowId: started.workflowId });
     assert.equal(generated.ok, true);
-    assert.equal(generated.structural.ok, true);
+    assert.equal(generated.generationSanity.ok, true);
     assert.equal(existsSync(resolve(root, "agent-complete", "scenario.yaml")), true);
 
     const generatedStatus = await call(client, "workflow_status", { workflowId: started.workflowId });
@@ -1259,6 +1259,45 @@ test("Scenario Manager validation unavailable is classified without patch scope"
   });
 });
 
+test("workflow_validate classifies local bundle packaging defects as patchable validation failures", async () => {
+  const root = mkdtempSync(join(tmpdir(), "ph-workflow-root-"));
+  let failed;
+  let status;
+  let result;
+
+  const validationCalls = await withScenarioManagerValidationClient(root, async (client) => {
+    const started = await call(client, "workflow_start", {
+      sourceType: "plain-instructions",
+      instructions: "Create a bundle and show local packaging failure classification.",
+    });
+    await call(client, "workflow_update", {
+      workflowId: started.workflowId,
+      plan: completePlan("bundle-packaging-defect"),
+      provenance: requiredProvenance("user"),
+    });
+    await completeThreeAmigos(client, started.workflowId);
+    await call(client, "workflow_generate", { workflowId: started.workflowId });
+    unlinkSync(resolve(root, "bundle-packaging-defect", "scenario.yaml"));
+
+    failed = await call(client, "workflow_validate", { workflowId: started.workflowId });
+    status = await call(client, "workflow_status", { workflowId: started.workflowId });
+    result = await call(client, "workflow_result", { workflowId: started.workflowId });
+  });
+
+  assert.equal(validationCalls, 0);
+  assert.equal(failed.ok, false);
+  assert.equal(failed.code, "WORKFLOW_VALIDATION_FAILED");
+  assert.equal(failed.failureCode, "WORKFLOW_VALIDATION_FAILED");
+  assert.equal(failed.authoritative, false);
+  assert.ok(failed.patchScope.some((scope) => scope.endsWith("/bundle-packaging-defect/**")));
+  assert.ok(failed.suggestedNextActions.includes("workflow_patch"));
+  assert.equal(status.agent.nextAction.tool, "workflow_patch");
+  assert.equal(status.agent.diagnosis.causes[0].code, "BUNDLE_PACKAGING_FAILED");
+  assert.equal(status.agent.diagnosis.causes[0].path, "scenario.yaml");
+  assert.equal(result.proof.validation.status, "fail");
+  assert.equal(result.proof.validation.scenarioManager.status, "not-run");
+});
+
 test("workflow CSV datasets generate runtime CSV input config and sample artifact", async () => {
   const root = mkdtempSync(join(tmpdir(), "ph-workflow-root-"));
 
@@ -1370,6 +1409,14 @@ test("workflow_patch is constrained and validation history preserves failed and 
     assert.equal(failedStatus.agent.verdict, "failed");
     assert.equal(failedStatus.agent.phase, "validation");
     assert.equal(failedStatus.agent.diagnosis.code, "WORKFLOW_VALIDATION_FAILED");
+    assert.deepEqual(failedStatus.agent.diagnosis.causes[0], {
+      code: "SCENARIO_DESCRIPTOR_INVALID",
+      path: "scenario.yaml",
+      message: "Invalid scenario descriptor.",
+      fix: "Repair scenario.yaml.",
+      category: "scenario",
+      severity: "error",
+    });
     assert.equal(failedStatus.agent.nextAction.tool, "workflow_patch");
     assert.equal(failedStatus.agent.nextAction.followUpTool, "workflow_validate");
     const failedResult = await call(client, "workflow_result", { workflowId: started.workflowId });

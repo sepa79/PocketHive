@@ -206,7 +206,7 @@ async function runCase(client, testCase) {
 
   const complete = await call(client, "wizard_complete", { sessionId: start.sessionId });
   assert(complete.completed, `${testCase.name} did not complete`);
-  assert(complete.structural?.ok, `${testCase.name} completion structural check failed`);
+  assert(complete.generationSanity?.ok, `${testCase.name} completion generation sanity check failed`);
 
   assertFiles(testCase.input.bundleId, testCase.expectedFiles);
   assertBeeRoles(testCase.input.bundleId, testCase.expectedRoles);

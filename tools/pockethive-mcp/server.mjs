@@ -2021,7 +2021,7 @@ registerWorkflowTools({
   wizardMockEndpoints,
   validateWizardAnswers,
   writeWizardBundle,
-  runBundleCheck,
+  runGenerationSanityCheck,
   scenarioManagerDryRunValidateBundle,
   scenarioManagerUploadBundle,
   loadBundleMockConfig,
@@ -2139,9 +2139,9 @@ reg("wizard.complete", "Complete a wizard session and generate the bundle files.
     throw new Error(`Wizard is not complete. Missing: ${plan.missing.join(", ") || "none"}. Errors: ${plan.errors.join("; ") || "none"}`);
   }
   const generated = await writeWizardBundle(session);
-  const structural = await runBundleCheck(generated.bundleId);
+  const generationSanity = await runGenerationSanityCheck(generated.bundleId);
   WIZARD_SESSIONS.delete(sessionId);
-  return { completed: true, generated, structural };
+  return { completed: true, generated, generationSanity };
 });
 
 reg("wizard.enrich", "Enrich an existing bundle with missing artifacts (variables, authProfiles, SUT, mock stubs, templates, README, FLOW_DOCUMENT, CHANGELOG). Never overwrites existing files unless a force flag is set. IMPORTANT: do NOT call this tool if the current plan has a non-null humanCheckpoint — all humanCheckpoint.questions must be answered by the human and submitted via wizard.answer first.", {
@@ -2156,12 +2156,12 @@ reg("wizard.enrich", "Enrich an existing bundle with missing artifacts (variable
     throw new Error(`Wizard is not complete. Missing: ${plan.missing.join(", ") || "none"}. Errors: ${plan.errors.join("; ") || "none"}`);
   }
   const result = await enrichWizardBundle(session, { forceReadme, forceFlowDoc, forceChangelog });
-  const structural = await runBundleCheck(result.bundleId);
+  const generationSanity = await runGenerationSanityCheck(result.bundleId);
   WIZARD_SESSIONS.delete(sessionId);
-  return { ...result, structural };
+  return { ...result, generationSanity };
 });
 
-async function runBundleCheck(bundle) {
+async function runGenerationSanityCheck(bundle) {
   const targetBundleDir = bundleDir(bundle);
   const scenarioPath = resolve(targetBundleDir, "scenario.yaml");
   const checks = [];
@@ -2326,9 +2326,36 @@ async function runBundleCheck(bundle) {
   };
 }
 
+class BundlePackagingError extends Error {
+  constructor(message, { path = null, fix = "Repair the generated bundle files and rerun validation." } = {}) {
+    super(message);
+    this.name = "BundlePackagingError";
+    this.code = "BUNDLE_PACKAGING_FAILED";
+    this.localGenerationDefect = true;
+    this.finding = {
+      category: "bundle",
+      code: "BUNDLE_PACKAGING_FAILED",
+      severity: "error",
+      path,
+      message,
+      fix,
+    };
+  }
+}
+
 async function createBundleZipBytes(bundle) {
   const targetBundleDir = bundleDir(bundle);
-  if (!existsSync(resolve(targetBundleDir, "scenario.yaml"))) throw new Error(`No scenario.yaml found in bundle '${bundle}'`);
+  if (!existsSync(targetBundleDir)) {
+    throw new BundlePackagingError(`Bundle directory not found for '${bundle}'`, {
+      fix: "Regenerate the workflow bundle or correct the bundle id, then rerun validation.",
+    });
+  }
+  if (!existsSync(resolve(targetBundleDir, "scenario.yaml"))) {
+    throw new BundlePackagingError(`No scenario.yaml found in bundle '${bundle}'`, {
+      path: "scenario.yaml",
+      fix: "Restore scenario.yaml in the generated bundle, then rerun validation.",
+    });
+  }
   const { createWriteStream } = await import("node:fs");
   const archiver = await import("archiver").catch(() => null);
   if (!archiver) throw new Error("archiver dependency is required for Scenario Manager bundle upload validation");
