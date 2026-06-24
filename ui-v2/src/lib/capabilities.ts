@@ -4,12 +4,24 @@ export type CapabilityImage = {
   digest?: string | null
 }
 
+export type CapabilityConfigEntry = {
+  name: string
+  type: string
+  default?: unknown
+  min?: number
+  max?: number
+  options?: unknown[]
+  multiline?: boolean
+  ui?: unknown
+  when?: Record<string, unknown>
+}
+
 export type CapabilityManifest = {
   schemaVersion: string
   capabilitiesVersion: string
   image: CapabilityImage
   role: string
-  config: unknown[]
+  config: CapabilityConfigEntry[]
   actions: unknown[]
   panels: unknown[]
   ui?: Record<string, unknown>
@@ -51,7 +63,11 @@ function normalizeManifest(entry: unknown): CapabilityManifest | null {
   }
 
   const role = typeof value.role === 'string' ? value.role : ''
-  const config = Array.isArray(value.config) ? [...value.config] : []
+  const config = Array.isArray(value.config)
+    ? value.config
+        .map((item) => normalizeConfigEntry(item))
+        .filter((item): item is CapabilityConfigEntry => item !== null)
+    : []
   const actions = Array.isArray(value.actions) ? [...value.actions] : []
   const panels = Array.isArray(value.panels) ? [...value.panels] : []
   const ui = value.ui && typeof value.ui === 'object' ? (value.ui as Record<string, unknown>) : undefined
@@ -65,6 +81,25 @@ function normalizeManifest(entry: unknown): CapabilityManifest | null {
     actions,
     panels,
     ui,
+  }
+}
+
+function normalizeConfigEntry(entry: unknown): CapabilityConfigEntry | null {
+  if (!entry || typeof entry !== 'object') return null
+  const value = entry as Record<string, unknown>
+  if (typeof value.name !== 'string' || value.name.trim().length === 0) return null
+  if (typeof value.type !== 'string' || value.type.trim().length === 0) return null
+  const options = Array.isArray(value.options) && value.options.length > 0 ? [...value.options] : undefined
+  return {
+    name: value.name.trim(),
+    type: value.type.trim(),
+    default: value.default,
+    min: typeof value.min === 'number' ? value.min : undefined,
+    max: typeof value.max === 'number' ? value.max : undefined,
+    options,
+    multiline: typeof value.multiline === 'boolean' ? value.multiline : undefined,
+    ui: value.ui,
+    when: value.when && typeof value.when === 'object' ? (value.when as Record<string, unknown>) : undefined,
   }
 }
 
@@ -193,4 +228,92 @@ function lookupManifestByImageName(
 ): CapabilityManifest | null {
   const key = canonicalImageName(name)
   return key ? index.byImageName.get(key) ?? null : null
+}
+
+export function formatCapabilityValue(value: unknown): string {
+  if (value === null || value === undefined) return ''
+  if (typeof value === 'string') return value
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  try {
+    return JSON.stringify(value, null, 2)
+  } catch {
+    return ''
+  }
+}
+
+export function matchesCapabilityWhen(
+  when: Record<string, unknown> | undefined,
+  resolveValue: (path: string) => unknown,
+): boolean {
+  if (!when || typeof when !== 'object') {
+    return true
+  }
+  for (const [path, expected] of Object.entries(when)) {
+    const actual = resolveValue(path)
+    if (!matchesExpected(actual, expected)) {
+      return false
+    }
+  }
+  return true
+}
+
+function matchesExpected(actual: unknown, expected: unknown): boolean {
+  if (Array.isArray(expected)) {
+    return expected.some((value) => matchesExpected(actual, value))
+  }
+  if (actual === undefined || actual === null) {
+    return false
+  }
+  if (typeof expected === 'string') {
+    const expectedText = expected.trim()
+    if (!expectedText) return false
+    if (typeof actual === 'string') {
+      return actual.trim().toLowerCase() === expectedText.toLowerCase()
+    }
+    return String(actual).trim().toLowerCase() === expectedText.toLowerCase()
+  }
+  if (typeof expected === 'boolean') {
+    if (typeof actual === 'boolean') return actual === expected
+    if (typeof actual === 'string') {
+      const normalized = actual.trim().toLowerCase()
+      if (normalized === 'true') return expected === true
+      if (normalized === 'false') return expected === false
+    }
+    return false
+  }
+  if (typeof expected === 'number') {
+    if (typeof actual === 'number') return actual === expected
+    if (typeof actual === 'string') {
+      const parsed = Number(actual)
+      return Number.isFinite(parsed) && parsed === expected
+    }
+    return false
+  }
+  return Object.is(actual, expected)
+}
+
+export function capabilityEntryUiString(entry: CapabilityConfigEntry, key: string): string | undefined {
+  const ui = entry.ui
+  if (!ui || typeof ui !== 'object') return undefined
+  const value = (ui as Record<string, unknown>)[key]
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : undefined
+}
+
+export type CapabilityConfigGroup = { id: string; label: string; entries: CapabilityConfigEntry[] }
+
+export function groupCapabilityConfigEntries(entries: CapabilityConfigEntry[]): CapabilityConfigGroup[] {
+  const groups = new Map<string, CapabilityConfigGroup>()
+  for (const entry of entries) {
+    const group = capabilityEntryUiString(entry, 'group') ?? 'General'
+    const id = group.trim() || 'General'
+    const existing = groups.get(id)
+    if (existing) {
+      existing.entries.push(entry)
+    } else {
+      groups.set(id, { id, label: id, entries: [entry] })
+    }
+  }
+  return Array.from(groups.values())
 }

@@ -35,8 +35,6 @@ function runtimeSubtitle(resource: RuntimeResource): string {
   const parts = [
     resource.resourceKind ?? 'resource',
     resource.role,
-    resource.runtimeType,
-    resource.state,
   ].filter((part): part is string => typeof part === 'string' && part.trim().length > 0)
   return parts.join(' · ')
 }

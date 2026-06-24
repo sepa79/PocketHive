@@ -2297,6 +2297,54 @@ select.textInputCompact option {
   color: var(--muted);
 }
 
+.configEditPanel {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.configEditHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.configEditTitleBlock {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.configEditTitle {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.configEditMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.configEditFieldList {
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.configEditHeader .actionButton {
+  flex: 0 0 auto;
+}
+
 .ioTable {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -3566,6 +3614,172 @@ select.textInputCompact option {
   max-height: 40vh;
 }
 
+.configPatchModal {
+  width: min(980px, 96vw);
+  min-height: min(720px, 86vh);
+}
+
+.configPatchBanner {
+  border: 1px solid rgba(255, 176, 32, 0.28);
+  border-radius: 8px;
+  background: rgba(255, 176, 32, 0.08);
+  color: var(--text);
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.configPatchBannerOk {
+  border-color: rgba(50, 214, 142, 0.28);
+  background: rgba(50, 214, 142, 0.08);
+}
+
+.configPatchToolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.configPatchSearch {
+  flex: 1;
+  min-width: 220px;
+}
+
+.configPatchToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.configPatchTabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.configPatchFields {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+  padding-right: 4px;
+}
+
+.configPatchField {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.14);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+:root[data-theme='light'] .configPatchField {
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.configPatchFieldIncluded {
+  border-color: rgba(51, 225, 255, 0.38);
+  background: rgba(51, 225, 255, 0.08);
+}
+
+.configPatchFieldHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.configPatchInclude {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.configPatchInclude > span {
+  overflow-wrap: anywhere;
+}
+
+.configPatchIncludeText {
+  min-width: 0;
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.configPatchIncludeHint {
+  color: var(--muted2);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.configPatchPath {
+  color: var(--muted2);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.configPatchInput {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.configPatchInputMuted {
+  color: var(--muted);
+}
+
+.configPatchBoolean {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.configPatchTextarea {
+  min-height: 88px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+.configPatchFieldFooter {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 11px;
+}
+
+.configPatchError {
+  border: 1px solid rgba(255, 93, 93, 0.28);
+  border-radius: 8px;
+  background: rgba(255, 93, 93, 0.08);
+  color: #ffb4b4;
+  padding: 10px 12px;
+  margin-top: 10px;
+  font-size: 12px;
+}
+
+.configPatchActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 12px;
+}
+
 .debugTapViewerGrid {
   display: grid;
   grid-template-columns: 320px 1fr;
@@ -3709,6 +3923,17 @@ select.textInputCompact option {
   }
   .wireLogHeader {
     display: none;
+  }
+
+  .configPatchToolbar,
+  .configPatchFieldHeader,
+  .configPatchActions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .configPatchSearch {
+    min-width: 0;
   }
   .wireLogRow {
     gap: 4px;
