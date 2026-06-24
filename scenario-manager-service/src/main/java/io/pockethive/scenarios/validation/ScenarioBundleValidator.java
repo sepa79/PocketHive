@@ -499,25 +499,25 @@ public final class ScenarioBundleValidator {
         if (!sutDir.startsWith(bundle) || !Files.isDirectory(sutDir)) {
             return List.of();
         }
-        List<String> ids = new ArrayList<>();
+        List<Path> sutDirs = new ArrayList<>();
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(sutDir)) {
             for (Path path : stream) {
-                if (!Files.isDirectory(path)) {
-                    continue;
+                if (Files.isDirectory(path) && !path.getFileName().toString().isBlank()) {
+                    sutDirs.add(path);
                 }
-                String id = path.getFileName().toString();
-                if (id.isBlank()) {
-                    continue;
-                }
-                try {
-                    readBundleSutDescriptor(path, id);
-                } catch (IllegalArgumentException e) {
-                    throw invalidBundleSutDescriptor(scenarioId, id, e);
-                }
-                ids.add(id);
             }
         }
-        ids.sort(String::compareTo);
+        sutDirs.sort((left, right) -> left.getFileName().toString().compareTo(right.getFileName().toString()));
+        List<String> ids = new ArrayList<>();
+        for (Path path : sutDirs) {
+            String id = path.getFileName().toString();
+            try {
+                readBundleSutDescriptor(path, id);
+            } catch (IllegalArgumentException e) {
+                throw invalidBundleSutDescriptor(scenarioId, id, e);
+            }
+            ids.add(id);
+        }
         return List.copyOf(ids);
     }
 

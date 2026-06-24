@@ -678,7 +678,7 @@ class ScenarioServiceTest {
                 .hasMessageContaining("has no sut.yaml");
         assertThatThrownBy(() -> service.listSutIds("scenario-1"))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Failed to parse bundle-local SUT 'sut-yml'")
+                .hasMessageContaining("Failed to parse bundle-local SUT 'sut-json'")
                 .hasMessageContaining("has no sut.yaml");
 
         writeBundleScenario("scenario-2");
