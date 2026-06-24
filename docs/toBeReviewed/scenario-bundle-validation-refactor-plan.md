@@ -496,6 +496,44 @@ docs:
     must be preserved. This remains compatible with the target, but UI editors
     must treat the direct public config shape as the YAML fragment they edit.
 
+## Separate Release: Managed Proxy HAProxy Reload Reliability
+
+This is a separate release from Scenario Bundle Validation and Bee Config SSOT.
+It is tracked here because current large-swarm E2E on `.50` is blocked by the
+managed proxy path, not by scenario validation.
+
+Finding from `.50` diagnosis:
+
+- `network-proxy-manager` writes a valid `haproxy.cfg` route for
+  `haproxy:<clientPort>` -> `toxiproxy:<clientPort+offset>`.
+- Toxiproxy creates the expected proxy and upstream with no toxics for the
+  `passthrough` profile.
+- In the swarm deployment, `network-proxy-manager` and HAProxy can run on
+  different nodes and share `/opt/haproxy-runtime` through NFS.
+- HAProxy currently relies on `inotifywait` inside the HAProxy container to
+  reload runtime config.
+- NFS updates written from another node do not reliably generate the local
+  `inotify` event needed by the HAProxy container, so HAProxy can keep running
+  the old config even though the shared file is correct.
+
+Required fix:
+
+- Replace "shared file changed via cross-node `inotify`" as the sole reload
+  trigger.
+- HAProxy runtime must observe config changes explicitly, for example by
+  polling file checksum/mtime in the HAProxy container and reloading on change,
+  or by exposing a deliberate reload control path.
+- The fix must remain explicit and deterministic; do not add fallback routing,
+  worker-side proxy discovery, or direct worker access to Toxiproxy.
+
+Regression coverage:
+
+- Add a swarm/NFS regression proving that after a
+  `network-proxy-manager` bind, HAProxy exposes the expected frontend listener
+  and admin stats entry before generator traffic starts.
+- Keep the existing HTTP/HTTPS/TCPS managed proxy E2E scenarios as end-to-end
+  proof that traffic reaches the real SUT through HAProxy and Toxiproxy.
+
 ## Migration
 
 Current endpoints to revisit:

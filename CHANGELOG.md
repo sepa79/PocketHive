@@ -4,6 +4,36 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.15.30]
+Timestamp: 2026-06-24T15:03:25Z
+
+- Scenario Manager validation: add the canonical scenario bundle validation
+  contract/module, move validation APIs to `/validation/scenario-bundles*`,
+  make runtime preparation fail before touching runtime directories, and keep
+  Orchestrator from duplicating static bundle validation rules.
+- MCP authoring workflows: route bundle validation proof through Scenario
+  Manager, preserve canonical validation findings in workflow diagnostics, and
+  keep local generation sanity checks separate from bundle validation gates.
+- Scenario/template validation: resolve template references from each
+  template-consuming worker's configured `templateRoot` and `serviceId`, support
+  author-defined template directory names, and detect duplicates by the same
+  effective lookup key used at runtime.
+- UI v2 Hive view: add topology-backed worker connections and opaque worker
+  cards, open tap views in the current authenticated window, remove the
+  duplicate runtime version inspector JSON view, and add capability-driven live
+  worker config editing.
+- Control-plane status: propagate worker `status-full.data.config` into
+  swarm-controller `status-full.data.context.workers[].config` so UI config
+  editors can render current runtime values.
+- UI v2 auth/control-plane health: defer schema/bootstrap reads until auth is
+  established and reset cached control-plane state when auth changes, avoiding
+  unauthenticated health/schema failures after login.
+- Docs/planning: add the Bee Config SSOT release plan and record the managed
+  proxy HAProxy reload defect where cross-node NFS writes do not reliably
+  trigger `inotify` reloads.
+- Release: bump PocketHive patch version to 0.15.30 for the validation,
+  UI v2 live-config, status-full config, and managed-proxy follow-up work.
+
 ## [0.15.29]
 Timestamp: 2026-06-21T23:59:05Z
 

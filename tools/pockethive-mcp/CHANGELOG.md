@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## [0.15.30] - 2026-06-24
+
+### Changed
+- `bundle.validate` and workflow validation now use Scenario Manager as the
+  canonical bundle validation source.
+- Local generation sanity checks are reported separately from validation proof
+  so MCP output cannot be mistaken for runtime admission evidence.
+- Workflow validation diagnostics preserve canonical Scenario Manager finding
+  codes, paths, messages, and fixes for patchable bundle problems.
+
+### Fixed
+- Removed MCP-side static bundle validation as a deployment gate so Scenario
+  Manager remains the single owner of bundle validation behavior.
+
 ## [0.15.29] - 2026-06-21
 
 ### Changed

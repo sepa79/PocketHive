@@ -5,7 +5,6 @@ import { BrowserRouter, MemoryRouter } from 'react-router-dom'
 import App from './App'
 import './styles.css'
 import { installTheme } from './lib/theme'
-import { bootstrapControlPlane } from './lib/controlPlane/bootstrap'
 import { startControlPlaneHealth } from './lib/controlPlane/healthStore'
 import { detectUiBasename } from './lib/routing/basename'
 import { AuthProvider } from './lib/authContext'
@@ -41,7 +40,6 @@ if (isPlugin) {
     const { route = '/' } = msg.payload ?? {}
     window.__phPluginConfig = msg.payload
 
-    bootstrapControlPlane()
     startControlPlaneHealth()
 
     renderApp(
@@ -51,7 +49,6 @@ if (isPlugin) {
     )
   })
 } else {
-  bootstrapControlPlane()
   startControlPlaneHealth()
 
   renderApp(

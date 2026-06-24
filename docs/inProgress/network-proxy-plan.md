@@ -328,12 +328,16 @@ Exit criteria:
 - [x] Support `HTTPS` and `TCPS` through the proxy stack.
 - [x] Implement create/remove binding flow from orchestrator.
 - [x] Persist `networkMode` and `networkProfileId` in swarm state and journal.
+- [ ] Fix HAProxy runtime reload so it does not rely on cross-node `inotify`
+      events from a shared/NFS runtime directory.
 
 Exit criteria:
 
- - one swarm can start with `networkMode = PROXIED` and a chosen `networkProfileId`
+- one swarm can start with `networkMode = PROXIED` and a chosen `networkProfileId`
 - secure traffic reaches the real test environment through the proxy stack
 - clearing/removing the swarm releases runtime binding state
+- after a proxy-manager bind, the HAProxy process has applied the generated
+  frontend/backend route within a bounded interval in the swarm/NFS deployment
 
 ### M2 - UI control surface
 
@@ -398,6 +402,9 @@ Exit criteria:
 - [x] `HTTPS` verification path
 - [x] `TCPS` verification path
 - [x] Failure tests for missing profile / unsupported endpoint / broken upstream
+- [ ] Regression for swarm/NFS deployments: after `network-proxy-manager`
+      writes a binding route, HAProxy exposes the expected listener and admin
+      stats entry before worker traffic starts.
 
 ## 11. Open questions
 
@@ -408,6 +415,10 @@ Exit criteria:
 - Secure traffic support depends on explicit authority handling; any hidden hostname rewrite will cause flaky TLS failures.
 - If literal URLs remain in scenarios, those paths will bypass the proxy layer by design.
 - If proxy manager state is not the single source of truth, UI/runtime state will drift.
+- Cross-node shared filesystems such as NFS must not be treated as reliable
+  `inotify` event sources. A proxy-manager write on one node can update
+  `haproxy.cfg` while the HAProxy container on another node keeps running the
+  old config.
 
 ## 13. Implementation notes
 
@@ -415,3 +426,8 @@ Exit criteria:
 - Do not let workers discover or synthesize proxy routes themselves.
 - Do not duplicate SUT data into separate "proxied SUT" definitions.
 - Fail fast when a requested profile cannot be applied to the selected endpoint/protocol set.
+- HAProxy reload must be driven by an explicit observable state change in the
+  HAProxy runtime process, such as polling file checksum/mtime or a deliberate
+  reload control path. Do not rely on `inotifywait` as the sole reload trigger
+  for a bind-mounted runtime config that may be written from a different swarm
+  node.
