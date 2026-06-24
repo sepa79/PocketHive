@@ -3,6 +3,7 @@ package io.pockethive.swarmcontroller;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -45,6 +46,7 @@ final class SwarmWorkersAggregator {
     if (runtime == null && previous != null) {
       runtime = previous.runtime();
     }
+    Map<String, Object> config = configFrom(dataNode, previous);
 
     long now = System.currentTimeMillis();
     WorkerSnapshot snapshot = new WorkerSnapshot(
@@ -55,6 +57,7 @@ final class SwarmWorkersAggregator {
         input,
         output,
         runtime,
+        config,
         Instant.ofEpochMilli(now).toString(),
         now);
     byKey.put(key, snapshot);
@@ -86,6 +89,9 @@ final class SwarmWorkersAggregator {
       if (snapshot.runtime() != null && !snapshot.runtime().isEmpty()) {
         entry.put("runtime", snapshot.runtime());
       }
+      if (snapshot.config() != null) {
+        entry.put("config", snapshot.config());
+      }
       out.add(entry);
     }
     return List.copyOf(out);
@@ -115,6 +121,51 @@ final class SwarmWorkersAggregator {
     return runtime;
   }
 
+  private static Map<String, Object> configFrom(JsonNode dataNode, WorkerSnapshot previous) {
+    if (dataNode != null && dataNode.has("config")) {
+      JsonNode configNode = dataNode.get("config");
+      if (configNode == null || !configNode.isObject()) {
+        return Map.of();
+      }
+      return objectFrom(configNode);
+    }
+    return previous != null ? previous.config() : null;
+  }
+
+  private static Map<String, Object> objectFrom(JsonNode node) {
+    Map<String, Object> values = new LinkedHashMap<>();
+    node.fields().forEachRemaining(entry -> values.put(entry.getKey(), valueFrom(entry.getValue())));
+    return Collections.unmodifiableMap(values);
+  }
+
+  private static List<Object> listFrom(JsonNode node) {
+    List<Object> values = new ArrayList<>();
+    node.elements().forEachRemaining(element -> values.add(valueFrom(element)));
+    return Collections.unmodifiableList(values);
+  }
+
+  private static Object valueFrom(JsonNode node) {
+    if (node == null || node.isNull()) {
+      return null;
+    }
+    if (node.isObject()) {
+      return objectFrom(node);
+    }
+    if (node.isArray()) {
+      return listFrom(node);
+    }
+    if (node.isBoolean()) {
+      return node.booleanValue();
+    }
+    if (node.isNumber()) {
+      return node.numberValue();
+    }
+    if (node.isTextual()) {
+      return node.textValue();
+    }
+    return node.asText();
+  }
+
   private static String textOrNull(JsonNode node, String field) {
     if (node == null || field == null) {
       return null;
@@ -135,6 +186,7 @@ final class SwarmWorkersAggregator {
       String workInput,
       String workOutput,
       Map<String, Object> runtime,
+      Map<String, Object> config,
       String lastSeenAt,
       long lastSeenMillis) {
   }

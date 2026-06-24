@@ -276,6 +276,12 @@ Additional rules:
   - `status-delta` carries a small aggregate only (no worker list).
   - `status-full` carries the full aggregate snapshot, including `data.context.workers[]`.
   - `data.context.workers[]` entries may include a `runtime` object with the same shape as the envelope `runtime`.
+  - `data.context.workers[]` entries must carry the last known public worker
+    `status-full.data.config` as `config` after the worker has reported a
+    `status-full`. An explicit empty object (`config: {}`) means the worker
+    reported an empty effective config. Later worker `status-delta` events
+    omit `data.config` and must not erase the last reported config from the
+    swarm-controller aggregate.
 - For orchestrator, `data.context` carries at least `swarmCount`. The
   `computeAdapter` selection is effectively static and belongs in `status-full`
   only (never in deltas).

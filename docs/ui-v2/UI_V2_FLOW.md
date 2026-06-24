@@ -190,9 +190,11 @@ Rules:
 
 - Do not edit scenario YAML as a substitute for live runtime config.
 - Do not send config updates through RabbitMQ directly from the browser.
-- Do not infer a runtime current value from scenario defaults. If the current
-  worker `status-full.data.config` is not available in the UI state, show that
-  explicitly and build a patch only from fields the user selects/changes.
+- Do not infer a runtime current value from scenario defaults. The current
+  value source is the worker `status-full.data.config` carried by the
+  swarm-controller aggregate at `data.context.workers[].config`. If it is not
+  available in the UI state, show that explicitly and build a patch only from
+  fields the user selects/changes.
 - The form must use capability `config[]` entries as the only field catalog.
 - A matched capability manifest must produce a visible `Edit config` action in
   the selected worker panel. Capability summary text such as field counts is

@@ -212,8 +212,12 @@ Data sources and ownership:
 - The request body includes `swarmId`, `idempotencyKey`, and `patch`; the
   Orchestrator publishes `signal.config-update.<swarmId>.<role>.<instance>`.
 - Current runtime config values are authoritative only when they come from a
-  worker `status-full.data.config` snapshot. The swarm-controller aggregate
-  may not include per-worker config; in that case the UI must show an explicit
+  worker `status-full.data.config` snapshot carried through the
+  swarm-controller aggregate at `data.context.workers[].config`.
+- The swarm-controller aggregate must preserve the latest public worker config
+  reported by `status-full`, including an explicit empty object (`config: {}`).
+  Later `status-delta` events omit config and must not clear it.
+- If `data.context.workers[].config` is absent, the UI must show an explicit
   "current config unavailable" state instead of treating scenario YAML or
   capability defaults as current runtime state.
 
