@@ -246,8 +246,255 @@ Template validation follow-up from TCP/E2E repair:
 3. Template directory names are author-defined namespaces, not protocol selectors. Protocol comes from the template contract field (`protocol`) or from the specific worker/template contract, not from the path segment.
 4. Missing and duplicate template checks must use the same effective lookup key as runtime: `serviceId::callId` for request-template workers. Duplicate IDs in an unused sibling directory must not fail a worker that cannot see that directory.
 5. Validation errors must name the worker role, configured `templateRoot`, and effective `serviceId::callId`; messages and fixes must not tell users to add files under `templates/http` unless that is the worker's configured root.
-3. [x] `workflow_result.agent.diagnosis.causes` for `WORKFLOW_VALIDATION_FAILED` surfaces canonical Scenario Manager findings (`code`, `path`, `message`, `fix`) when Scenario Manager returns them.
-4. [x] Cleaned minor docs formatting drift in `docs/inProgress/pockethive-plugin/TOOL-CONTRACTS.md` around the validation evidence contract paragraph.
+6. [x] `workflow_result.agent.diagnosis.causes` for `WORKFLOW_VALIDATION_FAILED` surfaces canonical Scenario Manager findings (`code`, `path`, `message`, `fix`) when Scenario Manager returns them.
+7. [x] Cleaned minor docs formatting drift in `docs/inProgress/pockethive-plugin/TOOL-CONTRACTS.md` around the validation evidence contract paragraph.
+
+## Separate Release: Bee Config SSOT
+
+This is a separate release from the scenario bundle validation refactor. It is
+tracked here because the validation work exposed the same contract split in
+runtime planning, authoring tools, capabilities, docs, and UI live config
+editing.
+
+Release boundary:
+
+- Goal: remove scenario support for `config.worker`, `config.worker.config`, and
+  `config.pockethive`, then enforce one bee config SSOT end-to-end.
+- Do not ship this as an incidental cleanup inside the validation endpoint
+  refactor. It changes the scenario authoring contract and repo-owned
+  scenarios.
+- No fallback/compatibility phase is planned. Repo-owned scenarios and authoring
+  tools migrate first, then old shapes fail validation.
+- Out of scope unless explicitly approved: removing Spring/runtime property
+  binding such as `pockethive.worker.config.*` inside worker applications. That
+  binding is not the same thing as allowing scenario YAML
+  `config.pockethive.worker.config`.
+
+Target contract:
+
+- One canonical bee config shape exists: the public effective worker config.
+- Scenario YAML `template.bees[].config` has the same shape as worker
+  `status-full.data.config` / swarm-controller
+  `status-full.data.context.workers[].config`.
+- Capability manifest `config[].name` paths are paths in that same config
+  shape.
+- Runtime `config-update` patches use that same config shape.
+- UI live config editing reads current values from the selected runtime worker
+  config snapshot and sends sparse patches using the same capability paths.
+- Workload enablement is not worker config. It stays in control-plane
+  `data.enabled` / worker aggregate `enabled` and in top-level
+  `config-update.enabled`.
+- There is no legacy shape, compatibility shim, prefix stripping, path aliasing,
+  or fallback path resolution.
+
+Canonical example:
+
+```yaml
+template:
+  bees:
+    - id: genA
+      role: generator
+      image: generator:latest
+      config:
+        inputs:
+          type: SCHEDULER
+          scheduler:
+            ratePerSec: 50
+        message:
+          bodyType: HTTP
+          path: /test
+          method: POST
+          body: '{"event":"local-rest"}'
+          headers:
+            content-type: application/json
+```
+
+This must produce the same public config shape in worker `status-full`:
+
+```json
+{
+  "inputs": {
+    "type": "SCHEDULER",
+    "scheduler": { "ratePerSec": 50 }
+  },
+  "message": {
+    "bodyType": "HTTP",
+    "path": "/test",
+    "method": "POST",
+    "body": "{\"event\":\"local-rest\"}",
+    "headers": { "content-type": "application/json" }
+  }
+}
+```
+
+Found previous-format support and authoring surfaces:
+
+1. Scenario Manager runtime validation/planning support:
+   - `scenario-manager-service/src/main/java/io/pockethive/scenarios/validation/ScenarioBundleValidator.java`
+     declares `WORKER_CONFIG_KEY = "worker"` and
+     `LEGACY_POCKETHIVE_CONFIG_KEY = "pockethive"`.
+   - `effectiveWorkerConfig(...)` flattens `config.worker.*`,
+     `config.worker.config.*`, and `config.pockethive.worker.*`.
+2. Orchestrator runtime planning support:
+   - `orchestrator-service/src/main/java/io/pockethive/orchestrator/domain/ScenarioPlan.java`
+     calls `mergeWorkerConfig(...)` for every bee in `toSwarmPlan(...)`.
+   - The method explicitly supports `config.worker.{...}` and falls back to
+     `config.pockethive.worker.config.{...}`.
+3. MCP authoring support:
+   - `tools/pockethive-mcp/server.mjs` `bundle.scaffold` and wizard generation
+     still emit `config.worker` for generator, processor, and sequence workers.
+   - `tools/pockethive-mcp/workflow.test.mjs` asserts generated
+     `sequence.config.worker.steps[...]`.
+4. Template tooling:
+   - `tools/scenario-templating-check/src/main/java/io/pockethive/tools/ScenarioTemplateValidator.java`
+     reads `generator.config.worker.message`.
+5. Capability metadata:
+   - `scenario-manager-service/capabilities/generator.latest.yaml` exposes
+     `worker.message.*` field names and matching `when` expressions.
+6. Active docs:
+   - `docs/scenarios/SCENARIO_CONTRACT.md` documents `worker` as logical worker
+     config under bee `config`.
+   - `docs/scenarios/README.md` describes worker config as
+     `config.worker`, `config.inputs`, `config.outputs`.
+   - `scenario-manager-service/README.md` and `docs/USAGE.md` teach
+     `pockethive.worker.config` inside scenario bee `config`.
+   - Other worker/application docs that mention `pockethive.worker.config.*`
+     must be reviewed and either scoped clearly to runtime application
+     properties or moved to the migration guide as "before" examples.
+7. Repo-owned scenarios:
+   - Current repo state has 46 `scenario.yaml` files under `scenarios/`.
+   - 44 files contain `worker:` blocks, with 149 `worker:` block occurrences.
+   - No repo-owned scenario currently contains a `pockethive:` block.
+8. Worker SDK status/config handling:
+   - The SDK already applies direct public config patches and emits public raw
+     config in `status-full`; it is not the primary source of scenario wrapper
+     support.
+   - The SDK currently augments missing `inputs.type` / `outputs.type` in status
+     snapshots. If scenario YAML and status config must be structurally equal,
+     scenario YAML must explicitly declare those type fields or that augmentation
+     must be moved out of `config`.
+
+Release stages:
+
+1. **Contract docs + agent migration guide**
+   - Update `docs/ARCHITECTURE.md` to declare public effective worker config as
+     the SSOT for scenario bee config, capability field paths, status snapshots,
+     and config-update patches.
+   - Update `docs/scenarios/SCENARIO_CONTRACT.md` to remove `config.worker` as
+     a contract section and make `template.bees[].config` the direct public
+     effective worker config.
+   - Update `docs/scenarios/README.md`, `scenario-manager-service/README.md`,
+     and any active authoring docs that still teach `config.worker` or
+     `pockethive.worker.config`.
+   - Add an agent-facing migration guide, for example
+     `docs/ai/SCENARIO_CONFIG_MIGRATION_GUIDE.md`, with mechanical examples:
+     `config.worker.message.*` -> `config.message.*`,
+     `config.worker.config.*` -> `config.*`, and no mention of compatibility
+     fallback.
+
+2. **TDD enforcement before removing old support**
+   - Add Scenario Manager validation tests that reject `config.worker`,
+     `config.worker.config`, and `config.pockethive`.
+   - Add capability validation tests that reject `config[].name` starting with
+     `worker.` and reject workload `enabled` as a worker config entry.
+   - Add Scenario Manager/Orchestrator contract tests proving
+     `template.bees[].config` is passed to runtime unchanged as the worker
+     public config.
+   - Add worker SDK/status tests proving the public config emitted in
+     `status-full.data.config` structurally matches the applied public config
+     for fields supplied by the scenario.
+   - Add UI unit/component tests proving capability `name: message.path` reads
+     `context.workers[].config.message.path` and emits
+     `{ "message": { "path": "..." } }`.
+   - Confirm these tests fail against the current implementation before removing
+     compatibility code.
+
+3. **Repo YAML and capability migration**
+   - Migrate all repo-owned `scenario.yaml` files from nested
+     `config.worker.*` to direct `config.*`.
+   - Require explicit `inputs.type` / `outputs.type` in scenario YAML whenever
+     the effective config is expected to expose those fields.
+   - Change generator capability paths from `worker.message.*` to `message.*`
+     and update `when` conditions to the same canonical paths.
+   - Remove workload `enabled` from capability `config[]` entries; represent it
+     through a separate UI/control-plane affordance.
+   - Update MCP/workflow authoring fixtures and template-check tooling that
+     still generate or inspect `config.worker`.
+
+4. **Remove support for previous formats**
+   - Remove `effectiveWorkerConfig(...)` flattening from Scenario Manager.
+   - Remove `ScenarioPlan.mergeWorkerConfig(...)` flattening from Orchestrator.
+   - Remove constants and code paths for `config.worker`,
+     `config.worker.config`, and `config.pockethive`.
+   - Convert previous-format tests to rejection tests or delete them if they
+     only verified compatibility.
+   - Keep the repository grep gates below at zero before merge.
+
+Required grep gates:
+
+```bash
+rg '^\s+worker:\s*$' scenarios scenario-manager-service -g 'scenario.y*ml'
+rg 'config\.worker|pockethive\.worker|worker\.message|name:\s*worker\.' \
+  docs/ARCHITECTURE.md docs/scenarios/SCENARIO_CONTRACT.md \
+  docs/scenarios/README.md scenario-manager-service/README.md \
+  scenario-manager-service orchestrator-service tools ui-v2 \
+  -g '!**/target/**' -g '!**/node_modules/**' -g '!**/build/**'
+rg '^\s*- name:\s*enabled\b' scenario-manager-service/capabilities
+```
+
+Migration guides, archive docs, and this plan may show previous-format examples
+only as explicitly labelled "before" examples.
+
+## Bee Config SSOT Review Findings
+
+Current review against `docs/ARCHITECTURE.md`, SSOT rules, and active contract
+docs:
+
+1. `docs/ARCHITECTURE.md` already defines `status-full.data.config` as the
+   effective configuration snapshot for the reporting scope and requires
+   swarm-controller `context.workers[].config` to carry the last public worker
+   `status-full.data.config`. This supports the target SSOT.
+2. `docs/ARCHITECTURE.md` also says enablement lives in `data.enabled` for
+   status metrics and config-update outcomes; therefore `enabled` in capability
+   `config[]` is inconsistent with the control-plane contract.
+3. `docs/scenarios/SCENARIO_CONTRACT.md` currently documents `worker` as a
+   logical worker config section under bee `config`. That conflicts with the
+   target single-shape contract and must be changed before code removal.
+4. `docs/scenarios/README.md` still describes worker config as
+   `config.worker`, `config.inputs`, `config.outputs`. This must be updated
+   with the scenario contract.
+5. `scenario-manager-service/README.md` still documents
+   `pockethive.worker.config` inside scenario config and service defaults under
+   `pockethive.worker.*`. This is incompatible with the no-legacy target for
+   scenario YAML and must be corrected or scoped strictly to local service
+   application defaults.
+6. Scenario Manager currently normalizes `config.worker` and `config.pockethive`
+   through `effectiveWorkerConfig(...)`. That is a compatibility path and must
+   be removed after the YAML/capability migration.
+7. Orchestrator currently normalizes the same shapes in
+   `ScenarioPlan.mergeWorkerConfig(...)`. That duplicates Scenario Manager
+   normalization and violates SSOT once the new contract is adopted.
+8. Current repository state is far from the target on authoring data:
+   44 of 46 `scenario.yaml` files contain `worker:` blocks, with 149 `worker:`
+   occurrences under scenario files. This is mostly mechanical migration, not a
+   new runtime model.
+9. Current runtime is closer to the target than authoring: worker SDK applies
+   direct public config patches and emits public raw config in status-full.
+   However it also augments missing `inputs.type` / `outputs.type` in status
+   snapshots. If scenario YAML and status config must be structurally equal,
+   scenario YAML must explicitly declare those type fields or the augmentation
+   must move out of `config`.
+10. `scenario-manager-service/capabilities/generator.latest.yaml` still uses
+    `worker.message.*` paths and matching `when` expressions. These must become
+    `message.*` paths to keep capability paths aligned with scenario config,
+    status config, and config-update patches.
+11. `tools/scenario-templating-check` still inspects
+    `generator.config.worker.message`; it must be migrated to direct
+    `generator.config.message` and reject the old shape once validation is
+    fail-fast.
+12. `docs/ai/UI_REACT_GUIDELINES.md` says YAML is SSOT and unknown subtrees
+    must be preserved. This remains compatible with the target, but UI editors
+    must treat the direct public config shape as the YAML fragment they edit.
 
 ## Migration
 
