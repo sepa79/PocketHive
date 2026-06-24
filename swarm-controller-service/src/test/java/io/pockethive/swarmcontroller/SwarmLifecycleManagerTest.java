@@ -368,6 +368,54 @@ class SwarmLifecycleManagerTest {
   }
 
   @Test
+  void exposesCsvInputConfigAsEnvironmentVariables() throws Exception {
+    SwarmLifecycleManager manager = newManager();
+    SwarmPlan plan = new SwarmPlan("swarm", List.of(
+        new Bee(
+            "generator",
+            "img-gen",
+            Work.ofDefaults(null, "gen-out"),
+            null,
+            Map.of(
+                "inputs", Map.of(
+                    "type", "CSV_DATASET",
+                    "csv", Map.of(
+                        "filePath", "/app/scenario/datasets/sample.csv",
+                        "ratePerSec", 3,
+                        "rotate", true,
+                        "skipHeader", false,
+                        "delimiter", "|",
+                        "charset", "UTF-8",
+                        "startupDelaySeconds", 2,
+                        "tickIntervalMs", 250,
+                        "enabled", true
+                    )
+                ),
+                "outputs", Map.of("type", "RABBITMQ")
+            )
+        )));
+    when(docker.createAndStartContainer(anyString(), anyMap(), anyString(), any(), anyMap())).thenReturn("c1");
+
+    manager.prepare(mapper.writeValueAsString(plan));
+
+    ArgumentCaptor<Map<String, String>> envCaptor = ArgumentCaptor.forClass(Map.class);
+    verify(docker).createAndStartContainer(anyString(), envCaptor.capture(), anyString(), any(), anyMap());
+    Map<String, String> env = envCaptor.getValue();
+
+    assertThat(env.get("POCKETHIVE_INPUTS_TYPE")).isEqualTo("CSV_DATASET");
+    assertThat(env.get("POCKETHIVE_OUTPUTS_TYPE")).isEqualTo("RABBITMQ");
+    assertThat(env.get("POCKETHIVE_INPUTS_CSV_FILEPATH")).isEqualTo("/app/scenario/datasets/sample.csv");
+    assertThat(env.get("POCKETHIVE_INPUTS_CSV_RATEPERSEC")).isEqualTo("3");
+    assertThat(env.get("POCKETHIVE_INPUTS_CSV_ROTATE")).isEqualTo("true");
+    assertThat(env.get("POCKETHIVE_INPUTS_CSV_SKIPHEADER")).isEqualTo("false");
+    assertThat(env.get("POCKETHIVE_INPUTS_CSV_DELIMITER")).isEqualTo("|");
+    assertThat(env.get("POCKETHIVE_INPUTS_CSV_CHARSET")).isEqualTo("UTF-8");
+    assertThat(env.get("POCKETHIVE_INPUTS_CSV_STARTUPDELAYSECONDS")).isEqualTo("2");
+    assertThat(env.get("POCKETHIVE_INPUTS_CSV_TICKINTERVALMS")).isEqualTo("250");
+    assertThat(env.get("POCKETHIVE_INPUTS_CSV_ENABLED")).isEqualTo("true");
+  }
+
+  @Test
   void prepareFailsWhenRabbitHostMissing() throws Exception {
     SwarmControllerProperties properties = SwarmControllerTestProperties.defaults();
     RabbitProperties rabbitProperties = new RabbitProperties();

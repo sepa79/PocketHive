@@ -26,6 +26,8 @@ export type SwarmJournalEntry = {
   extra: Record<string, unknown> | null
 }
 
+export type JournalSeverityFilter = 'ERROR' | 'WARN' | 'INFO'
+
 export type JournalPageResponse = {
   items: SwarmJournalEntry[]
   nextCursor: JournalCursor | null

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   listAdminUsers,
   replaceAdminUserGrants,
@@ -111,20 +111,21 @@ export function UsersPage() {
   const [draftUser, setDraftUser] = useState<EditableUser | null>(null)
   const [draftGrants, setDraftGrants] = useState<AuthGrant[]>([])
 
-  async function reloadUsers() {
+  const reloadUsers = useCallback(async (preferredSelectedUserId: string | null = null) => {
     try {
       setLoading(true)
       setError(null)
       const loadedUsers = await listAdminUsers()
       setUsers(loadedUsers)
-      const nextSelectedUser = loadedUsers.find((entry) => entry.id === selectedUserId) ?? loadedUsers[0] ?? null
+      const nextSelectedUser =
+        loadedUsers.find((entry) => entry.id === preferredSelectedUserId) ?? loadedUsers[0] ?? null
       setSelectedUserId(nextSelectedUser?.id ?? null)
       setDraftUser(nextSelectedUser ? toEditableUser(nextSelectedUser) : null)
       setDraftGrants(nextSelectedUser ? cloneGrants(nextSelectedUser.grants) : [])
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     if (!auth.isAuthAdmin) {
@@ -149,7 +150,7 @@ export function UsersPage() {
     return () => {
       cancelled = true
     }
-  }, [auth.isAuthAdmin])
+  }, [auth.isAuthAdmin, reloadUsers])
 
   function selectUser(user: AuthenticatedUser) {
     setSelectedUserId(user.id)
@@ -261,7 +262,7 @@ export function UsersPage() {
           <button
             type="button"
             className="btnSecondary"
-            onClick={() => void reloadUsers()}
+            onClick={() => void reloadUsers(selectedUserId)}
           >
             Reload
           </button>

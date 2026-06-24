@@ -4,15 +4,16 @@ import { SwarmIssueBox } from '../components/hive/SwarmIssueBox'
 import { useToolsBar } from '../components/ToolsBarContext'
 import { useNavigate, useParams } from 'react-router-dom'
 import { CreateSwarmModal } from './hive/CreateSwarmModal'
+import { ConfigUpdatePatchModal } from './hive/ConfigUpdatePatchModal'
 import { useAuth } from '../lib/authContext'
 import { SwarmRuntimeInspector } from './hive/SwarmRuntimeInspector'
 import {
   buildManifestIndex,
   normalizeManifests,
   resolveManifestForImage,
+  type CapabilityConfigEntry,
   type CapabilityManifest,
 } from '../lib/capabilities'
-import { detectUiBasename } from '../lib/routing/basename'
 import { listBundleTemplates, type BundleTemplateEntry } from '../lib/scenariosApi'
 import { newUuid } from '../lib/uuid'
 import {
@@ -72,6 +73,7 @@ type SwarmWorkerSummary = {
   lastSeenAt: string | null
   workIo: { input: string | null; output: string | null } | null
   runtime: RuntimeMeta | null
+  config: Record<string, unknown> | null
 }
 
 type SwarmSnapshotView = {
@@ -119,6 +121,16 @@ type ScenarioDefinition = {
 
 type SwarmAction = 'start' | 'stop' | 'remove'
 type SwarmDetailTab = 'snapshot' | 'network' | 'scenario' | 'inspector'
+
+type ConfigEditTarget = {
+  swarmId: string
+  role: string
+  instance: string
+  imageLabel: string
+  entries: CapabilityConfigEntry[]
+  currentConfig: Record<string, unknown> | null
+  currentConfigAvailable: boolean
+}
 
 const ORCHESTRATOR_BASE = '/orchestrator/api'
 const CAPABILITIES_ENDPOINT = '/scenario-manager/api/capabilities?all=true'
@@ -200,6 +212,7 @@ function extractSnapshotView(snapshot: StatusFullSnapshotResponse | null): Swarm
       const stale = toBooleanOrNull(entry.stale)
       const lastSeenAt = toStringOrNull(entry.lastSeenAt)
       const workIoState = isRecord(entry.ioState) && isRecord(entry.ioState.work) ? entry.ioState.work : null
+      const config = isRecord(entry.config) ? entry.config : null
       const workIo = workIoState
         ? {
             input: toStringOrNull(workIoState.input),
@@ -216,6 +229,7 @@ function extractSnapshotView(snapshot: StatusFullSnapshotResponse | null): Swarm
         lastSeenAt,
         workIo,
         runtime: workerRuntime,
+        config,
       } satisfies SwarmWorkerSummary
     })
     .filter((entry): entry is SwarmWorkerSummary => entry !== null)
@@ -488,6 +502,8 @@ export function HivePage() {
   const [swarmJournalLoading, setSwarmJournalLoading] = useState(false)
   const [swarmJournalError, setSwarmJournalError] = useState<string | null>(null)
   const [detailTab, setDetailTab] = useState<SwarmDetailTab>('snapshot')
+  const [configEditTarget, setConfigEditTarget] = useState<ConfigEditTarget | null>(null)
+  const [configEditBusy, setConfigEditBusy] = useState(false)
 
   const tapBusyKey = useCallback((role: string, direction: 'IN' | 'OUT', ioName: string | null) => {
     return `${role}::${direction}::${ioName ?? ''}`
@@ -519,10 +535,9 @@ export function HivePage() {
       if (!tapId) {
         throw new Error('Tap created but tapId is missing in response.')
       }
-      const base = detectUiBasename(window.location.pathname)
-      window.open(`${base}/debug/taps/${encodeURIComponent(tapId)}`, '_blank', 'noopener,noreferrer')
+      navigate(`/debug/taps/${encodeURIComponent(tapId)}`)
     },
-    [selectedSwarmId],
+    [navigate, selectedSwarmId],
   )
 
   const loadSwarms = useCallback(async () => {
@@ -597,7 +612,7 @@ export function HivePage() {
     }
     setSwarmJournalLoading(true)
     try {
-      const page = await getSwarmJournalPage(selectedSwarmId, { limit: 50 })
+      const page = await getSwarmJournalPage(selectedSwarmId, { limit: 50, severity: 'ERROR' })
       setSwarmJournalEntries(page?.items ?? [])
       setSwarmJournalError(null)
     } catch (err) {
@@ -805,6 +820,41 @@ export function HivePage() {
     [loadNetworkState, loadSwarms, networkProfileDraft, selectedSwarm],
   )
 
+  const sendSelectedWorkerConfigUpdate = useCallback(
+    async (patch: Record<string, unknown>) => {
+      if (!configEditTarget) return
+      setConfigEditBusy(true)
+      setMessage(null)
+      try {
+        const response = await fetch(
+          `${ORCHESTRATOR_BASE}/components/${encodeURIComponent(configEditTarget.role)}/${encodeURIComponent(
+            configEditTarget.instance,
+          )}/config`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              idempotencyKey: createIdempotencyKey(),
+              swarmId: configEditTarget.swarmId,
+              patch,
+            }),
+          },
+        )
+        if (!response.ok) {
+          throw new Error(await readErrorMessage(response))
+        }
+        setMessage(`Config update accepted for ${configEditTarget.role}/${configEditTarget.instance}.`)
+        setConfigEditTarget(null)
+        await Promise.all([loadSnapshot(), loadSwarms()])
+      } catch (err) {
+        setMessage(err instanceof Error ? err.message : 'Failed to send config update.')
+      } finally {
+        setConfigEditBusy(false)
+      }
+    },
+    [configEditTarget, loadSnapshot, loadSwarms],
+  )
+
   useEffect(() => {
     const handle = window.setInterval(() => {
       void loadSwarms()
@@ -1004,6 +1054,20 @@ export function HivePage() {
         }}
       />
 
+      <ConfigUpdatePatchModal
+        open={configEditTarget !== null}
+        title={configEditTarget ? `Edit config: ${configEditTarget.role}` : 'Edit config'}
+        imageLabel={configEditTarget?.imageLabel ?? ''}
+        entries={configEditTarget?.entries ?? []}
+        currentConfig={configEditTarget?.currentConfig ?? null}
+        currentConfigAvailable={configEditTarget?.currentConfigAvailable ?? false}
+        busy={configEditBusy}
+        onClose={() => {
+          if (!configEditBusy) setConfigEditTarget(null)
+        }}
+        onApply={sendSelectedWorkerConfigUpdate}
+      />
+
       {showHelp ? (
         <div className="modalBackdrop" role="presentation" onClick={() => setShowHelp(false)}>
           <div className="modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
@@ -1189,6 +1253,7 @@ export function HivePage() {
 	                    <SwarmIssueBox
 	                      issue={selectedSwarmIssue}
 	                      error={swarmJournalError}
+	                      loading={swarmJournalLoading}
 	                      onOpenJournal={openSelectedSwarmJournal}
 	                    />
                       <div className="detailTabStrip" role="tablist" aria-label="Swarm detail panels">
@@ -1531,40 +1596,45 @@ export function HivePage() {
 	                                    (bee.id ?? bee.role ?? `bee-${idx + 1}`) === activeKey,
 	                                ) ?? fallback
 	                              if (!activeBee) return <div className="muted">No bee selected.</div>
-	                              const roleKey = (activeBee.role ?? '').trim().toLowerCase()
-	                              const runtimeWorker =
-	                                roleKey ? runtimeWorkersByRole.get(roleKey) ?? null : null
-	                              const runtimeImage = runtimeWorker?.runtime?.image ?? null
+		                              const targetRole =
+		                                typeof activeBee.role === 'string' && activeBee.role.trim().length > 0
+		                                  ? activeBee.role.trim()
+		                                  : null
+		                              const roleKey = targetRole ? targetRole.toLowerCase() : ''
+		                              const runtimeWorker =
+		                                roleKey ? runtimeWorkersByRole.get(roleKey) ?? null : null
+		                              const runtimeImage = runtimeWorker?.runtime?.image ?? null
 	                              const manifestResolution = runtimeImage
 	                                ? resolveManifestForImage(runtimeImage, manifestIndex)
 	                                : { manifest: null, kind: 'none' as const, requestedTag: null, resolvedTag: null }
 	                              const manifest = manifestResolution.manifest
-	                              const ports = activeBee.ports
-	                                ? activeBee.ports
-	                                    .map((port) => `${port.id}:${port.direction}`)
-	                                    .join(', ')
-	                                : '—'
-	                              const configEntries = Array.isArray(manifest?.config)
-	                                ? manifest.config
-	                                    .map((entry) => {
-	                                      if (!entry || typeof entry !== 'object') return null
-	                                      const value = entry as Record<string, unknown>
-	                                      const name =
-	                                        typeof value.name === 'string' && value.name.trim().length > 0
-	                                          ? value.name.trim()
-	                                          : null
-	                                      const type =
-	                                        typeof value.type === 'string' && value.type.trim().length > 0
-	                                          ? value.type.trim()
-	                                          : null
-	                                      return name ? { name, type } : null
-	                                    })
-	                                    .filter(
-	                                      (entry): entry is { name: string; type: string | null } =>
-	                                        entry !== null,
-	                                    )
-	                                : []
-		                              return (
+		                              const ports = activeBee.ports
+		                                ? activeBee.ports
+		                                    .map((port) => `${port.id}:${port.direction}`)
+		                                    .join(', ')
+		                                : '—'
+		                              const configEntries = manifest?.config ?? []
+		                              const workerInstance =
+		                                typeof runtimeWorker?.instance === 'string' && runtimeWorker.instance.trim().length > 0
+		                                  ? runtimeWorker.instance.trim()
+		                                  : null
+		                              const currentConfig = runtimeWorker?.config ?? null
+		                              const currentConfigAvailable = currentConfig !== null
+			                              const configEditBlockedReason = !canManageSelectedSwarm
+			                                ? 'PocketHive ALL permission is required.'
+			                                : !selectedSwarmId
+			                                  ? 'Swarm id is missing.'
+			                                  : !targetRole
+			                                    ? 'Bee role is missing.'
+			                                    : !workerInstance
+			                                      ? 'Runtime instance is missing.'
+			                                      : !manifest
+			                                        ? 'Capability manifest is missing.'
+			                                        : configEntries.length === 0
+			                                          ? 'Capability manifest has no config fields.'
+			                                          : null
+			                              const canEditConfig = configEditBlockedReason === null
+			                              return (
 		                                <div className="swarmWorkerDetail">
 		                                  <div className="swarmBeeHeader">
 		                                    <span className="swarmBeeRole">
@@ -1636,7 +1706,7 @@ export function HivePage() {
 		                                              ? 'Tap requires bee.role to be set in scenario template.'
 		                                              : !hasOut
 		                                                ? 'No outputs configured for this worker (work.out is empty).'
-		                                                : `Open Debug Tap Viewer (OUT, ioName=${ioNameOut}). Creates an ephemeral tap queue and opens the viewer in a new tab.`
+		                                                : `Open Debug Tap Viewer (OUT, ioName=${ioNameOut}). Creates an ephemeral tap queue and opens the viewer.`
 	                              }
 		                                          disabled={!canTapOut || (tapOutKey ? tapBusy[tapOutKey] === true : false)}
 		                                          onClick={() => {
@@ -1704,7 +1774,7 @@ export function HivePage() {
 		                                              ? 'Tap requires bee.role to be set in scenario template.'
 		                                              : !hasIn
 		                                                ? 'No inputs configured for this worker (work.in is empty).'
-		                                                : `Open Debug Tap Viewer (IN, ioName=${ioNameIn}). Creates an ephemeral tap queue and opens the viewer in a new tab.`
+		                                                : `Open Debug Tap Viewer (IN, ioName=${ioNameIn}). Creates an ephemeral tap queue and opens the viewer.`
 		                                          }
 		                                          disabled={!canTapIn || (tapInKey ? tapBusy[tapInKey] === true : false)}
 		                                          onClick={() => {
@@ -1862,39 +1932,86 @@ export function HivePage() {
 		                                      <span className="muted">
 		                                        capabilities: manifest not found for image
 		                                      </span>
-		                                    ) : (
-		                                      <>
-		                                        <div
-		                                          className="chipRow"
-		                                          title={
-		                                            explainMode
-		                                              ? 'Config/actions come from the capability manifest.\nManifest is matched to the worker runtime image.'
-		                                              : 'Capabilities summary.'
-		                                          }
-		                                        >
-		                                          <span className="chip chip-metric">
-		                                            config fields {manifest.config.length}
-		                                          </span>
-		                                          <span className="chip chip-metric">
-		                                            actions {manifest.actions.length ? manifest.actions.length : 'none'}
-		                                          </span>
-		                                        </div>
-		                                        {configEntries.length ? (
-		                                          <span>
-		                                            config fields:{' '}
-		                                            {configEntries
-		                                              .slice(0, 10)
-		                                              .map((entry) =>
-		                                                entry.type ? `${entry.name}:${entry.type}` : entry.name,
-		                                              )
-	                                              .join(', ')}
-	                                            {configEntries.length > 10 ? '…' : ''}
-	                                          </span>
-		                                        ) : (
-		                                          <span className="muted">config fields: —</span>
-		                                        )}
-	                                      </>
-	                                    )}
+			                                    ) : (
+			                                      <div
+			                                        className="configEditPanel"
+			                                        title={
+			                                          explainMode
+			                                            ? 'Config/actions come from the capability manifest.\nManifest is matched to the worker runtime image.'
+			                                            : 'Runtime config.'
+			                                        }
+			                                      >
+			                                        <div className="configEditHeader">
+			                                          <div className="configEditTitleBlock">
+			                                            <span className="configEditTitle">Runtime config</span>
+			                                            {configEntries.length ? (
+			                                              <span className={currentConfigAvailable ? 'muted' : 'warningText'}>
+			                                                {currentConfigAvailable
+			                                                  ? 'current config loaded from runtime snapshot'
+			                                                  : 'current config unavailable; selected fields only'}
+			                                              </span>
+			                                            ) : null}
+			                                          </div>
+			                                          <button
+			                                            type="button"
+			                                            className="actionButton"
+			                                            disabled={!canEditConfig || configEditBusy}
+			                                            title={
+			                                              configEditBlockedReason ??
+			                                              (currentConfigAvailable
+			                                                ? 'Send runtime config-update patch.'
+			                                                : 'Send runtime config-update patch. Current values are unavailable; only selected fields are sent.')
+			                                            }
+			                                            onClick={() => {
+			                                              if (
+			                                                !canEditConfig ||
+			                                                !selectedSwarmId ||
+			                                                !targetRole ||
+			                                                !workerInstance
+			                                              ) {
+			                                                return
+			                                              }
+			                                              setConfigEditTarget({
+			                                                swarmId: selectedSwarmId,
+			                                                role: targetRole,
+			                                                instance: workerInstance,
+			                                                imageLabel: runtimeImage ?? activeBee.image ?? '—',
+			                                                entries: configEntries,
+			                                                currentConfig,
+			                                                currentConfigAvailable,
+			                                              })
+			                                            }}
+			                                          >
+			                                            {configEditBusy ? 'Opening…' : 'Edit config'}
+			                                          </button>
+			                                        </div>
+			                                        <div className="configEditMeta">
+			                                          <span className="chip chip-metric">
+			                                            config fields {manifest.config.length}
+			                                          </span>
+			                                          <span className="chip chip-metric">
+			                                            actions {manifest.actions.length ? manifest.actions.length : 'none'}
+			                                          </span>
+			                                          {configEditBlockedReason ? (
+			                                            <span className="warningText">{configEditBlockedReason}</span>
+			                                          ) : null}
+			                                        </div>
+			                                        {configEntries.length ? (
+			                                          <span className="configEditFieldList">
+			                                            fields:{' '}
+			                                            {configEntries
+			                                              .slice(0, 10)
+			                                              .map((entry) =>
+			                                                entry.type ? `${entry.name}:${entry.type}` : entry.name,
+			                                              )
+			                                              .join(', ')}
+			                                            {configEntries.length > 10 ? '…' : ''}
+			                                          </span>
+			                                        ) : (
+			                                          <span className="muted">fields: —</span>
+			                                        )}
+			                                      </div>
+		                                    )}
 	                                  </div>
 	                                </div>
 	                              )

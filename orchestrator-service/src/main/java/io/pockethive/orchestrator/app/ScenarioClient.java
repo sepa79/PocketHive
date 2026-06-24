@@ -44,7 +44,7 @@ public interface ScenarioClient {
                                        String correlationId,
                                        String idempotencyKey) throws Exception;
 
-    record ScenarioTemplateDescriptor(String id, String bundlePath, String folderPath, boolean defunct) {
+    record ScenarioTemplateDescriptor(String id, String bundleKey, String bundlePath, String folderPath, boolean defunct) {
     }
 
     record ResolvedVariables(String profileId, String sutId, Map<String, Object> vars, List<String> warnings) {

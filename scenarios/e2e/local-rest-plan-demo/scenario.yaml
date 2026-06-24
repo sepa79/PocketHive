@@ -8,12 +8,15 @@ template:
   image: "swarm-controller:latest"
   bees:
   - role: "generator"
+    id: generator
     image: "generator:latest"
     work:
       in:
         in: null
       out:
         out: "genQ"
+    ports:
+      - { id: out, direction: out }
     env: {}
     config:
       inputs:
@@ -28,23 +31,30 @@ template:
           headers:
             content-type: "application/json"
   - role: "processor"
+    id: processor
     image: "processor:latest"
     work:
       in:
         in: "genQ"
       out:
         out: "finalQ"
+    ports:
+      - { id: in, direction: in }
+      - { id: out, direction: out }
     env: {}
     config:
       worker:
         baseUrl: "{{ sut.endpoints['default'].baseUrl }}/api"
   - role: "postprocessor"
+    id: postprocessor
     image: "postprocessor:latest"
     work:
       in:
         in: "finalQ"
       out:
         out: null
+    ports:
+      - { id: in, direction: in }
     env: {}
 trafficPolicy: null
 plan:
@@ -76,3 +86,13 @@ plan:
     name: "Stop swarm workloads"
     time: "PT40S"
     type: "stop"
+
+topology:
+  version: 1
+  edges:
+    - id: e1
+      from: { beeId: generator, port: out }
+      to: { beeId: processor, port: in }
+    - id: e2
+      from: { beeId: processor, port: out }
+      to: { beeId: postprocessor, port: in }

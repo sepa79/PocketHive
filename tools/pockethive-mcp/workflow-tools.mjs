@@ -28,7 +28,7 @@ export function registerWorkflowTools(deps) {
     wizardMockEndpoints,
     validateWizardAnswers = () => [],
     writeWizardBundle,
-    runBundleCheck,
+    runGenerationSanityCheck,
     scenarioManagerDryRunValidateBundle,
     scenarioManagerUploadBundle,
     loadBundleMockConfig = async (bundleId) => ({ bundle: bundleId, wiremock: { attempted: false, loaded: 0, files: [] }, requestJournal: { reset: false } }),
@@ -204,7 +204,7 @@ export function registerWorkflowTools(deps) {
       prompt: "What evidence should prove the modified bundle still works?",
       type: "text",
       answerType: "text",
-      examples: ["structural validation and changed-file summary"],
+      examples: ["Scenario Manager validation and changed-file summary"],
       whyAsked: "Modification reports need proof that the changed bundle remains usable.",
     },
     {
@@ -212,7 +212,7 @@ export function registerWorkflowTools(deps) {
       prompt: "What success criteria should the modification prove?",
       type: "object-or-text",
       answerType: "object-or-text",
-      examples: ["Bundle check passes after the patch."],
+      examples: ["Scenario Manager validation passes after the patch."],
       whyAsked: "The agent needs a measurable stop condition for debug/fix work.",
     },
   ];
@@ -1585,7 +1585,7 @@ export function registerWorkflowTools(deps) {
   function workflowEvidenceGaps(session) {
     const gaps = [];
     if (!session.generated) gaps.push({ id: "bundle.generated", status: "missing" });
-    if (!workflowStructuralValidation(session)) gaps.push({ id: "bundle.validated", status: "missing" });
+    if (!workflowScenarioManagerValidation(session)) gaps.push({ id: "bundle.validated", status: "missing" });
     if (!session.evidence?.deployment) gaps.push({ id: "runtime.deployed", status: "not-run" });
     if (!session.evidence?.runtime) gaps.push({ id: "runtime.verified", status: "not-run" });
     if (!session.evidence?.report) gaps.push({ id: "stakeholder.report", status: "missing" });
@@ -1650,8 +1650,8 @@ export function registerWorkflowTools(deps) {
     switch (claimId) {
       case "bundle.generated":
         return session.mode === "modify" ? "not-applicable" : session.evidence?.generation?.ok ? "satisfied" : session.evidence?.generation ? "failed" : "pending";
-      case "validation.structural":
-        return workflowStructuralValidation(session)?.ok ? "satisfied" : workflowStructuralValidation(session) ? "failed" : "pending";
+      case "validation.scenario-manager":
+        return workflowScenarioManagerValidation(session)?.ok ? "satisfied" : workflowScenarioManagerValidation(session) ? "failed" : "pending";
       case "stakeholder.report":
       case "observability.output":
         return session.evidence?.report?.ok ? "satisfied" : "pending";
@@ -1689,7 +1689,7 @@ export function registerWorkflowTools(deps) {
     });
     const claims = [
       claim("bundle.generated", "Generated bundle files exist in the active bundle root.", "authoring", session.mode !== "modify", "workflow.generate", ["plan.bundleId"]),
-      claim("validation.structural", "Bundle passes structural validation.", "validation", true, "workflow.validate", ["plan.bundleId"]),
+      claim("validation.scenario-manager", "Bundle passes Scenario Manager validation.", "validation", true, "workflow.validate", ["plan.bundleId"]),
       claim("stakeholder.report", "Stakeholder handoff report is written.", "report", true, "workflow.report", ["plan.successCriteria", "plan.observability.goal"]),
       claim("observability.output", "Stakeholder observability output is captured or reported.", "report", true, "workflow.report", ["plan.observability.goal"]),
       claim("runtime.deployed", "Bundle is deployed through official PocketHive APIs.", "runtime", runtimeRequired, "workflow.deploy", ["plan.target"]),
@@ -1702,7 +1702,7 @@ export function registerWorkflowTools(deps) {
       claims.push(claim("mock.matched", "Mock matched requests and unmatched requests are evidenced.", "runtime", runtimeRequired, "workflow.verify", ["plan.mock.strategy"]));
     }
     if (datasetStrategy === "CSV_DATASET") {
-      claims.push(claim("dataset.sample-artifact", "CSV sample dataset artifact is generated for authoring review; runtime rotation is not claimed.", "authoring", false, "workflow.generate", ["plan.dataset.strategy", "plan.dataset.csvColumns"]));
+      claims.push(claim("dataset.sample-artifact", "CSV sample dataset artifact is generated for runtime CSV_DATASET input.", "authoring", false, "workflow.generate", ["plan.dataset.strategy", "plan.dataset.csvColumns"]));
     }
     if (datasetStrategy === "REDIS_DATASET") {
       claims.push(claim("dataset.rotated", "Dataset rotation or consumption is evidenced.", "runtime", runtimeRequired, "workflow.verify", ["plan.dataset.strategy"]));
@@ -1727,7 +1727,7 @@ export function registerWorkflowTools(deps) {
     const auth = plan.auth;
     const mockStrategy = plan.mock?.strategy ?? plan.sutDouble;
     const csvSampleExists = Boolean(session.generated?.bundleId && existsSync(resolve(bundleDir(session.generated.bundleId), "datasets", "sample.csv")));
-    const structuralValidation = workflowStructuralValidation(session);
+    const scenarioManagerValidation = workflowScenarioManagerValidation(session);
     const claim = (id, claimText, status, required = true, evidence = [], gap = null) => ({
       id,
       claim: claimText,
@@ -1787,12 +1787,12 @@ export function registerWorkflowTools(deps) {
         session.mode === "modify" ? null : "Run workflow_generate.",
       ),
       claim(
-        "validation.structural",
-        "Bundle structural validation passed.",
-        structuralValidation?.ok ? "satisfied" : structuralValidation ? "failed" : "missing",
+        "validation.scenario-manager",
+        "Scenario Manager bundle validation passed.",
+        scenarioManagerValidation?.ok ? "satisfied" : scenarioManagerValidation ? "failed" : "missing",
         true,
-        structuralValidation ? ["evidence.structuralValidation"] : [],
-        structuralValidation?.ok ? null : "Run workflow_validate and fix failures.",
+        scenarioManagerValidation ? ["evidence.scenarioManagerValidation"] : [],
+        scenarioManagerValidation?.ok ? null : "Run workflow_validate and fix failures.",
       ),
       claim(
         "runtime.deployed",
@@ -1816,7 +1816,7 @@ export function registerWorkflowTools(deps) {
         datasetStrategy && datasetStrategy !== "SCHEDULER" ? "satisfied" : datasetStrategy === "SCHEDULER" ? "not-applicable" : "missing",
         Boolean(datasetStrategy && datasetStrategy !== "SCHEDULER"),
         datasetStrategy ? [`dataset=${datasetStrategy}`] : [],
-        datasetStrategy === "CSV_DATASET" ? "CSV creates a sample artifact; runtime rotation is not claimed." : datasetStrategy ? null : "No dataset strategy is recorded.",
+        datasetStrategy === "CSV_DATASET" ? "CSV creates a sample artifact consumed by the runtime CSV_DATASET input." : datasetStrategy ? null : "No dataset strategy is recorded.",
       ),
       claim(
         "dataset.sample-artifact",
@@ -1865,7 +1865,7 @@ export function registerWorkflowTools(deps) {
     if (session.reported) return "reported";
     if (session.evidence?.runtime?.ok) return "verified";
     if (session.evidence?.deployment?.ok) return "deployed";
-    if (workflowStructuralValidation(session)?.ok) return "validated";
+    if (workflowScenarioManagerValidation(session)?.ok) return "validated";
     if (session.generated) return "generated";
     if (!Object.keys(session.plan || {}).length) return "source_ready";
     if (!workflowMissingFields(session).length && workflowValidationErrors(session).length) return "plan_invalid";
@@ -1964,10 +1964,10 @@ export function registerWorkflowTools(deps) {
     const verifyOperation = session.activeOperations?.verify ? session.operations?.[session.activeOperations.verify] : null;
     const missing = workflowMissingFields(session);
     const hasValidationErrors = workflowValidationErrors(session).length > 0;
-    const structurallyValid = Boolean(workflowStructuralValidation(session)?.ok);
+    const validationOk = Boolean(workflowScenarioManagerValidation(session)?.ok);
     if (session.mode === "modify") {
       if (missing.length === 0 && !hasValidationErrors) actions.push("workflow.preview", "workflow.patch", "workflow.validate", "workflow.report");
-      if (structurallyValid) actions.push("workflow.deploy", "workflow.deploy.start");
+      if (validationOk) actions.push("workflow.deploy", "workflow.deploy.start");
       if (deployOperation) actions.push("workflow.deploy.status", ...(deployOperation.status === "running" ? ["workflow.deploy.resume"] : []));
       if (session.evidence?.deployment?.ok) actions.push("workflow.verify", "workflow.verify.start");
       if (verifyOperation) actions.push("workflow.verify.status", ...(verifyOperation.status === "running" ? ["workflow.verify.resume"] : []));
@@ -1980,7 +1980,7 @@ export function registerWorkflowTools(deps) {
       }
     }
     if (session.generated) actions.push("workflow.patch", "workflow.validate", "workflow.report");
-    if (structurallyValid) actions.push("workflow.deploy", "workflow.deploy.start");
+    if (validationOk) actions.push("workflow.deploy", "workflow.deploy.start");
     if (deployOperation) actions.push("workflow.deploy.status", ...(deployOperation.status === "running" ? ["workflow.deploy.resume"] : []));
     if (session.evidence?.deployment?.ok) actions.push("workflow.verify", "workflow.verify.start");
     if (verifyOperation) actions.push("workflow.verify.status", ...(verifyOperation.status === "running" ? ["workflow.verify.resume"] : []));
@@ -2039,6 +2039,15 @@ export function registerWorkflowTools(deps) {
       || text.includes("invalid or expired bearer token")
       || text.includes("missing authorization")
       || text.includes("login failed");
+  }
+
+  function workflowEvidenceIsBundlePackagingFailure(value) {
+    return Boolean(
+      value?.localGenerationDefect
+      || value?.code === "BUNDLE_PACKAGING_FAILED"
+      || value?.name === "BundlePackagingError"
+      || value?.finding?.code === "BUNDLE_PACKAGING_FAILED"
+    );
   }
 
   function workflowFailureIsEnvironmentAuth(failure) {
@@ -2116,12 +2125,42 @@ export function registerWorkflowTools(deps) {
   }
 
   function workflowFailureIsExternalValidation(session, failure) {
-    return failure?.action === "validate"
-      && (failure?.evidence?.validator === "scenario-manager-dry-run"
-        || failure?.evidence?.validationLevel === "scenario-manager"
-        || failure?.code === "WORKFLOW_EXTERNAL_VALIDATION_FAILED"
-        || failure?.code === "WORKFLOW_ENV_AUTH_FAILED")
-      && Boolean(workflowStructuralValidation(session)?.ok);
+    if (failure?.code === "WORKFLOW_EXTERNAL_VALIDATION_FAILED" || failure?.code === "WORKFLOW_ENV_AUTH_FAILED") return true;
+    if (failure?.action !== "validate") return false;
+    const evidence = failure?.evidence || {};
+    if (evidence.failureKind === "bundle-packaging") return false;
+    return Boolean(evidence.failureKind || (evidence.error && !evidence.scenarioManager));
+  }
+
+  function workflowScenarioManagerFindingsFromEvidence(evidence) {
+    const scenarioManager = evidence?.scenarioManager || evidence?.evidence?.scenarioManager || null;
+    return Array.isArray(scenarioManager?.findings) ? scenarioManager.findings : [];
+  }
+
+  function workflowValidationFailureCauses(session, failure) {
+    const findings = workflowScenarioManagerFindingsFromEvidence(failure?.evidence);
+    if (findings.length) {
+      return findings.map(finding => ({
+        code: finding.code || "SCENARIO_MANAGER_FINDING",
+        path: finding.path || null,
+        message: finding.message || "",
+        fix: finding.fix || null,
+        category: finding.category || null,
+        severity: finding.severity || null,
+      }));
+    }
+    const packagingFinding = failure?.evidence?.finding;
+    if (packagingFinding) {
+      return [{
+        code: packagingFinding.code || "BUNDLE_PACKAGING_FAILED",
+        path: packagingFinding.path || null,
+        message: packagingFinding.message || failure?.evidence?.error || "",
+        fix: packagingFinding.fix || "Repair the generated bundle files and rerun validation.",
+        category: packagingFinding.category || "bundle",
+        severity: packagingFinding.severity || "error",
+      }];
+    }
+    return workflowValidationIssues(session).map(issue => ({ field: issue.field, code: issue.code, message: issue.message }));
   }
 
   function workflowAgentPhase(session) {
@@ -2163,7 +2202,7 @@ export function registerWorkflowTools(deps) {
     }
     const runtimeVerdict = workflowRuntimeVerdict(session);
     if (runtimeVerdict) return runtimeVerdict;
-    if (workflowStructuralValidation(session)?.ok || session.generated) return AGENT_VERDICTS.READY;
+    if (workflowScenarioManagerValidation(session)?.ok || session.generated) return AGENT_VERDICTS.READY;
     return AGENT_VERDICTS.NEEDS_INPUT;
   }
 
@@ -2174,7 +2213,7 @@ export function registerWorkflowTools(deps) {
       case "WORKFLOW_ENV_AUTH_FAILED":
         return "PocketHive environment auth failed; refresh MCP auth/environment settings and retry the workflow step.";
       case "WORKFLOW_EXTERNAL_VALIDATION_FAILED":
-        return "Scenario Manager validation failed after local structural validation passed; inspect Scenario Manager availability before patching bundle files.";
+        return "Scenario Manager validation could not complete; inspect Scenario Manager availability before patching bundle files.";
       case "WORKFLOW_DEPLOY_FAILED":
         return "Runtime deployment failed while calling PocketHive APIs.";
       case "WORKFLOW_DEPLOY_NOT_READY":
@@ -2218,20 +2257,15 @@ export function registerWorkflowTools(deps) {
     };
   }
 
-  function workflowStructuralValidation(session) {
-    return session.evidence?.structuralValidation
-      || (session.evidence?.validation?.validationLevel === "structural" ? session.evidence.validation : null);
-  }
-
   function workflowScenarioManagerValidation(session) {
+    const latestValidation = session.evidence?.validation || null;
     return session.evidence?.scenarioManagerValidation
-      || (session.evidence?.validation?.validationLevel === "scenario-manager" ? session.evidence.validation : null);
+      || (latestValidation?.validationLevel === "scenario-manager" && latestValidation?.evidence?.failureKind !== "bundle-packaging" ? latestValidation : null);
   }
 
   function workflowProofSummary(session) {
     const runtimeEvidence = session.evidence?.runtime?.evidence || null;
     const mocks = runtimeEvidence?.mocks || {};
-    const structuralValidation = workflowStructuralValidation(session);
     const scenarioManagerValidation = workflowScenarioManagerValidation(session);
     const latestValidation = session.evidence?.validation || null;
     return {
@@ -2240,10 +2274,6 @@ export function registerWorkflowTools(deps) {
         code: latestValidation?.code || null,
         authoritative: Boolean(latestValidation?.authoritative),
         latestLevel: latestValidation?.validationLevel || null,
-        structural: {
-          status: structuralValidation ? structuralValidation.ok ? "pass" : "fail" : "not-run",
-          code: structuralValidation?.code || null,
-        },
         scenarioManager: {
           status: scenarioManagerValidation ? scenarioManagerValidation.ok ? "pass" : "fail" : "not-run",
           code: scenarioManagerValidation?.code || null,
@@ -2312,11 +2342,11 @@ export function registerWorkflowTools(deps) {
         message: workflowFailureIsEnvironmentAuth(failure)
           ? "PocketHive API auth failed; inspect MCP environment settings or refresh the active auth profile before patching bundle files."
           : workflowFailureIsExternalValidation(session, failure)
-          ? "Scenario Manager validation failed after local structural validation passed; inspect MCP/runtime auth or Scenario Manager availability before patching bundle files."
+          ? "Scenario Manager validation could not complete; inspect MCP/runtime auth or Scenario Manager availability before patching bundle files."
           : workflowFailureSummary(failure.code),
         evidence: failure.evidence || null,
         causes: failure.code === "WORKFLOW_VALIDATION_FAILED"
-          ? validationIssues.map(issue => ({ field: issue.field, code: issue.code, message: issue.message }))
+          ? workflowValidationFailureCauses(session, failure)
           : [],
       };
     }
@@ -2438,9 +2468,8 @@ export function registerWorkflowTools(deps) {
         return {
           kind: AGENT_NEXT_ACTION_KINDS.VALIDATE,
           tool: toolName("workflow.validate"),
-          reason: "Local structural validation passed; retry Scenario Manager validation after fixing MCP/runtime auth, or use workflow.result/evidence to continue with recorded non-authoritative proof.",
+          reason: "Retry Scenario Manager validation after fixing MCP/runtime auth, or use workflow.result/evidence to continue with recorded non-authoritative proof.",
           validator: "scenario-manager-dry-run",
-          structuralStatus: "pass",
         };
       }
       return {
@@ -2472,7 +2501,7 @@ export function registerWorkflowTools(deps) {
         reason: "The workflow is ready to generate bundle files.",
       };
     }
-    if (!workflowStructuralValidation(session)?.ok) {
+    if (!workflowScenarioManagerValidation(session)?.ok) {
       return {
         kind: AGENT_NEXT_ACTION_KINDS.VALIDATE,
         tool: toolName("workflow.validate"),
@@ -2786,7 +2815,6 @@ export function registerWorkflowTools(deps) {
 
   function workflowEvidenceRenderPayload(session) {
     const status = workflowStatusPayload(session);
-    const structuralValidation = workflowStructuralValidation(session);
     const scenarioManagerValidation = workflowScenarioManagerValidation(session);
     return {
       ...status,
@@ -2804,7 +2832,6 @@ export function registerWorkflowTools(deps) {
         evidenceGapCount: status.evidenceGaps.length,
         operationCount: Object.keys(status.operations || {}).length,
         validation: status.evidence?.validation?.code || (status.evidence?.validation ? "recorded" : "not-run"),
-        structuralValidation: structuralValidation?.code || (structuralValidation ? "recorded" : "not-run"),
         scenarioManagerValidation: scenarioManagerValidation?.code || (scenarioManagerValidation ? "recorded" : "not-run"),
         deployment: status.evidence?.deployment?.code || "not-run",
         runtime: status.evidence?.runtime?.code || "not-run",
@@ -3437,7 +3464,7 @@ export function registerWorkflowTools(deps) {
   }
 
   function ensureWorkflowValidatedBeforeRuntime(session) {
-    if (!workflowStructuralValidation(session)?.ok) {
+    if (!workflowScenarioManagerValidation(session)?.ok) {
       throw new Error("WORKFLOW_VALIDATION_REQUIRED: call workflow.validate and fix failures before runtime deployment");
     }
   }
@@ -4039,22 +4066,22 @@ export function registerWorkflowTools(deps) {
     const session = workflowSession(workflowId);
     ensureWorkflowCanGenerate(session);
     const generated = await writeWizardBundle(workflowWizardSession(session));
-    const structural = await runBundleCheck(generated.bundleId);
+    const generationSanity = await runGenerationSanityCheck(generated.bundleId);
     if (!generated.filesCreated.includes(WORKFLOW_TRACE_FILE)) generated.filesCreated.push(WORKFLOW_TRACE_FILE);
     session.generated = generated;
     session.bundle = { id: generated.bundleId, path: generated.path };
-    const ok = structural.ok;
-    session.evidence.generation = { ok, generated, structural };
-    recordWorkflowAttempt(session, "generate", ok, { bundleId: generated.bundleId, filesChanged: generated.filesCreated, code: ok ? "WORKFLOW_GENERATED" : "WORKFLOW_GENERATION_STRUCTURAL_FAILURE" });
+    const ok = generationSanity.ok;
+    session.evidence.generation = { ok, generated, generationSanity };
+    recordWorkflowAttempt(session, "generate", ok, { bundleId: generated.bundleId, filesChanged: generated.filesCreated, code: ok ? "WORKFLOW_GENERATED" : "WORKFLOW_GENERATION_SANITY_FAILED" });
     writeWorkflowTrace(session);
     persistWorkflowSessions();
-    return { ok, workflowId, generated, structural, state: workflowState(session), activeRole: workflowRolePayload(workflowActiveRoleId(session)), allowedActions: workflowAllowedActions(session) };
+    return { ok, workflowId, generated, generationSanity, state: workflowState(session), activeRole: workflowRolePayload(workflowActiveRoleId(session)), allowedActions: workflowAllowedActions(session) };
   }, workflowMutating);
 
-  reg("workflow.validate", "Validate the generated workflow bundle and record structured evidence.", {
+  reg("workflow.validate", "Validate the generated workflow bundle through Scenario Manager and record structured evidence.", {
     workflowId: z.string(),
-    validator: z.enum(["local-structural", "scenario-manager-dry-run"]).optional().default("local-structural"),
-  }, async ({ workflowId, validator = "local-structural" }) => {
+    validator: z.enum(["scenario-manager-dry-run"]).optional().default("scenario-manager-dry-run"),
+  }, async ({ workflowId, validator = "scenario-manager-dry-run" }) => {
     const session = workflowSession(workflowId);
     ensureWorkflowGenerated(session);
     if (session.mode === "modify") {
@@ -4065,72 +4092,42 @@ export function registerWorkflowTools(deps) {
     let ok = false;
     let code = "WORKFLOW_VALIDATION_FAILED";
     try {
-      const structural = await runBundleCheck(session.generated.bundleId);
-      const structuralRecord = {
-        ok: structural.ok,
-        code: structural.ok ? "WORKFLOW_STRUCTURAL_VALIDATED" : "WORKFLOW_VALIDATION_FAILED",
-        authoritative: false,
-        validationLevel: "structural",
-        evidence: {
-          validator: "local-structural",
-          validationLevel: "structural",
-          authoritative: false,
-          structural,
-          note: "Local structural validation only. Use validator=scenario-manager-dry-run for authoritative Scenario Manager validation when a stack is configured.",
-        },
+      const scenarioManager = await scenarioManagerDryRunValidateBundle(session.generated.bundleId);
+      ok = scenarioManager?.ok === true;
+      code = ok ? "WORKFLOW_VALIDATED" : "WORKFLOW_VALIDATION_FAILED";
+      evidence = {
+        validator,
+        validationLevel: "scenario-manager",
+        authoritative: true,
+        scenarioManager,
       };
-      session.evidence.structuralValidation = structuralRecord;
-      if (!structural.ok) {
-        evidence = { validator, structural };
-      } else if (validator === "scenario-manager-dry-run") {
-        evidence = {
-          validator,
-          validationLevel: "scenario-manager",
-          authoritative: true,
-          structural,
-          scenarioManager: await scenarioManagerDryRunValidateBundle(session.generated.bundleId),
-        };
-        ok = true;
-        code = "WORKFLOW_VALIDATED";
-      } else {
-        evidence = {
-          validator,
-          validationLevel: "structural",
-          authoritative: false,
-          structural,
-          note: "Local structural validation only. Use validator=scenario-manager-dry-run for authoritative Scenario Manager validation when a stack is configured.",
-        };
-        ok = true;
-        code = "WORKFLOW_STRUCTURAL_VALIDATED";
-      }
     } catch (e) {
-      const structuralOk = Boolean(session.evidence?.structuralValidation?.ok);
-      const scenarioManagerFailure = validator === "scenario-manager-dry-run" && structuralOk;
       const authFailure = workflowEvidenceIsAuthFailure(e);
+      const bundlePackagingFailure = !authFailure && workflowEvidenceIsBundlePackagingFailure(e);
       evidence = {
         validator,
         error: e.message,
-        validationLevel: scenarioManagerFailure ? "scenario-manager" : "structural",
+        validationLevel: "scenario-manager",
         authoritative: false,
-        ...(scenarioManagerFailure ? {
-          structuralStatus: "pass",
-          failureKind: authFailure ? "environment-auth" : "scenario-manager-unavailable",
-          note: authFailure
-            ? "Local structural validation passed. Scenario Manager validation failed because PocketHive API auth was rejected."
-            : "Local structural validation passed. Scenario Manager validation could not complete against the configured environment.",
-        } : {}),
+        failureKind: authFailure ? "environment-auth" : bundlePackagingFailure ? "bundle-packaging" : "scenario-manager-unavailable",
+        ...(bundlePackagingFailure && e.finding ? { finding: e.finding } : {}),
+        note: authFailure
+          ? "Scenario Manager validation failed because PocketHive API auth was rejected."
+          : bundlePackagingFailure
+            ? "The generated bundle could not be packaged for Scenario Manager validation; patch the bundle files and retry."
+            : "Scenario Manager validation could not complete against the configured environment.",
       };
-      if (scenarioManagerFailure) {
-        code = authFailure ? "WORKFLOW_ENV_AUTH_FAILED" : "WORKFLOW_EXTERNAL_VALIDATION_FAILED";
-      }
+      code = authFailure ? "WORKFLOW_ENV_AUTH_FAILED" : bundlePackagingFailure ? "WORKFLOW_VALIDATION_FAILED" : "WORKFLOW_EXTERNAL_VALIDATION_FAILED";
     }
     const authoritative = Boolean(evidence?.authoritative);
-    const validationLevel = evidence?.validationLevel || (validator === "scenario-manager-dry-run" ? "scenario-manager" : "structural");
+    const validationLevel = evidence?.validationLevel || "scenario-manager";
     session.evidence.validation = { ok, code, authoritative, validationLevel, evidence };
     if (validationLevel === "scenario-manager") {
-      session.evidence.scenarioManagerValidation = { ok, code, authoritative, validationLevel, evidence };
-    } else if (validationLevel === "structural") {
-      session.evidence.structuralValidation = session.evidence.validation;
+      if (evidence?.failureKind === "bundle-packaging") {
+        delete session.evidence.scenarioManagerValidation;
+      } else {
+        session.evidence.scenarioManagerValidation = { ok, code, authoritative, validationLevel, evidence };
+      }
     }
     recordWorkflowAttempt(session, "validate", ok, { code, evidence });
     writeWorkflowTrace(session);

@@ -7,12 +7,15 @@ template:
   image: "swarm-controller:latest"
   bees:
   - role: "generator-iso8583"
+    id: generator-iso8583
     image: "generator:latest"
     work:
       in:
         in: null
       out:
         out: "iso8583-build"
+    ports:
+      - { id: out, direction: out }
     env: {}
     config:
       worker:
@@ -32,12 +35,15 @@ template:
           ratePerSec: 10
           maxMessages: 100
   - role: "generator-performance"
+    id: generator-performance
     image: "generator:latest"
     work:
       in:
         in: null
       out:
         out: "perf-build"
+    ports:
+      - { id: out, direction: out }
     env: {}
     config:
       worker:
@@ -56,12 +62,15 @@ template:
           ratePerSec: 50
           maxMessages: 500
   - role: "generator-netty"
+    id: generator-netty
     image: "generator:latest"
     work:
       in:
         in: null
       out:
         out: "netty-build"
+    ports:
+      - { id: out, direction: out }
     env: {}
     config:
       worker:
@@ -79,48 +88,64 @@ template:
           ratePerSec: 1
           maxMessages: 5
   - role: "request-builder-iso"
+    id: request-builder-iso
     image: "request-builder:latest"
     work:
       in:
         in: "iso8583-build"
       out:
         out: "proc"
+    ports:
+      - { id: in, direction: in }
+      - { id: out, direction: out }
     env: {}
     config:
       worker:
         templateRoot: "/app/scenario/templates/tcp"
         serviceId: "demo"
   - role: "request-builder-perf"
+    id: request-builder-perf
     image: "request-builder:latest"
     work:
       in:
         in: "perf-build"
       out:
         out: "proc"
+    ports:
+      - { id: in, direction: in }
+      - { id: out, direction: out }
     env: {}
     config:
       worker:
         templateRoot: "/app/scenario/templates/tcp"
         serviceId: "demo"
   - role: "request-builder-netty"
+    id: request-builder-netty
     image: "request-builder:latest"
     work:
       in:
         in: "netty-build"
       out:
         out: "proc"
+    ports:
+      - { id: in, direction: in }
+      - { id: out, direction: out }
     env: {}
     config:
       worker:
         templateRoot: "/app/scenario/templates/tcp"
         serviceId: "demo"
   - role: "processor"
+    id: processor
     image: "processor:latest"
     work:
       in:
         in: "proc"
       out:
         out: "post"
+    ports:
+      - { id: in, direction: in }
+      - { id: out, direction: out }
     env: {}
     config:
       worker:
@@ -135,12 +160,15 @@ template:
           readTimeoutMs: 5000
       baseUrl: "{{ sut.endpoints['tcp-server'].baseUrl }}"
   - role: "postprocessor"
+    id: postprocessor
     image: "postprocessor:latest"
     work:
       in:
         in: "post"
       out:
         out: null
+    ports:
+      - { id: in, direction: in }
     env: {}
     config:
       worker:
@@ -171,3 +199,28 @@ plan:
       name: Start swarm
       time: PT0S
       type: start
+
+topology:
+  version: 1
+  edges:
+    - id: e1
+      from: { beeId: generator-iso8583, port: out }
+      to: { beeId: request-builder-iso, port: in }
+    - id: e2
+      from: { beeId: generator-performance, port: out }
+      to: { beeId: request-builder-perf, port: in }
+    - id: e3
+      from: { beeId: generator-netty, port: out }
+      to: { beeId: request-builder-netty, port: in }
+    - id: e4
+      from: { beeId: request-builder-iso, port: out }
+      to: { beeId: processor, port: in }
+    - id: e5
+      from: { beeId: request-builder-perf, port: out }
+      to: { beeId: processor, port: in }
+    - id: e6
+      from: { beeId: request-builder-netty, port: out }
+      to: { beeId: processor, port: in }
+    - id: e7
+      from: { beeId: processor, port: out }
+      to: { beeId: postprocessor, port: in }

@@ -85,7 +85,7 @@ phase: 1
 | `health_check` | Public operational | `MCP-SERVER.md` | Read-only |
 | `contract_*` | Public operational | `MCP-IMPROVEMENT-SPEC.md` | Read-only |
 | `bundle_list`, `bundle_read` | Public operational | `MCP-SERVER.md` | Read-only |
-| `bundle_check`, `bundle_validate`, `bundle_validate_result` | Public operational | `MCP-IMPROVEMENT-SPEC.md` | Read-only or validation job state |
+| `bundle_validate`, `bundle_validate_result` | Public operational | `MCP-IMPROVEMENT-SPEC.md` | Scenario Manager validation job state |
 | `bundle_diff` | Public operational | `MCP-IMPROVEMENT-SPEC.md` | Read-only |
 | `bundle_docs_*` | Advanced authoring | `MCP-IMPROVEMENT-SPEC.md` | Guarded bundle doc writes |
 | `scenario_*` | Public operational | `MCP-SERVER.md` | Runtime scenario import/read |
@@ -157,25 +157,24 @@ evidence remain available through `workflow_status`, `workflow_report`, and
 `workflow_evidence_render`.
 
 `workflow_result.proof.validation` reports the latest validation attempt and
-also exposes validation by level:
+the Scenario Manager validation state:
 
 ```yaml
 proof:
   validation:
     status: pass | fail | not-run
-    latestLevel: structural | scenario-manager | null
-    structural:
-      status: pass | fail | not-run
-      code: string | null
+    latestLevel: scenario-manager | null
     scenarioManager:
       status: pass | fail | not-run
       code: string | null
       authoritative: boolean
 ```
 
-An authoritative Scenario Manager failure must not erase a prior structural
-validation pass. Agents inspect the nested validation level before deciding
-whether the next action is a bundle patch or an environment/auth retry.
+Local generation sanity is exposed by `wizard_complete`, `wizard_enrich`, and
+`workflow_generate` as `generationSanity`. It is generation diagnostics, not
+bundle validation proof. Agents use `workflow_result.nextAction` and
+`diagnosis.causes` to decide whether the next step is a bundle patch or an
+environment/auth retry.
 
 ## Wizard Tool Contracts
 
@@ -270,7 +269,7 @@ phase: 1
 ```yaml
 name: wizard_complete
 class: public novice
-purpose: Generate bundle files from a complete wizard session and run bundle_check.
+purpose: Generate bundle files from a complete wizard session and run generation sanity checks.
 input:
   required:
     sessionId: string
@@ -373,8 +372,9 @@ sideEffects:
 
 ## Bundle Validation Modes
 
-`bundle_check` is the in-process structural check. `bundle_validate` requires an
-explicit validator:
+`bundle_validate` is the public static bundle validation surface and always uses
+Scenario Manager. Generation sanity checks may run inside authoring tools, but
+they are not public validation tools and are not workflow validation evidence.
 
 ```yaml
 name: bundle_validate
@@ -382,12 +382,9 @@ input:
   required:
     bundle: string
   optional:
-    validator: local-structural | scenario-manager-dry-run | scenario-manager-upload
+    validator: scenario-manager-dry-run | scenario-manager-upload
     replaceExisting: boolean
 sideEffects:
-  local-structural:
-    files: none
-    runtime: validation job state only
   scenario-manager-dry-run:
     files: none
     runtime: side-effect-free validation call to Scenario Manager
@@ -990,8 +987,8 @@ should prefer a mock-backed scenario unless the user explicitly confirms a
 low-rate live/public target.
 
 `evidenceContract` is created before generation and describes the claims the
-workflow will later try to prove. It must include required offline claims such
-as generation, structural validation, and stakeholder report. Runtime claims
+workflow will later try to prove. It must include required claims such as
+generation, Scenario Manager validation, and stakeholder report. Runtime claims
 such as workers healthy, queues drained, mock matched requests, traffic shape,
 dataset rotation, auth refresh, and observability output are included when
 relevant and marked `required` only when the plan/profile requires live proof.
@@ -1060,19 +1057,19 @@ phase: 2
 ```yaml
 name: workflow_validate
 class: public novice
-purpose: Validate the generated bundle and record structured validation evidence.
+purpose: Validate the generated bundle through Scenario Manager and record structured validation evidence.
 input:
   required:
     workflowId: string
   optional:
-    validator: local-structural | scenario-manager-dry-run
+    validator: scenario-manager-dry-run
 output:
   required:
     ok: boolean
     code: string
     failureCode: string | null
     authoritative: boolean
-    validationLevel: structural | scenario-manager
+    validationLevel: scenario-manager
     suggestedNextActions: string[]
     patchScope: string[]
     evidence: object
@@ -1083,25 +1080,18 @@ writeScope: none
 phase: 2
 ```
 
-`validator=local-structural` is an offline authoring check. It may prove that
-generated files are internally coherent, but it is not authoritative Scenario
-Manager validation. `validator=scenario-manager-dry-run` is authoritative for
-the running Scenario Manager contract and should be used before live deployment
-when a PocketHive stack is configured.
-
-Workflow sessions keep structural validation evidence separately from Scenario
-Manager validation evidence. A later Scenario Manager dry-run failure records
-`validationLevel=scenario-manager` as the latest validation attempt, but the
-`validation.structural` claim remains satisfied when local structural
-validation previously passed.
+`validator=scenario-manager-dry-run` is authoritative for the running Scenario
+Manager contract and must be used before live deployment when a PocketHive stack
+is configured. Workflow sessions keep Scenario Manager validation evidence as
+the single workflow validation proof.
 
 Failure codes distinguish artifact failures from environment failures:
 
 - `WORKFLOW_VALIDATION_FAILED` means the generated bundle needs a patch before
-  validation can pass.
-- `WORKFLOW_EXTERNAL_VALIDATION_FAILED` means local structural validation
-  passed, but Scenario Manager validation could not complete against the
-  configured stack.
+  validation can pass. Canonical Scenario Manager findings are exposed in
+  `workflow_result.diagnosis.causes` when Scenario Manager returned them.
+- `WORKFLOW_EXTERNAL_VALIDATION_FAILED` means Scenario Manager validation could
+  not complete against the configured stack.
 - `WORKFLOW_ENV_AUTH_FAILED` means PocketHive API auth was rejected, commonly a
   `401`/expired bearer token. `workflow_result.nextAction.tool` must point to
   `env_status` and `patchScope` must be empty because generated bundle files
@@ -1450,7 +1440,7 @@ gap: string | null
 ```
 
 The default matrix covers bundle existence, answered/gated questions, answer
-validation, provenance, role checks, structural validation, runtime deployment,
+validation, provenance, role checks, Scenario Manager validation, runtime deployment,
 runtime verification, dataset handling, auth handling, mock/live target proof,
 observability output, and stakeholder report generation.
 

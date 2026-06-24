@@ -12,7 +12,7 @@
 2. [Novice Mental Model](#2-novice-mental-model)
 3. [Responsibility Boundary — No Shell Tools](#3-responsibility-boundary--no-shell-tools)
 4. [Contract Tools — Runtime First](#4-contract-tools--runtime-first)
-5. [Fast Structural Validator — bundle.check](#5-fast-structural-validator--bundlecheck)
+5. [Generation Sanity Checks](#5-generation-sanity-checks)
 6. [Scenario Wizard](#6-scenario-wizard)
 7. [Mock Configuration — mock-config/](#7-mock-configuration--mock-config)
 8. [Dataset Management](#8-dataset-management)
@@ -98,8 +98,7 @@ Bundle artifacts
         |
         v
 Validation
-  bundle.check fast structural check
-  bundle.validate full template/runtime check
+  bundle.validate through Scenario Manager
         |
         v
 Run and evidence
@@ -193,7 +192,7 @@ Keep and improve API/file-backed tools:
 | Area | In-scope tools |
 |---|---|
 | Context | `context.get`, `context.set-bundles-root`, `context.list-bundles-roots` |
-| Bundle files | `bundle.list`, `bundle.read`, `bundle.check`, `bundle.validate`, `bundle.validate.result`, `bundle.diff` |
+| Bundle files | `bundle.list`, `bundle.read`, `bundle.validate`, `bundle.validate.result`, `bundle.diff` |
 | Scenario lifecycle | `scenario.deploy`, `scenario.list`, `scenario.get` |
 | Swarm lifecycle | `swarm.list`, `swarm.get`, `swarm.create`, `swarm.wait-ready`, `swarm.start`, `swarm.stop`, `swarm.remove` |
 | Real-time control | `component.config-preview` read-only merge plan and `component.config-update` through Orchestrator only; read current component config from Orchestrator journal/status evidence, deep-merge requested changes, then send the merged update |
@@ -261,10 +260,8 @@ The Scenario Manager is the preferred runtime source for the PocketHive contract
 Expand the Scenario Manager API with:
 - `GET /api/authoring-contract` — full authoring manifest from live Scenario Manager sources
 - `GET /api/authoring-contract/fingerprint` — lightweight cache freshness check
-- `POST /scenario-bundles/validate` — side-effect-free bundle validation with structured findings
-- `POST /scenarios/{id}/validate` — validate an existing loaded scenario bundle
-- `POST /scenario-bundles/validate-existing?bundleKey=...` — validate a catalog entry by bundle identity
-- `POST /scenarios/{id}/templates/validate` — bundle-local template call validation
+- `POST /validation/scenario-bundles` — side-effect-free bundle validation with structured findings
+- `POST /validation/scenario-bundles/existing?bundleKey=...` — validate a catalog entry by bundle identity
 
 MCP should call the authoring contract once per server session and cache it.
 It should call again only when `forceRefresh` is explicit or when a fingerprint
@@ -605,21 +602,18 @@ Output:
 
 ---
 
-## 5. Fast Structural Validator — bundle.check
+## 5. Generation Sanity Checks
 
 ### 5.1 Purpose
 
-Pure JavaScript, no JVM, no WSL. Returns in <1s. Runs after every domain tool call
-and before `bundle.validate` / `scenario.deploy`. Catches structural errors immediately
-without the 30–150s JVM validation cycle.
+Authoring tools may run local generation sanity checks to catch missing files or
+obvious generated-artifact defects immediately. These checks are internal
+authoring diagnostics only. Public static bundle validation must use
+`bundle.validate` through Scenario Manager.
 
-### 5.2 Tool Definition
+### 5.2 Internal Check Shape
 
 ```
-Tool: bundle.check
-Input:
-  bundle: string
-
 Action:
   bundleDir = resolve(getBundlesDir(), bundle)
   Throw if bundleDir does not exist.
@@ -911,9 +905,9 @@ Action:
    11. README.md                         — always
    12. FLOW_DOCUMENT.md, CHANGELOG.md    — when docs != no
 
-  Run bundle.check on generated bundle.
-  Return structural errors/warnings explicitly. For live Scenario Manager
-  validation, call bundle.validate with validator="scenario-manager-dry-run".
+  Run generation sanity checks on generated bundle.
+  Return generation errors/warnings explicitly. For Scenario Manager validation,
+  call bundle.validate with validator="scenario-manager-dry-run".
   Use validator="scenario-manager-upload" only when the user explicitly wants
   Scenario Manager import/replace side effects.
 
@@ -921,7 +915,7 @@ Output:
   {
     completed: true,
     generated: { created, bundleId, path, pattern, target },
-    structural: BundleCheckResult
+    generationSanity: GenerationSanityResult
   }
 ```
 
@@ -1441,7 +1435,7 @@ Output:
 Minimum records:
 - `smoke` / `default` profile: 10 records minimum
 - `nft` profile: 1000 records minimum
-- Single-record datasets are flagged as a warning by `bundle.check` (CHECK-17 variant)
+- Single-record datasets are flagged as a generation sanity warning (CHECK-17 variant)
 
 ---
 

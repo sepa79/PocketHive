@@ -3,8 +3,10 @@ package io.pockethive.orchestrator.app;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -54,6 +56,7 @@ import io.pockethive.swarm.model.SutEnvironment;
 import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.SwarmTemplate;
 import io.pockethive.swarm.model.Work;
+import io.pockethive.util.BeeNameGenerator;
 import java.util.List;
 import java.util.Map;
 import java.nio.file.Files;
@@ -75,6 +78,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.StringHttpMessageConverter;
 import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
@@ -143,7 +147,7 @@ class SwarmControllerTest {
         SwarmStore registry = new SwarmStore();
         SwarmController ctrl = controller(tracker, registry, new SwarmPlanRegistry());
         when(scenarioClient.fetchScenarioTemplate("tpl-1"))
-            .thenReturn(new ScenarioClient.ScenarioTemplateDescriptor("tpl-1", "prod/tpl-1", "prod", false));
+            .thenReturn(new ScenarioClient.ScenarioTemplateDescriptor("tpl-1", "prod/tpl-1", "prod/tpl-1", "prod", false));
 
         try {
             OrchestratorCurrentUserHolder.set(userWith(
@@ -166,7 +170,7 @@ class SwarmControllerTest {
         SwarmStore registry = new SwarmStore();
         SwarmController ctrl = controller(tracker, registry, new SwarmPlanRegistry());
         when(scenarioClient.fetchScenarioTemplate("tpl-1"))
-            .thenReturn(new ScenarioClient.ScenarioTemplateDescriptor("tpl-1", "e2e/local-rest-defaults", "e2e", false));
+            .thenReturn(new ScenarioClient.ScenarioTemplateDescriptor("tpl-1", "e2e/local-rest-defaults", "e2e/local-rest-defaults", "e2e", false));
 
         try {
             OrchestratorCurrentUserHolder.set(userWith(
@@ -189,7 +193,7 @@ class SwarmControllerTest {
         SwarmStore registry = new SwarmStore();
         SwarmController ctrl = controller(tracker, registry, new SwarmPlanRegistry());
         when(scenarioClient.fetchScenarioTemplate("tpl-1"))
-            .thenReturn(new ScenarioClient.ScenarioTemplateDescriptor("tpl-1", "e2e/local-rest", "e2e", true));
+            .thenReturn(new ScenarioClient.ScenarioTemplateDescriptor("tpl-1", "e2e/local-rest", "e2e/local-rest", "e2e", true));
 
         assertThatThrownBy(() -> ctrl.create("sw1", new SwarmCreateRequest("tpl-1", "idem", null)))
             .isInstanceOf(ResponseStatusException.class)
@@ -588,7 +592,6 @@ class SwarmControllerTest {
             new Bee("generator", "img", Work.ofDefaults(null, "out"), java.util.Map.of())
         ));
         when(scenarioClient.fetchScenario("tpl-1")).thenReturn(new ScenarioPlan(template, null, null, null));
-        when(scenarioClient.prepareScenarioRuntime("tpl-1", "sw1")).thenReturn("/tmp/runtime/sw1");
         when(scenarioClient.fetchNetworkProfile(eq("missing-profile"), anyString(), eq("idem")))
             .thenThrow(new IllegalStateException("missing profile missing-profile"));
         SwarmController ctrl = controller(tracker, new SwarmStore(), plans);
@@ -606,6 +609,7 @@ class SwarmControllerTest {
             .hasMessageContaining("Failed to resolve network profile 'missing-profile'");
 
         verify(scenarioClient).fetchNetworkProfile(eq("missing-profile"), anyString(), eq("idem"));
+        verify(scenarioClient, never()).prepareScenarioRuntime(anyString(), anyString());
         verifyNoInteractions(networkProxyClient);
         verifyNoInteractions(lifecycle);
     }
@@ -618,7 +622,6 @@ class SwarmControllerTest {
             new Bee("processor", "img", Work.ofDefaults("in", "out"), java.util.Map.of())
         ));
         when(scenarioClient.fetchScenario("tpl-1")).thenReturn(new ScenarioPlan(template, null, null, null));
-        when(scenarioClient.prepareScenarioRuntime("tpl-1", "sw1")).thenReturn("/tmp/runtime/sw1");
         when(scenarioClient.fetchNetworkProfile(eq("passthrough"), anyString(), eq("idem")))
             .thenReturn(new NetworkProfile("passthrough", "Passthrough", List.of(), List.of("default")));
         when(scenarioClient.fetchScenarioSut(eq("tpl-1"), eq("sut-A"), anyString(), eq("idem")))
@@ -645,6 +648,7 @@ class SwarmControllerTest {
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("Unsupported SUT endpoint scheme 'smtp'");
 
+        verify(scenarioClient, never()).prepareScenarioRuntime(anyString(), anyString());
         verifyNoInteractions(networkProxyClient);
         verifyNoInteractions(lifecycle);
     }
@@ -657,7 +661,6 @@ class SwarmControllerTest {
             new Bee("processor", "img", Work.ofDefaults("in", "out"), java.util.Map.of())
         ));
         when(scenarioClient.fetchScenario("tpl-1")).thenReturn(new ScenarioPlan(template, null, null, null));
-        when(scenarioClient.prepareScenarioRuntime("tpl-1", "sw1")).thenReturn("/tmp/runtime/sw1");
         when(scenarioClient.fetchNetworkProfile(eq("passthrough"), anyString(), eq("idem")))
             .thenReturn(new NetworkProfile("passthrough", "Passthrough", List.of(), List.of("default")));
         when(scenarioClient.fetchScenarioSut(eq("tpl-1"), eq("sut-A"), anyString(), eq("idem")))
@@ -684,6 +687,7 @@ class SwarmControllerTest {
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("endpoint.upstreamBaseUrl must be provided when networkMode=PROXIED");
 
+        verify(scenarioClient, never()).prepareScenarioRuntime(anyString(), anyString());
         verifyNoInteractions(networkProxyClient);
         verifyNoInteractions(lifecycle);
     }
@@ -1238,6 +1242,66 @@ class SwarmControllerTest {
     }
 
     @Test
+    void createPropagatesScenarioRuntimeRefusalBody() throws Exception {
+        SwarmCreateTracker tracker = new SwarmCreateTracker();
+        SwarmPlanRegistry plans = new SwarmPlanRegistry();
+        SwarmTemplate template = new SwarmTemplate("ctrl-image", List.of(
+            new Bee("generator", "img", Work.ofDefaults(null, "out"), Map.of())
+        ));
+        String validationBody = """
+            {
+              "ok": false,
+              "source": "scenario-manager",
+              "summary": { "errors": 1, "warnings": 0 },
+              "findings": [
+                {
+                  "category": "scenario",
+                  "code": "SCENARIO_DESCRIPTOR_INVALID",
+                  "severity": "error",
+                  "path": "scenario.yaml",
+                  "message": "Invalid scenario descriptor.",
+                  "fix": "Repair scenario.yaml."
+                }
+              ]
+            }
+            """;
+        when(scenarioClient.fetchScenario("tpl-1")).thenReturn(new ScenarioPlan(template, null, null, null));
+        when(scenarioClient.prepareScenarioRuntime("tpl-1", "sw1"))
+            .thenThrow(new ScenarioClientException(
+                "scenario-runtime tpl-1/sw1 POST",
+                400,
+                validationBody,
+                MediaType.APPLICATION_JSON_VALUE));
+        SwarmController ctrl = controller(tracker, new SwarmStore(), plans);
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(ctrl)
+            .setMessageConverters(
+                new StringHttpMessageConverter(),
+                new MappingJackson2HttpMessageConverter(mapper))
+            .build();
+
+        mvc.perform(post("/api/swarms/sw1/create")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"templateId\":\"tpl-1\",\"idempotencyKey\":\"idem\"}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(result -> assertThat(result.getResponse().getContentType())
+                .startsWith(MediaType.APPLICATION_JSON_VALUE))
+            .andExpect(result -> assertThat(result.getResponse().getContentAsString())
+                .contains("\"code\": \"SCENARIO_DESCRIPTOR_INVALID\""));
+
+        verify(lifecycle, never()).startSwarm(
+            anyString(),
+            anyString(),
+            anyString(),
+            any(SwarmTemplateMetadata.class),
+            anyBoolean(),
+            any(),
+            any(),
+            any());
+        assertThat(plans.find(BeeNameGenerator.generate("swarm-controller", "sw1"))).isEmpty();
+    }
+
+    @Test
     void createReturnsExistingCorrelationWhenSwarmAlreadyExists() {
         SwarmStore registry = new SwarmStore();
         Swarm swarm = new Swarm("sw1", "inst", "c", "run-1");
@@ -1292,7 +1356,7 @@ class SwarmControllerTest {
 
         Files.writeString(journal, mapper.writeValueAsString(entry) + "\n");
 
-        ResponseEntity<List<Map<String, Object>>> response = ctrl.journal("sw1", "run-1");
+        ResponseEntity<List<Map<String, Object>>> response = ctrl.journal("sw1", "run-1", null);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isNotNull();
@@ -1308,6 +1372,45 @@ class SwarmControllerTest {
         Map<String, Object> parsedScope = (Map<String, Object>) parsed.get("scope");
         assertThat(parsedScope.get("swarmId")).isEqualTo("sw1");
         assertThat(parsedScope.get("role")).isEqualTo("swarm-controller");
+    }
+
+    @Test
+    void journalFiltersRuntimeRootEntriesBySeverity() throws Exception {
+        SwarmJournalController ctrl = journalController(new SwarmStore());
+        Path root = Path.of("scenarios-runtime").toAbsolutePath().normalize();
+        Path swarmDir = root.resolve("sw-severity").resolve("run-1");
+        Files.createDirectories(swarmDir);
+        Path journal = swarmDir.resolve("journal.ndjson");
+
+        Map<String, Object> info = new LinkedHashMap<>();
+        info.put("timestamp", "2025-01-01T00:00:00Z");
+        info.put("swarmId", "sw-severity");
+        info.put("severity", "INFO");
+        info.put("kind", "signal");
+
+        Map<String, Object> error = new LinkedHashMap<>();
+        error.put("timestamp", "2025-01-01T00:00:01Z");
+        error.put("swarmId", "sw-severity");
+        error.put("severity", "ERROR");
+        error.put("kind", "signal");
+
+        Files.writeString(journal, mapper.writeValueAsString(info) + "\n" + mapper.writeValueAsString(error) + "\n");
+
+        ResponseEntity<List<Map<String, Object>>> response = ctrl.journal("sw-severity", "run-1", "ERROR");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody()).hasSize(1);
+        assertThat(response.getBody().get(0).get("severity")).isEqualTo("ERROR");
+    }
+
+    @Test
+    void journalRejectsInvalidSeverityFilter() {
+        SwarmJournalController ctrl = journalController(new SwarmStore());
+
+        ResponseEntity<List<Map<String, Object>>> response = ctrl.journal("sw-severity", "run-1", "DEBUG");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     }
 
     private SwarmController controller(
@@ -1330,6 +1433,7 @@ class SwarmControllerTest {
             lenient().when(scenarioClient.fetchScenarioTemplate(anyString()))
                 .thenAnswer(invocation -> new ScenarioClient.ScenarioTemplateDescriptor(
                     invocation.getArgument(0),
+                    "bundles/" + invocation.getArgument(0),
                     "bundles/" + invocation.getArgument(0),
                     "bundles",
                     false));

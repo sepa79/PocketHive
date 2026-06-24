@@ -905,7 +905,7 @@ function wizardAssumptions(rawAnswers, answers) {
     assumptions.push("mockEndpoints generated from endpoints");
   }
   if (answers.dataSource === "CSV_DATASET") {
-    assumptions.push("CSV sample artifact generated; runtime still uses Scheduler because the current generator capability manifest exposes SCHEDULER and REDIS_DATASET inputs");
+    assumptions.push("CSV sample artifact generated and wired as generator CSV_DATASET input");
   }
   return assumptions;
 }
@@ -1317,7 +1317,7 @@ function wizardFlowDocument(session, answers, target) {
     "",
     "- Scenario shape follows `docs/scenarios/SCENARIO_CONTRACT.md` and `io.pockethive.scenarios.Scenario`.",
     "- Worker fields follow Scenario Manager capability manifests from `/api/capabilities`.",
-    "- Runtime validation should use `bundle.validate` with `validator: scenario-manager-dry-run` when Scenario Manager is available.",
+    "- Runtime validation must use `bundle.validate`; Scenario Manager is the canonical static bundle validator.",
     "",
     "## Target",
     "",
@@ -1454,7 +1454,19 @@ async function writeWizardBundle(session) {
     : answers.endpoints?.length > 1
       ? `{{ pickWeighted(${answers.endpoints.map(endpoint => `'${endpoint.callId}', 1`).join(", ")}) }}`
       : primaryCallId;
-  const generatorInputConfig = answers.dataSource === "REDIS_DATASET"
+  const usesDatasetInput = answers.dataSource === "REDIS_DATASET" || answers.dataSource === "CSV_DATASET";
+  const datasetPayloadBody = usesDatasetInput ? "{{ payload }}" : null;
+  const generatorInputConfig = answers.dataSource === "CSV_DATASET"
+    ? {
+        type: "CSV_DATASET",
+        csv: {
+          filePath: "/app/scenario/datasets/sample.csv",
+          ratePerSec: answers.defaultRatePerSec,
+          skipHeader: true,
+          rotate: false,
+        },
+      }
+    : answers.dataSource === "REDIS_DATASET"
     ? {
         type: "REDIS_DATASET",
         redis: answers.redisLists.length === 1
@@ -1484,7 +1496,7 @@ async function writeWizardBundle(session) {
           worker: {
             message: {
               bodyType: "SIMPLE",
-              body: answers.dataSource === "REDIS_DATASET" ? "{{ payload }}" : answers.tcpPayload,
+              body: datasetPayloadBody ?? answers.tcpPayload,
               headers: { "x-ph-call-id": primaryCallId },
             },
           },
@@ -1516,7 +1528,7 @@ async function writeWizardBundle(session) {
         config: {
           inputs: generatorInputConfig,
           outputs: { type: "RABBITMQ" },
-          worker: { message: { bodyType: "SIMPLE", body: answers.dataSource === "REDIS_DATASET" ? "{{ payload }}" : (answers.requestBody || "{}") } },
+          worker: { message: { bodyType: "SIMPLE", body: datasetPayloadBody ?? (answers.requestBody || "{}") } },
         },
       },
       {
@@ -1556,7 +1568,7 @@ async function writeWizardBundle(session) {
           worker: {
             message: {
               bodyType: "SIMPLE",
-              body: answers.dataSource === "REDIS_DATASET" ? "{{ payload }}" : "{}",
+              body: datasetPayloadBody ?? "{}",
               headers: { "x-ph-call-id": callIdTemplate, "x-ph-service-id": serviceId },
             },
           },
@@ -2009,7 +2021,7 @@ registerWorkflowTools({
   wizardMockEndpoints,
   validateWizardAnswers,
   writeWizardBundle,
-  runBundleCheck,
+  runGenerationSanityCheck,
   scenarioManagerDryRunValidateBundle,
   scenarioManagerUploadBundle,
   loadBundleMockConfig,
@@ -2127,9 +2139,9 @@ reg("wizard.complete", "Complete a wizard session and generate the bundle files.
     throw new Error(`Wizard is not complete. Missing: ${plan.missing.join(", ") || "none"}. Errors: ${plan.errors.join("; ") || "none"}`);
   }
   const generated = await writeWizardBundle(session);
-  const structural = await runBundleCheck(generated.bundleId);
+  const generationSanity = await runGenerationSanityCheck(generated.bundleId);
   WIZARD_SESSIONS.delete(sessionId);
-  return { completed: true, generated, structural };
+  return { completed: true, generated, generationSanity };
 });
 
 reg("wizard.enrich", "Enrich an existing bundle with missing artifacts (variables, authProfiles, SUT, mock stubs, templates, README, FLOW_DOCUMENT, CHANGELOG). Never overwrites existing files unless a force flag is set. IMPORTANT: do NOT call this tool if the current plan has a non-null humanCheckpoint — all humanCheckpoint.questions must be answered by the human and submitted via wizard.answer first.", {
@@ -2144,12 +2156,12 @@ reg("wizard.enrich", "Enrich an existing bundle with missing artifacts (variable
     throw new Error(`Wizard is not complete. Missing: ${plan.missing.join(", ") || "none"}. Errors: ${plan.errors.join("; ") || "none"}`);
   }
   const result = await enrichWizardBundle(session, { forceReadme, forceFlowDoc, forceChangelog });
-  const structural = await runBundleCheck(result.bundleId);
+  const generationSanity = await runGenerationSanityCheck(result.bundleId);
   WIZARD_SESSIONS.delete(sessionId);
-  return { ...result, structural };
+  return { ...result, generationSanity };
 });
 
-async function runBundleCheck(bundle) {
+async function runGenerationSanityCheck(bundle) {
   const targetBundleDir = bundleDir(bundle);
   const scenarioPath = resolve(targetBundleDir, "scenario.yaml");
   const checks = [];
@@ -2310,17 +2322,40 @@ async function runBundleCheck(bundle) {
     errors,
     warnings,
     artifacts,
-    source: "bundle.check.structural",
+    source: "bundle.generation-sanity",
   };
 }
 
-reg("bundle.check", "Run a fast structural check on a bundle without shelling out.", {
-  bundle: BUNDLE_ARG,
-}, async ({ bundle }) => runBundleCheck(bundle));
+class BundlePackagingError extends Error {
+  constructor(message, { path = null, fix = "Repair the generated bundle files and rerun validation." } = {}) {
+    super(message);
+    this.name = "BundlePackagingError";
+    this.code = "BUNDLE_PACKAGING_FAILED";
+    this.localGenerationDefect = true;
+    this.finding = {
+      category: "bundle",
+      code: "BUNDLE_PACKAGING_FAILED",
+      severity: "error",
+      path,
+      message,
+      fix,
+    };
+  }
+}
 
 async function createBundleZipBytes(bundle) {
   const targetBundleDir = bundleDir(bundle);
-  if (!existsSync(resolve(targetBundleDir, "scenario.yaml"))) throw new Error(`No scenario.yaml found in bundle '${bundle}'`);
+  if (!existsSync(targetBundleDir)) {
+    throw new BundlePackagingError(`Bundle directory not found for '${bundle}'`, {
+      fix: "Regenerate the workflow bundle or correct the bundle id, then rerun validation.",
+    });
+  }
+  if (!existsSync(resolve(targetBundleDir, "scenario.yaml"))) {
+    throw new BundlePackagingError(`No scenario.yaml found in bundle '${bundle}'`, {
+      path: "scenario.yaml",
+      fix: "Restore scenario.yaml in the generated bundle, then rerun validation.",
+    });
+  }
   const { createWriteStream } = await import("node:fs");
   const archiver = await import("archiver").catch(() => null);
   if (!archiver) throw new Error("archiver dependency is required for Scenario Manager bundle upload validation");
@@ -2381,7 +2416,7 @@ async function scenarioManagerUploadBundle(bundle, { replaceExisting = true } = 
 async function scenarioManagerDryRunValidateBundle(bundle) {
   const zipBytes = await createBundleZipBytes(bundle);
   try {
-    return await httpJson(`${SM_URL}/scenario-bundles/validate`, {
+    return await httpJson(`${SM_URL}/validation/scenario-bundles`, {
       method: "POST",
       body: zipBytes,
       headers: { "content-type": "application/zip" },
@@ -2491,45 +2526,30 @@ setInterval(() => {
   }
 }, 60_000).unref();
 
-reg("bundle.validate", "Start async validation of a bundle. Returns a jobId immediately. Poll with bundle.validate.result.", {
+reg("bundle.validate", "Start async Scenario Manager validation of a bundle. Returns a jobId immediately. Poll with bundle.validate.result.", {
   bundle: BUNDLE_ARG,
-  validator: z.enum(["local-structural", "scenario-manager-dry-run", "scenario-manager-upload"]).optional().describe("local-structural runs bundle.check only. scenario-manager-dry-run validates through Scenario Manager without writes. scenario-manager-upload validates through Scenario Manager upload/replace and has write side effects."),
+  validator: z.enum(["scenario-manager-dry-run", "scenario-manager-upload"]).optional().default("scenario-manager-dry-run").describe("scenario-manager-dry-run validates through Scenario Manager without writes. scenario-manager-upload validates through Scenario Manager upload/replace and has write side effects."),
   replaceExisting: z.boolean().optional().describe("Only for scenario-manager-upload. Allows replacing an existing Scenario Manager bundle."),
-}, async ({ bundle, validator = "local-structural", replaceExisting = true }) => {
-  const check = await runBundleCheck(bundle);
-  if (!check.ok) {
-    throw new Error(`Bundle '${bundle}' failed structural check: ${check.errors.map(e => e.message).join("; ")}`);
-  }
-
+}, async ({ bundle, validator = "scenario-manager-dry-run", replaceExisting = true }) => {
   const jobId = `${bundle}-${validator}-${Date.now()}`;
   _validateJobs.set(jobId, { status: "running", result: null, error: null, startedAt: Date.now() });
 
   (async () => {
     try {
-      const structural = await runBundleCheck(bundle);
       let result;
       if (validator === "scenario-manager-dry-run") {
         result = {
           mode: validator,
           source: "scenario-manager-api",
-          structural,
           scenarioManager: await scenarioManagerDryRunValidateBundle(bundle),
           note: "Scenario Manager dry-run validation uses the running Scenario Manager contract without importing or replacing the bundle.",
-        };
-      } else if (validator === "scenario-manager-upload") {
-        result = {
-          mode: validator,
-          source: "scenario-manager-api",
-          structural,
-          scenarioManager: await scenarioManagerUploadBundle(bundle, { replaceExisting }),
-          note: "Scenario Manager upload/replace validates using the running Scenario Manager contract and stores/replaces the bundle there.",
         };
       } else {
         result = {
           mode: validator,
-          source: "bundle.check",
-          structural,
-          note: "Local structural validation only. Use validator=scenario-manager-dry-run when live Scenario Manager validation is intended.",
+          source: "scenario-manager-api",
+          scenarioManager: await scenarioManagerUploadBundle(bundle, { replaceExisting }),
+          note: "Scenario Manager upload/replace validates using the running Scenario Manager contract and stores/replaces the bundle there.",
         };
       }
       _validateJobs.set(jobId, { status: "done", result, error: null, startedAt: _validateJobs.get(jobId).startedAt });
@@ -2763,8 +2783,12 @@ reg("debug.tap.close", "Close and delete a debug tap", {
 reg("debug.journal", "Read swarm journal (timeline of control-plane events)", {
   swarmId: SWARM_ID_ARG,
   limit: z.number().optional().default(50),
-}, async ({ swarmId, limit }) => {
-  return await httpJson(`/api/swarms/${encodeURIComponent(swarmId)}/journal/page?limit=${limit}`);
+  severity: z.enum(["ERROR", "WARN", "INFO"]).optional(),
+}, async ({ swarmId, limit, severity }) => {
+  const query = new URLSearchParams();
+  query.set("limit", String(limit));
+  if (severity !== undefined) query.set("severity", severity);
+  return await httpJson(`/api/swarms/${encodeURIComponent(swarmId)}/journal/page?${query.toString()}`);
 });
 
 reg("debug.hive-journal", "Read hive-level journal entries through Orchestrator.", {

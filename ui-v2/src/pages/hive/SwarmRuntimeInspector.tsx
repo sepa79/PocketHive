@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   getRabbitTopology,
   getRuntimeLogs,
-  getRuntimeVersion,
   inspectRuntime,
   listRuntimeResources,
   type RabbitTopologySnapshot,
@@ -10,7 +9,6 @@ import {
   type RuntimeLogsResponse,
   type RuntimeResource,
   type RuntimeResourceListResponse,
-  type RuntimeVersionResponse,
 } from '../../lib/runtimeDebugApi'
 
 type RuntimeInspectorProps = {
@@ -18,7 +16,7 @@ type RuntimeInspectorProps = {
   runId: string | null
 }
 
-type InspectorAction = 'logs' | 'version' | 'inspect'
+type InspectorAction = 'logs' | 'inspect'
 
 function runtimeKey(resource: RuntimeResource): string {
   return [
@@ -37,8 +35,6 @@ function runtimeSubtitle(resource: RuntimeResource): string {
   const parts = [
     resource.resourceKind ?? 'resource',
     resource.role,
-    resource.runtimeType,
-    resource.state,
   ].filter((part): part is string => typeof part === 'string' && part.trim().length > 0)
   return parts.join(' · ')
 }
@@ -71,7 +67,6 @@ export function SwarmRuntimeInspector({ swarmId, runId }: RuntimeInspectorProps)
   const [actionBusy, setActionBusy] = useState<InspectorAction | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [logs, setLogs] = useState<RuntimeLogsResponse | null>(null)
-  const [version, setVersion] = useState<RuntimeVersionResponse | null>(null)
   const [inspect, setInspect] = useState<RuntimeInspectResponse | null>(null)
   const loadSequence = useRef(0)
   const actionSequence = useRef(0)
@@ -134,7 +129,6 @@ export function SwarmRuntimeInspector({ swarmId, runId }: RuntimeInspectorProps)
       setRabbit(null)
       setSelectedKey(null)
       setLogs(null)
-      setVersion(null)
       setInspect(null)
       setActionError(null)
     }
@@ -146,7 +140,6 @@ export function SwarmRuntimeInspector({ swarmId, runId }: RuntimeInspectorProps)
     setActionBusy(null)
     setActionError(null)
     setLogs(null)
-    setVersion(null)
     setInspect(null)
   }, [selectedResourceKey])
 
@@ -168,15 +161,6 @@ export function SwarmRuntimeInspector({ swarmId, runId }: RuntimeInspectorProps)
           })
           if (actionSequence.current !== sequence) return
           setLogs(nextLogs)
-        } else if (action === 'version') {
-          const nextVersion = await getRuntimeVersion({
-            swarmId,
-            runId,
-            runtimeId: selectedRuntimeId,
-            resourceKind: selectedResourceKind,
-          })
-          if (actionSequence.current !== sequence) return
-          setVersion(nextVersion)
         } else {
           const nextInspect = await inspectRuntime({
             swarmId,
@@ -326,14 +310,6 @@ export function SwarmRuntimeInspector({ swarmId, runId }: RuntimeInspectorProps)
                   type="button"
                   className="actionButton actionButtonGhost"
                   disabled={!selectedRuntimeId || actionBusy !== null}
-                  onClick={() => void runAction('version')}
-                >
-                  Version
-                </button>
-                <button
-                  type="button"
-                  className="actionButton actionButtonGhost"
-                  disabled={!selectedRuntimeId || actionBusy !== null}
                   onClick={() => void runAction('inspect')}
                 >
                   Inspect
@@ -348,12 +324,6 @@ export function SwarmRuntimeInspector({ swarmId, runId }: RuntimeInspectorProps)
                   <div className="fieldLabel">Logs</div>
                   <pre className="codePre runtimeCodePre">
                     {logs ? logs.logs || '(empty)' : '—'}
-                  </pre>
-                </div>
-                <div>
-                  <div className="fieldLabel">Version</div>
-                  <pre className="codePre runtimeCodePre">
-                    {version ? safeJson(version) : '—'}
                   </pre>
                 </div>
                 <div>

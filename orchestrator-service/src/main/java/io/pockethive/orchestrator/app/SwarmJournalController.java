@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -64,13 +65,22 @@ public class SwarmJournalController {
      */
     @GetMapping("/{swarmId}/journal")
     public ResponseEntity<List<Map<String, Object>>> journal(@PathVariable String swarmId,
-                                                             @RequestParam(required = false) String runId) {
+                                                             @RequestParam(required = false) String runId,
+                                                             @RequestParam(required = false) String severity) {
         String path = "/api/swarms/" + swarmId + "/journal";
         logRestRequest("GET", path, null);
         endpointAuthorization.requireReadSwarm(swarmId);
+        String severityFilter;
+        try {
+            severityFilter = normalizeSeverityFilter(severity);
+        } catch (IllegalArgumentException ex) {
+            ResponseEntity<List<Map<String, Object>>> response = ResponseEntity.badRequest().build();
+            logRestResponse("GET", path, response);
+            return response;
+        }
         ResponseEntity<List<Map<String, Object>>> response;
         try {
-            List<Map<String, Object>> entries = readJournalEntries(swarmId, runId);
+            List<Map<String, Object>> entries = readJournalEntries(swarmId, runId, severityFilter);
             if (entries == null) {
                 response = ResponseEntity.notFound().build();
             } else {
@@ -98,7 +108,8 @@ public class SwarmJournalController {
                                                            @RequestParam(required = false) Long beforeId,
                                                            @RequestParam(required = false) Integer limit,
                                                            @RequestParam(required = false) String runId,
-                                                           @RequestParam(required = false) String correlationId) {
+                                                           @RequestParam(required = false) String correlationId,
+                                                           @RequestParam(required = false) String severity) {
         String path = "/api/swarms/" + swarmId + "/journal/page";
         logRestRequest("GET", path, null);
         endpointAuthorization.requireReadSwarm(swarmId);
@@ -112,6 +123,14 @@ public class SwarmJournalController {
             logRestResponse("GET", path, response);
             return response;
         }
+        String severityFilter;
+        try {
+            severityFilter = normalizeSeverityFilter(severity);
+        } catch (IllegalArgumentException ex) {
+            ResponseEntity<JournalPageResponse> response = ResponseEntity.badRequest().build();
+            logRestResponse("GET", path, response);
+            return response;
+        }
         int pageSize = limit == null ? 200 : Math.max(1, Math.min(1000, limit));
         String corr = correlationId == null ? null : correlationId.trim();
         if (corr != null && corr.isBlank()) {
@@ -119,7 +138,7 @@ public class SwarmJournalController {
         }
         ResponseEntity<JournalPageResponse> response;
         try {
-            JournalPageResponse page = readJournalPageFromPostgres("SWARM", swarmId, runId, corr, beforeTs, beforeId, pageSize);
+            JournalPageResponse page = readJournalPageFromPostgres("SWARM", swarmId, runId, corr, severityFilter, beforeTs, beforeId, pageSize);
             if (page == null) {
                 response = ResponseEntity.notFound().build();
             } else {
@@ -345,9 +364,9 @@ public class SwarmJournalController {
         return response;
     }
 
-    private List<Map<String, Object>> readJournalEntries(String swarmId, String requestedRunId) {
+    private List<Map<String, Object>> readJournalEntries(String swarmId, String requestedRunId, String severityFilter) {
         if ("postgres".equalsIgnoreCase(journalSink)) {
-            return readJournalEntriesFromPostgres(swarmId, requestedRunId);
+            return readJournalEntriesFromPostgres(swarmId, requestedRunId, severityFilter);
         }
         Path root = Paths.get(SCENARIOS_RUNTIME_ROOT).toAbsolutePath().normalize();
         String cleanedId = sanitizeSegment(swarmId);
@@ -384,7 +403,9 @@ public class SwarmJournalController {
             }
             try {
                 Map<String, Object> entry = json.readValue(trimmed, MAP_TYPE);
-                result.add(entry);
+                if (matchesSeverityFilter(entry, severityFilter)) {
+                    result.add(entry);
+                }
             } catch (Exception ex) {
                 log.warn("Skipping malformed journal line in {}: {}", journal, ex.getMessage());
             }
@@ -433,6 +454,7 @@ public class SwarmJournalController {
                                                            String swarmId,
                                                            String requestedRunId,
                                                            String correlationId,
+                                                           String severityFilter,
                                                            Instant beforeTs,
                                                            Long beforeId,
                                                            int limit) {
@@ -447,7 +469,7 @@ public class SwarmJournalController {
 
         UUID pinnedCapture = "SWARM".equalsIgnoreCase(scope) ? findPinnedCaptureId(cleanedId, runId) : null;
         if (pinnedCapture != null) {
-            return readJournalPageFromArchive(pinnedCapture, scope, cleanedId, runId, correlationId, beforeTs, beforeId, limit);
+            return readJournalPageFromArchive(pinnedCapture, scope, cleanedId, runId, correlationId, severityFilter, beforeTs, beforeId, limit);
         }
         record Row(long id, Instant ts, Map<String, Object> entry) {}
 
@@ -480,6 +502,10 @@ public class SwarmJournalController {
         if (correlationId != null) {
             sql.append(" AND correlation_id = ?");
             args.add(correlationId);
+        }
+        if (severityFilter != null) {
+            sql.append(" AND severity = ?");
+            args.add(severityFilter);
         }
         if (beforeTs != null && beforeId != null) {
             sql.append(" AND (ts, id) < (?, ?)");
@@ -533,7 +559,7 @@ public class SwarmJournalController {
         return new JournalPageResponse(items, cursor, hasMore);
     }
 
-    private List<Map<String, Object>> readJournalEntriesFromPostgres(String swarmId, String requestedRunId) {
+    private List<Map<String, Object>> readJournalEntriesFromPostgres(String swarmId, String requestedRunId, String severityFilter) {
         String cleanedId = sanitizeSegment(swarmId);
         if (cleanedId == null) {
             return null;
@@ -544,9 +570,9 @@ public class SwarmJournalController {
         }
         UUID pinnedCapture = findPinnedCaptureId(cleanedId, runId);
         if (pinnedCapture != null) {
-            return readJournalEntriesFromArchive(pinnedCapture, cleanedId, runId);
+            return readJournalEntriesFromArchive(pinnedCapture, cleanedId, runId, severityFilter);
         }
-        String sql = """
+        StringBuilder sql = new StringBuilder("""
             SELECT
               ts,
               swarm_id,
@@ -566,12 +592,16 @@ public class SwarmJournalController {
               extra::text AS extra
             FROM journal_event
             WHERE scope = 'SWARM' AND swarm_id = ? AND run_id = ?
-            ORDER BY ts ASC, id ASC
-            """;
-        List<Map<String, Object>> rows = jdbc.query(sql, ps -> {
-            ps.setString(1, cleanedId);
-            ps.setString(2, runId);
-        }, (rs, rowNum) -> {
+            """);
+        List<Object> args = new ArrayList<>();
+        args.add(cleanedId);
+        args.add(runId);
+        if (severityFilter != null) {
+            sql.append(" AND severity = ?");
+            args.add(severityFilter);
+        }
+        sql.append(" ORDER BY ts ASC, id ASC");
+        List<Map<String, Object>> rows = jdbc.query(sql.toString(), args.toArray(), (rs, rowNum) -> {
             var entry = new LinkedHashMap<String, Object>();
             var ts = rs.getTimestamp("ts");
             entry.put("timestamp", ts == null ? null : ts.toInstant());
@@ -740,6 +770,7 @@ public class SwarmJournalController {
                                                           String swarmId,
                                                           String runId,
                                                           String correlationId,
+                                                          String severityFilter,
                                                           Instant beforeTs,
                                                           Long beforeId,
                                                           int limit) {
@@ -774,6 +805,10 @@ public class SwarmJournalController {
         if (correlationId != null) {
             sql.append(" AND correlation_id = ?");
             args.add(correlationId);
+        }
+        if (severityFilter != null) {
+            sql.append(" AND severity = ?");
+            args.add(severityFilter);
         }
         if (beforeTs != null && beforeId != null) {
             sql.append(" AND (ts, id) < (?, ?)");
@@ -823,8 +858,8 @@ public class SwarmJournalController {
         return new JournalPageResponse(items, cursor, hasMore);
     }
 
-    private List<Map<String, Object>> readJournalEntriesFromArchive(UUID captureId, String swarmId, String runId) {
-        String sql = """
+    private List<Map<String, Object>> readJournalEntriesFromArchive(UUID captureId, String swarmId, String runId, String severityFilter) {
+        StringBuilder sql = new StringBuilder("""
             SELECT
               ts,
               swarm_id,
@@ -844,13 +879,17 @@ public class SwarmJournalController {
               extra::text AS extra
             FROM journal_event_archive
             WHERE capture_id = ? AND scope = 'SWARM' AND swarm_id = ? AND run_id = ?
-            ORDER BY ts ASC, id ASC
-            """;
-        List<Map<String, Object>> rows = jdbc.query(sql, ps -> {
-            ps.setObject(1, captureId);
-            ps.setString(2, swarmId);
-            ps.setString(3, runId);
-        }, (rs, rowNum) -> {
+            """);
+        List<Object> args = new ArrayList<>();
+        args.add(captureId);
+        args.add(swarmId);
+        args.add(runId);
+        if (severityFilter != null) {
+            sql.append(" AND severity = ?");
+            args.add(severityFilter);
+        }
+        sql.append(" ORDER BY ts ASC, id ASC");
+        List<Map<String, Object>> rows = jdbc.query(sql.toString(), args.toArray(), (rs, rowNum) -> {
             var entry = new LinkedHashMap<String, Object>();
             var ts = rs.getTimestamp("ts");
             entry.put("timestamp", ts == null ? null : ts.toInstant());
@@ -896,6 +935,28 @@ public class SwarmJournalController {
             return null;
         }
         return cleaned;
+    }
+
+    static String normalizeSeverityFilter(String severity) {
+        if (severity == null) {
+            return null;
+        }
+        String normalized = severity.trim().toUpperCase(Locale.ROOT);
+        if (normalized.isBlank()) {
+            return null;
+        }
+        return switch (normalized) {
+            case "ERROR", "WARN", "INFO" -> normalized;
+            default -> throw new IllegalArgumentException("severity must be one of ERROR, WARN, INFO");
+        };
+    }
+
+    private static boolean matchesSeverityFilter(Map<String, Object> entry, String severityFilter) {
+        if (severityFilter == null) {
+            return true;
+        }
+        Object severity = entry.get("severity");
+        return severity instanceof String value && severityFilter.equals(value.trim().toUpperCase(Locale.ROOT));
     }
 
     public record JournalRunSummary(String runId, Instant firstTs, Instant lastTs, long entries, boolean pinned) {}

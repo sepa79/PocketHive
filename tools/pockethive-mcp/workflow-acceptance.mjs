@@ -140,7 +140,7 @@ async function completeThreeAmigos(client, workflowId, roles = ["architect", "de
 async function generateValidateReport(client, workflowId, bundleId) {
   const generated = await call(client, "workflow_generate", { workflowId });
   assert.equal(generated.ok, true, `${bundleId} generation failed`);
-  const validated = await call(client, "workflow_validate", { workflowId, validator: "local-structural" });
+  const validated = await call(client, "workflow_validate", { workflowId });
   assert.equal(validated.ok, true, `${bundleId} validation failed`);
   const report = await call(client, "workflow_report", { workflowId });
   assert.equal(report.ok, true, `${bundleId} report failed`);
@@ -260,8 +260,8 @@ async function modifyWorkflowCase(client) {
     workflowId: start.workflowId,
     plan: {
       changeSummary: "Update README only while preserving the scenario contract.",
-      observability: { goal: "Reviewer can see structural validation after modification." },
-      successCriteria: { summary: "Bundle check passes after the README update." },
+      observability: { goal: "Reviewer can see Scenario Manager validation after modification." },
+      successCriteria: { summary: "Scenario Manager validation passes after the README update." },
     },
   });
   await call(client, "workflow_patch", {

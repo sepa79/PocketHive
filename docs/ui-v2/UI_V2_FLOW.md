@@ -143,7 +143,7 @@ Goal: add a compact, non-flickering “zoomed-in” view per swarm (similar inte
 
 ### What UI v1 Hive had (features to carry over)
 
-From `ui/src/pages/hive/*`:
+From archived UI v1 (`archive/legacy-ui/src/pages/hive/*`):
 - Graph view (React Flow) with stable node ids:
   - per-swarm filter mode + overview mode
   - queue depth influences edge color/width
@@ -153,6 +153,10 @@ From `ui/src/pages/hive/*`:
 - Selection loop: click node → show details panel; click list item → highlight in graph.
 - Queue table in component details (depth/consumers/health).
 - Extra nodes/edges for SUT (HTTP roles) and “guard” diagnostics (where available).
+- Live component configuration editing from capability manifests:
+  - click/select a bee or runtime component,
+  - show capability-backed config fields,
+  - submit an explicit runtime `config-update` patch.
 
 ### Data sources (SSOT / contracts first)
 
@@ -168,6 +172,41 @@ Use existing SSOT docs and schemas, do not handcraft parallel parsers:
 - Swarm metadata & selection:
   - Orchestrator REST (existing Hive list/details) for swarm ids, templateId, sut id, etc.
 
+### Hive Scenario Tab — Live Config Edit
+
+Live config editing is a must-have in UI v2. The first supported surface is:
+
+- `Hive -> /hive/:swarmId -> Scenario tab -> selected bee`.
+- The selected bee comes from Scenario Manager `template.bees[]`.
+- The runtime target comes from Orchestrator's cached swarm `status-full` aggregate:
+  `data.context.workers[]`, matched by role for the current implementation.
+- The field catalog comes from Scenario Manager capability manifests, matched to the
+  selected runtime image.
+- The mutation path is only Orchestrator:
+  `POST /api/components/{role}/{instance}/config` with `swarmId`,
+  `idempotencyKey`, and a `patch` object.
+
+Rules:
+
+- Do not edit scenario YAML as a substitute for live runtime config.
+- Do not send config updates through RabbitMQ directly from the browser.
+- Do not infer a runtime current value from scenario defaults. The current
+  value source is the worker `status-full.data.config` carried by the
+  swarm-controller aggregate at `data.context.workers[].config`. If it is not
+  available in the UI state, show that explicitly and build a patch only from
+  fields the user selects/changes.
+- The form must use capability `config[]` entries as the only field catalog.
+- A matched capability manifest must produce a visible `Edit config` action in
+  the selected worker panel. Capability summary text such as field counts is
+  secondary and must not be the only visible config surface.
+- When the action is disabled, the UI must show the specific reason next to the
+  action instead of leaving the user to infer it from disabled styling.
+- Hidden/conditional fields use capability `when`; fields not selected by the
+  user are omitted from the patch.
+- Empty patches are not sent unless the UI has an explicit reset action.
+- After a successful request, refresh the swarm snapshot; do not fabricate a
+  local config state.
+
 ### UX spec (compact, stable, “no flicker”)
 
 Layout proposal for `/v2/hive/:swarmId/view`:
@@ -179,6 +218,9 @@ Layout proposal for `/v2/hive/:swarmId/view`:
   - edges: from scenario `topology.edges` (logical), styled using runtime queue stats when available
   - edge label: resolved queue (or logical `port` pair) + depth/consumers (tooltip for details)
 - Top controls: Fit/Reset, Auto-layout (toggle), Freeze layout (toggle), Labels (toggle)
+- Runtime inspector resource list:
+  - show only operational identity in compact rows: running state pill, runtime instance/name, resource kind, role, and image
+  - do not show Docker adapter mode (`container`/`service`) or raw runtime state in each row; those are diagnostic details for the detail/inspect panel, not selection context
 
 “No flicker” rules (hard requirements):
 - Never blank/unmount the canvas on refresh; keep last-known graph and show a stale indicator instead.

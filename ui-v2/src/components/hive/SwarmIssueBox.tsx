@@ -3,10 +3,12 @@ import type { JournalIssue } from '../../lib/journal'
 export function SwarmIssueBox({
   issue,
   error,
+  loading = false,
   onOpenJournal,
 }: {
   issue: JournalIssue | null
   error: string | null
+  loading?: boolean
   onOpenJournal: () => void
 }) {
   if (error) {
@@ -24,7 +26,11 @@ export function SwarmIssueBox({
   }
 
   if (!issue) {
-    return null
+    return loading ? (
+      <div className="card journalIssueBox">
+        <div className="muted">Loading diagnostics...</div>
+      </div>
+    ) : null
   }
 
   return (

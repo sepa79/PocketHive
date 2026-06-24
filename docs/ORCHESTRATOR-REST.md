@@ -89,6 +89,10 @@ Returns `404` when the swarm id is unknown or no `status-full` has been cached y
 
 Returns the swarm-level journal entries as a JSON array (chronological order).
 
+**Query params**
+- `runId` (optional; when omitted, uses the active runId for the swarm if available)
+- `severity` (optional; exact match, one of `ERROR`, `WARN`, `INFO`)
+
 Notes:
 - This is a non-paginated “timeline” endpoint intended for UI/debug use.
 - When `pockethive.journal.sink=postgres`, entries are read from Postgres.
@@ -124,6 +128,7 @@ Availability: requires `pockethive.journal.sink=postgres`. Otherwise returns `50
 **Query params**
 - `limit` (optional, default `200`, max `1000`)
 - `correlationId` (optional)
+- `severity` (optional; exact match, one of `ERROR`, `WARN`, `INFO`)
 - `runId` (optional; when omitted, uses the active runId for the swarm if available, else latest recorded run)
 - `beforeTs` + `beforeId` (optional cursor pair; use the `nextCursor` from the previous response)
 

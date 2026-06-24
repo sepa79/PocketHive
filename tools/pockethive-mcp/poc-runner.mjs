@@ -193,7 +193,7 @@ async function runOfflinePoc() {
     log("wizard_summary", summary.scenario.pattern);
 
     const complete = await call(client, "wizard_complete", { sessionId: start.sessionId });
-    if (!complete.completed || !complete.structural?.ok) {
+    if (!complete.completed || !complete.generationSanity?.ok) {
       throw new Error(`Wizard completion failed: ${JSON.stringify(complete, null, 2)}`);
     }
     log("wizard_complete", complete.generated.path);
@@ -208,10 +208,6 @@ async function runOfflinePoc() {
       throw new Error("Generated bundle is missing one or more expected wizard artifacts");
     }
     log("bundle files", "scenario.yaml + templates/http/default/onboarding.yaml + docs/mock artifacts");
-
-    const check = await call(client, "bundle_check", { bundle: BUNDLE_ID });
-    if (!check.ok) throw new Error(`bundle_check failed: ${JSON.stringify(check.errors, null, 2)}`);
-    log("bundle_check", "ok");
 
     const resources = await client.listResources();
     const widget = resources.resources.find(resource => resource.uri === "ui://pockethive/evidence-summary-v1.html");

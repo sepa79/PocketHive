@@ -5,13 +5,18 @@ import { BrowserRouter, MemoryRouter } from 'react-router-dom'
 import App from './App'
 import './styles.css'
 import { installTheme } from './lib/theme'
-import { bootstrapControlPlane } from './lib/controlPlane/bootstrap'
 import { startControlPlaneHealth } from './lib/controlPlane/healthStore'
 import { detectUiBasename } from './lib/routing/basename'
 import { AuthProvider } from './lib/authContext'
 import { installAuthenticatedFetch } from './lib/auth'
 
 declare const __PLUGIN_MODE__: boolean
+
+declare global {
+  interface Window {
+    __phPluginConfig?: unknown
+  }
+}
 
 installTheme()
 installAuthenticatedFetch()
@@ -33,9 +38,8 @@ if (isPlugin) {
     window.removeEventListener('message', onConfig)
 
     const { route = '/' } = msg.payload ?? {}
-    ;(window as any).__phPluginConfig = msg.payload
+    window.__phPluginConfig = msg.payload
 
-    bootstrapControlPlane()
     startControlPlaneHealth()
 
     renderApp(
@@ -45,7 +49,6 @@ if (isPlugin) {
     )
   })
 } else {
-  bootstrapControlPlane()
   startControlPlaneHealth()
 
   renderApp(

@@ -1,7 +1,7 @@
 import { apiFetch } from './api'
 import { randomId } from './id'
 import type { Component } from '../types/hive'
-import type { SwarmSummary, BeeSummary, SwarmJournalEntry } from '../types/orchestrator'
+import type { SwarmSummary, BeeSummary, SwarmJournalEntry, JournalSeverityFilter } from '../types/orchestrator'
 
 export interface JournalCursor {
   ts: string
@@ -354,8 +354,14 @@ export async function getSwarm(id: string): Promise<SwarmSummary | null> {
   return parseSwarmSummary(response)
 }
 
-export async function getSwarmJournal(id: string, options?: { runId?: string | null }): Promise<SwarmJournalEntry[]> {
-  const query = buildQuery({ runId: options?.runId ?? undefined })
+export async function getSwarmJournal(
+  id: string,
+  options?: { runId?: string | null; severity?: JournalSeverityFilter | null },
+): Promise<SwarmJournalEntry[]> {
+  const query = buildQuery({
+    runId: options?.runId ?? undefined,
+    severity: options?.severity ?? undefined,
+  })
   const response = await apiFetch(`/orchestrator/swarms/${id}/journal${query}`, {
     headers: { Accept: 'application/json' },
   })
@@ -393,17 +399,20 @@ export async function getSwarmJournalPage(
     limit?: number
     correlationId?: string | null
     runId?: string | null
+    severity?: JournalSeverityFilter | null
     before?: JournalCursor | null
   },
 ): Promise<JournalPageResponse | null> {
   const limit = options?.limit
   const correlationId = options?.correlationId ?? null
   const runId = options?.runId ?? null
+  const severity = options?.severity ?? null
   const before = options?.before ?? null
   const query = buildQuery({
     limit,
     correlationId: correlationId ?? undefined,
     runId: runId ?? undefined,
+    severity: severity ?? undefined,
     beforeTs: before?.ts ?? undefined,
     beforeId: before?.id ?? undefined,
   })

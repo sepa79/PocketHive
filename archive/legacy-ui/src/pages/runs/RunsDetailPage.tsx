@@ -7,7 +7,7 @@ import {
   pinSwarmJournalRun,
 } from '../../lib/orchestratorApi'
 import type { JournalCursor, JournalRunSummary } from '../../lib/orchestratorApi'
-import type { SwarmJournalEntry } from '../../types/orchestrator'
+import type { JournalSeverityFilter, SwarmJournalEntry } from '../../types/orchestrator'
 import { useUIStore } from '../../store'
 import { useConfig } from '../../lib/config'
 
@@ -36,7 +36,7 @@ export default function RunsDetailPage() {
   const [entries, setEntries] = useState<SwarmJournalEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [showErrorsOnly, setShowErrorsOnly] = useState(false)
+  const [severityFilter, setSeverityFilter] = useState<JournalSeverityFilter | ''>('')
   const [search, setSearch] = useState('')
   const [correlationFilter, setCorrelationFilter] = useState('')
   const [runId, setRunId] = useState<string>('')
@@ -104,8 +104,9 @@ export default function RunsDetailPage() {
       try {
         const correlationId = correlationFilter.trim() ? correlationFilter.trim() : null
         const resolvedRunId = runId.trim() ? runId.trim() : null
+        const severity = severityFilter || null
         try {
-          const page = await getSwarmJournalPage(swarmId, { limit: 200, correlationId, runId: resolvedRunId })
+          const page = await getSwarmJournalPage(swarmId, { limit: 200, correlationId, runId: resolvedRunId, severity })
           if (!cancelled) {
             setPagingSupported(true)
             const nextItems = page?.items ?? []
@@ -132,7 +133,7 @@ export default function RunsDetailPage() {
         } catch (err) {
           const status = err instanceof Error ? (err as Error & { status?: number }).status : undefined
           if (status === 501) {
-            const result = await getSwarmJournal(swarmId, { runId: resolvedRunId })
+            const result = await getSwarmJournal(swarmId, { runId: resolvedRunId, severity })
             if (!cancelled) {
               setPagingSupported(false)
               setEntries([...result].reverse())
@@ -167,7 +168,7 @@ export default function RunsDetailPage() {
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [swarmId, correlationFilter, runId])
+  }, [swarmId, correlationFilter, runId, severityFilter])
 
   const grafanaBaseUrl = useMemo(() => {
     const raw = cfg.grafana?.trim() ? cfg.grafana.trim() : '/grafana'
@@ -226,7 +227,7 @@ export default function RunsDetailPage() {
   const filtered = useMemo(() => {
     const text = search.trim().toLowerCase()
     return entries.filter((entry) => {
-      if (showErrorsOnly && entry.severity !== 'ERROR') return false
+      if (severityFilter && entry.severity !== severityFilter) return false
       if (!text) return true
       const haystack = [
         entry.kind,
@@ -245,7 +246,7 @@ export default function RunsDetailPage() {
         .toLowerCase()
       return haystack.includes(text)
     })
-  }, [entries, showErrorsOnly, search])
+  }, [entries, severityFilter, search])
 
   const grouped = useMemo((): JournalRow[] => {
     const rows: JournalRow[] = []
@@ -313,10 +314,12 @@ export default function RunsDetailPage() {
     try {
       const correlationId = correlationFilter.trim() ? correlationFilter.trim() : null
       const resolvedRunId = runId.trim() ? runId.trim() : null
+      const severity = severityFilter || null
       const page = await getSwarmJournalPage(swarmId, {
         limit: 500,
         correlationId,
         runId: resolvedRunId,
+        severity,
         before: cursor,
       })
       const nextItems = page?.items ?? []
@@ -478,15 +481,17 @@ export default function RunsDetailPage() {
           onChange={(e) => setCorrelationFilter(e.target.value)}
           className="w-full rounded-md border border-white/15 bg-slate-950/80 px-3 py-1.5 text-xs text-white/90 placeholder:text-white/40 focus:border-amber-400/60 focus:outline-none"
         />
-        <label className="flex items-center gap-2 text-white/70">
-          <input
-            type="checkbox"
-            className="h-3 w-3 rounded border-white/30 bg-slate-950/80 text-amber-400 focus:ring-amber-400"
-            checked={showErrorsOnly}
-            onChange={(e) => setShowErrorsOnly(e.target.checked)}
-          />
-          Errors only
-        </label>
+        <select
+          aria-label="Journal severity"
+          value={severityFilter}
+          onChange={(e) => setSeverityFilter(e.currentTarget.value as JournalSeverityFilter | '')}
+          className="w-full rounded-md border border-white/15 bg-slate-950/80 px-3 py-1.5 text-xs text-white/90 focus:border-amber-400/60 focus:outline-none"
+        >
+          <option value="">All severities</option>
+          <option value="ERROR">ERROR</option>
+          <option value="WARN">WARN</option>
+          <option value="INFO">INFO</option>
+        </select>
         <div className="flex items-center justify-end text-white/50">
           {loading
             ? 'Refreshing…'

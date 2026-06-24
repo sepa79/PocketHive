@@ -1,11 +1,11 @@
 {
   "name": "pockethive",
-  "version": "0.15.28",
+  "version": "0.15.30",
   "private": true,
   "description": "Development tooling for PocketHive",
   "scripts": {
     "build": "echo \"no build step\"",
-    "lint": "eslint -c ui/eslint.config.js \"ui/src/**/*.{ts,tsx}\"",
+    "lint": "npm run lint --prefix ui-v2",
     "mcp:agentic-evals": "npm run acceptance:agentic --prefix tools/pockethive-mcp",
     "mcp:doctor": "npm --prefix tools/pockethive-mcp run doctor --",
     "mcp:setup": "npm ci --prefix tools/pockethive-mcp",

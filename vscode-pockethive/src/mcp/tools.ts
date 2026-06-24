@@ -25,10 +25,6 @@ export async function bundleScaffold(bundleId: string, pattern: string, sutType 
   return call('bundle_scaffold', { bundleId, pattern, sutType });
 }
 
-export async function bundleCheck(bundle: unknown): Promise<BundleCheckResult> {
-  return call('bundle_check', { bundle: requireBundleName(bundle) }) as Promise<BundleCheckResult>;
-}
-
 export async function bundleValidate(bundle: unknown): Promise<{ jobId: string }> {
   return call('bundle_validate', { bundle: requireBundleName(bundle) }) as Promise<{ jobId: string }>;
 }
@@ -200,22 +196,19 @@ export interface ValidationResult {
   status: 'running' | 'done' | 'error';
   mode?: string;
   source?: string;
-  structural?: BundleCheckResult;
+  scenarioManager?: ScenarioManagerValidationResult;
   note?: string;
   error?: string;
   elapsedSeconds?: number;
 }
 
-export interface BundleCheckResult {
-  ok: boolean;
-  bundle: string;
-  path: string;
-  scenarioId?: string;
-  checks: Array<{ id: string; ok: boolean; message: string; severity: string }>;
-  errors: Array<{ id: string; message: string }>;
-  warnings: Array<{ id: string; message: string }>;
-  artifacts?: Record<string, boolean>;
+export interface ScenarioManagerValidationResult {
+  ok?: boolean;
   source?: string;
+  scenarioId?: string;
+  summary?: { errors?: number; warnings?: number };
+  findings?: Array<{ severity?: string; code?: string; path?: string; message?: string; fix?: string }>;
+  [key: string]: unknown;
 }
 
 export interface ScenarioSummary {

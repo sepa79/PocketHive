@@ -37,7 +37,8 @@
         document.querySelectorAll('#md img').forEach(img=>{
           const orig = img.getAttribute('src') || '';
           if(!orig) return;
-          // Repo uses 'ui/assets/...'; in app, alias /ui/ maps to docroot
+          // Repo keeps legacy UI assets under archive/legacy-ui/assets; /ui/ maps to docroot
+          if(/^archive\/legacy-ui\//.test(orig)) img.setAttribute('src', '/' + orig.replace(/^archive\/legacy-ui\//, 'ui/'));
           if(/^ui\//.test(orig)) img.setAttribute('src', '/' + orig.replace(/^\/?/, ''));
           else if(/^docs\//.test(orig)) img.setAttribute('src', '/' + orig.replace(/^\/?/, ''));
           else if(/^\.\//.test(orig)) img.setAttribute('src', orig.replace(/^\./, ''));

@@ -196,6 +196,48 @@ envelope refactor. This consolidates remaining UI items from:
 
 **Rule:** worker runtimes emit `status-full` after `config-update`, so start/stop can wait on those snapshots.
 
+### Runtime component config editing (UI v2)
+
+Live worker/bee config editing must be available in UI v2. The initial UI
+surface is the Hive swarm detail `Scenario` tab, where the user selects a bee
+and opens a capability-backed config-update form.
+
+Data sources and ownership:
+
+- Capability field definitions come from Scenario Manager `/api/capabilities`.
+- Runtime target identity comes from the Orchestrator swarm snapshot
+  `data.context.workers[]` entry for the selected bee.
+- Runtime mutations go through Orchestrator only:
+  `POST /api/components/{role}/{instance}/config`.
+- The request body includes `swarmId`, `idempotencyKey`, and `patch`; the
+  Orchestrator publishes `signal.config-update.<swarmId>.<role>.<instance>`.
+- Current runtime config values are authoritative only when they come from a
+  worker `status-full.data.config` snapshot carried through the
+  swarm-controller aggregate at `data.context.workers[].config`.
+- The swarm-controller aggregate must preserve the latest public worker config
+  reported by `status-full`, including an explicit empty object (`config: {}`).
+  Later `status-delta` events omit config and must not clear it.
+- If `data.context.workers[].config` is absent, the UI must show an explicit
+  "current config unavailable" state instead of treating scenario YAML or
+  capability defaults as current runtime state.
+
+UI behavior:
+
+- Render fields only from capability `config[]` entries.
+- A selected bee with matched config capabilities must show an explicit, visible
+  runtime config edit action. Capability summary text is not a substitute for
+  the edit affordance.
+- If the edit action is blocked, show the concrete blocking reason next to the
+  action (permission, missing runtime instance, missing role, or empty
+  capability config).
+- Apply capability `when` conditions against the visible form/current config.
+- Build a sparse patch from fields explicitly selected or changed by the user.
+- Omit unselected fields. Do not send empty patches except from a dedicated
+  reset action.
+- After Orchestrator accepts the update, refresh the swarm snapshot and rely on
+  subsequent status/outcome evidence; do not mutate local worker config as if it
+  were confirmed.
+
 ## 2) Topology-first join (runtime SSOT in `status-full`)
 
 - Scenario Manager remains template-only; UI reads current topology from `status-full` snapshots.

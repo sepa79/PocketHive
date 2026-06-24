@@ -5,8 +5,8 @@ currently does, what it *should* do (per the scenario contract), and what is
 missing or buggy.
 
 **Scope**
-- UI: `ui/src/pages/ScenariosPage.tsx` (the “Scenarios” page)
-- Shared config patch modal: `ui/src/components/ConfigUpdatePatchModal.tsx`
+- Legacy UI reference: `archive/legacy-ui/src/pages/ScenariosPage.tsx`
+- Legacy shared config patch modal: `archive/legacy-ui/src/components/ConfigUpdatePatchModal.tsx`
 - Capability-driven config: `docs/architecture/workerCapabilities.md`
 - Authoring contract: `docs/scenarios/SCENARIO_CONTRACT.md`
 - Plan semantics: `docs/scenarios/SCENARIO_PLAN_GUIDE.md`

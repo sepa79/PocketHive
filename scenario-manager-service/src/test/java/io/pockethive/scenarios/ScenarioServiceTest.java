@@ -5,6 +5,8 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import io.pockethive.capabilities.CapabilityCatalogueService;
+import io.pockethive.scenarios.validation.BundleValidationException;
+import io.pockethive.scenarios.validation.ScenarioBundleValidator;
 import io.pockethive.swarm.model.Bee;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -37,7 +39,7 @@ class ScenarioServiceTest {
         scenariosDir = Files.createDirectories(tempDir.resolve("scenarios"));
         capabilitiesDir = Files.createDirectories(tempDir.resolve("capabilities"));
         capabilities = new CapabilityCatalogueService(capabilitiesDir.toString());
-        service = new ScenarioService(scenariosDir.toString(), capabilities);
+        service = new ScenarioService(scenariosDir.toString(), tempDir.resolve("runtime"), capabilities);
     }
 
     @Test
@@ -46,7 +48,7 @@ class ScenarioServiceTest {
         writeManifest("worker", "worker-image");
         capabilities.reload();
 
-        writeScenario("available.yaml", """
+        writeScenario("available", """
                 id: available
                 name: Available Scenario
                 template:
@@ -68,6 +70,32 @@ class ScenarioServiceTest {
                 .containsExactly("available");
         assertThat(service.listDefunctSummaries()).isEmpty();
         assertThat(service.findAvailable("available")).isPresent();
+    }
+
+    @Test
+    void flatScenarioDescriptorsAreIgnored() throws IOException {
+        writeManifest("ctrl", "ctrl-image");
+        capabilities.reload();
+
+        Files.writeString(scenariosDir.resolve("flat.yaml"), """
+                id: flat
+                name: Flat Scenario
+                template:
+                  image: ctrl-image:latest
+                  bees: []
+                """);
+        Files.writeString(scenariosDir.resolve("scenario.yaml"), """
+                id: root
+                name: Root Scenario
+                template:
+                  image: ctrl-image:latest
+                  bees: []
+                """);
+
+        service.reload();
+
+        assertThat(service.listAllSummaries()).isEmpty();
+        assertThat(service.listBundleTemplates()).isEmpty();
     }
 
     @Test
@@ -105,7 +133,7 @@ class ScenarioServiceTest {
         writeManifest("ctrl", "ctrl-image");
         capabilities.reload();
 
-        writeScenario("defunct.yaml", """
+        writeScenario("defunct", """
                 id: defunct
                 name: Defunct Scenario
                 template:
@@ -120,7 +148,7 @@ class ScenarioServiceTest {
                           out: b
                 """);
 
-        Logger logger = (Logger) LoggerFactory.getLogger(ScenarioService.class);
+        Logger logger = (Logger) LoggerFactory.getLogger(ScenarioBundleValidator.class);
         ListAppender<ILoggingEvent> appender = new ListAppender<>();
         appender.start();
         logger.addAppender(appender);
@@ -147,7 +175,7 @@ class ScenarioServiceTest {
         writeManifest("worker", "worker-image");
         capabilities.reload();
 
-        writeScenario("healthy.yaml", """
+        writeScenario("healthy", """
                 id: healthy
                 name: Healthy Scenario
                 template:
@@ -162,7 +190,7 @@ class ScenarioServiceTest {
                           out: b
                 """);
 
-        writeScenario("broken.yaml", """
+        writeScenario("broken", """
                 id: broken
                 name: Broken Scenario
                 template:
@@ -308,7 +336,7 @@ class ScenarioServiceTest {
         writeManifest("worker", "worker-image");
         capabilities.reload();
 
-        writeScenario("guarded.yaml", """
+        writeScenario("guarded", """
                 id: guarded
                 name: Guarded Scenario
                 trafficPolicy:
@@ -353,7 +381,7 @@ class ScenarioServiceTest {
         capabilities.reload();
         service = new ScenarioService(scenariosDir.toString(), "experimental", capabilities);
 
-        writeScenario("defaulted.yaml", """
+        writeScenario("defaulted", """
                 id: defaulted
                 name: Defaulted Scenario
                 template:
@@ -384,7 +412,7 @@ class ScenarioServiceTest {
         capabilities.reload();
         service = new ScenarioService(scenariosDir.toString(), "runtime", capabilities);
 
-        writeScenario("runtime-tagged.yaml", """
+        writeScenario("runtime-tagged", """
                 id: runtime-tagged
                 name: Runtime Tagged Scenario
                 template:
@@ -416,7 +444,7 @@ class ScenarioServiceTest {
         capabilities.reload();
         service = new ScenarioService(scenariosDir.toString(), capabilities);
 
-        writeScenario("experimental.yaml", """
+        writeScenario("experimental", """
                 id: experimental
                 name: Experimental Scenario
                 template:
@@ -443,6 +471,10 @@ class ScenarioServiceTest {
 
     @Test
     void createBundleFromZipStoresNewBundlesUnderBundlesFolder() throws IOException {
+        writeManifest("ctrl", "ctrl-image");
+        writeManifest("worker", "worker-image");
+        capabilities.reload();
+
         byte[] zipBytes = scenarioBundleZip("""
                 id: uploaded-demo
                 name: Uploaded Demo
@@ -472,11 +504,57 @@ class ScenarioServiceTest {
     }
 
     @Test
+    void createBundleFromZipCopiesValidatedDescriptorRootFromNestedZip() throws IOException {
+        writeManifest("ctrl", "ctrl-image");
+        writeManifest("worker", "worker-image");
+        capabilities.reload();
+
+        byte[] zipBytes = scenarioBundleZip(Map.of(
+                "top-level/scenario.yaml", """
+                    id: nested-upload-demo
+                    name: Nested Upload Demo
+                    template:
+                      image: ctrl-image:latest
+                      bees:
+                        - role: worker
+                          image: worker-image:latest
+                          work:
+                            in:
+                              in: a
+                            out:
+                              out: b
+                    """,
+                "top-level/note.txt", "copied from validated root"));
+
+        Scenario created = service.createBundleFromZip(zipBytes);
+
+        Path targetDir = scenariosDir.resolve("bundles").resolve("nested-upload-demo");
+        assertThat(created.getId()).isEqualTo("nested-upload-demo");
+        assertThat(targetDir.resolve("scenario.yaml")).exists();
+        assertThat(targetDir.resolve("note.txt")).hasContent("copied from validated root");
+        assertThat(targetDir.resolve("top-level")).doesNotExist();
+    }
+
+    @Test
+    void replaceBundleFromZipRequiresExplicitExpectedScenarioId() throws IOException {
+        byte[] zipBytes = scenarioBundleZip("""
+                id: uploaded-demo
+                name: Uploaded Demo
+                template:
+                  image: ctrl-image:latest
+                  bees: []
+                """);
+
+        assertThatThrownBy(() -> service.replaceBundleFromZip(" ", zipBytes))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Scenario id must not be null or blank");
+    }
+
+    @Test
     void variablesValidationEmitsCoverageWarningsForRequiredVariables() throws IOException {
         writeBundleScenario("scenario-1");
-        Path bundle = service.bundleDir("scenario-1");
-        Files.createDirectories(bundle.resolve("sut").resolve("sut-A"));
-        Files.createDirectories(bundle.resolve("sut").resolve("sut-B"));
+        writeBundleSut("scenario-1", "sut-A");
+        writeBundleSut("scenario-1", "sut-B");
         service.reload();
 
         String raw = """
@@ -521,6 +599,36 @@ class ScenarioServiceTest {
     }
 
     @Test
+    void variablesValidationRejectsUnknownCanonicalSut() throws IOException {
+        writeBundleScenario("scenario-1");
+        writeBundleSut("scenario-1", "sut-A");
+        service.reload();
+
+        String raw = """
+                version: 1
+                definitions:
+                  - name: customerId
+                    scope: sut
+                    type: string
+                profiles:
+                  - id: default
+                    name: Default
+                values:
+                  sut:
+                    default:
+                      ghost:
+                        customerId: "123"
+                """;
+
+        ScenarioService.VariablesDocument doc = service.parseVariables(raw);
+
+        assertThatThrownBy(() -> service.validateVariables("scenario-1", doc))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("values.sut[default] references unknown sutId 'ghost'")
+                .hasMessageContaining("sut/<sutId>/sut.yaml");
+    }
+
+    @Test
     void bundleLocalSutRawCanBeWrittenReadAndDeleted() throws IOException {
         writeBundleScenario("scenario-1");
         service.reload();
@@ -548,10 +656,76 @@ class ScenarioServiceTest {
     }
 
     @Test
+    void bundleLocalSutReadRequiresCanonicalSutYaml() throws IOException {
+        writeBundleScenario("scenario-1");
+        service.reload();
+        Path sutRoot = service.bundleDir("scenario-1").resolve("sut");
+        Path ymlSut = Files.createDirectories(sutRoot.resolve("sut-yml"));
+        Files.writeString(ymlSut.resolve("sut.yml"), """
+                id: sut-yml
+                name: SUT YML
+                """);
+        Path jsonSut = Files.createDirectories(sutRoot.resolve("sut-json"));
+        Files.writeString(jsonSut.resolve("sut.json"), """
+                {"id":"sut-json","name":"SUT JSON"}
+                """);
+
+        assertThatThrownBy(() -> service.readBundleSut("scenario-1", "sut-yml"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("has no sut.yaml");
+        assertThatThrownBy(() -> service.readBundleSut("scenario-1", "sut-json"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("has no sut.yaml");
+        assertThatThrownBy(() -> service.listSutIds("scenario-1"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Failed to parse bundle-local SUT 'sut-json'")
+                .hasMessageContaining("has no sut.yaml");
+
+        writeBundleScenario("scenario-2");
+        sutRoot = service.bundleDir("scenario-2").resolve("sut");
+        Path wrongIdSut = Files.createDirectories(sutRoot.resolve("sut-wrong-id"));
+        Files.writeString(wrongIdSut.resolve("sut.yaml"), """
+                id: different-id
+                name: Wrong ID SUT
+                """);
+        service.reload();
+
+        assertThatThrownBy(() -> service.readBundleSut("scenario-2", "sut-wrong-id"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("does not match directory name");
+        assertThatThrownBy(() -> service.listSutIds("scenario-2"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Failed to parse bundle-local SUT 'sut-wrong-id'")
+                .hasMessageContaining("does not match directory name");
+    }
+
+    @Test
+    void prepareRuntimeDirectoryRejectsCurrentBrokenBundleBeforeClearingTarget() throws IOException {
+        writeManifest("ctrl", "ctrl-image");
+        capabilities.reload();
+        writeBundleScenario("scenario-1");
+        service.reload();
+
+        Path runtimeDir = service.runtimeDir("sw1");
+        Files.createDirectories(runtimeDir);
+        Path sentinel = runtimeDir.resolve("sentinel.txt");
+        Files.writeString(sentinel, "keep");
+
+        Path sutDir = Files.createDirectories(service.bundleDir("scenario-1").resolve("sut").resolve("wrong-id"));
+        Files.writeString(sutDir.resolve("sut.yaml"), """
+                id: different-id
+                name: Wrong ID
+                """);
+
+        assertThatThrownBy(() -> service.prepareRuntimeDirectory("scenario-1", "sw1"))
+                .isInstanceOf(BundleValidationException.class);
+        assertThat(Files.readString(sentinel)).isEqualTo("keep");
+    }
+
+    @Test
     void variablesSupportObjectTypeForSutScope() throws IOException {
         writeBundleScenario("scenario-1");
-        Path bundle = service.bundleDir("scenario-1");
-        Files.createDirectories(bundle.resolve("sut").resolve("webauth-local"));
+        writeBundleSut("scenario-1", "webauth-local");
         service.reload();
 
         String raw = """
@@ -594,8 +768,7 @@ class ScenarioServiceTest {
     @Test
     void variablesRejectNonObjectValueWhenTypeIsObject() throws IOException {
         writeBundleScenario("scenario-1");
-        Path bundle = service.bundleDir("scenario-1");
-        Files.createDirectories(bundle.resolve("sut").resolve("webauth-local"));
+        writeBundleSut("scenario-1", "webauth-local");
         service.reload();
 
         String raw = """
@@ -639,28 +812,43 @@ class ScenarioServiceTest {
         Files.writeString(capabilitiesDir.resolve(prefix + "-manifest.json"), manifest);
     }
 
-    private void writeScenario(String fileName, String content) throws IOException {
-        Files.writeString(scenariosDir.resolve(fileName), content);
+    private void writeScenario(String bundleName, String content) throws IOException {
+        Path bundle = Files.createDirectories(scenariosDir.resolve(bundleName));
+        Files.writeString(bundle.resolve(ScenarioBundleLayout.SCENARIO_DESCRIPTOR_FILE), content);
     }
 
-	    private void writeBundleScenario(String scenarioId) throws IOException {
-	        Path bundle = scenariosDir.resolve(scenarioId);
-	        Files.createDirectories(bundle);
-	        Files.writeString(bundle.resolve("scenario.yaml"), """
-	                id: %s
-	                name: %s
+    private void writeBundleScenario(String scenarioId) throws IOException {
+        Path bundle = scenariosDir.resolve(scenarioId);
+        Files.createDirectories(bundle);
+        Files.writeString(bundle.resolve("scenario.yaml"), """
+                id: %s
+                name: %s
                 template:
                   image: ctrl-image:latest
                   bees: []
                 """.formatted(scenarioId, scenarioId));
     }
 
+    private void writeBundleSut(String scenarioId, String sutId) throws IOException {
+        Path sutDir = Files.createDirectories(service.bundleDir(scenarioId).resolve("sut").resolve(sutId));
+        Files.writeString(sutDir.resolve("sut.yaml"), """
+                id: %s
+                name: %s
+                """.formatted(sutId, sutId));
+    }
+
     private byte[] scenarioBundleZip(String scenarioYaml) throws IOException {
+        return scenarioBundleZip(Map.of("scenario.yaml", scenarioYaml));
+    }
+
+    private byte[] scenarioBundleZip(Map<String, String> entries) throws IOException {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         try (ZipOutputStream zip = new ZipOutputStream(out)) {
-            zip.putNextEntry(new ZipEntry("scenario.yaml"));
-            zip.write(scenarioYaml.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-            zip.closeEntry();
+            for (Map.Entry<String, String> entry : entries.entrySet()) {
+                zip.putNextEntry(new ZipEntry(entry.getKey()));
+                zip.write(entry.getValue().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                zip.closeEntry();
+            }
         }
         return out.toByteArray();
     }

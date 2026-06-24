@@ -13,13 +13,19 @@
 
 declare const __PLUGIN_MODE__: boolean;
 
+declare global {
+  interface Window {
+    __phPluginMessage?: (msg: unknown) => void;
+  }
+}
+
 type PendingRequest = { resolve: (r: Response) => void; reject: (e: Error) => void };
 const pending = new Map<string, PendingRequest>();
 let seq = 0;
 
 // Called by the extension host when any message arrives from the plugin side.
 // Attach to window so the extension host can call it via executeScript.
-(window as any).__phPluginMessage = (msg: unknown) => {
+window.__phPluginMessage = (msg: unknown) => {
   if (!msg || typeof msg !== 'object') return;
   const m = msg as Record<string, unknown>;
 

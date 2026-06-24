@@ -1,4 +1,4 @@
-import type { JournalCursor, JournalPageResponse, SwarmJournalEntry } from './journal'
+import type { JournalCursor, JournalPageResponse, JournalSeverityFilter, SwarmJournalEntry } from './journal'
 import { normalizeJournalEntry } from './journal'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -79,6 +79,7 @@ export async function getSwarmJournalPage(
     limit?: number
     correlationId?: string | null
     runId?: string | null
+    severity?: JournalSeverityFilter | null
     before?: JournalCursor | null
   },
 ): Promise<JournalPageResponse | null> {
@@ -86,6 +87,7 @@ export async function getSwarmJournalPage(
     limit: options?.limit ?? undefined,
     correlationId: options?.correlationId ?? undefined,
     runId: options?.runId ?? undefined,
+    severity: options?.severity ?? undefined,
     beforeTs: options?.before?.ts ?? undefined,
     beforeId: options?.before?.id ?? undefined,
   })

@@ -10,6 +10,7 @@ import {
   disableSwarmManagers,
   listSwarms,
   getSwarm,
+  getSwarmJournalPage,
 } from './orchestratorApi'
 
 vi.mock('./api', () => ({
@@ -238,5 +239,23 @@ describe('orchestratorApi', () => {
       stackName: null,
       bees: [{ role: 'generator', image: 'gen:1' }],
     })
+  })
+
+  it('passes severity to swarm journal page query', async () => {
+    ;(apiFetch as unknown as Mock).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ items: [], nextCursor: null, hasMore: false }),
+    })
+
+    await getSwarmJournalPage('sw1', {
+      limit: 50,
+      runId: 'run-1',
+      severity: 'ERROR',
+    })
+
+    expect((apiFetch as unknown as Mock).mock.calls[0][0]).toBe(
+      '/orchestrator/swarms/sw1/journal/page?limit=50&runId=run-1&severity=ERROR',
+    )
   })
 })

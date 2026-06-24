@@ -6,6 +6,7 @@ import java.util.Objects;
 public final class OutcomeHeaders {
 
   public static final String CALL_ID = "x-ph-call-id";
+  public static final String SERVICE_ID = "x-ph-service-id";
   public static final String PROCESSOR_STATUS = "x-ph-processor-status";
   public static final String PROCESSOR_SUCCESS = "x-ph-processor-success";
   public static final String PROCESSOR_DURATION_MS = "x-ph-processor-duration-ms";

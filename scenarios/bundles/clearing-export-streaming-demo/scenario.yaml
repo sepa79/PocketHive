@@ -5,6 +5,7 @@ template:
   image: swarm-controller:latest
   bees:
     - role: generator
+      id: generator
       image: generator:latest
       config:
         outputs:
@@ -24,24 +25,32 @@ template:
       work:
         out:
           out: gen
-
+      ports:
+        - { id: out, direction: out }
     - role: moderator
+      id: moderator
       image: moderator:latest
       work:
         in:
           in: gen
         out:
           out: mod
-
+      ports:
+        - { id: in, direction: in }
+        - { id: out, direction: out }
     - role: processor
+      id: processor
       image: processor:latest
       work:
         in:
           in: mod
         out:
           out: post
-
+      ports:
+        - { id: in, direction: in }
+        - { id: out, direction: out }
     - role: clearing-export
+      id: clearing-export
       image: clearing-export:latest
       config:
         worker:
@@ -66,3 +75,18 @@ template:
       work:
         in:
           in: post
+      ports:
+        - { id: in, direction: in }
+
+topology:
+  version: 1
+  edges:
+    - id: e1
+      from: { beeId: generator, port: out }
+      to: { beeId: moderator, port: in }
+    - id: e2
+      from: { beeId: moderator, port: out }
+      to: { beeId: processor, port: in }
+    - id: e3
+      from: { beeId: processor, port: out }
+      to: { beeId: clearing-export, port: in }

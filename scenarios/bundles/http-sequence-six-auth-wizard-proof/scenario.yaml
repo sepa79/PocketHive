@@ -10,10 +10,13 @@ template:
   image: swarm-controller:latest
   bees:
     - role: generator
+      id: generator
       image: generator:latest
       work:
         out:
           out: seq
+      ports:
+        - { id: out, direction: out }
       config:
         inputs:
           type: SCHEDULER
@@ -27,12 +30,16 @@ template:
             bodyType: SIMPLE
             body: '{"customerId":"CUST-WIZ-1001","proofRun":"wizard-full-report"}'
     - role: http-sequence
+      id: http-sequence
       image: http-sequence:latest
       work:
         in:
           in: seq
         out:
           out: post
+      ports:
+        - { id: in, direction: in }
+        - { id: out, direction: out }
       env:
         WIZARD_PROOF_CLIENT_SECRET: local-dummy-wizard-proof-secret
       config:
@@ -88,10 +95,13 @@ template:
             bodyPreviewBytes: 4096
             redisTtlSeconds: 120
     - role: postprocessor
+      id: postprocessor
       image: postprocessor:latest
       work:
         in:
           in: post
+      ports:
+        - { id: in, direction: in }
 plan:
   version: 1
   source: wizard.complete
@@ -147,3 +157,13 @@ plan:
       resultCodePattern: '"ok"\s*:\s*(true|false)'
       successCodes:
         - "true"
+
+topology:
+  version: 1
+  edges:
+    - id: e1
+      from: { beeId: generator, port: out }
+      to: { beeId: http-sequence, port: in }
+    - id: e2
+      from: { beeId: http-sequence, port: out }
+      to: { beeId: postprocessor, port: in }

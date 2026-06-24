@@ -101,7 +101,7 @@ class OrchestratorAdminAuthTest {
                 PocketHivePermissionIds.VIEW,
                 PocketHiveResourceTypes.FOLDER,
                 "demo"));
-            assertThatThrownBy(() -> controller.journal("prod-swarm", null))
+            assertThatThrownBy(() -> controller.journal("prod-swarm", null, null))
                 .hasMessageContaining("403 FORBIDDEN");
         } finally {
             OrchestratorCurrentUserHolder.clear();
@@ -191,9 +191,9 @@ class OrchestratorAdminAuthTest {
             @Override
             public ScenarioTemplateDescriptor fetchScenarioTemplate(String templateId) {
                 if (templateId.startsWith("prod")) {
-                    return new ScenarioTemplateDescriptor(templateId, "prod/" + templateId, "prod", false);
+                    return new ScenarioTemplateDescriptor(templateId, "prod/" + templateId, "prod/" + templateId, "prod", false);
                 }
-                return new ScenarioTemplateDescriptor(templateId, "demo/" + templateId, "demo", false);
+                return new ScenarioTemplateDescriptor(templateId, "demo/" + templateId, "demo/" + templateId, "demo", false);
             }
 
             @Override

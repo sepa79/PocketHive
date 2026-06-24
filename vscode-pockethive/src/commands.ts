@@ -159,23 +159,25 @@ export async function validateBundleCommand(
       vscode.window.showErrorMessage(`PocketHive: Validation error for '${bundleName}': ${result.error}`);
       return;
     }
-    const structural = result.structural;
-    if (!structural) {
-      const message = result.note ?? 'No validation result was returned.';
+    const scenarioManager = result.scenarioManager;
+    if (!scenarioManager) {
+      const message = result.note ?? 'No Scenario Manager validation result was returned.';
       scenarioProvider.setValidationResult(bundleName, 'failed', message);
       vscode.window.showErrorMessage(`PocketHive: '${bundleName}' validation failed. ${message}`);
-    } else if (!structural.ok) {
-      const message = structural.errors[0]?.message ?? 'Bundle structure check failed.';
+    } else if (scenarioManager.ok !== true) {
+      const message = scenarioManager.findings?.find(finding => finding.severity === 'error')?.message
+        ?? 'Scenario Manager validation failed.';
       scenarioProvider.setValidationResult(bundleName, 'failed', message);
       vscode.window.showErrorMessage(`PocketHive: '${bundleName}' validation failed. ${message}`);
     } else {
       scenarioProvider.setValidationResult(bundleName, 'passed');
-      const warningText = structural.warnings.length ? ` ${structural.warnings.length} warning(s).` : '';
-      vscode.window.showInformationMessage(`PocketHive: '${bundleName}' structure check passed.${warningText}`);
+      const warnings = scenarioManager.summary?.warnings ?? scenarioManager.findings?.filter(finding => finding.severity === 'warning').length ?? 0;
+      const warningText = warnings ? ` ${warnings} warning(s).` : '';
+      vscode.window.showInformationMessage(`PocketHive: '${bundleName}' Scenario Manager validation passed.${warningText}`);
     }
   } catch (err) {
     scenarioProvider.setValidationResult(bundleName, 'failed', String(err));
-    vscode.window.showErrorMessage(`PocketHive: Validation failed — ${String(err)}`);
+    vscode.window.showErrorMessage(`PocketHive: Validation failed - ${String(err)}`);
   }
 }
 

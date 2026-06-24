@@ -4,6 +4,7 @@ import {
   formatJournalSummary,
   groupJournalEntries,
   journalSeverityTone,
+  type JournalSeverityFilter,
   type SwarmJournalEntry,
 } from '../../lib/journal'
 
@@ -35,6 +36,8 @@ export function JournalEntriesCard({
   emptyMessage,
   onSearchChange,
   onErrorsOnlyChange,
+  severityFilter,
+  onSeverityFilterChange,
   onLoadMore,
   onOpenSwarmJournal,
 }: {
@@ -50,6 +53,8 @@ export function JournalEntriesCard({
   emptyMessage: string
   onSearchChange: (value: string) => void
   onErrorsOnlyChange: (value: boolean) => void
+  severityFilter?: JournalSeverityFilter | ''
+  onSeverityFilterChange?: (value: JournalSeverityFilter | '') => void
   onLoadMore?: (() => void) | null
   onOpenSwarmJournal?: ((swarmId: string, runId?: string | null) => void) | null
 }) {
@@ -94,14 +99,28 @@ export function JournalEntriesCard({
             onChange={(event) => onSearchChange(event.currentTarget.value)}
             placeholder="Search journal..."
           />
-          <label className="journalToggle">
-            <input
-              type="checkbox"
-              checked={errorsOnly}
-              onChange={(event) => onErrorsOnlyChange(event.currentTarget.checked)}
-            />
-            <span>Errors only</span>
-          </label>
+          {onSeverityFilterChange ? (
+            <select
+              aria-label="Journal severity"
+              className="textInput textInputCompact"
+              value={severityFilter ?? ''}
+              onChange={(event) => onSeverityFilterChange(event.currentTarget.value as JournalSeverityFilter | '')}
+            >
+              <option value="">All severities</option>
+              <option value="ERROR">ERROR</option>
+              <option value="WARN">WARN</option>
+              <option value="INFO">INFO</option>
+            </select>
+          ) : (
+            <label className="journalToggle">
+              <input
+                type="checkbox"
+                checked={errorsOnly}
+                onChange={(event) => onErrorsOnlyChange(event.currentTarget.checked)}
+              />
+              <span>Errors only</span>
+            </label>
+          )}
           <div className="journalCount">{loading ? 'Refreshing…' : summaryLabel}</div>
         </div>
       </div>

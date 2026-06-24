@@ -15,7 +15,7 @@ Non-goals:
 Scenario Variables are named values with:
 
 - a **scope**: `global` or `sut`
-- a **type**: `string | int | float | bool`
+- a **type**: `string | int | float | bool | object`
 
 At swarm creation time the user selects:
 
@@ -134,10 +134,10 @@ values:
 Rules:
 - Definition names are unique.
 - `scope` is one of `global|sut`.
-- `type` is one of `string|int|float|bool`.
+- `type` is one of `string|int|float|bool|object`.
 - `profiles[*].id` values are unique.
 - `values.global` keys must be profile ids.
-- `values.sut` keys must be profile ids, and then `sutId` values that exist in `sut/`.
+- `values.sut` keys must be profile ids, and then `sutId` values that have a canonical bundle-local descriptor at `sut/<sutId>/sut.yaml`.
 
 ---
 
@@ -204,6 +204,7 @@ Type intent:
 - `int` and `float` are numeric in SpEL expressions.
 - `bool` is boolean in SpEL expressions.
 - `string` is a string.
+- `object` is a structured map/object.
 
 If a variable is missing, rendering fails fast (hard error).
 
@@ -224,7 +225,8 @@ Editor validation intent:
 
 - Hard errors (block save / block create):
   - unknown value keys not present in `definitions`
-  - type mismatch (`string|int|float|bool`)
+  - `values.sut` references to `sutId` values without canonical `sut/<sutId>/sut.yaml`
+  - type mismatch (`string|int|float|bool|object`)
   - missing `required` variables for a selected `(profileId, sutId)` at create time
 - Warnings (allow save):
   - incomplete matrix coverage (some `(profileId, sutId)` pairs missing values for non-required variables, or missing optional pairs)

@@ -6,6 +6,7 @@ import { ScenarioWorkspaceTree } from '../components/scenarios/ScenarioWorkspace
 import { useAuth } from '../lib/authContext'
 import { monacoLanguageForBundleFile } from '../lib/bundleEditor'
 import {
+  type BundleValidationResult,
   type BundleFilePayload,
   type BundleTemplateEntry,
   type BundleTreeNode,
@@ -17,8 +18,10 @@ import {
   listBundleWorkspaces,
   readBundleFile,
   readBundleTree,
+  reloadScenarioManager,
   renameBundleEntry,
   uploadScenarioBundle,
+  validateExistingScenarioBundle,
   writeBundleFile,
 } from '../lib/scenariosApi'
 
@@ -46,6 +49,12 @@ function joinPath(prefix: string, leaf: string): string {
   return prefix ? `${prefix}/${cleanLeaf}` : cleanLeaf
 }
 
+type BundleValidationPanelState = {
+  scope: 'all' | 'selected'
+  checkedAt: string
+  results: BundleValidationResult[]
+}
+
 export function ScenariosPage() {
   const auth = useAuth()
   const [loading, setLoading] = useState(false)
@@ -63,6 +72,9 @@ export function ScenariosPage() {
   const [selectedFileError, setSelectedFileError] = useState<string | null>(null)
 
   const [busy, setBusy] = useState(false)
+  const [validationBusy, setValidationBusy] = useState(false)
+  const [validationState, setValidationState] = useState<BundleValidationPanelState | null>(null)
+  const [validationError, setValidationError] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<BundleTemplateEntry | null>(null)
   const uploadInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -77,6 +89,20 @@ export function ScenariosPage() {
     () => items.filter((entry) => auth.canViewBundle(entry.bundlePath, entry.folderPath)),
     [auth, items],
   )
+  const validationTotals = useMemo(() => {
+    const results = validationState?.results ?? []
+    return {
+      bundles: results.length,
+      errors: results.reduce((sum, result) => sum + result.summary.errors, 0),
+      warnings: results.reduce((sum, result) => sum + result.summary.warnings, 0),
+      findings: results.flatMap((result) =>
+        result.findings.map((finding) => ({
+          result,
+          finding,
+        })),
+      ),
+    }
+  }, [validationState])
 
   useEffect(() => {
     let cancelled = false
@@ -164,8 +190,10 @@ export function ScenariosPage() {
         if (current && list.some((entry) => entry.bundleKey === current)) return current
         return list[0].bundleKey
       })
+      return list
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load scenarios')
+      return []
     } finally {
       setLoading(false)
     }
@@ -247,6 +275,43 @@ export function ScenariosPage() {
     if (!confirmDiscardChanges()) return
     await reload()
   }, [confirmDiscardChanges, reload])
+
+  const runBundleValidation = useCallback(
+    async (scope: 'all' | 'selected') => {
+      if (!auth.canManagePocketHive) return
+      if (!confirmDiscardChanges()) return
+      setValidationBusy(true)
+      setValidationError(null)
+      try {
+        await reloadScenarioManager()
+        const refreshed = await reload()
+        const targetBundleKey = selected?.bundleKey ?? selectedKey
+        const targets = scope === 'selected'
+          ? refreshed.filter((entry) => entry.bundleKey === targetBundleKey)
+          : refreshed
+        if (scope === 'selected' && targets.length === 0) {
+          throw new Error('Selected scenario has no bundle validation target')
+        }
+        if (scope === 'all' && targets.length === 0) {
+          throw new Error('No scenario bundle validation targets found')
+        }
+        const results: BundleValidationResult[] = []
+        for (const target of targets) {
+          results.push(await validateExistingScenarioBundle(target.bundleKey))
+        }
+        setValidationState({
+          scope,
+          checkedAt: new Date().toISOString(),
+          results,
+        })
+      } catch (e) {
+        setValidationError(e instanceof Error ? e.message : 'Bundle validation failed')
+      } finally {
+        setValidationBusy(false)
+      }
+    },
+    [auth.canManagePocketHive, confirmDiscardChanges, reload, selected, selectedKey],
+  )
 
   const handleSelectBundle = useCallback((bundleKey: string) => {
     if (bundleKey !== selectedKey && !confirmDiscardChanges()) return
@@ -418,9 +483,19 @@ export function ScenariosPage() {
             onChange={(event) => void handleUploadChange(event)}
           />
           {auth.canManagePocketHive ? (
-            <button type="button" className="actionButton" onClick={triggerUpload} disabled={busy}>
-              Upload bundle
-            </button>
+            <>
+              <button
+                type="button"
+                className="actionButton actionButtonGhost"
+                onClick={() => void runBundleValidation('all')}
+                disabled={busy || validationBusy}
+              >
+                Reload & validate all
+              </button>
+              <button type="button" className="actionButton" onClick={triggerUpload} disabled={busy || validationBusy}>
+                Upload bundle
+              </button>
+            </>
           ) : null}
           <div className="muted">Bundles can live anywhere under `scenarios/**`.</div>
         </div>
@@ -539,7 +614,71 @@ export function ScenariosPage() {
                 </div>
               ) : null}
 
+              <div className="scenarioValidationPanel">
+                <div className="row between">
+                  <div className="h2" style={{ fontSize: 13 }}>Bundle validation</div>
+                  <div className="row" style={{ gap: 8 }}>
+                    {validationBusy ? <span className="pill pillInfo">VALIDATING</span> : null}
+                    {validationState ? (
+                      <span className={validationTotals.errors > 0 ? 'pill pillBad' : 'pill pillOk'}>
+                        {validationTotals.errors} errors
+                      </span>
+                    ) : (
+                      <span className="pill pillWarn">NOT RUN</span>
+                    )}
+                  </div>
+                </div>
+
+                {validationError ? (
+                  <div className="warningText scenarioValidationMessage">{validationError}</div>
+                ) : validationState ? (
+                  <>
+                    <div className="scenarioValidationSummary">
+                      <span>{validationState.scope === 'all' ? 'All bundles' : 'Selected bundle'}</span>
+                      <span>{validationTotals.bundles} bundle{validationTotals.bundles === 1 ? '' : 's'}</span>
+                      <span>{validationTotals.warnings} warnings</span>
+                      <span>{new Date(validationState.checkedAt).toLocaleTimeString()}</span>
+                    </div>
+                    {validationTotals.findings.length > 0 ? (
+                      <div className="scenarioValidationFindings">
+                        {validationTotals.findings.slice(0, 10).map(({ result, finding }, index) => (
+                          <div
+                            key={`${result.bundleKey ?? result.scenarioId ?? 'bundle'}-${finding.code}-${finding.path}-${index}`}
+                            className="scenarioValidationFinding"
+                          >
+                            <div className="scenarioValidationFindingHeader">
+                              <span className={finding.severity === 'error' ? 'warningText' : 'scenarioValidationWarning'}>
+                                {finding.severity}
+                              </span>
+                              <span className="mono">{finding.code}</span>
+                              <span className="muted">{result.bundleKey ?? result.scenarioId ?? 'bundle'}</span>
+                              <span className="mono muted">{finding.path}</span>
+                            </div>
+                            <div>{finding.message}</div>
+                            <div className="muted">{finding.fix}</div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="scenarioValidationMessage">No findings.</div>
+                    )}
+                  </>
+                ) : (
+                  <div className="muted scenarioValidationMessage">No validation run in this session.</div>
+                )}
+              </div>
+
               <div className="scenarioWorkspaceActions">
+                {auth.canManagePocketHive ? (
+                  <button
+                    type="button"
+                    className="actionButton actionButtonGhost"
+                    onClick={() => void runBundleValidation('selected')}
+                    disabled={busy || validationBusy || !selected}
+                  >
+                    Reload & validate this
+                  </button>
+                ) : null}
                 <button type="button" className="actionButton" onClick={() => void handleSaveFile()} disabled={busy || !canManageSelected || !fileDirty}>
                   Save file
                 </button>

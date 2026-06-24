@@ -5,6 +5,7 @@ template:
   image: swarm-controller:latest
   bees:
     - role: generator
+      id: generator
       image: generator:latest
       config:
         inputs:
@@ -26,7 +27,10 @@ template:
       work:
         out:
           out: db
+      ports:
+        - { id: out, direction: out }
     - role: db-query
+      id: db-query
       image: db-query:latest
       config:
         worker:
@@ -60,7 +64,11 @@ template:
           in: db
         out:
           out: post
+      ports:
+        - { id: in, direction: in }
+        - { id: out, direction: out }
     - role: postprocessor
+      id: postprocessor
       image: postprocessor:latest
       config:
         worker:
@@ -70,3 +78,15 @@ template:
       work:
         in:
           in: post
+      ports:
+        - { id: in, direction: in }
+
+topology:
+  version: 1
+  edges:
+    - id: e1
+      from: { beeId: generator, port: out }
+      to: { beeId: db-query, port: in }
+    - id: e2
+      from: { beeId: db-query, port: out }
+      to: { beeId: postprocessor, port: in }

@@ -61,7 +61,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -226,7 +228,6 @@ public class SwarmController {
                 }
                 String image = requireImage(template, templateId);
                 SwarmPlan originalPlan = planDescriptor.toSwarmPlan(swarmId);
-                prepareScenarioRuntime(templateId, swarmId);
                 String runtimeRootSource = scenariosRuntimeRootSource;
                 if (runtimeRootSource == null || runtimeRootSource.isBlank()) {
                     throw new IllegalStateException("POCKETHIVE_SCENARIOS_RUNTIME_ROOT must not be blank");
@@ -332,20 +333,22 @@ public class SwarmController {
                     sutId,
                     finalSutEnvironment);
                 String instanceId = BeeNameGenerator.generate("swarm-controller", swarmId);
-                plans.register(instanceId, plan);
+                String planJson;
                 try {
-                    String planJson = json.writeValueAsString(timeline);
-                    timelines.register(instanceId, planJson);
+                    planJson = json.writeValueAsString(timeline);
                 } catch (JsonProcessingException e) {
                     throw new IllegalStateException("Failed to serialize scenario plan for swarm " + swarmId, e);
                 }
                 boolean autoPull = Boolean.TRUE.equals(req.autoPullImages());
+                if (networkMode == NetworkMode.PROXIED && resolvedSutEnvironment == null) {
+                    throw new IllegalStateException(
+                        "networkMode=PROXIED requires resolved SUT environment for swarm '%s'".formatted(swarmId));
+                }
+                prepareScenarioRuntime(templateId, swarmId);
+                plans.register(instanceId, plan);
+                timelines.register(instanceId, planJson);
                 boolean networkBindingApplied = false;
                 if (networkMode == NetworkMode.PROXIED) {
-                    if (resolvedSutEnvironment == null) {
-                        throw new IllegalStateException(
-                            "networkMode=PROXIED requires resolved SUT environment for swarm '%s'".formatted(swarmId));
-                    }
                     networkBindings.applyBinding(
                         swarmId,
                         sutId,
@@ -740,11 +743,42 @@ public class SwarmController {
                     "Scenario runtime for template %s and swarm %s returned empty path".formatted(templateId, swarmId));
             }
             return runtimeDir;
+        } catch (ScenarioClientException e) {
+            log.warn("scenario manager refused runtime preparation for template {} and swarm {}", templateId, swarmId, e);
+            throw e;
         } catch (Exception e) {
             log.warn("failed to prepare scenario runtime for template {} and swarm {}", templateId, swarmId, e);
             throw new IllegalStateException(
                 "Failed to prepare scenario runtime for template %s".formatted(templateId), e);
         }
+    }
+
+    @ExceptionHandler(ScenarioClientException.class)
+    ResponseEntity<?> scenarioManagerFailure(ScenarioClientException e) {
+        String body = e.responseBody();
+        if (body == null || body.isBlank()) {
+            return ResponseEntity.status(e.statusCode())
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(new ErrorResponse(e.getMessage()));
+        }
+        MediaType contentType = responseContentType(e.contentType(), body);
+        return ResponseEntity.status(e.statusCode())
+            .contentType(contentType)
+            .body(body);
+    }
+
+    private static MediaType responseContentType(String contentType, String body) {
+        if (contentType != null && !contentType.isBlank()) {
+            try {
+                return MediaType.parseMediaType(contentType);
+            } catch (RuntimeException ignored) {
+                // Fall through to body-based detection.
+            }
+        }
+        String trimmed = body == null ? "" : body.trim();
+        return trimmed.startsWith("{") || trimmed.startsWith("[")
+            ? MediaType.APPLICATION_JSON
+            : MediaType.TEXT_PLAIN;
     }
 
     /**

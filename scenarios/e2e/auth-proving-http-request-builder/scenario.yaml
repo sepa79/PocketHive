@@ -5,6 +5,7 @@ template:
   image: swarm-controller:latest
   bees:
     - role: gen-oauth-client
+      id: gen-oauth-client
       image: generator:latest
       config:
         inputs:
@@ -22,7 +23,10 @@ template:
       work:
         out:
           out: build
+      ports:
+        - { id: out, direction: out }
     - role: gen-oauth-password
+      id: gen-oauth-password
       image: generator:latest
       config:
         inputs:
@@ -40,7 +44,10 @@ template:
       work:
         out:
           out: build
+      ports:
+        - { id: out, direction: out }
     - role: gen-static-bearer
+      id: gen-static-bearer
       image: generator:latest
       config:
         inputs:
@@ -58,7 +65,10 @@ template:
       work:
         out:
           out: build
+      ports:
+        - { id: out, direction: out }
     - role: gen-basic
+      id: gen-basic
       image: generator:latest
       config:
         inputs:
@@ -76,7 +86,10 @@ template:
       work:
         out:
           out: build
+      ports:
+        - { id: out, direction: out }
     - role: gen-api-key
+      id: gen-api-key
       image: generator:latest
       config:
         inputs:
@@ -94,7 +107,10 @@ template:
       work:
         out:
           out: build
+      ports:
+        - { id: out, direction: out }
     - role: gen-query-token
+      id: gen-query-token
       image: generator:latest
       config:
         inputs:
@@ -112,7 +128,10 @@ template:
       work:
         out:
           out: build
+      ports:
+        - { id: out, direction: out }
     - role: gen-hmac
+      id: gen-hmac
       image: generator:latest
       config:
         inputs:
@@ -130,7 +149,10 @@ template:
       work:
         out:
           out: build
+      ports:
+        - { id: out, direction: out }
     - role: gen-aws
+      id: gen-aws
       image: generator:latest
       config:
         inputs:
@@ -148,7 +170,10 @@ template:
       work:
         out:
           out: build
+      ports:
+        - { id: out, direction: out }
     - role: request-builder
+      id: request-builder
       image: request-builder:latest
       config:
         worker:
@@ -160,7 +185,11 @@ template:
           in: build
         out:
           out: proc
+      ports:
+        - { id: in, direction: in }
+        - { id: out, direction: out }
     - role: processor
+      id: processor
       image: processor:latest
       config:
         worker:
@@ -170,8 +199,48 @@ template:
           in: proc
         out:
           out: post
+      ports:
+        - { id: in, direction: in }
+        - { id: out, direction: out }
     - role: postprocessor
+      id: postprocessor
       image: postprocessor:latest
       work:
         in:
           in: post
+      ports:
+        - { id: in, direction: in }
+
+topology:
+  version: 1
+  edges:
+    - id: e1
+      from: { beeId: gen-oauth-client, port: out }
+      to: { beeId: request-builder, port: in }
+    - id: e2
+      from: { beeId: gen-oauth-password, port: out }
+      to: { beeId: request-builder, port: in }
+    - id: e3
+      from: { beeId: gen-static-bearer, port: out }
+      to: { beeId: request-builder, port: in }
+    - id: e4
+      from: { beeId: gen-basic, port: out }
+      to: { beeId: request-builder, port: in }
+    - id: e5
+      from: { beeId: gen-api-key, port: out }
+      to: { beeId: request-builder, port: in }
+    - id: e6
+      from: { beeId: gen-query-token, port: out }
+      to: { beeId: request-builder, port: in }
+    - id: e7
+      from: { beeId: gen-hmac, port: out }
+      to: { beeId: request-builder, port: in }
+    - id: e8
+      from: { beeId: gen-aws, port: out }
+      to: { beeId: request-builder, port: in }
+    - id: e9
+      from: { beeId: request-builder, port: out }
+      to: { beeId: processor, port: in }
+    - id: e10
+      from: { beeId: processor, port: out }
+      to: { beeId: postprocessor, port: in }

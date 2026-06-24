@@ -5,6 +5,7 @@ template:
   image: swarm-controller:latest
   bees:
     - role: gen-tcp-prefix
+      id: gen-tcp-prefix
       image: generator:latest
       config:
         inputs:
@@ -21,7 +22,10 @@ template:
       work:
         out:
           out: build-tcp
+      ports:
+        - { id: out, direction: out }
     - role: rb-tcp-prefix
+      id: rb-tcp-prefix
       image: request-builder:latest
       config:
         worker:
@@ -33,7 +37,11 @@ template:
           in: build-tcp
         out:
           out: proc-tcp
+      ports:
+        - { id: in, direction: in }
+        - { id: out, direction: out }
     - role: proc-tcp-prefix
+      id: proc-tcp-prefix
       image: processor:latest
       config:
         worker:
@@ -49,7 +57,11 @@ template:
           in: proc-tcp
         out:
           out: post
+      ports:
+        - { id: in, direction: in }
+        - { id: out, direction: out }
     - role: gen-iso-mac
+      id: gen-iso-mac
       image: generator:latest
       config:
         inputs:
@@ -66,7 +78,10 @@ template:
       work:
         out:
           out: build-iso
+      ports:
+        - { id: out, direction: out }
     - role: rb-iso-mac
+      id: rb-iso-mac
       image: request-builder:latest
       config:
         worker:
@@ -78,7 +93,11 @@ template:
           in: build-iso
         out:
           out: proc-iso
+      ports:
+        - { id: in, direction: in }
+        - { id: out, direction: out }
     - role: proc-iso-mac
+      id: proc-iso-mac
       image: processor:latest
       config:
         worker:
@@ -95,7 +114,11 @@ template:
           in: proc-iso
         out:
           out: post
+      ports:
+        - { id: in, direction: in }
+        - { id: out, direction: out }
     - role: gen-mtls
+      id: gen-mtls
       image: generator:latest
       config:
         inputs:
@@ -112,7 +135,10 @@ template:
       work:
         out:
           out: build-mtls
+      ports:
+        - { id: out, direction: out }
     - role: rb-mtls
+      id: rb-mtls
       image: request-builder:latest
       config:
         worker:
@@ -124,7 +150,11 @@ template:
           in: build-mtls
         out:
           out: proc-mtls
+      ports:
+        - { id: in, direction: in }
+        - { id: out, direction: out }
     - role: proc-mtls
+      id: proc-mtls
       image: processor:latest
       config:
         worker:
@@ -141,8 +171,45 @@ template:
           in: proc-mtls
         out:
           out: post
+      ports:
+        - { id: in, direction: in }
+        - { id: out, direction: out }
     - role: postprocessor
+      id: postprocessor
       image: postprocessor:latest
       work:
         in:
           in: post
+      ports:
+        - { id: in, direction: in }
+
+topology:
+  version: 1
+  edges:
+    - id: e1
+      from: { beeId: gen-tcp-prefix, port: out }
+      to: { beeId: rb-tcp-prefix, port: in }
+    - id: e2
+      from: { beeId: rb-tcp-prefix, port: out }
+      to: { beeId: proc-tcp-prefix, port: in }
+    - id: e3
+      from: { beeId: proc-tcp-prefix, port: out }
+      to: { beeId: postprocessor, port: in }
+    - id: e4
+      from: { beeId: gen-iso-mac, port: out }
+      to: { beeId: rb-iso-mac, port: in }
+    - id: e5
+      from: { beeId: rb-iso-mac, port: out }
+      to: { beeId: proc-iso-mac, port: in }
+    - id: e6
+      from: { beeId: proc-iso-mac, port: out }
+      to: { beeId: postprocessor, port: in }
+    - id: e7
+      from: { beeId: gen-mtls, port: out }
+      to: { beeId: rb-mtls, port: in }
+    - id: e8
+      from: { beeId: rb-mtls, port: out }
+      to: { beeId: proc-mtls, port: in }
+    - id: e9
+      from: { beeId: proc-mtls, port: out }
+      to: { beeId: postprocessor, port: in }

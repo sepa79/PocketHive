@@ -4,14 +4,16 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.auth.client.AuthServiceServiceTokenProvider;
 import io.pockethive.orchestrator.app.ScenarioClient;
+import io.pockethive.orchestrator.app.ScenarioClientException;
 import io.pockethive.orchestrator.config.OrchestratorProperties;
 import io.pockethive.orchestrator.domain.ScenarioPlan;
 import io.pockethive.swarm.model.NetworkProfile;
 import io.pockethive.swarm.model.SutEnvironment;
-import java.util.Objects;
 import java.util.Map;
+import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Component;
 
 import java.net.URI;
@@ -54,9 +56,6 @@ public class ScenarioManagerClient implements ScenarioClient {
 
     @Override
     public ScenarioPlan fetchScenario(String templateId) throws Exception {
-        // NOTE: This is a direct id-based lookup. It does not validate whether the template
-        // is marked defunct in /api/templates. Callers that originate outside the UI must
-        // preflight against Scenario Manager bundle diagnostics before creating a swarm.
         String url = baseUrl + "/scenarios/" + templateId;
         HttpResponse<String> resp = sendGet(url, "template " + templateId);
         return json.readValue(resp.body(), ScenarioPlan.class);
@@ -71,13 +70,11 @@ public class ScenarioManagerClient implements ScenarioClient {
         String url = baseUrl + "/api/templates/" + trimmedTemplate;
         HttpResponse<String> resp = sendGet(url, "template-metadata " + trimmedTemplate);
         ScenarioTemplateResponse body = json.readValue(resp.body(), ScenarioTemplateResponse.class);
-        return new ScenarioTemplateDescriptor(body.id(), body.bundlePath(), body.folderPath(), body.defunct());
+        return new ScenarioTemplateDescriptor(body.id(), body.bundleKey(), body.bundlePath(), body.folderPath(), body.defunct());
     }
 
     @Override
     public String prepareScenarioRuntime(String templateId, String swarmId) throws Exception {
-        // NOTE: This continues the direct id-based create path and does not check /api/templates.
-        // Tooling and agents should validate template usability via bundle diagnostics first.
         String trimmedTemplate = templateId == null ? null : templateId.trim();
         if (trimmedTemplate == null || trimmedTemplate.isEmpty()) {
             throw new IllegalArgumentException("templateId must not be null or blank");
@@ -188,7 +185,7 @@ public class ScenarioManagerClient implements ScenarioClient {
         log.info("{} response status {} length {}", label, resp.statusCode(),
             resp.body() != null ? resp.body().length() : 0);
         if (resp.statusCode() != 200) {
-            throw new IllegalStateException(label + " fetch status " + resp.statusCode());
+            throw requestFailure(label + " fetch", resp);
         }
         return resp;
     }
@@ -204,9 +201,17 @@ public class ScenarioManagerClient implements ScenarioClient {
         log.info("{} response status {} length {}", label, resp.statusCode(),
             resp.body() != null ? resp.body().length() : 0);
         if (resp.statusCode() != 200) {
-            throw new IllegalStateException(label + " POST status " + resp.statusCode());
+            throw requestFailure(label + " POST", resp);
         }
         return resp;
+    }
+
+    private static ScenarioClientException requestFailure(String label, HttpResponse<String> response) {
+        return new ScenarioClientException(
+            label,
+            response.statusCode(),
+            response.body(),
+            response.headers().firstValue(HttpHeaders.CONTENT_TYPE).orElse(null));
     }
 
     private HttpResponse<String> sendGetOnce(String url,
@@ -275,7 +280,7 @@ public class ScenarioManagerClient implements ScenarioClient {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record ScenarioTemplateResponse(String id, String bundlePath, String folderPath, boolean defunct) {
+    public record ScenarioTemplateResponse(String id, String bundleKey, String bundlePath, String folderPath, boolean defunct) {
     }
 
     public record ScenarioVariablesResolveResponse(String profileId, String sutId, Map<String, Object> vars, java.util.List<String> warnings) {

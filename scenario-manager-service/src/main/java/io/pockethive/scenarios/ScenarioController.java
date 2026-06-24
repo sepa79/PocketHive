@@ -5,6 +5,8 @@ import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import io.pockethive.auth.contract.AuthenticatedUserDto;
 import io.pockethive.scenarios.auth.ScenarioManagerAuthorization;
 import io.pockethive.scenarios.auth.ScenarioManagerCurrentUserHolder;
+import io.pockethive.scenarios.validation.BundleValidationException;
+import io.pockethive.scenarios.validation.BundleValidationResult;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,7 +53,7 @@ public class ScenarioController {
                                            @RequestHeader(HttpHeaders.CONTENT_TYPE) String contentType) throws IOException {
         log.info("[REST] POST /scenarios contentType={} scenario={}", contentType, safeJson(scenarioSummary(scenario)));
         requireManageAllFolders();
-        Scenario created = service.create(scenario, ScenarioService.formatFrom(contentType));
+        Scenario created = service.create(scenario);
         log.info("[REST] POST /scenarios -> status=201 scenario={}", safeJson(scenarioSummary(created)));
         return ResponseEntity.status(HttpStatus.CREATED)
                 .contentType(MediaType.APPLICATION_JSON)
@@ -304,7 +306,7 @@ public class ScenarioController {
     public Scenario one(@PathVariable("id") String id) {
         // NOTE: This endpoint still resolves by raw scenario id via service.find(id).
         // That means direct callers can currently fetch defunct scenarios even though
-        // UI create flows are expected to preflight against /api/templates first.
+        // runnability is surfaced by /api/templates and enforced by the runtime endpoint.
         log.info("[REST] GET /scenarios/{}", id);
         requireReadScenario(id);
         Scenario scenario = service.find(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
@@ -321,7 +323,7 @@ public class ScenarioController {
                            @RequestHeader(HttpHeaders.CONTENT_TYPE) String contentType) throws IOException {
         log.info("[REST] PUT /scenarios/{} contentType={} scenario={}", id, contentType, safeJson(scenarioSummary(scenario)));
         requireManageScenario(id);
-        Scenario updated = service.update(id, scenario, ScenarioService.formatFrom(contentType));
+        Scenario updated = service.update(id, scenario);
         log.info("[REST] PUT /scenarios/{} -> status=200 scenario={}", id, safeJson(scenarioSummary(updated)));
         return updated;
     }
@@ -382,7 +384,9 @@ public class ScenarioController {
         requireReadScenario(id);
         String text = service.readVariablesRaw(id);
         if (text == null) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "variables.yaml not found");
+            throw new ResponseStatusException(
+                HttpStatus.NOT_FOUND,
+                ScenarioBundleLayout.VARIABLES_FILE + " not found");
         }
         log.info("[REST] GET /scenarios/{}/variables -> status=200 ({} chars)", id, text.length());
         return ResponseEntity.ok()
@@ -691,39 +695,11 @@ public class ScenarioController {
         }
     }
 
-    @PostMapping(value = "/{id}/validate", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ScenarioService.BundleValidationResult validateScenario(@PathVariable("id") String id) throws IOException {
-        log.info("[REST] POST /scenarios/{}/validate", id);
-        try {
-            ScenarioService.BundleValidationResult result = service.validateExistingScenario(id);
-            log.info("[REST] POST /scenarios/{}/validate -> status=200 ok={} findings={}",
-                    id, result.ok(), result.findings().size());
-            return result;
-        } catch (IllegalArgumentException e) {
-            log.warn("[REST] POST /scenarios/{}/validate -> status=404 {}", id, e.getMessage());
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
-        }
-    }
-
-    @PostMapping(value = "/{id}/templates/validate", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ScenarioService.TemplateValidationResult validateTemplates(@PathVariable("id") String id) throws IOException {
-        log.info("[REST] POST /scenarios/{}/templates/validate", id);
-        try {
-            ScenarioService.TemplateValidationResult result = service.validateScenarioTemplates(id);
-            log.info("[REST] POST /scenarios/{}/templates/validate -> status=200 ok={} findings={}",
-                    id, result.ok(), result.findings().size());
-            return result;
-        } catch (IllegalArgumentException e) {
-            log.warn("[REST] POST /scenarios/{}/templates/validate -> status=404 {}", id, e.getMessage());
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
-        }
-    }
-
     @PostMapping(
             value = "/bundles",
             consumes = "application/zip",
             produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<Scenario> uploadBundle(@RequestBody byte[] body) throws IOException {
+    public ResponseEntity<?> uploadBundle(@RequestBody byte[] body) throws IOException {
         int size = body != null ? body.length : 0;
         log.info("[REST] POST /scenarios/bundles contentType=application/zip size={}", size);
         requireManageFolder("bundles");
@@ -738,14 +714,23 @@ public class ScenarioController {
             value = "/{id}/bundle",
             consumes = "application/zip",
             produces = MediaType.APPLICATION_JSON_VALUE)
-    public Scenario replaceBundle(@PathVariable("id") String id,
-                                  @RequestBody byte[] body) throws IOException {
+    public ResponseEntity<?> replaceBundle(@PathVariable("id") String id,
+                                           @RequestBody byte[] body) throws IOException {
         int size = body != null ? body.length : 0;
         log.info("[REST] PUT /scenarios/{}/bundle contentType=application/zip size={}", id, size);
         requireManageScenario(id);
         Scenario updated = service.replaceBundleFromZip(id, body);
         log.info("[REST] PUT /scenarios/{}/bundle -> status=200 body={}", id, safeJson(updated));
-        return updated;
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(updated);
+    }
+
+    @ExceptionHandler(BundleValidationException.class)
+    ResponseEntity<BundleValidationResult> invalidBundle(BundleValidationException e) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(e.result());
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
@@ -759,9 +744,10 @@ public class ScenarioController {
         String swarmId = request != null ? request.swarmId() : null;
         log.info("[REST] POST /scenarios/{}/runtime swarmId={}", id, swarmId);
         requireRunScenario(id);
-        Scenario scenario = service.findAvailable(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        Path runtimeDir = service.prepareRuntimeDirectory(scenario.getId(), swarmId);
-        ScenarioRuntimeResponse body = new ScenarioRuntimeResponse(scenario.getId(), swarmId, runtimeDir.toString());
+        ScenarioService.ScenarioAccessDescriptor access = service.findScenarioAccess(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        Path runtimeDir = service.prepareRuntimeDirectory(access.scenarioId(), swarmId);
+        ScenarioRuntimeResponse body = new ScenarioRuntimeResponse(access.scenarioId(), swarmId, runtimeDir.toString());
         log.info("[REST] POST /scenarios/{}/runtime -> status=200 body={}", id, safeJson(body));
         return ResponseEntity.ok(body);
     }

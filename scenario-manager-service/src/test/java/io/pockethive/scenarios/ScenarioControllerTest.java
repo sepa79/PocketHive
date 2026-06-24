@@ -20,6 +20,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
+import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
@@ -73,6 +75,8 @@ class ScenarioControllerTest {
         cleanDirectory(capabilitiesDir);
         writeCapabilityManifest("ctrl", "ctrl-image");
         writeCapabilityManifest("worker", "worker-image");
+        writeCapabilityManifest("generator", "generator");
+        writeCapabilityManifest("request-builder", "request-builder");
         capabilityCatalogue.reload();
         mvc.perform(post("/scenarios/reload"))
                 .andExpect(status().isNoContent());
@@ -515,7 +519,7 @@ class ScenarioControllerTest {
                   bees: []
                 """);
 
-        mvc.perform(post("/scenario-bundles/validate")
+        mvc.perform(post("/validation/scenario-bundles")
                         .contentType("application/zip")
                         .content(zip)
                         .accept(MediaType.APPLICATION_JSON))
@@ -523,6 +527,8 @@ class ScenarioControllerTest {
                 .andExpect(jsonPath("$.ok").value(true))
                 .andExpect(jsonPath("$.source").value("uploaded-zip"))
                 .andExpect(jsonPath("$.scenarioId").value("dry-run-demo"))
+                .andExpect(jsonPath("$.summary.errors").value(0))
+                .andExpect(jsonPath("$.summary.warnings").value(0))
                 .andExpect(jsonPath("$.findings", hasSize(0)));
 
         mvc.perform(get("/scenarios").accept(MediaType.APPLICATION_JSON))
@@ -551,22 +557,364 @@ class ScenarioControllerTest {
                               "swarmId": "sw1"
                             }
                             """))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.source").value("scenario-manager"))
+                .andExpect(jsonPath("$.scenarioId").value("defunct-runtime"))
+                .andExpect(jsonPath("$.summary.errors").value(1))
+                .andExpect(jsonPath("$.findings[0].code").value("BUNDLE_DEFUNCT"));
+    }
+
+    @Test
+    void runtimePreparationRejectsBundleBrokenAfterLoad() throws Exception {
+        Path bundle = Files.createDirectories(scenariosDir.resolve("runtime-broken-after-load"));
+        Files.writeString(bundle.resolve("scenario.yaml"), """
+                id: runtime-broken-after-load
+                name: Runtime Broken After Load
+                template:
+                  image: ctrl-image:latest
+                  bees: []
+                """);
+
+        mvc.perform(post("/scenarios/reload"))
+                .andExpect(status().isNoContent());
+
+        Files.writeString(bundle.resolve("scenario.yaml"), "id: [not valid yaml");
+
+        mvc.perform(post("/scenarios/runtime-broken-after-load/runtime")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                            {
+                              "swarmId": "sw1"
+                            }
+                            """)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.source").value("scenario-manager"))
+                .andExpect(jsonPath("$.summary.errors").value(1))
+                .andExpect(jsonPath("$.findings[0].code").value("SCENARIO_DESCRIPTOR_INVALID"));
     }
 
     @Test
     void dryRunBundleValidationReturnsStructuredFindings() throws Exception {
         byte[] zip = bundleZip("note.txt", "no scenario here");
 
-        mvc.perform(post("/scenario-bundles/validate")
+        mvc.perform(post("/validation/scenario-bundles")
                         .contentType("application/zip")
                         .content(zip)
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.summary.errors").value(1))
+                .andExpect(jsonPath("$.findings[0].category").value("scenario"))
                 .andExpect(jsonPath("$.findings[0].code").value("SCENARIO_DESCRIPTOR_INVALID"))
                 .andExpect(jsonPath("$.findings[0].severity").value("error"))
                 .andExpect(jsonPath("$.findings[0].path").value("scenario.yaml"));
+    }
+
+    @Test
+    void bundleValidationDoesNotAcceptScenarioDescriptorFallbackNames() throws Exception {
+        for (String descriptorName : List.of("scenario.yml", "scenario.json")) {
+            byte[] zip = bundleZip(descriptorName, """
+                    id: fallback-descriptor-demo
+                    name: Fallback descriptor demo
+                    template:
+                      image: ctrl-image:latest
+                      bees: []
+                    """);
+
+            mvc.perform(post("/validation/scenario-bundles")
+                            .contentType("application/zip")
+                            .content(zip)
+                            .accept(MediaType.APPLICATION_JSON))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.ok").value(false))
+                    .andExpect(jsonPath("$.findings[0].category").value("scenario"))
+                    .andExpect(jsonPath("$.findings[0].code").value("SCENARIO_DESCRIPTOR_INVALID"))
+                    .andExpect(jsonPath("$.findings[0].path").value("scenario.yaml"))
+                    .andExpect(jsonPath("$.findings[0].message")
+                            .value(org.hamcrest.Matchers.containsString("Bundle does not contain a scenario.yaml")));
+        }
+    }
+
+    @Test
+    void dryRunBundleValidationReturnsStructuredFindingsForMalformedDescriptor() throws Exception {
+        byte[] zip = bundleZip("scenario.yaml", """
+                id: [not-a-string]
+                name: Broken descriptor
+                template:
+                  image: ctrl-image:latest
+                  bees: []
+                """);
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings[0].category").value("scenario"))
+                .andExpect(jsonPath("$.findings[0].code").value("SCENARIO_DESCRIPTOR_INVALID"));
+    }
+
+    @Test
+    void bundleValidationReportsDuplicateScenarioYamlKeys() throws Exception {
+        byte[] zip = bundleZip("scenario.yaml", """
+                id: duplicate-scenario-key-demo
+                id: duplicate-scenario-key-demo
+                name: Duplicate scenario key demo
+                template:
+                  image: ctrl-image:latest
+                  bees: []
+                """);
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings[0].category").value("scenario"))
+                .andExpect(jsonPath("$.findings[0].code").value("SCENARIO_DESCRIPTOR_INVALID"))
+                .andExpect(jsonPath("$.findings[0].path").value("scenario.yaml"));
+    }
+
+    @Test
+    void bundleValidationReportsDuplicateVariablesYamlKeys() throws Exception {
+        byte[] zip = bundleZip(Map.of(
+                "scenario.yaml", """
+                    id: duplicate-variable-key-demo
+                    name: Duplicate variable key demo
+                    template:
+                      image: ctrl-image:latest
+                      bees: []
+                    """,
+                "variables.yaml", """
+                    version: 1
+                    version: 1
+                    definitions:
+                      - name: customerId
+                        scope: GLOBAL
+                        type: STRING
+                    """));
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings[0].category").value("variables"))
+                .andExpect(jsonPath("$.findings[0].code").value("VARIABLES_INVALID"))
+                .andExpect(jsonPath("$.findings[0].path").value("variables.yaml"));
+    }
+
+    @Test
+    void bundleValidationReportsDuplicateSutYamlKeys() throws Exception {
+        byte[] zip = bundleZip(Map.of(
+                "scenario.yaml", """
+                    id: duplicate-sut-key-demo
+                    name: Duplicate SUT key demo
+                    template:
+                      image: ctrl-image:latest
+                      bees: []
+                    """,
+                "sut/default/sut.yaml", """
+                    id: default
+                    id: default
+                    baseUrl: http://example.test
+                    """));
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings[0].category").value("sut"))
+                .andExpect(jsonPath("$.findings[0].code").value("SUT_INVALID"))
+                .andExpect(jsonPath("$.findings[0].path").value("sut"));
+    }
+
+    @Test
+    void bundleValidationReportsMissingCanonicalSutYaml() throws Exception {
+        byte[] zip = bundleZip(Map.of(
+                "scenario.yaml", """
+                    id: missing-canonical-sut-demo
+                    name: Missing canonical SUT demo
+                    template:
+                      image: ctrl-image:latest
+                      bees: []
+                    """,
+                "sut/default/sut.yml", """
+                    id: default
+                    name: Default SUT
+                    """));
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings[0].category").value("sut"))
+                .andExpect(jsonPath("$.findings[0].code").value("SUT_INVALID"))
+                .andExpect(jsonPath("$.findings[0].message").value(org.hamcrest.Matchers.containsString("has no sut.yaml")));
+    }
+
+    @Test
+    void bundleValidationReportsValuesSutWithoutCanonicalSutYaml() throws Exception {
+        byte[] zip = bundleZip(Map.of(
+                "scenario.yaml", """
+                    id: values-sut-missing-canonical-demo
+                    name: Values SUT missing canonical demo
+                    template:
+                      image: ctrl-image:latest
+                      bees: []
+                    """,
+                "variables.yaml", """
+                    version: 1
+                    definitions:
+                      - name: customerId
+                        scope: sut
+                        type: string
+                    profiles:
+                      - id: default
+                        name: Default
+                    values:
+                      sut:
+                        default:
+                          ghost:
+                            customerId: "123"
+                    """));
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings[0].category").value("variables"))
+                .andExpect(jsonPath("$.findings[0].code").value("VARIABLES_INVALID"))
+                .andExpect(jsonPath("$.findings[0].path").value("variables.yaml"))
+                .andExpect(jsonPath("$.findings[0].message").value(org.hamcrest.Matchers.containsString("unknown sutId 'ghost'")));
+    }
+
+    @Test
+    void bundleValidationReportsSutYamlIdMismatch() throws Exception {
+        byte[] zip = bundleZip(Map.of(
+                "scenario.yaml", """
+                    id: mismatched-sut-id-demo
+                    name: Mismatched SUT ID demo
+                    template:
+                      image: ctrl-image:latest
+                      bees: []
+                    """,
+                "sut/default/sut.yaml", """
+                    id: other
+                    name: Other SUT
+                    """));
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings[0].category").value("sut"))
+                .andExpect(jsonPath("$.findings[0].code").value("SUT_INVALID"))
+                .andExpect(jsonPath("$.findings[0].message").value(org.hamcrest.Matchers.containsString("does not match directory name")));
+    }
+
+    @Test
+    void listBundleSutsRejectsMalformedCanonicalSut() throws Exception {
+        Path bundle = Files.createDirectories(scenariosDir.resolve("malformed-sut-list-demo"));
+        Files.writeString(bundle.resolve("scenario.yaml"), """
+                id: malformed-sut-list-demo
+                name: Malformed SUT list demo
+                template:
+                  image: ctrl-image:latest
+                  bees: []
+                """);
+        Path sutDir = Files.createDirectories(bundle.resolve("sut").resolve("default"));
+        Files.writeString(sutDir.resolve("sut.yaml"), """
+                id: other
+                name: Other SUT
+                """);
+
+        mvc.perform(post("/scenarios/reload"))
+                .andExpect(status().isNoContent());
+
+        mvc.perform(get("/scenarios/malformed-sut-list-demo/suts").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void bundleUploadReturnsValidationBodyWhenDescriptorIsMissing() throws Exception {
+        byte[] zip = bundleZip("note.txt", "no scenario here");
+
+        mvc.perform(post("/scenarios/bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings[0].code").value("SCENARIO_DESCRIPTOR_INVALID"));
+    }
+
+    @Test
+    void bundleUploadReturnsValidationBodyWhenDescriptorIsMalformed() throws Exception {
+        byte[] zip = bundleZip("scenario.yaml", """
+                id: [not-a-string]
+                name: Broken descriptor
+                template:
+                  image: ctrl-image:latest
+                  bees: []
+                """);
+
+        mvc.perform(post("/scenarios/bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings[0].code").value("SCENARIO_DESCRIPTOR_INVALID"));
+    }
+
+    @Test
+    void bundleReplaceReturnsCanonicalValidationBodyWhenScenarioIdMismatches() throws Exception {
+        Path existing = Files.createDirectories(scenariosDir.resolve("replace-target"));
+        Files.writeString(existing.resolve("scenario.yaml"), """
+                id: replace-target
+                name: Replace target
+                template:
+                  image: ctrl-image:latest
+                  bees: []
+                """);
+        mvc.perform(post("/scenarios/reload"))
+                .andExpect(status().isNoContent());
+
+        byte[] zip = bundleZip("scenario.yaml", """
+                id: uploaded-other
+                name: Uploaded other
+                template:
+                  image: ctrl-image:latest
+                  bees: []
+                """);
+
+        mvc.perform(put("/scenarios/replace-target/bundle")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.source").value("uploaded-zip"))
+                .andExpect(jsonPath("$.scenarioId").value("uploaded-other"))
+                .andExpect(jsonPath("$.findings[0].code").value("SCENARIO_DESCRIPTOR_INVALID"))
+                .andExpect(jsonPath("$.findings[0].path").value("scenario.yaml:id"))
+                .andExpect(jsonPath("$.findings[0].message")
+                        .value(org.hamcrest.Matchers.containsString("does not match requested scenario")));
     }
 
     @Test
@@ -578,27 +926,606 @@ class ScenarioControllerTest {
                 name: Template reference demo
                 template:
                   image: ctrl-image:latest
-                  bees: []
-                plan:
-                  steps:
-                    - action: config-update
+                  bees:
+                    - role: generator
+                      image: generator:latest
                       config:
                         worker:
-                          config:
-                            message:
-                              headers:
-                                x-ph-call-id: login
+                          message:
+                            headers:
+                              x-ph-call-id: login
+                      work:
+                        out:
+                          out: build
+                    - role: request-builder
+                      image: request-builder:latest
+                      config:
+                        worker:
+                          templateRoot: /app/scenario/templates/redemption
+                          serviceId: auth
+                      work:
+                        in:
+                          in: build
+                        out:
+                          out: proc
                 """);
 
         mvc.perform(post("/scenarios/reload"))
                 .andExpect(status().isNoContent());
 
-        mvc.perform(post("/scenarios/template-ref-demo/templates/validate")
+        mvc.perform(post("/validation/scenario-bundles/existing")
+                        .param("bundleKey", "template-ref-demo")
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.ok").value(false))
-                .andExpect(jsonPath("$.referencedCallIds[0]").value("login"))
+                .andExpect(jsonPath("$.findings[0].category").value("templates"))
                 .andExpect(jsonPath("$.findings[0].code").value("TEMPLATE_CALL_ID_MISSING"));
+    }
+
+    @Test
+    void templateValidationUsesWorkerTemplateRootForTcpTemplates() throws Exception {
+        byte[] zip = bundleZip(Map.of(
+                "scenario.yaml", """
+                    id: tcp-template-ref-demo
+                    name: TCP template reference demo
+                    template:
+                      image: ctrl-image:latest
+                      bees:
+                        - role: generator
+                          image: generator:latest
+                          config:
+                            worker:
+                              message:
+                                headers:
+                                  x-ph-call-id: tcp-request
+                          work:
+                            out:
+                              out: build
+                        - role: request-builder
+                          image: request-builder:latest
+                          config:
+                            worker:
+                              templateRoot: /app/scenario/templates/tcp
+                              serviceId: banking
+                          work:
+                            in:
+                              in: build
+                            out:
+                              out: proc
+                    """,
+                "templates/tcp/banking/tcp-request.yaml", """
+                    protocol: TCP
+                    serviceId: banking
+                    callId: tcp-request
+                    bodyTemplate: "{{ payload }}"
+                    """));
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(true))
+                .andExpect(jsonPath("$.findings", hasSize(0)));
+    }
+
+    @Test
+    void templateValidationIgnoresDuplicateCallIdOutsideWorkerTemplateRoot() throws Exception {
+        byte[] zip = bundleZip(Map.of(
+                "scenario.yaml", """
+                    id: template-root-scope-demo
+                    name: Template root scope demo
+                    template:
+                      image: ctrl-image:latest
+                      bees:
+                        - role: generator
+                          image: generator:latest
+                          config:
+                            worker:
+                              message:
+                                headers:
+                                  x-ph-call-id: redeem
+                          work:
+                            out:
+                              out: build
+                        - role: request-builder
+                          image: request-builder:latest
+                          config:
+                            worker:
+                              templateRoot: /app/scenario/templates/redemption
+                              serviceId: default
+                          work:
+                            in:
+                              in: build
+                            out:
+                              out: proc
+                    """,
+                "templates/redemption/redeem.yaml", """
+                    protocol: HTTP
+                    serviceId: default
+                    callId: redeem
+                    method: POST
+                    pathTemplate: /redeem
+                    """,
+                "templates/auth/redeem.yaml", """
+                    protocol: HTTP
+                    serviceId: default
+                    callId: redeem
+                    method: POST
+                    pathTemplate: /auth/redeem
+                    """));
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(true))
+                .andExpect(jsonPath("$.findings", hasSize(0)));
+    }
+
+    @Test
+    void templateValidationReportsDuplicateVisibleTemplateKey() throws Exception {
+        byte[] zip = bundleZip(Map.of(
+                "scenario.yaml", """
+                    id: duplicate-visible-template-demo
+                    name: Duplicate visible template demo
+                    template:
+                      image: ctrl-image:latest
+                      bees:
+                        - role: generator
+                          image: generator:latest
+                          config:
+                            worker:
+                              message:
+                                headers:
+                                  x-ph-call-id: redeem
+                          work:
+                            out:
+                              out: build
+                        - role: request-builder
+                          image: request-builder:latest
+                          config:
+                            worker:
+                              templateRoot: /app/scenario/templates/redemption
+                              serviceId: default
+                          work:
+                            in:
+                              in: build
+                            out:
+                              out: proc
+                    """,
+                "templates/redemption/redeem-a.yaml", """
+                    protocol: HTTP
+                    serviceId: default
+                    callId: redeem
+                    method: POST
+                    pathTemplate: /redeem/a
+                    """,
+                "templates/redemption/nested/redeem-b.yaml", """
+                    protocol: HTTP
+                    serviceId: default
+                    callId: redeem
+                    method: POST
+                    pathTemplate: /redeem/b
+                    """));
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings[0].category").value("templates"))
+                .andExpect(jsonPath("$.findings[0].code").value("TEMPLATE_CALL_ID_DUPLICATE"))
+                .andExpect(jsonPath("$.findings[0].message")
+                        .value(org.hamcrest.Matchers.containsString("default::redeem")));
+    }
+
+    @Test
+    void bundleValidationReportsMissingVariablesYamlForVarsReferences() throws Exception {
+        byte[] zip = bundleZip(Map.of(
+                "scenario.yaml", """
+                    id: vars-ref-demo
+                    name: Vars ref demo
+                    template:
+                      image: ctrl-image:latest
+                      bees: []
+                    """,
+                "templates/http/default/account.yaml", """
+                    protocol: HTTP
+                    serviceId: default
+                    callId: account
+                    method: GET
+                    pathTemplate: /accounts/{{ vars.customerId }}
+                    """));
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings[0].category").value("variables"))
+                .andExpect(jsonPath("$.findings[0].code").value("VARIABLES_MISSING"));
+    }
+
+    @Test
+    void bundleValidationReportsUnknownAuthProfileType() throws Exception {
+        byte[] zip = bundleZip(Map.of(
+                "scenario.yaml", """
+                    id: auth-type-demo
+                    name: Auth type demo
+                    template:
+                      image: ctrl-image:latest
+                      bees: []
+                    """,
+                "templates/http/default/account.yaml", """
+                    protocol: HTTP
+                    serviceId: default
+                    callId: account
+                    method: GET
+                    pathTemplate: /accounts
+                    authRef:
+                      profileId: api
+                      applyAs: HTTP_AUTHORIZATION_BEARER
+                    """,
+                "authProfiles.yaml", """
+                    profiles:
+                      api:
+                        type: definitely-not-valid
+                        storage:
+                          mode: NONE
+                    """));
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings[0].category").value("auth"))
+                .andExpect(jsonPath("$.findings[0].code").value("AUTH_PROFILES_INVALID"));
+    }
+
+    @Test
+    void bundleValidationDoesNotAcceptAuthProfilesYmlFallback() throws Exception {
+        byte[] zip = bundleZip(Map.of(
+                "scenario.yaml", """
+                    id: auth-yml-demo
+                    name: Auth YML demo
+                    template:
+                      image: ctrl-image:latest
+                      bees: []
+                    """,
+                "templates/http/default/account.yaml", """
+                    protocol: HTTP
+                    serviceId: default
+                    callId: account
+                    method: GET
+                    pathTemplate: /accounts
+                    authRef:
+                      profileId: api
+                      applyAs: HTTP_AUTHORIZATION_BEARER
+                    """,
+                "authProfiles.yml", """
+                    profiles:
+                      api:
+                        type: STATIC_TOKEN
+                        storage:
+                          mode: NONE
+                        token: test-token
+                    """));
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings[0].category").value("auth"))
+                .andExpect(jsonPath("$.findings[0].code").value("AUTH_PROFILES_MISSING"));
+    }
+
+    @Test
+    void bundleValidationReportsMissingRefreshableAuthTokenKey() throws Exception {
+        byte[] zip = bundleZip(Map.of(
+                "scenario.yaml", """
+                    id: auth-token-key-demo
+                    name: Auth token key demo
+                    template:
+                      image: ctrl-image:latest
+                      bees: []
+                    """,
+                "templates/http/default/account.yaml", """
+                    protocol: HTTP
+                    serviceId: default
+                    callId: account
+                    method: GET
+                    pathTemplate: /accounts
+                    authRef:
+                      profileId: api
+                      applyAs: HTTP_AUTHORIZATION_BEARER
+                    """,
+                "authProfiles.yaml", """
+                    profiles:
+                      api:
+                        type: oauth2-client-credentials
+                        storage:
+                          mode: REDIS
+                    """));
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings[0].category").value("auth"))
+                .andExpect(jsonPath("$.findings[0].code").value("AUTH_STORAGE_INVALID"))
+                .andExpect(jsonPath("$.findings[0].path").value("authProfiles.yaml:profiles.api.storage.tokenKey"));
+    }
+
+    @Test
+    void bundleValidationReportsInvalidRefreshableAuthTokenKey() throws Exception {
+        byte[] zip = bundleZip(Map.of(
+                "scenario.yaml", """
+                    id: invalid-auth-token-key-demo
+                    name: Invalid auth token key demo
+                    template:
+                      image: ctrl-image:latest
+                      bees: []
+                    """,
+                "templates/http/default/account.yaml", """
+                    protocol: HTTP
+                    serviceId: default
+                    callId: account
+                    method: GET
+                    pathTemplate: /accounts
+                    authRef:
+                      profileId: api
+                      applyAs: HTTP_AUTHORIZATION_BEARER
+                    """,
+                "authProfiles.yaml", """
+                    profiles:
+                      api:
+                        type: oauth2-client-credentials
+                        storage:
+                          mode: REDIS
+                          tokenKey: ../secret
+                    """));
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings[0].category").value("auth"))
+                .andExpect(jsonPath("$.findings[0].code").value("AUTH_STORAGE_INVALID"))
+                .andExpect(jsonPath("$.findings[0].path").value("authProfiles.yaml:profiles.api.storage.tokenKey"));
+    }
+
+    @Test
+    void bundleValidationReportsDuplicateTemplateYamlKeys() throws Exception {
+        byte[] zip = bundleZip(Map.of(
+                "scenario.yaml", """
+                    id: duplicate-template-key-demo
+                    name: Duplicate template key demo
+                    template:
+                      image: ctrl-image:latest
+                      bees: []
+                    """,
+                "templates/http/default/account.yaml", """
+                    protocol: HTTP
+                    protocol: HTTP
+                    serviceId: default
+                    callId: account
+                    method: GET
+                    pathTemplate: /accounts
+                    """));
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings[0].category").value("templates"))
+                .andExpect(jsonPath("$.findings[0].code").value("TEMPLATE_PARSE_ERROR"));
+    }
+
+    @Test
+    void bundleValidationReportsDuplicateTemplateJsonKeys() throws Exception {
+        byte[] zip = bundleZip(Map.of(
+                "scenario.yaml", """
+                    id: duplicate-template-json-key-demo
+                    name: Duplicate template JSON key demo
+                    template:
+                      image: ctrl-image:latest
+                      bees: []
+                    """,
+                "templates/http/default/account.json", """
+                    {
+                      "protocol": "HTTP",
+                      "protocol": "HTTP",
+                      "serviceId": "default",
+                      "callId": "account",
+                      "method": "GET",
+                      "pathTemplate": "/accounts"
+                    }
+                    """));
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings[0].category").value("templates"))
+                .andExpect(jsonPath("$.findings[0].code").value("TEMPLATE_PARSE_ERROR"));
+    }
+
+    @Test
+    void bundleValidationReportsDuplicateAuthProfileKeys() throws Exception {
+        byte[] zip = bundleZip(Map.of(
+                "scenario.yaml", """
+                    id: duplicate-auth-profile-demo
+                    name: Duplicate auth profile demo
+                    template:
+                      image: ctrl-image:latest
+                      bees: []
+                    """,
+                "templates/http/default/account.yaml", """
+                    protocol: HTTP
+                    serviceId: default
+                    callId: account
+                    method: GET
+                    pathTemplate: /accounts
+                    authRef:
+                      profileId: api
+                      applyAs: HTTP_AUTHORIZATION_BEARER
+                    """,
+                "authProfiles.yaml", """
+                    profiles:
+                      api:
+                        type: bearer-token
+                        storage:
+                          mode: NONE
+                      api:
+                        type: bearer-token
+                        storage:
+                          mode: NONE
+                    """));
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings[0].category").value("auth"))
+                .andExpect(jsonPath("$.findings[0].code").value("AUTH_PROFILES_INVALID"));
+    }
+
+    @Test
+    void bundleUploadReturnsValidationBodyWhenScenarioAlreadyExists() throws Exception {
+        mvc.perform(post("/scenarios")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                            {
+                              "id": "duplicate-upload",
+                              "name": "Duplicate upload"
+                            }
+                            """))
+                .andExpect(status().isCreated());
+
+        byte[] zip = bundleZip("scenario.yaml", """
+                id: duplicate-upload
+                name: Duplicate upload
+                template:
+                  image: ctrl-image:latest
+                  bees: []
+                """);
+
+        mvc.perform(post("/scenarios/bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings[0].code").value("DUPLICATE_SCENARIO_ID"));
+    }
+
+    @Test
+    void existingBundleValidationReportsDuplicateScenarioIdCode() throws Exception {
+        Path first = Files.createDirectories(scenariosDir.resolve("duplicate-a"));
+        Files.writeString(first.resolve("scenario.yaml"), """
+                id: duplicate-existing
+                name: Duplicate A
+                template:
+                  image: ctrl-image:latest
+                  bees: []
+                """);
+        Path second = Files.createDirectories(scenariosDir.resolve("duplicate-b"));
+        Files.writeString(second.resolve("scenario.yaml"), """
+                id: duplicate-existing
+                name: Duplicate B
+                template:
+                  image: ctrl-image:latest
+                  bees: []
+                """);
+
+        mvc.perform(post("/scenarios/reload"))
+                .andExpect(status().isNoContent());
+
+        mvc.perform(post("/validation/scenario-bundles/existing")
+                        .param("bundleKey", "duplicate-a")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.summary.errors").value(1))
+                .andExpect(jsonPath("$.findings", hasSize(1)))
+                .andExpect(jsonPath("$.findings[0].category").value("scenario"))
+                .andExpect(jsonPath("$.findings[0].code").value("DUPLICATE_SCENARIO_ID"));
+    }
+
+    @Test
+    void existingBundleValidationReportsDefunctFindingOnce() throws Exception {
+        Path bundle = Files.createDirectories(scenariosDir.resolve("missing-capability-demo"));
+        Files.writeString(bundle.resolve("scenario.yaml"), """
+                id: missing-capability-demo
+                name: Missing capability demo
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - role: worker
+                      image: missing-image:latest
+                      work:
+                        in:
+                          in: a
+                        out:
+                          out: b
+                """);
+
+        mvc.perform(post("/scenarios/reload"))
+                .andExpect(status().isNoContent());
+
+        mvc.perform(post("/validation/scenario-bundles/existing")
+                        .param("bundleKey", "missing-capability-demo")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.summary.errors").value(1))
+                .andExpect(jsonPath("$.findings", hasSize(1)))
+                .andExpect(jsonPath("$.findings[0].code").value("CAPABILITY_MANIFEST_MISSING"));
+    }
+
+    @Test
+    void bundleUploadReturnsValidationBodyWhenBundleIsInvalid() throws Exception {
+        byte[] zip = bundleZip(Map.of(
+                "scenario.yaml", """
+                    id: invalid-upload
+                    name: Invalid upload
+                    template:
+                      image: ctrl-image:latest
+                      bees: []
+                    """,
+                "templates/http/default/account.yaml", """
+                    protocol: HTTP
+                    serviceId: default
+                    callId: account
+                    method: GET
+                    pathTemplate: /accounts/{{ vars.customerId }}
+                    """));
+
+        mvc.perform(post("/scenarios/bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings[0].code").value("VARIABLES_MISSING"));
     }
 
     @Test
@@ -607,9 +1534,14 @@ class ScenarioControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.contractVersion").value("scenario-authoring.v1"))
                 .andExpect(jsonPath("$.fingerprint").exists())
-                .andExpect(jsonPath("$.endpoints.validateBundle").value("/scenario-bundles/validate"))
+                .andExpect(jsonPath("$.endpoints.validateBundle").value("/validation/scenario-bundles"))
                 .andExpect(jsonPath("$.endpoints.validateExistingBundle")
-                        .value("/scenario-bundles/validate-existing?bundleKey={bundleKey}"))
+                        .value("/validation/scenario-bundles/existing?bundleKey={bundleKey}"))
+                .andExpect(jsonPath("$.endpoints.validateScenario").doesNotExist())
+                .andExpect(jsonPath("$.endpoints.validateTemplates").doesNotExist())
+                .andExpect(jsonPath("$.scenario.descriptorNames", hasSize(1)))
+                .andExpect(jsonPath("$.scenario.descriptorNames[0]").value("scenario.yaml"))
+                .andExpect(jsonPath("$.sut.root").value("sut/<sutId>/sut.yaml"))
                 .andExpect(jsonPath("$.cache.sessionCacheable").value(true));
 
         mvc.perform(get("/api/authoring-contract/fingerprint").accept(MediaType.APPLICATION_JSON))
@@ -667,11 +1599,17 @@ class ScenarioControllerTest {
     }
 
     private static byte[] bundleZip(String entryName, String content) throws IOException {
+        return bundleZip(Map.of(entryName, content));
+    }
+
+    private static byte[] bundleZip(Map<String, String> entries) throws IOException {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         try (ZipOutputStream zip = new ZipOutputStream(out)) {
-            zip.putNextEntry(new ZipEntry(entryName));
-            zip.write(content.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-            zip.closeEntry();
+            for (Map.Entry<String, String> entry : entries.entrySet()) {
+                zip.putNextEntry(new ZipEntry(entry.getKey()));
+                zip.write(entry.getValue().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                zip.closeEntry();
+            }
         }
         return out.toByteArray();
     }

@@ -88,6 +88,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch (e) {
         if (cancelled) return
         clearAuthSession()
+        resetControlPlaneBootstrap()
+        resetControlPlaneSchema()
         setSession(null)
         setUser(null)
         setStatus('anonymous')
@@ -105,6 +107,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function loginDev(username: string) {
     setError(null)
     const nextSession = await loginDevUser(username)
+    resetControlPlaneBootstrap()
+    resetControlPlaneSchema()
     setSession(nextSession)
     setUser(nextSession.user)
     setStatus('authenticated')
@@ -124,6 +128,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function refresh() {
     const stored = readStoredAuthSession()
     if (!stored) {
+      resetControlPlaneBootstrap()
+      resetControlPlaneSchema()
       setSession(null)
       setUser(null)
       setStatus('anonymous')
@@ -131,6 +137,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     const resolvedUser = await fetchCurrentUser(stored.accessToken)
     replaceSessionUser(resolvedUser)
+    resetControlPlaneBootstrap()
+    resetControlPlaneSchema()
     setSession({ ...stored, user: resolvedUser })
     setUser(resolvedUser)
     setStatus('authenticated')

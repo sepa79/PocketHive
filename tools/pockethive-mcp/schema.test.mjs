@@ -110,6 +110,16 @@ test("wizard_start mockEndpoints declares item shape", async () => {
   assert.equal((wizardStart.inputSchema.required ?? []).includes("mockEndpoints"), false);
 });
 
+test("debug_journal exposes optional severity filter", async () => {
+  const tools = await listTools();
+  const debugJournal = toolByName(tools, "debug_journal");
+  const severity = debugJournal.inputSchema.properties.severity;
+
+  assert.equal(severity.type, "string");
+  assert.deepEqual(severity.enum, ["ERROR", "WARN", "INFO"]);
+  assert.equal((debugJournal.inputSchema.required ?? []).includes("severity"), false);
+});
+
 test("workflow tools are listed with read/write annotations", async () => {
   const tools = await listTools();
   const expected = [
