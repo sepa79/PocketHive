@@ -304,6 +304,20 @@ Target contract:
 - There is no legacy shape, compatibility shim, prefix stripping, path aliasing,
   or fallback path resolution.
 
+Implementation tracking:
+
+- [x] Add direct scenario config migration guide and standalone migrator.
+- [x] Migrate repo-owned scenario YAML to direct `template.bees[].config`.
+- [x] Migrate capability paths away from `worker.message.*`.
+- [x] Remove Scenario Manager / Orchestrator legacy flattening paths.
+- [x] Reject legacy `config.worker` / `config.pockethive` scenario shapes.
+- [x] Lock SC aggregate projection with an exact
+  `SwarmWorkersAggregatorTest`: `context.workers[].config` carries worker
+  `status-full.data.config` without synthetic IO type keys.
+- [x] Fix MCP `component.config-update` to send only the requested patch, not a
+  client-side merged config.
+- [x] Reject exact `worker` / `pockethive` roots in capability config paths.
+
 Canonical example:
 
 ```yaml

@@ -98,7 +98,35 @@ class CapabilityCatalogueServiceTest {
 
         assertThatThrownBy(catalogue::reload)
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("must use direct config paths, not 'worker.*'");
+                .hasMessageContaining("must use direct config paths, not 'worker' or 'worker.*'");
+    }
+
+    @Test
+    void rejectsExactLegacyConfigRootsInCapabilityConfigAndWhenClauses() throws IOException {
+        String body = """
+                schemaVersion: "1.0"
+                capabilitiesVersion: "1.0"
+                image:
+                  name: "generator"
+                role: "generator"
+                config:
+                  - name: worker
+                    type: json
+                    when:
+                      pockethive: true
+                  - name: pockethive
+                    type: json
+                actions: []
+                panels: []
+                """;
+        Files.writeString(capabilitiesDir.resolve("generator.yaml"), body);
+
+        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(capabilitiesDir);
+
+        assertThatThrownBy(catalogue::reload)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("must use direct config paths, not 'worker' or 'worker.*'")
+                .hasMessageContaining("must use direct config paths, not 'pockethive' or 'pockethive.*'");
     }
 
     @Test

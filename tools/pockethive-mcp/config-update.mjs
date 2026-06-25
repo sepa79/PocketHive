@@ -80,6 +80,7 @@ export function planComponentConfigUpdate({ currentConfig, patch, allowEmptyPatc
   const mergedConfig = deepMergeConfig(currentConfig, patch);
   return {
     patchSummary,
+    dispatchPatch: cloneJson(patch),
     mergedConfig,
     mergedConfigSummary: summarizePatch(mergedConfig),
   };

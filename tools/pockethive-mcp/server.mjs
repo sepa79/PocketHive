@@ -2982,7 +2982,7 @@ async function sendComponentConfigUpdate({
   const endpoint = `/api/components/${encodeURIComponent(role)}/${encodeURIComponent(instanceId)}/config`;
   const body = {
     idempotencyKey: key,
-    patch: plan.mergedConfig,
+    patch: plan.dispatchPatch,
     swarmId,
     ...(notes ? { notes } : {}),
   };

@@ -84,3 +84,23 @@ test("planComponentConfigUpdate rejects empty patches unless explicitly allowed"
     { enabled: true }
   );
 });
+
+test("planComponentConfigUpdate keeps dispatch patch sparse", () => {
+  const patch = { message: { path: "/updated" } };
+  const plan = planComponentConfigUpdate({
+    currentConfig: {
+      inputs: { type: "SCHEDULER", scheduler: { ratePerSec: 5 } },
+      message: { path: "/old", method: "GET" },
+    },
+    patch,
+  });
+
+  assert.deepEqual(plan.dispatchPatch, { message: { path: "/updated" } });
+  assert.deepEqual(plan.mergedConfig, {
+    inputs: { type: "SCHEDULER", scheduler: { ratePerSec: 5 } },
+    message: { path: "/updated", method: "GET" },
+  });
+
+  patch.message.path = "/mutated";
+  assert.deepEqual(plan.dispatchPatch, { message: { path: "/updated" } });
+});

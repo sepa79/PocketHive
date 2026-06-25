@@ -24,7 +24,9 @@ import java.util.*;
 public class CapabilityCatalogueService {
     private static final Logger logger = LoggerFactory.getLogger(CapabilityCatalogueService.class);
     private static final String ENABLED_CONFIG_NAME = "enabled";
+    private static final String WORKER_CONFIG_ROOT = "worker";
     private static final String WORKER_CONFIG_PREFIX = "worker.";
+    private static final String LEGACY_POCKETHIVE_CONFIG_ROOT = "pockethive";
     private static final String LEGACY_POCKETHIVE_CONFIG_PREFIX = "pockethive.";
 
     private final Path capabilitiesDir;
@@ -228,11 +230,11 @@ public class CapabilityCatalogueService {
         if (ENABLED_CONFIG_NAME.equals(normalized)) {
             errors.add(source + " must not declare runtime worker state field 'enabled'");
         }
-        if (normalized.startsWith(WORKER_CONFIG_PREFIX)) {
-            errors.add(source + " must use direct config paths, not '" + WORKER_CONFIG_PREFIX + "*'");
+        if (WORKER_CONFIG_ROOT.equals(normalized) || normalized.startsWith(WORKER_CONFIG_PREFIX)) {
+            errors.add(source + " must use direct config paths, not '" + WORKER_CONFIG_ROOT + "' or '" + WORKER_CONFIG_PREFIX + "*'");
         }
-        if (normalized.startsWith(LEGACY_POCKETHIVE_CONFIG_PREFIX)) {
-            errors.add(source + " must use direct config paths, not '" + LEGACY_POCKETHIVE_CONFIG_PREFIX + "*'");
+        if (LEGACY_POCKETHIVE_CONFIG_ROOT.equals(normalized) || normalized.startsWith(LEGACY_POCKETHIVE_CONFIG_PREFIX)) {
+            errors.add(source + " must use direct config paths, not '" + LEGACY_POCKETHIVE_CONFIG_ROOT + "' or '" + LEGACY_POCKETHIVE_CONFIG_PREFIX + "*'");
         }
     }
 

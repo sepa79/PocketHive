@@ -15,6 +15,16 @@ class SwarmWorkersAggregatorTest {
   @Test
   void propagatesWorkerStatusFullConfigIntoSnapshot() throws Exception {
     SwarmWorkersAggregator aggregator = new SwarmWorkersAggregator(60_000);
+    Map<String, Object> expectedConfig = Map.of(
+        "enabled", true,
+        "message", Map.of(
+            "method", "POST",
+            "path", "/test"
+        ),
+        "inputs", Map.of(
+            "scheduler", Map.of("ratePerSec", 50)
+        )
+    );
 
     aggregator.updateFromWorkerStatus(
         "generator",
@@ -37,8 +47,8 @@ class SwarmWorkersAggregatorTest {
               },
               "ioState": {
                 "work": {
-                  "input": "ok",
-                  "output": "ok"
+                  "input": "SCHEDULER",
+                  "output": "RABBITMQ"
                 }
               }
             }
@@ -48,9 +58,10 @@ class SwarmWorkersAggregatorTest {
     Map<String, Object> worker = singleWorker(aggregator.snapshot());
 
     assertThat(worker).containsKey("config");
-    assertThat(config(worker))
-        .containsEntry("enabled", true)
-        .containsKeys("message", "inputs");
+    assertThat(config(worker)).isEqualTo(expectedConfig);
+    @SuppressWarnings("unchecked")
+    Map<String, Object> inputs = (Map<String, Object>) config(worker).get("inputs");
+    assertThat(inputs).doesNotContainKey("type");
   }
 
   @Test
