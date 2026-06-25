@@ -115,13 +115,16 @@ class CapabilityCatalogueControllerTest {
     void capabilityLookupReturnsAllWhenRequested() throws Exception {
         CapabilityManifest manifest = new CapabilityManifest(
                 "1.0", "2.0", new CapabilityManifest.Image("image/name", "latest", "sha256:def"),
-                "role", List.of(), List.of(), List.of(), null);
+                "role", List.of(), List.of(), List.of(),
+                new CapabilityManifest.Ui("Scheduler IO", null, null, null, "SCHEDULER", "INPUT"));
         given(catalogue.allManifests()).willReturn(List.of(manifest));
         given(authorization.canReadPocketHive(org.mockito.ArgumentMatchers.any())).willReturn(true);
 
         mvc.perform(get("/api/capabilities").param("all", "true"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].image.digest").value("sha256:def"));
+                .andExpect(jsonPath("$[0].image.digest").value("sha256:def"))
+                .andExpect(jsonPath("$[0].ui.ioType").value("SCHEDULER"))
+                .andExpect(jsonPath("$[0].ui.ioScope").value("INPUT"));
     }
 
     @Test

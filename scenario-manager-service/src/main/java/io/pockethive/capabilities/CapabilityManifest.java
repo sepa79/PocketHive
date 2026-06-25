@@ -63,5 +63,5 @@ public record CapabilityManifest(
     public record Panel(String id, JsonNode options) { }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record Ui(String label, String color, String shape, String abbreviation, String ioType) { }
+    public record Ui(String label, String color, String shape, String abbreviation, String ioType, String ioScope) { }
 }

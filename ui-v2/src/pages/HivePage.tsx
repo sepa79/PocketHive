@@ -9,6 +9,7 @@ import { useAuth } from '../lib/authContext'
 import { SwarmRuntimeInspector } from './hive/SwarmRuntimeInspector'
 import {
   buildManifestIndex,
+  composeCapabilityConfigEntries,
   normalizeManifests,
   resolveManifestForImage,
   type CapabilityConfigEntry,
@@ -1613,13 +1614,15 @@ export function HivePage() {
 		                                    .map((port) => `${port.id}:${port.direction}`)
 		                                    .join(', ')
 		                                : '—'
-		                              const configEntries = manifest?.config ?? []
 		                              const workerInstance =
 		                                typeof runtimeWorker?.instance === 'string' && runtimeWorker.instance.trim().length > 0
 		                                  ? runtimeWorker.instance.trim()
 		                                  : null
 		                              const currentConfig = runtimeWorker?.config ?? null
 		                              const currentConfigAvailable = currentConfig !== null
+	                              const configEntries = manifest
+	                                ? composeCapabilityConfigEntries(manifest, capabilities, currentConfig)
+	                                : []
 			                              const configEditBlockedReason = !canManageSelectedSwarm
 			                                ? 'PocketHive ALL permission is required.'
 			                                : !selectedSwarmId
@@ -1987,7 +1990,7 @@ export function HivePage() {
 			                                        </div>
 			                                        <div className="configEditMeta">
 			                                          <span className="chip chip-metric">
-			                                            config fields {manifest.config.length}
+			                                            config fields {configEntries.length}
 			                                          </span>
 			                                          <span className="chip chip-metric">
 			                                            actions {manifest.actions.length ? manifest.actions.length : 'none'}

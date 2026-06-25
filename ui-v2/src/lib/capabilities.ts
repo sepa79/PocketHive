@@ -39,6 +39,13 @@ export type ManifestResolution = {
   resolvedTag: string | null
 }
 
+const IO_SELECTOR_PATHS = {
+  INPUT: 'inputs.type',
+  OUTPUT: 'outputs.type',
+} as const
+
+type IoScope = keyof typeof IO_SELECTOR_PATHS
+
 export function normalizeManifests(data: unknown): CapabilityManifest[] {
   if (!Array.isArray(data)) return []
   return data
@@ -125,6 +132,28 @@ export function buildManifestIndex(list: CapabilityManifest[]): ManifestIndex {
 
 export function findManifestForImage(image: string, index: ManifestIndex): CapabilityManifest | null {
   return resolveManifestForImage(image, index).manifest
+}
+
+export function composeCapabilityConfigEntries(
+  workerManifest: CapabilityManifest,
+  catalogue: CapabilityManifest[],
+  currentConfig: Record<string, unknown> | null | undefined,
+): CapabilityConfigEntry[] {
+  const entries: CapabilityConfigEntry[] = []
+  const names = new Set<string>()
+  appendConfigEntries(entries, names, workerManifest.config)
+
+  for (const scope of Object.keys(IO_SELECTOR_PATHS) as IoScope[]) {
+    const selectedType = explicitIoType(currentConfig, scope)
+    if (!selectedType) continue
+    for (const manifest of catalogue) {
+      if (ioManifestScope(manifest) !== scope) continue
+      if (ioManifestType(manifest) !== selectedType) continue
+      appendConfigEntries(entries, names, manifest.config)
+    }
+  }
+
+  return entries
 }
 
 export function resolveManifestForImage(
@@ -228,6 +257,59 @@ function lookupManifestByImageName(
 ): CapabilityManifest | null {
   const key = canonicalImageName(name)
   return key ? index.byImageName.get(key) ?? null : null
+}
+
+function appendConfigEntries(
+  target: CapabilityConfigEntry[],
+  names: Set<string>,
+  entries: CapabilityConfigEntry[],
+) {
+  for (const entry of entries) {
+    if (names.has(entry.name)) continue
+    names.add(entry.name)
+    target.push(entry)
+  }
+}
+
+function explicitIoType(config: Record<string, unknown> | null | undefined, scope: IoScope): string | null {
+  const raw = valueAtPath(config, IO_SELECTOR_PATHS[scope])
+  if (typeof raw !== 'string') return null
+  const normalized = raw.trim().toUpperCase()
+  return normalized.length > 0 ? normalized : null
+}
+
+function ioManifestScope(manifest: CapabilityManifest): IoScope | null {
+  const raw = manifestUiString(manifest, 'ioScope')
+  if (!raw) return null
+  const normalized = raw.trim().toUpperCase()
+  return normalized === 'INPUT' || normalized === 'OUTPUT' ? normalized : null
+}
+
+function ioManifestType(manifest: CapabilityManifest): string | null {
+  const raw = manifestUiString(manifest, 'ioType')
+  if (!raw) return null
+  const normalized = raw.trim().toUpperCase()
+  return normalized.length > 0 ? normalized : null
+}
+
+function manifestUiString(manifest: CapabilityManifest, key: string): string | null {
+  const value = manifest.ui?.[key]
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : null
+}
+
+function valueAtPath(config: Record<string, unknown> | null | undefined, path: string): unknown {
+  if (!config || !path) return undefined
+  const segments = path.split('.').filter((segment) => segment.length > 0)
+  let current: unknown = config
+  for (const segment of segments) {
+    if (!current || typeof current !== 'object' || Array.isArray(current)) {
+      return undefined
+    }
+    current = (current as Record<string, unknown>)[segment]
+  }
+  return current
 }
 
 export function formatCapabilityValue(value: unknown): string {

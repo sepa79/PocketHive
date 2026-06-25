@@ -1,6 +1,6 @@
 id: local-rest-topology
 name: Local REST - Simple REST Swarm (Topology)
-description: Copy of local-rest with logical topology edges for UI testing.
+description: Simple WireMock-backed local REST swarm with logical topology edges for UI testing.
 template:
   image: swarm-controller:latest
   bees:
@@ -11,6 +11,7 @@ template:
         - { id: out, direction: out }
       config:
         inputs:
+          type: SCHEDULER
           scheduler:
             ratePerSec: 50
         message:

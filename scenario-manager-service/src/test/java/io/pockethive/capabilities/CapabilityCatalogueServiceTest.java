@@ -54,6 +54,18 @@ class CapabilityCatalogueServiceTest {
     }
 
     @Test
+    void bundledIoCapabilitiesExposeScopeAndType() throws Exception {
+        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(Path.of("capabilities"));
+        catalogue.reload();
+
+        CapabilityManifest manifest = catalogue.findByImageName("io-scheduler").orElseThrow();
+
+        assertThat(manifest.ui()).isNotNull();
+        assertThat(manifest.ui().ioScope()).isEqualTo("INPUT");
+        assertThat(manifest.ui().ioType()).isEqualTo("SCHEDULER");
+    }
+
+    @Test
     void rejectsRuntimeStateFieldsInCapabilityConfig() throws IOException {
         String body = """
                 schemaVersion: "1.0"

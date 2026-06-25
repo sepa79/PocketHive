@@ -123,29 +123,36 @@ boundary.
 Each tool must have a contract entry matching `TOOL-CONTRACTS.md` before it is
 implemented or changed.
 
+Published MCP tool names use underscores. Names with dots or hyphens are
+legacy/conceptual aliases and must not be used in normal agent or plugin
+integrations unless `PH_MCP_TOOL_NAME_MODE=legacy` or `both` is set.
+
 ### Bundle management
-- `bundle.list` — lists bundles in `BUNDLES_ROOT/bundles/`
-- `bundle.read` — reads a file from a bundle
-- `bundle.scaffold` — quick-pick bundle scaffold for IDE users
-- `bundle.validate` — async validation through Scenario Manager; never a shell command
-- `bundle.validate.result` — polls validation job result
-- `bundle.diff` — preview generated/session changes before export
+- `bundle_list` — lists bundles in `BUNDLES_ROOT/bundles/`
+- `bundle_read` — reads a file from a bundle
+- `bundle_scaffold` — quick-pick bundle scaffold for IDE users
+- `bundle_validate` — async validation through Scenario Manager; never a shell command
+- `bundle_validate_result` — polls validation job result
+- `bundle_diff` — preview generated/session changes before export
 
 ### Wizard authoring
-- `wizard.start` — starts a novice bundle design session; no file writes
-- `wizard.answer` — records one answer and returns the next required question
-- `wizard.summary` — previews the generated plan; no file writes
-- `wizard.complete` — creates a new bundle and runs generation sanity checks
+- `wizard_start` — starts a novice bundle design session; no file writes
+- `wizard_answer` — records one answer and returns the next required question
+- `wizard_summary` — previews the generated plan; no file writes
+- `wizard_complete` — creates a new bundle and runs generation sanity checks
 
 ### Agent-managed workflows
-- `workflow.start/source.read/update/status/preview/generate/validate/deploy/verify/patch/report`
+- `workflow_start`, `workflow_source_read`, `workflow_update`,
+  `workflow_status`, `workflow_preview`, `workflow_generate`,
+  `workflow_validate`, `workflow_deploy`, `workflow_verify`,
+  `workflow_patch`, and `workflow_report`
   provide the deterministic control surface for external-agent test conversion
   workflows. The MCP owns state, gates, generated artifacts, official API calls,
   and evidence. The external agent owns source interpretation and debug/fix
   choices.
-- `workflow.result` is the compact agent-facing handoff shape for the same
+- `workflow_result` is the compact agent-facing handoff shape for the same
   workflow: verdict, phase, diagnosis, next action, proof summary, and refs.
-  `workflow.status`, `workflow.report`, `workflow.evidence.render`, and
+  `workflow_status`, `workflow_report`, `workflow_evidence_render`, and
   workflow traces include the same `agent` object so agents can stay on one
   interpretation path and drill into full evidence only when needed.
 - Runtime verification has two explicit proof modes. `accept-partial` is for
@@ -154,7 +161,7 @@ implemented or changed.
   fails missing/partial production proof for queue drain, request handling,
   flow order, configured auth, mutating payload body assertions, and runtime
   payload trace.
-- `workflow.config.get`, `workflow.config.validate`, and `workflow.list` are
+- `workflow_config_get`, `workflow_config_validate`, and `workflow_list` are
   read-only plugin-facing tools for configuration and status display. Plugins
   may render remaining `nextQuestions`, but must not answer them or call
   mutating workflow tools.
@@ -237,20 +244,20 @@ once after a `401`. Explicit `POCKETHIVE_AUTH_TOKEN` values are treated as
 caller-owned and are not refreshed by the MCP.
 
 ### Scenario Manager contracts
-- `scenario.contracts.get` — reads Scenario Manager capability/template/scenario
+- `scenario_contracts_get` — reads Scenario Manager capability/template/scenario
   contract context for wizard and authoring tools
-- `scenario.capabilities.get` — reads worker capability manifests from
+- `scenario_capabilities_get` — reads worker capability manifests from
   Scenario Manager `/api/capabilities`
-- `scenario.templates.catalog` — reads Scenario Manager `/api/templates`,
+- `scenario_templates_catalog` — reads Scenario Manager `/api/templates`,
   including defunct bundle status
 
-`scenario.contracts.get` reads Scenario Manager `/api/authoring-contract` on the
+`scenario_contracts_get` reads Scenario Manager `/api/authoring-contract` on the
 first call and caches it for the MCP server process. Later calls reuse the
 cached contract unless the caller passes `forceRefresh: true`, or passes
 `checkFingerprint: true` and `/api/authoring-contract/fingerprint` reports a
 changed fingerprint.
 
-`bundle.validate` supports two explicit validators:
+`bundle_validate` supports two explicit validators:
 
 - `scenario-manager-dry-run` — validates a zip through
   `POST /validation/scenario-bundles`; no Scenario Manager writes
@@ -258,13 +265,13 @@ changed fingerprint.
   through Scenario Manager. This has Scenario Manager write side effects.
 
 ### Scenario lifecycle
-- `scenario.deploy` — HTTP zip upload (local + remote)
-- `scenario.list` — lists loaded scenarios
-- `scenario.get` — gets a specific scenario
+- `scenario_deploy` — HTTP zip upload (local + remote)
+- `scenario_list` — lists loaded scenarios
+- `scenario_get` — gets a specific scenario
 
 ### Swarm lifecycle
-- `swarm.list`, `swarm.get`, `swarm.create`, `swarm.start`
-- `swarm.wait-ready`, `swarm.stop`, `swarm.remove`
+- `swarm_list`, `swarm_get`, `swarm_create`, `swarm_start`
+- `swarm_wait_ready`, `swarm_stop`, `swarm_remove`
 - `workflow_deploy_start`, `workflow_deploy_status`, `workflow_deploy_resume`
   and `workflow_verify_start`, `workflow_verify_status`,
   `workflow_verify_resume` for slow machines where scenario
@@ -273,9 +280,9 @@ changed fingerprint.
   relying on one long MCP timeout.
 
 ### Real-time component control
-- `component.config-preview` — reads the current runtime config and returns the
+- `component_config_preview` — reads the current runtime config and returns the
   merge plan without sending an update.
-- `component.config-update` — sends a targeted runtime config-update through
+- `component_config_update` — sends a targeted runtime config-update through
   Orchestrator `POST /api/components/{role}/{instance}/config`.
 
 This is the same write path used by the web UI. Before sending the update, the
@@ -306,17 +313,17 @@ rate:
 
 If the current config cannot be read for the exact `role` and `instanceId`, the
 tool fails with `CURRENT_CONFIG_UNAVAILABLE` instead of sending a partial patch.
-Use `component.config-preview` when an agent or human wants to inspect the
+Use `component_config_preview` when an agent or human wants to inspect the
 planned merge first; it uses the same read and merge logic but does not publish
 a config update.
 The returned Orchestrator `202 Accepted` response and watch topics are dispatch
-evidence only; agents should follow with `debug.journal`, status-full snapshots,
+evidence only; agents should follow with `debug_journal`, status-full snapshots,
 queue depth, or metrics to prove the component applied the update.
 
 ### Debugging
-- `debug.queues`, `debug.tap`, `debug.tap.read`, `debug.tap.close`
-- `debug.journal`, `debug.config-update` compatibility alias
-- `debug.prometheus`
+- `debug_queues`, `debug_tap`, `debug_tap_read`, `debug_tap_close`
+- `debug_journal`, `debug_config_update` compatibility alias
+- `debug_prometheus`
 - `evidence_summary` — read-only aggregate evidence model for one swarm
 - `workflow_result` — compact read-only agent handoff for one workflow
 - `workflow_evidence_render` — read-only MCP App render tool for workflow
@@ -325,9 +332,11 @@ queue depth, or metrics to prove the component applied the update.
   PocketHive APIs. Direct Docker logs and direct Loki queries are out of scope.
 
 ### Mock servers
-- `mock.wiremock.list/add/reset/requests/unmatched`
-- `mock.tcp.list/add/reset/requests/unmatched/scenarios`
-- `mock.tcp.reset-scenarios/enable/disable/update`
+- `mock_wiremock_list`, `mock_wiremock_add`, `mock_wiremock_reset`,
+  `mock_wiremock_requests`, `mock_wiremock_unmatched`
+- `mock_tcp_list`, `mock_tcp_add`, `mock_tcp_reset`, `mock_tcp_requests`,
+  `mock_tcp_unmatched`, `mock_tcp_scenarios`, `mock_tcp_reset_scenarios`,
+  `mock_tcp_enable`, `mock_tcp_disable`, `mock_tcp_update`
 
 ### Removed shell/dev tools
 - `docker.execute`, `docker.compose`
@@ -341,7 +350,7 @@ queue depth, or metrics to prove the component applied the update.
 - `github.update_issue`, `github.add_issue_comment`, `github.search_issues`
 
 ### Health
-- `health.check`
+- `health_check`
 
 ### GitHub issues
 General GitHub issue access is out of scope for PocketHive MCP. Use a separate
@@ -352,18 +361,18 @@ PocketHive evidence into a structured issue payload, for example
 `issue.export-evidence`. It must not become a general GitHub client.
 
 ### Environment (existing, enhanced)
-- `env.list` — enhanced to return structured environment objects
-- `env.switch` — switches active environment, takes effect on next MCP server spawn
+- `env_list` — enhanced to return structured environment objects
+- `env_switch` — switches active environment, takes effect on next MCP server spawn
 
 ## New tools
 
-### context.get
+### context_get
 
 Returns the current active configuration context. AI agents should call
 this at the start of any session to understand what they are working with.
 
 ```
-Tool: context.get
+Tool: context_get
 Input: (none)
 Output: {
   bundlesRoot: string,          // active BUNDLES_ROOT path
@@ -377,13 +386,13 @@ Output: {
 }
 ```
 
-### context.set-bundles-root
+### context_set_bundles_root
 
 Switches the active bundles root. Takes effect immediately — no server
 restart needed. The server updates its in-memory `BUNDLES_ROOT` variable.
 
 ```
-Tool: context.set-bundles-root
+Tool: context_set_bundles_root
 Input: { path: string }
 Output: {
   switched: true,
@@ -395,13 +404,13 @@ Output: {
 Note: this only affects the current server process. The IDE plugin also
 updates its settings so the new root persists across restarts.
 
-### context.list-bundles-roots
+### context_list_bundles_roots
 
 Lists all configured bundles roots from the IDE plugin settings.
 The server receives these as a JSON array in `PH_BUNDLES_ROOTS` env var.
 
 ```
-Tool: context.list-bundles-roots
+Tool: context_list_bundles_roots
 Input: (none)
 Output: {
   roots: [{ path: string, name: string, active: boolean }],
@@ -409,13 +418,13 @@ Output: {
 }
 ```
 
-### env.add
+### env_add
 
 Creates a new named environment profile. Stored in the IDE plugin settings.
 The server signals the plugin to persist the new profile.
 
 ```
-Tool: env.add
+Tool: env_add
 Input: {
   name: string,
   baseUrl: string,
@@ -426,22 +435,22 @@ Input: {
 Output: { added: true, name: string }
 ```
 
-### env.remove
+### env_remove
 
 Removes a named environment profile.
 
 ```
-Tool: env.remove
+Tool: env_remove
 Input: { name: string }
 Output: { removed: true, name: string }
 ```
 
-### env.current
+### env_current
 
 Returns the active environment details (without secrets).
 
 ```
-Tool: env.current
+Tool: env_current
 Input: (none)
 Output: {
   name: string,
@@ -453,21 +462,21 @@ Output: {
 }
 ```
 
-### bundle.diff
+### bundle_diff
 
 Shows the diff between the local bundle files and the version currently
 deployed to the Scenario Manager.
 
 > **Note**: The Scenario Manager REST API does not expose an endpoint to
-> list or download deployed bundle file contents. `bundle.diff` therefore
+> list or download deployed bundle file contents. `bundle_diff` therefore
 > compares local files against a local deploy manifest written by
-> `scenario.deploy` at deploy time (`.pockethive-deploy-manifest.json`
+> `scenario_deploy` at deploy time (`.pockethive-deploy-manifest.json`
 > in the bundle directory). If no manifest exists, the tool reports all
 > local files as undeployed. This is a known limitation — a future SM
 > API endpoint (`GET /scenarios/{id}/files`) would enable true remote diff.
 
 ```
-Tool: bundle.diff
+Tool: bundle_diff
 Input: { bundle: string }
 Output: {
   bundle: string,

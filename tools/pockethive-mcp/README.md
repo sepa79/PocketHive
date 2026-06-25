@@ -65,9 +65,35 @@ Use this decision table when configuring an agent or IDE:
 | Runtime cleanup/log/version tools | `tools/pockethive-mcp` |
 | Low-level terminal diagnostics only | `tools/mcp-orchestrator-debug/client.mjs` |
 
-Default MCP tool names use underscores, for example `runtime_cleanup_plan`.
-Dotted names such as `runtime.cleanup.plan` are conceptual names unless
-`PH_MCP_TOOL_NAME_MODE=legacy` or `both` is set.
+## Tool Name Contract
+
+Default MCP tool names use underscores. Agent/client docs and examples must use
+the names returned by `tools/list`, for example:
+
+```text
+scenario_list
+scenario_get
+scenario_deploy
+swarm_list
+swarm_create
+swarm_wait_ready
+swarm_get
+swarm_start
+swarm_stop
+swarm_remove
+debug_journal
+component_config_preview
+component_config_update
+runtime_control_plane_status
+runtime_inspect_worker
+runtime_manifest_validate
+```
+
+Names with dots or hyphens, such as `swarm.create`,
+`component.config-preview`, or `runtime.cleanup.plan`, are legacy/conceptual
+names only. They are exposed only when `PH_MCP_TOOL_NAME_MODE=legacy` or
+`PH_MCP_TOOL_NAME_MODE=both` is set. Do not use those names in normal agent
+instructions or client integrations.
 
 ## Core Environment
 
@@ -177,9 +203,8 @@ runtime_manifest_validate
 runtime_cleanup_execute
 ```
 
-These default names use underscores for client compatibility. Conceptual dotted
-names such as `runtime.cleanup.plan` are available only when
-`PH_MCP_TOOL_NAME_MODE=legacy` or `both`.
+These default names use underscores for client compatibility. See the Tool Name
+Contract above for legacy dotted/hyphenated name handling.
 
 Cleanup is always `plan -> execute`. Cleanup tools delegate to Orchestrator's
 `/api/runtime/cleanup/*` reconciliation API so swarm registry, Docker runtime

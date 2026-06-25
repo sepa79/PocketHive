@@ -382,12 +382,15 @@ export function ConfigUpdatePatchModal({
                     <div key={entry.name} className={isIncluded ? 'configPatchField configPatchFieldIncluded' : 'configPatchField'}>
 	                      <div className="configPatchFieldHeader">
 	                        <label className="configPatchInclude">
-	                          <input
-	                            type="checkbox"
-	                            aria-label={`Include ${label} in patch`}
-	                            checked={isIncluded}
-	                            onChange={(event) => setEnabled((previous) => ({ ...previous, [entry.name]: event.currentTarget.checked }))}
-	                          />
+		                          <input
+		                            type="checkbox"
+		                            aria-label={`Include ${label} in patch`}
+		                            checked={isIncluded}
+		                            onChange={(event) => {
+		                              const checked = event.currentTarget.checked
+		                              setEnabled((previous) => ({ ...previous, [entry.name]: checked }))
+		                            }}
+		                          />
 	                          <span className="configPatchIncludeText">
 	                            <span>{label}</span>
 	                            <span className="configPatchIncludeHint">include in patch</span>

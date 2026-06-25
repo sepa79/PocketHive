@@ -1,0 +1,7 @@
+serviceId: capability-controls
+callId: control
+protocol: HTTP
+method: GET
+pathTemplate: /__admin/health
+headersTemplate:
+  content-type: application/json
