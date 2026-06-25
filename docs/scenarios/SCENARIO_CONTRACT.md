@@ -160,15 +160,13 @@ config:
       ratePerSec: 50
   outputs:
     type: RABBITMQ             # or REDIS / NOOP, etc.
-  worker:
-    # worker‑specific settings
-    message:
-      bodyType: HTTP
-      path: /test
-      method: POST
-      body: '{"event":"local-rest"}'
-      headers:
-        content-type: application/json
+  message:
+    bodyType: HTTP
+    path: /test
+    method: POST
+    body: '{"event":"local-rest"}'
+    headers:
+      content-type: application/json
 ```
 
 This mirrors how workers bind properties:
@@ -180,9 +178,8 @@ This mirrors how workers bind properties:
 - `outputs` – IO configuration for the outbound side.
   - `type` – output type enum (e.g. `RABBITMQ`, `REDIS`, `NOOP`).
   - `<typeKey>` – type‑specific config.
-- `worker` – logical worker config.
-  - Keys under this section are specific to each role and are documented
-    in the worker SDK and capability manifests.
+- Role-specific worker fields live directly under `config`.
+  - These keys are documented in the worker SDK and capability manifests.
 
 The **capabilities** files under `scenario-manager-service/capabilities/` are
 the authoritative list of user-tunable fields per worker and IO type.
@@ -206,10 +203,9 @@ config:
       maxMessages: 0        # 0 = infinite, >0 = finite run
   outputs:
     type: RABBITMQ
-  worker:
-    message:
-      bodyType: SIMPLE
-      body: 'tick'
+  message:
+    bodyType: SIMPLE
+    body: 'tick'
 ```
 
 **Redis dataset consumer:**
@@ -225,14 +221,13 @@ config:
       ratePerSec: 5
   outputs:
     type: RABBITMQ
-  worker:
-    message:
-      bodyType: HTTP
-      path: /api/demo
-      method: POST
-      body: '{{ payload }}'
-      headers:
-        content-type: application/json
+  message:
+    bodyType: HTTP
+    path: /api/demo
+    method: POST
+    body: '{{ payload }}'
+    headers:
+      content-type: application/json
 ```
 
 **Redis dataset consumer (multi-list):**
@@ -283,8 +278,7 @@ config:
   docker:
     volumes:
       - /opt/pockethive/scenarios-runtime/<swarmId>:/app/scenario:ro
-  worker:
-    # normal worker config...
+  # normal worker config...
 ```
 
 - `volumes` is a list of Docker bind specs:
@@ -400,9 +394,8 @@ The recommended pattern in worker config is:
 
 ```yaml
 config:
-  worker:
-    # For HTTP workers (e.g. processor)
-    baseUrl: "{{ sut.endpoints['default'].baseUrl }}/api"
+  # For HTTP workers (e.g. processor)
+  baseUrl: "{{ sut.endpoints['default'].baseUrl }}/api"
 ```
 
 At **create** time the Orchestrator resolves this expression using the
@@ -477,16 +470,15 @@ Example for generator HTTP bodies:
 
 ```yaml
 config:
-  worker:
-    message:
-      bodyType: HTTP
-      schemaRef: "schemas/local-rest-body.schema.json#/body"
-      body: |
-        {
-          "event": "local-rest-schema-demo",
-          "message": "Hello from {{ swarmId }}",
-          "correlationId": "{{ correlationId }}"
-        }
+  message:
+    bodyType: HTTP
+    schemaRef: "schemas/local-rest-body.schema.json#/body"
+    body: |
+      {
+        "event": "local-rest-schema-demo",
+        "message": "Hello from {{ swarmId }}",
+        "correlationId": "{{ correlationId }}"
+      }
 ```
 
 - The same `schemaRef` hint is also supported in **Request Builder templates** (for example next to `bodyTemplate`).

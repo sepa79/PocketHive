@@ -269,8 +269,7 @@ plan:
           time: PT60.1S
           type: config-update
           config:
-            worker:
-              baseUrl: "{{ sut.endpoints['wiremock-new'].baseUrl }}"
+            baseUrl: "{{ sut.endpoints['wiremock-new'].baseUrl }}"
 
     - instanceId: worker-bee
       steps:

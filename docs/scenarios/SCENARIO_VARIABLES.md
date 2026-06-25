@@ -181,11 +181,10 @@ Example:
 
 ```yaml
 config:
-  worker:
-    customerId: "{{ vars.customerId }}"
-    loopCount: "{{ vars.loopCount }}"
-    enabled: "{{ vars.enableFoo }}"
-    discount: "{{ vars.discount }}"
+  customerId: "{{ vars.customerId }}"
+  loopCount: "{{ vars.loopCount }}"
+  enabled: "{{ vars.enableFoo }}"
+  discount: "{{ vars.discount }}"
 ```
 
 ### 5.2 SpEL (`eval(...)`)

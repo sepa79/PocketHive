@@ -1,0 +1,15 @@
+{
+  "name": "@pockethive/scenario-config-migrate",
+  "version": "0.15.30",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "scenario-config-migrate": "./cli.mjs"
+  },
+  "scripts": {
+    "test": "node --test scenario-config-migrate.test.mjs"
+  },
+  "dependencies": {
+    "yaml": "^2.8.2"
+  }
+}

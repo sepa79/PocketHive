@@ -256,6 +256,19 @@ tracked here because the validation work exposed the same contract split in
 runtime planning, authoring tools, capabilities, docs, and UI live config
 editing.
 
+PR and commit boundary:
+
+- Ship this as one PR with three logical commits:
+  1. Contract docs, agent migration guide, and standalone migrator.
+  2. Repo-owned scenario/capability/tooling migration produced by the migrator.
+  3. Legacy-shape rejection and runtime/planning compatibility removal.
+- The migration guide and migrator are not a follow-up. They are the first
+  commit because external scenario repositories need the same mechanical path
+  before old shapes start failing validation.
+- Keep the commits reviewable, but do not split the Bee Config SSOT behavior
+  across multiple PRs. The old and new config shapes must not coexist as a
+  shipped compatibility phase.
+
 Release boundary:
 
 - Goal: remove scenario support for `config.worker`, `config.worker.config`, and
@@ -483,16 +496,19 @@ Required grep gates:
 
 ```bash
 rg '^\s+worker:\s*$' scenarios scenario-manager-service -g 'scenario.y*ml'
-rg 'config\.worker|pockethive\.worker|worker\.message|name:\s*worker\.' \
-  docs/ARCHITECTURE.md docs/scenarios/SCENARIO_CONTRACT.md \
-  docs/scenarios/README.md scenario-manager-service/README.md \
-  scenario-manager-service orchestrator-service tools ui-v2 \
+rg 'config\.worker|pockethive\.worker\.config|worker\.message|name:\s*worker\.' \
+  docs/ARCHITECTURE.md docs/scenarios/*.md scenario-manager-service/README.md \
+  scenario-manager-service/capabilities tools/pockethive-mcp \
+  tools/scenario-templating-check ui-v2 \
   -g '!**/target/**' -g '!**/node_modules/**' -g '!**/build/**'
 rg '^\s*- name:\s*enabled\b' scenario-manager-service/capabilities
+rg 'effectiveWorkerConfig|mergeWorkerConfig|flattenWorkerBlock' \
+  scenario-manager-service/src/main/java orchestrator-service/src/main/java
 ```
 
-Migration guides, archive docs, and this plan may show previous-format examples
-only as explicitly labelled "before" examples.
+Migration guides, archive docs, this plan, negative tests, and explicit
+rejection diagnostics may show previous-format examples only as labelled
+"before"/invalid examples.
 
 ## Bee Config SSOT Review Findings
 

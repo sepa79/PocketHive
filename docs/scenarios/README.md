@@ -39,7 +39,7 @@ may live anywhere under that root (subfolders are supported).
   - `in` – inbound queue suffix (e.g. `genQ`).
   - `out` – outbound queue suffix (e.g. `modQ`).
   - Swarm Controller expands these into full queue names using the swarm id.
-- **Worker config** (`config.worker`, `config.inputs`, `config.outputs`)
+- **Worker config** (`config`, `config.inputs`, `config.outputs`)
   - Mirrors the configuration structure expected by worker services,
     including IO configuration such as `inputs.scheduler.ratePerSec`
     or `inputs.redis.listName` / `inputs.redis.sources`, and output
