@@ -20,13 +20,7 @@ config:
     ui:
       label: Input type
       group: IO
-  - name: enabled
-    type: boolean
-    default: false
-    ui:
-      label: Enabled
-      group: General
-  - name: worker.message.bodyType
+  - name: message.bodyType
     type: string
     default: "HTTP"
     options:
@@ -35,15 +29,15 @@ config:
     ui:
       label: Body type
       group: Message
-  - name: worker.message.path
+  - name: message.path
     type: string
     default: "/"
     when:
-      worker.message.bodyType: "HTTP"
+      message.bodyType: "HTTP"
     ui:
       label: Path
       group: Message
-  - name: worker.message.method
+  - name: message.method
     type: string
     default: "GET"
     options:
@@ -55,18 +49,18 @@ config:
       - "HEAD"
       - "OPTIONS"
     when:
-      worker.message.bodyType: "HTTP"
+      message.bodyType: "HTTP"
     ui:
       label: Method
       group: Message
-  - name: worker.message.body
+  - name: message.body
     type: text
     default: ""
     multiline: true
     ui:
       label: Body
       group: Message
-  - name: worker.message.headers
+  - name: message.headers
     type: json
     default: {}
     multiline: true

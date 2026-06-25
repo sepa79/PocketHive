@@ -9,12 +9,6 @@ ui:
   shape: "pentagon"
   abbreviation: "MO"
 config:
-  - name: enabled
-    type: boolean
-    default: false
-    ui:
-      label: Enabled
-      group: General
   - name: mode.type
     type: string
     default: "pass-through"

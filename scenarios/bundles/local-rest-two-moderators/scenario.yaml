@@ -1,6 +1,8 @@
 id: local-rest-two-moderators
 name: Local REST - Double Moderator Chain
-description: Local images wired as generator → moderator A → processor → moderator B → postprocessor. Guard monitors `moderator-a-out` against a deterministic WireMock delay to showcase steady-state buffer control.
+description: Local images wired as generator → moderator A → processor →
+  moderator B → postprocessor. Guard monitors `moderator-a-out` against a
+  deterministic WireMock delay to showcase steady-state buffer control.
 trafficPolicy:
   bufferGuard:
     enabled: true
@@ -35,12 +37,11 @@ template:
           type: SCHEDULER
           scheduler:
             ratePerSec: 10
-        worker:
-          message:
-            bodyType: HTTP
-            path: /api/guarded
-            method: POST
-            body: hello from generator
+        message:
+          bodyType: HTTP
+          path: /api/guarded
+          method: POST
+          body: hello from generator
       work:
         out:
           out: gen-out
@@ -74,10 +75,9 @@ template:
       id: moderator-2
       image: moderator:latest
       config:
-        worker:
-          mode:
-            type: rate-per-sec
-            ratePerSec: 5
+        mode:
+          type: rate-per-sec
+          ratePerSec: 5
       work:
         in:
           in: mod2-out

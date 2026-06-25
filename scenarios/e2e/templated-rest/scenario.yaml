@@ -1,6 +1,7 @@
 id: templated-rest
 name: Local REST - Templated Generator
-description: Uses local images. Sample scenario that enables the templating interceptor for the generator.
+description: Uses local images. Sample scenario that enables the templating
+  interceptor for the generator.
 template:
   image: swarm-controller:latest
   bees:
@@ -11,20 +12,19 @@ template:
         inputs:
           scheduler:
             ratePerSec: 5
-        worker:
-          message:
-            bodyType: HTTP
-            path: /api/guarded
-            method: POST
-            body: "{{ payload }}"
-            headers:
-              content-type: text/plain
         interceptors:
           templating:
             template: >
-              hello world from Template Interceptor,
-              sequence number is {{ headers["x-ph-seq"] }}
-              and was generated at {{ headers.generatedAt }}
+              hello world from Template Interceptor, sequence number is {{
+              headers["x-ph-seq"] }} and was generated at {{ headers.generatedAt
+              }}
+        message:
+          bodyType: HTTP
+          path: /api/guarded
+          method: POST
+          body: "{{ payload }}"
+          headers:
+            content-type: text/plain
       work:
         out:
           out: gen

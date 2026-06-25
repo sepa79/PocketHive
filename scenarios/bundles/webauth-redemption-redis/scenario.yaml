@@ -1,6 +1,7 @@
 id: webauth-redemption-redis
 name: WebAuth Redemption (Redis -> WebAuth -> Redis)
-description: Reads WebAuth redemption payloads from Redis list webauth.RED.custA and forwards original payloads to webauth.BAL.custA after processing.
+description: Reads WebAuth redemption payloads from Redis list webauth.RED.custA
+  and forwards original payloads to webauth.BAL.custA after processing.
 template:
   image: swarm-controller:latest
   bees:
@@ -15,14 +16,13 @@ template:
             port: 6379
             listName: webauth.RED.custA
             ratePerSec: 5
-        worker:
-          message:
-            bodyType: SIMPLE
-            body: "{{ payload }}"
-            headers:
-              content-type: application/json
-              x-ph-service-id: webauth
-              x-ph-call-id: webauth-redemption
+        message:
+          bodyType: SIMPLE
+          body: "{{ payload }}"
+          headers:
+            content-type: application/json
+            x-ph-service-id: webauth
+            x-ph-call-id: webauth-redemption
       work:
         out:
           out: build

@@ -1,6 +1,7 @@
 id: tcp-ssl-demo
 name: TCP SSL/TLS Secure Demo
-description: Demonstrates secure TCP communication using TLS with certificate verification options
+description: Demonstrates secure TCP communication using TLS with certificate
+  verification options
 template:
   image: swarm-controller:latest
   bees:
@@ -13,18 +14,17 @@ template:
           scheduler:
             ratePerSec: 2
             maxMessages: 1
-        worker:
-          message:
-            bodyType: SIMPLE
-            body: |
-              {
-                "sessionId": "SEC_{{ eval('#uuid()') }}",
-                "encryptedData": "{{ eval("#base64_encode('Sensitive data: ' + #randInt(1000, 9999))") }}",
-                "signature": "{{ eval("#hmac_sha256_hex('secretkey', #uuid())") }}",
-                "timestamp": "{{ eval("#date_format(now, 'yyyy-MM-dd''T''HH:mm:ss.SSS''Z''')") }}"
-              }
-            headers:
-              x-ph-call-id: secure-message
+        message:
+          bodyType: SIMPLE
+          body: |
+            {
+              "sessionId": "SEC_{{ eval('#uuid()') }}",
+              "encryptedData": "{{ eval("#base64_encode('Sensitive data: ' + #randInt(1000, 9999))") }}",
+              "signature": "{{ eval("#hmac_sha256_hex('secretkey', #uuid())") }}",
+              "timestamp": "{{ eval("#date_format(now, 'yyyy-MM-dd''T''HH:mm:ss.SSS''Z''')") }}"
+            }
+          headers:
+            x-ph-call-id: secure-message
       work:
         out:
           out: build
@@ -34,9 +34,8 @@ template:
       id: request-builder
       image: request-builder:latest
       config:
-        worker:
-          templateRoot: /app/scenario/templates/tcp
-          serviceId: secure
+        templateRoot: /app/scenario/templates/tcp
+        serviceId: secure
       work:
         in:
           in: build
@@ -50,14 +49,13 @@ template:
       image: processor:latest
       config:
         baseUrl: "{{ sut.endpoints['tcps-server'].baseUrl }}"
-        worker:
-          tcpTransport:
-            type: socket
-            connectionReuse: NONE
-            maxRetries: 2
-            connectTimeoutMs: 5000
-            readTimeoutMs: 8000
-            sslVerify: false
+        tcpTransport:
+          type: socket
+          connectionReuse: NONE
+          maxRetries: 2
+          connectTimeoutMs: 5000
+          readTimeoutMs: 8000
+          sslVerify: false
       work:
         in:
           in: proc
@@ -70,9 +68,8 @@ template:
       id: postprocessor
       image: postprocessor:latest
       config:
-        worker:
-          postprocessor:
-            publish-all-metrics: true
+        postprocessor:
+          publish-all-metrics: true
       work:
         in:
           in: post

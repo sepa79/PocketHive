@@ -88,7 +88,7 @@ public final class ScenarioTemplateValidator {
                 Map<String, Object> bee = asMap(o, "bee");
                 String role = String.valueOf(bee.get("role"));
                 if ("generator".equalsIgnoreCase(role)) return true;
-                // Also match custom-named bees that have generator config shape (inputs + worker.message)
+                // Also match custom-named bees that have generator config shape (inputs + message).
                 Object cfg = bee.get("config");
                 if (!(cfg instanceof Map<?, ?> cfgMap)) return false;
                 return cfgMap.containsKey("inputs");
@@ -98,8 +98,7 @@ public final class ScenarioTemplateValidator {
             .orElseThrow(() -> new IllegalArgumentException("No generator bee found in scenario"));
 
         Map<String, Object> config = asMap(generator.get("config"), "generator.config");
-        Map<String, Object> worker = asMap(config.get("worker"), "generator.config.worker");
-        Map<String, Object> message = asMap(worker.get("message"), "generator.config.worker.message");
+        Map<String, Object> message = asMap(config.get("message"), "generator.config.message");
 
         String payload = Objects.toString(context.getOrDefault("payload", "{}"), "{}");
         @SuppressWarnings("unchecked")

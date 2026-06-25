@@ -11,14 +11,13 @@ template:
         inputs:
           scheduler:
             ratePerSec: 5
-        worker:
-          message:
-            bodyType: HTTP
-            path: /test
-            method: POST
-            body: '{"event":"http-proxy-demo"}'
-            headers:
-              content-type: application/json
+        message:
+          bodyType: HTTP
+          path: /test
+          method: POST
+          body: '{"event":"http-proxy-demo"}'
+          headers:
+            content-type: application/json
       work:
         out:
           out: gen

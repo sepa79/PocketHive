@@ -1,6 +1,7 @@
 id: redis-dataset-demo
 name: Redis dataset demo (generator + per-customer lists)
-description: Seeds Redis with randomised payloads and runs two low-rate data providers that each drain their own list.
+description: Seeds Redis with randomised payloads and runs two low-rate data
+  providers that each drain their own list.
 template:
   image: swarm-controller:latest
   bees:
@@ -14,16 +15,6 @@ template:
           type: SCHEDULER
           scheduler:
             ratePerSec: 5
-        worker:
-          message:
-            bodyType: SIMPLE
-            body: |
-              {% set cust = pickWeighted('custA', 1, 'custB', 1) %}
-              {% set card = eval("#randLong('4000000000000000','4999999999999999')") %}
-              {"customerCode":"{{ cust }}",
-              "accountNumber":"{{ eval('#randInt(10000000,99999999)') }}",
-              "cardNumber":"{{ card }}",
-              "nonce":"{{ eval('#uuid()') }}"}
         interceptors:
           redisUploader:
             enabled: true
@@ -38,6 +29,15 @@ template:
               - match: '"customerCode"\s*:\s*"custB"'
                 list: ph:dataset:custb
             defaultList: ph:dataset:other
+        message:
+          bodyType: SIMPLE
+          body: |
+            {% set cust = pickWeighted('custA', 1, 'custB', 1) %}
+            {% set card = eval("#randLong('4000000000000000','4999999999999999')") %}
+            {"customerCode":"{{ cust }}",
+            "accountNumber":"{{ eval('#randInt(10000000,99999999)') }}",
+            "cardNumber":"{{ card }}",
+            "nonce":"{{ eval('#uuid()') }}"}
       work: {}
 
     - role: dataProviderA
@@ -51,13 +51,13 @@ template:
             port: 6379
             listName: ph:dataset:custa
             ratePerSec: 5
-        worker:
-          message:
-            bodyType: SIMPLE
-            body: "{{ payload }}"
-            headers:
-              content-type: application/json
-              x-ph-call-id: "{{ pickWeighted('redis-auth', 50, 'redis-balance', 30, 'redis-topup', 20) }}"
+        message:
+          bodyType: SIMPLE
+          body: "{{ payload }}"
+          headers:
+            content-type: application/json
+            x-ph-call-id: "{{ pickWeighted('redis-auth', 50, 'redis-balance', 30,
+              'redis-topup', 20) }}"
       work:
         out:
           out: http-build
@@ -74,13 +74,13 @@ template:
             port: 6379
             listName: ph:dataset:custb
             ratePerSec: 5
-        worker:
-          message:
-            bodyType: SIMPLE
-            body: "{{ payload }}"
-            headers:
-              content-type: application/json
-              x-ph-call-id: "{{ pickWeighted('redis-balance', 40, 'redis-topup', 40, 'redis-auth', 20) }}"
+        message:
+          bodyType: SIMPLE
+          body: "{{ payload }}"
+          headers:
+            content-type: application/json
+            x-ph-call-id: "{{ pickWeighted('redis-balance', 40, 'redis-topup', 40,
+              'redis-auth', 20) }}"
       work:
         out:
           out: http-build

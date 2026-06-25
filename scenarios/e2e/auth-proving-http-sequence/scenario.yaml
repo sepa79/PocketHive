@@ -1,6 +1,7 @@
 id: auth-proving-http-sequence
 name: Auth Proving - HTTP Sequence
-description: Proves http-sequence per-step auth, shared Redis token reuse, mixed profiles, and repeated step order.
+description: Proves http-sequence per-step auth, shared Redis token reuse, mixed
+  profiles, and repeated step order.
 template:
   image: swarm-controller:latest
   bees:
@@ -13,12 +14,11 @@ template:
           scheduler:
             ratePerSec: 1
             maxMessages: 1
-        worker:
-          message:
-            bodyType: SIMPLE
-            body: '{"scenario":"auth-proving-http-sequence","journey":"mixed-auth"}'
-            headers:
-              content-type: application/json
+        message:
+          bodyType: SIMPLE
+          body: '{"scenario":"auth-proving-http-sequence","journey":"mixed-auth"}'
+          headers:
+            content-type: application/json
       work:
         out:
           out: sequence
@@ -28,28 +28,27 @@ template:
       id: http-sequence
       image: http-sequence:latest
       config:
-        worker:
-          baseUrl: "{{ sut.endpoints['default'].baseUrl }}"
-          templateRoot: /app/scenario/templates/http
-          serviceId: sequence
-          threadCount: 1
-          debugCapture:
-            mode: ALWAYS
-            includeHeaders: true
-            includeRequest: true
-            bodyPreviewBytes: 512
-            redisTtlSeconds: 300
-          steps:
-            - id: oauth-first
-              callId: oauth-shared
-            - id: basic-middle
-              callId: basic-step
-            - id: oauth-again
-              callId: oauth-shared
-            - id: query-step
-              callId: query-step
-            - id: static-final
-              callId: static-final
+        baseUrl: "{{ sut.endpoints['default'].baseUrl }}"
+        templateRoot: /app/scenario/templates/http
+        serviceId: sequence
+        threadCount: 1
+        debugCapture:
+          mode: ALWAYS
+          includeHeaders: true
+          includeRequest: true
+          bodyPreviewBytes: 512
+          redisTtlSeconds: 300
+        steps:
+          - id: oauth-first
+            callId: oauth-shared
+          - id: basic-middle
+            callId: basic-step
+          - id: oauth-again
+            callId: oauth-shared
+          - id: query-step
+            callId: query-step
+          - id: static-final
+            callId: static-final
       work:
         in:
           in: sequence

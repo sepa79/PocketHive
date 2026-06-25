@@ -964,9 +964,9 @@ test("workflow generation preserves rich endpoint semantics in sequence bundles"
     assert.ok(scenario.topology?.edges?.length >= 2);
     assert.equal(Object.prototype.hasOwnProperty.call(scenario, "trafficPolicy"), true);
     const sequence = scenario.template.bees.find(bee => bee.role === "http-sequence");
-    assert.deepEqual(sequence.config.worker.steps[0].extracts, [{ fromJsonPointer: "/sessionId", to: "session.id", required: true }]);
-    assert.deepEqual(sequence.config.worker.steps[0].retry, { maxAttempts: 2, initialBackoffMs: 25, backoffMultiplier: 1, maxBackoffMs: 50, on: ["5xx"] });
-    assert.equal(sequence.config.worker.steps[0].continueOnNon2xx, false);
+    assert.deepEqual(sequence.config.steps[0].extracts, [{ fromJsonPointer: "/sessionId", to: "session.id", required: true }]);
+    assert.deepEqual(sequence.config.steps[0].retry, { maxAttempts: 2, initialBackoffMs: 25, backoffMultiplier: 1, maxBackoffMs: 50, on: ["5xx"] });
+    assert.equal(sequence.config.steps[0].continueOnNon2xx, false);
 
     const template = parse(readFileSync(resolve(root, "agent-rich-sequence", "templates", "http", "sequence", "session.yaml"), "utf8"));
     assert.equal(template.pathTemplate, "/session?client=demo");

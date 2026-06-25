@@ -1,6 +1,7 @@
 id: local-rest-schema-demo
 name: Local REST - Schema-driven body demo
-description: Local REST swarm using a JSON Schema to help author the generator body in the scenario editor.
+description: Local REST swarm using a JSON Schema to help author the generator
+  body in the scenario editor.
 template:
   image: swarm-controller:latest
   bees:
@@ -11,23 +12,22 @@ template:
         inputs:
           scheduler:
             ratePerSec: 10
-        worker:
-          message:
-            bodyType: HTTP
-            path: /schema-demo
-            method: POST
-            # The schemaRef is used by the Hive scenario editor to render a form;
-            # the generator worker itself ignores this field and only uses the body
-            # template below.
-            schemaRef: schemas/local-rest-body.schema.json#/body
-            body: |
-              {
-                "event": "local-rest-schema-demo",
-                "message": "Hello from {{ swarmId }}",
-                "correlationId": "{{ correlationId }}"
-              }
-            headers:
-              content-type: application/json
+        message:
+          bodyType: HTTP
+          path: /schema-demo
+          method: POST
+          # The schemaRef is used by the Hive scenario editor to render a form;
+          # the generator worker itself ignores this field and only uses the body
+          # template below.
+          schemaRef: schemas/local-rest-body.schema.json#/body
+          body: |
+            {
+              "event": "local-rest-schema-demo",
+              "message": "Hello from {{ swarmId }}",
+              "correlationId": "{{ correlationId }}"
+            }
+          headers:
+            content-type: application/json
       work:
         out:
           out: genQ
@@ -37,8 +37,7 @@ template:
       id: processor
       image: processor:latest
       config:
-        worker:
-          baseUrl: "{{ sut.endpoints['default'].baseUrl }}/api"
+        baseUrl: "{{ sut.endpoints['default'].baseUrl }}/api"
       work:
         in:
           in: genQ

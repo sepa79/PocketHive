@@ -1,6 +1,8 @@
 id: clearing-export-structured-demo
 name: Clearing Export Structured Demo
-description: Runs 20 transactions through generator->moderator->processor->clearing-export (structured mode XML) and writes 2 clearing files.
+description: Runs 20 transactions through
+  generator->moderator->processor->clearing-export (structured mode XML) and
+  writes 2 clearing files.
 template:
   image: swarm-controller:latest
   bees:
@@ -15,13 +17,12 @@ template:
           scheduler:
             ratePerSec: 20
             maxMessages: 20
-        worker:
-          message:
-            path: /api/test
-            method: POST
-            body: '{"tx":"demo","channel":"e2e-clearing-structured"}'
-            headers:
-              content-type: application/json
+        message:
+          path: /api/test
+          method: POST
+          body: '{"tx":"demo","channel":"e2e-clearing-structured"}'
+          headers:
+            content-type: application/json
       work:
         out:
           out: gen
@@ -53,20 +54,19 @@ template:
       id: clearing-export
       image: clearing-export:latest
       config:
-        worker:
-          mode: structured
-          schemaRegistryRoot: /app/scenario/clearing-schemas
-          schemaId: pcs-clearing
-          schemaVersion: "1.0.0"
-          maxRecordsPerFile: 10
-          flushIntervalMs: 60000
-          maxBufferedRecords: 5000
-          recordSourceStep: latest
-          recordSourceStepIndex: -1
-          recordBuildFailurePolicy: stop
-          localTargetDir: "/tmp/pockethive/clearing-out"
-          localTempSuffix: ".tmp"
-          writeManifest: false
+        mode: structured
+        schemaRegistryRoot: /app/scenario/clearing-schemas
+        schemaId: pcs-clearing
+        schemaVersion: "1.0.0"
+        maxRecordsPerFile: 10
+        flushIntervalMs: 60000
+        maxBufferedRecords: 5000
+        recordSourceStep: latest
+        recordSourceStepIndex: -1
+        recordBuildFailurePolicy: stop
+        localTargetDir: "/tmp/pockethive/clearing-out"
+        localTempSuffix: ".tmp"
+        writeManifest: false
       work:
         in:
           in: post

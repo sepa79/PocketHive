@@ -9,9 +9,6 @@ ui:
   shape: "hexagon"
   abbreviation: "CE"
 config:
-  - name: enabled
-    type: boolean
-    default: false
   - name: maxRecordsPerFile
     type: integer
     default: 1000

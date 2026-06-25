@@ -1,6 +1,7 @@
 id: https-proxy-demo
 name: HTTPS Proxy Demo
-description: Routes processor HTTPS traffic through the managed proxy authority with TLS verification disabled.
+description: Routes processor HTTPS traffic through the managed proxy authority
+  with TLS verification disabled.
 template:
   image: swarm-controller:latest
   bees:
@@ -11,14 +12,13 @@ template:
         inputs:
           scheduler:
             ratePerSec: 5
-        worker:
-          message:
-            bodyType: HTTP
-            path: /test
-            method: POST
-            body: '{"event":"https-proxy-demo"}'
-            headers:
-              content-type: application/json
+        message:
+          bodyType: HTTP
+          path: /test
+          method: POST
+          body: '{"event":"https-proxy-demo"}'
+          headers:
+            content-type: application/json
       work:
         out:
           out: gen

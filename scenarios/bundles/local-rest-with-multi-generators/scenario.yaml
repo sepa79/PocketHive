@@ -1,6 +1,8 @@
 id: local-rest-with-multi-generators
 name: Local REST - Multi Generators
-description: Uses local images. Sample REST scenario that ships two generator bees with distinct payloads, rate limits, and an expected 10% beta generator failure rate.
+description: Uses local images. Sample REST scenario that ships two generator
+  bees with distinct payloads, rate limits, and an expected 10% beta generator
+  failure rate.
 template:
   image: swarm-controller:latest
   bees:
@@ -11,12 +13,11 @@ template:
         inputs:
           scheduler:
             ratePerSec: 30
-        worker:
-          message:
-            bodyType: HTTP
-            path: /api/test-alpha
-            method: POST
-            body: hello-from-generator-a
+        message:
+          bodyType: HTTP
+          path: /api/test-alpha
+          method: POST
+          body: hello-from-generator-a
       work:
         out:
           out: gen
@@ -29,12 +30,11 @@ template:
         inputs:
           scheduler:
             ratePerSec: 70
-        worker:
-          message:
-            bodyType: HTTP
-            path: /api/test-beta
-            method: POST
-            body: hello-from-generator-b
+        message:
+          bodyType: HTTP
+          path: /api/test-beta
+          method: POST
+          body: hello-from-generator-b
       work:
         out:
           out: gen

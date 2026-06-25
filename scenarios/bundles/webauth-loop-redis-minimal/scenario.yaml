@@ -1,6 +1,8 @@
 id: webauth-loop-redis-minimal
 name: WebAuth Loop (Redis + Metrics)
-description: Single-loop WebAuth scenario. Runs TOP -> RED -> BAL -> TOP for custA using one Redis input, processor call, and postprocessor metrics before writing back to Redis.
+description: Single-loop WebAuth scenario. Runs TOP -> RED -> BAL -> TOP for
+  custA using one Redis input, processor call, and postprocessor metrics before
+  writing back to Redis.
 template:
   image: swarm-controller:latest
   bees:
@@ -22,14 +24,13 @@ template:
                 weight: 1
             pickStrategy: ROUND_ROBIN
             ratePerSec: 15
-        worker:
-          message:
-            bodyType: SIMPLE
-            body: "{{ payload }}"
-            headers:
-              content-type: application/json
-              x-ph-service-id: webauth
-              x-ph-call-id: webauth-loop
+        message:
+          bodyType: SIMPLE
+          body: "{{ payload }}"
+          headers:
+            content-type: application/json
+            x-ph-service-id: webauth
+            x-ph-call-id: webauth-loop
       work:
         out:
           out: build

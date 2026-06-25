@@ -1,6 +1,8 @@
 id: local-rest-worker-crash
 name: Local REST - Worker Crash
-description: Intentionally broken e2e scenario. Generator gets invalid JAVA_TOOL_OPTIONS so the worker process dies during startup and swarm bootstrap should stall waiting for healthy workers.
+description: Intentionally broken e2e scenario. Generator gets invalid
+  JAVA_TOOL_OPTIONS so the worker process dies during startup and swarm
+  bootstrap should stall waiting for healthy workers.
 template:
   image: swarm-controller:latest
   bees:
@@ -13,14 +15,13 @@ template:
         inputs:
           scheduler:
             ratePerSec: 50
-        worker:
-          message:
-            bodyType: HTTP
-            path: /test
-            method: POST
-            body: '{"event":"local-rest-worker-crash"}'
-            headers:
-              content-type: application/json
+        message:
+          bodyType: HTTP
+          path: /test
+          method: POST
+          body: '{"event":"local-rest-worker-crash"}'
+          headers:
+            content-type: application/json
       work:
         out:
           out: genQ
@@ -30,10 +31,9 @@ template:
       id: moderator
       image: moderator:latest
       config:
-        worker:
-          mode:
-            type: rate-per-sec
-            ratePerSec: 10
+        mode:
+          type: rate-per-sec
+          ratePerSec: 10
       work:
         in:
           in: genQ
@@ -46,8 +46,7 @@ template:
       id: processor
       image: processor:latest
       config:
-        worker:
-          baseUrl: "{{ sut.endpoints['default'].baseUrl }}/api"
+        baseUrl: "{{ sut.endpoints['default'].baseUrl }}/api"
       work:
         in:
           in: modQ

@@ -8,9 +8,6 @@ ui:
   color: "#facc15"
   shape: "hexagon"
   abbreviation: "PP"
-config:
-  - name: enabled
-    type: boolean
-    default: false
+config: []
 actions: []
 panels: []

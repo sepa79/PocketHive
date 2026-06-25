@@ -13,17 +13,16 @@ template:
           scheduler:
             ratePerSec: 50
             maxMessages: 1000
-        worker:
-          message:
-            bodyType: SIMPLE
-            body: |
-              {
-                "txnId": "TXN_{{ eval('#randInt(100000, 999999)') }}",
-                "payload": "{{ eval('#base64_encode(''perf_'' + #randInt(1, 10000))') }}",
-                "timestamp": "{{ eval("#date_format(now, 'yyyy-MM-dd''T''HH:mm:ss.SSS')") }}"
-              }
-            headers:
-              x-ph-call-id: simple-perf-test
+        message:
+          bodyType: SIMPLE
+          body: |
+            {
+              "txnId": "TXN_{{ eval('#randInt(100000, 999999)') }}",
+              "payload": "{{ eval('#base64_encode(''perf_'' + #randInt(1, 10000))') }}",
+              "timestamp": "{{ eval("#date_format(now, 'yyyy-MM-dd''T''HH:mm:ss.SSS')") }}"
+            }
+          headers:
+            x-ph-call-id: simple-perf-test
       work:
         out:
           out: mod
@@ -33,9 +32,8 @@ template:
       id: moderator
       image: moderator:latest
       config:
-        worker:
-          mode: THREAD_COUNT
-          threadCount: 10
+        mode: THREAD_COUNT
+        threadCount: 10
       work:
         in:
           in: mod
@@ -48,9 +46,8 @@ template:
       id: request-builder
       image: request-builder:latest
       config:
-        worker:
-          templateRoot: /app/scenario/templates/tcp
-          serviceId: default
+        templateRoot: /app/scenario/templates/tcp
+        serviceId: default
       work:
         in:
           in: build
@@ -64,15 +61,14 @@ template:
       image: processor:latest
       config:
         baseUrl: "{{ sut.endpoints['tcp-server'].baseUrl }}"
-        worker:
-          mode: THREAD_COUNT
-          threadCount: 25
-          tcpTransport:
-            type: socket
-            connectionReuse: PER_THREAD
-            maxRetries: 2
-            connectTimeoutMs: 3000
-            readTimeoutMs: 5000
+        mode: THREAD_COUNT
+        threadCount: 25
+        tcpTransport:
+          type: socket
+          connectionReuse: PER_THREAD
+          maxRetries: 2
+          connectTimeoutMs: 3000
+          readTimeoutMs: 5000
       work:
         in:
           in: proc
@@ -85,9 +81,8 @@ template:
       id: postprocessor
       image: postprocessor:latest
       config:
-        worker:
-          postprocessor:
-            publish-all-metrics: true
+        postprocessor:
+          publish-all-metrics: true
       work:
         in:
           in: post

@@ -456,33 +456,33 @@ reg("bundle.scaffold", "Scaffold a new bundle directory with a canonical scenari
   const beesByPattern = {
     "rest-simple": [
       { role: "generator", image: "generator:latest", work: { out: { out: "proc" } },
-        config: { inputs: { type: "SCHEDULER", scheduler: { ratePerSec: 10 } }, worker: { message: { bodyType: "SIMPLE", body: "{}" } } } },
+        config: { inputs: { type: "SCHEDULER", scheduler: { ratePerSec: 10 } }, message: { bodyType: "SIMPLE", body: "{}" } } },
       { role: "processor", image: "processor:latest", work: { in: { in: "proc" }, out: { out: "post" } },
-        config: { baseUrl: "{{ sut.endpoints['target'].baseUrl }}", worker: { mode: "THREAD_COUNT", threadCount: 5 } } },
+        config: { baseUrl: "{{ sut.endpoints['target'].baseUrl }}", mode: "THREAD_COUNT", threadCount: 5 } },
       { role: "postprocessor", image: "postprocessor:latest", work: { in: { in: "post" } } },
     ],
     "rest-rbuilder": [
       { role: "generator", image: "generator:latest", work: { out: { out: "build" } },
         config: { inputs: { type: "SCHEDULER", scheduler: { ratePerSec: 10 } },
-          worker: { message: { bodyType: "SIMPLE", body: "{}", headers: { "x-ph-call-id": "my-call", "x-ph-service-id": "default" } } } } },
+          message: { bodyType: "SIMPLE", body: "{}", headers: { "x-ph-call-id": "my-call", "x-ph-service-id": "default" } } } },
       { role: "request-builder", image: "request-builder:latest", work: { in: { in: "build" }, out: { out: "proc" } },
         config: { templateRoot: "/app/scenario/templates/http", serviceId: "default" } },
       { role: "processor", image: "processor:latest", work: { in: { in: "proc" }, out: { out: "post" } },
-        config: { baseUrl: "{{ sut.endpoints['target'].baseUrl }}", worker: { mode: "THREAD_COUNT", threadCount: 5 } } },
+        config: { baseUrl: "{{ sut.endpoints['target'].baseUrl }}", mode: "THREAD_COUNT", threadCount: 5 } },
       { role: "postprocessor", image: "postprocessor:latest", work: { in: { in: "post" } } },
     ],
     "sequence": [
       { role: "generator", image: "generator:latest", work: { out: { out: "seq" } },
-        config: { inputs: { type: "SCHEDULER", scheduler: { ratePerSec: 5 } }, worker: { message: { bodyType: "SIMPLE", body: "{}" } } } },
+        config: { inputs: { type: "SCHEDULER", scheduler: { ratePerSec: 5 } }, message: { bodyType: "SIMPLE", body: "{}" } } },
       { role: "http-sequence", image: "http-sequence:latest", work: { in: { in: "seq" }, out: { out: "post" } },
-        config: { worker: { baseUrl: "{{ sut.endpoints['target'].baseUrl }}" } } },
+        config: { baseUrl: "{{ sut.endpoints['target'].baseUrl }}" } },
       { role: "postprocessor", image: "postprocessor:latest", work: { in: { in: "post" } } },
     ],
     "tcp-simple": [
       { role: "generator", image: "generator:latest", work: { out: { out: "proc" } },
-        config: { inputs: { type: "SCHEDULER", scheduler: { ratePerSec: 10 } }, worker: { message: { bodyType: "SIMPLE", body: "PING" } } } },
+        config: { inputs: { type: "SCHEDULER", scheduler: { ratePerSec: 10 } }, message: { bodyType: "SIMPLE", body: "PING" } } },
       { role: "processor", image: "processor:latest", work: { in: { in: "proc" }, out: { out: "post" } },
-        config: { baseUrl: "{{ sut.endpoints['target'].baseUrl }}", worker: { mode: "THREAD_COUNT", threadCount: 5, tcpTransport: { type: "socket" } } } },
+        config: { baseUrl: "{{ sut.endpoints['target'].baseUrl }}", mode: "THREAD_COUNT", threadCount: 5, tcpTransport: { type: "socket" } } },
       { role: "postprocessor", image: "postprocessor:latest", work: { in: { in: "post" } } },
     ],
     "blank": [],
@@ -1493,12 +1493,10 @@ async function writeWizardBundle(session) {
         config: {
           inputs: generatorInputConfig,
           outputs: { type: "RABBITMQ" },
-          worker: {
-            message: {
-              bodyType: "SIMPLE",
-              body: datasetPayloadBody ?? answers.tcpPayload,
-              headers: { "x-ph-call-id": primaryCallId },
-            },
+          message: {
+            bodyType: "SIMPLE",
+            body: datasetPayloadBody ?? answers.tcpPayload,
+            headers: { "x-ph-call-id": primaryCallId },
           },
         },
       },
@@ -1514,7 +1512,7 @@ async function writeWizardBundle(session) {
         role: "processor",
         image: "processor:latest",
         work: { in: { in: "built" }, out: { out: "post" } },
-        config: { baseUrl: processorBase, worker: { mode: "THREAD_COUNT", threadCount: 5, tcpTransport: { type: "socket" } } },
+        config: { baseUrl: processorBase, mode: "THREAD_COUNT", threadCount: 5, tcpTransport: { type: "socket" } },
       },
       { id: "resultSink", ...postprocessor },
     );
@@ -1528,7 +1526,7 @@ async function writeWizardBundle(session) {
         config: {
           inputs: generatorInputConfig,
           outputs: { type: "RABBITMQ" },
-          worker: { message: { bodyType: "SIMPLE", body: datasetPayloadBody ?? (answers.requestBody || "{}") } },
+          message: { bodyType: "SIMPLE", body: datasetPayloadBody ?? (answers.requestBody || "{}") },
         },
       },
       {
@@ -1537,19 +1535,17 @@ async function writeWizardBundle(session) {
         image: "http-sequence:latest",
         work: { in: { in: "seq" }, out: { out: "post" } },
         config: {
-          worker: {
-            baseUrl: processorBase,
-            templateRoot,
-            serviceId,
-            threadCount: 1,
-            steps: answers.endpoints.map((endpoint, index) => wizardSequenceStep(endpoint, index)),
-            debugCapture: {
-              mode: "ERROR_ONLY",
-              includeHeaders: true,
-              includeRequest: true,
-              bodyPreviewBytes: 4096,
-              redisTtlSeconds: 120,
-            },
+          baseUrl: processorBase,
+          templateRoot,
+          serviceId,
+          threadCount: 1,
+          steps: answers.endpoints.map((endpoint, index) => wizardSequenceStep(endpoint, index)),
+          debugCapture: {
+            mode: "ERROR_ONLY",
+            includeHeaders: true,
+            includeRequest: true,
+            bodyPreviewBytes: 4096,
+            redisTtlSeconds: 120,
           },
         },
       },
@@ -1565,12 +1561,10 @@ async function writeWizardBundle(session) {
         config: {
           inputs: generatorInputConfig,
           outputs: { type: "RABBITMQ" },
-          worker: {
-            message: {
-              bodyType: "SIMPLE",
-              body: datasetPayloadBody ?? "{}",
-              headers: { "x-ph-call-id": callIdTemplate, "x-ph-service-id": serviceId },
-            },
+          message: {
+            bodyType: "SIMPLE",
+            body: datasetPayloadBody ?? "{}",
+            headers: { "x-ph-call-id": callIdTemplate, "x-ph-service-id": serviceId },
           },
         },
       },
@@ -1586,7 +1580,7 @@ async function writeWizardBundle(session) {
         role: "processor",
         image: "processor:latest",
         work: { in: { in: "proc" }, out: { out: "post" } },
-        config: { baseUrl: processorBase, worker: { mode: "THREAD_COUNT", threadCount: 5 } },
+        config: { baseUrl: processorBase, mode: "THREAD_COUNT", threadCount: 5 },
       },
       { id: "resultSink", ...postprocessor },
     );
@@ -3551,7 +3545,7 @@ function buildReport({ swarmId, scenarioId, sources, queueRows, tapSample, inclu
     }
   }
   const configuredExtracts = (scenario?.template?.bees || [])
-    .find(bee => bee?.role === "http-sequence")?.config?.worker?.steps
+    .find(bee => bee?.role === "http-sequence")?.config?.steps
     ?.flatMap(step => (step.extracts || []).map(extract => ({ stepId: step.id, callId: step.callId, to: extract.to }))) || [];
   const authHeaders = selectedBusinessRequests.map(entry => headerValue(entry?.request?.headers, "authorization"));
   const bearerCount = authHeaders.filter(value => value.startsWith("Bearer ")).length;

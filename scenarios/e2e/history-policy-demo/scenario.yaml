@@ -11,8 +11,7 @@ template:
         inputs:
           scheduler:
             ratePerSec: 5
-        worker:
-          historyPolicy: FULL
+        historyPolicy: FULL
       work:
         out:
           out: gen
@@ -22,8 +21,7 @@ template:
       id: moderator
       image: moderator:latest
       config:
-        worker:
-          historyPolicy: LATEST_ONLY
+        historyPolicy: LATEST_ONLY
       work:
         in:
           in: gen
@@ -36,8 +34,7 @@ template:
       id: processor
       image: processor:latest
       config:
-        worker:
-          historyPolicy: DISABLED
+        historyPolicy: DISABLED
       work:
         in:
           in: mod
@@ -50,8 +47,7 @@ template:
       id: postprocessor
       image: postprocessor:latest
       config:
-        worker:
-          historyPolicy: FULL
+        historyPolicy: FULL
       work:
         in:
           in: final

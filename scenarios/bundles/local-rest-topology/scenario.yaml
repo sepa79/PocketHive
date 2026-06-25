@@ -13,14 +13,13 @@ template:
         inputs:
           scheduler:
             ratePerSec: 50
-        worker:
-          message:
-            bodyType: HTTP
-            path: /test
-            method: POST
-            body: '{"event":"local-rest"}'
-            headers:
-              content-type: application/json
+        message:
+          bodyType: HTTP
+          path: /test
+          method: POST
+          body: '{"event":"local-rest"}'
+          headers:
+            content-type: application/json
       work:
         out:
           out: genQ
@@ -31,10 +30,9 @@ template:
         - { id: in, direction: in }
         - { id: out, direction: out }
       config:
-        worker:
-          mode:
-            type: rate-per-sec
-            ratePerSec: 10
+        mode:
+          type: rate-per-sec
+          ratePerSec: 10
       work:
         in:
           in: genQ
@@ -47,8 +45,7 @@ template:
         - { id: in, direction: in }
         - { id: out, direction: out }
       config:
-        worker:
-          baseUrl: "{{ sut.endpoints['default'].baseUrl }}/api"
+        baseUrl: "{{ sut.endpoints['default'].baseUrl }}/api"
       work:
         in:
           in: modQ
