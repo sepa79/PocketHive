@@ -234,13 +234,11 @@ class ScenarioControllerTest {
                     - action: config-update
                       role: generator
                       config:
-                        worker:
-                          config:
-                            message:
-                              body: |
-                                {
-                                  "greeting": "hello"
-                                }
+                        message:
+                          body: |
+                            {
+                              "greeting": "hello"
+                            }
                 """;
 
         mvc.perform(put("/scenarios/literal-demo/raw")
@@ -659,6 +657,70 @@ class ScenarioControllerTest {
     }
 
     @Test
+    void bundleValidationRejectsWorkerConfigWrapper() throws Exception {
+        byte[] zip = bundleZip("scenario.yaml", """
+                id: legacy-worker-wrapper-demo
+                name: Legacy worker wrapper demo
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - role: generator
+                      image: generator:latest
+                      work: {}
+                      config:
+                        worker:
+                          message:
+                            bodyType: SIMPLE
+                            body: "{}"
+                """);
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings[0].category").value("scenario"))
+                .andExpect(jsonPath("$.findings[0].code").value("SCENARIO_DESCRIPTOR_INVALID"))
+                .andExpect(jsonPath("$.findings[0].path").value("scenario.yaml:template.bees[0].config.worker"))
+                .andExpect(jsonPath("$.findings[0].message")
+                        .value(org.hamcrest.Matchers.containsString("config.worker is not supported")));
+    }
+
+    @Test
+    void bundleValidationRejectsLegacyPockethiveConfigWrapper() throws Exception {
+        byte[] zip = bundleZip("scenario.yaml", """
+                id: legacy-pockethive-wrapper-demo
+                name: Legacy pockethive wrapper demo
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - role: generator
+                      image: generator:latest
+                      work: {}
+                      config:
+                        pockethive:
+                          worker:
+                            config:
+                              message:
+                                bodyType: SIMPLE
+                                body: "{}"
+                """);
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings[0].category").value("scenario"))
+                .andExpect(jsonPath("$.findings[0].code").value("SCENARIO_DESCRIPTOR_INVALID"))
+                .andExpect(jsonPath("$.findings[0].path").value("scenario.yaml:template.bees[0].config.pockethive"))
+                .andExpect(jsonPath("$.findings[0].message")
+                        .value(org.hamcrest.Matchers.containsString("config.pockethive")));
+    }
+
+    @Test
     void bundleValidationReportsDuplicateScenarioYamlKeys() throws Exception {
         byte[] zip = bundleZip("scenario.yaml", """
                 id: duplicate-scenario-key-demo
@@ -930,19 +992,17 @@ class ScenarioControllerTest {
                     - role: generator
                       image: generator:latest
                       config:
-                        worker:
-                          message:
-                            headers:
-                              x-ph-call-id: login
+                        message:
+                          headers:
+                            x-ph-call-id: login
                       work:
                         out:
                           out: build
                     - role: request-builder
                       image: request-builder:latest
                       config:
-                        worker:
-                          templateRoot: /app/scenario/templates/redemption
-                          serviceId: auth
+                        templateRoot: /app/scenario/templates/redemption
+                        serviceId: auth
                       work:
                         in:
                           in: build
@@ -974,19 +1034,17 @@ class ScenarioControllerTest {
                         - role: generator
                           image: generator:latest
                           config:
-                            worker:
-                              message:
-                                headers:
-                                  x-ph-call-id: tcp-request
+                            message:
+                              headers:
+                                x-ph-call-id: tcp-request
                           work:
                             out:
                               out: build
                         - role: request-builder
                           image: request-builder:latest
                           config:
-                            worker:
-                              templateRoot: /app/scenario/templates/tcp
-                              serviceId: banking
+                            templateRoot: /app/scenario/templates/tcp
+                            serviceId: banking
                           work:
                             in:
                               in: build
@@ -1021,19 +1079,17 @@ class ScenarioControllerTest {
                         - role: generator
                           image: generator:latest
                           config:
-                            worker:
-                              message:
-                                headers:
-                                  x-ph-call-id: redeem
+                            message:
+                              headers:
+                                x-ph-call-id: redeem
                           work:
                             out:
                               out: build
                         - role: request-builder
                           image: request-builder:latest
                           config:
-                            worker:
-                              templateRoot: /app/scenario/templates/redemption
-                              serviceId: default
+                            templateRoot: /app/scenario/templates/redemption
+                            serviceId: default
                           work:
                             in:
                               in: build
@@ -1076,19 +1132,17 @@ class ScenarioControllerTest {
                         - role: generator
                           image: generator:latest
                           config:
-                            worker:
-                              message:
-                                headers:
-                                  x-ph-call-id: redeem
+                            message:
+                              headers:
+                                x-ph-call-id: redeem
                           work:
                             out:
                               out: build
                         - role: request-builder
                           image: request-builder:latest
                           config:
-                            worker:
-                              templateRoot: /app/scenario/templates/redemption
-                              serviceId: default
+                            templateRoot: /app/scenario/templates/redemption
+                            serviceId: default
                           work:
                             in:
                               in: build

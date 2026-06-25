@@ -46,9 +46,7 @@ class ScenarioPlanTest {
                     "time": "PT15S",
                     "type": "config-update",
                     "config": {
-                      "worker": {
-                        "ratePerSec": 10
-                      }
+                      "ratePerSec": 10
                     }
                   }
                 ]
@@ -75,12 +73,7 @@ class ScenarioPlanTest {
     assertThat(step.type()).isEqualTo("config-update");
 
     Map<String, Object> cfg = step.config();
-    assertThat(cfg).containsKey("worker");
-    Object worker = cfg.get("worker");
-    assertThat(worker).isInstanceOf(Map.class);
-    @SuppressWarnings("unchecked")
-    Map<String, Object> workerMap = (Map<String, Object>) worker;
-    assertThat(workerMap.get("ratePerSec")).isEqualTo(10);
+    assertThat(cfg).containsEntry("ratePerSec", 10);
 
     // Swarm-level step
     assertThat(plan.plan().swarm()).hasSize(1);
@@ -94,7 +87,7 @@ class ScenarioPlanTest {
   void toSwarmPlanPreservesTopology() {
     SwarmTemplate template = new SwarmTemplate("controller", List.of(
         new Bee("genA", "generator", "img", Work.ofDefaults(null, "gen"),
-            List.of(new BeePort("out", "out")), Map.of(), Map.of()),
+            List.of(new BeePort("out", "out")), Map.of(), Map.of("ratePerSec", 10)),
         new Bee("modA", "moderator", "img2", Work.ofDefaults("gen", "mod"),
             List.of(new BeePort("in", "in"), new BeePort("out", "out")), Map.of(), Map.of())
     ));
@@ -108,5 +101,6 @@ class ScenarioPlanTest {
     assertThat(swarmPlan.topology()).isNotNull();
     assertThat(swarmPlan.topology().edges()).hasSize(1);
     assertThat(swarmPlan.bees().getFirst().id()).isEqualTo("genA");
+    assertThat(swarmPlan.bees().getFirst().config()).containsEntry("ratePerSec", 10);
   }
 }

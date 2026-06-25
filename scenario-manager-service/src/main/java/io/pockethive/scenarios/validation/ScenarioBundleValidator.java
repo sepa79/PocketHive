@@ -49,7 +49,6 @@ public final class ScenarioBundleValidator {
     private static final String SERVICE_ID_CONFIG_KEY = "serviceId";
     private static final String WORKER_CONFIG_KEY = "worker";
     private static final String LEGACY_POCKETHIVE_CONFIG_KEY = "pockethive";
-    private static final String CONFIG_KEY = "config";
     private static final String CALL_ID_CONFIG_KEY = "callId";
     private static final String DEFAULT_SERVICE_ID = "default";
     private static final Set<String> REQUEST_TEMPLATE_PROTOCOLS = Set.of("HTTP", "TCP", "ISO8583");
@@ -103,6 +102,7 @@ public final class ScenarioBundleValidator {
             defunctReason.ifPresent(reason -> findings.add(defunctFinding(reason)));
         }
         expectedScenarioIdFinding(scenarioId, input.expectedScenarioId()).ifPresent(findings::add);
+        findings.addAll(validateScenarioConfigShape(resolved));
 
         if (bundleRoot != null && Files.isDirectory(bundleRoot) && scenarioId != null && !scenarioId.isBlank()) {
             try {
@@ -661,6 +661,39 @@ public final class ScenarioBundleValidator {
             }
         }
         return List.copyOf(sources);
+    }
+
+    private List<ValidationFinding> validateScenarioConfigShape(Scenario scenario) {
+        if (scenario == null || scenario.getTemplate() == null || scenario.getTemplate().bees() == null) {
+            return List.of();
+        }
+        List<ValidationFinding> findings = new ArrayList<>();
+        int index = 0;
+        for (Bee bee : scenario.getTemplate().bees()) {
+            Map<String, Object> config = bee == null ? null : bee.config();
+            if (config == null || config.isEmpty()) {
+                index++;
+                continue;
+            }
+            String configPath = ScenarioBundleLayout.SCENARIO_DESCRIPTOR_FILE
+                + ":template.bees[" + index + "].config";
+            if (config.containsKey(WORKER_CONFIG_KEY)) {
+                findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
+                    ValidationSeverity.ERROR,
+                    configPath + "." + WORKER_CONFIG_KEY,
+                    "Scenario bee config must declare worker settings directly under config; config.worker is not supported.",
+                    "Move fields from config.worker into config."));
+            }
+            if (config.containsKey(LEGACY_POCKETHIVE_CONFIG_KEY)) {
+                findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
+                    ValidationSeverity.ERROR,
+                    configPath + "." + LEGACY_POCKETHIVE_CONFIG_KEY,
+                    "Scenario bee config must not use legacy config.pockethive worker settings.",
+                    "Move fields from config.pockethive.worker.config into config."));
+            }
+            index++;
+        }
+        return List.copyOf(findings);
     }
 
     private Map<String, List<TemplateSource>> visibleRequestTemplates(
@@ -1271,7 +1304,7 @@ public final class ScenarioBundleValidator {
             if (bee == null || !usesRequestTemplateContract(bee)) {
                 continue;
             }
-            Map<String, Object> config = effectiveWorkerConfig(bee.config());
+            Map<String, Object> config = bee.config() == null ? Map.of() : bee.config();
             String templateRoot = stringValue(config.get(TEMPLATE_ROOT_CONFIG_KEY));
             if (templateRoot == null || templateRoot.isBlank()) {
                 continue;
@@ -1312,67 +1345,6 @@ public final class ScenarioBundleValidator {
             normalized = normalized.substring(0, tag);
         }
         return normalized;
-    }
-
-    private Map<String, Object> effectiveWorkerConfig(Map<String, Object> config) {
-        if (config == null || config.isEmpty()) {
-            return Map.of();
-        }
-        Map<String, Object> merged = new LinkedHashMap<>(config);
-
-        Object workerBlock = config.get(WORKER_CONFIG_KEY);
-        if (workerBlock instanceof Map<?, ?> workerMapRaw) {
-            Map<String, Object> flattened = flattenWorkerBlock(copyToStringKeyMap(workerMapRaw));
-            if (!flattened.isEmpty()) {
-                merged.remove(WORKER_CONFIG_KEY);
-                merged.putAll(flattened);
-                return Map.copyOf(merged);
-            }
-        }
-
-        Object pockethiveObj = config.get(LEGACY_POCKETHIVE_CONFIG_KEY);
-        if (!(pockethiveObj instanceof Map<?, ?> pockethive)) {
-            return Map.copyOf(merged);
-        }
-        Object workerObj = pockethive.get(WORKER_CONFIG_KEY);
-        if (!(workerObj instanceof Map<?, ?> workerRaw)) {
-            return Map.copyOf(merged);
-        }
-        Map<String, Object> flattened = flattenWorkerBlock(copyToStringKeyMap(workerRaw));
-        if (flattened.isEmpty()) {
-            return Map.copyOf(merged);
-        }
-        merged.remove(LEGACY_POCKETHIVE_CONFIG_KEY);
-        merged.putAll(flattened);
-        return Map.copyOf(merged);
-    }
-
-    private Map<String, Object> flattenWorkerBlock(Map<String, Object> workerMap) {
-        if (workerMap == null || workerMap.isEmpty()) {
-            return Map.of();
-        }
-        Map<String, Object> flattened = new LinkedHashMap<>();
-        workerMap.forEach((key, value) -> {
-            if (CONFIG_KEY.equals(key) && value instanceof Map<?, ?> nested) {
-                flattened.putAll(copyToStringKeyMap(nested));
-            } else {
-                flattened.put(key, value);
-            }
-        });
-        return flattened.isEmpty() ? Map.of() : Map.copyOf(flattened);
-    }
-
-    private Map<String, Object> copyToStringKeyMap(Map<?, ?> source) {
-        if (source == null || source.isEmpty()) {
-            return Map.of();
-        }
-        Map<String, Object> copy = new LinkedHashMap<>();
-        source.forEach((key, value) -> {
-            if (key != null) {
-                copy.put(key.toString(), value);
-            }
-        });
-        return copy.isEmpty() ? Map.of() : Map.copyOf(copy);
     }
 
     private Optional<String> bundleRelativeTemplateRoot(
@@ -1445,7 +1417,7 @@ public final class ScenarioBundleValidator {
             }
             String producerPath = ScenarioBundleLayout.SCENARIO_DESCRIPTOR_FILE + ":template.bees." + producer.role() + ".config";
             collectHeaderTemplateReferences(
-                effectiveWorkerConfig(producer.config()),
+                producer.config() == null ? Map.of() : producer.config(),
                 consumer.defaultServiceId(),
                 producerPath,
                 references);

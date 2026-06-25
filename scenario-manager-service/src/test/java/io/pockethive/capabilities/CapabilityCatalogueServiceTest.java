@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class CapabilityCatalogueServiceTest {
 
@@ -50,6 +51,54 @@ class CapabilityCatalogueServiceTest {
         assertThat(catalogue.allManifests())
                 .isNotEmpty()
                 .allSatisfy(manifest -> assertThat(manifest.image().tag()).isNull());
+    }
+
+    @Test
+    void rejectsRuntimeStateFieldsInCapabilityConfig() throws IOException {
+        String body = """
+                schemaVersion: "1.0"
+                capabilitiesVersion: "1.0"
+                image:
+                  name: "processor"
+                role: "processor"
+                config:
+                  - name: enabled
+                    type: boolean
+                actions: []
+                panels: []
+                """;
+        Files.writeString(capabilitiesDir.resolve("processor.yaml"), body);
+
+        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(capabilitiesDir);
+
+        assertThatThrownBy(catalogue::reload)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("must not declare runtime worker state field 'enabled'");
+    }
+
+    @Test
+    void rejectsLegacyWorkerConfigPathsInCapabilityConfigAndWhenClauses() throws IOException {
+        String body = """
+                schemaVersion: "1.0"
+                capabilitiesVersion: "1.0"
+                image:
+                  name: "generator"
+                role: "generator"
+                config:
+                  - name: worker.message.path
+                    type: string
+                    when:
+                      worker.message.bodyType: HTTP
+                actions: []
+                panels: []
+                """;
+        Files.writeString(capabilitiesDir.resolve("generator.yaml"), body);
+
+        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(capabilitiesDir);
+
+        assertThatThrownBy(catalogue::reload)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("must use direct config paths, not 'worker.*'");
     }
 
     @Test
