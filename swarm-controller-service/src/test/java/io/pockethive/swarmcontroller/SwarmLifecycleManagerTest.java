@@ -23,6 +23,7 @@ import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.TrafficPolicy;
 import io.pockethive.swarm.model.Work;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
+import io.pockethive.swarmcontroller.runtime.SwarmRuntimeCore;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -788,6 +789,32 @@ class SwarmLifecycleManagerTest {
     assertThat(meterRegistry.find("ph_swarm_queue_oldest_age_seconds")
         .tags("queue", queue("qin"), "swarm", TEST_SWARM_ID)
         .gauge()).isNull();
+  }
+
+  @Test
+  void startAssignsDistinctRuntimeBeeIdsForWorkersWithSameRole() throws Exception {
+    SwarmLifecycleManager manager = newManager();
+    SwarmPlan plan = new SwarmPlan("swarm", List.of(
+        new Bee("generator", "img-alpha", Work.ofDefaults(null, "gen-alpha"), Map.of()),
+        new Bee("generator", "img-beta", Work.ofDefaults(null, "gen-beta"), Map.of())
+    ));
+    when(docker.createAndStartContainer(anyString(), anyMap(), anyString(), any(), anyMap()))
+        .thenReturn("c-alpha", "c-beta");
+
+    manager.start(mapper.writeValueAsString(plan));
+
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<Map<String, String>> envCaptor = ArgumentCaptor.forClass(Map.class);
+    verify(docker, times(2))
+        .createAndStartContainer(anyString(), envCaptor.capture(), anyString(), any(), anyMap());
+    List<String> beeIds = envCaptor.getAllValues().stream()
+        .map(env -> env.get(SwarmRuntimeCore.WORKER_BEE_ID_ENV))
+        .toList();
+
+    assertThat(beeIds)
+        .allSatisfy(beeId -> assertThat(beeId).isNotBlank())
+        .doesNotHaveDuplicates()
+        .doesNotContain("generator");
   }
 
   private Properties queueProps(long depth) {

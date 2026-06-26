@@ -34,6 +34,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -834,6 +835,28 @@ class SwarmSignalListenerTest {
     listener.handle(status(TEST_SWARM_ID, "gen", "g1", false), statusEvent("status-full", "gen", "g1"));
     verify(lifecycle).updateHeartbeat("gen", "g1");
     verify(lifecycle).markReady("gen", "g1");
+  }
+
+  @Test
+  void statusFullWorkerListUsesControllerOwnedBeeId() throws Exception {
+    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+    when(lifecycle.runtimeBeeIdFor("gen", "g1")).thenReturn(Optional.of("runtime-bee-g1"));
+    SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
+    reset(rabbit);
+
+    listener.handle(status(TEST_SWARM_ID, "gen", "g1", false), statusEvent("status-full", "gen", "g1"));
+    reset(rabbit);
+
+    listener.handle(
+        signal(ControlPlaneSignals.STATUS_REQUEST, "inst", "id-status-workers", "corr-status-workers"),
+        statusRequestSignal("swarm-controller", "inst"));
+
+    ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
+    verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
+        eq(statusEvent("status-full", "swarm-controller", "inst")), payload.capture());
+    JsonNode workers = mapper.readTree(payload.getValue()).path("data").path("context").path("workers");
+    assertThat(workers).hasSize(1);
+    assertThat(workers.get(0).path("beeId").asText()).isEqualTo("runtime-bee-g1");
   }
 
   @Test

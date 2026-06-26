@@ -38,8 +38,8 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
 ```
 
 > Swarms are sorted lexicographically by `id` for deterministic UI rendering.
-> Bee summaries are keyed by `beeId` from `template.bees[].id`; do not collapse
-> multiple bees with the same `role`.
+> Bee summaries are keyed by Swarm Controller-owned runtime `beeId`; do not
+> collapse multiple bees with the same `role`.
 
 ### 2.2 Fetch swarm
 `GET /api/swarms/{swarmId}`
@@ -116,10 +116,10 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
 
 Returns `404` when the swarm id is unknown or no `status-full` has been cached yet.
 
-`data.context.workers[].beeId` is the runtime identity used to join this
-snapshot to Scenario Manager `template.bees[].id`. `role` and `instance` are the
-current control-plane address for component actions; clients must not join or
-deduplicate workers by `role`.
+`data.context.workers[].beeId` is the Swarm Controller-owned runtime identity
+for component selection. `role` and `instance` are the current control-plane
+address for component actions; clients must not join or deduplicate workers by
+`role`.
 
 ### 2.3 Swarm journal (timeline)
 `GET /api/swarms/{swarmId}/journal`
@@ -735,7 +735,7 @@ Deletes the tap queue and returns the last known tap state.
 **Signal:** `signal.config-update.<swarmId>.<role>.<instance>` → **Outcome:** `event.outcome.config-update.<swarmId>.<role>.<instance>` (check `data.status`) → **Alerts:** `event.alert.{type}.<swarmId>.<role>.<instance>`
 
 For UI-originated edits, resolve `{role}/{instance}` from the selected runtime
-worker after joining Scenario Manager `template.bees[].id` to
+worker after selecting the SC-owned
 `status-full.data.context.workers[].beeId`. `role` alone is not a stable target.
 
 **Response (202)** — same envelope.

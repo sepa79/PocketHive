@@ -134,7 +134,7 @@ Control-plane payloads are defined by `docs/spec/control-events.schema.json` and
 | `origin` | string | Yes | Logical emitter identity (e.g. `orchestrator-1`, `swarm-controller:aaa-marshal-…`, `processor:bee-1`, `hive-ui`). Never blank. |
 | `scope` | object | Yes | `{ swarmId, role, instance }` describing the entity the message is about. |
 | `scope.swarmId` | string | Yes | Swarm the message relates to. Use the literal `ALL` for cross‑swarm or global fan‑out; never `null`. |
-| `scope.role` | string | Yes | Role string of the **subject** of the message; carried for control-plane addressing and human display. It is not scenario node identity, not a type system, and not guaranteed unique within a swarm; scenario nodes are identified by `template.bees[].id` / runtime `beeId`. Core deployed components use values such as `orchestrator`, `swarm-controller`, `generator`, `moderator`, `processor`, `postprocessor`, `trigger`, but the envelope schema must **not** hardcode an enum for this field. Use the literal `ALL` for cross‑role or fan‑out scopes; never `null`. |
+| `scope.role` | string | Yes | Role string of the **subject** of the message; carried for control-plane addressing and human display. It is not scenario node identity, not a type system, and not guaranteed unique within a swarm; runtime worker identity is the Swarm Controller-owned `beeId` exposed in `status-full.data.context.workers[]`. Core deployed components use values such as `orchestrator`, `swarm-controller`, `generator`, `moderator`, `processor`, `postprocessor`, `trigger`, but the envelope schema must **not** hardcode an enum for this field. Use the literal `ALL` for cross‑role or fan‑out scopes; never `null`. |
 | `scope.instance` | string | Yes | Logical instance identifier of the **subject** of the message (the controller/worker/orchestrator instance the message is about). Use the literal `ALL` for fan‑out across instances; never `null`. This may or may not be the same as the `origin` instance that emitted it. |
 | `correlationId` | string\|null | Yes | Correlation token used to join related messages. For `kind=signal` / `kind=outcome`, this field **must** be non‑empty and identical across the command signal and its outcomes. For other kinds (`event`, `metric`) it is either `null` or used only for explicitly documented higher‑level correlations. |
 | `idempotencyKey` | string\|null | Yes | Stable identifier reused across retries of the same logical operation. For externally initiated `kind=signal` / `kind=outcome` messages this field **should** be non‑empty; for purely internal, non‑retriable messages it may be `null`. For non‑command kinds (`event`, `metric`) this field is typically `null`. |
@@ -279,9 +279,9 @@ Additional rules:
     aggregate consumed by UI/runtime clients.
   - Every `data.context.workers[]` entry must include `beeId`, `role`,
     `instance`, `enabled`, `tps`, `lastSeenAt`, `stale`, and `ioState`.
-    `beeId` is copied from the scenario `template.bees[].id` for the worker
-    node. `role` and `instance` are the current control-plane address for
-    mutations such as config updates; they are not node identity.
+    `beeId` is assigned and owned by Swarm Controller when it materialises a
+    runtime worker. `role` and `instance` are the current control-plane address
+    for mutations such as config updates; they are not node identity.
   - `data.context.workers[]` entries may include a `runtime` object with the same shape as the envelope `runtime`.
   - `data.context.workers[]` entries must carry the last known public worker
     `status-full.data.config` as `config` after the worker has reported a
@@ -289,15 +289,14 @@ Additional rules:
     reported an empty effective config. Later worker `status-delta` events
     omit `data.config` and must not erase the last reported config from the
     swarm-controller aggregate.
-  - The swarm-controller resolves `beeId` from its scenario/runtime mapping
-    (`template.bees[].id -> role + instance`). If a worker also echoes
+  - The swarm-controller resolves `beeId` from its runtime materialisation
+    mapping (`beeId -> role + instance`). If a worker also echoes
     `data.context.beeId`, that value is only a consistency check. A missing or
     mismatched echo must be reported explicitly and must not overwrite the
     swarm-controller mapping.
-  - Clients must join scenario bees to runtime workers by
-    `template.bees[].id == data.context.workers[].beeId` only. They must not
-    fall back to `role`, array order, topology position, label, queue name, or
-    image name.
+  - Clients must resolve editable runtime workers through the SC-owned
+    `data.context.workers[].beeId`. They must not fall back to `role`, array
+    order, topology position, label, queue name, image name, or worker echo.
 - For orchestrator, `data.context` carries at least `swarmCount`. The
   `computeAdapter` selection is effectively static and belongs in `status-full`
   only (never in deltas).
@@ -362,10 +361,13 @@ Goal: give UI a stable "what to draw" graph that does not depend on transport de
 **A) Logical topology (scenario SSOT; UI drawing contract)**
 
 - Stored in scenario templates (see `docs/scenarios/SCENARIO_CONTRACT.md`), not in status messages.
-- `template.bees[]` is the SSOT for nodes. Each bee must have a unique stable
-  `id`; `role` is an operator-visible string and is not node identity.
-- `topology` is the SSOT for edges, referencing bees by `beeId` and ports by `port`.
-- `template.bees[].id` and `topology.edges[].id` are stable identifiers within the template.
+- `template.bees[]` is the authoring SSOT for declared worker definitions.
+  `role` is an operator-visible string and is not node identity.
+- `topology` is the SSOT for authoring-time graph edges. It may use authoring
+  labels to connect declared bees, but those labels are not runtime worker
+  identity.
+- Runtime worker identity is assigned by Swarm Controller and exposed as
+  `status-full.data.context.workers[].beeId`.
 
 Example (scenario template fragment):
 
@@ -475,14 +477,16 @@ Example (bindings with ports + optional selector hint):
 
 **D) UI join strategy**
 
-- UI obtains `template + topology` via Scenario Manager REST (SSOT).
-- UI uses swarm-controller `status-full` for `workers[]`, runtime `bindings`, and queue stats.
-- UI joins logical bees to runtime workers and bindings only by `beeId`.
-  `role`/`instance` are used only after that join, as the transport target for
-  Orchestrator component actions.
-- If a selected bee has no matching `data.context.workers[].beeId`, UI must
+- UI obtains `template + topology` via Scenario Manager REST for authoring
+  context.
+- UI uses swarm-controller `status-full` for `workers[]`, runtime `bindings`,
+  queue stats, and runtime identity.
+- UI joins/edit-targets runtime workers only by SC-owned
+  `data.context.workers[].beeId`. `role`/`instance` are used only after that
+  join, as the transport target for Orchestrator component actions.
+- If a selected UI item has no matching `data.context.workers[].beeId`, UI must
   show an explicit missing-runtime state and disable runtime mutation for that
-  bee. It must not silently fall back to role matching.
+  item. It must not silently fall back to role matching.
 
 ---
 

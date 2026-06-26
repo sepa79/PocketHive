@@ -42,8 +42,10 @@ avoided to keep scenarios portable.
 
 ## Bees
 
-Each **bee** defines one scenario worker node in the swarm. `id` is the stable
-node identity. `role` is an operator-visible string and is not node identity.
+Each **bee** defines one scenario worker declaration in the swarm. `role` is an
+operator-visible string and is not node identity. Runtime node identity is the
+Swarm Controller-owned `beeId` exposed after materialisation in
+`status-full.data.context.workers[]`.
 
 ```yaml
 template:
@@ -69,12 +71,13 @@ template:
 
 Bee fields (see `common/swarm-model/src/main/java/io/pockethive/swarm/model/Bee.java`):
 
-- `id` (string, required)
-  - Stable scenario node identifier. Must be unique within `template.bees[]`.
-  - Used by `topology.edges[].from|to.beeId` and by runtime worker aggregates
-    as `status-full.data.context.workers[].beeId`.
-  - This is the only supported logical join key between scenario nodes,
-    topology, runtime bindings, and UI-selected workers.
+- `id` (string, optional)
+  - Optional authoring label for scenarios that need to refer to a bee from
+    authoring-only structures such as topology.
+  - This is not the runtime worker identity and must not be used as the live
+    config-update target.
+  - Runtime joins use Swarm Controller-owned
+    `status-full.data.context.workers[].beeId`.
 - `role` (string, required)
   - Operator-visible role string, e.g. `generator`, `processor`, `moderator`,
     `postprocessor`, `request-builder`, `http-sequence`.
@@ -110,8 +113,10 @@ to draw edges. It does not replace `work` queue suffixes and is not a runtime
 binding list. Runtime bindings are emitted by swarm-controller in
 `status-full.data.context.bindings`.
 
-`template.bees[].id` is required even when `topology` is omitted. When
-`topology` is present, every edge `beeId` must reference an existing bee id.
+Runtime worker identity is assigned by Swarm Controller; Scenario Manager must
+not reject a runnable scenario only because `template.bees[].id` is missing or
+duplicated. When `topology` is present, `topology.edges[].from|to.beeId` refers
+to authoring graph labels, not the runtime `beeId` used for live mutation.
 
 ```yaml
 template:
@@ -343,12 +348,10 @@ The tool will:
     template.
   - Render each template once with a dummy WorkItem to catch errors.
 
-Scenario contract validators must reject:
-
-- Any bee missing `template.bees[].id`.
-- Duplicate `template.bees[].id` values within one scenario.
-- Any `topology.edges[].from.beeId` or `topology.edges[].to.beeId` that does not
-  reference an existing bee id.
+Scenario contract validators must not treat runtime identity as an authoring
+validation rule. In particular, they must not reject bundles solely because
+`template.bees[].id` is missing or duplicated. Runtime `beeId` assignment and
+the runtime `beeId -> (role, instance)` mapping are owned by Swarm Controller.
 
 ## System Under Test (SUT) environments
 

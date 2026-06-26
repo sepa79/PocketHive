@@ -58,6 +58,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -77,6 +78,8 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
 
   private static final Logger log = LoggerFactory.getLogger(SwarmLifecycleManager.class);
   private static final String SCENARIOS_RUNTIME_DESTINATION = "/app/scenarios-runtime";
+  public static final String WORKER_BEE_ID_ENV = "POCKETHIVE_BEE_ID";
+  private static final String RUNTIME_BEE_ID_PREFIX = "bee-";
 
   private final AmqpAdmin amqp;
   private final ObjectMapper mapper;
@@ -325,6 +328,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
       Set<String> roles = new LinkedHashSet<>();
       for (Bee bee : runnableBees) {
         String beeName = BeeNameGenerator.generate(bee.role(), swarmId);
+        String runtimeBeeId = newRuntimeBeeId();
         roles.add(bee.role());
         Map<String, String> env = new LinkedHashMap<>(
             ControlPlaneContainerEnvironmentFactory.workerEnvironment(beeName, bee.role(), workerSettings, rabbitProperties));
@@ -350,6 +354,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
         if (bee.env() != null) {
           env.putAll(bee.env());
         }
+        env.put(WORKER_BEE_ID_ENV, runtimeBeeId);
         Map<String, Object> effectiveConfig = enrichConfigWithSut(bee.config(), sutEnv);
         List<String> volumes = resolveVolumes(effectiveConfig);
         if (hasText(scenariosRuntimeRootSource)) {
@@ -364,7 +369,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
             bee.image(),
             Map.copyOf(env),
             volumes));
-        runtimeState.registerWorker(bee.role(), beeName, beeName);
+        runtimeState.registerWorker(runtimeBeeId, bee.role(), beeName, beeName);
         if (effectiveConfig != null && !effectiveConfig.isEmpty()) {
           configFanout.registerBootstrapConfig(beeName, bee.role(), effectiveConfig);
         }
@@ -643,6 +648,12 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
   @Override
   public TrafficPolicy trafficPolicy() {
     return trafficPolicy;
+  }
+
+  @Override
+  public Optional<String> runtimeBeeIdFor(String role, String instance) {
+    SwarmRuntimeState state = runtimeState;
+    return state != null ? state.beeIdFor(role, instance) : Optional.empty();
   }
 
   @Override
@@ -1016,6 +1027,10 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
       }
     }
     return result.isEmpty() ? List.of() : List.copyOf(result);
+  }
+
+  private static String newRuntimeBeeId() {
+    return RUNTIME_BEE_ID_PREFIX + UUID.randomUUID();
   }
 
   private static Map<String, Object> enrichConfigWithSut(Map<String, Object> config,

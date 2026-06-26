@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.function.BiFunction;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -160,8 +162,89 @@ class SwarmWorkersAggregatorTest {
     assertThat(config(worker)).isEmpty();
   }
 
+  @Test
+  void includesControllerOwnedBeeIdForDuplicateRolesWithoutWorkerEcho() throws Exception {
+    SwarmWorkersAggregator aggregator = aggregatorWithRuntimeBeeIds(Map.of(
+        key("generator", "gen-a"), "runtime-bee-a",
+        key("generator", "gen-b"), "runtime-bee-b"));
+
+    aggregator.updateFromWorkerStatus(
+        "generator",
+        "gen-a",
+        data("""
+            {
+              "enabled": true,
+              "tps": 11,
+              "config": { "message": { "path": "/alpha" } },
+              "ioState": { "work": { "input": "ok", "output": "ok" } }
+            }
+            """),
+        runtime());
+    aggregator.updateFromWorkerStatus(
+        "generator",
+        "gen-b",
+        data("""
+            {
+              "enabled": true,
+              "tps": 29,
+              "config": { "message": { "path": "/beta" } },
+              "ioState": { "work": { "input": "ok", "output": "ok" } }
+            }
+            """),
+        runtime());
+
+    List<Map<String, Object>> workers = aggregator.snapshot();
+
+    assertThat(workers)
+        .extracting(worker -> worker.get("beeId"))
+        .containsExactlyInAnyOrder("runtime-bee-a", "runtime-bee-b");
+    assertThat(workers)
+        .filteredOn(worker -> "runtime-bee-a".equals(worker.get("beeId")))
+        .singleElement()
+        .satisfies(worker -> assertThat(config(worker)).containsEntry("message", Map.of("path", "/alpha")));
+    assertThat(workers)
+        .filteredOn(worker -> "runtime-bee-b".equals(worker.get("beeId")))
+        .singleElement()
+        .satisfies(worker -> assertThat(config(worker)).containsEntry("message", Map.of("path", "/beta")));
+  }
+
+  @Test
+  void workerContextBeeIdEchoDoesNotOverrideControllerOwnedMapping() throws Exception {
+    SwarmWorkersAggregator aggregator = aggregatorWithRuntimeBeeIds(Map.of(
+        key("generator", "gen-a"), "runtime-bee-a"));
+
+    aggregator.updateFromWorkerStatus(
+        "generator",
+        "gen-a",
+        data("""
+            {
+              "enabled": true,
+              "context": { "beeId": "worker-echo-wrong" },
+              "config": { "message": { "path": "/alpha" } },
+              "ioState": { "work": { "input": "ok", "output": "ok" } }
+            }
+            """),
+        runtime());
+
+    Map<String, Object> worker = singleWorker(aggregator.snapshot());
+
+    assertThat(worker)
+        .containsEntry("beeId", "runtime-bee-a")
+        .doesNotContainEntry("beeId", "worker-echo-wrong");
+  }
+
   private static JsonNode data(String json) throws Exception {
     return MAPPER.readTree(json);
+  }
+
+  private static SwarmWorkersAggregator aggregatorWithRuntimeBeeIds(Map<String, String> beeIdsByScope) {
+    BiFunction<String, String, Optional<String>> resolver =
+        (role, instance) -> Optional.ofNullable(beeIdsByScope.get(key(role, instance)));
+    return new SwarmWorkersAggregator(60_000L, resolver);
+  }
+
+  private static String key(String role, String instance) {
+    return role + ":" + instance;
   }
 
   private static JsonNode runtime() throws Exception {

@@ -9,7 +9,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BiFunction;
 
 /**
  * Aggregates per-worker status deltas into a swarm-level worker list snapshot.
@@ -19,11 +21,20 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 final class SwarmWorkersAggregator {
 
+  private static final String WORKER_BEE_ID_FIELD = "beeId";
+
   private final long staleAfterMillis;
+  private final BiFunction<String, String, Optional<String>> runtimeBeeIdResolver;
   private final Map<String, WorkerSnapshot> byKey = new ConcurrentHashMap<>();
 
   SwarmWorkersAggregator(long staleAfterMillis) {
+    this(staleAfterMillis, (role, instance) -> Optional.empty());
+  }
+
+  SwarmWorkersAggregator(long staleAfterMillis,
+                         BiFunction<String, String, Optional<String>> runtimeBeeIdResolver) {
     this.staleAfterMillis = staleAfterMillis;
+    this.runtimeBeeIdResolver = Objects.requireNonNull(runtimeBeeIdResolver, "runtimeBeeIdResolver");
   }
 
   void updateFromWorkerStatus(String role, String instance, JsonNode dataNode, JsonNode runtimeNode) {
@@ -76,6 +87,8 @@ final class SwarmWorkersAggregator {
       Map<String, Object> entry = new LinkedHashMap<>();
       entry.put("role", snapshot.role());
       entry.put("instance", snapshot.instance());
+      resolveRuntimeBeeId(snapshot.role(), snapshot.instance())
+          .ifPresent(beeId -> entry.put(WORKER_BEE_ID_FIELD, beeId));
       entry.put("enabled", snapshot.enabled());
       entry.put("tps", snapshot.tps());
       entry.put("lastSeenAt", snapshot.lastSeenAt());
@@ -103,6 +116,14 @@ final class SwarmWorkersAggregator {
 
   private static String key(String role, String instance) {
     return Objects.requireNonNull(role).trim() + ":" + Objects.requireNonNull(instance).trim();
+  }
+
+  private Optional<String> resolveRuntimeBeeId(String role, String instance) {
+    Optional<String> resolved = runtimeBeeIdResolver.apply(role, instance);
+    if (resolved == null) {
+      return Optional.empty();
+    }
+    return resolved.map(String::trim).filter(value -> !value.isBlank());
   }
 
   private static Map<String, Object> runtimeFrom(JsonNode node) {
