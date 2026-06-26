@@ -42,19 +42,22 @@ avoided to keep scenarios portable.
 
 ## Bees
 
-Each **bee** defines one worker role in the swarm.
+Each **bee** defines one scenario worker node in the swarm. `id` is the stable
+node identity. `role` is an operator-visible string and is not node identity.
 
 ```yaml
 template:
   image: swarm-controller:latest
   bees:
-    - role: generator
+    - id: genA
+      role: generator
       image: generator:latest
       work:
         out:
           out: genQ
       config: { ... }
-    - role: processor
+    - id: procA
+      role: processor
       image: processor:latest
       work:
         in:
@@ -66,13 +69,18 @@ template:
 
 Bee fields (see `common/swarm-model/src/main/java/io/pockethive/swarm/model/Bee.java`):
 
+- `id` (string, required)
+  - Stable scenario node identifier. Must be unique within `template.bees[]`.
+  - Used by `topology.edges[].from|to.beeId` and by runtime worker aggregates
+    as `status-full.data.context.workers[].beeId`.
+  - This is the only supported logical join key between scenario nodes,
+    topology, runtime bindings, and UI-selected workers.
 - `role` (string, required)
-  - Logical role name, e.g. `generator`, `processor`, `moderator`,
+  - Operator-visible role string, e.g. `generator`, `processor`, `moderator`,
     `postprocessor`, `request-builder`, `http-sequence`.
+  - `role` is not unique, not a type system, and must not be used as scenario
+    node identity.
   - Legacy note: older bundles may still reference `http-builder`.
-- `id` (string, optional)
-  - Stable identifier used by `topology.edges[].from|to.beeId`. Required if
-    the scenario declares `topology`.
 - `image` (string, required)
   - Container image name (logical); Orchestrator will prefix it with the
     configured repository, e.g. `generator:latest` →
@@ -101,6 +109,9 @@ Bee fields (see `common/swarm-model/src/main/java/io/pockethive/swarm/model/Bee.
 to draw edges. It does not replace `work` queue suffixes and is not a runtime
 binding list. Runtime bindings are emitted by swarm-controller in
 `status-full.data.context.bindings`.
+
+`template.bees[].id` is required even when `topology` is omitted. When
+`topology` is present, every edge `beeId` must reference an existing bee id.
 
 ```yaml
 template:
@@ -331,6 +342,13 @@ The tool will:
   - Check that every `x-ph-call-id` used in the scenario has a matching
     template.
   - Render each template once with a dummy WorkItem to catch errors.
+
+Scenario contract validators must reject:
+
+- Any bee missing `template.bees[].id`.
+- Duplicate `template.bees[].id` values within one scenario.
+- Any `topology.edges[].from.beeId` or `topology.edges[].to.beeId` that does not
+  reference an existing bee id.
 
 ## System Under Test (SUT) environments
 

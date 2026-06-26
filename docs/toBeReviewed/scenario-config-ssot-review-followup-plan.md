@@ -30,8 +30,22 @@ describe the same public worker config shape.
   plus matching IO manifests selected by explicit `inputs.type` / `outputs.type`.
 - [ ] Provide migration guidance/tooling for internal and external scenarios to
   add explicit IO selectors without guessing when multiple IO blocks exist.
+- [ ] Provide migration guidance/tooling for internal and external scenarios to
+  add required `template.bees[].id` values explicitly and update topology
+  `beeId` references where needed.
 - [ ] Add validation/tests that reject missing or unknown IO selectors and prove
   UI does not synthesize selectors from runtime metadata.
+- [ ] Migrate active scenario bundles so every `template.bees[]` entry has a
+  required, unique `id` before validator enforcement is enabled.
+- [ ] Define the canonical SC worker aggregate contract for
+  `status-full.data.context.workers[]`, including `beeId`. The schema/docs
+  contract is the SSOT; the Java DTO/record is the SC implementation projection
+  and must be tested against that contract.
+- [ ] Fix runtime worker identity: `template.bees[].id` must be the SC/UI join
+  key; `role` must remain a user-facing label / control-plane routing segment
+  only.
+- [ ] Follow TDD order for runtime identity fix: architecture contract updates,
+  red tests, then implementation.
 - [ ] Final phase: remove public runtime config defaults from workers after
   explicit config migration, validation, and UI composition are complete.
 
@@ -40,6 +54,7 @@ describe the same public worker config shape.
 ### 1. MCP sends merged config as the config-update patch
 
 Severity: High
+Status: Done
 
 Evidence:
 
@@ -66,6 +81,7 @@ Fix:
 ### 2. Verify swarm-controller config projection used by UI
 
 Severity: Medium
+Status: Done
 
 Evidence:
 
@@ -109,14 +125,17 @@ Fix:
 - Add/strengthen `SwarmWorkersAggregatorTest` so it asserts exact config
   equality, including absence of synthetic `inputs.type` / `outputs.type` when
   the worker did not report them.
-- Keep IO type metadata in non-config fields such as `ioState`, `input`,
-  `output`, or `runtime`.
+- Keep IO type metadata in non-config fields such as `ioState`, `input`, or
+  `output`. Do not put IO selector metadata in `runtime`; `runtime` is
+  infra-only and schema-restricted.
 - If UI needs IO type as an editable config field, it must come from canonical
-  worker config or capability defaults, not from SC synthesis.
+  worker config, not from SC synthesis, capability defaults, runtime metadata,
+  or topology inference.
 
 ### 3. Capability validation misses exact legacy root names
 
 Severity: Medium
+Status: Done
 
 Evidence:
 
@@ -138,9 +157,10 @@ Fix:
 - Apply the same exact-root rejection to `config[].when` paths.
 - Add tests for exact-root and prefixed-root rejection.
 
-### 4. Hive runtime config UI does not compose IO capability manifests
+### 4. Hive runtime config UI did not compose IO capability manifests
 
 Severity: High
+Status: Done
 
 Evidence:
 
@@ -149,13 +169,13 @@ Evidence:
   `inputs.type` / `outputs.type` matches.
 - `docs/scenarios/SCENARIO_PLAN_GUIDE.md` says config-update forms must expose
   fields such as `inputs.scheduler.ratePerSec` by adding IO manifests.
-- `ui-v2/src/pages/HivePage.tsx` currently resolves only the runtime worker image
-  manifest and passes `manifest.config` directly into `ConfigUpdatePatchModal`.
-- `generator.latest.yaml` exposes `inputs.type`, but scheduler fields live in
-  `io.scheduler.latest.yaml`; therefore generator RPS is not visible in Hive UI.
-- Manual UI smoke on `.50` with `local-rest` confirmed generator `Edit config`
-  showed only the generator manifest fields and `rate` search returned no match,
-  even though the scenario YAML contains `inputs.scheduler.ratePerSec`.
+- Before the fix, `ui-v2/src/pages/HivePage.tsx` resolved only the runtime
+  worker image manifest and passed `manifest.config` directly into
+  `ConfigUpdatePatchModal`.
+- `generator.latest.yaml` exposes `inputs.type`; scheduler fields live in
+  `io.scheduler.latest.yaml`, so generator RPS was not visible in Hive UI before
+  capability composition was added.
+- Manual UI smoke on `.50` with `local-rest` confirmed the original issue.
 
 Impact:
 
@@ -166,7 +186,7 @@ would duplicate the IO manifest SSOT.
 Fix:
 
 - Keep IO-specific fields only in IO manifests.
-- Build a capability composer in the UI layer that takes:
+- Keep the capability composer in the UI layer:
   - the worker manifest resolved by image,
   - current canonical runtime config from `context.workers[].config`,
   - the capability catalogue indexed by `(ui.ioScope, ui.ioType)`.
@@ -180,6 +200,7 @@ Fix:
 ### 5. Worker public config defaults should be retired last
 
 Severity: Medium
+Status: Pending
 
 Evidence:
 
@@ -207,36 +228,161 @@ Fix:
 - Add worker startup/bind tests that fail clearly when required public config is
   missing, instead of applying service-local defaults.
 
+### 6. Hive UI joins runtime workers by `role` instead of bee identity
+
+Severity: High
+Status: Pending
+
+Evidence:
+
+- `docs/ARCHITECTURE.md` already says `template.bees[]` is the SSOT for nodes
+  and `topology.edges[]` references nodes by `beeId`.
+- `role` is not node identity. It is a user-facing/logical label and remains a
+  control-plane routing segment together with runtime `instance`.
+- `ui-v2/src/pages/HivePage.tsx` builds `runtimeWorkersByRole` and uses it to
+  choose the current runtime worker/config for the selected scenario bee.
+- Repo scenarios already contain repeated roles, for example multiple
+  generators/moderators.
+
+Impact:
+
+The UI can show and patch the wrong runtime worker when more than one bee has
+the same `role`. This also makes `context.workers[].config` unsafe for config
+editing because the config projection is selected through a non-identity field.
+
+Fix:
+
+- Contract: `template.bees[].id` is the stable node identity and must be
+  required/unique for runnable scenario templates.
+- Swarm Controller owns the canonical runtime mapping from
+  `template.bees[].id` to the concrete control-plane target
+  `(role, instance)`. `role` and `instance` remain the transport address for
+  current config-update signals; they are not node identity.
+- Swarm Controller must resolve `beeId` from that planned runtime mapping and
+  carry it into the aggregate snapshot as
+  `status-full.data.context.workers[].beeId`.
+- Worker status must echo `data.context.beeId` when the worker receives an
+  explicit `POCKETHIVE_BEE_ID` environment value. SC uses that echo only as a
+  consistency check against its own mapping. Missing or mismatched echoes must
+  become explicit diagnostics; they must not become an alternate source of
+  identity.
+- SC must not derive `beeId` from `role`, role ordering, display labels, queue
+  names, image names, topology position, or runtime metadata.
+- Hive UI must join scenario bees to runtime workers by `beeId` only.
+- UI may use `runtimeWorker.role` + `runtimeWorker.instance` only after a
+  successful `beeId` join, because those fields are the current config-update
+  transport target.
+- Missing `beeId` must disable runtime config editing with an explicit reason.
+  Do not fallback to role.
+- Audit and fix existing role-keyed runtime projections where they represent
+  node identity rather than transport grouping. Known candidates include
+  `SwarmRuntimeState`, binding materialisation, `computeStartOrder`, Orchestrator
+  summary `beesFromWorkers`, and Hive UI runtime selection.
+
+TDD sequence:
+
+1. Architecture / contracts:
+   - Update `docs/ARCHITECTURE.md` status-full aggregate notes so
+     `data.context.workers[]` includes required `beeId` for worker entries.
+   - Define a canonical worker aggregate contract for
+     `status-full.data.context.workers[]` instead of relying on an untyped
+     free-form map for fields used by UI/runtime editing. The canonical
+     definition lives in the documented schema/docs contract; the Java
+     DTO/record is an implementation projection used by SC aggregation tests,
+     not a second SSOT.
+   - Update `docs/ORCHESTRATOR-REST.md` cached status-full examples.
+   - Update `docs/ui-v2/UI_V2_FLOW.md`: current role match is invalid; target
+     behavior is `beeId` join only.
+   - Update scenario docs/validation notes so `template.bees[].id` is required
+     and unique.
+2. Red tests:
+   - Scenario validation test rejects missing `template.bees[].id`.
+   - Scenario validation test rejects duplicate `template.bees[].id`.
+   - Active bundle validation test proves all repo scenario bundles declare
+     unique bee ids. Add this before migration; it stays red until active
+     bundles are migrated.
+   - Migration guidance/tooling test proves independent scenario bundles can add
+     explicit bee ids deterministically without deriving identity from `role`
+     when duplicate roles exist.
+   - SC runtime/planning test proves each worker gets explicit bee identity
+     (`POCKETHIVE_BEE_ID`) from the scenario bee and that SC records the
+     canonical `beeId -> (role, instance)` mapping.
+   - Worker SDK/control-plane status test proves `beeId` is emitted in worker
+     status context when the env value is present.
+   - Worker/SC consistency test proves a missing or mismatched worker
+     `data.context.beeId` is diagnosed and does not overwrite SC's canonical
+     mapping.
+   - `SwarmWorkersAggregatorTest` covers two planned workers with the same
+     `role`, different SC-owned `beeId -> (role, instance)` mappings, and
+     different worker configs. The snapshot must contain two entries keyed by
+     the SC mapping's `beeId` and preserve each config. Worker status
+     `data.context.beeId` is only a consistency echo in this test, not the
+     source of identity.
+   - UI mapping test covers two scenario bees with the same `role`; selecting
+     bee B must use worker B's config and runtime target, not the last worker
+     stored for that role.
+3. Implementation:
+   - Migrate active scenario bundles to explicit, unique `template.bees[].id`
+     before enabling required-id validation.
+   - Add migration instructions/tooling for internal and external scenarios:
+     require authors or the tool input to choose stable bee ids; never infer
+     duplicate-role identities from `role` alone.
+   - Require/validate scenario bee ids in the shared model and Scenario Manager
+     validation path.
+   - Propagate bee id from scenario template into worker runtime/env as
+     `POCKETHIVE_BEE_ID`.
+   - Store the canonical `beeId -> (role, instance)` and `instance -> beeId`
+     mapping in SC runtime state.
+   - Carry bee id from SC runtime state into
+     `context.workers[].beeId`.
+   - Emit worker `data.context.beeId` as a diagnostic echo and validate it
+     against SC runtime state.
+   - Replace or explicitly classify role-keyed maps: role can group transport
+     targets, but must not identify scenario nodes.
+   - Replace `runtimeWorkersByRole` in Hive UI with `runtimeWorkersByBeeId`.
+   - Disable edit explicitly when either selected scenario bee id or runtime
+     worker `beeId` is missing.
+
 ## Execution Order
 
-1. Fix/document the SC aggregate projection contract:
+1. [x] Fix/document the SC aggregate projection contract:
    `context.workers[].config` is not canonical by itself, but must faithfully
    carry worker canonical `status-full.data.config` for UI.
-2. Fix MCP config-update to send only the requested patch.
-3. Tighten capability manifest validation for exact legacy roots.
-4. Migrate scenarios and docs to explicit IO selectors:
+2. [x] Fix MCP config-update to send only the requested patch.
+3. [x] Tighten capability manifest validation for exact legacy roots.
+4. [ ] Migrate scenarios and docs to explicit IO selectors:
    - `inputs.scheduler` requires `inputs.type: SCHEDULER`
    - `inputs.redis` requires `inputs.type: REDIS_DATASET`
    - `inputs.csv` requires `inputs.type: CSV_DATASET`
    - `outputs.redis` requires `outputs.type: REDIS`
    - multiple IO subblocks without an explicit selector must fail migration.
-5. Add Scenario Manager validation for missing/unknown IO selectors and tests
+5. [ ] Add Scenario Manager validation for missing/unknown IO selectors and tests
    against active scenario bundles.
-6. Add Hive UI capability composition for runtime config edit forms, using only
+6. [x] Add Hive UI capability composition for runtime config edit forms, using only
    explicit selectors and IO manifests from Scenario Manager.
-7. Smoke through Hive UI:
+7. [ ] Fix runtime identity join with TDD:
+   - architecture contract updates,
+   - red tests,
+   - migrate active bundles to required unique bee ids,
+   - implementation that carries SC-owned `beeId` mapping end-to-end and removes
+     UI role joins.
+8. [ ] Smoke through Hive UI:
    create a runnable swarm with explicit `inputs.type=SCHEDULER`, start it,
    change generator `inputs.scheduler.ratePerSec`, confirm runtime config/TPS,
    then change it again.
-8. Final phase: remove public runtime config defaults from workers and replace
+9. [ ] Final phase: remove public runtime config defaults from workers and replace
    them with explicit startup/config validation.
-9. Run focused gates:
+10. [ ] Run focused gates:
 
 ```bash
 npm test --prefix tools/pockethive-mcp
-./mvnw -pl common/worker-sdk -Dtest=WorkerControlPlaneRuntimeTest test
-./mvnw -pl scenario-manager-service -am -Dtest=CapabilityCatalogueServiceTest test
-./mvnw -pl scenario-manager-service -am -Dtest=ScenarioBundleValidatorTest test
+./mvnw -pl common/worker-sdk -am -Dtest=WorkerControlPlaneRuntimeTest -Dsurefire.failIfNoSpecifiedTests=false test
+./mvnw -pl scenario-manager-service -am -Dtest=CapabilityCatalogueServiceTest -Dsurefire.failIfNoSpecifiedTests=false test
+./mvnw -pl scenario-manager-service -am -Dtest=ScenarioBundleValidatorTest -Dsurefire.failIfNoSpecifiedTests=false test
+./mvnw -pl swarm-controller-service -am -Dtest=SwarmWorkersAggregatorTest -Dsurefire.failIfNoSpecifiedTests=false test
+./mvnw -pl swarm-controller-service -am -Dtest=SwarmRuntimeCoreScenarioEngineTest -Dsurefire.failIfNoSpecifiedTests=false test
+npm test --prefix ui-v2
+npm run lint --prefix ui-v2
 npm run build --prefix ui-v2
 rg -n "config\\.worker|config\\.pockethive|worker\\.message|name:\\s*worker\\.|name:\\s*pockethive\\." \
   scenarios scenario-manager-service/capabilities docs/scenarios tools/pockethive-mcp \
@@ -257,5 +403,11 @@ rg -n "config\\.worker|config\\.pockethive|worker\\.message|name:\\s*worker\\.|n
 - Hive UI exposes IO-specific fields such as `inputs.scheduler.ratePerSec` by
   composing worker capabilities with IO capabilities from Scenario Manager.
 - Hive UI and SC do not synthesize `inputs.type` / `outputs.type`.
+- Active scenario bundles have required, unique `template.bees[].id` values.
+- SC owns the canonical runtime mapping from `beeId` to `(role, instance)`.
+- Runtime worker identity is joined by `beeId`, never by `role`.
+- `status-full.data.context.workers[]` exposes `beeId` for worker entries.
+- Hive UI disables runtime config editing if `beeId` is unavailable instead of
+  falling back to `role`.
 - Worker runtime defaults for public config are removed only after migration,
   validation, and UI smoke pass.

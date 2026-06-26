@@ -30,14 +30,16 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
     "templateId": "baseline-demo",
     "controllerImage": "ghcr.io/pockethive/swarm-controller:1.2.3",
     "bees": [
-      { "role": "generator", "image": "ghcr.io/pockethive/generator:1.2.3" },
-      { "role": "moderator", "image": "ghcr.io/pockethive/moderator:1.2.3" }
+      { "beeId": "genA", "role": "generator", "image": "ghcr.io/pockethive/generator:1.2.3" },
+      { "beeId": "modA", "role": "moderator", "image": "ghcr.io/pockethive/moderator:1.2.3" }
     ]
   }
 ]
 ```
 
 > Swarms are sorted lexicographically by `id` for deterministic UI rendering.
+> Bee summaries are keyed by `beeId` from `template.bees[].id`; do not collapse
+> multiple bees with the same `role`.
 
 ### 2.2 Fetch swarm
 `GET /api/swarms/{swarmId}`
@@ -75,7 +77,37 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
       "ioState": {},
       "context": {
         "swarmStatus": "RUNNING",
-        "swarmHealth": "RUNNING"
+        "swarmHealth": "RUNNING",
+        "workers": [
+          {
+            "beeId": "genA",
+            "role": "generator",
+            "instance": "demo-generator-1",
+            "enabled": true,
+            "tps": 10,
+            "lastSeenAt": "2026-01-22T12:34:55Z",
+            "stale": false,
+            "ioState": {
+              "work": {
+                "input": "ok",
+                "output": "ok"
+              }
+            },
+            "runtime": {
+              "templateId": "baseline-demo",
+              "runId": "run-20260122-123455Z",
+              "containerId": null,
+              "image": "ghcr.io/pockethive/generator:1.2.3",
+              "stackName": null
+            },
+            "config": {
+              "inputs": {
+                "type": "SCHEDULER",
+                "ratePerSecond": 10
+              }
+            }
+          }
+        ]
       }
     }
   }
@@ -83,6 +115,11 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
 ```
 
 Returns `404` when the swarm id is unknown or no `status-full` has been cached yet.
+
+`data.context.workers[].beeId` is the runtime identity used to join this
+snapshot to Scenario Manager `template.bees[].id`. `role` and `instance` are the
+current control-plane address for component actions; clients must not join or
+deduplicate workers by `role`.
 
 ### 2.3 Swarm journal (timeline)
 `GET /api/swarms/{swarmId}/journal`
@@ -696,6 +733,10 @@ Deletes the tap queue and returns the last known tap state.
 ```
 
 **Signal:** `signal.config-update.<swarmId>.<role>.<instance>` → **Outcome:** `event.outcome.config-update.<swarmId>.<role>.<instance>` (check `data.status`) → **Alerts:** `event.alert.{type}.<swarmId>.<role>.<instance>`
+
+For UI-originated edits, resolve `{role}/{instance}` from the selected runtime
+worker after joining Scenario Manager `template.bees[].id` to
+`status-full.data.context.workers[].beeId`. `role` alone is not a stable target.
 
 **Response (202)** — same envelope.
 

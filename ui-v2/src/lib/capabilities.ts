@@ -139,6 +139,8 @@ export function composeCapabilityConfigEntries(
   catalogue: CapabilityManifest[],
   currentConfig: Record<string, unknown> | null | undefined,
 ): CapabilityConfigEntry[] {
+  // TODO(capabilities): Share this IO config composition with the VSCode scenario editor
+  // instead of maintaining the same ui.ioScope/ui.ioType merge algorithm in two UI clients.
   const entries: CapabilityConfigEntry[] = []
   const names = new Set<string>()
   appendConfigEntries(entries, names, workerManifest.config)
