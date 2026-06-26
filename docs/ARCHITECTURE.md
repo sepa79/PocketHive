@@ -484,6 +484,9 @@ Example (bindings with ports + optional selector hint):
 - UI joins/edit-targets runtime workers only by SC-owned
   `data.context.workers[].beeId`. `role`/`instance` are used only after that
   join, as the transport target for Orchestrator component actions.
+- Until a canonical authoring-to-runtime mapping exists, UI must expose runtime
+  workers as an explicit live target selector rather than inferring the target
+  from the selected authoring bee.
 - If a selected UI item has no matching `data.context.workers[].beeId`, UI must
   show an explicit missing-runtime state and disable runtime mutation for that
   item. It must not silently fall back to role matching.

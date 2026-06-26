@@ -49,7 +49,7 @@ describe the same public worker config shape.
   - [x] SC aggregation publishes `context.workers[].beeId` from runtime state.
   - [ ] Worker status echo diagnostics for missing/mismatched
     `data.context.beeId`.
-  - [ ] Hive UI joins editable runtime workers by `beeId`, not `role`.
+  - [x] Hive UI joins editable runtime workers by `beeId`, not `role`.
 - [x] Follow TDD order for the SC-side runtime identity fix: architecture
   contract updates, red tests, then implementation.
 - [ ] Final phase: remove public runtime config defaults from workers after
@@ -339,8 +339,8 @@ TDD sequence:
    - Replace or explicitly classify role-keyed maps: role can group transport
      targets, but must not identify scenario nodes.
    - Replace `runtimeWorkersByRole` in Hive UI with `runtimeWorkersByBeeId`.
-   - Disable edit explicitly when either selected scenario bee id or runtime
-     worker `beeId` is missing.
+   - Disable live edit explicitly until the UI holds an explicit runtime target
+     selected from `status-full.data.context.workers[].beeId`.
 
 ## Execution Order
 
@@ -365,7 +365,7 @@ TDD sequence:
    - [x] SC implementation that carries SC-owned `beeId` mapping into
      `context.workers[].beeId`,
    - [ ] worker echo diagnostics for missing/mismatched `data.context.beeId`,
-   - [ ] UI implementation that removes role joins.
+   - [x] UI implementation that removes role joins.
 8. [ ] Smoke through Hive UI:
    create a runnable swarm with explicit `inputs.type=SCHEDULER`, start it,
    change generator `inputs.scheduler.ratePerSec`, confirm runtime config/TPS,
