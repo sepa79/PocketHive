@@ -8,6 +8,7 @@ import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.worker.WorkerControlPlane;
+import io.pockethive.controlplane.worker.WorkerRuntimeIdentity;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.observability.ObservabilityContextUtil;
 import io.pockethive.observability.StatusEnvelopeBuilder;
@@ -838,6 +839,62 @@ class WorkerControlPlaneRuntimeTest {
 	        assertThat(data.get("config")).isNotNull();
 	        assertThat(data.get("io")).isNotNull();
 	    }
+
+    @Test
+    void statusSnapshotEchoesRuntimeBeeIdInContext() throws Exception {
+        runtime = new WorkerControlPlaneRuntime(
+            controlPlane,
+            stateStore,
+            MAPPER,
+            emitter,
+            IDENTITY,
+            PROPERTIES.getControlPlane(),
+            null,
+            "runtime-bee-1");
+        reset(emitter);
+
+        runtime.emitStatusSnapshot();
+
+        ArgumentCaptor<ControlPlaneEmitter.StatusContext> statusCaptor =
+            ArgumentCaptor.forClass(ControlPlaneEmitter.StatusContext.class);
+        verify(emitter).emitStatusSnapshot(statusCaptor.capture());
+
+        Map<String, Object> snapshot = buildSnapshot(statusCaptor.getValue());
+        @SuppressWarnings("unchecked")
+        Map<String, Object> data = (Map<String, Object>) snapshot.get("data");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> context = (Map<String, Object>) data.get("context");
+        assertThat(context).containsEntry(WorkerRuntimeIdentity.BEE_ID_CONTEXT_FIELD, "runtime-bee-1");
+    }
+
+    @Test
+    void statusSnapshotRuntimeBeeIdEchoOverridesWorkerProvidedBeeId() throws Exception {
+        runtime = new WorkerControlPlaneRuntime(
+            controlPlane,
+            stateStore,
+            MAPPER,
+            emitter,
+            IDENTITY,
+            PROPERTIES.getControlPlane(),
+            null,
+            "runtime-bee-1");
+        runtime.statusPublisher(definition.beanName()).update(status ->
+            status.data(WorkerRuntimeIdentity.BEE_ID_CONTEXT_FIELD, "worker-provided-bee"));
+        reset(emitter);
+
+        runtime.emitStatusSnapshot();
+
+        ArgumentCaptor<ControlPlaneEmitter.StatusContext> statusCaptor =
+            ArgumentCaptor.forClass(ControlPlaneEmitter.StatusContext.class);
+        verify(emitter).emitStatusSnapshot(statusCaptor.capture());
+
+        Map<String, Object> snapshot = buildSnapshot(statusCaptor.getValue());
+        @SuppressWarnings("unchecked")
+        Map<String, Object> data = (Map<String, Object>) snapshot.get("data");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> context = (Map<String, Object>) data.get("context");
+        assertThat(context).containsEntry(WorkerRuntimeIdentity.BEE_ID_CONTEXT_FIELD, "runtime-bee-1");
+    }
 
 	    @Test
 	    void statusRequestWithoutPayloadEmitsSnapshot() throws Exception {

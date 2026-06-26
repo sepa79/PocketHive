@@ -41,13 +41,13 @@ describe the same public worker config shape.
   `status-full.data.context.workers[]`, including `beeId`. The schema/docs
   contract is the SSOT; the Java DTO/record is the SC implementation projection
   and must be tested against that contract.
-- [ ] Fix runtime worker identity: SC-owned runtime `beeId` must be the SC/UI
+- [x] Fix runtime worker identity: SC-owned runtime `beeId` must be the SC/UI
   join key; `role` must remain a user-facing label / control-plane routing
   segment only.
   - [x] SC runtime state stores canonical runtime `beeId` mappings.
   - [x] SC assigns explicit runtime `POCKETHIVE_BEE_ID` per materialised worker.
   - [x] SC aggregation publishes `context.workers[].beeId` from runtime state.
-  - [ ] Worker status echo diagnostics for missing/mismatched
+  - [x] Worker status echo diagnostics for missing/mismatched
     `data.context.beeId`.
   - [x] Hive UI joins editable runtime workers by `beeId`, not `role`.
 - [x] Follow TDD order for the SC-side runtime identity fix: architecture
@@ -359,12 +359,12 @@ TDD sequence:
    against active scenario bundles.
 6. [x] Add Hive UI capability composition for runtime config edit forms, using only
    explicit selectors and IO manifests from Scenario Manager.
-7. [ ] Fix runtime identity join with TDD:
+7. [x] Fix runtime identity join with TDD:
    - [x] architecture contract updates,
    - [x] red SC tests,
    - [x] SC implementation that carries SC-owned `beeId` mapping into
      `context.workers[].beeId`,
-   - [ ] worker echo diagnostics for missing/mismatched `data.context.beeId`,
+   - [x] worker echo diagnostics for missing/mismatched `data.context.beeId`,
    - [x] UI implementation that removes role joins.
 8. [ ] Smoke through Hive UI:
    create a runnable swarm with explicit `inputs.type=SCHEDULER`, start it,

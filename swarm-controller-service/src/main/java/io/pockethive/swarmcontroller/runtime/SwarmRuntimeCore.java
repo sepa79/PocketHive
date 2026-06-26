@@ -9,6 +9,7 @@ import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import io.pockethive.controlplane.messaging.EventMessage;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
+import io.pockethive.controlplane.worker.WorkerRuntimeIdentity;
 import io.pockethive.docker.DockerContainerClient;
 import io.pockethive.manager.ports.Clock;
 import io.pockethive.manager.ports.ComputeAdapter;
@@ -78,7 +79,6 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
 
   private static final Logger log = LoggerFactory.getLogger(SwarmLifecycleManager.class);
   private static final String SCENARIOS_RUNTIME_DESTINATION = "/app/scenarios-runtime";
-  public static final String WORKER_BEE_ID_ENV = "POCKETHIVE_BEE_ID";
   private static final String RUNTIME_BEE_ID_PREFIX = "bee-";
 
   private final AmqpAdmin amqp;
@@ -354,7 +354,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
         if (bee.env() != null) {
           env.putAll(bee.env());
         }
-        env.put(WORKER_BEE_ID_ENV, runtimeBeeId);
+        env.put(WorkerRuntimeIdentity.BEE_ID_ENV, runtimeBeeId);
         Map<String, Object> effectiveConfig = enrichConfigWithSut(bee.config(), sutEnv);
         List<String> volumes = resolveVolumes(effectiveConfig);
         if (hasText(scenariosRuntimeRootSource)) {

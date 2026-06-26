@@ -119,7 +119,9 @@ Returns `404` when the swarm id is unknown or no `status-full` has been cached y
 `data.context.workers[].beeId` is the Swarm Controller-owned runtime identity
 for component selection. `role` and `instance` are the current control-plane
 address for component actions; clients must not join or deduplicate workers by
-`role`.
+`role`. When a worker status echo is missing or mismatched, the affected worker
+entry may include `identityDiagnostics.workerBeeIdEcho` with `missing` or
+`mismatch`, plus the SC-owned `expectedBeeId` and, for mismatches, `actualBeeId`.
 
 ### 2.3 Swarm journal (timeline)
 `GET /api/swarms/{swarmId}/journal`

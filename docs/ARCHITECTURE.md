@@ -294,6 +294,9 @@ Additional rules:
     `data.context.beeId`, that value is only a consistency check. A missing or
     mismatched echo must be reported explicitly and must not overwrite the
     swarm-controller mapping.
+  - Worker echo diagnostics are reported on the affected worker aggregate as
+    `identityDiagnostics.workerBeeIdEcho: "missing" | "mismatch"`, with
+    `expectedBeeId` and, for mismatches, `actualBeeId`.
   - Clients must resolve editable runtime workers through the SC-owned
     `data.context.workers[].beeId`. They must not fall back to `role`, array
     order, topology position, label, queue name, image name, or worker echo.

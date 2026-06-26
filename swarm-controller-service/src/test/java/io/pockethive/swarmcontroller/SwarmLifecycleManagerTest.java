@@ -13,6 +13,7 @@ import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
+import io.pockethive.controlplane.worker.WorkerRuntimeIdentity;
 import com.github.dockerjava.api.DockerClient;
 import io.pockethive.docker.DockerContainerClient;
 import io.pockethive.docker.compute.PocketHiveDockerLabels;
@@ -23,7 +24,6 @@ import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.TrafficPolicy;
 import io.pockethive.swarm.model.Work;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
-import io.pockethive.swarmcontroller.runtime.SwarmRuntimeCore;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -808,7 +808,7 @@ class SwarmLifecycleManagerTest {
     verify(docker, times(2))
         .createAndStartContainer(anyString(), envCaptor.capture(), anyString(), any(), anyMap());
     List<String> beeIds = envCaptor.getAllValues().stream()
-        .map(env -> env.get(SwarmRuntimeCore.WORKER_BEE_ID_ENV))
+        .map(env -> env.get(WorkerRuntimeIdentity.BEE_ID_ENV))
         .toList();
 
     assertThat(beeIds)
