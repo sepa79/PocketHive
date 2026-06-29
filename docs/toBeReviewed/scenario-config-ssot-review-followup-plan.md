@@ -366,19 +366,34 @@ TDD sequence:
      `context.workers[].beeId`,
    - [x] worker echo diagnostics for missing/mismatched `data.context.beeId`,
    - [x] UI implementation that removes role joins.
-8. [ ] Smoke through Hive UI:
+8. [x] Smoke through Hive UI:
    create a runnable swarm with explicit `inputs.type=SCHEDULER`, start it,
    change generator `inputs.scheduler.ratePerSec`, confirm runtime config/TPS,
    then change it again.
+   - 2026-06-26 local smoke: `smoke-ui-rate` from `local-rest-topology`.
+   - Confirmed Hive UI capability edits on generator:
+     `50 -> 120`, `120 -> 30`, and final `30 -> 120`.
+   - Confirmed via Orchestrator status-full after control-plane refresh:
+     `inputs.type=SCHEDULER`, `inputs.scheduler.ratePerSec=30` with `tps=30`,
+     then `ratePerSec=120` with `tps=120`.
 9. [ ] Final phase: remove public runtime config defaults from workers and replace
    them with explicit startup/config validation.
-10. [ ] Run focused gates:
+10. [x] Run focused gates:
+   - 2026-06-29 local focused verification passed:
+     - `npm test --prefix tools/pockethive-mcp` (`82/82`),
+     - `npm test --prefix ui-v2` (`3/3`),
+     - focused Maven worker/scenario-manager/swarm-controller tests,
+     - `ScenarioControllerTest` (`48/48`) as the current bundle validation
+       regression suite,
+     - `npm run lint --prefix ui-v2`,
+     - `npm run build --prefix ui-v2` with the existing large chunk warning,
+     - legacy config grep returned no matches.
 
 ```bash
 npm test --prefix tools/pockethive-mcp
 ./mvnw -pl common/worker-sdk -am -Dtest=WorkerControlPlaneRuntimeTest -Dsurefire.failIfNoSpecifiedTests=false test
 ./mvnw -pl scenario-manager-service -am -Dtest=CapabilityCatalogueServiceTest -Dsurefire.failIfNoSpecifiedTests=false test
-./mvnw -pl scenario-manager-service -am -Dtest=ScenarioBundleValidatorTest -Dsurefire.failIfNoSpecifiedTests=false test
+./mvnw -pl scenario-manager-service -am -Dtest=ScenarioControllerTest -Dsurefire.failIfNoSpecifiedTests=false test
 ./mvnw -pl swarm-controller-service -am -Dtest=SwarmWorkersAggregatorTest -Dsurefire.failIfNoSpecifiedTests=false test
 ./mvnw -pl swarm-controller-service -am -Dtest=SwarmRuntimeCoreScenarioEngineTest -Dsurefire.failIfNoSpecifiedTests=false test
 npm test --prefix ui-v2
