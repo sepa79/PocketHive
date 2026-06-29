@@ -20,18 +20,15 @@ class TriggerWorkInputFactory implements WorkInputFactory {
   private final WorkerRuntime workerRuntime;
   private final WorkerControlPlaneRuntime controlPlaneRuntime;
   private final ControlPlaneIdentity identity;
-  private final TriggerWorkerProperties properties;
 
   TriggerWorkInputFactory(
       WorkerRuntime workerRuntime,
       WorkerControlPlaneRuntime controlPlaneRuntime,
-      ControlPlaneIdentity identity,
-      TriggerWorkerProperties properties
+      ControlPlaneIdentity identity
   ) {
     this.workerRuntime = workerRuntime;
     this.controlPlaneRuntime = controlPlaneRuntime;
     this.identity = identity;
-    this.properties = properties;
   }
 
   @Override
@@ -50,7 +47,7 @@ class TriggerWorkInputFactory implements WorkInputFactory {
     SchedulerInputProperties scheduling = config instanceof SchedulerInputProperties props
         ? props
         : new SchedulerInputProperties();
-    TriggerSchedulerState schedulerState = new TriggerSchedulerState(properties, scheduling.isEnabled());
+    TriggerSchedulerState schedulerState = new TriggerSchedulerState(scheduling.isEnabled());
     return SchedulerWorkInput.<TriggerWorkerConfig>builder()
         .workerDefinition(definition)
         .controlPlaneRuntime(controlPlaneRuntime)

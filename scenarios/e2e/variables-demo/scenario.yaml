@@ -37,6 +37,9 @@ template:
     - role: moderator
       id: moderator
       image: moderator:latest
+      config:
+        mode:
+          type: pass-through
       work:
         in:
           in: gen

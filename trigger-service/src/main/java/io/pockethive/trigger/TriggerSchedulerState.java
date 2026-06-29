@@ -11,34 +11,32 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 final class TriggerSchedulerState implements SchedulerState<TriggerWorkerConfig> {
 
-  private final TriggerWorkerProperties properties;
-  private final boolean defaultEnabled;
   private final AtomicBoolean singleRequestPending = new AtomicBoolean(false);
 
   private volatile TriggerWorkerConfig config;
   private volatile boolean enabled;
   private volatile long lastInvocation;
 
-  TriggerSchedulerState(TriggerWorkerProperties properties, boolean defaultEnabled) {
-    this.properties = Objects.requireNonNull(properties, "properties");
-    TriggerWorkerConfig initial = properties.defaultConfig();
-    this.config = initial;
-    this.defaultEnabled = defaultEnabled;
+  TriggerSchedulerState(boolean defaultEnabled) {
     this.enabled = defaultEnabled;
     this.lastInvocation = 0L;
   }
 
   @Override
-  public synchronized TriggerWorkerConfig defaultConfig() {
-    return properties.defaultConfig();
-  }
-
-  @Override
   public synchronized void update(WorkerControlPlaneRuntime.WorkerStateSnapshot snapshot) {
     Objects.requireNonNull(snapshot, "snapshot");
-    TriggerWorkerConfig incoming = snapshot.config(TriggerWorkerConfig.class)
-        .orElseGet(properties::defaultConfig);
+    TriggerWorkerConfig incoming = snapshot.config(TriggerWorkerConfig.class).orElse(null);
     boolean resolvedEnabled = snapshot.enabled();
+    if (incoming == null) {
+      this.config = null;
+      this.enabled = false;
+      singleRequestPending.set(false);
+      lastInvocation = 0L;
+      if (resolvedEnabled) {
+        throw new IllegalStateException("Missing runtime config for " + TriggerWorkerConfig.class.getName());
+      }
+      return;
+    }
     TriggerWorkerConfig updated = new TriggerWorkerConfig(
         incoming.intervalMs(),
         incoming.singleRequest(),
@@ -66,6 +64,9 @@ final class TriggerSchedulerState implements SchedulerState<TriggerWorkerConfig>
 
   @Override
   public synchronized int planInvocations(long nowMillis) {
+    if (config == null) {
+      return 0;
+    }
     int quota = 0;
     if (singleRequestPending.getAndSet(false)) {
       quota++;

@@ -326,31 +326,19 @@ class ProcessorTest {
     }
 
     @Test
-    void workerFallsBackToDefaultsWhenConfigMissing() throws Exception {
+    void workerFailsWhenRuntimeConfigMissing() throws Exception {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
-        properties.setConfig(Map.of("baseUrl", "http://defaults"));
         HttpClient httpClient = mock(HttpClient.class);
         Clock clock = Clock.fixed(Instant.parse("2024-01-01T00:00:00Z"), ZoneOffset.UTC);
         ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, clock);
         TestWorkerContext context = new TestWorkerContext(null);
 
-        AtomicReference<ClassicHttpRequest> requestRef = new AtomicReference<>();
-        when(httpClient.execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class))).thenAnswer(invocation -> {
-            ClassicHttpRequest request = invocation.getArgument(0, ClassicHttpRequest.class);
-            HttpClientResponseHandler<?> handler = invocation.getArgument(1, HttpClientResponseHandler.class);
-            requestRef.set(request);
-            BasicClassicHttpResponse response = new BasicClassicHttpResponse(200, "OK");
-            response.setEntity(new StringEntity("ok", java.nio.charset.StandardCharsets.UTF_8));
-            return handler.handleResponse(response);
-        });
-
         WorkItem inbound = inboundItem(Map.of("path", "/defaults"));
 
-        worker.onMessage(inbound, context);
-
-        ClassicHttpRequest request = requestRef.get();
-        assertThat(request).isNotNull();
-        assertThat(request.getUri()).isEqualTo(URI.create("http://defaults/defaults"));
+        assertThatThrownBy(() -> worker.onMessage(inbound, context))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("Missing runtime config for " + ProcessorWorkerConfig.class.getName());
+        verify(httpClient, never()).execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class));
     }
 
     @Test
@@ -1105,6 +1093,10 @@ class ProcessorTest {
             previousTransport.close();
         }
         globalTransportField.set(tcpHandler, transport);
+
+        Field activeConfigField = tcpHandler.getClass().getDeclaredField("activeConfig");
+        activeConfigField.setAccessible(true);
+        activeConfigField.set(tcpHandler, TcpTransportConfig.defaults());
     }
 
     private static <T> T withScenarioRoot(Path scenarioRoot, ThrowingSupplier<T> action) throws Exception {

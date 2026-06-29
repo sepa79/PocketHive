@@ -60,7 +60,6 @@ class ClearingExportWorkerImplTest {
     ConfigurableApplicationContext applicationContext = mock(ConfigurableApplicationContext.class);
     ClearingExportWorkerConfig config = testConfig();
 
-    when(properties.defaultConfig()).thenReturn(config);
     when(batchWriter.bufferedRecords()).thenReturn(0L);
     when(batchWriter.recordsAccepted()).thenReturn(0L);
     when(batchWriter.filesWritten()).thenReturn(0L);
@@ -121,7 +120,7 @@ class ClearingExportWorkerImplTest {
 
     when(context.enabled()).thenReturn(true);
     when(context.statusPublisher()).thenReturn(StatusPublisher.NO_OP);
-    when(context.config(ClearingExportWorkerConfig.class)).thenReturn(config);
+    when(context.requireConfig(ClearingExportWorkerConfig.class)).thenReturn(config);
     when(templateRenderer.render(eq(config.recordTemplate()), anyMap())).thenReturn("D|x");
 
     ClearingExportWorkerImpl worker = new ClearingExportWorkerImpl(
@@ -172,7 +171,7 @@ class ClearingExportWorkerImplTest {
 
     when(context.enabled()).thenReturn(true);
     when(context.statusPublisher()).thenReturn(StatusPublisher.NO_OP);
-    when(context.config(ClearingExportWorkerConfig.class)).thenReturn(config);
+    when(context.requireConfig(ClearingExportWorkerConfig.class)).thenReturn(config);
     when(templateRenderer.render(eq(config.recordTemplate()), anyMap())).thenReturn("D|x");
 
     ClearingExportWorkerImpl worker = new ClearingExportWorkerImpl(
@@ -223,7 +222,7 @@ class ClearingExportWorkerImplTest {
 
     when(context.enabled()).thenReturn(true);
     when(context.statusPublisher()).thenReturn(StatusPublisher.NO_OP);
-    when(context.config(ClearingExportWorkerConfig.class)).thenReturn(config);
+    when(context.requireConfig(ClearingExportWorkerConfig.class)).thenReturn(config);
     when(templateRenderer.render(eq(config.recordTemplate()), anyMap())).thenReturn("D|x");
 
     ClearingExportWorkerImpl worker = new ClearingExportWorkerImpl(
@@ -274,7 +273,7 @@ class ClearingExportWorkerImplTest {
 
     when(context.enabled()).thenReturn(true);
     when(context.statusPublisher()).thenReturn(StatusPublisher.NO_OP);
-    when(context.config(ClearingExportWorkerConfig.class)).thenReturn(config);
+    when(context.requireConfig(ClearingExportWorkerConfig.class)).thenReturn(config);
     when(templateRenderer.render(eq(config.recordTemplate()), anyMap())).thenReturn("D|x");
 
     ClearingExportWorkerImpl worker = new ClearingExportWorkerImpl(
@@ -325,7 +324,7 @@ class ClearingExportWorkerImplTest {
 
     when(context.enabled()).thenReturn(true);
     when(context.statusPublisher()).thenReturn(StatusPublisher.NO_OP);
-    when(context.config(ClearingExportWorkerConfig.class)).thenReturn(config);
+    when(context.requireConfig(ClearingExportWorkerConfig.class)).thenReturn(config);
     when(schemaRegistry.resolve(config)).thenReturn(schema);
     when(projector.project(eq(schema), anyMap())).thenReturn(projected);
 
@@ -367,7 +366,7 @@ class ClearingExportWorkerImplTest {
 
     when(context.enabled()).thenReturn(true);
     when(context.statusPublisher()).thenReturn(StatusPublisher.NO_OP);
-    when(context.config(ClearingExportWorkerConfig.class)).thenReturn(config);
+    when(context.requireConfig(ClearingExportWorkerConfig.class)).thenReturn(config);
 
     ClearingExportWorkerImpl worker = new ClearingExportWorkerImpl(
         properties,
@@ -405,7 +404,7 @@ class ClearingExportWorkerImplTest {
 
     when(context.enabled()).thenReturn(true);
     when(context.statusPublisher()).thenReturn(StatusPublisher.NO_OP);
-    when(context.config(ClearingExportWorkerConfig.class)).thenReturn(config);
+    when(context.requireConfig(ClearingExportWorkerConfig.class)).thenReturn(config);
     when(templateRenderer.render(eq(config.recordTemplate()), anyMap())).thenReturn("D|ok");
 
     ClearingExportWorkerImpl worker = new ClearingExportWorkerImpl(
@@ -481,7 +480,7 @@ class ClearingExportWorkerImplTest {
 
     when(context.enabled()).thenReturn(true);
     when(context.statusPublisher()).thenReturn(StatusPublisher.NO_OP);
-    when(context.config(ClearingExportWorkerConfig.class)).thenReturn(config);
+    when(context.requireConfig(ClearingExportWorkerConfig.class)).thenReturn(config);
     when(templateRenderer.render(eq(config.recordTemplate()), anyMap())).thenReturn("D|x");
     org.mockito.Mockito.doThrow(new IllegalStateException("write failed"))
         .when(batchWriter).append(eq("D|x"), eq(config));
@@ -527,7 +526,7 @@ class ClearingExportWorkerImplTest {
 
     when(context.enabled()).thenReturn(true);
     when(context.statusPublisher()).thenReturn(StatusPublisher.NO_OP);
-    when(context.config(ClearingExportWorkerConfig.class)).thenReturn(config);
+    when(context.requireConfig(ClearingExportWorkerConfig.class)).thenReturn(config);
 
     ClearingExportWorkerImpl worker = new ClearingExportWorkerImpl(
         properties,
@@ -630,7 +629,7 @@ class ClearingExportWorkerImplTest {
 
     when(context.enabled()).thenReturn(true);
     when(context.statusPublisher()).thenReturn(StatusPublisher.NO_OP);
-    when(context.config(ClearingExportWorkerConfig.class)).thenReturn(config);
+    when(context.requireConfig(ClearingExportWorkerConfig.class)).thenReturn(config);
     when(schemaRegistry.resolve(config)).thenReturn(schema);
     when(projector.project(eq(schema), anyMap())).thenThrow(new IllegalStateException("projection failed"));
 

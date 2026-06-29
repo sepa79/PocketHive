@@ -9,7 +9,6 @@ import io.pockethive.worker.sdk.transport.rabbit.RabbitMessageWorkerAdapter;
 import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageListener;
@@ -148,23 +147,6 @@ public final class RabbitWorkInput implements WorkInput, ApplicationListener<Con
         public Builder identity(ControlPlaneIdentity identity) {
             this.identity = Objects.requireNonNull(identity, "identity");
             adapterBuilder.identity(identity);
-            return this;
-        }
-
-        public <C> Builder withConfigDefaults(Class<C> configType,
-                                              Supplier<C> defaultsSupplier,
-                                              Function<C, Boolean> enabledExtractor) {
-            adapterBuilder.withConfigDefaults(configType, defaultsSupplier, enabledExtractor);
-            return this;
-        }
-
-        public Builder defaultEnabledSupplier(Supplier<Boolean> defaultEnabledSupplier) {
-            adapterBuilder.defaultEnabledSupplier(defaultEnabledSupplier);
-            return this;
-        }
-
-        public Builder defaultConfigSupplier(Supplier<Object> defaultConfigSupplier) {
-            adapterBuilder.defaultConfigSupplier(defaultConfigSupplier);
             return this;
         }
 

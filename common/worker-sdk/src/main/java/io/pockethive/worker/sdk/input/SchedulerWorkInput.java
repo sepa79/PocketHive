@@ -190,7 +190,6 @@ public final class SchedulerWorkInput<C> implements WorkInput {
         if (listenersRegistered) {
             return;
         }
-        controlPlaneRuntime.registerDefaultConfig(workerDefinition.beanName(), schedulerState.defaultConfig());
         controlPlaneRuntime.registerStateListener(workerDefinition.beanName(), snapshot -> {
             boolean previouslyEnabled = schedulerState.isEnabled();
             schedulerState.update(snapshot);

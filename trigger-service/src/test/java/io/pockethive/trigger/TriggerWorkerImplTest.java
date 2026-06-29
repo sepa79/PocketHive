@@ -91,10 +91,11 @@ class TriggerWorkerImplTest {
   }
 
   @Test
-  void fallsBackToDefaultsWhenConfigMissing() {
+  void failsWhenRuntimeConfigMissing() {
     WorkerContext context = new TestWorkerContext(null, logger);
-    WorkItem result = worker.onMessage(WorkItem.text(context.info(), "").build(), context);
-    assertThat(result).isNull();
+    assertThatThrownBy(() -> worker.onMessage(WorkItem.text(context.info(), "").build(), context))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("Missing runtime config for " + TriggerWorkerConfig.class.getName());
   }
 
   @Test

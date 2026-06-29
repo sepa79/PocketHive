@@ -48,7 +48,6 @@ import org.springframework.stereotype.Component;
 )
 class TriggerWorkerImpl implements PocketHiveWorkerFunction {
 
-  private final TriggerWorkerProperties properties;
   private final HttpClient httpClient;
 
   @Autowired
@@ -57,7 +56,6 @@ class TriggerWorkerImpl implements PocketHiveWorkerFunction {
   }
 
   TriggerWorkerImpl(TriggerWorkerProperties properties, HttpClient httpClient) {
-    this.properties = Objects.requireNonNull(properties, "properties");
     this.httpClient = Objects.requireNonNull(httpClient, "httpClient");
   }
 
@@ -88,7 +86,7 @@ class TriggerWorkerImpl implements PocketHiveWorkerFunction {
    */
   @Override
   public WorkItem onMessage(WorkItem seed, WorkerContext context) {
-    TriggerWorkerConfig config = context.configOrDefault(TriggerWorkerConfig.class, properties::defaultConfig);
+    TriggerWorkerConfig config = context.requireConfig(TriggerWorkerConfig.class);
 
     context.statusPublisher()
         .update(status -> status

@@ -55,6 +55,10 @@ template:
     - id: postA
       role: postprocessor
       image: postprocessor:latest
+      config:
+        forwardToOutput: false
+        txOutcomeSinkMode: NONE
+        dropTxOutcomeWithoutCallId: true
       ports:
         - { id: in, direction: in }
       work:

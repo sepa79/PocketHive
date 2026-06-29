@@ -49,7 +49,6 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
   private static final WorkerInfo SYNTHETIC_WORKER_INFO =
       new WorkerInfo(WORKER_BEAN_NAME, "system", WORKER_BEAN_NAME + "-system", null, null);
 
-  private final ClearingExportWorkerProperties properties;
   private final ClearingExportBatchWriter batchWriter;
   private final ClearingStructuredSchemaRegistry schemaRegistry;
   private final StructuredRecordProjector structuredRecordProjector;
@@ -98,7 +97,6 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
       ObjectMapper objectMapper,
       Clock clock
   ) {
-    this.properties = Objects.requireNonNull(properties, "properties");
     this.batchWriter = Objects.requireNonNull(batchWriter, "batchWriter");
     this.schemaRegistry = Objects.requireNonNull(schemaRegistry, "schemaRegistry");
     this.structuredRecordProjector = Objects.requireNonNull(structuredRecordProjector, "structuredRecordProjector");
@@ -127,10 +125,7 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
       throw new IllegalStateException("Clearing-export worker is halted: " + fatal);
     }
 
-    ClearingExportWorkerConfig config = context.config(ClearingExportWorkerConfig.class);
-    if (config == null) {
-      config = properties.defaultConfig();
-    }
+    ClearingExportWorkerConfig config = context.requireConfig(ClearingExportWorkerConfig.class);
 
     try {
       List<WorkStep> steps = collectSteps(in);
@@ -202,7 +197,7 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
         .orElseGet(() -> {
           Map<String, Object> raw = snapshot.rawConfig();
           if (raw == null || raw.isEmpty()) {
-            return properties.defaultConfig();
+            throw new IllegalStateException("Missing runtime config for " + ClearingExportWorkerConfig.class.getName());
           }
           try {
             return objectMapper.convertValue(raw, ClearingExportWorkerConfig.class);

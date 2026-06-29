@@ -31,6 +31,9 @@ template:
     - role: moderator
       id: moderator
       image: moderator:latest
+      config:
+        mode:
+          type: pass-through
       work:
         in:
           in: gen
@@ -42,6 +45,8 @@ template:
     - role: processor
       id: processor
       image: processor:latest
+      config:
+        baseUrl: "{{ sut.endpoints['default'].baseUrl }}"
       work:
         in:
           in: mod

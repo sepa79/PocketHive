@@ -13,9 +13,4 @@ public class ProcessorWorkerProperties extends CanonicalWorkerProperties<Process
   public ProcessorWorkerProperties(ObjectMapper mapper, WorkerControlPlaneProperties controlPlaneProperties) {
     super(() -> controlPlaneProperties.getWorker().getRole(), ProcessorWorkerConfig.class, mapper);
   }
-
-  public ProcessorWorkerConfig defaultConfig() {
-    return toConfig(objectMapper()).orElseThrow(() ->
-        new IllegalStateException("Missing processor config under pockethive.worker.config"));
-  }
 }

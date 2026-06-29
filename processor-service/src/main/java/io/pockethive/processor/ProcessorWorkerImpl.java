@@ -45,9 +45,7 @@ import org.springframework.stereotype.Component;
  * message we resolve configuration from the {@link WorkerContext}:
  * <ul>
  *   <li>If control plane overrides exist they are surfaced through
- *       {@link WorkerContext#config(Class)}; otherwise we fall back to
- *       {@link ProcessorWorkerProperties#defaultConfig()} which points to {@code http://localhost:8082} and
- *       enables the worker by default.</li>
+ *       {@link WorkerContext#config(Class)}.</li>
  *   <li>The resolved {@link ProcessorWorkerConfig#baseUrl() baseUrl} becomes the target for HTTP
  *       enrichment. You can override it through control-plane config payloads such as
  *       <pre>{@code {
@@ -62,9 +60,7 @@ import org.springframework.stereotype.Component;
  * the SDK transport layer handles them out-of-band (log + alert/journal + drop) instead of
  * emitting error payload steps.
  * <p>
- * The defaults above can be tweaked by editing {@code processor-service/src/main/resources}
- * configuration or by publishing control-plane overrides on the {@code processor.control.*} routing
- * keys (for example {@code processor.control.config}).
+ * Configuration is supplied by the control plane on the {@code processor.control.*} routing keys.
  */
 @Component("processorWorker")
 @PocketHiveWorker(
@@ -80,7 +76,6 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
   }
 
   private final ObjectMapper mapper;
-  private final ProcessorWorkerProperties properties;
   private final CallMetricsRecorder metricsRecorder = new CallMetricsRecorder();
   private final Map<String, ProtocolHandler> protocolHandlers;
   private final AuthFailureJournalDeduplicator authFailureJournal = new AuthFailureJournalDeduplicator();
@@ -130,7 +125,6 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
                               TemplateRenderer templateRenderer,
                               RedisSequenceProperties redisProperties) {
     this.mapper = Objects.requireNonNull(mapper, "mapper");
-    this.properties = Objects.requireNonNull(properties, "properties");
     java.util.concurrent.atomic.AtomicLong nextAllowedTimeNanos = new java.util.concurrent.atomic.AtomicLong(0L);
     this.protocolHandlers = Map.of(
         "HTTP", new HttpProtocolHandler(
@@ -144,13 +138,12 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
             insecureClients.noKeepAlive(),
             insecureClients.perThread(),
             nextAllowedTimeNanos),
-        "TCP", new TcpProtocolHandler(mapper, clock, metricsRecorder, properties.defaultConfig().tcpTransport(), nextAllowedTimeNanos,
+        "TCP", new TcpProtocolHandler(mapper, clock, metricsRecorder, nextAllowedTimeNanos,
             templateRenderer, redisProperties),
         "ISO8583", new Iso8583ProtocolHandler(
             mapper,
             clock,
             metricsRecorder,
-            properties.defaultConfig().tcpTransport(),
             nextAllowedTimeNanos,
             templateRenderer,
             redisProperties)
@@ -160,7 +153,7 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
 
   @Override
   public WorkItem onMessage(WorkItem in, WorkerContext context) {
-    ProcessorWorkerConfig config = context.configOrDefault(ProcessorWorkerConfig.class, properties::defaultConfig);
+    ProcessorWorkerConfig config = context.requireConfig(ProcessorWorkerConfig.class);
 
     Logger logger = context.logger();
     try {

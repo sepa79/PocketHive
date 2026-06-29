@@ -16,12 +16,10 @@ import org.springframework.stereotype.Component;
 )
 class DbQueryWorkerImpl implements PocketHiveWorkerFunction {
 
-  private final DbQueryWorkerProperties properties;
   private final DbQueryRunner runner;
 
   @Autowired
   DbQueryWorkerImpl(ObjectMapper mapper, DbQueryWorkerProperties properties, DbStatementExecutor executor) {
-    this.properties = properties;
     this.runner = new DbQueryRunner(
         mapper,
         new DbQueryTemplateLoader(),
@@ -31,7 +29,7 @@ class DbQueryWorkerImpl implements PocketHiveWorkerFunction {
 
   @Override
   public WorkItem onMessage(WorkItem item, WorkerContext context) throws Exception {
-    DbQueryWorkerConfig config = context.configOrDefault(DbQueryWorkerConfig.class, properties::defaultConfig);
+    DbQueryWorkerConfig config = context.requireConfig(DbQueryWorkerConfig.class);
     context.statusPublisher()
         .update(status -> status
             .data("adapter", config.adapter() == null ? null : config.adapter().name())

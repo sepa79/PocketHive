@@ -275,18 +275,6 @@ public class PocketHiveWorkerSdkAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnBean({WorkerControlPlaneRuntime.class, WorkerRegistry.class})
-    @ConditionalOnMissingBean
-    PocketHiveWorkerDefaultsInitializer pocketHiveWorkerDefaultsInitializer(
-        WorkerRegistry workerRegistry,
-        WorkerControlPlaneRuntime controlPlaneRuntime,
-        ObjectProvider<List<PocketHiveWorkerProperties<?>>> propertiesProvider
-    ) {
-        List<PocketHiveWorkerProperties<?>> properties = propertiesProvider.getIfAvailable(Collections::emptyList);
-        return new PocketHiveWorkerDefaultsInitializer(workerRegistry, controlPlaneRuntime, properties);
-    }
-
-    @Bean
     @ConditionalOnMissingBean
     WorkInputConfigBinder workInputConfigBinder(ConfigurableEnvironment environment) {
         return new WorkInputConfigBinder(Binder.get(environment));
@@ -350,12 +338,9 @@ public class PocketHiveWorkerSdkAutoConfiguration {
     io.pockethive.worker.sdk.input.WorkInputFactory schedulerWorkInputFactory(
         WorkerRuntime workerRuntime,
         WorkerControlPlaneRuntime controlPlaneRuntime,
-        @Qualifier("workerControlPlaneIdentity") ControlPlaneIdentity identity,
-        ObjectMapper objectMapper,
-        ObjectProvider<List<PocketHiveWorkerProperties<?>>> propertiesProvider
+        @Qualifier("workerControlPlaneIdentity") ControlPlaneIdentity identity
     ) {
-        List<PocketHiveWorkerProperties<?>> properties = propertiesProvider.getIfAvailable(Collections::emptyList);
-        return new SchedulerWorkInputFactory(workerRuntime, controlPlaneRuntime, identity, objectMapper, properties);
+        return new SchedulerWorkInputFactory(workerRuntime, controlPlaneRuntime, identity);
     }
 
     @Bean
@@ -365,11 +350,9 @@ public class PocketHiveWorkerSdkAutoConfiguration {
         WorkerControlPlaneRuntime controlPlaneRuntime,
         @Qualifier("workerControlPlaneIdentity") ControlPlaneIdentity identity,
         RabbitTemplate rabbitTemplate,
-        RabbitListenerEndpointRegistry listenerRegistry,
-        ObjectProvider<List<PocketHiveWorkerProperties<?>>> propertiesProvider
+        RabbitListenerEndpointRegistry listenerRegistry
     ) {
-        List<PocketHiveWorkerProperties<?>> properties = propertiesProvider.getIfAvailable(Collections::emptyList);
-        return new RabbitWorkInputFactory(workerRuntime, controlPlaneRuntime, identity, rabbitTemplate, listenerRegistry, properties);
+        return new RabbitWorkInputFactory(workerRuntime, controlPlaneRuntime, identity, rabbitTemplate, listenerRegistry);
     }
 
     @Bean

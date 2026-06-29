@@ -24,11 +24,6 @@ pockethive:
     rabbit:
       exchange: ${POCKETHIVE_OUTPUT_RABBIT_EXCHANGE}
       routingKey: ${POCKETHIVE_OUTPUT_RABBIT_ROUTING_KEY}
-  worker:
-    config:
-      templateRoot: /app/templates/http
-      serviceId: default
-      passThroughOnMissingTemplate: true
   control-plane:
     exchange: ${POCKETHIVE_CONTROL_PLANE_EXCHANGE}
     swarm-id: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID}

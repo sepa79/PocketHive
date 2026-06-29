@@ -7,6 +7,15 @@ template:
     - role: generator
       id: generator
       image: generator:latest
+      config:
+        inputs:
+          scheduler:
+            ratePerSec: 1.0
+        message:
+          path: /api/test
+          method: POST
+          body: hello-world
+          headers: {}
       work:
         out:
           out: gen
@@ -15,6 +24,8 @@ template:
     - role: processor
       id: processor
       image: processor:latest
+      config:
+        baseUrl: "{{ sut.endpoints['default'].baseUrl }}"
       work:
         in:
           in: gen
@@ -26,6 +37,10 @@ template:
     - role: postprocessor
       id: postprocessor
       image: postprocessor:latest
+      config:
+        forwardToOutput: false
+        txOutcomeSinkMode: NONE
+        dropTxOutcomeWithoutCallId: true
       work:
         in:
           in: final

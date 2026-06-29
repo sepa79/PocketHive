@@ -43,7 +43,6 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
 
   private static final ObjectMapper MAPPER = new ObjectMapper().findAndRegisterModules();
 
-  private final RequestBuilderWorkerProperties properties;
   private final TemplateRenderer templateRenderer;
   private final MessageTemplateRenderer messageTemplateRenderer;
   private final TemplateLoader templateLoader;
@@ -69,18 +68,16 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
                         TemplateRenderer templateRenderer,
                         TemplateLoader templateLoader,
                         RedisSequenceProperties redisProperties) {
-    this.properties = Objects.requireNonNull(properties, "properties");
     this.templateRenderer = Objects.requireNonNull(templateRenderer, "templateRenderer");
     this.templateLoader = Objects.requireNonNull(templateLoader, "templateLoader");
     this.redisProperties = redisProperties == null ? new RedisSequenceProperties() : redisProperties;
     this.messageTemplateRenderer = new MessageTemplateRenderer(templateRenderer);
-    reloadTemplates();
   }
 
   @Override
   public WorkItem onMessage(WorkItem seed, WorkerContext context) {
     RequestBuilderWorkerConfig config =
-        context.configOrDefault(RequestBuilderWorkerConfig.class, properties::defaultConfig);
+        context.requireConfig(RequestBuilderWorkerConfig.class);
 
     WorkItem effectiveSeed = seed;
     if (effectiveSeed.headers().get("vars") == null && config.vars() != null && !config.vars().isEmpty()) {
@@ -225,10 +222,6 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
     context.logger().debug("Suppressed repeated Request Builder auth journal alert for serviceId={} callId={} occurrence={}",
         serviceId, callId, decision.occurrences());
     return null;
-  }
-
-  private void reloadTemplates() {
-    reloadTemplates(properties.defaultConfig());
   }
 
   private void reloadTemplates(RequestBuilderWorkerConfig config) {

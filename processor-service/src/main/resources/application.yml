@@ -24,20 +24,6 @@ pockethive:
     rabbit:
       exchange: ${POCKETHIVE_OUTPUT_RABBIT_EXCHANGE}
       routingKey: ${POCKETHIVE_OUTPUT_RABBIT_ROUTING_KEY}
-  worker:
-    config:
-      baseUrl: http://wiremock:8080
-      tcpTransport:
-        type: socket
-        connectionReuse: PER_THREAD
-        connectTimeoutMs: 5000
-        readTimeoutMs: 30000
-        maxBytes: 8192
-        keepAlive: true
-        workerThreads: 4
-        tcpNoDelay: true
-        sslVerify: false
-        maxRetries: 2
   control-plane:
     exchange: ${POCKETHIVE_CONTROL_PLANE_EXCHANGE}
     swarm-id: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID}

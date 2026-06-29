@@ -88,16 +88,16 @@ class WorkerControlPlaneRuntimeTest {
     }
 
     @Test
-    void registerDefaultConfigSeedsState() throws Exception {
-        TestConfig defaults = new TestConfig(true, 7.5);
+    void configUpdateAppliesRuntimeConfig() throws Exception {
+        TestConfig configUpdate = new TestConfig(true, 7.5);
 
-        runtime.registerDefaultConfig(definition.beanName(), defaults);
+        applyConfigUpdate(runtime, Map.of("enabled", true, "ratePerSec", 7.5));
 
-        assertThat(runtime.workerConfig(definition.beanName(), TestConfig.class)).contains(defaults);
+        assertThat(runtime.workerConfig(definition.beanName(), TestConfig.class)).contains(configUpdate);
         assertThat(runtime.workerRawConfig(definition.beanName()))
             .containsEntry("ratePerSec", 7.5)
             .containsEntry("enabled", true);
-        assertThat(runtime.workerEnabled(definition.beanName())).isFalse();
+        assertThat(runtime.workerEnabled(definition.beanName())).isTrue();
 
         reset(emitter);
         runtime.emitStatusSnapshot();
@@ -118,8 +118,6 @@ class WorkerControlPlaneRuntimeTest {
 
     @Test
     void configUpdateCanonicalisesKebabCaseKeys() throws Exception {
-        runtime.registerDefaultConfig(definition.beanName(), new TestConfig(false, 7.5));
-
         Map<String, Object> args = Map.of("rate-per-sec", 10.0);
         ControlSignal signal = ControlSignal.forInstance(
             "config-update",
@@ -601,9 +599,8 @@ class WorkerControlPlaneRuntimeTest {
     }
 
     @Test
-    void partialConfigUpdateRetainsSeededDefaults() throws Exception {
-        TestConfig defaults = new TestConfig(true, 7.5);
-        runtime.registerDefaultConfig(definition.beanName(), defaults);
+    void partialConfigUpdateRetainsExistingRuntimeConfig() throws Exception {
+        applyConfigUpdate(runtime, Map.of("enabled", true, "ratePerSec", 7.5));
         reset(emitter);
 
         Map<String, Object> args = Map.of(
@@ -656,16 +653,20 @@ class WorkerControlPlaneRuntimeTest {
             IDENTITY,
             PROPERTIES.getControlPlane()
         );
-        PrivateTestConfig defaults = new PrivateTestConfig(
+        PrivateTestConfig initialConfig = new PrivateTestConfig(
             true,
             7.5,
             Map.of("authProfile", Map.of("sut", Map.of("id", "sut-1")))
         );
 
-        privateRuntime.registerDefaultConfig(privateDefinition.beanName(), defaults);
+        applyConfigUpdate(privateRuntime, Map.of(
+            "enabled", true,
+            "ratePerSec", 7.5,
+            "privateConfig", Map.of("authProfile", Map.of("sut", Map.of("id", "sut-1")))
+        ));
 
         assertThat(privateRuntime.workerConfig(privateDefinition.beanName(), PrivateTestConfig.class))
-            .contains(defaults);
+            .contains(initialConfig);
         assertThat(privateRuntime.workerRawConfig(privateDefinition.beanName()))
             .containsEntry("enabled", true)
             .containsEntry("ratePerSec", 7.5)
@@ -712,8 +713,8 @@ class WorkerControlPlaneRuntimeTest {
 
     @Test
     void nullValuedConfigEntriesAreIgnored() throws Exception {
-        TestConfig defaults = new TestConfig(true, 7.5);
-        runtime.registerDefaultConfig(definition.beanName(), defaults);
+        TestConfig config = new TestConfig(true, 7.5);
+        applyConfigUpdate(runtime, Map.of("enabled", true, "ratePerSec", 7.5));
         reset(emitter);
 
         Map<String, Object> data = new java.util.LinkedHashMap<>();
@@ -738,7 +739,7 @@ class WorkerControlPlaneRuntimeTest {
         assertThat(rawConfig)
             .containsEntry("enabled", true)
             .containsEntry("ratePerSec", 7.5);
-        assertThat(runtime.workerConfig(definition.beanName(), TestConfig.class)).contains(defaults);
+        assertThat(runtime.workerConfig(definition.beanName(), TestConfig.class)).contains(config);
     }
 
     @Test
@@ -898,7 +899,6 @@ class WorkerControlPlaneRuntimeTest {
 
 	    @Test
 	    void statusRequestWithoutPayloadEmitsSnapshot() throws Exception {
-	        runtime.registerDefaultConfig(definition.beanName(), new TestConfig(true, 5.0));
 	        reset(emitter);
 
 	        String routingKey = ControlPlaneRouting.signal("status-request", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
@@ -919,9 +919,8 @@ class WorkerControlPlaneRuntimeTest {
 	    }
 
     @Test
-    void controlPlaneConfigOverridesSeededDefaults() throws Exception {
-        TestConfig defaults = new TestConfig(false, 3.0);
-        runtime.registerDefaultConfig(definition.beanName(), defaults);
+    void controlPlaneConfigUpdateOverridesExistingRuntimeConfig() throws Exception {
+        applyConfigUpdate(runtime, Map.of("enabled", false, "ratePerSec", 3.0));
 
         Map<String, Object> args = Map.of(
             "enabled", true,
@@ -948,6 +947,23 @@ class WorkerControlPlaneRuntimeTest {
         assertThat(runtime.workerEnabled(definition.beanName())).isTrue();
         Map<String, Object> rawConfig = runtime.workerRawConfig(definition.beanName());
         assertThat(rawConfig).containsEntry("ratePerSec", 11.0);
+    }
+
+    private void applyConfigUpdate(WorkerControlPlaneRuntime target, Map<String, Object> args) throws Exception {
+        ControlSignal signal = ControlSignal.forInstance(
+            "config-update",
+            IDENTITY.swarmId(),
+            IDENTITY.role(),
+            IDENTITY.instanceId(),
+            ORIGIN,
+            UUID.randomUUID().toString(),
+            UUID.randomUUID().toString(),
+            args
+        );
+        String payload = MAPPER.writeValueAsString(signal);
+        String routingKey = ControlPlaneRouting.signal("config-update", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
+        boolean handled = target.handle(payload, routingKey);
+        assertThat(handled).isTrue();
     }
 
 	        private String buildEnvelopeJson(ControlPlaneEmitter.StatusContext context, String type) {

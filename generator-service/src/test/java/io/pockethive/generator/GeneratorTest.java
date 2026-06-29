@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.amqp.core.MessageProperties;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class GeneratorTest {
 
@@ -76,15 +77,10 @@ class GeneratorTest {
   }
 
   @Test
-  void generateFallsBackToDefaultsWhenConfigMissing() throws Exception {
-    WorkItem result = worker.onMessage(seedMessage(), new TestWorkerContext(null));
-
-    assertThat(result).isNotNull();
-    JsonNode payload = MAPPER.readTree(result.asString());
-    assertThat(payload.path("kind").asText()).isEqualTo("http.request");
-    assertThat(payload.path("request").path("path").asText()).isEqualTo("/default");
-    assertThat(payload.path("request").path("method").asText()).isEqualTo("POST");
-    assertThat(payload.path("request").path("headers").path("X-Test").asText()).isEqualTo("true");
+  void generateFailsWhenRuntimeConfigMissing() {
+    assertThatThrownBy(() -> worker.onMessage(seedMessage(), new TestWorkerContext(null)))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("Missing runtime config for " + GeneratorWorkerConfig.class.getName());
   }
 
   private static final class TestWorkerContext implements WorkerContext {

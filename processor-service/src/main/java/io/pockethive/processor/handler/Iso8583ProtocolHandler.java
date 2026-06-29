@@ -33,6 +33,7 @@ import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -41,7 +42,6 @@ public class Iso8583ProtocolHandler implements ProtocolHandler {
   private final ObjectReader strictEnvelopeReader;
   private final Clock clock;
   private final CallMetricsRecorder metricsRecorder;
-  private final TcpTransportConfig defaultConfig;
   private final AtomicLong nextAllowedTimeNanos;
   private final TemplateRenderer templateRenderer;
   private final RedisSequenceProperties redisProperties;
@@ -54,7 +54,6 @@ public class Iso8583ProtocolHandler implements ProtocolHandler {
   public Iso8583ProtocolHandler(ObjectMapper mapper,
                                 Clock clock,
                                 CallMetricsRecorder metricsRecorder,
-                                TcpTransportConfig defaultConfig,
                                 AtomicLong nextAllowedTimeNanos,
                                 TemplateRenderer templateRenderer,
                                 RedisSequenceProperties redisProperties) {
@@ -63,11 +62,9 @@ public class Iso8583ProtocolHandler implements ProtocolHandler {
         .with(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
     this.clock = clock;
     this.metricsRecorder = metricsRecorder;
-    this.defaultConfig = defaultConfig == null ? TcpTransportConfig.defaults() : defaultConfig;
     this.nextAllowedTimeNanos = nextAllowedTimeNanos == null ? new AtomicLong(0L) : nextAllowedTimeNanos;
     this.templateRenderer = templateRenderer;
     this.redisProperties = redisProperties;
-    reloadTransports(this.defaultConfig);
   }
 
   @Override
@@ -114,7 +111,9 @@ public class Iso8583ProtocolHandler implements ProtocolHandler {
           requestMetadata(endpoint, request, null));
     }
 
-    TcpTransportConfig desired = config.tcpTransport() == null ? defaultConfig : config.tcpTransport();
+    TcpTransportConfig desired = Objects.requireNonNull(
+        config.tcpTransport(),
+        "processor tcpTransport config must be provided by runtime config");
     ensureTransportConfig(desired);
 
     long start = clock.millis();
@@ -287,9 +286,7 @@ public class Iso8583ProtocolHandler implements ProtocolHandler {
   }
 
   private void ensureTransportConfig(TcpTransportConfig desired) {
-    if (desired == null) {
-      desired = defaultConfig;
-    }
+    desired = Objects.requireNonNull(desired, "processor tcpTransport config must be provided by runtime config");
     TcpTransportConfig current = activeConfig;
     if (desired.equals(current)) {
       return;

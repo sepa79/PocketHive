@@ -79,22 +79,6 @@ public final class WorkerState {
         }
     }
 
-    boolean seedConfig(Object config, Boolean enabled) {
-        synchronized (this) {
-            if (configRef.get() != null || enableConfigured) {
-                return false;
-            }
-            if (config != null) {
-                configRef.set(config);
-            }
-            if (enabled != null) {
-                this.enabled = enabled;
-                this.enableConfigured = true;
-            }
-            return true;
-        }
-    }
-
     boolean enabled() {
         return enabled;
     }

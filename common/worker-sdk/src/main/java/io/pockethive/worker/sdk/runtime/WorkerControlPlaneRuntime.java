@@ -196,13 +196,13 @@ public final class WorkerControlPlaneRuntime {
     }
 
     /**
-     * Returns the last known enablement flag for the worker bean (defaults to {@code true} when no command has been applied yet).
+     * Returns the last known enablement flag for the worker bean.
      */
     public boolean workerEnabled(String workerBeanName) {
         Objects.requireNonNull(workerBeanName, "workerBeanName");
         return stateStore.find(workerBeanName)
             .map(WorkerState::enabled)
-            .orElse(true);
+            .orElse(false);
     }
 
     /**
@@ -346,34 +346,6 @@ public final class WorkerControlPlaneRuntime {
     }
 
     /**
-     * Seeds the worker state with the provided default configuration if no control-plane override has been applied yet.
-     */
-    public void registerDefaultConfig(String workerBeanName, Object defaultConfig) {
-        Objects.requireNonNull(workerBeanName, "workerBeanName");
-        if (defaultConfig == null) {
-            return;
-        }
-        WorkerState state = stateStore.find(workerBeanName).orElse(null);
-        if (state == null) {
-            log.warn("Unable to seed default config for unknown worker {}", workerBeanName);
-            return;
-        }
-        Map<String, Object> rawConfig = configMerger.toRawConfig(defaultConfig);
-        Map<String, Object> privateConfig = privateConfigFrom(rawConfig);
-        Map<String, Object> publicRawConfig = publicConfigFrom(rawConfig);
-        Boolean enabled = null;
-        Object typedConfig = ensureTypedDefault(state.definition(), defaultConfig, rawConfig);
-        if (state.seedConfig(typedConfig, enabled)) {
-            state.updatePrivateConfig(privateConfig);
-            state.updateRawConfig(publicRawConfig);
-            RedisSequenceConfiguration.configureFromWorkerConfig(publicRawConfig);
-            ensureStatusPublisher(state);
-            notifier.logInitialConfig(state, publicRawConfig, enabled);
-            notifyStateListeners(state);
-        }
-    }
-
-    /**
      * Registers a listener that will be notified for every worker state change. Existing worker snapshots are
      * delivered immediately upon registration.
      */
@@ -450,7 +422,9 @@ public final class WorkerControlPlaneRuntime {
                 templateRenderer.resetSeededSelections();
             }
             Map<String, Object> filteredUpdate = filtered.values();
-            Map<String, Object> canonicalUpdate = publicConfigFrom(ConfigKeyCanonicalizer.canonicalise(filteredUpdate));
+            Map<String, Object> canonicalSource = ConfigKeyCanonicalizer.canonicalise(filteredUpdate);
+            Map<String, Object> privateUpdate = privateConfigFrom(canonicalSource);
+            Map<String, Object> canonicalUpdate = publicConfigFrom(canonicalSource);
             boolean previousEnabled = state.enabled();
             try {
                 ConfigMerger.ConfigMergeResult mergeResult = configMerger.merge(
@@ -467,6 +441,11 @@ public final class WorkerControlPlaneRuntime {
                         previousEnabled,
                         enabled,
                         canonicalUpdate);
+                }
+                if (patch.resetRequested()) {
+                    state.updatePrivateConfig(Map.of());
+                } else if (state.privateConfig().isEmpty() && !privateUpdate.isEmpty()) {
+                    state.updatePrivateConfig(privateUpdate);
                 }
                 Object typedConfig = mergeResult.replaced() && !mergeResult.rawConfig().isEmpty()
                     ? configMerger.toTypedConfig(state.definition(), configForTypedWorker(mergeResult.rawConfig(), state.privateConfig()))
