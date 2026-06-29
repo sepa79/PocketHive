@@ -12,6 +12,7 @@ ui:
 config:
   - name: inputs.type
     type: string
+    required: true
     default: "SCHEDULER"
     options:
       - "SCHEDULER"

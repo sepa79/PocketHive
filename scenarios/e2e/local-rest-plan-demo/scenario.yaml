@@ -21,6 +21,7 @@ template:
       env: {}
       config:
         inputs:
+          type: SCHEDULER
           scheduler:
             ratePerSec: 10
         message:

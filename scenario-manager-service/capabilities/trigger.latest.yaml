@@ -1,0 +1,93 @@
+schemaVersion: "1.0"
+capabilitiesVersion: "1.0"
+role: trigger
+image:
+  name: trigger
+ui:
+  label: "Trigger"
+  color: "#fb923c"
+  shape: "triangle"
+  abbreviation: "TR"
+  hideIo: true
+config:
+  - name: intervalMs
+    type: int
+    required: true
+    default: 0
+    min: 0
+    ui:
+      label: Interval
+      group: Trigger
+      unit: ms
+  - name: singleRequest
+    type: boolean
+    required: true
+    default: true
+    ui:
+      label: Single request
+      group: Trigger
+  - name: actionType
+    type: string
+    required: true
+    default: rest
+    options:
+      - rest
+      - shell
+    ui:
+      label: Action type
+      group: Trigger
+  - name: command
+    type: string
+    required: true
+    default: noop
+    when:
+      actionType: shell
+    ui:
+      label: Command
+      group: Shell
+  - name: url
+    type: string
+    required: true
+    default: ""
+    when:
+      actionType: rest
+    ui:
+      label: URL
+      group: REST
+  - name: method
+    type: string
+    required: true
+    default: POST
+    options:
+      - GET
+      - POST
+      - PUT
+      - DELETE
+      - PATCH
+    when:
+      actionType: rest
+    ui:
+      label: Method
+      group: REST
+  - name: body
+    type: text
+    required: true
+    default: ""
+    multiline: true
+    when:
+      actionType: rest
+    ui:
+      label: Body
+      group: REST
+  - name: headers
+    type: json
+    required: true
+    default: {}
+    multiline: true
+    when:
+      actionType: rest
+    ui:
+      label: Headers
+      group: REST
+actions: []
+panels: []

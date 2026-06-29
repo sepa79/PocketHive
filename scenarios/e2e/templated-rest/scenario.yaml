@@ -10,6 +10,7 @@ template:
       image: generator:latest
       config:
         inputs:
+          type: SCHEDULER
           scheduler:
             ratePerSec: 5
         interceptors:
@@ -36,6 +37,7 @@ template:
       config:
         mode:
           type: pass-through
+          ratePerSec: 0.0
       work:
         in:
           in: gen

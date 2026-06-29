@@ -34,6 +34,7 @@ template:
       config:
         mode:
           type: pass-through
+          ratePerSec: 0.0
       work:
         in:
           in: gen

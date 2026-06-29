@@ -33,6 +33,7 @@ template:
       config:
         templateRoot: /app/scenario/templates/tcp
         serviceId: default
+        passThroughOnMissingTemplate: false
       work:
         in:
           in: build
@@ -64,8 +65,9 @@ template:
       id: postprocessor
       image: postprocessor:latest
       config:
-        postprocessor:
-          publish-all-metrics: true
+        forwardToOutput: false
+        txOutcomeSinkMode: NONE
+        dropTxOutcomeWithoutCallId: true
       work:
         in:
           in: post

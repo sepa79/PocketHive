@@ -1,0 +1,58 @@
+version: 1
+definitions:
+  - name: client
+    scope: global
+    type: string
+    required: true
+  - name: sendMD5
+    scope: global
+    type: bool
+    required: true
+  - name: timestampMD5
+    scope: global
+    type: bool
+    required: true
+  - name: md5Mechanism
+    scope: global
+    type: string
+    required: true
+  - name: md5Secret
+    scope: global
+    type: string
+    required: true
+  - name: customerCode
+    scope: global
+    type: string
+    required: true
+  - name: productClassCode
+    scope: global
+    type: string
+    required: true
+  - name: origin
+    scope: global
+    type: string
+    required: true
+  - name: currency
+    scope: global
+    type: string
+    required: true
+  - name: timestampMode
+    scope: global
+    type: string
+    required: true
+profiles:
+  - id: default
+    name: Default
+values:
+  global:
+    default:
+      client: "900001"
+      sendMD5: true
+      timestampMD5: true
+      md5Mechanism: "PACASSO_DEFAULT"
+      md5Secret: "dummy"
+      customerCode: "1111111"
+      productClassCode: "PCLASS_A"
+      origin: "12345678"
+      currency: "USD"
+      timestampMode: "DEFAULT"

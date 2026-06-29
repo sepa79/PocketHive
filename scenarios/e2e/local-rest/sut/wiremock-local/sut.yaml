@@ -1,0 +1,9 @@
+id: wiremock-local
+name: WireMock (local docker-compose)
+type: http
+endpoints:
+  default:
+    id: default
+    kind: http
+    baseUrl: http://wiremock:8080
+

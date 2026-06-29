@@ -59,6 +59,7 @@ config:
       group: IO
   - name: baseUrl
     type: string
+    required: true
     default: ""
     ui:
       label: Base URL

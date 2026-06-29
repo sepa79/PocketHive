@@ -128,6 +128,7 @@ template:
       config:
         templateRoot: "/app/scenario/templates/tcp"
         serviceId: "demo"
+        passThroughOnMissingTemplate: false
     - role: "request-builder-perf"
       id: request-builder-perf
       image: "request-builder:latest"
@@ -143,6 +144,7 @@ template:
       config:
         templateRoot: "/app/scenario/templates/tcp"
         serviceId: "demo"
+        passThroughOnMissingTemplate: false
     - role: "request-builder-netty"
       id: request-builder-netty
       image: "request-builder:latest"
@@ -158,6 +160,7 @@ template:
       config:
         templateRoot: "/app/scenario/templates/tcp"
         serviceId: "demo"
+        passThroughOnMissingTemplate: false
     - role: "processor"
       id: processor
       image: "processor:latest"
@@ -193,8 +196,9 @@ template:
         - { id: in, direction: in }
       env: {}
       config:
-        postprocessor:
-          publish-all-metrics: true
+        forwardToOutput: false
+        txOutcomeSinkMode: NONE
+        dropTxOutcomeWithoutCallId: true
 plan:
   bees:
     - role: "generator-iso8583"

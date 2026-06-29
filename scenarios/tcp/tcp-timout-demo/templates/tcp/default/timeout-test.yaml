@@ -1,4 +1,4 @@
-serviceId: timeout
+serviceId: default
 callId: timeout-test
 protocol: TCP
 behavior: REQUEST_RESPONSE

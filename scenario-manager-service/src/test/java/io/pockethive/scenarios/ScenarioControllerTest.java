@@ -721,6 +721,61 @@ class ScenarioControllerTest {
     }
 
     @Test
+    void bundleValidationRejectsMissingRequiredCapabilityConfig() throws Exception {
+        Files.writeString(capabilitiesDir.resolve("moderator-required-manifest.json"), """
+                {
+                  "schemaVersion": "1.0",
+                  "capabilitiesVersion": "1.0",
+                  "role": "moderator",
+                  "image": {
+                    "name": "moderator",
+                    "tag": "latest"
+                  },
+                  "config": [
+                    {
+                      "name": "mode.type",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "mode.ratePerSec",
+                      "type": "number",
+                      "required": true
+                    }
+                  ]
+                }
+                """);
+        capabilityCatalogue.reload();
+
+        byte[] zip = bundleZip("scenario.yaml", """
+                id: missing-required-config-demo
+                name: Missing required config demo
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - role: moderator
+                      image: moderator:latest
+                      work: {}
+                      config:
+                        mode:
+                          type: pass-through
+                """);
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings[0].category").value("scenario"))
+                .andExpect(jsonPath("$.findings[0].code").value("SCENARIO_DESCRIPTOR_INVALID"))
+                .andExpect(jsonPath("$.findings[0].path")
+                        .value("scenario.yaml:template.bees[0].config.mode.ratePerSec"))
+                .andExpect(jsonPath("$.findings[0].message")
+                        .value(org.hamcrest.Matchers.containsString("missing required field 'mode.ratePerSec'")));
+    }
+
+    @Test
     void bundleValidationReportsDuplicateScenarioYamlKeys() throws Exception {
         byte[] zip = bundleZip("scenario.yaml", """
                 id: duplicate-scenario-key-demo

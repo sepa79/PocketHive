@@ -7,15 +7,25 @@ template:
     - role: generator
       image: generator:latest
       config:
-        ratePerSec: 50
+        inputs:
+          type: SCHEDULER
+          scheduler:
+            ratePerSec: 50
         message:
+          bodyType: HTTP
           path: /api/guarded
+          method: POST
           body: guarded-request
+          headers: {}
       work:
         out:
           out: gen
     - role: moderator
       image: moderator:latest
+      config:
+        mode:
+          type: pass-through
+          ratePerSec: 0.0
       work:
         in:
           in: gen
@@ -32,6 +42,10 @@ template:
           out: final
     - role: postprocessor
       image: postprocessor:latest
+      config:
+        forwardToOutput: false
+        txOutcomeSinkMode: NONE
+        dropTxOutcomeWithoutCallId: true
       work:
         in:
           in: final

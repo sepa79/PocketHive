@@ -132,7 +132,7 @@ Feature: Swarm lifecycle golden path
     Then the swarm is removed and lifecycle confirmations are recorded
 
   @group-contracts
-  Scenario: Worker runtime config matches service defaults when scenario provides none
+  Scenario: Worker runtime config matches explicit local-rest-defaults config
     And the "local-rest-defaults" scenario template is requested
     When I create the swarm from that template
     Then the swarm is registered and queues are declared
@@ -140,10 +140,10 @@ Feature: Swarm lifecycle golden path
     Then the swarm reports running
     And the worker status snapshots include config only in status-full
     And the status-full snapshots include runtime metadata
-    And the generator runtime config matches the service defaults
-    And the moderator runtime config matches the service defaults
-    And the processor runtime config matches the service defaults
-    And the postprocessor runtime config matches the service defaults
+    And the generator runtime config matches the local-rest-defaults scenario
+    And the moderator runtime config matches the local-rest-defaults scenario
+    And the processor runtime config matches the local-rest-defaults scenario
+    And the postprocessor runtime config matches the local-rest-defaults scenario
 
   @group-contracts
   Scenario: Worker runtime config matches overrides from local-rest

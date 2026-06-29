@@ -13,6 +13,7 @@ template:
         JAVA_TOOL_OPTIONS: "-XX:ThisOptionDoesNotExist"
       config:
         inputs:
+          type: SCHEDULER
           scheduler:
             ratePerSec: 50
         message:

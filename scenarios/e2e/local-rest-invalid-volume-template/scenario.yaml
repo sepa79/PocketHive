@@ -13,6 +13,7 @@ template:
           volumes:
             - ":/app/invalid"
         inputs:
+          type: SCHEDULER
           scheduler:
             ratePerSec: 50
         message:
@@ -33,6 +34,7 @@ template:
       config:
         mode:
           type: pass-through
+          ratePerSec: 0.0
       work:
         in:
           in: genQ

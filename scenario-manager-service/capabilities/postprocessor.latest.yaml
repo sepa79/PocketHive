@@ -8,6 +8,30 @@ ui:
   color: "#facc15"
   shape: "hexagon"
   abbreviation: "PP"
-config: []
+config:
+  - name: forwardToOutput
+    type: boolean
+    required: true
+    default: false
+    ui:
+      label: Forward to output
+      group: Output
+  - name: txOutcomeSinkMode
+    type: string
+    required: true
+    default: "NONE"
+    options:
+      - "NONE"
+      - "CLICKHOUSE_V2"
+    ui:
+      label: Tx outcome sink
+      group: Output
+  - name: dropTxOutcomeWithoutCallId
+    type: boolean
+    required: true
+    default: true
+    ui:
+      label: Drop tx outcomes without call id
+      group: Output
 actions: []
 panels: []

@@ -110,6 +110,9 @@ template:
       id: postprocessor
       image: postprocessor:latest
       config:
+        forwardToOutput: false
+        txOutcomeSinkMode: NONE
+        dropTxOutcomeWithoutCallId: true
         outputs:
           type: REDIS
           redis:

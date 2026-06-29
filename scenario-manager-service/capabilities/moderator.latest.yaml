@@ -11,6 +11,7 @@ ui:
 config:
   - name: mode.type
     type: string
+    required: true
     default: "pass-through"
     options:
       - "pass-through"
@@ -21,6 +22,7 @@ config:
       group: Mode
   - name: mode.ratePerSec
     type: number
+    required: true
     default: 0
     min: 0
     max: 100000

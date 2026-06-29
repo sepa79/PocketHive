@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.StreamReadFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import io.pockethive.capabilities.CapabilityManifest;
 import io.pockethive.capabilities.CapabilityCatalogueService;
 import io.pockethive.scenarios.Scenario;
 import io.pockethive.scenarios.ScenarioBundleLayout;
@@ -670,11 +671,11 @@ public final class ScenarioBundleValidator {
         List<ValidationFinding> findings = new ArrayList<>();
         int index = 0;
         for (Bee bee : scenario.getTemplate().bees()) {
-            Map<String, Object> config = bee == null ? null : bee.config();
-            if (config == null || config.isEmpty()) {
+            if (bee == null) {
                 index++;
                 continue;
             }
+            Map<String, Object> config = bee.config() == null ? Map.of() : bee.config();
             String configPath = ScenarioBundleLayout.SCENARIO_DESCRIPTOR_FILE
                 + ":template.bees[" + index + "].config";
             if (config.containsKey(WORKER_CONFIG_KEY)) {
@@ -691,9 +692,52 @@ public final class ScenarioBundleValidator {
                     "Scenario bee config must not use legacy config.pockethive worker settings.",
                     "Move fields from config.pockethive.worker.config into config."));
             }
+            validateRequiredCapabilityConfig(bee, config, configPath, findings);
             index++;
         }
         return List.copyOf(findings);
+    }
+
+    private void validateRequiredCapabilityConfig(
+        Bee bee,
+        Map<String, Object> config,
+        String configPath,
+        List<ValidationFinding> findings
+    ) {
+        capabilities.resolveByImageReference(bee.image())
+            .map(CapabilityCatalogueService.CapabilityResolution::manifest)
+            .map(CapabilityManifest::config)
+            .orElse(List.of())
+            .stream()
+            .filter(Objects::nonNull)
+            .filter(entry -> Boolean.TRUE.equals(entry.required()))
+            .map(CapabilityManifest.ConfigEntry::name)
+            .filter(name -> name != null && !name.isBlank())
+            .forEach(requiredPath -> {
+                if (hasConfigValue(config, requiredPath)) {
+                    return;
+                }
+                findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
+                    ValidationSeverity.ERROR,
+                    configPath + "." + requiredPath,
+                    "Scenario bee config is missing required field '" + requiredPath + "' for image '"
+                        + bee.image() + "'.",
+                    "Add config." + requiredPath + " to the scenario bee."));
+            });
+    }
+
+    private boolean hasConfigValue(Map<String, Object> config, String dottedPath) {
+        Object current = config;
+        for (String segment : dottedPath.split("\\.")) {
+            if (!(current instanceof Map<?, ?> map) || !map.containsKey(segment)) {
+                return false;
+            }
+            current = map.get(segment);
+        }
+        if (current == null) {
+            return false;
+        }
+        return !(current instanceof String text) || !text.isBlank();
     }
 
     private Map<String, List<TemplateSource>> visibleRequestTemplates(

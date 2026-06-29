@@ -11,6 +11,7 @@ template:
       image: generator:latest
       config:
         inputs:
+          type: SCHEDULER
           scheduler:
             ratePerSec: 30
         message:
@@ -28,6 +29,7 @@ template:
       image: generator:latest
       config:
         inputs:
+          type: SCHEDULER
           scheduler:
             ratePerSec: 70
         message:
@@ -46,6 +48,7 @@ template:
       config:
         mode:
           type: pass-through
+          ratePerSec: 0.0
       work:
         in:
           in: gen

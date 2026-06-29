@@ -13,7 +13,10 @@ template:
           scheduler:
             ratePerSec: 0
             maxMessages: 1
+        intervalMs: 0
+        singleRequest: true
         actionType: rest
+        command: setup-tcp-pooling-mapping
         url: "http://tcp-mock-server:8083/api/mappings"
         method: POST
         headers:
@@ -110,6 +113,7 @@ template:
       config:
         templateRoot: /app/scenario/templates/tcp
         serviceId: default
+        passThroughOnMissingTemplate: false
       work:
         in:
           in: build-global
@@ -124,6 +128,7 @@ template:
       config:
         templateRoot: /app/scenario/templates/tcp
         serviceId: default
+        passThroughOnMissingTemplate: false
       work:
         in:
           in: build-per-thread
@@ -138,6 +143,7 @@ template:
       config:
         templateRoot: /app/scenario/templates/tcp
         serviceId: default
+        passThroughOnMissingTemplate: false
       work:
         in:
           in: build-none
@@ -213,8 +219,9 @@ template:
       id: postprocessor
       image: postprocessor:latest
       config:
-        postprocessor:
-          publish-all-metrics: true
+        forwardToOutput: false
+        txOutcomeSinkMode: NONE
+        dropTxOutcomeWithoutCallId: true
       work:
         in:
           in: post

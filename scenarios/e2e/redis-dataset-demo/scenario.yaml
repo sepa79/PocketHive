@@ -92,6 +92,7 @@ template:
       config:
         templateRoot: /app/scenario/templates/http
         serviceId: default
+        passThroughOnMissingTemplate: false
       work:
         in:
           in: http-build

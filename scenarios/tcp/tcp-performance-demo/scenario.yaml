@@ -87,8 +87,9 @@ template:
       id: moderator-warmup
       image: moderator:latest
       config:
-        mode: THREAD_COUNT
-        threadCount: 5
+        mode:
+          type: pass-through
+          ratePerSec: 0.0
       work:
         in:
           in: mod-warmup
@@ -101,8 +102,9 @@ template:
       id: moderator-ramp
       image: moderator:latest
       config:
-        mode: THREAD_COUNT
-        threadCount: 10
+        mode:
+          type: pass-through
+          ratePerSec: 0.0
       work:
         in:
           in: mod-ramp
@@ -115,8 +117,9 @@ template:
       id: moderator-peak
       image: moderator:latest
       config:
-        mode: THREAD_COUNT
-        threadCount: 20
+        mode:
+          type: pass-through
+          ratePerSec: 0.0
       work:
         in:
           in: mod-peak
@@ -131,6 +134,7 @@ template:
       config:
         templateRoot: /app/scenario/templates/tcp
         serviceId: default
+        passThroughOnMissingTemplate: false
       work:
         in:
           in: build
@@ -164,8 +168,9 @@ template:
       id: postprocessor
       image: postprocessor:latest
       config:
-        postprocessor:
-          publish-all-metrics: true
+        forwardToOutput: false
+        txOutcomeSinkMode: NONE
+        dropTxOutcomeWithoutCallId: true
       work:
         in:
           in: post

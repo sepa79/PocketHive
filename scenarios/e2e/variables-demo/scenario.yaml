@@ -10,6 +10,7 @@ template:
       image: generator:latest
       config:
         inputs:
+          type: SCHEDULER
           scheduler:
             ratePerSec: 2
             maxMessages: 5
@@ -40,6 +41,7 @@ template:
       config:
         mode:
           type: pass-through
+          ratePerSec: 0.0
       work:
         in:
           in: gen
