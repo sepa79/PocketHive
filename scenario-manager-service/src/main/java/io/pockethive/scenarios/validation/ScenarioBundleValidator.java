@@ -53,6 +53,15 @@ public final class ScenarioBundleValidator {
     private static final String WORKER_CONFIG_KEY = "worker";
     private static final String LEGACY_POCKETHIVE_CONFIG_KEY = "pockethive";
     private static final String CALL_ID_CONFIG_KEY = "callId";
+    private static final String INPUT_IO_SCOPE = "INPUT";
+    private static final String OUTPUT_IO_SCOPE = "OUTPUT";
+    private static final String INPUT_CONFIG_ROOT = "inputs";
+    private static final String OUTPUT_CONFIG_ROOT = "outputs";
+    private static final String TYPE_CONFIG_LEAF = "type";
+    private static final String INPUT_SELECTOR_CONFIG_PATH = INPUT_CONFIG_ROOT + "." + TYPE_CONFIG_LEAF;
+    private static final String OUTPUT_SELECTOR_CONFIG_PATH = OUTPUT_CONFIG_ROOT + "." + TYPE_CONFIG_LEAF;
+    private static final String TEMPLATE_EXPRESSION_OPEN = "{{";
+    private static final String TEMPLATE_EXPRESSION_CLOSE = "}}";
     private static final Set<String> REQUEST_TEMPLATE_PROTOCOLS = Set.of("HTTP", "TCP", "ISO8583");
 
     private final ObjectMapper strictJsonMapper = new ObjectMapper(JsonFactory.builder()
@@ -693,10 +702,108 @@ public final class ScenarioBundleValidator {
                     "Scenario bee config must not use legacy config.pockethive worker settings.",
                     "Move fields from config.pockethive.worker.config into config."));
             }
+            validateIoSelectorConfig(config, configPath, findings);
             validateRequiredCapabilityConfig(bee, config, configPath, findings);
+            validateCapabilityConfigOptions(bee, config, configPath, findings);
             index++;
         }
         return List.copyOf(findings);
+    }
+
+    private void validateIoSelectorConfig(
+        Map<String, Object> config,
+        String configPath,
+        List<ValidationFinding> findings
+    ) {
+        for (IoSelectorRequirement requirement : ioSelectorRequirements()) {
+            if (!containsConfigPath(config, requirement.subblockPath())) {
+                continue;
+            }
+            Object rawSelector = configValue(config, requirement.selectorPath());
+            String actualSelector = stringValue(rawSelector);
+            if (actualSelector == null || actualSelector.isBlank()) {
+                findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
+                    ValidationSeverity.ERROR,
+                    configPath + "." + requirement.selectorPath(),
+                    "Scenario bee config contains IO-specific block '" + requirement.subblockPath()
+                        + "' but is missing required selector '" + requirement.selectorPath()
+                        + ": " + requirement.expectedSelector() + "'.",
+                    "Add config." + requirement.selectorPath() + ": " + requirement.expectedSelector() + "."));
+                continue;
+            }
+            if (!requirement.expectedSelector().equals(actualSelector)) {
+                findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
+                    ValidationSeverity.ERROR,
+                    configPath + "." + requirement.selectorPath(),
+                    "Scenario bee config contains IO-specific block '" + requirement.subblockPath()
+                        + "' but selector '" + requirement.selectorPath() + "' is '" + actualSelector
+                        + "'; expected '" + requirement.expectedSelector() + "'.",
+                    "Set config." + requirement.selectorPath() + " to " + requirement.expectedSelector()
+                        + " or remove config." + requirement.subblockPath() + "."));
+            }
+        }
+    }
+
+    private List<IoSelectorRequirement> ioSelectorRequirements() {
+        Map<String, IoSelectorRequirement> requirements = new LinkedHashMap<>();
+        for (CapabilityManifest manifest : capabilities.allManifests()) {
+            CapabilityManifest.Ui ui = manifest.ui();
+            if (ui == null) {
+                continue;
+            }
+            String ioType = trimToNull(ui.ioType());
+            String selectorPath = selectorPathForIoScope(ui.ioScope());
+            String configRoot = configRootForIoScope(ui.ioScope());
+            if (ioType == null || selectorPath == null || configRoot == null) {
+                continue;
+            }
+            for (CapabilityManifest.ConfigEntry entry : manifest.config()) {
+                if (entry == null) {
+                    continue;
+                }
+                String subblockPath = ioSubblockPath(entry.name(), configRoot);
+                if (subblockPath == null) {
+                    continue;
+                }
+                String key = selectorPath + "|" + subblockPath + "|" + ioType;
+                requirements.putIfAbsent(key, new IoSelectorRequirement(subblockPath, selectorPath, ioType));
+            }
+        }
+        return List.copyOf(requirements.values());
+    }
+
+    private String selectorPathForIoScope(String scope) {
+        String normalized = trimToNull(scope);
+        if (INPUT_IO_SCOPE.equals(normalized)) {
+            return INPUT_SELECTOR_CONFIG_PATH;
+        }
+        if (OUTPUT_IO_SCOPE.equals(normalized)) {
+            return OUTPUT_SELECTOR_CONFIG_PATH;
+        }
+        return null;
+    }
+
+    private String configRootForIoScope(String scope) {
+        String normalized = trimToNull(scope);
+        if (INPUT_IO_SCOPE.equals(normalized)) {
+            return INPUT_CONFIG_ROOT;
+        }
+        if (OUTPUT_IO_SCOPE.equals(normalized)) {
+            return OUTPUT_CONFIG_ROOT;
+        }
+        return null;
+    }
+
+    private String ioSubblockPath(String configName, String configRoot) {
+        String normalized = trimToNull(configName);
+        if (normalized == null) {
+            return null;
+        }
+        String[] segments = normalized.split("\\.");
+        if (segments.length < 3 || !configRoot.equals(segments[0]) || TYPE_CONFIG_LEAF.equals(segments[1])) {
+            return null;
+        }
+        return segments[0] + "." + segments[1];
     }
 
     private void validateRequiredCapabilityConfig(
@@ -730,6 +837,84 @@ public final class ScenarioBundleValidator {
             });
     }
 
+    private void validateCapabilityConfigOptions(
+        Bee bee,
+        Map<String, Object> config,
+        String configPath,
+        List<ValidationFinding> findings
+    ) {
+        capabilities.resolveByImageReference(bee.image())
+            .map(CapabilityCatalogueService.CapabilityResolution::manifest)
+            .map(CapabilityManifest::config)
+            .orElse(List.of())
+            .stream()
+            .filter(Objects::nonNull)
+            .filter(entry -> entry.options() != null && entry.options().isArray())
+            .filter(entry -> capabilityConditionMatches(config, entry.when()))
+            .forEach(entry -> {
+                String fieldPath = trimToNull(entry.name());
+                if (fieldPath == null || !containsConfigPath(config, fieldPath)) {
+                    return;
+                }
+                Set<String> allowedValues = optionValues(entry.options());
+                if (allowedValues.isEmpty()) {
+                    return;
+                }
+                String actualValue = configScalarValue(configValue(config, fieldPath));
+                if (actualValue == null || allowedValues.contains(actualValue)) {
+                    return;
+                }
+                findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
+                    ValidationSeverity.ERROR,
+                    configPath + "." + fieldPath,
+                    "Scenario bee config field '" + fieldPath + "' has unsupported value '" + actualValue
+                        + "' for image '" + bee.image() + "'. Allowed values: "
+                        + String.join(", ", allowedValues) + ".",
+                    "Set config." + fieldPath + " to one of: " + String.join(", ", allowedValues) + "."));
+            });
+    }
+
+    private Set<String> optionValues(JsonNode options) {
+        if (options == null || !options.isArray()) {
+            return Set.of();
+        }
+        Set<String> values = new LinkedHashSet<>();
+        for (JsonNode option : options) {
+            String value = optionScalarValue(option);
+            if (value != null) {
+                values.add(value);
+            }
+        }
+        return values;
+    }
+
+    private String optionScalarValue(JsonNode option) {
+        if (option == null || option.isNull() || option.isMissingNode() || option.isContainerNode()) {
+            return null;
+        }
+        return option.asText();
+    }
+
+    private String configScalarValue(Object value) {
+        if (value == null || value instanceof Map<?, ?> || value instanceof Collection<?>) {
+            return null;
+        }
+        if (value instanceof String text) {
+            String trimmed = text.trim();
+            if (containsTemplateExpression(trimmed)) {
+                return null;
+            }
+            return trimmed;
+        }
+        return String.valueOf(value);
+    }
+
+    private boolean containsTemplateExpression(String value) {
+        return value != null
+            && value.contains(TEMPLATE_EXPRESSION_OPEN)
+            && value.contains(TEMPLATE_EXPRESSION_CLOSE);
+    }
+
     private boolean capabilityConditionMatches(Map<String, Object> config, JsonNode when) {
         if (when == null || when.isNull() || when.isMissingNode()) {
             return true;
@@ -757,6 +942,17 @@ public final class ScenarioBundleValidator {
             current = map.get(segment);
         }
         return current;
+    }
+
+    private boolean containsConfigPath(Map<String, Object> config, String dottedPath) {
+        Object current = config;
+        for (String segment : dottedPath.split("\\.")) {
+            if (!(current instanceof Map<?, ?> map) || !map.containsKey(segment)) {
+                return false;
+            }
+            current = map.get(segment);
+        }
+        return true;
     }
 
     private boolean matchesConditionValue(Object actual, JsonNode expected) {
@@ -1741,6 +1937,14 @@ public final class ScenarioBundleValidator {
         return trimmed.isEmpty() ? null : trimmed;
     }
 
+    private static String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
     private String stringValue(Object value) {
         return value instanceof String text ? text.trim() : null;
     }
@@ -1797,6 +2001,8 @@ public final class ScenarioBundleValidator {
             return normalizedServiceId + "::" + normalizedCallId;
         }
     }
+
+    private record IoSelectorRequirement(String subblockPath, String selectorPath, String expectedSelector) { }
 
     private static final class BundleValidationFailure extends IllegalArgumentException {
         private final ValidationIssue issue;

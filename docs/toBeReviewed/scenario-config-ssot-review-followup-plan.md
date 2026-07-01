@@ -25,10 +25,11 @@ Runtime bee identity and public runtime default removal are implemented on
   `./start-e2e-tests.sh --target local-swarm --group all`.
 
 Remaining open work is limited to IO-selector migration guidance/tooling for
-external scenarios and dedicated Scenario Manager validation for missing/unknown
-IO selectors. Active repo scenarios are migrated, but the validator still does
-not have a direct "IO subblock requires matching selector" rule for every
-`inputs.*` / `outputs.*` shape.
+external scenarios. Active repo scenarios are migrated, and Scenario Manager now
+rejects IO-specific config subblocks whose explicit selector is missing or does
+not match the IO manifest. Scenario Manager also validates literal
+`config[].options` values from capability manifests, including unknown
+`inputs.type` / `outputs.type` selectors.
 
 ## Tracking
 
@@ -44,11 +45,12 @@ not have a direct "IO subblock requires matching selector" rule for every
   `mergedConfig`.
 - [x] Tighten capability validation to reject exact `worker` / `pockethive`
   roots.
-- [ ] Require explicit `inputs.type` / `outputs.type` whenever scenario config
+- [x] Require explicit `inputs.type` / `outputs.type` whenever scenario config
   contains IO-specific subblocks such as `inputs.scheduler`, `inputs.redis`,
   `inputs.csv`, or `outputs.redis`.
-  - 2026-07-01: Partially covered by required capability fields and migrated
-    repo scenarios, but still open for a dedicated IO-subblock selector rule.
+  - 2026-07-01: Done in Scenario Manager by deriving IO subblock selector
+    requirements from IO capability manifests (`ui.ioScope`, `ui.ioType`, and
+    `config[].name`).
 - [x] Compose Hive UI runtime config forms from the worker capability manifest
   plus matching IO manifests selected by explicit `inputs.type` / `outputs.type`.
 - [ ] Provide migration guidance/tooling for internal and external scenarios to
@@ -57,10 +59,14 @@ not have a direct "IO subblock requires matching selector" rule for every
   scenarios: authoring labels may exist for topology, but runtime `beeId` is
   assigned and owned by Swarm Controller during materialisation.
   - Done via architecture, REST, UI flow, and scenario contract documentation.
-- [ ] Add validation/tests that reject missing or unknown IO selectors and prove
+- [x] Add validation/tests that reject missing or unknown IO selectors and prove
   UI does not synthesize selectors from runtime metadata.
-  - 2026-07-01: Required public config validation exists; missing/unknown
-    selector-specific validation remains open.
+  - 2026-07-01: Done in Scenario Manager. Missing/mismatched IO subblock
+    selectors are derived from IO manifests, and unknown literal selector values
+    are rejected through generic capability `config[].options` validation.
+    Templated values such as `{{ vars.txOutcomeSinkMode }}` are intentionally
+    treated as dynamic inputs and remain covered by existing
+    `variables.yaml`/template validation.
 - [x] Do not add Scenario Manager validator enforcement for required/unique
   `template.bees[].id` as part of the runtime identity fix.
   - Confirmed by scenario contract docs and absence of new required/unique
@@ -396,10 +402,13 @@ TDD sequence:
    - `outputs.redis` requires `outputs.type: REDIS`
    - multiple IO subblocks without an explicit selector must fail migration.
    - External scenario guidance/tooling remains open in the Tracking section.
-5. [ ] Add Scenario Manager validation for missing/unknown IO selectors and tests
+5. [x] Add Scenario Manager validation for missing/mismatched IO selectors and tests
    against active scenario bundles.
-   - Required public config validation exists and active repo bundle validation
-     passes, but this direct selector-specific rule is still open.
+   - The IO-subblock rule now rejects missing or mismatched selectors and active
+     repo bundle validation passes.
+   - Generic capability `config[].options` validation now rejects unknown
+     literal selector/enum values while allowing templated values to be checked
+     through `variables.yaml`/template validation.
 6. [x] Add Hive UI capability composition for runtime config edit forms, using only
    explicit selectors and IO manifests from Scenario Manager.
 7. [x] Fix runtime identity join with TDD:
@@ -439,6 +448,10 @@ TDD sequence:
      - `./build-hive.sh`,
      - full local E2E reported green through
        `./start-e2e-tests.sh --target local-swarm --group all`.
+   - 2026-07-01 IO selector/options verification:
+     - `./mvnw -q -pl scenario-manager-service -Dtest=ScenarioControllerTest,ScenarioRepositoryValidationTest -Dsurefire.failIfNoSpecifiedTests=false test`
+       (`ScenarioControllerTest` 63/63, `ScenarioRepositoryValidationTest` 1/1),
+     - `git diff --check`.
 
 ```bash
 npm test --prefix tools/pockethive-mcp

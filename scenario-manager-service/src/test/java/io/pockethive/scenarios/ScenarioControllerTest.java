@@ -945,6 +945,363 @@ class ScenarioControllerTest {
     }
 
     @Test
+    void bundleValidationRejectsInputIoSubblockWithoutExplicitSelector() throws Exception {
+        useRepositoryCapabilityManifest("processor", "processor.latest.yaml");
+        useRepositoryCapabilityManifest("io-redis-dataset", "io.redis-dataset.latest.yaml");
+        capabilityCatalogue.reload();
+
+        byte[] zip = bundleZip("scenario.yaml", """
+                id: processor-redis-input-missing-selector-demo
+                name: Processor Redis input missing selector demo
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - role: processor
+                      image: processor:latest
+                      work: {}
+                      config:
+                        baseUrl: "http://wiremock:8080"
+                        mode: THREAD_COUNT
+                        threadCount: 1
+                        inputs:
+                          redis:
+                            listName: ph:dataset
+                """);
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings", hasSize(1)))
+                .andExpect(jsonPath("$.findings[0].path")
+                        .value("scenario.yaml:template.bees[0].config.inputs.type"))
+                .andExpect(jsonPath("$.findings[0].message")
+                        .value(org.hamcrest.Matchers.containsString(
+                                "missing required selector 'inputs.type: REDIS_DATASET'")));
+    }
+
+    @Test
+    void bundleValidationRejectsInputIoSubblockWithMismatchedSelector() throws Exception {
+        useRepositoryCapabilityManifest("processor", "processor.latest.yaml");
+        useRepositoryCapabilityManifest("io-redis-dataset", "io.redis-dataset.latest.yaml");
+        capabilityCatalogue.reload();
+
+        byte[] zip = bundleZip("scenario.yaml", """
+                id: processor-redis-input-mismatch-demo
+                name: Processor Redis input mismatch demo
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - role: processor
+                      image: processor:latest
+                      work: {}
+                      config:
+                        baseUrl: "http://wiremock:8080"
+                        mode: THREAD_COUNT
+                        threadCount: 1
+                        inputs:
+                          type: RABBITMQ
+                          redis:
+                            listName: ph:dataset
+                """);
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings", hasSize(1)))
+                .andExpect(jsonPath("$.findings[0].path")
+                        .value("scenario.yaml:template.bees[0].config.inputs.type"))
+                .andExpect(jsonPath("$.findings[0].message")
+                        .value(org.hamcrest.Matchers.containsString(
+                                "selector 'inputs.type' is 'RABBITMQ'; expected 'REDIS_DATASET'")));
+    }
+
+    @Test
+    void bundleValidationRejectsCsvInputIoSubblockWithMismatchedSelector() throws Exception {
+        useRepositoryCapabilityManifest("generator", "generator.latest.yaml");
+        useRepositoryCapabilityManifest("io-csv-dataset", "io.csv-dataset.latest.yaml");
+        capabilityCatalogue.reload();
+
+        byte[] zip = bundleZip("scenario.yaml", """
+                id: generator-csv-input-mismatch-demo
+                name: Generator CSV input mismatch demo
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - role: generator
+                      image: generator:latest
+                      work: {}
+                      config:
+                        inputs:
+                          type: REDIS_DATASET
+                          csv:
+                            filePath: /app/scenario/datasets/users.csv
+                        message:
+                          bodyType: SIMPLE
+                          body: "{}"
+                """);
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings", hasSize(1)))
+                .andExpect(jsonPath("$.findings[0].path")
+                        .value("scenario.yaml:template.bees[0].config.inputs.type"))
+                .andExpect(jsonPath("$.findings[0].message")
+                        .value(org.hamcrest.Matchers.containsString(
+                                "selector 'inputs.type' is 'REDIS_DATASET'; expected 'CSV_DATASET'")));
+    }
+
+    @Test
+    void bundleValidationRejectsOutputIoSubblockWithoutExplicitSelector() throws Exception {
+        useRepositoryCapabilityManifest("processor", "processor.latest.yaml");
+        useRepositoryCapabilityManifest("io-redis-output", "io.redis-output.latest.yaml");
+        capabilityCatalogue.reload();
+
+        byte[] zip = bundleZip("scenario.yaml", """
+                id: processor-redis-output-missing-selector-demo
+                name: Processor Redis output missing selector demo
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - role: processor
+                      image: processor:latest
+                      work: {}
+                      config:
+                        baseUrl: "http://wiremock:8080"
+                        mode: THREAD_COUNT
+                        threadCount: 1
+                        inputs:
+                          type: RABBITMQ
+                        outputs:
+                          redis:
+                            defaultList: ph:out
+                """);
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings", hasSize(1)))
+                .andExpect(jsonPath("$.findings[0].path")
+                        .value("scenario.yaml:template.bees[0].config.outputs.type"))
+                .andExpect(jsonPath("$.findings[0].message")
+                        .value(org.hamcrest.Matchers.containsString(
+                                "missing required selector 'outputs.type: REDIS'")));
+    }
+
+    @Test
+    void bundleValidationAcceptsIoSubblocksWithMatchingExplicitSelectors() throws Exception {
+        useRepositoryCapabilityManifest("processor", "processor.latest.yaml");
+        useRepositoryCapabilityManifest("io-redis-dataset", "io.redis-dataset.latest.yaml");
+        useRepositoryCapabilityManifest("io-redis-output", "io.redis-output.latest.yaml");
+        capabilityCatalogue.reload();
+
+        byte[] zip = bundleZip("scenario.yaml", """
+                id: processor-redis-io-valid-demo
+                name: Processor Redis IO valid demo
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - role: processor
+                      image: processor:latest
+                      work: {}
+                      config:
+                        baseUrl: "http://wiremock:8080"
+                        mode: THREAD_COUNT
+                        threadCount: 1
+                        inputs:
+                          type: REDIS_DATASET
+                          redis:
+                            listName: ph:dataset
+                        outputs:
+                          type: REDIS
+                          redis:
+                            defaultList: ph:out
+                """);
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(true))
+                .andExpect(jsonPath("$.findings", hasSize(0)));
+    }
+
+    @Test
+    void bundleValidationRejectsUnknownInputSelectorOption() throws Exception {
+        useRepositoryCapabilityManifest("processor", "processor.latest.yaml");
+        capabilityCatalogue.reload();
+
+        byte[] zip = bundleZip("scenario.yaml", """
+                id: processor-unknown-input-selector-demo
+                name: Processor unknown input selector demo
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - role: processor
+                      image: processor:latest
+                      work: {}
+                      config:
+                        baseUrl: "http://wiremock:8080"
+                        mode: THREAD_COUNT
+                        threadCount: 1
+                        inputs:
+                          type: BANANA
+                """);
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings", hasSize(1)))
+                .andExpect(jsonPath("$.findings[0].path")
+                        .value("scenario.yaml:template.bees[0].config.inputs.type"))
+                .andExpect(jsonPath("$.findings[0].message")
+                        .value(org.hamcrest.Matchers.allOf(
+                                org.hamcrest.Matchers.containsString("unsupported value 'BANANA'"),
+                                org.hamcrest.Matchers.containsString("RABBITMQ"),
+                                org.hamcrest.Matchers.containsString("REDIS_DATASET"))));
+    }
+
+    @Test
+    void bundleValidationRejectsUnknownOutputSelectorOption() throws Exception {
+        useRepositoryCapabilityManifest("processor", "processor.latest.yaml");
+        capabilityCatalogue.reload();
+
+        byte[] zip = bundleZip("scenario.yaml", """
+                id: processor-unknown-output-selector-demo
+                name: Processor unknown output selector demo
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - role: processor
+                      image: processor:latest
+                      work: {}
+                      config:
+                        baseUrl: "http://wiremock:8080"
+                        mode: THREAD_COUNT
+                        threadCount: 1
+                        inputs:
+                          type: RABBITMQ
+                        outputs:
+                          type: BANANA
+                """);
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings", hasSize(1)))
+                .andExpect(jsonPath("$.findings[0].path")
+                        .value("scenario.yaml:template.bees[0].config.outputs.type"))
+                .andExpect(jsonPath("$.findings[0].message")
+                        .value(org.hamcrest.Matchers.allOf(
+                                org.hamcrest.Matchers.containsString("unsupported value 'BANANA'"),
+                                org.hamcrest.Matchers.containsString("RABBITMQ"),
+                                org.hamcrest.Matchers.containsString("REDIS"),
+                                org.hamcrest.Matchers.containsString("NONE"))));
+    }
+
+    @Test
+    void bundleValidationRejectsUnknownCapabilityOption() throws Exception {
+        useRepositoryCapabilityManifest("processor", "processor.latest.yaml");
+        capabilityCatalogue.reload();
+
+        byte[] zip = bundleZip("scenario.yaml", """
+                id: processor-unknown-mode-demo
+                name: Processor unknown mode demo
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - role: processor
+                      image: processor:latest
+                      work: {}
+                      config:
+                        baseUrl: "http://wiremock:8080"
+                        mode: BANANA
+                        threadCount: 1
+                        inputs:
+                          type: RABBITMQ
+                """);
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings", hasSize(1)))
+                .andExpect(jsonPath("$.findings[0].path")
+                        .value("scenario.yaml:template.bees[0].config.mode"))
+                .andExpect(jsonPath("$.findings[0].message")
+                        .value(org.hamcrest.Matchers.allOf(
+                                org.hamcrest.Matchers.containsString("unsupported value 'BANANA'"),
+                                org.hamcrest.Matchers.containsString("THREAD_COUNT"),
+                                org.hamcrest.Matchers.containsString("RATE_PER_SEC"))));
+    }
+
+    @Test
+    void bundleValidationAllowsTemplatedCapabilityOption() throws Exception {
+        useRepositoryCapabilityManifest("postprocessor", "postprocessor.latest.yaml");
+        capabilityCatalogue.reload();
+
+        byte[] zip = bundleZip(Map.of(
+                "scenario.yaml", """
+                    id: postprocessor-templated-option-demo
+                    name: Postprocessor templated option demo
+                    template:
+                      image: ctrl-image:latest
+                      bees:
+                        - role: postprocessor
+                          image: postprocessor:latest
+                          work: {}
+                          config:
+                            forwardToOutput: false
+                            txOutcomeSinkMode: "{{ vars.txOutcomeSinkMode }}"
+                            dropTxOutcomeWithoutCallId: true
+                    """,
+                "variables.yaml", """
+                    version: 1
+                    definitions:
+                      - name: txOutcomeSinkMode
+                        scope: global
+                        type: string
+                        required: true
+                    profiles:
+                      - id: default
+                        name: Default
+                    values:
+                      global:
+                        default:
+                          txOutcomeSinkMode: "CLICKHOUSE_V2"
+                    """));
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(true))
+                .andExpect(jsonPath("$.findings", hasSize(0)));
+    }
+
+    @Test
     void bundleValidationReportsDuplicateScenarioYamlKeys() throws Exception {
         byte[] zip = bundleZip("scenario.yaml", """
                 id: duplicate-scenario-key-demo
