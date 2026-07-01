@@ -1,11 +1,27 @@
 import { promises as fs } from "node:fs";
-import { basename, join, resolve } from "node:path";
+import { basename, dirname, extname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { isMap, isSeq, isScalar, parseDocument } from "yaml";
 
 const SCENARIO_FILE_NAMES = new Set(["scenario.yaml", "scenario.yml"]);
 const SKIP_DIRS = new Set([".git", "node_modules", "target", "build", "dist"]);
+const CAPABILITY_FILE_EXTENSIONS = new Set([".json", ".yaml", ".yml"]);
+const DEFAULT_CAPABILITIES_DIR = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../scenario-manager-service/capabilities"
+);
+const INPUT_IO_SCOPE = "INPUT";
+const OUTPUT_IO_SCOPE = "OUTPUT";
+const INPUT_CONFIG_ROOT = "inputs";
+const OUTPUT_CONFIG_ROOT = "outputs";
+const TYPE_CONFIG_LEAF = "type";
 
-export async function runScenarioConfigMigration({ command, paths, dryRun = false } = {}) {
+export async function runScenarioConfigMigration({
+  command,
+  paths,
+  dryRun = false,
+  capabilitiesDir = DEFAULT_CAPABILITIES_DIR,
+} = {}) {
   if (!["check", "migrate"].includes(command)) {
     throw new Error("command must be 'check' or 'migrate'");
   }
@@ -13,10 +29,11 @@ export async function runScenarioConfigMigration({ command, paths, dryRun = fals
     throw new Error(`${command} requires at least one path`);
   }
 
+  const ioRequirements = await loadIoSelectorRequirements(capabilitiesDir);
   const scenarioFiles = await discoverScenarioFiles(paths);
   const files = [];
   for (const file of scenarioFiles) {
-    files.push(await processScenarioFile(file, { command, dryRun }));
+    files.push(await processScenarioFile(file, { command, dryRun, ioRequirements }));
   }
 
   const summary = summarize(files);
@@ -65,13 +82,14 @@ async function collectScenarioFiles(path, discovered) {
   }
 }
 
-async function processScenarioFile(file, { command, dryRun }) {
+async function processScenarioFile(file, { command, dryRun, ioRequirements }) {
   const original = await fs.readFile(file, "utf8");
   const doc = parseDocument(original, { keepSourceTokens: true });
   const context = {
     file,
     command,
     migrate: command === "migrate",
+    ioRequirements,
     operations: [],
     findings: [],
   };
@@ -130,6 +148,178 @@ function migrateConfigMap(config, context) {
       ...context,
       sourceBase: `template.bees[${context.beeIndex}].config.pockethive`,
     });
+  }
+
+  migrateIoSelectors(config, context);
+}
+
+async function loadIoSelectorRequirements(capabilitiesDir) {
+  const dir = resolve(capabilitiesDir);
+  const entries = await fs.readdir(dir, { withFileTypes: true }).catch((error) => {
+    if (error && error.code === "ENOENT") {
+      throw new Error(`Capability manifest directory not found: ${dir}`);
+    }
+    throw error;
+  });
+  const bySubblockPath = new Map();
+  for (const entry of entries) {
+    if (!entry.isFile() || !CAPABILITY_FILE_EXTENSIONS.has(extname(entry.name))) {
+      continue;
+    }
+    const file = join(dir, entry.name);
+    const manifest = parseDocument(await fs.readFile(file, "utf8")).toJSON();
+    addIoSelectorRequirementsFromManifest(manifest, bySubblockPath, file);
+  }
+  return { bySubblockPath };
+}
+
+function addIoSelectorRequirementsFromManifest(manifest, bySubblockPath, file) {
+  const ui = manifest?.ui;
+  const ioType = trimToNull(ui?.ioType);
+  const scope = trimToNull(ui?.ioScope)?.toUpperCase();
+  const selectorPath = selectorPathForIoScope(scope);
+  const configRoot = configRootForIoScope(scope);
+  if (!ioType || !selectorPath || !configRoot || !Array.isArray(manifest?.config)) {
+    return;
+  }
+
+  for (const entry of manifest.config) {
+    const subblockPath = ioSubblockPath(entry?.name, configRoot);
+    if (!subblockPath) {
+      continue;
+    }
+    const existing = bySubblockPath.get(subblockPath);
+    if (existing && existing.expectedSelector !== ioType) {
+      throw new Error(
+        `Conflicting IO selector requirements for ${subblockPath}: ${existing.expectedSelector} and ${ioType} (${file})`
+      );
+    }
+    bySubblockPath.set(subblockPath, {
+      subblockPath,
+      configRoot,
+      selectorKey: TYPE_CONFIG_LEAF,
+      selectorPath,
+      expectedSelector: ioType,
+    });
+  }
+}
+
+function selectorPathForIoScope(scope) {
+  if (scope === INPUT_IO_SCOPE) {
+    return `${INPUT_CONFIG_ROOT}.${TYPE_CONFIG_LEAF}`;
+  }
+  if (scope === OUTPUT_IO_SCOPE) {
+    return `${OUTPUT_CONFIG_ROOT}.${TYPE_CONFIG_LEAF}`;
+  }
+  return null;
+}
+
+function configRootForIoScope(scope) {
+  if (scope === INPUT_IO_SCOPE) {
+    return INPUT_CONFIG_ROOT;
+  }
+  if (scope === OUTPUT_IO_SCOPE) {
+    return OUTPUT_CONFIG_ROOT;
+  }
+  return null;
+}
+
+function ioSubblockPath(configName, configRoot) {
+  const normalized = trimToNull(configName);
+  if (!normalized) {
+    return null;
+  }
+  const segments = normalized.split(".");
+  if (segments.length < 3 || segments[0] !== configRoot || segments[1] === TYPE_CONFIG_LEAF) {
+    return null;
+  }
+  return `${segments[0]}.${segments[1]}`;
+}
+
+function migrateIoSelectors(config, context) {
+  migrateIoSelectorForRoot(config, INPUT_CONFIG_ROOT, context);
+  migrateIoSelectorForRoot(config, OUTPUT_CONFIG_ROOT, context);
+}
+
+function migrateIoSelectorForRoot(config, configRoot, context) {
+  const root = getNode(config, configRoot);
+  if (!isMap(root)) {
+    return;
+  }
+
+  const blocks = [];
+  const seenSubblocks = new Set();
+  for (const pair of root.items) {
+    const key = keyOf(pair);
+    if (key === TYPE_CONFIG_LEAF) {
+      continue;
+    }
+    const subblockPath = `${configRoot}.${key}`;
+    if (seenSubblocks.has(subblockPath)) {
+      continue;
+    }
+    seenSubblocks.add(subblockPath);
+    const requirement = context.ioRequirements.bySubblockPath.get(subblockPath);
+    if (requirement) {
+      blocks.push(requirement);
+    }
+  }
+
+  if (blocks.length === 0) {
+    return;
+  }
+
+  const selectorPath = `${configRoot}.${TYPE_CONFIG_LEAF}`;
+  const selectorNode = getNode(root, TYPE_CONFIG_LEAF);
+  const selector = trimToNull(scalarValue(selectorNode));
+  if (!selector) {
+    handleMissingIoSelector(root, selectorPath, blocks, context);
+    return;
+  }
+
+  for (const block of blocks) {
+    if (selector !== block.expectedSelector) {
+      addError(context, {
+        code: "IO_SELECTOR_MISMATCH",
+        path: `template.bees[${context.beeIndex}].config.${selectorPath}`,
+        message: `IO subblock '${block.subblockPath}' requires ${selectorPath}: ${block.expectedSelector}, but found '${selector}'.`,
+        fix: `Set config.${selectorPath} to ${block.expectedSelector} or remove config.${block.subblockPath}.`,
+      });
+    }
+  }
+}
+
+function handleMissingIoSelector(root, selectorPath, blocks, context) {
+  const expectedSelectors = Array.from(new Set(blocks.map((block) => block.expectedSelector)));
+  if (blocks.length !== 1 || expectedSelectors.length !== 1) {
+    addError(context, {
+      code: "IO_SELECTOR_AMBIGUOUS",
+      path: `template.bees[${context.beeIndex}].config.${selectorPath}`,
+      message: `Cannot infer ${selectorPath}; found IO subblocks ${blocks.map((block) => `'${block.subblockPath}'`).join(", ")}.`,
+      fix: `Set config.${selectorPath} explicitly and remove IO subblocks that do not match it.`,
+    });
+    return;
+  }
+
+  const expectedSelector = expectedSelectors[0];
+  if (context.command === "check") {
+    addError(context, {
+      code: "IO_SELECTOR_MISSING",
+      path: `template.bees[${context.beeIndex}].config.${selectorPath}`,
+      message: `IO subblock '${blocks[0].subblockPath}' requires explicit ${selectorPath}: ${expectedSelector}.`,
+      fix: "Run tools/scenario-config-migrate migrate on this scenario file.",
+    });
+    return;
+  }
+
+  context.operations.push(setOperation(
+    context,
+    `template.bees[${context.beeIndex}].config.${selectorPath}`,
+    expectedSelector,
+    `required by ${blocks[0].subblockPath}`
+  ));
+  if (context.migrate) {
+    root.set(TYPE_CONFIG_LEAF, expectedSelector);
   }
 }
 
@@ -291,6 +481,7 @@ function summarize(files) {
     operations: 0,
     findings: 0,
     legacyFindings: 0,
+    ioSelectorFindings: 0,
     errors: 0,
   };
   for (const file of files) {
@@ -299,6 +490,7 @@ function summarize(files) {
     summary.findings += file.findings.length;
     for (const finding of file.findings) {
       if (finding.code === "LEGACY_CONFIG_SHAPE") summary.legacyFindings += 1;
+      if (finding.code.startsWith("IO_SELECTOR_")) summary.ioSelectorFindings += 1;
       if (finding.severity === "error") summary.errors += 1;
     }
   }
@@ -326,6 +518,17 @@ function removeOperation(context, sourcePath) {
     beeId: context.beeId,
     beeIndex: context.beeIndex,
     sourcePath,
+  };
+}
+
+function setOperation(context, targetPath, value, note = null) {
+  return {
+    action: "set",
+    beeId: context.beeId,
+    beeIndex: context.beeIndex,
+    targetPath,
+    value,
+    ...(note ? { note } : {}),
   };
 }
 
@@ -358,6 +561,12 @@ function scalarValue(node) {
   if (node === undefined || node === null) return null;
   if (isScalar(node)) return String(node.value);
   return null;
+}
+
+function trimToNull(value) {
+  if (value === undefined || value === null) return null;
+  const trimmed = String(value).trim();
+  return trimmed.length === 0 ? null : trimmed;
 }
 
 function nodeEquals(left, right) {

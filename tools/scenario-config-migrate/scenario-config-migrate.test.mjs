@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import test from "node:test";
@@ -122,6 +122,132 @@ template:
   }
 });
 
+test("migrate adds missing IO selector for one known subblock", async () => {
+  const root = await fixtureDir();
+  try {
+    const capabilitiesDir = await capabilityFixtureDir(root);
+    const scenario = join(root, "scenario.yaml");
+    await writeFile(scenario, `id: demo
+template:
+  bees:
+    - role: processor
+      config:
+        inputs:
+          redis:
+            listName: ph:dataset
+`, "utf8");
+
+    const result = await runScenarioConfigMigration({
+      command: "migrate",
+      paths: [scenario],
+      capabilitiesDir,
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.summary.changed, 1);
+    assert.equal(result.files[0].operations[0].action, "set");
+    assert.equal(result.files[0].operations[0].value, "REDIS_DATASET");
+
+    const updated = await readFile(scenario, "utf8");
+    assert.match(updated, /^\s+type: REDIS_DATASET$/m);
+    assert.match(updated, /^\s+redis:\s*$/m);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("migrate refuses to infer selector when multiple IO subblocks exist", async () => {
+  const root = await fixtureDir();
+  try {
+    const capabilitiesDir = await capabilityFixtureDir(root);
+    const scenario = join(root, "scenario.yaml");
+    await writeFile(scenario, `id: demo
+template:
+  bees:
+    - role: generator
+      config:
+        inputs:
+          redis:
+            listName: ph:dataset
+          csv:
+            filePath: /app/scenario/datasets/users.csv
+`, "utf8");
+
+    const result = await runScenarioConfigMigration({
+      command: "migrate",
+      paths: [scenario],
+      capabilitiesDir,
+    });
+    assert.equal(result.ok, false);
+    assert.equal(result.summary.ioSelectorFindings, 1);
+    assert.equal(result.files[0].findings[0].code, "IO_SELECTOR_AMBIGUOUS");
+
+    const unchanged = await readFile(scenario, "utf8");
+    assert.doesNotMatch(unchanged, /^\s+type:/m);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("check reports mismatched IO selector without rewriting", async () => {
+  const root = await fixtureDir();
+  try {
+    const capabilitiesDir = await capabilityFixtureDir(root);
+    const scenario = join(root, "scenario.yaml");
+    await writeFile(scenario, `id: demo
+template:
+  bees:
+    - role: processor
+      config:
+        inputs:
+          type: RABBITMQ
+          redis:
+            listName: ph:dataset
+`, "utf8");
+
+    const result = await runScenarioConfigMigration({
+      command: "check",
+      paths: [scenario],
+      capabilitiesDir,
+    });
+    assert.equal(result.ok, false);
+    assert.equal(result.summary.ioSelectorFindings, 1);
+    assert.equal(result.files[0].findings[0].code, "IO_SELECTOR_MISMATCH");
+    assert.match(result.files[0].findings[0].message, /REDIS_DATASET/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 async function fixtureDir() {
   return mkdtemp(join(tmpdir(), "scenario-config-migrate-"));
+}
+
+async function capabilityFixtureDir(root) {
+  const capabilitiesDir = join(root, "capabilities");
+  await mkdir(capabilitiesDir, { recursive: true });
+  await writeFile(join(capabilitiesDir, "io.redis-dataset.latest.yaml"), `schemaVersion: "1.0"
+capabilitiesVersion: "1.0"
+role: io-redis-dataset
+image:
+  name: io-redis-dataset
+ui:
+  ioScope: INPUT
+  ioType: REDIS_DATASET
+config:
+  - name: inputs.redis.listName
+    type: string
+`, "utf8");
+  await writeFile(join(capabilitiesDir, "io.csv-dataset.latest.yaml"), `schemaVersion: "1.0"
+capabilitiesVersion: "1.0"
+role: io-csv-dataset
+image:
+  name: io-csv-dataset
+ui:
+  ioScope: INPUT
+  ioType: CSV_DATASET
+config:
+  - name: inputs.csv.filePath
+    type: string
+`, "utf8");
+  return capabilitiesDir;
 }

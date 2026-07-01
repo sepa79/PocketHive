@@ -24,12 +24,14 @@ Runtime bee identity and public runtime default removal are implemented on
   `git diff --check`, `./build-hive.sh`, and full local E2E through
   `./start-e2e-tests.sh --target local-swarm --group all`.
 
-Remaining open work is limited to IO-selector migration guidance/tooling for
-external scenarios. Active repo scenarios are migrated, and Scenario Manager now
-rejects IO-specific config subblocks whose explicit selector is missing or does
-not match the IO manifest. Scenario Manager also validates literal
-`config[].options` values from capability manifests, including unknown
-`inputs.type` / `outputs.type` selectors.
+The follow-up is functionally complete for repo-owned scenarios. Active repo
+scenarios are migrated, Scenario Manager rejects IO-specific config subblocks
+whose explicit selector is missing or does not match the IO manifest, and
+Scenario Manager validates literal `config[].options` values from capability
+manifests, including unknown `inputs.type` / `outputs.type` selectors.
+External scenario migration guidance/tooling now lives in
+`docs/ai/SCENARIO_CONFIG_MIGRATION_GUIDE.md` and
+`tools/scenario-config-migrate`.
 
 ## Tracking
 
@@ -53,8 +55,12 @@ not match the IO manifest. Scenario Manager also validates literal
     `config[].name`).
 - [x] Compose Hive UI runtime config forms from the worker capability manifest
   plus matching IO manifests selected by explicit `inputs.type` / `outputs.type`.
-- [ ] Provide migration guidance/tooling for internal and external scenarios to
+- [x] Provide migration guidance/tooling for internal and external scenarios to
   add explicit IO selectors without guessing when multiple IO blocks exist.
+  - 2026-07-01: Done by extending `tools/scenario-config-migrate` to derive IO
+    selector requirements from capability manifests and to auto-add selectors
+    only when exactly one known IO subblock exists for a scope. Ambiguous or
+    mismatched selectors fail with manual guidance.
 - [x] Provide runtime identity guidance/tooling for internal and external
   scenarios: authoring labels may exist for topology, but runtime `beeId` is
   assigned and owned by Swarm Controller during materialisation.
@@ -401,7 +407,9 @@ TDD sequence:
    - `inputs.csv` requires `inputs.type: CSV_DATASET`
    - `outputs.redis` requires `outputs.type: REDIS`
    - multiple IO subblocks without an explicit selector must fail migration.
-   - External scenario guidance/tooling remains open in the Tracking section.
+   - External scenario guidance/tooling is covered by
+     `tools/scenario-config-migrate` and
+     `docs/ai/SCENARIO_CONFIG_MIGRATION_GUIDE.md`.
 5. [x] Add Scenario Manager validation for missing/mismatched IO selectors and tests
    against active scenario bundles.
    - The IO-subblock rule now rejects missing or mismatched selectors and active
@@ -452,6 +460,8 @@ TDD sequence:
      - `./mvnw -q -pl scenario-manager-service -Dtest=ScenarioControllerTest,ScenarioRepositoryValidationTest -Dsurefire.failIfNoSpecifiedTests=false test`
        (`ScenarioControllerTest` 63/63, `ScenarioRepositoryValidationTest` 1/1),
      - `git diff --check`.
+   - 2026-07-01 IO selector migration tooling verification:
+     - `npm test --prefix tools/scenario-config-migrate` (`7/7`).
 
 ```bash
 npm test --prefix tools/pockethive-mcp

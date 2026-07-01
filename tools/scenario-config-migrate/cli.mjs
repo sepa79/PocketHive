@@ -2,8 +2,8 @@
 import { runScenarioConfigMigration } from "./index.mjs";
 
 const USAGE = `Usage:
-  scenario-config-migrate check [--json] <path...>
-  scenario-config-migrate migrate [--dry-run] [--json] <path...>
+  scenario-config-migrate check [--json] [--capabilities-dir <dir>] <path...>
+  scenario-config-migrate migrate [--dry-run] [--json] [--capabilities-dir <dir>] <path...>
 `;
 
 async function main(argv) {
@@ -11,6 +11,7 @@ async function main(argv) {
   const command = args.shift();
   const json = removeFlag(args, "--json");
   const dryRun = removeFlag(args, "--dry-run");
+  const capabilitiesDir = removeOption(args, "--capabilities-dir");
 
   if (!["check", "migrate"].includes(command) || args.length === 0) {
     process.stderr.write(USAGE);
@@ -23,7 +24,7 @@ async function main(argv) {
     return;
   }
 
-  const result = await runScenarioConfigMigration({ command, paths: args, dryRun });
+  const result = await runScenarioConfigMigration({ command, paths: args, dryRun, capabilitiesDir });
   if (json) {
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   } else {
@@ -37,6 +38,17 @@ function removeFlag(args, flag) {
   if (index < 0) return false;
   args.splice(index, 1);
   return true;
+}
+
+function removeOption(args, flag) {
+  const index = args.indexOf(flag);
+  if (index < 0) return undefined;
+  const value = args[index + 1];
+  if (!value || value.startsWith("--")) {
+    throw new Error(`${flag} requires a value`);
+  }
+  args.splice(index, 2);
+  return value;
 }
 
 function formatText(result) {
@@ -54,11 +66,13 @@ function formatText(result) {
         lines.push(`  move ${operation.sourcePath} -> ${operation.targetPath}`);
       } else if (operation.action === "remove") {
         lines.push(`  remove ${operation.sourcePath}`);
+      } else if (operation.action === "set") {
+        lines.push(`  set ${operation.targetPath} = ${operation.value}`);
       }
     }
   }
   lines.push(
-    `summary files=${result.summary.files} changed=${result.summary.changed} operations=${result.summary.operations} findings=${result.summary.findings} errors=${result.summary.errors}`
+    `summary files=${result.summary.files} changed=${result.summary.changed} operations=${result.summary.operations} findings=${result.summary.findings} legacyFindings=${result.summary.legacyFindings} ioSelectorFindings=${result.summary.ioSelectorFindings} errors=${result.summary.errors}`
   );
   return `${lines.join("\n")}\n`;
 }
