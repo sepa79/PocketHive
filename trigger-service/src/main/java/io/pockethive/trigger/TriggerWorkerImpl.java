@@ -89,21 +89,28 @@ class TriggerWorkerImpl implements PocketHiveWorkerFunction {
     TriggerWorkerConfig config = context.requireConfig(TriggerWorkerConfig.class);
 
     context.statusPublisher()
-        .update(status -> status
-            .data("intervalMs", config.intervalMs())
-            .data("actionType", config.actionType())
-            .data("command", config.command())
-            .data("url", config.url())
-            .data("method", config.method())
-            .data("body", config.body())
-            .data("headers", config.headers()));
+        .update(status -> {
+          status
+              .data("intervalMs", config.intervalMs())
+              .data("actionType", config.actionType());
+          if (TriggerWorkerConfig.ACTION_SHELL.equals(config.actionType())) {
+            status.data("command", config.command());
+          }
+          if (TriggerWorkerConfig.ACTION_REST.equals(config.actionType())) {
+            status
+                .data("url", config.url())
+                .data("method", config.method())
+                .data("body", config.body())
+                .data("headers", config.headers());
+          }
+        });
 
     Logger logger = context.logger();
     try {
       switch (config.actionType()) {
-        case "shell" -> runShell(config.command(), logger);
-        case "rest" -> callRest(config, logger);
-        default -> logger.debug("Unknown trigger action type: {}", config.actionType());
+        case TriggerWorkerConfig.ACTION_SHELL -> runShell(config.command(), logger);
+        case TriggerWorkerConfig.ACTION_REST -> callRest(config, logger);
+        default -> throw new IllegalArgumentException("Unknown trigger action type: " + config.actionType());
       }
     } catch (Exception ex) {
       logger.warn("Trigger action failed: {}", ex.toString(), ex);
@@ -114,8 +121,7 @@ class TriggerWorkerImpl implements PocketHiveWorkerFunction {
 
   private void runShell(String command, Logger logger) throws Exception {
     if (command == null || command.isBlank()) {
-      logger.debug("No trigger command configured; skipping shell action");
-      return;
+      throw new IllegalArgumentException("command must be provided for shell trigger action");
     }
     Process process = new ProcessBuilder("bash", "-c", command).start();
     try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
@@ -130,8 +136,7 @@ class TriggerWorkerImpl implements PocketHiveWorkerFunction {
 
   private void callRest(TriggerWorkerConfig config, Logger logger) throws Exception {
     if (config.url().isBlank()) {
-      logger.warn("No URL configured for REST trigger action");
-      return;
+      throw new IllegalArgumentException("url must be provided for REST trigger action");
     }
     URI target = URI.create(config.url());
     HttpRequest.Builder builder = HttpRequest.newBuilder(target);

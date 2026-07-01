@@ -47,6 +47,8 @@ template:
         - { id: out, direction: out }
       config:
         baseUrl: "{{ sut.endpoints['default'].baseUrl }}/api"
+        mode: THREAD_COUNT
+        threadCount: 1
       work:
         in:
           in: modQ

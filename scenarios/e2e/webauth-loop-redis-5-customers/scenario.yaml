@@ -96,6 +96,8 @@ template:
       image: processor:latest
       config:
         baseUrl: "{{ sut.endpoints['webauth'].baseUrl }}"
+        mode: THREAD_COUNT
+        threadCount: 1
         outputs:
           type: RABBITMQ
       work:

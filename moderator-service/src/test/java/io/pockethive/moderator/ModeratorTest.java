@@ -49,7 +49,10 @@ class ModeratorTest {
                 .build();
 
         WorkItem result = worker.onMessage(message, new TestWorkerContext(
-            new ModeratorWorkerConfig(ModeratorWorkerConfig.Mode.passThrough())));
+            new ModeratorWorkerConfig(new ModeratorWorkerConfig.Mode(
+                ModeratorWorkerConfig.Mode.Type.PASS_THROUGH,
+                null,
+                null))));
 
         assertThat(result).isNotNull();
         assertThat(new String(result.body(), StandardCharsets.UTF_8)).isEqualTo("test");

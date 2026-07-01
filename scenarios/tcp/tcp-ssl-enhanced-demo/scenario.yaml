@@ -50,6 +50,8 @@ template:
       image: processor:latest
       config:
         baseUrl: "{{ sut.endpoints['tcps-server'].baseUrl }}"
+        mode: THREAD_COUNT
+        threadCount: 1
         tcpTransport:
           type: socket
           connectionReuse: PER_THREAD

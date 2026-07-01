@@ -14,17 +14,17 @@ public record MessageTemplate(
     Map<String, String> headerTemplates
 ) {
 
-    public MessageTemplate {
-        bodyType = bodyType == null ? MessageBodyType.HTTP : bodyType;
-        headerTemplates = headerTemplates == null ? Map.of() : Map.copyOf(headerTemplates);
-    }
+	public MessageTemplate {
+	    Objects.requireNonNull(bodyType, "bodyType");
+	    headerTemplates = headerTemplates == null ? Map.of() : Map.copyOf(headerTemplates);
+	}
 
     public static Builder builder() {
         return new Builder();
     }
 
     public static final class Builder {
-        private MessageBodyType bodyType = MessageBodyType.HTTP;
+	    private MessageBodyType bodyType;
         private String pathTemplate;
         private String methodTemplate;
         private String bodyTemplate;

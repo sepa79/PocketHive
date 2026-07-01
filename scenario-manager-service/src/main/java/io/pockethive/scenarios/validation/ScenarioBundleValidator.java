@@ -2,6 +2,7 @@ package io.pockethive.scenarios.validation;
 
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.StreamReadFeature;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import io.pockethive.capabilities.CapabilityManifest;
@@ -27,6 +28,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -51,7 +53,6 @@ public final class ScenarioBundleValidator {
     private static final String WORKER_CONFIG_KEY = "worker";
     private static final String LEGACY_POCKETHIVE_CONFIG_KEY = "pockethive";
     private static final String CALL_ID_CONFIG_KEY = "callId";
-    private static final String DEFAULT_SERVICE_ID = "default";
     private static final Set<String> REQUEST_TEMPLATE_PROTOCOLS = Set.of("HTTP", "TCP", "ISO8583");
 
     private final ObjectMapper strictJsonMapper = new ObjectMapper(JsonFactory.builder()
@@ -711,9 +712,12 @@ public final class ScenarioBundleValidator {
             .stream()
             .filter(Objects::nonNull)
             .filter(entry -> Boolean.TRUE.equals(entry.required()))
-            .map(CapabilityManifest.ConfigEntry::name)
-            .filter(name -> name != null && !name.isBlank())
-            .forEach(requiredPath -> {
+            .filter(entry -> capabilityConditionMatches(config, entry.when()))
+            .forEach(entry -> {
+                String requiredPath = entry.name();
+                if (requiredPath == null || requiredPath.isBlank()) {
+                    return;
+                }
                 if (hasConfigValue(config, requiredPath)) {
                     return;
                 }
@@ -724,6 +728,49 @@ public final class ScenarioBundleValidator {
                         + bee.image() + "'.",
                     "Add config." + requiredPath + " to the scenario bee."));
             });
+    }
+
+    private boolean capabilityConditionMatches(Map<String, Object> config, JsonNode when) {
+        if (when == null || when.isNull() || when.isMissingNode()) {
+            return true;
+        }
+        if (!when.isObject()) {
+            return true;
+        }
+        Iterator<Map.Entry<String, JsonNode>> fields = when.fields();
+        while (fields.hasNext()) {
+            Map.Entry<String, JsonNode> condition = fields.next();
+            Object actual = configValue(config, condition.getKey());
+            if (!matchesConditionValue(actual, condition.getValue())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private Object configValue(Map<String, Object> config, String dottedPath) {
+        Object current = config;
+        for (String segment : dottedPath.split("\\.")) {
+            if (!(current instanceof Map<?, ?> map) || !map.containsKey(segment)) {
+                return null;
+            }
+            current = map.get(segment);
+        }
+        return current;
+    }
+
+    private boolean matchesConditionValue(Object actual, JsonNode expected) {
+        if (actual == null || expected == null || expected.isNull()) {
+            return actual == null && (expected == null || expected.isNull());
+        }
+        if (expected.isBoolean()) {
+            return actual instanceof Boolean bool && bool == expected.booleanValue();
+        }
+        if (expected.isNumber()) {
+            return actual instanceof Number number
+                && Double.compare(number.doubleValue(), expected.doubleValue()) == 0;
+        }
+        return expected.asText().equals(String.valueOf(actual));
     }
 
     private boolean hasConfigValue(Map<String, Object> config, String dottedPath) {
@@ -759,7 +806,7 @@ public final class ScenarioBundleValidator {
             }
             String serviceId = stringValue(source.document().get(SERVICE_ID_CONFIG_KEY));
             if (serviceId == null || serviceId.isBlank()) {
-                serviceId = consumer.defaultServiceId();
+                continue;
             }
             visible
                 .computeIfAbsent(templateKey(serviceId, callId), ignored -> new ArrayList<>())
@@ -777,7 +824,7 @@ public final class ScenarioBundleValidator {
             return;
         }
         Map<?, ?> doc = source.document();
-        for (String field : List.of("protocol", CALL_ID_CONFIG_KEY)) {
+        for (String field : List.of("protocol", SERVICE_ID_CONFIG_KEY, CALL_ID_CONFIG_KEY)) {
             Object value = doc.get(field);
             if (!(value instanceof String text) || text.isBlank()) {
                 findings.add(ValidationIssue.TEMPLATE_REQUIRED_FIELD_MISSING.finding(
@@ -1355,7 +1402,7 @@ public final class ScenarioBundleValidator {
             }
             String serviceId = stringValue(config.get(SERVICE_ID_CONFIG_KEY));
             if (serviceId == null || serviceId.isBlank()) {
-                serviceId = DEFAULT_SERVICE_ID;
+                continue;
             }
             consumers.add(new TemplateConsumer(bee.role(), templateRoot, serviceId, bee, config));
         }
@@ -1541,10 +1588,10 @@ public final class ScenarioBundleValidator {
 
     private Set<String> serviceIdCandidates(Object value, String defaultServiceId) {
         if (value == null) {
-            return Set.of(defaultServiceId);
+            return Set.of();
         }
         if (value instanceof String text && text.trim().isBlank()) {
-            return Set.of(defaultServiceId);
+            return Set.of();
         }
         return extractCallIds(value);
     }

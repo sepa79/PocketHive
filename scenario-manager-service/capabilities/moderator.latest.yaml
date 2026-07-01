@@ -12,7 +12,6 @@ config:
   - name: mode.type
     type: string
     required: true
-    default: "pass-through"
     options:
       - "pass-through"
       - "rate-per-sec"
@@ -23,7 +22,6 @@ config:
   - name: mode.ratePerSec
     type: number
     required: true
-    default: 0
     min: 0
     max: 100000
     when:
@@ -35,7 +33,7 @@ config:
       unit: msg/s
   - name: mode.sine.minRatePerSec
     type: number
-    default: 0
+    required: true
     min: 0
     max: 100000
     when:
@@ -47,7 +45,7 @@ config:
       unit: msg/s
   - name: mode.sine.maxRatePerSec
     type: number
-    default: 0
+    required: true
     min: 0
     max: 100000
     when:
@@ -59,7 +57,7 @@ config:
       unit: msg/s
   - name: mode.sine.periodSeconds
     type: number
-    default: 60
+    required: true
     min: 1
     when:
       mode.type: "sine"
@@ -70,7 +68,7 @@ config:
       unit: s
   - name: mode.sine.phaseOffsetSeconds
     type: number
-    default: 0
+    required: true
     when:
       mode.type: "sine"
     ui:

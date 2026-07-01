@@ -12,14 +12,12 @@ config:
   - name: forwardToOutput
     type: boolean
     required: true
-    default: false
     ui:
       label: Forward to output
       group: Output
   - name: txOutcomeSinkMode
     type: string
     required: true
-    default: "NONE"
     options:
       - "NONE"
       - "CLICKHOUSE_V2"
@@ -29,7 +27,6 @@ config:
   - name: dropTxOutcomeWithoutCallId
     type: boolean
     required: true
-    default: true
     ui:
       label: Drop tx outcomes without call id
       group: Output

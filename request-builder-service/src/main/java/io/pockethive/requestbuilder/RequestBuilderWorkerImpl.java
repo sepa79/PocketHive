@@ -150,7 +150,7 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
 
         Map<String, String> headers = new HashMap<>(rendered.headers());
 
-        String method = rendered.method() == null ? "GET" : rendered.method().toUpperCase(Locale.ROOT);
+        String method = requireNonBlank(rendered.method(), "method").toUpperCase(Locale.ROOT);
         AuthRuntime.MutableHttpRequest authRequest = new AuthRuntime.MutableHttpRequest(
             method, rendered.path(), headers, rendered.body());
         if (httpDef.authRef() != null) {
@@ -242,11 +242,11 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
   private WorkItem handleMissing(RequestBuilderWorkerConfig config, WorkItem seed, WorkerContext context) {
     recordError();
     publishStatus(context, config);
-    return config.passThroughOnMissingTemplate() ? seed : null;
+    return Boolean.TRUE.equals(config.passThroughOnMissingTemplate()) ? seed : null;
   }
 
   private static String missingBehavior(RequestBuilderWorkerConfig config) {
-    return config.passThroughOnMissingTemplate()
+    return Boolean.TRUE.equals(config.passThroughOnMissingTemplate())
         ? "passing work item through unchanged"
         : "dropping work item (no output)";
   }

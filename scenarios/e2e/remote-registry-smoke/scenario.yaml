@@ -13,6 +13,7 @@ template:
           scheduler:
             ratePerSec: 1.0
         message:
+          bodyType: HTTP
           path: /api/test
           method: POST
           body: hello-world
@@ -27,6 +28,8 @@ template:
       image: processor:latest
       config:
         baseUrl: "{{ sut.endpoints['default'].baseUrl }}"
+        mode: THREAD_COUNT
+        threadCount: 1
       work:
         in:
           in: gen

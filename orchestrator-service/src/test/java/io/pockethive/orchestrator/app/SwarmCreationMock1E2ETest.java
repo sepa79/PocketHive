@@ -421,7 +421,11 @@ class SwarmCreationMock1E2ETest {
                 "processor:latest",
                 Work.ofDefaults("mod", "final"),
                 Map.of(),
-                Map.of("docker", dockerConfig, "baseUrl", "http://sut:8080")),
+                Map.of(
+                    "docker", dockerConfig,
+                    "baseUrl", "http://sut:8080",
+                    "mode", "THREAD_COUNT",
+                    "threadCount", 1)),
             new Bee(
                 "postprocessor",
                 "postprocessor:latest",

@@ -104,10 +104,17 @@ class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
   public WorkItem onMessage(WorkItem seed, WorkerContext context) {
     GeneratorWorkerConfig config = context.requireConfig(GeneratorWorkerConfig.class);
     context.statusPublisher()
-        .update(status -> status
-            .data("path", config.message().path())
-            .data("method", config.message().method())
-            .data("enabled", context.enabled()));
+        .update(status -> {
+          GeneratorWorkerConfig.Message message = config.message();
+          status
+              .data("bodyType", message.bodyType())
+              .data("enabled", context.enabled());
+          if (message.bodyType() == MessageBodyType.HTTP) {
+            status
+                .data("path", message.path())
+                .data("method", message.method());
+          }
+        });
     WorkItem message = buildMessage(config, context, seed);
     return appendMessageStep(seed, message, context);
   }

@@ -46,6 +46,8 @@ template:
       image: processor:latest
       config:
         baseUrl: "{{ sut.endpoints['default'].baseUrl }}"
+        mode: THREAD_COUNT
+        threadCount: 1
         historyPolicy: DISABLED
       work:
         in:

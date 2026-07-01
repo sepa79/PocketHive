@@ -20,6 +20,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.Map;
 import java.util.zip.ZipEntry;
@@ -776,6 +777,174 @@ class ScenarioControllerTest {
     }
 
     @Test
+    void bundleValidationRejectsGeneratorWithoutExplicitMessageBodyType() throws Exception {
+        useRepositoryCapabilityManifest("generator", "generator.latest.yaml");
+        capabilityCatalogue.reload();
+
+        byte[] zip = bundleZip("scenario.yaml", """
+                id: generator-missing-body-type-demo
+                name: Generator missing body type demo
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - role: generator
+                      image: generator:latest
+                      work: {}
+                      config:
+                        inputs:
+                          type: SCHEDULER
+                        message:
+                          body: "{}"
+                """);
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings", hasSize(1)))
+                .andExpect(jsonPath("$.findings[0].path")
+                        .value("scenario.yaml:template.bees[0].config.message.bodyType"))
+                .andExpect(jsonPath("$.findings[0].message")
+                        .value(org.hamcrest.Matchers.containsString("missing required field 'message.bodyType'")));
+    }
+
+    @Test
+    void bundleValidationRejectsProcessorWithoutExplicitModeAndThreadCount() throws Exception {
+        useRepositoryCapabilityManifest("processor", "processor.latest.yaml");
+        capabilityCatalogue.reload();
+
+        byte[] zip = bundleZip("scenario.yaml", """
+                id: processor-missing-mode-demo
+                name: Processor missing mode demo
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - role: processor
+                      image: processor:latest
+                      work: {}
+                      config:
+                        baseUrl: "http://wiremock:8080"
+                """);
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings", hasSize(2)))
+                .andExpect(jsonPath("$.findings[*].path", org.hamcrest.Matchers.hasItems(
+                        "scenario.yaml:template.bees[0].config.mode",
+                        "scenario.yaml:template.bees[0].config.threadCount")))
+                .andExpect(jsonPath("$.findings[*].message", org.hamcrest.Matchers.hasItems(
+                        org.hamcrest.Matchers.containsString("missing required field 'mode'"),
+                        org.hamcrest.Matchers.containsString("missing required field 'threadCount'"))));
+    }
+
+    @Test
+    void bundleValidationRejectsRequestBuilderWithoutExplicitTemplateSettings() throws Exception {
+        useRepositoryCapabilityManifest("request-builder", "request-builder.latest.yaml");
+        capabilityCatalogue.reload();
+
+        byte[] zip = bundleZip("scenario.yaml", """
+                id: request-builder-missing-template-settings-demo
+                name: Request Builder missing template settings demo
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - role: request-builder
+                      image: request-builder:latest
+                      work: {}
+                      config: {}
+                """);
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings", hasSize(3)))
+                .andExpect(jsonPath("$.findings[*].path", org.hamcrest.Matchers.hasItems(
+                        "scenario.yaml:template.bees[0].config.templateRoot",
+                        "scenario.yaml:template.bees[0].config.serviceId",
+                        "scenario.yaml:template.bees[0].config.passThroughOnMissingTemplate")))
+                .andExpect(jsonPath("$.findings[*].message", org.hamcrest.Matchers.hasItems(
+                        org.hamcrest.Matchers.containsString("missing required field 'templateRoot'"),
+                        org.hamcrest.Matchers.containsString("missing required field 'serviceId'"),
+                        org.hamcrest.Matchers.containsString("missing required field 'passThroughOnMissingTemplate'"))));
+    }
+
+    @Test
+    void bundleValidationRejectsRestTriggerWithoutExplicitRestFields() throws Exception {
+        useRepositoryCapabilityManifest("trigger", "trigger.latest.yaml");
+        capabilityCatalogue.reload();
+
+        byte[] zip = bundleZip("scenario.yaml", """
+                id: trigger-rest-missing-fields-demo
+                name: Trigger REST missing fields demo
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - role: trigger
+                      image: trigger:latest
+                      work: {}
+                      config:
+                        intervalMs: 1000
+                        singleRequest: true
+                        actionType: rest
+                """);
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings", hasSize(4)))
+                .andExpect(jsonPath("$.findings[*].path", org.hamcrest.Matchers.hasItems(
+                        "scenario.yaml:template.bees[0].config.url",
+                        "scenario.yaml:template.bees[0].config.method",
+                        "scenario.yaml:template.bees[0].config.body",
+                        "scenario.yaml:template.bees[0].config.headers")));
+    }
+
+    @Test
+    void bundleValidationRejectsShellTriggerWithoutExplicitCommand() throws Exception {
+        useRepositoryCapabilityManifest("trigger", "trigger.latest.yaml");
+        capabilityCatalogue.reload();
+
+        byte[] zip = bundleZip("scenario.yaml", """
+                id: trigger-shell-missing-command-demo
+                name: Trigger shell missing command demo
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - role: trigger
+                      image: trigger:latest
+                      work: {}
+                      config:
+                        intervalMs: 1000
+                        singleRequest: true
+                        actionType: shell
+                """);
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings", hasSize(1)))
+                .andExpect(jsonPath("$.findings[0].path")
+                        .value("scenario.yaml:template.bees[0].config.command"))
+                .andExpect(jsonPath("$.findings[0].message")
+                        .value(org.hamcrest.Matchers.containsString("missing required field 'command'")));
+    }
+
+    @Test
     void bundleValidationReportsDuplicateScenarioYamlKeys() throws Exception {
         byte[] zip = bundleZip("scenario.yaml", """
                 id: duplicate-scenario-key-demo
@@ -1049,6 +1218,7 @@ class ScenarioControllerTest {
                       config:
                         message:
                           headers:
+                            x-ph-service-id: auth
                             x-ph-call-id: login
                       work:
                         out:
@@ -1705,6 +1875,14 @@ class ScenarioControllerTest {
                 }
                 """.formatted(prefix, imageName);
         Files.writeString(capabilitiesDir.resolve(prefix + "-manifest.json"), manifest);
+    }
+
+    private static void useRepositoryCapabilityManifest(String prefix, String manifestName) throws IOException {
+        Files.deleteIfExists(capabilitiesDir.resolve(prefix + "-manifest.json"));
+        Files.copy(
+                Path.of("capabilities").resolve(manifestName),
+                capabilitiesDir.resolve(manifestName),
+                StandardCopyOption.REPLACE_EXISTING);
     }
 
     private static byte[] bundleZip(String entryName, String content) throws IOException {

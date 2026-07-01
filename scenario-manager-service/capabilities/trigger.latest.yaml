@@ -13,7 +13,6 @@ config:
   - name: intervalMs
     type: int
     required: true
-    default: 0
     min: 0
     ui:
       label: Interval
@@ -22,14 +21,12 @@ config:
   - name: singleRequest
     type: boolean
     required: true
-    default: true
     ui:
       label: Single request
       group: Trigger
   - name: actionType
     type: string
     required: true
-    default: rest
     options:
       - rest
       - shell
@@ -39,7 +36,6 @@ config:
   - name: command
     type: string
     required: true
-    default: noop
     when:
       actionType: shell
     ui:
@@ -48,7 +44,6 @@ config:
   - name: url
     type: string
     required: true
-    default: ""
     when:
       actionType: rest
     ui:
@@ -57,7 +52,6 @@ config:
   - name: method
     type: string
     required: true
-    default: POST
     options:
       - GET
       - POST
@@ -72,7 +66,6 @@ config:
   - name: body
     type: text
     required: true
-    default: ""
     multiline: true
     when:
       actionType: rest
@@ -82,7 +75,6 @@ config:
   - name: headers
     type: json
     required: true
-    default: {}
     multiline: true
     when:
       actionType: rest

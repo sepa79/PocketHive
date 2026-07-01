@@ -60,13 +60,12 @@ config:
   - name: baseUrl
     type: string
     required: true
-    default: ""
     ui:
       label: Base URL
       group: HTTP
   - name: mode
     type: string
-    default: "THREAD_COUNT"
+    required: true
     options:
       - "THREAD_COUNT"
       - "RATE_PER_SEC"
@@ -75,13 +74,13 @@ config:
       group: HTTP
   - name: threadCount
     type: int
-    default: 1
+    required: true
     ui:
       label: Thread count
       group: HTTP
   - name: ratePerSec
     type: number
-    default: 1.0
+    required: true
     when:
       mode: "RATE_PER_SEC"
     ui:
