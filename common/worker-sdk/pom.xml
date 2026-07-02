@@ -60,6 +60,11 @@
       <version>${project.version}</version>
     </dependency>
     <dependency>
+      <groupId>io.pockethive</groupId>
+      <artifactId>scenario-validation-contracts</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
       <groupId>io.lettuce</groupId>
       <artifactId>lettuce-core</artifactId>
     </dependency>

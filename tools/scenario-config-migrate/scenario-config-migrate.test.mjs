@@ -67,6 +67,113 @@ template:
   }
 });
 
+test("check reports legacy scenario authoring id and topology beeId", async () => {
+  const root = await fixtureDir();
+  try {
+    const scenario = join(root, "scenario.yaml");
+    await writeFile(scenario, `id: demo
+template:
+  bees:
+    - id: genA
+      role: generator
+      config: {}
+    - id: modA
+      role: moderator
+      config: {}
+topology:
+  version: 1
+  edges:
+    - id: e1
+      from: { beeId: genA, port: out }
+      to: { beeId: modA, port: in }
+`, "utf8");
+
+    const result = await runScenarioConfigMigration({ command: "check", paths: [scenario] });
+    assert.equal(result.ok, false);
+    assert.equal(result.summary.legacyFindings, 4);
+    assert.deepEqual(
+      result.files[0].findings.map((finding) => finding.code),
+      [
+        "LEGACY_SCENARIO_AUTHORING",
+        "LEGACY_SCENARIO_AUTHORING",
+        "LEGACY_SCENARIO_AUTHORING",
+        "LEGACY_SCENARIO_AUTHORING",
+      ]
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("migrate rewrites scenario authoring id and topology beeId to role", async () => {
+  const root = await fixtureDir();
+  try {
+    const scenario = join(root, "scenario.yaml");
+    await writeFile(scenario, `id: demo
+template:
+  bees:
+    - id: genA
+      role: generator
+      config: {}
+    - id: modA
+      role: moderator
+      config: {}
+topology:
+  version: 1
+  edges:
+    - id: e1
+      from: { beeId: genA, port: out }
+      to: { beeId: modA, port: in }
+`, "utf8");
+
+    const result = await runScenarioConfigMigration({ command: "migrate", paths: [scenario] });
+    assert.equal(result.ok, true);
+    assert.equal(result.summary.changed, 1);
+
+    const updated = await readFile(scenario, "utf8");
+    assert.match(updated, /^\s+- role: genA$/m);
+    assert.match(updated, /^\s+- role: modA$/m);
+    assert.doesNotMatch(updated, /^\s+id: genA$/m);
+    assert.doesNotMatch(updated, /beeId:/);
+    assert.match(updated, /from: \{ port: out, role: genA \}/);
+    assert.match(updated, /to: \{ port: in, role: modA \}/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("migrate fails when topology role conflicts with legacy beeId", async () => {
+  const root = await fixtureDir();
+  try {
+    const scenario = join(root, "scenario.yaml");
+    await writeFile(scenario, `id: demo
+template:
+  bees:
+    - id: genA
+      role: generator
+      config: {}
+    - id: modA
+      role: moderator
+      config: {}
+topology:
+  version: 1
+  edges:
+    - id: e1
+      from: { beeId: genA, role: modA, port: out }
+      to: { beeId: modA, port: in }
+`, "utf8");
+
+    const result = await runScenarioConfigMigration({ command: "migrate", paths: [scenario] });
+    assert.equal(result.ok, false);
+    assert.equal(result.files[0].findings[0].code, "SCENARIO_AUTHORING_CONFLICT");
+
+    const unchanged = await readFile(scenario, "utf8");
+    assert.match(unchanged, /beeId: genA/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("check reports legacy pockethive worker config and discovers only scenario files", async () => {
   const root = await fixtureDir();
   try {

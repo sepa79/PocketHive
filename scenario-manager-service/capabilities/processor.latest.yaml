@@ -40,6 +40,7 @@ ui:
 config:
   - name: inputs.type
     type: string
+    liveMutable: false
     required: true
     options:
       - "RABBITMQ"
@@ -49,6 +50,7 @@ config:
       group: IO
   - name: outputs.type
     type: string
+    liveMutable: false
     required: true
     options:
       - "RABBITMQ"
@@ -59,12 +61,14 @@ config:
       group: IO
   - name: baseUrl
     type: string
+    liveMutable: true
     required: true
     ui:
       label: Base URL
       group: HTTP
   - name: mode
     type: string
+    liveMutable: true
     required: true
     options:
       - "THREAD_COUNT"
@@ -74,12 +78,14 @@ config:
       group: HTTP
   - name: threadCount
     type: integer
+    liveMutable: true
     required: true
     ui:
       label: Thread count
       group: HTTP
   - name: ratePerSec
     type: number
+    liveMutable: true
     required: true
     when:
       mode: "RATE_PER_SEC"
@@ -88,11 +94,13 @@ config:
       group: HTTP
   - name: keepAlive
     type: boolean
+    liveMutable: true
     ui:
       label: Keep-alive
       group: HTTP
   - name: connectionReuse
     type: string
+    liveMutable: true
     options:
       - "GLOBAL"
       - "PER_THREAD"
@@ -102,10 +110,13 @@ config:
       group: HTTP
   - name: timeoutMs
     type: integer
+    liveMutable: true
   - name: sslVerify
     type: boolean
+    liveMutable: true
   - name: tcpTransport.type
     type: string
+    liveMutable: true
     options:
       - "socket"
       - "nio"
@@ -115,36 +126,43 @@ config:
       group: TCP
   - name: tcpTransport.timeout
     type: integer
+    liveMutable: true
     ui:
       label: Timeout (ms)
       group: TCP
   - name: tcpTransport.maxBytes
     type: integer
+    liveMutable: true
     ui:
       label: Max bytes
       group: TCP
   - name: tcpTransport.keepAlive
     type: boolean
+    liveMutable: true
     ui:
       label: Keep-alive
       group: TCP
   - name: tcpTransport.workerThreads
     type: integer
+    liveMutable: true
     ui:
       label: Worker threads
       group: TCP
   - name: tcpTransport.tcpNoDelay
     type: boolean
+    liveMutable: true
     ui:
       label: TCP no-delay
       group: TCP
   - name: tcpTransport.sslVerify
     type: boolean
+    liveMutable: true
     ui:
       label: SSL verify
       group: TCP
   - name: tcpTransport.connectionReuse
     type: string
+    liveMutable: true
     options:
       - "GLOBAL"
       - "PER_THREAD"
@@ -154,26 +172,31 @@ config:
       group: TCP
   - name: tcpTransport.maxRetries
     type: integer
+    liveMutable: true
     ui:
       label: Max retries
       group: TCP
   - name: tcpTransport.connectTimeoutMs
     type: integer
+    liveMutable: true
     ui:
       label: Connect timeout (ms)
       group: TCP
   - name: tcpTransport.readTimeoutMs
     type: integer
+    liveMutable: true
     ui:
       label: Read timeout (ms)
       group: TCP
   - name: tcpTransport.ssl.enabled
     type: boolean
+    liveMutable: true
     ui:
       label: SSL enabled
       group: TCP
   - name: tcpTransport.ssl.verifyHostname
     type: boolean
+    liveMutable: true
     ui:
       label: SSL verify hostname
       group: TCP

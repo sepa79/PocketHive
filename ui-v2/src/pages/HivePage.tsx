@@ -9,7 +9,7 @@ import { useAuth } from '../lib/authContext'
 import { SwarmRuntimeInspector } from './hive/SwarmRuntimeInspector'
 import {
   buildManifestIndex,
-  composeCapabilityConfigEntries,
+  composeLiveCapabilityConfigEntries,
   normalizeManifests,
   resolveManifestForImage,
   type CapabilityConfigEntry,
@@ -66,7 +66,6 @@ type RuntimeMeta = {
 }
 
 type SwarmWorkerSummary = {
-  beeId: string | null
   role: string | null
   instance: string | null
   enabled: boolean | null
@@ -91,7 +90,6 @@ type SwarmSnapshotView = {
 }
 
 type ScenarioBee = {
-  id: string | null
   role: string | null
   image: string | null
   work: {
@@ -103,8 +101,8 @@ type ScenarioBee = {
 
 type ScenarioTopologyEdge = {
   id: string | null
-  from: { beeId: string | null; port: string | null } | null
-  to: { beeId: string | null; port: string | null } | null
+  from: { role: string | null; port: string | null } | null
+  to: { role: string | null; port: string | null } | null
 }
 
 type ScenarioDefinition = {
@@ -207,7 +205,6 @@ function extractSnapshotView(snapshot: StatusFullSnapshotResponse | null): Swarm
   const workers: SwarmWorkerSummary[] = workersRaw
     .map((entry) => {
       if (!isRecord(entry)) return null
-      const beeId = toStringOrNull(entry.beeId)
       const role = toStringOrNull(entry.role)
       const instance = toStringOrNull(entry.instance)
       const workerEnabled = toBooleanOrNull(entry.enabled)
@@ -224,7 +221,6 @@ function extractSnapshotView(snapshot: StatusFullSnapshotResponse | null): Swarm
         : null
       const workerRuntime = extractRuntimeMeta(entry.runtime)
       return {
-        beeId,
         role,
         instance,
         enabled: workerEnabled,
@@ -341,7 +337,6 @@ function asScenarioDefinition(data: unknown): ScenarioDefinition | null {
                 .filter((port): port is { id: string; direction: 'in' | 'out' } => port !== null)
             : null
           return {
-            id: toStringOrNull(bee.id),
             role: toStringOrNull(bee.role),
             image: toStringOrNull(bee.image),
             work: workIn || workOut ? { in: workIn, out: workOut } : null,
@@ -360,9 +355,9 @@ function asScenarioDefinition(data: unknown): ScenarioDefinition | null {
           return {
             id: toStringOrNull(edge.id),
             from: from
-              ? { beeId: toStringOrNull(from.beeId), port: toStringOrNull(from.port) }
+              ? { role: toStringOrNull(from.role), port: toStringOrNull(from.port) }
               : null,
-            to: to ? { beeId: toStringOrNull(to.beeId), port: toStringOrNull(to.port) } : null,
+            to: to ? { role: toStringOrNull(to.role), port: toStringOrNull(to.port) } : null,
           }
         })
         .filter((edge): edge is ScenarioTopologyEdge => edge !== null)
@@ -444,23 +439,6 @@ function workerHalEyeTitle(worker: SwarmWorkerSummary | null): string {
   }`
 }
 
-function formatAge(iso: string | null | undefined): string {
-  if (!iso) return '—'
-  const ts = Date.parse(iso)
-  if (!Number.isFinite(ts)) return iso
-  const diffMs = Date.now() - ts
-  if (diffMs < 0) return '—'
-  const sec = Math.floor(diffMs / 1000)
-  if (sec < 10) return 'just now'
-  if (sec < 60) return `${sec}s ago`
-  const min = Math.floor(sec / 60)
-  if (min < 60) return `${min}m ago`
-  const hr = Math.floor(min / 60)
-  if (hr < 48) return `${hr}h ago`
-  const days = Math.floor(hr / 24)
-  return `${days}d ago`
-}
-
 export function HivePage() {
   const auth = useAuth()
   const navigate = useNavigate()
@@ -487,7 +465,6 @@ export function HivePage() {
     }
   })
   const [selectedBeeKey, setSelectedBeeKey] = useState<string | null>(null)
-  const [selectedRuntimeBeeId, setSelectedRuntimeBeeId] = useState<string | null>(null)
   const [snapshot, setSnapshot] = useState<StatusFullSnapshotResponse | null>(null)
   const [snapshotError, setSnapshotError] = useState<string | null>(null)
   const [snapshotLoading, setSnapshotLoading] = useState(false)
@@ -504,7 +481,6 @@ export function HivePage() {
   const [networkError, setNetworkError] = useState<string | null>(null)
   const [networkProfileDraft, setNetworkProfileDraft] = useState('')
   const [swarmJournalEntries, setSwarmJournalEntries] = useState<SwarmJournalEntry[]>([])
-  const [swarmJournalLoading, setSwarmJournalLoading] = useState(false)
   const [swarmJournalError, setSwarmJournalError] = useState<string | null>(null)
   const [detailTab, setDetailTab] = useState<SwarmDetailTab>('snapshot')
   const [configEditTarget, setConfigEditTarget] = useState<ConfigEditTarget | null>(null)
@@ -545,8 +521,9 @@ export function HivePage() {
     [navigate, selectedSwarmId],
   )
 
-  const loadSwarms = useCallback(async () => {
-    setLoading(true)
+  const loadSwarms = useCallback(async (options?: { showLoading?: boolean }) => {
+    const showLoading = options?.showLoading ?? true
+    if (showLoading) setLoading(true)
     try {
       const response = await fetch(`${ORCHESTRATOR_BASE}/swarms`, {
         headers: { Accept: 'application/json' },
@@ -560,7 +537,7 @@ export function HivePage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load swarms')
     } finally {
-      setLoading(false)
+      if (showLoading) setLoading(false)
     }
   }, [])
 
@@ -612,10 +589,8 @@ export function HivePage() {
     if (!selectedSwarmId) {
       setSwarmJournalEntries([])
       setSwarmJournalError(null)
-      setSwarmJournalLoading(false)
       return
     }
-    setSwarmJournalLoading(true)
     try {
       const page = await getSwarmJournalPage(selectedSwarmId, { limit: 50, severity: 'ERROR' })
       setSwarmJournalEntries(page?.items ?? [])
@@ -623,8 +598,6 @@ export function HivePage() {
     } catch (err) {
       setSwarmJournalEntries([])
       setSwarmJournalError(err instanceof Error ? err.message : 'Failed to load swarm journal')
-    } finally {
-      setSwarmJournalLoading(false)
     }
   }, [selectedSwarmId])
 
@@ -731,7 +704,7 @@ export function HivePage() {
   }, [selectedSwarmId])
 
   useEffect(() => {
-    void loadSwarms()
+    void loadSwarms({ showLoading: true })
   }, [loadSwarms])
 
   useEffect(() => {
@@ -771,7 +744,7 @@ export function HivePage() {
           throw new Error(await readErrorMessage(response))
         }
         setMessage(`${action} request accepted for ${swarm.id}.`)
-        void loadSwarms()
+        void loadSwarms({ showLoading: true })
       } catch (err) {
         setMessage(err instanceof Error ? err.message : `Failed to ${action} swarm.`)
       } finally {
@@ -815,7 +788,7 @@ export function HivePage() {
             ? `Applied profile '${profileId}' to swarm '${selectedSwarm.id}'.`
             : `Cleared proxy routing for swarm '${selectedSwarm.id}'.`,
         )
-        await Promise.all([loadSwarms(), loadNetworkState()])
+        await Promise.all([loadSwarms({ showLoading: true }), loadNetworkState()])
       } catch (err) {
         setNetworkError(err instanceof Error ? err.message : 'Failed to update swarm network mode')
       } finally {
@@ -850,7 +823,7 @@ export function HivePage() {
         }
         setMessage(`Config update accepted for ${configEditTarget.role}/${configEditTarget.instance}.`)
         setConfigEditTarget(null)
-        await Promise.all([loadSnapshot(), loadSwarms()])
+        await Promise.all([loadSnapshot(), loadSwarms({ showLoading: true })])
       } catch (err) {
         setMessage(err instanceof Error ? err.message : 'Failed to send config update.')
       } finally {
@@ -862,7 +835,7 @@ export function HivePage() {
 
   useEffect(() => {
     const handle = window.setInterval(() => {
-      void loadSwarms()
+      void loadSwarms({ showLoading: false })
     }, 5000)
     return () => window.clearInterval(handle)
   }, [loadSwarms])
@@ -926,14 +899,6 @@ export function HivePage() {
   const scenarioIdFromSnapshot = snapshotView?.runtime?.templateId ?? null
   const manifestIndex = useMemo(() => buildManifestIndex(capabilities), [capabilities])
   const selectedRunId = snapshotView?.runtime?.runId ?? null
-  const runtimeWorkersByBeeId = useMemo(() => {
-    const index = new Map<string, SwarmWorkerSummary>()
-    for (const worker of snapshotView?.workers ?? []) {
-      const beeId = (worker.beeId ?? '').trim()
-      if (beeId) index.set(beeId, worker)
-    }
-    return index
-  }, [snapshotView])
 
   const openSwarmJournal = useCallback(
     (swarmId: string, runId?: string | null) => {
@@ -952,19 +917,11 @@ export function HivePage() {
 
   useEffect(() => {
     setSelectedBeeKey(null)
-    setSelectedRuntimeBeeId(null)
     if (!selectedSwarmId) {
       void loadScenarioDetail(null)
       return
     }
   }, [loadScenarioDetail, selectedSwarmId])
-
-  useEffect(() => {
-    if (!selectedRuntimeBeeId) return
-    if (!runtimeWorkersByBeeId.has(selectedRuntimeBeeId)) {
-      setSelectedRuntimeBeeId(null)
-    }
-  }, [runtimeWorkersByBeeId, selectedRuntimeBeeId])
 
   useEffect(() => {
     // Avoid UI flicker when the cached status snapshot is temporarily missing/refreshing.
@@ -996,7 +953,7 @@ export function HivePage() {
   const toolsBar = useMemo(
     () => (
       <div className="pageToolsBarContent">
-        <button type="button" className="actionButton" onClick={loadSwarms}>
+        <button type="button" className="actionButton" onClick={() => void loadSwarms({ showLoading: true })}>
           Refresh
         </button>
         <button
@@ -1266,7 +1223,6 @@ export function HivePage() {
 	                    <SwarmIssueBox
 	                      issue={selectedSwarmIssue}
 	                      error={swarmJournalError}
-	                      loading={swarmJournalLoading}
 	                      onOpenJournal={openSelectedSwarmJournal}
 	                    />
                       <div className="detailTabStrip" role="tablist" aria-label="Swarm detail panels">
@@ -1521,7 +1477,7 @@ export function HivePage() {
 
                       {detailTab === 'scenario' && (
                       <>
-	                    {scenarioLoading && <div className="muted">Loading scenario topology…</div>}
+		                    {scenarioLoading && <div className="muted">Loading scenario…</div>}
 	                    {scenarioError && <div className="muted">{scenarioError}</div>}
 	                    {!scenarioLoading && !scenarioError && selectedScenario && (
                       <>
@@ -1547,12 +1503,10 @@ export function HivePage() {
                             {selectedScenario.template?.bees?.length ? (
                               <div className="swarmBeeList">
                                 {selectedScenario.template.bees.map((bee, idx) => {
-                                  const label = bee.role ?? bee.id ?? `bee-${idx + 1}`
-                                  const key = bee.id ?? bee.role ?? `bee-${idx + 1}`
+                                  const label = bee.role ?? `bee-${idx + 1}`
+                                  const key = bee.role ?? `bee-${idx + 1}`
                                   const isActive = (selectedBeeKey ?? (selectedScenario.template?.bees?.[0]
-                                    ? selectedScenario.template.bees[0].id ??
-                                      selectedScenario.template.bees[0].role ??
-                                      'bee-1'
+                                    ? selectedScenario.template.bees[0].role ?? 'bee-1'
                                     : null)) === key
                                   return (
                                     <button
@@ -1565,7 +1519,6 @@ export function HivePage() {
                                       }
                                       onClick={() => {
                                         setSelectedBeeKey(key)
-                                        setSelectedRuntimeBeeId(null)
                                       }}
                                     >
                                       <div className="swarmBeeHeader">
@@ -1588,35 +1541,36 @@ export function HivePage() {
                               </div>
                             ) : (
                               <div className="muted">No bees listed.</div>
-                            )}
-                          </div>
-                          <div className="swarmDetailSection">
-                            <div className="fieldLabel">Selected bee / runtime target</div>
+	                            )}
+	                          </div>
+		                          <div className="swarmDetailSection">
+                            <div className="fieldLabel">Selected bee</div>
                             {selectedScenario.template?.bees?.length ? (() => {
                               const bees = selectedScenario.template?.bees ?? []
                               const fallback = bees[0]
                               const activeKey =
                                 selectedBeeKey ??
-                                (fallback ? fallback.id ?? fallback.role ?? 'bee-1' : null)
+                                (fallback ? fallback.role ?? 'bee-1' : null)
                               const activeBee =
                                 bees.find(
                                   (bee, idx) =>
-                                    (bee.id ?? bee.role ?? `bee-${idx + 1}`) === activeKey,
+                                    (bee.role ?? `bee-${idx + 1}`) === activeKey,
                                 ) ?? fallback
                               if (!activeBee) return <div className="muted">No bee selected.</div>
-                              const runtimeWorkers = snapshotView?.workers ?? []
-                              const runtimeWorker =
-                                selectedRuntimeBeeId
-                                  ? runtimeWorkersByBeeId.get(selectedRuntimeBeeId) ?? null
+                              const activeRole =
+                                typeof activeBee.role === 'string' && activeBee.role.trim().length > 0
+                                  ? activeBee.role.trim()
                                   : null
-                              const runtimeBeeId =
-                                typeof runtimeWorker?.beeId === 'string' && runtimeWorker.beeId.trim().length > 0
-                                  ? runtimeWorker.beeId.trim()
-                                  : null
-                              const targetRole =
-                                typeof runtimeWorker?.role === 'string' && runtimeWorker.role.trim().length > 0
-                                  ? runtimeWorker.role.trim()
-                                  : null
+                              const matchingRuntimeWorkers = activeRole
+                                ? (snapshotView?.workers ?? []).filter(
+                                    (worker) =>
+                                      typeof worker.role === 'string' && worker.role.trim() === activeRole,
+                                  )
+                                : []
+		                              const runtimeWorker =
+                                matchingRuntimeWorkers.length === 1 ? matchingRuntimeWorkers[0] : null
+	                              const targetRole =
+	                                activeRole
                               const runtimeImage = runtimeWorker?.runtime?.image ?? null
                               const manifestResolution = runtimeImage
                                 ? resolveManifestForImage(runtimeImage, manifestIndex)
@@ -1634,23 +1588,29 @@ export function HivePage() {
                               const currentConfig = runtimeWorker?.config ?? null
                               const currentConfigAvailable = currentConfig !== null
                               const configEntries = manifest
-                                ? composeCapabilityConfigEntries(manifest, capabilities, currentConfig)
+                                ? composeLiveCapabilityConfigEntries(manifest, capabilities, currentConfig)
                                 : []
-                              const configEditBlockedReason = !canManageSelectedSwarm
-                                ? 'PocketHive ALL permission is required.'
-                                : !selectedSwarmId
-                                  ? 'Swarm id is missing.'
-                                  : !runtimeBeeId
-                                    ? 'Runtime beeId is missing.'
-                                    : !targetRole
-                                      ? 'Runtime worker role is missing.'
-                                      : !workerInstance
-                                        ? 'Runtime instance is missing.'
-                                        : !manifest
-                                          ? 'Capability manifest is missing.'
-                                          : configEntries.length === 0
-                                            ? 'Capability manifest has no config fields.'
-                                            : null
+	                              const configEditBlockedReason = !canManageSelectedSwarm
+	                                ? 'PocketHive ALL permission is required.'
+	                                : !selectedSwarmId
+	                                  ? 'Swarm id is missing.'
+                                  : !activeRole
+                                    ? 'Scenario bee role is missing.'
+		                                    : matchingRuntimeWorkers.length === 0
+		                                      ? 'Runtime worker for this scenario role is missing from snapshot.'
+                                      : matchingRuntimeWorkers.length > 1
+                                        ? 'Multiple runtime workers report this scenario role.'
+		                                      : !runtimeWorker
+		                                        ? 'Runtime worker is missing from snapshot.'
+		                                    : !targetRole
+		                                      ? 'Runtime worker role is missing.'
+	                                      : !workerInstance
+	                                        ? 'Runtime instance is missing.'
+	                                        : !manifest
+	                                          ? 'Capability manifest is missing.'
+	                                          : configEntries.length === 0
+	                                            ? 'Capability manifest has no config fields.'
+	                                            : null
                               const canEditConfig = configEditBlockedReason === null
                               return (
 		                                <div className="swarmWorkerDetail">
@@ -1662,7 +1622,7 @@ export function HivePage() {
 		                                        title={workerHalEyeTitle(runtimeWorker)}
 		                                        aria-hidden="true"
 		                                      />
-		                                      {activeBee.role ?? activeBee.id ?? 'worker'}
+			                                      {activeBee.role ?? 'worker'}
 		                                      {runtimeWorker?.instance ? (
 		                                        <span
 		                                          className="swarmBeeInstance"
@@ -1673,62 +1633,8 @@ export function HivePage() {
 		                                      ) : null}
 		                                    </span>
 		                                    <span className="swarmBeeImage">{runtimeImage ?? activeBee.image ?? '—'}</span>
-		                                  </div>
-		                                  <div className="swarmBeeMeta">
-		                                    <label
-		                                      className="row"
-		                                      style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap' }}
-		                                      title="Live config targets must come from status-full.data.context.workers[].beeId."
-		                                    >
-		                                      <span className="muted">runtime target</span>
-		                                      {runtimeWorkers.length ? (
-		                                        <select
-		                                          className="tapIoSelect"
-		                                          value={runtimeBeeId ?? ''}
-		                                          aria-label="Runtime worker target"
-		                                          onChange={(event) => {
-		                                            const next = event.currentTarget.value.trim()
-		                                            setSelectedRuntimeBeeId(next.length > 0 ? next : null)
-		                                          }}
-		                                        >
-		                                          <option value="" disabled>
-		                                            Select runtime worker
-		                                          </option>
-		                                          {runtimeWorkers.map((worker, idx) => {
-		                                            const workerBeeId =
-		                                              typeof worker.beeId === 'string' && worker.beeId.trim().length > 0
-		                                                ? worker.beeId.trim()
-		                                                : ''
-		                                            const labelParts = [
-		                                              worker.role ?? 'worker',
-		                                              worker.instance ? `/${worker.instance}` : '',
-		                                              workerBeeId ? ` (${workerBeeId})` : ' (missing beeId)',
-		                                            ]
-		                                            const optionValue = workerBeeId || `missing-runtime-worker-${idx}`
-		                                            return (
-		                                              <option
-		                                                key={workerBeeId || `runtime-worker-${idx}`}
-		                                                value={optionValue}
-		                                                disabled={!workerBeeId}
-		                                              >
-		                                                {labelParts.join('')}
-		                                              </option>
-		                                            )
-		                                          })}
-		                                        </select>
-		                                      ) : (
-		                                        <span className="muted">no runtime worker snapshot</span>
-		                                      )}
-		                                    </label>
-		                                    {runtimeBeeId ? (
-		                                      <span title="SC-owned runtime worker identity used for live mutation.">
-		                                        runtime beeId: {runtimeBeeId}
-		                                      </span>
-		                                    ) : (
-		                                      <span className="warningText">runtime beeId missing; live config disabled</span>
-		                                    )}
-		                                  </div>
-		                                  {(() => {
+			                                  </div>
+			                                  {(() => {
 		                                    const role =
 		                                      typeof activeBee.role === 'string' && activeBee.role.trim().length > 0
 		                                        ? activeBee.role.trim()
@@ -1921,18 +1827,9 @@ export function HivePage() {
 		                                      </div>
 		                                    )
 		                                  })()}
-		                                  <div className="swarmBeeMeta">
-		                                    <span
-		                                      title={
-		                                        explainMode
-		                                          ? 'beeId is a stable id inside the scenario template.\nIt is used by topology.edges[].from/to.beeId.'
-		                                          : 'Scenario beeId.'
-		                                      }
-		                                    >
-		                                      id: {activeBee.id ?? '—'}
-		                                    </span>
-		                                    <span
-		                                      title={
+			                                  <div className="swarmBeeMeta">
+			                                    <span
+			                                      title={
 		                                        explainMode
 		                                          ? 'Logical ports used by topology edges.\nWhen topology is present, work.in/out keys should match these port ids.'
 		                                          : 'Logical ports (for topology).'
@@ -1986,13 +1883,13 @@ export function HivePage() {
 		                                              : `lastSeenAt: ${runtimeWorker.lastSeenAt ?? '—'}`
 		                                          }
 		                                        >
-		                                          seen {formatAge(runtimeWorker.lastSeenAt)}
+		                                          runtime {runtimeWorker.stale ? 'stale' : 'live'}
 		                                        </span>
 		                                      </div>
-		                                    ) : (
-		                                      <span className="muted">
-		                                        runtime: no selected status-full worker
-		                                      </span>
+			                                    ) : (
+			                                      <span className="muted">
+			                                        runtime: no matching status-full worker
+			                                      </span>
 		                                    )}
 		                                    {!capabilitiesLoaded ? (
 		                                      <span className="muted">capabilities: loading…</span>
@@ -2015,17 +1912,10 @@ export function HivePage() {
 			                                            : 'Runtime config.'
 			                                        }
 			                                      >
-			                                        <div className="configEditHeader">
-			                                          <div className="configEditTitleBlock">
-			                                            <span className="configEditTitle">Runtime config</span>
-			                                            {configEntries.length ? (
-			                                              <span className={currentConfigAvailable ? 'muted' : 'warningText'}>
-			                                                {currentConfigAvailable
-			                                                  ? 'current config loaded from runtime snapshot'
-			                                                  : 'current config unavailable; selected fields only'}
-			                                              </span>
-			                                            ) : null}
-			                                          </div>
+				                                        <div className="configEditHeader">
+				                                          <div className="configEditTitleBlock">
+				                                            <span className="configEditTitle">Runtime config</span>
+				                                          </div>
 			                                          <button
 			                                            type="button"
 			                                            className="actionButton"
@@ -2070,52 +1960,13 @@ export function HivePage() {
 			                                            <span className="warningText">{configEditBlockedReason}</span>
 			                                          ) : null}
 			                                        </div>
-			                                        {configEntries.length ? (
-			                                          <span className="configEditFieldList">
-			                                            fields:{' '}
-			                                            {configEntries
-			                                              .slice(0, 10)
-			                                              .map((entry) =>
-			                                                entry.type ? `${entry.name}:${entry.type}` : entry.name,
-			                                              )
-			                                              .join(', ')}
-			                                            {configEntries.length > 10 ? '…' : ''}
-			                                          </span>
-			                                        ) : (
-			                                          <span className="muted">fields: —</span>
-			                                        )}
-			                                      </div>
-		                                    )}
+				                                      </div>
+			                                    )}
 	                                  </div>
 	                                </div>
 	                              )
 	                            })() : (
 	                              <div className="muted">No bees listed.</div>
-                            )}
-                          </div>
-                          <div className="swarmDetailSection swarmDetailSectionWide">
-                            <div className="fieldLabel">Topology</div>
-                            {selectedScenario.topology?.edges?.length ? (
-                              <div className="swarmEdgeList">
-                                {selectedScenario.topology.edges.map((edge, idx) => {
-                                  const from = edge.from
-                                    ? `${edge.from.beeId ?? 'bee'}:${edge.from.port ?? 'port'}`
-                                    : '—'
-                                  const to = edge.to
-                                    ? `${edge.to.beeId ?? 'bee'}:${edge.to.port ?? 'port'}`
-                                    : '—'
-                                  return (
-                                    <div key={`${edge.id ?? idx}`} className="swarmEdgeItem">
-                                      <span>{edge.id ?? `edge-${idx + 1}`}</span>
-                                      <span className="muted">
-                                        {from} → {to}
-                                      </span>
-                                    </div>
-                                  )
-                                })}
-                              </div>
-                            ) : (
-                              <div className="muted">No topology edges defined.</div>
                             )}
                           </div>
                         </div>

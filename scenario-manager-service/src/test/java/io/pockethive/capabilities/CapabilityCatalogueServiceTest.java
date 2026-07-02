@@ -79,6 +79,69 @@ class CapabilityCatalogueServiceTest {
     }
 
     @Test
+    void bundledCapabilitiesDeclareLiveMutabilityForEveryConfigEntry() throws Exception {
+        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(Path.of("capabilities"));
+        catalogue.reload();
+
+        assertThat(catalogue.allManifests())
+                .isNotEmpty()
+                .allSatisfy(manifest -> assertThat(manifest.config())
+                        .allSatisfy(entry -> assertThat(entry.liveMutable())
+                                .as("%s:%s", manifest.role(), entry.name())
+                                .isNotNull()));
+    }
+
+    @Test
+    void rejectsMissingCapabilityConfigLiveMutability() throws IOException {
+        String body = """
+                schemaVersion: "1.0"
+                capabilitiesVersion: "1.0"
+                image:
+                  name: "processor"
+                role: "processor"
+                config:
+                  - name: threadCount
+                    type: integer
+                actions: []
+                panels: []
+                """;
+        Files.writeString(capabilitiesDir.resolve("processor.yaml"), body);
+
+        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(capabilitiesDir);
+
+        assertThatThrownBy(catalogue::reload)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("config[].liveMutable for 'threadCount' is required");
+    }
+
+    @Test
+    void rejectsUnsafeIoCapabilityConfigMarkedLiveMutable() throws IOException {
+        String body = """
+                schemaVersion: "1.0"
+                capabilitiesVersion: "1.0"
+                image:
+                  name: "io-redis-output"
+                role: "io-redis-output"
+                ui:
+                  ioScope: OUTPUT
+                  ioType: REDIS
+                config:
+                  - name: outputs.redis.host
+                    type: string
+                    liveMutable: true
+                actions: []
+                panels: []
+                """;
+        Files.writeString(capabilitiesDir.resolve("io-redis-output.yaml"), body);
+
+        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(capabilitiesDir);
+
+        assertThatThrownBy(catalogue::reload)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("config[].liveMutable for unsafe IO field 'outputs.redis.host' must be false");
+    }
+
+    @Test
     void rejectsRuntimeStateFieldsInCapabilityConfig() throws IOException {
         String body = """
                 schemaVersion: "1.0"

@@ -12,15 +12,16 @@ envelope refactor. This consolidates remaining UI items from:
 
 - Checklist mismatch: STOMP filters are marked done, but the UI subscribes to `/exchange/ph.control/#` instead of the three explicit topic families from architecture.
 - Direction drift vs architecture: this plan section says UI should read topology from `status-full`; architecture now defines `template + topology` from Scenario Manager, with `status-full` used for `workers[]`, bindings, and queue stats.
-- Some unchecked items appear implemented:
-  - `SCENARIO_CONTRACT` already documents `template.bees[].id`, `ports`, and `topology.edges`.
-  - `Bee` model already includes `id`.
+- Some unchecked items appear implemented or superseded:
+  - `SCENARIO_CONTRACT` documents `template.bees[].role`, `ports`, and
+    `topology.edges`; `template.bees[].id` has been removed from the contract.
+  - `Bee` model no longer includes `id`; `role` is the unique scenario node key.
   - Swarm Controller `status-full` already emits `context.bindings` and runtime metadata includes `templateId` as stable scenario identifier.
   - Raw work exchange debug capture is available via Debug Tap flow (UI + Orchestrator).
 - Open items still look valid:
   - unify UI hydration around Orchestrator REST snapshot baseline (`RestGateway`/snapshot source consolidation),
   - remove per-worker fan-out dependency in `SwarmViewPage`,
-  - runtime join by `beeId` for repeated roles,
+  - live mutation targeting by `role + instance`,
   - keyboard navigation in Wire Log.
 
 ## Architecture decisions (current)
@@ -240,17 +241,22 @@ UI behavior:
 
 ## 2) Topology-first join (runtime SSOT in `status-full`)
 
-- Scenario Manager remains template-only; UI reads current topology from `status-full` snapshots.
+- Scenario Manager remains the authoring SSOT; UI reads current template and
+  topology from Scenario Manager, then joins runtime status by exact unique
+  `role`.
 - [ ] Extend `docs/scenarios/SCENARIO_CONTRACT.md` with:
-  - `template.bees[].id`
+  - `template.bees[].role` as the unique scenario node key
   - `template.bees[].ports`
-  - optional `template.bees[].ui`
-  - `topology.edges[]` + validation rules
-- [ ] Extend `Bee` (swarm-model) with `id` (or parallel field) and propagate it into runtime worker identity mapping.
-- [ ] Embed the current template snapshot + `topology.edges[]` in `status-full.data.context` for UI join.
+  - `topology.edges[]` using endpoint `{ role, port }` + validation rules
+- [x] Remove `Bee.id`; do not propagate a second authoring id into runtime
+  worker identity.
+- [ ] Keep template/topology authoring data in Scenario Manager; do not duplicate
+  it in `status-full.data.context`.
 - [ ] Emit SC `status-full.data.context.bindings` (work-plane materialisation) and include a stable scenario identifier for UI join.
-- [ ] Update SC `workers[]` aggregate to include `beeId` for each runtime instance (so UI can join per-node when roles repeat).
-- [ ] Update UI to draw from `topology.edges[]` + node metadata from `template.bees[]`, join runtime by `beeId`.
+- [ ] Update SC `workers[]` aggregate to include `instance` for each runtime
+  worker and no separate runtime `beeId`.
+- [x] Update UI to draw from `topology.edges[]` + node metadata from
+  `template.bees[]`, and target runtime workers by exact `role + instance`.
 
 ## 3) Wire Log and debug tooling
 

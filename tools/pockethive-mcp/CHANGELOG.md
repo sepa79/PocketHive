@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## [0.15.32] - 2026-07-02
+
+### Changed
+- Scenario generation and validation helpers now treat `role` as the scenario
+  node key and infer worker type from image/capability data instead of role-name
+  heuristics.
+- Version tracks the PocketHive 0.15.32 release.
+
 ## [0.15.31] - 2026-07-02
 
 ### Changed

@@ -389,7 +389,7 @@ class SwarmControllerTest {
         SwarmCreateTracker tracker = new SwarmCreateTracker();
         SwarmPlanRegistry plans = new SwarmPlanRegistry();
         SwarmTemplate template = new SwarmTemplate("ctrl-image", List.of(
-            new Bee("request-builder", "request-builder:latest", Work.ofDefaults("in", "out"), Map.of(), Map.of("serviceId", "default")),
+            new Bee("request-builder-iso", "ghcr.io/acme/pockethive/request-builder:latest", Work.ofDefaults("in", "out"), Map.of(), Map.of("serviceId", "default")),
             new Bee("generator", "generator:latest", Work.ofDefaults(null, "out"), Map.of(), Map.of("ratePerSec", 1))
         ));
         when(scenarioClient.fetchScenario("tpl-1")).thenReturn(new ScenarioPlan(template, null, null, null));
@@ -427,7 +427,7 @@ class SwarmControllerTest {
 
         SwarmPlan plan = plans.find(capturedInstance.get()).orElseThrow();
         Map<String, Object> requestBuilderConfig = plan.bees().stream()
-            .filter(bee -> "request-builder".equals(bee.role()))
+            .filter(bee -> "request-builder-iso".equals(bee.role()))
             .findFirst()
             .orElseThrow()
             .config();

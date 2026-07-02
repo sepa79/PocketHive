@@ -5,8 +5,7 @@ description: Simple WireMock-backed local REST swarm with logical topology edges
 template:
   image: swarm-controller:latest
   bees:
-    - id: genA
-      role: generator
+    - role: genA
       image: generator:latest
       ports:
         - { id: out, direction: out }
@@ -26,8 +25,7 @@ template:
       work:
         out:
           out: genQ
-    - id: modA
-      role: moderator
+    - role: modA
       image: moderator:latest
       ports:
         - { id: in, direction: in }
@@ -41,8 +39,7 @@ template:
           in: genQ
         out:
           out: modQ
-    - id: procA
-      role: processor
+    - role: procA
       image: processor:latest
       ports:
         - { id: in, direction: in }
@@ -60,8 +57,7 @@ template:
           in: modQ
         out:
           out: finalQ
-    - id: postA
-      role: postprocessor
+    - role: postA
       image: postprocessor:latest
       config:
         forwardToOutput: false
@@ -77,11 +73,11 @@ topology:
   version: 1
   edges:
     - id: e1
-      from: { beeId: genA, port: out }
-      to: { beeId: modA, port: in }
+      from: { port: out, role: genA }
+      to: { port: in, role: modA }
     - id: e2
-      from: { beeId: modA, port: out }
-      to: { beeId: procA, port: in }
+      from: { port: out, role: modA }
+      to: { port: in, role: procA }
     - id: e3
-      from: { beeId: procA, port: out }
-      to: { beeId: postA, port: in }
+      from: { port: out, role: procA }
+      to: { port: in, role: postA }

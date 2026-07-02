@@ -6,7 +6,6 @@ template:
   image: swarm-controller:latest
   bees:
     - role: gen-tcp-prefix
-      id: gen-tcp-prefix
       image: generator:latest
       config:
         inputs:
@@ -25,7 +24,6 @@ template:
       ports:
         - { id: out, direction: out }
     - role: rb-tcp-prefix
-      id: rb-tcp-prefix
       image: request-builder:latest
       config:
         templateRoot: /app/scenario/templates/tcp
@@ -40,7 +38,6 @@ template:
         - { id: in, direction: in }
         - { id: out, direction: out }
     - role: proc-tcp-prefix
-      id: proc-tcp-prefix
       image: processor:latest
       config:
         baseUrl: "{{ sut.endpoints['tcp-server'].baseUrl }}"
@@ -65,7 +62,6 @@ template:
         - { id: in, direction: in }
         - { id: out, direction: out }
     - role: gen-iso-mac
-      id: gen-iso-mac
       image: generator:latest
       config:
         inputs:
@@ -84,7 +80,6 @@ template:
       ports:
         - { id: out, direction: out }
     - role: rb-iso-mac
-      id: rb-iso-mac
       image: request-builder:latest
       config:
         templateRoot: /app/scenario/templates/tcp
@@ -99,7 +94,6 @@ template:
         - { id: in, direction: in }
         - { id: out, direction: out }
     - role: proc-iso-mac
-      id: proc-iso-mac
       image: processor:latest
       config:
         baseUrl: "{{ sut.endpoints['tcp-server'].baseUrl }}"
@@ -125,7 +119,6 @@ template:
         - { id: in, direction: in }
         - { id: out, direction: out }
     - role: gen-mtls
-      id: gen-mtls
       image: generator:latest
       config:
         inputs:
@@ -144,7 +137,6 @@ template:
       ports:
         - { id: out, direction: out }
     - role: rb-mtls
-      id: rb-mtls
       image: request-builder:latest
       config:
         templateRoot: /app/scenario/templates/tcp
@@ -159,7 +151,6 @@ template:
         - { id: in, direction: in }
         - { id: out, direction: out }
     - role: proc-mtls
-      id: proc-mtls
       image: processor:latest
       config:
         baseUrl: "{{ sut.endpoints['tcps-server'].baseUrl }}"
@@ -185,7 +176,6 @@ template:
         - { id: in, direction: in }
         - { id: out, direction: out }
     - role: postprocessor
-      id: postprocessor
       image: postprocessor:latest
       config:
         forwardToOutput: false
@@ -201,29 +191,29 @@ topology:
   version: 1
   edges:
     - id: e1
-      from: { beeId: gen-tcp-prefix, port: out }
-      to: { beeId: rb-tcp-prefix, port: in }
+      from: { port: out, role: gen-tcp-prefix }
+      to: { port: in, role: rb-tcp-prefix }
     - id: e2
-      from: { beeId: rb-tcp-prefix, port: out }
-      to: { beeId: proc-tcp-prefix, port: in }
+      from: { port: out, role: rb-tcp-prefix }
+      to: { port: in, role: proc-tcp-prefix }
     - id: e3
-      from: { beeId: proc-tcp-prefix, port: out }
-      to: { beeId: postprocessor, port: in }
+      from: { port: out, role: proc-tcp-prefix }
+      to: { port: in, role: postprocessor }
     - id: e4
-      from: { beeId: gen-iso-mac, port: out }
-      to: { beeId: rb-iso-mac, port: in }
+      from: { port: out, role: gen-iso-mac }
+      to: { port: in, role: rb-iso-mac }
     - id: e5
-      from: { beeId: rb-iso-mac, port: out }
-      to: { beeId: proc-iso-mac, port: in }
+      from: { port: out, role: rb-iso-mac }
+      to: { port: in, role: proc-iso-mac }
     - id: e6
-      from: { beeId: proc-iso-mac, port: out }
-      to: { beeId: postprocessor, port: in }
+      from: { port: out, role: proc-iso-mac }
+      to: { port: in, role: postprocessor }
     - id: e7
-      from: { beeId: gen-mtls, port: out }
-      to: { beeId: rb-mtls, port: in }
+      from: { port: out, role: gen-mtls }
+      to: { port: in, role: rb-mtls }
     - id: e8
-      from: { beeId: rb-mtls, port: out }
-      to: { beeId: proc-mtls, port: in }
+      from: { port: out, role: rb-mtls }
+      to: { port: in, role: proc-mtls }
     - id: e9
-      from: { beeId: proc-mtls, port: out }
-      to: { beeId: postprocessor, port: in }
+      from: { port: out, role: proc-mtls }
+      to: { port: in, role: postprocessor }

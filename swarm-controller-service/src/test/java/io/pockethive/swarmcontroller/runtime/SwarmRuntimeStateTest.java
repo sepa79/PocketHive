@@ -11,50 +11,52 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class SwarmRuntimeStateTest {
 
   @Test
-  void recordsCanonicalRuntimeBeeIdTargetsWithoutCollapsingDuplicateRoles() {
-    SwarmRuntimeState state = new SwarmRuntimeState(
-        new SwarmRuntimeContext(new SwarmPlan("swarm", List.of()), List.of(), Set.of()));
+  void rejectsDuplicateRuntimeRole() {
+    SwarmRuntimeState state = newState();
 
-    state.registerWorker("runtime-bee-a", "generator", "gen-a", "container-a");
-    state.registerWorker("runtime-bee-b", "generator", "gen-b", "container-b");
+    state.registerWorker("generator", "gen-a", "container-a");
 
-    assertThat(state.workerByBeeId("runtime-bee-a"))
-        .hasValue(new SwarmRuntimeState.WorkerTarget("generator", "gen-a", "container-a"));
-    assertThat(state.workerByBeeId("runtime-bee-b"))
-        .hasValue(new SwarmRuntimeState.WorkerTarget("generator", "gen-b", "container-b"));
-    assertThat(state.beeIdFor("generator", "gen-a")).hasValue("runtime-bee-a");
-    assertThat(state.beeIdFor("generator", "gen-b")).hasValue("runtime-bee-b");
-    assertThat(state.instanceByBeeId())
-        .containsEntry("runtime-bee-a", "gen-a")
-        .containsEntry("runtime-bee-b", "gen-b");
-    assertThat(state.instancesByRole())
-        .containsEntry("generator", List.of("gen-a", "gen-b"));
-  }
-
-  @Test
-  void keepsRuntimeBeeIdMappingConsistentWhenATargetIsReregistered() {
-    SwarmRuntimeState state = new SwarmRuntimeState(
-        new SwarmRuntimeContext(new SwarmPlan("swarm", List.of()), List.of(), Set.of()));
-
-    state.registerWorker("runtime-bee-a", "generator", "gen-a", "container-a");
-    state.registerWorker("runtime-bee-b", "generator", "gen-a", "container-b");
-
-    assertThat(state.workerByBeeId("runtime-bee-a")).isEmpty();
-    assertThat(state.workerByBeeId("runtime-bee-b"))
-        .hasValue(new SwarmRuntimeState.WorkerTarget("generator", "gen-a", "container-b"));
-    assertThat(state.beeIdFor("generator", "gen-a")).hasValue("runtime-bee-b");
-  }
-
-  @Test
-  void rejectsWorkerRegistrationWithoutRuntimeBeeId() {
-    SwarmRuntimeState state = new SwarmRuntimeState(
-        new SwarmRuntimeContext(new SwarmPlan("swarm", List.of()), List.of(), Set.of()));
-
-    assertThatThrownBy(() -> state.registerWorker(" ", "generator", "gen-a", "container-a"))
+    assertThatThrownBy(() -> state.registerWorker("generator", "gen-b", "container-b"))
         .isInstanceOf(IllegalArgumentException.class)
-        .hasMessageContaining("beeId");
+        .hasMessageContaining("duplicate runtime worker role: generator");
+
+    assertThat(state.workersByInstance())
+        .containsOnlyKeys("gen-a");
+    assertThat(state.instancesByRole())
+        .containsEntry("generator", List.of("gen-a"));
+  }
+
+  @Test
+  void rejectsDuplicateRuntimeInstance() {
+    SwarmRuntimeState state = newState();
+
+    state.registerWorker("generator", "gen-a", "container-a");
+
+    assertThatThrownBy(() -> state.registerWorker("processor", "gen-a", "container-b"))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("duplicate runtime worker instance: gen-a");
+
+    assertThat(state.workersByInstance())
+        .containsOnlyKeys("gen-a");
+    assertThat(state.instancesByRole())
+        .containsEntry("generator", List.of("gen-a"))
+        .doesNotContainKey("processor");
+  }
+
+  @Test
+  void rejectsWorkerRegistrationWithoutRuntimeInstance() {
+    SwarmRuntimeState state = newState();
+
+    assertThatThrownBy(() -> state.registerWorker("generator", " ", "container-a"))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("role, instanceId, and containerId");
 
     assertThat(state.instancesByRole()).isEmpty();
-    assertThat(state.workersByBeeId()).isEmpty();
+    assertThat(state.workersByInstance()).isEmpty();
+  }
+
+  private static SwarmRuntimeState newState() {
+    return new SwarmRuntimeState(
+        new SwarmRuntimeContext(new SwarmPlan("swarm", List.of()), List.of(), Set.of()));
   }
 }

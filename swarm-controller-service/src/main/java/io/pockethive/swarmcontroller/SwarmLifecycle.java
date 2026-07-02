@@ -215,15 +215,6 @@ public interface SwarmLifecycle {
     return null;
   }
 
-  /**
-   * Resolve the controller-owned runtime bee identity for a concrete worker
-   * instance. Callers must treat an empty result as "identity not materialised"
-   * and must not derive it from worker payloads.
-   */
-  default Optional<String> runtimeBeeIdFor(String role, String instance) {
-    return Optional.empty();
-  }
-
   default Optional<String> handleConfigUpdateError(String role, String instance, String error) {
     return Optional.empty();
   }

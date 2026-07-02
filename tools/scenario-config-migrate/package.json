@@ -1,6 +1,6 @@
 {
   "name": "@pockethive/scenario-config-migrate",
-  "version": "0.15.31",
+  "version": "0.15.32",
   "private": true,
   "type": "module",
   "bin": {

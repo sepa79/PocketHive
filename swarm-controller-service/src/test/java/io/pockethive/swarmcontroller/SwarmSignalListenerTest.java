@@ -34,7 +34,6 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -838,9 +837,8 @@ class SwarmSignalListenerTest {
   }
 
   @Test
-  void statusFullWorkerListUsesControllerOwnedBeeId() throws Exception {
+  void statusFullWorkerListUsesRuntimeInstanceWithoutSecondRuntimeId() throws Exception {
     when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
-    when(lifecycle.runtimeBeeIdFor("gen", "g1")).thenReturn(Optional.of("runtime-bee-g1"));
     SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
     reset(rabbit);
 
@@ -856,7 +854,10 @@ class SwarmSignalListenerTest {
         eq(statusEvent("status-full", "swarm-controller", "inst")), payload.capture());
     JsonNode workers = mapper.readTree(payload.getValue()).path("data").path("context").path("workers");
     assertThat(workers).hasSize(1);
-    assertThat(workers.get(0).path("beeId").asText()).isEqualTo("runtime-bee-g1");
+    assertThat(workers.get(0).path("role").asText()).isEqualTo("gen");
+    assertThat(workers.get(0).path("instance").asText()).isEqualTo("g1");
+    assertThat(workers.get(0).has("beeId")).isFalse();
+    assertThat(workers.get(0).has("identityDiagnostics")).isFalse();
   }
 
   @Test

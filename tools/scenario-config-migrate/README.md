@@ -8,6 +8,8 @@ Spring properties, runtime directories, or generated artifacts.
 
 The migrator covers:
 
+- legacy scenario authoring fields: `template.bees[].id` and topology endpoint
+  `beeId`
 - legacy `config.worker` / `config.pockethive` wrapper removal
 - missing explicit IO selectors when exactly one known IO subblock is present
 - missing required fields for the selected IO manifest when the tool has a
@@ -45,6 +47,35 @@ node tools/scenario-config-migrate/cli.mjs migrate scenarios
 
 The migrator stops on conflicts. It never merges different source and target
 values. Resolve the reported scenario path and bee manually, then rerun it.
+
+For scenario authoring, `migrate` rewrites old `.31` node ids into the new
+single key:
+
+```yaml
+template:
+  bees:
+    - id: genA
+      role: generator
+topology:
+  edges:
+    - from: { beeId: genA, port: out }
+```
+
+becomes:
+
+```yaml
+template:
+  bees:
+    - role: genA
+topology:
+  edges:
+    - from: { role: genA, port: out }
+```
+
+`role` is the unique scenario node key. Worker type comes from `image` and the
+capability manifest, not from a second id field. If a topology endpoint already
+has a conflicting `role`, or points to a role that is not declared in
+`template.bees`, the tool fails and requires manual editing.
 
 For IO selectors, `migrate` only writes `inputs.type` / `outputs.type` when the
 scenario contains exactly one known IO subblock for that scope, for example:

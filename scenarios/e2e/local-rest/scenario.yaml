@@ -6,7 +6,6 @@ template:
   image: swarm-controller:latest
   bees:
     - role: generator
-      id: generator
       image: generator:latest
       config:
         inputs:
@@ -27,7 +26,6 @@ template:
       ports:
         - { id: out, direction: out }
     - role: moderator
-      id: moderator
       image: moderator:latest
       config:
         mode:
@@ -42,7 +40,6 @@ template:
         - { id: in, direction: in }
         - { id: out, direction: out }
     - role: processor
-      id: processor
       image: processor:latest
       config:
         baseUrl: "{{ sut.endpoints['default'].baseUrl }}/api"
@@ -61,7 +58,6 @@ template:
         - { id: in, direction: in }
         - { id: out, direction: out }
     - role: postprocessor
-      id: postprocessor
       image: postprocessor:latest
       config:
         forwardToOutput: false
@@ -77,11 +73,11 @@ topology:
   version: 1
   edges:
     - id: e1
-      from: { beeId: generator, port: out }
-      to: { beeId: moderator, port: in }
+      from: { port: out, role: generator }
+      to: { port: in, role: moderator }
     - id: e2
-      from: { beeId: moderator, port: out }
-      to: { beeId: processor, port: in }
+      from: { port: out, role: moderator }
+      to: { port: in, role: processor }
     - id: e3
-      from: { beeId: processor, port: out }
-      to: { beeId: postprocessor, port: in }
+      from: { port: out, role: processor }
+      to: { port: in, role: postprocessor }

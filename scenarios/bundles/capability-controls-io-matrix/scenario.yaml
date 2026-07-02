@@ -4,8 +4,7 @@ description: Minimal runtime bundle for manual/UI capability-control checks.
 template:
   image: swarm-controller:latest
   bees:
-    - role: generator
-      id: csv-generator
+    - role: csv-generator
       image: generator:latest
       config:
         inputs:
@@ -29,8 +28,7 @@ template:
           out: csv-out
       ports:
         - { id: out, direction: out }
-    - role: processor
-      id: redis-processor
+    - role: redis-processor
       image: processor:latest
       config:
         inputs:
@@ -66,7 +64,6 @@ template:
       ports:
         - { id: out, direction: out }
     - role: request-builder
-      id: request-builder
       image: request-builder:latest
       config:
         templateRoot: /app/scenario/templates/http

@@ -11,30 +11,35 @@ ui:
 config:
   - name: baseUrl
     type: string
+    liveMutable: true
     required: true
     ui:
       label: Base URL
       group: HTTP
   - name: templateRoot
     type: string
+    liveMutable: true
     required: true
     ui:
       label: Template root
       group: Templates
   - name: serviceId
     type: string
+    liveMutable: true
     required: true
     ui:
       label: Service ID
       group: Templates
   - name: threadCount
     type: integer
+    liveMutable: true
     required: true
     ui:
       label: Max in-flight journeys
       group: Runtime
   - name: steps
     type: json
+    liveMutable: true
     required: true
     multiline: true
     ui:
@@ -42,6 +47,7 @@ config:
       group: Journey
   - name: debugCapture
     type: json
+    liveMutable: true
     required: true
     multiline: true
     ui:

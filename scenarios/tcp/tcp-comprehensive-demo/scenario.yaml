@@ -7,7 +7,6 @@ template:
   image: "swarm-controller:latest"
   bees:
     - role: "generator-iso8583"
-      id: generator-iso8583
       image: "generator:latest"
       work:
         in:
@@ -46,7 +45,6 @@ template:
             x-ph-call-id: "ProcessTransaction"
             x-ph-service-id: "payment-gateway"
     - role: "generator-performance"
-      id: generator-performance
       image: "generator:latest"
       work:
         in:
@@ -81,7 +79,6 @@ template:
             x-ph-call-id: "PerformanceTest"
             x-ph-service-id: "performance"
     - role: "generator-netty"
-      id: generator-netty
       image: "generator:latest"
       work:
         in:
@@ -114,7 +111,6 @@ template:
             x-ph-call-id: "netty-test"
             x-ph-service-id: "demo"
     - role: "request-builder-iso"
-      id: request-builder-iso
       image: "request-builder:latest"
       work:
         in:
@@ -130,7 +126,6 @@ template:
         serviceId: "demo"
         passThroughOnMissingTemplate: false
     - role: "request-builder-perf"
-      id: request-builder-perf
       image: "request-builder:latest"
       work:
         in:
@@ -146,7 +141,6 @@ template:
         serviceId: "demo"
         passThroughOnMissingTemplate: false
     - role: "request-builder-netty"
-      id: request-builder-netty
       image: "request-builder:latest"
       work:
         in:
@@ -162,7 +156,6 @@ template:
         serviceId: "demo"
         passThroughOnMissingTemplate: false
     - role: "processor"
-      id: processor
       image: "processor:latest"
       work:
         in:
@@ -189,7 +182,6 @@ template:
         outputs:
           type: RABBITMQ
     - role: "postprocessor"
-      id: postprocessor
       image: "postprocessor:latest"
       work:
         in:
@@ -233,23 +225,23 @@ topology:
   version: 1
   edges:
     - id: e1
-      from: { beeId: generator-iso8583, port: out }
-      to: { beeId: request-builder-iso, port: in }
+      from: { port: out, role: generator-iso8583 }
+      to: { port: in, role: request-builder-iso }
     - id: e2
-      from: { beeId: generator-performance, port: out }
-      to: { beeId: request-builder-perf, port: in }
+      from: { port: out, role: generator-performance }
+      to: { port: in, role: request-builder-perf }
     - id: e3
-      from: { beeId: generator-netty, port: out }
-      to: { beeId: request-builder-netty, port: in }
+      from: { port: out, role: generator-netty }
+      to: { port: in, role: request-builder-netty }
     - id: e4
-      from: { beeId: request-builder-iso, port: out }
-      to: { beeId: processor, port: in }
+      from: { port: out, role: request-builder-iso }
+      to: { port: in, role: processor }
     - id: e5
-      from: { beeId: request-builder-perf, port: out }
-      to: { beeId: processor, port: in }
+      from: { port: out, role: request-builder-perf }
+      to: { port: in, role: processor }
     - id: e6
-      from: { beeId: request-builder-netty, port: out }
-      to: { beeId: processor, port: in }
+      from: { port: out, role: request-builder-netty }
+      to: { port: in, role: processor }
     - id: e7
-      from: { beeId: processor, port: out }
-      to: { beeId: postprocessor, port: in }
+      from: { port: out, role: processor }
+      to: { port: in, role: postprocessor }

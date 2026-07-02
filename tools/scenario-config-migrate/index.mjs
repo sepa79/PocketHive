@@ -141,17 +141,154 @@ function migrateDocument(doc, context) {
   if (!isSeq(bees)) {
     return;
   }
+  const authoring = migrateScenarioAuthoring(bees, context);
+  migrateTopologyEndpoints(doc, authoring, context);
   bees.items.forEach((bee, beeIndex) => {
     if (!isMap(bee)) {
       return;
     }
-    const beeId = scalarValue(getNode(bee, "id")) ?? scalarValue(getNode(bee, "role")) ?? String(beeIndex);
+    const beeRole = authoring.rolesByBeeIndex.get(beeIndex)
+      ?? scalarValue(getNode(bee, "role"))
+      ?? String(beeIndex);
     const config = getNode(bee, "config");
     if (!isMap(config)) {
       return;
     }
-    migrateConfigMap(config, { ...context, beeIndex, beeId });
+    migrateConfigMap(config, { ...context, beeIndex, beeRole });
   });
+}
+
+function migrateScenarioAuthoring(bees, context) {
+  const legacyIdToRole = new Map();
+  const declaredRoles = new Set();
+  const rolesByBeeIndex = new Map();
+
+  bees.items.forEach((bee, beeIndex) => {
+    if (!isMap(bee)) {
+      return;
+    }
+    const legacyId = trimToNull(scalarValue(getNode(bee, "id")));
+    const currentRole = trimToNull(scalarValue(getNode(bee, "role")));
+    const migratedRole = legacyId ?? currentRole;
+    const beeContext = { ...context, beeIndex, beeRole: migratedRole ?? String(beeIndex) };
+
+    if (!migratedRole) {
+      addError(beeContext, {
+        code: "SCENARIO_AUTHORING_INVALID",
+        path: `template.bees[${beeIndex}].role`,
+        message: "Scenario bee role is required.",
+        fix: "Set template.bees[].role to the unique scenario node role.",
+      });
+      return;
+    }
+
+    if (declaredRoles.has(migratedRole)) {
+      addError(beeContext, {
+        code: "SCENARIO_AUTHORING_CONFLICT",
+        path: `template.bees[${beeIndex}].role`,
+        message: `Scenario bee role '${migratedRole}' is not unique.`,
+        fix: "Rename one bee role and update topology endpoints to the new role.",
+      });
+    }
+    declaredRoles.add(migratedRole);
+    rolesByBeeIndex.set(beeIndex, migratedRole);
+
+    if (!legacyId) {
+      return;
+    }
+    legacyIdToRole.set(legacyId, migratedRole);
+    if (context.command === "check") {
+      context.findings.push({
+        severity: "error",
+        code: "LEGACY_SCENARIO_AUTHORING",
+        path: `template.bees[${beeIndex}].id`,
+        beeRole: migratedRole,
+        beeIndex,
+        message: "template.bees[].id is legacy scenario authoring shape; role is the only scenario node key.",
+        fix: "Run tools/scenario-config-migrate migrate on this scenario file.",
+      });
+      return;
+    }
+
+    context.operations.push(setOperation(
+      beeContext,
+      `template.bees[${beeIndex}].role`,
+      migratedRole,
+      "template.bees[].id becomes the unique role"
+    ));
+    context.operations.push(removeOperation(beeContext, `template.bees[${beeIndex}].id`));
+    if (context.migrate) {
+      bee.set("role", migratedRole);
+      deleteKey(bee, "id");
+    }
+  });
+
+  return { legacyIdToRole, declaredRoles, rolesByBeeIndex };
+}
+
+function migrateTopologyEndpoints(doc, authoring, context) {
+  const edges = doc.getIn(["topology", "edges"], true);
+  if (!isSeq(edges)) {
+    return;
+  }
+  edges.items.forEach((edge, edgeIndex) => {
+    if (!isMap(edge)) {
+      return;
+    }
+    for (const endpointName of ["from", "to"]) {
+      const endpoint = getNode(edge, endpointName);
+      if (!isMap(endpoint)) {
+        continue;
+      }
+      migrateTopologyEndpoint(endpoint, endpointName, edgeIndex, authoring, context);
+    }
+  });
+}
+
+function migrateTopologyEndpoint(endpoint, endpointName, edgeIndex, authoring, context) {
+  const legacyBeeId = trimToNull(scalarValue(getNode(endpoint, "beeId")));
+  const currentRole = trimToNull(scalarValue(getNode(endpoint, "role")));
+  const migratedRole = legacyBeeId ? (authoring.legacyIdToRole.get(legacyBeeId) ?? legacyBeeId) : currentRole;
+  const pathBase = `topology.edges[${edgeIndex}].${endpointName}`;
+  if (currentRole && migratedRole && currentRole !== migratedRole) {
+    addError(context, {
+      code: "SCENARIO_AUTHORING_CONFLICT",
+      path: `${pathBase}.role`,
+      message: `Cannot migrate ${pathBase}; existing role '${currentRole}' conflicts with legacy beeId '${legacyBeeId}'.`,
+      fix: "Resolve the topology endpoint manually, then rerun the migrator.",
+    });
+    return;
+  }
+  if (migratedRole && !authoring.declaredRoles.has(migratedRole)) {
+    addError(context, {
+      code: "SCENARIO_AUTHORING_INVALID",
+      path: `${pathBase}.${legacyBeeId ? "beeId" : "role"}`,
+      message: `Topology endpoint role '${migratedRole}' is not declared in template.bees.`,
+      fix: "Use an existing template.bees role or add the missing bee.",
+    });
+    return;
+  }
+  if (!legacyBeeId) {
+    return;
+  }
+
+  if (context.command === "check") {
+    context.findings.push({
+      severity: "error",
+      code: "LEGACY_SCENARIO_AUTHORING",
+      path: `${pathBase}.beeId`,
+      message: "topology endpoint beeId is legacy scenario authoring shape; role is the only topology endpoint key.",
+      fix: "Run tools/scenario-config-migrate migrate on this scenario file.",
+    });
+    return;
+  }
+
+  const endpointContext = { ...context, beeRole: migratedRole };
+  context.operations.push(moveOperation(endpointContext, `${pathBase}.beeId`, `${pathBase}.role`));
+  if (context.migrate) {
+    endpoint.set("role", migratedRole);
+    deleteKey(endpoint, "beeId");
+  }
 }
 
 function migrateConfigMap(config, context) {
@@ -579,7 +716,7 @@ function reportLegacy(context, path, message) {
       severity: "error",
       code: "LEGACY_CONFIG_SHAPE",
       path,
-      beeId: context.beeId,
+      beeRole: context.beeRole,
       beeIndex: context.beeIndex,
       message,
       fix: "Run tools/scenario-config-migrate migrate on this scenario file.",
@@ -590,7 +727,7 @@ function reportLegacy(context, path, message) {
 function addError(context, finding) {
   context.findings.push({
     severity: "error",
-    beeId: context.beeId,
+    beeRole: context.beeRole,
     beeIndex: context.beeIndex,
     ...finding,
   });
@@ -611,7 +748,7 @@ function summarize(files) {
     summary.operations += file.operations.length;
     summary.findings += file.findings.length;
     for (const finding of file.findings) {
-      if (finding.code === "LEGACY_CONFIG_SHAPE") summary.legacyFindings += 1;
+      if (finding.code.startsWith("LEGACY_")) summary.legacyFindings += 1;
       if (finding.code.startsWith("IO_SELECTOR_")) summary.ioSelectorFindings += 1;
       if (finding.severity === "error") summary.errors += 1;
     }
@@ -620,13 +757,13 @@ function summarize(files) {
 }
 
 function hasErrors(findings) {
-  return findings.some((finding) => finding.severity === "error" && finding.code !== "LEGACY_CONFIG_SHAPE");
+  return findings.some((finding) => finding.severity === "error" && !finding.code.startsWith("LEGACY_"));
 }
 
 function moveOperation(context, sourcePath, targetPath, note = null) {
   return {
     action: "move",
-    beeId: context.beeId,
+    beeRole: context.beeRole,
     beeIndex: context.beeIndex,
     sourcePath,
     targetPath,
@@ -637,7 +774,7 @@ function moveOperation(context, sourcePath, targetPath, note = null) {
 function removeOperation(context, sourcePath) {
   return {
     action: "remove",
-    beeId: context.beeId,
+    beeRole: context.beeRole,
     beeIndex: context.beeIndex,
     sourcePath,
   };
@@ -646,7 +783,7 @@ function removeOperation(context, sourcePath) {
 function setOperation(context, targetPath, value, note = null) {
   return {
     action: "set",
-    beeId: context.beeId,
+    beeRole: context.beeRole,
     beeIndex: context.beeIndex,
     targetPath,
     value,

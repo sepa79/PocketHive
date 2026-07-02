@@ -6,7 +6,6 @@ template:
   image: swarm-controller:latest
   bees:
     - role: generator-warmup
-      id: generator-warmup
       image: generator:latest
       config:
         inputs:
@@ -32,7 +31,6 @@ template:
       ports:
         - { id: out, direction: out }
     - role: generator-ramp
-      id: generator-ramp
       image: generator:latest
       config:
         inputs:
@@ -58,7 +56,6 @@ template:
       ports:
         - { id: out, direction: out }
     - role: generator-peak
-      id: generator-peak
       image: generator:latest
       config:
         inputs:
@@ -84,7 +81,6 @@ template:
       ports:
         - { id: out, direction: out }
     - role: moderator-warmup
-      id: moderator-warmup
       image: moderator:latest
       config:
         mode:
@@ -99,7 +95,6 @@ template:
         - { id: in, direction: in }
         - { id: out, direction: out }
     - role: moderator-ramp
-      id: moderator-ramp
       image: moderator:latest
       config:
         mode:
@@ -114,7 +109,6 @@ template:
         - { id: in, direction: in }
         - { id: out, direction: out }
     - role: moderator-peak
-      id: moderator-peak
       image: moderator:latest
       config:
         mode:
@@ -129,7 +123,6 @@ template:
         - { id: in, direction: in }
         - { id: out, direction: out }
     - role: request-builder
-      id: request-builder
       image: request-builder:latest
       config:
         templateRoot: /app/scenario/templates/tcp
@@ -144,7 +137,6 @@ template:
         - { id: in, direction: in }
         - { id: out, direction: out }
     - role: processor
-      id: processor
       image: processor:latest
       config:
         baseUrl: "{{ sut.endpoints['tcp-server'].baseUrl }}"
@@ -169,7 +161,6 @@ template:
         - { id: in, direction: in }
         - { id: out, direction: out }
     - role: postprocessor
-      id: postprocessor
       image: postprocessor:latest
       config:
         forwardToOutput: false
@@ -238,26 +229,26 @@ topology:
   version: 1
   edges:
     - id: e1
-      from: { beeId: generator-warmup, port: out }
-      to: { beeId: moderator-warmup, port: in }
+      from: { port: out, role: generator-warmup }
+      to: { port: in, role: moderator-warmup }
     - id: e2
-      from: { beeId: generator-ramp, port: out }
-      to: { beeId: moderator-ramp, port: in }
+      from: { port: out, role: generator-ramp }
+      to: { port: in, role: moderator-ramp }
     - id: e3
-      from: { beeId: generator-peak, port: out }
-      to: { beeId: moderator-peak, port: in }
+      from: { port: out, role: generator-peak }
+      to: { port: in, role: moderator-peak }
     - id: e4
-      from: { beeId: moderator-warmup, port: out }
-      to: { beeId: request-builder, port: in }
+      from: { port: out, role: moderator-warmup }
+      to: { port: in, role: request-builder }
     - id: e5
-      from: { beeId: moderator-ramp, port: out }
-      to: { beeId: request-builder, port: in }
+      from: { port: out, role: moderator-ramp }
+      to: { port: in, role: request-builder }
     - id: e6
-      from: { beeId: moderator-peak, port: out }
-      to: { beeId: request-builder, port: in }
+      from: { port: out, role: moderator-peak }
+      to: { port: in, role: request-builder }
     - id: e7
-      from: { beeId: request-builder, port: out }
-      to: { beeId: processor, port: in }
+      from: { port: out, role: request-builder }
+      to: { port: in, role: processor }
     - id: e8
-      from: { beeId: processor, port: out }
-      to: { beeId: postprocessor, port: in }
+      from: { port: out, role: processor }
+      to: { port: in, role: postprocessor }

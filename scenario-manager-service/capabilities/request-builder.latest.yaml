@@ -11,12 +11,15 @@ ui:
 config:
   - name: templateRoot
     type: string
+    liveMutable: true
     required: true
   - name: serviceId
     type: string
+    liveMutable: true
     required: true
   - name: passThroughOnMissingTemplate
     type: boolean
+    liveMutable: true
     required: true
 actions: []
 panels: []

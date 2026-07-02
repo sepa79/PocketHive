@@ -658,6 +658,127 @@ class ScenarioControllerTest {
     }
 
     @Test
+    void bundleValidationRejectsLegacyBeeIdField() throws Exception {
+        byte[] zip = bundleZip("scenario.yaml", """
+                id: legacy-bee-id-demo
+                name: Legacy bee id demo
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - id: genA
+                      role: generator
+                      image: worker-image:latest
+                      work: {}
+                """);
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings[0].code").value("SCENARIO_DESCRIPTOR_INVALID"))
+                .andExpect(jsonPath("$.findings[0].message")
+                        .value(org.hamcrest.Matchers.containsString("id")));
+    }
+
+    @Test
+    void bundleValidationRejectsLegacyTopologyBeeIdField() throws Exception {
+        byte[] zip = bundleZip("scenario.yaml", """
+                id: legacy-topology-bee-id-demo
+                name: Legacy topology beeId demo
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - role: generator
+                      image: worker-image:latest
+                      work: {}
+                    - role: processor
+                      image: worker-image:latest
+                      work: {}
+                topology:
+                  version: 1
+                  edges:
+                    - id: e1
+                      from: { beeId: generator, port: out }
+                      to: { role: processor, port: in }
+                """);
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings[0].code").value("SCENARIO_DESCRIPTOR_INVALID"))
+                .andExpect(jsonPath("$.findings[0].message")
+                        .value(org.hamcrest.Matchers.containsString("beeId")));
+    }
+
+    @Test
+    void bundleValidationRejectsDuplicateBeeRole() throws Exception {
+        byte[] zip = bundleZip("scenario.yaml", """
+                id: duplicate-role-demo
+                name: Duplicate role demo
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - role: generator
+                      image: worker-image:latest
+                      work: {}
+                    - role: generator
+                      image: worker-image:latest
+                      work: {}
+                """);
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings[*].path")
+                        .value(org.hamcrest.Matchers.hasItem("scenario.yaml:template.bees[1].role")))
+                .andExpect(jsonPath("$.findings[*].message")
+                        .value(org.hamcrest.Matchers.hasItem("Scenario bee role 'generator' must be unique.")));
+    }
+
+    @Test
+    void bundleValidationRejectsTopologyRoleNotDeclaredInTemplate() throws Exception {
+        byte[] zip = bundleZip("scenario.yaml", """
+                id: unknown-topology-role-demo
+                name: Unknown topology role demo
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - role: generator
+                      image: worker-image:latest
+                      work: {}
+                    - role: processor
+                      image: worker-image:latest
+                      work: {}
+                topology:
+                  version: 1
+                  edges:
+                    - id: e1
+                      from: { role: missing, port: out }
+                      to: { role: processor, port: in }
+                """);
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings[*].path")
+                        .value(org.hamcrest.Matchers.hasItem("scenario.yaml:topology.edges[0].from.role")))
+                .andExpect(jsonPath("$.findings[*].message")
+                        .value(org.hamcrest.Matchers.hasItem(
+                                "Topology endpoint role 'missing' is not declared in template.bees.")));
+    }
+
+    @Test
     void bundleValidationRejectsWorkerConfigWrapper() throws Exception {
         byte[] zip = bundleZip("scenario.yaml", """
                 id: legacy-worker-wrapper-demo
@@ -733,16 +854,18 @@ class ScenarioControllerTest {
                     "tag": "latest"
                   },
                   "config": [
-                    {
-                      "name": "mode.type",
-                      "type": "string",
-                      "required": true
-                    },
-                    {
-                      "name": "mode.ratePerSec",
-                      "type": "number",
-                      "required": true
-                    }
+	                    {
+	                      "name": "mode.type",
+	                      "type": "string",
+	                      "liveMutable": true,
+	                      "required": true
+	                    },
+	                    {
+	                      "name": "mode.ratePerSec",
+	                      "type": "number",
+	                      "liveMutable": true,
+	                      "required": true
+	                    }
                   ]
                 }
                 """);
@@ -1709,11 +1832,11 @@ class ScenarioControllerTest {
                     "tag": "latest"
                   },
                   "config": [
-                    { "name": "textValue", "type": "string" },
-                    { "name": "flagValue", "type": "boolean" },
-                    { "name": "jsonValue", "type": "json" },
-                    { "name": "countValue", "type": "integer" },
-                    { "name": "rateValue", "type": "number" }
+	                    { "name": "textValue", "type": "string", "liveMutable": true },
+	                    { "name": "flagValue", "type": "boolean", "liveMutable": true },
+	                    { "name": "jsonValue", "type": "json", "liveMutable": true },
+	                    { "name": "countValue", "type": "integer", "liveMutable": true },
+	                    { "name": "rateValue", "type": "number", "liveMutable": true }
                   ]
                 }
                 """);
@@ -1769,7 +1892,7 @@ class ScenarioControllerTest {
                     "tag": "latest"
                   },
                   "config": [
-                    { "name": "rateValue", "type": "number", "min": 0, "max": 10 }
+	                    { "name": "rateValue", "type": "number", "liveMutable": true, "min": 0, "max": 10 }
                   ]
                 }
                 """);
@@ -2318,6 +2441,87 @@ class ScenarioControllerTest {
                 .andExpect(jsonPath("$.ok").value(false))
                 .andExpect(jsonPath("$.findings[0].category").value("templates"))
                 .andExpect(jsonPath("$.findings[0].code").value("TEMPLATE_CALL_ID_MISSING"));
+    }
+
+    @Test
+    void templateValidationClassifiesRequestTemplateConsumerByImage() throws Exception {
+        byte[] zip = bundleZip("scenario.yaml", """
+                id: custom-role-template-consumer-demo
+                name: Custom role template consumer demo
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - role: generator
+                      image: generator:latest
+                      config:
+                        message:
+                          headers:
+                            x-ph-service-id: auth
+                            x-ph-call-id: login
+                      work:
+                        out:
+                          out: build
+                    - role: request-builder-iso
+                      image: request-builder:latest
+                      config:
+                        templateRoot: /app/scenario/templates/auth
+                        serviceId: auth
+                      work:
+                        in:
+                          in: build
+                        out:
+                          out: proc
+                """);
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings[0].category").value("templates"))
+                .andExpect(jsonPath("$.findings[0].code").value("TEMPLATE_CALL_ID_MISSING"))
+                .andExpect(jsonPath("$.findings[0].message")
+                        .value(org.hamcrest.Matchers.containsString("Worker 'request-builder-iso'")));
+    }
+
+    @Test
+    void templateValidationDoesNotClassifyRequestTemplateConsumerByRole() throws Exception {
+        byte[] zip = bundleZip("scenario.yaml", """
+                id: role-name-is-not-worker-type-demo
+                name: Role name is not worker type demo
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - role: generator
+                      image: generator:latest
+                      config:
+                        message:
+                          headers:
+                            x-ph-service-id: auth
+                            x-ph-call-id: login
+                      work:
+                        out:
+                          out: build
+                    - role: request-builder
+                      image: worker-image:latest
+                      config:
+                        templateRoot: /app/scenario/templates/auth
+                        serviceId: auth
+                      work:
+                        in:
+                          in: build
+                        out:
+                          out: proc
+                """);
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(true))
+                .andExpect(jsonPath("$.findings", hasSize(0)));
     }
 
     @Test
