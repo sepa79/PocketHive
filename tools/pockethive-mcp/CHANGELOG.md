@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## [0.15.31] - 2026-07-02
+
+### Changed
+- Version tracks the PocketHive 0.15.31 release. No MCP server behavior changes
+  were required for this release.
+
 ## [0.15.30] - 2026-06-24
 
 ### Changed

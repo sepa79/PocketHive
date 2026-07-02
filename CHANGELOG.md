@@ -4,6 +4,34 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.15.31]
+Timestamp: 2026-07-02T10:03:13Z
+
+- Worker runtime config: remove implicit worker IO/config defaults across
+  worker services, require explicit `inputs.type` / `outputs.type`, and keep
+  live IO updates limited to safe runtime fields while rejecting unsafe input
+  and output shape changes.
+- Scenario Manager validation: enforce canonical capability config types
+  (`string`, `boolean`, `number`, `integer`, `json`), reject unknown or
+  non-canonical manifest type values, require IO selector subblocks to match
+  their selected input/output type, and fail semantically empty Redis IO before
+  runtime.
+- Runtime IO validation: align Scheduler, CSV dataset, Redis dataset, Redis
+  output, Redis uploader, and worker SDK binders with the manifest contracts so
+  invalid ranges, blank targets, and missing Redis sources fail explicitly
+  instead of being clamped or masked at startup.
+- Scenario config migration: add and document the scenario config migration
+  tool, including its safe explicit IO value insertion behavior for existing
+  Redis targets.
+- UI v2 config patching: preserve required blank strings when `allowBlank` is
+  declared and parse `integer` fields as integers instead of accepting decimal
+  values through the generic number path.
+- Verification: local full E2E and `.50` HiveForge `large-swarm` full E2E pass,
+  including managed HTTP/HTTPS/TCPS proxy, Redis dataset, WebAuth Redis loop,
+  ClickHouse tx outcomes, and clearing export variants.
+- Release: bump PocketHive patch version to 0.15.31 for the explicit scenario
+  IO config hardening and migration follow-up.
+
 ## [0.15.30]
 Timestamp: 2026-06-24T15:03:25Z
 
