@@ -12,7 +12,7 @@ ui:
 config:
   - name: inputs.type
     type: string
-    default: "SCHEDULER"
+    required: true
     options:
       - "SCHEDULER"
       - "REDIS_DATASET"
@@ -20,32 +20,26 @@ config:
     ui:
       label: Input type
       group: IO
-  - name: enabled
-    type: boolean
-    default: false
-    ui:
-      label: Enabled
-      group: General
-  - name: worker.message.bodyType
+  - name: message.bodyType
     type: string
-    default: "HTTP"
+    required: true
     options:
       - "HTTP"
       - "SIMPLE"
     ui:
       label: Body type
       group: Message
-  - name: worker.message.path
+  - name: message.path
     type: string
-    default: "/"
+    required: true
     when:
-      worker.message.bodyType: "HTTP"
+      message.bodyType: "HTTP"
     ui:
       label: Path
       group: Message
-  - name: worker.message.method
+  - name: message.method
     type: string
-    default: "GET"
+    required: true
     options:
       - "GET"
       - "POST"
@@ -55,20 +49,19 @@ config:
       - "HEAD"
       - "OPTIONS"
     when:
-      worker.message.bodyType: "HTTP"
+      message.bodyType: "HTTP"
     ui:
       label: Method
       group: Message
-  - name: worker.message.body
-    type: text
-    default: ""
+  - name: message.body
+    type: string
+    required: true
     multiline: true
     ui:
       label: Body
       group: Message
-  - name: worker.message.headers
+  - name: message.headers
     type: json
-    default: {}
     multiline: true
     ui:
       label: Headers

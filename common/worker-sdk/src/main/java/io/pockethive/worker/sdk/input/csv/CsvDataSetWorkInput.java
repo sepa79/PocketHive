@@ -77,7 +77,7 @@ public final class CsvDataSetWorkInput implements WorkInput {
         this.controlPlaneRuntime = Objects.requireNonNull(controlPlaneRuntime, "controlPlaneRuntime");
         this.workerRuntime = Objects.requireNonNull(workerRuntime, "workerRuntime");
         this.identity = Objects.requireNonNull(identity, "identity");
-        this.properties = properties == null ? new CsvDataSetInputProperties() : properties;
+        this.properties = Objects.requireNonNull(properties, "properties");
         this.log = log == null ? defaultLog : log;
     }
 
@@ -185,7 +185,7 @@ public final class CsvDataSetWorkInput implements WorkInput {
     }
 
     private int planInvocations() {
-        double perTickRate = Math.max(0.0, properties.getRatePerSec()) * tickIntervalMs / 1_000.0;
+        double perTickRate = properties.getRatePerSec() * tickIntervalMs / 1_000.0;
         double planned = perTickRate + carryOver;
         int quota = (int) Math.floor(planned);
         carryOver = planned - quota;
@@ -304,12 +304,16 @@ public final class CsvDataSetWorkInput implements WorkInput {
         }
 
         Object rateObj = csvMap.get("ratePerSec");
-        if (rateObj instanceof Number number) {
-            double rate = number.doubleValue();
-            if (rate >= 0.0) {
-                properties.setRatePerSec(rate);
-                log.info("{} csv ratePerSec: {}", workerDefinition.beanName(), rate);
+        if (rateObj != null) {
+            if (!(rateObj instanceof Number number)) {
+                throw new IllegalArgumentException("inputs.csv.ratePerSec must be a number");
             }
+            double rate = number.doubleValue();
+            if (!Double.isFinite(rate) || rate < 0.0) {
+                throw new IllegalArgumentException("inputs.csv.ratePerSec must be a finite number >= 0");
+            }
+            properties.setRatePerSec(rate);
+            log.info("{} csv ratePerSec: {}", workerDefinition.beanName(), rate);
         }
     }
 
@@ -368,12 +372,10 @@ public final class CsvDataSetWorkInput implements WorkInput {
         });
     }
 
-    private void validateConfiguration() {
+    void validateConfiguration() {
         if (properties == null) {
             throw new IllegalStateException("CSV properties must not be null");
         }
-        if (properties.getFilePath() == null || properties.getFilePath().isBlank()) {
-            throw new IllegalStateException("CSV filePath must be configured (check inputs.csv.filePath in scenario)");
-        }
+        properties.validateConfigured("inputs.csv");
     }
 }

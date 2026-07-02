@@ -112,7 +112,7 @@ public class SwarmSignalListener {
     this.controlExchange = properties.getControlExchange();
     this.diagnostics = new SwarmDiagnosticsAggregator(this.mapper);
     this.ioStates = new SwarmIoStateAggregator();
-    this.workers = new SwarmWorkersAggregator(MAX_STALENESS_MS);
+    this.workers = new SwarmWorkersAggregator(MAX_STALENESS_MS, lifecycle::runtimeBeeIdFor);
     this.journal = journal != null ? journal : SwarmJournal.noop();
     this.journalErrors = new SwarmControlPlaneJournalErrors(this.journal, swarmId, role, instanceId, "swarm-signal-listener");
     this.journalRunId = journalRunId != null && !journalRunId.isBlank() ? journalRunId.trim() : null;

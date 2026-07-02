@@ -1,6 +1,8 @@
 id: clearing-export-structured-demo
 name: Clearing Export Structured Demo
-description: Runs 20 transactions through generator->moderator->processor->clearing-export (structured mode XML) and writes 2 clearing files.
+description: Runs 20 transactions through
+  generator->moderator->processor->clearing-export (structured mode XML) and
+  writes 2 clearing files.
 template:
   image: swarm-controller:latest
   bees:
@@ -15,13 +17,13 @@ template:
           scheduler:
             ratePerSec: 20
             maxMessages: 20
-        worker:
-          message:
-            path: /api/test
-            method: POST
-            body: '{"tx":"demo","channel":"e2e-clearing-structured"}'
-            headers:
-              content-type: application/json
+        message:
+          bodyType: HTTP
+          path: /api/test
+          method: POST
+          body: '{"tx":"demo","channel":"e2e-clearing-structured"}'
+          headers:
+            content-type: application/json
       work:
         out:
           out: gen
@@ -30,6 +32,10 @@ template:
     - role: moderator
       id: moderator
       image: moderator:latest
+      config:
+        mode:
+          type: pass-through
+          ratePerSec: 0.0
       work:
         in:
           in: gen
@@ -41,6 +47,14 @@ template:
     - role: processor
       id: processor
       image: processor:latest
+      config:
+        baseUrl: "{{ sut.endpoints['default'].baseUrl }}"
+        mode: THREAD_COUNT
+        threadCount: 1
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
       work:
         in:
           in: mod
@@ -53,20 +67,23 @@ template:
       id: clearing-export
       image: clearing-export:latest
       config:
-        worker:
-          mode: structured
-          schemaRegistryRoot: /app/scenario/clearing-schemas
-          schemaId: pcs-clearing
-          schemaVersion: "1.0.0"
-          maxRecordsPerFile: 10
-          flushIntervalMs: 60000
-          maxBufferedRecords: 5000
-          recordSourceStep: latest
-          recordSourceStepIndex: -1
-          recordBuildFailurePolicy: stop
-          localTargetDir: "/tmp/pockethive/clearing-out"
-          localTempSuffix: ".tmp"
-          writeManifest: false
+        mode: structured
+        streamingAppendEnabled: false
+        streamingWindowMs: 0
+        strictTemplate: false
+        schemaRegistryRoot: /app/scenario/clearing-schemas
+        schemaId: pcs-clearing
+        schemaVersion: "1.0.0"
+        maxRecordsPerFile: 10
+        flushIntervalMs: 60000
+        maxBufferedRecords: 5000
+        recordSourceStep: latest
+        recordSourceStepIndex: -1
+        recordBuildFailurePolicy: stop
+        localTargetDir: "/tmp/pockethive/clearing-out"
+        localTempSuffix: ".tmp"
+        writeManifest: false
+        businessCodeFilterEnabled: false
       work:
         in:
           in: post

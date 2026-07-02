@@ -13,9 +13,4 @@ class HttpSequenceWorkerProperties extends CanonicalWorkerProperties<HttpSequenc
   HttpSequenceWorkerProperties(ObjectMapper mapper, WorkerControlPlaneProperties controlPlaneProperties) {
     super(() -> controlPlaneProperties.getWorker().getRole(), HttpSequenceWorkerConfig.class, mapper);
   }
-
-  HttpSequenceWorkerConfig defaultConfig() {
-    return toConfig(objectMapper()).orElseGet(
-        () -> new HttpSequenceWorkerConfig(null, "/app/templates/http", "default", 1, java.util.List.of(), null, java.util.Map.of()));
-  }
 }

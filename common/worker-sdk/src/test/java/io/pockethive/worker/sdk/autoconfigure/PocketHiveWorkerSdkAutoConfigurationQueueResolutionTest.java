@@ -16,6 +16,8 @@ import io.pockethive.worker.sdk.runtime.WorkerRegistry;
 import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.BeanCreationException;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
@@ -26,6 +28,7 @@ class PocketHiveWorkerSdkAutoConfigurationQueueResolutionTest {
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
         .withPropertyValues(defaultProperties())
         .withBean(ObjectMapper.class, ObjectMapper::new)
+        .withBean(RabbitTemplate.class, () -> Mockito.mock(RabbitTemplate.class))
         .withUserConfiguration(TestWorkerConfiguration.class, PocketHiveWorkerSdkAutoConfiguration.class);
 
     @Test

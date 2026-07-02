@@ -9,17 +9,124 @@ ui:
   shape: "hexagon"
   abbreviation: "CE"
 config:
-  - name: enabled
+  - name: mode
+    type: string
+    required: true
+    options:
+      - template
+      - structured
+  - name: streamingAppendEnabled
     type: boolean
-    default: false
+    required: true
+  - name: streamingWindowMs
+    type: integer
+    required: true
+  - name: strictTemplate
+    type: boolean
+    required: true
+  - name: lineSeparator
+    type: string
+    required: true
+    when:
+      mode: template
+  - name: fileNameTemplate
+    type: string
+    required: true
+    when:
+      mode: template
+  - name: headerTemplate
+    type: string
+    required: true
+    when:
+      mode: template
+  - name: recordTemplate
+    type: string
+    required: true
+    when:
+      mode: template
+  - name: footerTemplate
+    type: string
+    required: true
+    when:
+      mode: template
+  - name: localTargetDir
+    type: string
+    required: true
+  - name: localTempSuffix
+    type: string
+    required: true
+  - name: writeManifest
+    type: boolean
+    required: true
+  - name: localManifestPath
+    type: string
+    required: true
+    when:
+      writeManifest: true
+  - name: schemaRegistryRoot
+    type: string
+    required: true
+    when:
+      mode: structured
+  - name: schemaId
+    type: string
+    required: true
+    when:
+      mode: structured
+  - name: schemaVersion
+    type: string
+    required: true
+    when:
+      mode: structured
+  - name: recordSourceStep
+    type: string
+    required: true
+    options:
+      - latest
+      - first
+      - previous
+      - index
+  - name: recordSourceStepIndex
+    type: integer
+    required: true
+  - name: recordBuildFailurePolicy
+    type: string
+    required: true
+    options:
+      - stop
+      - skip_record
+      - warn_only
+  - name: businessCodeFilterEnabled
+    type: boolean
+    required: true
+  - name: businessCodeAllowList
+    type: json
+    required: true
+    when:
+      businessCodeFilterEnabled: true
+  - name: businessCodeSourceStep
+    type: string
+    required: true
+    options:
+      - latest
+      - first
+      - previous
+      - index
+    when:
+      businessCodeFilterEnabled: true
+  - name: businessCodeSourceStepIndex
+    type: integer
+    required: true
+    when:
+      businessCodeFilterEnabled: true
   - name: maxRecordsPerFile
     type: integer
-    default: 1000
+    required: true
   - name: flushIntervalMs
     type: integer
-    default: 1000
+    required: true
   - name: maxBufferedRecords
     type: integer
-    default: 50000
+    required: true
 actions: []
 panels: []

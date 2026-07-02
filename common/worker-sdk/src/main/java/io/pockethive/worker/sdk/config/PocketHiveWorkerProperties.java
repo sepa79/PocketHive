@@ -1,15 +1,13 @@
 package io.pockethive.worker.sdk.config;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.worker.sdk.api.HistoryPolicy;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.function.Supplier;
 
 /**
- * Base configuration bean that captures worker-specific defaults under {@code pockethive.worker}.
+ * Base configuration bean that captures worker-specific config under {@code pockethive.worker}.
  * <p>
  * Services extend this class, provide the worker role + config type, and simply annotate the concrete bean
  * with {@link PocketHiveWorkerConfigProperties} so the SDK binds {@code pockethive.worker.config.*} once.
@@ -25,7 +23,7 @@ public abstract class PocketHiveWorkerProperties<T> {
      */
     private Map<String, Object> config = new LinkedHashMap<>();
     /**
-     * Default {@link HistoryPolicy} for items handled by this worker. Bound from
+     * Service-level {@link HistoryPolicy} for items handled by this worker. Bound from
      * {@code pockethive.worker.history-policy}. Defaults to {@link HistoryPolicy#FULL}.
      */
     private HistoryPolicy historyPolicy = HistoryPolicy.FULL;
@@ -80,31 +78,6 @@ public abstract class PocketHiveWorkerProperties<T> {
             return Map.of();
         }
         return Map.copyOf(filtered);
-    }
-
-    public boolean hasConfigOverrides() {
-        return !config.isEmpty();
-    }
-
-    /**
-     * Attempts to convert the raw configuration map to the worker's typed domain config.
-     */
-    public Optional<T> toConfig(ObjectMapper mapper) {
-        Objects.requireNonNull(mapper, "mapper");
-        if (configType == Void.class) {
-            return Optional.empty();
-        }
-        Map<String, Object> raw = rawConfig();
-        if (raw.isEmpty()) {
-            return Optional.empty();
-        }
-        try {
-            return Optional.of(mapper.convertValue(raw, configType));
-        } catch (IllegalArgumentException ex) {
-            String message = "Unable to convert worker defaults for role '%s' to %s"
-                .formatted(role(), configType.getSimpleName());
-            throw new IllegalStateException(message, ex);
-        }
     }
 
     private static String normaliseRole(String role) {

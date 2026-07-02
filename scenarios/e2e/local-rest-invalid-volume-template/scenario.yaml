@@ -1,6 +1,7 @@
 id: local-rest-invalid-volume-template
 name: Local REST - Invalid Volume Template
-description: Intentionally broken e2e scenario. Generator declares an invalid docker volume spec so swarm provisioning should fail before the worker starts.
+description: Intentionally broken e2e scenario. Generator declares an invalid
+  docker volume spec so swarm provisioning should fail before the worker starts.
 template:
   image: swarm-controller:latest
   bees:
@@ -12,16 +13,17 @@ template:
           volumes:
             - ":/app/invalid"
         inputs:
+          type: SCHEDULER
           scheduler:
             ratePerSec: 50
-        worker:
-          message:
-            bodyType: HTTP
-            path: /test
-            method: POST
-            body: '{"event":"local-rest-invalid-volume-template"}'
-            headers:
-              content-type: application/json
+            maxMessages: 0
+        message:
+          bodyType: HTTP
+          path: /test
+          method: POST
+          body: '{"event":"local-rest-invalid-volume-template"}'
+          headers:
+            content-type: application/json
       work:
         out:
           out: genQ
@@ -30,6 +32,10 @@ template:
     - role: moderator
       id: moderator
       image: moderator:latest
+      config:
+        mode:
+          type: pass-through
+          ratePerSec: 0.0
       work:
         in:
           in: genQ
@@ -42,8 +48,13 @@ template:
       id: processor
       image: processor:latest
       config:
-        worker:
-          baseUrl: "{{ sut.endpoints['default'].baseUrl }}/api"
+        baseUrl: "{{ sut.endpoints['default'].baseUrl }}/api"
+        mode: THREAD_COUNT
+        threadCount: 1
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
       work:
         in:
           in: modQ
@@ -55,6 +66,10 @@ template:
     - role: postprocessor
       id: postprocessor
       image: postprocessor:latest
+      config:
+        forwardToOutput: false
+        txOutcomeSinkMode: NONE
+        dropTxOutcomeWithoutCallId: true
       work:
         in:
           in: finalQ

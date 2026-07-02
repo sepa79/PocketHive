@@ -2,6 +2,7 @@ package io.pockethive.capabilities;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import jakarta.annotation.PostConstruct;
@@ -22,6 +23,11 @@ import java.util.*;
 @Service
 public class CapabilityCatalogueService {
     private static final Logger logger = LoggerFactory.getLogger(CapabilityCatalogueService.class);
+    private static final String ENABLED_CONFIG_NAME = "enabled";
+    private static final String WORKER_CONFIG_ROOT = "worker";
+    private static final String WORKER_CONFIG_PREFIX = "worker.";
+    private static final String LEGACY_POCKETHIVE_CONFIG_ROOT = "pockethive";
+    private static final String LEGACY_POCKETHIVE_CONFIG_PREFIX = "pockethive.";
 
     private final Path capabilitiesDir;
     private final ObjectMapper jsonMapper;
@@ -174,12 +180,73 @@ public class CapabilityCatalogueService {
                 errors.add("image.name is required");
             }
         }
+        validateConfigEntries(manifest, errors);
 
         if (!errors.isEmpty()) {
             throw new IllegalStateException("Invalid capability manifest " + source + ": " + String.join(", ", errors));
         }
 
         return new ManifestCoordinates(digest, canonicalImageName(name));
+    }
+
+    private static void validateConfigEntries(CapabilityManifest manifest, List<String> errors) {
+        if (manifest.config() == null) {
+            return;
+        }
+        for (CapabilityManifest.ConfigEntry entry : manifest.config()) {
+            if (entry == null) {
+                continue;
+            }
+            validateConfigPath(entry.name(), "config[].name", errors);
+            validateConfigType(entry, errors);
+            validateWhenKeys(entry.when(), errors);
+        }
+    }
+
+    private static void validateConfigType(CapabilityManifest.ConfigEntry entry, List<String> errors) {
+        if (CapabilityConfigType.fromWireValue(entry.type()).isPresent()) {
+            return;
+        }
+        String entryName = isBlank(entry.name()) ? "<unnamed>" : entry.name().trim();
+        String actualType = entry.type() == null ? "<null>" : entry.type().isBlank() ? "<blank>" : entry.type();
+        errors.add("config[].type for '" + entryName + "' is unsupported value '" + actualType
+            + "'; expected one of: " + CapabilityConfigType.allowedWireValues());
+    }
+
+    private static void validateWhenKeys(JsonNode node, List<String> errors) {
+        if (node == null || node.isNull()) {
+            return;
+        }
+        if (node.isObject()) {
+            Iterator<String> fieldNames = node.fieldNames();
+            while (fieldNames.hasNext()) {
+                String fieldName = fieldNames.next();
+                validateConfigPath(fieldName, "config[].when", errors);
+                validateWhenKeys(node.get(fieldName), errors);
+            }
+            return;
+        }
+        if (node.isArray()) {
+            for (JsonNode child : node) {
+                validateWhenKeys(child, errors);
+            }
+        }
+    }
+
+    private static void validateConfigPath(String path, String source, List<String> errors) {
+        if (isBlank(path)) {
+            return;
+        }
+        String normalized = path.trim();
+        if (ENABLED_CONFIG_NAME.equals(normalized)) {
+            errors.add(source + " must not declare runtime worker state field 'enabled'");
+        }
+        if (WORKER_CONFIG_ROOT.equals(normalized) || normalized.startsWith(WORKER_CONFIG_PREFIX)) {
+            errors.add(source + " must use direct config paths, not '" + WORKER_CONFIG_ROOT + "' or '" + WORKER_CONFIG_PREFIX + "*'");
+        }
+        if (LEGACY_POCKETHIVE_CONFIG_ROOT.equals(normalized) || normalized.startsWith(LEGACY_POCKETHIVE_CONFIG_PREFIX)) {
+            errors.add(source + " must use direct config paths, not '" + LEGACY_POCKETHIVE_CONFIG_ROOT + "' or '" + LEGACY_POCKETHIVE_CONFIG_PREFIX + "*'");
+        }
     }
 
     private static IllegalStateException duplicateKey(String keyType, String key, Path path) {

@@ -42,19 +42,24 @@ avoided to keep scenarios portable.
 
 ## Bees
 
-Each **bee** defines one worker role in the swarm.
+Each **bee** defines one scenario worker declaration in the swarm. `role` is an
+operator-visible string and is not node identity. Runtime node identity is the
+Swarm Controller-owned `beeId` exposed after materialisation in
+`status-full.data.context.workers[]`.
 
 ```yaml
 template:
   image: swarm-controller:latest
   bees:
-    - role: generator
+    - id: genA
+      role: generator
       image: generator:latest
       work:
         out:
           out: genQ
       config: { ... }
-    - role: processor
+    - id: procA
+      role: processor
       image: processor:latest
       work:
         in:
@@ -66,13 +71,19 @@ template:
 
 Bee fields (see `common/swarm-model/src/main/java/io/pockethive/swarm/model/Bee.java`):
 
-- `role` (string, required)
-  - Logical role name, e.g. `generator`, `processor`, `moderator`,
-    `postprocessor`, `request-builder`, `http-sequence`.
-  - Legacy note: older bundles may still reference `http-builder`.
 - `id` (string, optional)
-  - Stable identifier used by `topology.edges[].from|to.beeId`. Required if
-    the scenario declares `topology`.
+  - Optional authoring label for scenarios that need to refer to a bee from
+    authoring-only structures such as topology.
+  - This is not the runtime worker identity and must not be used as the live
+    config-update target.
+  - Runtime joins use Swarm Controller-owned
+    `status-full.data.context.workers[].beeId`.
+- `role` (string, required)
+  - Operator-visible role string, e.g. `generator`, `processor`, `moderator`,
+    `postprocessor`, `request-builder`, `http-sequence`.
+  - `role` is not unique, not a type system, and must not be used as scenario
+    node identity.
+  - Legacy note: older bundles may still reference `http-builder`.
 - `image` (string, required)
   - Container image name (logical); Orchestrator will prefix it with the
     configured repository, e.g. `generator:latest` →
@@ -101,6 +112,11 @@ Bee fields (see `common/swarm-model/src/main/java/io/pockethive/swarm/model/Bee.
 to draw edges. It does not replace `work` queue suffixes and is not a runtime
 binding list. Runtime bindings are emitted by swarm-controller in
 `status-full.data.context.bindings`.
+
+Runtime worker identity is assigned by Swarm Controller; Scenario Manager must
+not reject a runnable scenario only because `template.bees[].id` is missing or
+duplicated. When `topology` is present, `topology.edges[].from|to.beeId` refers
+to authoring graph labels, not the runtime `beeId` used for live mutation.
 
 ```yaml
 template:
@@ -160,15 +176,13 @@ config:
       ratePerSec: 50
   outputs:
     type: RABBITMQ             # or REDIS / NOOP, etc.
-  worker:
-    # worker‑specific settings
-    message:
-      bodyType: HTTP
-      path: /test
-      method: POST
-      body: '{"event":"local-rest"}'
-      headers:
-        content-type: application/json
+  message:
+    bodyType: HTTP
+    path: /test
+    method: POST
+    body: '{"event":"local-rest"}'
+    headers:
+      content-type: application/json
 ```
 
 This mirrors how workers bind properties:
@@ -180,9 +194,8 @@ This mirrors how workers bind properties:
 - `outputs` – IO configuration for the outbound side.
   - `type` – output type enum (e.g. `RABBITMQ`, `REDIS`, `NOOP`).
   - `<typeKey>` – type‑specific config.
-- `worker` – logical worker config.
-  - Keys under this section are specific to each role and are documented
-    in the worker SDK and capability manifests.
+- Role-specific worker fields live directly under `config`.
+  - These keys are documented in the worker SDK and capability manifests.
 
 The **capabilities** files under `scenario-manager-service/capabilities/` are
 the authoritative list of user-tunable fields per worker and IO type.
@@ -203,13 +216,12 @@ config:
     type: SCHEDULER
     scheduler:
       ratePerSec: 50
-      maxMessages: 0        # 0 = infinite, >0 = finite run
+      maxMessages: 0        # 0 = infinite, >0 = finite run; Java long technical range
   outputs:
     type: RABBITMQ
-  worker:
-    message:
-      bodyType: SIMPLE
-      body: 'tick'
+  message:
+    bodyType: SIMPLE
+    body: 'tick'
 ```
 
 **Redis dataset consumer:**
@@ -225,14 +237,13 @@ config:
       ratePerSec: 5
   outputs:
     type: RABBITMQ
-  worker:
-    message:
-      bodyType: HTTP
-      path: /api/demo
-      method: POST
-      body: '{{ payload }}'
-      headers:
-        content-type: application/json
+  message:
+    bodyType: HTTP
+    path: /api/demo
+    method: POST
+    body: '{{ payload }}'
+    headers:
+      content-type: application/json
 ```
 
 **Redis dataset consumer (multi-list):**
@@ -283,8 +294,7 @@ config:
   docker:
     volumes:
       - /opt/pockethive/scenarios-runtime/<swarmId>:/app/scenario:ro
-  worker:
-    # normal worker config...
+  # normal worker config...
 ```
 
 - `volumes` is a list of Docker bind specs:
@@ -337,6 +347,11 @@ The tool will:
   - Check that every `x-ph-call-id` used in the scenario has a matching
     template.
   - Render each template once with a dummy WorkItem to catch errors.
+
+Scenario contract validators must not treat runtime identity as an authoring
+validation rule. In particular, they must not reject bundles solely because
+`template.bees[].id` is missing or duplicated. Runtime `beeId` assignment and
+the runtime `beeId -> (role, instance)` mapping are owned by Swarm Controller.
 
 ## System Under Test (SUT) environments
 
@@ -400,9 +415,8 @@ The recommended pattern in worker config is:
 
 ```yaml
 config:
-  worker:
-    # For HTTP workers (e.g. processor)
-    baseUrl: "{{ sut.endpoints['default'].baseUrl }}/api"
+  # For HTTP workers (e.g. processor)
+  baseUrl: "{{ sut.endpoints['default'].baseUrl }}/api"
 ```
 
 At **create** time the Orchestrator resolves this expression using the
@@ -477,16 +491,15 @@ Example for generator HTTP bodies:
 
 ```yaml
 config:
-  worker:
-    message:
-      bodyType: HTTP
-      schemaRef: "schemas/local-rest-body.schema.json#/body"
-      body: |
-        {
-          "event": "local-rest-schema-demo",
-          "message": "Hello from {{ swarmId }}",
-          "correlationId": "{{ correlationId }}"
-        }
+  message:
+    bodyType: HTTP
+    schemaRef: "schemas/local-rest-body.schema.json#/body"
+    body: |
+      {
+        "event": "local-rest-schema-demo",
+        "message": "Hello from {{ swarmId }}",
+        "correlationId": "{{ correlationId }}"
+      }
 ```
 
 - The same `schemaRef` hint is also supported in **Request Builder templates** (for example next to `bodyTemplate`).

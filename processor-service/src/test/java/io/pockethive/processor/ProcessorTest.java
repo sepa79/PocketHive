@@ -88,11 +88,11 @@ class ProcessorTest {
     @Test
     void workerInvokesHttpAndPropagatesResponse() throws Exception {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
-        properties.setConfig(Map.of("baseUrl", "http://sut"));
+        properties.setConfig(processorConfig("http://sut"));
         HttpClient httpClient = mock(HttpClient.class);
         Clock clock = Clock.fixed(Instant.parse("2024-01-01T00:00:00Z"), ZoneOffset.UTC);
         ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, clock);
-        ProcessorWorkerConfig config = new ProcessorWorkerConfig("http://sut", null, 0, 0.0, null, null, null, null,null);
+        ProcessorWorkerConfig config = processorRuntimeConfig("http://sut");
         TestWorkerContext context = new TestWorkerContext(config);
 
         AtomicReference<ClassicHttpRequest> requestRef = new AtomicReference<>();
@@ -153,11 +153,11 @@ class ProcessorTest {
     @Test
     void workerExtractsBusinessOutcomeHeadersFromResultRules() throws Exception {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
-        properties.setConfig(Map.of("baseUrl", "http://sut"));
+        properties.setConfig(processorConfig("http://sut"));
         HttpClient httpClient = mock(HttpClient.class);
         Clock clock = Clock.fixed(Instant.parse("2024-03-01T00:00:00Z"), ZoneOffset.UTC);
         ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, clock);
-        ProcessorWorkerConfig config = new ProcessorWorkerConfig("http://sut", null, 0, 0.0, null, null, null, null, null);
+        ProcessorWorkerConfig config = processorRuntimeConfig("http://sut");
         TestWorkerContext context = new TestWorkerContext(config);
 
         when(httpClient.execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class))).thenAnswer(invocation -> {
@@ -214,11 +214,11 @@ class ProcessorTest {
     @Test
     void workerConcatenatesBaseUrlAndMessagePath() throws Exception {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
-        properties.setConfig(Map.of("baseUrl", "http://sut/api"));
+        properties.setConfig(processorConfig("http://sut/api"));
         HttpClient httpClient = mock(HttpClient.class);
         Clock clock = Clock.fixed(Instant.parse("2024-02-02T00:00:00Z"), ZoneOffset.UTC);
         ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, clock);
-        ProcessorWorkerConfig config = new ProcessorWorkerConfig("http://sut/api", null, 0, 0.0, null, null, null, null, null);
+        ProcessorWorkerConfig config = processorRuntimeConfig("http://sut/api");
         TestWorkerContext context = new TestWorkerContext(config);
 
         AtomicReference<ClassicHttpRequest> requestRef = new AtomicReference<>();
@@ -243,11 +243,11 @@ class ProcessorTest {
     @Test
     void workerTracksRollingMetricsAcrossCalls() throws Exception {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
-        properties.setConfig(Map.of("baseUrl", "http://sut"));
+        properties.setConfig(processorConfig("http://sut"));
         HttpClient httpClient = mock(HttpClient.class);
         SequenceClock clock = new SequenceClock(0, 50, 100, 250);
         ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, clock);
-        ProcessorWorkerConfig config = new ProcessorWorkerConfig("http://sut", null, 0, 0.0, null, null, null, null, null);
+        ProcessorWorkerConfig config = processorRuntimeConfig("http://sut");
         TestWorkerContext context = new TestWorkerContext(config);
 
         AtomicInteger invocation = new AtomicInteger();
@@ -289,7 +289,7 @@ class ProcessorTest {
     @Test
     void workerSelectsHttpClientFromSslVerifyFlag() throws Exception {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
-        properties.setConfig(Map.of("baseUrl", "https://sut"));
+        properties.setConfig(processorConfig("https://sut"));
         HttpClient verifiedClient = mock(HttpClient.class);
         HttpClient insecureClient = mock(HttpClient.class);
         Clock clock = Clock.fixed(Instant.parse("2024-03-03T00:00:00Z"), ZoneOffset.UTC);
@@ -318,106 +318,50 @@ class ProcessorTest {
 
         WorkItem inbound = inboundItem(Map.of("path", "/tls"));
 
-        worker.onMessage(inbound, new TestWorkerContext(new ProcessorWorkerConfig("https://sut", null, 0, 0.0, null, null, null, Boolean.FALSE, null)));
-        worker.onMessage(inbound, new TestWorkerContext(new ProcessorWorkerConfig("https://sut", null, 0, 0.0, null, null, null, Boolean.TRUE, null)));
+        worker.onMessage(inbound, new TestWorkerContext(processorRuntimeConfig("https://sut", Boolean.FALSE)));
+        worker.onMessage(inbound, new TestWorkerContext(processorRuntimeConfig("https://sut", Boolean.TRUE)));
 
         verify(insecureClient).execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class));
         verify(verifiedClient).execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class));
     }
 
     @Test
-    void workerFallsBackToDefaultsWhenConfigMissing() throws Exception {
+    void workerFailsWhenRuntimeConfigMissing() throws Exception {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
-        properties.setConfig(Map.of("baseUrl", "http://defaults"));
         HttpClient httpClient = mock(HttpClient.class);
         Clock clock = Clock.fixed(Instant.parse("2024-01-01T00:00:00Z"), ZoneOffset.UTC);
         ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, clock);
         TestWorkerContext context = new TestWorkerContext(null);
 
-        AtomicReference<ClassicHttpRequest> requestRef = new AtomicReference<>();
-        when(httpClient.execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class))).thenAnswer(invocation -> {
-            ClassicHttpRequest request = invocation.getArgument(0, ClassicHttpRequest.class);
-            HttpClientResponseHandler<?> handler = invocation.getArgument(1, HttpClientResponseHandler.class);
-            requestRef.set(request);
-            BasicClassicHttpResponse response = new BasicClassicHttpResponse(200, "OK");
-            response.setEntity(new StringEntity("ok", java.nio.charset.StandardCharsets.UTF_8));
-            return handler.handleResponse(response);
-        });
-
         WorkItem inbound = inboundItem(Map.of("path", "/defaults"));
 
-        worker.onMessage(inbound, context);
-
-        ClassicHttpRequest request = requestRef.get();
-        assertThat(request).isNotNull();
-        assertThat(request.getUri()).isEqualTo(URI.create("http://defaults/defaults"));
-    }
-
-    @Test
-    void workerThrowsWhenBaseUrlMissingAndPathIsRelative() throws Exception {
-        ProcessorWorkerProperties properties = newProcessorWorkerProperties();
-        properties.setConfig(Map.of("baseUrl", ""));
-        HttpClient httpClient = mock(HttpClient.class);
-        Clock clock = Clock.systemUTC();
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, clock);
-        ProcessorWorkerConfig config = new ProcessorWorkerConfig(" ", null, 0, 0.0, null, null, null, null, null);
-        TestWorkerContext context = new TestWorkerContext(config);
-
-        WorkItem inbound = inboundItem(Map.of("path", "/noop"));
-
         assertThatThrownBy(() -> worker.onMessage(inbound, context))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessage("invalid baseUrl");
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("Missing runtime config for " + ProcessorWorkerConfig.class.getName());
         verify(httpClient, never()).execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class));
     }
 
     @Test
-    void workerAllowsAbsolutePathWithoutBaseUrl() throws Exception {
+    void workerRejectsBlankBaseUrlDuringConfigBinding() {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
-        properties.setConfig(Map.of("baseUrl", ""));
-        HttpClient httpClient = mock(HttpClient.class);
-        Clock clock = Clock.systemUTC();
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, clock);
-        ProcessorWorkerConfig config = new ProcessorWorkerConfig(" ", null, 0, 0.0, null, null, null, null, null);
-        TestWorkerContext context = new TestWorkerContext(config);
 
-        AtomicReference<ClassicHttpRequest> requestRef = new AtomicReference<>();
-        when(httpClient.execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class))).thenAnswer(invocation -> {
-            ClassicHttpRequest request = invocation.getArgument(0, ClassicHttpRequest.class);
-            HttpClientResponseHandler<?> handler = invocation.getArgument(1, HttpClientResponseHandler.class);
-            requestRef.set(request);
-            BasicClassicHttpResponse response = new BasicClassicHttpResponse(200, "OK");
-            response.setEntity(new StringEntity("{\"ok\":true}", java.nio.charset.StandardCharsets.UTF_8));
-            return handler.handleResponse(response);
-        });
+        assertThatThrownBy(() -> properties.setConfig(processorConfig("")))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Unable to bind worker config for role 'processor'")
+            .hasRootCauseMessage("baseUrl must not be blank");
+    }
 
-        WorkItem inbound = inboundItem(Map.of(
-            "method", "POST",
-            "path", "https://external.example/api/test",
-            "body", Map.of("value", 1)
-        ));
-
-        WorkItem result = worker.onMessage(inbound, context);
-
-        assertThat(result).isNotNull();
-        JsonNode payload = MAPPER.readTree(result.asString());
-        assertThat(payload.path("kind").asText()).isEqualTo("http.result");
-        assertThat(payload.path("request").path("baseUrl").isNull()).isTrue();
-        assertThat(payload.path("request").path("path").asText()).isEqualTo("https://external.example/api/test");
-        assertThat(payload.path("request").path("url").asText()).isEqualTo("https://external.example/api/test");
-        assertThat(payload.path("request").path("scheme").asText()).isEqualTo("https");
-        assertThat(payload.path("outcome").path("status").asInt()).isEqualTo(200);
-
-        ClassicHttpRequest request = requestRef.get();
-        assertThat(request).isNotNull();
-        assertThat(request.getUri()).isEqualTo(URI.create("https://external.example/api/test"));
-        assertThat(request.getMethod()).isEqualTo("POST");
+    @Test
+    void workerRejectsBlankRuntimeBaseUrlBeforeProcessing() {
+        assertThatThrownBy(() -> processorRuntimeConfig(" "))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("baseUrl must not be blank");
     }
 
     @Test
     void workerEmitsTcpResultEnvelope() throws Exception {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
-        properties.setConfig(Map.of("baseUrl", "tcp://tcp.example:9100"));
+        properties.setConfig(processorConfig("tcp://tcp.example:9100"));
         HttpClient httpClient = mock(HttpClient.class);
         Clock clock = Clock.systemUTC();
         ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, clock);
@@ -431,7 +375,7 @@ class ProcessorTest {
             public void close() {
             }
         });
-        ProcessorWorkerConfig config = new ProcessorWorkerConfig("tcp://tcp.example:9100", null, 0, 0.0, null, null, null, null, null);
+        ProcessorWorkerConfig config = processorRuntimeConfig("tcp://tcp.example:9100");
         TestWorkerContext context = new TestWorkerContext(config);
 
         WorkItem inbound = inboundTcpItem("request_response", "ping");
@@ -472,7 +416,7 @@ class ProcessorTest {
                 keyStoreType: PKCS12
             """);
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
-        properties.setConfig(Map.of("baseUrl", "tcp://tcp.example:9100"));
+        properties.setConfig(processorConfig("tcp://tcp.example:9100"));
         HttpClient httpClient = mock(HttpClient.class);
         ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC());
         AtomicReference<TcpRequest> capturedRequest = new AtomicReference<>();
@@ -487,16 +431,8 @@ class ProcessorTest {
             public void close() {
             }
         });
-        ProcessorWorkerConfig config = new ProcessorWorkerConfig(
+        ProcessorWorkerConfig config = processorRuntimeConfig(
             "tcp://tcp.example:9100",
-            null,
-            0,
-            0.0,
-            null,
-            null,
-            null,
-            null,
-            null,
             Map.of("authProfile", Map.of("sut", Map.of(
                 "id", "tcp-sut",
                 "endpoints", Map.of("certs", Map.of("baseUrl", "/certs"))))));
@@ -537,21 +473,11 @@ class ProcessorTest {
             server.start();
 
             ProcessorWorkerProperties properties = newProcessorWorkerProperties();
-            properties.setConfig(Map.of("baseUrl", "tcp://127.0.0.1:" + server.port()));
+            properties.setConfig(processorConfig("tcp://127.0.0.1:" + server.port()));
             HttpClient httpClient = mock(HttpClient.class);
             Clock clock = Clock.fixed(Instant.parse("2024-02-20T12:00:00Z"), ZoneOffset.UTC);
             ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, clock);
-            ProcessorWorkerConfig config = new ProcessorWorkerConfig(
-                "tcp://127.0.0.1:" + server.port(),
-                null,
-                0,
-                0.0,
-                null,
-                null,
-                null,
-                null,
-                null
-            );
+            ProcessorWorkerConfig config = processorRuntimeConfig("tcp://127.0.0.1:" + server.port());
             TestWorkerContext context = new TestWorkerContext(config);
 
             WorkItem inbound = inboundIsoItem("MC_2BYTE_LEN_BIN_BITMAP", "RAW_HEX", "0200A1B2C3D4");
@@ -589,7 +515,7 @@ class ProcessorTest {
                 macKey: iso-secret
             """);
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
-        properties.setConfig(Map.of("baseUrl", "tcp://iso.example:5000"));
+        properties.setConfig(processorConfig("tcp://iso.example:5000"));
         HttpClient httpClient = mock(HttpClient.class);
         ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC());
         AtomicReference<TcpRequest> capturedRequest = new AtomicReference<>();
@@ -604,7 +530,7 @@ class ProcessorTest {
             public void close() {
             }
         });
-        ProcessorWorkerConfig config = new ProcessorWorkerConfig("tcp://iso.example:5000", null, 0, 0.0, null, null, null, null, null);
+        ProcessorWorkerConfig config = processorRuntimeConfig("tcp://iso.example:5000");
         TestWorkerContext context = new TestWorkerContext(config);
         WorkerInfo info = new WorkerInfo("ingress", "swarm", "ingress-instance", null, null);
         WorkItem inbound = WorkItem.json(info, Iso8583RequestEnvelope.of(new Iso8583RequestEnvelope.Iso8583Request(
@@ -638,20 +564,10 @@ class ProcessorTest {
             server.start();
 
             ProcessorWorkerProperties properties = newProcessorWorkerProperties();
-            properties.setConfig(Map.of("baseUrl", "tcp://127.0.0.1:" + server.port()));
+            properties.setConfig(processorConfig("tcp://127.0.0.1:" + server.port()));
             HttpClient httpClient = mock(HttpClient.class);
             ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC());
-            ProcessorWorkerConfig config = new ProcessorWorkerConfig(
-                "tcp://127.0.0.1:" + server.port(),
-                null,
-                0,
-                0.0,
-                null,
-                null,
-                null,
-                null,
-                null
-            );
+            ProcessorWorkerConfig config = processorRuntimeConfig("tcp://127.0.0.1:" + server.port());
             TestWorkerContext context = new TestWorkerContext(config);
 
             ResultRules rules = new ResultRules(
@@ -689,7 +605,7 @@ class ProcessorTest {
     @Test
     void workerExtractsOutcomeHeadersFromTcpResultRules() throws Exception {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
-        properties.setConfig(Map.of("baseUrl", "tcp://tcp.example:9100"));
+        properties.setConfig(processorConfig("tcp://tcp.example:9100"));
         HttpClient httpClient = mock(HttpClient.class);
         ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC());
         injectGlobalTcpTransport(worker, new TcpTransport() {
@@ -702,7 +618,7 @@ class ProcessorTest {
             public void close() {
             }
         });
-        ProcessorWorkerConfig config = new ProcessorWorkerConfig("tcp://tcp.example:9100", null, 0, 0.0, null, null, null, null, null);
+        ProcessorWorkerConfig config = processorRuntimeConfig("tcp://tcp.example:9100");
         TestWorkerContext context = new TestWorkerContext(config);
 
         ResultRules rules = new ResultRules(
@@ -738,7 +654,7 @@ class ProcessorTest {
     @Test
     void workerFailsLoudOnInvalidResultRulesRegex() throws Exception {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
-        properties.setConfig(Map.of("baseUrl", "tcp://tcp.example:9100"));
+        properties.setConfig(processorConfig("tcp://tcp.example:9100"));
         HttpClient httpClient = mock(HttpClient.class);
         ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC());
         injectGlobalTcpTransport(worker, new TcpTransport() {
@@ -765,7 +681,7 @@ class ProcessorTest {
         )).build();
 
         assertThatThrownBy(() -> worker.onMessage(inbound, new TestWorkerContext(
-            new ProcessorWorkerConfig("tcp://tcp.example:9100", null, 0, 0.0, null, null, null, null, null)
+            processorRuntimeConfig("tcp://tcp.example:9100")
         )))
             .isInstanceOf(java.util.regex.PatternSyntaxException.class);
     }
@@ -773,7 +689,7 @@ class ProcessorTest {
     @Test
     void workerFailsLoudWhenHeaderSourceIsMissingHeaderName() throws Exception {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
-        properties.setConfig(Map.of("baseUrl", "tcp://tcp.example:9100"));
+        properties.setConfig(processorConfig("tcp://tcp.example:9100"));
         HttpClient httpClient = mock(HttpClient.class);
         ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC());
         injectGlobalTcpTransport(worker, new TcpTransport() {
@@ -802,7 +718,7 @@ class ProcessorTest {
         )).build();
 
         assertThatThrownBy(() -> worker.onMessage(inbound, new TestWorkerContext(
-            new ProcessorWorkerConfig("tcp://tcp.example:9100", null, 0, 0.0, null, null, null, null, null)
+            processorRuntimeConfig("tcp://tcp.example:9100")
         )))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("header must not be blank");
@@ -811,7 +727,7 @@ class ProcessorTest {
     @Test
     void workerFailsLoudOnDuplicateDimensionsAfterNormalization() throws Exception {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
-        properties.setConfig(Map.of("baseUrl", "tcp://tcp.example:9100"));
+        properties.setConfig(processorConfig("tcp://tcp.example:9100"));
         HttpClient httpClient = mock(HttpClient.class);
         ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC());
         injectGlobalTcpTransport(worker, new TcpTransport() {
@@ -841,7 +757,7 @@ class ProcessorTest {
         )).build();
 
         assertThatThrownBy(() -> worker.onMessage(inbound, new TestWorkerContext(
-            new ProcessorWorkerConfig("tcp://tcp.example:9100", null, 0, 0.0, null, null, null, null, null)
+            processorRuntimeConfig("tcp://tcp.example:9100")
         )))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("Duplicate ResultRules dimension after normalization");
@@ -850,10 +766,10 @@ class ProcessorTest {
     @Test
     void workerRejectsIso8583RawHexPayloadContainingWhitespace() throws Exception {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
-        properties.setConfig(Map.of("baseUrl", "tcp://127.0.0.1:6036"));
+        properties.setConfig(processorConfig("tcp://127.0.0.1:6036"));
         HttpClient httpClient = mock(HttpClient.class);
         ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC());
-        ProcessorWorkerConfig config = new ProcessorWorkerConfig("tcp://127.0.0.1:6036", null, 0, 0.0, null, null, null, null, null);
+        ProcessorWorkerConfig config = processorRuntimeConfig("tcp://127.0.0.1:6036");
         TestWorkerContext context = new TestWorkerContext(config);
 
         WorkItem inbound = inboundIsoItem("MC_2BYTE_LEN_BIN_BITMAP", "RAW_HEX", "02 00");
@@ -867,10 +783,10 @@ class ProcessorTest {
     @Test
     void workerRejectsUnsupportedIso8583PayloadAdapter() throws Exception {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
-        properties.setConfig(Map.of("baseUrl", "tcp://127.0.0.1:6036"));
+        properties.setConfig(processorConfig("tcp://127.0.0.1:6036"));
         HttpClient httpClient = mock(HttpClient.class);
         ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC());
-        ProcessorWorkerConfig config = new ProcessorWorkerConfig("tcp://127.0.0.1:6036", null, 0, 0.0, null, null, null, null, null);
+        ProcessorWorkerConfig config = processorRuntimeConfig("tcp://127.0.0.1:6036");
         TestWorkerContext context = new TestWorkerContext(config);
 
         WorkItem inbound = inboundIsoItem("MC_2BYTE_LEN_BIN_BITMAP", "UNSUPPORTED_ADAPTER", "<fields/>");
@@ -888,7 +804,7 @@ class ProcessorTest {
             server.start();
 
             ProcessorWorkerProperties properties = newProcessorWorkerProperties();
-            properties.setConfig(Map.of("baseUrl", "tcp://127.0.0.1:" + server.port()));
+            properties.setConfig(processorConfig("tcp://127.0.0.1:" + server.port()));
             HttpClient httpClient = mock(HttpClient.class);
             ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC());
 
@@ -904,17 +820,7 @@ class ProcessorTest {
                 TcpTransportConfig.ConnectionReuse.NONE,
                 1
             );
-            ProcessorWorkerConfig config = new ProcessorWorkerConfig(
-                "tcp://127.0.0.1:" + server.port(),
-                null,
-                0,
-                0.0,
-                null,
-                null,
-                null,
-                null,
-                transport
-            );
+            ProcessorWorkerConfig config = processorRuntimeConfig("tcp://127.0.0.1:" + server.port(), transport);
 
             WorkItem inbound = inboundIsoItem("MC_2BYTE_LEN_BIN_BITMAP", "RAW_HEX", "0200A1B2C3D4");
             WorkItem result = worker.onMessage(inbound, new TestWorkerContext(config));
@@ -933,10 +839,10 @@ class ProcessorTest {
     @Test
     void workerRejectsUnknownIso8583WireProfile() throws Exception {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
-        properties.setConfig(Map.of("baseUrl", "tcp://127.0.0.1:6036"));
+        properties.setConfig(processorConfig("tcp://127.0.0.1:6036"));
         HttpClient httpClient = mock(HttpClient.class);
         ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC());
-        ProcessorWorkerConfig config = new ProcessorWorkerConfig("tcp://127.0.0.1:6036", null, 0, 0.0, null, null, null, null, null);
+        ProcessorWorkerConfig config = processorRuntimeConfig("tcp://127.0.0.1:6036");
         TestWorkerContext context = new TestWorkerContext(config);
 
         WorkItem inbound = inboundIsoItem("UNKNOWN_PROFILE", "RAW_HEX", "0102");
@@ -948,30 +854,23 @@ class ProcessorTest {
     }
 
     @Test
-    void workerThrowsWhenTcpBaseUrlMissing() throws Exception {
+    void workerRejectsBlankTcpBaseUrlDuringConfigBinding() {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
-        properties.setConfig(Map.of("baseUrl", ""));
-        HttpClient httpClient = mock(HttpClient.class);
-        Clock clock = Clock.systemUTC();
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, clock);
-        ProcessorWorkerConfig config = new ProcessorWorkerConfig(" ", null, 0, 0.0, null, null, null, null, null);
-        TestWorkerContext context = new TestWorkerContext(config);
 
-        WorkItem inbound = inboundTcpItem("REQUEST_RESPONSE", "ping");
-
-        assertThatThrownBy(() -> worker.onMessage(inbound, context))
+        assertThatThrownBy(() -> properties.setConfig(processorConfig("")))
             .isInstanceOf(IllegalArgumentException.class)
-            .hasMessage("invalid TCP baseUrl");
+            .hasMessageContaining("Unable to bind worker config for role 'processor'")
+            .hasRootCauseMessage("baseUrl must not be blank");
     }
 
     @Test
     void workerRejectsLegacyPayloadWithoutKind() throws Exception {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
-        properties.setConfig(Map.of("baseUrl", "http://sut"));
+        properties.setConfig(processorConfig("http://sut"));
         HttpClient httpClient = mock(HttpClient.class);
         Clock clock = Clock.systemUTC();
         ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, clock);
-        ProcessorWorkerConfig config = new ProcessorWorkerConfig("http://sut", null, 0, 0.0, null, null, null, null, null);
+        ProcessorWorkerConfig config = processorRuntimeConfig("http://sut");
         TestWorkerContext context = new TestWorkerContext(config);
 
         WorkItem legacyInbound = WorkItem.json(
@@ -988,7 +887,7 @@ class ProcessorTest {
     @Test
     void perThreadClientUsesSystemProxyRoutePlanner() throws Exception {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
-        properties.setConfig(Map.of("baseUrl", "http://sut"));
+        properties.setConfig(processorConfig("http://sut"));
         ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties);
 
         Field handlersField = ProcessorWorkerImpl.class.getDeclaredField("protocolHandlers");
@@ -1021,6 +920,50 @@ class ProcessorTest {
         WorkerInvocationContext invocationContext = instantiateInvocationContext(definition, state, context, inbound);
         return interceptor.intercept(invocationContext, invocation ->
                 worker.onMessage(invocation.message(), invocation.workerContext()));
+    }
+
+    private static Map<String, Object> processorConfig(String baseUrl) {
+        return Map.of(
+            "baseUrl", baseUrl,
+            "mode", ProcessorWorkerConfig.Mode.THREAD_COUNT.name(),
+            "threadCount", 1
+        );
+    }
+
+    private static ProcessorWorkerConfig processorRuntimeConfig(String baseUrl) {
+        return processorRuntimeConfig(baseUrl, null, null, Map.of());
+    }
+
+    private static ProcessorWorkerConfig processorRuntimeConfig(String baseUrl, Boolean sslVerify) {
+        return processorRuntimeConfig(baseUrl, sslVerify, null, Map.of());
+    }
+
+    private static ProcessorWorkerConfig processorRuntimeConfig(String baseUrl, TcpTransportConfig tcpTransport) {
+        return processorRuntimeConfig(baseUrl, null, tcpTransport, Map.of());
+    }
+
+    private static ProcessorWorkerConfig processorRuntimeConfig(String baseUrl, Map<String, Object> privateConfig) {
+        return processorRuntimeConfig(baseUrl, null, null, privateConfig);
+    }
+
+    private static ProcessorWorkerConfig processorRuntimeConfig(
+        String baseUrl,
+        Boolean sslVerify,
+        TcpTransportConfig tcpTransport,
+        Map<String, Object> privateConfig
+    ) {
+        return new ProcessorWorkerConfig(
+            baseUrl,
+            ProcessorWorkerConfig.Mode.THREAD_COUNT,
+            1,
+            null,
+            null,
+            null,
+            null,
+            sslVerify,
+            tcpTransport,
+            privateConfig
+        );
     }
 
     private static WorkItem inboundItem(Map<String, Object> payload) {
@@ -1105,6 +1048,10 @@ class ProcessorTest {
             previousTransport.close();
         }
         globalTransportField.set(tcpHandler, transport);
+
+        Field activeConfigField = tcpHandler.getClass().getDeclaredField("activeConfig");
+        activeConfigField.setAccessible(true);
+        activeConfigField.set(tcpHandler, TcpTransportConfig.defaults());
     }
 
     private static <T> T withScenarioRoot(Path scenarioRoot, ThrowingSupplier<T> action) throws Exception {

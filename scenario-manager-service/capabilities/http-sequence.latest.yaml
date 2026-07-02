@@ -11,46 +11,38 @@ ui:
 config:
   - name: baseUrl
     type: string
-    default: ""
+    required: true
     ui:
       label: Base URL
       group: HTTP
   - name: templateRoot
     type: string
-    default: "/app/templates/http"
+    required: true
     ui:
       label: Template root
       group: Templates
   - name: serviceId
     type: string
-    default: "default"
+    required: true
     ui:
       label: Service ID
       group: Templates
   - name: threadCount
-    type: number
-    default: 1
+    type: integer
+    required: true
     ui:
       label: Max in-flight journeys
       group: Runtime
   - name: steps
     type: json
-    default: []
+    required: true
     multiline: true
     ui:
       label: Steps
       group: Journey
   - name: debugCapture
     type: json
-    default:
-      mode: "ERROR_ONLY"
-      samplePct: 0.0
-      maxBodyBytes: 262144
-      maxJourneyBytes: 1048576
-      includeHeaders: true
-      includeRequest: false
-      bodyPreviewBytes: 4096
-      redisTtlSeconds: 120
+    required: true
     multiline: true
     ui:
       label: Debug capture

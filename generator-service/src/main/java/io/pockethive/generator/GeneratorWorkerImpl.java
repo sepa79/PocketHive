@@ -54,13 +54,11 @@ import org.springframework.stereotype.Component;
 )
 class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
 
-  private final GeneratorWorkerProperties properties;
   private final TemplateRenderer templateRenderer;
   private final MessageTemplateRenderer messageTemplateRenderer;
 
   @Autowired
   GeneratorWorkerImpl(GeneratorWorkerProperties properties, TemplateRenderer templateRenderer) {
-    this.properties = properties;
     this.templateRenderer = templateRenderer;
     this.messageTemplateRenderer = new MessageTemplateRenderer(templateRenderer);
   }
@@ -104,12 +102,19 @@ class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
    */
   @Override
   public WorkItem onMessage(WorkItem seed, WorkerContext context) {
-    GeneratorWorkerConfig config = context.configOrDefault(GeneratorWorkerConfig.class, properties::defaultConfig);
+    GeneratorWorkerConfig config = context.requireConfig(GeneratorWorkerConfig.class);
     context.statusPublisher()
-        .update(status -> status
-            .data("path", config.message().path())
-            .data("method", config.message().method())
-            .data("enabled", context.enabled()));
+        .update(status -> {
+          GeneratorWorkerConfig.Message message = config.message();
+          status
+              .data("bodyType", message.bodyType())
+              .data("enabled", context.enabled());
+          if (message.bodyType() == MessageBodyType.HTTP) {
+            status
+                .data("path", message.path())
+                .data("method", message.method());
+          }
+        });
     WorkItem message = buildMessage(config, context, seed);
     return appendMessageStep(seed, message, context);
   }

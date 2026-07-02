@@ -1,28 +1,30 @@
 ---
 id: "local-rest-plan-demo"
 name: "Local REST Plan Demo"
-description: "Local REST swarm that uses a scenario plan to drive the entire lifecycle:\
-  \ start all workers, change generator rate, stop and restart the generator, then\
-  \ stop the swarm without issuing an explicit swarm-start command.\n"
+description: "Local REST swarm that uses a scenario plan to drive the entire
+  lifecycle: start all workers, change generator rate, stop and restart the
+  generator, then stop the swarm without issuing an explicit swarm-start
+  command.\n"
 template:
   image: "swarm-controller:latest"
   bees:
-  - role: "generator"
-    id: generator
-    image: "generator:latest"
-    work:
-      in:
-        in: null
-      out:
-        out: "genQ"
-    ports:
-      - { id: out, direction: out }
-    env: {}
-    config:
-      inputs:
-        scheduler:
-          ratePerSec: 10
-      worker:
+    - role: "generator"
+      id: generator
+      image: "generator:latest"
+      work:
+        in:
+          in: null
+        out:
+          out: "genQ"
+      ports:
+        - { id: out, direction: out }
+      env: {}
+      config:
+        inputs:
+          type: SCHEDULER
+          scheduler:
+            ratePerSec: 10
+            maxMessages: 0
         message:
           bodyType: "HTTP"
           path: "/test"
@@ -30,62 +32,71 @@ template:
           body: "{\"event\":\"local-rest-plan-demo\"}"
           headers:
             content-type: "application/json"
-  - role: "processor"
-    id: processor
-    image: "processor:latest"
-    work:
-      in:
-        in: "genQ"
-      out:
-        out: "finalQ"
-    ports:
-      - { id: in, direction: in }
-      - { id: out, direction: out }
-    env: {}
-    config:
-      worker:
+    - role: "processor"
+      id: processor
+      image: "processor:latest"
+      work:
+        in:
+          in: "genQ"
+        out:
+          out: "finalQ"
+      ports:
+        - { id: in, direction: in }
+        - { id: out, direction: out }
+      env: {}
+      config:
         baseUrl: "{{ sut.endpoints['default'].baseUrl }}/api"
-  - role: "postprocessor"
-    id: postprocessor
-    image: "postprocessor:latest"
-    work:
-      in:
-        in: "finalQ"
-      out:
-        out: null
-    ports:
-      - { id: in, direction: in }
-    env: {}
+        mode: THREAD_COUNT
+        threadCount: 1
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
+    - role: "postprocessor"
+      id: postprocessor
+      image: "postprocessor:latest"
+      config:
+        forwardToOutput: false
+        txOutcomeSinkMode: NONE
+        dropTxOutcomeWithoutCallId: true
+      work:
+        in:
+          in: "finalQ"
+        out:
+          out: null
+      ports:
+        - { id: in, direction: in }
+      env: {}
 trafficPolicy: null
 plan:
   bees:
-  - role: "generator"
-    steps:
-    - stepId: "gen-rate-fast"
-      name: "Increase generator rate to 50/s"
-      time: "PT5S"
-      type: "config-update"
-      config:
-        inputs:
-          scheduler:
-            ratePerSec: 50
-    - stepId: "gen-stop-1"
-      name: "Stop generator"
-      time: "PT15S"
-      type: "stop"
-    - stepId: "gen-start-2"
-      name: "Restart generator"
-      time: "PT35S"
-      type: "start"
+    - role: "generator"
+      steps:
+        - stepId: "gen-rate-fast"
+          name: "Increase generator rate to 50/s"
+          time: "PT5S"
+          type: "config-update"
+          config:
+            inputs:
+              scheduler:
+                ratePerSec: 50
+        - stepId: "gen-stop-1"
+          name: "Stop generator"
+          time: "PT15S"
+          type: "stop"
+        - stepId: "gen-start-2"
+          name: "Restart generator"
+          time: "PT35S"
+          type: "start"
   swarm:
-  - stepId: "swarm-start"
-    name: "Enable swarm workloads"
-    time: "PT1S"
-    type: "start"
-  - stepId: "swarm-stop"
-    name: "Stop swarm workloads"
-    time: "PT40S"
-    type: "stop"
+    - stepId: "swarm-start"
+      name: "Enable swarm workloads"
+      time: "PT1S"
+      type: "start"
+    - stepId: "swarm-stop"
+      name: "Stop swarm workloads"
+      time: "PT40S"
+      type: "stop"
 
 topology:
   version: 1

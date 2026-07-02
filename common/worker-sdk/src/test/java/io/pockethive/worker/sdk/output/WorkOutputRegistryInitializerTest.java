@@ -1,6 +1,7 @@
 package io.pockethive.worker.sdk.output;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.pockethive.worker.sdk.config.RabbitOutputProperties;
 import io.pockethive.worker.sdk.config.WorkInputConfig;
@@ -54,7 +55,7 @@ class WorkOutputRegistryInitializerTest {
         WorkerRegistry workerRegistry = new WorkerRegistry(List.of(noopDefinition, rabbitDefinition));
         WorkOutputRegistry outputRegistry = new WorkOutputRegistry();
         MapConfigurationPropertySource source = new MapConfigurationPropertySource(Map.of(
-            "pockethive.outputs.processor.routing-key", "custom.out"
+            "pockethive.outputs.rabbit.routing-key", "custom.out"
         ));
         WorkOutputConfigBinder binder = new WorkOutputConfigBinder(new Binder(source));
         RabbitTemplate rabbitTemplate = new RabbitTemplate();
@@ -111,6 +112,38 @@ class WorkOutputRegistryInitializerTest {
         initializer.afterSingletonsInstantiated();
 
         assertThat(outputRegistry.get("priorityWorker")).isSameAs(preferredOutput);
+    }
+
+    @Test
+    void rejectsNonNoneOutputWithoutSupportingFactory() {
+        WorkerDefinition definition = new WorkerDefinition(
+            "redisWorker",
+            Object.class,
+            WorkerInputType.SCHEDULER,
+            "redis",
+            WorkIoBindings.none(),
+            Void.class,
+            WorkInputConfig.class,
+            WorkOutputConfig.class,
+            WorkerOutputType.REDIS,
+            "",
+            Set.of()
+        );
+        WorkerRegistry workerRegistry = new WorkerRegistry(List.of(definition));
+        WorkOutputRegistry outputRegistry = new WorkOutputRegistry();
+        WorkOutputConfigBinder binder = new WorkOutputConfigBinder(new Binder(new MapConfigurationPropertySource(Map.of())));
+
+        WorkOutputRegistryInitializer initializer = new WorkOutputRegistryInitializer(
+            workerRegistry,
+            outputRegistry,
+            binder,
+            List.of(new NoopWorkOutputFactory())
+        );
+
+        assertThatThrownBy(initializer::afterSingletonsInstantiated)
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("No WorkOutputFactory found for worker 'redisWorker'")
+            .hasMessageContaining("output=REDIS");
     }
 
     private static class OrderedOutputFactory implements WorkOutputFactory, Ordered {

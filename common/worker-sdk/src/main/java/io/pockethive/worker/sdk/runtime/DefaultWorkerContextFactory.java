@@ -114,7 +114,7 @@ public final class DefaultWorkerContextFactory implements WorkerContextFactory {
         );
         ObservabilityContext observabilityContext = resolveObservabilityContext(info, message);
         HistoryPolicy historyPolicy = resolveHistoryPolicy(definition);
-        return new DefaultWorkerContext(info, definition, state, logger, meterRegistry, observationRegistry, beanResolver, observabilityContext, historyPolicy);
+        return new DefaultWorkerContext(info, state, logger, meterRegistry, observationRegistry, observabilityContext, historyPolicy);
     }
 
     private static String resolveIdentifier(
@@ -142,12 +142,10 @@ public final class DefaultWorkerContextFactory implements WorkerContextFactory {
 
     private record DefaultWorkerContext(
         WorkerInfo info,
-        WorkerDefinition definition,
         WorkerState state,
         Logger logger,
         MeterRegistry meterRegistry,
         ObservationRegistry observationRegistry,
-        Function<Class<?>, Object> beanResolver,
         ObservabilityContext observabilityContext,
         HistoryPolicy historyPolicy
     ) implements WorkerContext {
@@ -165,17 +163,7 @@ public final class DefaultWorkerContextFactory implements WorkerContextFactory {
         @Override
         public <C> C config(Class<C> type) {
             Objects.requireNonNull(type, "type");
-            Optional<C> fromState = state.config(type);
-            if (fromState.isPresent()) {
-                return fromState.get();
-            }
-            if (definition.configType() != Void.class && type.isAssignableFrom(definition.configType())) {
-                Object bean = beanResolver.apply(definition.configType());
-                if (type.isInstance(bean)) {
-                    return type.cast(bean);
-                }
-            }
-            return null;
+            return state.config(type).orElse(null);
         }
 
         @Override

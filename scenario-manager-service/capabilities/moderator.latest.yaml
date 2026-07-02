@@ -9,15 +9,9 @@ ui:
   shape: "pentagon"
   abbreviation: "MO"
 config:
-  - name: enabled
-    type: boolean
-    default: false
-    ui:
-      label: Enabled
-      group: General
   - name: mode.type
     type: string
-    default: "pass-through"
+    required: true
     options:
       - "pass-through"
       - "rate-per-sec"
@@ -27,7 +21,7 @@ config:
       group: Mode
   - name: mode.ratePerSec
     type: number
-    default: 0
+    required: true
     min: 0
     max: 100000
     when:
@@ -39,7 +33,7 @@ config:
       unit: msg/s
   - name: mode.sine.minRatePerSec
     type: number
-    default: 0
+    required: true
     min: 0
     max: 100000
     when:
@@ -51,7 +45,7 @@ config:
       unit: msg/s
   - name: mode.sine.maxRatePerSec
     type: number
-    default: 0
+    required: true
     min: 0
     max: 100000
     when:
@@ -63,7 +57,7 @@ config:
       unit: msg/s
   - name: mode.sine.periodSeconds
     type: number
-    default: 60
+    required: true
     min: 1
     when:
       mode.type: "sine"
@@ -74,7 +68,7 @@ config:
       unit: s
   - name: mode.sine.phaseOffsetSeconds
     type: number
-    default: 0
+    required: true
     when:
       mode.type: "sine"
     ui:

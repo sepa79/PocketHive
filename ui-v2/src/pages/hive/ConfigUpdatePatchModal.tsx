@@ -1,13 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   capabilityEntryUiString,
-  formatCapabilityValue,
   groupCapabilityConfigEntries,
   matchesCapabilityWhen,
   type CapabilityConfigEntry,
 } from '../../lib/capabilities'
-
-type ConfigFormValue = string | boolean
+import {
+  configInputStep,
+  configInputType,
+  convertFormValue,
+  formatValueForInput,
+  isConfigTextarea,
+  type ConfigFormValue,
+} from './ConfigUpdatePatchModalForm'
 
 type ConfigUpdatePatchModalProps = {
   open: boolean
@@ -20,10 +25,6 @@ type ConfigUpdatePatchModalProps = {
   onClose: () => void
   onApply: (patch: Record<string, unknown>) => void | Promise<void>
 }
-
-type ConversionResult =
-  | { ok: true; apply: boolean; value: unknown }
-  | { ok: false; message: string }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -64,83 +65,10 @@ function assignNestedValue(target: Record<string, unknown>, path: string, value:
   }
 }
 
-function formatValueForInput(entry: CapabilityConfigEntry, value: unknown): ConfigFormValue {
-  const normalizedType = entry.type.trim().toLowerCase()
-  if (normalizedType === 'boolean' || normalizedType === 'bool') {
-    if (typeof value === 'boolean') return value
-    if (typeof value === 'number') return value !== 0
-    if (typeof value === 'string') {
-      const normalized = value.trim().toLowerCase()
-      if (normalized === 'true') return true
-      if (normalized === 'false') return false
-    }
-    return false
-  }
-  if (normalizedType === 'json') {
-    if (value === undefined || value === null) return ''
-    if (typeof value === 'string') {
-      const trimmed = value.trim()
-      if (!trimmed) return ''
-      try {
-        return JSON.stringify(JSON.parse(trimmed), null, 2)
-      } catch {
-        return value
-      }
-    }
-    try {
-      return JSON.stringify(value, null, 2)
-    } catch {
-      return ''
-    }
-  }
-  if (normalizedType === 'number' || normalizedType === 'int' || normalizedType === 'integer') {
-    if (typeof value === 'number') return Number.isFinite(value) ? String(value) : ''
-    if (typeof value === 'string') return value
-    return ''
-  }
-  return formatCapabilityValue(value)
-}
-
-function convertFormValue(entry: CapabilityConfigEntry, rawValue: ConfigFormValue): ConversionResult {
-  const normalizedType = entry.type.trim().toLowerCase()
-  if (normalizedType === 'boolean' || normalizedType === 'bool') {
-    return { ok: true, apply: true, value: rawValue === true }
-  }
-  if (normalizedType === 'json') {
-    const text = typeof rawValue === 'string' ? rawValue.trim() : ''
-    if (!text) return { ok: true, apply: false, value: undefined }
-    try {
-      return { ok: true, apply: true, value: JSON.parse(text) }
-    } catch {
-      return { ok: false, message: `${entry.name} must be valid JSON.` }
-    }
-  }
-  if (normalizedType === 'number' || normalizedType === 'int' || normalizedType === 'integer') {
-    const text = typeof rawValue === 'string' ? rawValue.trim() : ''
-    if (!text) return { ok: true, apply: false, value: undefined }
-    const parsed = Number(text)
-    if (!Number.isFinite(parsed)) {
-      return { ok: false, message: `${entry.name} must be a number.` }
-    }
-    return { ok: true, apply: true, value: parsed }
-  }
-  if (typeof rawValue === 'string') {
-    if (!rawValue.trim()) return { ok: true, apply: false, value: undefined }
-    return { ok: true, apply: true, value: rawValue }
-  }
-  return { ok: true, apply: false, value: undefined }
-}
-
 function extractUnit(entry: CapabilityConfigEntry): string | null {
   if (!entry.ui || typeof entry.ui !== 'object') return null
   const value = (entry.ui as Record<string, unknown>).unit
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
-}
-
-function extractStep(entry: CapabilityConfigEntry): number | undefined {
-  if (!entry.ui || typeof entry.ui !== 'object') return undefined
-  const value = (entry.ui as Record<string, unknown>).step
-  return typeof value === 'number' ? value : undefined
 }
 
 export function ConfigUpdatePatchModal({
@@ -344,7 +272,7 @@ export function ConfigUpdatePatchModal({
                         })}
                       </select>
                     )
-                  } else if (normalizedType === 'boolean' || normalizedType === 'bool') {
+                  } else if (normalizedType === 'boolean') {
                     field = (
                       <label className="configPatchBoolean">
                         <input
@@ -355,7 +283,7 @@ export function ConfigUpdatePatchModal({
                         <span>{value === true ? 'true' : 'false'}</span>
                       </label>
                     )
-                  } else if (normalizedType === 'json' || entry.multiline || normalizedType === 'text') {
+                  } else if (isConfigTextarea(entry)) {
                     field = (
                       <textarea
                         className={`${fieldClass} configPatchTextarea`}
@@ -368,10 +296,10 @@ export function ConfigUpdatePatchModal({
                     field = (
                       <input
                         className={fieldClass}
-                        type={normalizedType === 'number' || normalizedType === 'int' || normalizedType === 'integer' ? 'number' : 'text'}
+                        type={configInputType(entry)}
                         min={entry.min}
                         max={entry.max}
-                        step={extractStep(entry)}
+                        step={configInputStep(entry)}
                         value={typeof value === 'string' ? value : ''}
                         onChange={(event) => setValue(event.currentTarget.value)}
                       />
@@ -382,12 +310,15 @@ export function ConfigUpdatePatchModal({
                     <div key={entry.name} className={isIncluded ? 'configPatchField configPatchFieldIncluded' : 'configPatchField'}>
 	                      <div className="configPatchFieldHeader">
 	                        <label className="configPatchInclude">
-	                          <input
-	                            type="checkbox"
-	                            aria-label={`Include ${label} in patch`}
-	                            checked={isIncluded}
-	                            onChange={(event) => setEnabled((previous) => ({ ...previous, [entry.name]: event.currentTarget.checked }))}
-	                          />
+		                          <input
+		                            type="checkbox"
+		                            aria-label={`Include ${label} in patch`}
+		                            checked={isIncluded}
+		                            onChange={(event) => {
+		                              const checked = event.currentTarget.checked
+		                              setEnabled((previous) => ({ ...previous, [entry.name]: checked }))
+		                            }}
+		                          />
 	                          <span className="configPatchIncludeText">
 	                            <span>{label}</span>
 	                            <span className="configPatchIncludeHint">include in patch</span>

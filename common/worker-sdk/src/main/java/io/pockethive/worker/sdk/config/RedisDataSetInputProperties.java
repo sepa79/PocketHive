@@ -8,6 +8,10 @@ import java.util.List;
  */
 public class RedisDataSetInputProperties implements WorkInputConfig {
 
+    private static final int MIN_PORT = 1;
+    private static final int MAX_PORT = 65_535;
+    private static final double MIN_RATE_PER_SEC = 0.0;
+
     public enum PickStrategy {
         ROUND_ROBIN,
         WEIGHTED_RANDOM
@@ -15,15 +19,14 @@ public class RedisDataSetInputProperties implements WorkInputConfig {
 
     private boolean enabled = false;
     private String host;
-    private int port = 6379;
+    private Integer port;
     private String username;
     private String password;
-    private boolean ssl = false;
+    private Boolean ssl;
     private String listName;
-    private String sourcesJson;
-    private List<Source> sources = List.of();
-    private PickStrategy pickStrategy = PickStrategy.ROUND_ROBIN;
-    private double ratePerSec = 1.0;
+    private List<Source> sources;
+    private PickStrategy pickStrategy;
+    private Double ratePerSec;
     private long initialDelayMs = 0L;
     private long tickIntervalMs = 1_000L;
 
@@ -44,11 +47,11 @@ public class RedisDataSetInputProperties implements WorkInputConfig {
     }
 
     public int getPort() {
-        return port;
+        return requirePresent(port, "port");
     }
 
     public void setPort(int port) {
-        this.port = Math.max(1, port);
+        this.port = port;
     }
 
     public String getUsername() {
@@ -68,7 +71,7 @@ public class RedisDataSetInputProperties implements WorkInputConfig {
     }
 
     public boolean isSsl() {
-        return ssl;
+        return requirePresent(ssl, "ssl");
     }
 
     public void setSsl(boolean ssl) {
@@ -84,15 +87,7 @@ public class RedisDataSetInputProperties implements WorkInputConfig {
     }
 
     public List<Source> getSources() {
-        return sources;
-    }
-
-    public String getSourcesJson() {
-        return sourcesJson;
-    }
-
-    public void setSourcesJson(String sourcesJson) {
-        this.sourcesJson = normalise(sourcesJson);
+        return sources == null ? List.of() : sources;
     }
 
     public void setSources(List<Source> sources) {
@@ -101,14 +96,17 @@ public class RedisDataSetInputProperties implements WorkInputConfig {
             return;
         }
         List<Source> normalised = new ArrayList<>(sources.size());
+        int index = 0;
         for (Source source : sources) {
             if (source == null) {
-                continue;
+                throw new IllegalArgumentException("sources[" + index + "] must be an object");
             }
+            validateSource(source, "sources[" + index + "]");
             Source copy = new Source();
             copy.setListName(source.getListName());
             copy.setWeight(source.getWeight());
             normalised.add(copy);
+            index++;
         }
         this.sources = List.copyOf(normalised);
     }
@@ -118,15 +116,15 @@ public class RedisDataSetInputProperties implements WorkInputConfig {
     }
 
     public void setPickStrategy(PickStrategy pickStrategy) {
-        this.pickStrategy = pickStrategy == null ? PickStrategy.ROUND_ROBIN : pickStrategy;
+        this.pickStrategy = pickStrategy;
     }
 
     public double getRatePerSec() {
-        return ratePerSec;
+        return requireRatePerSec(ratePerSec, "ratePerSec");
     }
 
     public void setRatePerSec(double ratePerSec) {
-        this.ratePerSec = Math.max(0.0, ratePerSec);
+        this.ratePerSec = ratePerSec;
     }
 
     public long getInitialDelayMs() {
@@ -145,6 +143,24 @@ public class RedisDataSetInputProperties implements WorkInputConfig {
         this.tickIntervalMs = Math.max(100L, tickIntervalMs);
     }
 
+    @Override
+    public void validateConfigured(String prefix) {
+        requireNonBlank(host, prefix + ".host");
+        requirePort(port, prefix + ".port");
+        requirePresent(ssl, prefix + ".ssl");
+        requirePresent(pickStrategy, prefix + ".pickStrategy");
+        requireRatePerSec(ratePerSec, prefix + ".ratePerSec");
+        boolean hasListName = listName != null;
+        boolean hasSources = !getSources().isEmpty();
+        if (hasListName == hasSources) {
+            throw new IllegalStateException(
+                prefix + " must configure exactly one source mode: listName or sources");
+        }
+        for (int i = 0; i < getSources().size(); i++) {
+            validateSource(getSources().get(i), prefix + ".sources[" + i + "]");
+        }
+    }
+
     private static String normalise(String value) {
         if (value == null) {
             return null;
@@ -153,9 +169,47 @@ public class RedisDataSetInputProperties implements WorkInputConfig {
         return trimmed.isEmpty() ? null : trimmed;
     }
 
+    private static String requireNonBlank(String value, String name) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalStateException(name + " must be configured");
+        }
+        return value;
+    }
+
+    private static <T> T requirePresent(T value, String name) {
+        if (value == null) {
+            throw new IllegalStateException(name + " must be configured");
+        }
+        return value;
+    }
+
+    private static int requirePort(Integer value, String name) {
+        int port = requirePresent(value, name);
+        if (port < MIN_PORT || port > MAX_PORT) {
+            throw new IllegalStateException(name + " must be between " + MIN_PORT + " and " + MAX_PORT);
+        }
+        return port;
+    }
+
+    private static double requireRatePerSec(Double value, String name) {
+        double rate = requirePresent(value, name);
+        if (!Double.isFinite(rate) || rate < MIN_RATE_PER_SEC) {
+            throw new IllegalStateException(name + " must be >= " + MIN_RATE_PER_SEC);
+        }
+        return rate;
+    }
+
+    private static void validateSource(Source source, String prefix) {
+        requireNonBlank(source.getListName(), prefix + ".listName");
+        double weight = requirePresent(source.weight, prefix + ".weight");
+        if (!Double.isFinite(weight) || weight <= 0.0) {
+            throw new IllegalStateException(prefix + ".weight must be > 0");
+        }
+    }
+
     public static final class Source {
         private String listName;
-        private double weight = 1.0;
+        private Double weight;
 
         public String getListName() {
             return listName;
@@ -166,7 +220,7 @@ public class RedisDataSetInputProperties implements WorkInputConfig {
         }
 
         public double getWeight() {
-            return weight;
+            return requirePresent(weight, "weight");
         }
 
         public void setWeight(double weight) {
@@ -181,7 +235,7 @@ public class RedisDataSetInputProperties implements WorkInputConfig {
             if (!(other instanceof Source source)) {
                 return false;
             }
-            return Double.compare(weight, source.weight) == 0
+            return java.util.Objects.equals(weight, source.weight)
                 && java.util.Objects.equals(listName, source.listName);
         }
 

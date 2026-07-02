@@ -13,16 +13,15 @@ template:
           scheduler:
             ratePerSec: 5
             maxMessages: 20
-        worker:
-          message:
-            bodyType: SIMPLE
-            body: |
-              {
-                "message": "ECHO_TEST_{{ eval('#randInt(1000, 9999)') }}",
-                "timestamp": "{{ eval("#date_format(now, 'yyyy-MM-dd HH:mm:ss')") }}"
-              }
-            headers:
-              x-ph-call-id: tcp-echo
+        message:
+          bodyType: SIMPLE
+          body: |
+            {
+              "message": "ECHO_TEST_{{ eval('#randInt(1000, 9999)') }}",
+              "timestamp": "{{ eval("#date_format(now, 'yyyy-MM-dd HH:mm:ss')") }}"
+            }
+          headers:
+            x-ph-call-id: tcp-echo
       work:
         out:
           out: build
@@ -32,9 +31,9 @@ template:
       id: request-builder
       image: request-builder:latest
       config:
-        worker:
-          templateRoot: /app/scenario/templates/tcp
-          serviceId: default
+        templateRoot: /app/scenario/templates/tcp
+        serviceId: default
+        passThroughOnMissingTemplate: false
       work:
         in:
           in: build
@@ -48,13 +47,18 @@ template:
       image: processor:latest
       config:
         baseUrl: "{{ sut.endpoints['tcp-server'].baseUrl }}"
-        worker:
-          tcpTransport:
-            type: socket
-            connectionReuse: PER_THREAD
-            maxRetries: 2
-            connectTimeoutMs: 2000
-            readTimeoutMs: 3000
+        mode: THREAD_COUNT
+        threadCount: 1
+        tcpTransport:
+          type: socket
+          connectionReuse: PER_THREAD
+          maxRetries: 2
+          connectTimeoutMs: 2000
+          readTimeoutMs: 3000
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
       work:
         in:
           in: proc
@@ -67,9 +71,9 @@ template:
       id: postprocessor
       image: postprocessor:latest
       config:
-        worker:
-          postprocessor:
-            publish-all-metrics: true
+        forwardToOutput: false
+        txOutcomeSinkMode: NONE
+        dropTxOutcomeWithoutCallId: true
       work:
         in:
           in: post

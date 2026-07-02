@@ -22,10 +22,9 @@ template:
             maxMessages: 1
         outputs:
           type: RABBITMQ
-        worker:
-          message:
-            bodyType: SIMPLE
-            body: "{}"
+        message:
+          bodyType: SIMPLE
+          body: "{}"
     - role: http-sequence
       id: http-sequence
       image: http-sequence:latest
@@ -38,33 +37,36 @@ template:
         - { id: in, direction: in }
         - { id: out, direction: out }
       config:
-        worker:
-          baseUrl: "{{ sut.endpoints['default'].baseUrl }}"
-          templateRoot: /app/scenario/templates/http
-          serviceId: sequence
-          threadCount: 1
-          steps:
-            - id: step-1-start
-              callId: start
-            - id: step-2-profile
-              callId: profile
-            - id: step-3-validate
-              callId: validate
-            - id: step-4-session-update
-              callId: session-update
-            - id: step-5-confirm
-              callId: confirm
-            - id: step-6-receipt
-              callId: receipt
-          debugCapture:
-            mode: ALWAYS
-            includeHeaders: true
-            includeRequest: true
-            bodyPreviewBytes: 4096
-            redisTtlSeconds: 120
+        baseUrl: "{{ sut.endpoints['default'].baseUrl }}"
+        templateRoot: /app/scenario/templates/http
+        serviceId: sequence
+        threadCount: 1
+        steps:
+          - id: step-1-start
+            callId: start
+          - id: step-2-profile
+            callId: profile
+          - id: step-3-validate
+            callId: validate
+          - id: step-4-session-update
+            callId: session-update
+          - id: step-5-confirm
+            callId: confirm
+          - id: step-6-receipt
+            callId: receipt
+        debugCapture:
+          mode: ALWAYS
+          includeHeaders: true
+          includeRequest: true
+          bodyPreviewBytes: 4096
+          redisTtlSeconds: 120
     - role: postprocessor
       id: postprocessor
       image: postprocessor:latest
+      config:
+        forwardToOutput: false
+        txOutcomeSinkMode: NONE
+        dropTxOutcomeWithoutCallId: true
       work:
         in:
           in: post

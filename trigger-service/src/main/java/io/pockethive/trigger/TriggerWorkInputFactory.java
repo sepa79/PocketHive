@@ -20,18 +20,15 @@ class TriggerWorkInputFactory implements WorkInputFactory {
   private final WorkerRuntime workerRuntime;
   private final WorkerControlPlaneRuntime controlPlaneRuntime;
   private final ControlPlaneIdentity identity;
-  private final TriggerWorkerProperties properties;
 
   TriggerWorkInputFactory(
       WorkerRuntime workerRuntime,
       WorkerControlPlaneRuntime controlPlaneRuntime,
-      ControlPlaneIdentity identity,
-      TriggerWorkerProperties properties
+      ControlPlaneIdentity identity
   ) {
     this.workerRuntime = workerRuntime;
     this.controlPlaneRuntime = controlPlaneRuntime;
     this.identity = identity;
-    this.properties = properties;
   }
 
   @Override
@@ -47,10 +44,10 @@ class TriggerWorkInputFactory implements WorkInputFactory {
   @Override
   public WorkInput create(WorkerDefinition definition, WorkInputConfig config) {
     Logger logger = LoggerFactory.getLogger(definition.beanType());
-    SchedulerInputProperties scheduling = config instanceof SchedulerInputProperties props
-        ? props
-        : new SchedulerInputProperties();
-    TriggerSchedulerState schedulerState = new TriggerSchedulerState(properties, scheduling.isEnabled());
+    if (!(config instanceof SchedulerInputProperties scheduling)) {
+      throw new IllegalStateException("Trigger scheduler input requires SchedulerInputProperties configuration");
+    }
+    TriggerSchedulerState schedulerState = new TriggerSchedulerState(scheduling.isEnabled());
     return SchedulerWorkInput.<TriggerWorkerConfig>builder()
         .workerDefinition(definition)
         .controlPlaneRuntime(controlPlaneRuntime)

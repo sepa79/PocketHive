@@ -31,12 +31,10 @@ import org.springframework.stereotype.Component;
 )
 class ModeratorWorkerImpl implements PocketHiveWorkerFunction {
 
-  private final ModeratorWorkerProperties properties;
   private final OperationModeLimiter modeLimiter = new OperationModeLimiter();
 
   @Autowired
   ModeratorWorkerImpl(ModeratorWorkerProperties properties) {
-    this.properties = properties;
   }
 
   /**
@@ -63,7 +61,7 @@ class ModeratorWorkerImpl implements PocketHiveWorkerFunction {
    */
   @Override
   public WorkItem onMessage(WorkItem in, WorkerContext context) {
-    ModeratorWorkerConfig config = context.configOrDefault(ModeratorWorkerConfig.class, properties::defaultConfig);
+    ModeratorWorkerConfig config = context.requireConfig(ModeratorWorkerConfig.class);
     ModeratorOperationMode mode = config.operationMode();
     context.statusPublisher()
         .update(status -> {

@@ -14,6 +14,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ModeratorTest {
 
@@ -48,7 +49,10 @@ class ModeratorTest {
                 .build();
 
         WorkItem result = worker.onMessage(message, new TestWorkerContext(
-            new ModeratorWorkerConfig(ModeratorWorkerConfig.Mode.passThrough())));
+            new ModeratorWorkerConfig(new ModeratorWorkerConfig.Mode(
+                ModeratorWorkerConfig.Mode.Type.PASS_THROUGH,
+                null,
+                null))));
 
         assertThat(result).isNotNull();
         assertThat(new String(result.body(), StandardCharsets.UTF_8)).isEqualTo("test");
@@ -56,12 +60,13 @@ class ModeratorTest {
     }
 
     @Test
-    void usesDefaultsWhenConfigMissing() {
+    void failsWhenRuntimeConfigMissing() {
         WorkItem message = WorkItem.text(new WorkerInfo("ingress", "swarm", "instance", null, null), "payload")
                 .build();
 
-        WorkItem result = worker.onMessage(message, new TestWorkerContext(null));
-        assertThat(result).isNotNull();
+        assertThatThrownBy(() -> worker.onMessage(message, new TestWorkerContext(null)))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("Missing runtime config for " + ModeratorWorkerConfig.class.getName());
     }
 
     private static final class TestWorkerContext implements WorkerContext {

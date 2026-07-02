@@ -9,16 +9,17 @@ template:
       image: generator:latest
       config:
         inputs:
+          type: SCHEDULER
           scheduler:
             ratePerSec: 5
-        worker:
-          message:
-            bodyType: HTTP
-            path: /test
-            method: POST
-            body: '{"event":"http-proxy-demo"}'
-            headers:
-              content-type: application/json
+            maxMessages: 0
+        message:
+          bodyType: HTTP
+          path: /test
+          method: POST
+          body: '{"event":"http-proxy-demo"}'
+          headers:
+            content-type: application/json
       work:
         out:
           out: gen
@@ -27,6 +28,10 @@ template:
     - role: moderator
       id: moderator
       image: moderator:latest
+      config:
+        mode:
+          type: pass-through
+          ratePerSec: 0.0
       work:
         in:
           in: gen
@@ -40,6 +45,12 @@ template:
       image: processor:latest
       config:
         baseUrl: "{{ sut.endpoints['default'].baseUrl }}/api"
+        mode: THREAD_COUNT
+        threadCount: 1
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
       work:
         in:
           in: mod
@@ -51,6 +62,10 @@ template:
     - role: postprocessor
       id: postprocessor
       image: postprocessor:latest
+      config:
+        forwardToOutput: false
+        txOutcomeSinkMode: NONE
+        dropTxOutcomeWithoutCallId: true
       work:
         in:
           in: final

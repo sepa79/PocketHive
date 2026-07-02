@@ -1511,6 +1511,8 @@ function getScenarioEditorHtml(webview: vscode.Webview): string {
     }
 
     function buildConfigEntriesForComponent(manifest, componentConfig, manifests) {
+      // TODO(capabilities): Share this IO config composition with UI v2 instead of
+      // maintaining the same ui.ioScope/ui.ioType merge algorithm in two UI clients.
       const baseEntries = Array.isArray(manifest.config) ? manifest.config : [];
       const ioSelections = resolveIoSelectionsFromConfig(componentConfig);
       if (ioSelections.length === 0) {

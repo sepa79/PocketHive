@@ -58,6 +58,7 @@ PocketHive splits the control plane into **managers** (orchestrator + swarm cont
 - Emit **their own** status streams (`event.metric.status-{full|delta}.{swarmId}.{role}.{instance}`) and respond to manager `signal.status-request.{swarmId}.{role}.{instance}` heartbeats.
 - Apply `signal.config-update.{swarmId}.{role}.{instance}` (`data.enabled: true|false`) to control **workload** state only while keeping control listeners responsive.
 - Runtime behaviour, worker interfaces, and adoption guidance are covered in the [Worker SDK quick start](sdk/worker-sdk-quickstart.md).
+- Worker capability manifests and capability `config[]` contract are specified in the [Worker Capability Catalogue](architecture/workerCapabilities.md).
 
 ### 2.3 Request Builder worker
 
@@ -134,7 +135,7 @@ Control-plane payloads are defined by `docs/spec/control-events.schema.json` and
 | `origin` | string | Yes | Logical emitter identity (e.g. `orchestrator-1`, `swarm-controller:aaa-marshal-…`, `processor:bee-1`, `hive-ui`). Never blank. |
 | `scope` | object | Yes | `{ swarmId, role, instance }` describing the entity the message is about. |
 | `scope.swarmId` | string | Yes | Swarm the message relates to. Use the literal `ALL` for cross‑swarm or global fan‑out; never `null`. |
-| `scope.role` | string | Yes | Role of the **subject** of the message; free‑form logical role id. Core roles include `orchestrator`, `swarm-controller`, `generator`, `moderator`, `processor`, `postprocessor`, `trigger`, but plugins may introduce additional roles. Use the literal `ALL` for cross‑role or fan‑out scopes; never `null`. The envelope schema must **not** hardcode an enum for this field. |
+| `scope.role` | string | Yes | Role string of the **subject** of the message; carried for control-plane addressing and human display. It is not scenario node identity, not a type system, and not guaranteed unique within a swarm; runtime worker identity is the Swarm Controller-owned `beeId` exposed in `status-full.data.context.workers[]`. Core deployed components use values such as `orchestrator`, `swarm-controller`, `generator`, `moderator`, `processor`, `postprocessor`, `trigger`, but the envelope schema must **not** hardcode an enum for this field. Use the literal `ALL` for cross‑role or fan‑out scopes; never `null`. |
 | `scope.instance` | string | Yes | Logical instance identifier of the **subject** of the message (the controller/worker/orchestrator instance the message is about). Use the literal `ALL` for fan‑out across instances; never `null`. This may or may not be the same as the `origin` instance that emitted it. |
 | `correlationId` | string\|null | Yes | Correlation token used to join related messages. For `kind=signal` / `kind=outcome`, this field **must** be non‑empty and identical across the command signal and its outcomes. For other kinds (`event`, `metric`) it is either `null` or used only for explicitly documented higher‑level correlations. |
 | `idempotencyKey` | string\|null | Yes | Stable identifier reused across retries of the same logical operation. For externally initiated `kind=signal` / `kind=outcome` messages this field **should** be non‑empty; for purely internal, non‑retriable messages it may be `null`. For non‑command kinds (`event`, `metric`) this field is typically `null`. |
@@ -205,6 +206,18 @@ The tables below describe the canonical `data` shapes for the message kinds/type
 | `config-update` | `data` | Yes | Config payload for the target component(s). Targeting is carried exclusively by the envelope `scope` and routing key. The `data` object carries the config patch and enablement flags. Exact shape is defined in worker/manager config docs. |
 | `status-request` | — | No | No command‑level args; the response is a `status-full` metric event instead of a confirmation outcome. On‑wire producers still send an empty `data: {}`. |
 
+**Runtime config-update safety**
+
+- `inputs.*` and `outputs.*` define IO wiring: adapters, protocols, endpoints, source files/lists,
+  credentials, routing, and output target selection. Treat these fields as **unsafe for live mutation**.
+- A running worker may accept only an explicit allowlist of operational live fields. Current safe IO
+  fields are scheduler `inputs.scheduler.ratePerSec`, `inputs.scheduler.maxMessages`,
+  `inputs.scheduler.reset`, Redis dataset `inputs.redis.ratePerSec`, and CSV dataset
+  `inputs.csv.ratePerSec`. Enable/disable remains controlled by the config-update `enabled` flag.
+- Changing `inputs.type`, `outputs.type`, IO endpoints, source datasets, output routes, protocols, or
+  credentials requires restarting/rematerializing the worker or swarm. Do not emulate such changes with
+  fallback adapter switches or partial live rewiring.
+
 **Command outcomes (`kind = outcome`) — current payloads**
 
 For **outcome** messages (`kind = outcome`, `type = <command>`), outcomes use a single `CommandOutcomePayload` envelope shape; the table below captures the field-level mapping from the legacy confirmation shape.
@@ -263,7 +276,7 @@ For **outcome** messages (`kind = outcome`, `type = <command>`), outcomes use a 
 |  | *(none)* | — | Runtime/infra metadata lives in the envelope as `runtime` (see below). |
 |  | `io` | Yes | Object describing IO bindings and queue health. **Workers** should include both planes (`io.work` + `io.control`); **managers** are control‑plane‑only and should include only `io.control` (no `io.work`). `queueStats` is optional and applies only to the work plane. Present only in `status-full`. |
 |  | `ioState` | Yes | Coarse IO health summary for workload/local IO only (for example `ioState.work`, `ioState.filesystem`). **Workers** should include `ioState.work` plus any local IO; **managers** include only local IO if applicable. `ioState` does not represent control‑plane health. |
-|  | `context` | No | Freeform role‑specific context. For swarm‑controller, `context` carries swarm aggregates (e.g. `swarmStatus`, `totals`, `watermark`, `maxStalenessSec`, scenario progress) and includes `context.workers[]` **only in `status-full`**. For orchestrator, `context` carries at least `swarmCount`; `computeAdapter` is effectively static and belongs in `status-full` (not `status-delta`). |
+|  | `context` | No | Freeform role‑specific context. For swarm‑controller, `context` carries swarm aggregates (e.g. `swarmStatus`, `totals`, `watermark`, `maxStalenessSec`, scenario progress) and includes the canonical runtime worker aggregate `context.workers[]` **only in `status-full`**. For orchestrator, `context` carries at least `swarmCount`; `computeAdapter` is effectively static and belongs in `status-full` (not `status-delta`). |
 | `status-delta` | `enabled` | Yes | Boolean. Same semantics as in `status-full`; used to signal enablement changes without resending full status snapshots. |
 |  | `tps` | No | Integer ≥ 0. Throughput sample for the interval since the last status event. **Workers should emit this**; managers may omit. |
 |  | `ioState` | Yes | Coarse IO health summary (see §6). Same rules as `status-full`: workload/local IO only; managers omit `work`. |
@@ -275,6 +288,13 @@ Additional rules:
 - `data.context` carries role-specific context. For swarm-controller:
   - `status-delta` carries a small aggregate only (no worker list).
   - `status-full` carries the full aggregate snapshot, including `data.context.workers[]`.
+  - `data.context.workers[]` is the canonical swarm-controller worker
+    aggregate consumed by UI/runtime clients.
+  - Every `data.context.workers[]` entry must include `beeId`, `role`,
+    `instance`, `enabled`, `tps`, `lastSeenAt`, `stale`, and `ioState`.
+    `beeId` is assigned and owned by Swarm Controller when it materialises a
+    runtime worker. `role` and `instance` are the current control-plane address
+    for mutations such as config updates; they are not node identity.
   - `data.context.workers[]` entries may include a `runtime` object with the same shape as the envelope `runtime`.
   - `data.context.workers[]` entries must carry the last known public worker
     `status-full.data.config` as `config` after the worker has reported a
@@ -282,6 +302,17 @@ Additional rules:
     reported an empty effective config. Later worker `status-delta` events
     omit `data.config` and must not erase the last reported config from the
     swarm-controller aggregate.
+  - The swarm-controller resolves `beeId` from its runtime materialisation
+    mapping (`beeId -> role + instance`). If a worker also echoes
+    `data.context.beeId`, that value is only a consistency check. A missing or
+    mismatched echo must be reported explicitly and must not overwrite the
+    swarm-controller mapping.
+  - Worker echo diagnostics are reported on the affected worker aggregate as
+    `identityDiagnostics.workerBeeIdEcho: "missing" | "mismatch"`, with
+    `expectedBeeId` and, for mismatches, `actualBeeId`.
+  - Clients must resolve editable runtime workers through the SC-owned
+    `data.context.workers[].beeId`. They must not fall back to `role`, array
+    order, topology position, label, queue name, image name, or worker echo.
 - For orchestrator, `data.context` carries at least `swarmCount`. The
   `computeAdapter` selection is effectively static and belongs in `status-full`
   only (never in deltas).
@@ -346,9 +377,13 @@ Goal: give UI a stable "what to draw" graph that does not depend on transport de
 **A) Logical topology (scenario SSOT; UI drawing contract)**
 
 - Stored in scenario templates (see `docs/scenarios/SCENARIO_CONTRACT.md`), not in status messages.
-- `template.bees[]` is the SSOT for nodes (identity + role + optional UI metadata + optional port declarations).
-- `topology` is the SSOT for edges, referencing bees by `beeId` and ports by `port`.
-- `template.bees[].id` and `topology.edges[].id` are stable identifiers within the template.
+- `template.bees[]` is the authoring SSOT for declared worker definitions.
+  `role` is an operator-visible string and is not node identity.
+- `topology` is the SSOT for authoring-time graph edges. It may use authoring
+  labels to connect declared bees, but those labels are not runtime worker
+  identity.
+- Runtime worker identity is assigned by Swarm Controller and exposed as
+  `status-full.data.context.workers[].beeId`.
 
 Example (scenario template fragment):
 
@@ -397,8 +432,8 @@ Example (inside swarm-controller `status-full.data.context`):
       "edges": [
         {
           "edgeId": "e1",
-          "from": { "role": "generator", "instance": "gen-1", "port": "out", "routingKey": "ph.<swarm>.gen" },
-          "to": { "role": "moderator", "instance": "mod-1", "port": "in", "queue": "ph.<swarm>.mod" }
+          "from": { "beeId": "genA", "role": "generator", "instance": "gen-1", "port": "out", "routingKey": "ph.<swarm>.gen" },
+          "to": { "beeId": "modA", "role": "moderator", "instance": "mod-1", "port": "in", "queue": "ph.<swarm>.mod" }
         }
       ]
     }
@@ -446,8 +481,8 @@ Example (bindings with ports + optional selector hint):
       "edges": [
         {
           "edgeId": "e-fast",
-          "from": { "role": "moderator", "instance": "mod-1", "port": "out.fast", "routingKey": "ph.<swarm>.mod.fast" },
-          "to": { "role": "processor", "instance": "proc-1", "port": "in.fast", "queue": "ph.<swarm>.proc.fast" },
+          "from": { "beeId": "modA", "role": "moderator", "instance": "mod-1", "port": "out.fast", "routingKey": "ph.<swarm>.mod.fast" },
+          "to": { "beeId": "procA", "role": "processor", "instance": "proc-1", "port": "in.fast", "queue": "ph.<swarm>.proc.fast" },
           "selector": { "policy": "predicate", "expr": "payload.priority >= 50" }
         }
       ]
@@ -458,8 +493,19 @@ Example (bindings with ports + optional selector hint):
 
 **D) UI join strategy**
 
-- UI obtains `template + topology` via Scenario Manager REST (SSOT).
-- UI uses swarm-controller `status-full` for `workers[]`, runtime `bindings`, and queue stats.
+- UI obtains `template + topology` via Scenario Manager REST for authoring
+  context.
+- UI uses swarm-controller `status-full` for `workers[]`, runtime `bindings`,
+  queue stats, and runtime identity.
+- UI joins/edit-targets runtime workers only by SC-owned
+  `data.context.workers[].beeId`. `role`/`instance` are used only after that
+  join, as the transport target for Orchestrator component actions.
+- Until a canonical authoring-to-runtime mapping exists, UI must expose runtime
+  workers as an explicit live target selector rather than inferring the target
+  from the selected authoring bee.
+- If a selected UI item has no matching `data.context.workers[].beeId`, UI must
+  show an explicit missing-runtime state and disable runtime mutation for that
+  item. It must not silently fall back to role matching.
 
 ---
 
@@ -739,17 +785,18 @@ sequenceDiagram
   "scope": { "swarmId": "alpha", "role": "processor", "instance": "alpha-processor-1" },
   "correlationId": null,
   "idempotencyKey": null,
+  "runtime": {
+    "templateId": "processor-demo",
+    "runId": "run-2025-09-12-01",
+    "containerId": "alpha-processor-1",
+    "image": "ghcr.io/pockethive/processor:0.14.0",
+    "stackName": "ph-alpha"
+  },
   "data": {
     "enabled": true,
     "startedAt": "2025-09-12T12:00:00Z",
     "tps": 12,
     "config": {},
-    "runtime": {
-      "runId": "run-2025-09-12-01",
-      "containerId": "alpha-processor-1",
-      "image": "ghcr.io/pockethive/processor:0.14.0",
-      "stackName": "ph-alpha"
-    },
     "io": {},
     "ioState": { "work": { "input": "ok", "output": "ok" } }
   }

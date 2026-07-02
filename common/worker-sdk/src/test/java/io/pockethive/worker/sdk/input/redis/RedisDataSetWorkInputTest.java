@@ -1,6 +1,7 @@
 package io.pockethive.worker.sdk.input.redis;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.mock;
@@ -119,15 +120,10 @@ class RedisDataSetWorkInputTest {
     }
 
     @Test
-    void parsesSourcesJsonFromBootstrapConfig() throws Exception {
+    void usesSourcesFromBootstrapConfig() throws Exception {
         RedisDataSetInputProperties properties = baseProperties();
         properties.setListName(null);
-        properties.setSourcesJson("""
-            [
-              {"listName":"red","weight":3},
-              {"listName":"bal","weight":1}
-            ]
-            """);
+        properties.setSources(List.of(source("red", 3.0), source("bal", 1.0)));
         properties.setPickStrategy(RedisDataSetInputProperties.PickStrategy.ROUND_ROBIN);
         properties.setRatePerSec(2.0);
         properties.setInitialDelayMs(10_000L);
@@ -233,6 +229,68 @@ class RedisDataSetWorkInputTest {
         assertThat(runtime.items.getFirst().headers().get("x-ph-redis-list")).isEqualTo("bal");
     }
 
+    @Test
+    void rejectsInvalidSourceEntriesInsteadOfDroppingOrDefaultingThem() {
+        RedisDataSetInputProperties properties = new RedisDataSetInputProperties();
+        List<RedisDataSetInputProperties.Source> sourcesWithNull = new ArrayList<>();
+        sourcesWithNull.add(null);
+
+        assertThatThrownBy(() -> properties.setSources(sourcesWithNull))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("sources[0]");
+
+        RedisDataSetInputProperties.Source missingWeight = new RedisDataSetInputProperties.Source();
+        missingWeight.setListName("red");
+        assertThatThrownBy(() -> properties.setSources(List.of(missingWeight)))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("sources[0].weight");
+
+        assertThatThrownBy(() -> properties.setSources(List.of(source("", 1.0))))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("sources[0].listName");
+
+        assertThatThrownBy(() -> properties.setSources(List.of(source("red", 0.0))))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("sources[0].weight");
+    }
+
+    @Test
+    void appliesExplicitRawScalarUpdates() {
+        RedisDataSetInputProperties properties = baseProperties();
+        input = inputFor(properties);
+
+        input.applyRawConfigOverrides(Map.of(
+            "inputs", Map.of(
+                "redis", Map.of(
+                    "host", "redis-updated",
+                    "port", "6380",
+                    "ssl", true,
+                    "pickStrategy", "WEIGHTED_RANDOM",
+                    "ratePerSec", "2500.5"
+                )
+            )
+        ));
+
+        assertThat(properties.getHost()).isEqualTo("redis-updated");
+        assertThat(properties.getPort()).isEqualTo(6380);
+        assertThat(properties.isSsl()).isTrue();
+        assertThat(properties.getPickStrategy()).isEqualTo(RedisDataSetInputProperties.PickStrategy.WEIGHTED_RANDOM);
+        assertThat(properties.getRatePerSec()).isEqualTo(2500.5);
+    }
+
+    @Test
+    void rejectsMalformedRawScalarUpdateWithoutApplyingPartialChanges() {
+        assertMalformedRawUpdateKeepsListName(Map.of("host", " "));
+        assertMalformedRawUpdateKeepsListName(Map.of("port", "not-a-port"));
+        assertMalformedRawUpdateKeepsListName(Map.of("port", 6379.5));
+        assertMalformedRawUpdateKeepsListName(Map.of("port", "0"));
+        assertMalformedRawUpdateKeepsListName(Map.of("port", "70000"));
+        assertMalformedRawUpdateKeepsListName(Map.of("ssl", "yes"));
+        assertMalformedRawUpdateKeepsListName(Map.of("pickStrategy", "RANDOMISH"));
+        assertMalformedRawUpdateKeepsListName(Map.of("ratePerSec", "fast"));
+        assertMalformedRawUpdateKeepsListName(Map.of("ratePerSec", "-0.1"));
+    }
+
     private static WorkerDefinition definition() {
         return new WorkerDefinition(
             "redisWorker",
@@ -263,9 +321,39 @@ class RedisDataSetWorkInputTest {
     private static RedisDataSetInputProperties baseProperties() {
         RedisDataSetInputProperties properties = new RedisDataSetInputProperties();
         properties.setHost("localhost");
+        properties.setPort(6379);
+        properties.setSsl(false);
         properties.setListName("dataset");
+        properties.setSources(List.of());
+        properties.setPickStrategy(RedisDataSetInputProperties.PickStrategy.ROUND_ROBIN);
+        properties.setRatePerSec(1.0);
         properties.setEnabled(true);
         return properties;
+    }
+
+    private RedisDataSetWorkInput inputFor(RedisDataSetInputProperties properties) {
+        return new RedisDataSetWorkInput(
+            definition(),
+            mockControlPlane(),
+            new RecordingWorkerRuntime(),
+            identity(),
+            properties,
+            LoggerFactory.getLogger("test-redis-input"),
+            new QueueRedisClientFactory(new ArrayDeque<>())
+        );
+    }
+
+    private void assertMalformedRawUpdateKeepsListName(Map<String, Object> invalidPatch) {
+        RedisDataSetInputProperties properties = baseProperties();
+        input = inputFor(properties);
+
+        java.util.LinkedHashMap<String, Object> update = new java.util.LinkedHashMap<>(invalidPatch);
+        update.put("listName", "updated-list");
+
+        assertThatThrownBy(() -> input.applyRawConfigOverrides(Map.of("inputs", Map.of("redis", update))))
+            .isInstanceOf(IllegalArgumentException.class);
+
+        assertThat(properties.getListName()).isEqualTo("dataset");
     }
 
     private static RedisDataSetInputProperties.Source source(String listName, double weight) {

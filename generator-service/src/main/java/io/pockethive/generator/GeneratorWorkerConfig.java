@@ -15,24 +15,23 @@ public record GeneratorWorkerConfig(Message message, Map<String, Object> vars) {
   public record Message(MessageBodyType bodyType, String path, String method, String body, Map<String, String> headers) {
 
     public Message {
-      bodyType = bodyType == null ? MessageBodyType.HTTP : bodyType;
-      path = normalizePath(path);
-      method = normalizeMethod(method);
-      body = body == null ? "" : body;
+      bodyType = Objects.requireNonNull(bodyType, "message.bodyType");
+      if (bodyType == MessageBodyType.HTTP) {
+        path = requireNonBlank(path, "message.path");
+        method = normalizeMethod(requireNonBlank(method, "message.method"));
+      }
+      body = Objects.requireNonNull(body, "message.body");
       headers = headers == null ? Map.of() : Map.copyOf(headers);
     }
 
-    private static String normalizePath(String value) {
+    private static String requireNonBlank(String value, String field) {
       if (value == null || value.isBlank()) {
-        return "/";
+        throw new IllegalArgumentException(field + " must be provided");
       }
       return value.trim();
     }
 
     private static String normalizeMethod(String value) {
-      if (value == null || value.isBlank()) {
-        return "GET";
-      }
       return value.trim().toUpperCase(Locale.ROOT);
     }
   }

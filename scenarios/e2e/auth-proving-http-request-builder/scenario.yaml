@@ -1,6 +1,7 @@
 id: auth-proving-http-request-builder
 name: Auth Proving - HTTP Request Builder
-description: Proves request-builder HTTP authRef application for OAuth, static bearer, basic, API key, query token, HMAC, and AWS signing.
+description: Proves request-builder HTTP authRef application for OAuth, static
+  bearer, basic, API key, query token, HMAC, and AWS signing.
 template:
   image: swarm-controller:latest
   bees:
@@ -13,13 +14,12 @@ template:
           scheduler:
             ratePerSec: 1
             maxMessages: 0
-        worker:
-          message:
-            bodyType: SIMPLE
-            body: '{"scenario":"auth-proving-http-request-builder","call":"oauth-client"}'
-            headers:
-              content-type: application/json
-              x-ph-call-id: oauth-client
+        message:
+          bodyType: SIMPLE
+          body: '{"scenario":"auth-proving-http-request-builder","call":"oauth-client"}'
+          headers:
+            content-type: application/json
+            x-ph-call-id: oauth-client
       work:
         out:
           out: build
@@ -34,13 +34,12 @@ template:
           scheduler:
             ratePerSec: 1
             maxMessages: 0
-        worker:
-          message:
-            bodyType: SIMPLE
-            body: '{"scenario":"auth-proving-http-request-builder","call":"oauth-password"}'
-            headers:
-              content-type: application/json
-              x-ph-call-id: oauth-password
+        message:
+          bodyType: SIMPLE
+          body: '{"scenario":"auth-proving-http-request-builder","call":"oauth-password"}'
+          headers:
+            content-type: application/json
+            x-ph-call-id: oauth-password
       work:
         out:
           out: build
@@ -55,13 +54,12 @@ template:
           scheduler:
             ratePerSec: 1
             maxMessages: 0
-        worker:
-          message:
-            bodyType: SIMPLE
-            body: '{"scenario":"auth-proving-http-request-builder","call":"static-bearer"}'
-            headers:
-              content-type: application/json
-              x-ph-call-id: static-bearer
+        message:
+          bodyType: SIMPLE
+          body: '{"scenario":"auth-proving-http-request-builder","call":"static-bearer"}'
+          headers:
+            content-type: application/json
+            x-ph-call-id: static-bearer
       work:
         out:
           out: build
@@ -76,13 +74,12 @@ template:
           scheduler:
             ratePerSec: 1
             maxMessages: 0
-        worker:
-          message:
-            bodyType: SIMPLE
-            body: '{"scenario":"auth-proving-http-request-builder","call":"basic-auth"}'
-            headers:
-              content-type: application/json
-              x-ph-call-id: basic-auth
+        message:
+          bodyType: SIMPLE
+          body: '{"scenario":"auth-proving-http-request-builder","call":"basic-auth"}'
+          headers:
+            content-type: application/json
+            x-ph-call-id: basic-auth
       work:
         out:
           out: build
@@ -97,13 +94,12 @@ template:
           scheduler:
             ratePerSec: 1
             maxMessages: 0
-        worker:
-          message:
-            bodyType: SIMPLE
-            body: '{"scenario":"auth-proving-http-request-builder","call":"api-key"}'
-            headers:
-              content-type: application/json
-              x-ph-call-id: api-key
+        message:
+          bodyType: SIMPLE
+          body: '{"scenario":"auth-proving-http-request-builder","call":"api-key"}'
+          headers:
+            content-type: application/json
+            x-ph-call-id: api-key
       work:
         out:
           out: build
@@ -118,13 +114,12 @@ template:
           scheduler:
             ratePerSec: 1
             maxMessages: 0
-        worker:
-          message:
-            bodyType: SIMPLE
-            body: '{"scenario":"auth-proving-http-request-builder","call":"query-token"}'
-            headers:
-              content-type: application/json
-              x-ph-call-id: query-token
+        message:
+          bodyType: SIMPLE
+          body: '{"scenario":"auth-proving-http-request-builder","call":"query-token"}'
+          headers:
+            content-type: application/json
+            x-ph-call-id: query-token
       work:
         out:
           out: build
@@ -139,13 +134,12 @@ template:
           scheduler:
             ratePerSec: 1
             maxMessages: 0
-        worker:
-          message:
-            bodyType: SIMPLE
-            body: '{"scenario":"auth-proving-http-request-builder","call":"hmac"}'
-            headers:
-              content-type: application/json
-              x-ph-call-id: hmac
+        message:
+          bodyType: SIMPLE
+          body: '{"scenario":"auth-proving-http-request-builder","call":"hmac"}'
+          headers:
+            content-type: application/json
+            x-ph-call-id: hmac
       work:
         out:
           out: build
@@ -160,13 +154,12 @@ template:
           scheduler:
             ratePerSec: 1
             maxMessages: 0
-        worker:
-          message:
-            bodyType: SIMPLE
-            body: '{"scenario":"auth-proving-http-request-builder","call":"aws"}'
-            headers:
-              content-type: application/json
-              x-ph-call-id: aws
+        message:
+          bodyType: SIMPLE
+          body: '{"scenario":"auth-proving-http-request-builder","call":"aws"}'
+          headers:
+            content-type: application/json
+            x-ph-call-id: aws
       work:
         out:
           out: build
@@ -176,10 +169,9 @@ template:
       id: request-builder
       image: request-builder:latest
       config:
-        worker:
-          templateRoot: /app/scenario/templates/http
-          serviceId: default
-          passThroughOnMissingTemplate: false
+        templateRoot: /app/scenario/templates/http
+        serviceId: default
+        passThroughOnMissingTemplate: false
       work:
         in:
           in: build
@@ -192,8 +184,13 @@ template:
       id: processor
       image: processor:latest
       config:
-        worker:
-          baseUrl: "{{ sut.endpoints['default'].baseUrl }}"
+        baseUrl: "{{ sut.endpoints['default'].baseUrl }}"
+        mode: THREAD_COUNT
+        threadCount: 1
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
       work:
         in:
           in: proc
@@ -205,6 +202,10 @@ template:
     - role: postprocessor
       id: postprocessor
       image: postprocessor:latest
+      config:
+        forwardToOutput: false
+        txOutcomeSinkMode: NONE
+        dropTxOutcomeWithoutCallId: true
       work:
         in:
           in: post

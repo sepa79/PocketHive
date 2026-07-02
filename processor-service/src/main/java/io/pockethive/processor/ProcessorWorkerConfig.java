@@ -3,12 +3,13 @@ package io.pockethive.processor;
 import io.pockethive.swarm.model.BeeConfigKeys;
 import io.pockethive.worker.sdk.config.MaxInFlightConfig;
 import java.util.Map;
+import java.util.Objects;
 
 public record ProcessorWorkerConfig(
     String baseUrl,
     Mode mode,
-    int threadCount,
-    double ratePerSec,
+    Integer threadCount,
+    Double ratePerSec,
     ConnectionReuse connectionReuse,
     Boolean keepAlive,
     Integer timeoutMs,
@@ -19,8 +20,8 @@ public record ProcessorWorkerConfig(
 
   public ProcessorWorkerConfig(String baseUrl,
                                Mode mode,
-                               int threadCount,
-                               double ratePerSec,
+                               Integer threadCount,
+                               Double ratePerSec,
                                ConnectionReuse connectionReuse,
                                Boolean keepAlive,
                                Integer timeoutMs,
@@ -41,10 +42,12 @@ public record ProcessorWorkerConfig(
   }
 
   public ProcessorWorkerConfig {
-    baseUrl = sanitise(baseUrl);
-    mode = mode == null ? Mode.THREAD_COUNT : mode;
-    threadCount = threadCount <= 0 ? 1 : threadCount;
-    ratePerSec = ratePerSec <= 0.0 ? 1.0 : ratePerSec;
+    baseUrl = requireNonBlank(baseUrl, "baseUrl");
+    mode = Objects.requireNonNull(mode, "mode");
+    threadCount = requirePositive(threadCount, "threadCount");
+    if (mode == Mode.RATE_PER_SEC) {
+      ratePerSec = requirePositive(ratePerSec, "ratePerSec");
+    }
     connectionReuse = connectionReuse == null ? ConnectionReuse.GLOBAL : connectionReuse;
     keepAlive = keepAlive == null ? Boolean.TRUE : keepAlive;
     timeoutMs = timeoutMs == null || timeoutMs <= 0 ? 30000 : timeoutMs;
@@ -71,11 +74,26 @@ public record ProcessorWorkerConfig(
     return threadCount;
   }
 
-  private static String sanitise(String candidate) {
-    if (candidate == null) {
-      return null;
-    }
+  private static String requireNonBlank(String candidate, String field) {
+    Objects.requireNonNull(candidate, field);
     String trimmed = candidate.trim();
-    return trimmed.isEmpty() ? null : trimmed;
+    if (trimmed.isEmpty()) {
+      throw new IllegalArgumentException(field + " must not be blank");
+    }
+    return trimmed;
+  }
+
+  private static int requirePositive(Integer candidate, String field) {
+    if (candidate == null || candidate <= 0) {
+      throw new IllegalArgumentException(field + " must be positive");
+    }
+    return candidate;
+  }
+
+  private static double requirePositive(Double candidate, String field) {
+    if (candidate == null || !Double.isFinite(candidate) || candidate <= 0.0) {
+      throw new IllegalArgumentException(field + " must be positive");
+    }
+    return candidate;
   }
 }

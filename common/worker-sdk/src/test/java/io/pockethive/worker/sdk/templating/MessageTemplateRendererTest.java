@@ -16,6 +16,7 @@ class MessageTemplateRendererTest {
     void keepsPayloadAsRawStringAndExposesParsedJsonUnderPayloadAsJson() {
         WorkItem seed = WorkItem.text(new WorkerInfo("templating", "swarm", "instance", null, null), "{\"col0\":\"value0\"}").build();
         MessageTemplate template = MessageTemplate.builder()
+            .bodyType(MessageBodyType.HTTP)
             .pathTemplate("/api/{{ payloadAsJson.col0 }}")
             .methodTemplate("POST")
             .bodyTemplate("json={{ payloadAsJson.col0 }}|raw={{ payload }}")
@@ -31,6 +32,7 @@ class MessageTemplateRendererTest {
     void payloadAsJsonIsNullWhenPayloadIsNotJson() {
         WorkItem seed = WorkItem.text(new WorkerInfo("templating", "swarm", "instance", null, null), "not-json").build();
         MessageTemplate template = MessageTemplate.builder()
+            .bodyType(MessageBodyType.HTTP)
             .pathTemplate("{% if payloadAsJson %}/ok{% else %}/missing{% endif %}")
             .methodTemplate("POST")
             .bodyTemplate("{% if payloadAsJson %}{{ payloadAsJson }}{% else %}null{% endif %}|{{ payload }}")
@@ -48,6 +50,7 @@ class MessageTemplateRendererTest {
             .header("vars", Map.of("loopCount", 10, "enableFoo", true))
             .build();
         MessageTemplate template = MessageTemplate.builder()
+            .bodyType(MessageBodyType.HTTP)
             .pathTemplate("/{{ vars.loopCount }}")
             .methodTemplate("POST")
             .bodyTemplate("flag={{ eval(\"vars.enableFoo ? 'Y' : 'N'\") }}")

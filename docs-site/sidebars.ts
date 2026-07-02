@@ -36,6 +36,7 @@ const sidebars: SidebarsConfig = {
       label: "Reference",
       items: [
         "ARCHITECTURE",
+        "architecture/workerCapabilities",
         "ORCHESTRATOR-REST",
         "USAGE",
         "observability",

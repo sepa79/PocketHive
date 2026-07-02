@@ -1,6 +1,5 @@
 package io.pockethive.worker.sdk.config;
 
-import java.lang.reflect.Constructor;
 import java.util.Locale;
 import java.util.Objects;
 import org.springframework.boot.context.properties.bind.Bindable;
@@ -24,8 +23,10 @@ public final class WorkOutputConfigBinder {
             return null;
         }
         String prefix = prefix(outputType);
-        return binder.bind(prefix, Bindable.of(configType))
-            .orElseGet(() -> instantiate(configType));
+        C config = binder.bind(prefix, Bindable.of(configType))
+            .orElseThrow(() -> new IllegalStateException("Work output config is required at " + prefix));
+        config.validateConfigured(prefix);
+        return config;
     }
 
     public String prefix(WorkerOutputType outputType) {
@@ -38,13 +39,4 @@ public final class WorkOutputConfigBinder {
         return "pockethive.outputs." + suffix;
     }
 
-    private static <C> C instantiate(Class<C> type) {
-        try {
-            Constructor<C> constructor = type.getDeclaredConstructor();
-            constructor.setAccessible(true);
-            return constructor.newInstance();
-        } catch (ReflectiveOperationException ex) {
-            throw new IllegalStateException("Unable to instantiate work output config " + type.getName(), ex);
-        }
-    }
 }

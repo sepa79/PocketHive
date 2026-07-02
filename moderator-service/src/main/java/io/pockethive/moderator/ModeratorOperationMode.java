@@ -31,8 +31,7 @@ sealed interface ModeratorOperationMode permits ModeratorOperationMode.PassThrou
 
   record RatePerSec(double ratePerSec) implements ModeratorOperationMode {
     public RatePerSec {
-      double sanitised = sanitiseRate(ratePerSec);
-      ratePerSec = sanitised;
+      ratePerSec = requireNonNegative(ratePerSec, "ratePerSec");
     }
 
     @Override
@@ -44,19 +43,13 @@ sealed interface ModeratorOperationMode permits ModeratorOperationMode.PassThrou
   record Sine(double minRatePerSec, double maxRatePerSec, double periodSeconds, double phaseOffsetSeconds)
       implements ModeratorOperationMode {
     public Sine {
-      double sanitisedMin = sanitiseRate(minRatePerSec);
-      double sanitisedMax = sanitiseRate(maxRatePerSec);
-      if (sanitisedMax < sanitisedMin) {
-        double tmp = sanitisedMin;
-        sanitisedMin = sanitisedMax;
-        sanitisedMax = tmp;
+      minRatePerSec = requireNonNegative(minRatePerSec, "minRatePerSec");
+      maxRatePerSec = requireNonNegative(maxRatePerSec, "maxRatePerSec");
+      if (maxRatePerSec < minRatePerSec) {
+        throw new IllegalArgumentException("maxRatePerSec must be greater than or equal to minRatePerSec");
       }
-      double sanitisedPeriod = sanitisePositive(periodSeconds, 60.0);
-      double sanitisedPhase = Double.isFinite(phaseOffsetSeconds) ? phaseOffsetSeconds : 0.0;
-      minRatePerSec = sanitisedMin;
-      maxRatePerSec = sanitisedMax;
-      periodSeconds = sanitisedPeriod;
-      phaseOffsetSeconds = sanitisedPhase;
+      periodSeconds = requirePositive(periodSeconds, "periodSeconds");
+      phaseOffsetSeconds = requireFinite(phaseOffsetSeconds, "phaseOffsetSeconds");
     }
 
     @Override
@@ -65,16 +58,23 @@ sealed interface ModeratorOperationMode permits ModeratorOperationMode.PassThrou
     }
   }
 
-  private static double sanitiseRate(double candidate) {
+  private static double requireNonNegative(double candidate, String field) {
     if (!Double.isFinite(candidate) || candidate < 0.0) {
-      return 0.0;
+      throw new IllegalArgumentException(field + " must be finite and non-negative");
     }
     return candidate;
   }
 
-  private static double sanitisePositive(double candidate, double fallback) {
+  private static double requirePositive(double candidate, String field) {
     if (!Double.isFinite(candidate) || candidate <= 0.0) {
-      return fallback;
+      throw new IllegalArgumentException(field + " must be finite and positive");
+    }
+    return candidate;
+  }
+
+  private static double requireFinite(double candidate, String field) {
+    if (!Double.isFinite(candidate)) {
+      throw new IllegalArgumentException(field + " must be finite");
     }
     return candidate;
   }

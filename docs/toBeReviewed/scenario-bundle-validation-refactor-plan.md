@@ -256,6 +256,19 @@ tracked here because the validation work exposed the same contract split in
 runtime planning, authoring tools, capabilities, docs, and UI live config
 editing.
 
+PR and commit boundary:
+
+- Ship this as one PR with three logical commits:
+  1. Contract docs, agent migration guide, and standalone migrator.
+  2. Repo-owned scenario/capability/tooling migration produced by the migrator.
+  3. Legacy-shape rejection and runtime/planning compatibility removal.
+- The migration guide and migrator are not a follow-up. They are the first
+  commit because external scenario repositories need the same mechanical path
+  before old shapes start failing validation.
+- Keep the commits reviewable, but do not split the Bee Config SSOT behavior
+  across multiple PRs. The old and new config shapes must not coexist as a
+  shipped compatibility phase.
+
 Release boundary:
 
 - Goal: remove scenario support for `config.worker`, `config.worker.config`, and
@@ -265,6 +278,10 @@ Release boundary:
   scenarios.
 - No fallback/compatibility phase is planned. Repo-owned scenarios and authoring
   tools migrate first, then old shapes fail validation.
+- Migration support is in scope for this release: ship an agent-facing guide and
+  a deterministic standalone migrator, then use that same migrator for
+  repo-owned scenarios so external scenario repositories can follow the same
+  path.
 - Out of scope unless explicitly approved: removing Spring/runtime property
   binding such as `pockethive.worker.config.*` inside worker applications. That
   binding is not the same thing as allowing scenario YAML
@@ -286,6 +303,20 @@ Target contract:
   `config-update.enabled`.
 - There is no legacy shape, compatibility shim, prefix stripping, path aliasing,
   or fallback path resolution.
+
+Implementation tracking:
+
+- [x] Add direct scenario config migration guide and standalone migrator.
+- [x] Migrate repo-owned scenario YAML to direct `template.bees[].config`.
+- [x] Migrate capability paths away from `worker.message.*`.
+- [x] Remove Scenario Manager / Orchestrator legacy flattening paths.
+- [x] Reject legacy `config.worker` / `config.pockethive` scenario shapes.
+- [x] Lock SC aggregate projection with an exact
+  `SwarmWorkersAggregatorTest`: `context.workers[].config` carries worker
+  `status-full.data.config` without synthetic IO type keys.
+- [x] Fix MCP `component.config-update` to send only the requested patch, not a
+  client-side merged config.
+- [x] Reject exact `worker` / `pockethive` roots in capability config paths.
 
 Canonical example:
 
@@ -391,6 +422,9 @@ Release stages:
      `config.worker.message.*` -> `config.message.*`,
      `config.worker.config.*` -> `config.*`, and no mention of compatibility
      fallback.
+   - Add the migration CLI contract to the guide and implement it under
+     `tools/scenario-config-migrate/` so agents can run the same checks on
+     non-repo scenario bundles.
 
 2. **TDD enforcement before removing old support**
    - Add Scenario Manager validation tests that reject `config.worker`,
@@ -411,7 +445,9 @@ Release stages:
 
 3. **Repo YAML and capability migration**
    - Migrate all repo-owned `scenario.yaml` files from nested
-     `config.worker.*` to direct `config.*`.
+     `config.worker.*` to direct `config.*` with
+     `tools/scenario-config-migrate/`; do not hand-migrate bulk YAML except to
+     resolve explicit tool-reported conflicts.
    - Require explicit `inputs.type` / `outputs.type` in scenario YAML whenever
      the effective config is expected to expose those fields.
    - Change generator capability paths from `worker.message.*` to `message.*`
@@ -430,20 +466,63 @@ Release stages:
      only verified compatibility.
    - Keep the repository grep gates below at zero before merge.
 
+Migration guide and tool requirements:
+
+- The guide is the human/agent contract; the tool is the execution path. The
+  guide must show before/after examples and the tool must implement exactly
+  those transformations.
+- The migrator must be standalone and must not require a running PocketHive
+  stack, Scenario Manager, Orchestrator, or MCP server.
+- The CLI must support:
+  - `check <path...>`: report previous-format scenario config without writing.
+  - `migrate <path...>`: rewrite scenario YAML in place.
+  - `migrate --dry-run <path...>`: show the planned rewrite without writing.
+  - `--json`: emit a machine-readable summary for agents and CI.
+- Accepted paths must include individual `scenario.yaml` files and directories
+  containing scenario bundles. Directory traversal must be explicit to
+  `scenario.yaml` / `scenario.yml` files; do not infer scenario files from
+  unrelated YAML.
+- Required transformations per bee:
+  - `template.bees[].config.worker.<key>` ->
+    `template.bees[].config.<key>`.
+  - `template.bees[].config.worker.config.<key>` ->
+    `template.bees[].config.<key>`.
+  - `template.bees[].config.pockethive.worker.<key>` ->
+    `template.bees[].config.<key>`.
+  - `template.bees[].config.pockethive.worker.config.<key>` ->
+    `template.bees[].config.<key>`.
+- Conflict policy is explicit failure, not merging: if a target key already
+  exists with a different source value, the migrator must stop and report the
+  scenario path, bee id, source path, and target path. The user or agent resolves
+  the conflict manually, then reruns the tool.
+- The migrator must preserve unknown scenario fields and comments where the
+  chosen YAML library supports it. If comment preservation is not supported, the
+  implementation must document that limitation before it is used on external
+  repositories.
+- The migrator must not rewrite runtime application configuration files,
+  `application.yml`, worker service defaults, or Spring property names such as
+  `pockethive.worker.config.*`; those are outside the scenario YAML migration.
+- Repo migration acceptance: all repo-owned `scenarios/**/scenario.y*ml` are
+  migrated by this tool, and a final `check scenarios` run reports zero
+  previous-format findings.
+
 Required grep gates:
 
 ```bash
 rg '^\s+worker:\s*$' scenarios scenario-manager-service -g 'scenario.y*ml'
-rg 'config\.worker|pockethive\.worker|worker\.message|name:\s*worker\.' \
-  docs/ARCHITECTURE.md docs/scenarios/SCENARIO_CONTRACT.md \
-  docs/scenarios/README.md scenario-manager-service/README.md \
-  scenario-manager-service orchestrator-service tools ui-v2 \
+rg 'config\.worker|pockethive\.worker\.config|worker\.message|name:\s*worker\.' \
+  docs/ARCHITECTURE.md docs/scenarios/*.md scenario-manager-service/README.md \
+  scenario-manager-service/capabilities tools/pockethive-mcp \
+  tools/scenario-templating-check ui-v2 \
   -g '!**/target/**' -g '!**/node_modules/**' -g '!**/build/**'
 rg '^\s*- name:\s*enabled\b' scenario-manager-service/capabilities
+rg 'effectiveWorkerConfig|mergeWorkerConfig|flattenWorkerBlock' \
+  scenario-manager-service/src/main/java orchestrator-service/src/main/java
 ```
 
-Migration guides, archive docs, and this plan may show previous-format examples
-only as explicitly labelled "before" examples.
+Migration guides, archive docs, this plan, negative tests, and explicit
+rejection diagnostics may show previous-format examples only as labelled
+"before"/invalid examples.
 
 ## Bee Config SSOT Review Findings
 

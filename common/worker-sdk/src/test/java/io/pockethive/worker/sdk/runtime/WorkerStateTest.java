@@ -13,7 +13,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class WorkerStateTest {
 
     @Test
-    void seedConfigInitialisesStateOnce() {
+    void startsDisabledWithoutConfig() {
         WorkerDefinition definition = new WorkerDefinition(
             "testWorker",
             Object.class,
@@ -28,14 +28,9 @@ class WorkerStateTest {
             Set.of(WorkerCapability.SCHEDULER)
         );
         WorkerState state = new WorkerState(definition);
-        TestConfig defaults = new TestConfig(true, 5.0);
 
-        boolean seeded = state.seedConfig(defaults, true);
-
-        assertThat(seeded).isTrue();
-        assertThat(state.config(TestConfig.class)).contains(defaults);
-        assertThat(state.enabled()).isTrue();
-        assertThat(state.seedConfig(new TestConfig(false, 1.0), false)).isFalse();
+        assertThat(state.config(TestConfig.class)).isEmpty();
+        assertThat(state.enabled()).isFalse();
     }
 
     @Test
@@ -54,7 +49,7 @@ class WorkerStateTest {
             Set.of(WorkerCapability.SCHEDULER)
         );
         WorkerState state = new WorkerState(definition);
-        state.seedConfig(new TestConfig(true, 5.0), true);
+        state.updateConfig(new TestConfig(true, 5.0), true, true);
 
         state.updateConfig(null, true, null);
         assertThat(state.config(TestConfig.class)).isEmpty();
@@ -76,12 +71,12 @@ class WorkerStateTest {
             Set.of(WorkerCapability.SCHEDULER)
         );
         WorkerState state = new WorkerState(definition);
-        TestConfig defaults = new TestConfig(true, 5.0);
-        state.seedConfig(defaults, true);
+        TestConfig config = new TestConfig(true, 5.0);
+        state.updateConfig(config, true, true);
 
         state.updateConfig(null, false, Boolean.FALSE);
 
-        assertThat(state.config(TestConfig.class)).contains(defaults);
+        assertThat(state.config(TestConfig.class)).contains(config);
         assertThat(state.enabled()).isFalse();
     }
 

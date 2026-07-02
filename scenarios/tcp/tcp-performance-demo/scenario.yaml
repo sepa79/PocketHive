@@ -1,6 +1,7 @@
 id: tcp-performance-demo
 name: TCP Performance Stress Test
-description: Demonstrates high-throughput TCP capabilities with ramping load, traffic shaping, and performance analytics
+description: Demonstrates high-throughput TCP capabilities with ramping load,
+  traffic shaping, and performance analytics
 template:
   image: swarm-controller:latest
   bees:
@@ -13,19 +14,18 @@ template:
           scheduler:
             ratePerSec: 10
             maxMessages: 100
-        worker:
-          message:
-            bodyType: SIMPLE
-            body: |
-              {
-                "txnId": "TXN_{{ eval('#randInt(100000, 999999)') }}",
-                "priority": "FAST",
-                "payload": "warmup_{{ eval('#randInt(1, 1000)') }}",
-                "timestamp": "{{ eval("#date_format(now, 'yyyy-MM-dd''T''HH:mm:ss.SSS')") }}"
-              }
-            headers:
-              x-ph-call-id: perf-test
-              x-ph-phase: warmup
+        message:
+          bodyType: SIMPLE
+          body: |
+            {
+              "txnId": "TXN_{{ eval('#randInt(100000, 999999)') }}",
+              "priority": "FAST",
+              "payload": "warmup_{{ eval('#randInt(1, 1000)') }}",
+              "timestamp": "{{ eval("#date_format(now, 'yyyy-MM-dd''T''HH:mm:ss.SSS')") }}"
+            }
+          headers:
+            x-ph-call-id: perf-test
+            x-ph-phase: warmup
       work:
         out:
           out: mod-warmup
@@ -40,19 +40,18 @@ template:
           scheduler:
             ratePerSec: 50
             maxMessages: 1000
-        worker:
-          message:
-            bodyType: SIMPLE
-            body: |
-              {
-                "txnId": "TXN_{{ eval('#randInt(100000, 999999)') }}",
-                "priority": "{{ eval('#randInt(1, 10) <= 6 ? \"FAST\" : (#randInt(1, 10) <= 9 ? \"NORMAL\" : \"SLOW\")') }}",
-                "payload": "ramp_{{ eval('#base64_encode(\"data\" + #randInt(1, 10000))') }}",
-                "timestamp": "{{ eval("#date_format(now, 'yyyy-MM-dd''T''HH:mm:ss.SSS')") }}"
-              }
-            headers:
-              x-ph-call-id: perf-test
-              x-ph-phase: ramp
+        message:
+          bodyType: SIMPLE
+          body: |
+            {
+              "txnId": "TXN_{{ eval('#randInt(100000, 999999)') }}",
+              "priority": "{{ eval('#randInt(1, 10) <= 6 ? \"FAST\" : (#randInt(1, 10) <= 9 ? \"NORMAL\" : \"SLOW\")') }}",
+              "payload": "ramp_{{ eval('#base64_encode(\"data\" + #randInt(1, 10000))') }}",
+              "timestamp": "{{ eval("#date_format(now, 'yyyy-MM-dd''T''HH:mm:ss.SSS')") }}"
+            }
+          headers:
+            x-ph-call-id: perf-test
+            x-ph-phase: ramp
       work:
         out:
           out: mod-ramp
@@ -67,19 +66,18 @@ template:
           scheduler:
             ratePerSec: 100
             maxMessages: 2000
-        worker:
-          message:
-            bodyType: SIMPLE
-            body: |
-              {
-                "txnId": "TXN_{{ eval('#randInt(100000, 999999)') }}",
-                "priority": "{{ eval('#randInt(1, 10) <= 5 ? \"FAST\" : (#randInt(1, 10) <= 8 ? \"NORMAL\" : \"SLOW\")') }}",
-                "payload": "peak_{{ eval('#base64_encode(\"stress\" + #randInt(1, 10000))') }}",
-                "timestamp": "{{ eval("#date_format(now, 'yyyy-MM-dd''T''HH:mm:ss.SSS')") }}"
-              }
-            headers:
-              x-ph-call-id: perf-test
-              x-ph-phase: peak
+        message:
+          bodyType: SIMPLE
+          body: |
+            {
+              "txnId": "TXN_{{ eval('#randInt(100000, 999999)') }}",
+              "priority": "{{ eval('#randInt(1, 10) <= 5 ? \"FAST\" : (#randInt(1, 10) <= 8 ? \"NORMAL\" : \"SLOW\")') }}",
+              "payload": "peak_{{ eval('#base64_encode(\"stress\" + #randInt(1, 10000))') }}",
+              "timestamp": "{{ eval("#date_format(now, 'yyyy-MM-dd''T''HH:mm:ss.SSS')") }}"
+            }
+          headers:
+            x-ph-call-id: perf-test
+            x-ph-phase: peak
       work:
         out:
           out: mod-peak
@@ -89,9 +87,9 @@ template:
       id: moderator-warmup
       image: moderator:latest
       config:
-        worker:
-          mode: THREAD_COUNT
-          threadCount: 5
+        mode:
+          type: pass-through
+          ratePerSec: 0.0
       work:
         in:
           in: mod-warmup
@@ -104,9 +102,9 @@ template:
       id: moderator-ramp
       image: moderator:latest
       config:
-        worker:
-          mode: THREAD_COUNT
-          threadCount: 10
+        mode:
+          type: pass-through
+          ratePerSec: 0.0
       work:
         in:
           in: mod-ramp
@@ -119,9 +117,9 @@ template:
       id: moderator-peak
       image: moderator:latest
       config:
-        worker:
-          mode: THREAD_COUNT
-          threadCount: 20
+        mode:
+          type: pass-through
+          ratePerSec: 0.0
       work:
         in:
           in: mod-peak
@@ -134,9 +132,9 @@ template:
       id: request-builder
       image: request-builder:latest
       config:
-        worker:
-          templateRoot: /app/scenario/templates/tcp
-          serviceId: default
+        templateRoot: /app/scenario/templates/tcp
+        serviceId: default
+        passThroughOnMissingTemplate: false
       work:
         in:
           in: build
@@ -150,15 +148,18 @@ template:
       image: processor:latest
       config:
         baseUrl: "{{ sut.endpoints['tcp-server'].baseUrl }}"
-        worker:
-          mode: THREAD_COUNT
-          threadCount: 50
-          tcpTransport:
-            type: socket
-            connectionReuse: PER_THREAD
-            maxRetries: 2
-            connectTimeoutMs: 3000
-            readTimeoutMs: 5000
+        mode: THREAD_COUNT
+        threadCount: 50
+        tcpTransport:
+          type: socket
+          connectionReuse: PER_THREAD
+          maxRetries: 2
+          connectTimeoutMs: 3000
+          readTimeoutMs: 5000
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
       work:
         in:
           in: proc
@@ -171,9 +172,9 @@ template:
       id: postprocessor
       image: postprocessor:latest
       config:
-        worker:
-          postprocessor:
-            publish-all-metrics: true
+        forwardToOutput: false
+        txOutcomeSinkMode: NONE
+        dropTxOutcomeWithoutCallId: true
       work:
         in:
           in: post

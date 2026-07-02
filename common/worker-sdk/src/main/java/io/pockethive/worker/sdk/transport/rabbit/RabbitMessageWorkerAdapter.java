@@ -20,7 +20,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.MDC;
 import org.springframework.amqp.core.Message;
@@ -64,8 +63,6 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
     private final WorkerControlPlaneRuntime controlPlaneRuntime;
     private final RabbitListenerEndpointRegistry listenerRegistry;
     private final io.pockethive.controlplane.ControlPlaneIdentity identity;
-    private final Supplier<Boolean> defaultEnabledSupplier;
-    private final Supplier<Object> defaultConfigSupplier;
     private final Function<WorkerStateSnapshot, Boolean> desiredStateResolver;
     private final WorkDispatcher dispatcher;
     private final MessageResultPublisher messageResultPublisher;
@@ -100,9 +97,7 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
         this.controlPlaneRuntime = builder.controlPlaneRuntime;
         this.listenerRegistry = builder.listenerRegistry;
         this.identity = builder.identity;
-        this.defaultEnabledSupplier = builder.defaultEnabledSupplier;
         this.desiredStateResolver = builder.desiredStateResolver;
-        this.defaultConfigSupplier = builder.defaultConfigSupplier;
         this.dispatcher = builder.dispatcher;
         this.messageResultPublisher = builder.messageResultPublisher;
         this.rabbitTemplate = builder.rabbitTemplate;
@@ -122,7 +117,7 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
     }
 
     /**
-     * Registers the control-plane listener and applies the default enabled state.
+     * Registers the control-plane listener and applies the explicit control-plane enabled state.
      * <p>
      * This method should be invoked during service initialisation (typically in a {@code @PostConstruct}
      * method) so that the helper can record the desired state communicated by the control plane. The
@@ -133,11 +128,7 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
         if (!initialised.compareAndSet(false, true)) {
             return;
         }
-        desiredEnabled = defaultEnabledSupplier.get();
-        Object defaultConfig = defaultConfigSupplier.get();
-        if (defaultConfig != null) {
-            controlPlaneRuntime.registerDefaultConfig(workerDefinition.beanName(), defaultConfig);
-        }
+        desiredEnabled = false;
         controlPlaneRuntime.registerStateListener(workerDefinition.beanName(), snapshot -> {
             updateConcurrency(snapshot);
             boolean enabled = Optional.ofNullable(desiredStateResolver.apply(snapshot)).orElse(desiredEnabled);
@@ -440,8 +431,6 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
         private WorkerControlPlaneRuntime controlPlaneRuntime;
         private RabbitListenerEndpointRegistry listenerRegistry;
         private io.pockethive.controlplane.ControlPlaneIdentity identity;
-        private Supplier<Boolean> defaultEnabledSupplier;
-        private Supplier<Object> defaultConfigSupplier = () -> null;
         private Function<WorkerStateSnapshot, Boolean> desiredStateResolver;
         private WorkDispatcher dispatcher;
         private MessageResultPublisher messageResultPublisher;
@@ -534,70 +523,6 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
          */
         public Builder identity(io.pockethive.controlplane.ControlPlaneIdentity identity) {
             this.identity = Objects.requireNonNull(identity, "identity");
-            return this;
-        }
-
-        /**
-         * Configures the default configuration hooks for the worker using the supplied typed defaults.
-         * <p>
-         * The helper seeds the control plane with the provided defaults, derives the initial enabled
-         * state and resolves subsequent desired state changes by inspecting either the explicit enabled
-         * flag or the latest typed configuration.
-         *
-         * @param configType        configuration class exposed by the worker runtime
-         * @param defaultsSupplier  supplier that returns the default configuration instance
-         * @param enabledExtractor  extractor that reads the enabled flag from the configuration
-         * @param <C>               type of the configuration object
-         * @return this builder instance
-         */
-        public <C> Builder withConfigDefaults(
-            Class<C> configType,
-            Supplier<C> defaultsSupplier,
-            Function<C, Boolean> enabledExtractor
-        ) {
-            Objects.requireNonNull(configType, "configType");
-            Objects.requireNonNull(defaultsSupplier, "defaultsSupplier");
-            Objects.requireNonNull(enabledExtractor, "enabledExtractor");
-
-            Supplier<C> typedDefaults = () -> Objects.requireNonNull(defaultsSupplier.get(),
-                "defaultsSupplier returned null config");
-            Supplier<Boolean> resolvedDefaultEnabled = () -> {
-                Boolean enabled = Objects.requireNonNull(enabledExtractor.apply(typedDefaults.get()),
-                    "enabledExtractor returned null default enabled flag");
-                return enabled;
-            };
-            Function<WorkerStateSnapshot, Boolean> resolvedDesiredState = snapshot -> snapshot.enabled()
-                ? true
-                : snapshot.config(configType)
-                    .map(enabledExtractor)
-                    .orElseGet(resolvedDefaultEnabled);
-
-            this.defaultConfigSupplier = () -> typedDefaults.get();
-            this.defaultEnabledSupplier = resolvedDefaultEnabled;
-            this.desiredStateResolver = resolvedDesiredState;
-            return this;
-        }
-
-        /**
-         * Supplies a callback that determines the default enabled state when the worker starts. The control
-         * plane desired state can later override this initial value.
-         *
-         * @param defaultEnabledSupplier supplier that provides the default enabled flag
-         * @return this builder instance
-         */
-        public Builder defaultEnabledSupplier(Supplier<Boolean> defaultEnabledSupplier) {
-            this.defaultEnabledSupplier = Objects.requireNonNull(defaultEnabledSupplier, "defaultEnabledSupplier");
-            return this;
-        }
-
-        /**
-         * Supplies the default configuration instance that should be exposed before the control plane sends overrides.
-         *
-         * @param defaultConfigSupplier supplier that returns the default configuration object
-         * @return this builder instance
-         */
-        public Builder defaultConfigSupplier(Supplier<Object> defaultConfigSupplier) {
-            this.defaultConfigSupplier = Objects.requireNonNull(defaultConfigSupplier, "defaultConfigSupplier");
             return this;
         }
 
@@ -706,8 +631,6 @@ public final class RabbitMessageWorkerAdapter implements ApplicationListener<Con
             Objects.requireNonNull(controlPlaneRuntime, "controlPlaneRuntime");
             Objects.requireNonNull(listenerRegistry, "listenerRegistry");
             Objects.requireNonNull(identity, "identity");
-            Objects.requireNonNull(defaultEnabledSupplier, "defaultEnabledSupplier");
-            Objects.requireNonNull(defaultConfigSupplier, "defaultConfigSupplier");
             Objects.requireNonNull(desiredStateResolver, "desiredStateResolver");
             Objects.requireNonNull(dispatcher, "dispatcher");
             if (messageResultPublisher == null) {

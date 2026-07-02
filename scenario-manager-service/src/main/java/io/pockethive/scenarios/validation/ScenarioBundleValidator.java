@@ -2,9 +2,12 @@ package io.pockethive.scenarios.validation;
 
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.StreamReadFeature;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import io.pockethive.capabilities.CapabilityCatalogueService;
+import io.pockethive.capabilities.CapabilityConfigType;
+import io.pockethive.capabilities.CapabilityManifest;
 import io.pockethive.scenarios.Scenario;
 import io.pockethive.scenarios.ScenarioBundleLayout;
 import io.pockethive.scenarios.ScenarioService;
@@ -26,6 +29,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -49,9 +53,25 @@ public final class ScenarioBundleValidator {
     private static final String SERVICE_ID_CONFIG_KEY = "serviceId";
     private static final String WORKER_CONFIG_KEY = "worker";
     private static final String LEGACY_POCKETHIVE_CONFIG_KEY = "pockethive";
-    private static final String CONFIG_KEY = "config";
     private static final String CALL_ID_CONFIG_KEY = "callId";
-    private static final String DEFAULT_SERVICE_ID = "default";
+    private static final String INPUT_IO_SCOPE = "INPUT";
+    private static final String OUTPUT_IO_SCOPE = "OUTPUT";
+    private static final String INPUT_CONFIG_ROOT = "inputs";
+    private static final String OUTPUT_CONFIG_ROOT = "outputs";
+    private static final String TYPE_CONFIG_LEAF = "type";
+    private static final String INPUT_SELECTOR_CONFIG_PATH = INPUT_CONFIG_ROOT + "." + TYPE_CONFIG_LEAF;
+    private static final String OUTPUT_SELECTOR_CONFIG_PATH = OUTPUT_CONFIG_ROOT + "." + TYPE_CONFIG_LEAF;
+    private static final String REDIS_DATASET_IO_TYPE = "REDIS_DATASET";
+    private static final String REDIS_OUTPUT_IO_TYPE = "REDIS";
+    private static final String REDIS_DATASET_CONFIG_PATH = INPUT_CONFIG_ROOT + ".redis";
+    private static final String REDIS_DATASET_LIST_NAME_PATH = REDIS_DATASET_CONFIG_PATH + ".listName";
+    private static final String REDIS_DATASET_SOURCES_PATH = REDIS_DATASET_CONFIG_PATH + ".sources";
+    private static final String REDIS_OUTPUT_CONFIG_PATH = OUTPUT_CONFIG_ROOT + ".redis";
+    private static final String REDIS_OUTPUT_ROUTES_PATH = REDIS_OUTPUT_CONFIG_PATH + ".routes";
+    private static final String REDIS_OUTPUT_TARGET_LIST_TEMPLATE_PATH = REDIS_OUTPUT_CONFIG_PATH + ".targetListTemplate";
+    private static final String REDIS_OUTPUT_DEFAULT_LIST_PATH = REDIS_OUTPUT_CONFIG_PATH + ".defaultList";
+    private static final String TEMPLATE_EXPRESSION_OPEN = "{{";
+    private static final String TEMPLATE_EXPRESSION_CLOSE = "}}";
     private static final Set<String> REQUEST_TEMPLATE_PROTOCOLS = Set.of("HTTP", "TCP", "ISO8583");
 
     private final ObjectMapper strictJsonMapper = new ObjectMapper(JsonFactory.builder()
@@ -103,6 +123,7 @@ public final class ScenarioBundleValidator {
             defunctReason.ifPresent(reason -> findings.add(defunctFinding(reason)));
         }
         expectedScenarioIdFinding(scenarioId, input.expectedScenarioId()).ifPresent(findings::add);
+        findings.addAll(validateScenarioConfigShape(resolved));
 
         if (bundleRoot != null && Files.isDirectory(bundleRoot) && scenarioId != null && !scenarioId.isBlank()) {
             try {
@@ -663,6 +684,781 @@ public final class ScenarioBundleValidator {
         return List.copyOf(sources);
     }
 
+    private List<ValidationFinding> validateScenarioConfigShape(Scenario scenario) {
+        if (scenario == null || scenario.getTemplate() == null || scenario.getTemplate().bees() == null) {
+            return List.of();
+        }
+        List<ValidationFinding> findings = new ArrayList<>();
+        int index = 0;
+        for (Bee bee : scenario.getTemplate().bees()) {
+            if (bee == null) {
+                index++;
+                continue;
+            }
+            Map<String, Object> config = bee.config() == null ? Map.of() : bee.config();
+            String configPath = ScenarioBundleLayout.SCENARIO_DESCRIPTOR_FILE
+                + ":template.bees[" + index + "].config";
+            if (config.containsKey(WORKER_CONFIG_KEY)) {
+                findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
+                    ValidationSeverity.ERROR,
+                    configPath + "." + WORKER_CONFIG_KEY,
+                    "Scenario bee config must declare worker settings directly under config; config.worker is not supported.",
+                    "Move fields from config.worker into config."));
+            }
+            if (config.containsKey(LEGACY_POCKETHIVE_CONFIG_KEY)) {
+                findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
+                    ValidationSeverity.ERROR,
+                    configPath + "." + LEGACY_POCKETHIVE_CONFIG_KEY,
+                    "Scenario bee config must not use legacy config.pockethive worker settings.",
+                    "Move fields from config.pockethive.worker.config into config."));
+            }
+            validateIoSelectorConfig(config, configPath, findings);
+            validateRequiredCapabilityConfig(bee, config, configPath, findings);
+            validateCapabilityConfigTypes(bee, config, configPath, findings);
+            validateCapabilityConfigOptions(bee, config, configPath, findings);
+            validateCapabilityConfigNumericRanges(bee, config, configPath, findings);
+            validateSelectedIoSemanticContracts(config, configPath, findings);
+            index++;
+        }
+        return List.copyOf(findings);
+    }
+
+    private void validateIoSelectorConfig(
+        Map<String, Object> config,
+        String configPath,
+        List<ValidationFinding> findings
+    ) {
+        for (IoSelectorRequirement requirement : ioSelectorRequirements()) {
+            if (!containsConfigPath(config, requirement.subblockPath())) {
+                continue;
+            }
+            Object rawSelector = configValue(config, requirement.selectorPath());
+            String actualSelector = stringValue(rawSelector);
+            if (actualSelector == null || actualSelector.isBlank()) {
+                findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
+                    ValidationSeverity.ERROR,
+                    configPath + "." + requirement.selectorPath(),
+                    "Scenario bee config contains IO-specific block '" + requirement.subblockPath()
+                        + "' but is missing required selector '" + requirement.selectorPath()
+                        + ": " + requirement.expectedSelector() + "'.",
+                    "Add config." + requirement.selectorPath() + ": " + requirement.expectedSelector() + "."));
+                continue;
+            }
+            if (!requirement.expectedSelector().equals(actualSelector)) {
+                findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
+                    ValidationSeverity.ERROR,
+                    configPath + "." + requirement.selectorPath(),
+                    "Scenario bee config contains IO-specific block '" + requirement.subblockPath()
+                        + "' but selector '" + requirement.selectorPath() + "' is '" + actualSelector
+                        + "'; expected '" + requirement.expectedSelector() + "'.",
+                    "Set config." + requirement.selectorPath() + " to " + requirement.expectedSelector()
+                        + " or remove config." + requirement.subblockPath() + "."));
+            }
+        }
+    }
+
+    private List<IoSelectorRequirement> ioSelectorRequirements() {
+        Map<String, IoSelectorRequirement> requirements = new LinkedHashMap<>();
+        for (CapabilityManifest manifest : capabilities.allManifests()) {
+            CapabilityManifest.Ui ui = manifest.ui();
+            if (ui == null) {
+                continue;
+            }
+            String ioType = trimToNull(ui.ioType());
+            String selectorPath = selectorPathForIoScope(ui.ioScope());
+            String configRoot = configRootForIoScope(ui.ioScope());
+            if (ioType == null || selectorPath == null || configRoot == null) {
+                continue;
+            }
+            for (CapabilityManifest.ConfigEntry entry : manifest.config()) {
+                if (entry == null) {
+                    continue;
+                }
+                String subblockPath = ioSubblockPath(entry.name(), configRoot);
+                if (subblockPath == null) {
+                    continue;
+                }
+                String key = selectorPath + "|" + subblockPath + "|" + ioType;
+                requirements.putIfAbsent(key, new IoSelectorRequirement(subblockPath, selectorPath, ioType));
+            }
+        }
+        return List.copyOf(requirements.values());
+    }
+
+    private String selectorPathForIoScope(String scope) {
+        String normalized = trimToNull(scope);
+        if (INPUT_IO_SCOPE.equals(normalized)) {
+            return INPUT_SELECTOR_CONFIG_PATH;
+        }
+        if (OUTPUT_IO_SCOPE.equals(normalized)) {
+            return OUTPUT_SELECTOR_CONFIG_PATH;
+        }
+        return null;
+    }
+
+    private String configRootForIoScope(String scope) {
+        String normalized = trimToNull(scope);
+        if (INPUT_IO_SCOPE.equals(normalized)) {
+            return INPUT_CONFIG_ROOT;
+        }
+        if (OUTPUT_IO_SCOPE.equals(normalized)) {
+            return OUTPUT_CONFIG_ROOT;
+        }
+        return null;
+    }
+
+    private String ioSubblockPath(String configName, String configRoot) {
+        String normalized = trimToNull(configName);
+        if (normalized == null) {
+            return null;
+        }
+        String[] segments = normalized.split("\\.");
+        if (segments.length < 3 || !configRoot.equals(segments[0]) || TYPE_CONFIG_LEAF.equals(segments[1])) {
+            return null;
+        }
+        return segments[0] + "." + segments[1];
+    }
+
+    private void validateRequiredCapabilityConfig(
+        Bee bee,
+        Map<String, Object> config,
+        String configPath,
+        List<ValidationFinding> findings
+    ) {
+        capabilityConfigEntriesFor(bee, config).stream()
+            .filter(ref -> Boolean.TRUE.equals(ref.entry().required()))
+            .filter(ref -> capabilityConditionMatches(config, ref.entry().when()))
+            .forEach(ref -> {
+                CapabilityManifest.ConfigEntry entry = ref.entry();
+                String requiredPath = entry.name();
+                if (requiredPath == null || requiredPath.isBlank()) {
+                    return;
+                }
+                if (ioSelectorSpecificFindingWillCover(config, requiredPath)) {
+                    return;
+                }
+                if (hasConfigValue(config, requiredPath, Boolean.TRUE.equals(entry.allowBlank()))) {
+                    return;
+                }
+                findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
+                    ValidationSeverity.ERROR,
+                    configPath + "." + requiredPath,
+                    "Scenario bee config is missing required field '" + requiredPath + "' for "
+                        + ref.owner() + ".",
+                    "Add config." + requiredPath + " to the scenario bee."));
+            });
+    }
+
+    private boolean ioSelectorSpecificFindingWillCover(Map<String, Object> config, String requiredPath) {
+        if (!INPUT_SELECTOR_CONFIG_PATH.equals(requiredPath) && !OUTPUT_SELECTOR_CONFIG_PATH.equals(requiredPath)) {
+            return false;
+        }
+        Object rawSelector = configValue(config, requiredPath);
+        String actualSelector = stringValue(rawSelector);
+        if (actualSelector != null && !actualSelector.isBlank()) {
+            return false;
+        }
+        return ioSelectorRequirements().stream()
+            .filter(requirement -> requiredPath.equals(requirement.selectorPath()))
+            .anyMatch(requirement -> containsConfigPath(config, requirement.subblockPath()));
+    }
+
+    private void validateCapabilityConfigTypes(
+        Bee bee,
+        Map<String, Object> config,
+        String configPath,
+        List<ValidationFinding> findings
+    ) {
+        capabilityConfigEntriesFor(bee, config).stream()
+            .filter(ref -> capabilityConditionMatches(config, ref.entry().when()))
+            .forEach(ref -> {
+                CapabilityManifest.ConfigEntry entry = ref.entry();
+                String fieldPath = trimToNull(entry.name());
+                CapabilityConfigType expectedType = capabilityConfigType(entry.type());
+                if (fieldPath == null || expectedType == null || !containsConfigPath(config, fieldPath)) {
+                    return;
+                }
+                Object rawValue = configValue(config, fieldPath);
+                if (!hasCapabilityConfigTypeMismatch(rawValue, expectedType)) {
+                    return;
+                }
+                String expectedDescription = expectedType.description();
+                findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
+                    ValidationSeverity.ERROR,
+                    configPath + "." + fieldPath,
+                    "Scenario bee config field '" + fieldPath + "' must be " + expectedDescription
+                        + " for " + ref.owner() + "; actual type is " + capabilityConfigActualType(rawValue) + ".",
+                    "Set config." + fieldPath + " to a value of type " + expectedDescription + "."));
+            });
+    }
+
+    private void validateCapabilityConfigOptions(
+        Bee bee,
+        Map<String, Object> config,
+        String configPath,
+        List<ValidationFinding> findings
+    ) {
+        capabilityConfigEntriesFor(bee, config).stream()
+            .filter(ref -> ref.entry().options() != null && ref.entry().options().isArray())
+            .filter(ref -> capabilityConditionMatches(config, ref.entry().when()))
+            .forEach(ref -> {
+                CapabilityManifest.ConfigEntry entry = ref.entry();
+                String fieldPath = trimToNull(entry.name());
+                if (fieldPath == null || !containsConfigPath(config, fieldPath)) {
+                    return;
+                }
+                Set<String> allowedValues = optionValues(entry.options());
+                if (allowedValues.isEmpty()) {
+                    return;
+                }
+                String actualValue = configScalarValue(configValue(config, fieldPath));
+                if (actualValue == null || allowedValues.contains(actualValue)) {
+                    return;
+                }
+                findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
+                    ValidationSeverity.ERROR,
+                    configPath + "." + fieldPath,
+                    "Scenario bee config field '" + fieldPath + "' has unsupported value '" + actualValue
+                        + "' for " + ref.owner() + ". Allowed values: "
+                        + String.join(", ", allowedValues) + ".",
+                    "Set config." + fieldPath + " to one of: " + String.join(", ", allowedValues) + "."));
+            });
+    }
+
+    private void validateCapabilityConfigNumericRanges(
+        Bee bee,
+        Map<String, Object> config,
+        String configPath,
+        List<ValidationFinding> findings
+    ) {
+        capabilityConfigEntriesFor(bee, config).stream()
+            .filter(ref -> ref.entry().min() != null || ref.entry().max() != null)
+            .filter(ref -> capabilityConditionMatches(config, ref.entry().when()))
+            .forEach(ref -> {
+                CapabilityManifest.ConfigEntry entry = ref.entry();
+                String fieldPath = trimToNull(entry.name());
+                if (fieldPath == null || !containsConfigPath(config, fieldPath)) {
+                    return;
+                }
+                Object rawValue = configValue(config, fieldPath);
+                CapabilityConfigType expectedType = capabilityConfigType(entry.type());
+                if (hasCapabilityConfigTypeMismatch(rawValue, expectedType)) {
+                    return;
+                }
+                Double actualValue = configNumericValue(rawValue);
+                if (actualValue == null) {
+                    return;
+                }
+                if (!Double.isFinite(actualValue)) {
+                    findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
+                        ValidationSeverity.ERROR,
+                        configPath + "." + fieldPath,
+                        "Scenario bee config field '" + fieldPath + "' must be a finite number for "
+                            + ref.owner() + ".",
+                        "Set config." + fieldPath + " to a numeric value."));
+                    return;
+                }
+
+                Number min = entry.min();
+                Number max = entry.max();
+                if (min != null && actualValue < min.doubleValue()) {
+                    findings.add(numericRangeFinding(configPath, fieldPath, actualValue, ref.owner(), min, max));
+                    return;
+                }
+                if (max != null && actualValue > max.doubleValue()) {
+                    findings.add(numericRangeFinding(configPath, fieldPath, actualValue, ref.owner(), min, max));
+                }
+            });
+    }
+
+    private ValidationFinding numericRangeFinding(
+        String configPath,
+        String fieldPath,
+        double actualValue,
+        String owner,
+        Number min,
+        Number max
+    ) {
+        String range = numericRangeDescription(min, max);
+        return ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
+            ValidationSeverity.ERROR,
+            configPath + "." + fieldPath,
+            "Scenario bee config field '" + fieldPath + "' has value " + formatNumber(actualValue)
+                + " for " + owner + "; expected " + range + ".",
+            "Set config." + fieldPath + " to a value " + range + ".");
+    }
+
+    private String numericRangeDescription(Number min, Number max) {
+        if (min != null && max != null) {
+            return "between " + formatNumber(min) + " and " + formatNumber(max);
+        }
+        if (min != null) {
+            return ">= " + formatNumber(min);
+        }
+        return "<= " + formatNumber(max);
+    }
+
+    private void validateSelectedIoSemanticContracts(
+        Map<String, Object> config,
+        String configPath,
+        List<ValidationFinding> findings
+    ) {
+        if (REDIS_DATASET_IO_TYPE.equals(stringValue(configValue(config, INPUT_SELECTOR_CONFIG_PATH)))
+            && containsConfigPath(config, REDIS_DATASET_CONFIG_PATH)) {
+            validateRedisDatasetSourceContract(config, configPath, findings);
+        }
+        if (REDIS_OUTPUT_IO_TYPE.equals(stringValue(configValue(config, OUTPUT_SELECTOR_CONFIG_PATH)))
+            && containsConfigPath(config, REDIS_OUTPUT_CONFIG_PATH)) {
+            validateRedisOutputTargetContract(config, configPath, findings);
+        }
+    }
+
+    private void validateRedisDatasetSourceContract(
+        Map<String, Object> config,
+        String configPath,
+        List<ValidationFinding> findings
+    ) {
+        Object listName = configValue(config, REDIS_DATASET_LIST_NAME_PATH);
+        Object sources = configValue(config, REDIS_DATASET_SOURCES_PATH);
+        boolean hasListName = isNonBlankString(listName);
+        boolean hasSources = hasConfiguredJsonCollection(sources);
+        if (hasListName == hasSources) {
+            findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
+                ValidationSeverity.ERROR,
+                configPath + "." + REDIS_DATASET_CONFIG_PATH,
+                "Redis dataset input requires exactly one source mode: non-blank '"
+                    + REDIS_DATASET_LIST_NAME_PATH + "' or non-empty '" + REDIS_DATASET_SOURCES_PATH + "'.",
+                "Set either config." + REDIS_DATASET_LIST_NAME_PATH + " or config."
+                    + REDIS_DATASET_SOURCES_PATH + " with at least one source, but not both."));
+        }
+        validateRedisDatasetSources(sources, configPath, findings);
+    }
+
+    private void validateRedisDatasetSources(
+        Object sources,
+        String configPath,
+        List<ValidationFinding> findings
+    ) {
+        if (sources != null
+            && !(sources instanceof Collection<?>)
+            && !(sources instanceof String text && containsTemplateExpression(text.trim()))) {
+            findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
+                ValidationSeverity.ERROR,
+                configPath + "." + REDIS_DATASET_SOURCES_PATH,
+                "Redis dataset sources must be a list.",
+                "Set config." + REDIS_DATASET_SOURCES_PATH + " to an array of source objects."));
+            return;
+        }
+        if (!(sources instanceof Collection<?> sourceEntries)) {
+            return;
+        }
+        Set<String> seenLists = new LinkedHashSet<>();
+        int index = 0;
+        for (Object source : sourceEntries) {
+            String sourcePath = REDIS_DATASET_SOURCES_PATH + "[" + index + "]";
+            if (!(source instanceof Map<?, ?> sourceMap)) {
+                findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
+                    ValidationSeverity.ERROR,
+                    configPath + "." + sourcePath,
+                    "Redis dataset source entry must be an object.",
+                    "Set config." + sourcePath + " to an object with listName and weight."));
+                index++;
+                continue;
+            }
+            String listName = scalarText(sourceMap.get("listName"));
+            if (listName == null || listName.isBlank()) {
+                findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
+                    ValidationSeverity.ERROR,
+                    configPath + "." + sourcePath + ".listName",
+                    "Redis dataset source listName must not be blank.",
+                    "Set config." + sourcePath + ".listName to the Redis list name."));
+            } else if (!containsTemplateExpression(listName) && !seenLists.add(listName)) {
+                findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
+                    ValidationSeverity.ERROR,
+                    configPath + "." + sourcePath + ".listName",
+                    "Redis dataset sources must not contain duplicate listName '" + listName + "'.",
+                    "Remove the duplicate source or use a distinct Redis list name."));
+            }
+            Object weightValue = sourceMap.get("weight");
+            if (weightValue == null) {
+                findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
+                    ValidationSeverity.ERROR,
+                    configPath + "." + sourcePath + ".weight",
+                    "Redis dataset source weight must be configured.",
+                    "Set config." + sourcePath + ".weight to a number greater than 0."));
+            } else {
+                Double weight = configNumericValue(weightValue);
+                if (weight != null && (!Double.isFinite(weight) || weight <= 0.0)) {
+                    findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
+                        ValidationSeverity.ERROR,
+                        configPath + "." + sourcePath + ".weight",
+                        "Redis dataset source weight must be > 0.",
+                        "Set config." + sourcePath + ".weight to a number greater than 0."));
+                }
+            }
+            index++;
+        }
+    }
+
+    private void validateRedisOutputTargetContract(
+        Map<String, Object> config,
+        String configPath,
+        List<ValidationFinding> findings
+    ) {
+        Object routes = configValue(config, REDIS_OUTPUT_ROUTES_PATH);
+        boolean hasRoutes = hasConfiguredJsonCollection(routes);
+        boolean hasTargetListTemplate = isNonBlankString(configValue(config, REDIS_OUTPUT_TARGET_LIST_TEMPLATE_PATH));
+        boolean hasDefaultList = isNonBlankString(configValue(config, REDIS_OUTPUT_DEFAULT_LIST_PATH));
+        if (!hasRoutes && !hasTargetListTemplate && !hasDefaultList) {
+            findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
+                ValidationSeverity.ERROR,
+                configPath + "." + REDIS_OUTPUT_CONFIG_PATH,
+                "Redis output requires at least one target: non-empty '" + REDIS_OUTPUT_ROUTES_PATH
+                    + "', non-blank '" + REDIS_OUTPUT_TARGET_LIST_TEMPLATE_PATH + "', or non-blank '"
+                    + REDIS_OUTPUT_DEFAULT_LIST_PATH + "'.",
+                "Set config." + REDIS_OUTPUT_ROUTES_PATH + ", config."
+                    + REDIS_OUTPUT_TARGET_LIST_TEMPLATE_PATH + ", or config." + REDIS_OUTPUT_DEFAULT_LIST_PATH + "."));
+        }
+        validateRedisOutputRoutes(routes, configPath, findings);
+    }
+
+    private void validateRedisOutputRoutes(
+        Object routes,
+        String configPath,
+        List<ValidationFinding> findings
+    ) {
+        if (routes != null
+            && !(routes instanceof Collection<?>)
+            && !(routes instanceof String text && containsTemplateExpression(text.trim()))) {
+            findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
+                ValidationSeverity.ERROR,
+                configPath + "." + REDIS_OUTPUT_ROUTES_PATH,
+                "Redis output routes must be a list.",
+                "Set config." + REDIS_OUTPUT_ROUTES_PATH + " to an array of route objects."));
+            return;
+        }
+        if (!(routes instanceof Collection<?> routeEntries)) {
+            return;
+        }
+        int index = 0;
+        for (Object route : routeEntries) {
+            String routePath = REDIS_OUTPUT_ROUTES_PATH + "[" + index + "]";
+            if (!(route instanceof Map<?, ?> routeMap)) {
+                findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
+                    ValidationSeverity.ERROR,
+                    configPath + "." + routePath,
+                    "Redis output route entry must be an object.",
+                    "Set config." + routePath + " to an object with list plus match and/or header."));
+                index++;
+                continue;
+            }
+            String match = scalarText(routeMap.get("match"));
+            String header = scalarText(routeMap.get("header"));
+            String headerMatch = scalarText(routeMap.get("headerMatch"));
+            String list = scalarText(routeMap.get("list"));
+            if (list == null || list.isBlank()) {
+                findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
+                    ValidationSeverity.ERROR,
+                    configPath + "." + routePath + ".list",
+                    "Redis output route list must not be blank.",
+                    "Set config." + routePath + ".list to the target Redis list."));
+            }
+            validateRegex(match, configPath, routePath + ".match", "Redis output route match", findings);
+            validateRegex(headerMatch, configPath, routePath + ".headerMatch", "Redis output route headerMatch", findings);
+            if (isBlank(match) && isBlank(header)) {
+                findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
+                    ValidationSeverity.ERROR,
+                    configPath + "." + routePath,
+                    "Redis output route requires match and/or header.",
+                    "Set config." + routePath + ".match or config." + routePath + ".header."));
+            }
+            if (!isBlank(header) && isBlank(headerMatch)) {
+                findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
+                    ValidationSeverity.ERROR,
+                    configPath + "." + routePath + ".headerMatch",
+                    "Redis output route headerMatch must be configured when header is set.",
+                    "Set config." + routePath + ".headerMatch to a regex for the header value."));
+            }
+            index++;
+        }
+    }
+
+    private void validateRegex(
+        String value,
+        String configPath,
+        String fieldPath,
+        String label,
+        List<ValidationFinding> findings
+    ) {
+        if (isBlank(value) || containsTemplateExpression(value)) {
+            return;
+        }
+        try {
+            Pattern.compile(value);
+        } catch (Exception ex) {
+            findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
+                ValidationSeverity.ERROR,
+                configPath + "." + fieldPath,
+                label + " regex is invalid: " + ex.getMessage(),
+                "Set config." + fieldPath + " to a valid regular expression."));
+        }
+    }
+
+    private boolean hasConfiguredJsonCollection(Object value) {
+        if (value instanceof String text && containsTemplateExpression(text.trim())) {
+            return true;
+        }
+        return value instanceof Collection<?> collection && !collection.isEmpty();
+    }
+
+    private boolean isNonBlankString(Object value) {
+        return value instanceof String text && !text.isBlank();
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
+    }
+
+    private String scalarText(Object value) {
+        return value == null ? null : value.toString();
+    }
+
+    private CapabilityConfigType capabilityConfigType(String type) {
+        return CapabilityConfigType.fromWireValue(type).orElse(null);
+    }
+
+    private boolean matchesCapabilityConfigType(Object value, CapabilityConfigType expectedType) {
+        return switch (expectedType) {
+            case STRING -> value instanceof String;
+            case BOOLEAN -> value instanceof Boolean;
+            case NUMBER -> value instanceof Number number && Double.isFinite(number.doubleValue());
+            case INTEGER -> isIntegralNumber(value);
+            case JSON -> value instanceof Map<?, ?> || value instanceof Collection<?>;
+        };
+    }
+
+    private boolean hasCapabilityConfigTypeMismatch(Object value, CapabilityConfigType expectedType) {
+        if (expectedType == null) {
+            return false;
+        }
+        if (value instanceof String text && containsTemplateExpression(text.trim())) {
+            return false;
+        }
+        return !matchesCapabilityConfigType(value, expectedType);
+    }
+
+    private boolean isIntegralNumber(Object value) {
+        if (!(value instanceof Number number)) {
+            return false;
+        }
+        double numeric = number.doubleValue();
+        return Double.isFinite(numeric) && numeric == Math.rint(numeric);
+    }
+
+    private String capabilityConfigActualType(Object value) {
+        if (value == null) {
+            return "null";
+        }
+        if (value instanceof Map<?, ?>) {
+            return "object";
+        }
+        if (value instanceof Collection<?>) {
+            return "array";
+        }
+        if (value instanceof String) {
+            return "string";
+        }
+        if (value instanceof Boolean) {
+            return "boolean";
+        }
+        if (value instanceof Number) {
+            return "number";
+        }
+        return value.getClass().getSimpleName();
+    }
+
+    private List<CapabilityConfigEntryRef> capabilityConfigEntriesFor(Bee bee, Map<String, Object> config) {
+        List<CapabilityConfigEntryRef> entries = new ArrayList<>();
+        capabilities.resolveByImageReference(bee.image())
+            .map(CapabilityCatalogueService.CapabilityResolution::manifest)
+            .map(CapabilityManifest::config)
+            .orElse(List.of())
+            .stream()
+            .filter(Objects::nonNull)
+            .map(entry -> new CapabilityConfigEntryRef(entry, "image '" + bee.image() + "'"))
+            .forEach(entries::add);
+
+        for (CapabilityManifest manifest : capabilities.allManifests()) {
+            CapabilityManifest.Ui ui = manifest.ui();
+            if (ui == null) {
+                continue;
+            }
+            String ioType = trimToNull(ui.ioType());
+            String selectorPath = selectorPathForIoScope(ui.ioScope());
+            if (ioType == null || selectorPath == null) {
+                continue;
+            }
+            String selectedType = stringValue(configValue(config, selectorPath));
+            if (!ioType.equals(selectedType)) {
+                continue;
+            }
+            String owner = "selected IO '" + ioType + "'";
+            manifest.config().stream()
+                .filter(Objects::nonNull)
+                .map(entry -> new CapabilityConfigEntryRef(entry, owner))
+                .forEach(entries::add);
+        }
+        return List.copyOf(entries);
+    }
+
+    private Set<String> optionValues(JsonNode options) {
+        if (options == null || !options.isArray()) {
+            return Set.of();
+        }
+        Set<String> values = new LinkedHashSet<>();
+        for (JsonNode option : options) {
+            String value = optionScalarValue(option);
+            if (value != null) {
+                values.add(value);
+            }
+        }
+        return values;
+    }
+
+    private String optionScalarValue(JsonNode option) {
+        if (option == null || option.isNull() || option.isMissingNode() || option.isContainerNode()) {
+            return null;
+        }
+        return option.asText();
+    }
+
+    private String configScalarValue(Object value) {
+        if (value == null || value instanceof Map<?, ?> || value instanceof Collection<?>) {
+            return null;
+        }
+        if (value instanceof String text) {
+            String trimmed = text.trim();
+            if (containsTemplateExpression(trimmed)) {
+                return null;
+            }
+            return trimmed;
+        }
+        return String.valueOf(value);
+    }
+
+    private Double configNumericValue(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return number.doubleValue();
+        }
+        if (value instanceof String text) {
+            String trimmed = text.trim();
+            if (trimmed.isEmpty() || containsTemplateExpression(trimmed)) {
+                return null;
+            }
+            try {
+                return Double.parseDouble(trimmed);
+            } catch (NumberFormatException ex) {
+                return Double.NaN;
+            }
+        }
+        return Double.NaN;
+    }
+
+    private String formatNumber(Number value) {
+        if (value == null) {
+            return "";
+        }
+        return formatNumber(value.doubleValue());
+    }
+
+    private String formatNumber(double value) {
+        if (Double.isFinite(value) && value == Math.rint(value)) {
+            return Long.toString((long) value);
+        }
+        return Double.toString(value);
+    }
+
+    private boolean containsTemplateExpression(String value) {
+        return value != null
+            && value.contains(TEMPLATE_EXPRESSION_OPEN)
+            && value.contains(TEMPLATE_EXPRESSION_CLOSE);
+    }
+
+    private boolean capabilityConditionMatches(Map<String, Object> config, JsonNode when) {
+        if (when == null || when.isNull() || when.isMissingNode()) {
+            return true;
+        }
+        if (!when.isObject()) {
+            return true;
+        }
+        Iterator<Map.Entry<String, JsonNode>> fields = when.fields();
+        while (fields.hasNext()) {
+            Map.Entry<String, JsonNode> condition = fields.next();
+            Object actual = configValue(config, condition.getKey());
+            if (!matchesConditionValue(actual, condition.getValue())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private Object configValue(Map<String, Object> config, String dottedPath) {
+        Object current = config;
+        for (String segment : dottedPath.split("\\.")) {
+            if (!(current instanceof Map<?, ?> map) || !map.containsKey(segment)) {
+                return null;
+            }
+            current = map.get(segment);
+        }
+        return current;
+    }
+
+    private boolean containsConfigPath(Map<String, Object> config, String dottedPath) {
+        Object current = config;
+        for (String segment : dottedPath.split("\\.")) {
+            if (!(current instanceof Map<?, ?> map) || !map.containsKey(segment)) {
+                return false;
+            }
+            current = map.get(segment);
+        }
+        return true;
+    }
+
+    private boolean matchesConditionValue(Object actual, JsonNode expected) {
+        if (actual == null || expected == null || expected.isNull()) {
+            return actual == null && (expected == null || expected.isNull());
+        }
+        if (expected.isBoolean()) {
+            return actual instanceof Boolean bool && bool == expected.booleanValue();
+        }
+        if (expected.isNumber()) {
+            return actual instanceof Number number
+                && Double.compare(number.doubleValue(), expected.doubleValue()) == 0;
+        }
+        return expected.asText().equals(String.valueOf(actual));
+    }
+
+    private boolean hasConfigValue(Map<String, Object> config, String dottedPath) {
+        return hasConfigValue(config, dottedPath, false);
+    }
+
+    private boolean hasConfigValue(Map<String, Object> config, String dottedPath, boolean allowBlank) {
+        Object current = config;
+        for (String segment : dottedPath.split("\\.")) {
+            if (!(current instanceof Map<?, ?> map) || !map.containsKey(segment)) {
+                return false;
+            }
+            current = map.get(segment);
+        }
+        if (current == null) {
+            return false;
+        }
+        return !(current instanceof String text) || allowBlank || !text.isBlank();
+    }
+
     private Map<String, List<TemplateSource>> visibleRequestTemplates(
         List<TemplateSource> templateSources,
         String relativeRoot,
@@ -682,7 +1478,7 @@ public final class ScenarioBundleValidator {
             }
             String serviceId = stringValue(source.document().get(SERVICE_ID_CONFIG_KEY));
             if (serviceId == null || serviceId.isBlank()) {
-                serviceId = consumer.defaultServiceId();
+                continue;
             }
             visible
                 .computeIfAbsent(templateKey(serviceId, callId), ignored -> new ArrayList<>())
@@ -700,7 +1496,7 @@ public final class ScenarioBundleValidator {
             return;
         }
         Map<?, ?> doc = source.document();
-        for (String field : List.of("protocol", CALL_ID_CONFIG_KEY)) {
+        for (String field : List.of("protocol", SERVICE_ID_CONFIG_KEY, CALL_ID_CONFIG_KEY)) {
             Object value = doc.get(field);
             if (!(value instanceof String text) || text.isBlank()) {
                 findings.add(ValidationIssue.TEMPLATE_REQUIRED_FIELD_MISSING.finding(
@@ -1271,14 +2067,14 @@ public final class ScenarioBundleValidator {
             if (bee == null || !usesRequestTemplateContract(bee)) {
                 continue;
             }
-            Map<String, Object> config = effectiveWorkerConfig(bee.config());
+            Map<String, Object> config = bee.config() == null ? Map.of() : bee.config();
             String templateRoot = stringValue(config.get(TEMPLATE_ROOT_CONFIG_KEY));
             if (templateRoot == null || templateRoot.isBlank()) {
                 continue;
             }
             String serviceId = stringValue(config.get(SERVICE_ID_CONFIG_KEY));
             if (serviceId == null || serviceId.isBlank()) {
-                serviceId = DEFAULT_SERVICE_ID;
+                continue;
             }
             consumers.add(new TemplateConsumer(bee.role(), templateRoot, serviceId, bee, config));
         }
@@ -1312,67 +2108,6 @@ public final class ScenarioBundleValidator {
             normalized = normalized.substring(0, tag);
         }
         return normalized;
-    }
-
-    private Map<String, Object> effectiveWorkerConfig(Map<String, Object> config) {
-        if (config == null || config.isEmpty()) {
-            return Map.of();
-        }
-        Map<String, Object> merged = new LinkedHashMap<>(config);
-
-        Object workerBlock = config.get(WORKER_CONFIG_KEY);
-        if (workerBlock instanceof Map<?, ?> workerMapRaw) {
-            Map<String, Object> flattened = flattenWorkerBlock(copyToStringKeyMap(workerMapRaw));
-            if (!flattened.isEmpty()) {
-                merged.remove(WORKER_CONFIG_KEY);
-                merged.putAll(flattened);
-                return Map.copyOf(merged);
-            }
-        }
-
-        Object pockethiveObj = config.get(LEGACY_POCKETHIVE_CONFIG_KEY);
-        if (!(pockethiveObj instanceof Map<?, ?> pockethive)) {
-            return Map.copyOf(merged);
-        }
-        Object workerObj = pockethive.get(WORKER_CONFIG_KEY);
-        if (!(workerObj instanceof Map<?, ?> workerRaw)) {
-            return Map.copyOf(merged);
-        }
-        Map<String, Object> flattened = flattenWorkerBlock(copyToStringKeyMap(workerRaw));
-        if (flattened.isEmpty()) {
-            return Map.copyOf(merged);
-        }
-        merged.remove(LEGACY_POCKETHIVE_CONFIG_KEY);
-        merged.putAll(flattened);
-        return Map.copyOf(merged);
-    }
-
-    private Map<String, Object> flattenWorkerBlock(Map<String, Object> workerMap) {
-        if (workerMap == null || workerMap.isEmpty()) {
-            return Map.of();
-        }
-        Map<String, Object> flattened = new LinkedHashMap<>();
-        workerMap.forEach((key, value) -> {
-            if (CONFIG_KEY.equals(key) && value instanceof Map<?, ?> nested) {
-                flattened.putAll(copyToStringKeyMap(nested));
-            } else {
-                flattened.put(key, value);
-            }
-        });
-        return flattened.isEmpty() ? Map.of() : Map.copyOf(flattened);
-    }
-
-    private Map<String, Object> copyToStringKeyMap(Map<?, ?> source) {
-        if (source == null || source.isEmpty()) {
-            return Map.of();
-        }
-        Map<String, Object> copy = new LinkedHashMap<>();
-        source.forEach((key, value) -> {
-            if (key != null) {
-                copy.put(key.toString(), value);
-            }
-        });
-        return copy.isEmpty() ? Map.of() : Map.copyOf(copy);
     }
 
     private Optional<String> bundleRelativeTemplateRoot(
@@ -1445,7 +2180,7 @@ public final class ScenarioBundleValidator {
             }
             String producerPath = ScenarioBundleLayout.SCENARIO_DESCRIPTOR_FILE + ":template.bees." + producer.role() + ".config";
             collectHeaderTemplateReferences(
-                effectiveWorkerConfig(producer.config()),
+                producer.config() == null ? Map.of() : producer.config(),
                 consumer.defaultServiceId(),
                 producerPath,
                 references);
@@ -1525,10 +2260,10 @@ public final class ScenarioBundleValidator {
 
     private Set<String> serviceIdCandidates(Object value, String defaultServiceId) {
         if (value == null) {
-            return Set.of(defaultServiceId);
+            return Set.of();
         }
         if (value instanceof String text && text.trim().isBlank()) {
-            return Set.of(defaultServiceId);
+            return Set.of();
         }
         return extractCallIds(value);
     }
@@ -1678,6 +2413,14 @@ public final class ScenarioBundleValidator {
         return trimmed.isEmpty() ? null : trimmed;
     }
 
+    private static String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
     private String stringValue(Object value) {
         return value instanceof String text ? text.trim() : null;
     }
@@ -1734,6 +2477,10 @@ public final class ScenarioBundleValidator {
             return normalizedServiceId + "::" + normalizedCallId;
         }
     }
+
+    private record IoSelectorRequirement(String subblockPath, String selectorPath, String expectedSelector) { }
+
+    private record CapabilityConfigEntryRef(CapabilityManifest.ConfigEntry entry, String owner) { }
 
     private static final class BundleValidationFailure extends IllegalArgumentException {
         private final ValidationIssue issue;

@@ -63,7 +63,6 @@ class PostProcessorWorkerImpl implements PocketHiveWorkerFunction {
   private static final String PROCESSOR_SUCCESS_HEADER = OutcomeHeaders.PROCESSOR_SUCCESS;
   private static final String PROCESSOR_STATUS_HEADER = OutcomeHeaders.PROCESSOR_STATUS;
 
-  private final PostProcessorWorkerProperties properties;
   private final TxOutcomeSinkRegistry txOutcomeSinkRegistry;
   private final Clock clock;
   private final AtomicReference<PostProcessorMetrics> metricsRef = new AtomicReference<>();
@@ -88,7 +87,6 @@ class PostProcessorWorkerImpl implements PocketHiveWorkerFunction {
       TxOutcomeSinkRegistry txOutcomeSinkRegistry,
       Clock clock
   ) {
-    this.properties = Objects.requireNonNull(properties, "properties");
     this.txOutcomeSinkRegistry = Objects.requireNonNull(txOutcomeSinkRegistry, "txOutcomeSinkRegistry");
     this.clock = Objects.requireNonNull(clock, "clock");
   }
@@ -122,7 +120,7 @@ class PostProcessorWorkerImpl implements PocketHiveWorkerFunction {
    */
   @Override
   public WorkItem onMessage(WorkItem in, WorkerContext context) {
-    PostProcessorWorkerConfig config = context.configOrDefault(PostProcessorWorkerConfig.class, properties::defaultConfig);
+    PostProcessorWorkerConfig config = context.requireConfig(PostProcessorWorkerConfig.class);
 
     ObservabilityContext observability =
         Objects.requireNonNull(context.observabilityContext(), "observabilityContext");

@@ -1,6 +1,5 @@
 package io.pockethive.worker.sdk.config;
 
-import java.lang.reflect.Constructor;
 import java.util.Locale;
 import java.util.Objects;
 import org.springframework.boot.context.properties.bind.Bindable;
@@ -8,7 +7,7 @@ import org.springframework.boot.context.properties.bind.Binder;
 
 /**
  * Utility that binds {@code pockethive.inputs.<type>} properties to the {@link WorkInputConfig} type
- * requested by a worker definition. Falls back to a default instance when no override is present.
+ * requested by a worker definition.
  */
 public final class WorkInputConfigBinder {
 
@@ -25,8 +24,10 @@ public final class WorkInputConfigBinder {
             return null;
         }
         String prefix = prefix(inputType);
-        return binder.bind(prefix, Bindable.of(configType))
-            .orElseGet(() -> instantiate(configType));
+        C config = binder.bind(prefix, Bindable.of(configType))
+            .orElseThrow(() -> new IllegalStateException("Work input config is required at " + prefix));
+        config.validateConfigured(prefix);
+        return config;
     }
 
     public String prefix(WorkerInputType inputType) {
@@ -40,13 +41,4 @@ public final class WorkInputConfigBinder {
         return "pockethive.inputs." + suffix;
     }
 
-    private static <C> C instantiate(Class<C> type) {
-        try {
-            Constructor<C> constructor = type.getDeclaredConstructor();
-            constructor.setAccessible(true);
-            return constructor.newInstance();
-        } catch (ReflectiveOperationException ex) {
-            throw new IllegalStateException("Unable to instantiate work input config " + type.getName(), ex);
-        }
-    }
 }

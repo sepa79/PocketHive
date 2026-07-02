@@ -1,6 +1,8 @@
 id: local-rest-with-multi-generators
 name: Local REST - Multi Generators
-description: Uses local images. Sample REST scenario that ships two generator bees with distinct payloads, rate limits, and an expected 10% beta generator failure rate.
+description: Uses local images. Sample REST scenario that ships two generator
+  bees with distinct payloads, rate limits, and an expected 10% beta generator
+  failure rate.
 template:
   image: swarm-controller:latest
   bees:
@@ -9,14 +11,15 @@ template:
       image: generator:latest
       config:
         inputs:
+          type: SCHEDULER
           scheduler:
             ratePerSec: 30
-        worker:
-          message:
-            bodyType: HTTP
-            path: /api/test-alpha
-            method: POST
-            body: hello-from-generator-a
+            maxMessages: 0
+        message:
+          bodyType: HTTP
+          path: /api/test-alpha
+          method: POST
+          body: hello-from-generator-a
       work:
         out:
           out: gen
@@ -27,14 +30,15 @@ template:
       image: generator:latest
       config:
         inputs:
+          type: SCHEDULER
           scheduler:
             ratePerSec: 70
-        worker:
-          message:
-            bodyType: HTTP
-            path: /api/test-beta
-            method: POST
-            body: hello-from-generator-b
+            maxMessages: 0
+        message:
+          bodyType: HTTP
+          path: /api/test-beta
+          method: POST
+          body: hello-from-generator-b
       work:
         out:
           out: gen
@@ -43,6 +47,10 @@ template:
     - role: moderator
       id: moderator
       image: moderator:latest
+      config:
+        mode:
+          type: pass-through
+          ratePerSec: 0.0
       work:
         in:
           in: gen
@@ -54,6 +62,14 @@ template:
     - role: processor
       id: processor
       image: processor:latest
+      config:
+        baseUrl: "{{ sut.endpoints['default'].baseUrl }}"
+        mode: THREAD_COUNT
+        threadCount: 1
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
       work:
         in:
           in: mod
@@ -65,6 +81,10 @@ template:
     - role: postprocessor
       id: postprocessor
       image: postprocessor:latest
+      config:
+        forwardToOutput: false
+        txOutcomeSinkMode: NONE
+        dropTxOutcomeWithoutCallId: true
       work:
         in:
           in: final

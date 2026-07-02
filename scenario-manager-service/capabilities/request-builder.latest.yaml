@@ -11,12 +11,12 @@ ui:
 config:
   - name: templateRoot
     type: string
-    default: "/app/templates/http"
+    required: true
   - name: serviceId
     type: string
-    default: "default"
+    required: true
   - name: passThroughOnMissingTemplate
     type: boolean
-    default: true
+    required: true
 actions: []
 panels: []

@@ -41,9 +41,9 @@ public final class RedisDataSetWorkInputFactory implements WorkInputFactory, Ord
     @Override
     public WorkInput create(WorkerDefinition definition, WorkInputConfig config) {
         Logger logger = LoggerFactory.getLogger(definition.beanType());
-        RedisDataSetInputProperties properties = config instanceof RedisDataSetInputProperties props
-            ? props
-            : new RedisDataSetInputProperties();
+        if (!(config instanceof RedisDataSetInputProperties properties)) {
+            throw new IllegalStateException("Redis dataset inputs require RedisDataSetInputProperties configuration");
+        }
         return new RedisDataSetWorkInput(definition, controlPlaneRuntime, workerRuntime, identity, properties, logger, null);
     }
 

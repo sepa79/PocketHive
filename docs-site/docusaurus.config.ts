@@ -37,6 +37,7 @@ const config: Config = {
           sidebarPath: require.resolve("./sidebars.ts"),
           include: [
             "guides/**",
+            "architecture/**",
             "scenarios/**",
             "sdk/**",
             "control-plane/worker-guide.md",

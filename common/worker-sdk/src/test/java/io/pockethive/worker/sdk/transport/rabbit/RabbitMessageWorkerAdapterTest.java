@@ -24,7 +24,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -78,7 +77,6 @@ class RabbitMessageWorkerAdapterTest {
 
     private WorkerDefinition workerDefinition;
     private ControlPlaneIdentity identity;
-    private DummyConfig defaults;
 
     @BeforeEach
     void setUp() {
@@ -96,7 +94,6 @@ class RabbitMessageWorkerAdapterTest {
             Set.of(WorkerCapability.MESSAGE_DRIVEN)
         );
         identity = new ControlPlaneIdentity("swarm-1", "processor", "instance-1");
-        defaults = new DummyConfig();
     }
 
     @Test
@@ -110,10 +107,8 @@ class RabbitMessageWorkerAdapterTest {
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<Consumer<WorkerControlPlaneRuntime.WorkerStateSnapshot>> listenerCaptor = ArgumentCaptor.forClass(Consumer.class);
-        InOrder inOrder = Mockito.inOrder(controlPlaneRuntime);
-        inOrder.verify(controlPlaneRuntime).registerDefaultConfig(eq("processorWorker"), eq(defaults));
-        inOrder.verify(controlPlaneRuntime).registerStateListener(eq("processorWorker"), listenerCaptor.capture());
-        inOrder.verify(controlPlaneRuntime).emitStatusSnapshot();
+        verify(controlPlaneRuntime).registerStateListener(eq("processorWorker"), listenerCaptor.capture());
+        verify(controlPlaneRuntime).emitStatusSnapshot();
         verify(listenerContainer, never()).start();
 
         WorkerControlPlaneRuntime.WorkerStateSnapshot disabledSnapshot = mock(WorkerControlPlaneRuntime.WorkerStateSnapshot.class);
@@ -423,8 +418,6 @@ class RabbitMessageWorkerAdapterTest {
             .controlPlaneRuntime(controlPlaneRuntime)
             .listenerRegistry(listenerRegistry)
             .identity(identity)
-            .defaultEnabledSupplier(() -> false)
-            .defaultConfigSupplier(() -> defaults)
             .desiredStateResolver(WorkerControlPlaneRuntime.WorkerStateSnapshot::enabled)
             .dispatcher(dispatcher)
             .dispatchErrorHandler(errorHandler);
@@ -439,8 +432,6 @@ class RabbitMessageWorkerAdapterTest {
             .controlPlaneRuntime(controlPlaneRuntime)
             .listenerRegistry(listenerRegistry)
             .identity(identity)
-            .defaultEnabledSupplier(() -> false)
-            .defaultConfigSupplier(() -> defaults)
             .desiredStateResolver(WorkerControlPlaneRuntime.WorkerStateSnapshot::enabled)
             .dispatcher(dispatcher);
     }
@@ -484,8 +475,5 @@ class RabbitMessageWorkerAdapterTest {
         Field field = target.getClass().getDeclaredField(fieldName);
         field.setAccessible(true);
         return field.get(target);
-    }
-
-    private record DummyConfig() {
     }
 }

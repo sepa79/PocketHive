@@ -8,6 +8,7 @@ import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.worker.WorkerControlPlane;
+import io.pockethive.controlplane.worker.WorkerRuntimeIdentity;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.observability.ObservabilityContextUtil;
 import io.pockethive.observability.StatusEnvelopeBuilder;
@@ -87,16 +88,16 @@ class WorkerControlPlaneRuntimeTest {
     }
 
     @Test
-    void registerDefaultConfigSeedsState() throws Exception {
-        TestConfig defaults = new TestConfig(true, 7.5);
+    void configUpdateAppliesRuntimeConfig() throws Exception {
+        TestConfig configUpdate = new TestConfig(true, 7.5);
 
-        runtime.registerDefaultConfig(definition.beanName(), defaults);
+        applyConfigUpdate(runtime, Map.of("enabled", true, "ratePerSec", 7.5));
 
-        assertThat(runtime.workerConfig(definition.beanName(), TestConfig.class)).contains(defaults);
+        assertThat(runtime.workerConfig(definition.beanName(), TestConfig.class)).contains(configUpdate);
         assertThat(runtime.workerRawConfig(definition.beanName()))
             .containsEntry("ratePerSec", 7.5)
             .containsEntry("enabled", true);
-        assertThat(runtime.workerEnabled(definition.beanName())).isFalse();
+        assertThat(runtime.workerEnabled(definition.beanName())).isTrue();
 
         reset(emitter);
         runtime.emitStatusSnapshot();
@@ -117,8 +118,6 @@ class WorkerControlPlaneRuntimeTest {
 
     @Test
     void configUpdateCanonicalisesKebabCaseKeys() throws Exception {
-        runtime.registerDefaultConfig(definition.beanName(), new TestConfig(false, 7.5));
-
         Map<String, Object> args = Map.of("rate-per-sec", 10.0);
         ControlSignal signal = ControlSignal.forInstance(
             "config-update",
@@ -247,6 +246,140 @@ class WorkerControlPlaneRuntimeTest {
         assertThat(ctx.idempotencyKey()).isEqualTo(idempotencyKey);
         assertThat(ctx.phase()).isEqualTo("apply");
         assertThat(ctx.details()).containsEntry("worker", definition.beanName());
+    }
+
+    @Test
+    void configUpdateRejectsUnsafeLiveIoUpdateBeforeApplyingState() throws Exception {
+        WorkerStateStore ioStateStore = new WorkerStateStore();
+        WorkerDefinition ioDefinition = new WorkerDefinition(
+            "redisIoWorker",
+            TestWorker.class,
+            WorkerInputType.REDIS_DATASET,
+            "generator",
+            WorkIoBindings.none(),
+            Map.class,
+            WorkInputConfig.class,
+            WorkOutputConfig.class,
+            WorkerOutputType.REDIS,
+            "Redis IO worker",
+            Set.of(WorkerCapability.MESSAGE_DRIVEN)
+        );
+        ioStateStore.getOrCreate(ioDefinition);
+        WorkerControlPlaneRuntime ioRuntime = new WorkerControlPlaneRuntime(
+            controlPlane,
+            ioStateStore,
+            MAPPER,
+            emitter,
+            IDENTITY,
+            PROPERTIES.getControlPlane()
+        );
+        applyConfigUpdate(ioRuntime, redisRuntimeIoConfig(1.0));
+        reset(emitter);
+
+        String correlationId = UUID.randomUUID().toString();
+        String idempotencyKey = UUID.randomUUID().toString();
+        ControlSignal signal = ControlSignal.forInstance(
+            "config-update",
+            IDENTITY.swarmId(),
+            IDENTITY.role(),
+            IDENTITY.instanceId(),
+            ORIGIN,
+            correlationId,
+            idempotencyKey,
+            Map.of("inputs", Map.of("redis", Map.of("port", 6380)))
+        );
+        String routingKey = ControlPlaneRouting.signal(
+            "config-update",
+            IDENTITY.swarmId(),
+            IDENTITY.role(),
+            IDENTITY.instanceId()
+        );
+
+        boolean handled = ioRuntime.handle(MAPPER.writeValueAsString(signal), routingKey);
+
+        assertThat(handled).isTrue();
+        verify(emitter, times(0)).emitReady(any());
+        ArgumentCaptor<ControlPlaneEmitter.ErrorContext> captor =
+            ArgumentCaptor.forClass(ControlPlaneEmitter.ErrorContext.class);
+        verify(emitter).emitError(captor.capture());
+        ControlPlaneEmitter.ErrorContext ctx = captor.getValue();
+        assertThat(ctx.signal()).isEqualTo("config-update");
+        assertThat(ctx.correlationId()).isEqualTo(correlationId);
+        assertThat(ctx.idempotencyKey()).isEqualTo(idempotencyKey);
+        assertThat(ctx.message()).contains("inputs.redis.port");
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> inputs = (Map<String, Object>) ioRuntime.workerRawConfig(ioDefinition.beanName()).get("inputs");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> redis = (Map<String, Object>) inputs.get("redis");
+        assertThat(redis).containsEntry("port", 6379);
+    }
+
+    @Test
+    void configUpdateRejectsInvalidSafeLiveIoUpdateBeforeApplyingState() throws Exception {
+        WorkerStateStore ioStateStore = new WorkerStateStore();
+        WorkerDefinition ioDefinition = new WorkerDefinition(
+            "redisIoWorker",
+            TestWorker.class,
+            WorkerInputType.REDIS_DATASET,
+            "generator",
+            WorkIoBindings.none(),
+            Map.class,
+            WorkInputConfig.class,
+            WorkOutputConfig.class,
+            WorkerOutputType.REDIS,
+            "Redis IO worker",
+            Set.of(WorkerCapability.MESSAGE_DRIVEN)
+        );
+        ioStateStore.getOrCreate(ioDefinition);
+        WorkerControlPlaneRuntime ioRuntime = new WorkerControlPlaneRuntime(
+            controlPlane,
+            ioStateStore,
+            MAPPER,
+            emitter,
+            IDENTITY,
+            PROPERTIES.getControlPlane()
+        );
+        applyConfigUpdate(ioRuntime, redisRuntimeIoConfig(1.0));
+        reset(emitter);
+
+        String correlationId = UUID.randomUUID().toString();
+        String idempotencyKey = UUID.randomUUID().toString();
+        ControlSignal signal = ControlSignal.forInstance(
+            "config-update",
+            IDENTITY.swarmId(),
+            IDENTITY.role(),
+            IDENTITY.instanceId(),
+            ORIGIN,
+            correlationId,
+            idempotencyKey,
+            Map.of("inputs", Map.of("redis", Map.of("ratePerSec", "fast")))
+        );
+        String routingKey = ControlPlaneRouting.signal(
+            "config-update",
+            IDENTITY.swarmId(),
+            IDENTITY.role(),
+            IDENTITY.instanceId()
+        );
+
+        boolean handled = ioRuntime.handle(MAPPER.writeValueAsString(signal), routingKey);
+
+        assertThat(handled).isTrue();
+        verify(emitter, times(0)).emitReady(any());
+        ArgumentCaptor<ControlPlaneEmitter.ErrorContext> captor =
+            ArgumentCaptor.forClass(ControlPlaneEmitter.ErrorContext.class);
+        verify(emitter).emitError(captor.capture());
+        ControlPlaneEmitter.ErrorContext ctx = captor.getValue();
+        assertThat(ctx.signal()).isEqualTo("config-update");
+        assertThat(ctx.correlationId()).isEqualTo(correlationId);
+        assertThat(ctx.idempotencyKey()).isEqualTo(idempotencyKey);
+        assertThat(ctx.message()).contains("inputs.redis.ratePerSec");
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> inputs = (Map<String, Object>) ioRuntime.workerRawConfig(ioDefinition.beanName()).get("inputs");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> redis = (Map<String, Object>) inputs.get("redis");
+        assertThat(redis).containsEntry("ratePerSec", 1.0);
     }
 
     @Test
@@ -600,9 +733,8 @@ class WorkerControlPlaneRuntimeTest {
     }
 
     @Test
-    void partialConfigUpdateRetainsSeededDefaults() throws Exception {
-        TestConfig defaults = new TestConfig(true, 7.5);
-        runtime.registerDefaultConfig(definition.beanName(), defaults);
+    void partialConfigUpdateRetainsExistingRuntimeConfig() throws Exception {
+        applyConfigUpdate(runtime, Map.of("enabled", true, "ratePerSec", 7.5));
         reset(emitter);
 
         Map<String, Object> args = Map.of(
@@ -655,16 +787,20 @@ class WorkerControlPlaneRuntimeTest {
             IDENTITY,
             PROPERTIES.getControlPlane()
         );
-        PrivateTestConfig defaults = new PrivateTestConfig(
+        PrivateTestConfig initialConfig = new PrivateTestConfig(
             true,
             7.5,
             Map.of("authProfile", Map.of("sut", Map.of("id", "sut-1")))
         );
 
-        privateRuntime.registerDefaultConfig(privateDefinition.beanName(), defaults);
+        applyConfigUpdate(privateRuntime, Map.of(
+            "enabled", true,
+            "ratePerSec", 7.5,
+            "privateConfig", Map.of("authProfile", Map.of("sut", Map.of("id", "sut-1")))
+        ));
 
         assertThat(privateRuntime.workerConfig(privateDefinition.beanName(), PrivateTestConfig.class))
-            .contains(defaults);
+            .contains(initialConfig);
         assertThat(privateRuntime.workerRawConfig(privateDefinition.beanName()))
             .containsEntry("enabled", true)
             .containsEntry("ratePerSec", 7.5)
@@ -711,8 +847,8 @@ class WorkerControlPlaneRuntimeTest {
 
     @Test
     void nullValuedConfigEntriesAreIgnored() throws Exception {
-        TestConfig defaults = new TestConfig(true, 7.5);
-        runtime.registerDefaultConfig(definition.beanName(), defaults);
+        TestConfig config = new TestConfig(true, 7.5);
+        applyConfigUpdate(runtime, Map.of("enabled", true, "ratePerSec", 7.5));
         reset(emitter);
 
         Map<String, Object> data = new java.util.LinkedHashMap<>();
@@ -737,7 +873,7 @@ class WorkerControlPlaneRuntimeTest {
         assertThat(rawConfig)
             .containsEntry("enabled", true)
             .containsEntry("ratePerSec", 7.5);
-        assertThat(runtime.workerConfig(definition.beanName(), TestConfig.class)).contains(defaults);
+        assertThat(runtime.workerConfig(definition.beanName(), TestConfig.class)).contains(config);
     }
 
     @Test
@@ -839,9 +975,64 @@ class WorkerControlPlaneRuntimeTest {
 	        assertThat(data.get("io")).isNotNull();
 	    }
 
+    @Test
+    void statusSnapshotEchoesRuntimeBeeIdInContext() throws Exception {
+        runtime = new WorkerControlPlaneRuntime(
+            controlPlane,
+            stateStore,
+            MAPPER,
+            emitter,
+            IDENTITY,
+            PROPERTIES.getControlPlane(),
+            null,
+            "runtime-bee-1");
+        reset(emitter);
+
+        runtime.emitStatusSnapshot();
+
+        ArgumentCaptor<ControlPlaneEmitter.StatusContext> statusCaptor =
+            ArgumentCaptor.forClass(ControlPlaneEmitter.StatusContext.class);
+        verify(emitter).emitStatusSnapshot(statusCaptor.capture());
+
+        Map<String, Object> snapshot = buildSnapshot(statusCaptor.getValue());
+        @SuppressWarnings("unchecked")
+        Map<String, Object> data = (Map<String, Object>) snapshot.get("data");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> context = (Map<String, Object>) data.get("context");
+        assertThat(context).containsEntry(WorkerRuntimeIdentity.BEE_ID_CONTEXT_FIELD, "runtime-bee-1");
+    }
+
+    @Test
+    void statusSnapshotRuntimeBeeIdEchoOverridesWorkerProvidedBeeId() throws Exception {
+        runtime = new WorkerControlPlaneRuntime(
+            controlPlane,
+            stateStore,
+            MAPPER,
+            emitter,
+            IDENTITY,
+            PROPERTIES.getControlPlane(),
+            null,
+            "runtime-bee-1");
+        runtime.statusPublisher(definition.beanName()).update(status ->
+            status.data(WorkerRuntimeIdentity.BEE_ID_CONTEXT_FIELD, "worker-provided-bee"));
+        reset(emitter);
+
+        runtime.emitStatusSnapshot();
+
+        ArgumentCaptor<ControlPlaneEmitter.StatusContext> statusCaptor =
+            ArgumentCaptor.forClass(ControlPlaneEmitter.StatusContext.class);
+        verify(emitter).emitStatusSnapshot(statusCaptor.capture());
+
+        Map<String, Object> snapshot = buildSnapshot(statusCaptor.getValue());
+        @SuppressWarnings("unchecked")
+        Map<String, Object> data = (Map<String, Object>) snapshot.get("data");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> context = (Map<String, Object>) data.get("context");
+        assertThat(context).containsEntry(WorkerRuntimeIdentity.BEE_ID_CONTEXT_FIELD, "runtime-bee-1");
+    }
+
 	    @Test
 	    void statusRequestWithoutPayloadEmitsSnapshot() throws Exception {
-	        runtime.registerDefaultConfig(definition.beanName(), new TestConfig(true, 5.0));
 	        reset(emitter);
 
 	        String routingKey = ControlPlaneRouting.signal("status-request", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
@@ -862,9 +1053,8 @@ class WorkerControlPlaneRuntimeTest {
 	    }
 
     @Test
-    void controlPlaneConfigOverridesSeededDefaults() throws Exception {
-        TestConfig defaults = new TestConfig(false, 3.0);
-        runtime.registerDefaultConfig(definition.beanName(), defaults);
+    void controlPlaneConfigUpdateOverridesExistingRuntimeConfig() throws Exception {
+        applyConfigUpdate(runtime, Map.of("enabled", false, "ratePerSec", 3.0));
 
         Map<String, Object> args = Map.of(
             "enabled", true,
@@ -891,6 +1081,54 @@ class WorkerControlPlaneRuntimeTest {
         assertThat(runtime.workerEnabled(definition.beanName())).isTrue();
         Map<String, Object> rawConfig = runtime.workerRawConfig(definition.beanName());
         assertThat(rawConfig).containsEntry("ratePerSec", 11.0);
+    }
+
+    private void applyConfigUpdate(WorkerControlPlaneRuntime target, Map<String, Object> args) throws Exception {
+        ControlSignal signal = ControlSignal.forInstance(
+            "config-update",
+            IDENTITY.swarmId(),
+            IDENTITY.role(),
+            IDENTITY.instanceId(),
+            ORIGIN,
+            UUID.randomUUID().toString(),
+            UUID.randomUUID().toString(),
+            args
+        );
+        String payload = MAPPER.writeValueAsString(signal);
+        String routingKey = ControlPlaneRouting.signal("config-update", IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
+        boolean handled = target.handle(payload, routingKey);
+        assertThat(handled).isTrue();
+    }
+
+    private static Map<String, Object> redisRuntimeIoConfig(double ratePerSec) {
+        return Map.of(
+            "inputs", Map.of(
+                "type", "REDIS_DATASET",
+                "redis", Map.of(
+                    "host", "redis",
+                    "port", 6379,
+                    "ssl", false,
+                    "listName", "ph:dataset",
+                    "sources", java.util.List.of(),
+                    "pickStrategy", "ROUND_ROBIN",
+                    "ratePerSec", ratePerSec
+                )
+            ),
+            "outputs", Map.of(
+                "type", "REDIS",
+                "redis", Map.of(
+                    "host", "redis",
+                    "port", 6379,
+                    "ssl", false,
+                    "sourceStep", "LAST",
+                    "pushDirection", "RPUSH",
+                    "routes", java.util.List.of(),
+                    "targetListTemplate", "",
+                    "defaultList", "ph:out",
+                    "maxLen", -1
+                )
+            )
+        );
     }
 
 	        private String buildEnvelopeJson(ControlPlaneEmitter.StatusContext context, String type) {

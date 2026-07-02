@@ -10,15 +10,14 @@ ui:
 config:
   - name: inputs.csv.filePath
     type: string
-    default: "/app/scenario/datasets/sample.csv"
+    required: true
     ui:
       label: CSV file path
       group: CSV
   - name: inputs.csv.ratePerSec
     type: number
-    default: 1
+    required: true
     min: 0
-    max: 1000
     ui:
       label: Rate
       group: CSV
@@ -26,39 +25,39 @@ config:
       unit: msg/s
   - name: inputs.csv.rotate
     type: boolean
-    default: false
+    required: true
     ui:
       label: Rotate rows
       group: CSV
   - name: inputs.csv.skipHeader
     type: boolean
-    default: true
+    required: true
     ui:
       label: First row is header
       group: CSV
   - name: inputs.csv.delimiter
     type: string
-    default: ","
+    required: true
     ui:
       label: Delimiter
       group: CSV
   - name: inputs.csv.charset
     type: string
-    default: "UTF-8"
+    required: true
     ui:
       label: Charset
       group: CSV
   - name: inputs.csv.startupDelaySeconds
-    type: number
-    default: 0
+    type: integer
+    required: true
     min: 0
     ui:
       label: Startup delay
       group: CSV
       unit: s
   - name: inputs.csv.tickIntervalMs
-    type: number
-    default: 1000
+    type: integer
+    required: true
     min: 100
     ui:
       label: Tick interval

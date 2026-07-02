@@ -1,6 +1,7 @@
 id: local-rest-schema-demo
 name: Local REST - Schema-driven body demo
-description: Local REST swarm using a JSON Schema to help author the generator body in the scenario editor.
+description: Local REST swarm using a JSON Schema to help author the generator
+  body in the scenario editor.
 template:
   image: swarm-controller:latest
   bees:
@@ -9,25 +10,26 @@ template:
       image: generator:latest
       config:
         inputs:
+          type: SCHEDULER
           scheduler:
             ratePerSec: 10
-        worker:
-          message:
-            bodyType: HTTP
-            path: /schema-demo
-            method: POST
-            # The schemaRef is used by the Hive scenario editor to render a form;
-            # the generator worker itself ignores this field and only uses the body
-            # template below.
-            schemaRef: schemas/local-rest-body.schema.json#/body
-            body: |
-              {
-                "event": "local-rest-schema-demo",
-                "message": "Hello from {{ swarmId }}",
-                "correlationId": "{{ correlationId }}"
-              }
-            headers:
-              content-type: application/json
+            maxMessages: 0
+        message:
+          bodyType: HTTP
+          path: /schema-demo
+          method: POST
+          # The schemaRef is used by the Hive scenario editor to render a form;
+          # the generator worker itself ignores this field and only uses the body
+          # template below.
+          schemaRef: schemas/local-rest-body.schema.json#/body
+          body: |
+            {
+              "event": "local-rest-schema-demo",
+              "message": "Hello from {{ swarmId }}",
+              "correlationId": "{{ correlationId }}"
+            }
+          headers:
+            content-type: application/json
       work:
         out:
           out: genQ
@@ -37,8 +39,13 @@ template:
       id: processor
       image: processor:latest
       config:
-        worker:
-          baseUrl: "{{ sut.endpoints['default'].baseUrl }}/api"
+        baseUrl: "{{ sut.endpoints['default'].baseUrl }}/api"
+        mode: THREAD_COUNT
+        threadCount: 1
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
       work:
         in:
           in: genQ
@@ -50,6 +57,10 @@ template:
     - role: postprocessor
       id: postprocessor
       image: postprocessor:latest
+      config:
+        forwardToOutput: false
+        txOutcomeSinkMode: NONE
+        dropTxOutcomeWithoutCallId: true
       work:
         in:
           in: finalQ

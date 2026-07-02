@@ -9,8 +9,26 @@ ui:
   shape: "hexagon"
   abbreviation: "PP"
 config:
-  - name: enabled
+  - name: forwardToOutput
     type: boolean
-    default: false
+    required: true
+    ui:
+      label: Forward to output
+      group: Output
+  - name: txOutcomeSinkMode
+    type: string
+    required: true
+    options:
+      - "NONE"
+      - "CLICKHOUSE_V2"
+    ui:
+      label: Tx outcome sink
+      group: Output
+  - name: dropTxOutcomeWithoutCallId
+    type: boolean
+    required: true
+    ui:
+      label: Drop tx outcomes without call id
+      group: Output
 actions: []
 panels: []

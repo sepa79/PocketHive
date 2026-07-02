@@ -13,9 +13,4 @@ class ModeratorWorkerProperties extends CanonicalWorkerProperties<ModeratorWorke
   ModeratorWorkerProperties(ObjectMapper mapper, WorkerControlPlaneProperties controlPlaneProperties) {
     super(() -> controlPlaneProperties.getWorker().getRole(), ModeratorWorkerConfig.class, mapper);
   }
-
-  ModeratorWorkerConfig defaultConfig() {
-    return toConfig(objectMapper()).orElseThrow(() ->
-        new IllegalStateException("Missing moderator config under pockethive.worker.config"));
-  }
 }

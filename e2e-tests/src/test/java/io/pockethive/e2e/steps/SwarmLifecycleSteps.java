@@ -286,9 +286,8 @@ public class SwarmLifecycleSteps {
    * <p>
    * For now this is explicit and minimal – only scenarios that use
    * {@code {{ sut.endpoints[...] }}} in their config (e.g. processor baseUrl) are
-   * bound to the {@code wiremock-local} environment defined in
-   * {@code scenario-manager-service/sut-environments.yaml}. Other scenarios
-   * leave {@code sutId} null.
+   * bound to the bundle-local SUT descriptor under {@code sut/<sutId>/sut.yaml}.
+   * Other scenarios leave {@code sutId} null.
    */
   private String resolveSutIdForScenario() {
     ensureTemplate();
@@ -297,7 +296,13 @@ public class SwarmLifecycleSteps {
       return null;
     }
     return switch (scenarioId) {
-      case "templated-rest", "redis-dataset-demo" -> "wiremock-local";
+      case "local-rest",
+          "local-rest-defaults",
+          "templated-rest",
+          "redis-dataset-demo",
+          "clearing-export-demo",
+          "clearing-export-streaming-demo",
+          "clearing-export-structured-demo" -> "wiremock-local";
       case "http-proxy-demo" -> "wiremock-proxy-local";
       case "https-proxy-demo" -> "wiremock-proxy-local-tls";
       case "tcp-socket-demo" -> "tcp-mock-local";
@@ -650,8 +655,8 @@ public class SwarmLifecycleSteps {
     });
   }
 
-  @And("the generator runtime config matches the service defaults")
-  public void theGeneratorRuntimeConfigMatchesTheServiceDefaults() {
+  @And("the generator runtime config matches the local-rest-defaults scenario")
+  public void theGeneratorRuntimeConfigMatchesTheLocalRestDefaultsScenario() {
     ensureStartResponse();
     captureWorkerStatuses(true);
     String generatorKey = roleKey(GENERATOR_ROLE);
@@ -667,15 +672,23 @@ public class SwarmLifecycleSteps {
 
     Map<String, Object> message = toMap(config.get("message"));
     assertEquals("/api/test", message.get("path"),
-        "Expected default generator path '/api/test'");
+        "Expected generator path '/api/test' from local-rest-defaults scenario");
     assertEquals("POST", message.get("method"),
-        "Expected default generator method 'POST'");
+        "Expected generator method 'POST' from local-rest-defaults scenario");
     assertEquals("hello-world", message.get("body"),
-        "Expected default generator body 'hello-world'");
+        "Expected generator body 'hello-world' from local-rest-defaults scenario");
 
     Map<String, Object> headers = toMap(message.get("headers"));
     assertTrue(headers.isEmpty(),
-        () -> "Expected default generator headers to be empty but were " + headers);
+        () -> "Expected generator headers from local-rest-defaults scenario to be empty but were " + headers);
+
+    Map<String, Object> inputs = toMap(config.get("inputs"));
+    Map<String, Object> scheduler = toMap(inputs.get("scheduler"));
+    Object rateObj = scheduler.get("ratePerSec");
+    assertTrue(rateObj instanceof Number,
+        () -> "Expected numeric inputs.scheduler.ratePerSec in generator config but was " + rateObj);
+    assertEquals(1.0, ((Number) rateObj).doubleValue(), 0.0001,
+        "Expected generator inputs.scheduler.ratePerSec=1.0 from local-rest-defaults scenario");
   }
 
   @And("the generator runtime config matches the local-rest scenario")
@@ -734,8 +747,8 @@ public class SwarmLifecycleSteps {
         "Expected generator inputs.scheduler.ratePerSec=50.0 from local-rest scenario");
   }
 
-  @And("the moderator runtime config matches the service defaults")
-  public void theModeratorRuntimeConfigMatchesTheServiceDefaults() {
+  @And("the moderator runtime config matches the local-rest-defaults scenario")
+  public void theModeratorRuntimeConfigMatchesTheLocalRestDefaultsScenario() {
     ensureStartResponse();
     captureWorkerStatuses(true);
     String moderatorKey = roleKey(MODERATOR_ROLE);
@@ -752,14 +765,14 @@ public class SwarmLifecycleSteps {
     Map<String, Object> mode = toMap(config.get("mode"));
     String type = String.valueOf(mode.get("type"));
     assertEquals("pass-through", type.toLowerCase(Locale.ROOT),
-        "Expected moderator mode.type='pass-through' by default");
+        "Expected moderator mode.type='pass-through' from local-rest-defaults scenario");
 
     Object rateObj = mode.get("ratePerSec");
     assertTrue(rateObj instanceof Number,
         () -> "Expected numeric mode.ratePerSec in moderator config but was " + rateObj);
     double ratePerSec = ((Number) rateObj).doubleValue();
     assertEquals(0.0, ratePerSec, 0.0001,
-        "Expected default moderator ratePerSec=0.0");
+        "Expected moderator ratePerSec=0.0 from local-rest-defaults scenario");
   }
 
   @And("the moderator runtime config matches the local-rest scenario")
@@ -790,8 +803,8 @@ public class SwarmLifecycleSteps {
         "Expected moderator ratePerSec=10.0 from local-rest scenario");
   }
 
-  @And("the processor runtime config matches the service defaults")
-  public void theProcessorRuntimeConfigMatchesTheServiceDefaults() {
+  @And("the processor runtime config matches the local-rest-defaults scenario")
+  public void theProcessorRuntimeConfigMatchesTheLocalRestDefaultsScenario() {
     ensureStartResponse();
     captureWorkerStatuses(true);
     String processorKey = roleKey(PROCESSOR_ROLE);
@@ -807,7 +820,7 @@ public class SwarmLifecycleSteps {
 
     String baseUrl = String.valueOf(config.get("baseUrl"));
     assertEquals("http://wiremock:8080", baseUrl,
-        "Expected processor baseUrl=http://wiremock:8080 from service defaults");
+        "Expected processor baseUrl=http://wiremock:8080 from local-rest-defaults scenario");
   }
 
   @And("the processor runtime config matches the local-rest scenario")
@@ -826,8 +839,8 @@ public class SwarmLifecycleSteps {
     assertFalse(config.isEmpty(), "Processor snapshot should include applied config");
 
     String baseUrl = String.valueOf(config.get("baseUrl"));
-    assertEquals("{{ sut.endpoints['default'].baseUrl }}/api", baseUrl,
-        "Expected processor baseUrl=\"{{ sut.endpoints['default'].baseUrl }}/api\" from local-rest scenario");
+    assertEquals("http://wiremock:8080/api", baseUrl,
+        "Expected processor baseUrl=http://wiremock:8080/api from local-rest scenario");
   }
 
   @And("the processor runtime config matches the proxied HTTP scenario")
@@ -892,8 +905,8 @@ public class SwarmLifecycleSteps {
         "Expected processor baseUrl=tcps://haproxy:19443 from proxied TCPS scenario");
   }
 
-  @And("the postprocessor runtime config matches the service defaults")
-  public void thePostprocessorRuntimeConfigMatchesTheServiceDefaults() {
+  @And("the postprocessor runtime config matches the local-rest-defaults scenario")
+  public void thePostprocessorRuntimeConfigMatchesTheLocalRestDefaultsScenario() {
     ensureStartResponse();
     captureWorkerStatuses(true);
     String postKey = roleKey(POSTPROCESSOR_ROLE);

@@ -36,16 +36,9 @@ to suppress publishing.
 )
 class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
 
-  private final GeneratorWorkerProperties properties;
-
-  GeneratorWorkerImpl(GeneratorWorkerProperties properties) {
-    this.properties = properties;
-  }
-
   @Override
   public WorkItem onMessage(WorkItem seed, WorkerContext context) {
-    GeneratorWorkerConfig config = context.config(GeneratorWorkerConfig.class)
-        .orElseGet(properties::defaultConfig);
+    GeneratorWorkerConfig config = context.requireConfig(GeneratorWorkerConfig.class);
     String outQueue = context.info().outQueue();
     context.statusPublisher()
         .workOut(outQueue)
@@ -62,16 +55,9 @@ class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
 )
 class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
 
-  private final ProcessorWorkerProperties properties;
-
-  ProcessorWorkerImpl(ProcessorWorkerProperties properties) {
-    this.properties = properties;
-  }
-
   @Override
   public WorkItem onMessage(WorkItem in, WorkerContext context) {
-    ProcessorWorkerConfig config = context.config(ProcessorWorkerConfig.class)
-        .orElseGet(properties::defaultConfig);
+    ProcessorWorkerConfig config = context.requireConfig(ProcessorWorkerConfig.class);
     context.statusPublisher()
         .update(status -> status.data("queue", "ph.swarm-alpha.mod"))
         .update(status -> status.data("baseUrl", config.baseUrl()));
@@ -116,7 +102,7 @@ pockethive:
     type: SCHEDULER
     scheduler:
       ratePerSec: 50        # dispatch rate in messages per second (>= 0)
-      maxMessages: 1000     # optional finite cap; 0 means “no limit”
+      maxMessages: 1000     # optional finite cap; 0 means "no limit"
 ```
 
 Behaviour:
@@ -126,6 +112,8 @@ Behaviour:
 - When `maxMessages > 0`, the scheduler tracks how many seeds have been dispatched for the current
   configuration. Once `dispatched >= maxMessages`, the scheduler stops emitting new seeds but keeps
   honouring config updates and enable/disable commands.
+- `maxMessages` has no business upper bound. Runtime stores it as a Java `long`, so the effective
+  technical range is `0..Long.MAX_VALUE`.
 - A config update that changes `maxMessages` or sets `inputs.scheduler.reset=true` resets the
   internal counters and clears the exhaustion flag for a fresh run.
 
@@ -206,7 +194,7 @@ pockethive:
     redis:
       host: redis
       port: 6379
-      sourceStep: FIRST          # FIRST or LAST; default LAST
+      sourceStep: FIRST          # FIRST or LAST
       pushDirection: RPUSH       # LPUSH or RPUSH
       routes:
         - header: x-ph-redis-list
@@ -230,9 +218,11 @@ pockethive:
               enabled: true
               host: redis
               port: 6379
-              phase: AFTER                   # BEFORE or AFTER; default AFTER (runs after onMessage)
-              sourceStep: FIRST              # or LAST; default FIRST
-              pushDirection: RPUSH           # default; symmetric with redis input LPOP
+              ssl: false
+              phase: AFTER                   # BEFORE or AFTER
+              sourceStep: FIRST              # FIRST or LAST
+              pushDirection: RPUSH           # LPUSH or RPUSH
+              maxLen: -1
               routes:                        # first match wins; optional
                 - header: x-ph-flow
                   headerMatch: '^TOP$'

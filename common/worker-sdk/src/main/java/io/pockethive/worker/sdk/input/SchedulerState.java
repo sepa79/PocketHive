@@ -12,14 +12,7 @@ import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 public interface SchedulerState<C> {
 
     /**
-     * Returns the default configuration that should be registered with the control plane before any
-     * overrides are applied.
-     */
-    C defaultConfig();
-
-    /**
-     * Applies the latest control-plane snapshot. Implementations may merge the snapshot with defaults and
-     * update any internal counters required for subsequent ticks.
+     * Applies the latest control-plane snapshot and updates any internal counters required for subsequent ticks.
      *
      * @param snapshot control-plane view of the worker state
      */

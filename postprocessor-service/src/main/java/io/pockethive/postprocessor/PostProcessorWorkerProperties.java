@@ -13,9 +13,4 @@ class PostProcessorWorkerProperties extends CanonicalWorkerProperties<PostProces
   PostProcessorWorkerProperties(ObjectMapper mapper, WorkerControlPlaneProperties controlPlaneProperties) {
     super(() -> controlPlaneProperties.getWorker().getRole(), PostProcessorWorkerConfig.class, mapper);
   }
-
-  PostProcessorWorkerConfig defaultConfig() {
-    return toConfig(objectMapper()).orElseThrow(() ->
-        new IllegalStateException("Missing postprocessor config under pockethive.worker.config"));
-  }
 }

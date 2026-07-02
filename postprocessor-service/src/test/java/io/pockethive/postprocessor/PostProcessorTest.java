@@ -24,6 +24,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class PostProcessorTest {
 
@@ -198,7 +199,7 @@ class PostProcessorTest {
     }
 
     @Test
-    void onMessageUsesDefaultsWhenNoConfigPresent() {
+    void onMessageFailsWhenRuntimeConfigMissing() {
         PostProcessorWorkerProperties properties = workerProperties();
         PostProcessorWorkerImpl worker = newWorker(properties);
         ObservabilityContext context = new ObservabilityContext();
@@ -209,10 +210,9 @@ class PostProcessorTest {
 
         TestWorkerContext workerContext = new TestWorkerContext(null, context, false);
 
-        worker.onMessage(message, workerContext);
-
-        assertThat(workerContext.statusData().get("enabled")).isEqualTo(false);
-        assertThat(workerContext.statusData()).doesNotContainKey("publishAllMetrics");
+        assertThatThrownBy(() -> worker.onMessage(message, workerContext))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("Missing runtime config for " + PostProcessorWorkerConfig.class.getName());
     }
 
     @Test

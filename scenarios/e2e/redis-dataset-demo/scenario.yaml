@@ -1,6 +1,7 @@
 id: redis-dataset-demo
 name: Redis dataset demo (generator + per-customer lists)
-description: Seeds Redis with randomised payloads and runs two low-rate data providers that each drain their own list.
+description: Seeds Redis with randomised payloads and runs two low-rate data
+  providers that each drain their own list.
 template:
   image: swarm-controller:latest
   bees:
@@ -14,30 +15,32 @@ template:
           type: SCHEDULER
           scheduler:
             ratePerSec: 5
-        worker:
-          message:
-            bodyType: SIMPLE
-            body: |
-              {% set cust = pickWeighted('custA', 1, 'custB', 1) %}
-              {% set card = eval("#randLong('4000000000000000','4999999999999999')") %}
-              {"customerCode":"{{ cust }}",
-              "accountNumber":"{{ eval('#randInt(10000000,99999999)') }}",
-              "cardNumber":"{{ card }}",
-              "nonce":"{{ eval('#uuid()') }}"}
+            maxMessages: 0
         interceptors:
           redisUploader:
             enabled: true
             host: redis
             port: 6379
+            ssl: false
             phase: AFTER
             sourceStep: LAST
             pushDirection: RPUSH
+            maxLen: -1
             routes:
               - match: '"customerCode"\s*:\s*"custA"'
                 list: ph:dataset:custa
               - match: '"customerCode"\s*:\s*"custB"'
                 list: ph:dataset:custb
             defaultList: ph:dataset:other
+        message:
+          bodyType: SIMPLE
+          body: |
+            {% set cust = pickWeighted('custA', 1, 'custB', 1) %}
+            {% set card = eval("#randLong('4000000000000000','4999999999999999')") %}
+            {"customerCode":"{{ cust }}",
+            "accountNumber":"{{ eval('#randInt(10000000,99999999)') }}",
+            "cardNumber":"{{ card }}",
+            "nonce":"{{ eval('#uuid()') }}"}
       work: {}
 
     - role: dataProviderA
@@ -51,13 +54,16 @@ template:
             port: 6379
             listName: ph:dataset:custa
             ratePerSec: 5
-        worker:
-          message:
-            bodyType: SIMPLE
-            body: "{{ payload }}"
-            headers:
-              content-type: application/json
-              x-ph-call-id: "{{ pickWeighted('redis-auth', 50, 'redis-balance', 30, 'redis-topup', 20) }}"
+            ssl: false
+            sources: []
+            pickStrategy: ROUND_ROBIN
+        message:
+          bodyType: SIMPLE
+          body: "{{ payload }}"
+          headers:
+            content-type: application/json
+            x-ph-call-id: "{{ pickWeighted('redis-auth', 50, 'redis-balance', 30,
+              'redis-topup', 20) }}"
       work:
         out:
           out: http-build
@@ -74,13 +80,16 @@ template:
             port: 6379
             listName: ph:dataset:custb
             ratePerSec: 5
-        worker:
-          message:
-            bodyType: SIMPLE
-            body: "{{ payload }}"
-            headers:
-              content-type: application/json
-              x-ph-call-id: "{{ pickWeighted('redis-balance', 40, 'redis-topup', 40, 'redis-auth', 20) }}"
+            ssl: false
+            sources: []
+            pickStrategy: ROUND_ROBIN
+        message:
+          bodyType: SIMPLE
+          body: "{{ payload }}"
+          headers:
+            content-type: application/json
+            x-ph-call-id: "{{ pickWeighted('redis-balance', 40, 'redis-topup', 40,
+              'redis-auth', 20) }}"
       work:
         out:
           out: http-build
@@ -92,6 +101,7 @@ template:
       config:
         templateRoot: /app/scenario/templates/http
         serviceId: default
+        passThroughOnMissingTemplate: false
       work:
         in:
           in: http-build
@@ -105,6 +115,12 @@ template:
       image: processor:latest
       config:
         baseUrl: "{{ sut.endpoints['default'].baseUrl }}"
+        mode: THREAD_COUNT
+        threadCount: 1
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
       work:
         in:
           in: proc
@@ -116,6 +132,10 @@ template:
     - role: postprocessor
       id: postprocessor
       image: postprocessor:latest
+      config:
+        forwardToOutput: false
+        txOutcomeSinkMode: NONE
+        dropTxOutcomeWithoutCallId: true
       work:
         in:
           in: post

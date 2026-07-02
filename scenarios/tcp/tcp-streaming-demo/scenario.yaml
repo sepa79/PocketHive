@@ -13,17 +13,16 @@ template:
           scheduler:
             ratePerSec: 5
             maxMessages: 50
-        worker:
-          message:
-            bodyType: SIMPLE
-            body: |
-              {
-                "requestId": "STREAM_{{ eval('#uuid()') }}",
-                "size": "LARGE",
-                "timestamp": "{{ eval("#date_format(now, 'yyyy-MM-dd''T''HH:mm:ss.SSS')") }}"
-              }
-            headers:
-              x-ph-call-id: streaming-test
+        message:
+          bodyType: SIMPLE
+          body: |
+            {
+              "requestId": "STREAM_{{ eval('#uuid()') }}",
+              "size": "LARGE",
+              "timestamp": "{{ eval("#date_format(now, 'yyyy-MM-dd''T''HH:mm:ss.SSS')") }}"
+            }
+          headers:
+            x-ph-call-id: streaming-test
       work:
         out:
           out: build
@@ -33,9 +32,9 @@ template:
       id: request-builder
       image: request-builder:latest
       config:
-        worker:
-          templateRoot: /app/scenario/templates/tcp
-          serviceId: default
+        templateRoot: /app/scenario/templates/tcp
+        serviceId: default
+        passThroughOnMissingTemplate: false
       work:
         in:
           in: build
@@ -49,15 +48,18 @@ template:
       image: processor:latest
       config:
         baseUrl: "{{ sut.endpoints['tcp-server'].baseUrl }}"
-        worker:
-          mode: THREAD_COUNT
-          threadCount: 5
-          tcpTransport:
-            type: socket
-            connectionReuse: PER_THREAD
-            maxRetries: 1
-            connectTimeoutMs: 3000
-            readTimeoutMs: 10000
+        mode: THREAD_COUNT
+        threadCount: 5
+        tcpTransport:
+          type: socket
+          connectionReuse: PER_THREAD
+          maxRetries: 1
+          connectTimeoutMs: 3000
+          readTimeoutMs: 10000
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
       work:
         in:
           in: proc
@@ -70,9 +72,9 @@ template:
       id: postprocessor
       image: postprocessor:latest
       config:
-        worker:
-          postprocessor:
-            publish-all-metrics: true
+        forwardToOutput: false
+        txOutcomeSinkMode: NONE
+        dropTxOutcomeWithoutCallId: true
       work:
         in:
           in: post

@@ -5,7 +5,6 @@ import io.micrometer.observation.ObservationRegistry;
 import io.pockethive.observability.ObservabilityContext;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.function.Supplier;
 import org.slf4j.Logger;
 
 /**
@@ -22,8 +21,7 @@ public interface WorkerContext {
     WorkerInfo info();
 
     /**
-     * Indicates whether the control-plane has this worker enabled. Defaults to {@code true} when no
-     * explicit command has been received yet.
+     * Indicates whether the control-plane has this worker enabled.
      */
     boolean enabled();
 
@@ -44,13 +42,15 @@ public interface WorkerContext {
     }
 
     /**
-     * Convenience wrapper that falls back to a supplier when no configuration is available.
+     * Convenience wrapper that fails when no runtime configuration is available.
      */
-    default <C> C configOrDefault(Class<C> type, Supplier<C> fallback) {
+    default <C> C requireConfig(Class<C> type) {
         Objects.requireNonNull(type, "type");
-        Objects.requireNonNull(fallback, "fallback");
         C value = config(type);
-        return value != null ? value : fallback.get();
+        if (value == null) {
+            throw new IllegalStateException("Missing runtime config for " + type.getName());
+        }
+        return value;
     }
 
     /**

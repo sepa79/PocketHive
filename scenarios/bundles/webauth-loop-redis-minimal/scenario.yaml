@@ -1,6 +1,8 @@
 id: webauth-loop-redis-minimal
 name: WebAuth Loop (Redis + Metrics)
-description: Single-loop WebAuth scenario. Runs TOP -> RED -> BAL -> TOP for custA using one Redis input, processor call, and postprocessor metrics before writing back to Redis.
+description: Single-loop WebAuth scenario. Runs TOP -> RED -> BAL -> TOP for
+  custA using one Redis input, processor call, and postprocessor metrics before
+  writing back to Redis.
 template:
   image: swarm-controller:latest
   bees:
@@ -22,14 +24,15 @@ template:
                 weight: 1
             pickStrategy: ROUND_ROBIN
             ratePerSec: 15
-        worker:
-          message:
-            bodyType: SIMPLE
-            body: "{{ payload }}"
-            headers:
-              content-type: application/json
-              x-ph-service-id: webauth
-              x-ph-call-id: webauth-loop
+            ssl: false
+            listName: ""
+        message:
+          bodyType: SIMPLE
+          body: "{{ payload }}"
+          headers:
+            content-type: application/json
+            x-ph-service-id: webauth
+            x-ph-call-id: webauth-loop
       work:
         out:
           out: build
@@ -55,7 +58,11 @@ template:
       image: processor:latest
       config:
         baseUrl: "{{ sut.endpoints['webauth'].baseUrl }}"
+        mode: THREAD_COUNT
+        threadCount: 1
         outputs:
+          type: RABBITMQ
+        inputs:
           type: RABBITMQ
       work:
         in:
@@ -69,6 +76,9 @@ template:
       id: postprocessor
       image: postprocessor:latest
       config:
+        forwardToOutput: false
+        txOutcomeSinkMode: NONE
+        dropTxOutcomeWithoutCallId: true
         outputs:
           type: REDIS
           redis:
@@ -86,6 +96,10 @@ template:
               - header: x-ph-redis-list
                 headerMatch: '^webauth\\.BAL\\.custA$'
                 list: webauth.TOP.custA
+            ssl: false
+            targetListTemplate: ""
+            defaultList: ""
+            maxLen: -1
       work:
         in:
           in: post

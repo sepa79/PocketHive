@@ -12,6 +12,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpHeaders;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -91,10 +92,11 @@ class TriggerWorkerImplTest {
   }
 
   @Test
-  void fallsBackToDefaultsWhenConfigMissing() {
+  void failsWhenRuntimeConfigMissing() {
     WorkerContext context = new TestWorkerContext(null, logger);
-    WorkItem result = worker.onMessage(WorkItem.text(context.info(), "").build(), context);
-    assertThat(result).isNull();
+    assertThatThrownBy(() -> worker.onMessage(WorkItem.text(context.info(), "").build(), context))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("Missing runtime config for " + TriggerWorkerConfig.class.getName());
   }
 
   @Test
@@ -118,14 +120,82 @@ class TriggerWorkerImplTest {
         .hasMessage("Trigger action failed");
   }
 
+  @Test
+  void restConfigDoesNotRequireShellCommand() throws Exception {
+    TriggerWorkerConfig config = new TriggerWorkerConfig(
+        1000L,
+        false,
+        "rest",
+        null,
+        "https://service.test",
+        "post",
+        "",
+        Map.of()
+    );
+    WorkerContext context = new TestWorkerContext(config, logger);
+
+    WorkItem result = worker.onMessage(WorkItem.text(context.info(), "").build(), context);
+
+    assertThat(result).isNull();
+    ArgumentCaptor<HttpRequest> requestCaptor = ArgumentCaptor.forClass(HttpRequest.class);
+    verify(httpClient).send(requestCaptor.capture(), any());
+    assertThat(requestCaptor.getValue().method()).isEqualTo("POST");
+  }
+
+  @Test
+  void shellConfigDoesNotRequireRestFieldsAndPublishesOnlyShellStatus() throws Exception {
+    TriggerWorkerConfig config = new TriggerWorkerConfig(
+        1000L,
+        false,
+        "shell",
+        "printf ok",
+        null,
+        null,
+        null,
+        null
+    );
+    CapturingStatusPublisher statusPublisher = new CapturingStatusPublisher();
+    WorkerContext context = new TestWorkerContext(config, logger, statusPublisher);
+
+    WorkItem result = worker.onMessage(WorkItem.text(context.info(), "").build(), context);
+
+    assertThat(result).isNull();
+    assertThat(statusPublisher.data())
+        .containsEntry("actionType", "shell")
+        .containsEntry("command", "printf ok")
+        .doesNotContainKeys("url", "method", "body", "headers");
+  }
+
+  @Test
+  void shellConfigRequiresCommand() {
+    assertThatThrownBy(() -> new TriggerWorkerConfig(
+        1000L,
+        false,
+        "shell",
+        null,
+        null,
+        null,
+        null,
+        null
+    ))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("command must be provided");
+  }
+
   private static final class TestWorkerContext implements WorkerContext {
 
     private final TriggerWorkerConfig config;
     private final Logger logger;
+    private final StatusPublisher statusPublisher;
 
     private TestWorkerContext(TriggerWorkerConfig config, Logger logger) {
+      this(config, logger, StatusPublisher.NO_OP);
+    }
+
+    private TestWorkerContext(TriggerWorkerConfig config, Logger logger, StatusPublisher statusPublisher) {
       this.config = config;
       this.logger = logger;
+      this.statusPublisher = statusPublisher;
     }
 
     @Override
@@ -148,7 +218,7 @@ class TriggerWorkerImplTest {
 
     @Override
     public StatusPublisher statusPublisher() {
-      return StatusPublisher.NO_OP;
+      return statusPublisher;
     }
 
     @Override
@@ -169,6 +239,29 @@ class TriggerWorkerImplTest {
     @Override
     public io.pockethive.observability.ObservabilityContext observabilityContext() {
       return new io.pockethive.observability.ObservabilityContext();
+    }
+  }
+
+  private static final class CapturingStatusPublisher implements StatusPublisher {
+
+    private final Map<String, Object> data = new LinkedHashMap<>();
+
+    @Override
+    public void update(java.util.function.Consumer<MutableStatus> consumer) {
+      consumer.accept(new MutableStatus() {
+        @Override
+        public MutableStatus data(String key, Object value) {
+          if (value == null) {
+            throw new IllegalArgumentException("status value must not be null: " + key);
+          }
+          data.put(key, value);
+          return this;
+        }
+      });
+    }
+
+    private Map<String, Object> data() {
+      return data;
     }
   }
 }

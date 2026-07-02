@@ -190,7 +190,6 @@ public final class SchedulerWorkInput<C> implements WorkInput {
         if (listenersRegistered) {
             return;
         }
-        controlPlaneRuntime.registerDefaultConfig(workerDefinition.beanName(), schedulerState.defaultConfig());
         controlPlaneRuntime.registerStateListener(workerDefinition.beanName(), snapshot -> {
             boolean previouslyEnabled = schedulerState.isEnabled();
             schedulerState.update(snapshot);
@@ -222,9 +221,15 @@ public final class SchedulerWorkInput<C> implements WorkInput {
 
         // Rate per second override
         Object rateObj = schedulerMap.get("ratePerSec");
-        if (rateObj instanceof Number number) {
+        if (rateObj != null) {
+            if (!(rateObj instanceof Number number)) {
+                throw new IllegalArgumentException("inputs.scheduler.ratePerSec must be a number");
+            }
             double rate = number.doubleValue();
-            if (rate >= 0.0 && rate != scheduling.getRatePerSec()) {
+            if (!Double.isFinite(rate) || rate < 0.0) {
+                throw new IllegalArgumentException("inputs.scheduler.ratePerSec must be a finite number >= 0");
+            }
+            if (rate != scheduling.getRatePerSec()) {
                 scheduling.setRatePerSec(rate);
                 if (log.isInfoEnabled()) {
                     log.info("{} scheduler ratePerSec updated via config: {}", workerDefinition.beanName(), rate);
@@ -235,8 +240,15 @@ public final class SchedulerWorkInput<C> implements WorkInput {
         // Finite-run configuration: maxMessages + optional reset flag
         boolean resetRequested = false;
         Object maxObj = schedulerMap.get("maxMessages");
-        if (maxObj instanceof Number maxNumber) {
-            long newMax = Math.max(0L, maxNumber.longValue());
+        if (maxObj != null) {
+            if (!(maxObj instanceof Number maxNumber)) {
+                throw new IllegalArgumentException("inputs.scheduler.maxMessages must be an integer >= 0");
+            }
+            double numeric = maxNumber.doubleValue();
+            if (!Double.isFinite(numeric) || numeric != Math.rint(numeric) || numeric < 0.0) {
+                throw new IllegalArgumentException("inputs.scheduler.maxMessages must be an integer >= 0");
+            }
+            long newMax = maxNumber.longValue();
             long currentMax = scheduling.getMaxMessages();
             if (newMax != currentMax) {
                 scheduling.setMaxMessages(newMax);
@@ -334,7 +346,7 @@ public final class SchedulerWorkInput<C> implements WorkInput {
         private BiConsumer<WorkItem, WorkerDefinition> resultHandler = SchedulerWorkInput::ignoreResult;
         private Consumer<Exception> dispatchErrorHandler = ex -> defaultLog.warn("Scheduler worker invocation failed", ex);
         private Logger log = defaultLog;
-        private SchedulerInputProperties scheduling = new SchedulerInputProperties();
+        private SchedulerInputProperties scheduling;
         private long initialDelayMs = 0L;
         private long tickIntervalMs = 1_000L;
 
@@ -381,7 +393,7 @@ public final class SchedulerWorkInput<C> implements WorkInput {
         }
 
         public Builder<C> scheduling(SchedulerInputProperties properties) {
-            this.scheduling = properties == null ? new SchedulerInputProperties() : properties;
+            this.scheduling = Objects.requireNonNull(properties, "properties");
             this.initialDelayMs = Math.max(0L, scheduling.getInitialDelayMs());
             this.tickIntervalMs = Math.max(100L, scheduling.getTickIntervalMs());
             return this;
@@ -407,6 +419,7 @@ public final class SchedulerWorkInput<C> implements WorkInput {
             Objects.requireNonNull(resultHandler, "resultHandler");
             Objects.requireNonNull(dispatchErrorHandler, "dispatchErrorHandler");
             Objects.requireNonNull(log, "log");
+            Objects.requireNonNull(scheduling, "scheduling");
             return new SchedulerWorkInput<>(this);
         }
     }

@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.amqp.core.MessageProperties;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class GeneratorTest {
 
@@ -76,20 +77,40 @@ class GeneratorTest {
   }
 
   @Test
-  void generateFallsBackToDefaultsWhenConfigMissing() throws Exception {
-    WorkItem result = worker.onMessage(seedMessage(), new TestWorkerContext(null));
+  void generateSimpleMessageDoesNotPublishNullHttpStatusFields() {
+    GeneratorWorkerConfig config = new GeneratorWorkerConfig(
+        new GeneratorWorkerConfig.Message(
+            MessageBodyType.SIMPLE,
+            null,
+            null,
+            "{\"value\":42}",
+            Map.of("x-ph-call-id", "simple")
+        ),
+        Map.of()
+    );
+    CapturingStatusPublisher statusPublisher = new CapturingStatusPublisher();
 
-    assertThat(result).isNotNull();
-    JsonNode payload = MAPPER.readTree(result.asString());
-    assertThat(payload.path("kind").asText()).isEqualTo("http.request");
-    assertThat(payload.path("request").path("path").asText()).isEqualTo("/default");
-    assertThat(payload.path("request").path("method").asText()).isEqualTo("POST");
-    assertThat(payload.path("request").path("headers").path("X-Test").asText()).isEqualTo("true");
+    WorkItem result = worker.onMessage(seedMessage(), new TestWorkerContext(config, statusPublisher));
+
+    assertThat(result.asString()).isEqualTo("{\"value\":42}");
+    assertThat(result.headers()).containsEntry("x-ph-call-id", "simple");
+    assertThat(statusPublisher.data())
+        .containsEntry("bodyType", MessageBodyType.SIMPLE)
+        .containsEntry("enabled", true)
+        .doesNotContainKeys("path", "method");
+  }
+
+  @Test
+  void generateFailsWhenRuntimeConfigMissing() {
+    assertThatThrownBy(() -> worker.onMessage(seedMessage(), new TestWorkerContext(null)))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("Missing runtime config for " + GeneratorWorkerConfig.class.getName());
   }
 
   private static final class TestWorkerContext implements WorkerContext {
 
     private final GeneratorWorkerConfig config;
+    private final StatusPublisher statusPublisher;
     private final WorkerInfo info = new WorkerInfo(
         "generator",
         WORKER_PROPERTIES.getSwarmId(),
@@ -99,7 +120,12 @@ class GeneratorTest {
     );
 
     private TestWorkerContext(GeneratorWorkerConfig config) {
+      this(config, StatusPublisher.NO_OP);
+    }
+
+    private TestWorkerContext(GeneratorWorkerConfig config, StatusPublisher statusPublisher) {
       this.config = config;
+      this.statusPublisher = statusPublisher;
     }
 
     @Override
@@ -122,7 +148,7 @@ class GeneratorTest {
 
     @Override
     public StatusPublisher statusPublisher() {
-      return StatusPublisher.NO_OP;
+      return statusPublisher;
     }
 
     @Override
@@ -143,6 +169,26 @@ class GeneratorTest {
     @Override
     public io.pockethive.observability.ObservabilityContext observabilityContext() {
       return new io.pockethive.observability.ObservabilityContext();
+    }
+  }
+
+  private static final class CapturingStatusPublisher implements StatusPublisher {
+    private final Map<String, Object> data = new LinkedHashMap<>();
+
+    @Override
+    public void update(java.util.function.Consumer<MutableStatus> consumer) {
+      consumer.accept(new MutableStatus() {
+        @Override
+        public MutableStatus data(String key, Object value) {
+          assertThat(value).as("status field " + key).isNotNull();
+          data.put(key, value);
+          return this;
+        }
+      });
+    }
+
+    private Map<String, Object> data() {
+      return data;
     }
   }
 

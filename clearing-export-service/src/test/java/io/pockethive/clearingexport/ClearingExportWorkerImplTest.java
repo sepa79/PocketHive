@@ -60,7 +60,6 @@ class ClearingExportWorkerImplTest {
     ConfigurableApplicationContext applicationContext = mock(ConfigurableApplicationContext.class);
     ClearingExportWorkerConfig config = testConfig();
 
-    when(properties.defaultConfig()).thenReturn(config);
     when(batchWriter.bufferedRecords()).thenReturn(0L);
     when(batchWriter.recordsAccepted()).thenReturn(0L);
     when(batchWriter.filesWritten()).thenReturn(0L);
@@ -117,11 +116,11 @@ class ClearingExportWorkerImplTest {
     WorkerControlPlaneRuntime controlPlaneRuntime = mock(WorkerControlPlaneRuntime.class);
     ConfigurableApplicationContext applicationContext = mock(ConfigurableApplicationContext.class);
     WorkerContext context = mock(WorkerContext.class);
-    ClearingExportWorkerConfig config = testConfigWith("first", -1, "log_error");
+    ClearingExportWorkerConfig config = testConfigWith("first", -1, "warn_only");
 
     when(context.enabled()).thenReturn(true);
     when(context.statusPublisher()).thenReturn(StatusPublisher.NO_OP);
-    when(context.config(ClearingExportWorkerConfig.class)).thenReturn(config);
+    when(context.requireConfig(ClearingExportWorkerConfig.class)).thenReturn(config);
     when(templateRenderer.render(eq(config.recordTemplate()), anyMap())).thenReturn("D|x");
 
     ClearingExportWorkerImpl worker = new ClearingExportWorkerImpl(
@@ -168,11 +167,11 @@ class ClearingExportWorkerImplTest {
     WorkerControlPlaneRuntime controlPlaneRuntime = mock(WorkerControlPlaneRuntime.class);
     ConfigurableApplicationContext applicationContext = mock(ConfigurableApplicationContext.class);
     WorkerContext context = mock(WorkerContext.class);
-    ClearingExportWorkerConfig config = testConfigWith("previous", -1, "log_error");
+    ClearingExportWorkerConfig config = testConfigWith("previous", -1, "warn_only");
 
     when(context.enabled()).thenReturn(true);
     when(context.statusPublisher()).thenReturn(StatusPublisher.NO_OP);
-    when(context.config(ClearingExportWorkerConfig.class)).thenReturn(config);
+    when(context.requireConfig(ClearingExportWorkerConfig.class)).thenReturn(config);
     when(templateRenderer.render(eq(config.recordTemplate()), anyMap())).thenReturn("D|x");
 
     ClearingExportWorkerImpl worker = new ClearingExportWorkerImpl(
@@ -219,11 +218,11 @@ class ClearingExportWorkerImplTest {
     WorkerControlPlaneRuntime controlPlaneRuntime = mock(WorkerControlPlaneRuntime.class);
     ConfigurableApplicationContext applicationContext = mock(ConfigurableApplicationContext.class);
     WorkerContext context = mock(WorkerContext.class);
-    ClearingExportWorkerConfig config = testConfigWith("index", 1, "log_error");
+    ClearingExportWorkerConfig config = testConfigWith("index", 1, "warn_only");
 
     when(context.enabled()).thenReturn(true);
     when(context.statusPublisher()).thenReturn(StatusPublisher.NO_OP);
-    when(context.config(ClearingExportWorkerConfig.class)).thenReturn(config);
+    when(context.requireConfig(ClearingExportWorkerConfig.class)).thenReturn(config);
     when(templateRenderer.render(eq(config.recordTemplate()), anyMap())).thenReturn("D|x");
 
     ClearingExportWorkerImpl worker = new ClearingExportWorkerImpl(
@@ -270,11 +269,11 @@ class ClearingExportWorkerImplTest {
     WorkerControlPlaneRuntime controlPlaneRuntime = mock(WorkerControlPlaneRuntime.class);
     ConfigurableApplicationContext applicationContext = mock(ConfigurableApplicationContext.class);
     WorkerContext context = mock(WorkerContext.class);
-    ClearingExportWorkerConfig config = testConfigWith("latest", -1, "log_error");
+    ClearingExportWorkerConfig config = testConfigWith("latest", -1, "warn_only");
 
     when(context.enabled()).thenReturn(true);
     when(context.statusPublisher()).thenReturn(StatusPublisher.NO_OP);
-    when(context.config(ClearingExportWorkerConfig.class)).thenReturn(config);
+    when(context.requireConfig(ClearingExportWorkerConfig.class)).thenReturn(config);
     when(templateRenderer.render(eq(config.recordTemplate()), anyMap())).thenReturn("D|x");
 
     ClearingExportWorkerImpl worker = new ClearingExportWorkerImpl(
@@ -310,7 +309,7 @@ class ClearingExportWorkerImplTest {
     WorkerControlPlaneRuntime controlPlaneRuntime = mock(WorkerControlPlaneRuntime.class);
     ConfigurableApplicationContext applicationContext = mock(ConfigurableApplicationContext.class);
     WorkerContext context = mock(WorkerContext.class);
-    ClearingExportWorkerConfig config = structuredConfigWith("latest", -1, "log_error");
+    ClearingExportWorkerConfig config = structuredConfigWith("latest", -1, "warn_only");
     ClearingStructuredSchema schema = new ClearingStructuredSchema(
         TEST_SCHEMA_ID,
         TEST_SCHEMA_VERSION,
@@ -325,7 +324,7 @@ class ClearingExportWorkerImplTest {
 
     when(context.enabled()).thenReturn(true);
     when(context.statusPublisher()).thenReturn(StatusPublisher.NO_OP);
-    when(context.config(ClearingExportWorkerConfig.class)).thenReturn(config);
+    when(context.requireConfig(ClearingExportWorkerConfig.class)).thenReturn(config);
     when(schemaRegistry.resolve(config)).thenReturn(schema);
     when(projector.project(eq(schema), anyMap())).thenReturn(projected);
 
@@ -367,7 +366,7 @@ class ClearingExportWorkerImplTest {
 
     when(context.enabled()).thenReturn(true);
     when(context.statusPublisher()).thenReturn(StatusPublisher.NO_OP);
-    when(context.config(ClearingExportWorkerConfig.class)).thenReturn(config);
+    when(context.requireConfig(ClearingExportWorkerConfig.class)).thenReturn(config);
 
     ClearingExportWorkerImpl worker = new ClearingExportWorkerImpl(
         properties,
@@ -405,7 +404,7 @@ class ClearingExportWorkerImplTest {
 
     when(context.enabled()).thenReturn(true);
     when(context.statusPublisher()).thenReturn(StatusPublisher.NO_OP);
-    when(context.config(ClearingExportWorkerConfig.class)).thenReturn(config);
+    when(context.requireConfig(ClearingExportWorkerConfig.class)).thenReturn(config);
     when(templateRenderer.render(eq(config.recordTemplate()), anyMap())).thenReturn("D|ok");
 
     ClearingExportWorkerImpl worker = new ClearingExportWorkerImpl(
@@ -446,18 +445,13 @@ class ClearingExportWorkerImplTest {
   }
 
   @Test
-  void onMessageFailureWithSilentDropPolicyDoesNotPublishManualWorkError() throws Exception {
-    runOnMessageFailurePolicyScenario(testConfigWith("latest", -1, "silent_drop"), false, false);
+  void onMessageFailureWithSkipRecordPolicyDoesNotPublishManualWorkError() throws Exception {
+    runOnMessageFailurePolicyScenario(testConfigWith("latest", -1, "skip_record"), false, false);
   }
 
   @Test
-  void onMessageFailureWithJournalAndLogPolicyPublishesManualWorkError() throws Exception {
-    runOnMessageFailurePolicyScenario(testConfigWith("latest", -1, "journal_and_log_error"), true, false);
-  }
-
-  @Test
-  void onMessageFailureWithLogOnlyPolicyDoesNotPublishManualWorkError() throws Exception {
-    runOnMessageFailurePolicyScenario(testConfigWith("latest", -1, "log_error"), false, false);
+  void onMessageFailureWithWarnOnlyPolicyDoesNotPublishManualWorkError() throws Exception {
+    runOnMessageFailurePolicyScenario(testConfigWith("latest", -1, "warn_only"), false, false);
   }
 
   @Test
@@ -481,7 +475,7 @@ class ClearingExportWorkerImplTest {
 
     when(context.enabled()).thenReturn(true);
     when(context.statusPublisher()).thenReturn(StatusPublisher.NO_OP);
-    when(context.config(ClearingExportWorkerConfig.class)).thenReturn(config);
+    when(context.requireConfig(ClearingExportWorkerConfig.class)).thenReturn(config);
     when(templateRenderer.render(eq(config.recordTemplate()), anyMap())).thenReturn("D|x");
     org.mockito.Mockito.doThrow(new IllegalStateException("write failed"))
         .when(batchWriter).append(eq("D|x"), eq(config));
@@ -527,7 +521,7 @@ class ClearingExportWorkerImplTest {
 
     when(context.enabled()).thenReturn(true);
     when(context.statusPublisher()).thenReturn(StatusPublisher.NO_OP);
-    when(context.config(ClearingExportWorkerConfig.class)).thenReturn(config);
+    when(context.requireConfig(ClearingExportWorkerConfig.class)).thenReturn(config);
 
     ClearingExportWorkerImpl worker = new ClearingExportWorkerImpl(
         properties,
@@ -557,7 +551,7 @@ class ClearingExportWorkerImplTest {
     TemplateRenderer templateRenderer = mock(TemplateRenderer.class);
     WorkerControlPlaneRuntime controlPlaneRuntime = mock(WorkerControlPlaneRuntime.class);
     ConfigurableApplicationContext applicationContext = mock(ConfigurableApplicationContext.class);
-    ClearingExportWorkerConfig config = structuredConfigWith("latest", -1, "log_error");
+    ClearingExportWorkerConfig config = structuredConfigWith("latest", -1, "warn_only");
     RecordingStatusPublisher statusPublisher = new RecordingStatusPublisher();
 
     when(controlPlaneRuntime.statusPublisher("clearingExportWorker")).thenReturn(statusPublisher);
@@ -616,7 +610,7 @@ class ClearingExportWorkerImplTest {
     WorkerControlPlaneRuntime controlPlaneRuntime = mock(WorkerControlPlaneRuntime.class);
     ConfigurableApplicationContext applicationContext = mock(ConfigurableApplicationContext.class);
     WorkerContext context = mock(WorkerContext.class);
-    ClearingExportWorkerConfig config = structuredConfigWith("latest", -1, "log_error");
+    ClearingExportWorkerConfig config = structuredConfigWith("latest", -1, "warn_only");
     ClearingStructuredSchema schema = new ClearingStructuredSchema(
         TEST_SCHEMA_ID,
         TEST_SCHEMA_VERSION,
@@ -630,7 +624,7 @@ class ClearingExportWorkerImplTest {
 
     when(context.enabled()).thenReturn(true);
     when(context.statusPublisher()).thenReturn(StatusPublisher.NO_OP);
-    when(context.config(ClearingExportWorkerConfig.class)).thenReturn(config);
+    when(context.requireConfig(ClearingExportWorkerConfig.class)).thenReturn(config);
     when(schemaRegistry.resolve(config)).thenReturn(schema);
     when(projector.project(eq(schema), anyMap())).thenThrow(new IllegalStateException("projection failed"));
 
@@ -875,7 +869,7 @@ class ClearingExportWorkerImplTest {
         true,
         2_000L,
         1_000,
-        1_000,
+        1_000L,
         50_000,
         true,
         "\n",
@@ -954,7 +948,7 @@ class ClearingExportWorkerImplTest {
         true,
         2_000L,
         1_000,
-        1_000,
+        1_000L,
         50_000,
         true,
         "\n",
@@ -971,7 +965,7 @@ class ClearingExportWorkerImplTest {
         null,
         "latest",
         -1,
-        "log_error",
+        "warn_only",
         true,
         allowedCodes,
         sourceStep,

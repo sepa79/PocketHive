@@ -92,10 +92,9 @@ Pattern:
 
   ```yaml
   config:
-    worker:
-      serviceId: default
-      templateRoot: /app/scenario/templates/http
-      passThroughOnMissingTemplate: false
+    serviceId: default
+    templateRoot: /app/scenario/templates/http
+    passThroughOnMissingTemplate: false
   ```
 
 Templates themselves can use Pebble + SpEL (see `docs/guides/templating-basics.md`)

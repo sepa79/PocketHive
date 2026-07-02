@@ -11,6 +11,7 @@ import io.pockethive.controlplane.topology.ControlPlaneRouteCatalog;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.controlplane.worker.WorkerConfigCommand;
 import io.pockethive.controlplane.worker.WorkerControlPlane;
+import io.pockethive.controlplane.worker.WorkerRuntimeIdentity;
 import io.pockethive.controlplane.worker.WorkerSignalListener;
 import io.pockethive.controlplane.worker.WorkerStatusRequest;
 import io.pockethive.swarm.model.BeeConfigKeys;
@@ -72,6 +73,7 @@ public final class WorkerControlPlaneRuntime {
     private volatile double lastIntervalSeconds = 0.0;
     private final Instant startedAt;
     private final Map<String, Object> runtimeMeta;
+    private final String runtimeBeeId;
 
     private static final List<String> IO_INPUT_PRECEDENCE = List.of(
         "upstream-error",
@@ -120,6 +122,20 @@ public final class WorkerControlPlaneRuntime {
         WorkerControlPlaneProperties.ControlPlane controlPlane,
         TemplateRenderer templateRenderer
     ) {
+        this(workerControlPlane, stateStore, objectMapper, emitter, identity, controlPlane, templateRenderer,
+            envValue(WorkerRuntimeIdentity.BEE_ID_ENV));
+    }
+
+    WorkerControlPlaneRuntime(
+        WorkerControlPlane workerControlPlane,
+        WorkerStateStore stateStore,
+        ObjectMapper objectMapper,
+        ControlPlaneEmitter emitter,
+        ControlPlaneIdentity identity,
+        WorkerControlPlaneProperties.ControlPlane controlPlane,
+        TemplateRenderer templateRenderer,
+        String runtimeBeeId
+    ) {
         this.workerControlPlane = Objects.requireNonNull(workerControlPlane, "workerControlPlane");
         this.stateStore = Objects.requireNonNull(stateStore, "stateStore");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
@@ -128,6 +144,7 @@ public final class WorkerControlPlaneRuntime {
         this.configMerger = new ConfigMerger(this.objectMapper);
         this.templateRenderer = templateRenderer;
         this.runtimeMeta = buildRuntimeMeta();
+        this.runtimeBeeId = normalize(runtimeBeeId);
         WorkerControlPlaneProperties.ControlPlane resolvedControlPlane =
             Objects.requireNonNull(controlPlane, "controlPlane");
         this.controlQueueName = resolvedControlPlane.getControlQueueName();
@@ -179,13 +196,13 @@ public final class WorkerControlPlaneRuntime {
     }
 
     /**
-     * Returns the last known enablement flag for the worker bean (defaults to {@code true} when no command has been applied yet).
+     * Returns the last known enablement flag for the worker bean.
      */
     public boolean workerEnabled(String workerBeanName) {
         Objects.requireNonNull(workerBeanName, "workerBeanName");
         return stateStore.find(workerBeanName)
             .map(WorkerState::enabled)
-            .orElse(true);
+            .orElse(false);
     }
 
     /**
@@ -329,34 +346,6 @@ public final class WorkerControlPlaneRuntime {
     }
 
     /**
-     * Seeds the worker state with the provided default configuration if no control-plane override has been applied yet.
-     */
-    public void registerDefaultConfig(String workerBeanName, Object defaultConfig) {
-        Objects.requireNonNull(workerBeanName, "workerBeanName");
-        if (defaultConfig == null) {
-            return;
-        }
-        WorkerState state = stateStore.find(workerBeanName).orElse(null);
-        if (state == null) {
-            log.warn("Unable to seed default config for unknown worker {}", workerBeanName);
-            return;
-        }
-        Map<String, Object> rawConfig = configMerger.toRawConfig(defaultConfig);
-        Map<String, Object> privateConfig = privateConfigFrom(rawConfig);
-        Map<String, Object> publicRawConfig = publicConfigFrom(rawConfig);
-        Boolean enabled = null;
-        Object typedConfig = ensureTypedDefault(state.definition(), defaultConfig, rawConfig);
-        if (state.seedConfig(typedConfig, enabled)) {
-            state.updatePrivateConfig(privateConfig);
-            state.updateRawConfig(publicRawConfig);
-            RedisSequenceConfiguration.configureFromWorkerConfig(publicRawConfig);
-            ensureStatusPublisher(state);
-            notifier.logInitialConfig(state, publicRawConfig, enabled);
-            notifyStateListeners(state);
-        }
-    }
-
-    /**
      * Registers a listener that will be notified for every worker state change. Existing worker snapshots are
      * delivered immediately upon registration.
      */
@@ -433,9 +422,16 @@ public final class WorkerControlPlaneRuntime {
                 templateRenderer.resetSeededSelections();
             }
             Map<String, Object> filteredUpdate = filtered.values();
-            Map<String, Object> canonicalUpdate = publicConfigFrom(ConfigKeyCanonicalizer.canonicalise(filteredUpdate));
+            Map<String, Object> canonicalSource = ConfigKeyCanonicalizer.canonicalise(filteredUpdate);
+            Map<String, Object> privateUpdate = privateConfigFrom(canonicalSource);
+            Map<String, Object> canonicalUpdate = publicConfigFrom(canonicalSource);
             boolean previousEnabled = state.enabled();
             try {
+                if (patch.resetRequested()) {
+                    LiveIoConfigUpdateGuard.validateReset(state.definition(), state.rawConfig());
+                } else {
+                    LiveIoConfigUpdateGuard.validate(state.definition(), state.rawConfig(), canonicalUpdate);
+                }
                 ConfigMerger.ConfigMergeResult mergeResult = configMerger.merge(
                     state.definition(),
                     state.rawConfig(),
@@ -450,6 +446,11 @@ public final class WorkerControlPlaneRuntime {
                         previousEnabled,
                         enabled,
                         canonicalUpdate);
+                }
+                if (patch.resetRequested()) {
+                    state.updatePrivateConfig(Map.of());
+                } else if (state.privateConfig().isEmpty() && !privateUpdate.isEmpty()) {
+                    state.updatePrivateConfig(privateUpdate);
                 }
                 Object typedConfig = mergeResult.replaced() && !mergeResult.rawConfig().isEmpty()
                     ? configMerger.toTypedConfig(state.definition(), configForTypedWorker(mergeResult.rawConfig(), state.privateConfig()))
@@ -839,6 +840,9 @@ public final class WorkerControlPlaneRuntime {
                 builder.config(configSnapshot);
             }
             workerStatusData.forEach(builder::data);
+            if (runtimeBeeId != null) {
+                builder.data(WorkerRuntimeIdentity.BEE_ID_CONTEXT_FIELD, runtimeBeeId);
+            }
         };
 
         maybeEmitIoOutOfData(workerIo);
@@ -942,6 +946,10 @@ public final class WorkerControlPlaneRuntime {
             return null;
         }
         String value = System.getenv(key);
+        return normalize(value);
+    }
+
+    private static String normalize(String value) {
         if (value == null) {
             return null;
         }

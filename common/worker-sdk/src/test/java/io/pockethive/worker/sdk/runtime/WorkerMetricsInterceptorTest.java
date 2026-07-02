@@ -26,6 +26,8 @@ import io.pockethive.worker.sdk.input.WorkInputFactory;
 import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -166,6 +168,11 @@ class WorkerMetricsInterceptorTest {
         @Bean
         MeterRegistry meterRegistry() {
             return new SimpleMeterRegistry();
+        }
+
+        @Bean
+        RabbitTemplate rabbitTemplate() {
+            return Mockito.mock(RabbitTemplate.class);
         }
 
         @Bean

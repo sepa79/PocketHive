@@ -13,18 +13,17 @@ template:
           scheduler:
             ratePerSec: 3
             maxMessages: 15
-        worker:
-          message:
-            bodyType: SIMPLE
-            body: |
-              {
-                "requestId": "REQ_{{ eval('#randInt(10000, 99999)') }}",
-                "operation": "BALANCE_INQUIRY",
-                "accountId": "ACC_{{ eval('#randInt(1000, 9999)') }}",
-                "timestamp": "{{ eval("#date_format(now, 'yyyy-MM-dd''T''HH:mm:ss')") }}"
-              }
-            headers:
-              x-ph-call-id: tcp-request
+        message:
+          bodyType: SIMPLE
+          body: |
+            {
+              "requestId": "REQ_{{ eval('#randInt(10000, 99999)') }}",
+              "operation": "BALANCE_INQUIRY",
+              "accountId": "ACC_{{ eval('#randInt(1000, 9999)') }}",
+              "timestamp": "{{ eval("#date_format(now, 'yyyy-MM-dd''T''HH:mm:ss')") }}"
+            }
+          headers:
+            x-ph-call-id: tcp-request
       work:
         out:
           out: build
@@ -34,9 +33,9 @@ template:
       id: request-builder
       image: request-builder:latest
       config:
-        worker:
-          templateRoot: /app/scenario/templates/tcp
-          serviceId: banking
+        templateRoot: /app/scenario/templates/tcp
+        serviceId: banking
+        passThroughOnMissingTemplate: false
       work:
         in:
           in: build
@@ -50,13 +49,18 @@ template:
       image: processor:latest
       config:
         baseUrl: "{{ sut.endpoints['tcp-server'].baseUrl }}"
-        worker:
-          tcpTransport:
-            type: socket
-            connectionReuse: PER_THREAD
-            maxRetries: 1
-            connectTimeoutMs: 2000
-            readTimeoutMs: 3000
+        mode: THREAD_COUNT
+        threadCount: 1
+        tcpTransport:
+          type: socket
+          connectionReuse: PER_THREAD
+          maxRetries: 1
+          connectTimeoutMs: 2000
+          readTimeoutMs: 3000
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
       work:
         in:
           in: proc
@@ -69,9 +73,9 @@ template:
       id: postprocessor
       image: postprocessor:latest
       config:
-        worker:
-          postprocessor:
-            publish-all-metrics: true
+        forwardToOutput: false
+        txOutcomeSinkMode: NONE
+        dropTxOutcomeWithoutCallId: true
       work:
         in:
           in: post

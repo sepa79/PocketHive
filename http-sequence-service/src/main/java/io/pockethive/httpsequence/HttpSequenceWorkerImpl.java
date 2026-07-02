@@ -26,7 +26,6 @@ class HttpSequenceWorkerImpl implements PocketHiveWorkerFunction {
   private static final int GLOBAL_MAX_CONNECTIONS = 200;
   private static final int GLOBAL_MAX_PER_ROUTE = 200;
 
-  private final HttpSequenceWorkerProperties properties;
   private final HttpSequenceRunner runner;
 
   @Autowired
@@ -37,7 +36,6 @@ class HttpSequenceWorkerImpl implements PocketHiveWorkerFunction {
       RedisSequenceProperties redisProperties
   ) {
     HttpClient pooled = newPooledClient();
-    this.properties = properties;
     this.runner = new HttpSequenceRunner(
         mapper,
         Clock.systemUTC(),
@@ -50,7 +48,7 @@ class HttpSequenceWorkerImpl implements PocketHiveWorkerFunction {
 
   @Override
   public WorkItem onMessage(WorkItem seed, WorkerContext context) {
-    HttpSequenceWorkerConfig config = context.configOrDefault(HttpSequenceWorkerConfig.class, properties::defaultConfig);
+    HttpSequenceWorkerConfig config = context.requireConfig(HttpSequenceWorkerConfig.class);
     return runner.run(seed, context, config);
   }
 

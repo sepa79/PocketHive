@@ -5,17 +5,20 @@ package io.pockethive.worker.sdk.config;
  */
 public class SchedulerInputProperties implements WorkInputConfig {
 
+    private static final double MIN_RATE_PER_SEC = 0.0;
+    private static final long MIN_MAX_MESSAGES = 0L;
+
     private boolean enabled = false;
     private long initialDelayMs = 0L;
     private long tickIntervalMs = 1_000L;
     private int maxPendingTicks = 1;
-    private double ratePerSec = 0.0;
+    private Double ratePerSec;
     /**
      * Optional upper bound on the total number of messages the scheduler will
      * dispatch for the current configuration. A value of {@code 0} means
      * "no limit" (infinite run).
      */
-    private long maxMessages = 0L;
+    private Long maxMessages;
 
     public boolean isEnabled() {
         return enabled;
@@ -50,18 +53,54 @@ public class SchedulerInputProperties implements WorkInputConfig {
     }
 
     public double getRatePerSec() {
-        return ratePerSec;
+        return requireRatePerSec(ratePerSec, "ratePerSec");
     }
 
     public void setRatePerSec(double ratePerSec) {
-        this.ratePerSec = Math.max(0.0, ratePerSec);
+        this.ratePerSec = ratePerSec;
     }
 
     public long getMaxMessages() {
-        return maxMessages;
+        return requireMaxMessages(maxMessages, "maxMessages");
     }
 
     public void setMaxMessages(long maxMessages) {
-        this.maxMessages = Math.max(0L, maxMessages);
+        this.maxMessages = maxMessages;
+    }
+
+    @Override
+    public void validateConfigured(String prefix) {
+        requireRatePerSec(ratePerSec, prefix + ".ratePerSec");
+        requireMaxMessages(maxMessages, prefix + ".maxMessages");
+    }
+
+    private static double requirePresent(Double value, String name) {
+        if (value == null) {
+            throw new IllegalStateException(name + " must be configured");
+        }
+        return value;
+    }
+
+    private static long requirePresent(Long value, String name) {
+        if (value == null) {
+            throw new IllegalStateException(name + " must be configured");
+        }
+        return value;
+    }
+
+    private static double requireRatePerSec(Double value, String name) {
+        double rate = requirePresent(value, name);
+        if (!Double.isFinite(rate) || rate < MIN_RATE_PER_SEC) {
+            throw new IllegalStateException(name + " must be >= " + MIN_RATE_PER_SEC);
+        }
+        return rate;
+    }
+
+    private static long requireMaxMessages(Long value, String name) {
+        long limit = requirePresent(value, name);
+        if (limit < MIN_MAX_MESSAGES) {
+            throw new IllegalStateException(name + " must be >= " + MIN_MAX_MESSAGES);
+        }
+        return limit;
     }
 }

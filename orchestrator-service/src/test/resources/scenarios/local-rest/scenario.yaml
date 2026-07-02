@@ -7,15 +7,26 @@ template:
     - role: generator
       image: generator:latest
       config:
-        ratePerSec: 50
+        inputs:
+          type: SCHEDULER
+          scheduler:
+            ratePerSec: 50
+            maxMessages: 0
         message:
+          bodyType: HTTP
           path: /api/guarded
+          method: POST
           body: guarded-request
+          headers: {}
       work:
         out:
           out: gen
     - role: moderator
       image: moderator:latest
+      config:
+        mode:
+          type: pass-through
+          ratePerSec: 0.0
       work:
         in:
           in: gen
@@ -25,6 +36,12 @@ template:
       image: processor:latest
       config:
         baseUrl: http://sut:8080
+        mode: THREAD_COUNT
+        threadCount: 1
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
       work:
         in:
           in: mod
@@ -32,6 +49,10 @@ template:
           out: final
     - role: postprocessor
       image: postprocessor:latest
+      config:
+        forwardToOutput: false
+        txOutcomeSinkMode: NONE
+        dropTxOutcomeWithoutCallId: true
       work:
         in:
           in: final

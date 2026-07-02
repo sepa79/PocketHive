@@ -16,9 +16,4 @@ class ClearingExportWorkerProperties extends CanonicalWorkerProperties<ClearingE
         ClearingExportWorkerConfig.class,
         new ObjectMapper().findAndRegisterModules());
   }
-
-  ClearingExportWorkerConfig defaultConfig() {
-    return toConfig(objectMapper()).orElseThrow(() ->
-        new IllegalStateException("Missing clearing-export config under pockethive.worker.config"));
-  }
 }

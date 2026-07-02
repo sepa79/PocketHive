@@ -8,7 +8,7 @@ import java.lang.annotation.Target;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * Meta-annotation that binds worker default properties to the shared {@code pockethive.worker} prefix.
+ * Meta-annotation that binds worker config properties to the shared {@code pockethive.worker} prefix.
  * <p>
  * Worker services can annotate their {@link PocketHiveWorkerProperties} beans with this annotation so
  * the SDK owns the prefix and we avoid repeating it across every service.

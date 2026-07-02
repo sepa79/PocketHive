@@ -258,6 +258,11 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     return core.trafficPolicy();
   }
 
+  @Override
+  public Optional<String> runtimeBeeIdFor(String role, String instance) {
+    return core.runtimeBeeIdFor(role, instance);
+  }
+
   public boolean bufferGuardActive() {
     return bufferGuard.isActive();
   }

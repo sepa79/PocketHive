@@ -22,7 +22,9 @@ public final class RabbitWorkOutputFactory implements WorkOutputFactory, Ordered
 
     @Override
     public WorkOutput create(WorkerDefinition definition, WorkOutputConfig config) {
-        RabbitOutputProperties properties = config instanceof RabbitOutputProperties props ? props : new RabbitOutputProperties();
+        if (!(config instanceof RabbitOutputProperties properties)) {
+            throw new IllegalStateException("Rabbit outputs require RabbitOutputProperties configuration");
+        }
         if (rabbitTemplate == null) {
             throw new IllegalStateException("RabbitTemplate is required for RabbitMQ outputs");
         }

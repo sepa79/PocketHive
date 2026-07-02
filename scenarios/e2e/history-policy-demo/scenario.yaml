@@ -9,10 +9,18 @@ template:
       image: generator:latest
       config:
         inputs:
+          type: SCHEDULER
           scheduler:
             ratePerSec: 5
-        worker:
-          historyPolicy: FULL
+            maxMessages: 0
+        message:
+          bodyType: HTTP
+          path: /api/test
+          method: POST
+          body: '{"event":"history-policy-demo"}'
+          headers:
+            content-type: application/json
+        historyPolicy: FULL
       work:
         out:
           out: gen
@@ -22,8 +30,10 @@ template:
       id: moderator
       image: moderator:latest
       config:
-        worker:
-          historyPolicy: LATEST_ONLY
+        mode:
+          type: pass-through
+          ratePerSec: 0.0
+        historyPolicy: LATEST_ONLY
       work:
         in:
           in: gen
@@ -36,8 +46,14 @@ template:
       id: processor
       image: processor:latest
       config:
-        worker:
-          historyPolicy: DISABLED
+        baseUrl: "{{ sut.endpoints['default'].baseUrl }}"
+        mode: THREAD_COUNT
+        threadCount: 1
+        historyPolicy: DISABLED
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
       work:
         in:
           in: mod
@@ -50,8 +66,10 @@ template:
       id: postprocessor
       image: postprocessor:latest
       config:
-        worker:
-          historyPolicy: FULL
+        forwardToOutput: false
+        txOutcomeSinkMode: NONE
+        dropTxOutcomeWithoutCallId: true
+        historyPolicy: FULL
       work:
         in:
           in: final

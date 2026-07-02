@@ -1,6 +1,8 @@
 id: webauth-loop-redis-5-customers
 name: WebAuth Loop (5 Customers, Shared BAL/TOP)
-description: Two-input loop for five customers. Main input reads RED per customer, secondary input reads shared BAL/TOP lists in round-robin. Flow is RED.<customer> -> BAL.shared -> TOP.shared -> RED.<customer>.
+description: Two-input loop for five customers. Main input reads RED per
+  customer, secondary input reads shared BAL/TOP lists in round-robin. Flow is
+  RED.<customer> -> BAL.shared -> TOP.shared -> RED.<customer>.
 template:
   image: swarm-controller:latest
   bees:
@@ -34,14 +36,15 @@ template:
                 weight: 8
             pickStrategy: WEIGHTED_RANDOM
             ratePerSec: 20
-        worker:
-          message:
-            bodyType: SIMPLE
-            body: "{{ payload }}"
-            headers:
-              content-type: application/json
-              x-ph-service-id: webauth
-              x-ph-call-id: webauth-loop-5
+            ssl: false
+            listName: ""
+        message:
+          bodyType: SIMPLE
+          body: "{{ payload }}"
+          headers:
+            content-type: application/json
+            x-ph-service-id: webauth
+            x-ph-call-id: webauth-loop-5
       work:
         out:
           out: build
@@ -63,14 +66,15 @@ template:
                 weight: 1
             pickStrategy: ROUND_ROBIN
             ratePerSec: 20
-        worker:
-          message:
-            bodyType: SIMPLE
-            body: "{{ payload }}"
-            headers:
-              content-type: application/json
-              x-ph-service-id: webauth
-              x-ph-call-id: webauth-loop-5
+            ssl: false
+            listName: ""
+        message:
+          bodyType: SIMPLE
+          body: "{{ payload }}"
+          headers:
+            content-type: application/json
+            x-ph-service-id: webauth
+            x-ph-call-id: webauth-loop-5
       work:
         out:
           out: build
@@ -96,7 +100,11 @@ template:
       image: processor:latest
       config:
         baseUrl: "{{ sut.endpoints['webauth'].baseUrl }}"
+        mode: THREAD_COUNT
+        threadCount: 1
         outputs:
+          type: RABBITMQ
+        inputs:
           type: RABBITMQ
       work:
         in:
@@ -110,6 +118,9 @@ template:
       id: postprocessor
       image: postprocessor:latest
       config:
+        forwardToOutput: false
+        txOutcomeSinkMode: NONE
+        dropTxOutcomeWithoutCallId: true
         outputs:
           type: REDIS
           redis:
@@ -125,6 +136,9 @@ template:
                 headerMatch: '^webauth\\.BAL\\.shared$'
                 list: webauth.TOP.shared
             targetListTemplate: "webauth.RED.{{ payloadAsJson.Customer }}"
+            ssl: false
+            defaultList: ""
+            maxLen: -1
       work:
         in:
           in: post

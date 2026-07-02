@@ -18,13 +18,6 @@ pockethive:
     rabbit:
       exchange: ${POCKETHIVE_OUTPUT_RABBIT_EXCHANGE}
       routingKey: ${POCKETHIVE_OUTPUT_RABBIT_ROUTING_KEY}
-  worker:
-    config:
-      baseUrl: http://wiremock:8080
-      templateRoot: /app/templates/http
-      serviceId: default
-      threadCount: 1
-      steps: []
   control-plane:
     exchange: ${POCKETHIVE_CONTROL_PLANE_EXCHANGE}
     swarm-id: ${POCKETHIVE_CONTROL_PLANE_SWARM_ID}

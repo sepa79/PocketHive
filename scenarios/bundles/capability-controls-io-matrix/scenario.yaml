@@ -1,0 +1,86 @@
+id: capability-controls-io-matrix
+name: Capability Controls IO Matrix
+description: Minimal runtime bundle for manual/UI capability-control checks.
+template:
+  image: swarm-controller:latest
+  bees:
+    - role: generator
+      id: csv-generator
+      image: generator:latest
+      config:
+        inputs:
+          type: CSV_DATASET
+          csv:
+            filePath: /app/scenario/datasets/capability-controls.csv
+            ratePerSec: 1
+            rotate: true
+            skipHeader: true
+            delimiter: ","
+            charset: UTF-8
+            startupDelaySeconds: 0
+            tickIntervalMs: 1000
+        message:
+          bodyType: SIMPLE
+          body: "{{ payload }}"
+          headers:
+            content-type: application/json
+      work:
+        out:
+          out: csv-out
+      ports:
+        - { id: out, direction: out }
+    - role: processor
+      id: redis-processor
+      image: processor:latest
+      config:
+        inputs:
+          type: REDIS_DATASET
+          redis:
+            host: redis
+            port: 6379
+            listName: capability.controls.input
+            sources: []
+            pickStrategy: ROUND_ROBIN
+            ratePerSec: 1
+            ssl: false
+        outputs:
+          type: REDIS
+          redis:
+            host: redis
+            port: 6379
+            sourceStep: LAST
+            pushDirection: RPUSH
+            routes: []
+            targetListTemplate: ""
+            defaultList: capability.controls.output
+            maxLen: -1
+            ssl: false
+        baseUrl: http://wiremock:8080/api
+        mode: THREAD_COUNT
+        threadCount: 1
+        keepAlive: true
+        connectionReuse: GLOBAL
+      work:
+        out:
+          out: redis-out
+      ports:
+        - { id: out, direction: out }
+    - role: request-builder
+      id: request-builder
+      image: request-builder:latest
+      config:
+        templateRoot: /app/scenario/templates/http
+        serviceId: capability-controls
+        passThroughOnMissingTemplate: true
+      work:
+        in:
+          in: rb-in
+        out:
+          out: rb-out
+      ports:
+        - { id: in, direction: in }
+        - { id: out, direction: out }
+
+topology:
+  version: 1
+  edges: []

@@ -1,6 +1,7 @@
 id: webauth-balance-redis
 name: WebAuth Balance (Redis -> WebAuth -> Redis)
-description: Reads WebAuth balance payloads from Redis list webauth.BAL.custA and forwards original payloads to webauth.TOP.custA after processing.
+description: Reads WebAuth balance payloads from Redis list webauth.BAL.custA
+  and forwards original payloads to webauth.TOP.custA after processing.
 template:
   image: swarm-controller:latest
   bees:
@@ -15,14 +16,16 @@ template:
             port: 6379
             listName: webauth.BAL.custA
             ratePerSec: 5
-        worker:
-          message:
-            bodyType: SIMPLE
-            body: "{{ payload }}"
-            headers:
-              content-type: application/json
-              x-ph-service-id: webauth
-              x-ph-call-id: webauth-balance
+            ssl: false
+            sources: []
+            pickStrategy: ROUND_ROBIN
+        message:
+          bodyType: SIMPLE
+          body: "{{ payload }}"
+          headers:
+            content-type: application/json
+            x-ph-service-id: webauth
+            x-ph-call-id: webauth-balance
       work:
         out:
           out: build
@@ -48,6 +51,8 @@ template:
       image: processor:latest
       config:
         baseUrl: "{{ sut.endpoints['webauth'].baseUrl }}"
+        mode: THREAD_COUNT
+        threadCount: 1
         outputs:
           type: REDIS
           redis:
@@ -56,6 +61,12 @@ template:
             sourceStep: FIRST
             pushDirection: RPUSH
             defaultList: webauth.TOP.custA
+            ssl: false
+            routes: []
+            targetListTemplate: ""
+            maxLen: -1
+        inputs:
+          type: RABBITMQ
       work:
         in:
           in: proc

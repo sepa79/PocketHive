@@ -26,9 +26,9 @@ public final class RedisWorkOutputFactory implements WorkOutputFactory, Ordered 
 
     @Override
     public WorkOutput create(WorkerDefinition definition, WorkOutputConfig config) {
-        RedisOutputProperties properties = config instanceof RedisOutputProperties props
-            ? props
-            : new RedisOutputProperties();
+        if (!(config instanceof RedisOutputProperties properties)) {
+            throw new IllegalStateException("Redis outputs require RedisOutputProperties configuration");
+        }
         return new RedisWorkOutput(definition, controlPlaneRuntime, properties, pushSupport);
     }
 

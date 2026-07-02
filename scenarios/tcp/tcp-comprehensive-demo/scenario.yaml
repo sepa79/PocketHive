@@ -1,154 +1,180 @@
 ---
 id: "tcp-comprehensive-demo"
 name: "TCP Capabilities Demo"
-description: "Demonstrates TCP Mock Server capabilities including ISO-8583, performance\
-  \ analytics, and enterprise features"
+description: "Demonstrates TCP Mock Server capabilities including ISO-8583,
+  performance analytics, and enterprise features"
 template:
   image: "swarm-controller:latest"
   bees:
-  - role: "generator-iso8583"
-    id: generator-iso8583
-    image: "generator:latest"
-    work:
-      in:
-        in: null
-      out:
-        out: "iso8583-build"
-    ports:
-      - { id: out, direction: out }
-    env: {}
-    config:
-      worker:
+    - role: "generator-iso8583"
+      id: generator-iso8583
+      image: "generator:latest"
+      work:
+        in:
+          in: null
+        out:
+          out: "iso8583-build"
+      ports:
+        - { id: out, direction: out }
+      env: {}
+      config:
+        inputs:
+          type: "SCHEDULER"
+          scheduler:
+            ratePerSec: 10
+            maxMessages: 100
         message:
           bodyType: "SIMPLE"
-          body: "{\n  \"messageType\": \"ISO8583_AUTH\",\n  \"mti\": \"0100\",\n \
-            \ \"transactionId\": \"{{ eval('#uuid()') }}\",\n  \"amount\": \"{{ eval('#randInt(100,50000)')\
-            \ }}\",\n  \"pan\": \"4111111111111{{ eval('#randInt(100,999)') }}\",\n\
-            \  \"timestamp\": \"{{ eval('#nowIso()') }}\",\n  \"merchantId\": \"MERCH{{\
-            \ eval('#randInt(1000,9999)') }}\"\n}\n"
+          body: "{
+
+            \  \"messageType\": \"ISO8583_AUTH\",
+
+            \  \"mti\": \"0100\",
+
+            \  \"transactionId\": \"{{ eval('#uuid()') }}\",
+
+            \  \"amount\": \"{{ eval('#randInt(100,50000)') }}\",
+
+            \  \"pan\": \"4111111111111{{ eval('#randInt(100,999)') }}\",
+
+            \  \"timestamp\": \"{{ eval('#nowIso()') }}\",
+
+            \  \"merchantId\": \"MERCH{{ eval('#randInt(1000,9999)') }}\"
+
+            }\n"
           headers:
             x-ph-call-id: "ProcessTransaction"
             x-ph-service-id: "payment-gateway"
-      inputs:
-        type: "SCHEDULER"
-        scheduler:
-          ratePerSec: 10
-          maxMessages: 100
-  - role: "generator-performance"
-    id: generator-performance
-    image: "generator:latest"
-    work:
-      in:
-        in: null
-      out:
-        out: "perf-build"
-    ports:
-      - { id: out, direction: out }
-    env: {}
-    config:
-      worker:
+    - role: "generator-performance"
+      id: generator-performance
+      image: "generator:latest"
+      work:
+        in:
+          in: null
+        out:
+          out: "perf-build"
+      ports:
+        - { id: out, direction: out }
+      env: {}
+      config:
+        inputs:
+          type: "SCHEDULER"
+          scheduler:
+            ratePerSec: 50
+            maxMessages: 500
         message:
           bodyType: "SIMPLE"
-          body: "{\n  \"messageType\": \"PERFORMANCE_TEST\",\n  \"batchId\": \"BATCH_{{\
-            \ eval('#randInt(1000,9999)') }}\",\n  \"transactionId\": \"{{ eval('#uuid()')\
-            \ }}\",\n  \"amount\": \"{{ eval('#randInt(100,100000)') }}\",\n  \"timestamp\"\
-            : \"{{ eval('#nowIso()') }}\"\n}\n"
+          body: "{
+
+            \  \"messageType\": \"PERFORMANCE_TEST\",
+
+            \  \"batchId\": \"BATCH_{{ eval('#randInt(1000,9999)') }}\",
+
+            \  \"transactionId\": \"{{ eval('#uuid()') }}\",
+
+            \  \"amount\": \"{{ eval('#randInt(100,100000)') }}\",
+
+            \  \"timestamp\": \"{{ eval('#nowIso()') }}\"
+
+            }\n"
           headers:
             x-ph-call-id: "PerformanceTest"
             x-ph-service-id: "performance"
-      inputs:
-        type: "SCHEDULER"
-        scheduler:
-          ratePerSec: 50
-          maxMessages: 500
-  - role: "generator-netty"
-    id: generator-netty
-    image: "generator:latest"
-    work:
-      in:
-        in: null
-      out:
-        out: "netty-build"
-    ports:
-      - { id: out, direction: out }
-    env: {}
-    config:
-      worker:
+    - role: "generator-netty"
+      id: generator-netty
+      image: "generator:latest"
+      work:
+        in:
+          in: null
+        out:
+          out: "netty-build"
+      ports:
+        - { id: out, direction: out }
+      env: {}
+      config:
+        inputs:
+          type: "SCHEDULER"
+          scheduler:
+            ratePerSec: 1
+            maxMessages: 5
         message:
           bodyType: "SIMPLE"
-          body: "{\n  \"testType\": \"netty\",\n  \"messageId\": \"NETTY_{{ eval('#randInt(1000,\
-            \ 9999)') }}\",\n  \"payload\": \"Netty async test\",\n  \"timestamp\"\
-            : \"{{ eval('#date_format(now, \"HH:mm:ss\")') }}\"\n}\n"
+          body: "{
+
+            \  \"testType\": \"netty\",
+
+            \  \"messageId\": \"NETTY_{{ eval('#randInt(1000, 9999)') }}\",
+
+            \  \"payload\": \"Netty async test\",
+
+            \  \"timestamp\": \"{{ eval('#date_format(now, \"HH:mm:ss\")') }}\"
+
+            }\n"
           headers:
             x-ph-call-id: "netty-test"
             x-ph-service-id: "demo"
-      inputs:
-        type: "SCHEDULER"
-        scheduler:
-          ratePerSec: 1
-          maxMessages: 5
-  - role: "request-builder-iso"
-    id: request-builder-iso
-    image: "request-builder:latest"
-    work:
-      in:
-        in: "iso8583-build"
-      out:
-        out: "proc"
-    ports:
-      - { id: in, direction: in }
-      - { id: out, direction: out }
-    env: {}
-    config:
-      worker:
+    - role: "request-builder-iso"
+      id: request-builder-iso
+      image: "request-builder:latest"
+      work:
+        in:
+          in: "iso8583-build"
+        out:
+          out: "proc"
+      ports:
+        - { id: in, direction: in }
+        - { id: out, direction: out }
+      env: {}
+      config:
         templateRoot: "/app/scenario/templates/tcp"
         serviceId: "demo"
-  - role: "request-builder-perf"
-    id: request-builder-perf
-    image: "request-builder:latest"
-    work:
-      in:
-        in: "perf-build"
-      out:
-        out: "proc"
-    ports:
-      - { id: in, direction: in }
-      - { id: out, direction: out }
-    env: {}
-    config:
-      worker:
+        passThroughOnMissingTemplate: false
+    - role: "request-builder-perf"
+      id: request-builder-perf
+      image: "request-builder:latest"
+      work:
+        in:
+          in: "perf-build"
+        out:
+          out: "proc"
+      ports:
+        - { id: in, direction: in }
+        - { id: out, direction: out }
+      env: {}
+      config:
         templateRoot: "/app/scenario/templates/tcp"
         serviceId: "demo"
-  - role: "request-builder-netty"
-    id: request-builder-netty
-    image: "request-builder:latest"
-    work:
-      in:
-        in: "netty-build"
-      out:
-        out: "proc"
-    ports:
-      - { id: in, direction: in }
-      - { id: out, direction: out }
-    env: {}
-    config:
-      worker:
+        passThroughOnMissingTemplate: false
+    - role: "request-builder-netty"
+      id: request-builder-netty
+      image: "request-builder:latest"
+      work:
+        in:
+          in: "netty-build"
+        out:
+          out: "proc"
+      ports:
+        - { id: in, direction: in }
+        - { id: out, direction: out }
+      env: {}
+      config:
         templateRoot: "/app/scenario/templates/tcp"
         serviceId: "demo"
-  - role: "processor"
-    id: processor
-    image: "processor:latest"
-    work:
-      in:
-        in: "proc"
-      out:
-        out: "post"
-    ports:
-      - { id: in, direction: in }
-      - { id: out, direction: out }
-    env: {}
-    config:
-      worker:
+        passThroughOnMissingTemplate: false
+    - role: "processor"
+      id: processor
+      image: "processor:latest"
+      work:
+        in:
+          in: "proc"
+        out:
+          out: "post"
+      ports:
+        - { id: in, direction: in }
+        - { id: out, direction: out }
+      env: {}
+      config:
+        baseUrl: "{{ sut.endpoints['tcp-server'].baseUrl }}"
         mode: "THREAD_COUNT"
         threadCount: 10
         keepAlive: true
@@ -158,22 +184,25 @@ template:
           maxRetries: 3
           connectTimeoutMs: 3000
           readTimeoutMs: 5000
-      baseUrl: "{{ sut.endpoints['tcp-server'].baseUrl }}"
-  - role: "postprocessor"
-    id: postprocessor
-    image: "postprocessor:latest"
-    work:
-      in:
-        in: "post"
-      out:
-        out: null
-    ports:
-      - { id: in, direction: in }
-    env: {}
-    config:
-      worker:
-        postprocessor:
-          publish-all-metrics: true
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
+    - role: "postprocessor"
+      id: postprocessor
+      image: "postprocessor:latest"
+      work:
+        in:
+          in: "post"
+        out:
+          out: null
+      ports:
+        - { id: in, direction: in }
+      env: {}
+      config:
+        forwardToOutput: false
+        txOutcomeSinkMode: NONE
+        dropTxOutcomeWithoutCallId: true
 plan:
   bees:
     - role: "generator-iso8583"

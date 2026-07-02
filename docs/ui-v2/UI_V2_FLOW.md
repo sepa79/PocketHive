@@ -176,10 +176,13 @@ Use existing SSOT docs and schemas, do not handcraft parallel parsers:
 
 Live config editing is a must-have in UI v2. The first supported surface is:
 
-- `Hive -> /hive/:swarmId -> Scenario tab -> selected bee`.
-- The selected bee comes from Scenario Manager `template.bees[]`.
+- `Hive -> /hive/:swarmId -> Scenario tab -> selected bee / runtime target`.
+- The selected bee is Scenario Manager authoring context only. Until a canonical
+  authoring-to-runtime bridge exists, the live mutation target must be selected
+  explicitly from the runtime workers reported by `status-full`.
 - The runtime target comes from Orchestrator's cached swarm `status-full` aggregate:
-  `data.context.workers[]`, matched by role for the current implementation.
+  `data.context.workers[]`, matched by SC-owned runtime
+  `data.context.workers[].beeId`.
 - The field catalog comes from Scenario Manager capability manifests, matched to the
   selected runtime image.
 - The mutation path is only Orchestrator:
@@ -190,6 +193,13 @@ Rules:
 
 - Do not edit scenario YAML as a substitute for live runtime config.
 - Do not send config updates through RabbitMQ directly from the browser.
+- Do not match a selected bee to runtime by `role`, array order, label, image,
+  queue name, topology position, or authoring-only id. If there is no SC-owned
+  `data.context.workers[].beeId` for the runtime target, show a missing-runtime
+  state and disable live mutation for that item.
+- Do not auto-select a runtime target by array order. A live edit target is
+  valid only after the UI holds an explicit `data.context.workers[].beeId`
+  selected from the runtime worker list.
 - Do not infer a runtime current value from scenario defaults. The current
   value source is the worker `status-full.data.config` carried by the
   swarm-controller aggregate at `data.context.workers[].config`. If it is not

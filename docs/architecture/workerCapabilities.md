@@ -38,11 +38,11 @@ One JSON (or YAML) **manifest per image**:
   },
   "role": "generator",
   "config": [
-    { "name": "inputs.type", "type": "string", "default": "SCHEDULER",
+    { "name": "inputs.type", "type": "string", "required": true,
       "options": ["SCHEDULER", "REDIS_DATASET"] },
-    { "name": "rate", "type": "int", "default": 100, "min": 1, "max": 100000,
+    { "name": "rate", "type": "integer", "required": true, "min": 1, "max": 100000,
       "ui": {"step": 10, "unit": "msg/s"} },
-    { "name": "payloadTemplate", "type": "string", "default": "", "multiline": true }
+    { "name": "payloadTemplate", "type": "string", "required": true, "multiline": true }
   ],
   "actions": [
     { "id": "warmup", "label": "Warm Up", "params": [] },
@@ -58,9 +58,12 @@ One JSON (or YAML) **manifest per image**:
 **Notes**
 - `image` is the **match key** at runtime (prefer `digest` > `name+tag`).
 - `config`/`actions` are **semantic contracts**, not URLs; UI builds forms and buttons from them.
-- `config[].default` values are **UI authoring hints only** (initial form values). They must not be treated
-  as runtime fallbacks or compatibility shims. Runtime behaviour must come from explicitly provided
-  scenario configuration and worker defaults, not from capability manifest defaults.
+- `config[].type` has one canonical vocabulary only: `string`, `boolean`, `number`,
+  `integer`, `json`. Do not use aliases such as `text` or `int`; capability
+  manifest loading fails on unsupported type values.
+- Bundled capability manifests must not publish `config[].default` values for public scenario config.
+  Runtime behaviour must come from explicitly provided scenario configuration, not from capability
+  manifest defaults or worker fallback defaults.
 - `config` may include IO selector fields such as `inputs.type` / `outputs.type`. IO-specific
   knobs (e.g. scheduler vs Redis dataset vs Redis output) are modelled as separate manifests with
   `ui.ioType` + `ui.ioScope` set (`io.scheduler.latest.yaml`, `io.redis-dataset.latest.yaml`,

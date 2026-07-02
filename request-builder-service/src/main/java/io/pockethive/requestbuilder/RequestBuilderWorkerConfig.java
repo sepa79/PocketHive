@@ -7,7 +7,7 @@ import java.util.Objects;
 public record RequestBuilderWorkerConfig(
     String templateRoot,
     String serviceId,
-    boolean passThroughOnMissingTemplate,
+    Boolean passThroughOnMissingTemplate,
     Map<String, Object> vars,
     Map<String, Object> privateConfig
 ) {
@@ -20,8 +20,9 @@ public record RequestBuilderWorkerConfig(
   }
 
   public RequestBuilderWorkerConfig {
-    templateRoot = normalize(templateRoot, "/app/templates/http");
-    serviceId = normalize(serviceId, "default");
+    templateRoot = requireNonBlank(templateRoot, "templateRoot");
+    serviceId = requireNonBlank(serviceId, "serviceId");
+    passThroughOnMissingTemplate = Objects.requireNonNull(passThroughOnMissingTemplate, "passThroughOnMissingTemplate");
     vars = vars == null ? Map.of() : Map.copyOf(vars);
     privateConfig = privateConfig == null ? Map.of() : Map.copyOf(privateConfig);
   }
@@ -39,11 +40,12 @@ public record RequestBuilderWorkerConfig(
     return Map.of();
   }
 
-  private static String normalize(String value, String defaultValue) {
-    if (value == null) {
-      return Objects.requireNonNull(defaultValue, "defaultValue");
-    }
+  private static String requireNonBlank(String value, String field) {
+    Objects.requireNonNull(value, field);
     String trimmed = value.trim();
-    return trimmed.isEmpty() ? defaultValue : trimmed;
+    if (trimmed.isEmpty()) {
+      throw new IllegalArgumentException(field + " must not be blank");
+    }
+    return trimmed;
   }
 }

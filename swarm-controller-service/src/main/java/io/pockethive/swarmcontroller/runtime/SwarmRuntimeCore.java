@@ -9,6 +9,7 @@ import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import io.pockethive.controlplane.messaging.EventMessage;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
+import io.pockethive.controlplane.worker.WorkerRuntimeIdentity;
 import io.pockethive.docker.DockerContainerClient;
 import io.pockethive.manager.ports.Clock;
 import io.pockethive.manager.ports.ComputeAdapter;
@@ -58,6 +59,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -77,6 +79,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
 
   private static final Logger log = LoggerFactory.getLogger(SwarmLifecycleManager.class);
   private static final String SCENARIOS_RUNTIME_DESTINATION = "/app/scenarios-runtime";
+  private static final String RUNTIME_BEE_ID_PREFIX = "bee-";
 
   private final AmqpAdmin amqp;
   private final ObjectMapper mapper;
@@ -325,6 +328,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
       Set<String> roles = new LinkedHashSet<>();
       for (Bee bee : runnableBees) {
         String beeName = BeeNameGenerator.generate(bee.role(), swarmId);
+        String runtimeBeeId = newRuntimeBeeId();
         roles.add(bee.role());
         Map<String, String> env = new LinkedHashMap<>(
             ControlPlaneContainerEnvironmentFactory.workerEnvironment(beeName, bee.role(), workerSettings, rabbitProperties));
@@ -350,6 +354,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
         if (bee.env() != null) {
           env.putAll(bee.env());
         }
+        env.put(WorkerRuntimeIdentity.BEE_ID_ENV, runtimeBeeId);
         Map<String, Object> effectiveConfig = enrichConfigWithSut(bee.config(), sutEnv);
         List<String> volumes = resolveVolumes(effectiveConfig);
         if (hasText(scenariosRuntimeRootSource)) {
@@ -364,7 +369,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
             bee.image(),
             Map.copyOf(env),
             volumes));
-        runtimeState.registerWorker(bee.role(), beeName, beeName);
+        runtimeState.registerWorker(runtimeBeeId, bee.role(), beeName, beeName);
         if (effectiveConfig != null && !effectiveConfig.isEmpty()) {
           configFanout.registerBootstrapConfig(beeName, bee.role(), effectiveConfig);
         }
@@ -646,6 +651,12 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
   }
 
   @Override
+  public Optional<String> runtimeBeeIdFor(String role, String instance) {
+    SwarmRuntimeState state = runtimeState;
+    return state != null ? state.beeIdFor(role, instance) : Optional.empty();
+  }
+
+  @Override
   public synchronized Optional<String> handleConfigUpdateError(String role, String instance, String error) {
     Optional<String> message = configFanout.handleConfigUpdateError(instance, error);
     message.ifPresent(msg -> {
@@ -839,7 +850,11 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
         putEnvIfPresent(env, "POCKETHIVE_INPUTS_REDIS_SSL", redisMap.get("ssl"));
         putEnvIfPresent(env, "POCKETHIVE_INPUTS_REDIS_LISTNAME", redisMap.get("listName"));
         putEnvIfPresent(env, "POCKETHIVE_INPUTS_REDIS_PICKSTRATEGY", redisMap.get("pickStrategy"));
-        putEnvAsJsonIfPresent(env, "POCKETHIVE_INPUTS_REDIS_SOURCESJSON", redisMap.get("sources"));
+        putIndexedEnvIfPresent(
+            env,
+            "POCKETHIVE_INPUTS_REDIS_SOURCES",
+            redisMap.get("sources"),
+            Map.of("listName", "LISTNAME", "weight", "WEIGHT"));
         putEnvIfPresent(env, "POCKETHIVE_INPUTS_REDIS_RATEPERSEC", redisMap.get("ratePerSec"));
         putEnvIfPresent(env, "POCKETHIVE_INPUTS_REDIS_INITIALDELAYMS", redisMap.get("initialDelayMs"));
         putEnvIfPresent(env, "POCKETHIVE_INPUTS_REDIS_TICKINTERVALMS", redisMap.get("tickIntervalMs"));
@@ -879,6 +894,15 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
         putEnvIfPresent(env, "POCKETHIVE_OUTPUTS_REDIS_PUSHDIRECTION", redisMap.get("pushDirection"));
         putEnvIfPresent(env, "POCKETHIVE_OUTPUTS_REDIS_DEFAULTLIST", redisMap.get("defaultList"));
         putEnvIfPresent(env, "POCKETHIVE_OUTPUTS_REDIS_TARGETLISTTEMPLATE", redisMap.get("targetListTemplate"));
+        putIndexedEnvIfPresent(
+            env,
+            "POCKETHIVE_OUTPUTS_REDIS_ROUTES",
+            redisMap.get("routes"),
+            Map.of(
+                "match", "MATCH",
+                "header", "HEADER",
+                "headerMatch", "HEADERMATCH",
+                "list", "LIST"));
         putEnvIfPresent(env, "POCKETHIVE_OUTPUTS_REDIS_MAXLEN", redisMap.get("maxLen"));
       }
     }
@@ -964,17 +988,26 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
     }
   }
 
-  private void putEnvAsJsonIfPresent(Map<String, String> env, String key, Object value) {
+  private static void putIndexedEnvIfPresent(
+      Map<String, String> env,
+      String keyPrefix,
+      Object value,
+      Map<String, String> fieldEnvNames) {
     if (value == null) {
       return;
     }
-    try {
-      String json = mapper.writeValueAsString(value);
-      if (!json.isBlank()) {
-        env.put(key, json);
+    if (!(value instanceof Iterable<?> entries)) {
+      throw new IllegalStateException(keyPrefix + " must be a list of objects");
+    }
+    int index = 0;
+    for (Object entry : entries) {
+      if (!(entry instanceof Map<?, ?> entryMap)) {
+        throw new IllegalStateException(keyPrefix + "_" + index + " must be an object");
       }
-    } catch (JsonProcessingException ex) {
-      throw new IllegalStateException("Failed to serialize " + key + " to JSON", ex);
+      for (Map.Entry<String, String> field : fieldEnvNames.entrySet()) {
+        putEnvIfPresent(env, keyPrefix + "_" + index + "_" + field.getValue(), entryMap.get(field.getKey()));
+      }
+      index++;
     }
   }
 
@@ -1016,6 +1049,10 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
       }
     }
     return result.isEmpty() ? List.of() : List.copyOf(result);
+  }
+
+  private static String newRuntimeBeeId() {
+    return RUNTIME_BEE_ID_PREFIX + UUID.randomUUID();
   }
 
   private static Map<String, Object> enrichConfigWithSut(Map<String, Object> config,

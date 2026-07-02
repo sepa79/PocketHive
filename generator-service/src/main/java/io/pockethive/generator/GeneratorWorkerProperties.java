@@ -14,9 +14,4 @@ class GeneratorWorkerProperties extends CanonicalWorkerProperties<GeneratorWorke
   GeneratorWorkerProperties(ObjectMapper mapper, WorkerControlPlaneProperties controlPlaneProperties) {
     super(() -> controlPlaneProperties.getWorker().getRole(), GeneratorWorkerConfig.class, mapper);
   }
-
-  GeneratorWorkerConfig defaultConfig() {
-    return toConfig(objectMapper()).orElseThrow(() ->
-        new IllegalStateException("Missing generator config under pockethive.worker.config"));
-  }
 }

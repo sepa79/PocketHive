@@ -10,21 +10,19 @@ ui:
 config:
   - name: inputs.scheduler.ratePerSec
     type: number
-    default: 0
+    required: true
     min: 0
-    max: 1000
     ui:
       step: 1
       unit: msg/s
   - name: inputs.scheduler.maxMessages
-    type: number
-    default: 0
+    type: integer
+    required: true
     min: 0
     ui:
       step: 1
       unit: messages
   - name: inputs.scheduler.reset
     type: boolean
-    default: false
 actions: []
 panels: []

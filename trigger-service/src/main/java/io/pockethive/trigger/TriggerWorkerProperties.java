@@ -13,9 +13,4 @@ class TriggerWorkerProperties extends CanonicalWorkerProperties<TriggerWorkerCon
   TriggerWorkerProperties(ObjectMapper mapper, WorkerControlPlaneProperties controlPlaneProperties) {
     super(() -> controlPlaneProperties.getWorker().getRole(), TriggerWorkerConfig.class, mapper);
   }
-
-  TriggerWorkerConfig defaultConfig() {
-    return toConfig(objectMapper()).orElseThrow(() ->
-        new IllegalStateException("Missing trigger config under pockethive.worker.config"));
-  }
 }

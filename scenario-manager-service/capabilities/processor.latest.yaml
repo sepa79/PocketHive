@@ -40,7 +40,7 @@ ui:
 config:
   - name: inputs.type
     type: string
-    default: "RABBITMQ"
+    required: true
     options:
       - "RABBITMQ"
       - "REDIS_DATASET"
@@ -49,7 +49,7 @@ config:
       group: IO
   - name: outputs.type
     type: string
-    default: "RABBITMQ"
+    required: true
     options:
       - "RABBITMQ"
       - "REDIS"
@@ -57,21 +57,15 @@ config:
     ui:
       label: Output type
       group: IO
-  - name: enabled
-    type: boolean
-    default: false
-    ui:
-      label: Enabled
-      group: General
   - name: baseUrl
     type: string
-    default: ""
+    required: true
     ui:
       label: Base URL
       group: HTTP
   - name: mode
     type: string
-    default: "THREAD_COUNT"
+    required: true
     options:
       - "THREAD_COUNT"
       - "RATE_PER_SEC"
@@ -79,14 +73,14 @@ config:
       label: Mode
       group: HTTP
   - name: threadCount
-    type: int
-    default: 1
+    type: integer
+    required: true
     ui:
       label: Thread count
       group: HTTP
   - name: ratePerSec
     type: number
-    default: 1.0
+    required: true
     when:
       mode: "RATE_PER_SEC"
     ui:
@@ -94,13 +88,11 @@ config:
       group: HTTP
   - name: keepAlive
     type: boolean
-    default: true
     ui:
       label: Keep-alive
       group: HTTP
   - name: connectionReuse
     type: string
-    default: "GLOBAL"
     options:
       - "GLOBAL"
       - "PER_THREAD"
@@ -109,14 +101,11 @@ config:
       label: Connection reuse
       group: HTTP
   - name: timeoutMs
-    type: int
-    default: 30000
+    type: integer
   - name: sslVerify
     type: boolean
-    default: false
   - name: tcpTransport.type
     type: string
-    default: "socket"
     options:
       - "socket"
       - "nio"
@@ -125,44 +114,37 @@ config:
       label: Transport type
       group: TCP
   - name: tcpTransport.timeout
-    type: int
-    default: 30000
+    type: integer
     ui:
       label: Timeout (ms)
       group: TCP
   - name: tcpTransport.maxBytes
-    type: int
-    default: 8192
+    type: integer
     ui:
       label: Max bytes
       group: TCP
   - name: tcpTransport.keepAlive
     type: boolean
-    default: true
     ui:
       label: Keep-alive
       group: TCP
   - name: tcpTransport.workerThreads
-    type: int
-    default: 4
+    type: integer
     ui:
       label: Worker threads
       group: TCP
   - name: tcpTransport.tcpNoDelay
     type: boolean
-    default: true
     ui:
       label: TCP no-delay
       group: TCP
   - name: tcpTransport.sslVerify
     type: boolean
-    default: false
     ui:
       label: SSL verify
       group: TCP
   - name: tcpTransport.connectionReuse
     type: string
-    default: "GLOBAL"
     options:
       - "GLOBAL"
       - "PER_THREAD"
@@ -171,32 +153,27 @@ config:
       label: Connection reuse
       group: TCP
   - name: tcpTransport.maxRetries
-    type: int
-    default: 3
+    type: integer
     ui:
       label: Max retries
       group: TCP
   - name: tcpTransport.connectTimeoutMs
-    type: int
-    default: 5000
+    type: integer
     ui:
       label: Connect timeout (ms)
       group: TCP
   - name: tcpTransport.readTimeoutMs
-    type: int
-    default: 30000
+    type: integer
     ui:
       label: Read timeout (ms)
       group: TCP
   - name: tcpTransport.ssl.enabled
     type: boolean
-    default: false
     ui:
       label: SSL enabled
       group: TCP
   - name: tcpTransport.ssl.verifyHostname
     type: boolean
-    default: true
     ui:
       label: SSL verify hostname
       group: TCP

@@ -13,8 +13,4 @@ class RequestBuilderWorkerProperties extends CanonicalWorkerProperties<RequestBu
   RequestBuilderWorkerProperties(ObjectMapper mapper, WorkerControlPlaneProperties controlPlaneProperties) {
     super(() -> controlPlaneProperties.getWorker().getRole(), RequestBuilderWorkerConfig.class, mapper);
   }
-
-  RequestBuilderWorkerConfig defaultConfig() {
-    return toConfig(objectMapper()).orElseGet(() -> new RequestBuilderWorkerConfig("/app/templates/http", "default", true, java.util.Map.of()));
-  }
 }

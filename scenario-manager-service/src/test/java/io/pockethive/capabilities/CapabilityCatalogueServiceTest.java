@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class CapabilityCatalogueServiceTest {
 
@@ -50,6 +51,137 @@ class CapabilityCatalogueServiceTest {
         assertThat(catalogue.allManifests())
                 .isNotEmpty()
                 .allSatisfy(manifest -> assertThat(manifest.image().tag()).isNull());
+    }
+
+    @Test
+    void bundledCapabilityConfigDoesNotPublishDefaults() throws Exception {
+        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(Path.of("capabilities"));
+        catalogue.reload();
+
+        assertThat(catalogue.allManifests())
+                .isNotEmpty()
+                .allSatisfy(manifest -> assertThat(manifest.config())
+                        .allSatisfy(entry -> assertThat(entry.defaultValue())
+                                .as("%s:%s", manifest.role(), entry.name())
+                                .isNull()));
+    }
+
+    @Test
+    void bundledIoCapabilitiesExposeScopeAndType() throws Exception {
+        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(Path.of("capabilities"));
+        catalogue.reload();
+
+        CapabilityManifest manifest = catalogue.findByImageName("io-scheduler").orElseThrow();
+
+        assertThat(manifest.ui()).isNotNull();
+        assertThat(manifest.ui().ioScope()).isEqualTo("INPUT");
+        assertThat(manifest.ui().ioType()).isEqualTo("SCHEDULER");
+    }
+
+    @Test
+    void rejectsRuntimeStateFieldsInCapabilityConfig() throws IOException {
+        String body = """
+                schemaVersion: "1.0"
+                capabilitiesVersion: "1.0"
+                image:
+                  name: "processor"
+                role: "processor"
+                config:
+                  - name: enabled
+                    type: boolean
+                actions: []
+                panels: []
+                """;
+        Files.writeString(capabilitiesDir.resolve("processor.yaml"), body);
+
+        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(capabilitiesDir);
+
+        assertThatThrownBy(catalogue::reload)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("must not declare runtime worker state field 'enabled'");
+    }
+
+    @Test
+    void rejectsUnsupportedCapabilityConfigTypes() throws IOException {
+        String body = """
+                schemaVersion: "1.0"
+                capabilitiesVersion: "1.0"
+                image:
+                  name: "processor"
+                role: "processor"
+                config:
+                  - name: threadCount
+                    type: int
+                  - name: upperCase
+                    type: INTEGER
+                  - name: padded
+                    type: " integer "
+                actions: []
+                panels: []
+                """;
+        Files.writeString(capabilitiesDir.resolve("processor.yaml"), body);
+
+        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(capabilitiesDir);
+
+        assertThatThrownBy(catalogue::reload)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("config[].type for 'threadCount' is unsupported value 'int'")
+                .hasMessageContaining("config[].type for 'upperCase' is unsupported value 'INTEGER'")
+                .hasMessageContaining("config[].type for 'padded' is unsupported value ' integer '")
+                .hasMessageContaining("expected one of: string, boolean, number, integer, json");
+    }
+
+    @Test
+    void rejectsLegacyWorkerConfigPathsInCapabilityConfigAndWhenClauses() throws IOException {
+        String body = """
+                schemaVersion: "1.0"
+                capabilitiesVersion: "1.0"
+                image:
+                  name: "generator"
+                role: "generator"
+                config:
+                  - name: worker.message.path
+                    type: string
+                    when:
+                      worker.message.bodyType: HTTP
+                actions: []
+                panels: []
+                """;
+        Files.writeString(capabilitiesDir.resolve("generator.yaml"), body);
+
+        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(capabilitiesDir);
+
+        assertThatThrownBy(catalogue::reload)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("must use direct config paths, not 'worker' or 'worker.*'");
+    }
+
+    @Test
+    void rejectsExactLegacyConfigRootsInCapabilityConfigAndWhenClauses() throws IOException {
+        String body = """
+                schemaVersion: "1.0"
+                capabilitiesVersion: "1.0"
+                image:
+                  name: "generator"
+                role: "generator"
+                config:
+                  - name: worker
+                    type: json
+                    when:
+                      pockethive: true
+                  - name: pockethive
+                    type: json
+                actions: []
+                panels: []
+                """;
+        Files.writeString(capabilitiesDir.resolve("generator.yaml"), body);
+
+        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(capabilitiesDir);
+
+        assertThatThrownBy(catalogue::reload)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("must use direct config paths, not 'worker' or 'worker.*'")
+                .hasMessageContaining("must use direct config paths, not 'pockethive' or 'pockethive.*'");
     }
 
     @Test

@@ -7,6 +7,18 @@ template:
     - role: generator
       id: generator
       image: generator:latest
+      config:
+        inputs:
+          type: SCHEDULER
+          scheduler:
+            ratePerSec: 1.0
+            maxMessages: 0
+        message:
+          bodyType: HTTP
+          path: /api/test
+          method: POST
+          body: hello-world
+          headers: {}
       work:
         out:
           out: gen
@@ -15,6 +27,10 @@ template:
     - role: moderator
       id: moderator
       image: moderator:latest
+      config:
+        mode:
+          type: pass-through
+          ratePerSec: 0.0
       work:
         in:
           in: gen
@@ -26,6 +42,14 @@ template:
     - role: processor
       id: processor
       image: processor:latest
+      config:
+        baseUrl: "{{ sut.endpoints['default'].baseUrl }}"
+        mode: THREAD_COUNT
+        threadCount: 1
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
       work:
         in:
           in: mod
@@ -37,6 +61,10 @@ template:
     - role: postprocessor
       id: postprocessor
       image: postprocessor:latest
+      config:
+        forwardToOutput: false
+        txOutcomeSinkMode: NONE
+        dropTxOutcomeWithoutCallId: true
       work:
         in:
           in: final

@@ -393,18 +393,53 @@ class SwarmCreationMock1E2ETest {
                 Map.of(),
                 Map.of(
                     "docker", dockerConfig,
-                    "ratePerSec", 50,
-                    "message", Map.of("path", "/api/guarded", "body", "guarded-request")
+                    "inputs", Map.of(
+                        "type", "SCHEDULER",
+                        "scheduler", Map.of("ratePerSec", 50, "maxMessages", 0)
+                    ),
+                    "message", Map.of(
+                        "bodyType", "HTTP",
+                        "path", "/api/guarded",
+                        "method", "POST",
+                        "body", "guarded-request",
+                        "headers", Map.of()
+                    )
                 )
             ),
-            new Bee("moderator", "moderator:latest", Work.ofDefaults("gen", "mod"), Map.of(), Map.of("docker", dockerConfig)),
+            new Bee(
+                "moderator",
+                "moderator:latest",
+                Work.ofDefaults("gen", "mod"),
+                Map.of(),
+                Map.of(
+                    "docker", dockerConfig,
+                    "mode", Map.of("type", "pass-through", "ratePerSec", 0.0)
+                )
+            ),
             new Bee(
                 "processor",
                 "processor:latest",
                 Work.ofDefaults("mod", "final"),
                 Map.of(),
-                Map.of("docker", dockerConfig, "baseUrl", "http://sut:8080")),
-            new Bee("postprocessor", "postprocessor:latest", Work.ofDefaults("final", null), Map.of(), Map.of("docker", dockerConfig))
+                Map.of(
+                    "docker", dockerConfig,
+                    "inputs", Map.of("type", "RABBITMQ"),
+                    "outputs", Map.of("type", "RABBITMQ"),
+                    "baseUrl", "http://sut:8080",
+                    "mode", "THREAD_COUNT",
+                    "threadCount", 1)),
+            new Bee(
+                "postprocessor",
+                "postprocessor:latest",
+                Work.ofDefaults("final", null),
+                Map.of(),
+                Map.of(
+                    "docker", dockerConfig,
+                    "forwardToOutput", false,
+                    "txOutcomeSinkMode", "NONE",
+                    "dropTxOutcomeWithoutCallId", true
+                )
+            )
         );
 
         String outcomeRoutingKey = ControlPlaneRouting.event("outcome", "swarm-create",

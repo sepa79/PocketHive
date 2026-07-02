@@ -31,6 +31,8 @@ public record CapabilityManifest(
             String name,
             String type,
             @JsonProperty("default") JsonNode defaultValue,
+            Boolean required,
+            Boolean allowBlank,
             Number min,
             Number max,
             Boolean multiline,
@@ -63,5 +65,5 @@ public record CapabilityManifest(
     public record Panel(String id, JsonNode options) { }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record Ui(String label, String color, String shape, String abbreviation, String ioType) { }
+    public record Ui(String label, String color, String shape, String abbreviation, String ioType, String ioScope) { }
 }
