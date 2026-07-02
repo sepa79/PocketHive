@@ -1,6 +1,7 @@
 package io.pockethive.worker.sdk.runtime;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
@@ -47,6 +48,11 @@ class RedisUploaderInterceptorTest {
                     "enabled", true,
                     "host", "redis",
                     "port", 6379,
+                    "ssl", false,
+                    "phase", "AFTER",
+                    "sourceStep", "LAST",
+                    "pushDirection", "RPUSH",
+                    "maxLen", -1,
                     "routes", List.of(
                         Map.of(
                             "header", "x-ph-flow",
@@ -80,6 +86,11 @@ class RedisUploaderInterceptorTest {
                     "enabled", true,
                     "host", "redis",
                     "port", 6379,
+                    "ssl", false,
+                    "phase", "AFTER",
+                    "sourceStep", "LAST",
+                    "pushDirection", "RPUSH",
+                    "maxLen", -1,
                     "targetListTemplate", "webauth.RED.{{ payloadAsJson.Customer }}"
                 )
             )
@@ -97,7 +108,67 @@ class RedisUploaderInterceptorTest {
     }
 
     @Test
-    void doesNotPushWhenNoRouteNoTemplateAndNoDefaultList() throws Exception {
+    void acceptsExplicitStringEnabledFlag() throws Exception {
+        RecordingWriterFactory writerFactory = new RecordingWriterFactory();
+        RedisUploaderInterceptor interceptor = new RedisUploaderInterceptor(writerFactory, new PebbleTemplateRenderer());
+
+        Map<String, Object> rawConfig = Map.of(
+            "interceptors", Map.of(
+                "redisUploader", Map.of(
+                    "enabled", "true",
+                    "host", "redis",
+                    "port", 6379,
+                    "ssl", false,
+                    "phase", "AFTER",
+                    "sourceStep", "LAST",
+                    "pushDirection", "RPUSH",
+                    "maxLen", -1,
+                    "defaultList", "webauth.RED.default"
+                )
+            )
+        );
+
+        WorkerInvocationContext context = invocationContext(rawConfig, message("{\"Customer\":\"custB\"}", Map.of()));
+
+        interceptor.intercept(context, ctx -> ctx.message());
+
+        assertThat(writerFactory.pushes).hasSize(1);
+        assertThat(writerFactory.pushes.getFirst().list).isEqualTo("webauth.RED.default");
+    }
+
+    @Test
+    void rejectsMalformedEnabledFlagInsteadOfDisablingUploader() {
+        RecordingWriterFactory writerFactory = new RecordingWriterFactory();
+        RedisUploaderInterceptor interceptor = new RedisUploaderInterceptor(writerFactory, new PebbleTemplateRenderer());
+
+        Map<String, Object> rawConfig = Map.of(
+            "interceptors", Map.of(
+                "redisUploader", Map.of(
+                    "enabled", "yes",
+                    "host", "redis",
+                    "port", 6379,
+                    "ssl", false,
+                    "phase", "AFTER",
+                    "sourceStep", "LAST",
+                    "pushDirection", "RPUSH",
+                    "maxLen", -1,
+                    "defaultList", "webauth.RED.default"
+                )
+            )
+        );
+
+        WorkerInvocationContext context = invocationContext(rawConfig, message("{\"Customer\":\"custB\"}", Map.of()));
+
+        assertThatThrownBy(() -> interceptor.intercept(context, ctx -> ctx.message()))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("enabled")
+            .hasMessageContaining("true or false");
+
+        assertThat(writerFactory.pushes).isEmpty();
+    }
+
+    @Test
+    void rejectsEnabledConfigWithNoTarget() {
         RecordingWriterFactory writerFactory = new RecordingWriterFactory();
         RedisUploaderInterceptor interceptor = new RedisUploaderInterceptor(writerFactory, new PebbleTemplateRenderer());
 
@@ -106,7 +177,12 @@ class RedisUploaderInterceptorTest {
                 "redisUploader", Map.of(
                     "enabled", true,
                     "host", "redis",
-                    "port", 6379
+                    "port", 6379,
+                    "ssl", false,
+                    "phase", "AFTER",
+                    "sourceStep", "LAST",
+                    "pushDirection", "RPUSH",
+                    "maxLen", -1
                 )
             )
         );
@@ -116,7 +192,114 @@ class RedisUploaderInterceptorTest {
             message("{\"Customer\":\"custC\"}", Map.of("x-ph-redis-list", "webauth.TOP.custC"))
         );
 
-        interceptor.intercept(context, ctx -> ctx.message());
+        assertThatThrownBy(() -> interceptor.intercept(context, ctx -> ctx.message()))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("requires routes, targetListTemplate, or defaultList");
+
+        assertThat(writerFactory.pushes).isEmpty();
+    }
+
+    @Test
+    void rejectsEnabledConfigWithoutExplicitPushDirection() {
+        RecordingWriterFactory writerFactory = new RecordingWriterFactory();
+        RedisUploaderInterceptor interceptor = new RedisUploaderInterceptor(writerFactory, new PebbleTemplateRenderer());
+
+        Map<String, Object> rawConfig = Map.of(
+            "interceptors", Map.of(
+                "redisUploader", Map.of(
+                    "enabled", true,
+                    "host", "redis",
+                    "port", 6379,
+                    "ssl", false,
+                    "phase", "AFTER",
+                    "sourceStep", "LAST",
+                    "maxLen", -1,
+                    "defaultList", "ph:dataset:other"
+                )
+            )
+        );
+
+        WorkerInvocationContext context = invocationContext(
+            rawConfig,
+            message("{\"Customer\":\"custC\"}", Map.of("x-ph-redis-list", "webauth.TOP.custC"))
+        );
+
+        assertThatThrownBy(() -> interceptor.intercept(context, ctx -> ctx.message()))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("requires field 'pushDirection'");
+
+        assertThat(writerFactory.pushes).isEmpty();
+    }
+
+    @Test
+    void rejectsMalformedRouteInsteadOfFallingThroughToDefaultList() {
+        RecordingWriterFactory writerFactory = new RecordingWriterFactory();
+        RedisUploaderInterceptor interceptor = new RedisUploaderInterceptor(writerFactory, new PebbleTemplateRenderer());
+
+        Map<String, Object> rawConfig = Map.of(
+            "interceptors", Map.of(
+                "redisUploader", Map.of(
+                    "enabled", true,
+                    "host", "redis",
+                    "port", 6379,
+                    "ssl", false,
+                    "phase", "AFTER",
+                    "sourceStep", "LAST",
+                    "pushDirection", "RPUSH",
+                    "maxLen", -1,
+                    "routes", List.of(Map.of(
+                        "header", "x-ph-flow",
+                        "list", "webauth.RED.custA"
+                    )),
+                    "defaultList", "webauth.RED.default"
+                )
+            )
+        );
+
+        WorkerInvocationContext context = invocationContext(
+            rawConfig,
+            message("{\"Customer\":\"custC\"}", Map.of("x-ph-flow", "TOP"))
+        );
+
+        assertThatThrownBy(() -> interceptor.intercept(context, ctx -> ctx.message()))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("headerMatch");
+
+        assertThat(writerFactory.pushes).isEmpty();
+    }
+
+    @Test
+    void rejectsOutOfRangeRedisUploaderScalars() {
+        assertInvalidUploaderScalar(Map.of("port", 6379.5), "port");
+        assertInvalidUploaderScalar(Map.of("port", 70_000), "port");
+        assertInvalidUploaderScalar(Map.of("maxLen", 1.5), "maxLen");
+        assertInvalidUploaderScalar(Map.of("maxLen", -2), "maxLen");
+    }
+
+    private static void assertInvalidUploaderScalar(Map<String, Object> patch, String field) {
+        RecordingWriterFactory writerFactory = new RecordingWriterFactory();
+        RedisUploaderInterceptor interceptor = new RedisUploaderInterceptor(writerFactory, new PebbleTemplateRenderer());
+        java.util.LinkedHashMap<String, Object> uploader = new java.util.LinkedHashMap<>(Map.of(
+            "enabled", true,
+            "host", "redis",
+            "port", 6379,
+            "ssl", false,
+            "phase", "AFTER",
+            "sourceStep", "LAST",
+            "pushDirection", "RPUSH",
+            "maxLen", -1,
+            "defaultList", "webauth.RED.default"
+        ));
+        uploader.putAll(patch);
+
+        WorkerInvocationContext context = invocationContext(
+            Map.of("interceptors", Map.of("redisUploader", uploader)),
+            message("{\"Customer\":\"custC\"}", Map.of("x-ph-flow", "TOP"))
+        );
+
+        assertThatThrownBy(() -> interceptor.intercept(context, ctx -> ctx.message()))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining(field);
 
         assertThat(writerFactory.pushes).isEmpty();
     }

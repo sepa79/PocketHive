@@ -51,6 +51,10 @@ template:
         baseUrl: "{{ sut.endpoints['default'].baseUrl }}"
         mode: THREAD_COUNT
         threadCount: 1
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
       work:
         in:
           in: mod
@@ -73,7 +77,7 @@ template:
         recordSourceStep: latest
         recordSourceStepIndex: -1
         recordBuildFailurePolicy: stop
-        lineSeparator: "\n"
+        lineSeparator: '\n'
         fileNameTemplate: "STREAM_{{ now }}.dat"
         headerTemplate: "H|{{ now }}"
         recordTemplate: "D|{{ steps.selected.payload }}"
@@ -81,6 +85,7 @@ template:
         localTargetDir: "/tmp/pockethive/clearing-out"
         localTempSuffix: ".tmp"
         writeManifest: false
+        businessCodeFilterEnabled: false
       work:
         in:
           in: post

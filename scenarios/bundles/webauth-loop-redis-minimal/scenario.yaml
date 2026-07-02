@@ -24,6 +24,8 @@ template:
                 weight: 1
             pickStrategy: ROUND_ROBIN
             ratePerSec: 15
+            ssl: false
+            listName: ""
         message:
           bodyType: SIMPLE
           body: "{{ payload }}"
@@ -60,6 +62,8 @@ template:
         threadCount: 1
         outputs:
           type: RABBITMQ
+        inputs:
+          type: RABBITMQ
       work:
         in:
           in: proc
@@ -92,6 +96,10 @@ template:
               - header: x-ph-redis-list
                 headerMatch: '^webauth\\.BAL\\.custA$'
                 list: webauth.TOP.custA
+            ssl: false
+            targetListTemplate: ""
+            defaultList: ""
+            maxLen: -1
       work:
         in:
           in: post

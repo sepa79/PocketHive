@@ -43,9 +43,9 @@ public final class SchedulerWorkInputFactory implements WorkInputFactory, Ordere
         Logger logger = LoggerFactory.getLogger(definition.beanType());
         Class<?> configType = definition.configType();
         Class<Object> typedConfigType = (Class<Object>) configType;
-        SchedulerInputProperties scheduling = config instanceof SchedulerInputProperties props
-            ? props
-            : new SchedulerInputProperties();
+        if (!(config instanceof SchedulerInputProperties scheduling)) {
+            throw new IllegalStateException("Scheduler inputs require SchedulerInputProperties configuration");
+        }
         SchedulerState<Object> schedulerState = SchedulerStates.ratePerSecond(
             typedConfigType,
             logger,

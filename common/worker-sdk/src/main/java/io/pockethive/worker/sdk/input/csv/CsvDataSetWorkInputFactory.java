@@ -37,9 +37,9 @@ public final class CsvDataSetWorkInputFactory implements WorkInputFactory, Order
     @Override
     public WorkInput create(WorkerDefinition definition, WorkInputConfig config) {
         Logger logger = LoggerFactory.getLogger(definition.beanType());
-        CsvDataSetInputProperties properties = config instanceof CsvDataSetInputProperties props
-            ? props
-            : new CsvDataSetInputProperties();
+        if (!(config instanceof CsvDataSetInputProperties properties)) {
+            throw new IllegalStateException("CSV dataset inputs require CsvDataSetInputProperties configuration");
+        }
         return new CsvDataSetWorkInput(definition, controlPlaneRuntime, workerRuntime, identity, properties, logger);
     }
 

@@ -1,7 +1,5 @@
 package io.pockethive.worker.sdk.input.redis;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.lettuce.core.RedisClient;
 import io.lettuce.core.RedisURI;
 import io.lettuce.core.api.StatefulRedisConnection;
@@ -39,7 +37,9 @@ import org.slf4j.LoggerFactory;
 public final class RedisDataSetWorkInput implements WorkInput {
 
     private static final Logger defaultLog = LoggerFactory.getLogger(RedisDataSetWorkInput.class);
-    private static final ObjectMapper JSON_MAPPER = new ObjectMapper().findAndRegisterModules();
+    private static final int MIN_PORT = 1;
+    private static final int MAX_PORT = 65_535;
+    private static final double MIN_RATE_PER_SEC = 0.0;
 
     private final WorkerDefinition workerDefinition;
     private final WorkerControlPlaneRuntime controlPlaneRuntime;
@@ -120,7 +120,7 @@ public final class RedisDataSetWorkInput implements WorkInput {
         this.controlPlaneRuntime = Objects.requireNonNull(controlPlaneRuntime, "controlPlaneRuntime");
         this.workerRuntime = Objects.requireNonNull(workerRuntime, "workerRuntime");
         this.identity = Objects.requireNonNull(identity, "identity");
-        this.properties = properties == null ? new RedisDataSetInputProperties() : properties;
+        this.properties = Objects.requireNonNull(properties, "properties");
         this.log = log == null ? defaultLog : log;
         this.clientFactory = clientFactory == null ? new LettuceRedisClientFactory() : clientFactory;
         this.randomUnit = randomUnit == null ? () -> ThreadLocalRandom.current().nextDouble() : randomUnit;
@@ -131,7 +131,6 @@ public final class RedisDataSetWorkInput implements WorkInput {
         if (running) {
             return;
         }
-        applySourcesJsonIfPresent();
         enabled = properties.isEnabled();
         tickIntervalMs = Math.max(100L, properties.getTickIntervalMs());
         registerStateListener();
@@ -253,7 +252,7 @@ public final class RedisDataSetWorkInput implements WorkInput {
     private boolean ensureReadyForTick(long now) {
         try {
             validateConfiguration();
-        } catch (IllegalStateException ex) {
+        } catch (IllegalArgumentException | IllegalStateException ex) {
             recordConfigError(now, ex.getMessage(), ex, false);
             return false;
         }
@@ -282,7 +281,7 @@ public final class RedisDataSetWorkInput implements WorkInput {
     }
 
     private int planInvocations() {
-        double perTickRate = Math.max(0.0, properties.getRatePerSec()) * tickIntervalMs / 1_000.0;
+        double perTickRate = properties.getRatePerSec() * tickIntervalMs / 1_000.0;
         double planned = perTickRate + carryOver;
         int quota = (int) Math.floor(planned);
         carryOver = planned - quota;
@@ -299,11 +298,20 @@ public final class RedisDataSetWorkInput implements WorkInput {
             if (previouslyEnabled != enabled && log.isInfoEnabled()) {
                 log.info("{} redis dataset {}", workerDefinition.beanName(), enabled ? "enabled" : "disabled");
             }
-            applyRawConfigOverrides(snapshot.rawConfig());
+            try {
+                applyRawConfigOverrides(snapshot.rawConfig());
+            } catch (IllegalArgumentException | IllegalStateException ex) {
+                recordConfigError(
+                    System.currentTimeMillis(),
+                    "Invalid Redis dataset config update: " + ex.getMessage(),
+                    ex,
+                    false
+                );
+            }
         });
     }
 
-    private void applyRawConfigOverrides(Map<String, Object> rawConfig) {
+    void applyRawConfigOverrides(Map<String, Object> rawConfig) {
         if (rawConfig == null || rawConfig.isEmpty()) {
             return;
         }
@@ -316,22 +324,48 @@ public final class RedisDataSetWorkInput implements WorkInput {
             return;
         }
 
+        List<RedisDataSetInputProperties.Source> parsedSources = redisMap.containsKey("sources")
+            ? parseSources(redisMap.get("sources"))
+            : null;
+        String parsedListName = redisMap.containsKey("listName")
+            ? asText(redisMap.get("listName"))
+            : null;
+        RedisDataSetInputProperties.PickStrategy parsedStrategy = redisMap.containsKey("pickStrategy")
+            ? requirePickStrategy(redisMap.get("pickStrategy"))
+            : null;
+        String parsedHost = redisMap.containsKey("host")
+            ? requireNonBlankText(redisMap.get("host"), "inputs.redis.host")
+            : null;
+        Integer parsedPort = redisMap.containsKey("port")
+            ? requireInteger(redisMap.get("port"), "inputs.redis.port")
+            : null;
+        if (parsedPort != null) {
+            validatePort(parsedPort, "inputs.redis.port");
+        }
+        Boolean parsedSsl = redisMap.containsKey("ssl")
+            ? requireBoolean(redisMap.get("ssl"), "inputs.redis.ssl")
+            : null;
+        Double parsedRate = redisMap.containsKey("ratePerSec")
+            ? requireDouble(redisMap.get("ratePerSec"), "inputs.redis.ratePerSec")
+            : null;
+        if (parsedRate != null) {
+            validateRatePerSec(parsedRate, "inputs.redis.ratePerSec");
+        }
+
         if (redisMap.containsKey("listName")) {
-            String listName = asText(redisMap.get("listName"));
             String current = properties.getListName();
-            if (!Objects.equals(listName, current)) {
-                properties.setListName(listName);
-                if (listName != null && !listName.isBlank()) {
+            if (!Objects.equals(parsedListName, current)) {
+                properties.setListName(parsedListName);
+                if (parsedListName != null && !parsedListName.isBlank()) {
                     properties.setSources(List.of());
                 }
                 if (log.isInfoEnabled()) {
-                    log.info("{} redis dataset list updated via config: {}", workerDefinition.beanName(), listName);
+                    log.info("{} redis dataset list updated via config: {}", workerDefinition.beanName(), parsedListName);
                 }
             }
         }
 
         if (redisMap.containsKey("sources")) {
-            List<RedisDataSetInputProperties.Source> parsedSources = parseSources(redisMap.get("sources"));
             if (!parsedSources.equals(properties.getSources())) {
                 properties.setSources(parsedSources);
                 if (!parsedSources.isEmpty()) {
@@ -346,65 +380,37 @@ public final class RedisDataSetWorkInput implements WorkInput {
                 }
             }
         }
-        if (redisMap.containsKey("sourcesJson")) {
-            properties.setSourcesJson(asText(redisMap.get("sourcesJson")));
-            applySourcesJsonIfPresent();
-        }
-
         if (redisMap.containsKey("pickStrategy")) {
-            String strategy = asText(redisMap.get("pickStrategy"));
-            if (strategy != null && !strategy.isBlank()) {
-                try {
-                    RedisDataSetInputProperties.PickStrategy parsed =
-                        RedisDataSetInputProperties.PickStrategy.valueOf(strategy.trim().toUpperCase());
-                    if (parsed != properties.getPickStrategy()) {
-                        properties.setPickStrategy(parsed);
-                        if (log.isInfoEnabled()) {
-                            log.info("{} redis dataset pickStrategy updated via config: {}", workerDefinition.beanName(), parsed);
-                        }
-                    }
-                } catch (IllegalArgumentException ex) {
-                    log.warn("{} invalid redis pickStrategy '{}'", workerDefinition.beanName(), strategy);
+            if (parsedStrategy != properties.getPickStrategy()) {
+                properties.setPickStrategy(parsedStrategy);
+                if (log.isInfoEnabled()) {
+                    log.info("{} redis dataset pickStrategy updated via config: {}", workerDefinition.beanName(), parsedStrategy);
                 }
             }
         }
-        String host = asText(redisMap.get("host"));
-        if (host != null && !host.isBlank() && !host.equals(properties.getHost())) {
-            properties.setHost(host);
+        if (redisMap.containsKey("host") && !parsedHost.equals(properties.getHost())) {
+            properties.setHost(parsedHost);
             if (log.isInfoEnabled()) {
-                log.info("{} redis dataset host updated via config: {}", workerDefinition.beanName(), host);
+                log.info("{} redis dataset host updated via config: {}", workerDefinition.beanName(), parsedHost);
             }
         }
-        Integer port = asInteger(redisMap.get("port"));
-        if (port != null && port > 0 && port != properties.getPort()) {
-            properties.setPort(port);
+        if (redisMap.containsKey("port") && parsedPort != properties.getPort()) {
+            properties.setPort(parsedPort);
             if (log.isInfoEnabled()) {
-                log.info("{} redis dataset port updated via config: {}", workerDefinition.beanName(), port);
+                log.info("{} redis dataset port updated via config: {}", workerDefinition.beanName(), parsedPort);
             }
         }
-        Double rate = asDouble(redisMap.get("ratePerSec"));
-        if (rate != null && rate >= 0.0 && rate != properties.getRatePerSec()) {
-            properties.setRatePerSec(rate);
+        if (redisMap.containsKey("ssl") && parsedSsl != properties.isSsl()) {
+            properties.setSsl(parsedSsl);
             if (log.isInfoEnabled()) {
-                log.info("{} redis dataset ratePerSec updated via config: {}", workerDefinition.beanName(), rate);
+                log.info("{} redis dataset ssl updated via config: {}", workerDefinition.beanName(), parsedSsl);
             }
         }
-    }
-
-    private void applySourcesJsonIfPresent() {
-        String sourcesJson = properties.getSourcesJson();
-        if (sourcesJson == null || sourcesJson.isBlank()) {
-            return;
-        }
-        try {
-            Object parsed = JSON_MAPPER.readValue(sourcesJson, Object.class);
-            List<RedisDataSetInputProperties.Source> sources = parseSources(parsed);
-            if (sources.isEmpty()) {
-                throw new IllegalStateException("Redis dataset sourcesJson must contain at least one source");
+        if (redisMap.containsKey("ratePerSec") && parsedRate != properties.getRatePerSec()) {
+            properties.setRatePerSec(parsedRate);
+            if (log.isInfoEnabled()) {
+                log.info("{} redis dataset ratePerSec updated via config: {}", workerDefinition.beanName(), parsedRate);
             }
-            properties.setSources(sources);
-        } catch (JsonProcessingException ex) {
-            throw new IllegalStateException("Redis dataset sourcesJson must be a valid JSON array", ex);
         }
     }
 
@@ -412,32 +418,71 @@ public final class RedisDataSetWorkInput implements WorkInput {
         return value == null ? null : value.toString();
     }
 
-    private static Integer asInteger(Object value) {
+    private static Integer requireInteger(Object value, String field) {
         if (value instanceof Number number) {
+            double numeric = number.doubleValue();
+            if (!Double.isFinite(numeric)
+                || numeric != Math.rint(numeric)
+                || numeric < Integer.MIN_VALUE
+                || numeric > Integer.MAX_VALUE) {
+                throw new IllegalArgumentException(field + " must be an integer");
+            }
             return number.intValue();
         }
         if (value instanceof String text) {
             try {
                 return Integer.parseInt(text.trim());
-            } catch (NumberFormatException ignored) {
-                return null;
+            } catch (NumberFormatException ex) {
+                throw new IllegalArgumentException(field + " must be an integer", ex);
             }
         }
-        return null;
+        throw new IllegalArgumentException(field + " must be an integer");
     }
 
-    private static Double asDouble(Object value) {
+    private static Double requireDouble(Object value, String field) {
         if (value instanceof Number number) {
             return number.doubleValue();
         }
         if (value instanceof String text) {
             try {
                 return Double.parseDouble(text.trim());
-            } catch (NumberFormatException ignored) {
-                return null;
+            } catch (NumberFormatException ex) {
+                throw new IllegalArgumentException(field + " must be a number", ex);
             }
         }
-        return null;
+        throw new IllegalArgumentException(field + " must be a number");
+    }
+
+    private static Boolean requireBoolean(Object value, String field) {
+        if (value instanceof Boolean booleanValue) {
+            return booleanValue;
+        }
+        if (value instanceof String text) {
+            if ("true".equalsIgnoreCase(text.trim())) {
+                return true;
+            }
+            if ("false".equalsIgnoreCase(text.trim())) {
+                return false;
+            }
+        }
+        throw new IllegalArgumentException(field + " must be true or false");
+    }
+
+    private static String requireNonBlankText(Object value, String field) {
+        String text = asText(value);
+        if (text == null || text.isBlank()) {
+            throw new IllegalArgumentException(field + " must not be blank");
+        }
+        return text;
+    }
+
+    private static RedisDataSetInputProperties.PickStrategy requirePickStrategy(Object value) {
+        String strategy = requireNonBlankText(value, "inputs.redis.pickStrategy");
+        try {
+            return RedisDataSetInputProperties.PickStrategy.valueOf(strategy.trim().toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            throw new IllegalArgumentException("inputs.redis.pickStrategy must be ROUND_ROBIN or WEIGHTED_RANDOM", ex);
+        }
     }
 
     private void recordConfigError(long now, String message, Exception ex, boolean warnWithStack) {
@@ -504,6 +549,12 @@ public final class RedisDataSetWorkInput implements WorkInput {
         if (properties.getHost() == null || properties.getHost().isBlank()) {
             throw new IllegalStateException("Redis host must be configured for redis dataset input");
         }
+        validatePort(properties.getPort(), "Redis dataset input port");
+        properties.isSsl();
+        if (properties.getPickStrategy() == null) {
+            throw new IllegalStateException("Redis dataset input pickStrategy must be configured");
+        }
+        validateRatePerSec(properties.getRatePerSec(), "Redis dataset input ratePerSec");
         String listName = properties.getListName();
         List<RedisDataSetInputProperties.Source> sources = properties.getSources();
         boolean hasSingleList = listName != null && !listName.isBlank();
@@ -523,7 +574,7 @@ public final class RedisDataSetWorkInput implements WorkInput {
                     throw new IllegalStateException("Redis dataset sources must not contain duplicates");
                 }
                 double weight = source.getWeight();
-                if (weight <= 0.0) {
+                if (!Double.isFinite(weight) || weight <= 0.0) {
                     throw new IllegalStateException("Redis dataset source.weight must be > 0");
                 }
                 totalWeight += weight;
@@ -602,19 +653,31 @@ public final class RedisDataSetWorkInput implements WorkInput {
     }
 
     private static List<RedisDataSetInputProperties.Source> parseSources(Object sourcesObj) {
+        if (sourcesObj == null) {
+            throw new IllegalArgumentException("inputs.redis.sources must be a list");
+        }
         if (!(sourcesObj instanceof Iterable<?> iterable)) {
-            return List.of();
+            throw new IllegalArgumentException("inputs.redis.sources must be a list");
         }
         List<RedisDataSetInputProperties.Source> parsed = new ArrayList<>();
+        int index = 0;
         for (Object entry : iterable) {
             if (!(entry instanceof Map<?, ?> sourceMap)) {
-                continue;
+                throw new IllegalArgumentException("inputs.redis.sources[" + index + "] must be an object");
+            }
+            String listName = asText(sourceMap.get("listName"));
+            if (listName == null || listName.isBlank()) {
+                throw new IllegalArgumentException("inputs.redis.sources[" + index + "].listName must not be blank");
+            }
+            Double weight = requireDouble(sourceMap.get("weight"), "inputs.redis.sources[" + index + "].weight");
+            if (!Double.isFinite(weight) || weight <= 0.0) {
+                throw new IllegalArgumentException("inputs.redis.sources[" + index + "].weight must be > 0");
             }
             RedisDataSetInputProperties.Source source = new RedisDataSetInputProperties.Source();
-            source.setListName(asText(sourceMap.get("listName")));
-            Double weight = asDouble(sourceMap.get("weight"));
-            source.setWeight(weight == null ? 1.0 : weight);
+            source.setListName(listName);
+            source.setWeight(weight);
             parsed.add(source);
+            index++;
         }
         return parsed;
     }
@@ -627,6 +690,18 @@ public final class RedisDataSetWorkInput implements WorkInput {
             resource.close();
         } catch (Exception ignored) {
             // ignored
+        }
+    }
+
+    private static void validatePort(int port, String field) {
+        if (port < MIN_PORT || port > MAX_PORT) {
+            throw new IllegalArgumentException(field + " must be between " + MIN_PORT + " and " + MAX_PORT);
+        }
+    }
+
+    private static void validateRatePerSec(double rate, String field) {
+        if (!Double.isFinite(rate) || rate < MIN_RATE_PER_SEC) {
+            throw new IllegalArgumentException(field + " must be >= " + MIN_RATE_PER_SEC);
         }
     }
 

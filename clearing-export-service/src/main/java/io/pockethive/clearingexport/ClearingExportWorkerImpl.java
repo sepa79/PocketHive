@@ -337,14 +337,9 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
   ) {
     String message = recordBuildFailureMessage(config);
     switch (config.recordBuildFailurePolicyMode()) {
-      case SILENT_DROP -> publishStatus(context);
-      case JOURNAL_AND_LOG_ERROR -> {
-        log.error(message, ex);
-        publishJournalAlert(item, ex);
-        publishStatus(context);
-      }
-      case LOG_ERROR -> {
-        log.error(message, ex);
+      case SKIP_RECORD -> publishStatus(context);
+      case WARN_ONLY -> {
+        log.warn(message, ex);
         publishStatus(context);
       }
       case STOP -> {

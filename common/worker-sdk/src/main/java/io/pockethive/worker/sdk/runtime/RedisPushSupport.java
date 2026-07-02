@@ -162,20 +162,24 @@ public final class RedisPushSupport {
 
     public static List<Route> parseRoutes(Object routesObj, Logger log, String owner) {
         List<Route> routes = new ArrayList<>();
-        if (!(routesObj instanceof Iterable<?> iterable)) {
+        if (routesObj == null) {
             return routes;
         }
         String source = owner == null || owner.isBlank() ? "redis" : owner;
+        if (!(routesObj instanceof Iterable<?> iterable)) {
+            throw invalidRoute(source, "routes must be a list");
+        }
+        int index = 0;
         for (Object obj : iterable) {
             if (!(obj instanceof Map<?, ?> routeMap)) {
-                continue;
+                throw invalidRoute(source, "routes[" + index + "] must be an object");
             }
             String match = asText(routeMap.get("match"));
             String headerName = asText(routeMap.get("header"));
             String headerMatch = asText(routeMap.get("headerMatch"));
             String list = asText(routeMap.get("list"));
             if (list == null || list.isBlank()) {
-                continue;
+                throw invalidRoute(source, "routes[" + index + "].list must not be blank");
             }
 
             Pattern payloadPattern = null;
@@ -183,10 +187,10 @@ public final class RedisPushSupport {
                 try {
                     payloadPattern = Pattern.compile(match);
                 } catch (Exception ex) {
-                    if (log != null) {
-                        log.warn("Invalid {} payload route pattern '{}': {}", source, match, ex.getMessage());
-                    }
-                    continue;
+                    throw invalidRoute(
+                        source,
+                        "routes[" + index + "].match has invalid regex '" + match + "': " + ex.getMessage()
+                    );
                 }
             }
 
@@ -195,46 +199,32 @@ public final class RedisPushSupport {
                 try {
                     headerPattern = Pattern.compile(headerMatch);
                 } catch (Exception ex) {
-                    if (log != null) {
-                        log.warn("Invalid {} header route pattern '{}': {}", source, headerMatch, ex.getMessage());
-                    }
-                    continue;
+                    throw invalidRoute(
+                        source,
+                        "routes[" + index + "].headerMatch has invalid regex '" + headerMatch + "': "
+                            + ex.getMessage()
+                    );
                 }
             }
 
             if (payloadPattern == null && (headerName == null || headerName.isBlank())) {
-                if (log != null) {
-                    log.warn("Skipping {} route without match criteria (requires match and/or header)", source);
-                }
-                continue;
+                throw invalidRoute(source, "routes[" + index + "] requires match and/or header");
             }
             if (headerName != null && !headerName.isBlank() && headerPattern == null) {
-                if (log != null) {
-                    log.warn("Skipping {} route with header '{}' but missing headerMatch", source, headerName);
-                }
-                continue;
+                throw invalidRoute(source, "routes[" + index + "].headerMatch must be configured when header is set");
             }
             routes.add(new Route(payloadPattern, headerName, headerPattern, list));
+            index++;
         }
         return routes;
     }
 
-    public static String asText(Object value) {
-        return value == null ? null : value.toString();
+    private static IllegalArgumentException invalidRoute(String source, String message) {
+        return new IllegalArgumentException(source + " " + message);
     }
 
-    public static int asInt(Object value, int defaultValue) {
-        if (value instanceof Number number) {
-            return number.intValue();
-        }
-        if (value instanceof String text) {
-            try {
-                return Integer.parseInt(text.trim());
-            } catch (NumberFormatException ignored) {
-                return defaultValue;
-            }
-        }
-        return defaultValue;
+    public static String asText(Object value) {
+        return value == null ? null : value.toString();
     }
 
     public enum SourceStep {
@@ -243,9 +233,15 @@ public final class RedisPushSupport {
 
         public static SourceStep fromString(String value) {
             if (value == null || value.isBlank()) {
+                throw new IllegalArgumentException("Redis sourceStep must be FIRST or LAST");
+            }
+            if ("FIRST".equalsIgnoreCase(value)) {
+                return FIRST;
+            }
+            if ("LAST".equalsIgnoreCase(value)) {
                 return LAST;
             }
-            return "FIRST".equalsIgnoreCase(value) ? FIRST : LAST;
+            throw new IllegalArgumentException("Redis sourceStep must be FIRST or LAST");
         }
     }
 
@@ -255,9 +251,15 @@ public final class RedisPushSupport {
 
         public static PushDirection fromString(String value) {
             if (value == null || value.isBlank()) {
+                throw new IllegalArgumentException("Redis pushDirection must be LPUSH or RPUSH");
+            }
+            if ("LPUSH".equalsIgnoreCase(value)) {
+                return LPUSH;
+            }
+            if ("RPUSH".equalsIgnoreCase(value)) {
                 return RPUSH;
             }
-            return "LPUSH".equalsIgnoreCase(value) ? LPUSH : RPUSH;
+            throw new IllegalArgumentException("Redis pushDirection must be LPUSH or RPUSH");
         }
     }
 
@@ -292,8 +294,8 @@ public final class RedisPushSupport {
 
         public PushRequest {
             connection = Objects.requireNonNull(connection, "connection");
-            sourceStep = sourceStep == null ? SourceStep.LAST : sourceStep;
-            pushDirection = pushDirection == null ? PushDirection.RPUSH : pushDirection;
+            sourceStep = Objects.requireNonNull(sourceStep, "sourceStep");
+            pushDirection = Objects.requireNonNull(pushDirection, "pushDirection");
             routes = routes == null ? List.of() : List.copyOf(routes);
         }
     }

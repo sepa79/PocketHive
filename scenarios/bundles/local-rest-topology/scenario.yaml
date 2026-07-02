@@ -1,6 +1,7 @@
 id: local-rest-topology
 name: Local REST - Simple REST Swarm (Topology)
-description: Simple WireMock-backed local REST swarm with logical topology edges for UI testing.
+description: Simple WireMock-backed local REST swarm with logical topology edges
+  for UI testing.
 template:
   image: swarm-controller:latest
   bees:
@@ -14,6 +15,7 @@ template:
           type: SCHEDULER
           scheduler:
             ratePerSec: 50
+            maxMessages: 0
         message:
           bodyType: HTTP
           path: /test
@@ -49,6 +51,10 @@ template:
         baseUrl: "{{ sut.endpoints['default'].baseUrl }}/api"
         mode: THREAD_COUNT
         threadCount: 1
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
       work:
         in:
           in: modQ

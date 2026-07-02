@@ -850,7 +850,11 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
         putEnvIfPresent(env, "POCKETHIVE_INPUTS_REDIS_SSL", redisMap.get("ssl"));
         putEnvIfPresent(env, "POCKETHIVE_INPUTS_REDIS_LISTNAME", redisMap.get("listName"));
         putEnvIfPresent(env, "POCKETHIVE_INPUTS_REDIS_PICKSTRATEGY", redisMap.get("pickStrategy"));
-        putEnvAsJsonIfPresent(env, "POCKETHIVE_INPUTS_REDIS_SOURCESJSON", redisMap.get("sources"));
+        putIndexedEnvIfPresent(
+            env,
+            "POCKETHIVE_INPUTS_REDIS_SOURCES",
+            redisMap.get("sources"),
+            Map.of("listName", "LISTNAME", "weight", "WEIGHT"));
         putEnvIfPresent(env, "POCKETHIVE_INPUTS_REDIS_RATEPERSEC", redisMap.get("ratePerSec"));
         putEnvIfPresent(env, "POCKETHIVE_INPUTS_REDIS_INITIALDELAYMS", redisMap.get("initialDelayMs"));
         putEnvIfPresent(env, "POCKETHIVE_INPUTS_REDIS_TICKINTERVALMS", redisMap.get("tickIntervalMs"));
@@ -890,6 +894,15 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
         putEnvIfPresent(env, "POCKETHIVE_OUTPUTS_REDIS_PUSHDIRECTION", redisMap.get("pushDirection"));
         putEnvIfPresent(env, "POCKETHIVE_OUTPUTS_REDIS_DEFAULTLIST", redisMap.get("defaultList"));
         putEnvIfPresent(env, "POCKETHIVE_OUTPUTS_REDIS_TARGETLISTTEMPLATE", redisMap.get("targetListTemplate"));
+        putIndexedEnvIfPresent(
+            env,
+            "POCKETHIVE_OUTPUTS_REDIS_ROUTES",
+            redisMap.get("routes"),
+            Map.of(
+                "match", "MATCH",
+                "header", "HEADER",
+                "headerMatch", "HEADERMATCH",
+                "list", "LIST"));
         putEnvIfPresent(env, "POCKETHIVE_OUTPUTS_REDIS_MAXLEN", redisMap.get("maxLen"));
       }
     }
@@ -975,17 +988,26 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
     }
   }
 
-  private void putEnvAsJsonIfPresent(Map<String, String> env, String key, Object value) {
+  private static void putIndexedEnvIfPresent(
+      Map<String, String> env,
+      String keyPrefix,
+      Object value,
+      Map<String, String> fieldEnvNames) {
     if (value == null) {
       return;
     }
-    try {
-      String json = mapper.writeValueAsString(value);
-      if (!json.isBlank()) {
-        env.put(key, json);
+    if (!(value instanceof Iterable<?> entries)) {
+      throw new IllegalStateException(keyPrefix + " must be a list of objects");
+    }
+    int index = 0;
+    for (Object entry : entries) {
+      if (!(entry instanceof Map<?, ?> entryMap)) {
+        throw new IllegalStateException(keyPrefix + "_" + index + " must be an object");
       }
-    } catch (JsonProcessingException ex) {
-      throw new IllegalStateException("Failed to serialize " + key + " to JSON", ex);
+      for (Map.Entry<String, String> field : fieldEnvNames.entrySet()) {
+        putEnvIfPresent(env, keyPrefix + "_" + index + "_" + field.getValue(), entryMap.get(field.getKey()));
+      }
+      index++;
     }
   }
 

@@ -52,6 +52,10 @@ template:
           maxRetries: 1
           connectTimeoutMs: 2000
           readTimeoutMs: 3000
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
       work:
         in:
           in: proc-tcp
@@ -108,6 +112,10 @@ template:
           connectTimeoutMs: 2000
           readTimeoutMs: 3000
           maxBytes: 8192
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
       work:
         in:
           in: proc-iso
@@ -164,6 +172,10 @@ template:
           connectTimeoutMs: 5000
           readTimeoutMs: 8000
           sslVerify: false
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
       work:
         in:
           in: proc-mtls

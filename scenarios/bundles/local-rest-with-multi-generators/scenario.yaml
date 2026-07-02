@@ -14,6 +14,7 @@ template:
           type: SCHEDULER
           scheduler:
             ratePerSec: 30
+            maxMessages: 0
         message:
           bodyType: HTTP
           path: /api/test-alpha
@@ -32,6 +33,7 @@ template:
           type: SCHEDULER
           scheduler:
             ratePerSec: 70
+            maxMessages: 0
         message:
           bodyType: HTTP
           path: /api/test-beta
@@ -64,6 +66,10 @@ template:
         baseUrl: "{{ sut.endpoints['default'].baseUrl }}"
         mode: THREAD_COUNT
         threadCount: 1
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
       work:
         in:
           in: mod

@@ -826,6 +826,10 @@ class ScenarioControllerTest {
                       work: {}
                       config:
                         baseUrl: "http://wiremock:8080"
+                        inputs:
+                          type: RABBITMQ
+                        outputs:
+                          type: RABBITMQ
                 """);
 
         mvc.perform(post("/validation/scenario-bundles")
@@ -841,6 +845,231 @@ class ScenarioControllerTest {
                 .andExpect(jsonPath("$.findings[*].message", org.hamcrest.Matchers.hasItems(
                         org.hamcrest.Matchers.containsString("missing required field 'mode'"),
                         org.hamcrest.Matchers.containsString("missing required field 'threadCount'"))));
+    }
+
+    @Test
+    void bundleValidationRejectsProcessorWithoutExplicitIoSelectors() throws Exception {
+        useRepositoryCapabilityManifest("processor", "processor.latest.yaml");
+        capabilityCatalogue.reload();
+
+        byte[] zip = bundleZip("scenario.yaml", """
+                id: processor-missing-io-selectors-demo
+                name: Processor missing IO selectors demo
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - role: processor
+                      image: processor:latest
+                      work: {}
+                      config:
+                        baseUrl: "http://wiremock:8080"
+                        mode: THREAD_COUNT
+                        threadCount: 1
+                """);
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings", hasSize(2)))
+                .andExpect(jsonPath("$.findings[*].path", org.hamcrest.Matchers.hasItems(
+                        "scenario.yaml:template.bees[0].config.inputs.type",
+                        "scenario.yaml:template.bees[0].config.outputs.type")))
+                .andExpect(jsonPath("$.findings[*].message", org.hamcrest.Matchers.hasItems(
+                        org.hamcrest.Matchers.containsString("missing required field 'inputs.type'"),
+                        org.hamcrest.Matchers.containsString("missing required field 'outputs.type'"))));
+    }
+
+    @Test
+    void bundleValidationRejectsSelectedIoMissingRequiredManifestConfig() throws Exception {
+        useRepositoryCapabilityManifest("generator", "generator.latest.yaml");
+        useRepositoryCapabilityManifest("io-scheduler", "io.scheduler.latest.yaml");
+        capabilityCatalogue.reload();
+
+        byte[] zip = bundleZip("scenario.yaml", """
+                id: generator-missing-selected-io-config-demo
+                name: Generator missing selected IO config demo
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - role: generator
+                      image: generator:latest
+                      work: {}
+                      config:
+                        inputs:
+                          type: SCHEDULER
+                          scheduler:
+                            ratePerSec: 1
+                        message:
+                          bodyType: SIMPLE
+                          body: "{}"
+                """);
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings", hasSize(1)))
+                .andExpect(jsonPath("$.findings[0].path")
+                        .value("scenario.yaml:template.bees[0].config.inputs.scheduler.maxMessages"))
+                .andExpect(jsonPath("$.findings[0].message")
+                        .value(org.hamcrest.Matchers.containsString(
+                                "missing required field 'inputs.scheduler.maxMessages'")));
+    }
+
+    @Test
+    void bundleValidationRejectsHttpSequenceWithoutExplicitRuntimeConfig() throws Exception {
+        useRepositoryCapabilityManifest("http-sequence", "http-sequence.latest.yaml");
+        capabilityCatalogue.reload();
+
+        byte[] zip = bundleZip("scenario.yaml", """
+                id: http-sequence-missing-runtime-config-demo
+                name: HTTP Sequence missing runtime config demo
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - role: http-sequence
+                      image: http-sequence:latest
+                      work: {}
+                      config:
+                        baseUrl: "http://wiremock:8080"
+                """);
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings", hasSize(5)))
+                .andExpect(jsonPath("$.findings[*].path", org.hamcrest.Matchers.hasItems(
+                        "scenario.yaml:template.bees[0].config.templateRoot",
+                        "scenario.yaml:template.bees[0].config.serviceId",
+                        "scenario.yaml:template.bees[0].config.threadCount",
+                        "scenario.yaml:template.bees[0].config.steps",
+                        "scenario.yaml:template.bees[0].config.debugCapture")));
+    }
+
+    @Test
+    void bundleValidationRejectsDbQueryWithoutExplicitRuntimeConfig() throws Exception {
+        useRepositoryCapabilityManifest("db-query", "db-query.latest.yaml");
+        capabilityCatalogue.reload();
+
+        byte[] zip = bundleZip("scenario.yaml", """
+                id: db-query-missing-runtime-config-demo
+                name: DB Query missing runtime config demo
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - role: db-query
+                      image: db-query:latest
+                      work: {}
+                      config: {}
+                """);
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings[*].path", org.hamcrest.Matchers.hasItems(
+                        "scenario.yaml:template.bees[0].config.adapter",
+                        "scenario.yaml:template.bees[0].config.templateRoot",
+                        "scenario.yaml:template.bees[0].config.serviceId",
+                        "scenario.yaml:template.bees[0].config.queryId",
+                        "scenario.yaml:template.bees[0].config.threadCount",
+                        "scenario.yaml:template.bees[0].config.queryTimeoutMs",
+                        "scenario.yaml:template.bees[0].config.connection.jdbcUrl",
+                        "scenario.yaml:template.bees[0].config.pool.maxSize",
+                        "scenario.yaml:template.bees[0].config.retry.maxAttempts",
+                        "scenario.yaml:template.bees[0].config.retry.on")));
+    }
+
+    @Test
+    void bundleValidationAcceptsDbQueryBlankCredentialsWhenExplicit() throws Exception {
+        useRepositoryCapabilityManifest("db-query", "db-query.latest.yaml");
+        capabilityCatalogue.reload();
+
+        byte[] zip = bundleZip("scenario.yaml", """
+                id: db-query-blank-credentials-demo
+                name: DB Query blank credentials demo
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - role: db-query
+                      image: db-query:latest
+                      work: {}
+                      config:
+                        adapter: POSTGRES
+                        templateRoot: "/scenario/templates"
+                        serviceId: demo-service
+                        queryId: demo-query
+                        threadCount: 1
+                        queryTimeoutMs: 1000
+                        connection:
+                          jdbcUrl: "jdbc:postgresql://postgres:5432/demo"
+                          username: ""
+                          password: ""
+                        pool:
+                          maxSize: 2
+                          minIdle: 0
+                          connectionTimeoutMs: 1000
+                          validationTimeoutMs: 1000
+                          idleTimeoutMs: 30000
+                          maxLifetimeMs: 60000
+                        retry:
+                          maxAttempts: 1
+                          initialBackoffMs: 100
+                          backoffMultiplier: 1.0
+                          maxBackoffMs: 100
+                          on: []
+                """);
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(true))
+                .andExpect(jsonPath("$.findings", hasSize(0)));
+    }
+
+    @Test
+    void bundleValidationRejectsClearingExportWithoutExplicitRuntimeConfig() throws Exception {
+        useRepositoryCapabilityManifest("clearing-export", "clearing-export.latest.yaml");
+        capabilityCatalogue.reload();
+
+        byte[] zip = bundleZip("scenario.yaml", """
+                id: clearing-export-missing-runtime-config-demo
+                name: Clearing Export missing runtime config demo
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - role: clearing-export
+                      image: clearing-export:latest
+                      work: {}
+                      config:
+                        mode: template
+                """);
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings[*].path", org.hamcrest.Matchers.hasItems(
+                        "scenario.yaml:template.bees[0].config.streamingAppendEnabled",
+                        "scenario.yaml:template.bees[0].config.streamingWindowMs",
+                        "scenario.yaml:template.bees[0].config.maxRecordsPerFile",
+                        "scenario.yaml:template.bees[0].config.fileNameTemplate",
+                        "scenario.yaml:template.bees[0].config.recordSourceStep",
+                        "scenario.yaml:template.bees[0].config.businessCodeFilterEnabled")));
     }
 
     @Test
@@ -966,6 +1195,8 @@ class ScenarioControllerTest {
                         inputs:
                           redis:
                             listName: ph:dataset
+                        outputs:
+                          type: RABBITMQ
                 """);
 
         mvc.perform(post("/validation/scenario-bundles")
@@ -1005,6 +1236,8 @@ class ScenarioControllerTest {
                           type: RABBITMQ
                           redis:
                             listName: ph:dataset
+                        outputs:
+                          type: RABBITMQ
                 """);
 
         mvc.perform(post("/validation/scenario-bundles")
@@ -1123,11 +1356,25 @@ class ScenarioControllerTest {
                         inputs:
                           type: REDIS_DATASET
                           redis:
+                            host: redis
+                            port: 6379
+                            ssl: false
                             listName: ph:dataset
+                            sources: []
+                            pickStrategy: ROUND_ROBIN
+                            ratePerSec: 2500.5
                         outputs:
                           type: REDIS
                           redis:
+                            host: redis
+                            port: 6379
+                            ssl: false
+                            sourceStep: LAST
+                            pushDirection: RPUSH
+                            routes: []
+                            targetListTemplate: ""
                             defaultList: ph:out
+                            maxLen: -1
                 """);
 
         mvc.perform(post("/validation/scenario-bundles")
@@ -1137,6 +1384,471 @@ class ScenarioControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.ok").value(true))
                 .andExpect(jsonPath("$.findings", hasSize(0)));
+    }
+
+    @Test
+    void bundleValidationRejectsRedisIoWithoutConcreteSourceOrTarget() throws Exception {
+        useRepositoryCapabilityManifest("processor", "processor.latest.yaml");
+        useRepositoryCapabilityManifest("io-redis-dataset", "io.redis-dataset.latest.yaml");
+        useRepositoryCapabilityManifest("io-redis-output", "io.redis-output.latest.yaml");
+        capabilityCatalogue.reload();
+
+        byte[] zip = bundleZip("scenario.yaml", """
+                id: processor-empty-redis-io-demo
+                name: Processor empty Redis IO demo
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - role: processor
+                      image: processor:latest
+                      work: {}
+                      config:
+                        baseUrl: "http://wiremock:8080"
+                        mode: THREAD_COUNT
+                        threadCount: 1
+                        inputs:
+                          type: REDIS_DATASET
+                          redis:
+                            host: redis
+                            port: 6379
+                            ssl: false
+                            listName: ""
+                            sources: []
+                            pickStrategy: ROUND_ROBIN
+                            ratePerSec: 1
+                        outputs:
+                          type: REDIS
+                          redis:
+                            host: redis
+                            port: 6379
+                            ssl: false
+                            sourceStep: LAST
+                            pushDirection: RPUSH
+                            routes: []
+                            targetListTemplate: ""
+                            defaultList: ""
+                            maxLen: -1
+                """);
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings", hasSize(2)))
+                .andExpect(jsonPath("$.findings[*].path", org.hamcrest.Matchers.hasItems(
+                        "scenario.yaml:template.bees[0].config.inputs.redis",
+                        "scenario.yaml:template.bees[0].config.outputs.redis")))
+                .andExpect(jsonPath("$.findings[*].message", org.hamcrest.Matchers.hasItems(
+                        org.hamcrest.Matchers.containsString("requires exactly one source mode"),
+                        org.hamcrest.Matchers.containsString("requires at least one target"))));
+    }
+
+    @Test
+    void bundleValidationRejectsRedisDatasetWithBothSourceModes() throws Exception {
+        useRepositoryCapabilityManifest("processor", "processor.latest.yaml");
+        useRepositoryCapabilityManifest("io-redis-dataset", "io.redis-dataset.latest.yaml");
+        useRepositoryCapabilityManifest("io-redis-output", "io.redis-output.latest.yaml");
+        capabilityCatalogue.reload();
+
+        byte[] zip = bundleZip("scenario.yaml", """
+                id: processor-redis-dataset-two-source-modes-demo
+                name: Processor Redis dataset two source modes demo
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - role: processor
+                      image: processor:latest
+                      work: {}
+                      config:
+                        baseUrl: "http://wiremock:8080"
+                        mode: THREAD_COUNT
+                        threadCount: 1
+                        inputs:
+                          type: REDIS_DATASET
+                          redis:
+                            host: redis
+                            port: 6379
+                            ssl: false
+                            listName: ph:dataset
+                            sources:
+                              - listName: ph:dataset:other
+                                weight: 1
+                            pickStrategy: ROUND_ROBIN
+                            ratePerSec: 1
+                        outputs:
+                          type: REDIS
+                          redis:
+                            host: redis
+                            port: 6379
+                            ssl: false
+                            sourceStep: LAST
+                            pushDirection: RPUSH
+                            routes: []
+                            targetListTemplate: ""
+                            defaultList: ph:out
+                            maxLen: -1
+                """);
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings", hasSize(1)))
+                .andExpect(jsonPath("$.findings[0].path")
+                        .value("scenario.yaml:template.bees[0].config.inputs.redis"))
+                .andExpect(jsonPath("$.findings[0].message")
+                        .value(org.hamcrest.Matchers.containsString("requires exactly one source mode")));
+    }
+
+    @Test
+    void bundleValidationRejectsMalformedRedisDatasetSourcesAndOutputRoutes() throws Exception {
+        useRepositoryCapabilityManifest("processor", "processor.latest.yaml");
+        useRepositoryCapabilityManifest("io-redis-dataset", "io.redis-dataset.latest.yaml");
+        useRepositoryCapabilityManifest("io-redis-output", "io.redis-output.latest.yaml");
+        capabilityCatalogue.reload();
+
+        byte[] zip = bundleZip("scenario.yaml", """
+                id: processor-malformed-redis-io-demo
+                name: Processor malformed Redis IO demo
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - role: processor
+                      image: processor:latest
+                      work: {}
+                      config:
+                        baseUrl: "http://wiremock:8080"
+                        mode: THREAD_COUNT
+                        threadCount: 1
+                        inputs:
+                          type: REDIS_DATASET
+                          redis:
+                            host: redis
+                            port: 6379
+                            ssl: false
+                            listName: ""
+                            sources:
+                              - listName: ""
+                                weight: 0
+                              - not-an-object
+                            pickStrategy: ROUND_ROBIN
+                            ratePerSec: 1
+                        outputs:
+                          type: REDIS
+                          redis:
+                            host: redis
+                            port: 6379
+                            ssl: false
+                            sourceStep: LAST
+                            pushDirection: RPUSH
+                            routes:
+                              - {}
+                            targetListTemplate: ""
+                            defaultList: ""
+                            maxLen: -1
+                """);
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings[*].path", org.hamcrest.Matchers.hasItems(
+                        "scenario.yaml:template.bees[0].config.inputs.redis.sources[0].listName",
+                        "scenario.yaml:template.bees[0].config.inputs.redis.sources[0].weight",
+                        "scenario.yaml:template.bees[0].config.inputs.redis.sources[1]",
+                        "scenario.yaml:template.bees[0].config.outputs.redis.routes[0].list",
+                        "scenario.yaml:template.bees[0].config.outputs.redis.routes[0]")))
+                .andExpect(jsonPath("$.findings[*].message", org.hamcrest.Matchers.hasItems(
+                        org.hamcrest.Matchers.containsString("source listName must not be blank"),
+                        org.hamcrest.Matchers.containsString("source weight must be > 0"),
+                        org.hamcrest.Matchers.containsString("source entry must be an object"),
+                        org.hamcrest.Matchers.containsString("route list must not be blank"),
+                        org.hamcrest.Matchers.containsString("route requires match and/or header"))));
+    }
+
+    @Test
+    void bundleValidationRejectsRedisJsonIoCollectionsThatAreNotLists() throws Exception {
+        useRepositoryCapabilityManifest("processor", "processor.latest.yaml");
+        useRepositoryCapabilityManifest("io-redis-dataset", "io.redis-dataset.latest.yaml");
+        useRepositoryCapabilityManifest("io-redis-output", "io.redis-output.latest.yaml");
+        capabilityCatalogue.reload();
+
+        byte[] zip = bundleZip("scenario.yaml", """
+                id: processor-redis-io-non-list-json-demo
+                name: Processor Redis IO non-list JSON demo
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - role: processor
+                      image: processor:latest
+                      work: {}
+                      config:
+                        baseUrl: "http://wiremock:8080"
+                        mode: THREAD_COUNT
+                        threadCount: 1
+                        inputs:
+                          type: REDIS_DATASET
+                          redis:
+                            host: redis
+                            port: 6379
+                            ssl: false
+                            listName: ph:dataset
+                            sources:
+                              listName: ph:dataset:other
+                              weight: 1
+                            pickStrategy: ROUND_ROBIN
+                            ratePerSec: 1
+                        outputs:
+                          type: REDIS
+                          redis:
+                            host: redis
+                            port: 6379
+                            ssl: false
+                            sourceStep: LAST
+                            pushDirection: RPUSH
+                            routes:
+                              list: ph:out:routed
+                              match: ".*"
+                            targetListTemplate: ""
+                            defaultList: ph:out
+                            maxLen: -1
+                """);
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings", hasSize(2)))
+                .andExpect(jsonPath("$.findings[*].path", org.hamcrest.Matchers.hasItems(
+                        "scenario.yaml:template.bees[0].config.inputs.redis.sources",
+                        "scenario.yaml:template.bees[0].config.outputs.redis.routes")))
+                .andExpect(jsonPath("$.findings[*].message", org.hamcrest.Matchers.hasItems(
+                        org.hamcrest.Matchers.containsString("sources must be a list"),
+                        org.hamcrest.Matchers.containsString("routes must be a list"))));
+    }
+
+    @Test
+    void bundleValidationRejectsSelectedIoNumericRangeViolations() throws Exception {
+        useRepositoryCapabilityManifest("processor", "processor.latest.yaml");
+        useRepositoryCapabilityManifest("io-redis-dataset", "io.redis-dataset.latest.yaml");
+        useRepositoryCapabilityManifest("io-redis-output", "io.redis-output.latest.yaml");
+        capabilityCatalogue.reload();
+
+        byte[] zip = bundleZip("scenario.yaml", """
+                id: processor-redis-io-range-invalid-demo
+                name: Processor Redis IO range invalid demo
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - role: processor
+                      image: processor:latest
+                      work: {}
+                      config:
+                        baseUrl: "http://wiremock:8080"
+                        mode: THREAD_COUNT
+                        threadCount: 1
+                        inputs:
+                          type: REDIS_DATASET
+                          redis:
+                            host: redis
+                            port: 0
+                            ssl: false
+                            listName: ph:dataset
+                            sources: []
+                            pickStrategy: ROUND_ROBIN
+                            ratePerSec: -0.1
+                        outputs:
+                          type: REDIS
+                          redis:
+                            host: redis
+                            port: 70000
+                            ssl: false
+                            sourceStep: LAST
+                            pushDirection: RPUSH
+                            routes: []
+                            targetListTemplate: ""
+                            defaultList: ph:out
+                            maxLen: -2
+                """);
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings", hasSize(4)))
+                .andExpect(jsonPath("$.findings[*].path", org.hamcrest.Matchers.hasItems(
+                        "scenario.yaml:template.bees[0].config.inputs.redis.port",
+                        "scenario.yaml:template.bees[0].config.inputs.redis.ratePerSec",
+                        "scenario.yaml:template.bees[0].config.outputs.redis.port",
+                        "scenario.yaml:template.bees[0].config.outputs.redis.maxLen")))
+                .andExpect(jsonPath("$.findings[*].message", org.hamcrest.Matchers.hasItems(
+                        org.hamcrest.Matchers.containsString("expected between 1 and 65535"),
+                        org.hamcrest.Matchers.containsString("expected >= 0"),
+                        org.hamcrest.Matchers.containsString("expected >= -1"))));
+    }
+
+    @Test
+    void bundleValidationRejectsImageCapabilityConfigTypeMismatches() throws Exception {
+        Files.writeString(capabilitiesDir.resolve("typed-worker.latest.json"), """
+                {
+                  "schemaVersion": "1.0",
+                  "capabilitiesVersion": "1.0",
+                  "role": "typed-worker",
+                  "image": {
+                    "name": "typed-worker",
+                    "tag": "latest"
+                  },
+                  "config": [
+                    { "name": "textValue", "type": "string" },
+                    { "name": "flagValue", "type": "boolean" },
+                    { "name": "jsonValue", "type": "json" },
+                    { "name": "countValue", "type": "integer" },
+                    { "name": "rateValue", "type": "number" }
+                  ]
+                }
+                """);
+        capabilityCatalogue.reload();
+
+        byte[] zip = bundleZip("scenario.yaml", """
+                id: typed-worker-type-invalid-demo
+                name: Typed worker type invalid demo
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - role: typed-worker
+                      image: typed-worker:latest
+                      work: {}
+                      config:
+                        textValue: 123
+                        flagValue: "true"
+                        jsonValue: "[]"
+                        countValue: 1.5
+                        rateValue: "2.5"
+                """);
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings", hasSize(5)))
+                .andExpect(jsonPath("$.findings[*].path", org.hamcrest.Matchers.hasItems(
+                        "scenario.yaml:template.bees[0].config.textValue",
+                        "scenario.yaml:template.bees[0].config.flagValue",
+                        "scenario.yaml:template.bees[0].config.jsonValue",
+                        "scenario.yaml:template.bees[0].config.countValue",
+                        "scenario.yaml:template.bees[0].config.rateValue")))
+                .andExpect(jsonPath("$.findings[*].message", org.hamcrest.Matchers.hasItems(
+                        org.hamcrest.Matchers.containsString("must be string"),
+                        org.hamcrest.Matchers.containsString("must be boolean"),
+                        org.hamcrest.Matchers.containsString("must be object or array"),
+                        org.hamcrest.Matchers.containsString("must be integer"),
+                        org.hamcrest.Matchers.containsString("must be number"))));
+    }
+
+    @Test
+    void bundleValidationDoesNotDuplicateNumericRangeFindingAfterTypeMismatch() throws Exception {
+        Files.writeString(capabilitiesDir.resolve("bounded-worker.latest.json"), """
+                {
+                  "schemaVersion": "1.0",
+                  "capabilitiesVersion": "1.0",
+                  "role": "bounded-worker",
+                  "image": {
+                    "name": "bounded-worker",
+                    "tag": "latest"
+                  },
+                  "config": [
+                    { "name": "rateValue", "type": "number", "min": 0, "max": 10 }
+                  ]
+                }
+                """);
+        capabilityCatalogue.reload();
+
+        byte[] zip = bundleZip("scenario.yaml", """
+                id: bounded-worker-type-invalid-demo
+                name: Bounded worker type invalid demo
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - role: bounded-worker
+                      image: bounded-worker:latest
+                      work: {}
+                      config:
+                        rateValue: "fast"
+                """);
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings", hasSize(1)))
+                .andExpect(jsonPath("$.findings[0].path")
+                        .value("scenario.yaml:template.bees[0].config.rateValue"))
+                .andExpect(jsonPath("$.findings[0].message")
+                        .value(org.hamcrest.Matchers.containsString("must be number")))
+                .andExpect(jsonPath("$.findings[0].message")
+                        .value(org.hamcrest.Matchers.not(
+                                org.hamcrest.Matchers.containsString("finite number"))));
+    }
+
+    @Test
+    void bundleValidationRejectsSelectedIoConfigTypeMismatches() throws Exception {
+        useRepositoryCapabilityManifest("generator", "generator.latest.yaml");
+        useRepositoryCapabilityManifest("io-scheduler", "io.scheduler.latest.yaml");
+        capabilityCatalogue.reload();
+
+        byte[] zip = bundleZip("scenario.yaml", """
+                id: generator-selected-io-type-invalid-demo
+                name: Generator selected IO type invalid demo
+                template:
+                  image: ctrl-image:latest
+                  bees:
+                    - role: generator
+                      image: generator:latest
+                      work: {}
+                      config:
+                        inputs:
+                          type: SCHEDULER
+                          scheduler:
+                            ratePerSec: "1.0"
+                            maxMessages: 10.5
+                            reset: "true"
+                        message:
+                          bodyType: SIMPLE
+                          body:
+                            bad: true
+                """);
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings", hasSize(4)))
+                .andExpect(jsonPath("$.findings[*].path", org.hamcrest.Matchers.hasItems(
+                        "scenario.yaml:template.bees[0].config.inputs.scheduler.ratePerSec",
+                        "scenario.yaml:template.bees[0].config.inputs.scheduler.maxMessages",
+                        "scenario.yaml:template.bees[0].config.inputs.scheduler.reset",
+                        "scenario.yaml:template.bees[0].config.message.body")))
+                .andExpect(jsonPath("$.findings[*].message", org.hamcrest.Matchers.hasItems(
+                        org.hamcrest.Matchers.containsString("must be string"),
+                        org.hamcrest.Matchers.containsString("must be number"),
+                        org.hamcrest.Matchers.containsString("must be integer"),
+                        org.hamcrest.Matchers.containsString("must be boolean"))));
     }
 
     @Test
@@ -1159,6 +1871,8 @@ class ScenarioControllerTest {
                         threadCount: 1
                         inputs:
                           type: BANANA
+                        outputs:
+                          type: RABBITMQ
                 """);
 
         mvc.perform(post("/validation/scenario-bundles")
@@ -1237,6 +1951,8 @@ class ScenarioControllerTest {
                         mode: BANANA
                         threadCount: 1
                         inputs:
+                          type: RABBITMQ
+                        outputs:
                           type: RABBITMQ
                 """);
 

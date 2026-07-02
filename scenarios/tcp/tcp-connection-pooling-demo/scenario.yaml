@@ -165,6 +165,10 @@ template:
           maxRetries: 1
           connectTimeoutMs: 2000
           readTimeoutMs: 3000
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
       work:
         in:
           in: proc-global
@@ -186,6 +190,10 @@ template:
           maxRetries: 1
           connectTimeoutMs: 2000
           readTimeoutMs: 3000
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
       work:
         in:
           in: proc-per-thread
@@ -207,6 +215,10 @@ template:
           maxRetries: 1
           connectTimeoutMs: 2000
           readTimeoutMs: 3000
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
       work:
         in:
           in: proc-none

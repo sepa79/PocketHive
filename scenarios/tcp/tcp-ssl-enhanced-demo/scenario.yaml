@@ -59,6 +59,10 @@ template:
           connectTimeoutMs: 5000
           readTimeoutMs: 8000
           sslVerify: false
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
       work:
         in:
           in: proc

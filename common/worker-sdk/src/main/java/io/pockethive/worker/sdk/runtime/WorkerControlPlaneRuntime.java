@@ -427,6 +427,11 @@ public final class WorkerControlPlaneRuntime {
             Map<String, Object> canonicalUpdate = publicConfigFrom(canonicalSource);
             boolean previousEnabled = state.enabled();
             try {
+                if (patch.resetRequested()) {
+                    LiveIoConfigUpdateGuard.validateReset(state.definition(), state.rawConfig());
+                } else {
+                    LiveIoConfigUpdateGuard.validate(state.definition(), state.rawConfig(), canonicalUpdate);
+                }
                 ConfigMerger.ConfigMergeResult mergeResult = configMerger.merge(
                     state.definition(),
                     state.rawConfig(),

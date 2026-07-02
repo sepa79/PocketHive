@@ -1,19 +1,18 @@
 package io.pockethive.clearingexport;
 
 import java.util.Locale;
-import java.util.Objects;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
 public record ClearingExportWorkerConfig(
     String mode,
-    boolean streamingAppendEnabled,
-    long streamingWindowMs,
-    int maxRecordsPerFile,
-    long flushIntervalMs,
-    int maxBufferedRecords,
-    boolean strictTemplate,
+    Boolean streamingAppendEnabled,
+    Long streamingWindowMs,
+    Integer maxRecordsPerFile,
+    Long flushIntervalMs,
+    Integer maxBufferedRecords,
+    Boolean strictTemplate,
     String lineSeparator,
     String fileNameTemplate,
     String headerTemplate,
@@ -21,7 +20,7 @@ public record ClearingExportWorkerConfig(
     String footerTemplate,
     String localTargetDir,
     String localTempSuffix,
-    boolean writeManifest,
+    Boolean writeManifest,
     String localManifestPath,
     String schemaRegistryRoot,
     String schemaId,
@@ -29,11 +28,13 @@ public record ClearingExportWorkerConfig(
     String recordSourceStep,
     Integer recordSourceStepIndex,
     String recordBuildFailurePolicy,
-    boolean businessCodeFilterEnabled,
+    Boolean businessCodeFilterEnabled,
     List<String> businessCodeAllowList,
     String businessCodeSourceStep,
     Integer businessCodeSourceStepIndex
 ) {
+  private static final String MODE_TEMPLATE = "template";
+  private static final String MODE_STRUCTURED = "structured";
 
   public ClearingExportWorkerConfig(
       String mode,
@@ -194,21 +195,26 @@ public record ClearingExportWorkerConfig(
   }
 
   public ClearingExportWorkerConfig {
-    mode = defaultIfBlank(mode, "template").trim();
-    streamingWindowMs = Math.max(1L, streamingWindowMs);
-    maxRecordsPerFile = Math.max(1, maxRecordsPerFile);
-    flushIntervalMs = Math.max(1L, flushIntervalMs);
-    maxBufferedRecords = Math.max(1, maxBufferedRecords);
-    lineSeparator = defaultIfBlank(lineSeparator, "\n");
+    mode = normalizeRequiredChoice(mode, "mode");
+    requireMode(mode);
+    streamingAppendEnabled = requirePresent(streamingAppendEnabled, "streamingAppendEnabled");
+    streamingWindowMs = requireNonNegative(streamingWindowMs, "streamingWindowMs");
+    if (streamingAppendEnabled && streamingWindowMs <= 0L) {
+      throw new IllegalArgumentException("streamingWindowMs must be > 0 when streamingAppendEnabled=true");
+    }
+    maxRecordsPerFile = requirePositive(maxRecordsPerFile, "maxRecordsPerFile");
+    flushIntervalMs = requirePositive(flushIntervalMs, "flushIntervalMs");
+    maxBufferedRecords = requirePositive(maxBufferedRecords, "maxBufferedRecords");
+    strictTemplate = requirePresent(strictTemplate, "strictTemplate");
     localTargetDir = requireNonBlank(localTargetDir, "localTargetDir");
-    localTempSuffix = defaultIfBlank(localTempSuffix, ".tmp");
-    localManifestPath = defaultIfBlank(localManifestPath, "reports/clearing/manifest.jsonl");
-    schemaRegistryRoot = defaultIfBlank(schemaRegistryRoot, "/app/scenario/clearing-schemas");
-    recordSourceStep = normalizeChoice(recordSourceStep, "latest");
-    recordSourceStepIndex = recordSourceStepIndex == null ? -1 : recordSourceStepIndex;
-    recordBuildFailurePolicy = normalizeChoice(recordBuildFailurePolicy, "stop");
+    localTempSuffix = requireNonBlank(localTempSuffix, "localTempSuffix");
+    writeManifest = requirePresent(writeManifest, "writeManifest");
+    localManifestPath = writeManifest ? requireNonBlank(localManifestPath, "localManifestPath") : trimToNull(localManifestPath);
+    recordSourceStep = normalizeRequiredChoice(recordSourceStep, "recordSourceStep");
+    recordSourceStepIndex = requirePresent(recordSourceStepIndex, "recordSourceStepIndex");
+    recordBuildFailurePolicy = normalizeRequiredChoice(recordBuildFailurePolicy, "recordBuildFailurePolicy");
+    businessCodeFilterEnabled = requirePresent(businessCodeFilterEnabled, "businessCodeFilterEnabled");
     businessCodeAllowList = normalizeBusinessCodes(businessCodeAllowList);
-    businessCodeSourceStepIndex = businessCodeSourceStepIndex == null ? -1 : businessCodeSourceStepIndex;
 
     RecordSourceStep sourceStep = RecordSourceStep.from(recordSourceStep);
     if (sourceStep == RecordSourceStep.INDEX && recordSourceStepIndex < 0) {
@@ -226,30 +232,40 @@ public record ClearingExportWorkerConfig(
       throw new IllegalArgumentException(
           "businessCodeSourceStep must be explicitly set when businessCodeFilterEnabled=true");
     }
-    businessCodeSourceStep = normalizeChoice(businessCodeSourceStep, "latest");
-    RecordSourceStep businessSourceStep;
-    try {
-      businessSourceStep = RecordSourceStep.from(businessCodeSourceStep);
-    } catch (IllegalArgumentException ex) {
-      throw new IllegalArgumentException(
-          "businessCodeSourceStep must be one of: latest, first, previous, index");
-    }
-    if (businessSourceStep == RecordSourceStep.INDEX && businessCodeSourceStepIndex < 0) {
-      throw new IllegalArgumentException(
-          "businessCodeSourceStep=index requires businessCodeSourceStepIndex >= 0");
-    }
-    if (businessSourceStep != RecordSourceStep.INDEX && businessCodeSourceStepIndex < -1) {
-      throw new IllegalArgumentException(
-          "businessCodeSourceStepIndex must be >= -1");
+    if (businessCodeFilterEnabled) {
+      businessCodeSourceStep = normalizeRequiredChoice(businessCodeSourceStep, "businessCodeSourceStep");
+      businessCodeSourceStepIndex = requirePresent(businessCodeSourceStepIndex, "businessCodeSourceStepIndex");
+      RecordSourceStep businessSourceStep;
+      try {
+        businessSourceStep = RecordSourceStep.from(businessCodeSourceStep);
+      } catch (IllegalArgumentException ex) {
+        throw new IllegalArgumentException(
+            "businessCodeSourceStep must be one of: latest, first, previous, index");
+      }
+      if (businessSourceStep == RecordSourceStep.INDEX && businessCodeSourceStepIndex < 0) {
+        throw new IllegalArgumentException(
+            "businessCodeSourceStep=index requires businessCodeSourceStepIndex >= 0");
+      }
+      if (businessSourceStep != RecordSourceStep.INDEX && businessCodeSourceStepIndex < -1) {
+        throw new IllegalArgumentException(
+            "businessCodeSourceStepIndex must be >= -1");
+      }
+    } else {
+      businessCodeSourceStep = trimToNull(businessCodeSourceStep);
+      businessCodeSourceStepIndex = businessCodeSourceStepIndex == null ? -1 : businessCodeSourceStepIndex;
     }
 
     if (isStructuredMode(mode)) {
       if (streamingAppendEnabled) {
         throw new IllegalArgumentException("streamingAppendEnabled is supported only in template mode");
       }
+      lineSeparator = trimToNull(lineSeparator);
+      schemaRegistryRoot = requireNonBlank(schemaRegistryRoot, "schemaRegistryRoot");
       schemaId = requireNonBlank(schemaId, "schemaId");
       schemaVersion = requireNonBlank(schemaVersion, "schemaVersion");
     } else {
+      lineSeparator = decodeLineSeparator(requireNonEmpty(lineSeparator, "lineSeparator"));
+      schemaRegistryRoot = trimToNull(schemaRegistryRoot);
       fileNameTemplate = requireNonBlank(fileNameTemplate, "fileNameTemplate");
       headerTemplate = requireNonBlank(headerTemplate, "headerTemplate");
       recordTemplate = requireNonBlank(recordTemplate, "recordTemplate");
@@ -274,11 +290,17 @@ public record ClearingExportWorkerConfig(
   }
 
   private static boolean isStructuredMode(String value) {
-    return "structured".equalsIgnoreCase(value);
+    return MODE_STRUCTURED.equalsIgnoreCase(value);
   }
 
-  private static String normalizeChoice(String value, String defaultValue) {
-    return defaultIfBlank(value, defaultValue)
+  private static void requireMode(String value) {
+    if (!MODE_TEMPLATE.equals(value) && !MODE_STRUCTURED.equals(value)) {
+      throw new IllegalArgumentException("mode must be one of: template, structured");
+    }
+  }
+
+  private static String normalizeRequiredChoice(String value, String name) {
+    return requireNonBlank(value, name)
         .trim()
         .toLowerCase(Locale.ROOT)
         .replace('-', '_');
@@ -311,9 +333,60 @@ public record ClearingExportWorkerConfig(
     return value.trim();
   }
 
-  private static String defaultIfBlank(String value, String defaultValue) {
+  private static String requireNonEmpty(String value, String name) {
+    if (value == null || value.isEmpty()) {
+      throw new IllegalArgumentException(name + " must be configured");
+    }
+    return value;
+  }
+
+  private static String decodeLineSeparator(String value) {
+    return switch (value) {
+      case "\\n" -> "\n";
+      case "\\r\\n" -> "\r\n";
+      case "\\r" -> "\r";
+      default -> value;
+    };
+  }
+
+  private static String trimToNull(String value) {
     if (value == null || value.trim().isEmpty()) {
-      return Objects.requireNonNull(defaultValue, "defaultValue");
+      return null;
+    }
+    return value.trim();
+  }
+
+  private static Boolean requirePresent(Boolean value, String name) {
+    if (value == null) {
+      throw new IllegalArgumentException(name + " must be configured");
+    }
+    return value;
+  }
+
+  private static Integer requirePresent(Integer value, String name) {
+    if (value == null) {
+      throw new IllegalArgumentException(name + " must be configured");
+    }
+    return value;
+  }
+
+  private static Integer requirePositive(Integer value, String name) {
+    if (value == null || value <= 0) {
+      throw new IllegalArgumentException(name + " must be > 0");
+    }
+    return value;
+  }
+
+  private static Long requirePositive(Long value, String name) {
+    if (value == null || value <= 0L) {
+      throw new IllegalArgumentException(name + " must be > 0");
+    }
+    return value;
+  }
+
+  private static Long requireNonNegative(Long value, String name) {
+    if (value == null || value < 0L) {
+      throw new IllegalArgumentException(name + " must be >= 0");
     }
     return value;
   }
@@ -342,9 +415,8 @@ public record ClearingExportWorkerConfig(
   }
 
   enum RecordBuildFailurePolicy {
-    SILENT_DROP("silent_drop"),
-    JOURNAL_AND_LOG_ERROR("journal_and_log_error"),
-    LOG_ERROR("log_error"),
+    SKIP_RECORD("skip_record"),
+    WARN_ONLY("warn_only"),
     STOP("stop");
 
     private final String value;
@@ -360,7 +432,7 @@ public record ClearingExportWorkerConfig(
         }
       }
       throw new IllegalArgumentException(
-          "recordBuildFailurePolicy must be one of: silent_drop, journal_and_log_error, log_error, stop");
+          "recordBuildFailurePolicy must be one of: stop, skip_record, warn_only");
     }
   }
 }

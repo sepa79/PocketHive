@@ -6,4 +6,3 @@ endpoints:
     id: default
     kind: http
     baseUrl: http://wiremock:8080
-

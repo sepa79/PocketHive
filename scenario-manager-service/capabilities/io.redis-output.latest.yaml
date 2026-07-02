@@ -10,13 +10,13 @@ ui:
 config:
   - name: outputs.redis.host
     type: string
-    default: redis
+    required: true
     ui:
       label: Redis host
       group: Redis output
   - name: outputs.redis.port
-    type: number
-    default: 6379
+    type: integer
+    required: true
     min: 1
     max: 65535
     ui:
@@ -24,25 +24,23 @@ config:
       group: Redis output
   - name: outputs.redis.username
     type: string
-    default: ""
     ui:
       label: Redis username
       group: Redis output
   - name: outputs.redis.password
     type: string
-    default: ""
     ui:
       label: Redis password
       group: Redis output
   - name: outputs.redis.ssl
     type: boolean
-    default: false
+    required: true
     ui:
       label: Redis SSL
       group: Redis output
   - name: outputs.redis.sourceStep
     type: string
-    default: "LAST"
+    required: true
     options:
       - "FIRST"
       - "LAST"
@@ -51,7 +49,7 @@ config:
       group: Redis output
   - name: outputs.redis.pushDirection
     type: string
-    default: "RPUSH"
+    required: true
     options:
       - "LPUSH"
       - "RPUSH"
@@ -60,7 +58,7 @@ config:
       group: Redis output
   - name: outputs.redis.routes
     type: json
-    default: []
+    required: true
     multiline: true
     ui:
       label: Routes
@@ -68,19 +66,21 @@ config:
       help: "Route by payload match and/or header+headerMatch. First match wins."
   - name: outputs.redis.targetListTemplate
     type: string
-    default: ""
+    required: true
+    allowBlank: true
     ui:
       label: Target list template
       group: Redis output
   - name: outputs.redis.defaultList
     type: string
-    default: ""
+    required: true
+    allowBlank: true
     ui:
       label: Default list
       group: Redis output
   - name: outputs.redis.maxLen
-    type: number
-    default: -1
+    type: integer
+    required: true
     min: -1
     ui:
       label: Max list length

@@ -47,6 +47,10 @@ template:
         baseUrl: "{{ sut.endpoints['default'].baseUrl }}"
         mode: THREAD_COUNT
         threadCount: 1
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
       work:
         in:
           in: proc

@@ -2,6 +2,7 @@ package io.pockethive.worker.sdk.output;
 
 import io.pockethive.worker.sdk.config.WorkOutputConfig;
 import io.pockethive.worker.sdk.config.WorkOutputConfigBinder;
+import io.pockethive.worker.sdk.config.WorkerOutputType;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.runtime.WorkerRegistry;
 import java.util.ArrayList;
@@ -52,7 +53,7 @@ public final class WorkOutputRegistryInitializer implements SmartInitializingSin
                 WorkOutputConfig config = configBinder.bind(definition.outputType(), definition.outputConfigType());
                 return factory.create(definition, config);
             })
-            .orElseGet(NoopWorkOutput::new);
+            .orElseThrow(() -> missingFactory(definition));
         outputRegistry.register(definition, output);
         if (log.isInfoEnabled()) {
             String outputName = output.getClass().getSimpleName();
@@ -61,5 +62,16 @@ public final class WorkOutputRegistryInitializer implements SmartInitializingSin
             }
             log.info("Registered {} work output for worker {}", outputName, definition.beanName());
         }
+    }
+
+    private IllegalStateException missingFactory(WorkerDefinition definition) {
+        if (definition.outputType() == WorkerOutputType.NONE) {
+            return new IllegalStateException(
+                "No WorkOutputFactory found for worker '%s' (role=%s output=%s); NoopWorkOutputFactory is required for NONE outputs"
+                    .formatted(definition.beanName(), definition.role(), definition.outputType()));
+        }
+        return new IllegalStateException(
+            "No WorkOutputFactory found for worker '%s' (role=%s output=%s)"
+                .formatted(definition.beanName(), definition.role(), definition.outputType()));
     }
 }

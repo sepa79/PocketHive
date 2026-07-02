@@ -54,7 +54,7 @@ config:
       label: Method
       group: Message
   - name: message.body
-    type: text
+    type: string
     required: true
     multiline: true
     ui:
@@ -62,7 +62,6 @@ config:
       group: Message
   - name: message.headers
     type: json
-    default: {}
     multiline: true
     ui:
       label: Headers

@@ -347,7 +347,7 @@ class ProcessorTest {
 
         assertThatThrownBy(() -> properties.setConfig(processorConfig("")))
             .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("Unable to bind worker defaults for role 'processor'")
+            .hasMessageContaining("Unable to bind worker config for role 'processor'")
             .hasRootCauseMessage("baseUrl must not be blank");
     }
 
@@ -859,7 +859,7 @@ class ProcessorTest {
 
         assertThatThrownBy(() -> properties.setConfig(processorConfig("")))
             .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("Unable to bind worker defaults for role 'processor'")
+            .hasMessageContaining("Unable to bind worker config for role 'processor'")
             .hasRootCauseMessage("baseUrl must not be blank");
     }
 

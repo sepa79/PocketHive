@@ -10,13 +10,13 @@ ui:
 config:
   - name: inputs.redis.host
     type: string
-    default: redis
+    required: true
     ui:
       label: Redis host
       group: Redis
   - name: inputs.redis.port
-    type: number
-    default: 6379
+    type: integer
+    required: true
     min: 1
     max: 65535
     ui:
@@ -24,32 +24,31 @@ config:
       group: Redis
   - name: inputs.redis.username
     type: string
-    default: ""
     ui:
       label: Redis username
       group: Redis
   - name: inputs.redis.password
     type: string
-    default: ""
     ui:
       label: Redis password
       group: Redis
   - name: inputs.redis.ssl
     type: boolean
-    default: false
+    required: true
     ui:
       label: Redis SSL
       group: Redis
   - name: inputs.redis.listName
     type: string
-    default: ph:dataset
+    required: true
+    allowBlank: true
     ui:
       label: Redis list (single source)
       group: Redis
       help: "Single-source mode. Use listName OR sources, never both."
   - name: inputs.redis.sources
     type: json
-    default: []
+    required: true
     multiline: true
     ui:
       label: Redis sources (multi-source)
@@ -57,7 +56,7 @@ config:
       help: "Multi-source mode. Array of {\"listName\":\"...\",\"weight\":1}. Clear listName when using sources."
   - name: inputs.redis.pickStrategy
     type: string
-    default: ROUND_ROBIN
+    required: true
     options:
       - ROUND_ROBIN
       - WEIGHTED_RANDOM
@@ -66,9 +65,8 @@ config:
       group: Redis
   - name: inputs.redis.ratePerSec
     type: number
-    default: 1
+    required: true
     min: 0
-    max: 1000
     ui:
       label: Rate
       group: Redis

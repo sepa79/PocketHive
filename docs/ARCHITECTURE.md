@@ -58,6 +58,7 @@ PocketHive splits the control plane into **managers** (orchestrator + swarm cont
 - Emit **their own** status streams (`event.metric.status-{full|delta}.{swarmId}.{role}.{instance}`) and respond to manager `signal.status-request.{swarmId}.{role}.{instance}` heartbeats.
 - Apply `signal.config-update.{swarmId}.{role}.{instance}` (`data.enabled: true|false`) to control **workload** state only while keeping control listeners responsive.
 - Runtime behaviour, worker interfaces, and adoption guidance are covered in the [Worker SDK quick start](sdk/worker-sdk-quickstart.md).
+- Worker capability manifests and capability `config[]` contract are specified in the [Worker Capability Catalogue](architecture/workerCapabilities.md).
 
 ### 2.3 Request Builder worker
 
@@ -204,6 +205,18 @@ The tables below describe the canonical `data` shapes for the message kinds/type
 | `swarm-remove` | — | No | Same as `swarm-start` (no args); on‑wire producers still send an empty `data: {}`. |
 | `config-update` | `data` | Yes | Config payload for the target component(s). Targeting is carried exclusively by the envelope `scope` and routing key. The `data` object carries the config patch and enablement flags. Exact shape is defined in worker/manager config docs. |
 | `status-request` | — | No | No command‑level args; the response is a `status-full` metric event instead of a confirmation outcome. On‑wire producers still send an empty `data: {}`. |
+
+**Runtime config-update safety**
+
+- `inputs.*` and `outputs.*` define IO wiring: adapters, protocols, endpoints, source files/lists,
+  credentials, routing, and output target selection. Treat these fields as **unsafe for live mutation**.
+- A running worker may accept only an explicit allowlist of operational live fields. Current safe IO
+  fields are scheduler `inputs.scheduler.ratePerSec`, `inputs.scheduler.maxMessages`,
+  `inputs.scheduler.reset`, Redis dataset `inputs.redis.ratePerSec`, and CSV dataset
+  `inputs.csv.ratePerSec`. Enable/disable remains controlled by the config-update `enabled` flag.
+- Changing `inputs.type`, `outputs.type`, IO endpoints, source datasets, output routes, protocols, or
+  credentials requires restarting/rematerializing the worker or swarm. Do not emulate such changes with
+  fallback adapter switches or partial live rewiring.
 
 **Command outcomes (`kind = outcome`) — current payloads**
 

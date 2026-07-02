@@ -155,6 +155,45 @@ template:
   }
 });
 
+test("migrate adds safe explicit values for selected IO required fields", async () => {
+  const root = await fixtureDir();
+  try {
+    const capabilitiesDir = await capabilityFixtureDir(root);
+    const scenario = join(root, "scenario.yaml");
+    await writeFile(scenario, `id: demo
+template:
+  bees:
+    - role: generator
+      config:
+        inputs:
+          type: SCHEDULER
+          scheduler:
+            ratePerSec: 5
+`, "utf8");
+
+    const check = await runScenarioConfigMigration({
+      command: "check",
+      paths: [scenario],
+      capabilitiesDir,
+    });
+    assert.equal(check.ok, false);
+    assert.equal(check.files[0].findings[0].code, "IO_REQUIRED_CONFIG_MISSING");
+
+    const result = await runScenarioConfigMigration({
+      command: "migrate",
+      paths: [scenario],
+      capabilitiesDir,
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.summary.changed, 1);
+
+    const updated = await readFile(scenario, "utf8");
+    assert.match(updated, /^\s+maxMessages: 0$/m);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("migrate refuses to infer selector when multiple IO subblocks exist", async () => {
   const root = await fixtureDir();
   try {
@@ -225,6 +264,22 @@ async function fixtureDir() {
 async function capabilityFixtureDir(root) {
   const capabilitiesDir = join(root, "capabilities");
   await mkdir(capabilitiesDir, { recursive: true });
+  await writeFile(join(capabilitiesDir, "io.scheduler.latest.yaml"), `schemaVersion: "1.0"
+capabilitiesVersion: "1.0"
+role: io-scheduler
+image:
+  name: io-scheduler
+ui:
+  ioScope: INPUT
+  ioType: SCHEDULER
+config:
+  - name: inputs.scheduler.ratePerSec
+    type: number
+    required: true
+  - name: inputs.scheduler.maxMessages
+    type: number
+    required: true
+`, "utf8");
   await writeFile(join(capabilitiesDir, "io.redis-dataset.latest.yaml"), `schemaVersion: "1.0"
 capabilitiesVersion: "1.0"
 role: io-redis-dataset

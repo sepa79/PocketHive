@@ -6,4 +6,6 @@ package io.pockethive.worker.sdk.config;
  * for worker code.
  */
 public interface WorkInputConfig {
+    default void validateConfigured(String prefix) {
+    }
 }

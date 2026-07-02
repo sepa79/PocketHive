@@ -33,13 +33,6 @@ public abstract class CanonicalWorkerProperties<T> extends PocketHiveWorkerPrope
         super.setConfig(canonicalise(config));
     }
 
-    /**
-     * Exposes the primary mapper for subclasses that need typed conversion (e.g. producing fallbacks).
-     */
-    protected ObjectMapper objectMapper() {
-        return mapper;
-    }
-
     private Map<String, Object> canonicalise(Map<String, Object> source) {
         if (source == null || source.isEmpty()) {
             return Map.of();
@@ -54,7 +47,7 @@ public abstract class CanonicalWorkerProperties<T> extends PocketHiveWorkerPrope
             return normalised == null ? Map.of() : normalised;
         } catch (IllegalArgumentException ex) {
             throw new IllegalArgumentException(
-                "Unable to bind worker defaults for role '" + role() + "'", ex);
+                "Unable to bind worker config for role '" + role() + "'", ex);
         }
     }
 }

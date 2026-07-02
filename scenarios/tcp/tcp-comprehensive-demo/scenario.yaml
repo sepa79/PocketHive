@@ -184,6 +184,10 @@ template:
           maxRetries: 3
           connectTimeoutMs: 3000
           readTimeoutMs: 5000
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
     - role: "postprocessor"
       id: postprocessor
       image: "postprocessor:latest"

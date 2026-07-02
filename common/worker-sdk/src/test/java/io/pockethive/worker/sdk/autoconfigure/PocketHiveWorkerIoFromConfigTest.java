@@ -34,6 +34,13 @@ class PocketHiveWorkerIoFromConfigTest {
         contextRunner
             .withPropertyValues(
                 "pockethive.inputs.type=REDIS_DATASET",
+                "pockethive.inputs.redis.host=redis",
+                "pockethive.inputs.redis.port=6379",
+                "pockethive.inputs.redis.ssl=false",
+                "pockethive.inputs.redis.sources[0].list-name=dataset",
+                "pockethive.inputs.redis.sources[0].weight=1",
+                "pockethive.inputs.redis.pick-strategy=ROUND_ROBIN",
+                "pockethive.inputs.redis.rate-per-sec=1",
                 "pockethive.outputs.type=NONE",
                 "pockethive.outputs.rabbit.exchange=ph.swarm-alpha.hive")
             .run(context -> {

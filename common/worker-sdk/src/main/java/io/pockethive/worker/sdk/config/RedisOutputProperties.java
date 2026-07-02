@@ -8,17 +8,21 @@ import java.util.List;
  */
 public class RedisOutputProperties implements WorkOutputConfig {
 
+    private static final int MIN_PORT = 1;
+    private static final int MAX_PORT = 65_535;
+    private static final int MIN_MAX_LEN = -1;
+
     private String host;
-    private int port = 6379;
+    private Integer port;
     private String username;
     private String password;
-    private boolean ssl = false;
-    private String sourceStep = "LAST";
-    private String pushDirection = "RPUSH";
-    private List<Route> routes = List.of();
+    private Boolean ssl;
+    private String sourceStep;
+    private String pushDirection;
+    private List<Route> routes;
     private String defaultList;
     private String targetListTemplate;
-    private int maxLen = -1;
+    private Integer maxLen;
 
     public String getHost() {
         return host;
@@ -29,11 +33,11 @@ public class RedisOutputProperties implements WorkOutputConfig {
     }
 
     public int getPort() {
-        return port;
+        return requirePresent(port, "port");
     }
 
     public void setPort(int port) {
-        this.port = Math.max(1, port);
+        this.port = port;
     }
 
     public String getUsername() {
@@ -53,7 +57,7 @@ public class RedisOutputProperties implements WorkOutputConfig {
     }
 
     public boolean isSsl() {
-        return ssl;
+        return requirePresent(ssl, "ssl");
     }
 
     public void setSsl(boolean ssl) {
@@ -61,25 +65,23 @@ public class RedisOutputProperties implements WorkOutputConfig {
     }
 
     public String getSourceStep() {
-        return sourceStep;
+        return requireNonBlank(sourceStep, "sourceStep");
     }
 
     public void setSourceStep(String sourceStep) {
-        String normalised = normalise(sourceStep);
-        this.sourceStep = normalised == null ? "LAST" : normalised;
+        this.sourceStep = normalise(sourceStep);
     }
 
     public String getPushDirection() {
-        return pushDirection;
+        return requireNonBlank(pushDirection, "pushDirection");
     }
 
     public void setPushDirection(String pushDirection) {
-        String normalised = normalise(pushDirection);
-        this.pushDirection = normalised == null ? "RPUSH" : normalised;
+        this.pushDirection = normalise(pushDirection);
     }
 
     public List<Route> getRoutes() {
-        return routes;
+        return routes == null ? List.of() : routes;
     }
 
     public void setRoutes(List<Route> routes) {
@@ -88,9 +90,10 @@ public class RedisOutputProperties implements WorkOutputConfig {
             return;
         }
         List<Route> copy = new ArrayList<>(routes.size());
+        int index = 0;
         for (Route route : routes) {
             if (route == null) {
-                continue;
+                throw new IllegalArgumentException("routes[" + index + "] must be an object");
             }
             Route routeCopy = new Route();
             routeCopy.setMatch(route.getMatch());
@@ -98,6 +101,7 @@ public class RedisOutputProperties implements WorkOutputConfig {
             routeCopy.setHeaderMatch(route.getHeaderMatch());
             routeCopy.setList(route.getList());
             copy.add(routeCopy);
+            index++;
         }
         this.routes = List.copyOf(copy);
     }
@@ -119,11 +123,25 @@ public class RedisOutputProperties implements WorkOutputConfig {
     }
 
     public int getMaxLen() {
-        return maxLen;
+        return requirePresent(maxLen, "maxLen");
     }
 
     public void setMaxLen(int maxLen) {
         this.maxLen = maxLen;
+    }
+
+    @Override
+    public void validateConfigured(String prefix) {
+        requireNonBlank(host, prefix + ".host");
+        requirePort(port, prefix + ".port");
+        requirePresent(ssl, prefix + ".ssl");
+        requireNonBlank(sourceStep, prefix + ".sourceStep");
+        requireNonBlank(pushDirection, prefix + ".pushDirection");
+        requireMaxLen(maxLen, prefix + ".maxLen");
+        if (getRoutes().isEmpty() && defaultList == null && targetListTemplate == null) {
+            throw new IllegalStateException(
+                prefix + " must configure routes, targetListTemplate, or defaultList");
+        }
     }
 
     private static String normalise(String value) {
@@ -132,6 +150,36 @@ public class RedisOutputProperties implements WorkOutputConfig {
         }
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private static String requireNonBlank(String value, String name) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalStateException(name + " must be configured");
+        }
+        return value;
+    }
+
+    private static <T> T requirePresent(T value, String name) {
+        if (value == null) {
+            throw new IllegalStateException(name + " must be configured");
+        }
+        return value;
+    }
+
+    private static int requirePort(Integer value, String name) {
+        int port = requirePresent(value, name);
+        if (port < MIN_PORT || port > MAX_PORT) {
+            throw new IllegalStateException(name + " must be between " + MIN_PORT + " and " + MAX_PORT);
+        }
+        return port;
+    }
+
+    private static int requireMaxLen(Integer value, String name) {
+        int configuredMaxLen = requirePresent(value, name);
+        if (configuredMaxLen < MIN_MAX_LEN) {
+            throw new IllegalStateException(name + " must be " + MIN_MAX_LEN + " or greater");
+        }
+        return configuredMaxLen;
     }
 
     public static final class Route {

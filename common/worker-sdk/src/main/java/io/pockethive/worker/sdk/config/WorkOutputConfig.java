@@ -5,4 +5,6 @@ package io.pockethive.worker.sdk.config;
  * Workers can override the concrete type via {@link io.pockethive.worker.sdk.config.PocketHiveWorker}.
  */
 public interface WorkOutputConfig {
+    default void validateConfigured(String prefix) {
+    }
 }

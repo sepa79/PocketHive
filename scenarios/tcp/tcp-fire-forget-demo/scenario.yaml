@@ -57,6 +57,10 @@ template:
           maxRetries: 1
           connectTimeoutMs: 2000
           readTimeoutMs: 1000
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
       work:
         in:
           in: proc

@@ -4,12 +4,13 @@ import io.pockethive.swarm.model.BeeConfigKeys;
 import io.pockethive.worker.sdk.config.MaxInFlightConfig;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 public record HttpSequenceWorkerConfig(
     String baseUrl,
     String templateRoot,
     String serviceId,
-    int threadCount,
+    Integer threadCount,
     List<Step> steps,
     DebugCapture debugCapture,
     Map<String, Object> vars,
@@ -19,7 +20,7 @@ public record HttpSequenceWorkerConfig(
   public HttpSequenceWorkerConfig(String baseUrl,
                                   String templateRoot,
                                   String serviceId,
-                                  int threadCount,
+                                  Integer threadCount,
                                   List<Step> steps,
                                   DebugCapture debugCapture,
                                   Map<String, Object> vars) {
@@ -27,12 +28,12 @@ public record HttpSequenceWorkerConfig(
   }
 
   public HttpSequenceWorkerConfig {
-    baseUrl = normalise(baseUrl);
-    templateRoot = normaliseOrDefault(templateRoot, "/app/templates/http");
-    serviceId = normaliseOrDefault(serviceId, "default");
-    threadCount = threadCount <= 0 ? 1 : threadCount;
-    steps = steps == null ? List.of() : List.copyOf(steps);
-    debugCapture = debugCapture == null ? DebugCapture.defaults() : debugCapture;
+    baseUrl = requireNonBlank(baseUrl, "baseUrl");
+    templateRoot = requireNonBlank(templateRoot, "templateRoot");
+    serviceId = requireNonBlank(serviceId, "serviceId");
+    threadCount = requirePositive(threadCount, "threadCount");
+    steps = List.copyOf(Objects.requireNonNull(steps, "steps"));
+    debugCapture = Objects.requireNonNull(debugCapture, "debugCapture");
     vars = vars == null ? Map.of() : Map.copyOf(vars);
     privateConfig = privateConfig == null ? Map.of() : Map.copyOf(privateConfig);
   }
@@ -170,8 +171,18 @@ public record HttpSequenceWorkerConfig(
     return trimmed.isEmpty() ? null : trimmed;
   }
 
-  private static String normaliseOrDefault(String value, String defaultValue) {
+  private static String requireNonBlank(String value, String field) {
     String trimmed = normalise(value);
-    return trimmed == null ? defaultValue : trimmed;
+    if (trimmed == null) {
+      throw new IllegalArgumentException(field + " is required");
+    }
+    return trimmed;
+  }
+
+  private static int requirePositive(Integer value, String field) {
+    if (value == null || value <= 0) {
+      throw new IllegalArgumentException(field + " must be > 0");
+    }
+    return value;
   }
 }

@@ -112,6 +112,17 @@ known IO subblock for that scope. It must fail and require manual editing when:
 Do not infer selectors from role names, topology edges, queues, runtime
 metadata, capability defaults, or worker defaults.
 
+When an IO selector is already present, the tool also checks required fields from
+the selected IO manifest. It may fill a missing field only when the migrator has
+a hardcoded safe explicit value for that exact path, such as
+`inputs.scheduler.maxMessages: 0`, Redis ports/SSL flags, CSV timing knobs, or
+Redis output mode knobs. For Redis output, it may fill missing `routes` with
+`[]` and missing `targetListTemplate` / `defaultList` with blank strings only
+when the scenario already declares at least one Redis output target (`routes`,
+`targetListTemplate`, or `defaultList`). It must fail and require manual editing
+for fields that need scenario intent, such as Redis list names, Redis dataset
+sources, concrete output routes, target list templates, or default output lists.
+
 ## Tool
 
 Use the standalone migrator:

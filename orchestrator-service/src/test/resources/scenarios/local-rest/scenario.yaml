@@ -11,6 +11,7 @@ template:
           type: SCHEDULER
           scheduler:
             ratePerSec: 50
+            maxMessages: 0
         message:
           bodyType: HTTP
           path: /api/guarded
@@ -37,6 +38,10 @@ template:
         baseUrl: http://sut:8080
         mode: THREAD_COUNT
         threadCount: 1
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
       work:
         in:
           in: mod

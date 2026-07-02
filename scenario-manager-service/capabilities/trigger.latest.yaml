@@ -11,7 +11,7 @@ ui:
   hideIo: true
 config:
   - name: intervalMs
-    type: int
+    type: integer
     required: true
     min: 0
     ui:
@@ -64,7 +64,7 @@ config:
       label: Method
       group: REST
   - name: body
-    type: text
+    type: string
     required: true
     multiline: true
     when:

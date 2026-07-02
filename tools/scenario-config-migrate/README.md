@@ -10,6 +10,8 @@ The migrator covers:
 
 - legacy `config.worker` / `config.pockethive` wrapper removal
 - missing explicit IO selectors when exactly one known IO subblock is present
+- missing required fields for the selected IO manifest when the tool has a
+  hardcoded safe explicit value for that field
 
 IO selector requirements are derived from Scenario Manager capability
 manifests. By default the tool reads
@@ -31,7 +33,8 @@ node tools/scenario-config-migrate/cli.mjs check --json scenarios
 ```
 
 `check` exits non-zero when it finds previous-format bee config, missing IO
-selectors, mismatched IO selectors, or ambiguous IO subblocks.
+selectors, mismatched IO selectors, ambiguous IO subblocks, or missing required
+selected-IO fields.
 
 ## Migrate
 
@@ -66,3 +69,13 @@ config:
 If multiple IO subblocks exist, or an existing selector conflicts with a
 subblock, the tool fails and requires a manual decision. It does not infer from
 role names, topology, queues, runtime metadata, or capability defaults.
+
+For selected IO manifests, `migrate` may also write missing required fields only
+when the field has an explicit safe value in the migrator, for example
+`inputs.scheduler.maxMessages: 0`, Redis ports, Redis SSL flags, CSV timing
+knobs, and Redis output mode knobs. For Redis output, routes may be filled as
+`[]` and `targetListTemplate` / `defaultList` may be filled as blank strings
+only when the scenario already declares at least one Redis output target
+(`routes`, `targetListTemplate`, or `defaultList`). Fields without a safe
+explicit value still fail and require manual editing; the tool does not invent
+concrete list names, Redis sources, output routes, or target list templates.

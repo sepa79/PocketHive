@@ -395,7 +395,7 @@ class SwarmCreationMock1E2ETest {
                     "docker", dockerConfig,
                     "inputs", Map.of(
                         "type", "SCHEDULER",
-                        "scheduler", Map.of("ratePerSec", 50)
+                        "scheduler", Map.of("ratePerSec", 50, "maxMessages", 0)
                     ),
                     "message", Map.of(
                         "bodyType", "HTTP",
@@ -423,6 +423,8 @@ class SwarmCreationMock1E2ETest {
                 Map.of(),
                 Map.of(
                     "docker", dockerConfig,
+                    "inputs", Map.of("type", "RABBITMQ"),
+                    "outputs", Map.of("type", "RABBITMQ"),
                     "baseUrl", "http://sut:8080",
                     "mode", "THREAD_COUNT",
                     "threadCount", 1)),

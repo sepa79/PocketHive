@@ -51,6 +51,10 @@ template:
         baseUrl: "{{ sut.endpoints['default'].baseUrl }}"
         mode: THREAD_COUNT
         threadCount: 1
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
       work:
         in:
           in: mod
@@ -64,6 +68,9 @@ template:
       image: clearing-export:latest
       config:
         mode: structured
+        streamingAppendEnabled: false
+        streamingWindowMs: 0
+        strictTemplate: false
         schemaRegistryRoot: /app/scenario/clearing-schemas
         schemaId: pcs-clearing
         schemaVersion: "1.0.0"
@@ -76,6 +83,7 @@ template:
         localTargetDir: "/tmp/pockethive/clearing-out"
         localTempSuffix: ".tmp"
         writeManifest: false
+        businessCodeFilterEnabled: false
       work:
         in:
           in: post

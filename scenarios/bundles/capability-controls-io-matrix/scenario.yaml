@@ -42,6 +42,7 @@ template:
             sources: []
             pickStrategy: ROUND_ROBIN
             ratePerSec: 1
+            ssl: false
         outputs:
           type: REDIS
           redis:
@@ -53,6 +54,7 @@ template:
             targetListTemplate: ""
             defaultList: capability.controls.output
             maxLen: -1
+            ssl: false
         baseUrl: http://wiremock:8080/api
         mode: THREAD_COUNT
         threadCount: 1

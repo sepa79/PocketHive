@@ -13,6 +13,7 @@ template:
           type: SCHEDULER
           scheduler:
             ratePerSec: 10
+            maxMessages: 0
         message:
           bodyType: HTTP
           path: /schema-demo
@@ -41,6 +42,10 @@ template:
         baseUrl: "{{ sut.endpoints['default'].baseUrl }}/api"
         mode: THREAD_COUNT
         threadCount: 1
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
       work:
         in:
           in: genQ

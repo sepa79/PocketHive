@@ -296,6 +296,13 @@ class SwarmLifecycleManagerTest {
                         "port", 6379,
                         "sourceStep", "FIRST",
                         "pushDirection", "RPUSH",
+                        "routes", List.of(
+                            Map.of(
+                                "header", "x-ph-redis-list",
+                                "headerMatch", "^webauth\\\\.RED\\\\.cust[A-E]$",
+                                "list", "webauth.BAL.shared"
+                            )
+                        ),
                         "defaultList", "webauth.RED.custA",
                         "targetListTemplate", "webauth.RED.{{ payloadAsJson.customerCode }}",
                         "maxLen", 100
@@ -318,6 +325,10 @@ class SwarmLifecycleManagerTest {
     assertThat(env.get("POCKETHIVE_OUTPUTS_REDIS_DEFAULTLIST")).isEqualTo("webauth.RED.custA");
     assertThat(env.get("POCKETHIVE_OUTPUTS_REDIS_TARGETLISTTEMPLATE"))
         .isEqualTo("webauth.RED.{{ payloadAsJson.customerCode }}");
+    assertThat(env.get("POCKETHIVE_OUTPUTS_REDIS_ROUTES_0_HEADER")).isEqualTo("x-ph-redis-list");
+    assertThat(env.get("POCKETHIVE_OUTPUTS_REDIS_ROUTES_0_HEADERMATCH"))
+        .isEqualTo("^webauth\\\\.RED\\\\.cust[A-E]$");
+    assertThat(env.get("POCKETHIVE_OUTPUTS_REDIS_ROUTES_0_LIST")).isEqualTo("webauth.BAL.shared");
     assertThat(env.get("POCKETHIVE_OUTPUTS_REDIS_MAXLEN")).isEqualTo("100");
   }
 
@@ -357,15 +368,10 @@ class SwarmLifecycleManagerTest {
     assertThat(env.get("POCKETHIVE_INPUTS_REDIS_HOST")).isEqualTo("redis");
     assertThat(env.get("POCKETHIVE_INPUTS_REDIS_PORT")).isEqualTo("6379");
     assertThat(env.get("POCKETHIVE_INPUTS_REDIS_PICKSTRATEGY")).isEqualTo("WEIGHTED_RANDOM");
-    assertThat(env.get("POCKETHIVE_INPUTS_REDIS_SOURCESJSON")).isNotBlank();
-
-    JsonNode sourcesNode = mapper.readTree(env.get("POCKETHIVE_INPUTS_REDIS_SOURCESJSON"));
-    assertThat(sourcesNode.isArray()).isTrue();
-    assertThat(sourcesNode).hasSize(2);
-    assertThat(sourcesNode.get(0).path("listName").asText()).isEqualTo("webauth.RED.custA");
-    assertThat(sourcesNode.get(0).path("weight").asInt()).isEqualTo(40);
-    assertThat(sourcesNode.get(1).path("listName").asText()).isEqualTo("webauth.RED.custB");
-    assertThat(sourcesNode.get(1).path("weight").asInt()).isEqualTo(25);
+    assertThat(env.get("POCKETHIVE_INPUTS_REDIS_SOURCES_0_LISTNAME")).isEqualTo("webauth.RED.custA");
+    assertThat(env.get("POCKETHIVE_INPUTS_REDIS_SOURCES_0_WEIGHT")).isEqualTo("40");
+    assertThat(env.get("POCKETHIVE_INPUTS_REDIS_SOURCES_1_LISTNAME")).isEqualTo("webauth.RED.custB");
+    assertThat(env.get("POCKETHIVE_INPUTS_REDIS_SOURCES_1_WEIGHT")).isEqualTo("25");
   }
 
   @Test

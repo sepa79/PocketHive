@@ -36,6 +36,8 @@ template:
                 weight: 8
             pickStrategy: WEIGHTED_RANDOM
             ratePerSec: 20
+            ssl: false
+            listName: ""
         message:
           bodyType: SIMPLE
           body: "{{ payload }}"
@@ -64,6 +66,8 @@ template:
                 weight: 1
             pickStrategy: ROUND_ROBIN
             ratePerSec: 20
+            ssl: false
+            listName: ""
         message:
           bodyType: SIMPLE
           body: "{{ payload }}"
@@ -100,6 +104,8 @@ template:
         threadCount: 1
         outputs:
           type: RABBITMQ
+        inputs:
+          type: RABBITMQ
       work:
         in:
           in: proc
@@ -130,6 +136,9 @@ template:
                 headerMatch: '^webauth\\.BAL\\.shared$'
                 list: webauth.TOP.shared
             targetListTemplate: "webauth.RED.{{ payloadAsJson.Customer }}"
+            ssl: false
+            defaultList: ""
+            maxLen: -1
       work:
         in:
           in: post

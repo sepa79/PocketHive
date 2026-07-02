@@ -198,8 +198,19 @@ public class CapabilityCatalogueService {
                 continue;
             }
             validateConfigPath(entry.name(), "config[].name", errors);
+            validateConfigType(entry, errors);
             validateWhenKeys(entry.when(), errors);
         }
+    }
+
+    private static void validateConfigType(CapabilityManifest.ConfigEntry entry, List<String> errors) {
+        if (CapabilityConfigType.fromWireValue(entry.type()).isPresent()) {
+            return;
+        }
+        String entryName = isBlank(entry.name()) ? "<unnamed>" : entry.name().trim();
+        String actualType = entry.type() == null ? "<null>" : entry.type().isBlank() ? "<blank>" : entry.type();
+        errors.add("config[].type for '" + entryName + "' is unsupported value '" + actualType
+            + "'; expected one of: " + CapabilityConfigType.allowedWireValues());
     }
 
     private static void validateWhenKeys(JsonNode node, List<String> errors) {

@@ -59,7 +59,7 @@ Legend:
 | `message.method` | select HTTP methods | OK/MCP | Good |
 | `message.body` | textarea | OK/MCP | Good |
 | `message.headers` | JSON textarea | OK/MCP | JSON editor later |
-| `inputs.scheduler.ratePerSec` | number input, min 0, max 1000, step 1 | OK/MCP | UX gap: no slider |
+| `inputs.scheduler.ratePerSec` | number input, min 0, step 1 | OK/MCP | UX gap: no slider |
 | `inputs.scheduler.maxMessages` | number input, min 0, step 1 | OK/MCP | UX gap: no slider/stepper pairing |
 | `inputs.scheduler.reset` | checkbox | OK/MCP | Good |
 
@@ -74,7 +74,7 @@ Legend:
 | `message.path` | text input when `message.bodyType=HTTP` | Visible in SCHEDULER/HTTP test | Conditional visibility works |
 | `message.method` | select when `message.bodyType=HTTP` | Visible in SCHEDULER/HTTP test | Conditional visibility works |
 | `inputs.csv.filePath` | text input | OK/MCP | Good |
-| `inputs.csv.ratePerSec` | number input, min 0, max 1000, step 1 | OK/MCP | UX gap: no slider |
+| `inputs.csv.ratePerSec` | number input, min 0, step 1 | OK/MCP | UX gap: no slider |
 | `inputs.csv.rotate` | checkbox | OK/MCP | Good |
 | `inputs.csv.skipHeader` | checkbox | OK/MCP | Good |
 | `inputs.csv.delimiter` | text input | OK/MCP | Good |
@@ -133,7 +133,7 @@ Legend:
 | `inputs.redis.listName` | text input | OK/MCP | Good |
 | `inputs.redis.sources` | JSON textarea | OK/MCP | JSON editor later |
 | `inputs.redis.pickStrategy` | select (`ROUND_ROBIN`, `WEIGHTED_RANDOM`) | OK/MCP | Good |
-| `inputs.redis.ratePerSec` | number input, min 0, max 1000, step 1 | OK/MCP | UX gap: no slider |
+| `inputs.redis.ratePerSec` | number input, min 0, step 1 | OK/MCP | UX gap: no slider |
 
 ### Processor - REDIS Output IO
 

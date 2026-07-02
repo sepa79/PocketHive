@@ -50,6 +50,10 @@ template:
         baseUrl: "{{ sut.endpoints['default'].baseUrl }}"
         mode: THREAD_COUNT
         threadCount: 1
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
       work:
         in:
           in: mod
@@ -63,6 +67,8 @@ template:
       image: clearing-export:latest
       config:
         mode: template
+        streamingAppendEnabled: false
+        streamingWindowMs: 0
         maxRecordsPerFile: 10
         flushIntervalMs: 60000
         maxBufferedRecords: 5000
@@ -70,7 +76,7 @@ template:
         recordSourceStep: latest
         recordSourceStepIndex: -1
         recordBuildFailurePolicy: stop
-        lineSeparator: "\n"
+        lineSeparator: '\n'
         fileNameTemplate: "CLEARING_{{ now }}.txt"
         headerTemplate: "H|{{ now }}"
         recordTemplate: "D|{{ steps.selected.payload }}"
@@ -78,6 +84,7 @@ template:
         localTargetDir: "/tmp/pockethive/clearing-out"
         localTempSuffix: ".tmp"
         writeManifest: false
+        businessCodeFilterEnabled: false
       work:
         in:
           in: post

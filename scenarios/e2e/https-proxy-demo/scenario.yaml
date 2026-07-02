@@ -13,6 +13,7 @@ template:
           type: SCHEDULER
           scheduler:
             ratePerSec: 5
+            maxMessages: 0
         message:
           bodyType: HTTP
           path: /test
@@ -48,6 +49,10 @@ template:
         mode: THREAD_COUNT
         threadCount: 1
         sslVerify: false
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
       work:
         in:
           in: mod

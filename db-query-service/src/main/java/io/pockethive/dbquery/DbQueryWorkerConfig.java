@@ -3,6 +3,7 @@ package io.pockethive.dbquery;
 import io.pockethive.worker.sdk.config.MaxInFlightConfig;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 public record DbQueryWorkerConfig(
     Adapter adapter,
@@ -18,9 +19,10 @@ public record DbQueryWorkerConfig(
 ) implements MaxInFlightConfig {
 
   public DbQueryWorkerConfig {
+    adapter = Objects.requireNonNull(adapter, "adapter");
     templateRoot = normalise(templateRoot);
-    serviceId = normalise(serviceId);
-    queryId = normalise(queryId);
+    serviceId = requireNonBlank(serviceId, "serviceId");
+    queryId = requireNonBlank(queryId, "queryId");
     if (templateRoot == null) {
       throw new IllegalArgumentException("templateRoot is required");
     }
@@ -36,6 +38,7 @@ public record DbQueryWorkerConfig(
     if (retry == null) {
       throw new IllegalArgumentException("retry is required");
     }
+    connection = Objects.requireNonNull(connection, "connection");
     vars = vars == null ? Map.of() : Map.copyOf(vars);
   }
 
@@ -61,9 +64,9 @@ public record DbQueryWorkerConfig(
 
   public record Connection(String jdbcUrl, String username, String password) {
     public Connection {
-      jdbcUrl = normalise(jdbcUrl);
-      username = normalise(username);
-      password = password == null ? "" : password;
+      jdbcUrl = requireNonBlank(jdbcUrl, "connection.jdbcUrl");
+      username = requirePresent(username, "connection.username").trim();
+      password = requirePresent(password, "connection.password");
     }
   }
 
@@ -134,5 +137,20 @@ public record DbQueryWorkerConfig(
 
   static String normalise(String value) {
     return value == null || value.isBlank() ? null : value.trim();
+  }
+
+  private static String requireNonBlank(String value, String field) {
+    String normalized = normalise(value);
+    if (normalized == null) {
+      throw new IllegalArgumentException(field + " is required");
+    }
+    return normalized;
+  }
+
+  private static String requirePresent(String value, String field) {
+    if (value == null) {
+      throw new IllegalArgumentException(field + " is required");
+    }
+    return value;
   }
 }

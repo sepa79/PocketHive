@@ -216,7 +216,7 @@ config:
     type: SCHEDULER
     scheduler:
       ratePerSec: 50
-      maxMessages: 0        # 0 = infinite, >0 = finite run
+      maxMessages: 0        # 0 = infinite, >0 = finite run; Java long technical range
   outputs:
     type: RABBITMQ
   message:

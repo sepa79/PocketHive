@@ -11,7 +11,7 @@ ui:
 config:
   - name: adapter
     type: string
-    default: "POSTGRES"
+    required: true
     options:
       - "POSTGRES"
       - "ORACLE"
@@ -20,115 +20,117 @@ config:
       group: Database
   - name: templateRoot
     type: string
-    default: "/app/scenario/templates/db"
+    required: true
     ui:
       label: Template root
       group: Templates
   - name: serviceId
     type: string
-    default: "db"
+    required: true
     ui:
       label: Service ID
       group: Templates
   - name: queryId
     type: string
-    default: "select-probe"
+    required: true
     ui:
       label: Query ID
       group: Templates
   - name: threadCount
-    type: int
-    default: 1
+    type: integer
+    required: true
     ui:
       label: Thread count
       group: Runtime
   - name: queryTimeoutMs
-    type: int
-    default: 30000
+    type: integer
+    required: true
     ui:
       label: Query timeout (ms)
       group: Runtime
   - name: connection.jdbcUrl
     type: string
-    default: ""
+    required: true
     ui:
       label: JDBC URL
       group: Connection
   - name: connection.username
     type: string
-    default: ""
+    required: true
+    allowBlank: true
     ui:
       label: Username
       group: Connection
   - name: connection.password
     type: string
-    default: ""
+    required: true
+    allowBlank: true
     ui:
       label: Password
       group: Connection
   - name: pool.maxSize
-    type: int
-    default: 4
+    type: integer
+    required: true
     ui:
       label: Pool max size
       group: Pool
   - name: pool.minIdle
-    type: int
-    default: 1
+    type: integer
+    required: true
     ui:
       label: Pool min idle
       group: Pool
   - name: pool.connectionTimeoutMs
-    type: int
-    default: 1000
+    type: integer
+    required: true
     ui:
       label: Connection timeout (ms)
       group: Pool
   - name: pool.validationTimeoutMs
-    type: int
-    default: 500
+    type: integer
+    required: true
     ui:
       label: Validation timeout (ms)
       group: Pool
   - name: pool.idleTimeoutMs
-    type: int
-    default: 60000
+    type: integer
+    required: true
     ui:
       label: Idle timeout (ms)
       group: Pool
   - name: pool.maxLifetimeMs
-    type: int
-    default: 1800000
+    type: integer
+    required: true
     ui:
       label: Max lifetime (ms)
       group: Pool
   - name: retry.maxAttempts
-    type: int
-    default: 1
+    type: integer
+    required: true
     ui:
       label: Retry attempts
       group: Retry
   - name: retry.initialBackoffMs
-    type: int
-    default: 0
+    type: integer
+    required: true
     ui:
       label: Initial backoff (ms)
       group: Retry
   - name: retry.backoffMultiplier
     type: number
-    default: 1.0
+    required: true
     ui:
       label: Backoff multiplier
       group: Retry
   - name: retry.maxBackoffMs
-    type: int
-    default: 0
+    type: integer
+    required: true
     ui:
       label: Max backoff (ms)
       group: Retry
   - name: retry.on
     type: json
-    default: []
+    required: true
     multiline: true
     ui:
       label: Retry tokens

@@ -8,6 +8,8 @@ export type CapabilityConfigEntry = {
   name: string
   type: string
   default?: unknown
+  required?: boolean
+  allowBlank?: boolean
   min?: number
   max?: number
   options?: unknown[]
@@ -101,6 +103,8 @@ function normalizeConfigEntry(entry: unknown): CapabilityConfigEntry | null {
     name: value.name.trim(),
     type: value.type.trim(),
     default: value.default,
+    required: typeof value.required === 'boolean' ? value.required : undefined,
+    allowBlank: typeof value.allowBlank === 'boolean' ? value.allowBlank : undefined,
     min: typeof value.min === 'number' ? value.min : undefined,
     max: typeof value.max === 'number' ? value.max : undefined,
     options,

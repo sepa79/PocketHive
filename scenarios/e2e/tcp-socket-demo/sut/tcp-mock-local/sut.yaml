@@ -6,4 +6,3 @@ endpoints:
     id: tcp-server
     kind: tcp
     baseUrl: tcp-mock-server:9090
-

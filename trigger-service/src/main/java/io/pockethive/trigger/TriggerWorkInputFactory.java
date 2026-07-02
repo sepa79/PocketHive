@@ -44,9 +44,9 @@ class TriggerWorkInputFactory implements WorkInputFactory {
   @Override
   public WorkInput create(WorkerDefinition definition, WorkInputConfig config) {
     Logger logger = LoggerFactory.getLogger(definition.beanType());
-    SchedulerInputProperties scheduling = config instanceof SchedulerInputProperties props
-        ? props
-        : new SchedulerInputProperties();
+    if (!(config instanceof SchedulerInputProperties scheduling)) {
+      throw new IllegalStateException("Trigger scheduler input requires SchedulerInputProperties configuration");
+    }
     TriggerSchedulerState schedulerState = new TriggerSchedulerState(scheduling.isEnabled());
     return SchedulerWorkInput.<TriggerWorkerConfig>builder()
         .workerDefinition(definition)

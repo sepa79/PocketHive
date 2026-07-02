@@ -54,6 +54,19 @@ class CapabilityCatalogueServiceTest {
     }
 
     @Test
+    void bundledCapabilityConfigDoesNotPublishDefaults() throws Exception {
+        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(Path.of("capabilities"));
+        catalogue.reload();
+
+        assertThat(catalogue.allManifests())
+                .isNotEmpty()
+                .allSatisfy(manifest -> assertThat(manifest.config())
+                        .allSatisfy(entry -> assertThat(entry.defaultValue())
+                                .as("%s:%s", manifest.role(), entry.name())
+                                .isNull()));
+    }
+
+    @Test
     void bundledIoCapabilitiesExposeScopeAndType() throws Exception {
         CapabilityCatalogueService catalogue = new CapabilityCatalogueService(Path.of("capabilities"));
         catalogue.reload();
@@ -86,6 +99,36 @@ class CapabilityCatalogueServiceTest {
         assertThatThrownBy(catalogue::reload)
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("must not declare runtime worker state field 'enabled'");
+    }
+
+    @Test
+    void rejectsUnsupportedCapabilityConfigTypes() throws IOException {
+        String body = """
+                schemaVersion: "1.0"
+                capabilitiesVersion: "1.0"
+                image:
+                  name: "processor"
+                role: "processor"
+                config:
+                  - name: threadCount
+                    type: int
+                  - name: upperCase
+                    type: INTEGER
+                  - name: padded
+                    type: " integer "
+                actions: []
+                panels: []
+                """;
+        Files.writeString(capabilitiesDir.resolve("processor.yaml"), body);
+
+        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(capabilitiesDir);
+
+        assertThatThrownBy(catalogue::reload)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("config[].type for 'threadCount' is unsupported value 'int'")
+                .hasMessageContaining("config[].type for 'upperCase' is unsupported value 'INTEGER'")
+                .hasMessageContaining("config[].type for 'padded' is unsupported value ' integer '")
+                .hasMessageContaining("expected one of: string, boolean, number, integer, json");
     }
 
     @Test

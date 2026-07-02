@@ -19,6 +19,7 @@ pockethive:
     type: SCHEDULER
     scheduler:
       ratePerSec: 1.0
+      maxMessages: 0
   outputs:
     type: RABBITMQ
     rabbit:

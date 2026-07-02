@@ -72,6 +72,7 @@ This file is a **navigation and guardrails** page for both human and AI contribu
 
 - **System architecture & contracts**
   - Architecture (single source of truth): `docs/ARCHITECTURE.md`
+  - Worker capability catalogue contract: `docs/architecture/workerCapabilities.md`
   - Orchestrator API surface: `docs/ORCHESTRATOR-REST.md`
   - Control‑plane worker notes: `docs/control-plane/worker-guide.md`
   - Correlation vs idempotency (must‑read): `docs/correlation-vs-idempotency.md`

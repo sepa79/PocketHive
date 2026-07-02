@@ -78,7 +78,7 @@ public final class SchedulerStates {
             this.enabled = Boolean.TRUE.equals(this.initialEnabledSupplier.get());
             this.carryOver = 0.0;
             if (this.log.isDebugEnabled()) {
-                double initialRate = rateSupplier != null ? Math.max(0.0, rateSupplier.getAsDouble()) : 0.0;
+                double initialRate = currentRate();
                 this.log.debug("{} scheduler initialised: enabled={}, ratePerSec={}",
                     configType.getSimpleName(), enabled, initialRate);
             }
@@ -95,7 +95,7 @@ public final class SchedulerStates {
                 carryOver = 0.0;
             }
             if (log.isDebugEnabled() && (hasConfig || enabledChanged)) {
-                double updatedRate = rateSupplier != null ? Math.max(0.0, rateSupplier.getAsDouble()) : 0.0;
+                double updatedRate = currentRate();
                 log.debug("{} scheduler updated: enabled={}, ratePerSec={}, reason={}",
                     configType.getSimpleName(),
                     resolvedEnabled,
@@ -119,7 +119,7 @@ public final class SchedulerStates {
                 return 0;
             }
             double rate = rateSupplier != null
-                ? Math.max(0.0, rateSupplier.getAsDouble())
+                ? currentRate()
                 : 0.0;
             double planned = rate + carryOver;
             int quota = (int) Math.floor(planned);
@@ -129,6 +129,18 @@ public final class SchedulerStates {
                     configType.getSimpleName(), nowMillis, quota, rate, carryOver);
             }
             return quota;
+        }
+
+        private double currentRate() {
+            if (rateSupplier == null) {
+                return 0.0;
+            }
+            double rate = rateSupplier.getAsDouble();
+            if (!Double.isFinite(rate) || rate < 0.0) {
+                throw new IllegalStateException(
+                    configType.getSimpleName() + " scheduler ratePerSec must be a finite number >= 0");
+            }
+            return rate;
         }
     }
 }

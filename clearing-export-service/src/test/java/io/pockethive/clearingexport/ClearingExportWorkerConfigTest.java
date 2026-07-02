@@ -40,6 +40,13 @@ class ClearingExportWorkerConfigTest {
   }
 
   @Test
+  void rejectsUnknownMode() {
+    assertThatThrownBy(() -> configWithMode("csv", "latest", -1, "stop"))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("mode must be one of: template, structured");
+  }
+
+  @Test
   void rejectsUnknownRecordSourceStep() {
     assertThatThrownBy(() -> config("middle", -1, "stop"))
         .isInstanceOf(IllegalArgumentException.class)
@@ -62,9 +69,16 @@ class ClearingExportWorkerConfigTest {
 
   @Test
   void rejectsUnknownRecordBuildFailurePolicy() {
-    assertThatThrownBy(() -> config("latest", -1, "warn_only"))
+    assertThatThrownBy(() -> config("latest", -1, "log_error"))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("recordBuildFailurePolicy must be one of");
+  }
+
+  @Test
+  void acceptsManifestRecordBuildFailurePolicies() {
+    assertThat(config("latest", -1, "stop").recordBuildFailurePolicy()).isEqualTo("stop");
+    assertThat(config("latest", -1, "skip_record").recordBuildFailurePolicy()).isEqualTo("skip_record");
+    assertThat(config("latest", -1, "warn_only").recordBuildFailurePolicy()).isEqualTo("warn_only");
   }
 
   @Test
@@ -214,8 +228,17 @@ class ClearingExportWorkerConfigTest {
       Integer recordSourceStepIndex,
       String recordBuildFailurePolicy
   ) {
+    return configWithMode("template", recordSourceStep, recordSourceStepIndex, recordBuildFailurePolicy);
+  }
+
+  private static ClearingExportWorkerConfig configWithMode(
+      String mode,
+      String recordSourceStep,
+      Integer recordSourceStepIndex,
+      String recordBuildFailurePolicy
+  ) {
     return new ClearingExportWorkerConfig(
-        "template",
+        mode,
         false,
         21_600_000L,
         1000,
