@@ -10,12 +10,14 @@ ui:
 config:
   - name: inputs.redis.host
     type: string
+    liveMutable: false
     required: true
     ui:
       label: Redis host
       group: Redis
   - name: inputs.redis.port
     type: integer
+    liveMutable: false
     required: true
     min: 1
     max: 65535
@@ -24,22 +26,26 @@ config:
       group: Redis
   - name: inputs.redis.username
     type: string
+    liveMutable: false
     ui:
       label: Redis username
       group: Redis
   - name: inputs.redis.password
     type: string
+    liveMutable: false
     ui:
       label: Redis password
       group: Redis
   - name: inputs.redis.ssl
     type: boolean
+    liveMutable: false
     required: true
     ui:
       label: Redis SSL
       group: Redis
   - name: inputs.redis.listName
     type: string
+    liveMutable: false
     required: true
     allowBlank: true
     ui:
@@ -48,6 +54,7 @@ config:
       help: "Single-source mode. Use listName OR sources, never both."
   - name: inputs.redis.sources
     type: json
+    liveMutable: false
     required: true
     multiline: true
     ui:
@@ -56,6 +63,7 @@ config:
       help: "Multi-source mode. Array of {\"listName\":\"...\",\"weight\":1}. Clear listName when using sources."
   - name: inputs.redis.pickStrategy
     type: string
+    liveMutable: false
     required: true
     options:
       - ROUND_ROBIN
@@ -65,6 +73,7 @@ config:
       group: Redis
   - name: inputs.redis.ratePerSec
     type: number
+    liveMutable: true
     required: true
     min: 0
     ui:

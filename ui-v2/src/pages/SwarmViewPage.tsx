@@ -23,7 +23,6 @@ import '@xyflow/react/dist/style.css'
 type ScenarioBeePort = { id: string; direction: 'in' | 'out' }
 
 type ScenarioBee = {
-  id: string | null
   role: string | null
   image: string | null
   work: {
@@ -35,8 +34,8 @@ type ScenarioBee = {
 
 type ScenarioTopologyEdge = {
   id: string | null
-  from: { beeId: string | null; port: string | null } | null
-  to: { beeId: string | null; port: string | null } | null
+  from: { role: string | null; port: string | null } | null
+  to: { role: string | null; port: string | null } | null
 }
 
 type ScenarioDefinition = {
@@ -107,23 +106,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function toStringOrNull(value: unknown): string | null {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
-}
-
-function formatAge(iso: string | null | undefined): string {
-  if (!iso) return '—'
-  const ts = Date.parse(iso)
-  if (!Number.isFinite(ts)) return iso
-  const diffMs = Date.now() - ts
-  if (diffMs < 0) return '—'
-  const sec = Math.floor(diffMs / 1000)
-  if (sec < 10) return 'just now'
-  if (sec < 60) return `${sec}s ago`
-  const min = Math.floor(sec / 60)
-  if (min < 60) return `${min}m ago`
-  const hr = Math.floor(min / 60)
-  if (hr < 48) return `${hr}h ago`
-  const days = Math.floor(hr / 24)
-  return `${days}d ago`
 }
 
 function shorten(value: string | null | undefined, limit: number) {
@@ -247,7 +229,6 @@ function asScenarioDefinition(data: unknown): ScenarioDefinition | null {
                 .filter((entry): entry is ScenarioBeePort => entry !== null)
             : null
           return {
-            id: toStringOrNull(bee.id),
             role: toStringOrNull(bee.role),
             image: toStringOrNull(bee.image),
             work: work ? { in: workIn, out: workOut } : null,
@@ -269,13 +250,13 @@ function asScenarioDefinition(data: unknown): ScenarioDefinition | null {
             id: toStringOrNull(edge.id),
             from: from
               ? {
-                  beeId: toStringOrNull(from.beeId),
+                  role: toStringOrNull(from.role),
                   port: toStringOrNull(from.port),
                 }
               : null,
             to: to
               ? {
-                  beeId: toStringOrNull(to.beeId),
+                  role: toStringOrNull(to.role),
                   port: toStringOrNull(to.port),
                 }
               : null,
@@ -396,19 +377,19 @@ function buildGraphModel(args: {
 }) {
   const bees = args.scenario.template?.bees ?? []
   const edges = args.scenario.topology?.edges ?? []
-  const beeById = new Map<string, ScenarioBee>()
+  const beeByRole = new Map<string, ScenarioBee>()
   bees.forEach((bee, idx) => {
-    const key = bee.id ?? (bee.role ? `${bee.role}-${idx + 1}` : `bee-${idx + 1}`)
+    const key = bee.role ?? `bee-${idx + 1}`
     if (key) {
-      beeById.set(key, bee)
+      beeByRole.set(key, bee)
     }
   })
 
-  const nodeIds = Array.from(beeById.keys())
+  const nodeIds = Array.from(beeByRole.keys())
   const topoEdges = edges
     .map((e) => {
-      const from = e.from?.beeId ?? null
-      const to = e.to?.beeId ?? null
+      const from = e.from?.role ?? null
+      const to = e.to?.role ?? null
       if (!from || !to) return null
       return { id: e.id ?? `${from}->${to}`, from, to, fromPort: e.from?.port ?? null, toPort: e.to?.port ?? null }
     })
@@ -419,7 +400,7 @@ function buildGraphModel(args: {
 
   const startX = 60
   const startY = 50
-  const colGap = 220
+  const colGap = 300
   const rowGap = 110
   layers.forEach((layerNodes, col) => {
     layerNodes.forEach((id, row) => {
@@ -428,7 +409,7 @@ function buildGraphModel(args: {
   })
 
   const positionedNodes: PositionedNode[] = nodeIds.map((id) => {
-    const bee = beeById.get(id)
+    const bee = beeByRole.get(id)
     const pos = nodePositions.get(id) ?? { x: startX, y: startY }
     const role = (bee?.role ?? id).trim()
     const label = bee?.role ? bee.role : id
@@ -451,8 +432,8 @@ function buildGraphModel(args: {
   const queueStatKeys = Array.from(allQueueStats.keys())
 
   const positionedEdges: PositionedEdge[] = topoEdges.map((edge) => {
-    const fromBee = beeById.get(edge.from) ?? null
-    const toBee = beeById.get(edge.to) ?? null
+    const fromBee = beeByRole.get(edge.from) ?? null
+    const toBee = beeByRole.get(edge.to) ?? null
     const fromSuffix = edge.fromPort && fromBee?.work?.out ? fromBee.work.out[edge.fromPort] ?? null : null
     const toSuffix = edge.toPort && toBee?.work?.in ? toBee.work.in[edge.toPort] ?? null : null
     const suffix = fromSuffix && toSuffix && fromSuffix === toSuffix ? fromSuffix : fromSuffix ?? toSuffix ?? null
@@ -475,7 +456,7 @@ function buildGraphModel(args: {
     }
   })
 
-  return { nodes: positionedNodes, edges: positionedEdges, beeById, allQueueStats }
+  return { nodes: positionedNodes, edges: positionedEdges, beeByRole, allQueueStats }
 }
 
 export function SwarmViewPage() {
@@ -662,9 +643,7 @@ export function SwarmViewPage() {
         const position = storedPos ?? existing?.position ?? { x: n.x, y: n.y }
         const snaps = snapshotsByRole.get(n.role.trim().toLowerCase()) ?? []
         const snap = snaps[0]
-        const subtitle = snap
-          ? `${shorten(snap.instance, 22) ?? snap.instance} · ${formatAge(snap.timestamp)}`
-          : 'no status'
+        const subtitle = snap ? (shorten(snap.instance, 26) ?? snap.instance) : 'no status'
         const dim = selected ? selected !== n.id : false
         const existingData = existing?.data
         const nextData: FlowNodeData = { title: n.label, subtitle, dim }
@@ -704,7 +683,7 @@ export function SwarmViewPage() {
   const cardModels = useMemo(() => {
     const bees = scenario?.template?.bees ?? []
     const beeOrder = bees.map((bee, idx) => {
-      const id = bee.id ?? (bee.role ? `${bee.role}-${idx + 1}` : `bee-${idx + 1}`)
+      const id = bee.role ?? `bee-${idx + 1}`
       const roleKey = (bee.role ?? '').trim().toLowerCase()
       return { id, roleKey, bee }
     })
@@ -729,7 +708,6 @@ export function SwarmViewPage() {
         enabled: snap?.enabled,
         tps: snap?.tps,
         ioState: snap?.ioState,
-        seenAt: snap?.timestamp ?? null,
         topQueues,
       }
     })
@@ -781,22 +759,25 @@ export function SwarmViewPage() {
               {cardModels.map((card) => {
                 const isSelected = selectedNodeId === card.nodeId
                 return (
-                  <button
+                  <div
                     key={card.nodeId}
-                    type="button"
+                    role="button"
+                    tabIndex={0}
+                    aria-pressed={isSelected}
                     className={isSelected ? 'swarmWorkerCard swarmWorkerCardSelected' : 'swarmWorkerCard'}
                     onClick={() => setSelectedNodeId((prev) => (prev === card.nodeId ? null : card.nodeId))}
+                    onKeyDown={(event) => {
+                      if (event.key !== 'Enter' && event.key !== ' ') return
+                      event.preventDefault()
+                      setSelectedNodeId((prev) => (prev === card.nodeId ? null : card.nodeId))
+                    }}
                     title="Click to highlight in graph"
                   >
                     <div className="row between" style={{ gap: 10 }}>
                       <div className="swarmWorkerTitle">
                         <div className="swarmWorkerRole">{card.role}</div>
-                        <div
-                          className="muted swarmWorkerMeta"
-                          title={`${card.instance ?? '—'}${card.seenAt ? ` · seen ${card.seenAt}` : ''}`}
-                        >
-                          {card.instance ? `(${shorten(card.instance, 22)})` : '(—)'}
-                          {card.seenAt ? ` · seen ${formatAge(card.seenAt)}` : ' · seen —'}
+                        <div className="muted swarmWorkerMeta" title={card.instance ?? 'No runtime status reported.'}>
+                          {card.instance ? shorten(card.instance, 28) : 'no status'}
                         </div>
                       </div>
                       <div className="swarmWorkerBadges">
@@ -804,6 +785,7 @@ export function SwarmViewPage() {
                           type="button"
                           className="actionButton actionButtonGhost actionButtonTiny"
                           title="Show raw control-plane status envelope (JSON)."
+                          onKeyDown={(event) => event.stopPropagation()}
                           onClick={(event) => {
                             event.stopPropagation()
                             try {
@@ -827,29 +809,29 @@ export function SwarmViewPage() {
                         <span className="chip chip-metric">tps {card.tps ?? '—'}</span>
                       </div>
                     </div>
-	                    <div className="swarmWorkerIo">
-	                      {isIoKnown(card.ioState?.input) || isIoKnown(card.ioState?.output) ? (
-	                        <>
-	                          {isIoKnown(card.ioState?.input) ? (
-	                            <span className="chip chip-metric" title={`ioState.work.input: ${card.ioState?.input ?? '—'}`}>
-	                              in {card.ioState?.input}
-	                            </span>
-	                          ) : null}
-	                          {isIoKnown(card.ioState?.output) ? (
-	                            <span className="chip chip-metric" title={`ioState.work.output: ${card.ioState?.output ?? '—'}`}>
-	                              out {card.ioState?.output}
-	                            </span>
-	                          ) : null}
-	                        </>
-	                      ) : (
-	                        <span
-	                          className="muted"
-	                          title="No IO state reported yet (ioState.work.* is missing or 'unknown')."
-	                        >
-	                          I/O: —
-	                        </span>
-	                      )}
-	                    </div>
+                    <div className="swarmWorkerIo">
+                      {isIoKnown(card.ioState?.input) || isIoKnown(card.ioState?.output) ? (
+                        <>
+                          {isIoKnown(card.ioState?.input) ? (
+                            <span className="chip chip-metric" title={`ioState.work.input: ${card.ioState?.input ?? '—'}`}>
+                              in {card.ioState?.input}
+                            </span>
+                          ) : null}
+                          {isIoKnown(card.ioState?.output) ? (
+                            <span className="chip chip-metric" title={`ioState.work.output: ${card.ioState?.output ?? '—'}`}>
+                              out {card.ioState?.output}
+                            </span>
+                          ) : null}
+                        </>
+                      ) : (
+                        <span
+                          className="muted"
+                          title="No IO state reported yet (ioState.work.* is missing or 'unknown')."
+                        >
+                          I/O: —
+                        </span>
+                      )}
+                    </div>
                     <div className="swarmWorkerQueues">
                       {card.topQueues.length ? (
                         card.topQueues.map((q) => (
@@ -864,7 +846,7 @@ export function SwarmViewPage() {
                         <div className="muted">Queues: —</div>
                       )}
                     </div>
-                  </button>
+                  </div>
                 )
               })}
             </div>

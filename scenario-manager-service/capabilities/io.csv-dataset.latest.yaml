@@ -10,12 +10,14 @@ ui:
 config:
   - name: inputs.csv.filePath
     type: string
+    liveMutable: false
     required: true
     ui:
       label: CSV file path
       group: CSV
   - name: inputs.csv.ratePerSec
     type: number
+    liveMutable: true
     required: true
     min: 0
     ui:
@@ -25,30 +27,35 @@ config:
       unit: msg/s
   - name: inputs.csv.rotate
     type: boolean
+    liveMutable: false
     required: true
     ui:
       label: Rotate rows
       group: CSV
   - name: inputs.csv.skipHeader
     type: boolean
+    liveMutable: false
     required: true
     ui:
       label: First row is header
       group: CSV
   - name: inputs.csv.delimiter
     type: string
+    liveMutable: false
     required: true
     ui:
       label: Delimiter
       group: CSV
   - name: inputs.csv.charset
     type: string
+    liveMutable: false
     required: true
     ui:
       label: Charset
       group: CSV
   - name: inputs.csv.startupDelaySeconds
     type: integer
+    liveMutable: false
     required: true
     min: 0
     ui:
@@ -57,6 +64,7 @@ config:
       unit: s
   - name: inputs.csv.tickIntervalMs
     type: integer
+    liveMutable: false
     required: true
     min: 100
     ui:

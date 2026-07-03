@@ -38,11 +38,11 @@ One JSON (or YAML) **manifest per image**:
   },
   "role": "generator",
   "config": [
-    { "name": "inputs.type", "type": "string", "required": true,
+    { "name": "inputs.type", "type": "string", "liveMutable": false, "required": true,
       "options": ["SCHEDULER", "REDIS_DATASET"] },
-    { "name": "rate", "type": "integer", "required": true, "min": 1, "max": 100000,
+    { "name": "rate", "type": "integer", "liveMutable": true, "required": true, "min": 1, "max": 100000,
       "ui": {"step": 10, "unit": "msg/s"} },
-    { "name": "payloadTemplate", "type": "string", "required": true, "multiline": true }
+    { "name": "payloadTemplate", "type": "string", "liveMutable": true, "required": true, "multiline": true }
   ],
   "actions": [
     { "id": "warmup", "label": "Warm Up", "params": [] },
@@ -61,6 +61,11 @@ One JSON (or YAML) **manifest per image**:
 - `config[].type` has one canonical vocabulary only: `string`, `boolean`, `number`,
   `integer`, `json`. Do not use aliases such as `text` or `int`; capability
   manifest loading fails on unsupported type values.
+- `config[].liveMutable` is required and must be explicit. `true` means the field can be offered by
+  runtime live config editing; `false` means the field is authoring/startup configuration only.
+  For `inputs.*` / `outputs.*`, `true` is allowed only on operational live IO fields documented in
+  `docs/ARCHITECTURE.md`. IO wiring fields such as selectors, endpoints, source lists, credentials,
+  and output routes must be `liveMutable: false`.
 - Bundled capability manifests must not publish `config[].default` values for public scenario config.
   Runtime behaviour must come from explicitly provided scenario configuration, not from capability
   manifest defaults or worker fallback defaults.

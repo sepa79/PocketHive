@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import io.pockethive.scenarios.validation.LiveIoConfigMutability;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -199,6 +200,7 @@ public class CapabilityCatalogueService {
             }
             validateConfigPath(entry.name(), "config[].name", errors);
             validateConfigType(entry, errors);
+            validateLiveMutability(entry, errors);
             validateWhenKeys(entry.when(), errors);
         }
     }
@@ -211,6 +213,21 @@ public class CapabilityCatalogueService {
         String actualType = entry.type() == null ? "<null>" : entry.type().isBlank() ? "<blank>" : entry.type();
         errors.add("config[].type for '" + entryName + "' is unsupported value '" + actualType
             + "'; expected one of: " + CapabilityConfigType.allowedWireValues());
+    }
+
+    private static void validateLiveMutability(CapabilityManifest.ConfigEntry entry, List<String> errors) {
+        String entryName = isBlank(entry.name()) ? "<unnamed>" : entry.name().trim();
+        if (entry.liveMutable() == null) {
+            errors.add("config[].liveMutable for '" + entryName + "' is required and must be true or false");
+            return;
+        }
+        if (Boolean.TRUE.equals(entry.liveMutable())
+            && LiveIoConfigMutability.isIoPath(entryName)
+            && !LiveIoConfigMutability.isLiveMutableIoPath(entryName)) {
+            errors.add("config[].liveMutable for unsafe IO field '" + entryName
+                + "' must be false; live-mutable IO fields are: "
+                + LiveIoConfigMutability.liveMutableIoPaths());
+        }
     }
 
     private static void validateWhenKeys(JsonNode node, List<String> errors) {

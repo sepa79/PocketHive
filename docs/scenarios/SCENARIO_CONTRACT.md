@@ -42,24 +42,22 @@ avoided to keep scenarios portable.
 
 ## Bees
 
-Each **bee** defines one scenario worker declaration in the swarm. `role` is an
-operator-visible string and is not node identity. Runtime node identity is the
-Swarm Controller-owned `beeId` exposed after materialisation in
-`status-full.data.context.workers[]`.
+Each **bee** defines one scenario worker declaration in the swarm. `role` is the
+unique scenario node key. Runtime worker identity is still the materialised
+`instance` exposed in `status-full.data.context.workers[]`; live runtime
+mutation addresses `role + instance`.
 
 ```yaml
 template:
   image: swarm-controller:latest
   bees:
-    - id: genA
-      role: generator
+    - role: generator
       image: generator:latest
       work:
         out:
           out: genQ
       config: { ... }
-    - id: procA
-      role: processor
+    - role: processor
       image: processor:latest
       work:
         in:
@@ -71,18 +69,12 @@ template:
 
 Bee fields (see `common/swarm-model/src/main/java/io/pockethive/swarm/model/Bee.java`):
 
-- `id` (string, optional)
-  - Optional authoring label for scenarios that need to refer to a bee from
-    authoring-only structures such as topology.
-  - This is not the runtime worker identity and must not be used as the live
-    config-update target.
-  - Runtime joins use Swarm Controller-owned
-    `status-full.data.context.workers[].beeId`.
 - `role` (string, required)
-  - Operator-visible role string, e.g. `generator`, `processor`, `moderator`,
-    `postprocessor`, `request-builder`, `http-sequence`.
-  - `role` is not unique, not a type system, and must not be used as scenario
-    node identity.
+  - Unique scenario node key, e.g. `generator`, `processor`, `moderator-a`,
+    `gen-oauth-client`, `request-builder`, `http-sequence`.
+  - `role` must be unique within one `scenario.yaml`.
+  - `role` is the control-plane routing segment for the materialised worker.
+  - Worker type/capability is resolved from `image`, not from a second id field.
   - Legacy note: older bundles may still reference `http-builder`.
 - `image` (string, required)
   - Container image name (logical); Orchestrator will prefix it with the
@@ -113,25 +105,23 @@ to draw edges. It does not replace `work` queue suffixes and is not a runtime
 binding list. Runtime bindings are emitted by swarm-controller in
 `status-full.data.context.bindings`.
 
-Runtime worker identity is assigned by Swarm Controller; Scenario Manager must
-not reject a runnable scenario only because `template.bees[].id` is missing or
-duplicated. When `topology` is present, `topology.edges[].from|to.beeId` refers
-to authoring graph labels, not the runtime `beeId` used for live mutation.
+Runtime worker identity is assigned by Swarm Controller as `instance`. Scenario
+Manager validates authoring identity separately: `template.bees[].role` is
+required, unique, and must be referenced by topology endpoints.
+`template.bees[].id` and `topology.edges[].from|to.beeId` are not valid fields.
 
 ```yaml
 template:
   image: swarm-controller:latest
   bees:
-    - id: genA
-      role: generator
+    - role: generator
       image: generator:latest
       work:
         out:
           out: genQ
       ports:
         - { id: out, direction: out }
-    - id: modA
-      role: moderator
+    - role: moderator
       image: moderator:latest
       work:
         in:
@@ -146,8 +136,8 @@ topology:
   version: 1
   edges:
     - id: e1
-      from: { beeId: genA, port: out }
-      to:   { beeId: modA, port: in }
+      from: { role: generator, port: out }
+      to:   { role: moderator, port: in }
 ```
 
 `work` port keys must match the `ports` ids when `topology` is present. For
@@ -155,8 +145,10 @@ single-input/output bees, use the standard `in` and `out` port ids.
 
 Edge fields:
 - `id` (string, required) – stable edge id within the template.
-- `from` (object, required) – `{ beeId, port }`.
-- `to` (object, required) – `{ beeId, port }`.
+- `from` (object, required) – `{ role, port }`; `role` must reference an
+  existing `template.bees[].role`.
+- `to` (object, required) – `{ role, port }`; `role` must reference an existing
+  `template.bees[].role`.
 - `selector` (object, optional) – edge selection hint for multi‑IO policies,
   e.g. `{ policy: predicate, expr: "payload.priority >= 50" }`.
 
@@ -349,9 +341,9 @@ The tool will:
   - Render each template once with a dummy WorkItem to catch errors.
 
 Scenario contract validators must not treat runtime identity as an authoring
-validation rule. In particular, they must not reject bundles solely because
-`template.bees[].id` is missing or duplicated. Runtime `beeId` assignment and
-the runtime `beeId -> (role, instance)` mapping are owned by Swarm Controller.
+validation rule. They must validate scenario authoring identity through unique
+`template.bees[].role` values and topology endpoint `role` references. Runtime
+`instance` values are owned by Swarm Controller materialisation.
 
 ## System Under Test (SUT) environments
 

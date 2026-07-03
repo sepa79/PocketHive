@@ -10,6 +10,7 @@ export type CapabilityConfigEntry = {
   default?: unknown
   required?: boolean
   allowBlank?: boolean
+  liveMutable?: boolean
   min?: number
   max?: number
   options?: unknown[]
@@ -105,6 +106,7 @@ function normalizeConfigEntry(entry: unknown): CapabilityConfigEntry | null {
     default: value.default,
     required: typeof value.required === 'boolean' ? value.required : undefined,
     allowBlank: typeof value.allowBlank === 'boolean' ? value.allowBlank : undefined,
+    liveMutable: typeof value.liveMutable === 'boolean' ? value.liveMutable : undefined,
     min: typeof value.min === 'number' ? value.min : undefined,
     max: typeof value.max === 'number' ? value.max : undefined,
     options,
@@ -160,6 +162,15 @@ export function composeCapabilityConfigEntries(
   }
 
   return entries
+}
+
+export function composeLiveCapabilityConfigEntries(
+  workerManifest: CapabilityManifest,
+  catalogue: CapabilityManifest[],
+  currentConfig: Record<string, unknown> | null | undefined,
+): CapabilityConfigEntry[] {
+  return composeCapabilityConfigEntries(workerManifest, catalogue, currentConfig)
+    .filter((entry) => entry.liveMutable === true)
 }
 
 export function resolveManifestForImage(

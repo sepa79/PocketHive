@@ -5,7 +5,6 @@ template:
   image: swarm-controller:latest
   bees:
     - role: trigger
-      id: trigger
       image: trigger:latest
       config:
         inputs:
@@ -36,7 +35,6 @@ template:
       ports:
         - { id: out, direction: out }
     - role: generator-global
-      id: generator-global
       image: generator:latest
       config:
         inputs:
@@ -60,7 +58,6 @@ template:
       ports:
         - { id: out, direction: out }
     - role: generator-per-thread
-      id: generator-per-thread
       image: generator:latest
       config:
         inputs:
@@ -84,7 +81,6 @@ template:
       ports:
         - { id: out, direction: out }
     - role: generator-none
-      id: generator-none
       image: generator:latest
       config:
         inputs:
@@ -108,7 +104,6 @@ template:
       ports:
         - { id: out, direction: out }
     - role: request-builder-global
-      id: request-builder-global
       image: request-builder:latest
       config:
         templateRoot: /app/scenario/templates/tcp
@@ -123,7 +118,6 @@ template:
         - { id: in, direction: in }
         - { id: out, direction: out }
     - role: request-builder-per-thread
-      id: request-builder-per-thread
       image: request-builder:latest
       config:
         templateRoot: /app/scenario/templates/tcp
@@ -138,7 +132,6 @@ template:
         - { id: in, direction: in }
         - { id: out, direction: out }
     - role: request-builder-none
-      id: request-builder-none
       image: request-builder:latest
       config:
         templateRoot: /app/scenario/templates/tcp
@@ -153,7 +146,6 @@ template:
         - { id: in, direction: in }
         - { id: out, direction: out }
     - role: processor-global
-      id: processor-global
       image: processor:latest
       config:
         baseUrl: "{{ sut.endpoints['tcp-server'].baseUrl }}"
@@ -178,7 +170,6 @@ template:
         - { id: in, direction: in }
         - { id: out, direction: out }
     - role: processor-per-thread
-      id: processor-per-thread
       image: processor:latest
       config:
         baseUrl: "{{ sut.endpoints['tcp-server'].baseUrl }}"
@@ -203,7 +194,6 @@ template:
         - { id: in, direction: in }
         - { id: out, direction: out }
     - role: processor-none
-      id: processor-none
       image: processor:latest
       config:
         baseUrl: "{{ sut.endpoints['tcp-server'].baseUrl }}"
@@ -228,7 +218,6 @@ template:
         - { id: in, direction: in }
         - { id: out, direction: out }
     - role: postprocessor
-      id: postprocessor
       image: postprocessor:latest
       config:
         forwardToOutput: false
@@ -244,29 +233,29 @@ topology:
   version: 1
   edges:
     - id: e1
-      from: { beeId: generator-global, port: out }
-      to: { beeId: request-builder-global, port: in }
+      from: { port: out, role: generator-global }
+      to: { port: in, role: request-builder-global }
     - id: e2
-      from: { beeId: generator-per-thread, port: out }
-      to: { beeId: request-builder-per-thread, port: in }
+      from: { port: out, role: generator-per-thread }
+      to: { port: in, role: request-builder-per-thread }
     - id: e3
-      from: { beeId: generator-none, port: out }
-      to: { beeId: request-builder-none, port: in }
+      from: { port: out, role: generator-none }
+      to: { port: in, role: request-builder-none }
     - id: e4
-      from: { beeId: request-builder-global, port: out }
-      to: { beeId: processor-global, port: in }
+      from: { port: out, role: request-builder-global }
+      to: { port: in, role: processor-global }
     - id: e5
-      from: { beeId: request-builder-per-thread, port: out }
-      to: { beeId: processor-per-thread, port: in }
+      from: { port: out, role: request-builder-per-thread }
+      to: { port: in, role: processor-per-thread }
     - id: e6
-      from: { beeId: request-builder-none, port: out }
-      to: { beeId: processor-none, port: in }
+      from: { port: out, role: request-builder-none }
+      to: { port: in, role: processor-none }
     - id: e7
-      from: { beeId: processor-global, port: out }
-      to: { beeId: postprocessor, port: in }
+      from: { port: out, role: processor-global }
+      to: { port: in, role: postprocessor }
     - id: e8
-      from: { beeId: processor-per-thread, port: out }
-      to: { beeId: postprocessor, port: in }
+      from: { port: out, role: processor-per-thread }
+      to: { port: in, role: postprocessor }
     - id: e9
-      from: { beeId: processor-none, port: out }
-      to: { beeId: postprocessor, port: in }
+      from: { port: out, role: processor-none }
+      to: { port: in, role: postprocessor }

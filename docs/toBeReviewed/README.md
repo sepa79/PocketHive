@@ -11,3 +11,4 @@ Current plans:
 - `docs/toBeReviewed/ScenarioPlan.md`
 - `docs/toBeReviewed/sut-environments-plan.md`
 - `docs/toBeReviewed/ui-v2-control-plane-adoption.md`
+- `docs/toBeReviewed/runtime-worker-instance-identity-plan.md`

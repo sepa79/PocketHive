@@ -11,6 +11,7 @@ ui:
 config:
   - name: adapter
     type: string
+    liveMutable: true
     required: true
     options:
       - "POSTGRES"
@@ -20,42 +21,49 @@ config:
       group: Database
   - name: templateRoot
     type: string
+    liveMutable: true
     required: true
     ui:
       label: Template root
       group: Templates
   - name: serviceId
     type: string
+    liveMutable: true
     required: true
     ui:
       label: Service ID
       group: Templates
   - name: queryId
     type: string
+    liveMutable: true
     required: true
     ui:
       label: Query ID
       group: Templates
   - name: threadCount
     type: integer
+    liveMutable: true
     required: true
     ui:
       label: Thread count
       group: Runtime
   - name: queryTimeoutMs
     type: integer
+    liveMutable: true
     required: true
     ui:
       label: Query timeout (ms)
       group: Runtime
   - name: connection.jdbcUrl
     type: string
+    liveMutable: true
     required: true
     ui:
       label: JDBC URL
       group: Connection
   - name: connection.username
     type: string
+    liveMutable: true
     required: true
     allowBlank: true
     ui:
@@ -63,6 +71,7 @@ config:
       group: Connection
   - name: connection.password
     type: string
+    liveMutable: true
     required: true
     allowBlank: true
     ui:
@@ -70,66 +79,77 @@ config:
       group: Connection
   - name: pool.maxSize
     type: integer
+    liveMutable: true
     required: true
     ui:
       label: Pool max size
       group: Pool
   - name: pool.minIdle
     type: integer
+    liveMutable: true
     required: true
     ui:
       label: Pool min idle
       group: Pool
   - name: pool.connectionTimeoutMs
     type: integer
+    liveMutable: true
     required: true
     ui:
       label: Connection timeout (ms)
       group: Pool
   - name: pool.validationTimeoutMs
     type: integer
+    liveMutable: true
     required: true
     ui:
       label: Validation timeout (ms)
       group: Pool
   - name: pool.idleTimeoutMs
     type: integer
+    liveMutable: true
     required: true
     ui:
       label: Idle timeout (ms)
       group: Pool
   - name: pool.maxLifetimeMs
     type: integer
+    liveMutable: true
     required: true
     ui:
       label: Max lifetime (ms)
       group: Pool
   - name: retry.maxAttempts
     type: integer
+    liveMutable: true
     required: true
     ui:
       label: Retry attempts
       group: Retry
   - name: retry.initialBackoffMs
     type: integer
+    liveMutable: true
     required: true
     ui:
       label: Initial backoff (ms)
       group: Retry
   - name: retry.backoffMultiplier
     type: number
+    liveMutable: true
     required: true
     ui:
       label: Backoff multiplier
       group: Retry
   - name: retry.maxBackoffMs
     type: integer
+    liveMutable: true
     required: true
     ui:
       label: Max backoff (ms)
       group: Retry
   - name: retry.on
     type: json
+    liveMutable: true
     required: true
     multiline: true
     ui:

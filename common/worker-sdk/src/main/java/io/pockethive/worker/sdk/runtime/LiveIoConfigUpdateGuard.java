@@ -2,20 +2,15 @@ package io.pockethive.worker.sdk.runtime;
 
 import io.pockethive.worker.sdk.config.WorkerInputType;
 import io.pockethive.worker.sdk.config.WorkerOutputType;
+import io.pockethive.scenarios.validation.LiveIoConfigMutability;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 
 final class LiveIoConfigUpdateGuard {
 
     private static final String INPUTS_ROOT = "inputs";
     private static final String OUTPUTS_ROOT = "outputs";
     private static final String TYPE_FIELD = "type";
-    private static final String SCHEDULER_RATE_PER_SEC = "inputs.scheduler.ratePerSec";
-    private static final String SCHEDULER_MAX_MESSAGES = "inputs.scheduler.maxMessages";
-    private static final String SCHEDULER_RESET = "inputs.scheduler.reset";
-    private static final String REDIS_DATASET_RATE_PER_SEC = "inputs.redis.ratePerSec";
-    private static final String CSV_DATASET_RATE_PER_SEC = "inputs.csv.ratePerSec";
     private static final double MIN_RATE_PER_SEC = 0.0;
 
     private LiveIoConfigUpdateGuard() {
@@ -31,7 +26,6 @@ final class LiveIoConfigUpdateGuard {
             definition,
             INPUTS_ROOT,
             inputSubblock(definition.input()),
-            safeInputFields(definition.input()),
             previous,
             update,
             bootstrap
@@ -40,7 +34,6 @@ final class LiveIoConfigUpdateGuard {
             definition,
             OUTPUTS_ROOT,
             outputSubblock(definition.outputType()),
-            Set.of(),
             previous,
             update,
             bootstrap
@@ -63,7 +56,6 @@ final class LiveIoConfigUpdateGuard {
         WorkerDefinition definition,
         String root,
         String selectedSubblock,
-        Set<String> safeFields,
         Map<String, Object> previousRaw,
         Map<String, Object> update,
         boolean bootstrap
@@ -91,14 +83,13 @@ final class LiveIoConfigUpdateGuard {
             if (!(value instanceof Map<?, ?> nestedUpdate)) {
                 throw unsafeUpdate(definition, path);
             }
-            validateSubblock(definition, selectedSubblock, safeFields, previousRaw, path, nestedUpdate, bootstrap);
+            validateSubblock(definition, selectedSubblock, previousRaw, path, nestedUpdate, bootstrap);
         }
     }
 
     private static void validateSubblock(
         WorkerDefinition definition,
         String selectedSubblock,
-        Set<String> safeFields,
         Map<String, Object> previousRaw,
         String subblockPath,
         Map<?, ?> nestedUpdate,
@@ -112,7 +103,7 @@ final class LiveIoConfigUpdateGuard {
             String fieldPath = subblockPath + "." + field;
             boolean safe = selectedSubblock != null
                 && subblockPath.endsWith("." + selectedSubblock)
-                && safeFields.contains(field);
+                && LiveIoConfigMutability.isLiveMutableIoPath(fieldPath);
             if (safe) {
                 validateSafeOperationalField(definition, fieldPath, nestedEntry.getValue());
                 continue;
@@ -126,10 +117,12 @@ final class LiveIoConfigUpdateGuard {
 
     private static void validateSafeOperationalField(WorkerDefinition definition, String dottedPath, Object value) {
         switch (dottedPath) {
-            case SCHEDULER_RATE_PER_SEC, REDIS_DATASET_RATE_PER_SEC, CSV_DATASET_RATE_PER_SEC ->
+            case LiveIoConfigMutability.SCHEDULER_RATE_PER_SEC,
+                 LiveIoConfigMutability.REDIS_DATASET_RATE_PER_SEC,
+                 LiveIoConfigMutability.CSV_DATASET_RATE_PER_SEC ->
                 requireRatePerSec(definition, dottedPath, value);
-            case SCHEDULER_MAX_MESSAGES -> requireNonNegativeInteger(definition, dottedPath, value);
-            case SCHEDULER_RESET -> requireBoolean(definition, dottedPath, value);
+            case LiveIoConfigMutability.SCHEDULER_MAX_MESSAGES -> requireNonNegativeInteger(definition, dottedPath, value);
+            case LiveIoConfigMutability.SCHEDULER_RESET -> requireBoolean(definition, dottedPath, value);
             default -> throw unsafeUpdate(definition, dottedPath);
         }
     }
@@ -200,16 +193,6 @@ final class LiveIoConfigUpdateGuard {
             current = map.get(segment);
         }
         return current;
-    }
-
-    private static Set<String> safeInputFields(WorkerInputType inputType) {
-        if (inputType == WorkerInputType.SCHEDULER) {
-            return Set.of("ratePerSec", "maxMessages", "reset");
-        }
-        if (inputType == WorkerInputType.REDIS_DATASET || inputType == WorkerInputType.CSV_DATASET) {
-            return Set.of("ratePerSec");
-        }
-        return Set.of();
     }
 
     private static String inputSubblock(WorkerInputType inputType) {

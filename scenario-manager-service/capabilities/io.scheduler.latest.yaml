@@ -10,6 +10,7 @@ ui:
 config:
   - name: inputs.scheduler.ratePerSec
     type: number
+    liveMutable: true
     required: true
     min: 0
     ui:
@@ -17,6 +18,7 @@ config:
       unit: msg/s
   - name: inputs.scheduler.maxMessages
     type: integer
+    liveMutable: true
     required: true
     min: 0
     ui:
@@ -24,5 +26,6 @@ config:
       unit: messages
   - name: inputs.scheduler.reset
     type: boolean
+    liveMutable: true
 actions: []
 panels: []

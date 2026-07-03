@@ -11,91 +11,109 @@ ui:
 config:
   - name: trafficPolicy.bufferGuard.enabled
     type: boolean
+    liveMutable: true
     ui:
       label: Buffer guard enabled
       group: Buffer guard
   - name: trafficPolicy.bufferGuard.queueAlias
     type: string
+    liveMutable: true
     ui:
       label: Queue alias
       group: Buffer guard
   - name: trafficPolicy.bufferGuard.targetDepth
     type: integer
+    liveMutable: true
     ui:
       label: Target depth
       group: Buffer guard
   - name: trafficPolicy.bufferGuard.minDepth
     type: integer
+    liveMutable: true
     ui:
       label: Min depth
       group: Buffer guard
   - name: trafficPolicy.bufferGuard.maxDepth
     type: integer
+    liveMutable: true
     ui:
       label: Max depth
       group: Buffer guard
   - name: trafficPolicy.bufferGuard.samplePeriod
     type: string
+    liveMutable: true
     ui:
       label: Sample period
       group: Buffer guard
   - name: trafficPolicy.bufferGuard.movingAverageWindow
     type: integer
+    liveMutable: true
     ui:
       label: Moving average window
       group: Buffer guard
   - name: trafficPolicy.bufferGuard.adjust.maxIncreasePct
     type: integer
+    liveMutable: true
     ui:
       label: Max increase
       group: Adjust
   - name: trafficPolicy.bufferGuard.adjust.maxDecreasePct
     type: integer
+    liveMutable: true
     ui:
       label: Max decrease
       group: Adjust
   - name: trafficPolicy.bufferGuard.adjust.minRatePerSec
     type: number
+    liveMutable: true
     ui:
       label: Min rate
       group: Adjust
   - name: trafficPolicy.bufferGuard.adjust.maxRatePerSec
     type: number
+    liveMutable: true
     ui:
       label: Max rate
       group: Adjust
   - name: trafficPolicy.bufferGuard.prefill.enabled
     type: boolean
+    liveMutable: true
     ui:
       label: Prefill enabled
       group: Prefill
   - name: trafficPolicy.bufferGuard.prefill.lookahead
     type: string
+    liveMutable: true
     ui:
       label: Lookahead
       group: Prefill
   - name: trafficPolicy.bufferGuard.prefill.liftPct
     type: integer
+    liveMutable: true
     ui:
       label: Lift
       group: Prefill
   - name: trafficPolicy.bufferGuard.backpressure.queueAlias
     type: string
+    liveMutable: true
     ui:
       label: Queue alias
       group: Backpressure
   - name: trafficPolicy.bufferGuard.backpressure.highDepth
     type: integer
+    liveMutable: true
     ui:
       label: High depth
       group: Backpressure
   - name: trafficPolicy.bufferGuard.backpressure.recoveryDepth
     type: integer
+    liveMutable: true
     ui:
       label: Recovery depth
       group: Backpressure
   - name: trafficPolicy.bufferGuard.backpressure.moderatorReductionPct
     type: integer
+    liveMutable: true
     ui:
       label: Moderator reduction
       group: Backpressure

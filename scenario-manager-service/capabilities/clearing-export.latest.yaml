@@ -11,75 +11,92 @@ ui:
 config:
   - name: mode
     type: string
+    liveMutable: true
     required: true
     options:
       - template
       - structured
   - name: streamingAppendEnabled
     type: boolean
+    liveMutable: true
     required: true
   - name: streamingWindowMs
     type: integer
+    liveMutable: true
     required: true
   - name: strictTemplate
     type: boolean
+    liveMutable: true
     required: true
   - name: lineSeparator
     type: string
+    liveMutable: true
     required: true
     when:
       mode: template
   - name: fileNameTemplate
     type: string
+    liveMutable: true
     required: true
     when:
       mode: template
   - name: headerTemplate
     type: string
+    liveMutable: true
     required: true
     when:
       mode: template
   - name: recordTemplate
     type: string
+    liveMutable: true
     required: true
     when:
       mode: template
   - name: footerTemplate
     type: string
+    liveMutable: true
     required: true
     when:
       mode: template
   - name: localTargetDir
     type: string
+    liveMutable: true
     required: true
   - name: localTempSuffix
     type: string
+    liveMutable: true
     required: true
   - name: writeManifest
     type: boolean
+    liveMutable: true
     required: true
   - name: localManifestPath
     type: string
+    liveMutable: true
     required: true
     when:
       writeManifest: true
   - name: schemaRegistryRoot
     type: string
+    liveMutable: true
     required: true
     when:
       mode: structured
   - name: schemaId
     type: string
+    liveMutable: true
     required: true
     when:
       mode: structured
   - name: schemaVersion
     type: string
+    liveMutable: true
     required: true
     when:
       mode: structured
   - name: recordSourceStep
     type: string
+    liveMutable: true
     required: true
     options:
       - latest
@@ -88,9 +105,11 @@ config:
       - index
   - name: recordSourceStepIndex
     type: integer
+    liveMutable: true
     required: true
   - name: recordBuildFailurePolicy
     type: string
+    liveMutable: true
     required: true
     options:
       - stop
@@ -98,14 +117,17 @@ config:
       - warn_only
   - name: businessCodeFilterEnabled
     type: boolean
+    liveMutable: true
     required: true
   - name: businessCodeAllowList
     type: json
+    liveMutable: true
     required: true
     when:
       businessCodeFilterEnabled: true
   - name: businessCodeSourceStep
     type: string
+    liveMutable: true
     required: true
     options:
       - latest
@@ -116,17 +138,21 @@ config:
       businessCodeFilterEnabled: true
   - name: businessCodeSourceStepIndex
     type: integer
+    liveMutable: true
     required: true
     when:
       businessCodeFilterEnabled: true
   - name: maxRecordsPerFile
     type: integer
+    liveMutable: true
     required: true
   - name: flushIntervalMs
     type: integer
+    liveMutable: true
     required: true
   - name: maxBufferedRecords
     type: integer
+    liveMutable: true
     required: true
 actions: []
 panels: []

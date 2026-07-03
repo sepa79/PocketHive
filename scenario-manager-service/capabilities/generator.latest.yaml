@@ -12,6 +12,7 @@ ui:
 config:
   - name: inputs.type
     type: string
+    liveMutable: false
     required: true
     options:
       - "SCHEDULER"
@@ -22,6 +23,7 @@ config:
       group: IO
   - name: message.bodyType
     type: string
+    liveMutable: true
     required: true
     options:
       - "HTTP"
@@ -31,6 +33,7 @@ config:
       group: Message
   - name: message.path
     type: string
+    liveMutable: true
     required: true
     when:
       message.bodyType: "HTTP"
@@ -39,6 +42,7 @@ config:
       group: Message
   - name: message.method
     type: string
+    liveMutable: true
     required: true
     options:
       - "GET"
@@ -55,6 +59,7 @@ config:
       group: Message
   - name: message.body
     type: string
+    liveMutable: true
     required: true
     multiline: true
     ui:
@@ -62,6 +67,7 @@ config:
       group: Message
   - name: message.headers
     type: json
+    liveMutable: true
     multiline: true
     ui:
       label: Headers

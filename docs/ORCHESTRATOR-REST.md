@@ -30,16 +30,16 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
     "templateId": "baseline-demo",
     "controllerImage": "ghcr.io/pockethive/swarm-controller:1.2.3",
     "bees": [
-      { "beeId": "genA", "role": "generator", "image": "ghcr.io/pockethive/generator:1.2.3" },
-      { "beeId": "modA", "role": "moderator", "image": "ghcr.io/pockethive/moderator:1.2.3" }
+      { "instance": "demo-generator-1", "role": "generator", "image": "ghcr.io/pockethive/generator:1.2.3" },
+      { "instance": "demo-moderator-1", "role": "moderator", "image": "ghcr.io/pockethive/moderator:1.2.3" }
     ]
   }
 ]
 ```
 
 > Swarms are sorted lexicographically by `id` for deterministic UI rendering.
-> Bee summaries are keyed by Swarm Controller-owned runtime `beeId`; do not
-> collapse multiple bees with the same `role`.
+> Bee summaries are keyed by runtime `instance`; do not collapse multiple bees
+> with the same `role`.
 
 ### 2.2 Fetch swarm
 `GET /api/swarms/{swarmId}`
@@ -80,7 +80,6 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
         "swarmHealth": "RUNNING",
         "workers": [
           {
-            "beeId": "genA",
             "role": "generator",
             "instance": "demo-generator-1",
             "enabled": true,
@@ -116,12 +115,10 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
 
 Returns `404` when the swarm id is unknown or no `status-full` has been cached yet.
 
-`data.context.workers[].beeId` is the Swarm Controller-owned runtime identity
-for component selection. `role` and `instance` are the current control-plane
-address for component actions; clients must not join or deduplicate workers by
-`role`. When a worker status echo is missing or mismatched, the affected worker
-entry may include `identityDiagnostics.workerBeeIdEcho` with `missing` or
-`mismatch`, plus the SC-owned `expectedBeeId` and, for mismatches, `actualBeeId`.
+`data.context.workers[].instance` is the runtime worker identity for component
+selection. `role` is the required routing segment for component actions, but
+clients must not join or deduplicate workers by `role`. Runtime worker payloads
+must not expose or require a second `beeId` identity.
 
 ### 2.3 Swarm journal (timeline)
 `GET /api/swarms/{swarmId}/journal`
@@ -737,8 +734,8 @@ Deletes the tap queue and returns the last known tap state.
 **Signal:** `signal.config-update.<swarmId>.<role>.<instance>` → **Outcome:** `event.outcome.config-update.<swarmId>.<role>.<instance>` (check `data.status`) → **Alerts:** `event.alert.{type}.<swarmId>.<role>.<instance>`
 
 For UI-originated edits, resolve `{role}/{instance}` from the selected runtime
-worker after selecting the SC-owned
-`status-full.data.context.workers[].beeId`. `role` alone is not a stable target.
+worker in `status-full.data.context.workers[]`. `instance` is the runtime worker
+identity; `role` alone is not a stable target.
 
 **Response (202)** — same envelope.
 

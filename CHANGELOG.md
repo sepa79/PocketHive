@@ -4,6 +4,35 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.15.32]
+Timestamp: 2026-07-02T20:36:29Z
+
+- Runtime identity: remove the duplicate runtime `beeId` contract and keep
+  `instance` as the only runtime worker id across worker status, Swarm
+  Controller aggregation, Orchestrator live config addressing, runtime debug,
+  and Hive UI surfaces.
+- Scenario authoring contract: remove `template.bees[].id` and topology
+  `from/to.beeId`, require unique `template.bees[].role`, and make topology
+  endpoints reference declared `role` values directly.
+- Worker capability contracts: add explicit `liveMutable` metadata to capability
+  config entries and keep UI live config editing limited to mutable fields while
+  keeping unsafe IO shape changes blocked.
+- Scenario Manager validation: reject legacy authoring identity fields, reject
+  duplicate/unknown topology roles, classify request-template consumers by
+  image/capability instead of scenario role, and keep capability config types
+  canonical.
+- Scenario migration tooling: update `.31` migration docs/tooling to remove
+  legacy bee ids and topology beeId endpoints while preserving explicit runtime
+  config migration behavior.
+- Hive UI: simplify the Scenario tab to enrich scenario bees with their matching
+  runtime worker by unique role, remove duplicate runtime worker selectors and
+  noisy runtime metadata, and stabilize worker cards/topology rendering.
+- PocketHive MCP: align scenario generation and validation helpers with
+  image/capability-based worker typing and the role-only scenario authoring
+  contract.
+- Release: bump PocketHive patch version to 0.15.32 for the runtime identity
+  and scenario authoring identity cleanup.
+
 ## [0.15.31]
 Timestamp: 2026-07-02T10:03:13Z
 

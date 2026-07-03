@@ -10,7 +10,6 @@ template:
   image: swarm-controller:latest
   bees:
     - role: generator
-      id: generator
       image: generator:latest
       work:
         out:
@@ -29,7 +28,6 @@ template:
           bodyType: SIMPLE
           body: '{"customerId":"CUST-WIZ-1001","proofRun":"wizard-full-report"}'
     - role: http-sequence
-      id: http-sequence
       image: http-sequence:latest
       work:
         in:
@@ -93,7 +91,6 @@ template:
           bodyPreviewBytes: 4096
           redisTtlSeconds: 120
     - role: postprocessor
-      id: postprocessor
       image: postprocessor:latest
       config:
         forwardToOutput: false
@@ -171,8 +168,8 @@ topology:
   version: 1
   edges:
     - id: e1
-      from: { beeId: generator, port: out }
-      to: { beeId: http-sequence, port: in }
+      from: { port: out, role: generator }
+      to: { port: in, role: http-sequence }
     - id: e2
-      from: { beeId: http-sequence, port: out }
-      to: { beeId: postprocessor, port: in }
+      from: { port: out, role: http-sequence }
+      to: { port: in, role: postprocessor }

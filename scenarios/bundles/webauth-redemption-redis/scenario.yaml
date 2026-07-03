@@ -6,7 +6,6 @@ template:
   image: swarm-controller:latest
   bees:
     - role: generator
-      id: generator
       image: generator:latest
       config:
         inputs:
@@ -32,7 +31,6 @@ template:
       ports:
         - { id: out, direction: out }
     - role: request-builder
-      id: request-builder
       image: request-builder:latest
       config:
         templateRoot: /app/scenario/templates/http
@@ -47,7 +45,6 @@ template:
         - { id: in, direction: in }
         - { id: out, direction: out }
     - role: processor
-      id: processor
       image: processor:latest
       config:
         baseUrl: "{{ sut.endpoints['webauth'].baseUrl }}"
@@ -77,8 +74,8 @@ topology:
   version: 1
   edges:
     - id: e1
-      from: { beeId: generator, port: out }
-      to: { beeId: request-builder, port: in }
+      from: { port: out, role: generator }
+      to: { port: in, role: request-builder }
     - id: e2
-      from: { beeId: request-builder, port: out }
-      to: { beeId: processor, port: in }
+      from: { port: out, role: request-builder }
+      to: { port: in, role: processor }

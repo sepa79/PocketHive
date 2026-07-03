@@ -13,7 +13,42 @@ and runtime `config-update` patches.
 Do not keep compatibility wrappers. Scenario YAML must not use
 `config.worker`, `config.worker.config`, or `config.pockethive`.
 
+Scenario authoring has one node key: `template.bees[].role`. Do not keep
+`template.bees[].id`, and do not use `topology.edges[].from/to.beeId`.
+Topology endpoints must use `role`.
+
 ## Mechanical Rewrites
+
+Before:
+
+```yaml
+template:
+  bees:
+    - id: genA
+      role: generator
+      image: generator:latest
+topology:
+  edges:
+    - from: { beeId: genA, port: out }
+```
+
+After:
+
+```yaml
+template:
+  bees:
+    - role: genA
+      image: generator:latest
+topology:
+  edges:
+    - from: { role: genA, port: out }
+```
+
+`role` is the unique scenario node key. Worker type comes from `image` and the
+capability manifest. If old `id` and old `role` differ, the migrator moves the
+old `id` value into `role` so topology keeps pointing at the same scenario node.
+If a topology endpoint already has a conflicting `role`, the migrator fails and
+requires manual editing.
 
 Before:
 

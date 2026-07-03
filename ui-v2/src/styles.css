@@ -1479,18 +1479,25 @@ select.textInputCompact option {
 }
 
 .swarmWorkerCard {
+  display: block;
   width: 100%;
   text-align: left;
   border: 1px solid var(--border2);
-  background: var(--panel2);
+  background: #121720;
   border-radius: 12px;
   padding: 10px 10px;
   color: inherit;
+  font: inherit;
 }
 
 .swarmWorkerCard:hover {
   border-color: rgba(255, 255, 255, 0.18);
-  background: rgba(255, 255, 255, 0.05);
+  background: #171d28;
+}
+
+.swarmWorkerCard:focus-visible {
+  outline: 2px solid rgba(51, 225, 255, 0.7);
+  outline-offset: 2px;
 }
 
 .swarmWorkerCardSelected {
@@ -2004,10 +2011,11 @@ select.textInputCompact option {
 }
 
 .swarmFlowNode {
-  width: 220px;
+  width: 240px;
+  box-sizing: border-box;
   border-radius: 8px;
   border: 1px solid var(--border2);
-  background: var(--panel2);
+  background: #121720;
   padding: 10px 12px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
 }
@@ -2044,6 +2052,29 @@ select.textInputCompact option {
   border-radius: 999px;
   border: 2px solid rgba(255, 255, 255, 0.28);
   background: rgba(8, 10, 14, 0.8);
+}
+
+:root[data-theme='light'] .swarmWorkerCard,
+:root[data-theme='light'] .swarmFlowNode {
+  background: #ffffff;
+}
+
+:root[data-theme='light'] .swarmWorkerCard:hover {
+  background: #f7f9fc;
+}
+
+:root[data-theme='light'] .swarmFlowNodeTitle {
+  color: rgba(10, 20, 30, 0.92);
+}
+
+:root[data-theme='light'] .swarmFlowNodeSubtitle,
+:root[data-theme='light'] .swarmQueueName {
+  color: rgba(10, 20, 30, 0.65);
+}
+
+:root[data-theme='light'] .swarmFlowHandle {
+  border-color: rgba(10, 20, 30, 0.32);
+  background: #ffffff;
 }
 
 .swarmGraphSvg {
@@ -2235,15 +2266,13 @@ select.textInputCompact option {
   gap: 10px;
 }
 
-.swarmBeeList,
-.swarmEdgeList {
+.swarmBeeList {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.swarmBeeItem,
-.swarmEdgeItem {
+.swarmBeeItem {
   border: 1px solid var(--border2);
   border-radius: 10px;
   padding: 8px 10px;
@@ -2369,10 +2398,6 @@ select.textInputCompact option {
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-
-.swarmDetailSectionWide {
-  grid-column: 1 / -1;
 }
 
 .runtimeInspector {

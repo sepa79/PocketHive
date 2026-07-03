@@ -11,6 +11,7 @@ ui:
 config:
   - name: mode.type
     type: string
+    liveMutable: true
     required: true
     options:
       - "pass-through"
@@ -21,6 +22,7 @@ config:
       group: Mode
   - name: mode.ratePerSec
     type: number
+    liveMutable: true
     required: true
     min: 0
     max: 100000
@@ -33,6 +35,7 @@ config:
       unit: msg/s
   - name: mode.sine.minRatePerSec
     type: number
+    liveMutable: true
     required: true
     min: 0
     max: 100000
@@ -45,6 +48,7 @@ config:
       unit: msg/s
   - name: mode.sine.maxRatePerSec
     type: number
+    liveMutable: true
     required: true
     min: 0
     max: 100000
@@ -57,6 +61,7 @@ config:
       unit: msg/s
   - name: mode.sine.periodSeconds
     type: number
+    liveMutable: true
     required: true
     min: 1
     when:
@@ -68,6 +73,7 @@ config:
       unit: s
   - name: mode.sine.phaseOffsetSeconds
     type: number
+    liveMutable: true
     required: true
     when:
       mode.type: "sine"

@@ -16,6 +16,9 @@ import io.pockethive.swarm.model.BeeRoles;
 import io.pockethive.swarm.model.OutcomeHeaders;
 import io.pockethive.swarm.model.SutEnvironment;
 import io.pockethive.swarm.model.SwarmTemplate;
+import io.pockethive.swarm.model.Topology;
+import io.pockethive.swarm.model.TopologyEdge;
+import io.pockethive.swarm.model.TopologyEndpoint;
 import io.pockethive.worker.sdk.auth.AuthApplyAs;
 import io.pockethive.worker.sdk.auth.AuthStorageMode;
 import io.pockethive.worker.sdk.auth.AuthTokenKeys;
@@ -167,7 +170,6 @@ public final class ScenarioBundleValidator {
                 if (!Objects.equals(updatedImage, bee.image())) {
                     changed = true;
                     updatedBees.add(new Bee(
-                        bee.id(),
                         bee.role(),
                         updatedImage,
                         bee.work(),
@@ -689,6 +691,7 @@ public final class ScenarioBundleValidator {
             return List.of();
         }
         List<ValidationFinding> findings = new ArrayList<>();
+        validateScenarioAuthoringContract(scenario, findings);
         int index = 0;
         for (Bee bee : scenario.getTemplate().bees()) {
             if (bee == null) {
@@ -721,6 +724,82 @@ public final class ScenarioBundleValidator {
             index++;
         }
         return List.copyOf(findings);
+    }
+
+    private void validateScenarioAuthoringContract(Scenario scenario, List<ValidationFinding> findings) {
+        Set<String> declaredRoles = new LinkedHashSet<>();
+        Set<String> duplicateRoles = new LinkedHashSet<>();
+        int beeIndex = 0;
+        for (Bee bee : scenario.getTemplate().bees()) {
+            String role = bee == null ? null : bee.role();
+            String path = ScenarioBundleLayout.SCENARIO_DESCRIPTOR_FILE + ":template.bees[" + beeIndex + "].role";
+            if (role == null || role.isBlank()) {
+                findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
+                    ValidationSeverity.ERROR,
+                    path,
+                    "Scenario bee role must not be blank.",
+                    "Set template.bees[" + beeIndex + "].role to the unique scenario node role."));
+            } else if (!declaredRoles.add(role) && duplicateRoles.add(role)) {
+                findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
+                    ValidationSeverity.ERROR,
+                    path,
+                    "Scenario bee role '" + role + "' must be unique.",
+                    "Rename one of the template.bees entries and update topology endpoints to that role."));
+            }
+            beeIndex++;
+        }
+
+        Topology topology = scenario.getTopology();
+        if (topology == null || topology.edges() == null) {
+            return;
+        }
+        int edgeIndex = 0;
+        for (TopologyEdge edge : topology.edges()) {
+            if (edge == null) {
+                edgeIndex++;
+                continue;
+            }
+            validateTopologyEndpointRole(edge.from(), "from", edgeIndex, declaredRoles, findings);
+            validateTopologyEndpointRole(edge.to(), "to", edgeIndex, declaredRoles, findings);
+            edgeIndex++;
+        }
+    }
+
+    private void validateTopologyEndpointRole(
+        TopologyEndpoint endpoint,
+        String endpointName,
+        int edgeIndex,
+        Set<String> declaredRoles,
+        List<ValidationFinding> findings
+    ) {
+        String path = ScenarioBundleLayout.SCENARIO_DESCRIPTOR_FILE
+            + ":topology.edges[" + edgeIndex + "]." + endpointName + ".role";
+        if (endpoint == null || endpoint.role() == null || endpoint.role().isBlank()) {
+            findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
+                ValidationSeverity.ERROR,
+                path,
+                "Topology endpoint role must not be blank.",
+                "Set topology.edges[" + edgeIndex + "]." + endpointName
+                    + ".role to one of the declared template.bees roles."));
+            return;
+        }
+        if (!declaredRoles.contains(endpoint.role())) {
+            findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
+                ValidationSeverity.ERROR,
+                path,
+                "Topology endpoint role '" + endpoint.role() + "' is not declared in template.bees.",
+                "Use an existing template.bees role or add the missing bee."));
+        }
+        String portPath = ScenarioBundleLayout.SCENARIO_DESCRIPTOR_FILE
+            + ":topology.edges[" + edgeIndex + "]." + endpointName + ".port";
+        if (endpoint.port() == null || endpoint.port().isBlank()) {
+            findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
+                ValidationSeverity.ERROR,
+                portPath,
+                "Topology endpoint port must not be blank.",
+                "Set topology.edges[" + edgeIndex + "]." + endpointName
+                    + ".port to a declared work/port id."));
+        }
     }
 
     private void validateIoSelectorConfig(
@@ -2082,11 +2161,8 @@ public final class ScenarioBundleValidator {
     }
 
     private boolean usesRequestTemplateContract(Bee bee) {
-        String role = bee.role() == null ? "" : bee.role().trim();
         String image = imageRepositoryName(bee.image());
-        return BeeRoles.REQUEST_BUILDER.equals(role)
-            || BeeRoles.HTTP_SEQUENCE.equals(role)
-            || BeeRoles.REQUEST_BUILDER.equals(image)
+        return BeeRoles.REQUEST_BUILDER.equals(image)
             || BeeRoles.HTTP_SEQUENCE.equals(image);
     }
 

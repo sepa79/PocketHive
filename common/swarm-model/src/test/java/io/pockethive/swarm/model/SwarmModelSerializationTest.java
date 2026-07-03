@@ -32,9 +32,9 @@ class SwarmModelSerializationTest {
                 new TopologySelector("predicate", "payload.priority >= 50"))
         ));
         SwarmPlan plan = new SwarmPlan("swarm-1", List.of(
-            new Bee("genA", "generator", "img", Work.ofDefaults("in", "out"),
+            new Bee("genA", "img", Work.ofDefaults("in", "out"),
                 List.of(new BeePort("out", "out")), Map.of("K", "V"), Map.of()),
-            new Bee("modA", "moderator", "img2", Work.ofDefaults("in", "out"),
+            new Bee("modA", "img2", Work.ofDefaults("in", "out"),
                 List.of(new BeePort("in", "in")), Map.of(), Map.of())
         ), topology, new TrafficPolicy(guard), null, null);
 
@@ -43,17 +43,17 @@ class SwarmModelSerializationTest {
 
         assertEquals("swarm-1", restored.id());
         assertEquals(2, restored.bees().size());
-        Map<String, Bee> beesById = restored.bees().stream()
-            .collect(java.util.stream.Collectors.toMap(Bee::id, bee -> bee));
-        Bee generator = beesById.get("genA");
-        Bee moderator = beesById.get("modA");
+        Map<String, Bee> beesByRole = restored.bees().stream()
+            .collect(java.util.stream.Collectors.toMap(Bee::role, bee -> bee));
+        Bee generator = beesByRole.get("genA");
+        Bee moderator = beesByRole.get("modA");
         assertNotNull(generator);
         assertNotNull(moderator);
-        assertEquals("generator", generator.role());
+        assertEquals("genA", generator.role());
         assertEquals("img", generator.image());
         assertNotNull(generator.env());
         assertEquals("V", generator.env().get("K"));
-        assertEquals("moderator", moderator.role());
+        assertEquals("modA", moderator.role());
         assertEquals("img2", moderator.image());
         assertNotNull(restored.topology());
         assertEquals(1, restored.topology().edges().size());

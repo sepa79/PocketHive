@@ -11,7 +11,6 @@ import io.pockethive.controlplane.topology.ControlPlaneRouteCatalog;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.controlplane.worker.WorkerConfigCommand;
 import io.pockethive.controlplane.worker.WorkerControlPlane;
-import io.pockethive.controlplane.worker.WorkerRuntimeIdentity;
 import io.pockethive.controlplane.worker.WorkerSignalListener;
 import io.pockethive.controlplane.worker.WorkerStatusRequest;
 import io.pockethive.swarm.model.BeeConfigKeys;
@@ -73,7 +72,7 @@ public final class WorkerControlPlaneRuntime {
     private volatile double lastIntervalSeconds = 0.0;
     private final Instant startedAt;
     private final Map<String, Object> runtimeMeta;
-    private final String runtimeBeeId;
+    private static final String REMOVED_RUNTIME_WORKER_ID_STATUS_KEY = "beeId";
 
     private static final List<String> IO_INPUT_PRECEDENCE = List.of(
         "upstream-error",
@@ -97,7 +96,8 @@ public final class WorkerControlPlaneRuntime {
         "config",
         "io",
         "ioState",
-        "context"
+        "context",
+        REMOVED_RUNTIME_WORKER_ID_STATUS_KEY
     );
 
     private final AtomicReference<String> lastWorkInputState = new AtomicReference<>(null);
@@ -122,20 +122,6 @@ public final class WorkerControlPlaneRuntime {
         WorkerControlPlaneProperties.ControlPlane controlPlane,
         TemplateRenderer templateRenderer
     ) {
-        this(workerControlPlane, stateStore, objectMapper, emitter, identity, controlPlane, templateRenderer,
-            envValue(WorkerRuntimeIdentity.BEE_ID_ENV));
-    }
-
-    WorkerControlPlaneRuntime(
-        WorkerControlPlane workerControlPlane,
-        WorkerStateStore stateStore,
-        ObjectMapper objectMapper,
-        ControlPlaneEmitter emitter,
-        ControlPlaneIdentity identity,
-        WorkerControlPlaneProperties.ControlPlane controlPlane,
-        TemplateRenderer templateRenderer,
-        String runtimeBeeId
-    ) {
         this.workerControlPlane = Objects.requireNonNull(workerControlPlane, "workerControlPlane");
         this.stateStore = Objects.requireNonNull(stateStore, "stateStore");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
@@ -144,7 +130,6 @@ public final class WorkerControlPlaneRuntime {
         this.configMerger = new ConfigMerger(this.objectMapper);
         this.templateRenderer = templateRenderer;
         this.runtimeMeta = buildRuntimeMeta();
-        this.runtimeBeeId = normalize(runtimeBeeId);
         WorkerControlPlaneProperties.ControlPlane resolvedControlPlane =
             Objects.requireNonNull(controlPlane, "controlPlane");
         this.controlQueueName = resolvedControlPlane.getControlQueueName();
@@ -840,9 +825,6 @@ public final class WorkerControlPlaneRuntime {
                 builder.config(configSnapshot);
             }
             workerStatusData.forEach(builder::data);
-            if (runtimeBeeId != null) {
-                builder.data(WorkerRuntimeIdentity.BEE_ID_CONTEXT_FIELD, runtimeBeeId);
-            }
         };
 
         maybeEmitIoOutOfData(workerIo);

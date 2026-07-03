@@ -130,6 +130,37 @@ function targetStringSchema(description, preferredKeys = ["id", "name"]) {
 const BUNDLE_ARG = targetStringSchema("Bundle name", ["name", "id"]);
 const SCENARIO_ID_ARG = targetStringSchema("Scenario ID", ["id", "name"]);
 const SWARM_ID_ARG = targetStringSchema("Swarm ID", ["id", "name"]);
+const WORKER_IMAGE_NAMES = Object.freeze({
+  GENERATOR: "generator",
+  PROCESSOR: "processor",
+  POSTPROCESSOR: "postprocessor",
+  REQUEST_BUILDER: "request-builder",
+  HTTP_SEQUENCE: "http-sequence",
+  CLEARING_EXPORT: "clearing-export",
+});
+const TERMINAL_WORKER_IMAGE_NAMES = new Set([
+  WORKER_IMAGE_NAMES.POSTPROCESSOR,
+  WORKER_IMAGE_NAMES.CLEARING_EXPORT,
+]);
+
+function textOrNull(value) {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function imageRepositoryName(image) {
+  const normalized = textOrNull(image);
+  if (!normalized) return null;
+  const withoutDigest = normalized.split("@", 1)[0];
+  const lastSegment = withoutDigest.slice(withoutDigest.lastIndexOf("/") + 1);
+  const tagIndex = lastSegment.lastIndexOf(":");
+  return textOrNull(tagIndex >= 0 ? lastSegment.slice(0, tagIndex) : lastSegment);
+}
+
+function beeImageName(bee) {
+  return imageRepositoryName(bee?.image);
+}
 
 // ── HTTP helper ───────────────────────────────────────────────────────────────
 
@@ -1289,16 +1320,16 @@ function wizardTopology(bees) {
   const produced = new Map();
   const edges = [];
   for (const bee of bees) {
-    const beeId = bee.id || bee.role;
+    const role = bee.role;
     for (const [port, suffix] of Object.entries(bee.work?.out || {})) {
-      if (typeof suffix === "string") produced.set(suffix, { beeId, port });
+      if (typeof suffix === "string") produced.set(suffix, { role, port });
     }
   }
   for (const bee of bees) {
-    const beeId = bee.id || bee.role;
+    const role = bee.role;
     for (const [port, suffix] of Object.entries(bee.work?.in || {})) {
       const from = produced.get(suffix);
-      if (from) edges.push({ id: `e${edges.length + 1}`, from, to: { beeId, port } });
+      if (from) edges.push({ id: `e${edges.length + 1}`, from, to: { role, port } });
     }
   }
   return { version: 1, edges };
@@ -1486,7 +1517,6 @@ async function writeWizardBundle(session) {
   if (answers.protocol === "TCP") {
     bees.push(
       {
-        id: "seed",
         role: "generator",
         image: "generator:latest",
         work: { out: { out: "proc" } },
@@ -1501,25 +1531,22 @@ async function writeWizardBundle(session) {
         },
       },
       {
-        id: "requestBuilder",
         role: "request-builder",
         image: "request-builder:latest",
         work: { in: { in: "proc" }, out: { out: "built" } },
         config: { templateRoot, serviceId },
       },
       {
-        id: "processor",
         role: "processor",
         image: "processor:latest",
         work: { in: { in: "built" }, out: { out: "post" } },
         config: { baseUrl: processorBase, mode: "THREAD_COUNT", threadCount: 5, tcpTransport: { type: "socket" } },
       },
-      { id: "resultSink", ...postprocessor },
+      postprocessor,
     );
   } else if (answers.protocol === "SEQUENCE") {
     bees.push(
       {
-        id: "seed",
         role: "generator",
         image: "generator:latest",
         work: { out: { out: "seq" } },
@@ -1530,7 +1557,6 @@ async function writeWizardBundle(session) {
         },
       },
       {
-        id: "httpSequence",
         role: "http-sequence",
         image: "http-sequence:latest",
         work: { in: { in: "seq" }, out: { out: "post" } },
@@ -1549,12 +1575,11 @@ async function writeWizardBundle(session) {
           },
         },
       },
-      { id: "resultSink", ...postprocessor },
+      postprocessor,
     );
   } else {
     bees.push(
       {
-        id: "seed",
         role: "generator",
         image: "generator:latest",
         work: { out: { out: "build" } },
@@ -1569,20 +1594,18 @@ async function writeWizardBundle(session) {
         },
       },
       {
-        id: "requestBuilder",
         role: "request-builder",
         image: "request-builder:latest",
         work: { in: { in: "build" }, out: { out: "proc" } },
         config: { templateRoot, serviceId },
       },
       {
-        id: "processor",
         role: "processor",
         image: "processor:latest",
         work: { in: { in: "proc" }, out: { out: "post" } },
         config: { baseUrl: processorBase, mode: "THREAD_COUNT", threadCount: 5 },
       },
-      { id: "resultSink", ...postprocessor },
+      postprocessor,
     );
   }
 
@@ -1776,11 +1799,11 @@ async function readExistingBundleAnswers(targetBundleDir, parseYaml) {
       if (scenario?.id) answers.bundleId = scenario.id;
       // Infer protocol from bees
       const bees = scenario?.template?.bees || [];
-      const roles = bees.map(b => b?.role).filter(Boolean);
-      if (roles.includes("http-sequence")) answers.protocol = "SEQUENCE";
-      else if (roles.some(r => r.includes("processor"))) answers.protocol = "REST";
+      const imageNames = bees.map(beeImageName).filter(Boolean);
+      if (imageNames.includes(WORKER_IMAGE_NAMES.HTTP_SEQUENCE)) answers.protocol = "SEQUENCE";
+      else if (imageNames.includes(WORKER_IMAGE_NAMES.PROCESSOR)) answers.protocol = "REST";
       // Infer dataSource from generator bee
-      const gen = bees.find(b => b?.role === "generator" || b?.config?.inputs);
+      const gen = bees.find(b => beeImageName(b) === WORKER_IMAGE_NAMES.GENERATOR);
       const inputType = gen?.config?.inputs?.type;
       if (inputType) answers.dataSource = inputType;
       const ratePerSec = gen?.config?.inputs?.scheduler?.ratePerSec
@@ -2198,9 +2221,13 @@ async function runGenerationSanityCheck(bundle) {
   addCheck("scenario.template.bees", bees.length > 0, "template.bees must contain at least one bee");
 
   const roles = new Set();
+  const imageNames = new Set();
   const producedQueues = new Set();
   const consumedQueues = [];
-  for (const bee of bees) {
+  for (const [index, bee] of bees.entries()) {
+    if (bee && Object.prototype.hasOwnProperty.call(bee, "id")) {
+      addCheck(`bee.${index}.no-id`, false, "template.bees[].id is not supported; use role as the unique scenario node key");
+    }
     const role = bee?.role;
     if (!role || typeof role !== "string") {
       addCheck("bee.role", false, "Each bee requires a string role");
@@ -2210,6 +2237,8 @@ async function runGenerationSanityCheck(bundle) {
       addCheck(`bee.${role}.unique`, false, `Duplicate bee role '${role}'`);
     }
     roles.add(role);
+    const imageName = beeImageName(bee);
+    if (imageName) imageNames.add(imageName);
     addCheck(`bee.${role}.image`, typeof bee?.image === "string" && bee.image.length > 0, `Bee '${role}' has an image`);
 
     const outputs = bee?.work?.out && typeof bee.work.out === "object" ? bee.work.out : {};
@@ -2231,11 +2260,34 @@ async function runGenerationSanityCheck(bundle) {
     );
   }
 
-  const hasGenerator = roles.has("generator");
-  const hasTerminal = roles.has("postprocessor") || roles.has("clearing-export");
+  const hasGenerator = imageNames.has(WORKER_IMAGE_NAMES.GENERATOR);
+  const hasTerminal = [...TERMINAL_WORKER_IMAGE_NAMES].some(imageName => imageNames.has(imageName));
   addCheck("pattern.generator", hasGenerator, "Scenario has a generator bee", "warning");
   addCheck("pattern.terminal", hasTerminal, "Scenario has a terminal postprocessor or clearing-export bee", "warning");
   addCheck("scenario.topology", Object.prototype.hasOwnProperty.call(scenario || {}, "topology"), "scenario.topology is declared", "warning");
+  const topologyEdges = Array.isArray(scenario?.topology?.edges) ? scenario.topology.edges : [];
+  for (const [edgeIndex, edge] of topologyEdges.entries()) {
+    for (const endpointName of ["from", "to"]) {
+      const endpoint = edge?.[endpointName];
+      if (!endpoint || typeof endpoint !== "object") {
+        addCheck(`topology.${edgeIndex}.${endpointName}`, false, `Topology edge ${edgeIndex + 1} ${endpointName} endpoint is required`);
+        continue;
+      }
+      if (Object.prototype.hasOwnProperty.call(endpoint, "beeId")) {
+        addCheck(
+          `topology.${edgeIndex}.${endpointName}.no-beeId`,
+          false,
+          "topology endpoint beeId is not supported; use role"
+        );
+      }
+      const endpointRole = endpoint.role;
+      addCheck(
+        `topology.${edgeIndex}.${endpointName}.role`,
+        typeof endpointRole === "string" && roles.has(endpointRole),
+        `Topology edge ${edgeIndex + 1} ${endpointName} role references a declared bee role`
+      );
+    }
+  }
   addCheck("scenario.trafficPolicy", Object.prototype.hasOwnProperty.call(scenario || {}, "trafficPolicy"), "scenario.trafficPolicy is declared", "warning");
 
   const artifacts = {
@@ -3545,7 +3597,7 @@ function buildReport({ swarmId, scenarioId, sources, queueRows, tapSample, inclu
     }
   }
   const configuredExtracts = (scenario?.template?.bees || [])
-    .find(bee => bee?.role === "http-sequence")?.config?.steps
+    .find(bee => beeImageName(bee) === WORKER_IMAGE_NAMES.HTTP_SEQUENCE)?.config?.steps
     ?.flatMap(step => (step.extracts || []).map(extract => ({ stepId: step.id, callId: step.callId, to: extract.to }))) || [];
   const authHeaders = selectedBusinessRequests.map(entry => headerValue(entry?.request?.headers, "authorization"));
   const bearerCount = authHeaders.filter(value => value.startsWith("Bearer ")).length;

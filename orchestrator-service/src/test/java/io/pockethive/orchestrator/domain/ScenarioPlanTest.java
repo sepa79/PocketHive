@@ -86,9 +86,9 @@ class ScenarioPlanTest {
   @Test
   void toSwarmPlanPreservesTopology() {
     SwarmTemplate template = new SwarmTemplate("controller", List.of(
-        new Bee("genA", "generator", "img", Work.ofDefaults(null, "gen"),
+        new Bee("genA", "img", Work.ofDefaults(null, "gen"),
             List.of(new BeePort("out", "out")), Map.of(), Map.of("ratePerSec", 10)),
-        new Bee("modA", "moderator", "img2", Work.ofDefaults("gen", "mod"),
+        new Bee("modA", "img2", Work.ofDefaults("gen", "mod"),
             List.of(new BeePort("in", "in"), new BeePort("out", "out")), Map.of(), Map.of())
     ));
     Topology topology = new Topology(1, List.of(
@@ -100,7 +100,7 @@ class ScenarioPlanTest {
 
     assertThat(swarmPlan.topology()).isNotNull();
     assertThat(swarmPlan.topology().edges()).hasSize(1);
-    assertThat(swarmPlan.bees().getFirst().id()).isEqualTo("genA");
+    assertThat(swarmPlan.bees().getFirst().role()).isEqualTo("genA");
     assertThat(swarmPlan.bees().getFirst().config()).containsEntry("ratePerSec", 10);
   }
 }

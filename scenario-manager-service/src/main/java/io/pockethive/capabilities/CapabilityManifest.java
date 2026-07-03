@@ -33,6 +33,7 @@ public record CapabilityManifest(
             @JsonProperty("default") JsonNode defaultValue,
             Boolean required,
             Boolean allowBlank,
+            Boolean liveMutable,
             Number min,
             Number max,
             Boolean multiline,

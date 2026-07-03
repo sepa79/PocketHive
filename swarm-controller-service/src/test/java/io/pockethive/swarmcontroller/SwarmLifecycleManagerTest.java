@@ -13,7 +13,6 @@ import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
-import io.pockethive.controlplane.worker.WorkerRuntimeIdentity;
 import com.github.dockerjava.api.DockerClient;
 import io.pockethive.docker.DockerContainerClient;
 import io.pockethive.docker.compute.PocketHiveDockerLabels;
@@ -187,25 +186,17 @@ class SwarmLifecycleManagerTest {
   }
 
   @Test
-  void handlesMultipleBeesSharingRole() throws Exception {
+  void rejectsMultipleBeesSharingRole() {
     SwarmLifecycleManager manager = newManager();
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
         new Bee("gen", "img1", Work.ofDefaults(null, null), null),
         new Bee("gen", "img2", Work.ofDefaults(null, null), null)));
-    when(docker.createAndStartContainer(eq("img1"), anyMap(), anyString(), any(), anyMap())).thenReturn("c1");
-    when(docker.createAndStartContainer(eq("img2"), anyMap(), anyString(), any(), anyMap())).thenReturn("c2");
 
-    manager.start(mapper.writeValueAsString(plan));
-    manager.updateHeartbeat("gen", "a");
-    manager.markReady("gen", "a");
+    assertThatThrownBy(() -> manager.start(mapper.writeValueAsString(plan)))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("duplicate runtime worker role: gen");
 
-    reset(docker);
-    manager.stop();
-    verifyNoInteractions(docker);
-
-    manager.remove();
-    verify(docker).stopAndRemoveContainer("c1");
-    verify(docker).stopAndRemoveContainer("c2");
+    verify(docker, never()).createAndStartContainer(anyString(), anyMap(), anyString(), any(), anyMap());
   }
 
   @Test
@@ -798,11 +789,11 @@ class SwarmLifecycleManagerTest {
   }
 
   @Test
-  void startAssignsDistinctRuntimeBeeIdsForWorkersWithSameRole() throws Exception {
+  void startAssignsDistinctRuntimeInstancesForWorkersWithDistinctRolesWithoutBeeIdEnv() throws Exception {
     SwarmLifecycleManager manager = newManager();
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
-        new Bee("generator", "img-alpha", Work.ofDefaults(null, "gen-alpha"), Map.of()),
-        new Bee("generator", "img-beta", Work.ofDefaults(null, "gen-beta"), Map.of())
+        new Bee("generator-alpha", "img-alpha", Work.ofDefaults(null, "gen-alpha"), Map.of()),
+        new Bee("generator-beta", "img-beta", Work.ofDefaults(null, "gen-beta"), Map.of())
     ));
     when(docker.createAndStartContainer(anyString(), anyMap(), anyString(), any(), anyMap()))
         .thenReturn("c-alpha", "c-beta");
@@ -811,16 +802,16 @@ class SwarmLifecycleManagerTest {
 
     @SuppressWarnings("unchecked")
     ArgumentCaptor<Map<String, String>> envCaptor = ArgumentCaptor.forClass(Map.class);
+    ArgumentCaptor<String> instanceCaptor = ArgumentCaptor.forClass(String.class);
     verify(docker, times(2))
-        .createAndStartContainer(anyString(), envCaptor.capture(), anyString(), any(), anyMap());
-    List<String> beeIds = envCaptor.getAllValues().stream()
-        .map(env -> env.get(WorkerRuntimeIdentity.BEE_ID_ENV))
-        .toList();
+        .createAndStartContainer(instanceCaptor.capture(), envCaptor.capture(), anyString(), any(), anyMap());
 
-    assertThat(beeIds)
-        .allSatisfy(beeId -> assertThat(beeId).isNotBlank())
+    assertThat(instanceCaptor.getAllValues())
+        .allSatisfy(instance -> assertThat(instance).isNotBlank())
         .doesNotHaveDuplicates()
         .doesNotContain("generator");
+    assertThat(envCaptor.getAllValues())
+        .allSatisfy(env -> assertThat(env).doesNotContainKey("POCKETHIVE_BEE_ID"));
   }
 
   private Properties queueProps(long depth) {

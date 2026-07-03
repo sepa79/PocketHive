@@ -176,13 +176,13 @@ Use existing SSOT docs and schemas, do not handcraft parallel parsers:
 
 Live config editing is a must-have in UI v2. The first supported surface is:
 
-- `Hive -> /hive/:swarmId -> Scenario tab -> selected bee / runtime target`.
-- The selected bee is Scenario Manager authoring context only. Until a canonical
-  authoring-to-runtime bridge exists, the live mutation target must be selected
-  explicitly from the runtime workers reported by `status-full`.
+- `Hive -> /hive/:swarmId -> Scenario tab -> selected bee`.
+- The selected bee is Scenario Manager authoring context. Its `role` is the
+  unique scenario node key and is used to resolve exactly one runtime worker
+  from `status-full`.
 - The runtime target comes from Orchestrator's cached swarm `status-full` aggregate:
-  `data.context.workers[]`, matched by SC-owned runtime
-  `data.context.workers[].beeId`.
+  `data.context.workers[]`, matched by exact `role`, then addressed by
+  `role + data.context.workers[].instance`.
 - The field catalog comes from Scenario Manager capability manifests, matched to the
   selected runtime image.
 - The mutation path is only Orchestrator:
@@ -193,19 +193,21 @@ Rules:
 
 - Do not edit scenario YAML as a substitute for live runtime config.
 - Do not send config updates through RabbitMQ directly from the browser.
-- Do not match a selected bee to runtime by `role`, array order, label, image,
-  queue name, topology position, or authoring-only id. If there is no SC-owned
-  `data.context.workers[].beeId` for the runtime target, show a missing-runtime
-  state and disable live mutation for that item.
-- Do not auto-select a runtime target by array order. A live edit target is
-  valid only after the UI holds an explicit `data.context.workers[].beeId`
-  selected from the runtime worker list.
+- Match a selected scenario bee to runtime only by exact unique `role`.
+- Do not match by array order, label, image, queue name, topology position, or
+  removed authoring-only ids.
+- If there is no runtime worker for the selected role, or more than one runtime
+  worker reports that role, show an explicit invalid-runtime state and disable
+  live mutation for that item.
 - Do not infer a runtime current value from scenario defaults. The current
   value source is the worker `status-full.data.config` carried by the
   swarm-controller aggregate at `data.context.workers[].config`. If it is not
   available in the UI state, show that explicitly and build a patch only from
   fields the user selects/changes.
 - The form must use capability `config[]` entries as the only field catalog.
+- Runtime live config forms must render only capability entries marked
+  `liveMutable: true`; entries marked `liveMutable: false` remain scenario
+  authoring/startup config and must not be offered as live patch controls.
 - A matched capability manifest must produce a visible `Edit config` action in
   the selected worker panel. Capability summary text such as field counts is
   secondary and must not be the only visible config surface.

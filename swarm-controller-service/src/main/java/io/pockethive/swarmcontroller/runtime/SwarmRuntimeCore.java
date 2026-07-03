@@ -9,7 +9,6 @@ import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import io.pockethive.controlplane.messaging.EventMessage;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
-import io.pockethive.controlplane.worker.WorkerRuntimeIdentity;
 import io.pockethive.docker.DockerContainerClient;
 import io.pockethive.manager.ports.Clock;
 import io.pockethive.manager.ports.ComputeAdapter;
@@ -59,7 +58,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -79,7 +77,6 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
 
   private static final Logger log = LoggerFactory.getLogger(SwarmLifecycleManager.class);
   private static final String SCENARIOS_RUNTIME_DESTINATION = "/app/scenarios-runtime";
-  private static final String RUNTIME_BEE_ID_PREFIX = "bee-";
 
   private final AmqpAdmin amqp;
   private final ObjectMapper mapper;
@@ -328,7 +325,6 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
       Set<String> roles = new LinkedHashSet<>();
       for (Bee bee : runnableBees) {
         String beeName = BeeNameGenerator.generate(bee.role(), swarmId);
-        String runtimeBeeId = newRuntimeBeeId();
         roles.add(bee.role());
         Map<String, String> env = new LinkedHashMap<>(
             ControlPlaneContainerEnvironmentFactory.workerEnvironment(beeName, bee.role(), workerSettings, rabbitProperties));
@@ -354,7 +350,6 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
         if (bee.env() != null) {
           env.putAll(bee.env());
         }
-        env.put(WorkerRuntimeIdentity.BEE_ID_ENV, runtimeBeeId);
         Map<String, Object> effectiveConfig = enrichConfigWithSut(bee.config(), sutEnv);
         List<String> volumes = resolveVolumes(effectiveConfig);
         if (hasText(scenariosRuntimeRootSource)) {
@@ -369,7 +364,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
             bee.image(),
             Map.copyOf(env),
             volumes));
-        runtimeState.registerWorker(runtimeBeeId, bee.role(), beeName, beeName);
+        runtimeState.registerWorker(bee.role(), beeName, beeName);
         if (effectiveConfig != null && !effectiveConfig.isEmpty()) {
           configFanout.registerBootstrapConfig(beeName, bee.role(), effectiveConfig);
         }
@@ -598,27 +593,22 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
     }
 
     List<Bee> bees = plan.bees() == null ? List.of() : plan.bees();
-    Map<String, Bee> beesById = new HashMap<>();
-    for (Bee bee : bees) {
-      if (bee != null && hasText(bee.id())) {
-        beesById.put(bee.id(), bee);
-      }
-    }
-    Map<String, String> instanceByBeeId = mapInstancesByBeeId(bees, runtimeState);
+    Map<String, Bee> beesByRole = beesByRole(bees);
+    Map<String, String> instanceByRole = mapInstancesByRole(beesByRole.keySet(), runtimeState);
 
     for (TopologyEdge edge : topologyPlan.edges()) {
       if (edge == null) {
         continue;
       }
-      Bee fromBee = beesById.get(edge.from().beeId());
-      Bee toBee = beesById.get(edge.to().beeId());
+      Bee fromBee = beesByRole.get(edge.from().role());
+      Bee toBee = beesByRole.get(edge.to().role());
       if (fromBee == null || toBee == null) {
         continue;
       }
       Map<String, Object> edgePayload = new LinkedHashMap<>();
       edgePayload.put("edgeId", edge.id());
-      edgePayload.put("from", bindingEndpointPayload(edge.from(), fromBee, instanceByBeeId, true));
-      edgePayload.put("to", bindingEndpointPayload(edge.to(), toBee, instanceByBeeId, false));
+      edgePayload.put("from", bindingEndpointPayload(edge.from(), fromBee, instanceByRole, true));
+      edgePayload.put("to", bindingEndpointPayload(edge.to(), toBee, instanceByRole, false));
       TopologySelector selector = edge.selector();
       if (selector != null) {
         Map<String, Object> selectorPayload = new LinkedHashMap<>();
@@ -648,12 +638,6 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
   @Override
   public TrafficPolicy trafficPolicy() {
     return trafficPolicy;
-  }
-
-  @Override
-  public Optional<String> runtimeBeeIdFor(String role, String instance) {
-    SwarmRuntimeState state = runtimeState;
-    return state != null ? state.beeIdFor(role, instance) : Optional.empty();
   }
 
   @Override
@@ -744,42 +728,59 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
 	    return Map.of("templateId", templateId, "runId", runId);
 	  }
 
-  private Map<String, String> mapInstancesByBeeId(List<Bee> bees, SwarmRuntimeState state) {
-    if (bees == null || bees.isEmpty() || state == null) {
+  private Map<String, Bee> beesByRole(List<Bee> bees) {
+    if (bees == null || bees.isEmpty()) {
+      return Map.of();
+    }
+    Map<String, Bee> mapping = new LinkedHashMap<>();
+    for (Bee bee : bees) {
+      if (bee == null || !hasText(bee.role())) {
+        continue;
+      }
+      Bee previous = mapping.putIfAbsent(bee.role(), bee);
+      if (previous != null) {
+        throw new IllegalStateException("duplicate scenario bee role: " + bee.role());
+      }
+    }
+    return mapping.isEmpty() ? Map.of() : Map.copyOf(mapping);
+  }
+
+  private Map<String, String> mapInstancesByRole(Set<String> roles, SwarmRuntimeState state) {
+    if (roles == null || roles.isEmpty() || state == null) {
       return Map.of();
     }
     Map<String, List<String>> instancesByRole = state.instancesByRole();
     if (instancesByRole.isEmpty()) {
       return Map.of();
     }
-    Map<String, Integer> roleOffsets = new HashMap<>();
     Map<String, String> mapping = new HashMap<>();
-    for (Bee bee : bees) {
-      if (bee == null) {
+    for (String role : roles) {
+      if (!hasText(role)) {
         continue;
       }
-      String role = bee.role();
-      int index = roleOffsets.getOrDefault(role, 0);
       List<String> instances = instancesByRole.get(role);
-      if (instances != null && index < instances.size() && hasText(bee.id())) {
-        mapping.put(bee.id(), instances.get(index));
+      if (instances == null || instances.isEmpty()) {
+        continue;
       }
-      roleOffsets.put(role, index + 1);
+      if (instances.size() > 1) {
+        throw new IllegalStateException("duplicate runtime worker role: " + role);
+      }
+      mapping.put(role, instances.getFirst());
     }
     return mapping.isEmpty() ? Map.of() : Map.copyOf(mapping);
   }
 
   private Map<String, Object> bindingEndpointPayload(TopologyEndpoint endpoint,
                                                      Bee bee,
-                                                     Map<String, String> instanceByBeeId,
+                                                     Map<String, String> instanceByRole,
                                                      boolean isFrom) {
     Map<String, Object> payload = new LinkedHashMap<>();
     if (endpoint == null || bee == null) {
       return payload;
     }
     maybePut(payload, "role", bee.role());
-    if (instanceByBeeId != null && hasText(endpoint.beeId())) {
-      maybePut(payload, "instance", instanceByBeeId.get(endpoint.beeId()));
+    if (instanceByRole != null && hasText(endpoint.role())) {
+      maybePut(payload, "instance", instanceByRole.get(endpoint.role()));
     }
     maybePut(payload, "port", endpoint.port());
     Work work = bee.work();
@@ -1049,10 +1050,6 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
       }
     }
     return result.isEmpty() ? List.of() : List.copyOf(result);
-  }
-
-  private static String newRuntimeBeeId() {
-    return RUNTIME_BEE_ID_PREFIX + UUID.randomUUID();
   }
 
   private static Map<String, Object> enrichConfigWithSut(Map<String, Object> config,

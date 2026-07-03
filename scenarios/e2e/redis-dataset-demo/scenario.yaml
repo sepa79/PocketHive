@@ -6,7 +6,6 @@ template:
   image: swarm-controller:latest
   bees:
     - role: generator
-      id: generator
       image: generator:latest
       config:
         outputs:
@@ -43,8 +42,7 @@ template:
             "nonce":"{{ eval('#uuid()') }}"}
       work: {}
 
-    - role: dataProviderA
-      id: dataprovidera
+    - role: dataprovidera
       image: generator:latest
       config:
         inputs:
@@ -69,8 +67,7 @@ template:
           out: http-build
       ports:
         - { id: out, direction: out }
-    - role: dataProviderB
-      id: dataproviderb
+    - role: dataproviderb
       image: generator:latest
       config:
         inputs:
@@ -96,7 +93,6 @@ template:
       ports:
         - { id: out, direction: out }
     - role: request-builder
-      id: request-builder
       image: request-builder:latest
       config:
         templateRoot: /app/scenario/templates/http
@@ -111,7 +107,6 @@ template:
         - { id: in, direction: in }
         - { id: out, direction: out }
     - role: processor
-      id: processor
       image: processor:latest
       config:
         baseUrl: "{{ sut.endpoints['default'].baseUrl }}"
@@ -130,7 +125,6 @@ template:
         - { id: in, direction: in }
         - { id: out, direction: out }
     - role: postprocessor
-      id: postprocessor
       image: postprocessor:latest
       config:
         forwardToOutput: false
@@ -146,14 +140,14 @@ topology:
   version: 1
   edges:
     - id: e1
-      from: { beeId: dataprovidera, port: out }
-      to: { beeId: request-builder, port: in }
+      from: { port: out, role: dataprovidera }
+      to: { port: in, role: request-builder }
     - id: e2
-      from: { beeId: dataproviderb, port: out }
-      to: { beeId: request-builder, port: in }
+      from: { port: out, role: dataproviderb }
+      to: { port: in, role: request-builder }
     - id: e3
-      from: { beeId: request-builder, port: out }
-      to: { beeId: processor, port: in }
+      from: { port: out, role: request-builder }
+      to: { port: in, role: processor }
     - id: e4
-      from: { beeId: processor, port: out }
-      to: { beeId: postprocessor, port: in }
+      from: { port: out, role: processor }
+      to: { port: in, role: postprocessor }

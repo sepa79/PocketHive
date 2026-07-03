@@ -101,7 +101,7 @@ public class SwarmController {
     @Value("${POCKETHIVE_SCENARIOS_RUNTIME_ROOT:}")
     private String scenariosRuntimeRootSource;
     private static final String CREATE_LOCK_KEY = "__create-lock__";
-    private static final Set<String> AUTH_SUT_CONTEXT_ROLES =
+    private static final Set<String> AUTH_SUT_CONTEXT_IMAGE_NAMES =
         Set.of(BeeRoles.REQUEST_BUILDER, BeeRoles.HTTP_SEQUENCE, BeeRoles.PROCESSOR);
     private static final Pattern BASE_URL_TEMPLATE =
         Pattern.compile("\\{\\{\\s*sut\\.endpoints\\['([^']+)'\\]\\.baseUrl\\s*}}(.*)");
@@ -309,14 +309,13 @@ public class SwarmController {
                                 config = addScenarioVars(config, resolvedVars);
                                 config = applyScenarioVarTemplates(config, resolvedVars);
                             }
-                            if (finalSutEnvironment != null && AUTH_SUT_CONTEXT_ROLES.contains(bee.role())) {
+                            if (finalSutEnvironment != null && isAuthSutContextImage(resolvedImage)) {
                                 config = addAuthProfilePrivateContext(config, finalSutEnvironment);
                             }
                             if (finalSutEnvironment != null && config != null && !config.isEmpty()) {
                                 config = applySutConfigTemplates(config, finalSutEnvironment);
                             }
                             return new io.pockethive.swarm.model.Bee(
-                                bee.id(),
                                 bee.role(),
                                 resolvedImage,
                                 bee.work(),
@@ -1425,6 +1424,25 @@ public class SwarmController {
         }
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private static boolean isAuthSutContextImage(String image) {
+        String repositoryName = imageRepositoryName(image);
+        return repositoryName != null && AUTH_SUT_CONTEXT_IMAGE_NAMES.contains(repositoryName);
+    }
+
+    private static String imageRepositoryName(String image) {
+        String normalized = normalize(image);
+        if (normalized == null) {
+            return null;
+        }
+        int digestIndex = normalized.indexOf('@');
+        String withoutDigest = digestIndex >= 0 ? normalized.substring(0, digestIndex) : normalized;
+        int slashIndex = withoutDigest.lastIndexOf('/');
+        String lastSegment = slashIndex >= 0 ? withoutDigest.substring(slashIndex + 1) : withoutDigest;
+        int tagIndex = lastSegment.lastIndexOf(':');
+        String repositoryName = tagIndex >= 0 ? lastSegment.substring(0, tagIndex) : lastSegment;
+        return normalize(repositoryName);
     }
 
     /**
