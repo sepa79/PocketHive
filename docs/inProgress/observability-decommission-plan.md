@@ -1,4 +1,4 @@
-Status: in progress / design agreed for Phase 1
+Status: Phase 1 committed; Phase 2 Prometheus removal preparation in progress
 
 # Observability Decommission Plan
 
@@ -179,37 +179,133 @@ Authoritative references:
 - No active docs describe Loki or Log Aggregator as current runtime components.
 - No service depends on `log-aggregator` for startup.
 
-## Phase 2 - ClickHouse Metrics Replacement For Prometheus
+## Phase 2 - Remove Prometheus And Pushgateway
 
-This is a later migration and should not block Phase 1.
+Phase 2 replaces the active Prometheus/Pushgateway metrics path with an
+explicit PocketHive metrics path backed by ClickHouse. The runtime removal
+should happen only after the product-owned ClickHouse metrics writer and query
+surfaces are in place.
 
-### Direction
+### Decisions
 
-- Define an explicit PocketHive metrics sink backed by ClickHouse.
+- Product metrics store: ClickHouse.
+- Metrics retention: 30 days by default, enforced with ClickHouse table TTL.
 - Do not import Prometheus scrapes into ClickHouse as a compatibility shortcut.
+- Do not keep a silent Prometheus fallback. Runtime targets must declare one
+  explicit metrics adapter and its settings.
+- Default runtime adapter after this phase: ClickHouse.
+- Tests and local tools that intentionally do not write metrics must declare an
+  explicit disabled adapter/state. Do not rely on missing properties.
+- Dual-write Prometheus + ClickHouse is not the default. It requires explicit
+  human approval for a named release window.
+
+### Replacement Shape
+
+- Add one product-owned metrics contract in a common module. Avoid duplicate
+  DTOs or ad hoc JSON shapes for service metrics.
+- Use an explicit adapter enum for metrics wiring, for example `CLICKHOUSE` and
+  an explicit disabled/test state. Do not branch on raw strings in service code.
+- Reuse the existing ClickHouse sink ownership where practical:
+  `common/sink-clickhouse` already owns shared ClickHouse sink settings, and
+  `postprocessor-service` already uses bounded buffering and explicit failure
+  for ClickHouse writes.
+- Add a ClickHouse init schema for aggregate service metrics, tentatively
+  `ph_metrics_samples`, with `TTL eventTime + INTERVAL 30 DAY`.
 - Keep metric semantics explicit:
-  - counters: cumulative sample or step delta, chosen once and documented
-  - timers: count/sum/max or pre-aggregated buckets, chosen once and documented
+  - counters: choose cumulative samples or step deltas once and document it
+  - timers: choose count/sum/max or pre-aggregated buckets once and document it
   - gauges: current value snapshots
-- Include required dimensions such as `swarmId`, `runId`, `role`, `instance`,
-  `metricName`, `metricKind`, `timestamp`, and bounded labels.
-- Update Grafana dashboards to query ClickHouse directly.
-- Replace MCP/agent metric evidence with a product-owned metrics query API, not
+- Required dimensions should include `eventTime`, `swarmId`, `runId` when
+  known, `role`, `instance`, `metricName`, `metricKind`, and bounded labels.
+- High-cardinality labels must be rejected or normalized at the write boundary.
+- Backpressure policy must be explicit: bounded queue, deterministic drop/fail
+  behavior, and visible counters or logs for rejected samples.
+
+### Active References To Replace Or Remove
+
+- `docker-compose.yml`: remove `x-metrics-env`, `prometheus`, `pushgateway`,
+  `prometheus-data`, Grafana `depends_on: prometheus`, Prometheus/Pushgateway
+  proxy exclusions, Pushgateway env vars, and Prometheus actuator exposure when
+  no longer needed.
+- `deploy/hiveforge/components/stack/ansible/templates/stack-compose.yml.j2`:
+  same runtime removal for HiveForge stacks.
+- `deploy/hiveforge/components/stack/ansible/deploy.yml`,
+  `deploy/hiveforge/components/stack/ansible/update.yml`, and
+  `deploy/hiveforge/components/stack/ansible/swarm-stack.yml`: remove
+  `POCKETHIVE_PROMETHEUS_ROOT` and Prometheus state paths.
+- `deploy/hiveforge/runtime/nginx.swarm.conf`: remove the `/prometheus/`
+  reverse proxy route.
+- `prometheus/prometheus.yml`: delete after Prometheus is removed from runtime.
+- `hiveforge.yaml`: remove the `runtime-prometheus` managed artifact.
+- `build-hive.sh`: remove `prometheus` and `pushgateway` from infra services.
+- `DEPLOYMENT_PACKAGE.md`, `package-deployment.sh`, and
+  `package-deployment.bat`: remove Prometheus config, volume, and image/package
+  references.
+- `grafana/provisioning/datasources/datasource.yml`: remove the Prometheus
+  datasource after ClickHouse panels cover the active metrics views.
+- `grafana/dashboards/pipeline-observability.json` and
+  `grafana/dashboards/pipeline-observability-detailed.json`: port or replace
+  panels with ClickHouse queries, then delete Prometheus dashboards.
+- `observability/pom.xml` and
+  `observability/src/main/java/io/pockethive/observability/metrics/PrometheusPushGatewayAutoConfiguration.java`:
+  remove Prometheus registry and Pushgateway auto-configuration.
+- `common/worker-sdk/src/main/java/io/pockethive/worker/sdk/metrics/PrometheusPushGatewayProperties.java`:
+  replace with the shared product metrics config or remove if the config moves
+  to a narrower module.
+- `common/control-plane-spring/src/main/java/io/pockethive/controlplane/spring/ControlPlaneContainerEnvironmentFactory.java`:
+  replace Pushgateway env propagation with explicit ClickHouse metrics
+  settings propagation, or delete propagation if services get settings through
+  the existing service environment.
+- `orchestrator-service` and `swarm-controller-service`: remove
+  Pushgateway-specific properties, tests, and worker launch settings.
+- Worker service `application.yml` files: remove
+  `management.prometheus.metrics.export.pushgateway.*`; add explicit
+  ClickHouse metrics sink settings only where the service emits product
+  metrics.
+- `ui-v2`: remove `/prometheus/` navigation/icon only after no product workflow
+  needs direct Prometheus access.
+- `tools/pockethive-mcp`: replace any `debug.prometheus` evidence path with a
+  product-owned metrics query tool/API.
+
+### Work Sequence
+
+- [ ] Write the ClickHouse metrics schema and contract first. Include table
+  name, TTL, primary order, label constraints, and example rows for counters,
+  timers, and gauges.
+- [ ] Add the shared metrics contract and adapter settings. Settings must be
+  required for active runtime targets.
+- [ ] Implement the ClickHouse metrics writer using explicit batching,
+  timeouts, bounded buffering, and overload policy.
+- [ ] Wire Orchestrator, Swarm Controller, and workers to the ClickHouse metrics
+  adapter through the existing control-plane environment path.
+- [ ] Port Grafana pipeline and buffer-guard dashboards from Prometheus to
+  ClickHouse.
+- [ ] Replace MCP/agent Prometheus evidence with a product-owned metrics query
+  API/tool.
+- [ ] Update active docs before runtime removal: `docs/observability.md`,
+  `docs/USAGE.md`, `docs/HIVEFORGE.md`, `README.md`, and deployment package
+  docs.
+- [ ] Remove Prometheus and Pushgateway runtime services, volumes, nginx routes,
+  package artifacts, dependencies, properties, and tests.
+- [ ] Delete `prometheus/` after no active runtime or package path mounts it.
+
+### Phase 2 Acceptance Criteria
+
+- `docker compose config` contains no `prometheus`, `pushgateway`, or
+  Prometheus/Pushgateway environment variables.
+- HiveForge rendered compose and nginx config contain no Prometheus or
+  Pushgateway services/routes.
+- Grafana has no Prometheus datasource and no dashboard panel using
+  `"datasource": "Prometheus"`.
+- Active Maven modules no longer depend on Prometheus registry or Pushgateway
+  libraries.
+- Control-plane worker launch env no longer contains
+  `MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_*`.
+- Product metrics are queryable from ClickHouse with 30-day retention.
+- MCP/agent metric evidence uses a product-owned metrics query surface, not
   direct Prometheus access.
-
-### Candidate work items
-
-- [ ] Write a ClickHouse metrics schema plan.
-- [ ] Add a shared metrics sink port in the appropriate common module.
-- [ ] Implement a ClickHouse metrics writer with explicit batching and overload
-  policy.
-- [ ] Dual-write Prometheus + ClickHouse for one release window if explicitly
-  approved.
-- [ ] Port Grafana pipeline/guard dashboards from Prometheus to ClickHouse.
-- [ ] Replace `debug.prometheus` with `debug.metrics` or a similarly named
-  product-owned metric evidence tool.
-- [ ] Remove Prometheus and Pushgateway only after dashboards and evidence tools
-  have moved.
+- No active docs describe Prometheus or Pushgateway as current runtime
+  components.
 
 ## Phase 3 - Failure Log Snapshots Into Journal
 
