@@ -38,9 +38,7 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
-@SpringBootTest(properties = {
-    "rabbitmq.logging.enabled=false"
-})
+@SpringBootTest
 @AutoConfigureMockMvc
 class ScenarioManagerAuthFilterTest {
     @Autowired

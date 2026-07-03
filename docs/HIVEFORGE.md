@@ -15,7 +15,7 @@ runtime environment values.
 - `swarm-reduced` - deploys the portable reduced Docker Swarm runtime from
   HiveForge-managed compose/config artifacts and prebuilt images.
 - `swarm-full` - deploys the Docker Swarm runtime with dedicated service-owned
-  roots for RabbitMQ, Postgres, ClickHouse, Prometheus, Loki, and Redis. Grafana
+  roots for RabbitMQ, Postgres, ClickHouse, Prometheus, and Redis. Grafana
   and the remaining runtime config/state stay under the shared HiveForge project
   root.
 
@@ -169,11 +169,10 @@ Agent sequence:
        POCKETHIVE_POSTGRES_ROOT: /data/postgres
        POCKETHIVE_CLICKHOUSE_ROOT: /data/clickhouse
        POCKETHIVE_PROMETHEUS_ROOT: /data/prometheus
-       POCKETHIVE_LOKI_ROOT: /data/loki
        POCKETHIVE_REDIS_ROOT: /data/redis
        HTTP_PROXY: http://proxy.example:3128
        HTTPS_PROXY: http://proxy.example:3128
-       NO_PROXY: localhost,127.0.0.1,::1,prometheus,loki,clickhouse,rabbitmq,postgres,redis,pushgateway,scenario-manager,orchestrator,auth-service,network-proxy-manager,ui,ui-v2
+       NO_PROXY: localhost,127.0.0.1,::1,prometheus,clickhouse,rabbitmq,postgres,redis,pushgateway,scenario-manager,orchestrator,auth-service,network-proxy-manager,ui,ui-v2
    ```
 
    Set `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` only when the target
@@ -268,7 +267,6 @@ POCKETHIVE_RABBITMQ_ROOT=/data/rabbitmq
 POCKETHIVE_POSTGRES_ROOT=/data/postgres
 POCKETHIVE_CLICKHOUSE_ROOT=/data/clickhouse
 POCKETHIVE_PROMETHEUS_ROOT=/data/prometheus
-POCKETHIVE_LOKI_ROOT=/data/loki
 POCKETHIVE_REDIS_ROOT=/data/redis
 ```
 
@@ -280,7 +278,6 @@ node.labels.pockethive.rabbitmq == true
 node.labels.pockethive.postgres == true
 node.labels.pockethive.clickhouse == true
 node.labels.pockethive.prometheus == true
-node.labels.pockethive.loki == true
 node.labels.pockethive.redis == true
 ```
 

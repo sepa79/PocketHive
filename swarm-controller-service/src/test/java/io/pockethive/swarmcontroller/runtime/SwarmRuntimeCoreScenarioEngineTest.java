@@ -14,7 +14,6 @@ import io.pockethive.swarmcontroller.config.SwarmControllerProperties.Docker;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties.Manager;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties.Metrics;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties.Pushgateway;
-import io.pockethive.swarmcontroller.config.SwarmControllerProperties.Rabbit;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties.SwarmController;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties.Traffic;
 import java.lang.reflect.Field;
@@ -41,7 +40,6 @@ class SwarmRuntimeCoreScenarioEngineTest {
         new Manager("swarm-controller"),
         new SwarmController(
             new Traffic("ph.test.hive", "ph.test"),
-            new Rabbit("ph.logs", new SwarmControllerProperties.Logging(false)),
             new Metrics(new Pushgateway(
                 false,
                 "http://pushgateway",

@@ -27,7 +27,6 @@ class SwarmControllerPropertiesBindingTest {
             "pockethive.control-plane.manager.role=swarm-controller",
             "pockethive.control-plane.swarm-controller.traffic.queue-prefix=ph.swarm-a",
             "pockethive.control-plane.swarm-controller.traffic.hive-exchange=ph.swarm-a.hive",
-            "pockethive.control-plane.swarm-controller.rabbit.logs-exchange=ph.logs",
             "pockethive.control-plane.swarm-controller.metrics.pushgateway.enabled=true",
             "pockethive.control-plane.swarm-controller.metrics.pushgateway.base-url=http://pushgateway:9091",
             "pockethive.control-plane.swarm-controller.metrics.pushgateway.push-rate=PT30S",
@@ -44,8 +43,6 @@ class SwarmControllerPropertiesBindingTest {
               assertThat(properties.getTraffic().queuePrefix()).isEqualTo("ph.swarm-a");
               assertThat(properties.hiveExchange()).isEqualTo("ph.swarm-a.hive");
               assertThat(properties.queueName("final")).isEqualTo("ph.swarm-a.final");
-              assertThat(properties.getRabbit().logsExchange()).isEqualTo("ph.logs");
-              assertThat(properties.getRabbit().logging().enabled()).isFalse();
               assertThat(properties.getMetrics().pushgateway().enabled()).isTrue();
               assertThat(properties.getMetrics().pushgateway().baseUrl())
                   .isEqualTo("http://pushgateway:9091");

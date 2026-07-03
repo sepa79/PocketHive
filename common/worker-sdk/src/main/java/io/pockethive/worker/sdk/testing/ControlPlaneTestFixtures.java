@@ -37,13 +37,6 @@ public final class ControlPlaneTestFixtures {
             null,
             true,
             null);
-        WorkerControlPlaneProperties.SwarmController.Rabbit.Logging logging =
-            new WorkerControlPlaneProperties.SwarmController.Rabbit.Logging(false);
-        WorkerControlPlaneProperties.SwarmController.Rabbit rabbit =
-            new WorkerControlPlaneProperties.SwarmController.Rabbit("ph.logs", logging);
-        WorkerControlPlaneProperties.SwarmController swarmController =
-            new WorkerControlPlaneProperties.SwarmController(rabbit);
-
         return new WorkerControlPlaneProperties(
             true,
             true,
@@ -51,8 +44,7 @@ public final class ControlPlaneTestFixtures {
             resolvedSwarm,
             resolvedInstance,
             "ph.control",
-            worker,
-            swarmController);
+            worker);
     }
 
     public static Map<String, String> workerQueues(String swarmId) {

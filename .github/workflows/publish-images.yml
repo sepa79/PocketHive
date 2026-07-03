@@ -106,9 +106,6 @@ jobs:
     strategy:
       matrix:
         service:
-          - name: log-aggregator
-            dockerfile: log-aggregator-service/Dockerfile.runtime
-            target: ""
           - name: auth-service
             dockerfile: auth-service/Dockerfile.runtime
             target: ""
@@ -177,7 +174,6 @@ jobs:
           rm -rf .local-jars
           mkdir -p .local-jars
           for module in \
-            log-aggregator-service \
             auth-service \
             scenario-manager-service \
             network-proxy-manager-service \

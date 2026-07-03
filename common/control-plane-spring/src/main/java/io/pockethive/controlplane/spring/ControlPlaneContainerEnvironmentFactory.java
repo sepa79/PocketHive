@@ -35,9 +35,6 @@ public final class ControlPlaneContainerEnvironmentFactory {
             requireSetting(controlPlaneProperties.getExchange(), "pockethive.control-plane.exchange"));
         env.put("POCKETHIVE_CONTROL_PLANE_SWARM_ID", resolvedSwarmId);
         populateRabbitEnv(env, rabbitProperties);
-        env.put(
-            "POCKETHIVE_LOGS_EXCHANGE",
-            requireSetting(settings.logsExchange(), "pockethive.control-plane.orchestrator.rabbit.logs-exchange"));
         env.put("POCKETHIVE_CONTROL_PLANE_WORKER_ENABLED",
             Boolean.toString(controlPlaneProperties.getWorker().isEnabled()));
         env.put("POCKETHIVE_CONTROL_PLANE_MANAGER_ROLE", requireSetting(managerRole, "pockethive.control-plane.manager.role"));
@@ -53,12 +50,6 @@ public final class ControlPlaneContainerEnvironmentFactory {
             ? settings.trafficHiveExchange()
             : trafficPrefix + ".hive";
         env.put("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_HIVE_EXCHANGE", hiveExchange);
-        env.put(
-            "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE",
-            requireSetting(settings.logsExchange(), "pockethive.control-plane.orchestrator.rabbit.logs-exchange"));
-        env.put(
-            "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED",
-            Boolean.toString(settings.loggingEnabled()));
         applyPushgatewayControlPlaneSettings(env, settings.metrics());
         env.put(
             "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_DOCKER_SOCKET_PATH",
@@ -82,17 +73,8 @@ public final class ControlPlaneContainerEnvironmentFactory {
             requireSetting(settings.controlExchange(), "pockethive.control-plane.exchange"));
         populateRabbitEnv(env, rabbitProperties);
         env.put(
-            "POCKETHIVE_LOGS_EXCHANGE",
-            requireSetting(settings.logsExchange(), "pockethive.control-plane.swarm-controller.rabbit.logs-exchange"));
-        env.put(
-            "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE",
-            requireSetting(settings.logsExchange(), "pockethive.control-plane.swarm-controller.rabbit.logs-exchange"));
-        env.put(
             "POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX",
             requireSetting(settings.controlQueuePrefix(), "pockethive.control-plane.control-queue-prefix"));
-        env.put(
-            "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED",
-            Boolean.toString(settings.loggingEnabled()));
         applyPushgatewayExport(env, settings.metrics());
         return env;
     }
@@ -183,15 +165,12 @@ public final class ControlPlaneContainerEnvironmentFactory {
         return value;
     }
 
-    public record ControllerSettings(String logsExchange,
-                                     boolean loggingEnabled,
-                                     PushgatewaySettings metrics,
+    public record ControllerSettings(PushgatewaySettings metrics,
                                      String dockerSocketPath,
                                      String trafficQueuePrefix,
                                      String trafficHiveExchange) {
         public ControllerSettings {
             Objects.requireNonNull(metrics, "metrics");
-            requireArgument(logsExchange, "logsExchange");
             requireArgument(dockerSocketPath, "dockerSocketPath");
         }
 
@@ -208,8 +187,6 @@ public final class ControlPlaneContainerEnvironmentFactory {
                                  String controlExchange,
                                  String controlQueuePrefix,
                                  String hiveExchange,
-                                 String logsExchange,
-                                 boolean loggingEnabled,
                                  PushgatewaySettings metrics) {
         public WorkerSettings {
             Objects.requireNonNull(metrics, "metrics");
@@ -217,7 +194,6 @@ public final class ControlPlaneContainerEnvironmentFactory {
             requireArgument(controlExchange, "controlExchange");
             requireArgument(controlQueuePrefix, "controlQueuePrefix");
             requireArgument(hiveExchange, "hiveExchange");
-            requireArgument(logsExchange, "logsExchange");
         }
     }
 

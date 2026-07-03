@@ -72,7 +72,7 @@ control-plane publisher. The starter also exposes the Stage 1 `WorkerRuntime` an
 
 `WorkerControlPlaneAutoConfiguration` binds a dedicated `WorkerControlPlaneProperties` bean. It fails fast when
 any worker-facing control-plane keys are missing so misconfigurations surface at startup instead of being masked
-by defaults. Populate the swarm identity, queue names, and logging exchange explicitly:
+by defaults. Populate the swarm identity and queue names explicitly:
 
 ```yaml
 pockethive:
@@ -81,11 +81,6 @@ pockethive:
     swarm-id: swarm-1
     instance-id: processor-1
     control-queue-prefix: ph.control
-    swarm-controller:
-      rabbit:
-        logs-exchange: ph.logs
-        logging:
-          enabled: true
     worker:
       role: ${POCKETHIVE_CONTROL_PLANE_WORKER_ROLE}
       skip-self-signals: false
@@ -125,7 +120,6 @@ configuration to abort fast:
 | RabbitMQ connectivity | `SPRING_RABBITMQ_HOST`, `SPRING_RABBITMQ_PORT`, `SPRING_RABBITMQ_USERNAME`, `SPRING_RABBITMQ_PASSWORD`, `SPRING_RABBITMQ_VIRTUAL_HOST` |
 | Control-plane identity & routing | `POCKETHIVE_CONTROL_PLANE_EXCHANGE`, `POCKETHIVE_CONTROL_PLANE_SWARM_ID`, `POCKETHIVE_CONTROL_PLANE_INSTANCE_ID`, `POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX`, `POCKETHIVE_CONTROL_PLANE_WORKER_ROLE` |
 | Work IO configuration | `POCKETHIVE_INPUT_RABBIT_QUEUE`, `POCKETHIVE_OUTPUT_RABBIT_EXCHANGE`, `POCKETHIVE_OUTPUT_RABBIT_ROUTING_KEY`* |
-| Logging contract | `POCKETHIVE_LOGS_EXCHANGE`, `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED`, `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE` |
 
 \*Workers without Rabbit inputs can omit `POCKETHIVE_INPUT_RABBIT_QUEUE`. Generator and postprocessor roles that do not
 publish Rabbit messages can omit `POCKETHIVE_OUTPUT_RABBIT_ROUTING_KEY`. When present, the Swarm Controller derives these
@@ -152,9 +146,6 @@ services:
       POCKETHIVE_INPUT_RABBIT_QUEUE: ph.dev.mod
       POCKETHIVE_OUTPUT_RABBIT_EXCHANGE: ph.dev.hive
       POCKETHIVE_OUTPUT_RABBIT_ROUTING_KEY: ph.dev.gen
-      POCKETHIVE_LOGS_EXCHANGE: ph.logs
-      POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED: "true"
-      POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE: ph.logs
 ```
 
 

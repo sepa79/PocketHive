@@ -14,7 +14,6 @@ class DockerConfigurationTest {
   private static final String CONTROL_QUEUE_PREFIX_BASE = "ph.control";
   private static final String TRAFFIC_PREFIX = "ph." + SWARM_ID;
   private static final String HIVE_EXCHANGE = TRAFFIC_PREFIX + ".hive";
-  private static final String LOGS_EXCHANGE = "ph.logs";
   private static final SwarmControllerProperties.Metrics METRICS =
       new SwarmControllerProperties.Metrics(
           new SwarmControllerProperties.Pushgateway(
@@ -57,9 +56,6 @@ class DockerConfigurationTest {
             new SwarmControllerProperties.Traffic(
                 HIVE_EXCHANGE,
                 TRAFFIC_PREFIX),
-            new SwarmControllerProperties.Rabbit(
-                LOGS_EXCHANGE,
-                new SwarmControllerProperties.Logging(true)),
             METRICS,
             docker,
             new SwarmControllerProperties.Features(false)));

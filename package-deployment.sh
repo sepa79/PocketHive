@@ -26,10 +26,6 @@ cp .env.example "${DEPLOY_DIR}/.env.example"
 cp README.md "${DEPLOY_DIR}/"
 cp LICENSE "${DEPLOY_DIR}/"
 
-# Configuration files
-mkdir -p "${DEPLOY_DIR}/loki"
-cp loki/config.yml "${DEPLOY_DIR}/loki/"
-
 # RabbitMQ config (definitions, listeners, and plugins)
 mkdir -p "${DEPLOY_DIR}/rabbitmq"
 cp -r rabbitmq/* "${DEPLOY_DIR}/rabbitmq/" 2>/dev/null || true
@@ -109,7 +105,6 @@ Docker named volumes retain stateful data between restarts:
 - `rabbitmq-data` (RabbitMQ queues and configuration)
 - `prometheus-data` (Prometheus TSDB)
 - `grafana-data` (Grafana database and plugins)
-- `loki-data` (Loki indexes and chunks)
 - `redis-data` (Redis datasets)
 
 They are created automatically on the first `docker compose up`. Remove them explicitly
@@ -118,7 +113,6 @@ with `docker compose down -v` if you need a clean slate.
 ## What's Included
 
 - `docker-compose.yml` - Main deployment configuration
-- `loki/` - Log aggregation config
 - `prometheus/` - Metrics config
 - `grafana/` - Dashboards and datasources
 - `wiremock/` - Mock server stubs
@@ -163,7 +157,6 @@ docker compose restart grafana
 - 8081 - Redis Commander
 - 3333 - Grafana (direct, optional)
 - 8080 - WireMock
-- 1080 - Log Aggregator
 - 1081 - Scenario Manager
 
 ## Support

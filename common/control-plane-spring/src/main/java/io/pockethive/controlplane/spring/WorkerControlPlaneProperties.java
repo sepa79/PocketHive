@@ -26,7 +26,6 @@ public final class WorkerControlPlaneProperties {
     private final String instanceId;
     private final String controlQueuePrefix;
     private final Worker worker;
-    private final SwarmController swarmController;
     private final ControlPlane controlPlane;
 
     public WorkerControlPlaneProperties(Boolean enabled,
@@ -35,8 +34,7 @@ public final class WorkerControlPlaneProperties {
                                         String swarmId,
                                         String instanceId,
                                         String controlQueuePrefix,
-                                        @Valid Worker worker,
-                                        @Valid SwarmController swarmController) {
+                                        @Valid Worker worker) {
         this.enabled = enabled == null || enabled;
         this.declareTopology = declareTopology == null || declareTopology;
         this.exchange = requireNonBlank(exchange, "pockethive.control-plane.exchange");
@@ -45,7 +43,6 @@ public final class WorkerControlPlaneProperties {
         this.controlQueuePrefix = requireNonBlank(controlQueuePrefix,
             "pockethive.control-plane.control-queue-prefix");
         this.worker = Objects.requireNonNull(worker, "worker must not be null");
-        this.swarmController = Objects.requireNonNull(swarmController, "swarmController must not be null");
         this.controlPlane = ControlPlane.forWorker(this.swarmId, this.controlQueuePrefix,
             this.worker.getRole(), this.instanceId);
     }
@@ -76,10 +73,6 @@ public final class WorkerControlPlaneProperties {
 
     public Worker getWorker() {
         return worker;
-    }
-
-    public SwarmController getSwarmController() {
-        return swarmController;
     }
 
     public ControlPlane getControlPlane() {
@@ -246,53 +239,6 @@ public final class WorkerControlPlaneProperties {
                 return capacity;
             }
         }
-    }
-
-    @Validated
-    public static final class SwarmController {
-        private final Rabbit rabbit;
-
-        public SwarmController(@Valid Rabbit rabbit) {
-            this.rabbit = Objects.requireNonNull(rabbit, "swarmController.rabbit must not be null");
-        }
-
-        public Rabbit getRabbit() {
-            return rabbit;
-        }
-
-        @Validated
-        public static final class Rabbit {
-            private final String logsExchange;
-            private final Logging logging;
-
-            public Rabbit(String logsExchange, @Valid Logging logging) {
-                this.logsExchange = requireNonBlank(logsExchange,
-                    "pockethive.control-plane.swarm-controller.rabbit.logs-exchange");
-                this.logging = logging != null ? logging : new Logging(null);
-            }
-
-            public String getLogsExchange() {
-                return logsExchange;
-            }
-
-            public Logging getLogging() {
-                return logging;
-            }
-
-            @Validated
-            public static final class Logging {
-                private final boolean enabled;
-
-                public Logging(Boolean enabled) {
-                    this.enabled = Boolean.TRUE.equals(enabled);
-                }
-
-                public boolean isEnabled() {
-                    return enabled;
-                }
-            }
-        }
-
     }
 
     private static String requireNonBlank(String value, String property) {

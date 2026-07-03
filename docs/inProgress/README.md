@@ -8,6 +8,9 @@ index is a convenience for humans and tools.
 
 Notable in‑progress plans:
 
+- `docs/inProgress/observability-decommission-plan.md` – active plan to remove
+  Loki and Log Aggregator first, then separately migrate Prometheus metrics to
+  ClickHouse.
 - `docs/inProgress/runtime-debug-mcp-cleanup-spec.md` – concise spec for
   PocketHive-owned runtime debug MCP tools and HiveGate-governed cleanup.
 - `docs/inProgress/db-query-worker-mvp.md` – MVP contract for the DB-only

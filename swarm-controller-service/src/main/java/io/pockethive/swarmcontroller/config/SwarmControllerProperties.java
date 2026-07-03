@@ -20,7 +20,6 @@ public class SwarmControllerProperties {
     private final String controlQueuePrefixBase;
     private final String controlQueuePrefix;
     private final Traffic traffic;
-    private final Rabbit rabbit;
     private final Metrics metrics;
     private final Docker docker;
     private final Features features;
@@ -37,7 +36,6 @@ public class SwarmControllerProperties {
         this.controlQueuePrefix = normalizeControlQueuePrefix(this.swarmId, this.controlQueuePrefixBase);
         SwarmController resolved = Objects.requireNonNull(swarmController, "swarmController");
         this.traffic = Objects.requireNonNull(resolved.traffic(), "traffic");
-        this.rabbit = Objects.requireNonNull(resolved.rabbit(), "rabbit");
         this.metrics = Objects.requireNonNull(resolved.metrics(), "metrics");
         this.docker = Objects.requireNonNull(resolved.docker(), "docker");
         this.features = Objects.requireNonNull(resolved.features(), "features");
@@ -65,10 +63,6 @@ public class SwarmControllerProperties {
 
     public Traffic getTraffic() {
         return traffic;
-    }
-
-    public Rabbit getRabbit() {
-        return rabbit;
     }
 
     public Metrics getMetrics() {
@@ -117,18 +111,15 @@ public class SwarmControllerProperties {
     @Validated
     public static final class SwarmController {
         private final Traffic traffic;
-        private final Rabbit rabbit;
         private final Metrics metrics;
         private final Docker docker;
         private final Features features;
 
         public SwarmController(@Valid Traffic traffic,
-                               @Valid Rabbit rabbit,
                                @Valid Metrics metrics,
                                @Valid Docker docker,
                                @Valid Features features) {
             this.traffic = Objects.requireNonNull(traffic, "traffic");
-            this.rabbit = Objects.requireNonNull(rabbit, "rabbit");
             this.metrics = Objects.requireNonNull(metrics, "metrics");
             this.docker = Objects.requireNonNull(docker, "docker");
             this.features = features != null ? features : new Features(null);
@@ -136,10 +127,6 @@ public class SwarmControllerProperties {
 
         public Traffic traffic() {
             return traffic;
-        }
-
-        public Rabbit rabbit() {
-            return rabbit;
         }
 
         public Metrics metrics() {
@@ -187,38 +174,6 @@ public class SwarmControllerProperties {
 
         public String queueName(String suffix) {
             return ControlPlaneContainerEnvironmentFactory.swarmTrafficQueueName(queuePrefix, suffix);
-        }
-    }
-
-    @Validated
-    public static final class Rabbit {
-        private final String logsExchange;
-        private final Logging logging;
-
-        public Rabbit(@NotBlank String logsExchange, @Valid Logging logging) {
-            this.logsExchange = requireNonBlank(logsExchange, "logsExchange");
-            this.logging = logging != null ? logging : new Logging(null);
-        }
-
-        public String logsExchange() {
-            return logsExchange;
-        }
-
-        public Logging logging() {
-            return logging;
-        }
-    }
-
-    @Validated
-    public static final class Logging {
-        private final boolean enabled;
-
-        public Logging(Boolean enabled) {
-            this.enabled = Boolean.TRUE.equals(enabled);
-        }
-
-        public boolean enabled() {
-            return enabled;
         }
     }
 

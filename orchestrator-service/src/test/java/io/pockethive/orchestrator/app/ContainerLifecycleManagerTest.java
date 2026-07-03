@@ -100,7 +100,6 @@ class ContainerLifecycleManagerTest {
         assertEquals("guest", env.get("SPRING_RABBITMQ_USERNAME"));
         assertEquals("guest", env.get("SPRING_RABBITMQ_PASSWORD"));
         assertEquals("/", env.get("SPRING_RABBITMQ_VIRTUAL_HOST"));
-        assertEquals("ph.logs", env.get("POCKETHIVE_LOGS_EXCHANGE"));
         assertEquals("false", env.get("POCKETHIVE_CONTROL_PLANE_WORKER_ENABLED"));
         assertEquals("swarm-controller", env.get("POCKETHIVE_CONTROL_PLANE_MANAGER_ROLE"));
         assertEquals(
@@ -108,8 +107,9 @@ class ContainerLifecycleManagerTest {
             env.get("POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX"));
         assertEquals("ph.sw1", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_QUEUE_PREFIX"));
         assertEquals("ph.sw1.hive", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_HIVE_EXCHANGE"));
-        assertEquals("ph.logs", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE"));
-        assertEquals("false", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED"));
+        assertFalse(env.containsKey("POCKETHIVE_LOGS_EXCHANGE"));
+        assertFalse(env.containsKey("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE"));
+        assertFalse(env.containsKey("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED"));
         assertEquals("true", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_ENABLED"));
         assertEquals("http://pushgateway:9091", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_BASE_URL"));
         assertEquals("PT1M", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_PUSH_RATE"));
@@ -380,9 +380,6 @@ class ContainerLifecycleManagerTest {
             new OrchestratorProperties.Orchestrator(
                 "ph.control.orchestrator",
                 "ph.control.orchestrator-status",
-                new OrchestratorProperties.Rabbit(
-                    "ph.logs",
-                    new OrchestratorProperties.Logging(Boolean.FALSE)),
                 new OrchestratorProperties.Metrics(
                     new OrchestratorProperties.Pushgateway(
                         true,
@@ -406,9 +403,6 @@ class ContainerLifecycleManagerTest {
             new OrchestratorProperties.Orchestrator(
                 "ph.control.orchestrator",
                 "ph.control.orchestrator-status",
-                new OrchestratorProperties.Rabbit(
-                    "ph.logs",
-                    new OrchestratorProperties.Logging(Boolean.FALSE)),
                 new OrchestratorProperties.Metrics(
                     new OrchestratorProperties.Pushgateway(
                         true,
@@ -432,9 +426,6 @@ class ContainerLifecycleManagerTest {
             new OrchestratorProperties.Orchestrator(
                 "ph.control.orchestrator",
                 "ph.control.orchestrator-status",
-                new OrchestratorProperties.Rabbit(
-                    "ph.logs",
-                    new OrchestratorProperties.Logging(Boolean.FALSE)),
                 new OrchestratorProperties.Metrics(
                     new OrchestratorProperties.Pushgateway(
                         true,

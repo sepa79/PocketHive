@@ -29,8 +29,6 @@ pockethive/
 ├── DEPLOY.md                   # Deployment instructions
 ├── README.md                   # Project overview
 ├── LICENSE                     # License file
-├── loki/
-│   └── config.yml              # Log aggregation config
 ├── rabbitmq/                   # Rabbit definitions/config used by the stack
 ├── prometheus/
 │   └── prometheus.yml          # Metrics scraping config
@@ -77,7 +75,7 @@ docker compose up -d
 
 ### ✅ Included (Ready to Use)
 - Docker Compose configuration
-- All configuration files (Loki, Prometheus, Grafana)
+- All configuration files (RabbitMQ, Prometheus, Grafana)
 - WireMock stubs
 - Grafana dashboards
 - Documentation
@@ -130,9 +128,8 @@ All images are pulled from GitHub Container Registry:
 - `ghcr.io/sepa79/pockethive/rabbitmq:latest`
 - `ghcr.io/sepa79/pockethive/orchestrator:latest`
 - `ghcr.io/sepa79/pockethive/scenario-manager:latest`
-- `ghcr.io/sepa79/pockethive/log-aggregator:latest`
 - `ghcr.io/sepa79/pockethive/ui:latest`
-- Plus standard images: Prometheus, Grafana, Loki, Redis, Redis Commander, WireMock
+- Plus standard images: Prometheus, Grafana, Redis, Redis Commander, WireMock
 
 ## Ports
 
@@ -146,13 +143,11 @@ All images are pulled from GitHub Container Registry:
 | 8081  | Redis Commander      | Redis web UI                   |
 | 3333  | Grafana              | Dashboards (direct, optional)  |
 | 8080  | WireMock             | HTTP mocks                     |
-| 1080  | Log Aggregator       | Log aggregation API            |
 | 1081  | Scenario Manager     | Scenario API                   |
 
 ## Persistent Data
 
 Volumes created for data persistence:
-- `pockethive_loki-data` - Logs
 - `pockethive_prometheus-data` - Metrics
 - `pockethive_grafana-data` - Dashboards
 - `pockethive_redis-data` - Redis datasets

@@ -33,7 +33,6 @@ Welcome to the PocketHive documentation hub. Use these resources to understand t
 - [Processor](../processor-service/README.md)
 - [Postprocessor](../postprocessor-service/README.md)
 - [Trigger](../trigger-service/README.md)
-- [Log Aggregator](../log-aggregator-service/README.md)
 
 ## Core Modules
 - [Topology Core](../common/topology-core/README.md)

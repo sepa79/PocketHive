@@ -420,23 +420,23 @@ class WorkerControlPlaneRuntimeTest {
 
         runtime.statusPublisher(definition.beanName()).update(status ->
             status.data("ioState", Map.of(
-                "work", Map.of(
-                    "input", "out-of-data",
-                    "output", "ok",
-                    "context", Map.of("dataset", "csv:customers", "logRef", "loki://trace/123")
-                )
-            )));
+	                "work", Map.of(
+	                    "input", "out-of-data",
+	                    "output", "ok",
+	                    "context", Map.of("dataset", "csv:customers")
+	                )
+	            )));
 
         runtime.emitStatusDelta();
         runtime.emitStatusDelta();
 
         ArgumentCaptor<AlertMessage> alertCaptor = ArgumentCaptor.forClass(AlertMessage.class);
         verify(emitter, times(1)).publishAlert(alertCaptor.capture());
-        AlertMessage alert = alertCaptor.getValue();
-        assertThat(alert.data().code()).isEqualTo("io.out-of-data");
-        assertThat(alert.data().context()).containsEntry("dataset", "csv:customers");
-        assertThat(alert.data().logRef()).isEqualTo("loki://trace/123");
-    }
+	        AlertMessage alert = alertCaptor.getValue();
+	        assertThat(alert.data().code()).isEqualTo("io.out-of-data");
+	        assertThat(alert.data().context()).containsEntry("dataset", "csv:customers");
+	        assertThat(alert.data().logRef()).isNull();
+	    }
 
     @Test
     void publishWorkErrorEmitsRuntimeExceptionAlertWithContext() {

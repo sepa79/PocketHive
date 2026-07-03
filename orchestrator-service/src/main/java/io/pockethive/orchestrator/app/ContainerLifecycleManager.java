@@ -178,8 +178,6 @@ public class ContainerLifecycleManager {
             pushgateway.getShutdownOperation());
         ControlPlaneContainerEnvironmentFactory.ControllerSettings controllerSettings =
             new ControlPlaneContainerEnvironmentFactory.ControllerSettings(
-                properties.getRabbit().getLogsExchange(),
-                properties.getRabbit().getLogging().isEnabled(),
                 metrics,
                 properties.getDocker().getSocketPath(),
                 "ph." + resolvedSwarmId,

@@ -23,9 +23,6 @@ class RabbitConfigTest {
             new OrchestratorProperties.Orchestrator(
                 "ph.control.orchestrator",
                 "ph.control.orchestrator-status",
-                new OrchestratorProperties.Rabbit(
-                    "ph.logs",
-                    new OrchestratorProperties.Logging(Boolean.FALSE)),
                 new OrchestratorProperties.Metrics(
                     new OrchestratorProperties.Pushgateway(
                         true,

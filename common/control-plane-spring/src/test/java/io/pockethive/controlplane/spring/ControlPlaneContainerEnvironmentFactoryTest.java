@@ -27,8 +27,6 @@ class ControlPlaneContainerEnvironmentFactoryTest {
                 "DELETE");
         ControlPlaneContainerEnvironmentFactory.ControllerSettings settings =
             new ControlPlaneContainerEnvironmentFactory.ControllerSettings(
-                "ph.logs",
-                true,
                 metrics,
                 "/var/run/docker.sock",
                 "ph.swarm-1",
@@ -48,8 +46,10 @@ class ControlPlaneContainerEnvironmentFactoryTest {
         assertThat(env).containsEntry(
             "POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX",
             "ph.control");
-        assertThat(env).containsEntry("POCKETHIVE_LOGS_EXCHANGE", "ph.logs");
-        assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED", "true");
+        assertThat(env).doesNotContainKeys(
+            "POCKETHIVE_LOGS_EXCHANGE",
+            "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE",
+            "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED");
         assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_ENABLED", "true");
         assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_BASE_URL", "http://pushgateway:9091");
         assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_PUSH_RATE", "PT30S");
@@ -72,8 +72,6 @@ class ControlPlaneContainerEnvironmentFactoryTest {
                 "ph.control",
                 "ph.control",
                 "ph.swarm-1.hive",
-                "ph.logs",
-                true,
                 metrics);
         RabbitProperties rabbitProperties = rabbitProperties();
 
@@ -85,7 +83,10 @@ class ControlPlaneContainerEnvironmentFactoryTest {
 
         assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID", "bee-a");
         assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_WORKER_ROLE", "processor");
-        assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE", "ph.logs");
+        assertThat(env).doesNotContainKeys(
+            "POCKETHIVE_LOGS_EXCHANGE",
+            "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE",
+            "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED");
         assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX", "ph.control");
         assertThat(env).containsEntry("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED", "true");
         assertThat(env).containsEntry("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL", "http://pushgateway:9091");
@@ -101,8 +102,6 @@ class ControlPlaneContainerEnvironmentFactoryTest {
                 "ph.control",
                 "ph.control",
                 "ph.swarm-1.hive",
-                "ph.logs",
-                false,
                 new ControlPlaneContainerEnvironmentFactory.PushgatewaySettings(
                     true,
                     "http://pushgateway:9091",
@@ -124,8 +123,6 @@ class ControlPlaneContainerEnvironmentFactoryTest {
     void buildsSwarmTrafficQueueNamesFromControllerEnvironmentContract() {
         ControlPlaneContainerEnvironmentFactory.ControllerSettings settings =
             new ControlPlaneContainerEnvironmentFactory.ControllerSettings(
-                "ph.logs",
-                false,
                 new ControlPlaneContainerEnvironmentFactory.PushgatewaySettings(
                     true,
                     "http://pushgateway:9091",

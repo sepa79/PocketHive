@@ -71,8 +71,6 @@ class PocketHiveWorkerIoFromConfigTest {
             "pockethive.control-plane.swarm-id=Swarm-Alpha",
             "pockethive.control-plane.exchange=swarm-alpha.control",
             "pockethive.control-plane.control-queue-prefix=ph.control",
-            "pockethive.control-plane.swarm-controller.rabbit.logs-exchange=ph.logs",
-            "pockethive.control-plane.swarm-controller.rabbit.logging.enabled=false",
             "management.prometheus.metrics.export.pushgateway.enabled=true",
             "management.prometheus.metrics.export.pushgateway.base-url=http://pushgateway:9091",
             "management.prometheus.metrics.export.pushgateway.push-rate=PT30S",

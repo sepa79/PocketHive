@@ -63,10 +63,6 @@ artifacts:
       source: grafana
       target: artifacts/runtime/config/grafana
       mode: replace
-    - name: runtime-loki
-      source: loki
-      target: artifacts/runtime/config/loki
-      mode: replace
     - name: runtime-clickhouse-init
       source: clickhouse/init
       target: artifacts/runtime/config/clickhouse/init

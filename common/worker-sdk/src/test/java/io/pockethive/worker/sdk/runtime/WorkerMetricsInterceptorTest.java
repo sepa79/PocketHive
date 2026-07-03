@@ -60,8 +60,6 @@ class WorkerMetricsInterceptorTest {
             "pockethive.control-plane.worker.enabled=true",
             "pockethive.control-plane.worker.declare-topology=false",
             "pockethive.control-plane.manager.enabled=false",
-            "pockethive.control-plane.swarm-controller.rabbit.logs-exchange=ph.logs",
-            "pockethive.control-plane.swarm-controller.rabbit.logging.enabled=false",
             "management.prometheus.metrics.export.pushgateway.enabled=true",
             "management.prometheus.metrics.export.pushgateway.base-url=http://pushgateway:9091",
             "management.prometheus.metrics.export.pushgateway.push-rate=PT30S",

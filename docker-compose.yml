@@ -87,10 +87,10 @@ services:
       GF_INSTALL_PLUGINS: grafana-clickhouse-datasource
       HTTP_PROXY: ${HTTP_PROXY:-}
       HTTPS_PROXY: ${HTTPS_PROXY:-}
-      NO_PROXY: "${NO_PROXY:-localhost,127.0.0.1,::1,prometheus,loki,clickhouse,rabbitmq,postgres,redis,pushgateway,scenario-manager,orchestrator,auth-service,network-proxy-manager,ui}"
+      NO_PROXY: "${NO_PROXY:-localhost,127.0.0.1,::1,prometheus,clickhouse,rabbitmq,postgres,redis,pushgateway,scenario-manager,orchestrator,auth-service,network-proxy-manager,ui}"
       http_proxy: ${HTTP_PROXY:-}
       https_proxy: ${HTTPS_PROXY:-}
-      no_proxy: "${NO_PROXY:-localhost,127.0.0.1,::1,prometheus,loki,clickhouse,rabbitmq,postgres,redis,pushgateway,scenario-manager,orchestrator,auth-service,network-proxy-manager,ui}"
+      no_proxy: "${NO_PROXY:-localhost,127.0.0.1,::1,prometheus,clickhouse,rabbitmq,postgres,redis,pushgateway,scenario-manager,orchestrator,auth-service,network-proxy-manager,ui}"
     volumes:
       - ./grafana/grafana.ini:/etc/grafana/grafana.ini:ro
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
@@ -99,24 +99,6 @@ services:
     # Expose Grafana via the UI reverse-proxy at http://localhost:8088/grafana
     depends_on:
       - prometheus
-      - loki
-
-  loki:
-    # Pin Loki: newer tags dropped /bin/sh which breaks our shell-based entrypoint below.
-    image: grafana/loki:2.9.1
-    entrypoint:
-      - /bin/sh
-      - -c
-      - |
-          set -e
-          chown -R 10001:10001 /var/lib/loki
-          exec su -s /bin/sh loki -c "/usr/bin/loki -config.file=/etc/loki/config.yml"
-    user: "0"
-    # ports:
-    #   - "3100:3100"
-    volumes:
-      - ./loki/config.yml:/etc/loki/config.yml:ro
-      - loki-data:/var/lib/loki
 
   pushgateway:
     image: prom/pushgateway:latest
@@ -208,8 +190,6 @@ services:
       POCKETHIVE_TCP_MOCK_SSL_ENABLED: "false"
       POCKETHIVE_TCP_MOCK_VALIDATION_ENABLED: "true"
       POCKETHIVE_TCP_MOCK_FILTERING_ENABLED: "true"
-      POCKETHIVE_LOGS_RABBIT_ENABLED: "true"
-      POCKETHIVE_LOGS_EXCHANGE: ph.logs
       MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "health,info,metrics,prometheus"
     volumes:
       - ./tcp-mock-server/mappings:/app/mappings:ro
@@ -240,8 +220,6 @@ services:
       POCKETHIVE_TCP_MOCK_SSL_ENABLED: "true"
       POCKETHIVE_TCP_MOCK_VALIDATION_ENABLED: "true"
       POCKETHIVE_TCP_MOCK_FILTERING_ENABLED: "true"
-      POCKETHIVE_LOGS_RABBIT_ENABLED: "true"
-      POCKETHIVE_LOGS_EXCHANGE: ph.logs
       MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "health,info,metrics,prometheus"
     volumes:
       - ./tcp-mock-server/mappings:/app/mappings:ro
@@ -281,19 +259,6 @@ services:
       retries: 10
       start_period: 10s
 
-  # promtail:
-  #   # disabled: logs are shipped via RabbitMQ and aggregated to Loki
-  #   image: grafana/promtail:2.9.1
-  #   command: -config.file=/etc/promtail/config.yml
-  #   ports:
-  #     - "9080:9080"
-  #   volumes:
-  #     - ./promtail/config.yml:/etc/promtail/config.yml:ro
-  #     - /var/lib/docker/containers:/var/lib/docker/containers:ro
-  #     - /var/run/docker.sock:/var/run/docker.sock:ro
-  #   depends_on:
-  #     - loki
-
 #--------------------------------------
 # PocketHive Services
 #--------------------------------------
@@ -311,28 +276,6 @@ services:
       timeout: 5s
       retries: 6
       start_period: 5s
-
-  log-aggregator:
-    image: ${DOCKER_REGISTRY:-}log-aggregator:${POCKETHIVE_VERSION:-latest}
-    environment:
-      <<: *metrics-env
-      RABBITMQ_HOST: rabbitmq
-      POCKETHIVE_LOGS_EXCHANGE: ph.logs
-      POCKETHIVE_LOGS_QUEUE: ph.logs.agg
-      POCKETHIVE_LOKI_URL: http://loki:3100
-      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE: log-aggregator
-      MANAGEMENT_METRICS_TAGS_INSTANCE: log-aggregator
-    depends_on:
-      rabbitmq:
-        condition: service_started
-      loki:
-        condition: service_started
-    healthcheck:
-      test: ["CMD-SHELL", "test -f /tmp/pockethive-ready"]
-      interval: 5s
-      timeout: 10s
-      retries: 10
-      start_period: 30s
 
   auth-service:
     image: ${DOCKER_REGISTRY:-}auth-service:${POCKETHIVE_VERSION:-latest}
@@ -369,8 +312,6 @@ services:
       POCKETHIVE_JOURNAL_SINK: postgres
       POCKETHIVE_TEMPLATE_ID: orchestrator
       POCKETHIVE_JOURNAL_RUN_ID: hive
-      POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_RABBIT_LOGGING_ENABLED: "true"
-      POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_RABBIT_LOGS_EXCHANGE: ph.logs
       POCKETHIVE_SINK_CLICKHOUSE_ENDPOINT: http://clickhouse:8123
       POCKETHIVE_SINK_CLICKHOUSE_TABLE: ph_tx_outcome_v2
       POCKETHIVE_SINK_CLICKHOUSE_USERNAME: pockethive
@@ -382,8 +323,6 @@ services:
     #      POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE: ph.control
     depends_on:
       rabbitmq:
-        condition: service_healthy
-      log-aggregator:
         condition: service_healthy
       postgres:
         condition: service_healthy
@@ -402,13 +341,9 @@ services:
       POCKETHIVE_IMAGES_DEFAULT_TAG: ${POCKETHIVE_VERSION:-latest}
       POCKETHIVE_AUTH_SERVICE_URL: http://auth-service:8080
       <<: *metrics-env
-      RABBITMQ_HOST: rabbitmq
-      RABBITMQ_LOGGING_ENABLED: "true"
-      POCKETHIVE_LOGS_EXCHANGE: ph.logs
       POCKETHIVE_CONTROL_PLANE_SWARM_ID: hive
       POCKETHIVE_CONTROL_PLANE_INSTANCE_ID: scenario-manager
       POCKETHIVE_CONTROL_PLANE_MANAGER_ROLE: scenario-manager
-      POCKETHIVE_LOGS_QUEUE: ph.logs.agg
       MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE: scenario-manager
       MANAGEMENT_METRICS_TAGS_INSTANCE: scenario-manager
     healthcheck:
@@ -425,10 +360,6 @@ services:
       - ./scenario-manager-service/network:/app/network:ro
       - ./scenario-manager-service/sut:/app/sut:ro
       - ${POCKETHIVE_SCENARIOS_RUNTIME_ROOT:-/opt/pockethive/scenarios-runtime}:/app/scenarios-runtime
-    depends_on:
-      log-aggregator:
-        condition: service_healthy
-
   network-proxy-manager:
     image: ${DOCKER_REGISTRY:-}network-proxy-manager:${POCKETHIVE_VERSION:-latest}
     environment:
@@ -465,7 +396,6 @@ volumes:
   rabbitmq-data:
   prometheus-data:
   grafana-data:
-  loki-data:
   redis-data:
   postgres-data:
   clickhouse-data:

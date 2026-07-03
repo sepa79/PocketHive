@@ -6,11 +6,6 @@
   },
   "images": [
     {
-      "name": "log-aggregator",
-      "image": "{{ imageRepository.project }}/log-aggregator:{{ release.imageTag }}",
-      "application": true
-    },
-    {
       "name": "auth-service",
       "image": "{{ imageRepository.project }}/auth-service:{{ release.imageTag }}",
       "application": true

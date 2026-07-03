@@ -815,7 +815,7 @@ sequenceDiagram
     "code": "worker.runtime-error",
     "message": "Unhandled exception in handler",
     "errorType": "NullPointerException",
-    "logRef": "loki://pockethive?swarm=alpha&instance=alpha-processor-1",
+    "logRef": null,
     "context": { "stage": "process" }
   }
 }

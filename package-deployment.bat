@@ -24,10 +24,6 @@ copy .env.example "%DEPLOY_DIR%\.env.example" >nul
 copy README.md "%DEPLOY_DIR%\" >nul
 copy LICENSE "%DEPLOY_DIR%\" >nul
 
-rem Configuration
-mkdir "%DEPLOY_DIR%\loki"
-copy loki\config.yml "%DEPLOY_DIR%\loki\" >nul
-
 mkdir "%DEPLOY_DIR%\prometheus"
 copy prometheus\prometheus.yml "%DEPLOY_DIR%\prometheus\" >nul
 
@@ -81,11 +77,10 @@ echo - 8080 - WireMock
 echo.
 echo ## Persistent Data
 echo.
-echo Docker named volumes keep state for RabbitMQ, Prometheus, Grafana, Loki, and Redis:
+echo Docker named volumes keep state for RabbitMQ, Prometheus, Grafana, and Redis:
 echo - rabbitmq-data
 echo - prometheus-data
 echo - grafana-data
-echo - loki-data
 echo - redis-data
 echo Use "docker compose down -v" to remove them for a clean reset.
 ) > "%DEPLOY_DIR%\DEPLOY.md"

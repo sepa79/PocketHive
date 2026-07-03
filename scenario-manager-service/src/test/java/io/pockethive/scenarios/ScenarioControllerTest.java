@@ -35,7 +35,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 import static org.springframework.test.web.servlet.setup.MockMvcBuilders.webAppContextSetup;
 
-@SpringBootTest(properties = "rabbitmq.logging.enabled=false")
+@SpringBootTest
 @AutoConfigureMockMvc
 class ScenarioControllerTest {
 
@@ -63,7 +63,6 @@ class ScenarioControllerTest {
         capabilitiesDir = Files.createDirectories(tempDir.resolve("capabilities"));
         registry.add("scenarios.dir", () -> scenariosDir.toString());
         registry.add("capabilities.dir", () -> capabilitiesDir.toString());
-        registry.add("rabbitmq.logging.enabled", () -> "false");
     }
 
     @BeforeEach

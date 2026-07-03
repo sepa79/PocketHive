@@ -52,10 +52,6 @@ pockethive:
     orchestrator:
       control-queue-prefix: ${POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_CONTROL_QUEUE_PREFIX:ph.control.orchestrator}
       status-queue-prefix: ${POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_STATUS_QUEUE_PREFIX:ph.control.orchestrator-status}
-      rabbit:
-        logs-exchange: ${POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_RABBIT_LOGS_EXCHANGE:ph.logs}
-        logging:
-          enabled: ${POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_RABBIT_LOGGING_ENABLED:false}
       metrics:
         pushgateway:
           enabled: ${POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_METRICS_PUSHGATEWAY_ENABLED:true}

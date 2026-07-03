@@ -1,52 +1,9 @@
 <configuration>
   <include resource="org/springframework/boot/logging/logback/base.xml"/>
 
-  <springProperty scope="context" name="roleIdentifier" source="pockethive.control-plane.manager.role"/>
-  <springProperty scope="context" name="swarmIdentifier" source="pockethive.control-plane.swarm-id"/>
-  <springProperty scope="context" name="instanceIdentifier" source="pockethive.control-plane.instance-id"/>
-
-  <springProperty scope="context" name="rabbitLoggingEnabled" source="rabbitmq.logging.enabled" defaultValue="false"/>
-
-  <springProperty scope="context" name="rabbitHost" source="spring.rabbitmq.host"/>
-  <springProperty scope="context" name="rabbitPort" source="spring.rabbitmq.port" defaultValue="5672"/>
-  <springProperty scope="context" name="rabbitUsername" source="spring.rabbitmq.username"/>
-  <springProperty scope="context" name="rabbitPassword" source="spring.rabbitmq.password"/>
-  <springProperty scope="context" name="rabbitVirtualHost" source="spring.rabbitmq.virtual-host" defaultValue="/"/>
-
-  <springProperty scope="context" name="logsExchange" source="pockethive.logs.exchange" defaultValue="ph.logs"/>
-
-  <logger name="org.springframework.amqp" level="WARN" additivity="false">
-    <appender-ref ref="CONSOLE"/>
-  </logger>
-  <logger name="com.rabbitmq" level="WARN" additivity="false">
-    <appender-ref ref="CONSOLE"/>
-  </logger>
   <logger name="io.pockethive" level="DEBUG"/>
 
-  <if
-    condition='Boolean.parseBoolean(property("rabbitLoggingEnabled") != null ? property("rabbitLoggingEnabled") : "false")'>
-    <then>
-      <appender name="RABBIT" class="org.springframework.amqp.rabbit.logback.AmqpAppender">
-        <host>${rabbitHost}</host>
-        <port>${rabbitPort}</port>
-        <username>${rabbitUsername}</username>
-        <password>${rabbitPassword}</password>
-        <virtualHost>${rabbitVirtualHost}</virtualHost>
-        <exchangeName>${logsExchange}</exchangeName>
-        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
-          <customFields>{"role":"${roleIdentifier}","swarmId":"${swarmIdentifier}","instanceId":"${instanceIdentifier}"}</customFields>
-        </encoder>
-      </appender>
-
-      <root level="INFO">
-        <appender-ref ref="CONSOLE"/>
-        <appender-ref ref="RABBIT"/>
-      </root>
-    </then>
-    <else>
-      <root level="INFO">
-        <appender-ref ref="CONSOLE"/>
-      </root>
-    </else>
-  </if>
+  <root level="INFO">
+    <appender-ref ref="CONSOLE"/>
+  </root>
 </configuration>

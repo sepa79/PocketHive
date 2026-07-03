@@ -7,7 +7,6 @@
       - state/clickhouse/data
       - state/prometheus/data
       - state/grafana/data
-      - state/loki/data
       - state/scenarios-runtime
       - state/tcp-mock/data
       - state/tcp-mock/tls-data
@@ -89,8 +88,6 @@
       value: "{{ pockethive_clickhouse_root }}"
     - name: POCKETHIVE_PROMETHEUS_ROOT
       value: "{{ pockethive_prometheus_root }}"
-    - name: POCKETHIVE_LOKI_ROOT
-      value: "{{ pockethive_loki_root }}"
     - name: POCKETHIVE_REDIS_ROOT
       value: "{{ pockethive_redis_root }}"
   when: pockethive_profile == "swarm-full"

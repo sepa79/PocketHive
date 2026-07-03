@@ -270,8 +270,6 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
         properties.getControlExchange(),
         properties.getControlQueuePrefixBase(),
         traffic.hiveExchange(),
-        properties.getRabbit().logsExchange(),
-        properties.getRabbit().logging().enabled(),
         metrics);
   }
 

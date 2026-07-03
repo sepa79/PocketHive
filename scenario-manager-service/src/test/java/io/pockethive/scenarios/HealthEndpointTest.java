@@ -13,8 +13,7 @@ import java.nio.file.Path;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-    properties = "rabbitmq.logging.enabled=false")
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class HealthEndpointTest {
 
     @Autowired
@@ -27,7 +26,6 @@ class HealthEndpointTest {
     static void properties(DynamicPropertyRegistry registry) {
         registry.add("scenarios.dir", () -> tempDir.toString());
         registry.add("capabilities.dir", () -> tempDir.resolve("capabilities").toString());
-        registry.add("rabbitmq.logging.enabled", () -> "false");
     }
 
     @Test

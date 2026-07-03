@@ -15,7 +15,6 @@
     pockethive_postgres_root: "{{ lookup('env', 'POCKETHIVE_POSTGRES_ROOT') }}"
     pockethive_clickhouse_root: "{{ lookup('env', 'POCKETHIVE_CLICKHOUSE_ROOT') }}"
     pockethive_prometheus_root: "{{ lookup('env', 'POCKETHIVE_PROMETHEUS_ROOT') }}"
-    pockethive_loki_root: "{{ lookup('env', 'POCKETHIVE_LOKI_ROOT') }}"
     pockethive_redis_root: "{{ lookup('env', 'POCKETHIVE_REDIS_ROOT') }}"
   tasks:
     - name: Require explicit HiveForge profile

@@ -39,7 +39,6 @@ The image list is defined by `tools/docker/image-manifest.sh` and currently
 includes:
 
 - `jvm-base`
-- `log-aggregator`
 - `auth-service`
 - `scenario-manager`
 - `network-proxy-manager`
@@ -58,8 +57,7 @@ includes:
 - `trigger`
 
 Third-party infrastructure images such as RabbitMQ, Redis, Postgres, Prometheus,
-Grafana, Loki, ClickHouse, WireMock, and Toxiproxy are not published by this
-workflow.
+Grafana, ClickHouse, WireMock, and Toxiproxy are not published by this workflow.
 
 ## Using Published Images
 

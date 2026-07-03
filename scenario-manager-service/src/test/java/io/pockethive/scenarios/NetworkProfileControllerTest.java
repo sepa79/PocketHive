@@ -25,7 +25,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import io.pockethive.auth.client.AuthServiceClient;
 
-@SpringBootTest(properties = "rabbitmq.logging.enabled=false")
+@SpringBootTest
 @AutoConfigureMockMvc
 class NetworkProfileControllerTest {
 
@@ -47,7 +47,6 @@ class NetworkProfileControllerTest {
     static void properties(DynamicPropertyRegistry registry) throws IOException {
         profilesFile = tempDir.resolve("network").resolve("network-profiles.yaml");
         registry.add("pockethive.network.profiles-path", () -> profilesFile.toString());
-        registry.add("rabbitmq.logging.enabled", () -> "false");
     }
 
     @BeforeEach

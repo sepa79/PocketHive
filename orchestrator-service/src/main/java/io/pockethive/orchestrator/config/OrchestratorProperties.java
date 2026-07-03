@@ -27,10 +27,6 @@ public class OrchestratorProperties {
         return orchestrator.statusQueuePrefix();
     }
 
-    public Rabbit getRabbit() {
-        return orchestrator.rabbit();
-    }
-
     public Metrics getMetrics() {
         return orchestrator.metrics();
     }
@@ -64,7 +60,6 @@ public class OrchestratorProperties {
 
         private final String controlQueuePrefix;
         private final String statusQueuePrefix;
-        private final @Valid Rabbit rabbit;
         private final @Valid Metrics metrics;
         private final @Valid Docker docker;
         private final @Valid Images images;
@@ -73,7 +68,6 @@ public class OrchestratorProperties {
 
         public Orchestrator(@NotBlank String controlQueuePrefix,
                              @NotBlank String statusQueuePrefix,
-                             @Valid Rabbit rabbit,
                              @Valid Metrics metrics,
                              @Valid Docker docker,
                              @Valid Images images,
@@ -81,7 +75,6 @@ public class OrchestratorProperties {
                              @Valid NetworkProxyManager networkProxyManager) {
             this.controlQueuePrefix = requireNonBlank(controlQueuePrefix, "controlQueuePrefix");
             this.statusQueuePrefix = requireNonBlank(statusQueuePrefix, "statusQueuePrefix");
-            this.rabbit = Objects.requireNonNull(rabbit, "rabbit");
             this.metrics = Objects.requireNonNull(metrics, "metrics");
             this.docker = Objects.requireNonNull(docker, "docker");
             this.images = Objects.requireNonNull(images, "images");
@@ -95,10 +88,6 @@ public class OrchestratorProperties {
 
         public String statusQueuePrefix() {
             return statusQueuePrefix;
-        }
-
-        public Rabbit rabbit() {
-            return rabbit;
         }
 
         public Metrics metrics() {
@@ -119,40 +108,6 @@ public class OrchestratorProperties {
 
         public NetworkProxyManager networkProxyManager() {
             return networkProxyManager;
-        }
-    }
-
-    @Validated
-    public static final class Rabbit {
-
-        private final String logsExchange;
-        private final @Valid Logging logging;
-
-        public Rabbit(@NotBlank String logsExchange, @Valid Logging logging) {
-            this.logsExchange = requireNonBlank(logsExchange, "logsExchange");
-            this.logging = Objects.requireNonNull(logging, "logging");
-        }
-
-        public String getLogsExchange() {
-            return logsExchange;
-        }
-
-        public Logging getLogging() {
-            return logging;
-        }
-    }
-
-    @Validated
-    public static final class Logging {
-
-        private final boolean enabled;
-
-        public Logging(@NotNull Boolean enabled) {
-            this.enabled = Objects.requireNonNull(enabled, "enabled");
-        }
-
-        public boolean isEnabled() {
-            return enabled;
         }
     }
 

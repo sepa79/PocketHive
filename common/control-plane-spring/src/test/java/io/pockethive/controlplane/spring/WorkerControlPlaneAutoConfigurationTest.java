@@ -37,9 +37,7 @@ class WorkerControlPlaneAutoConfigurationTest {
             "pockethive.control-plane.exchange=ph.control.worker",
             "pockethive.inputs.rabbit.queue=ph.swarm-alpha.gen",
             "pockethive.outputs.rabbit.exchange=ph.swarm-alpha.hive",
-            "pockethive.outputs.rabbit.routing-key=ph.swarm-alpha.gen",
-            "pockethive.control-plane.swarm-controller.rabbit.logs-exchange=ph.logs",
-            "pockethive.control-plane.swarm-controller.rabbit.logging.enabled=true");
+            "pockethive.outputs.rabbit.routing-key=ph.swarm-alpha.gen");
 
     @Test
     void registersWorkerInfrastructure() {

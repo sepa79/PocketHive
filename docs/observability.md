@@ -10,6 +10,20 @@ The Buzz panel aggregates REST and STOMP activity from both the Hive services an
 
 Each entry displays its timestamp, origin, channel and payload to help operators trace system interactions.
 
+## Runtime Logs
+
+PocketHive does not run a central Loki/Log Aggregator pipeline. Services write
+logs to container stdout/stderr, and product-owned tools read them on demand
+through Orchestrator's runtime debug API:
+
+- UI runtime inspector: bounded `Logs` action for workers and managers.
+- PocketHive MCP: `runtime_tail_worker_logs`, backed by Orchestrator.
+- REST: `POST /api/runtime/debug/resources/logs` as documented in
+  `docs/ORCHESTRATOR-REST.md`.
+
+The runtime debug path returns finite, redacted Docker/Swarm log reads. It is for
+debugging current runtime state, not durable log retention.
+
 ## Metrics Pushgateway
 
 PocketHive services now export Micrometer metrics to a Prometheus Pushgateway instead of exposing `/actuator/prometheus`.

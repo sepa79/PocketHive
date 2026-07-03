@@ -196,7 +196,7 @@ Goal: provide a first‑class, queryable journal for swarms (control‑plane sco
 - Prefer **Postgres + Grafana annotations** as the default “weekend overview” workflow:
   - Grafana panels show throughput/latency/queue depth.
   - Journal entries appear as annotations and as a queryable timeline with filters.
-- Logs (Loki) are **deep detail** and best-effort; journal entries should point to logs/traces, not duplicate them.
+- Runtime logs are **deep detail** and best-effort; journal entries should point to logs/traces, not duplicate them.
 
 ### Metrics: aggregated vs per-transaction capture
 
@@ -218,5 +218,5 @@ Goal: provide a first‑class, queryable journal for swarms (control‑plane sco
 ### Dashboarding system
 
 - Grafana remains the default dashboarding system:
-  - Datasources: Prometheus (aggregates), Postgres (Journal), optionally ClickHouse (per-txn capture), optionally Loki (logs).
+  - Datasources: Prometheus (aggregates), Postgres (Journal), optionally ClickHouse (per-txn capture).
   - Hive UI should deep-link into Grafana with stable filter parameters (`swarmId`, `correlationId`, `captureId`).

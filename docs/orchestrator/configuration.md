@@ -28,7 +28,7 @@ pockethive.control-plane.orchestrator.status-queue-prefix   # Prefix for the orc
 The orchestrator composes queue names using these prefixes and the runtime
 instance id.
 
-## RabbitMQ and logging
+## RabbitMQ
 
 ```
 spring.rabbitmq.host             # RabbitMQ hostname shared across the control plane
@@ -36,13 +36,10 @@ spring.rabbitmq.port             # RabbitMQ port
 spring.rabbitmq.username         # RabbitMQ username
 spring.rabbitmq.password         # RabbitMQ password
 spring.rabbitmq.virtual-host     # RabbitMQ virtual host
-pockethive.control-plane.orchestrator.rabbit.logs-exchange   # Exchange used by the logback AMQP appender
-pockethive.control-plane.orchestrator.rabbit.logging.enabled # Toggle for logback AMQP appender (boolean)
 ```
 
 The Spring Boot `RabbitProperties` drive broker connectivity; the orchestrator
-reuses those values when launching swarm controllers. Disable the log appender
-by setting `pockethive.control-plane.orchestrator.rabbit.logging.enabled=false`.
+reuses those values when launching swarm controllers.
 
 ## Metrics pushgateway
 

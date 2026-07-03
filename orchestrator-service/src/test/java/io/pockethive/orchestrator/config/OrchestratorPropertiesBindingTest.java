@@ -18,8 +18,6 @@ class OrchestratorPropertiesBindingTest {
             .withPropertyValues(
                 "pockethive.control-plane.orchestrator.control-queue-prefix=ph.control.orchestrator",
                 "pockethive.control-plane.orchestrator.status-queue-prefix=ph.control.orchestrator-status",
-                "pockethive.control-plane.orchestrator.rabbit.logs-exchange=ph.logs",
-                "pockethive.control-plane.orchestrator.rabbit.logging.enabled=true",
                 "pockethive.control-plane.orchestrator.metrics.pushgateway.enabled=true",
                 "pockethive.control-plane.orchestrator.metrics.pushgateway.base-url=http://pushgateway:9091",
                 "pockethive.control-plane.orchestrator.metrics.pushgateway.push-rate=PT1M",
@@ -39,8 +37,6 @@ class OrchestratorPropertiesBindingTest {
                 OrchestratorProperties properties = context.getBean(OrchestratorProperties.class);
                 assertThat(properties.getControlQueuePrefix()).isEqualTo("ph.control.orchestrator");
                 assertThat(properties.getStatusQueuePrefix()).isEqualTo("ph.control.orchestrator-status");
-                assertThat(properties.getRabbit().getLogsExchange()).isEqualTo("ph.logs");
-                assertThat(properties.getRabbit().getLogging().isEnabled()).isTrue();
                 assertThat(properties.getMetrics().getPushgateway().isEnabled()).isTrue();
                 assertThat(properties.getMetrics().getPushgateway().getBaseUrl())
                     .isEqualTo("http://pushgateway:9091");
@@ -72,8 +68,6 @@ class OrchestratorPropertiesBindingTest {
         contextRunner
             .withPropertyValues(
                 "pockethive.control-plane.orchestrator.status-queue-prefix=ph.control.orchestrator-status",
-                "pockethive.control-plane.orchestrator.rabbit.logs-exchange=ph.logs",
-                "pockethive.control-plane.orchestrator.rabbit.logging.enabled=false",
                 "pockethive.control-plane.orchestrator.metrics.pushgateway.enabled=true",
                 "pockethive.control-plane.orchestrator.metrics.pushgateway.base-url=http://pushgateway:9091",
                 "pockethive.control-plane.orchestrator.metrics.pushgateway.push-rate=PT1M",

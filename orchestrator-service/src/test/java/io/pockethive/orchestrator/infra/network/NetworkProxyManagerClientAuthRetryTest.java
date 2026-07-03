@@ -126,7 +126,6 @@ class NetworkProxyManagerClientAuthRetryTest {
         return new OrchestratorProperties(new OrchestratorProperties.Orchestrator(
             "ph.control.orchestrator",
             "ph.control.orchestrator-status",
-            new OrchestratorProperties.Rabbit("ph.logs", new OrchestratorProperties.Logging(false)),
             new OrchestratorProperties.Metrics(new OrchestratorProperties.Pushgateway(
                 false,
                 "http://pushgateway:9091",

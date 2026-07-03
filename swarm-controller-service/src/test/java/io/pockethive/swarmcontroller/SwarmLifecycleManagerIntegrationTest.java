@@ -3,7 +3,6 @@ package io.pockethive.swarmcontroller;
 import static io.pockethive.swarmcontroller.SwarmControllerTestProperties.CONTROL_EXCHANGE;
 import static io.pockethive.swarmcontroller.SwarmControllerTestProperties.CONTROL_QUEUE_PREFIX_BASE;
 import static io.pockethive.swarmcontroller.SwarmControllerTestProperties.HIVE_EXCHANGE;
-import static io.pockethive.swarmcontroller.SwarmControllerTestProperties.LOGS_EXCHANGE;
 import static io.pockethive.swarmcontroller.SwarmControllerTestProperties.TRAFFIC_PREFIX;
 import static io.pockethive.swarmcontroller.SwarmControllerTestProperties.TEST_SWARM_ID;
 
@@ -38,8 +37,6 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest(properties = {
-    "pockethive.control-plane.swarm-controller.rabbit.logging.enabled=false",
-    "rabbitmq.logging.enabled=false",
     "pockethive.control-plane.manager.role=swarm-controller"
 })
   @RabbitAvailable
@@ -71,8 +68,6 @@ import static org.junit.jupiter.api.Assertions.*;
     setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX", CONTROL_QUEUE_PREFIX_BASE);
     setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_QUEUE_PREFIX", TRAFFIC_PREFIX);
     setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_HIVE_EXCHANGE", HIVE_EXCHANGE);
-    setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE", LOGS_EXCHANGE);
-    setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED", Boolean.FALSE.toString());
     setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_DOCKER_SOCKET_PATH", "/var/run/docker.sock");
     setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_ENABLED", Boolean.FALSE.toString());
     setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_BASE_URL", "http://localhost:9091");
@@ -107,12 +102,6 @@ import static org.junit.jupiter.api.Assertions.*;
     register(registry, "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_HIVE_EXCHANGE",
         "pockethive.control-plane.swarm-controller.traffic.hive-exchange",
         HIVE_EXCHANGE);
-    register(registry, "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE",
-        "pockethive.control-plane.swarm-controller.rabbit.logs-exchange",
-        LOGS_EXCHANGE);
-    register(registry, "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED",
-        "pockethive.control-plane.swarm-controller.rabbit.logging.enabled",
-        Boolean.FALSE.toString());
     register(registry, "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_DOCKER_SOCKET_PATH",
         "pockethive.control-plane.swarm-controller.docker.socket-path",
         "/var/run/docker.sock");
