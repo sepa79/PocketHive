@@ -8,7 +8,9 @@ import com.sun.net.httpserver.HttpServer;
 import io.pockethive.auth.client.AuthServiceClient;
 import io.pockethive.auth.client.AuthServiceServiceTokenProvider;
 import io.pockethive.manager.runtime.ComputeAdapterType;
+import io.pockethive.observability.metrics.PocketHiveMetricsAdapter;
 import io.pockethive.orchestrator.config.OrchestratorProperties;
+import io.pockethive.sink.clickhouse.metrics.ClickHouseMetricsSinkProperties;
 import io.pockethive.swarm.model.NetworkBinding;
 import io.pockethive.swarm.model.NetworkBindingRequest;
 import java.io.IOException;
@@ -126,19 +128,28 @@ class NetworkProxyManagerClientAuthRetryTest {
         return new OrchestratorProperties(new OrchestratorProperties.Orchestrator(
             "ph.control.orchestrator",
             "ph.control.orchestrator-status",
-            new OrchestratorProperties.Metrics(new OrchestratorProperties.Pushgateway(
+            metrics(),
+            new OrchestratorProperties.Docker("/var/run/docker.sock", ComputeAdapterType.AUTO),
+            new OrchestratorProperties.Images(null),
+            new OrchestratorProperties.ScenarioManager("http://scenario-manager:8080", http),
+            new OrchestratorProperties.NetworkProxyManager(networkProxyManagerUrl, http)
+        ));
+    }
+
+    private static OrchestratorProperties.Metrics metrics() {
+        return new OrchestratorProperties.Metrics(
+            PocketHiveMetricsAdapter.PROMETHEUS_PUSHGATEWAY,
+            Duration.ofSeconds(10),
+            new OrchestratorProperties.Pushgateway(
                 false,
                 "http://pushgateway:9091",
                 Duration.ofSeconds(10),
                 "DELETE",
                 "PocketHive",
                 new OrchestratorProperties.GroupingKey("instance")
-            )),
-            new OrchestratorProperties.Docker("/var/run/docker.sock", ComputeAdapterType.AUTO),
-            new OrchestratorProperties.Images(null),
-            new OrchestratorProperties.ScenarioManager("http://scenario-manager:8080", http),
-            new OrchestratorProperties.NetworkProxyManager(networkProxyManagerUrl, http)
-        ));
+            ),
+            ClickHouseMetricsSinkProperties.disabled()
+        );
     }
 
     private static void respondJson(HttpExchange exchange, String body) throws IOException {

@@ -20,7 +20,9 @@ import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
 import io.pockethive.orchestrator.infra.JournalRunMetadataWriter;
 import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.RuntimeOwnershipManifestStore;
 import io.pockethive.orchestrator.runtime.RuntimeOwnershipManifest;
+import io.pockethive.observability.metrics.PocketHiveMetricsAdapter;
 import io.pockethive.sink.clickhouse.ClickHouseSinkProperties;
+import io.pockethive.sink.clickhouse.metrics.ClickHouseMetricsSinkProperties;
 import io.pockethive.swarm.model.NetworkMode;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.Work;
@@ -380,14 +382,7 @@ class ContainerLifecycleManagerTest {
             new OrchestratorProperties.Orchestrator(
                 "ph.control.orchestrator",
                 "ph.control.orchestrator-status",
-                new OrchestratorProperties.Metrics(
-                    new OrchestratorProperties.Pushgateway(
-                        true,
-                        "http://pushgateway:9091",
-                        Duration.ofMinutes(1),
-                        "DELETE",
-                        "swarm-job",
-                        new OrchestratorProperties.GroupingKey("controller-instance"))),
+                defaultMetrics(),
                 new OrchestratorProperties.Docker("/var/run/docker.sock", null),
                 new OrchestratorProperties.Images(null),
                 new OrchestratorProperties.ScenarioManager(
@@ -403,14 +398,7 @@ class ContainerLifecycleManagerTest {
             new OrchestratorProperties.Orchestrator(
                 "ph.control.orchestrator",
                 "ph.control.orchestrator-status",
-                new OrchestratorProperties.Metrics(
-                    new OrchestratorProperties.Pushgateway(
-                        true,
-                        "http://pushgateway:9091",
-                        Duration.ofMinutes(1),
-                        "DELETE",
-                        "swarm-job",
-                        new OrchestratorProperties.GroupingKey("controller-instance"))),
+                defaultMetrics(),
                 new OrchestratorProperties.Docker(socketPath, null),
                 new OrchestratorProperties.Images(null),
                 new OrchestratorProperties.ScenarioManager(
@@ -426,14 +414,7 @@ class ContainerLifecycleManagerTest {
             new OrchestratorProperties.Orchestrator(
                 "ph.control.orchestrator",
                 "ph.control.orchestrator-status",
-                new OrchestratorProperties.Metrics(
-                    new OrchestratorProperties.Pushgateway(
-                        true,
-                        "http://pushgateway:9091",
-                        Duration.ofMinutes(1),
-                        "DELETE",
-                        "swarm-job",
-                        new OrchestratorProperties.GroupingKey("controller-instance"))),
+                defaultMetrics(),
                 new OrchestratorProperties.Docker("/var/run/docker.sock", null),
                 new OrchestratorProperties.Images(prefix),
                 new OrchestratorProperties.ScenarioManager(
@@ -453,6 +434,20 @@ class ContainerLifecycleManagerTest {
         properties.getManager().setRole("orchestrator");
         properties.getWorker().setEnabled(false);
         return properties;
+    }
+
+    private static OrchestratorProperties.Metrics defaultMetrics() {
+        return new OrchestratorProperties.Metrics(
+            PocketHiveMetricsAdapter.PROMETHEUS_PUSHGATEWAY,
+            Duration.ofSeconds(10),
+            new OrchestratorProperties.Pushgateway(
+                true,
+                "http://pushgateway:9091",
+                Duration.ofMinutes(1),
+                "DELETE",
+                "swarm-job",
+                new OrchestratorProperties.GroupingKey("controller-instance")),
+            ClickHouseMetricsSinkProperties.disabled());
     }
 
     private static RabbitProperties rabbitProperties() {

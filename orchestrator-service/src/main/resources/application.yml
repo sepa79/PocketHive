@@ -39,6 +39,13 @@ pockethive:
         reconcile:
           initial-delay-ms: ${POCKETHIVE_JOURNAL_POSTGRES_PARTITION_RECONCILE_INITIAL_DELAY_MS:2000}
           fixed-delay-ms: ${POCKETHIVE_JOURNAL_POSTGRES_PARTITION_RECONCILE_FIXED_DELAY_MS:60000}
+  metrics:
+    adapter: ${POCKETHIVE_METRICS_ADAPTER:PROMETHEUS_PUSHGATEWAY}
+    publish-interval: ${POCKETHIVE_METRICS_PUBLISH_INTERVAL:10s}
+    swarm-id: ${POCKETHIVE_METRICS_SWARM_ID:hive}
+    run-id: ${POCKETHIVE_METRICS_RUN_ID:not-run-scoped}
+    role: ${POCKETHIVE_METRICS_ROLE:orchestrator}
+    instance: ${POCKETHIVE_METRICS_INSTANCE:orchestrator-local}
   control-plane:
     exchange: ${POCKETHIVE_CONTROL_PLANE_EXCHANGE:ph.control}
     control-queue-prefix: ${POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX:ph.control}
@@ -53,6 +60,8 @@ pockethive:
       control-queue-prefix: ${POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_CONTROL_QUEUE_PREFIX:ph.control.orchestrator}
       status-queue-prefix: ${POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_STATUS_QUEUE_PREFIX:ph.control.orchestrator-status}
       metrics:
+        adapter: ${POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_METRICS_ADAPTER:PROMETHEUS_PUSHGATEWAY}
+        publish-interval: ${POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_METRICS_PUBLISH_INTERVAL:10s}
         pushgateway:
           enabled: ${POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_METRICS_PUSHGATEWAY_ENABLED:true}
           base-url: ${POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_METRICS_PUSHGATEWAY_BASE_URL:http://pushgateway:9091}

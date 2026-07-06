@@ -1,1 +1,2 @@
 io.pockethive.observability.metrics.PrometheusPushGatewayAutoConfiguration
+io.pockethive.observability.metrics.ClickHouseMetricsAutoConfiguration

@@ -1,6 +1,7 @@
 package io.pockethive.orchestrator.app;
 
 import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory;
+import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory.MetricsSettings;
 import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory.PushgatewaySettings;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.controlplane.topology.ControlQueueDescriptor;
@@ -170,15 +171,12 @@ public class ContainerLifecycleManager {
         String resolvedInstance = requireNonBlank(instanceId, "controller instance");
         String resolvedSwarmId = requireNonBlank(swarmId, "swarmId");
         String resolvedImage = resolveImage(image);
-        OrchestratorProperties.Pushgateway pushgateway = properties.getMetrics().getPushgateway();
-        PushgatewaySettings metrics = new PushgatewaySettings(
-            pushgateway.isEnabled(),
-            pushgateway.getBaseUrl(),
-            pushgateway.getPushRate(),
-            pushgateway.getShutdownOperation());
+        String runId = java.util.UUID.randomUUID().toString();
+        MetricsSettings metrics = metricsSettings(properties.getMetrics());
         ControlPlaneContainerEnvironmentFactory.ControllerSettings controllerSettings =
             new ControlPlaneContainerEnvironmentFactory.ControllerSettings(
                 metrics,
+                runId,
                 properties.getDocker().getSocketPath(),
                 "ph." + resolvedSwarmId,
                 "ph." + resolvedSwarmId + ".hive");
@@ -231,7 +229,6 @@ public class ContainerLifecycleManager {
             log.info("autoPullImages=true, pulling controller image {} before start", resolvedImage);
             docker.pullImage(resolvedImage);
         }
-        String runId = java.util.UUID.randomUUID().toString();
         env.put("POCKETHIVE_JOURNAL_RUN_ID", runId);
         runMetadataWriter.upsertOnSwarmStart(resolvedSwarmId, runId, templateMetadata);
         log.info("launching controller for swarm {} as instance {} using image {} (runId={})",
@@ -264,6 +261,19 @@ public class ContainerLifecycleManager {
             controllerSettings);
         store.updateStatus(resolvedSwarmId, SwarmLifecycleStatus.CREATING);
         return swarm;
+    }
+
+    private static MetricsSettings metricsSettings(OrchestratorProperties.Metrics metrics) {
+        OrchestratorProperties.Pushgateway pushgateway = metrics.getPushgateway();
+        return new MetricsSettings(
+            metrics.getAdapter(),
+            metrics.getPublishInterval(),
+            new PushgatewaySettings(
+                pushgateway.isEnabled(),
+                pushgateway.getBaseUrl(),
+                pushgateway.getPushRate(),
+                pushgateway.getShutdownOperation()),
+            metrics.getClickHouse());
     }
 
     private void writeRuntimeOwnershipManifest(String swarmId,

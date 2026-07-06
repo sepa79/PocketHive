@@ -1,5 +1,7 @@
 package io.pockethive.swarmcontroller;
 
+import io.pockethive.observability.metrics.PocketHiveMetricsAdapter;
+import io.pockethive.sink.clickhouse.metrics.ClickHouseMetricsSinkProperties;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import java.time.Duration;
 
@@ -33,13 +35,16 @@ final class SwarmControllerTestProperties {
             new SwarmControllerProperties.SwarmController(
                 new SwarmControllerProperties.Traffic(HIVE_EXCHANGE, TRAFFIC_PREFIX),
                 new SwarmControllerProperties.Metrics(
+                    PocketHiveMetricsAdapter.PROMETHEUS_PUSHGATEWAY,
+                    Duration.ofSeconds(10),
                     new SwarmControllerProperties.Pushgateway(
                         true,
                         METRICS_BASE_URL,
                         METRICS_PUSH_RATE,
                         METRICS_SHUTDOWN_OPERATION,
                         METRICS_JOB,
-                        new SwarmControllerProperties.GroupingKey(METRICS_GROUPING_INSTANCE))),
+                        new SwarmControllerProperties.GroupingKey(METRICS_GROUPING_INSTANCE)),
+                    ClickHouseMetricsSinkProperties.disabled()),
                 new SwarmControllerProperties.Docker(null, "/var/run/docker.sock", null),
                 new SwarmControllerProperties.Features(bufferGuardEnabled)));
     }

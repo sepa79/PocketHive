@@ -1,5 +1,7 @@
 package io.pockethive.controlplane.spring;
 
+import io.pockethive.observability.metrics.PocketHiveMetricsAdapter;
+import io.pockethive.sink.clickhouse.metrics.ClickHouseMetricsSinkProperties;
 import java.time.Duration;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -50,6 +52,13 @@ public final class ControlPlaneContainerEnvironmentFactory {
             ? settings.trafficHiveExchange()
             : trafficPrefix + ".hive";
         env.put("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_HIVE_EXCHANGE", hiveExchange);
+        applyPocketHiveMetricsSettings(
+            env,
+            settings.metrics(),
+            resolvedSwarmId,
+            settings.runId(),
+            managerRole,
+            resolvedInstance);
         applyPushgatewayControlPlaneSettings(env, settings.metrics());
         env.put(
             "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_DOCKER_SOCKET_PATH",
@@ -75,6 +84,13 @@ public final class ControlPlaneContainerEnvironmentFactory {
         env.put(
             "POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX",
             requireSetting(settings.controlQueuePrefix(), "pockethive.control-plane.control-queue-prefix"));
+        applyPocketHiveMetricsSettings(
+            env,
+            settings.metrics(),
+            settings.swarmId(),
+            settings.runId(),
+            resolvedRole,
+            resolvedInstance);
         applyPushgatewayExport(env, settings.metrics());
         return env;
     }
@@ -126,36 +142,118 @@ public final class ControlPlaneContainerEnvironmentFactory {
 
     private static void applyPushgatewayControlPlaneSettings(
         Map<String, String> env,
-        PushgatewaySettings metrics) {
+        MetricsSettings metrics) {
         Objects.requireNonNull(metrics, "metrics");
+        PushgatewaySettings pushgateway = metrics.pushgateway();
         env.put(
             "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_ENABLED",
-            Boolean.toString(metrics.enabled()));
+            Boolean.toString(pushgateway.enabled()));
         env.put(
             "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_BASE_URL",
-            metrics.baseUrl());
+            pushgateway.baseUrl());
         env.put(
             "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_PUSH_RATE",
-            metrics.pushRate().toString());
+            pushgateway.pushRate().toString());
         env.put(
             "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_SHUTDOWN_OPERATION",
-            metrics.shutdownOperation());
+            pushgateway.shutdownOperation());
+        env.put(
+            "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_ADAPTER",
+            metrics.adapter().name());
+        env.put(
+            "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUBLISH_INTERVAL",
+            metrics.publishInterval().toString());
+        applyClickHouseControlPlaneSettings(env, metrics.clickHouse());
     }
 
-    private static void applyPushgatewayExport(Map<String, String> env, PushgatewaySettings metrics) {
+    private static void applyPushgatewayExport(Map<String, String> env, MetricsSettings metrics) {
         Objects.requireNonNull(metrics, "metrics");
+        PushgatewaySettings pushgateway = metrics.pushgateway();
         env.put(
             "MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED",
-            Boolean.toString(metrics.enabled()));
+            Boolean.toString(pushgateway.enabled()));
         env.put(
             "MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL",
-            metrics.baseUrl());
+            pushgateway.baseUrl());
         env.put(
             "MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE",
-            metrics.pushRate().toString());
+            pushgateway.pushRate().toString());
         env.put(
             "MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION",
-            metrics.shutdownOperation());
+            pushgateway.shutdownOperation());
+    }
+
+    private static void applyPocketHiveMetricsSettings(Map<String, String> env,
+                                                       MetricsSettings metrics,
+                                                       String swarmId,
+                                                       String runId,
+                                                       String role,
+                                                       String instance) {
+        Objects.requireNonNull(metrics, "metrics");
+        env.put("POCKETHIVE_METRICS_ADAPTER", metrics.adapter().name());
+        env.put("POCKETHIVE_METRICS_PUBLISH_INTERVAL", metrics.publishInterval().toString());
+        env.put("POCKETHIVE_METRICS_SWARM_ID", requireSetting(swarmId, "pockethive.metrics.swarm-id"));
+        env.put("POCKETHIVE_METRICS_RUN_ID", requireSetting(runId, "pockethive.metrics.run-id"));
+        env.put("POCKETHIVE_METRICS_ROLE", requireSetting(role, "pockethive.metrics.role"));
+        env.put("POCKETHIVE_METRICS_INSTANCE", requireSetting(instance, "pockethive.metrics.instance"));
+        applyClickHouseMetricsExport(env, metrics.clickHouse());
+    }
+
+    private static void applyClickHouseControlPlaneSettings(Map<String, String> env,
+                                                            ClickHouseMetricsSinkProperties clickHouse) {
+        if (!clickHouse.configured()) {
+            return;
+        }
+        env.put("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_CLICKHOUSE_ENDPOINT", clickHouse.getEndpoint());
+        env.put("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_CLICKHOUSE_TABLE", clickHouse.getTable());
+        putIfNotBlank(env, "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_CLICKHOUSE_USERNAME",
+            clickHouse.getUsername());
+        putIfNotBlank(env, "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_CLICKHOUSE_PASSWORD",
+            clickHouse.getPassword());
+        env.put("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_CLICKHOUSE_CONNECT_TIMEOUT_MS",
+            Integer.toString(clickHouse.getConnectTimeoutMs()));
+        env.put("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_CLICKHOUSE_READ_TIMEOUT_MS",
+            Integer.toString(clickHouse.getReadTimeoutMs()));
+        env.put("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_CLICKHOUSE_BATCH_SIZE",
+            Integer.toString(clickHouse.getBatchSize()));
+        env.put("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_CLICKHOUSE_FLUSH_INTERVAL_MS",
+            Integer.toString(clickHouse.getFlushIntervalMs()));
+        env.put("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_CLICKHOUSE_MAX_BUFFERED_SAMPLES",
+            Integer.toString(clickHouse.getMaxBufferedSamples()));
+        env.put("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_CLICKHOUSE_MAX_LABEL_COUNT",
+            Integer.toString(clickHouse.getMaxLabelCount()));
+        env.put("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_CLICKHOUSE_MAX_LABEL_KEY_LENGTH",
+            Integer.toString(clickHouse.getMaxLabelKeyLength()));
+        env.put("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_CLICKHOUSE_MAX_LABEL_VALUE_LENGTH",
+            Integer.toString(clickHouse.getMaxLabelValueLength()));
+    }
+
+    private static void applyClickHouseMetricsExport(Map<String, String> env,
+                                                     ClickHouseMetricsSinkProperties clickHouse) {
+        if (!clickHouse.configured()) {
+            return;
+        }
+        env.put("POCKETHIVE_METRICS_CLICKHOUSE_ENDPOINT", clickHouse.getEndpoint());
+        env.put("POCKETHIVE_METRICS_CLICKHOUSE_TABLE", clickHouse.getTable());
+        putIfNotBlank(env, "POCKETHIVE_METRICS_CLICKHOUSE_USERNAME", clickHouse.getUsername());
+        putIfNotBlank(env, "POCKETHIVE_METRICS_CLICKHOUSE_PASSWORD", clickHouse.getPassword());
+        env.put("POCKETHIVE_METRICS_CLICKHOUSE_CONNECT_TIMEOUT_MS", Integer.toString(clickHouse.getConnectTimeoutMs()));
+        env.put("POCKETHIVE_METRICS_CLICKHOUSE_READ_TIMEOUT_MS", Integer.toString(clickHouse.getReadTimeoutMs()));
+        env.put("POCKETHIVE_METRICS_CLICKHOUSE_BATCH_SIZE", Integer.toString(clickHouse.getBatchSize()));
+        env.put("POCKETHIVE_METRICS_CLICKHOUSE_FLUSH_INTERVAL_MS", Integer.toString(clickHouse.getFlushIntervalMs()));
+        env.put("POCKETHIVE_METRICS_CLICKHOUSE_MAX_BUFFERED_SAMPLES",
+            Integer.toString(clickHouse.getMaxBufferedSamples()));
+        env.put("POCKETHIVE_METRICS_CLICKHOUSE_MAX_LABEL_COUNT", Integer.toString(clickHouse.getMaxLabelCount()));
+        env.put("POCKETHIVE_METRICS_CLICKHOUSE_MAX_LABEL_KEY_LENGTH",
+            Integer.toString(clickHouse.getMaxLabelKeyLength()));
+        env.put("POCKETHIVE_METRICS_CLICKHOUSE_MAX_LABEL_VALUE_LENGTH",
+            Integer.toString(clickHouse.getMaxLabelValueLength()));
+    }
+
+    private static void putIfNotBlank(Map<String, String> env, String key, String value) {
+        if (value != null && !value.isBlank()) {
+            env.put(key, value);
+        }
     }
 
     private static String requireArgument(String value, String description) {
@@ -165,12 +263,14 @@ public final class ControlPlaneContainerEnvironmentFactory {
         return value;
     }
 
-    public record ControllerSettings(PushgatewaySettings metrics,
+    public record ControllerSettings(MetricsSettings metrics,
+                                     String runId,
                                      String dockerSocketPath,
                                      String trafficQueuePrefix,
                                      String trafficHiveExchange) {
         public ControllerSettings {
             Objects.requireNonNull(metrics, "metrics");
+            requireArgument(runId, "runId");
             requireArgument(dockerSocketPath, "dockerSocketPath");
         }
 
@@ -184,16 +284,40 @@ public final class ControlPlaneContainerEnvironmentFactory {
     }
 
     public record WorkerSettings(String swarmId,
+                                 String runId,
                                  String controlExchange,
                                  String controlQueuePrefix,
                                  String hiveExchange,
-                                 PushgatewaySettings metrics) {
+                                 MetricsSettings metrics) {
         public WorkerSettings {
             Objects.requireNonNull(metrics, "metrics");
             requireArgument(swarmId, "swarmId");
+            requireArgument(runId, "runId");
             requireArgument(controlExchange, "controlExchange");
             requireArgument(controlQueuePrefix, "controlQueuePrefix");
             requireArgument(hiveExchange, "hiveExchange");
+        }
+    }
+
+    public record MetricsSettings(PocketHiveMetricsAdapter adapter,
+                                  Duration publishInterval,
+                                  PushgatewaySettings pushgateway,
+                                  ClickHouseMetricsSinkProperties clickHouse) {
+        public MetricsSettings {
+            Objects.requireNonNull(adapter, "adapter");
+            Objects.requireNonNull(publishInterval, "publishInterval");
+            Objects.requireNonNull(pushgateway, "pushgateway");
+            clickHouse = clickHouse == null ? ClickHouseMetricsSinkProperties.disabled() : clickHouse;
+            if (publishInterval.isZero() || publishInterval.isNegative()) {
+                throw new IllegalArgumentException("metrics.publishInterval must be positive");
+            }
+            if (adapter != PocketHiveMetricsAdapter.PROMETHEUS_PUSHGATEWAY && pushgateway.enabled()) {
+                throw new IllegalArgumentException(
+                    "metrics.pushgateway.enabled must be false unless adapter is PROMETHEUS_PUSHGATEWAY");
+            }
+            if (adapter == PocketHiveMetricsAdapter.CLICKHOUSE) {
+                clickHouse.requireConfigured();
+            }
         }
     }
 

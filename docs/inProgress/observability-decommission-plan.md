@@ -269,14 +269,14 @@ surfaces are in place.
 
 ### Work Sequence
 
-- [ ] Write the ClickHouse metrics schema and contract first. Include table
+- [x] Write the ClickHouse metrics schema and contract first. Include table
   name, TTL, primary order, label constraints, and example rows for counters,
   timers, and gauges.
-- [ ] Add the shared metrics contract and adapter settings. Settings must be
+- [x] Add the shared metrics contract and adapter settings. Settings must be
   required for active runtime targets.
-- [ ] Implement the ClickHouse metrics writer using explicit batching,
+- [x] Implement the ClickHouse metrics writer using explicit batching,
   timeouts, bounded buffering, and overload policy.
-- [ ] Wire Orchestrator, Swarm Controller, and workers to the ClickHouse metrics
+- [x] Wire Orchestrator, Swarm Controller, and workers to the ClickHouse metrics
   adapter through the existing control-plane environment path.
 - [ ] Port Grafana pipeline and buffer-guard dashboards from Prometheus to
   ClickHouse.

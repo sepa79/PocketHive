@@ -8,7 +8,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import io.pockethive.manager.scenario.ScenarioEngine;
+import io.pockethive.observability.metrics.PocketHiveMetricsAdapter;
 import io.pockethive.sink.clickhouse.ClickHouseSinkProperties;
+import io.pockethive.sink.clickhouse.metrics.ClickHouseMetricsSinkProperties;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties.Docker;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties.Manager;
@@ -40,13 +42,17 @@ class SwarmRuntimeCoreScenarioEngineTest {
         new Manager("swarm-controller"),
         new SwarmController(
             new Traffic("ph.test.hive", "ph.test"),
-            new Metrics(new Pushgateway(
-                false,
-                "http://pushgateway",
+            new Metrics(
+                PocketHiveMetricsAdapter.PROMETHEUS_PUSHGATEWAY,
                 Duration.ofSeconds(10),
-                "DELETE",
-                "job",
-                new SwarmControllerProperties.GroupingKey("inst"))),
+                new Pushgateway(
+                    false,
+                    "http://pushgateway",
+                    Duration.ofSeconds(10),
+                    "DELETE",
+                    "job",
+                    new SwarmControllerProperties.GroupingKey("inst")),
+                ClickHouseMetricsSinkProperties.disabled()),
             new Docker(null, "/var/run/docker.sock", io.pockethive.manager.runtime.ComputeAdapterType.DOCKER_SINGLE),
             new SwarmControllerProperties.Features(false)));
     SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
@@ -59,12 +65,12 @@ class SwarmRuntimeCoreScenarioEngineTest {
         mock(io.pockethive.manager.ports.ComputeAdapter.class);
     io.pockethive.swarmcontroller.infra.amqp.SwarmQueueMetrics queueMetrics =
         new io.pockethive.swarmcontroller.infra.amqp.SwarmQueueMetrics("test-swarm", meterRegistry);
-			    io.pockethive.manager.runtime.ConfigFanout configFanout =
-			        new io.pockethive.manager.runtime.ConfigFanout(
-			            mapper,
-			            new io.pockethive.swarmcontroller.runtime.SwarmControlPlanePortAdapter(controlPublisher),
-			            props.getSwarmId(),
-			            "inst");
+    io.pockethive.manager.runtime.ConfigFanout configFanout =
+        new io.pockethive.manager.runtime.ConfigFanout(
+            mapper,
+            new io.pockethive.swarmcontroller.runtime.SwarmControlPlanePortAdapter(controlPublisher),
+            props.getSwarmId(),
+            "inst");
 
     SwarmRuntimeCore core = new SwarmRuntimeCore(
         amqp,

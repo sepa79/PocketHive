@@ -3,6 +3,8 @@ package io.pockethive.swarmcontroller.infra.docker;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.github.dockerjava.core.DefaultDockerClientConfig;
+import io.pockethive.observability.metrics.PocketHiveMetricsAdapter;
+import io.pockethive.sink.clickhouse.metrics.ClickHouseMetricsSinkProperties;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
@@ -16,13 +18,16 @@ class DockerConfigurationTest {
   private static final String HIVE_EXCHANGE = TRAFFIC_PREFIX + ".hive";
   private static final SwarmControllerProperties.Metrics METRICS =
       new SwarmControllerProperties.Metrics(
+          PocketHiveMetricsAdapter.PROMETHEUS_PUSHGATEWAY,
+          Duration.ofSeconds(10),
           new SwarmControllerProperties.Pushgateway(
               true,
               "http://pushgateway:9091",
               Duration.ofSeconds(30),
               "DELETE",
               "test-job",
-              new SwarmControllerProperties.GroupingKey("controller-instance")));
+              new SwarmControllerProperties.GroupingKey("controller-instance")),
+          ClickHouseMetricsSinkProperties.disabled());
 
   @Test
   void dockerClientConfigHonorsConfiguredHost() {

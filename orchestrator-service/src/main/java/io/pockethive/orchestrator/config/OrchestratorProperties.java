@@ -1,6 +1,8 @@
 package io.pockethive.orchestrator.config;
 
 import io.pockethive.manager.runtime.ComputeAdapterType;
+import io.pockethive.observability.metrics.PocketHiveMetricsAdapter;
+import io.pockethive.sink.clickhouse.metrics.ClickHouseMetricsSinkProperties;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -114,14 +116,45 @@ public class OrchestratorProperties {
     @Validated
     public static final class Metrics {
 
+        private final PocketHiveMetricsAdapter adapter;
+        private final Duration publishInterval;
         private final @Valid Pushgateway pushgateway;
+        private final @Valid ClickHouseMetricsSinkProperties clickHouse;
 
-        public Metrics(@Valid Pushgateway pushgateway) {
+        public Metrics(@NotNull PocketHiveMetricsAdapter adapter,
+                       @NotNull Duration publishInterval,
+                       @Valid Pushgateway pushgateway,
+                       @Valid ClickHouseMetricsSinkProperties clickHouse) {
+            this.adapter = Objects.requireNonNull(adapter, "adapter");
+            this.publishInterval = Objects.requireNonNull(publishInterval, "publishInterval");
             this.pushgateway = Objects.requireNonNull(pushgateway, "pushgateway");
+            this.clickHouse = clickHouse == null ? ClickHouseMetricsSinkProperties.disabled() : clickHouse;
+            if (this.publishInterval.isZero() || this.publishInterval.isNegative()) {
+                throw new IllegalArgumentException("metrics.publishInterval must be positive");
+            }
+            if (this.adapter != PocketHiveMetricsAdapter.PROMETHEUS_PUSHGATEWAY && this.pushgateway.isEnabled()) {
+                throw new IllegalArgumentException(
+                    "metrics.pushgateway.enabled must be false unless adapter is PROMETHEUS_PUSHGATEWAY");
+            }
+            if (this.adapter == PocketHiveMetricsAdapter.CLICKHOUSE) {
+                this.clickHouse.requireConfigured();
+            }
+        }
+
+        public PocketHiveMetricsAdapter getAdapter() {
+            return adapter;
+        }
+
+        public Duration getPublishInterval() {
+            return publishInterval;
         }
 
         public Pushgateway getPushgateway() {
             return pushgateway;
+        }
+
+        public ClickHouseMetricsSinkProperties getClickHouse() {
+            return clickHouse;
         }
     }
 
@@ -300,4 +333,5 @@ public class OrchestratorProperties {
         }
         return value;
     }
+
 }

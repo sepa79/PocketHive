@@ -41,6 +41,7 @@ import io.pockethive.swarmcontroller.QueueStats;
 import io.pockethive.swarmcontroller.SwarmLifecycleManager;
 import io.pockethive.swarmcontroller.scenario.TimelineScenarioObserver;
 import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory;
+import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory.MetricsSettings;
 import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory.PushgatewaySettings;
 import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory.WorkerSettings;
 import io.pockethive.sink.clickhouse.ClickHouseSinkProperties;
@@ -259,14 +260,20 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
 
   private static WorkerSettings deriveWorkerSettings(SwarmControllerProperties properties) {
     SwarmControllerProperties.Traffic traffic = properties.getTraffic();
-    SwarmControllerProperties.Pushgateway pushgateway = properties.getMetrics().pushgateway();
-    PushgatewaySettings metrics = new PushgatewaySettings(
-        pushgateway.enabled(),
-        pushgateway.baseUrl(),
-        pushgateway.pushRate(),
-        pushgateway.shutdownOperation());
+    SwarmControllerProperties.Metrics propertiesMetrics = properties.getMetrics();
+    SwarmControllerProperties.Pushgateway pushgateway = propertiesMetrics.pushgateway();
+    MetricsSettings metrics = new MetricsSettings(
+        propertiesMetrics.adapter(),
+        propertiesMetrics.publishInterval(),
+        new PushgatewaySettings(
+            pushgateway.enabled(),
+            pushgateway.baseUrl(),
+            pushgateway.pushRate(),
+            pushgateway.shutdownOperation()),
+        propertiesMetrics.clickHouse());
     return new WorkerSettings(
         properties.getSwarmId(),
+        requireEnvValue("POCKETHIVE_JOURNAL_RUN_ID"),
         properties.getControlExchange(),
         properties.getControlQueuePrefixBase(),
         traffic.hiveExchange(),
