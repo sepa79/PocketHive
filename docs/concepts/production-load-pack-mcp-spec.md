@@ -197,3 +197,8 @@ Must test:
 - local runner waits 5 minutes.
 - pack runs write manifests.
 - tests cover config, validation, runner, MCP tools, HTTP client behavior.
+
+## 11. Nice To Have
+
+- PocketHive VS Code plugin calls `pack.validate-config` / `pack.validate` and highlights duplicate aliases, duplicate profile IDs, duplicate generated `swarmId`, exact duplicate scenario tuples, unknown scenarios, bad SUT IDs, and bad variable profile IDs.
+- YAML schema covers structure: required fields, ID format, max lengths, valid enums, and duplicate map keys where parser supports strict mode.
