@@ -278,7 +278,7 @@ surfaces are in place.
   timeouts, bounded buffering, and overload policy.
 - [x] Wire Orchestrator, Swarm Controller, and workers to the ClickHouse metrics
   adapter through the existing control-plane environment path.
-- [ ] Port Grafana pipeline and buffer-guard dashboards from Prometheus to
+- [x] Port Grafana pipeline and buffer-guard dashboards from Prometheus to
   ClickHouse.
 - [ ] Replace MCP/agent Prometheus evidence with a product-owned metrics query
   API/tool.

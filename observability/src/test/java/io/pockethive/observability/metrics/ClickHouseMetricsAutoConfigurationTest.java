@@ -4,6 +4,9 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.pockethive.sink.clickhouse.metrics.ClickHouseMetricSample;
 import io.pockethive.sink.clickhouse.metrics.ClickHouseMetricSampleSink;
+import org.springframework.boot.actuate.autoconfigure.metrics.CompositeMeterRegistryAutoConfiguration;
+import org.springframework.boot.actuate.autoconfigure.metrics.MetricsAutoConfiguration;
+import org.springframework.boot.actuate.autoconfigure.metrics.export.simple.SimpleMetricsExportAutoConfiguration;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -52,6 +55,29 @@ class ClickHouseMetricsAutoConfigurationTest {
             "pockethive.metrics.role=processor",
             "pockethive.metrics.instance=processor-1")
         .run(context -> {
+          assertThat(context).hasSingleBean(MicrometerClickHouseMetricsPublisher.class);
+          assertThat(context).hasSingleBean(ClickHouseMetricsLifecycle.class);
+        });
+  }
+
+  @Test
+  void createsPublisherAfterBootMeterRegistryAutoConfiguration() {
+    new ApplicationContextRunner()
+        .withConfiguration(AutoConfigurations.of(
+            ClickHouseMetricsAutoConfiguration.class,
+            MetricsAutoConfiguration.class,
+            CompositeMeterRegistryAutoConfiguration.class,
+            SimpleMetricsExportAutoConfiguration.class))
+        .withBean(ClickHouseMetricSampleSink.class, RecordingSink::new)
+        .withPropertyValues(
+            "pockethive.metrics.adapter=CLICKHOUSE",
+            "pockethive.metrics.publish-interval=PT10S",
+            "pockethive.metrics.swarm-id=swarm-a",
+            "pockethive.metrics.run-id=run-a",
+            "pockethive.metrics.role=processor",
+            "pockethive.metrics.instance=processor-1")
+        .run(context -> {
+          assertThat(context).hasSingleBean(MeterRegistry.class);
           assertThat(context).hasSingleBean(MicrometerClickHouseMetricsPublisher.class);
           assertThat(context).hasSingleBean(ClickHouseMetricsLifecycle.class);
         });

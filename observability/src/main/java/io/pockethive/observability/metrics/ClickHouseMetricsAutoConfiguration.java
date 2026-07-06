@@ -6,6 +6,10 @@ import io.pockethive.sink.clickhouse.metrics.ClickHouseMetricSampleSink;
 import io.pockethive.sink.clickhouse.metrics.ClickHouseMetricsSink;
 import io.pockethive.sink.clickhouse.metrics.ClickHouseMetricsSinkProperties;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.actuate.autoconfigure.metrics.CompositeMeterRegistryAutoConfiguration;
+import org.springframework.boot.actuate.autoconfigure.metrics.MetricsAutoConfiguration;
+import org.springframework.boot.actuate.autoconfigure.metrics.export.prometheus.PrometheusMetricsExportAutoConfiguration;
+import org.springframework.boot.actuate.autoconfigure.metrics.export.simple.SimpleMetricsExportAutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
@@ -14,7 +18,12 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 
-@AutoConfiguration
+@AutoConfiguration(after = {
+    MetricsAutoConfiguration.class,
+    CompositeMeterRegistryAutoConfiguration.class,
+    SimpleMetricsExportAutoConfiguration.class,
+    PrometheusMetricsExportAutoConfiguration.class
+})
 @ConditionalOnClass({MeterRegistry.class, ClickHouseMetricsSink.class})
 @ConditionalOnProperty(prefix = "pockethive.metrics", name = "adapter", havingValue = "CLICKHOUSE")
 @EnableConfigurationProperties({

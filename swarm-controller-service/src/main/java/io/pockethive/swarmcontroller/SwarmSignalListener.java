@@ -948,6 +948,7 @@ public class SwarmSignalListener {
   }
 
   private void sendStatusFull() {
+    refreshQueueMetricsForStatusFull();
     SwarmMetrics m = lifecycle.getMetrics();
     String state = determineState(m);
     maybeJournalHealthTransition(state, m);
@@ -987,6 +988,14 @@ public class SwarmSignalListener {
     appendTrafficDiagnostics(builder);
     String payload = builder.toJson();
     sendControl(rk, payload, "status");
+  }
+
+  private void refreshQueueMetricsForStatusFull() {
+    try {
+      lifecycle.snapshotQueueStats();
+    } catch (RuntimeException e) {
+      log.warn("Failed to refresh swarm queue metrics before status-full for swarm {}", swarmId, e);
+    }
   }
 
   private void sendStatusDelta() {

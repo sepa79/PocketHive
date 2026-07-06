@@ -5,7 +5,7 @@ datasources:
     type: prometheus
     access: proxy
     url: http://prometheus:9090/prometheus/
-    isDefault: true
+    isDefault: false
   - name: PocketHive Journal (Postgres)
     type: postgres
     access: proxy
@@ -23,6 +23,7 @@ datasources:
     uid: clickhouse
     type: grafana-clickhouse-datasource
     access: proxy
+    isDefault: true
     jsonData:
       protocol: http
       host: clickhouse
