@@ -26,15 +26,8 @@ class RabbitConfigTest {
                 "ph.control.orchestrator",
                 "ph.control.orchestrator-status",
                 new OrchestratorProperties.Metrics(
-                    PocketHiveMetricsAdapter.PROMETHEUS_PUSHGATEWAY,
+                    PocketHiveMetricsAdapter.DISABLED,
                     Duration.ofMinutes(1),
-                    new OrchestratorProperties.Pushgateway(
-                        true,
-                        "http://pushgateway:9091",
-                        Duration.ofMinutes(1),
-                        "DELETE",
-                        "swarm-job",
-                        new OrchestratorProperties.GroupingKey("controller-instance")),
                     ClickHouseMetricsSinkProperties.disabled()),
                 new OrchestratorProperties.Docker("/var/run/docker.sock", null),
                 new OrchestratorProperties.Images(null),

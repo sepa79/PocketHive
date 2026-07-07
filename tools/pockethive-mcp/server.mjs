@@ -64,11 +64,20 @@ const SM_URL = process.env.SCENARIO_MANAGER_BASE_URL || `${BASE_URL}/scenario-ma
 const AUTH_SERVICE_URL = process.env.AUTH_SERVICE_BASE_URL || `${BASE_URL}/auth-service`;
 const POCKETHIVE_AUTH_USERNAME = process.env.POCKETHIVE_AUTH_USERNAME || "";
 const RABBIT_MGMT = process.env.RABBITMQ_MANAGEMENT_BASE_URL || `${BASE_URL}/rabbitmq/api`;
-const PROM_URL = process.env.PROMETHEUS_BASE_URL || `${BASE_URL}/prometheus`;
+const GRAFANA_URL = process.env.POCKETHIVE_GRAFANA_BASE_URL || "";
+const GRAFANA_USERNAME = process.env.POCKETHIVE_GRAFANA_USERNAME || "";
+const GRAFANA_PASSWORD = process.env.POCKETHIVE_GRAFANA_PASSWORD || "";
+const GRAFANA_CLICKHOUSE_DATASOURCE_UID = process.env.POCKETHIVE_GRAFANA_CLICKHOUSE_DATASOURCE_UID || "";
 const REDIS_HOST = process.env.REDIS_HOST || "localhost";
 const REDIS_PORT = Number(process.env.REDIS_PORT || "6379");
 // TCP_MOCK_BASE_URL and WIREMOCK_BASE_URL can be set explicitly to override
 // the auto-derived URLs (host from BASE_URL, standard ports 8083/8080).
+const METRICS_QUERY_KINDS = Object.freeze([
+  "tx-outcomes-summary",
+  "processor-runtime-summary",
+  "queue-runtime-summary",
+  "buffer-guard-summary",
+]);
 
 // ── Path helpers ──────────────────────────────────────────────────────────────
 
@@ -278,6 +287,171 @@ async function httpJson(url, opts = {}) {
     }
   }
   throw new Error(`HTTP auth retry failed for ${full}`);
+}
+
+function grafanaBasicAuth() {
+  if (!GRAFANA_USERNAME.trim() || !GRAFANA_PASSWORD.trim()) {
+    throw new Error("POCKETHIVE_GRAFANA_USERNAME and POCKETHIVE_GRAFANA_PASSWORD must be configured for metrics queries");
+  }
+  return `Basic ${Buffer.from(`${GRAFANA_USERNAME}:${GRAFANA_PASSWORD}`).toString("base64")}`;
+}
+
+function grafanaMetricsConfig() {
+  const grafanaBaseUrl = GRAFANA_URL.trim().replace(/\/+$/, "");
+  const datasourceUid = GRAFANA_CLICKHOUSE_DATASOURCE_UID.trim();
+  if (!grafanaBaseUrl) {
+    throw new Error("POCKETHIVE_GRAFANA_BASE_URL must be configured for metrics queries");
+  }
+  if (!datasourceUid) {
+    throw new Error("POCKETHIVE_GRAFANA_CLICKHOUSE_DATASOURCE_UID must be configured for metrics queries");
+  }
+  return { grafanaBaseUrl, datasourceUid };
+}
+
+function clickHouseStringLiteral(value, fieldName) {
+  const text = String(value || "").trim();
+  if (!text) {
+    throw new Error(`${fieldName} must not be blank`);
+  }
+  return `'${text.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
+}
+
+function boundedMetricsLimit(limit) {
+  const value = limit === undefined ? 100 : Number(limit);
+  if (!Number.isInteger(value) || value < 1 || value > 500) {
+    throw new Error("limit must be an integer from 1 to 500");
+  }
+  return value;
+}
+
+function grafanaFrameRows(frame) {
+  const fields = Array.isArray(frame?.schema?.fields) ? frame.schema.fields : [];
+  const names = fields.map((field, index) => String(field?.name || `field_${index}`));
+  const values = Array.isArray(frame?.data?.values) ? frame.data.values : [];
+  const rowCount = values.reduce((max, column) => Math.max(max, Array.isArray(column) ? column.length : 0), 0);
+  const rows = [];
+  for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+    const row = {};
+    for (let columnIndex = 0; columnIndex < names.length; columnIndex += 1) {
+      row[names[columnIndex]] = Array.isArray(values[columnIndex]) ? values[columnIndex][rowIndex] : null;
+    }
+    rows.push(row);
+  }
+  return rows;
+}
+
+function grafanaRows(response) {
+  const results = response?.results || {};
+  const rows = [];
+  const frames = [];
+  for (const [refId, result] of Object.entries(results)) {
+    if (result?.error) {
+      throw new Error(`Grafana ClickHouse query ${refId} failed: ${result.error}`);
+    }
+    for (const frame of result?.frames || []) {
+      const frameRows = grafanaFrameRows(frame);
+      frames.push({ refId, rowCount: frameRows.length });
+      rows.push(...frameRows);
+    }
+  }
+  return { rows, frames };
+}
+
+function metricsSql({ kind, swarmId, limit }) {
+  const swarm = clickHouseStringLiteral(swarmId, "swarmId");
+  const boundedLimit = boundedMetricsLimit(limit);
+  if (kind === "tx-outcomes-summary") {
+    return {
+      table: "ph_tx_outcome_v2",
+      sql: `SELECT count() AS total, countIf(processorSuccess = 1) AS success, countIf(processorSuccess = 0) AS failed, avg(processorDurationMs) AS avgProcessorDurationMs, max(processorDurationMs) AS maxProcessorDurationMs, max(eventTime) AS lastEventTime FROM ph_tx_outcome_v2 WHERE $__timeFilter(eventTime) AND swarmId = ${swarm}`,
+    };
+  }
+  if (kind === "processor-runtime-summary") {
+    return {
+      table: "ph_metrics_samples",
+      sql: `SELECT metricName, statistic, role, instance, count() AS samples, argMax(value, eventTime) AS latestValue, max(eventTime) AS lastEventTime FROM ph_metrics_samples WHERE $__timeFilter(eventTime) AND swarmId = ${swarm} AND metricName IN ('ph_processor_calls_total', 'ph_errors_total', 'ph_processor_latency_ms', 'ph_processor_latency_avg_ms', 'ph_processor_success_ratio', 'ph_total_latency_ms') AND role = 'postprocessor' GROUP BY metricName, statistic, role, instance ORDER BY metricName, statistic, instance LIMIT ${boundedLimit}`,
+    };
+  }
+  if (kind === "queue-runtime-summary") {
+    return {
+      table: "ph_metrics_samples",
+      sql: `SELECT metricName, if(labels['queue'] = '', instance, labels['queue']) AS queue, role, instance, count() AS samples, argMax(value, eventTime) AS latestValue, max(value) AS maxValue, max(eventTime) AS lastEventTime FROM ph_metrics_samples WHERE $__timeFilter(eventTime) AND swarmId = ${swarm} AND metricName IN ('ph_swarm_queue_depth', 'ph_swarm_queue_consumers', 'ph_swarm_queue_oldest_age_seconds') GROUP BY metricName, queue, role, instance ORDER BY metricName, queue, instance LIMIT ${boundedLimit}`,
+    };
+  }
+  if (kind === "buffer-guard-summary") {
+    return {
+      table: "ph_metrics_samples",
+      sql: `SELECT metricName, if(labels['queue'] = '', instance, labels['queue']) AS queue, role, instance, count() AS samples, argMax(value, eventTime) AS latestValue, max(eventTime) AS lastEventTime FROM ph_metrics_samples WHERE $__timeFilter(eventTime) AND swarmId = ${swarm} AND metricName IN ('ph_swarm_buffer_guard_depth', 'ph_swarm_buffer_guard_target', 'ph_swarm_buffer_guard_rate_per_sec', 'ph_swarm_buffer_guard_state') GROUP BY metricName, queue, role, instance ORDER BY metricName, queue, instance LIMIT ${boundedLimit}`,
+    };
+  }
+  throw new Error(`Unsupported metrics query kind: ${kind}`);
+}
+
+async function grafanaClickHouseQuery({ rawSql, from, to, timeoutMs = 10000 }) {
+  const { grafanaBaseUrl, datasourceUid } = grafanaMetricsConfig();
+  const response = await httpJson(`${grafanaBaseUrl}/api/ds/query`, {
+    method: "POST",
+    timeoutMs,
+    headers: {
+      authorization: grafanaBasicAuth(),
+    },
+    body: {
+      from,
+      to,
+      queries: [
+        {
+          refId: "A",
+          datasource: { type: "grafana-clickhouse-datasource", uid: datasourceUid },
+          queryType: "table",
+          editorType: "sql",
+          format: 1,
+          rawSql,
+        },
+      ],
+    },
+  });
+  return { response, ...grafanaRows(response) };
+}
+
+async function queryProductMetrics({ swarmId, kind, from, to, limit }) {
+  if (!METRICS_QUERY_KINDS.includes(kind)) {
+    throw new Error(`kind must be one of: ${METRICS_QUERY_KINDS.join(", ")}`);
+  }
+  const resolvedFrom = String(from || "").trim();
+  const resolvedTo = String(to || "").trim();
+  if (!resolvedFrom || !resolvedTo) {
+    throw new Error("from and to must be explicit Grafana time range values, e.g. now-1h and now");
+  }
+  const query = metricsSql({ kind, swarmId, limit });
+  const result = await grafanaClickHouseQuery({ rawSql: query.sql, from: resolvedFrom, to: resolvedTo });
+  const { grafanaBaseUrl, datasourceUid } = grafanaMetricsConfig();
+  return {
+    source: "grafana-clickhouse",
+    datasource: {
+      grafanaBaseUrl,
+      uid: datasourceUid,
+    },
+    query: {
+      kind,
+      swarmId,
+      from: resolvedFrom,
+      to: resolvedTo,
+      table: query.table,
+      limit: boundedMetricsLimit(limit),
+    },
+    rows: result.rows,
+    frames: result.frames,
+  };
+}
+
+async function checkMetricsQueryHealth() {
+  const result = await grafanaClickHouseQuery({
+    rawSql: "SELECT 1 AS ok",
+    from: "now-5m",
+    to: "now",
+    timeoutMs: 5000,
+  });
+  return { ok: result.rows?.[0]?.ok === 1, rows: result.rows };
 }
 
 async function httpText(url, opts = {}) {
@@ -2021,7 +2195,7 @@ registerWorkflowTools({
   ORCH_URL,
   SM_URL,
   RABBIT_MGMT,
-  PROM_URL,
+  GRAFANA_URL,
   POCKETHIVE_ROOT,
   REPO_ROOT,
   getBundlesDir,
@@ -3066,10 +3240,8 @@ async function sendComponentConfigUpdate({
         purpose: "Request fresh status-full snapshots if component state is stale after the config update.",
       },
       {
-        tool: "debug.prometheus",
-        inputHint: {
-          query: `ph_swarm_queue_depth{ph_swarm="${swarmId}"}`,
-        },
+        tool: "metrics_query",
+        input: { swarmId, kind: "queue-runtime-summary", from: "now-15m", to: "now" },
         purpose: "Inspect queue depth or worker metrics to verify runtime effect, especially for rate changes.",
       },
     ],
@@ -3124,10 +3296,16 @@ reg("debug.config-update", "Compatibility alias for component.config-update.", {
   return await sendComponentConfigUpdate({ swarmId, role, instanceId, patch });
 });
 
-reg("debug.prometheus", "Query Prometheus for metrics (instant query). Use to verify postprocessor metrics are flowing, e.g. ph_transaction_total_latency_ms", {
-  query: z.string().describe("PromQL query, e.g. ph_transaction_total_latency_ms{ph_swarm=\"my-swarm\"}"),
-}, async ({ query }) => {
-  return await httpJson(`${PROM_URL}/api/v1/query?query=${encodeURIComponent(query)}`, { timeoutMs: 10000 });
+reg("metrics.query", "Query product metrics from ClickHouse through the provisioned Grafana datasource. Raw SQL is not accepted.", {
+  swarmId: SWARM_ID_ARG,
+  kind: z.enum(METRICS_QUERY_KINDS).describe("Whitelisted metrics summary shape to query."),
+  from: z.string().describe("Explicit Grafana time range start, e.g. now-1h."),
+  to: z.string().describe("Explicit Grafana time range end, e.g. now."),
+  limit: z.number().int().min(1).max(500).optional().describe("Maximum grouped rows for summary queries. Defaults to 100."),
+}, async ({ swarmId, kind, from, to, limit }) => {
+  return await queryProductMetrics({ swarmId, kind, from, to, limit });
+}, {
+  annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
 });
 
 async function evidenceSource(name, fn) {
@@ -3774,11 +3952,11 @@ async function buildEvidenceSummary({ swarmId, includeTapSample, scenarioId, pre
       .map(q => ({ name: q.name, messages: q.messages, consumers: q.consumers }));
   }));
   sources.push(await evidenceSource("debug.journal", () => httpJson(`/api/swarms/${encodeURIComponent(swarmId)}/journal/page?limit=50`)));
-  sources.push(await evidenceSource("debug.prometheus.success", () =>
-    httpJson(`${PROM_URL}/api/v1/query?query=${encodeURIComponent(`ph_transaction_processor_success{ph_swarm="${swarmId}"}`)}`, { timeoutMs: 10000 })
+  sources.push(await evidenceSource("metrics.tx-outcomes-summary", () =>
+    queryProductMetrics({ swarmId, kind: "tx-outcomes-summary", from: "now-1h", to: "now", limit: 100 })
   ));
-  sources.push(await evidenceSource("debug.prometheus.latency", () =>
-    httpJson(`${PROM_URL}/api/v1/query?query=${encodeURIComponent(`ph_transaction_total_latency_ms{ph_swarm="${swarmId}"}`)}`, { timeoutMs: 10000 })
+  sources.push(await evidenceSource("metrics.processor-runtime-summary", () =>
+    queryProductMetrics({ swarmId, kind: "processor-runtime-summary", from: "now-1h", to: "now", limit: 100 })
   ));
   sources.push(await evidenceSource("mock.wiremock.requests", () => httpJson(`${WIREMOCK_URL}/__admin/requests?limit=20`, { timeoutMs: 10000 })));
   sources.push(await evidenceSource("mock.wiremock.unmatched", () => httpJson(`${WIREMOCK_URL}/__admin/requests/unmatched`, { timeoutMs: 10000 })));
@@ -3849,8 +4027,8 @@ async function buildEvidenceSummary({ swarmId, includeTapSample, scenarioId, pre
       raw: journal?.data ?? null,
     },
     metrics: {
-      success: source("debug.prometheus.success")?.data ?? null,
-      latency: source("debug.prometheus.latency")?.data ?? null,
+      txOutcomes: source("metrics.tx-outcomes-summary")?.data ?? null,
+      processor: source("metrics.processor-runtime-summary")?.data ?? null,
     },
     mocks: {
       wiremockRequests: countArrayLike(wiremockRequests?.data),
@@ -4605,17 +4783,16 @@ reg("env.switch", "Request a switch to a named environment profile in the IDE/cl
   };
 });
 
-reg("health.check", "Check connectivity to Orchestrator, Scenario Manager, RabbitMQ, and Prometheus", {}, async () => {
+reg("health.check", "Check connectivity to Orchestrator, Scenario Manager, RabbitMQ, and ClickHouse metrics through Grafana", {}, async () => {
   const results = {};
-  for (const [name, url] of [
-    ["orchestrator", `${ORCH_URL}/actuator/health`],
-    ["scenario-manager", `${SM_URL}/actuator/health`],
-    ["rabbitmq", `${RABBIT_MGMT}/overview`],
-    ["prometheus", `${PROM_URL}/api/v1/status/config`],
+  for (const [name, check] of [
+    ["orchestrator", () => httpJson(`${ORCH_URL}/actuator/health`, { timeoutMs: 5000 })],
+    ["scenario-manager", () => httpJson(`${SM_URL}/actuator/health`, { timeoutMs: 5000 })],
+    ["rabbitmq", () => httpJson(`${RABBIT_MGMT}/overview`, { headers: { authorization: rabbitAuth() }, timeoutMs: 5000 })],
+    ["metrics", () => checkMetricsQueryHealth()],
   ]) {
     try {
-      const headers = name === "rabbitmq" ? { authorization: rabbitAuth() } : {};
-      await httpJson(url, { headers, timeoutMs: 5000 });
+      await check();
       results[name] = "UP";
     } catch (e) { results[name] = `DOWN: ${e.message}`; }
   }

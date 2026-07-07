@@ -59,7 +59,7 @@ public final class ControlPlaneContainerEnvironmentFactory {
             settings.runId(),
             managerRole,
             resolvedInstance);
-        applyPushgatewayControlPlaneSettings(env, settings.metrics());
+        applyControlPlaneMetricsSettings(env, settings.metrics());
         env.put(
             "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_DOCKER_SOCKET_PATH",
             requireSetting(settings.dockerSocketPath(), "pockethive.control-plane.orchestrator.docker.socket-path"));
@@ -91,7 +91,6 @@ public final class ControlPlaneContainerEnvironmentFactory {
             settings.runId(),
             resolvedRole,
             resolvedInstance);
-        applyPushgatewayExport(env, settings.metrics());
         return env;
     }
 
@@ -140,23 +139,10 @@ public final class ControlPlaneContainerEnvironmentFactory {
         return Integer.toString(port);
     }
 
-    private static void applyPushgatewayControlPlaneSettings(
+    private static void applyControlPlaneMetricsSettings(
         Map<String, String> env,
         MetricsSettings metrics) {
         Objects.requireNonNull(metrics, "metrics");
-        PushgatewaySettings pushgateway = metrics.pushgateway();
-        env.put(
-            "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_ENABLED",
-            Boolean.toString(pushgateway.enabled()));
-        env.put(
-            "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_BASE_URL",
-            pushgateway.baseUrl());
-        env.put(
-            "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_PUSH_RATE",
-            pushgateway.pushRate().toString());
-        env.put(
-            "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_SHUTDOWN_OPERATION",
-            pushgateway.shutdownOperation());
         env.put(
             "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_ADAPTER",
             metrics.adapter().name());
@@ -164,23 +150,6 @@ public final class ControlPlaneContainerEnvironmentFactory {
             "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUBLISH_INTERVAL",
             metrics.publishInterval().toString());
         applyClickHouseControlPlaneSettings(env, metrics.clickHouse());
-    }
-
-    private static void applyPushgatewayExport(Map<String, String> env, MetricsSettings metrics) {
-        Objects.requireNonNull(metrics, "metrics");
-        PushgatewaySettings pushgateway = metrics.pushgateway();
-        env.put(
-            "MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED",
-            Boolean.toString(pushgateway.enabled()));
-        env.put(
-            "MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL",
-            pushgateway.baseUrl());
-        env.put(
-            "MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE",
-            pushgateway.pushRate().toString());
-        env.put(
-            "MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION",
-            pushgateway.shutdownOperation());
     }
 
     private static void applyPocketHiveMetricsSettings(Map<String, String> env,
@@ -301,34 +270,17 @@ public final class ControlPlaneContainerEnvironmentFactory {
 
     public record MetricsSettings(PocketHiveMetricsAdapter adapter,
                                   Duration publishInterval,
-                                  PushgatewaySettings pushgateway,
                                   ClickHouseMetricsSinkProperties clickHouse) {
         public MetricsSettings {
             Objects.requireNonNull(adapter, "adapter");
             Objects.requireNonNull(publishInterval, "publishInterval");
-            Objects.requireNonNull(pushgateway, "pushgateway");
             clickHouse = clickHouse == null ? ClickHouseMetricsSinkProperties.disabled() : clickHouse;
             if (publishInterval.isZero() || publishInterval.isNegative()) {
                 throw new IllegalArgumentException("metrics.publishInterval must be positive");
             }
-            if (adapter != PocketHiveMetricsAdapter.PROMETHEUS_PUSHGATEWAY && pushgateway.enabled()) {
-                throw new IllegalArgumentException(
-                    "metrics.pushgateway.enabled must be false unless adapter is PROMETHEUS_PUSHGATEWAY");
-            }
             if (adapter == PocketHiveMetricsAdapter.CLICKHOUSE) {
                 clickHouse.requireConfigured();
             }
-        }
-    }
-
-    public record PushgatewaySettings(boolean enabled,
-                                      String baseUrl,
-                                      Duration pushRate,
-                                      String shutdownOperation) {
-        public PushgatewaySettings {
-            Objects.requireNonNull(pushRate, "pushRate");
-            requireArgument(baseUrl, "metrics baseUrl");
-            requireArgument(shutdownOperation, "metrics shutdownOperation");
         }
     }
 }

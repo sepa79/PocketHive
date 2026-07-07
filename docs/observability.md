@@ -24,18 +24,32 @@ through Orchestrator's runtime debug API:
 The runtime debug path returns finite, redacted Docker/Swarm log reads. It is for
 debugging current runtime state, not durable log retention.
 
-## Metrics Pushgateway
+## Product Metrics (ClickHouse)
 
-PocketHive services now export Micrometer metrics to a Prometheus Pushgateway instead of exposing `/actuator/prometheus`.
+PocketHive product metrics use the explicit metrics adapter and are stored in
+ClickHouse. Runtime targets must declare one adapter (`CLICKHOUSE` for active
+metrics, or an explicit disabled/test state for targets that intentionally do
+  not publish metrics). Do not add a secondary metrics backend as a silent fallback.
 
-- **Service wiring.** Each bee binds the standard Micrometer properties (`management.prometheus.metrics.export.pushgateway.*`) so deployments can supply the gateway URL, swarm id (`...job`), and bee name (`...grouping-key.instance`) directly via configuration or environment variables. The Docker Compose profile continues to inject these variables for local services.
-- **Prometheus scrape.** The bundled Prometheus instance scrapes only the Pushgateway (`pushgateway:9091`) with `honor_labels: true`, so dashboards continue to use the swarm/bee labels that workers provide.
-- **Lifecycle hygiene.** During shutdown each service deletes its Pushgateway metrics (job + instance grouping key) via `MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION=DELETE`. Expect the series to vanish within one scrape interval after a container terminates.
-- **Retention runbook.** If a worker crashes without executing its shutdown hook, stale metrics remain. Operators can:
-  1. Inspect the Pushgateway UI (`http://pushgateway:9091`) to confirm lingering groups.
-  2. Manually delete metrics with `curl -X DELETE http://pushgateway:9091/metrics/job/<swarm>/instance/<bee-name>`.
-  3. Restart the swarm or offending bee to force a fresh push if the worker is still active.
-- **Alerting considerations.** Dashboards and alerts should filter on the swarm/bee tags rather than the old Prometheus scrape job names. Treat the absence of a bee's metrics as a potential failure once the Pushgateway retention window (default 15s scrape interval) elapses.
+- **Storage.** Aggregate service metrics are written to `ph_metrics_samples`.
+  The table stores `eventTime`, `swarmId`, `runId`, `role`, `instance`,
+  `metricName`, `metricKind`, `statistic`, `value`, `unit`, and bounded
+  `labels`. The ClickHouse schema enforces a 30-day TTL.
+- **Service wiring.** Active runtimes set `POCKETHIVE_METRICS_ADAPTER=CLICKHOUSE`
+  together with explicit ClickHouse settings:
+  `POCKETHIVE_METRICS_CLICKHOUSE_ENDPOINT`,
+  `POCKETHIVE_METRICS_CLICKHOUSE_TABLE`, credentials when required, batching,
+  timeout, buffer, and label-bound settings. Identity fields
+  (`POCKETHIVE_METRICS_SWARM_ID`, `POCKETHIVE_METRICS_RUN_ID`,
+  `POCKETHIVE_METRICS_ROLE`, `POCKETHIVE_METRICS_INSTANCE`) must be explicit for
+  swarm-scoped components.
+- **Semantics.** Counters are stored as cumulative samples; dashboards compute
+  rates from the difference between the first and last sample in each time
+  bucket. Timers store `COUNT` and `SUM` samples where applicable; gauges store
+  current `VALUE` snapshots.
+- **Bounds.** Label count, key length, and value length are rejected at the
+  ClickHouse metrics sink boundary. Rejected samples are skipped individually
+  and logged so one bad meter does not stop a full publish cycle.
 
 ## Queue depth snapshots
 
@@ -49,7 +63,14 @@ Operators can correlate these numbers with the `queues` topology block to unders
 
 ## Postprocessor ClickHouse tx-outcomes sink
 
-Per-transaction postprocessor observability now relies on the ClickHouse tx-outcomes sink. The postprocessor continues exporting aggregated service metrics to Prometheus, while transaction-level analysis (latency tails, success ratios, error mixes, segment drill-downs) should be done from `ph_tx_outcome_v2`. The bundled Grafana transaction dashboards target `ph_tx_outcome_v2` only. The legacy `ph_tx_outcome_v1` table is no longer created for fresh ClickHouse volumes; when it exists in an old volume, treat it as read-only historical source data for migration and benchmark work.
+Per-transaction postprocessor observability relies on the ClickHouse
+tx-outcomes sink. Transaction-level analysis (latency tails, success ratios,
+error mixes, segment drill-downs) should be done from `ph_tx_outcome_v2`.
+Aggregated service metrics for runtime dashboards are stored in
+`ph_metrics_samples`. The bundled Grafana transaction dashboards target
+`ph_tx_outcome_v2` only. The legacy `ph_tx_outcome_v1` table is no longer
+created for fresh ClickHouse volumes; when it exists in an old volume, treat it
+as read-only historical source data for migration and benchmark work.
 
 For wide time ranges, prefer the long-term RTT dashboard. It requires selecting one `swarmId` first, uses hourly-or-coarser buckets, and avoids high-cardinality `swarm/callId/businessCode` time-series fan-out except for bounded drill-down tables.
 
@@ -59,11 +80,16 @@ For wide time ranges, prefer the long-term RTT dashboard. It requires selecting 
    - Controller feature flag `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_FEATURES_BUFFER_GUARD_ENABLED` must be `true` (default).
    - The active scenario must define `trafficPolicy.bufferGuard.enabled: true` and point `queueAlias` at the queue you want to regulate (e.g., `moderator-a-out`).
 2. **Watch the guard gauges**
-   - Depth: `ph_swarm_buffer_guard_depth{swarm="<id>"}` — moving average of the guarded queue.
-   - Target/min/max: `ph_swarm_buffer_guard_target` (constant) and the queue depth gauges `ph_swarm_queue_depth` for min/max context.
-   - Rate override: `ph_swarm_buffer_guard_rate_per_sec` — the last rate pushed to the producer role.
-   - State: `ph_swarm_buffer_guard_state` — numeric code (0=disabled, 1=steady, 2=prefill, 3=filling, 4=draining, 5=backpressure).
-   - Dashboards should plot depth vs. target and rate vs. time for each guarded swarm (use `queue` and `swarm` labels).
+   - Depth: `metricName = 'ph_swarm_buffer_guard_depth'` in
+     `ph_metrics_samples` — moving average of the guarded queue.
+   - Target/min/max: `ph_swarm_buffer_guard_target` and
+     `ph_swarm_queue_depth` for queue-depth context.
+   - Rate override: `ph_swarm_buffer_guard_rate_per_sec` — the last rate pushed
+     to the producer role.
+   - State: `ph_swarm_buffer_guard_state` — numeric code (0=disabled, 1=steady,
+     2=prefill, 3=filling, 4=draining, 5=backpressure).
+   - Dashboards should plot depth vs. target and rate vs. time for each guarded
+     swarm using `swarmId` and `labels['queue']`.
 3. **Inspect logs**
    - Set `io.pockethive.swarmcontroller.guard` to `INFO` (already defaulted in `logback-spring.xml`) to view lines such as:
      - `Buffer guard [moderator-a-out] state -> DRAINING (...)`

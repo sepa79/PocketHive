@@ -9,6 +9,7 @@ import io.pockethive.sink.clickhouse.metrics.ClickHouseMetricSample;
 import io.pockethive.sink.clickhouse.metrics.ClickHouseMetricSampleRejectedException;
 import io.pockethive.sink.clickhouse.metrics.ClickHouseMetricSampleSink;
 import io.pockethive.sink.clickhouse.metrics.ClickHouseMetricStatistic;
+import io.pockethive.sink.clickhouse.metrics.ClickHouseMetricsBufferFullException;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -73,7 +74,7 @@ public class MicrometerClickHouseMetricsPublisher {
           try {
             sink.write(resolved);
             samples++;
-          } catch (ClickHouseMetricSampleRejectedException ex) {
+          } catch (ClickHouseMetricSampleRejectedException | ClickHouseMetricsBufferFullException ex) {
             skipped++;
             rejected++;
             log.warn(

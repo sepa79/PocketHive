@@ -55,10 +55,6 @@ artifacts:
       source: rabbitmq
       target: artifacts/runtime/config/rabbitmq
       mode: replace
-    - name: runtime-prometheus
-      source: prometheus
-      target: artifacts/runtime/config/prometheus
-      mode: replace
     - name: runtime-grafana
       source: grafana
       target: artifacts/runtime/config/grafana

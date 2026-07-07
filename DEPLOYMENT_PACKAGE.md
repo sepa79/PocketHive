@@ -30,11 +30,9 @@ pockethive/
 ├── README.md                   # Project overview
 ├── LICENSE                     # License file
 ├── rabbitmq/                   # Rabbit definitions/config used by the stack
-├── prometheus/
-│   └── prometheus.yml          # Metrics scraping config
 ├── grafana/
-│   ├── dashboards/             # Pre-built dashboards
-│   └── provisioning/           # Datasource configs
+│   ├── dashboards/             # Pre-built ClickHouse/Postgres dashboards
+│   └── provisioning/           # ClickHouse/Postgres datasource configs
 ├── wiremock/
 │   ├── mappings/               # HTTP mock stubs
 │   ├── __files/                # Response templates
@@ -75,7 +73,7 @@ docker compose up -d
 
 ### ✅ Included (Ready to Use)
 - Docker Compose configuration
-- All configuration files (RabbitMQ, Prometheus, Grafana)
+- Configuration files for RabbitMQ, Grafana, and ClickHouse dashboards/provisioning
 - WireMock stubs
 - Grafana dashboards
 - Documentation
@@ -124,12 +122,12 @@ scenario-manager:
 
 ## Image Sources
 
-All images are pulled from GitHub Container Registry:
+PocketHive application images are pulled from GitHub Container Registry:
 - `ghcr.io/sepa79/pockethive/rabbitmq:latest`
 - `ghcr.io/sepa79/pockethive/orchestrator:latest`
 - `ghcr.io/sepa79/pockethive/scenario-manager:latest`
 - `ghcr.io/sepa79/pockethive/ui:latest`
-- Plus standard images: Prometheus, Grafana, Redis, Redis Commander, WireMock
+- Plus standard images: ClickHouse, Grafana, Redis, Redis Commander, and WireMock
 
 ## Ports
 
@@ -141,14 +139,16 @@ All images are pulled from GitHub Container Registry:
 | 15674 | RabbitMQ Web STOMP   | WebSocket STOMP                |
 | 6379  | Redis                | Dataset cache/source           |
 | 8081  | Redis Commander      | Redis web UI                   |
-| 3333  | Grafana              | Dashboards (direct, optional)  |
+| 8088 `/grafana/` | Grafana     | Dashboards via UI ingress      |
+| 8123  | ClickHouse           | HTTP API                       |
+| 9000  | ClickHouse           | Native protocol                |
 | 8080  | WireMock             | HTTP mocks                     |
 | 1081  | Scenario Manager     | Scenario API                   |
 
 ## Persistent Data
 
 Volumes created for data persistence:
-- `pockethive_prometheus-data` - Metrics
+- `pockethive_clickhouse-data` - Product metrics and transaction outcomes
 - `pockethive_grafana-data` - Dashboards
 - `pockethive_redis-data` - Redis datasets
 

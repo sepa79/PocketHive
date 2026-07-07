@@ -18,15 +18,8 @@ class DockerConfigurationTest {
   private static final String HIVE_EXCHANGE = TRAFFIC_PREFIX + ".hive";
   private static final SwarmControllerProperties.Metrics METRICS =
       new SwarmControllerProperties.Metrics(
-          PocketHiveMetricsAdapter.PROMETHEUS_PUSHGATEWAY,
+          PocketHiveMetricsAdapter.DISABLED,
           Duration.ofSeconds(10),
-          new SwarmControllerProperties.Pushgateway(
-              true,
-              "http://pushgateway:9091",
-              Duration.ofSeconds(30),
-              "DELETE",
-              "test-job",
-              new SwarmControllerProperties.GroupingKey("controller-instance")),
           ClickHouseMetricsSinkProperties.disabled());
 
   @Test

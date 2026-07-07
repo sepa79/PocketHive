@@ -8,7 +8,6 @@ import io.pockethive.sink.clickhouse.metrics.ClickHouseMetricsSinkProperties;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.actuate.autoconfigure.metrics.CompositeMeterRegistryAutoConfiguration;
 import org.springframework.boot.actuate.autoconfigure.metrics.MetricsAutoConfiguration;
-import org.springframework.boot.actuate.autoconfigure.metrics.export.prometheus.PrometheusMetricsExportAutoConfiguration;
 import org.springframework.boot.actuate.autoconfigure.metrics.export.simple.SimpleMetricsExportAutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
@@ -21,8 +20,7 @@ import org.springframework.context.annotation.Bean;
 @AutoConfiguration(after = {
     MetricsAutoConfiguration.class,
     CompositeMeterRegistryAutoConfiguration.class,
-    SimpleMetricsExportAutoConfiguration.class,
-    PrometheusMetricsExportAutoConfiguration.class
+    SimpleMetricsExportAutoConfiguration.class
 })
 @ConditionalOnClass({MeterRegistry.class, ClickHouseMetricsSink.class})
 @ConditionalOnProperty(prefix = "pockethive.metrics", name = "adapter", havingValue = "CLICKHOUSE")

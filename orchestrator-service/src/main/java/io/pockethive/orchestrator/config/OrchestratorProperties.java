@@ -118,23 +118,16 @@ public class OrchestratorProperties {
 
         private final PocketHiveMetricsAdapter adapter;
         private final Duration publishInterval;
-        private final @Valid Pushgateway pushgateway;
         private final @Valid ClickHouseMetricsSinkProperties clickHouse;
 
         public Metrics(@NotNull PocketHiveMetricsAdapter adapter,
                        @NotNull Duration publishInterval,
-                       @Valid Pushgateway pushgateway,
                        @Valid ClickHouseMetricsSinkProperties clickHouse) {
             this.adapter = Objects.requireNonNull(adapter, "adapter");
             this.publishInterval = Objects.requireNonNull(publishInterval, "publishInterval");
-            this.pushgateway = Objects.requireNonNull(pushgateway, "pushgateway");
             this.clickHouse = clickHouse == null ? ClickHouseMetricsSinkProperties.disabled() : clickHouse;
             if (this.publishInterval.isZero() || this.publishInterval.isNegative()) {
                 throw new IllegalArgumentException("metrics.publishInterval must be positive");
-            }
-            if (this.adapter != PocketHiveMetricsAdapter.PROMETHEUS_PUSHGATEWAY && this.pushgateway.isEnabled()) {
-                throw new IllegalArgumentException(
-                    "metrics.pushgateway.enabled must be false unless adapter is PROMETHEUS_PUSHGATEWAY");
             }
             if (this.adapter == PocketHiveMetricsAdapter.CLICKHOUSE) {
                 this.clickHouse.requireConfigured();
@@ -149,75 +142,8 @@ public class OrchestratorProperties {
             return publishInterval;
         }
 
-        public Pushgateway getPushgateway() {
-            return pushgateway;
-        }
-
         public ClickHouseMetricsSinkProperties getClickHouse() {
             return clickHouse;
-        }
-    }
-
-    @Validated
-    public static final class Pushgateway {
-
-        private final boolean enabled;
-        private final String baseUrl;
-        private final Duration pushRate;
-        private final String shutdownOperation;
-        private final String job;
-        private final @Valid GroupingKey groupingKey;
-
-        public Pushgateway(@NotNull Boolean enabled,
-                           @NotBlank String baseUrl,
-                           @NotNull Duration pushRate,
-                           @NotBlank String shutdownOperation,
-                           @NotBlank String job,
-                           @Valid GroupingKey groupingKey) {
-            this.enabled = Objects.requireNonNull(enabled, "enabled");
-            this.baseUrl = requireNonBlank(baseUrl, "baseUrl");
-            this.pushRate = Objects.requireNonNull(pushRate, "pushRate");
-            this.shutdownOperation = requireNonBlank(shutdownOperation, "shutdownOperation");
-            this.job = requireNonBlank(job, "job");
-            this.groupingKey = Objects.requireNonNull(groupingKey, "groupingKey");
-        }
-
-        public boolean isEnabled() {
-            return enabled;
-        }
-
-        public String getBaseUrl() {
-            return baseUrl;
-        }
-
-        public Duration getPushRate() {
-            return pushRate;
-        }
-
-        public String getShutdownOperation() {
-            return shutdownOperation;
-        }
-
-        public String getJob() {
-            return job;
-        }
-
-        public GroupingKey getGroupingKey() {
-            return groupingKey;
-        }
-    }
-
-    @Validated
-    public static final class GroupingKey {
-
-        private final String instance;
-
-        public GroupingKey(@NotBlank String instance) {
-            this.instance = requireNonBlank(instance, "instance");
-        }
-
-        public String getInstance() {
-            return instance;
         }
     }
 

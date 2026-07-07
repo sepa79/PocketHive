@@ -15,7 +15,6 @@ import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties.Docker;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties.Manager;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties.Metrics;
-import io.pockethive.swarmcontroller.config.SwarmControllerProperties.Pushgateway;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties.SwarmController;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties.Traffic;
 import java.lang.reflect.Field;
@@ -43,15 +42,8 @@ class SwarmRuntimeCoreScenarioEngineTest {
         new SwarmController(
             new Traffic("ph.test.hive", "ph.test"),
             new Metrics(
-                PocketHiveMetricsAdapter.PROMETHEUS_PUSHGATEWAY,
+                PocketHiveMetricsAdapter.DISABLED,
                 Duration.ofSeconds(10),
-                new Pushgateway(
-                    false,
-                    "http://pushgateway",
-                    Duration.ofSeconds(10),
-                    "DELETE",
-                    "job",
-                    new SwarmControllerProperties.GroupingKey("inst")),
                 ClickHouseMetricsSinkProperties.disabled()),
             new Docker(null, "/var/run/docker.sock", io.pockethive.manager.runtime.ComputeAdapterType.DOCKER_SINGLE),
             new SwarmControllerProperties.Features(false)));

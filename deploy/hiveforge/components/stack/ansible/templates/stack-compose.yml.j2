@@ -83,26 +83,6 @@ services:
       retries: 5
       start_period: 10s
 
-  prometheus:
-    image: prom/prometheus:latest
-    command:
-      - --config.file=/etc/prometheus/prometheus.yml
-      - --storage.tsdb.path=/prometheus
-      - --storage.tsdb.retention.time=3y
-      - --web.external-url=http://localhost:8088/prometheus/
-      - --web.route-prefix=/prometheus
-    volumes:
-      - {{ pockethive_bind_source_dir }}/artifacts/runtime/config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-{% if pockethive_profile == "swarm-full" %}
-      - {{ pockethive_prometheus_root }}:/prometheus
-    deploy:
-      placement:
-        constraints:
-          - node.labels.pockethive.prometheus == true
-{% else %}
-      - {{ pockethive_bind_source_dir }}/state/prometheus/data:/prometheus
-{% endif %}
-
   grafana:
     image: grafana/grafana
     environment:
@@ -112,28 +92,15 @@ services:
       GF_SERVER_ROOT_URL: "{{ lookup('env', 'POCKETHIVE_GRAFANA_ROOT_URL') | default('http://localhost:8088/grafana/', true) }}"
       HTTP_PROXY: "{{ lookup('env', 'HTTP_PROXY') }}"
       HTTPS_PROXY: "{{ lookup('env', 'HTTPS_PROXY') }}"
-      NO_PROXY: "{{ lookup('env', 'NO_PROXY') | default('localhost,127.0.0.1,::1,prometheus,clickhouse,rabbitmq,postgres,redis,pushgateway,scenario-manager,orchestrator,auth-service,network-proxy-manager,ui', true) }}"
+      NO_PROXY: "{{ lookup('env', 'NO_PROXY') | default('localhost,127.0.0.1,::1,clickhouse,rabbitmq,postgres,redis,scenario-manager,orchestrator,auth-service,network-proxy-manager,ui', true) }}"
       http_proxy: "{{ lookup('env', 'HTTP_PROXY') }}"
       https_proxy: "{{ lookup('env', 'HTTPS_PROXY') }}"
-      no_proxy: "{{ lookup('env', 'NO_PROXY') | default('localhost,127.0.0.1,::1,prometheus,clickhouse,rabbitmq,postgres,redis,pushgateway,scenario-manager,orchestrator,auth-service,network-proxy-manager,ui', true) }}"
+      no_proxy: "{{ lookup('env', 'NO_PROXY') | default('localhost,127.0.0.1,::1,clickhouse,rabbitmq,postgres,redis,scenario-manager,orchestrator,auth-service,network-proxy-manager,ui', true) }}"
     volumes:
       - {{ pockethive_bind_source_dir }}/artifacts/runtime/config/grafana/grafana.ini:/etc/grafana/grafana.ini:ro
       - {{ pockethive_bind_source_dir }}/artifacts/runtime/config/grafana/provisioning:/etc/grafana/provisioning:ro
       - {{ pockethive_bind_source_dir }}/artifacts/runtime/config/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - {{ pockethive_bind_source_dir }}/state/grafana/data:/var/lib/grafana
-
-  pushgateway:
-    image: prom/pushgateway:latest
-    deploy:
-      placement:
-        constraints:
-          - node.role == manager
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9091/-/ready"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 5s
 
   wiremock:
     image: holomekc/wiremock-gui:latest
@@ -237,7 +204,7 @@ services:
       POCKETHIVE_TCP_MOCK_SSL_ENABLED: "false"
       POCKETHIVE_TCP_MOCK_VALIDATION_ENABLED: "true"
       POCKETHIVE_TCP_MOCK_FILTERING_ENABLED: "true"
-      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics,prometheus
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics
     volumes:
       - {{ pockethive_bind_source_dir }}/artifacts/runtime/tcp-mock/mappings:/app/mappings:ro
       - {{ pockethive_bind_source_dir }}/artifacts/runtime/tcp-mock/__files:/app/__files:ro
@@ -268,7 +235,7 @@ services:
       POCKETHIVE_TCP_MOCK_SSL_ENABLED: "true"
       POCKETHIVE_TCP_MOCK_VALIDATION_ENABLED: "true"
       POCKETHIVE_TCP_MOCK_FILTERING_ENABLED: "true"
-      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics,prometheus
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics
     volumes:
       - {{ pockethive_bind_source_dir }}/artifacts/runtime/tcp-mock/mappings:/app/mappings:ro
       - {{ pockethive_bind_source_dir }}/artifacts/runtime/tcp-mock/__files:/app/__files:ro
@@ -350,11 +317,6 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - {{ pockethive_bind_source_dir }}/state/scenarios-runtime:/app/scenarios-runtime
     environment:
-      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL: http://pushgateway:9091
-      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED: "false"
-      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_JOB: swarm1
-      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE: 10s
-      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION: DELETE
       MANAGEMENT_METRICS_TAGS_SWARM: swarm1
       POCKETHIVE_AUTH_SERVICE_URL: http://auth-service:8080
       POCKETHIVE_AUTH_SERVICE_PRINCIPAL_NAME: orchestrator-service
@@ -379,7 +341,6 @@ services:
       POCKETHIVE_METRICS_CLICKHOUSE_USERNAME: pockethive
       POCKETHIVE_METRICS_CLICKHOUSE_PASSWORD: pockethive
       POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_METRICS_ADAPTER: CLICKHOUSE
-      POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_METRICS_PUSHGATEWAY_ENABLED: "false"
       POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_METRICS_CLICKHOUSE_ENDPOINT: http://clickhouse:8123
       POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_METRICS_CLICKHOUSE_TABLE: ph_metrics_samples
       POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_METRICS_CLICKHOUSE_USERNAME: pockethive
@@ -410,16 +371,11 @@ services:
     environment:
       POCKETHIVE_IMAGES_DEFAULT_TAG: {{ pockethive_version }}
       POCKETHIVE_AUTH_SERVICE_URL: http://auth-service:8080
-      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL: http://pushgateway:9091
-      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED: "true"
-      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_JOB: swarm1
-      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE: 10s
-      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION: DELETE
       MANAGEMENT_METRICS_TAGS_SWARM: swarm1
       POCKETHIVE_CONTROL_PLANE_SWARM_ID: hive
       POCKETHIVE_CONTROL_PLANE_INSTANCE_ID: scenario-manager
       POCKETHIVE_CONTROL_PLANE_MANAGER_ROLE: scenario-manager
-      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_GROUPING_KEY_INSTANCE: scenario-manager
+      POCKETHIVE_METRICS_ADAPTER: DISABLED
       MANAGEMENT_METRICS_TAGS_INSTANCE: scenario-manager
     ports:
       - target: 8080
@@ -449,6 +405,7 @@ services:
       POCKETHIVE_NETWORK_PROXY_MANAGER_HAPROXY_CONFIG_FILE: /opt/haproxy-runtime/haproxy.cfg
       POCKETHIVE_NETWORK_PROXY_MANAGER_HAPROXY_BACKEND_HOST: toxiproxy
       POCKETHIVE_NETWORK_PROXY_MANAGER_TOXIPROXY_LISTEN_PORT_OFFSET: 10000
+      POCKETHIVE_METRICS_ADAPTER: DISABLED
     ports:
       - target: 8080
         published: 1082

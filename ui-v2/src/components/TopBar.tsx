@@ -212,7 +212,6 @@ type ToolLink = {
 const toolLinks: ToolLink[] = [
   { id: 'docs', title: 'Docs', href: '/docs/', icon: '/icons/docs.svg' },
   { id: 'rabbitmq', title: 'RabbitMQ', href: '/rabbitmq/', icon: '/icons/rabbitmq.svg' },
-  { id: 'prometheus', title: 'Prometheus', href: '/prometheus/', icon: '/icons/prometheus.svg' },
   { id: 'grafana', title: 'Grafana', href: '/grafana/', icon: '/icons/grafana.svg' },
   { id: 'redis', title: 'Redis', href: '/redis/', icon: '/icons/redis.svg' },
   { id: 'wiremock', title: 'WireMock', href: '/wiremock/', icon: '/icons/wiremock.svg' },

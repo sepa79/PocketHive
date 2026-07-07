@@ -112,10 +112,16 @@ class ContainerLifecycleManagerTest {
         assertFalse(env.containsKey("POCKETHIVE_LOGS_EXCHANGE"));
         assertFalse(env.containsKey("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE"));
         assertFalse(env.containsKey("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED"));
-        assertEquals("true", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_ENABLED"));
-        assertEquals("http://pushgateway:9091", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_BASE_URL"));
-        assertEquals("PT1M", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_PUSH_RATE"));
-        assertEquals("DELETE", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_SHUTDOWN_OPERATION"));
+        assertEquals("CLICKHOUSE", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_ADAPTER"));
+        assertEquals("PT10S", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUBLISH_INTERVAL"));
+        assertEquals(
+            "http://clickhouse:8123",
+            env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_CLICKHOUSE_ENDPOINT"));
+        assertEquals(
+            ClickHouseMetricsSinkProperties.DEFAULT_TABLE,
+            env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_CLICKHOUSE_TABLE"));
+        assertEquals("CLICKHOUSE", env.get("POCKETHIVE_METRICS_ADAPTER"));
+        assertEquals("http://clickhouse:8123", env.get("POCKETHIVE_METRICS_CLICKHOUSE_ENDPOINT"));
         assertEquals("/var/run/docker.sock", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_DOCKER_SOCKET_PATH"));
         assertEquals("/var/run/docker.sock", env.get("DOCKER_SOCKET_PATH"));
         assertEquals("unix:///var/run/docker.sock", env.get("DOCKER_HOST"));
@@ -438,16 +444,15 @@ class ContainerLifecycleManagerTest {
 
     private static OrchestratorProperties.Metrics defaultMetrics() {
         return new OrchestratorProperties.Metrics(
-            PocketHiveMetricsAdapter.PROMETHEUS_PUSHGATEWAY,
+            PocketHiveMetricsAdapter.CLICKHOUSE,
             Duration.ofSeconds(10),
-            new OrchestratorProperties.Pushgateway(
-                true,
-                "http://pushgateway:9091",
-                Duration.ofMinutes(1),
-                "DELETE",
-                "swarm-job",
-                new OrchestratorProperties.GroupingKey("controller-instance")),
-            ClickHouseMetricsSinkProperties.disabled());
+            clickHouseMetrics());
+    }
+
+    private static ClickHouseMetricsSinkProperties clickHouseMetrics() {
+        ClickHouseMetricsSinkProperties properties = new ClickHouseMetricsSinkProperties();
+        properties.setEndpoint("http://clickhouse:8123");
+        return properties;
     }
 
     private static RabbitProperties rabbitProperties() {

@@ -114,16 +114,8 @@ class ScenarioManagerClientAuthRetryTest {
 
     private static OrchestratorProperties.Metrics metrics() {
         return new OrchestratorProperties.Metrics(
-            PocketHiveMetricsAdapter.PROMETHEUS_PUSHGATEWAY,
+            PocketHiveMetricsAdapter.DISABLED,
             Duration.ofSeconds(10),
-            new OrchestratorProperties.Pushgateway(
-                false,
-                "http://pushgateway:9091",
-                Duration.ofSeconds(10),
-                "DELETE",
-                "PocketHive",
-                new OrchestratorProperties.GroupingKey("instance")
-            ),
             ClickHouseMetricsSinkProperties.disabled()
         );
     }

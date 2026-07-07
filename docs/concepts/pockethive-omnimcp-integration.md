@@ -21,7 +21,7 @@ Together they give you:
 - AI that can **propose, author, and run** a load scenario
 - a governance layer that **approves, bounds, and audits** every action before it touches
   the stack
-- observable **evidence** (queue depths, Prometheus metrics, journal events, tap payloads)
+- observable **evidence** (queue depths, product metrics, journal events, tap payloads)
   that feeds back into the AI's next decision — all through the same governed path
 
 The VM-sandboxed AI model has **no direct network access**. Its only way out is through
@@ -37,7 +37,7 @@ not a raw tool the AI can call freely.
 | OmniMCP plane | PocketHive component | Notes |
 |---|---|---|
 | Execution plane | `swarm.create/start/stop/remove`, `scenario.deploy`, `bundle.scaffold` | Mutating — require execution tickets |
-| Shared capability plane | `swarm.get`, `swarm.list`, `debug.queues`, `debug.journal`, `debug.prometheus` | Read-only — policy-gated but no ticket needed |
+| Shared capability plane | `swarm.get`, `swarm.list`, `debug.queues`, `debug.journal`, `metrics_query` | Read-only — policy-gated but no ticket needed |
 | Execution plane | `debug.tap`, `debug.tap.read`, `debug.tap.close` | Short-lived read with side-effect (creates tap resource) — ticket scoped to tap lifecycle |
 | Shared capability plane | `scenario.list`, `scenario.get`, `bundle.list`, `bundle.read` | Read-only catalogue queries |
 | Execution plane | `bundle.validate` | Local JVM invocation — ticket required, output redacted to pass/fail + error summary |
@@ -87,7 +87,7 @@ OmniMCP's execution ticket contract maps cleanly onto PocketHive's mutating oper
 | `POCKETHIVE_BUNDLE_SCAFFOLD` | `bundle.scaffold` | medium — writes files |
 | `POCKETHIVE_BUNDLE_DEPLOY` | `scenario.deploy` | medium — modifies SM state |
 | `POCKETHIVE_SWARM_LIFECYCLE` | `swarm.create`, `swarm.start`, `swarm.stop`, `swarm.remove` | high — spins up containers |
-| `POCKETHIVE_SWARM_READ` | `swarm.get`, `swarm.list`, `debug.queues`, `debug.journal`, `debug.prometheus` | low |
+| `POCKETHIVE_SWARM_READ` | `swarm.get`, `swarm.list`, `debug.queues`, `debug.journal`, `metrics_query` | low |
 | `POCKETHIVE_DEBUG_TAP` | `debug.tap`, `debug.tap.read`, `debug.tap.close` | low |
 | `POCKETHIVE_CONFIG_UPDATE` | `debug.config-update` | medium — mutates running worker |
 
@@ -139,7 +139,7 @@ OmniMCP's execution ticket contract maps cleanly onto PocketHive's mutating oper
 +---------------------------+------------------------------+
 |  PocketHive Stack                                        |
 |  Orchestrator · Scenario Manager · RabbitMQ              |
-|  WireMock · TCP Mock · Prometheus                        |
+|  WireMock · TCP Mock · Grafana · ClickHouse              |
 +----------------------------------------------------------+
 ```
 
@@ -154,7 +154,7 @@ OmniMCP's execution ticket contract maps cleanly onto PocketHive's mutating oper
 - create and start a swarm
 - read swarm status, queue depths, journal events
 - tap message payloads to verify data flow
-- query Prometheus metrics
+- query product metrics
 - stop and remove a swarm
 
 ### Cannot do (blocked by policy)
@@ -202,7 +202,7 @@ The skill runner orchestrates the full TDD cycle:
 2. `bundle.validate` → gate on pass
 3. `scenario.deploy` → load into SM
 4. `swarm.create` + `swarm.wait-ready` + `swarm.start`
-5. Poll `debug.queues` + `debug.prometheus` until acceptance criteria met or timeout
+5. Poll `debug.queues` + `metrics_query` until acceptance criteria met or timeout
 6. `debug.tap` → sample payloads for evidence
 7. `swarm.stop` + `swarm.remove`
 8. Return structured evidence summary
@@ -220,7 +220,7 @@ After the skill completes, OmniMCP's evidence plane records:
   "artifactRefs": [
     "bundles/pcs-auth-csv/scenario.yaml",
     "evidence/load-test-001/validation-result.json",
-    "evidence/load-test-001/prometheus-snapshot.json",
+    "evidence/load-test-001/metrics-snapshot.json",
     "evidence/load-test-001/tap-samples.json",
     "evidence/load-test-001/journal-events.json"
   ],
@@ -326,7 +326,7 @@ The only PocketHive-side prerequisite is that `server.mjs` accepts all config vi
 ## Context efficiency rules for PocketHive outputs
 
 PocketHive tools can return large payloads (queue lists, journal pages, tap samples,
-Prometheus query results). The adapter must enforce OmniMCP's context efficiency rules:
+metric query results). The adapter must enforce OmniMCP's context efficiency rules:
 
 | Tool | Default profile | Model-visible output |
 |---|---|---|
@@ -334,7 +334,7 @@ Prometheus query results). The adapter must enforce OmniMCP's context efficiency
 | `debug.queues` | MINIMAL | queue name, depth, consumers — no raw RabbitMQ metadata |
 | `debug.journal` | STANDARD | top 5 events, summary of errors — no raw JSON payloads |
 | `debug.tap.read` | STANDARD | 3 sample summaries (headers + step count) — no raw body |
-| `debug.prometheus` | MINIMAL | metric name, latest value, labels — no raw Prometheus response |
+| `metrics_query` | MINIMAL | summary rows, selected labels, bounded time window — no raw backend response |
 | `bundle.validate` | MINIMAL | PASS / FAIL + first error message — no full stack trace |
 | `swarm.list` | MINIMAL | swarm IDs, statuses — no per-worker detail |
 

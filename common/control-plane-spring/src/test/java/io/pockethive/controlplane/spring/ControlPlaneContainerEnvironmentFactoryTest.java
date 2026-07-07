@@ -22,7 +22,7 @@ class ControlPlaneContainerEnvironmentFactoryTest {
         controlPlaneProperties.setSwarmId("swarm-1");
         controlPlaneProperties.setInstanceId("controller-a");
         ControlPlaneContainerEnvironmentFactory.MetricsSettings metrics =
-            prometheusMetrics(Duration.ofSeconds(30), Duration.ofSeconds(15));
+            clickHouseMetrics(Duration.ofSeconds(15));
         ControlPlaneContainerEnvironmentFactory.ControllerSettings settings =
             new ControlPlaneContainerEnvironmentFactory.ControllerSettings(
                 metrics,
@@ -49,14 +49,14 @@ class ControlPlaneContainerEnvironmentFactoryTest {
             "POCKETHIVE_LOGS_EXCHANGE",
             "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE",
             "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED");
-        assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_ENABLED", "true");
-        assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_BASE_URL", "http://pushgateway:9091");
-        assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_PUSH_RATE", "PT30S");
-        assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_SHUTDOWN_OPERATION", "DELETE");
-        assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_ADAPTER", "PROMETHEUS_PUSHGATEWAY");
+        assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_ADAPTER", "CLICKHOUSE");
         assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUBLISH_INTERVAL", "PT15S");
-        assertThat(env).containsEntry("POCKETHIVE_METRICS_ADAPTER", "PROMETHEUS_PUSHGATEWAY");
+        assertThat(env).containsEntry(
+            "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_CLICKHOUSE_ENDPOINT",
+            "http://clickhouse:8123");
+        assertThat(env).containsEntry("POCKETHIVE_METRICS_ADAPTER", "CLICKHOUSE");
         assertThat(env).containsEntry("POCKETHIVE_METRICS_PUBLISH_INTERVAL", "PT15S");
+        assertThat(env).containsEntry("POCKETHIVE_METRICS_CLICKHOUSE_ENDPOINT", "http://clickhouse:8123");
         assertThat(env).containsEntry("POCKETHIVE_METRICS_SWARM_ID", "swarm-1");
         assertThat(env).containsEntry("POCKETHIVE_METRICS_RUN_ID", "run-1");
         assertThat(env).containsEntry("POCKETHIVE_METRICS_ROLE", "swarm-controller");
@@ -68,7 +68,7 @@ class ControlPlaneContainerEnvironmentFactoryTest {
     @Test
     void workerEnvironmentBuildsMap() {
         ControlPlaneContainerEnvironmentFactory.MetricsSettings metrics =
-            prometheusMetrics(Duration.ofSeconds(45), Duration.ofSeconds(20));
+            clickHouseMetrics(Duration.ofSeconds(20));
         ControlPlaneContainerEnvironmentFactory.WorkerSettings settings =
             new ControlPlaneContainerEnvironmentFactory.WorkerSettings(
                 "swarm-1",
@@ -92,16 +92,14 @@ class ControlPlaneContainerEnvironmentFactoryTest {
             "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE",
             "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED");
         assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX", "ph.control");
-        assertThat(env).containsEntry("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_ENABLED", "true");
-        assertThat(env).containsEntry("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_BASE_URL", "http://pushgateway:9091");
-        assertThat(env).containsEntry("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_PUSH_RATE", "PT45S");
-        assertThat(env).containsEntry("MANAGEMENT_PROMETHEUS_METRICS_EXPORT_PUSHGATEWAY_SHUTDOWN_OPERATION", "DELETE");
-        assertThat(env).containsEntry("POCKETHIVE_METRICS_ADAPTER", "PROMETHEUS_PUSHGATEWAY");
+        assertThat(env).containsEntry("POCKETHIVE_METRICS_ADAPTER", "CLICKHOUSE");
         assertThat(env).containsEntry("POCKETHIVE_METRICS_PUBLISH_INTERVAL", "PT20S");
+        assertThat(env).containsEntry("POCKETHIVE_METRICS_CLICKHOUSE_ENDPOINT", "http://clickhouse:8123");
         assertThat(env).containsEntry("POCKETHIVE_METRICS_SWARM_ID", "swarm-1");
         assertThat(env).containsEntry("POCKETHIVE_METRICS_RUN_ID", "run-1");
         assertThat(env).containsEntry("POCKETHIVE_METRICS_ROLE", "processor");
         assertThat(env).containsEntry("POCKETHIVE_METRICS_INSTANCE", "bee-a");
+        assertThat(env.keySet()).noneMatch(key -> key.startsWith("MANAGEMENT_"));
     }
 
     @Test
@@ -153,30 +151,13 @@ class ControlPlaneContainerEnvironmentFactoryTest {
     }
 
     @Test
-    void nonPrometheusMetricsAdapterRejectsEnabledPushgateway() {
+    void clickHouseAdapterRequiresConfiguredSettings() {
         assertThatThrownBy(() -> new ControlPlaneContainerEnvironmentFactory.MetricsSettings(
             PocketHiveMetricsAdapter.CLICKHOUSE,
             Duration.ofSeconds(10),
-            new ControlPlaneContainerEnvironmentFactory.PushgatewaySettings(
-                true,
-                "http://pushgateway:9091",
-                Duration.ofSeconds(30),
-                "DELETE"),
-            clickHouseProperties(
-                "http://clickhouse:8123",
-                "ph_metrics_samples",
-                "",
-                "",
-                1000,
-                2000,
-                100,
-                50,
-                1234,
-                12,
-                40,
-                120)))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("pushgateway.enabled");
+            ClickHouseMetricsSinkProperties.disabled()))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("endpoint/table");
     }
 
     @Test
@@ -188,7 +169,7 @@ class ControlPlaneContainerEnvironmentFactoryTest {
                 "ph.control",
                 "ph.control",
                 "ph.swarm-1.hive",
-                prometheusMetrics(Duration.ofSeconds(30), Duration.ofSeconds(30)));
+                disabledMetrics(Duration.ofSeconds(30)));
         RabbitProperties rabbitProperties = new RabbitProperties();
         rabbitProperties.setHost("");
 
@@ -205,7 +186,7 @@ class ControlPlaneContainerEnvironmentFactoryTest {
     void buildsSwarmTrafficQueueNamesFromControllerEnvironmentContract() {
         ControlPlaneContainerEnvironmentFactory.ControllerSettings settings =
             new ControlPlaneContainerEnvironmentFactory.ControllerSettings(
-                prometheusMetrics(Duration.ofSeconds(30), Duration.ofSeconds(30)),
+                disabledMetrics(Duration.ofSeconds(30)),
                 "run-1",
                 "/var/run/docker.sock",
                 "ph.swarm-1",
@@ -229,17 +210,10 @@ class ControlPlaneContainerEnvironmentFactoryTest {
         return properties;
     }
 
-    private static ControlPlaneContainerEnvironmentFactory.MetricsSettings prometheusMetrics(
-        Duration pushRate,
-        Duration publishInterval) {
+    private static ControlPlaneContainerEnvironmentFactory.MetricsSettings disabledMetrics(Duration publishInterval) {
         return new ControlPlaneContainerEnvironmentFactory.MetricsSettings(
-            PocketHiveMetricsAdapter.PROMETHEUS_PUSHGATEWAY,
+            PocketHiveMetricsAdapter.DISABLED,
             publishInterval,
-            new ControlPlaneContainerEnvironmentFactory.PushgatewaySettings(
-                true,
-                "http://pushgateway:9091",
-                pushRate,
-                "DELETE"),
             ClickHouseMetricsSinkProperties.disabled());
     }
 
@@ -247,11 +221,6 @@ class ControlPlaneContainerEnvironmentFactoryTest {
         return new ControlPlaneContainerEnvironmentFactory.MetricsSettings(
             PocketHiveMetricsAdapter.CLICKHOUSE,
             publishInterval,
-            new ControlPlaneContainerEnvironmentFactory.PushgatewaySettings(
-                false,
-                "http://pushgateway:9091",
-                Duration.ofSeconds(30),
-                "DELETE"),
             clickHouseProperties(
                 "http://clickhouse:8123",
                 "ph_metrics_samples",

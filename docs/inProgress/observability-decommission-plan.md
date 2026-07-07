@@ -1,4 +1,4 @@
-Status: Phase 1 committed; Phase 2 Prometheus removal preparation in progress
+Status: Phase 1 committed; Phase 2 implementation complete; full runtime E2E/Grafana verification pending
 
 # Observability Decommission Plan
 
@@ -264,8 +264,9 @@ surfaces are in place.
   metrics.
 - `ui-v2`: remove `/prometheus/` navigation/icon only after no product workflow
   needs direct Prometheus access.
-- `tools/pockethive-mcp`: replace any `debug.prometheus` evidence path with a
-  product-owned metrics query tool/API.
+- `tools/pockethive-mcp`: replace any `debug.prometheus` evidence path with
+  `metrics_query`, a whitelisted product metrics query tool over
+  Grafana/ClickHouse.
 
 ### Work Sequence
 
@@ -280,14 +281,14 @@ surfaces are in place.
   adapter through the existing control-plane environment path.
 - [x] Port Grafana pipeline and buffer-guard dashboards from Prometheus to
   ClickHouse.
-- [ ] Replace MCP/agent Prometheus evidence with a product-owned metrics query
+- [x] Replace MCP/agent Prometheus evidence with a product-owned metrics query
   API/tool.
-- [ ] Update active docs before runtime removal: `docs/observability.md`,
+- [x] Update active docs before runtime removal: `docs/observability.md`,
   `docs/USAGE.md`, `docs/HIVEFORGE.md`, `README.md`, and deployment package
   docs.
-- [ ] Remove Prometheus and Pushgateway runtime services, volumes, nginx routes,
+- [x] Remove Prometheus and Pushgateway runtime services, volumes, nginx routes,
   package artifacts, dependencies, properties, and tests.
-- [ ] Delete `prometheus/` after no active runtime or package path mounts it.
+- [x] Delete `prometheus/` after no active runtime or package path mounts it.
 
 ### Phase 2 Acceptance Criteria
 

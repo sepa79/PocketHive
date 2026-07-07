@@ -120,6 +120,21 @@ test("debug_journal exposes optional severity filter", async () => {
   assert.equal((debugJournal.inputSchema.required ?? []).includes("severity"), false);
 });
 
+test("metrics_query exposes whitelisted ClickHouse summary shapes", async () => {
+  const tools = await listTools();
+  const metricsQuery = toolByName(tools, "metrics_query");
+
+  assert.equal(metricsQuery.annotations.readOnlyHint, true);
+  assert.equal(metricsQuery.inputSchema.properties.rawSql, undefined);
+  assert.deepEqual(metricsQuery.inputSchema.properties.kind.enum, [
+    "tx-outcomes-summary",
+    "processor-runtime-summary",
+    "queue-runtime-summary",
+    "buffer-guard-summary",
+  ]);
+  assert.equal(tools.some((tool) => tool.name === "metrics.query"), false);
+});
+
 test("workflow tools are listed with read/write annotations", async () => {
   const tools = await listTools();
   const expected = [

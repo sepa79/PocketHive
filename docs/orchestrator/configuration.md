@@ -41,20 +41,28 @@ spring.rabbitmq.virtual-host     # RabbitMQ virtual host
 The Spring Boot `RabbitProperties` drive broker connectivity; the orchestrator
 reuses those values when launching swarm controllers.
 
-## Metrics pushgateway
+## Product metrics
 
 ```
-pockethive.control-plane.orchestrator.metrics.pushgateway.enabled              # Boolean toggle for worker/exporter pushgateway integration
-pockethive.control-plane.orchestrator.metrics.pushgateway.base-url             # Pushgateway base URL
-pockethive.control-plane.orchestrator.metrics.pushgateway.push-rate            # ISO-8601 duration controlling push frequency
-pockethive.control-plane.orchestrator.metrics.pushgateway.shutdown-operation   # Pushgateway shutdown behavior
-pockethive.control-plane.orchestrator.metrics.pushgateway.job                  # Job label forwarded to workers
-pockethive.control-plane.orchestrator.metrics.pushgateway.grouping-key.instance # Grouping key instance label
+pockethive.control-plane.orchestrator.metrics.adapter                         # CLICKHOUSE for active product metrics, DISABLED for explicit no-metrics targets
+pockethive.control-plane.orchestrator.metrics.publish-interval                # ISO-8601 duration controlling publish frequency
+pockethive.control-plane.orchestrator.metrics.clickhouse.endpoint             # ClickHouse HTTP endpoint
+pockethive.control-plane.orchestrator.metrics.clickhouse.table                # Metrics table, normally ph_metrics_samples
+pockethive.control-plane.orchestrator.metrics.clickhouse.username             # ClickHouse username, if required
+pockethive.control-plane.orchestrator.metrics.clickhouse.password             # ClickHouse password, if required
+pockethive.control-plane.orchestrator.metrics.clickhouse.connect-timeout-ms   # HTTP connect timeout
+pockethive.control-plane.orchestrator.metrics.clickhouse.read-timeout-ms      # HTTP read timeout
+pockethive.control-plane.orchestrator.metrics.clickhouse.batch-size           # Insert batch size
+pockethive.control-plane.orchestrator.metrics.clickhouse.flush-interval-ms    # Max batch wait
+pockethive.control-plane.orchestrator.metrics.clickhouse.max-buffered-samples # Bounded in-process buffer
+pockethive.control-plane.orchestrator.metrics.clickhouse.max-label-count      # Label count limit
+pockethive.control-plane.orchestrator.metrics.clickhouse.max-label-key-length # Label key length limit
+pockethive.control-plane.orchestrator.metrics.clickhouse.max-label-value-length # Label value length limit
 ```
 
-All pushgateway values are forwarded verbatim to swarm controllers and worker
-containers. Omit the section only if metrics are entirely disabled for the
-deployment.
+ClickHouse metrics settings are forwarded to swarm controllers and worker
+containers through the shared control-plane environment factory. Use `DISABLED`
+only for targets that intentionally do not publish metrics.
 
 ## Docker
 

@@ -70,13 +70,7 @@ class PocketHiveWorkerIoFromConfigTest {
             "pockethive.control-plane.instance-id=instance-1",
             "pockethive.control-plane.swarm-id=Swarm-Alpha",
             "pockethive.control-plane.exchange=swarm-alpha.control",
-            "pockethive.control-plane.control-queue-prefix=ph.control",
-            "management.prometheus.metrics.export.pushgateway.enabled=true",
-            "management.prometheus.metrics.export.pushgateway.base-url=http://pushgateway:9091",
-            "management.prometheus.metrics.export.pushgateway.push-rate=PT30S",
-            "management.prometheus.metrics.export.pushgateway.job=worker-sdk-test",
-            "management.prometheus.metrics.export.pushgateway.shutdown-operation=DELETE",
-            "management.prometheus.metrics.export.pushgateway.grouping-key.instance=test-worker"
+            "pockethive.control-plane.control-queue-prefix=ph.control"
         };
     }
 

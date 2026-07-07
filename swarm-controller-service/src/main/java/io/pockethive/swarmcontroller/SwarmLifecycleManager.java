@@ -6,7 +6,6 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.pockethive.controlplane.messaging.AmqpControlPlanePublisher;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory.MetricsSettings;
-import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory.PushgatewaySettings;
 import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory.WorkerSettings;
 import io.pockethive.docker.DockerContainerClient;
 import io.pockethive.docker.compute.DockerSingleNodeComputeAdapter;
@@ -137,15 +136,9 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     Objects.requireNonNull(properties, "properties");
     SwarmControllerProperties.Traffic traffic = properties.getTraffic();
     SwarmControllerProperties.Metrics propertiesMetrics = properties.getMetrics();
-    SwarmControllerProperties.Pushgateway pushgateway = propertiesMetrics.pushgateway();
     var metrics = new MetricsSettings(
         propertiesMetrics.adapter(),
         propertiesMetrics.publishInterval(),
-        new PushgatewaySettings(
-            pushgateway.enabled(),
-            pushgateway.baseUrl(),
-            pushgateway.pushRate(),
-            pushgateway.shutdownOperation()),
         propertiesMetrics.clickHouse());
     return new WorkerSettings(
         properties.getSwarmId(),

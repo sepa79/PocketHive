@@ -10,6 +10,7 @@ import io.pockethive.sink.clickhouse.metrics.ClickHouseMetricSample;
 import io.pockethive.sink.clickhouse.metrics.ClickHouseMetricSampleRejectedException;
 import io.pockethive.sink.clickhouse.metrics.ClickHouseMetricSampleSink;
 import io.pockethive.sink.clickhouse.metrics.ClickHouseMetricStatistic;
+import io.pockethive.sink.clickhouse.metrics.ClickHouseMetricsBufferFullException;
 import java.io.IOException;
 import java.time.Clock;
 import java.time.Duration;
@@ -131,6 +132,27 @@ class MicrometerClickHouseMetricsPublisherTest {
   }
 
   @Test
+  void skipsBufferFullSampleAndContinuesPublishingLaterMeters() throws Exception {
+    SimpleMeterRegistry registry = new SimpleMeterRegistry();
+    Counter.builder("ph_bad_total").register(registry).increment(1.0);
+    Counter.builder("ph_good_total").register(registry).increment(2.0);
+    BufferFullOnceSink sink = new BufferFullOnceSink();
+
+    MicrometerClickHouseMetricsPublisher.PublishResult result =
+        publisher(registry, sink, properties()).publishOnce();
+
+    assertEquals(2, result.meters());
+    assertEquals(1, result.samples());
+    assertEquals(1, result.skippedMeasurements());
+    assertEquals(1, result.rejectedSamples());
+    assertEquals(2, sink.attemptedMetricNames.size());
+    assertTrue(sink.attemptedMetricNames.containsAll(List.of("ph_bad_total", "ph_good_total")));
+    assertEquals(1, sink.flushes);
+    assertEquals(1, sink.samples.size());
+    assertEquals(sink.attemptedMetricNames.get(1), sink.samples.getFirst().metricName());
+  }
+
+  @Test
   void propagatesTransportFailuresWithoutFlushingCycle() {
     SimpleMeterRegistry registry = new SimpleMeterRegistry();
     Counter.builder("ph_first_total").register(registry).increment(1.0);
@@ -221,6 +243,21 @@ class MicrometerClickHouseMetricsPublisherTest {
       if (!rejected) {
         rejected = true;
         throw new ClickHouseMetricSampleRejectedException("test rejected sample");
+      }
+      super.write(sample);
+    }
+  }
+
+  private static final class BufferFullOnceSink extends RecordingSink {
+    private final List<String> attemptedMetricNames = new ArrayList<>();
+    private boolean rejected;
+
+    @Override
+    public void write(ClickHouseMetricSample sample) throws Exception {
+      attemptedMetricNames.add(sample.metricName());
+      if (!rejected) {
+        rejected = true;
+        throw new ClickHouseMetricsBufferFullException("test buffer full");
       }
       super.write(sample);
     }

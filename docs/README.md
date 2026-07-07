@@ -16,7 +16,7 @@ Welcome to the PocketHive documentation hub. Use these resources to understand t
 ## Usage
 - [Usage Guide](USAGE.md)
 - [HiveForge Deployment](HIVEFORGE.md)
-- Legacy Prometheus UI helpers are archived under `archive/legacy-ui/src/lib/prometheus.ts`.
+- Legacy UI helpers are archived under `archive/legacy-ui/`.
 
 ## Guides
 - [Guides Hub](guides/README.md)

@@ -208,6 +208,8 @@ async function withFakePocketHiveStack(bundleId, fn, options = {}) {
     taps: new Map(),
     tapCreates: 0,
     tapReads: 0,
+    grafanaQueryCalls: 0,
+    lastGrafanaQuery: null,
   };
   const scenario = {
     id: bundleId,
@@ -336,8 +338,23 @@ async function withFakePocketHiveStack(bundleId, fn, options = {}) {
         { name: "ph.agent-live-stack.post", messages: 0, consumers: state.stopped ? 0 : 1 },
       ]);
     }
-    if (req.method === "GET" && url.pathname === "/prometheus/api/v1/query") {
-      return send(res, 200, { status: "success", data: { resultType: "vector", result: [] } });
+    if (req.method === "POST" && url.pathname === "/grafana/api/ds/query") {
+      const body = await requestJson(req);
+      state.grafanaQueryCalls += 1;
+      state.lastGrafanaQuery = body;
+      return send(res, 200, {
+        results: {
+          A: {
+            status: 200,
+            frames: [
+              {
+                schema: { fields: [{ name: "total" }, { name: "success" }] },
+                data: { values: [[5], [5]] },
+              },
+            ],
+          },
+        },
+      });
     }
     if (req.method === "GET" && url.pathname === "/tcp-mock/api/requests") {
       return send(res, 200, []);
@@ -403,6 +420,54 @@ async function withFakePocketHiveStack(bundleId, fn, options = {}) {
     await new Promise((resolveClose) => server.close(resolveClose));
   }
 }
+
+test("metrics_query reads product metrics through Grafana ClickHouse datasource", async () => {
+  const root = mkdtempSync(join(tmpdir(), "ph-workflow-root-"));
+
+  await withFakePocketHiveStack("agent-metrics", async ({ baseUrl, state }) => {
+    await withClient(root, async (client) => {
+      const result = await call(client, "metrics_query", {
+        swarmId: "agent-live-stack",
+        kind: "tx-outcomes-summary",
+        from: "now-1h",
+        to: "now",
+      });
+
+      assert.equal(result.source, "grafana-clickhouse");
+      assert.equal(result.datasource.uid, "clickhouse");
+      assert.equal(result.query.kind, "tx-outcomes-summary");
+      assert.equal(result.query.table, "ph_tx_outcome_v2");
+      assert.deepEqual(result.rows, [{ total: 5, success: 5 }]);
+      assert.equal(state.grafanaQueryCalls, 1);
+      assert.equal(state.lastGrafanaQuery.from, "now-1h");
+      assert.equal(state.lastGrafanaQuery.to, "now");
+      assert.equal(state.lastGrafanaQuery.queries[0].datasource.uid, "clickhouse");
+      assert.equal(state.lastGrafanaQuery.queries[0].queryType, "table");
+      assert.match(state.lastGrafanaQuery.queries[0].rawSql, /ph_tx_outcome_v2/);
+    }, {
+      POCKETHIVE_BASE_URL: baseUrl,
+      POCKETHIVE_GRAFANA_BASE_URL: `${baseUrl}/grafana`,
+      POCKETHIVE_GRAFANA_USERNAME: "pockethive",
+      POCKETHIVE_GRAFANA_PASSWORD: "pockethive",
+      POCKETHIVE_GRAFANA_CLICKHOUSE_DATASOURCE_UID: "clickhouse",
+    });
+  });
+});
+
+test("metrics_query fails closed when Grafana metrics config is incomplete", async () => {
+  const root = mkdtempSync(join(tmpdir(), "ph-workflow-root-"));
+
+  await withClient(root, async (client) => {
+    const error = await callError(client, "metrics_query", {
+      swarmId: "agent-live-stack",
+      kind: "tx-outcomes-summary",
+      from: "now-1h",
+      to: "now",
+    });
+
+    assert.match(error, /POCKETHIVE_GRAFANA_BASE_URL must be configured/);
+  });
+});
 
 test("workflow_start rejects source paths outside allowed roots", async () => {
   const root = mkdtempSync(join(tmpdir(), "ph-workflow-root-"));
@@ -1642,7 +1707,10 @@ test("workflow deploy loads mock config and verify settles live evidence", async
         ORCHESTRATOR_BASE_URL: `${baseUrl}/orchestrator`,
         SCENARIO_MANAGER_BASE_URL: `${baseUrl}/scenario-manager`,
         RABBITMQ_MANAGEMENT_BASE_URL: `${baseUrl}/rabbitmq/api`,
-        PROMETHEUS_BASE_URL: `${baseUrl}/prometheus`,
+        POCKETHIVE_GRAFANA_BASE_URL: `${baseUrl}/grafana`,
+        POCKETHIVE_GRAFANA_USERNAME: "pockethive",
+        POCKETHIVE_GRAFANA_PASSWORD: "pockethive",
+        POCKETHIVE_GRAFANA_CLICKHOUSE_DATASOURCE_UID: "clickhouse",
         WIREMOCK_BASE_URL: `${baseUrl}/wiremock`,
         TCP_MOCK_BASE_URL: `${baseUrl}/tcp-mock`,
         REDIS_HOST: redis.host,
@@ -1695,7 +1763,10 @@ test("workflow strict proof fails when tap flow disagrees with WireMock flow", a
         ORCHESTRATOR_BASE_URL: `${baseUrl}/orchestrator`,
         SCENARIO_MANAGER_BASE_URL: `${baseUrl}/scenario-manager`,
         RABBITMQ_MANAGEMENT_BASE_URL: `${baseUrl}/rabbitmq/api`,
-        PROMETHEUS_BASE_URL: `${baseUrl}/prometheus`,
+        POCKETHIVE_GRAFANA_BASE_URL: `${baseUrl}/grafana`,
+        POCKETHIVE_GRAFANA_USERNAME: "pockethive",
+        POCKETHIVE_GRAFANA_PASSWORD: "pockethive",
+        POCKETHIVE_GRAFANA_CLICKHOUSE_DATASOURCE_UID: "clickhouse",
         WIREMOCK_BASE_URL: `${baseUrl}/wiremock`,
         TCP_MOCK_BASE_URL: `${baseUrl}/tcp-mock`,
         REDIS_HOST: redis.host,
@@ -1788,7 +1859,10 @@ test("workflow async deploy job survives slow readiness without blocking one too
         ORCHESTRATOR_BASE_URL: `${baseUrl}/orchestrator`,
         SCENARIO_MANAGER_BASE_URL: `${baseUrl}/scenario-manager`,
         RABBITMQ_MANAGEMENT_BASE_URL: `${baseUrl}/rabbitmq/api`,
-        PROMETHEUS_BASE_URL: `${baseUrl}/prometheus`,
+        POCKETHIVE_GRAFANA_BASE_URL: `${baseUrl}/grafana`,
+        POCKETHIVE_GRAFANA_USERNAME: "pockethive",
+        POCKETHIVE_GRAFANA_PASSWORD: "pockethive",
+        POCKETHIVE_GRAFANA_CLICKHOUSE_DATASOURCE_UID: "clickhouse",
         WIREMOCK_BASE_URL: `${baseUrl}/wiremock`,
         TCP_MOCK_BASE_URL: `${baseUrl}/tcp-mock`,
         REDIS_HOST: redis.host,
@@ -1937,7 +2011,10 @@ test("workflow async verify job observes, stops, and settles in resumable steps"
         ORCHESTRATOR_BASE_URL: `${baseUrl}/orchestrator`,
         SCENARIO_MANAGER_BASE_URL: `${baseUrl}/scenario-manager`,
         RABBITMQ_MANAGEMENT_BASE_URL: `${baseUrl}/rabbitmq/api`,
-        PROMETHEUS_BASE_URL: `${baseUrl}/prometheus`,
+        POCKETHIVE_GRAFANA_BASE_URL: `${baseUrl}/grafana`,
+        POCKETHIVE_GRAFANA_USERNAME: "pockethive",
+        POCKETHIVE_GRAFANA_PASSWORD: "pockethive",
+        POCKETHIVE_GRAFANA_CLICKHOUSE_DATASOURCE_UID: "clickhouse",
         WIREMOCK_BASE_URL: `${baseUrl}/wiremock`,
         TCP_MOCK_BASE_URL: `${baseUrl}/tcp-mock`,
         REDIS_HOST: redis.host,

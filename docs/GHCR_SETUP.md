@@ -56,8 +56,8 @@ includes:
 - `clearing-export`
 - `trigger`
 
-Third-party infrastructure images such as RabbitMQ, Redis, Postgres, Prometheus,
-Grafana, ClickHouse, WireMock, and Toxiproxy are not published by this workflow.
+Third-party infrastructure images such as RabbitMQ, Redis, Postgres, Grafana,
+ClickHouse, WireMock, and Toxiproxy are not published by this workflow.
 
 ## Using Published Images
 

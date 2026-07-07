@@ -2,7 +2,6 @@ package io.pockethive.orchestrator.app;
 
 import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory;
 import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory.MetricsSettings;
-import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory.PushgatewaySettings;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.controlplane.topology.ControlQueueDescriptor;
 import io.pockethive.controlplane.topology.SwarmControllerControlPlaneTopologyDescriptor;
@@ -264,15 +263,9 @@ public class ContainerLifecycleManager {
     }
 
     private static MetricsSettings metricsSettings(OrchestratorProperties.Metrics metrics) {
-        OrchestratorProperties.Pushgateway pushgateway = metrics.getPushgateway();
         return new MetricsSettings(
             metrics.getAdapter(),
             metrics.getPublishInterval(),
-            new PushgatewaySettings(
-                pushgateway.isEnabled(),
-                pushgateway.getBaseUrl(),
-                pushgateway.getPushRate(),
-                pushgateway.getShutdownOperation()),
             metrics.getClickHouse());
     }
 

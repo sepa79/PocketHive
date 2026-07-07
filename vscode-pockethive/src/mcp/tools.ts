@@ -239,7 +239,7 @@ export interface HealthResult {
   orchestrator: string;
   'scenario-manager': string;
   rabbitmq: string;
-  prometheus: string;
+  metrics: string;
   baseUrl: string;
   [key: string]: unknown;
 }
