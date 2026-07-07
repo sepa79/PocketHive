@@ -8,9 +8,6 @@ index is a convenience for humans and tools.
 
 Notable in‑progress plans:
 
-- `docs/inProgress/observability-decommission-plan.md` – active plan to remove
-  Loki and Log Aggregator first, then separately migrate Prometheus metrics to
-  ClickHouse.
 - `docs/inProgress/runtime-debug-mcp-cleanup-spec.md` – concise spec for
   PocketHive-owned runtime debug MCP tools and HiveGate-governed cleanup.
 - `docs/inProgress/db-query-worker-mvp.md` – MVP contract for the DB-only
@@ -18,8 +15,12 @@ Notable in‑progress plans:
   configurable connection pool.
 - `docs/inProgress/e2e-api-framework-mini-plan.md` – lightweight refactor plan
   for turning the ingress auth pack into a reusable API/E2E support layer.
+
 Recently archived:
 
+- `docs/archive/observability-decommission-plan.md` – completed plan for
+  removing Loki, Log Aggregator, Prometheus, and Pushgateway while moving
+  active metrics to ClickHouse.
 - `docs/archive/auth-api-rollout-plan.md` – completed auth/authz rollout
   checklist across PocketHive HTTP APIs, with e2e + verification tracking.
 

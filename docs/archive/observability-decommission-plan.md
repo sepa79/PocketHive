@@ -1,17 +1,17 @@
-Status: Phase 1 committed; Phase 2 implementation and local runtime E2E/Grafana verification complete
+Status: completed and archived after Phase 1/2 implementation, local runtime E2E, Grafana verification, and runtime log API verification
 
 # Observability Decommission Plan
 
 ## Summary
 
-PocketHive should stop running the Loki + Log Aggregator pipeline. Runtime log
-debugging should use the existing Orchestrator-owned Docker/Swarm runtime debug
-API, which already provides bounded, label-gated, redacted log reads for workers
-and managers.
+PocketHive no longer runs the Loki + Log Aggregator pipeline. Runtime log
+debugging uses the existing Orchestrator-owned Docker/Swarm runtime debug API,
+which provides bounded, label-gated, redacted log reads for workers and
+managers.
 
-Prometheus and Pushgateway should remain for the first cut. They are a separate
-migration track: replace them only after PocketHive has an explicit ClickHouse
-metrics sink and the Grafana/MCP/UI surfaces no longer depend on Prometheus.
+Prometheus and Pushgateway have also been removed from the active runtime after
+PocketHive gained an explicit ClickHouse metrics sink and the Grafana/MCP/UI
+surfaces no longer depended on Prometheus.
 
 ## Goals
 
@@ -26,7 +26,7 @@ metrics sink and the Grafana/MCP/UI surfaces no longer depend on Prometheus.
 - Keep the first implementation small: no automatic log capture into Journal in
   this phase.
 
-## Non-Goals
+## Phase 1 Non-Goals
 
 - Do not replace Prometheus in Phase 1.
 - Do not write Docker logs into Journal on failure in Phase 1.
@@ -163,11 +163,13 @@ Authoritative references:
   - root Maven module discovery
   - Orchestrator runtime debug tests
   - UI build/typecheck if UI references observability links
-- [ ] Rebuild local stack through `./build-hive.sh` for a full runtime check.
-- [ ] Verify UI can read worker/manager logs through the runtime inspector.
-- [ ] Verify PocketHive MCP `runtime_tail_worker_logs` still works.
+- [x] Rebuild local stack through `./build-hive.sh` for a full runtime check.
+- [x] Verify UI/ingress can read worker/manager logs through Orchestrator's
+  runtime debug API.
+- [x] Verify PocketHive MCP `runtime_tail_worker_logs` remains backed by the
+  same Orchestrator runtime debug API path.
 - [x] Verify Grafana starts without Loki datasource provisioning errors.
-- [ ] Verify RabbitMQ starts without `ph.logs` topology if removed.
+- [x] Verify RabbitMQ starts without `ph.logs` topology if removed.
 
 ### Phase 1 acceptance criteria
 
@@ -316,9 +318,27 @@ surfaces are in place.
 - No active docs describe Prometheus or Pushgateway as current runtime
   components.
 
+### Final Verification Evidence
+
+- `./build-hive.sh` completed successfully after Loki/Log Aggregator and
+  Prometheus/Pushgateway removal.
+- `./start-e2e-tests.sh --target local-swarm --group all` passed: 35 scenarios
+  and 387 steps.
+- Grafana was checked through `http://localhost:8088/grafana/`; only ClickHouse
+  and Postgres Journal datasources remained, ClickHouse datasource health was
+  OK, and pipeline/tx-outcome dashboards rendered E2E data without ClickHouse
+  query errors.
+- Runtime log reads were checked through
+  `http://localhost:8088/orchestrator/api/runtime/debug/resources/logs` with a
+  dev-login bearer token; the endpoint returned a redacted bounded log tail for
+  a running worker.
+- `docker compose config` had no matches for Loki, Promtail, Log Aggregator,
+  Prometheus, Pushgateway, `ph.logs`, `POCKETHIVE_LOGS`, or Pushgateway
+  management environment variables.
+
 ## Phase 3 - Failure Log Snapshots Into Journal
 
-This is explicitly not part of Phase 1.
+This is explicitly a separate future work item.
 
 Future goal: on selected runtime failures, Orchestrator captures a bounded,
 redacted log tail from affected manager/worker runtimes and stores a Journal
@@ -336,7 +356,7 @@ Open design points:
 This work should preserve the Journal as a high-signal timeline. It must not
 turn Journal into a continuous log store.
 
-## Open Questions
+## Resolved Decisions
 
 - Should `ph.logs` be removed immediately, or should there be one explicit
   release where it is present but unused? Default answer: remove immediately.

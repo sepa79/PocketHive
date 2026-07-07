@@ -11,7 +11,6 @@ const config: Config = {
   url: DOCS_URL,
   baseUrl: DOCS_BASE_URL,
   onBrokenLinks: "throw",
-  onBrokenMarkdownLinks: "throw",
   favicon: "img/favicon.svg",
 
   organizationName: "pockethive",
@@ -24,6 +23,9 @@ const config: Config = {
 
   markdown: {
     mermaid: true,
+    hooks: {
+      onBrokenMarkdownLinks: "throw",
+    },
   },
   themes: ["@docusaurus/theme-mermaid"],
 
