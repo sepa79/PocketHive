@@ -3,7 +3,6 @@ package io.pockethive.swarmcontroller;
 import static io.pockethive.swarmcontroller.SwarmControllerTestProperties.CONTROL_EXCHANGE;
 import static io.pockethive.swarmcontroller.SwarmControllerTestProperties.CONTROL_QUEUE_PREFIX_BASE;
 import static io.pockethive.swarmcontroller.SwarmControllerTestProperties.HIVE_EXCHANGE;
-import static io.pockethive.swarmcontroller.SwarmControllerTestProperties.LOGS_EXCHANGE;
 import static io.pockethive.swarmcontroller.SwarmControllerTestProperties.TRAFFIC_PREFIX;
 import static io.pockethive.swarmcontroller.SwarmControllerTestProperties.TEST_SWARM_ID;
 
@@ -38,8 +37,6 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest(properties = {
-    "pockethive.control-plane.swarm-controller.rabbit.logging.enabled=false",
-    "rabbitmq.logging.enabled=false",
     "pockethive.control-plane.manager.role=swarm-controller"
 })
   @RabbitAvailable
@@ -71,15 +68,14 @@ import static org.junit.jupiter.api.Assertions.*;
     setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX", CONTROL_QUEUE_PREFIX_BASE);
     setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_QUEUE_PREFIX", TRAFFIC_PREFIX);
     setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_HIVE_EXCHANGE", HIVE_EXCHANGE);
-    setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE", LOGS_EXCHANGE);
-    setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED", Boolean.FALSE.toString());
     setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_DOCKER_SOCKET_PATH", "/var/run/docker.sock");
-    setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_ENABLED", Boolean.FALSE.toString());
-    setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_BASE_URL", "http://localhost:9091");
-    setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_PUSH_RATE", "10s");
-    setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_SHUTDOWN_OPERATION", "DELETE");
-    setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_JOB", "swarm-controller");
-    setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_GROUPING_KEY_INSTANCE", TEST_INSTANCE_ID);
+    setRequiredSystemProperty("POCKETHIVE_METRICS_ADAPTER", "DISABLED");
+    setRequiredSystemProperty("POCKETHIVE_METRICS_SWARM_ID", TEST_SWARM_ID);
+    setRequiredSystemProperty("POCKETHIVE_METRICS_RUN_ID", "run-it");
+    setRequiredSystemProperty("POCKETHIVE_METRICS_ROLE", "swarm-controller");
+    setRequiredSystemProperty("POCKETHIVE_METRICS_INSTANCE", TEST_INSTANCE_ID);
+    setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_ADAPTER", "DISABLED");
+    setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUBLISH_INTERVAL", "10s");
   }
 
 	  @DynamicPropertySource
@@ -107,33 +103,20 @@ import static org.junit.jupiter.api.Assertions.*;
     register(registry, "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_HIVE_EXCHANGE",
         "pockethive.control-plane.swarm-controller.traffic.hive-exchange",
         HIVE_EXCHANGE);
-    register(registry, "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE",
-        "pockethive.control-plane.swarm-controller.rabbit.logs-exchange",
-        LOGS_EXCHANGE);
-    register(registry, "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED",
-        "pockethive.control-plane.swarm-controller.rabbit.logging.enabled",
-        Boolean.FALSE.toString());
     register(registry, "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_DOCKER_SOCKET_PATH",
         "pockethive.control-plane.swarm-controller.docker.socket-path",
         "/var/run/docker.sock");
-    register(registry, "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_ENABLED",
-        "pockethive.control-plane.swarm-controller.metrics.pushgateway.enabled",
-        Boolean.FALSE.toString());
-    register(registry, "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_BASE_URL",
-        "pockethive.control-plane.swarm-controller.metrics.pushgateway.base-url",
-        "http://localhost:9091");
-    register(registry, "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_PUSH_RATE",
-        "pockethive.control-plane.swarm-controller.metrics.pushgateway.push-rate",
+    register(registry, "POCKETHIVE_METRICS_ADAPTER", "pockethive.metrics.adapter", "DISABLED");
+    register(registry, "POCKETHIVE_METRICS_SWARM_ID", "pockethive.metrics.swarm-id", swarmId);
+    register(registry, "POCKETHIVE_METRICS_RUN_ID", "pockethive.metrics.run-id", "run-it");
+    register(registry, "POCKETHIVE_METRICS_ROLE", "pockethive.metrics.role", "swarm-controller");
+    register(registry, "POCKETHIVE_METRICS_INSTANCE", "pockethive.metrics.instance", TEST_INSTANCE_ID);
+    register(registry, "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_ADAPTER",
+        "pockethive.control-plane.swarm-controller.metrics.adapter",
+        "DISABLED");
+    register(registry, "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUBLISH_INTERVAL",
+        "pockethive.control-plane.swarm-controller.metrics.publish-interval",
         "10s");
-    register(registry, "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_SHUTDOWN_OPERATION",
-        "pockethive.control-plane.swarm-controller.metrics.pushgateway.shutdown-operation",
-        "DELETE");
-    register(registry, "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_JOB",
-        "pockethive.control-plane.swarm-controller.metrics.pushgateway.job",
-        "swarm-controller");
-	    register(registry, "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUSHGATEWAY_GROUPING_KEY_INSTANCE",
-	        "pockethive.control-plane.swarm-controller.metrics.pushgateway.grouping-key.instance",
-	        TEST_INSTANCE_ID);
 
 	    if (!POSTGRES.isRunning()) {
 	      POSTGRES.start();

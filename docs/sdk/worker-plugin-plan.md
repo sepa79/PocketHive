@@ -114,7 +114,7 @@
 
 - SDK v3 host must run in staging/prod with at least two worker roles for one release cycle, and telemetry must show stable load/startup times.
 - Control-plane testing (per `docs/ci/control-plane-testing.md`) must cover concurrent plugin boot, failure isolation, and message routing.
-- Resource sizing guidance and monitoring dashboards (Grafana/Loki) must highlight per-plugin metrics so operators can detect noisy neighbors.
+- Resource sizing guidance and monitoring dashboards must highlight per-plugin metrics so operators can detect noisy neighbors.
 
 ## 4) Next Steps
 

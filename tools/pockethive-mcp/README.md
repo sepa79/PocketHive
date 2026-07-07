@@ -21,6 +21,10 @@ checkout:
 ```bash
 export POCKETHIVE_BASE_URL=http://localhost:8088
 export POCKETHIVE_AUTH_USERNAME=local-admin
+export POCKETHIVE_GRAFANA_BASE_URL=http://localhost:8088/grafana
+export POCKETHIVE_GRAFANA_USERNAME=pockethive
+export POCKETHIVE_GRAFANA_PASSWORD=pockethive
+export POCKETHIVE_GRAFANA_CLICKHOUSE_DATASOURCE_UID=clickhouse
 export POCKETHIVE_ROOT=/absolute/path/to/PocketHive
 export BUNDLES_ROOT=/absolute/path/to/pockethive-scenario-bundles
 export PH_BUNDLES_ROOTS='["/absolute/path/to/pockethive-scenario-bundles"]'
@@ -82,6 +86,7 @@ swarm_start
 swarm_stop
 swarm_remove
 debug_journal
+metrics_query
 component_config_preview
 component_config_update
 runtime_control_plane_status
@@ -107,6 +112,10 @@ instructions or client integrations.
 | `PH_WORKFLOW_SOURCE_ROOTS` | optional | Extra source roots for JMeter/Postman/OpenAPI/k6 inputs |
 | `WIREMOCK_BASE_URL` | optional | Override WireMock admin URL; otherwise derived from `POCKETHIVE_BASE_URL` host on port `8080` |
 | `TCP_MOCK_BASE_URL` | optional | Override TCP mock admin URL; otherwise derived from `POCKETHIVE_BASE_URL` host on port `8083` |
+| `POCKETHIVE_GRAFANA_BASE_URL` | yes for metrics | Grafana ingress root for ClickHouse metrics queries |
+| `POCKETHIVE_GRAFANA_USERNAME` | yes for metrics | Grafana basic auth username for `metrics_query` |
+| `POCKETHIVE_GRAFANA_PASSWORD` | yes for metrics | Grafana basic auth password for `metrics_query` |
+| `POCKETHIVE_GRAFANA_CLICKHOUSE_DATASOURCE_UID` | yes for metrics | Provisioned ClickHouse datasource UID, usually `clickhouse` |
 
 Use explicit values. Do not rely on hidden fallbacks for real environments.
 
@@ -183,6 +192,21 @@ Production/live verification should use:
   "includeTapSample": true
 }
 ```
+
+## Metrics Evidence
+
+`metrics_query` reads product metrics from ClickHouse through Grafana's
+provisioned ClickHouse datasource. It accepts only explicit time ranges and
+whitelisted summary shapes:
+
+```text
+tx-outcomes-summary
+processor-runtime-summary
+queue-runtime-summary
+buffer-guard-summary
+```
+
+The tool does not accept raw SQL or PromQL.
 
 ## Runtime Debug And Cleanup
 

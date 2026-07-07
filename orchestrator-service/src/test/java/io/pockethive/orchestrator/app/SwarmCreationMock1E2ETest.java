@@ -172,41 +172,17 @@ class SwarmCreationMock1E2ETest {
     @DynamicPropertySource
     static void registerProperties(DynamicPropertyRegistry registry) {
         registry.add(
-            "pockethive.control-plane.orchestrator.metrics.pushgateway.enabled",
-            () -> "true");
+            "pockethive.metrics.adapter",
+            () -> "DISABLED");
         registry.add(
-            "pockethive.control-plane.orchestrator.metrics.pushgateway.base-url",
-            () -> "http://pushgateway:9091");
+            "POCKETHIVE_METRICS_ADAPTER",
+            () -> "DISABLED");
         registry.add(
-            "pockethive.control-plane.orchestrator.metrics.pushgateway.push-rate",
-            () -> "PT1M");
+            "pockethive.control-plane.orchestrator.metrics.adapter",
+            () -> "DISABLED");
         registry.add(
-            "pockethive.control-plane.orchestrator.metrics.pushgateway.shutdown-operation",
-            () -> "DELETE");
-        registry.add(
-            "pockethive.control-plane.orchestrator.metrics.pushgateway.job",
-            () -> "swarm-job");
-        registry.add(
-            "pockethive.control-plane.orchestrator.metrics.pushgateway.grouping-key.instance",
-            () -> "controller-instance");
-        registry.add(
-            "POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_METRICS_PUSHGATEWAY_ENABLED",
-            () -> "true");
-        registry.add(
-            "POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_METRICS_PUSHGATEWAY_BASE_URL",
-            () -> "http://pushgateway:9091");
-        registry.add(
-            "POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_METRICS_PUSHGATEWAY_PUSH_RATE",
-            () -> "PT1M");
-        registry.add(
-            "POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_METRICS_PUSHGATEWAY_SHUTDOWN_OPERATION",
-            () -> "DELETE");
-        registry.add(
-            "POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_METRICS_PUSHGATEWAY_JOB",
-            () -> "swarm-job");
-        registry.add(
-            "POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_METRICS_PUSHGATEWAY_GROUPING_KEY_INSTANCE",
-            () -> "controller-instance");
+            "POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_METRICS_ADAPTER",
+            () -> "DISABLED");
         registry.add(
             "pockethive.control-plane.orchestrator.docker.compute-adapter",
             () -> "DOCKER_SINGLE");
@@ -715,17 +691,22 @@ class SwarmCreationMock1E2ETest {
             throw new IllegalStateException("Unable to create temporary runtime root directory", e);
         }
         scenarioManagerContext = new SpringApplicationBuilder(ScenarioManagerTestApplication.class)
-            .properties(Map.of(
-                "spring.autoconfigure.exclude",
-                "org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration,"
-                    + "org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration",
-                "server.port", port,
-                "server.address", "127.0.0.1",
-                "scenarios.dir", scenariosDir.toString(),
-                "capabilities.dir", capabilitiesDir.toString(),
-                "POCKETHIVE_SCENARIOS_RUNTIME_ROOT", runtimeRoot.toString(),
-                "pockethive.auth.service-url", "http://127.0.0.1:" + authServicePort,
-                "logging.level.root", "WARN"
+            .properties(Map.ofEntries(
+                Map.entry(
+                    "spring.autoconfigure.exclude",
+                    "org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration,"
+                        + "org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration"),
+                Map.entry("server.port", port),
+                Map.entry("server.address", "127.0.0.1"),
+                Map.entry("scenarios.dir", scenariosDir.toString()),
+                Map.entry("capabilities.dir", capabilitiesDir.toString()),
+                Map.entry("POCKETHIVE_SCENARIOS_RUNTIME_ROOT", runtimeRoot.toString()),
+                Map.entry("POCKETHIVE_METRICS_ADAPTER", "DISABLED"),
+                Map.entry("pockethive.metrics.adapter", "DISABLED"),
+                Map.entry("POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_METRICS_ADAPTER", "DISABLED"),
+                Map.entry("pockethive.control-plane.orchestrator.metrics.adapter", "DISABLED"),
+                Map.entry("pockethive.auth.service-url", "http://127.0.0.1:" + authServicePort),
+                Map.entry("logging.level.root", "WARN")
             ))
             .run();
         scenarioManagerPort = port;

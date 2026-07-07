@@ -27,10 +27,10 @@ The postprocessor currently emits aggregate Micrometer metrics for the completed
 - `ph_processor_latency_avg_ms`
 
 These metrics are tagged with `ph_role`, `ph_instance`, and `ph_swarm` and are exported through the
-standard PocketHive Pushgateway wiring described in [Observability](../docs/observability.md).
+standard PocketHive ClickHouse metrics sink described in [Observability](../docs/observability.md).
 
 There is no supported `publish-all-metrics` config flag in the current postprocessor contract. The
-old per-transaction Prometheus gauges such as `ph_transaction_hop_duration_ms`,
+old per-transaction gauges such as `ph_transaction_hop_duration_ms`,
 `ph_transaction_total_latency_ms`, and `ph_transaction_processor_*` are not emitted by the current
 worker path. Transaction-level Grafana analysis should use the ClickHouse tx-outcomes sink described
 in [Observability](../docs/observability.md#postprocessor-clickhouse-tx-outcomes-sink).

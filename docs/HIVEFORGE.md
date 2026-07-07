@@ -15,9 +15,9 @@ runtime environment values.
 - `swarm-reduced` - deploys the portable reduced Docker Swarm runtime from
   HiveForge-managed compose/config artifacts and prebuilt images.
 - `swarm-full` - deploys the Docker Swarm runtime with dedicated service-owned
-  roots for RabbitMQ, Postgres, ClickHouse, Prometheus, Loki, and Redis. Grafana
-  and the remaining runtime config/state stay under the shared HiveForge project
-  root.
+  roots for RabbitMQ, Postgres, ClickHouse, and Redis. ClickHouse owns product
+  metrics. Grafana and the remaining runtime config/state stay under the shared
+  HiveForge project root.
 
 The `single-full` profile intentionally maps to the existing canonical local
 PocketHive entrypoint instead of inventing a second compose orchestration path.
@@ -168,12 +168,10 @@ Agent sequence:
        POCKETHIVE_RABBITMQ_ROOT: /data/rabbitmq
        POCKETHIVE_POSTGRES_ROOT: /data/postgres
        POCKETHIVE_CLICKHOUSE_ROOT: /data/clickhouse
-       POCKETHIVE_PROMETHEUS_ROOT: /data/prometheus
-       POCKETHIVE_LOKI_ROOT: /data/loki
        POCKETHIVE_REDIS_ROOT: /data/redis
        HTTP_PROXY: http://proxy.example:3128
        HTTPS_PROXY: http://proxy.example:3128
-       NO_PROXY: localhost,127.0.0.1,::1,prometheus,loki,clickhouse,rabbitmq,postgres,redis,pushgateway,scenario-manager,orchestrator,auth-service,network-proxy-manager,ui,ui-v2
+       NO_PROXY: localhost,127.0.0.1,::1,clickhouse,rabbitmq,postgres,redis,scenario-manager,orchestrator,auth-service,network-proxy-manager,ui,ui-v2
    ```
 
    Set `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` only when the target
@@ -267,8 +265,6 @@ PocketHive does not append another `/data` segment:
 POCKETHIVE_RABBITMQ_ROOT=/data/rabbitmq
 POCKETHIVE_POSTGRES_ROOT=/data/postgres
 POCKETHIVE_CLICKHOUSE_ROOT=/data/clickhouse
-POCKETHIVE_PROMETHEUS_ROOT=/data/prometheus
-POCKETHIVE_LOKI_ROOT=/data/loki
 POCKETHIVE_REDIS_ROOT=/data/redis
 ```
 
@@ -279,8 +275,6 @@ They must exist on nodes with the corresponding labels:
 node.labels.pockethive.rabbitmq == true
 node.labels.pockethive.postgres == true
 node.labels.pockethive.clickhouse == true
-node.labels.pockethive.prometheus == true
-node.labels.pockethive.loki == true
 node.labels.pockethive.redis == true
 ```
 

@@ -45,9 +45,7 @@ class ProcessorTopologyProvisioningTest {
             "pockethive.control-plane.control-queue-prefix=" + WORKER_PROPERTIES.getControlQueuePrefix(),
             "pockethive.inputs.rabbit.queue=" + MODERATOR_QUEUE,
             "pockethive.outputs.rabbit.exchange=" + EXCHANGE,
-            "pockethive.outputs.rabbit.routing-key=" + FINAL_QUEUE,
-            "pockethive.control-plane.swarm-controller.rabbit.logs-exchange=ph.logs",
-            "pockethive.control-plane.swarm-controller.rabbit.logging.enabled=false");
+            "pockethive.outputs.rabbit.routing-key=" + FINAL_QUEUE);
 
     @Test
     void processorServiceDoesNotDeclareTrafficTopology() {

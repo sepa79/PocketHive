@@ -965,6 +965,29 @@ class SwarmSignalListenerTest {
         anyString());
   }
 
+  @Test
+  void statusFullRefreshesQueueMetricsForGrafana() {
+    when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(1,1,1,1, java.time.Instant.now()));
+    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+
+    newListener(lifecycle, rabbit, "inst", mapper);
+
+    verify(lifecycle).snapshotQueueStats();
+  }
+
+  @Test
+  void statusFullStillPublishesWhenQueueMetricsRefreshFails() {
+    when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(1,1,1,1, java.time.Instant.now()));
+    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+    doThrow(new IllegalStateException("queue stats unavailable")).when(lifecycle).snapshotQueueStats();
+
+    newListener(lifecycle, rabbit, "inst", mapper);
+
+    verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
+        eq(statusEvent("status-full", "swarm-controller", "inst")),
+        anyString());
+  }
+
   private void assertConcreteSwarmControlRoutes(String payload) throws Exception {
     JsonNode node = mapper.readTree(payload);
     JsonNode routesNode = node.path("data").path("io").path("control").path("queues").path("routes");

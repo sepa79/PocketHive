@@ -7,7 +7,7 @@
   <packaging>pom</packaging>
     <properties>
     <!-- Flatten plugin resolves this CI-friendly revision into published POMs; see build plugins below. -->
-    <revision>0.15.32</revision>
+    <revision>0.15.33</revision>
     <logstash.logback.version>8.1</logstash.logback.version>
     <tomcat.version>10.1.55</tomcat.version>
     <netty.version>4.1.134.Final</netty.version>
@@ -35,7 +35,6 @@
     <module>common/swarm-model</module>
     <module>common/journal-postgres</module>
     <module>generator-service</module>
-    <module>log-aggregator-service</module>
     <module>moderator-service</module>
     <module>orchestrator-service</module>
     <module>postprocessor-service</module>

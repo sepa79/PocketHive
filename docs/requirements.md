@@ -46,7 +46,3 @@ PocketHive is a portable transaction swarm: a set of small, composable services 
 - Consumes final-queue messages and records hop and total latency metrics.
 - Pushes metrics to the control exchange and increments error counters when flagged.
 - Accepts control messages to enable/disable processing and sends `status-full` on start.
-
-### Log Aggregator Service
-- Consumes log events from RabbitMQ and batches them to Loki over HTTP.
-- Batch size, flush interval, and retry strategy are configurable via environment variables.

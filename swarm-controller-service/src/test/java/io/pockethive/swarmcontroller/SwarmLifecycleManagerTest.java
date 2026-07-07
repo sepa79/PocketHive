@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import static io.pockethive.swarmcontroller.SwarmControllerTestProperties.CONTROL_EXCHANGE;
 import static io.pockethive.swarmcontroller.SwarmControllerTestProperties.CONTROL_QUEUE_PREFIX_BASE;
 import static io.pockethive.swarmcontroller.SwarmControllerTestProperties.HIVE_EXCHANGE;
-import static io.pockethive.swarmcontroller.SwarmControllerTestProperties.LOGS_EXCHANGE;
 import static io.pockethive.swarmcontroller.SwarmControllerTestProperties.TRAFFIC_PREFIX;
 import static io.pockethive.swarmcontroller.SwarmControllerTestProperties.TEST_SWARM_ID;
 
@@ -131,9 +130,9 @@ class SwarmLifecycleManagerTest {
     assertEquals("guest", env.get("SPRING_RABBITMQ_USERNAME"));
     assertEquals("guest", env.get("SPRING_RABBITMQ_PASSWORD"));
     assertEquals("/", env.get("SPRING_RABBITMQ_VIRTUAL_HOST"));
-    assertEquals(LOGS_EXCHANGE, env.get("POCKETHIVE_LOGS_EXCHANGE"));
-    assertEquals(LOGS_EXCHANGE, env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE"));
-    assertEquals("true", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED"));
+    assertFalse(env.containsKey("POCKETHIVE_LOGS_EXCHANGE"));
+    assertFalse(env.containsKey("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE"));
+    assertFalse(env.containsKey("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED"));
     assertEquals("ctrl-net", env.get("CONTROL_NETWORK"));
     assertEquals(queue("qout"), env.get("POCKETHIVE_OUTPUT_RABBIT_ROUTING_KEY"));
     assertEquals(HIVE_EXCHANGE, env.get("POCKETHIVE_OUTPUT_RABBIT_EXCHANGE"));

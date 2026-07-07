@@ -4,7 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
+import io.pockethive.observability.metrics.PocketHiveMetricsAdapter;
 import io.pockethive.orchestrator.config.OrchestratorProperties;
+import io.pockethive.sink.clickhouse.metrics.ClickHouseMetricsSinkProperties;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
 
@@ -23,17 +25,10 @@ class RabbitConfigTest {
             new OrchestratorProperties.Orchestrator(
                 "ph.control.orchestrator",
                 "ph.control.orchestrator-status",
-                new OrchestratorProperties.Rabbit(
-                    "ph.logs",
-                    new OrchestratorProperties.Logging(Boolean.FALSE)),
                 new OrchestratorProperties.Metrics(
-                    new OrchestratorProperties.Pushgateway(
-                        true,
-                        "http://pushgateway:9091",
-                        Duration.ofMinutes(1),
-                        "DELETE",
-                        "swarm-job",
-                        new OrchestratorProperties.GroupingKey("controller-instance"))),
+                    PocketHiveMetricsAdapter.DISABLED,
+                    Duration.ofMinutes(1),
+                    ClickHouseMetricsSinkProperties.disabled()),
                 new OrchestratorProperties.Docker("/var/run/docker.sock", null),
                 new OrchestratorProperties.Images(null),
                 new OrchestratorProperties.ScenarioManager(

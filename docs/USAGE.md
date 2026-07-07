@@ -64,10 +64,11 @@ Then rebuild/redeploy the stack via `./build-hive.sh` (or `docker compose down &
 
 ## Grafana (metrics + journal annotations)
 
-- Grafana UI: `http://localhost:3333/grafana/` (user/pass: `pockethive` / `pockethive`).
+- Grafana UI: `http://localhost:8088/grafana/` (user/pass: `pockethive` / `pockethive`).
 - Dashboards:
   - `PocketHive Journal` (`uid=pockethive-journal`) — Postgres-backed timeline + annotations (WARN/ERROR, lifecycle outcomes, journal backpressure).
-  - `Pipeline observability` (`uid=pockethive-pipeline`) — Prometheus panels with Journal annotations overlaid.
+  - `Pipeline observability` (`uid=pockethive-pipeline`) — ClickHouse service metrics from `ph_metrics_samples` with Journal annotations overlaid.
+  - `PocketHive Pipeline Deep Dive` (`uid=pockethive-pipeline-detailed`) — ClickHouse runtime metrics and transaction drill-downs.
   - ClickHouse transaction dashboards use `ph_tx_outcome_v2`.
 
 ## ClickHouse tx_outcome v1 -> v2 migration
@@ -192,8 +193,8 @@ Manual checks:
   - `local-rest-two-moderators-randomized` – generator targets `/api/guarded-random`, WireMock cycles through multiple latency slots, and guard reacts to bursty downstream pressure.
 - **Launch checklist:**
   1. Create/start a swarm from one of the guard scenarios (UI modal or `/api/swarms/{id}/create` + `/start`).
-  2. Confirm the guard queue is exposed via metrics (`ph_swarm_queue_depth{queue="ph.<swarm>.moderator-a-out"}`) and logs report the guard state (`io.pockethive.swarmcontroller.guard` logger).
-  3. Monitor guard gauges (`ph_swarm_buffer_guard_depth`, `*_target`, `*_rate_per_sec`, `*_state`) in Grafana or scrape Prometheus directly.
+  2. Confirm the guard queue is exposed via ClickHouse metrics (`ph_swarm_queue_depth` in `ph_metrics_samples`, filtered by `swarmId` and `labels['queue']`) and logs report the guard state (`io.pockethive.swarmcontroller.guard` logger).
+  3. Monitor guard gauges (`ph_swarm_buffer_guard_depth`, `*_target`, `*_rate_per_sec`, `*_state`) in Grafana.
 - **Tuning tips:** Use `targetDepth` as the desired steady level, keep `minDepth`/`maxDepth` wide enough to avoid thrash, and start with adjustment percentages between 5‑20%. Set `backpressure.queueAlias` to the queue immediately downstream of the guard if you want automatic slowdown when processors fall behind.
 
 #### Guard configuration cheat‑sheet
@@ -255,5 +256,5 @@ Manual checks:
 - **WebSocket errors**: ensure UI health is `ok`, RabbitMQ is running and Web-STOMP is enabled; check browser network logs for `/ws`.
 - **Authentication**: RabbitMQ blocks remote logins for the built-in `guest` user; use the proxy or create a non-guest user.
 - **UI access**: ensure port `8088` is free or adjust mapping in `docker-compose.yml`.
-- **WSL2/Docker restarts**: if services suddenly time out talking to each other after a Docker restart (e.g. `log-aggregator` can’t reach `rabbitmq:15672`), rebuild the compose network: `docker compose down --remove-orphans && docker compose up -d`.
+- **WSL2/Docker restarts**: if services suddenly time out talking to each other after a Docker restart, rebuild the compose network: `docker compose down --remove-orphans && docker compose up -d`.
 - **WSL2 flakiness / “is it networking or the app?”**: run `tools/diag/docker-triage.sh` to collect container status, logs, and basic inter-container connectivity checks.

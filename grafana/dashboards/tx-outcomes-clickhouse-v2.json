@@ -8,19 +8,6 @@
         "iconColor": "rgba(0, 211, 255, 1)",
         "name": "Annotations & Alerts",
         "type": "dashboard"
-      },
-      {
-        "datasource": {
-          "type": "grafana-clickhouse-datasource",
-          "uid": "clickhouse"
-        },
-        "enable": true,
-        "hide": false,
-        "iconColor": "rgba(255, 0, 0, 1)",
-        "name": "Latency spike annotations",
-        "query": "SELECT toUnixTimestamp(toStartOfInterval(eventTime, INTERVAL 10 SECOND)) * 1000 AS time, concat('Latency spike — p95 = ', toString(quantileTDigest(0.95)(processorDurationMs)), ' ms') AS text FROM ph_tx_outcome_v2 WHERE $__timeFilter(eventTime) AND ('${swarm:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${swarm:csv}'), swarmId)) AND ('${callId:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${callId:csv}'), callIdKey)) AND ('${businessCode:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${businessCode:csv}'), if(businessCodeKey = '', 'n/a', businessCodeKey))) GROUP BY time HAVING quantileTDigest(0.95)(processorDurationMs) >= 2000 ORDER BY time DESC LIMIT 100",
-        "rawQuery": true,
-        "type": "tags"
       }
     ]
   },

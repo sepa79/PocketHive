@@ -8,7 +8,7 @@ Welcome to the PocketHive documentation hub. Use these resources to understand t
 - [SUT + Dataset + Simulation Model (proposal)](architecture/sut-dataset-simulation-model.md)
 - [Network Proxy Plan](inProgress/network-proxy-plan.md)
 - [Auth API Rollout Plan](archive/auth-api-rollout-plan.md)
-- [E2E API Framework Mini-Plan](inProgress/e2e-api-framework-mini-plan.md)
+- [E2E API Framework Mini-Plan](archive/e2e-api-framework-mini-plan.md)
 
 ## Roadmap
 - [Release Notes](../CHANGELOG.md)
@@ -16,7 +16,7 @@ Welcome to the PocketHive documentation hub. Use these resources to understand t
 ## Usage
 - [Usage Guide](USAGE.md)
 - [HiveForge Deployment](HIVEFORGE.md)
-- Legacy Prometheus UI helpers are archived under `archive/legacy-ui/src/lib/prometheus.ts`.
+- Legacy UI helpers are archived under `archive/legacy-ui/`.
 
 ## Guides
 - [Guides Hub](guides/README.md)
@@ -33,7 +33,6 @@ Welcome to the PocketHive documentation hub. Use these resources to understand t
 - [Processor](../processor-service/README.md)
 - [Postprocessor](../postprocessor-service/README.md)
 - [Trigger](../trigger-service/README.md)
-- [Log Aggregator](../log-aggregator-service/README.md)
 
 ## Core Modules
 - [Topology Core](../common/topology-core/README.md)

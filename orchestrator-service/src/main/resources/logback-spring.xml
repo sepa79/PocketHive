@@ -1,50 +1,6 @@
 <configuration>
   <include resource="org/springframework/boot/logging/logback/base.xml"/>
 
-  <springProperty scope="context" name="applicationName"
-                  source="spring.application.name"
-                  defaultValue="unknown"/>
-
-  <springProperty scope="context" name="roleIdentifier"
-                  source="pockethive.control-plane.manager.role"
-                  defaultValue="${applicationName}"/>
-
-  <springProperty scope="context" name="swarmIdentifier"
-                  source="pockethive.control-plane.swarm-id"
-                  defaultValue=""/>
-
-  <springProperty scope="context" name="instanceIdentifier"
-                  source="pockethive.control-plane.instance-id"
-                  defaultValue="${applicationName}"/>
-
-  <springProperty scope="context" name="rabbitLoggingEnabled"
-                  source="pockethive.control-plane.orchestrator.rabbit.logging.enabled"
-                  defaultValue="false"/>
-
-  <springProperty scope="context" name="rabbitHost"
-                  source="spring.rabbitmq.host"
-                  defaultValue="rabbitmq"/>
-
-  <springProperty scope="context" name="rabbitPort"
-                  source="spring.rabbitmq.port"
-                  defaultValue="5672"/>
-
-  <springProperty scope="context" name="rabbitUsername"
-                  source="spring.rabbitmq.username"
-                  defaultValue="guest"/>
-
-  <springProperty scope="context" name="rabbitPassword"
-                  source="spring.rabbitmq.password"
-                  defaultValue="guest"/>
-
-  <springProperty scope="context" name="rabbitVirtualHost"
-                  source="spring.rabbitmq.virtual-host"
-                  defaultValue="/"/>
-
-  <springProperty scope="context" name="logsExchange"
-                  source="pockethive.control-plane.orchestrator.rabbit.logs-exchange"
-                  defaultValue="ph.logs"/>
-
   <logger name="org.springframework.amqp" level="WARN" additivity="false">
     <appender-ref ref="CONSOLE"/>
   </logger>
@@ -53,29 +9,7 @@
   </logger>
   <logger name="io.pockethive" level="DEBUG"/>
 
-  <if condition='!"false".equalsIgnoreCase(property("rabbitLoggingEnabled"))'>
-    <then>
-      <appender name="RABBIT" class="org.springframework.amqp.rabbit.logback.AmqpAppender">
-        <host>${rabbitHost}</host>
-        <port>${rabbitPort}</port>
-        <username>${rabbitUsername}</username>
-        <password>${rabbitPassword}</password>
-        <virtualHost>${rabbitVirtualHost}</virtualHost>
-        <exchangeName>${logsExchange}</exchangeName>
-        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
-          <customFields>{"role":"${roleIdentifier}","swarmId":"${swarmIdentifier}","instanceId":"${instanceIdentifier}"}</customFields>
-        </encoder>
-      </appender>
-
-      <root level="INFO">
-        <appender-ref ref="CONSOLE"/>
-        <appender-ref ref="RABBIT"/>
-      </root>
-    </then>
-    <else>
-      <root level="INFO">
-        <appender-ref ref="CONSOLE"/>
-      </root>
-    </else>
-  </if>
+  <root level="INFO">
+    <appender-ref ref="CONSOLE"/>
+  </root>
 </configuration>

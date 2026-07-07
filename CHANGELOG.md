@@ -4,6 +4,36 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.15.33]
+Timestamp: 2026-07-07T10:40:35Z
+
+- Observability runtime: remove Loki, Promtail, Log Aggregator, Prometheus,
+  and Pushgateway from local Compose, HiveForge stack templates, packaging,
+  image publishing, runtime docs, and active service wiring.
+- Product metrics: add the explicit ClickHouse metrics adapter/sink path for
+  Orchestrator, Swarm Controller, and worker runtimes, with bounded buffering,
+  per-sample rejection handling, explicit adapter configuration, and 30-day
+  ClickHouse retention.
+- Grafana: move active pipeline/buffer-guard metrics dashboards to ClickHouse,
+  keep Journal annotations on Postgres, prune legacy Loki/Prometheus
+  datasources from existing Grafana volumes, and remove links to retired log
+  dashboards.
+- Runtime logs: keep log inspection on the product-owned Orchestrator runtime
+  debug API path instead of a central Loki/Log Aggregator pipeline.
+- Failure diagnostics: capture bounded, redacted runtime log tails into
+  separate Journal `runtime-log-snapshot` entries for error alerts, with
+  explicit `runtime-log-snapshot-unavailable` entries when the scoped runtime
+  cannot be read.
+- Docs: update active docs and Docusaurus output sources for the ClickHouse-only
+  metrics/runtime-log model, and archive the completed observability
+  decommission plan.
+- Verification: local stack rebuild, full local-swarm E2E, Grafana datasource
+  and dashboard checks through ingress, and runtime log API checks through
+  ingress passed for the decommissioned observability stack; Journal snapshot
+  entries were verified through the Orchestrator ingress API after full E2E.
+- Release: bump PocketHive patch version to 0.15.33 for the observability
+  decommission and ClickHouse metrics migration.
+
 ## [0.15.32]
 Timestamp: 2026-07-02T20:36:29Z
 

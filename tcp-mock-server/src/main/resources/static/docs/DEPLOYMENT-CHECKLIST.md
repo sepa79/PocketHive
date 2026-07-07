@@ -177,9 +177,9 @@
   ```bash
   nc -zv localhost 9090
   ```
-- [ ] Prometheus metrics available
+- [ ] Actuator metrics endpoint responds
   ```bash
-  curl http://localhost:8090/actuator/prometheus
+  curl http://localhost:8090/actuator/metrics
   ```
 
 ### Functional Checks

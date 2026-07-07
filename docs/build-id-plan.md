@@ -23,7 +23,7 @@ Goal: introduce a single `POCKETHIVE_BUILD_ID` that is generated once per `build
 
 ## 3. Wire build id into Docker images
 
-- For service Dockerfiles (orchestrator, scenario-manager, log-aggregator, UI) and `Dockerfile.bees.local`:
+- For service Dockerfiles (orchestrator, scenario-manager, UI) and `Dockerfile.bees.local`:
   - Add `ARG POCKETHIVE_BUILD_ID`.
   - Add either `LABEL io.pockethive.build="${POCKETHIVE_BUILD_ID}"` and/or `ENV POCKETHIVE_BUILD_ID=${POCKETHIVE_BUILD_ID}`.
 - In `build-hive.sh`, when building:

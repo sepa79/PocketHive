@@ -24,13 +24,6 @@ copy .env.example "%DEPLOY_DIR%\.env.example" >nul
 copy README.md "%DEPLOY_DIR%\" >nul
 copy LICENSE "%DEPLOY_DIR%\" >nul
 
-rem Configuration
-mkdir "%DEPLOY_DIR%\loki"
-copy loki\config.yml "%DEPLOY_DIR%\loki\" >nul
-
-mkdir "%DEPLOY_DIR%\prometheus"
-copy prometheus\prometheus.yml "%DEPLOY_DIR%\prometheus\" >nul
-
 rem Grafana
 mkdir "%DEPLOY_DIR%\grafana\dashboards"
 mkdir "%DEPLOY_DIR%\grafana\provisioning\dashboards"
@@ -73,19 +66,19 @@ echo.
 echo ## Ports
 echo.
 echo - 8088 - UI
+echo - 8088/grafana/ - Grafana ^(pockethive/pockethive^)
 echo - 5672 - RabbitMQ
 echo - 15672 - RabbitMQ Management
-echo - 3000 - Grafana ^(pockethive/pockethive^)
-echo - 9090 - Prometheus
+echo - 8123 - ClickHouse HTTP API
+echo - 9000 - ClickHouse native protocol
 echo - 8080 - WireMock
 echo.
 echo ## Persistent Data
 echo.
-echo Docker named volumes keep state for RabbitMQ, Prometheus, Grafana, Loki, and Redis:
+echo Docker named volumes keep state for RabbitMQ, ClickHouse, Grafana, and Redis:
 echo - rabbitmq-data
-echo - prometheus-data
+echo - clickhouse-data
 echo - grafana-data
-echo - loki-data
 echo - redis-data
 echo Use "docker compose down -v" to remove them for a clean reset.
 ) > "%DEPLOY_DIR%\DEPLOY.md"
@@ -98,7 +91,7 @@ echo docker compose up -d
 echo echo.
 echo echo PocketHive is starting!
 echo echo UI: http://localhost:8088
-echo echo Grafana: http://localhost:3000 ^(pockethive/pockethive^)
+echo echo Grafana: http://localhost:8088/grafana/ ^(pockethive/pockethive^)
 ) > "%DEPLOY_DIR%\start.bat"
 
 rem Create stop.bat

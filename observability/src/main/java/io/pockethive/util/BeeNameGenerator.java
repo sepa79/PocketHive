@@ -63,7 +63,6 @@ public final class BeeNameGenerator {
           "request-builder", "composer",
           "clearing-export", "packer",
           "trigger", "buzzer",
-          "log-aggregator", "scribe",
           "swarm-controller", "marshal",
           "orchestrator", "queen");
 

@@ -6,7 +6,7 @@ cd "${SCRIPT_DIR}"
 
 source "${SCRIPT_DIR}/tools/docker/image-manifest.sh"
 
-INFRA_SERVICES=(rabbitmq tcp-mock-server-tls toxiproxy prometheus grafana loki wiremock pushgateway redis redis-commander)
+INFRA_SERVICES=(rabbitmq tcp-mock-server-tls toxiproxy grafana wiremock redis redis-commander)
 mapfile -t IMAGE_SERVICES < <(pockethive_all_image_services)
 ALL_SERVICES=("${INFRA_SERVICES[@]}" "${IMAGE_SERVICES[@]}")
 declare -A DURATIONS=()
@@ -83,7 +83,7 @@ compose_build_services() {
   for svc in "${services[@]}"; do
     local image="${POCKETHIVE_SERVICE_IMAGE[$svc]:-}"
     if [[ -z "${image}" ]]; then
-      # Infrastructure / third-party services (rabbitmq, prometheus, grafana, etc.)
+      # Infrastructure / third-party services (rabbitmq, grafana, etc.)
       # use upstream images and are not built locally here.
       continue
     fi
@@ -166,7 +166,7 @@ clean_stack() {
     echo "Pruning local PocketHive images..."
     # Target only images built by this repo: core services and bees.
     mapfile -t ph_images < <(docker images --format '{{.Repository}} {{.ID}}' | awk '
-      $1 ~ /^(orchestrator|scenario-manager|log-aggregator|network-proxy-manager|network-proxy-haproxy|tcp-mock-server|ui|swarm-controller|generator|request-builder|http-sequence|moderator|processor|postprocessor|clearing-export|trigger|pockethive-)/ { print $2 }')
+      $1 ~ /^(orchestrator|scenario-manager|network-proxy-manager|network-proxy-haproxy|tcp-mock-server|ui|swarm-controller|generator|request-builder|http-sequence|moderator|processor|postprocessor|clearing-export|trigger|pockethive-)/ { print $2 }')
     for img in "${ph_images[@]}"; do
       if [[ -n "$img" ]]; then
         echo " - Removing image ${img}"

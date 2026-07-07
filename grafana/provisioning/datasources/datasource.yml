@@ -1,15 +1,12 @@
 apiVersion: 1
 
-datasources:
-  - name: Prometheus
-    type: prometheus
-    access: proxy
-    url: http://prometheus:9090/prometheus/
-    isDefault: true
+deleteDatasources:
   - name: Loki
-    type: loki
-    access: proxy
-    url: http://loki:3100
+    orgId: 1
+  - name: Prometheus
+    orgId: 1
+
+datasources:
   - name: PocketHive Journal (Postgres)
     type: postgres
     access: proxy
@@ -27,6 +24,7 @@ datasources:
     uid: clickhouse
     type: grafana-clickhouse-datasource
     access: proxy
+    isDefault: true
     jsonData:
       protocol: http
       host: clickhouse

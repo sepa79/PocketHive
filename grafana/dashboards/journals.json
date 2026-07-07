@@ -66,12 +66,8 @@
                     "url": "../../../../journal/swarms/${__data.fields[\"swarm_id\"]}?runId=${__value.raw}"
                   },
                   {
-                    "title": "Open logs (Grafana)",
-                    "url": "/grafana/d/pockethive-logs/pockethive-logs?var-swarmId=${__data.fields[\"swarm_id\"]}"
-                  },
-                  {
-                    "title": "Open logs (runId search)",
-                    "url": "/grafana/d/pockethive-logs/pockethive-logs?var-swarmId=${__data.fields[\"swarm_id\"]}&var-search=${__value.raw}"
+                    "title": "Open journal (Grafana)",
+                    "url": "/grafana/d/pockethive-journal/pockethive-journal?var-scope=SWARM&var-swarmId=${__data.fields[\"swarm_id\"]}&var-runId=${__value.raw}"
                   }
                 ]
               }
@@ -88,8 +84,8 @@
                     "url": "../../../../journal/swarms/${__value.raw}"
                   },
                   {
-                    "title": "Open logs (Grafana)",
-                    "url": "/grafana/d/pockethive-logs/pockethive-logs?var-swarmId=${__value.raw}"
+                    "title": "Open journal (Grafana)",
+                    "url": "/grafana/d/pockethive-journal/pockethive-journal?var-scope=SWARM&var-swarmId=${__value.raw}"
                   }
                 ]
               }

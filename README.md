@@ -119,17 +119,15 @@ flowchart LR
   end
 
   %% External observers
-  LOG[(Log Aggregator)]
-  OBS[(Prometheus / Grafana / Loki)]
+  OBS[(ClickHouse / Grafana / Journal)]
 
-  TELE --> LOG
   TELE --> OBS
 ```
 
 Reading guide:
 - **Control**: dashed arrows from **Swarm Controller** to components.
 - **Work/Data**: left→right stream—`Generator → Moderator → Processor → Post‑Processor`. **Trigger** can inject/react to events.
-- **Telemetry**: components emit to a shared telemetry hub that feeds logs/metrics.
+- **Telemetry**: components emit to a shared telemetry hub that feeds metrics and events.
 
 ---
 
@@ -153,8 +151,8 @@ flowchart LR
   %% Observability cluster to the far right
   subgraph OBSV["Observability"]
     direction TB
-    LOG[(Log Aggregator)]
-    OBS[(Prometheus / Grafana / Loki)]
+    LOGS[(Runtime Debug Logs)]
+    OBS[(ClickHouse / Grafana / Journal)]
   end
 
   %% Core flow
@@ -163,7 +161,8 @@ flowchart LR
   SWARMS --> WM
 
   %% Telemetry
-  SWARMS --> LOG
+  UI -- bounded log reads --> ORCH
+  ORCH --> LOGS
   SWARMS --> OBS
   ORCH --> OBS
   UI --> OBS
@@ -175,7 +174,7 @@ flowchart LR
 
 ### UI (Hive Dashboard)
 - Start/stop scenarios, apply plans, inspect status.
-- Live metrics and logs dashboards (links to Grafana/Loki).
+- Live metrics dashboards and bounded runtime log reads.
 
 ### Orchestrator
 - Applies **Scenario Plans** and manages a dynamic set of swarms.
@@ -205,7 +204,8 @@ All services read environment variables (see each service’s README/Dockerfile)
 - `POCKETHIVE_CONTROL_PLANE_EXCHANGE` (control plane, direct)
 - `POCKETHIVE_CONTROL_PLANE_TRAFFIC_EXCHANGE` / queues for work/data paths
 - Logging: `LOG_LEVEL`, structured log toggles
-- Metrics scraping endpoints for Prometheus
+- Metrics adapter settings: `POCKETHIVE_METRICS_ADAPTER`, ClickHouse endpoint,
+  table, batching, and label bounds.
 
 Keep configuration **explicit**—favor declaring values over hidden defaults.
 
@@ -213,8 +213,10 @@ Keep configuration **explicit**—favor declaring values over hidden defaults.
 
 ## Observability
 
-- **Metrics**: each component exposes counters/histograms (throughput, errors, latencies). Scraped by Prometheus, visualized in Grafana.
-- **Logs**: structured JSON logs ingested by the log aggregator and browsed via Loki.
+- **Metrics**: components publish counters, timers, and gauges through the
+  explicit metrics adapter. Product metrics are stored in ClickHouse
+  (`ph_metrics_samples`, 30-day TTL) and visualized in Grafana.
+- **Logs**: services write to container stdout/stderr. UI and MCP log reads go through the Orchestrator runtime debug API as bounded, redacted Docker/Swarm log reads. Error alerts can also attach a bounded runtime log snapshot as a separate Journal entry.
 - **Events**: optionally surfaced to UI for human‑readable timelines.
 
 ---
@@ -236,7 +238,6 @@ The UI container fronted by Nginx proxies several internal services so browsers 
 - `/orchestrator/*` → Orchestrator REST API
 - `/scenario-manager/*` → Scenario Manager REST API
 - `/rabbitmq/` → RabbitMQ management UI (STOMP WebSocket available at `/ws`)
-- `/prometheus/` → Prometheus console
 - `/grafana/` → Grafana dashboards
 - `/wiremock/` → WireMock admin endpoints
 

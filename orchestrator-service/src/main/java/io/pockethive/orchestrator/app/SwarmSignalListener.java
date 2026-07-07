@@ -2,9 +2,11 @@ package io.pockethive.orchestrator.app;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
+import io.pockethive.control.AlertMessage;
 import io.pockethive.control.CommandState;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.control.ControlScope;
+import io.pockethive.controlplane.messaging.Alerts;
 import io.pockethive.orchestrator.domain.ScenarioTimelineRegistry;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
 import io.pockethive.orchestrator.domain.SwarmStore;
@@ -15,6 +17,7 @@ import io.pockethive.orchestrator.domain.SwarmLifecycleStatus;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.HiveJournal;
 import io.pockethive.orchestrator.domain.HiveJournal.HiveJournalEntry;
+import io.pockethive.orchestrator.runtime.RuntimeLogSnapshotJournalService;
 import io.pockethive.swarm.model.NetworkMode;
 import io.pockethive.swarm.model.SwarmPlan;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -58,6 +61,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 @EnableScheduling
 public class SwarmSignalListener {
     private static final String ROLE = "orchestrator";
+    private static final String ALERT_EVENT_TYPE = Alerts.TYPE + "." + Alerts.TYPE;
     private static final long STATUS_INTERVAL_MS = 5000L;
     private static final Duration TEMPLATE_TIMEOUT = Duration.ofMillis(120_000L);
     private static final Logger log = LoggerFactory.getLogger(SwarmSignalListener.class);
@@ -73,6 +77,7 @@ public class SwarmSignalListener {
     private final ControlPlaneJournalErrors journalErrors;
     private final ManagerControlPlane controlPlane;
     private final ControlPlaneEmitter controlEmitter;
+    private final RuntimeLogSnapshotJournalService runtimeLogSnapshots;
     private final ControlPlaneTopologyDescriptor topology;
     private final ControlPlaneIdentity identity;
     private final String instanceId;
@@ -90,6 +95,7 @@ public class SwarmSignalListener {
                                HiveJournal hiveJournal,
                                ManagerControlPlane controlPlane,
                                ControlPlaneEmitter controlEmitter,
+                               RuntimeLogSnapshotJournalService runtimeLogSnapshots,
                                ControlPlaneIdentity managerControlPlaneIdentity,
                                @Qualifier("managerControlPlaneTopologyDescriptor") ControlPlaneTopologyDescriptor descriptor,
                                @Qualifier("managerControlQueueName") String controlQueue) {
@@ -103,6 +109,7 @@ public class SwarmSignalListener {
         this.hiveJournal = Objects.requireNonNull(hiveJournal, "hiveJournal");
         this.controlPlane = Objects.requireNonNull(controlPlane, "controlPlane");
         this.controlEmitter = Objects.requireNonNull(controlEmitter, "controlEmitter");
+        this.runtimeLogSnapshots = Objects.requireNonNull(runtimeLogSnapshots, "runtimeLogSnapshots");
         this.topology = Objects.requireNonNull(descriptor, "descriptor");
         this.identity = Objects.requireNonNull(managerControlPlaneIdentity, "identity");
         this.instanceId = identity.instanceId();
@@ -148,6 +155,8 @@ public class SwarmSignalListener {
 
             if (key.type().startsWith("outcome.")) {
                 handleOutcomeEvent(key, routingKey, body);
+            } else if (ALERT_EVENT_TYPE.equals(key.type())) {
+                handleAlertEvent(key, routingKey, body);
             }
         } catch (Exception e) {
             log.warn("Ignoring control-plane event due to handler exception; rk={} payload snippet={}", routingKey, snippet(body), e);
@@ -179,6 +188,16 @@ public class SwarmSignalListener {
             return;
         }
         onControllerReady(key);
+    }
+
+    private void handleAlertEvent(RoutingKey key, String routingKey, String body) {
+        try {
+            AlertMessage alert = json.readValue(body, AlertMessage.class);
+            runtimeLogSnapshots.captureForAlert(routingKey, alert);
+        } catch (Exception e) {
+            log.warn("Failed to parse control alert event; rk={} payload snippet={}", routingKey, snippet(body), e);
+            journalControlPlaneDrop(key.swarmId(), routingKey, "invalid alert payload", body, e);
+        }
     }
 
     private void handleOutcomeEvent(RoutingKey key, String routingKey, String body) {

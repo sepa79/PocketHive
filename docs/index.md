@@ -81,9 +81,9 @@ by the UI under `/docs/...` as part of the runtime image.
 - `docs/inProgress/network-proxy-plan.md` (Status: in progress) –
   shared-per-SUT network proxying, secure traffic routing, and runtime fault
   profiles.
-- `docs/inProgress/e2e-api-framework-mini-plan.md` (Status: completed) –
-  incremental plan for extracting a reusable API/E2E support layer from the
-  current ingress auth pack.
+- `docs/archive/e2e-api-framework-mini-plan.md` (Status: completed / archived) –
+  historical plan for extracting a reusable API/E2E support layer from the
+  ingress auth pack.
 
 ## Specs & Tools
 

@@ -2,16 +2,10 @@
   "annotations": {
     "list": [
       {
-        "builtIn": 1,
-        "datasource": "-- Grafana --",
-        "enable": true,
-        "hide": false,
-        "iconColor": "rgba(0, 211, 255, 1)",
-        "name": "Annotations & Alerts",
-        "type": "dashboard"
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "P60BB12A89CB6DC1C"
       },
-      {
-        "datasource": "PocketHive Journal (Postgres)",
         "enable": true,
         "hide": false,
         "iconColor": "rgba(255, 120, 10, 1)",
@@ -21,7 +15,10 @@
         "query": "SELECT extract(epoch from ts) * 1000 AS time, CONCAT(COALESCE(scope,''),' ',COALESCE(swarm_id,''),' ',COALESCE(kind,''),' ',COALESCE(type,'')) AS text, severity AS tags\nFROM journal_event\nWHERE $__timeFilter(ts)\n  AND scope = 'SWARM'\n  AND severity IN ('WARN','ERROR')\n  AND swarm_id ~ '${swarm:regex}'\nORDER BY ts DESC, id DESC\nLIMIT 500"
       },
       {
-        "datasource": "PocketHive Journal (Postgres)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "P60BB12A89CB6DC1C"
+      },
         "enable": true,
         "hide": false,
         "iconColor": "rgba(76, 175, 80, 1)",
@@ -52,19 +49,23 @@
           "text": "All",
           "value": "$__all"
         },
-        "datasource": "Prometheus",
-        "definition": "label_values(ph_processor_calls_total, ph_swarm)",
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "clickhouse"
+        },
+        "definition": "SELECT DISTINCT swarmId FROM ph_metrics_samples WHERE $__timeFilter(eventTime) ORDER BY swarmId",
         "hide": 0,
         "includeAll": true,
         "label": "Swarm",
         "multi": true,
         "name": "swarm",
         "options": [],
-        "query": "label_values(ph_processor_calls_total, ph_swarm)",
-        "refresh": 2,
+        "query": "SELECT DISTINCT swarmId FROM ph_metrics_samples WHERE $__timeFilter(eventTime) ORDER BY swarmId",
+        "refresh": 1,
         "regex": "",
         "skipUrlSync": false,
-        "type": "query"
+        "type": "query",
+        "sort": 1
       }
     ]
   },
@@ -72,10 +73,13 @@
   "timezone": "",
   "title": "PocketHive Pipeline Observability",
   "uid": "pockethive-pipeline",
-  "version": 2,
+  "version": 3,
   "panels": [
     {
-      "datasource": "Prometheus",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -121,8 +125,10 @@
       },
       "targets": [
         {
-          "expr": "sum by (ph_instance, ph_swarm) (rate(ph_processor_calls_total{ph_role=\"postprocessor\",ph_swarm=~\"$swarm\"}[5m]))",
-          "legendFormat": "{{ph_instance}} ({{ph_swarm}})",
+          "editorType": "sql",
+          "format": 2,
+          "queryType": "sql",
+          "rawSql": "SELECT\n  time,\n  series,\n  if(seconds > 0, greatest(last_value - first_value, 0) / seconds, 0) AS value\nFROM (\n  SELECT\n    toStartOfInterval(eventTime, toIntervalSecond(greatest($__interval_s, 300))) AS time,\n    concat(instance, ' (', swarmId, ')') AS series,\n    dateDiff('second', min(eventTime), max(eventTime)) AS seconds,\n    argMin(value, eventTime) AS first_value,\n    argMax(value, eventTime) AS last_value\n  FROM ph_metrics_samples\n  WHERE $__timeFilter(eventTime)\n    AND metricName = 'ph_processor_calls_total'\n    AND statistic = 'COUNT'\n    AND role = 'postprocessor'\n    AND ('${swarm:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${swarm:csv}'), swarmId))\n  GROUP BY time, series\n)\nORDER BY time, series",
           "refId": "A"
         }
       ],
@@ -130,7 +136,10 @@
       "type": "timeseries"
     },
     {
-      "datasource": "Prometheus",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -176,8 +185,10 @@
       },
       "targets": [
         {
-          "expr": "sum by (ph_instance, ph_swarm) (rate(ph_errors_total{ph_role=\"postprocessor\",ph_swarm=~\"$swarm\"}[5m]))",
-          "legendFormat": "{{ph_instance}} ({{ph_swarm}})",
+          "editorType": "sql",
+          "format": 2,
+          "queryType": "sql",
+          "rawSql": "SELECT\n  time,\n  series,\n  if(seconds > 0, greatest(last_value - first_value, 0) / seconds, 0) AS value\nFROM (\n  SELECT\n    toStartOfInterval(eventTime, toIntervalSecond(greatest($__interval_s, 300))) AS time,\n    concat(instance, ' (', swarmId, ')') AS series,\n    dateDiff('second', min(eventTime), max(eventTime)) AS seconds,\n    argMin(value, eventTime) AS first_value,\n    argMax(value, eventTime) AS last_value\n  FROM ph_metrics_samples\n  WHERE $__timeFilter(eventTime)\n    AND metricName = 'ph_errors_total'\n    AND statistic = 'COUNT'\n    AND role = 'postprocessor'\n    AND ('${swarm:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${swarm:csv}'), swarmId))\n  GROUP BY time, series\n)\nORDER BY time, series",
           "refId": "A"
         }
       ],
@@ -185,7 +196,10 @@
       "type": "timeseries"
     },
     {
-      "datasource": "Prometheus",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -231,8 +245,10 @@
       },
       "targets": [
         {
-          "expr": "sum by (ph_instance, ph_swarm) (rate(ph_processor_latency_ms_sum{ph_role=\"postprocessor\",ph_swarm=~\"$swarm\"}[5m])) / clamp_min(sum by (ph_instance, ph_swarm) (rate(ph_processor_latency_ms_count{ph_role=\"postprocessor\",ph_swarm=~\"$swarm\"}[5m])), 1e-09)",
-          "legendFormat": "{{ph_instance}} ({{ph_swarm}})",
+          "editorType": "sql",
+          "format": 2,
+          "queryType": "sql",
+          "rawSql": "SELECT\n  time,\n  series,\n  if(sumIf(delta_value, statistic = 'COUNT') > 0,\n     sumIf(delta_value, statistic = 'SUM') / sumIf(delta_value, statistic = 'COUNT'),\n     0) AS value\nFROM (\n  SELECT\n    toStartOfInterval(eventTime, toIntervalSecond(greatest($__interval_s, 300))) AS time,\n    concat(instance, ' (', swarmId, ')') AS series,\n    statistic,\n    greatest(argMax(value, eventTime) - argMin(value, eventTime), 0) AS delta_value\n  FROM ph_metrics_samples\n  WHERE $__timeFilter(eventTime)\n    AND metricName = 'ph_processor_latency_ms'\n    AND statistic IN ('SUM', 'COUNT')\n    AND role = 'postprocessor'\n    AND ('${swarm:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${swarm:csv}'), swarmId))\n  GROUP BY time, series, statistic\n)\nGROUP BY time, series\nORDER BY time, series",
           "refId": "A"
         }
       ],
@@ -240,7 +256,10 @@
       "type": "timeseries"
     },
     {
-      "datasource": "Prometheus",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -286,8 +305,10 @@
       },
       "targets": [
         {
-          "expr": "ph_processor_latency_avg_ms{ph_role=\"postprocessor\",ph_swarm=~\"$swarm\"}",
-          "legendFormat": "{{ph_instance}} ({{ph_swarm}})",
+          "editorType": "sql",
+          "format": 2,
+          "queryType": "sql",
+          "rawSql": "SELECT\n  toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n  concat(instance, ' (', swarmId, ')') AS series,\n  argMax(value, eventTime) AS value\nFROM ph_metrics_samples\nWHERE $__timeFilter(eventTime)\n  AND metricName = 'ph_processor_latency_avg_ms'\n  AND statistic = 'VALUE'\n  AND role = 'postprocessor'\n  AND ('${swarm:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${swarm:csv}'), swarmId))\nGROUP BY time, series\nORDER BY time, series",
           "refId": "A"
         }
       ],
@@ -295,7 +316,10 @@
       "type": "timeseries"
     },
     {
-      "datasource": "Prometheus",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -316,7 +340,7 @@
               }
             ]
           },
-          "unit": "none"
+          "unit": "short"
         },
         "overrides": []
       },
@@ -341,8 +365,10 @@
       },
       "targets": [
         {
-          "expr": "ph_swarm_queue_depth{swarm=~\"$swarm\"}",
-          "legendFormat": "{{queue}} ({{swarm}})",
+          "editorType": "sql",
+          "format": 2,
+          "queryType": "sql",
+          "rawSql": "SELECT\n  toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n  concat(if(labels['queue'] = '', instance, labels['queue']), ' (', swarmId, ')') AS series,\n  argMax(value, eventTime) AS value\nFROM ph_metrics_samples\nWHERE $__timeFilter(eventTime)\n  AND metricName = 'ph_swarm_queue_depth'\n  AND statistic = 'VALUE'\n  AND ('${swarm:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${swarm:csv}'), swarmId))\nGROUP BY time, series\nORDER BY time, series",
           "refId": "A"
         }
       ],

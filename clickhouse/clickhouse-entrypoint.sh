@@ -3,6 +3,7 @@ set -euo pipefail
 
 ORIGINAL_ENTRYPOINT="/entrypoint.sh"
 MIGRATION_SCRIPT="/opt/pockethive/migrate-tx-outcome-v1-to-v2.sh"
+INIT_SQL_DIR="/docker-entrypoint-initdb.d"
 CLICKHOUSE_HOST="127.0.0.1"
 CLICKHOUSE_NATIVE_PORT="${CLICKHOUSE_NATIVE_PORT:-9000}"
 CLICKHOUSE_USER_NAME="${CLICKHOUSE_USER:-pockethive}"
@@ -20,6 +21,25 @@ shutdown() {
 }
 
 trap shutdown TERM INT
+
+apply_init_sql_scripts() {
+  shopt -s nullglob
+  local scripts=("${INIT_SQL_DIR}"/*.sql)
+  shopt -u nullglob
+
+  for script in "${scripts[@]}"; do
+    echo "Applying idempotent ClickHouse init SQL: ${script}"
+    if ! clickhouse-client \
+      --host "$CLICKHOUSE_HOST" \
+      --port "$CLICKHOUSE_NATIVE_PORT" \
+      --user "$CLICKHOUSE_USER_NAME" \
+      --password "$CLICKHOUSE_PASSWORD_VALUE" \
+      --multiquery <"$script"; then
+      echo "Failed to apply ClickHouse init SQL: ${script}" >&2
+      return 1
+    fi
+  done
+}
 
 if [[ ! -x "$ORIGINAL_ENTRYPOINT" ]]; then
   echo "Original ClickHouse entrypoint not found or not executable: ${ORIGINAL_ENTRYPOINT}" >&2
@@ -51,6 +71,11 @@ done
 
 if [[ "$ready" != "true" ]]; then
   echo "ClickHouse did not become ready before tx-outcome migration timeout" >&2
+  shutdown
+  exit 1
+fi
+
+if ! apply_init_sql_scripts; then
   shutdown
   exit 1
 fi

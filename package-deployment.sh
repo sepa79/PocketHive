@@ -26,16 +26,9 @@ cp .env.example "${DEPLOY_DIR}/.env.example"
 cp README.md "${DEPLOY_DIR}/"
 cp LICENSE "${DEPLOY_DIR}/"
 
-# Configuration files
-mkdir -p "${DEPLOY_DIR}/loki"
-cp loki/config.yml "${DEPLOY_DIR}/loki/"
-
 # RabbitMQ config (definitions, listeners, and plugins)
 mkdir -p "${DEPLOY_DIR}/rabbitmq"
 cp -r rabbitmq/* "${DEPLOY_DIR}/rabbitmq/" 2>/dev/null || true
-
-mkdir -p "${DEPLOY_DIR}/prometheus"
-cp prometheus/prometheus.yml "${DEPLOY_DIR}/prometheus/"
 
 # Grafana
 mkdir -p "${DEPLOY_DIR}/grafana/dashboards"
@@ -107,9 +100,8 @@ sudo docker compose -f docker-compose.opt.yml up -d
 Docker named volumes retain stateful data between restarts:
 
 - `rabbitmq-data` (RabbitMQ queues and configuration)
-- `prometheus-data` (Prometheus TSDB)
+- `clickhouse-data` (product metrics and transaction outcomes)
 - `grafana-data` (Grafana database and plugins)
-- `loki-data` (Loki indexes and chunks)
 - `redis-data` (Redis datasets)
 
 They are created automatically on the first `docker compose up`. Remove them explicitly
@@ -118,9 +110,7 @@ with `docker compose down -v` if you need a clean slate.
 ## What's Included
 
 - `docker-compose.yml` - Main deployment configuration
-- `loki/` - Log aggregation config
-- `prometheus/` - Metrics config
-- `grafana/` - Dashboards and datasources
+- `grafana/` - ClickHouse/Postgres dashboards and datasources
 - `wiremock/` - Mock server stubs
 - `scenarios/` - Example Scenario bundles (YAML + assets)
 - `scenario-manager-service/` - Scenario Manager capabilities, network profiles, and SUT environment definitions
@@ -155,15 +145,15 @@ docker compose restart grafana
 
 ## Ports
 
-- 8088 - UI (also proxies Grafana, Prometheus, RabbitMQ UI, Redis Commander)
+- 8088 - UI (also proxies Grafana at /grafana/, RabbitMQ UI, Redis Commander)
 - 5672 - RabbitMQ AMQP
 - 15672 - RabbitMQ Management
 - 15674 - RabbitMQ Web STOMP
 - 6379 - Redis
 - 8081 - Redis Commander
-- 3333 - Grafana (direct, optional)
+- 8123 - ClickHouse HTTP API
+- 9000 - ClickHouse native protocol
 - 8080 - WireMock
-- 1080 - Log Aggregator
 - 1081 - Scenario Manager
 
 ## Support
@@ -181,7 +171,7 @@ docker compose up -d
 echo
 echo "PocketHive is starting!"
 echo "UI: http://localhost:8088"
-echo "Grafana: http://localhost:3000 (pockethive/pockethive)"
+echo "Grafana: http://localhost:8088/grafana/ (pockethive/pockethive)"
 echo
 echo "Run 'docker compose logs -f' to view logs"
 EOF

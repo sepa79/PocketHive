@@ -123,7 +123,7 @@ At 1000 msg/sec with 100-byte payloads:
 - **Netty**: ~500KB/sec log output (hex dumps)
 
 ### Filtering
-Use log aggregation tools (Loki, ELK) to filter by:
+Use runtime log reads or external log aggregation tools to filter by:
 - `TCP_SEND` / `TCP_RECV` keywords
 - Host/port combinations
 - Latency thresholds

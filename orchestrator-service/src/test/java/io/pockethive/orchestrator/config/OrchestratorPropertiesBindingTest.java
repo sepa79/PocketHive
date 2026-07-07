@@ -2,6 +2,9 @@ package io.pockethive.orchestrator.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.pockethive.observability.metrics.PocketHiveMetricsAdapter;
+import io.pockethive.sink.clickhouse.metrics.ClickHouseMetricsSinkProperties;
+import java.time.Duration;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.context.properties.ConfigurationPropertiesBindException;
@@ -18,14 +21,8 @@ class OrchestratorPropertiesBindingTest {
             .withPropertyValues(
                 "pockethive.control-plane.orchestrator.control-queue-prefix=ph.control.orchestrator",
                 "pockethive.control-plane.orchestrator.status-queue-prefix=ph.control.orchestrator-status",
-                "pockethive.control-plane.orchestrator.rabbit.logs-exchange=ph.logs",
-                "pockethive.control-plane.orchestrator.rabbit.logging.enabled=true",
-                "pockethive.control-plane.orchestrator.metrics.pushgateway.enabled=true",
-                "pockethive.control-plane.orchestrator.metrics.pushgateway.base-url=http://pushgateway:9091",
-                "pockethive.control-plane.orchestrator.metrics.pushgateway.push-rate=PT1M",
-                "pockethive.control-plane.orchestrator.metrics.pushgateway.shutdown-operation=DELETE",
-                "pockethive.control-plane.orchestrator.metrics.pushgateway.job=swarm-job",
-                "pockethive.control-plane.orchestrator.metrics.pushgateway.grouping-key.instance=controller-instance",
+                "pockethive.control-plane.orchestrator.metrics.adapter=DISABLED",
+                "pockethive.control-plane.orchestrator.metrics.publish-interval=PT10S",
                 "pockethive.control-plane.orchestrator.docker.socket-path=/var/run/docker.sock",
                 "pockethive.control-plane.orchestrator.images.repository-prefix=",
                 "pockethive.control-plane.orchestrator.scenario-manager.url=http://scenario-manager:8080",
@@ -39,18 +36,11 @@ class OrchestratorPropertiesBindingTest {
                 OrchestratorProperties properties = context.getBean(OrchestratorProperties.class);
                 assertThat(properties.getControlQueuePrefix()).isEqualTo("ph.control.orchestrator");
                 assertThat(properties.getStatusQueuePrefix()).isEqualTo("ph.control.orchestrator-status");
-                assertThat(properties.getRabbit().getLogsExchange()).isEqualTo("ph.logs");
-                assertThat(properties.getRabbit().getLogging().isEnabled()).isTrue();
-                assertThat(properties.getMetrics().getPushgateway().isEnabled()).isTrue();
-                assertThat(properties.getMetrics().getPushgateway().getBaseUrl())
-                    .isEqualTo("http://pushgateway:9091");
-                assertThat(properties.getMetrics().getPushgateway().getPushRate())
-                    .isEqualTo(java.time.Duration.ofMinutes(1));
-                assertThat(properties.getMetrics().getPushgateway().getShutdownOperation())
-                    .isEqualTo("DELETE");
-                assertThat(properties.getMetrics().getPushgateway().getJob()).isEqualTo("swarm-job");
-                assertThat(properties.getMetrics().getPushgateway().getGroupingKey().getInstance())
-                    .isEqualTo("controller-instance");
+                assertThat(properties.getMetrics().getAdapter())
+                    .isEqualTo(PocketHiveMetricsAdapter.DISABLED);
+                assertThat(properties.getMetrics().getPublishInterval())
+                    .isEqualTo(Duration.ofSeconds(10));
+                assertThat(properties.getMetrics().getClickHouse().configured()).isFalse();
                 assertThat(properties.getDocker().getSocketPath()).isEqualTo("/var/run/docker.sock");
                 assertThat(properties.getScenarioManager().getUrl())
                     .isEqualTo("http://scenario-manager:8080");
@@ -68,18 +58,40 @@ class OrchestratorPropertiesBindingTest {
     }
 
     @Test
+    void bindsClickHouseMetricsFromNestedControlPlanePrefix() {
+        contextRunner
+            .withPropertyValues(
+                "pockethive.control-plane.orchestrator.control-queue-prefix=ph.control.orchestrator",
+                "pockethive.control-plane.orchestrator.status-queue-prefix=ph.control.orchestrator-status",
+                "pockethive.control-plane.orchestrator.metrics.adapter=CLICKHOUSE",
+                "pockethive.control-plane.orchestrator.metrics.publish-interval=PT10S",
+                "pockethive.control-plane.orchestrator.metrics.clickhouse.endpoint=http://clickhouse:8123",
+                "pockethive.control-plane.orchestrator.docker.socket-path=/var/run/docker.sock",
+                "pockethive.control-plane.orchestrator.images.repository-prefix=",
+                "pockethive.control-plane.orchestrator.scenario-manager.url=http://scenario-manager:8080",
+                "pockethive.control-plane.orchestrator.scenario-manager.http.connect-timeout=PT5S",
+                "pockethive.control-plane.orchestrator.scenario-manager.http.read-timeout=PT30S",
+                "pockethive.control-plane.orchestrator.network-proxy-manager.url=http://network-proxy-manager:8080",
+                "pockethive.control-plane.orchestrator.network-proxy-manager.http.connect-timeout=PT5S",
+                "pockethive.control-plane.orchestrator.network-proxy-manager.http.read-timeout=PT30S")
+            .run(context -> {
+                assertThat(context).hasNotFailed();
+                ClickHouseMetricsSinkProperties clickHouse =
+                    context.getBean(OrchestratorProperties.class).getMetrics().getClickHouse();
+                assertThat(clickHouse.configured()).isTrue();
+                assertThat(clickHouse.getEndpoint()).isEqualTo("http://clickhouse:8123");
+                assertThat(clickHouse.getTable()).isEqualTo(ClickHouseMetricsSinkProperties.DEFAULT_TABLE);
+                assertThat(clickHouse.getMaxBufferedSamples()).isEqualTo(50_000);
+            });
+    }
+
+    @Test
     void failsWhenRequiredControlQueuePrefixMissing() {
         contextRunner
             .withPropertyValues(
                 "pockethive.control-plane.orchestrator.status-queue-prefix=ph.control.orchestrator-status",
-                "pockethive.control-plane.orchestrator.rabbit.logs-exchange=ph.logs",
-                "pockethive.control-plane.orchestrator.rabbit.logging.enabled=false",
-                "pockethive.control-plane.orchestrator.metrics.pushgateway.enabled=true",
-                "pockethive.control-plane.orchestrator.metrics.pushgateway.base-url=http://pushgateway:9091",
-                "pockethive.control-plane.orchestrator.metrics.pushgateway.push-rate=PT1M",
-                "pockethive.control-plane.orchestrator.metrics.pushgateway.shutdown-operation=DELETE",
-                "pockethive.control-plane.orchestrator.metrics.pushgateway.job=swarm-job",
-                "pockethive.control-plane.orchestrator.metrics.pushgateway.grouping-key.instance=controller-instance",
+                "pockethive.control-plane.orchestrator.metrics.adapter=DISABLED",
+                "pockethive.control-plane.orchestrator.metrics.publish-interval=PT10S",
                 "pockethive.control-plane.orchestrator.docker.socket-path=/var/run/docker.sock",
                 "pockethive.control-plane.orchestrator.scenario-manager.url=http://scenario-manager:8080",
                 "pockethive.control-plane.orchestrator.scenario-manager.http.connect-timeout=PT5S",

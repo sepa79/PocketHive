@@ -22,8 +22,6 @@ The controller is fully configured through environment-backed Spring properties.
 | `pockethive.control-plane.control-queue-prefix` | Yes | Prefix for controller-specific control queues. | `POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX` |
 | `pockethive.control-plane.swarm-controller.traffic.queue-prefix` | Yes | Base prefix for hive work queues that workers bind to. | `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_QUEUE_PREFIX` |
 | `pockethive.control-plane.swarm-controller.traffic.hive-exchange` | Yes | Hive traffic exchange declared for swarm work fan-out. | `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_HIVE_EXCHANGE` |
-| `pockethive.control-plane.swarm-controller.rabbit.logs-exchange` | Yes | Exchange that receives aggregated bee logs. | `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE` |
-| `pockethive.control-plane.swarm-controller.rabbit.logging.enabled` | Yes | Enables or disables log shipping through the logs exchange. | `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED` |
 | `pockethive.control-plane.swarm-controller.docker.socket-path` | Yes | Docker socket path mounted into the controller container. | `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_DOCKER_SOCKET_PATH` |
 | `pockethive.control-plane.swarm-controller.docker.host` | No | Overrides the derived `DOCKER_HOST` (useful for TCP daemons). | `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_DOCKER_HOST` |
 | `logging.config` | No | Points to the Logback XML used at runtime. Defaults to `classpath:logback-spring.xml`. | `LOGGING_CONFIG` |
@@ -46,13 +44,8 @@ pockethive:
       traffic:
         queue-prefix: ${POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_QUEUE_PREFIX}
         hive-exchange: ${POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_HIVE_EXCHANGE}
-      rabbit:
-        logs-exchange: ${POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGS_EXCHANGE}
-        logging:
-          enabled: ${POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_RABBIT_LOGGING_ENABLED}
       docker:
         socket-path: ${POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_DOCKER_SOCKET_PATH}
 ```
 
 Use the table above to supply the matching environment variables before scheduling the controller container.
-

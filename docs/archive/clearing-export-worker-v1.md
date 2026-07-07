@@ -55,7 +55,7 @@ Design constraints already accepted:
 
 ## V2 universal structured mode (new requirements)
 
-Source requirements: `docs/inProgress/clearing-export-structured-mode-v1.md`.
+Source requirements: `docs/archive/clearing-export-structured-mode-v1.md`.
 
 ### V2 objective
 
@@ -199,7 +199,7 @@ Known runtime limitation (documented, no behavior change in this iteration):
 
 ## References
 
-- `docs/inProgress/clearing-export-structured-mode-v1.md`
+- `docs/archive/clearing-export-structured-mode-v1.md`
 - `docs/clearing/CLEARING_STRUCTURED_SCHEMA_CONTRACT.md`
 - `docs/ai/CLEARING_EXPORT_WORKER_PLAYBOOK.md`
 - `docs/correlation-vs-idempotency.md`

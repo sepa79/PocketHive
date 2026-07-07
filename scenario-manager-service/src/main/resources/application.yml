@@ -1,14 +1,8 @@
 # Default configuration for local development. Override values using standard Spring mechanisms
-# such as SPRING_APPLICATION_JSON or SPRING_RABBITMQ_* environment variables.
+# such as SPRING_APPLICATION_JSON or environment variables.
 spring:
   application:
     name: scenario-manager
-  rabbitmq:
-    host: ${SPRING_RABBITMQ_HOST:rabbitmq}
-    port: ${SPRING_RABBITMQ_PORT:5672}
-    username: ${SPRING_RABBITMQ_USERNAME:guest}
-    password: ${SPRING_RABBITMQ_PASSWORD:guest}
-    virtual-host: ${SPRING_RABBITMQ_VIRTUAL_HOST:/}
 
 logging:
   config: classpath:logback-spring.xml
@@ -28,6 +22,3 @@ pockethive:
     profiles-path: network/network-profiles.yaml
   sut:
     environments-path: sut/sut-environments.yaml
-  logs:
-    queue: ${POCKETHIVE_LOGS_QUEUE:ph.logs.agg}
-    exchange: ${POCKETHIVE_LOGS_EXCHANGE:ph.logs}

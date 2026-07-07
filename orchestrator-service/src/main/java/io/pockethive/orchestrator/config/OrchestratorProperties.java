@@ -1,6 +1,8 @@
 package io.pockethive.orchestrator.config;
 
 import io.pockethive.manager.runtime.ComputeAdapterType;
+import io.pockethive.observability.metrics.PocketHiveMetricsAdapter;
+import io.pockethive.sink.clickhouse.metrics.ClickHouseMetricsSinkProperties;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -25,10 +27,6 @@ public class OrchestratorProperties {
 
     public String getStatusQueuePrefix() {
         return orchestrator.statusQueuePrefix();
-    }
-
-    public Rabbit getRabbit() {
-        return orchestrator.rabbit();
     }
 
     public Metrics getMetrics() {
@@ -64,7 +62,6 @@ public class OrchestratorProperties {
 
         private final String controlQueuePrefix;
         private final String statusQueuePrefix;
-        private final @Valid Rabbit rabbit;
         private final @Valid Metrics metrics;
         private final @Valid Docker docker;
         private final @Valid Images images;
@@ -73,7 +70,6 @@ public class OrchestratorProperties {
 
         public Orchestrator(@NotBlank String controlQueuePrefix,
                              @NotBlank String statusQueuePrefix,
-                             @Valid Rabbit rabbit,
                              @Valid Metrics metrics,
                              @Valid Docker docker,
                              @Valid Images images,
@@ -81,7 +77,6 @@ public class OrchestratorProperties {
                              @Valid NetworkProxyManager networkProxyManager) {
             this.controlQueuePrefix = requireNonBlank(controlQueuePrefix, "controlQueuePrefix");
             this.statusQueuePrefix = requireNonBlank(statusQueuePrefix, "statusQueuePrefix");
-            this.rabbit = Objects.requireNonNull(rabbit, "rabbit");
             this.metrics = Objects.requireNonNull(metrics, "metrics");
             this.docker = Objects.requireNonNull(docker, "docker");
             this.images = Objects.requireNonNull(images, "images");
@@ -95,10 +90,6 @@ public class OrchestratorProperties {
 
         public String statusQueuePrefix() {
             return statusQueuePrefix;
-        }
-
-        public Rabbit rabbit() {
-            return rabbit;
         }
 
         public Metrics metrics() {
@@ -123,113 +114,36 @@ public class OrchestratorProperties {
     }
 
     @Validated
-    public static final class Rabbit {
-
-        private final String logsExchange;
-        private final @Valid Logging logging;
-
-        public Rabbit(@NotBlank String logsExchange, @Valid Logging logging) {
-            this.logsExchange = requireNonBlank(logsExchange, "logsExchange");
-            this.logging = Objects.requireNonNull(logging, "logging");
-        }
-
-        public String getLogsExchange() {
-            return logsExchange;
-        }
-
-        public Logging getLogging() {
-            return logging;
-        }
-    }
-
-    @Validated
-    public static final class Logging {
-
-        private final boolean enabled;
-
-        public Logging(@NotNull Boolean enabled) {
-            this.enabled = Objects.requireNonNull(enabled, "enabled");
-        }
-
-        public boolean isEnabled() {
-            return enabled;
-        }
-    }
-
-    @Validated
     public static final class Metrics {
 
-        private final @Valid Pushgateway pushgateway;
+        private final PocketHiveMetricsAdapter adapter;
+        private final Duration publishInterval;
+        private final @Valid ClickHouseMetricsSinkProperties clickHouse;
 
-        public Metrics(@Valid Pushgateway pushgateway) {
-            this.pushgateway = Objects.requireNonNull(pushgateway, "pushgateway");
+        public Metrics(@NotNull PocketHiveMetricsAdapter adapter,
+                       @NotNull Duration publishInterval,
+                       @Valid ClickHouseMetricsSinkProperties clickHouse) {
+            this.adapter = Objects.requireNonNull(adapter, "adapter");
+            this.publishInterval = Objects.requireNonNull(publishInterval, "publishInterval");
+            this.clickHouse = clickHouse == null ? ClickHouseMetricsSinkProperties.disabled() : clickHouse;
+            if (this.publishInterval.isZero() || this.publishInterval.isNegative()) {
+                throw new IllegalArgumentException("metrics.publishInterval must be positive");
+            }
+            if (this.adapter == PocketHiveMetricsAdapter.CLICKHOUSE) {
+                this.clickHouse.requireConfigured();
+            }
         }
 
-        public Pushgateway getPushgateway() {
-            return pushgateway;
-        }
-    }
-
-    @Validated
-    public static final class Pushgateway {
-
-        private final boolean enabled;
-        private final String baseUrl;
-        private final Duration pushRate;
-        private final String shutdownOperation;
-        private final String job;
-        private final @Valid GroupingKey groupingKey;
-
-        public Pushgateway(@NotNull Boolean enabled,
-                           @NotBlank String baseUrl,
-                           @NotNull Duration pushRate,
-                           @NotBlank String shutdownOperation,
-                           @NotBlank String job,
-                           @Valid GroupingKey groupingKey) {
-            this.enabled = Objects.requireNonNull(enabled, "enabled");
-            this.baseUrl = requireNonBlank(baseUrl, "baseUrl");
-            this.pushRate = Objects.requireNonNull(pushRate, "pushRate");
-            this.shutdownOperation = requireNonBlank(shutdownOperation, "shutdownOperation");
-            this.job = requireNonBlank(job, "job");
-            this.groupingKey = Objects.requireNonNull(groupingKey, "groupingKey");
+        public PocketHiveMetricsAdapter getAdapter() {
+            return adapter;
         }
 
-        public boolean isEnabled() {
-            return enabled;
+        public Duration getPublishInterval() {
+            return publishInterval;
         }
 
-        public String getBaseUrl() {
-            return baseUrl;
-        }
-
-        public Duration getPushRate() {
-            return pushRate;
-        }
-
-        public String getShutdownOperation() {
-            return shutdownOperation;
-        }
-
-        public String getJob() {
-            return job;
-        }
-
-        public GroupingKey getGroupingKey() {
-            return groupingKey;
-        }
-    }
-
-    @Validated
-    public static final class GroupingKey {
-
-        private final String instance;
-
-        public GroupingKey(@NotBlank String instance) {
-            this.instance = requireNonBlank(instance, "instance");
-        }
-
-        public String getInstance() {
-            return instance;
+        public ClickHouseMetricsSinkProperties getClickHouse() {
+            return clickHouse;
         }
     }
 
@@ -345,4 +259,5 @@ public class OrchestratorProperties {
         }
         return value;
     }
+
 }

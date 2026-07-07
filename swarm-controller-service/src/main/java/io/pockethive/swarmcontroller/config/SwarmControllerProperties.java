@@ -2,6 +2,8 @@ package io.pockethive.swarmcontroller.config;
 
 import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory;
 import io.pockethive.manager.runtime.ComputeAdapterType;
+import io.pockethive.observability.metrics.PocketHiveMetricsAdapter;
+import io.pockethive.sink.clickhouse.metrics.ClickHouseMetricsSinkProperties;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -20,7 +22,6 @@ public class SwarmControllerProperties {
     private final String controlQueuePrefixBase;
     private final String controlQueuePrefix;
     private final Traffic traffic;
-    private final Rabbit rabbit;
     private final Metrics metrics;
     private final Docker docker;
     private final Features features;
@@ -37,7 +38,6 @@ public class SwarmControllerProperties {
         this.controlQueuePrefix = normalizeControlQueuePrefix(this.swarmId, this.controlQueuePrefixBase);
         SwarmController resolved = Objects.requireNonNull(swarmController, "swarmController");
         this.traffic = Objects.requireNonNull(resolved.traffic(), "traffic");
-        this.rabbit = Objects.requireNonNull(resolved.rabbit(), "rabbit");
         this.metrics = Objects.requireNonNull(resolved.metrics(), "metrics");
         this.docker = Objects.requireNonNull(resolved.docker(), "docker");
         this.features = Objects.requireNonNull(resolved.features(), "features");
@@ -65,10 +65,6 @@ public class SwarmControllerProperties {
 
     public Traffic getTraffic() {
         return traffic;
-    }
-
-    public Rabbit getRabbit() {
-        return rabbit;
     }
 
     public Metrics getMetrics() {
@@ -117,18 +113,15 @@ public class SwarmControllerProperties {
     @Validated
     public static final class SwarmController {
         private final Traffic traffic;
-        private final Rabbit rabbit;
         private final Metrics metrics;
         private final Docker docker;
         private final Features features;
 
         public SwarmController(@Valid Traffic traffic,
-                               @Valid Rabbit rabbit,
                                @Valid Metrics metrics,
                                @Valid Docker docker,
                                @Valid Features features) {
             this.traffic = Objects.requireNonNull(traffic, "traffic");
-            this.rabbit = Objects.requireNonNull(rabbit, "rabbit");
             this.metrics = Objects.requireNonNull(metrics, "metrics");
             this.docker = Objects.requireNonNull(docker, "docker");
             this.features = features != null ? features : new Features(null);
@@ -136,10 +129,6 @@ public class SwarmControllerProperties {
 
         public Traffic traffic() {
             return traffic;
-        }
-
-        public Rabbit rabbit() {
-            return rabbit;
         }
 
         public Metrics metrics() {
@@ -191,108 +180,35 @@ public class SwarmControllerProperties {
     }
 
     @Validated
-    public static final class Rabbit {
-        private final String logsExchange;
-        private final Logging logging;
-
-        public Rabbit(@NotBlank String logsExchange, @Valid Logging logging) {
-            this.logsExchange = requireNonBlank(logsExchange, "logsExchange");
-            this.logging = logging != null ? logging : new Logging(null);
-        }
-
-        public String logsExchange() {
-            return logsExchange;
-        }
-
-        public Logging logging() {
-            return logging;
-        }
-    }
-
-    @Validated
-    public static final class Logging {
-        private final boolean enabled;
-
-        public Logging(Boolean enabled) {
-            this.enabled = Boolean.TRUE.equals(enabled);
-        }
-
-        public boolean enabled() {
-            return enabled;
-        }
-    }
-
-    @Validated
     public static final class Metrics {
-        private final @Valid Pushgateway pushgateway;
+        private final PocketHiveMetricsAdapter adapter;
+        private final Duration publishInterval;
+        private final @Valid ClickHouseMetricsSinkProperties clickHouse;
 
-        public Metrics(@Valid Pushgateway pushgateway) {
-            this.pushgateway = Objects.requireNonNull(pushgateway, "pushgateway");
+        public Metrics(@NotNull PocketHiveMetricsAdapter adapter,
+                       @NotNull Duration publishInterval,
+                       @Valid ClickHouseMetricsSinkProperties clickHouse) {
+            this.adapter = Objects.requireNonNull(adapter, "adapter");
+            this.publishInterval = Objects.requireNonNull(publishInterval, "publishInterval");
+            this.clickHouse = clickHouse == null ? ClickHouseMetricsSinkProperties.disabled() : clickHouse;
+            if (this.publishInterval.isZero() || this.publishInterval.isNegative()) {
+                throw new IllegalArgumentException("metrics.publishInterval must be positive");
+            }
+            if (this.adapter == PocketHiveMetricsAdapter.CLICKHOUSE) {
+                this.clickHouse.requireConfigured();
+            }
         }
 
-        public Pushgateway pushgateway() {
-            return pushgateway;
-        }
-    }
-
-    @Validated
-    public static final class Pushgateway {
-        private final boolean enabled;
-        private final String baseUrl;
-        private final Duration pushRate;
-        private final String shutdownOperation;
-        private final String job;
-        private final @Valid GroupingKey groupingKey;
-
-        public Pushgateway(@NotNull Boolean enabled,
-                           @NotBlank String baseUrl,
-                           @NotNull Duration pushRate,
-                           @NotBlank String shutdownOperation,
-                           @NotBlank String job,
-                           @Valid GroupingKey groupingKey) {
-            this.enabled = Objects.requireNonNull(enabled, "enabled");
-            this.baseUrl = requireNonBlank(baseUrl, "baseUrl");
-            this.pushRate = Objects.requireNonNull(pushRate, "pushRate");
-            this.shutdownOperation = requireNonBlank(shutdownOperation, "shutdownOperation");
-            this.job = requireNonBlank(job, "job");
-            this.groupingKey = Objects.requireNonNull(groupingKey, "groupingKey");
+        public PocketHiveMetricsAdapter adapter() {
+            return adapter;
         }
 
-        public boolean enabled() {
-            return enabled;
+        public Duration publishInterval() {
+            return publishInterval;
         }
 
-        public String baseUrl() {
-            return baseUrl;
-        }
-
-        public Duration pushRate() {
-            return pushRate;
-        }
-
-        public String shutdownOperation() {
-            return shutdownOperation;
-        }
-
-        public String job() {
-            return job;
-        }
-
-        public GroupingKey groupingKey() {
-            return groupingKey;
-        }
-    }
-
-    @Validated
-    public static final class GroupingKey {
-        private final String instance;
-
-        public GroupingKey(@NotBlank String instance) {
-            this.instance = requireNonBlank(instance, "instance");
-        }
-
-        public String instance() {
-            return instance;
+        public ClickHouseMetricsSinkProperties clickHouse() {
+            return clickHouse;
         }
     }
 
@@ -344,4 +260,5 @@ public class SwarmControllerProperties {
         }
         return value;
     }
+
 }
