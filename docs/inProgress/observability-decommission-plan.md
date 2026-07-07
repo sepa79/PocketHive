@@ -1,4 +1,4 @@
-Status: Phase 1 committed; Phase 2 implementation complete; full runtime E2E/Grafana verification pending
+Status: Phase 1 committed; Phase 2 implementation and local runtime E2E/Grafana verification complete
 
 # Observability Decommission Plan
 
@@ -149,10 +149,11 @@ Authoritative references:
 ### 1.5 Grafana and UI
 
 - [x] Remove Loki datasource from
-  `grafana/provisioning/datasources/datasource.yml`.
+  `grafana/provisioning/datasources/datasource.yml` and add an explicit
+  `deleteDatasources` prune entry for existing Grafana volumes.
 - [x] Delete `grafana/dashboards/logs.json`.
-- [ ] Verify Grafana provisioning still succeeds with Prometheus, Postgres
-  Journal, and ClickHouse datasources.
+- [x] Verify Grafana provisioning still succeeds with Postgres Journal and
+  ClickHouse datasources.
 - [x] Keep the UI runtime inspector `Logs` action, backed by Orchestrator.
 - [x] Keep `/prometheus/` routes and Prometheus icons in Phase 1.
 
@@ -165,7 +166,7 @@ Authoritative references:
 - [ ] Rebuild local stack through `./build-hive.sh` for a full runtime check.
 - [ ] Verify UI can read worker/manager logs through the runtime inspector.
 - [ ] Verify PocketHive MCP `runtime_tail_worker_logs` still works.
-- [ ] Verify Grafana starts without Loki datasource provisioning errors.
+- [x] Verify Grafana starts without Loki datasource provisioning errors.
 - [ ] Verify RabbitMQ starts without `ph.logs` topology if removed.
 
 ### Phase 1 acceptance criteria
@@ -289,6 +290,10 @@ surfaces are in place.
 - [x] Remove Prometheus and Pushgateway runtime services, volumes, nginx routes,
   package artifacts, dependencies, properties, and tests.
 - [x] Delete `prometheus/` after no active runtime or package path mounts it.
+- [x] Verify local Grafana through `http://localhost:8088/grafana/` after full
+  E2E: only ClickHouse and Postgres Journal datasources remain, ClickHouse
+  datasource health is OK, and pipeline/tx-outcome dashboards render E2E data
+  without ClickHouse query errors.
 
 ### Phase 2 Acceptance Criteria
 
@@ -298,6 +303,9 @@ surfaces are in place.
   Pushgateway services/routes.
 - Grafana has no Prometheus datasource and no dashboard panel using
   `"datasource": "Prometheus"`.
+- Grafana provisioning explicitly prunes legacy Loki and Prometheus datasource
+  rows from existing Grafana volumes.
+- Grafana dashboards do not link to removed Loki/log dashboards.
 - Active Maven modules no longer depend on Prometheus registry or Pushgateway
   libraries.
 - Control-plane worker launch env no longer contains
