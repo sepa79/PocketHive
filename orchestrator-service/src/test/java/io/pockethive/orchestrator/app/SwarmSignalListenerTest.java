@@ -6,6 +6,8 @@ import io.pockethive.control.AlertMessage;
 import io.pockethive.control.CommandOutcome;
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.control.ControlSignal;
+import io.pockethive.control.ControlScope;
+import io.pockethive.controlplane.messaging.Alerts;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.manager.ManagerControlPlane;
 import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
@@ -26,6 +28,7 @@ import io.pockethive.orchestrator.domain.SwarmCreateTracker.Phase;
 	import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
 	import io.pockethive.orchestrator.domain.SwarmStore;
 	import io.pockethive.orchestrator.domain.SwarmLifecycleStatus;
+import io.pockethive.orchestrator.runtime.RuntimeLogSnapshotJournalService;
 import io.pockethive.swarm.model.NetworkBinding;
 import io.pockethive.swarm.model.NetworkMode;
 import io.pockethive.swarm.model.SwarmPlan;
@@ -43,6 +46,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.times;
@@ -72,6 +76,9 @@ import static org.mockito.Mockito.verifyNoInteractions;
     @Mock
     private NetworkProxyClient networkProxyClient;
 
+    @Mock
+    private RuntimeLogSnapshotJournalService runtimeLogSnapshots;
+
     @Captor
     private ArgumentCaptor<SignalMessage> signalCaptor;
 
@@ -80,6 +87,9 @@ import static org.mockito.Mockito.verifyNoInteractions;
 
     @Captor
     private ArgumentCaptor<ControlPlaneEmitter.StatusContext> statusCaptor;
+
+    @Captor
+    private ArgumentCaptor<AlertMessage> alertCaptor;
 
 	    private final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
 	    private final ControlPlaneTopologySettings settings =
@@ -110,36 +120,61 @@ import static org.mockito.Mockito.verifyNoInteractions;
 	        lenient().doNothing().when(controlEmitter).emitStatusDelta(any());
 	        listener = new SwarmSignalListener(plans, timelines, tracker, registry, lifecycle, networkBindings(), mapper,
 	            HiveJournal.noop(),
-	            controlPlane, controlEmitter, identity, descriptor, controlQueueName);
-	        clearInvocations(controlPlane, controlEmitter, publisher, lifecycle, networkProxyClient);
+	            controlPlane, controlEmitter, runtimeLogSnapshots, identity, descriptor, controlQueueName);
+	        clearInvocations(controlPlane, controlEmitter, publisher, lifecycle, networkProxyClient, runtimeLogSnapshots);
 	    }
 
     @Test
     void handleRejectsBlankRoutingKey() {
         assertThatCode(() -> listener.handle("{}", " "))
             .doesNotThrowAnyException();
-        verifyNoInteractions(controlPlane, controlEmitter, publisher, lifecycle);
+        verifyNoInteractions(controlPlane, controlEmitter, publisher, lifecycle, runtimeLogSnapshots);
     }
 
     @Test
     void handleRejectsNullRoutingKey() {
         assertThatCode(() -> listener.handle("{}", null))
             .doesNotThrowAnyException();
-        verifyNoInteractions(controlPlane, controlEmitter, publisher, lifecycle);
+        verifyNoInteractions(controlPlane, controlEmitter, publisher, lifecycle, runtimeLogSnapshots);
     }
 
     @Test
     void handleRejectsNonEventRoutingKey() {
         assertThatCode(() -> listener.handle("{}", "signal.swarm-start.swarm-test.swarm-controller.controller-1"))
             .doesNotThrowAnyException();
-        verifyNoInteractions(controlPlane, controlEmitter, publisher, lifecycle);
+        verifyNoInteractions(controlPlane, controlEmitter, publisher, lifecycle, runtimeLogSnapshots);
     }
 
     @Test
     void handleRejectsMalformedRoutingKey() {
         assertThatCode(() -> listener.handle("{}", "event."))
             .doesNotThrowAnyException();
-        verifyNoInteractions(controlPlane, controlEmitter, publisher, lifecycle);
+        verifyNoInteractions(controlPlane, controlEmitter, publisher, lifecycle, runtimeLogSnapshots);
+    }
+
+    @Test
+    void handleAlertDelegatesRuntimeLogSnapshotCapture() throws Exception {
+        String routingKey = ControlPlaneRouting.event("alert", Alerts.TYPE,
+            new ConfirmationScope(SWARM_ID, "processor", "processor-1"));
+        AlertMessage alert = Alerts.error(
+            "processor-1",
+            ControlScope.forInstance(SWARM_ID, "processor", "processor-1"),
+            "corr-1",
+            "idem-1",
+            Map.of("runId", "run-1"),
+            Alerts.Codes.RUNTIME_EXCEPTION,
+            "boom",
+            "java.lang.IllegalStateException",
+            "boom",
+            null,
+            Map.of("phase", "work"),
+            Instant.parse("2026-07-07T10:00:00Z"));
+
+        listener.handle(mapper.writeValueAsString(alert), routingKey);
+
+        verify(runtimeLogSnapshots).captureForAlert(eq(routingKey), alertCaptor.capture());
+        assertThat(alertCaptor.getValue().data().code()).isEqualTo(Alerts.Codes.RUNTIME_EXCEPTION);
+        assertThat(alertCaptor.getValue().scope().instance()).isEqualTo("processor-1");
     }
 
     @Test
@@ -238,7 +273,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 		    void statusSnapshotIncludesControlRoutes() {
 		        new SwarmSignalListener(plans, timelines, tracker, registry, lifecycle, networkBindings(), mapper,
 		            HiveJournal.noop(),
-		            controlPlane, controlEmitter, identity, descriptor, controlQueueName);
+		            controlPlane, controlEmitter, runtimeLogSnapshots, identity, descriptor, controlQueueName);
 
 	        verify(controlEmitter).emitStatusSnapshot(statusCaptor.capture());
         StatusEnvelopeBuilder builder = new StatusEnvelopeBuilder();

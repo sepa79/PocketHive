@@ -216,7 +216,7 @@ Keep configuration **explicit**—favor declaring values over hidden defaults.
 - **Metrics**: components publish counters, timers, and gauges through the
   explicit metrics adapter. Product metrics are stored in ClickHouse
   (`ph_metrics_samples`, 30-day TTL) and visualized in Grafana.
-- **Logs**: services write to container stdout/stderr. UI and MCP log reads go through the Orchestrator runtime debug API as bounded, redacted Docker/Swarm log reads.
+- **Logs**: services write to container stdout/stderr. UI and MCP log reads go through the Orchestrator runtime debug API as bounded, redacted Docker/Swarm log reads. Error alerts can also attach a bounded runtime log snapshot as a separate Journal entry.
 - **Events**: optionally surfaced to UI for human‑readable timelines.
 
 ---

@@ -8,7 +8,7 @@ Welcome to the PocketHive documentation hub. Use these resources to understand t
 - [SUT + Dataset + Simulation Model (proposal)](architecture/sut-dataset-simulation-model.md)
 - [Network Proxy Plan](inProgress/network-proxy-plan.md)
 - [Auth API Rollout Plan](archive/auth-api-rollout-plan.md)
-- [E2E API Framework Mini-Plan](inProgress/e2e-api-framework-mini-plan.md)
+- [E2E API Framework Mini-Plan](archive/e2e-api-framework-mini-plan.md)
 
 ## Roadmap
 - [Release Notes](../CHANGELOG.md)

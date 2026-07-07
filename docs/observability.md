@@ -24,6 +24,17 @@ through Orchestrator's runtime debug API:
 The runtime debug path returns finite, redacted Docker/Swarm log reads. It is for
 debugging current runtime state, not durable log retention.
 
+For failure context, Orchestrator also listens to scoped
+`event.alert.alert` messages with `data.level=error`. It captures the same
+bounded, redacted runtime log tail and appends a separate Journal entry:
+
+- `runtime-log-snapshot` when the scoped runtime can be read.
+- `runtime-log-snapshot-unavailable` when the alert scope is missing,
+  ambiguous, or the runtime log read fails.
+
+Alert `logRef` stays `null` until PocketHive has a product-owned log reference
+contract. Journal snapshots are diagnostic context, not a central log store.
+
 ## Product Metrics (ClickHouse)
 
 PocketHive product metrics use the explicit metrics adapter and are stored in

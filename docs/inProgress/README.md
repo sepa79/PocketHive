@@ -13,8 +13,6 @@ Notable in‑progress plans:
 - `docs/inProgress/db-query-worker-mvp.md` – MVP contract for the DB-only
   load worker supporting Postgres/Oracle with explicit JDBC config and a
   configurable connection pool.
-- `docs/inProgress/e2e-api-framework-mini-plan.md` – lightweight refactor plan
-  for turning the ingress auth pack into a reusable API/E2E support layer.
 
 Recently archived:
 
@@ -23,6 +21,11 @@ Recently archived:
   active metrics to ClickHouse.
 - `docs/archive/auth-api-rollout-plan.md` – completed auth/authz rollout
   checklist across PocketHive HTTP APIs, with e2e + verification tracking.
+- `docs/archive/e2e-api-framework-mini-plan.md` – completed refactor plan for
+  turning the ingress auth pack into a reusable API/E2E support layer.
+- `docs/archive/clearing-export-structured-mode-v1.md` – implemented structured
+  clearing export plan now superseded by the clearing schema contract and
+  worker playbook.
 
 Files in this folder should carry a `Status: in progress` header so it’s clear
 they are live design documents rather than historical notes.

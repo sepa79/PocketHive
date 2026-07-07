@@ -336,7 +336,7 @@ Additional rules:
 | `message` | Yes | Human-readable alert message. |
 | `errorType` | No | Exception class name (for runtime errors). |
 | `errorDetail` | No | Best-effort detail string (root cause, truncated stack trace). |
-| `logRef` | No | Opaque pointer to logs or traces (do not embed full stack traces). |
+| `logRef` | No | Opaque pointer to logs or traces (currently `null`; do not embed full stack traces). |
 | `context` | No | Object carrying type‑specific structured context. For IO / “out of data” alerts, recommended keys include: `backend` (for example `redis`, `csv`, `kafka`), `resourceId` (dataset id, file path, key prefix, etc.), `loopMode` (`loop`/`no-loop`), and optional limit info such as `limitKind` (`maxMessages`, `maxTime`, `none`) and `limitValue` (numeric/string). For other alert codes, `context` can carry whatever structured fields a producer and UI agree on. |
 
 Recommended `data.code` values include: `worker.runtime-error`, `controller.runtime-error`,
@@ -348,6 +348,10 @@ Recommended `data.code` values include: `worker.runtime-error`, `controller.runt
   - Signals: `timestamp`, `kind`, `type`, `scope`, `origin`, `data`, plus direction from routing.
   - Outcomes: use `data.status` and `data.context` (no stringified payloads in `details`).
   - Alerts: record `data.code`, `data.message`, `data.context`, and `logRef`.
+  - Error alerts may produce a separate Orchestrator-local `runtime-debug` entry
+    of type `runtime-log-snapshot` or `runtime-log-snapshot-unavailable`. The
+    snapshot uses the alert scope and the Orchestrator runtime debug path; it
+    must not mutate the alert envelope or revive central log aggregation.
   - Metrics: do not log every `status-*` tick; record only state transitions.
 - `actor` is redundant and must not be required by UI or new tooling.
 - UI should rely on `origin` + routing for "from -> to" and on typed `data` fields for display.

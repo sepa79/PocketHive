@@ -20,12 +20,17 @@ Timestamp: 2026-07-07T10:40:35Z
   dashboards.
 - Runtime logs: keep log inspection on the product-owned Orchestrator runtime
   debug API path instead of a central Loki/Log Aggregator pipeline.
+- Failure diagnostics: capture bounded, redacted runtime log tails into
+  separate Journal `runtime-log-snapshot` entries for error alerts, with
+  explicit `runtime-log-snapshot-unavailable` entries when the scoped runtime
+  cannot be read.
 - Docs: update active docs and Docusaurus output sources for the ClickHouse-only
   metrics/runtime-log model, and archive the completed observability
   decommission plan.
 - Verification: local stack rebuild, full local-swarm E2E, Grafana datasource
   and dashboard checks through ingress, and runtime log API checks through
-  ingress passed for the decommissioned observability stack.
+  ingress passed for the decommissioned observability stack; Journal snapshot
+  entries were verified through the Orchestrator ingress API after full E2E.
 - Release: bump PocketHive patch version to 0.15.33 for the observability
   decommission and ClickHouse metrics migration.
 

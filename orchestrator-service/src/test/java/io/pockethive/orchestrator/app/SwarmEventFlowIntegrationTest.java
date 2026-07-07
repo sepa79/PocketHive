@@ -23,6 +23,7 @@ import io.pockethive.orchestrator.domain.SwarmCreateTracker.Phase;
 import io.pockethive.orchestrator.domain.SwarmLifecycleStatus;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
 import io.pockethive.orchestrator.domain.SwarmStore;
+import io.pockethive.orchestrator.runtime.RuntimeLogSnapshotJournalService;
 import io.pockethive.swarm.model.NetworkBinding;
 import io.pockethive.swarm.model.NetworkMode;
 import io.pockethive.swarm.model.SwarmPlan;
@@ -67,6 +68,9 @@ class SwarmEventFlowIntegrationTest {
 
     @Mock
     private NetworkProxyClient networkProxyClient;
+
+    @Mock
+    private RuntimeLogSnapshotJournalService runtimeLogSnapshots;
 
     @Captor
     private ArgumentCaptor<SignalMessage> signalCaptor;
@@ -119,6 +123,7 @@ class SwarmEventFlowIntegrationTest {
             journal,
             controlPlane,
             controlEmitter,
+            runtimeLogSnapshots,
             identity,
             descriptor,
             controlQueueName);

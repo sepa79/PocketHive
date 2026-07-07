@@ -338,23 +338,44 @@ surfaces are in place.
 
 ## Phase 3 - Failure Log Snapshots Into Journal
 
-This is explicitly a separate future work item.
+Phase 3 adds bounded failure log snapshots without reintroducing a log
+aggregation pipeline.
 
-Future goal: on selected runtime failures, Orchestrator captures a bounded,
-redacted log tail from affected manager/worker runtimes and stores a Journal
-entry or artifact pointer.
+On selected runtime failures, Orchestrator captures a bounded, redacted log
+tail from the affected manager/worker runtime and stores a separate Journal
+entry. This keeps alerts small (`logRef` remains `null` for now) while giving
+operators immediate failure context.
 
-Open design points:
+### Decisions
 
-- exact trigger events
-- max lines and max bytes
-- storage location: inline bounded details vs external artifact reference
-- redaction test coverage
-- retention and pinning behavior
-- whether capture is `ON_FAILURE` only or can be manually requested
+- Trigger: incoming control-plane `event.alert.alert` with `data.level=error`.
+- Owner: Orchestrator only. UI, MCP, and agents still use Orchestrator runtime
+  debug APIs and never read Docker directly.
+- Targeting: use the alert scope. `swarm-controller` maps to manager runtime
+  logs; worker roles map to worker runtime logs. Do not guess another target
+  when the scope is missing or ambiguous.
+- Storage: inline bounded Journal `extra.logs` for captured snapshots.
+- Failure visibility: if the scoped runtime cannot be resolved or logs cannot
+  be read, write `runtime-log-snapshot-unavailable` instead of silently
+  falling back.
+- Bounds: default 200 tail lines, 2 minutes before the alert timestamp, and
+  65,536 characters after redaction.
+- Config: `pockethive.runtime-log-snapshots.mode=ERROR_ALERTS` by default;
+  `DISABLED` is the explicit off state.
+- Retention/pinning: use existing Journal retention and capture behavior.
 
 This work should preserve the Journal as a high-signal timeline. It must not
 turn Journal into a continuous log store.
+
+### Work Sequence
+
+- [x] Add explicit Orchestrator runtime log snapshot settings.
+- [x] Hook Orchestrator alert handling for `event.alert.alert`.
+- [x] Reuse `RuntimeDebugService` for bounded, label-gated, redacted log reads.
+- [x] Write `runtime-log-snapshot` Journal entries with the captured tail.
+- [x] Write `runtime-log-snapshot-unavailable` Journal entries when the scoped
+  runtime cannot be read.
+- [x] Verify with focused Orchestrator tests.
 
 ## Resolved Decisions
 
