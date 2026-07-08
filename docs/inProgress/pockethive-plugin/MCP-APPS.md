@@ -507,7 +507,7 @@ async function startAutoRefresh(swarmId: string) {
 | orchestrator      ● UP                           |
 | scenario-manager  ● UP                           |
 | rabbitmq          ● UP                           |
-| prometheus        ● UP                           |
+| metrics           ● UP                           |
 | wiremock          ● UP                           |
 | tcp-mock          ◐ DEGRADED                     |
 |                                                  |

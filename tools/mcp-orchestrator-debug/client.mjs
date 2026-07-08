@@ -23,7 +23,6 @@ import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { readFileSync, existsSync, rmSync } from "node:fs";
 import { spawn } from "node:child_process";
-import amqplib from "amqplib";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -43,6 +42,22 @@ const RABBIT_MGMT_BASE_URL =
 const AUTH_DEV_USERNAME = process.env.POCKETHIVE_AUTH_USERNAME || "";
 const AUTH_BEARER_TOKEN = process.env.POCKETHIVE_AUTH_TOKEN || "";
 let cachedAuthHeader = null;
+let cachedAmqplib = null;
+
+async function amqpClient() {
+  if (cachedAmqplib) {
+    return cachedAmqplib;
+  }
+  try {
+    cachedAmqplib = (await import("amqplib")).default;
+    return cachedAmqplib;
+  } catch (err) {
+    throw new Error(
+      "AMQP debug commands require root npm dependencies. Run `npm ci` from the repo root, " +
+        `then retry this command. ${err?.message ?? String(err)}`
+    );
+  }
+}
 
 function printUsage() {
   console.error(
@@ -765,6 +780,7 @@ async function withOptionalRecording(fn) {
   if (!recordEnabled) {
     return fn();
   }
+  await amqpClient();
   if (existsSync(LOG_PATH)) {
     try {
       rmSync(LOG_PATH);
@@ -927,7 +943,8 @@ async function collectWorkerConfigs(swarmId) {
     throw new Error("swarmId must not be blank");
   }
   const url = rabbitUrl();
-  const conn = await amqplib.connect(url);
+  const amqp = await amqpClient();
+  const conn = await amqp.connect(url);
   const ch = await conn.createChannel();
   try {
     const ex = controlExchange();
@@ -1029,7 +1046,8 @@ function sleep(ms) {
 
 async function checkQueues(names) {
   const url = rabbitUrl();
-  const conn = await amqplib.connect(url);
+  const amqp = await amqpClient();
+  const conn = await amqp.connect(url);
   const ch = await conn.createChannel();
   const results = [];
   try {
@@ -1067,7 +1085,8 @@ async function checkQueues(names) {
 
 async function createTapQueue(exchange, routingKey, queueName) {
   const url = rabbitUrl();
-  const conn = await amqplib.connect(url);
+  const amqp = await amqpClient();
+  const conn = await amqp.connect(url);
   const ch = await conn.createChannel();
   try {
     const ex = (exchange || "").trim();
@@ -1153,7 +1172,8 @@ async function listQueues() {
 
 async function sendStatusRequest(swarmId, role, instanceId) {
   const url = rabbitUrl();
-  const conn = await amqplib.connect(url);
+  const amqp = await amqpClient();
+  const conn = await amqp.connect(url);
   const ch = await conn.createChannel();
   try {
     const exchange = controlExchange();

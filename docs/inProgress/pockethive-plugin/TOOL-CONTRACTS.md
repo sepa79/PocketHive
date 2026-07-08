@@ -107,6 +107,7 @@ phase: 1
 - No tool may execute shell commands or spawn child processes.
 - No tool may read Docker/container logs directly.
 - No tool may query Loki directly.
+- No tool may query Prometheus directly.
 - No tool may write outside the configured bundle root.
 - No contract tool may silently switch source. Runtime and offline sources must
   be explicit in the output.
@@ -454,7 +455,8 @@ allowedSources:
   - swarm_get
   - debug_journal
   - debug_queues
-  - debug_prometheus
+  - metrics_query
+  - runtime_tail_worker_logs when bounded runtime log evidence is requested
   - debug_tap_read when includeTapSample is true
   - mock request tools
   - scenario_get when a template id can be inferred from swarm status or when
@@ -1548,7 +1550,8 @@ must be covered by automated tests.
 
 Agents must treat `accepted=true` as dispatch evidence only. To prove the
 component applied the update, follow the returned watch topics, read
-`debug_journal`, or inspect status/metrics for the targeted component.
+`debug_journal`, or inspect status / `metrics_query` output for the targeted
+component.
 
 `debug_config_update` remains as a compatibility alias, but new workflows should
 prefer `component_config_update`.

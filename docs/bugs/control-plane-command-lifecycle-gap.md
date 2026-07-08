@@ -52,6 +52,20 @@ This indicates a race where a command can be published before the target queue/l
 
 The current Orchestrator code does not register a pending timeout for `swarm-remove`, so no timeout/error path is triggered when the outcome never arrives.
 
+Additional smoke-review observation from the observability decommission follow-up:
+
+- A create followed by immediate remove can return `202 Accepted` for both
+  operations, then the swarm can later remain visible and/or running.
+- The failure reproduced on the merged branch and also on pre-merge `main`
+  `f8b9562292fb8cba9c3cf8880248799fd42b2d9d`, so it is not proven to be caused
+  by the observability decommission PR.
+- The practical impact is still release-relevant unless explicitly waived:
+  smoke cleanup can report success on dispatch while leaving a registered or
+  running swarm behind.
+- Test oracles that check only immediate `GET /api/swarms/{id}` absence are not
+  strong enough. Lifecycle tests need a delayed watch or outcome-based oracle
+  that proves the swarm reaches a terminal removed state and does not reappear.
+
 ### 2. `swarm-start` is safer, but still not built on a general receive/completion model
 
 `swarm-start` is tracked more robustly than remove:
