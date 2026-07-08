@@ -44,7 +44,8 @@ POC runner completed.
 ```
 
 This proves the local authoring loop and App-resource packaging without needing
-RabbitMQ, Scenario Manager, Orchestrator, Prometheus, or mock servers.
+RabbitMQ, Scenario Manager, Orchestrator, Grafana/ClickHouse metrics, or mock
+servers.
 
 ## Wizard Acceptance Suite
 

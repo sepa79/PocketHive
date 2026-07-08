@@ -342,6 +342,9 @@ async function withFakePocketHiveStack(bundleId, fn, options = {}) {
       const body = await requestJson(req);
       state.grafanaQueryCalls += 1;
       state.lastGrafanaQuery = body;
+      if (options.grafanaResponse !== undefined) {
+        return send(res, options.grafanaStatus ?? 200, options.grafanaResponse);
+      }
       return send(res, 200, {
         results: {
           A: {
@@ -466,6 +469,68 @@ test("metrics_query fails closed when Grafana metrics config is incomplete", asy
     });
 
     assert.match(error, /POCKETHIVE_GRAFANA_BASE_URL must be configured/);
+  });
+});
+
+test("metrics_query fails closed when Grafana ClickHouse returns a datasource error", async () => {
+  const root = mkdtempSync(join(tmpdir(), "ph-workflow-root-"));
+
+  await withFakePocketHiveStack("agent-metrics-backpressure", async ({ baseUrl, state }) => {
+    await withClient(root, async (client) => {
+      const error = await callError(client, "metrics_query", {
+        swarmId: "agent-live-stack",
+        kind: "tx-outcomes-summary",
+        from: "now-1h",
+        to: "now",
+      });
+
+      assert.match(error, /Grafana ClickHouse query A failed: ClickHouse backpressure/);
+      assert.equal(state.grafanaQueryCalls, 1);
+    }, {
+      POCKETHIVE_BASE_URL: baseUrl,
+      POCKETHIVE_GRAFANA_BASE_URL: `${baseUrl}/grafana`,
+      POCKETHIVE_GRAFANA_USERNAME: "pockethive",
+      POCKETHIVE_GRAFANA_PASSWORD: "pockethive",
+      POCKETHIVE_GRAFANA_CLICKHOUSE_DATASOURCE_UID: "clickhouse",
+    });
+  }, {
+    grafanaResponse: {
+      results: {
+        A: {
+          error: "ClickHouse backpressure",
+        },
+      },
+    },
+  });
+});
+
+test("metrics_query fails closed when Grafana metrics API is unavailable", async () => {
+  const root = mkdtempSync(join(tmpdir(), "ph-workflow-root-"));
+
+  await withFakePocketHiveStack("agent-metrics-down", async ({ baseUrl, state }) => {
+    await withClient(root, async (client) => {
+      const error = await callError(client, "metrics_query", {
+        swarmId: "agent-live-stack",
+        kind: "tx-outcomes-summary",
+        from: "now-1h",
+        to: "now",
+      });
+
+      assert.match(error, /HTTP 503/);
+      assert.match(error, /clickhouse unavailable/);
+      assert.equal(state.grafanaQueryCalls, 1);
+    }, {
+      POCKETHIVE_BASE_URL: baseUrl,
+      POCKETHIVE_GRAFANA_BASE_URL: `${baseUrl}/grafana`,
+      POCKETHIVE_GRAFANA_USERNAME: "pockethive",
+      POCKETHIVE_GRAFANA_PASSWORD: "pockethive",
+      POCKETHIVE_GRAFANA_CLICKHOUSE_DATASOURCE_UID: "clickhouse",
+    });
+  }, {
+    grafanaStatus: 503,
+    grafanaResponse: {
+      error: "clickhouse unavailable",
+    },
   });
 });
 

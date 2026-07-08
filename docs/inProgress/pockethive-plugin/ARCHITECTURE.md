@@ -40,9 +40,9 @@
                                    |
 +----------------------------------v-------------------------------+
 |  PocketHive Stack                                               |
-|  Orchestrator · Scenario Manager · RabbitMQ · Prometheus        |
-|  WireMock · TCP Mock · ClickHouse                               |
-|  Future option: PocketHive-provided logs backed by Loki          |
+|  Orchestrator · Scenario Manager · RabbitMQ                     |
+|  WireMock · TCP Mock · Grafana/ClickHouse metrics               |
+|  Runtime logs through bounded Orchestrator debug APIs            |
 |  (local Docker Compose or remote NFT server)                    |
 +------------------------------------------------------------------+
 ```
@@ -208,12 +208,13 @@ STOMP:   ws://localhost:8088/stomp/websocket
 
 The plugin does not read Docker/container logs and the MCP server does not run
 shell log commands. Current diagnostics should use PocketHive-provided runtime
-evidence: swarm status, journal, queues, debug taps, Prometheus metrics, mock
-request history, and dataset checks.
+evidence: swarm status, journal, queues, debug taps, `metrics_query`
+ClickHouse summaries, bounded runtime debug/log APIs, mock request history, and
+dataset checks.
 
 If PocketHive later exposes structured logs through a product API, the MCP may
-add a tool for that API. Loki is a possible backend for that future feature, but
-direct Loki access is not part of the current plugin design.
+add a tool for that API. Loki is not an active evidence path; it may only be a
+hidden backend behind a future PocketHive-owned API.
 
 ## Process isolation
 

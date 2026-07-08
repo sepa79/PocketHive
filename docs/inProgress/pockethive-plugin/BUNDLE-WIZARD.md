@@ -314,7 +314,7 @@ Agent: [calls wizard.summary, then wizard.complete]
 
         Validation passed. Evidence still needs a runtime run:
         deploy the scenario, start a swarm, then collect journal, queues,
-        tap sample, mock requests, and Prometheus metrics."
+        tap sample, mock requests, and ClickHouse metrics via metrics_query."
 ```
 
 ### Quick smoke test
@@ -399,8 +399,9 @@ Agent: [advanced path calls: scenario.load,
 - **Never use shell tools.** The wizard cannot rebuild services, run Git,
   inspect Docker, read container logs, or execute local commands.
 - **Use PocketHive evidence.** Verify with journals, taps, queues, metrics,
-  mock request history, datasets, and PocketHive-provided log APIs if they
-  exist. Loki is future-only unless exposed through PocketHive.
+  mock request history, datasets, bounded runtime debug/log APIs, and
+  PocketHive-provided structured log APIs if they exist. Loki is future-only
+  unless exposed through PocketHive.
 
 ## Scenario contract coverage
 

@@ -66,7 +66,8 @@ not responsible for Docker, Compose, Maven, npm, Git, local stack lifecycle, or
 container log access.
 
 Allowed integrations are PocketHive-owned HTTP APIs, RabbitMQ management APIs,
-Prometheus APIs, WireMock/TCP mock admin APIs, and guarded bundle file access.
+Grafana's provisioned ClickHouse datasource API, WireMock/TCP mock admin APIs,
+and guarded bundle file access.
 If PocketHive exposes a structured log API, the MCP may use that API. Direct
 Docker/container logs and direct Loki queries are out of scope for this phase.
 Loki may be considered later only behind a PocketHive-owned API.
@@ -323,7 +324,8 @@ queue depth, or metrics to prove the component applied the update.
 ### Debugging
 - `debug_queues`, `debug_tap`, `debug_tap_read`, `debug_tap_close`
 - `debug_journal`, `debug_config_update` compatibility alias
-- `debug_prometheus`
+- `metrics_query`
+- `runtime_tail_worker_logs`
 - `evidence_summary` — read-only aggregate evidence model for one swarm
 - `workflow_result` — compact read-only agent handoff for one workflow
 - `workflow_evidence_render` — read-only MCP App render tool for workflow

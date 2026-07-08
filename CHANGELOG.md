@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.15.34]
+Timestamp: 2026-07-08T13:49:59Z
+
+- Observability follow-up: align active PocketHive plugin evidence docs with
+  ClickHouse `metrics_query` and bounded Orchestrator runtime debug/log APIs
+  after Prometheus/Loki removal.
+- Lifecycle docs: record the pre-existing create-then-immediate-remove race
+  where accepted swarm lifecycle commands can strand or later re-surface swarms,
+  and clarify that the short stale-listing window is a separate issue.
+- PocketHive MCP: prove `metrics_query` fails closed for Grafana/ClickHouse
+  datasource errors and unavailable metrics APIs, with no Prometheus or local
+  SQL fallback.
+- Debug tooling: allow REST-only root debug CLI commands to run without loading
+  AMQP dependencies, while AMQP-backed commands and `--record` fail explicitly
+  when root npm dependencies are missing.
+- Release: bump PocketHive patch version to 0.15.34 for the observability
+  review follow-up fixes.
+
 ## [0.15.33]
 Timestamp: 2026-07-07T10:40:35Z
 

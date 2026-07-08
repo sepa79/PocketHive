@@ -67,9 +67,10 @@ the ground truth.
   `github.*` CRUD/search tools stay out of this MCP server.
 
 - **Do not read container logs directly.** Use PocketHive-provided evidence:
-  swarm status, swarm journal, queues, debug taps, metrics, mock request
-  history, dataset checks, and PocketHive-owned log APIs if they exist. Loki
-  is a future option only when exposed through a PocketHive API.
+  swarm status, swarm journal, queues, debug taps, `metrics_query` ClickHouse
+  summaries, bounded runtime debug/log APIs, mock request history, dataset
+  checks, and PocketHive-owned structured log APIs if they exist. Loki is a
+  future option only when exposed through a PocketHive API.
 
 - **Do not duplicate ui-v2 React components**. Webview panels embed the
   built `ui-v2` output. Do not rewrite topology views, journal pages, or
@@ -98,7 +99,8 @@ in `server.mjs`. Every tool must:
 - Return a plain JSON-serialisable object
 - Handle errors by throwing — the `reg` wrapper catches and formats them
 - Call only PocketHive-owned APIs, mock admin APIs, RabbitMQ management APIs,
-  Prometheus APIs, or guarded bundle file operations
+  Grafana's provisioned ClickHouse datasource API, or guarded bundle file
+  operations
 - Never execute shell commands or spawn child processes from MCP tool handlers
 
 MCP Apps start with a narrow Phase 1.5 `evidence.summary` widget. Tools use

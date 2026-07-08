@@ -200,17 +200,20 @@ Goal: provide a first‑class, queryable journal for swarms (control‑plane sco
 
 ### Metrics: aggregated vs per-transaction capture
 
-- Aggregated metrics stay in Prometheus (Pushgateway batching from PP is fine for this path).
+- Aggregated service metrics now use the explicit ClickHouse metrics adapter and
+  `ph_metrics_samples`; do not reintroduce Prometheus/Pushgateway as an
+  implicit compatibility path.
 - Per-transaction capture is for **short focused tests** (minutes–hours) and post-test analysis:
   - Avoid Influx-style “TTL/rollup is a new index+key-name” pain by using an event-store DB:
-    - Candidate: **ClickHouse** with `txn_raw` (short TTL) + `txn_rollup` (long retention) and an explicit archive/pin pathway.
+    - Current store: **ClickHouse** with `ph_tx_outcome_v2` for transaction
+      outcomes and explicit archive/pin pathways where long retention is needed.
   - “Keep this 4h test forever” maps to **pin/archive** (store by `capture_id` / `run_id`), not global retention changes.
 
 ### Transport: keep control-plane thin
 
 - Do not route “everything” through the control-plane queues.
 - Keep control-plane messages for lifecycle/coordination; telemetry (metrics/txns) should use a separate pathway.
-- If PP direct-to-Pushgateway is reliable enough, keep it. Introduce a queue only when we need:
+- Keep telemetry on explicit product-owned sink paths. Introduce a queue only when we need:
   - centralized retry/backpressure,
   - DB credential isolation,
   - or per-transaction capture fan-in.
@@ -218,5 +221,6 @@ Goal: provide a first‑class, queryable journal for swarms (control‑plane sco
 ### Dashboarding system
 
 - Grafana remains the default dashboarding system:
-  - Datasources: Prometheus (aggregates), Postgres (Journal), optionally ClickHouse (per-txn capture).
+  - Datasources: ClickHouse (aggregates and per-transaction capture) and
+    Postgres (Journal).
   - Hive UI should deep-link into Grafana with stable filter parameters (`swarmId`, `correlationId`, `captureId`).

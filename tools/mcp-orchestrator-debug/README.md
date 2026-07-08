@@ -35,10 +35,16 @@ full command surface from the terminal.
 From the repo root:
 
 ```bash
-npm install
+npm ci
 ```
 
 This will pull `@modelcontextprotocol/sdk`, `amqplib`, and `zod`.
+
+The REST-only CLI commands such as `list-swarms`, `get-swarm`, journal reads,
+and scenario/template reads use Node built-ins and can run without root
+`node_modules`. Run `npm ci` before starting the MCP server, the Rabbit
+recorder, `--record`, or AMQP-backed CLI commands such as `worker-configs`,
+`status-request`, `check-queues`, and `tap-queue`.
 
 ## 2. Configuration
 

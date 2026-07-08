@@ -123,11 +123,13 @@ source proves:
 - `debug.journal` for swarm lifecycle and runtime events
 - `debug.tap` for representative WorkItems and payload flow
 - `debug.queues` for queue depth/drain evidence
-- `debug.prometheus` for metrics
+- `metrics_query` for whitelisted ClickHouse metrics summaries
 - `mock.wiremock.requests` / `mock.tcp.requests` for SUT-double evidence
 - `dataset.check` for Redis dataset readiness
 - `evidence.summary` for an aggregate read-only evidence view
-- PocketHive-provided log APIs, if PocketHive exposes them
+- `runtime_tail_worker_logs` for bounded worker/manager log tails through
+  Orchestrator runtime debug
+- PocketHive-provided structured log APIs, if PocketHive exposes them
 
 Do not use Docker/container logs directly. Loki is a possible future backend,
 but not a current MCP integration target unless PocketHive exposes it through
@@ -146,8 +148,8 @@ not execute shell commands directly or indirectly.
 This is stricter than "sandbox the dangerous commands". The correct boundary is:
 
 - MCP tools may call PocketHive-owned HTTP APIs, RabbitMQ management APIs,
-  Prometheus APIs, WireMock/TCP mock admin APIs, and structured file APIs for
-  the active bundle.
+  Grafana's provisioned ClickHouse datasource API, WireMock/TCP mock admin
+  APIs, and structured file APIs for the active bundle.
 - MCP tools may read and write bundle artifacts under the configured
   `BUNDLES_ROOT`, using explicit path containment checks.
 - MCP tools must not run `docker`, `docker compose`, `mvn`, `npm`, `node`
@@ -196,7 +198,7 @@ Keep and improve API/file-backed tools:
 | Scenario lifecycle | `scenario.deploy`, `scenario.list`, `scenario.get` |
 | Swarm lifecycle | `swarm.list`, `swarm.get`, `swarm.create`, `swarm.wait-ready`, `swarm.start`, `swarm.stop`, `swarm.remove` |
 | Real-time control | `component.config-preview` read-only merge plan and `component.config-update` through Orchestrator only; read current component config from Orchestrator journal/status evidence, deep-merge requested changes, then send the merged update |
-| Debug evidence | `debug.queues`, `debug.tap`, `debug.tap.read`, `debug.tap.close`, `debug.journal`, `debug.config-update` compatibility alias, `debug.prometheus`, `evidence.summary`, PocketHive-provided log tools if/when exposed by PocketHive APIs |
+| Debug evidence | `debug.queues`, `debug.tap`, `debug.tap.read`, `debug.tap.close`, `debug.journal`, `debug.config-update` compatibility alias, `metrics_query`, `runtime_tail_worker_logs`, `evidence.summary`, PocketHive-provided structured log tools if/when exposed by PocketHive APIs |
 | Mocks | `mock.wiremock.*`, `mock.tcp.*`, `mock.save`, `mock.load` |
 | Datasets | `dataset.seed`, `dataset.check`, `dataset.save` |
 | Contracts | `contract.*` |
@@ -1455,10 +1457,11 @@ Action:
   Collect evidence from tools:
     queues    = debug.queues { swarmId }
     journal   = debug.journal { swarmId, limit: 20 }
-    prometheus_latency = debug.prometheus { query: "ph_transaction_total_latency_ms{ph_swarm='<swarmId>'}" }
-    prometheus_success = debug.prometheus { query: "ph_transaction_processor_success{ph_swarm='<swarmId>'}" }
+    metrics_tx = metrics_query { swarmId, kind: "tx-outcomes-summary", from: "now-1h", to: "now" }
+    metrics_runtime = metrics_query { swarmId, kind: "processor-runtime-summary", from: "now-1h", to: "now" }
     wiremock_requests  = mock.wiremock.requests { limit: 100 }
     redis_keys = (check ph:tokens:<swarmId>:* if auth used)
+    runtime_tail = runtime_tail_worker_logs { swarmId, resourceKind: "worker", role, instance, tailLines: 200 } when a bounded log tail is relevant
     pockethive_logs = optional, only if PocketHive exposes a structured log API
 
   Do not collect evidence by reading Docker/container logs directly.

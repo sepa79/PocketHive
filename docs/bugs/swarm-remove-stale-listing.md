@@ -10,6 +10,12 @@
 
 `POST /api/swarms/{swarmId}/remove` is asynchronous and correctly returns `202`.
 
+This document covers the short-lived stale-listing window after a successful
+remove outcome. It does not cover the separate lifecycle race where create and
+immediate remove both return `202`, but the remove command is never completed
+and the swarm later remains or runs. Track that deeper race in
+`docs/bugs/control-plane-command-lifecycle-gap.md`.
+
 The actual flow is:
 
 1. Orchestrator sends `signal.swarm-remove...`
@@ -62,4 +68,3 @@ So this is primarily a **stale-listing / stale-status presentation bug**, not a 
 - Make `list-swarms` prefer `SwarmStore` lifecycle state when a swarm is already `REMOVING`.
 - Ensure the UI can clearly represent `REMOVING` instead of continuing to show an old `STOPPED`/`READY` snapshot.
 - Optionally measure whether `computeAdapter.stopManager(...)` is the dominant contributor to remove latency and expose that in logs/metrics.
-
