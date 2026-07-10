@@ -1,3 +1,4 @@
+protocolVersion: "2.0.0"
 id: webauth-loop-redis-minimal
 name: WebAuth Loop (Redis + Metrics)
 description: Single-loop WebAuth scenario. Runs TOP -> RED -> BAL -> TOP for

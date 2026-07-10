@@ -15,7 +15,7 @@ import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime.WorkerStateSnapshot;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.runtime.WorkerState;
-import io.pockethive.worker.sdk.templating.TemplateRenderer;
+import io.pockethive.templating.TemplateRenderer;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.time.Clock;

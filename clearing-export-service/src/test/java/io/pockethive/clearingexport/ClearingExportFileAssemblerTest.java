@@ -1,6 +1,6 @@
 package io.pockethive.clearingexport;
 
-import io.pockethive.worker.sdk.templating.PebbleTemplateRenderer;
+import io.pockethive.templating.PebbleTemplateRenderer;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;

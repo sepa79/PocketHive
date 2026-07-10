@@ -1,3 +1,4 @@
+protocolVersion: "2.0.0"
 id: auth-proving-profile-collision
 name: Auth Proving - Profile Collision
 description: Proves shared Redis token keys with different resolved auth profile

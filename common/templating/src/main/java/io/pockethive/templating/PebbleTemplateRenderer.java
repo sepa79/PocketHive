@@ -1,4 +1,4 @@
-package io.pockethive.worker.sdk.templating;
+package io.pockethive.templating;
 
 import io.pebbletemplates.pebble.PebbleEngine;
 import io.pebbletemplates.pebble.error.PebbleException;
@@ -22,6 +22,7 @@ import java.util.Objects;
 public final class PebbleTemplateRenderer implements TemplateRenderer {
 
     private final PebbleEngine engine;
+    private final PebbleEngine validationEngine;
     private final PebbleWeightedSelectionExtension.SeededSelector seededSelector;
     private static final int TEMPLATE_CACHE_SIZE = 10;
     private final Map<String, PebbleTemplate> templateCache = Collections.synchronizedMap(
@@ -47,6 +48,7 @@ public final class PebbleTemplateRenderer implements TemplateRenderer {
     private PebbleTemplateRenderer(PebbleEngine engine, PebbleWeightedSelectionExtension.SeededSelector seededSelector) {
         this.engine = Objects.requireNonNull(engine, "engine");
         this.seededSelector = Objects.requireNonNull(seededSelector, "seededSelector");
+        this.validationEngine = validationEngine();
     }
 
     @Override
@@ -68,6 +70,18 @@ public final class PebbleTemplateRenderer implements TemplateRenderer {
         }
     }
 
+    public void validateSyntax(String templateSource) {
+        Objects.requireNonNull(templateSource, "templateSource");
+        try {
+            PebbleTemplate template = validationEngine.getLiteralTemplate(templateSource);
+            try (Writer writer = new StringWriter()) {
+                template.evaluate(writer, Map.of());
+            }
+        } catch (IOException | RuntimeException ex) {
+            throw new TemplateRenderingException("Failed to compile template", ex);
+        }
+    }
+
     @Override
     public void resetSeededSelections() {
         seededSelector.reset();
@@ -78,6 +92,15 @@ public final class PebbleTemplateRenderer implements TemplateRenderer {
         return new PebbleEngine.Builder()
             .extension(new PebbleEvalExtension(evaluator))
             .extension(new PebbleWeightedSelectionExtension(seededSelector))
+            .autoEscaping(false)
+            .cacheActive(true)
+            .build();
+    }
+
+    private static PebbleEngine validationEngine() {
+        return new PebbleEngine.Builder()
+            .extension(new PebbleEvalExtension(new SpelTemplateEvaluator(), true))
+            .extension(new PebbleWeightedSelectionExtension(new PebbleWeightedSelectionExtension.SeededSelector()))
             .autoEscaping(false)
             .cacheActive(true)
             .build();

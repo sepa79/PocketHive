@@ -1,10 +1,10 @@
-package io.pockethive.worker.sdk.templating;
+package io.pockethive.templating;
 
 import io.pebbletemplates.pebble.extension.AbstractExtension;
 import io.pebbletemplates.pebble.extension.Function;
 import io.pebbletemplates.pebble.template.EvaluationContext;
 import io.pebbletemplates.pebble.template.PebbleTemplate;
-import io.pockethive.worker.sdk.api.WorkItem;
+import java.lang.reflect.Method;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -19,8 +19,12 @@ final class PebbleEvalExtension extends AbstractExtension {
     private final Function evalFunction;
 
     PebbleEvalExtension(SpelTemplateEvaluator evaluator) {
+        this(evaluator, false);
+    }
+
+    PebbleEvalExtension(SpelTemplateEvaluator evaluator, boolean validateOnly) {
         Objects.requireNonNull(evaluator, "evaluator");
-        this.evalFunction = new EvalFunction(evaluator);
+        this.evalFunction = new EvalFunction(evaluator, validateOnly);
     }
 
     @Override
@@ -31,9 +35,11 @@ final class PebbleEvalExtension extends AbstractExtension {
     private static final class EvalFunction implements Function {
 
         private final SpelTemplateEvaluator evaluator;
+        private final boolean validateOnly;
 
-        private EvalFunction(SpelTemplateEvaluator evaluator) {
+        private EvalFunction(SpelTemplateEvaluator evaluator, boolean validateOnly) {
             this.evaluator = evaluator;
+            this.validateOnly = validateOnly;
         }
 
         @Override
@@ -47,6 +53,10 @@ final class PebbleEvalExtension extends AbstractExtension {
                               EvaluationContext context,
                               int lineNumber) {
             String expression = args == null ? "" : Objects.toString(args.get("expression"), "");
+            if (validateOnly) {
+                evaluator.validate(expression);
+                return "";
+            }
             Map<String, Object> root = buildRoot(context);
             return evaluator.evaluate(expression, root);
         }
@@ -60,16 +70,16 @@ final class PebbleEvalExtension extends AbstractExtension {
             }
 
             Object payload = context.getVariable("payload");
-            if (payload == null && workItem instanceof WorkItem wi) {
-                payload = wi.payload();
+            if (payload == null) {
+                payload = accessorValue(workItem, "payload");
             }
             if (payload != null) {
                 root.put("payload", payload);
             }
 
             Object headers = context.getVariable("headers");
-            if (headers == null && workItem instanceof WorkItem wi) {
-                headers = wi.headers();
+            if (headers == null) {
+                headers = accessorValue(workItem, "headers");
             }
             if (headers != null) {
                 root.put("headers", headers);
@@ -88,6 +98,18 @@ final class PebbleEvalExtension extends AbstractExtension {
             root.put("nowIso", DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(OffsetDateTime.ofInstant(now, ZoneOffset.UTC)));
 
             return root;
+        }
+
+        private Object accessorValue(Object target, String methodName) {
+            if (target == null) {
+                return null;
+            }
+            try {
+                Method method = target.getClass().getMethod(methodName);
+                return method.invoke(target);
+            } catch (ReflectiveOperationException ignored) {
+                return null;
+            }
         }
     }
 }

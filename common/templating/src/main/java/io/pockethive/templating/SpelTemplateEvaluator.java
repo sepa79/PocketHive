@@ -1,4 +1,4 @@
-package io.pockethive.worker.sdk.templating;
+package io.pockethive.templating;
 
 import java.lang.reflect.Method;
 
@@ -146,6 +146,12 @@ final class SpelTemplateEvaluator {
     context.registerFunction("datetime_offset", DATETIME_OFFSET_METHOD);
 
     return PARSER.parseExpression(expression).getValue(context);
+  }
+
+  void validate(String expression) {
+    if (expression != null && !expression.isBlank()) {
+      PARSER.parseExpression(expression);
+    }
   }
 
   private static final class BlockingTypeLocator extends StandardTypeLocator {

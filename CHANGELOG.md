@@ -4,6 +4,35 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.15.35]
+Timestamp: 2026-07-10T13:36:56Z
+
+- Scenario protocol: require `protocolVersion` in every `scenario.yaml` and
+  reject missing or incompatible major versions before deeper validation.
+- Validation evidence: report the scenario protocol version, supported
+  protocol version, Scenario Manager release, and bundle SHA-256 digest in the
+  canonical Scenario Manager validation response.
+- Validation SSOT: keep Scenario Manager as the sole authoritative bundle
+  validator used by MCP and runtime admission, with one shared set of
+  validators and no MCP-side acceptance fallback.
+- Template validation: extract the PocketHive Pebble/eval implementation into
+  the shared `common/templating` module and use the same compiler in workers and
+  Scenario Manager to catch malformed inline templates, including broken
+  nested and repeated quotes.
+- Scenario migration: add protocol version declarations to repository bundles,
+  repair invalid template quoting found by the stricter validator, and retain
+  the explicit TCP Mock Handlebars boundary pending template-language
+  unification.
+- Regression coverage: add a manual MCP agent based on the v0.15.28 legacy-ID
+  scenario that proves legacy fields, missing/incompatible protocol versions,
+  malformed Pebble, and invalid eval expressions are rejected through the
+  official Scenario Manager ingress path.
+- Tooling and tests: include validator evidence in UI/MCP contracts, update E2E
+  scenario creation payloads, and align the PocketHive MCP package with release
+  0.15.35.
+- Release: bump PocketHive patch version to 0.15.35 for scenario validation
+  hardening and evidence.
+
 ## [0.15.34]
 Timestamp: 2026-07-08T13:49:59Z
 

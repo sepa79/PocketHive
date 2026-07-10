@@ -107,6 +107,15 @@ Finding shape:
 - Validates the scenario descriptor, capability references, `variables.yaml`,
   bundle-local `sut/**/sut.yaml`, and template call references that Scenario
   Manager can inspect.
+- Compiles inline Pebble and `eval` syntax with the canonical
+  `common/templating` engine also used by worker runtime.
+
+Scenario Manager is the single public and authoritative bundle validator.
+MCP, UI, CLI, CI, and agent acceptance tests must call these Scenario Manager
+validation endpoints and must not maintain independent bundle validators. The
+shared `common/templating` module is a runtime compiler dependency used by the
+one Scenario Manager validation pipeline; it is not a second bundle-validation
+surface.
 
 Response:
 
@@ -114,6 +123,12 @@ Response:
 {
   "ok": true,
   "source": "uploaded-zip",
+  "validation": {
+    "scenarioProtocolVersion": "2.0.0",
+    "supportedScenarioProtocolVersion": "2.0.0",
+    "scenarioManagerVersion": "0.15.35",
+    "artifactDigest": "sha256:..."
+  },
   "scenarioId": "webauth-demo",
   "bundleKey": null,
   "bundlePath": null,
@@ -124,6 +139,12 @@ Response:
   "findings": []
 }
 ```
+
+`validation` is required evidence. It identifies the scenario protocol declared
+by the submitted descriptor, the protocol supported by the validator, the
+Scenario Manager release that performed validation, and a deterministic
+SHA-256 digest of the validated bundle contents (sorted relative paths plus
+file bytes). ZIP container metadata therefore does not change the digest.
 
 ### Validate an existing bundle by bundle key
 

@@ -1,3 +1,4 @@
+protocolVersion: "2.0.0"
 id: capability-controls-io-matrix
 name: Capability Controls IO Matrix
 description: Minimal runtime bundle for manual/UI capability-control checks.

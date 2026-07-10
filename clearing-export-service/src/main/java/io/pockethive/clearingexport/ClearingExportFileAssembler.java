@@ -1,6 +1,6 @@
 package io.pockethive.clearingexport;
 
-import io.pockethive.worker.sdk.templating.TemplateRenderer;
+import io.pockethive.templating.TemplateRenderer;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;

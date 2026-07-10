@@ -700,6 +700,7 @@ class SwarmCreationMock1E2ETest {
                 Map.entry("server.address", "127.0.0.1"),
                 Map.entry("scenarios.dir", scenariosDir.toString()),
                 Map.entry("capabilities.dir", capabilitiesDir.toString()),
+                Map.entry("pockethive.release.version", "e2e-test"),
                 Map.entry("POCKETHIVE_SCENARIOS_RUNTIME_ROOT", runtimeRoot.toString()),
                 Map.entry("POCKETHIVE_METRICS_ADAPTER", "DISABLED"),
                 Map.entry("pockethive.metrics.adapter", "DISABLED"),

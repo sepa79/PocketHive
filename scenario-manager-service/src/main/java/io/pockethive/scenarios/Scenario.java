@@ -11,6 +11,8 @@ import java.util.Map;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class Scenario {
     @NotBlank
+    private String protocolVersion;
+    @NotBlank
     private String id;
     @NotBlank
     private String name;
@@ -33,13 +35,15 @@ public class Scenario {
 
     public Scenario() {}
 
-    public Scenario(String id,
+    public Scenario(String protocolVersion,
+                    String id,
                     String name,
                     String description,
                     SwarmTemplate template,
                     Topology topology,
                     TrafficPolicy trafficPolicy,
                     Map<String, Object> plan) {
+        this.protocolVersion = protocolVersion;
         this.id = id;
         this.name = name;
         this.description = description;
@@ -53,7 +57,16 @@ public class Scenario {
                     String name,
                     String description,
                     SwarmTemplate template) {
-        this(id, name, description, template, null, null, null);
+        this(io.pockethive.scenarios.validation.ScenarioProtocol.CURRENT_VERSION,
+                id, name, description, template, null, null, null);
+    }
+
+    public String getProtocolVersion() {
+        return protocolVersion;
+    }
+
+    public void setProtocolVersion(String protocolVersion) {
+        this.protocolVersion = protocolVersion;
     }
 
     public String getId() {

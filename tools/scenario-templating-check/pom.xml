@@ -22,6 +22,11 @@
     <dependencies>
         <dependency>
             <groupId>io.pockethive</groupId>
+            <artifactId>templating</artifactId>
+            <version>${project.parent.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.pockethive</groupId>
             <artifactId>worker-sdk</artifactId>
             <version>${project.parent.version}</version>
         </dependency>

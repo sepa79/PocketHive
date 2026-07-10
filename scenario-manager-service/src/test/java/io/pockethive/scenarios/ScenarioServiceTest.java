@@ -49,6 +49,7 @@ class ScenarioServiceTest {
         capabilities.reload();
 
         writeScenario("available", """
+                protocolVersion: "2.0.0"
                 id: available
                 name: Available Scenario
                 template:
@@ -78,6 +79,7 @@ class ScenarioServiceTest {
         capabilities.reload();
 
         Files.writeString(scenariosDir.resolve("flat.yaml"), """
+                protocolVersion: "2.0.0"
                 id: flat
                 name: Flat Scenario
                 template:
@@ -85,6 +87,7 @@ class ScenarioServiceTest {
                   bees: []
                 """);
         Files.writeString(scenariosDir.resolve("scenario.yaml"), """
+                protocolVersion: "2.0.0"
                 id: root
                 name: Root Scenario
                 template:
@@ -105,6 +108,7 @@ class ScenarioServiceTest {
 
         Path bundle = Files.createDirectories(scenariosDir.resolve("e2e").resolve("e2e-scenario"));
         Files.writeString(bundle.resolve("scenario.yaml"), """
+                protocolVersion: "2.0.0"
                 id: e2e-scenario
                 name: E2E Scenario
                 template:
@@ -121,6 +125,7 @@ class ScenarioServiceTest {
                 scenariosDir.toString(),
                 false,
                 "",
+                "test",
                 capabilities);
         withoutTestScenarios.reload();
         assertThat(withoutTestScenarios.listAllSummaries())
@@ -134,6 +139,7 @@ class ScenarioServiceTest {
         capabilities.reload();
 
         writeScenario("defunct", """
+                protocolVersion: "2.0.0"
                 id: defunct
                 name: Defunct Scenario
                 template:
@@ -176,6 +182,7 @@ class ScenarioServiceTest {
         capabilities.reload();
 
         writeScenario("healthy", """
+                protocolVersion: "2.0.0"
                 id: healthy
                 name: Healthy Scenario
                 template:
@@ -191,6 +198,7 @@ class ScenarioServiceTest {
                 """);
 
         writeScenario("broken", """
+                protocolVersion: "2.0.0"
                 id: broken
                 name: Broken Scenario
                 template:
@@ -227,6 +235,7 @@ class ScenarioServiceTest {
 
         Path healthyBundle = Files.createDirectories(scenariosDir.resolve("healthy-bundle"));
         Files.writeString(healthyBundle.resolve("scenario.yaml"), """
+                protocolVersion: "2.0.0"
                 id: healthy-bundle
                 name: Healthy Bundle
                 template:
@@ -259,6 +268,7 @@ class ScenarioServiceTest {
 
         Path firstBundle = Files.createDirectories(scenariosDir.resolve("folder-a").resolve("dup"));
         Files.writeString(firstBundle.resolve("scenario.yaml"), """
+                protocolVersion: "2.0.0"
                 id: dup
                 name: Dup A
                 template:
@@ -268,6 +278,7 @@ class ScenarioServiceTest {
 
         Path secondBundle = Files.createDirectories(scenariosDir.resolve("folder-b").resolve("dup"));
         Files.writeString(secondBundle.resolve("scenario.yaml"), """
+                protocolVersion: "2.0.0"
                 id: dup
                 name: Dup B
                 template:
@@ -295,6 +306,7 @@ class ScenarioServiceTest {
 
         Path activeBundle = Files.createDirectories(scenariosDir.resolve("active-dup"));
         Files.writeString(activeBundle.resolve("scenario.yaml"), """
+                protocolVersion: "2.0.0"
                 id: dup
                 name: Active Dup
                 template:
@@ -304,6 +316,7 @@ class ScenarioServiceTest {
 
         Path quarantinedBundle = Files.createDirectories(scenariosDir.resolve("quarantine").resolve("dup-copy"));
         Files.writeString(quarantinedBundle.resolve("scenario.yaml"), """
+                protocolVersion: "2.0.0"
                 id: dup
                 name: Quarantined Dup
                 template:
@@ -337,6 +350,7 @@ class ScenarioServiceTest {
         capabilities.reload();
 
         writeScenario("guarded", """
+                protocolVersion: "2.0.0"
                 id: guarded
                 name: Guarded Scenario
                 trafficPolicy:
@@ -382,6 +396,7 @@ class ScenarioServiceTest {
         service = new ScenarioService(scenariosDir.toString(), "experimental", capabilities);
 
         writeScenario("defaulted", """
+                protocolVersion: "2.0.0"
                 id: defaulted
                 name: Defaulted Scenario
                 template:
@@ -413,6 +428,7 @@ class ScenarioServiceTest {
         service = new ScenarioService(scenariosDir.toString(), "runtime", capabilities);
 
         writeScenario("runtime-tagged", """
+                protocolVersion: "2.0.0"
                 id: runtime-tagged
                 name: Runtime Tagged Scenario
                 template:
@@ -445,6 +461,7 @@ class ScenarioServiceTest {
         service = new ScenarioService(scenariosDir.toString(), capabilities);
 
         writeScenario("experimental", """
+                protocolVersion: "2.0.0"
                 id: experimental
                 name: Experimental Scenario
                 template:
@@ -476,6 +493,7 @@ class ScenarioServiceTest {
         capabilities.reload();
 
         byte[] zipBytes = scenarioBundleZip("""
+                protocolVersion: "2.0.0"
                 id: uploaded-demo
                 name: Uploaded Demo
                 template:
@@ -511,6 +529,7 @@ class ScenarioServiceTest {
 
         byte[] zipBytes = scenarioBundleZip(Map.of(
                 "top-level/scenario.yaml", """
+                    protocolVersion: "2.0.0"
                     id: nested-upload-demo
                     name: Nested Upload Demo
                     template:
@@ -538,6 +557,7 @@ class ScenarioServiceTest {
     @Test
     void replaceBundleFromZipRequiresExplicitExpectedScenarioId() throws IOException {
         byte[] zipBytes = scenarioBundleZip("""
+                protocolVersion: "2.0.0"
                 id: uploaded-demo
                 name: Uploaded Demo
                 template:
@@ -634,6 +654,7 @@ class ScenarioServiceTest {
         service.reload();
         String sutId = "sut-A";
         String raw = """
+                protocolVersion: "2.0.0"
                 id: sut-A
                 name: SUT A
                 endpoints:
@@ -662,6 +683,7 @@ class ScenarioServiceTest {
         Path sutRoot = service.bundleDir("scenario-1").resolve("sut");
         Path ymlSut = Files.createDirectories(sutRoot.resolve("sut-yml"));
         Files.writeString(ymlSut.resolve("sut.yml"), """
+                protocolVersion: "2.0.0"
                 id: sut-yml
                 name: SUT YML
                 """);
@@ -685,6 +707,7 @@ class ScenarioServiceTest {
         sutRoot = service.bundleDir("scenario-2").resolve("sut");
         Path wrongIdSut = Files.createDirectories(sutRoot.resolve("sut-wrong-id"));
         Files.writeString(wrongIdSut.resolve("sut.yaml"), """
+                protocolVersion: "2.0.0"
                 id: different-id
                 name: Wrong ID SUT
                 """);
@@ -713,6 +736,7 @@ class ScenarioServiceTest {
 
         Path sutDir = Files.createDirectories(service.bundleDir("scenario-1").resolve("sut").resolve("wrong-id"));
         Files.writeString(sutDir.resolve("sut.yaml"), """
+                protocolVersion: "2.0.0"
                 id: different-id
                 name: Wrong ID
                 """);
@@ -821,6 +845,7 @@ class ScenarioServiceTest {
         Path bundle = scenariosDir.resolve(scenarioId);
         Files.createDirectories(bundle);
         Files.writeString(bundle.resolve("scenario.yaml"), """
+                protocolVersion: "2.0.0"
                 id: %s
                 name: %s
                 template:
@@ -832,6 +857,7 @@ class ScenarioServiceTest {
     private void writeBundleSut(String scenarioId, String sutId) throws IOException {
         Path sutDir = Files.createDirectories(service.bundleDir(scenarioId).resolve("sut").resolve(sutId));
         Files.writeString(sutDir.resolve("sut.yaml"), """
+                protocolVersion: "2.0.0"
                 id: %s
                 name: %s
                 """.formatted(sutId, sutId));

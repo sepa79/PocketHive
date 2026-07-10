@@ -1,3 +1,4 @@
+protocolVersion: "2.0.0"
 id: local-rest-topology
 name: Local REST - Simple REST Swarm (Topology)
 description: Simple WireMock-backed local REST swarm with logical topology edges

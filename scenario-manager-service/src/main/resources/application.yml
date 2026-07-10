@@ -8,6 +8,8 @@ logging:
   config: classpath:logback-spring.xml
 
 pockethive:
+  release:
+    version: "@project.version@"
   auth:
     service-url: ${POCKETHIVE_AUTH_SERVICE_URL:http://auth-service:8080}
     connect-timeout: ${POCKETHIVE_AUTH_CONNECT_TIMEOUT:PT2S}

@@ -1,6 +1,6 @@
 {
   "name": "@pockethive/mcp-server",
-  "version": "0.15.32",
+  "version": "0.15.35",
   "description": "PocketHive MCP server — full lifecycle tools for scenario authoring and swarm management",
   "type": "module",
   "bin": {
@@ -10,6 +10,7 @@
   "files": [
     "CHANGELOG.md",
     "README.md",
+    "fixtures",
     "config-update.mjs",
     "doctor.mjs",
     "runtime-tools.mjs",
@@ -21,6 +22,7 @@
     "smoke-test.mjs",
     "workflow-agentic-evals.mjs",
     "workflow-acceptance.mjs",
+    "scenario-regression-acceptance.mjs",
     "wizard-acceptance.mjs"
   ],
   "publishConfig": {
@@ -33,6 +35,7 @@
     "acceptance:workflow": "node workflow-acceptance.mjs",
     "acceptance:workflow:live": "cross-env PH_WORKFLOW_ACCEPTANCE_LIVE=1 node workflow-acceptance.mjs",
     "acceptance:wizard": "node wizard-acceptance.mjs",
+    "acceptance:scenario-regression": "node scenario-regression-acceptance.mjs",
     "doctor": "node doctor.mjs",
     "mcp:start": "npm run start",
     "mcp:start:http": "npm run start:http",

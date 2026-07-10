@@ -1,3 +1,4 @@
+protocolVersion: "2.0.0"
 id: tcp-timeout-demo
 name: TCP Timeout and Delay Demo
 description: Demonstrates TCP timeout handling with fast, slow, and timeout responses

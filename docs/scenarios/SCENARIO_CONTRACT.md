@@ -12,6 +12,7 @@ wraps a `SwarmTemplate` and optional `TrafficPolicy`.
 ## Top‑level structure
 
 ```yaml
+protocolVersion: "2.0.0"
 id: local-rest
 name: Local REST - Simple REST Swarm
 description: Uses local images with a 50 msg/s generator.
@@ -25,6 +26,10 @@ trafficPolicy:
   # optional, see traffic-shaping docs
 ```
 
+- `protocolVersion` (SemVer string, required) – scenario authoring protocol
+  version. Scenario Manager currently supports major version `2`. A missing,
+  malformed, or different-major version is rejected before deeper bundle
+  validation. There is no implicit version for legacy files.
 - `id` (string, required) – unique scenario id; used in URLs and UI.
 - `name` (string, required) – human‑friendly name.
 - `description` (string, optional) – short description.

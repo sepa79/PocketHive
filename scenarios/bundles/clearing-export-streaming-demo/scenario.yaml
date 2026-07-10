@@ -1,3 +1,4 @@
+protocolVersion: "2.0.0"
 id: clearing-export-streaming-demo
 name: Clearing Export Streaming Demo
 description: Runs 20 transactions through

@@ -1,9 +1,8 @@
-package io.pockethive.worker.sdk.templating;
+package io.pockethive.templating;
 
 import io.lettuce.core.RedisClient;
 import io.lettuce.core.RedisURI;
 import io.lettuce.core.api.sync.RedisCommands;
-import io.pockethive.worker.sdk.config.RedisSequenceProperties;
 
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
@@ -28,13 +27,12 @@ public final class RedisSequenceGenerator {
     private static final AtomicReference<ConnectionConfig> CONFIG = new AtomicReference<>();
 
     static {
-        RedisSequenceProperties defaults = new RedisSequenceProperties();
         CONFIG.set(new ConnectionConfig(
-            defaults.getHost(),
-            defaults.getPort(),
-            defaults.getUsername(),
-            defaults.getPassword(),
-            defaults.isSsl()
+            "redis",
+            6379,
+            null,
+            null,
+            false
         ));
     }
 

@@ -43,7 +43,7 @@ async function withClient(bundlesRoot, fn, envOverrides = {}) {
 async function withScenarioManagerValidationClient(bundlesRoot, fn, options = {}) {
   const responses = Array.isArray(options.responses) && options.responses.length
     ? options.responses
-    : [{ ok: true, source: "uploaded-zip", scenarioId: "test-bundle", summary: { errors: 0, warnings: 0 }, findings: [] }];
+    : [{ ok: true, validation: validationEvidence, source: "uploaded-zip", scenarioId: "test-bundle", summary: { errors: 0, warnings: 0 }, findings: [] }];
   let validationCalls = 0;
   const server = createServer(async (req, res) => {
     const url = new URL(req.url, "http://127.0.0.1");
@@ -375,7 +375,13 @@ test("Scenario Manager validation and claim matrix react to artifact mutation", 
           fix: "Repair the WireMock mapping JSON.",
         }],
       },
-      { ok: true, source: "uploaded-zip", scenarioId: "invariant-mock-mutation", summary: { errors: 0, warnings: 0 }, findings: [] },
+      { ok: true, validation: validationEvidence, source: "uploaded-zip", scenarioId: "invariant-mock-mutation", summary: { errors: 0, warnings: 0 }, findings: [] },
     ],
   });
 });
+const validationEvidence = {
+  scenarioProtocolVersion: "2.0.0",
+  supportedScenarioProtocolVersion: "2.0.0",
+  scenarioManagerVersion: "0.15.35",
+  artifactDigest: "sha256:test",
+};

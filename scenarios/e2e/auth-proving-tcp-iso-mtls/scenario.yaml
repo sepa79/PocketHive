@@ -1,3 +1,4 @@
+protocolVersion: "2.0.0"
 id: auth-proving-tcp-iso-mtls
 name: Auth Proving - TCP ISO8583 mTLS
 description: Proves TCP payload auth, ISO8583 MAC application, and

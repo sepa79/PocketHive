@@ -398,6 +398,12 @@ Use `validator: scenario-manager-dry-run` when the user wants Scenario Manager
 to validate the bundle with the live runtime contract and no Scenario Manager
 write side effects.
 
+The MCP accepts a dry-run result as authoritative only when Scenario Manager
+returns validation evidence containing `supportedScenarioProtocolVersion`,
+`scenarioManagerVersion`, and `artifactDigest`. A stale Scenario Manager that
+returns the legacy result shape fails explicitly instead of producing an
+unversioned authoritative PASS.
+
 Use `validator: scenario-manager-upload` only when the user explicitly wants the
 validation step to import or replace the bundle. This mode is intentionally not
 hidden behind fallback behavior because it writes to Scenario Manager.

@@ -1,3 +1,4 @@
+protocolVersion: "2.0.0"
 id: webauth-loop-redis-5-customers
 name: WebAuth Loop (5 Customers, Shared BAL/TOP)
 description: Two-input loop for five customers. Main input reads RED per

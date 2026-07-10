@@ -1,3 +1,4 @@
+protocolVersion: "2.0.0"
 id: tcp-netty-demo
 name: TCP Netty Transport Demo
 description: Demonstrates TCP using Netty async transport for high-throughput scenarios

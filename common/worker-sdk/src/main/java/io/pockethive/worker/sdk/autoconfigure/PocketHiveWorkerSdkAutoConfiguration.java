@@ -60,8 +60,8 @@ import io.pockethive.worker.sdk.output.WorkOutputRegistry;
 import io.pockethive.worker.sdk.output.WorkOutputRegistryInitializer;
 import io.pockethive.worker.sdk.output.RabbitWorkOutputFactory;
 import io.pockethive.worker.sdk.output.RedisWorkOutputFactory;
-import io.pockethive.worker.sdk.templating.PebbleTemplateRenderer;
-import io.pockethive.worker.sdk.templating.TemplateRenderer;
+import io.pockethive.templating.PebbleTemplateRenderer;
+import io.pockethive.templating.TemplateRenderer;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
@@ -242,7 +242,7 @@ public class PocketHiveWorkerSdkAutoConfiguration {
 	        @Qualifier("workerControlPlaneIdentity") ControlPlaneIdentity identity,
 	        @Qualifier("workerControlPlaneEmitter") ControlPlaneEmitter controlPlaneEmitter,
 	        WorkerControlPlaneProperties workerControlPlaneProperties,
-	        ObjectProvider<io.pockethive.worker.sdk.templating.TemplateRenderer> templateRendererProvider,
+	        ObjectProvider<io.pockethive.templating.TemplateRenderer> templateRendererProvider,
 	        ObjectProvider<ObjectMapper> objectMapperProvider
 	    ) {
 	        ObjectMapper mapper = objectMapperProvider.getIfAvailable(() -> new ObjectMapper().findAndRegisterModules());
@@ -250,7 +250,7 @@ public class PocketHiveWorkerSdkAutoConfiguration {
 	            .requireNonNull(workerControlPlaneProperties, "workerControlPlaneProperties must not be null")
 	            .getControlPlane();
 	        Objects.requireNonNull(controlPlane, "workerControlPlaneProperties.controlPlane must not be null");
-	        io.pockethive.worker.sdk.templating.TemplateRenderer renderer = templateRendererProvider.getIfAvailable();
+	        io.pockethive.templating.TemplateRenderer renderer = templateRendererProvider.getIfAvailable();
 	        return new WorkerControlPlaneRuntime(workerControlPlane, workerStateStore, mapper, controlPlaneEmitter, identity,
 	            controlPlane, renderer);
 	    }

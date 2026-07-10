@@ -1,3 +1,4 @@
+protocolVersion: "2.0.0"
 id: variables-demo
 name: Scenario Variables Demo (vars.* + eval)
 description: Demonstrates Scenario Variables injected as config.vars -> WorkItem

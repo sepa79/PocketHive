@@ -1,3 +1,4 @@
+protocolVersion: "2.0.0"
 id: local-rest-with-multi-generators
 name: Local REST - Multi Generators
 description: Uses local images. Sample REST scenario that ships two generator

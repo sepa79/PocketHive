@@ -341,6 +341,19 @@ Run agentic evals:
 npm run mcp:agentic-evals
 ```
 
+Run the manual scenario-regression agent against a rebuilt PocketHive stack:
+
+```bash
+POCKETHIVE_BASE_URL=http://localhost:8088 \
+POCKETHIVE_AUTH_USERNAME=local-admin \
+npm --prefix tools/pockethive-mcp run acceptance:scenario-regression
+```
+
+This agent stages invalid bundles derived from the v0.15.28 legacy-ID scenario
+and submits them through MCP `bundle_validate`. It does not run a local or
+independent validator; every verdict and finding comes from Scenario Manager
+through the official PocketHive ingress.
+
 Run live workflow acceptance against a local PocketHive stack:
 
 ```bash

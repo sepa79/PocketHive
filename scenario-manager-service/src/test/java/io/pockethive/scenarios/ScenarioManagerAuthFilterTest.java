@@ -454,6 +454,7 @@ class ScenarioManagerAuthFilterTest {
                 .contentType("application/json")
                 .content("""
                     {
+                      "protocolVersion": "2.0.0",
                       "id": "new-scenario",
                       "name": "New Scenario",
                       "template": {
@@ -566,6 +567,7 @@ class ScenarioManagerAuthFilterTest {
                 .header(HttpHeaders.AUTHORIZATION, "Bearer test-token")
                 .contentType("text/plain")
                 .content("""
+                    protocolVersion: "2.0.0"
                     id: alpha
                     name: Alpha Updated
                     template:
@@ -578,6 +580,7 @@ class ScenarioManagerAuthFilterTest {
                 .header(HttpHeaders.AUTHORIZATION, "Bearer test-token")
                 .contentType("text/plain")
                 .content("""
+                    protocolVersion: "2.0.0"
                     id: omega
                     name: Omega Updated
                     template:
@@ -711,6 +714,7 @@ class ScenarioManagerAuthFilterTest {
         Files.createDirectories(bundleDir);
         Files.writeString(bundleDir.resolve("scenario.yaml"), """
             ---
+            protocolVersion: "2.0.0"
             id: "%s"
             name: "%s"
             template:
@@ -724,6 +728,7 @@ class ScenarioManagerAuthFilterTest {
         try (ZipOutputStream zip = new ZipOutputStream(out)) {
             zip.putNextEntry(new ZipEntry("scenario.yaml"));
             zip.write("""
+                protocolVersion: "2.0.0"
                 id: %s
                 name: %s
                 template:

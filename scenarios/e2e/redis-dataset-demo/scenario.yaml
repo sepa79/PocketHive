@@ -1,3 +1,4 @@
+protocolVersion: "2.0.0"
 id: redis-dataset-demo
 name: Redis dataset demo (generator + per-customer lists)
 description: Seeds Redis with randomised payloads and runs two low-rate data

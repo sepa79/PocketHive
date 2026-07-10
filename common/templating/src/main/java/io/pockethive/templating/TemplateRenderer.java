@@ -1,4 +1,4 @@
-package io.pockethive.worker.sdk.templating;
+package io.pockethive.templating;
 
 import java.util.Map;
 

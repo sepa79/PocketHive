@@ -10,7 +10,7 @@ import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.api.WorkerInfo;
 import io.pockethive.worker.sdk.config.RedisSequenceProperties;
-import io.pockethive.worker.sdk.templating.TemplateRenderer;
+import io.pockethive.templating.TemplateRenderer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
@@ -207,7 +207,7 @@ class HttpSequenceRunnerTest {
     HttpSequenceRunner runner = new HttpSequenceRunner(
         new ObjectMapper().findAndRegisterModules(),
         Clock.systemUTC(),
-        new io.pockethive.worker.sdk.templating.PebbleTemplateRenderer(),
+        new io.pockethive.templating.PebbleTemplateRenderer(),
         new TemplateLoader(),
         executor,
         new RedisSequenceProperties());

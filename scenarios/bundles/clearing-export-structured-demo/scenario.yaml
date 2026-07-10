@@ -1,3 +1,4 @@
+protocolVersion: "2.0.0"
 id: clearing-export-structured-demo
 name: Clearing Export Structured Demo
 description: Runs 20 transactions through

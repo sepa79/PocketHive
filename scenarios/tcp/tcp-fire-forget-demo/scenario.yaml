@@ -1,3 +1,4 @@
+protocolVersion: "2.0.0"
 id: tcp-fire-forget-demo
 name: TCP Fire-and-Forget Demo
 description: Demonstrates one-way TCP messaging with no response expected
@@ -18,7 +19,7 @@ template:
             {
               "eventId": "EVT_{{ eval('#uuid()') }}",
               "eventType": "FIRE_FORGET",
-              "payload": "{{ eval('#base64_encode(''event_'' + #randInt(1, 10000))') }}",
+              "payload": "{{ eval("#base64_encode('event_' + #randInt(1, 10000))") }}",
               "timestamp": "{{ eval("#date_format(now, 'yyyy-MM-dd''T''HH:mm:ss.SSS')") }}"
             }
           headers:
