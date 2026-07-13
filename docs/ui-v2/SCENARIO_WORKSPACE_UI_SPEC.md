@@ -1,9 +1,9 @@
 # UI V2 Scenario Workspace UI Spec
 
-> Status: **planned / spec draft**  
+> Status: **implemented baseline / reference**
 > Scope: UI v2 Scenarios page MVP  
 > Related:
-> - `docs/ui-v2/SCENARIO_WORKSPACE_PLAN.md`
+> - `docs/scenarios/SCENARIO_EDITOR_STATUS.md`
 > - `docs/ui-v2/MONACO_OFFLINE_SPEC.md`
 > - `docs/scenarios/SCENARIO_BUNDLE_WORKSPACE_API_SPEC.md`
 

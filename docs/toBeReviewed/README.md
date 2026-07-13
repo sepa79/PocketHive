@@ -1,14 +1,10 @@
 # To Be Reviewed
 
-This directory contains plans that are implemented enough to review, but not yet
-archived as historical docs.
+There are currently no plans waiting for review.
 
-Files here should carry a `Status: to be reviewed` header.
+Use this directory only for work that is implemented enough for a bounded review but is not yet accepted as living documentation or archived history. Files placed here must include:
 
-Current plans:
-
-- `docs/toBeReviewed/worker-configurable-io-plan.md`
-- `docs/toBeReviewed/ScenarioPlan.md`
-- `docs/toBeReviewed/sut-environments-plan.md`
-- `docs/toBeReviewed/ui-v2-control-plane-adoption.md`
-- `docs/toBeReviewed/runtime-worker-instance-identity-plan.md`
+- `Status: to be reviewed`,
+- the exact review question,
+- the verification evidence,
+- the expected destination after review.

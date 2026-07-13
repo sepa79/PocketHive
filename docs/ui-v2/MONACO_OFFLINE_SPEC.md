@@ -1,10 +1,10 @@
 # UI V2 Monaco Offline Spec
 
-> Status: **planned / spec draft**  
+> Status: **implemented / reference**
 > Scope: `ui-v2` only  
 > Related:
-> - `docs/ui-v2/SCENARIO_WORKSPACE_PLAN.md`
-> - `docs/architecture/tenancy-foundation-plan.md`
+> - `docs/scenarios/SCENARIO_EDITOR_STATUS.md`
+> - `docs/archive/tenancy-foundation-plan.md`
 
 This spec defines how Monaco must be packaged and initialized in **UI v2** so
 that it works in **isolated deployments with no internet access**.

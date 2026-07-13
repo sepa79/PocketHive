@@ -1,10 +1,11 @@
 # Auth Service API Spec
 
-> Status: planned / spec draft  
+> Status: implemented baseline / reference
 > Scope: shared `auth-service` HTTP contract for PocketHive and HiveWatch  
 > Related:
-> - `docs/architecture/AUTH_SERVICE_FOUNDATION_PLAN.md`
-> - `docs/architecture/tenancy-foundation-plan.md`
+> - `docs/archive/auth-service-foundation-plan.md`
+> - `docs/archive/tenancy-foundation-plan.md`
+> - `docs/todo/auth-service-followups.md`
 
 This spec defines the MVP HTTP contract for the standalone shared
 `auth-service`.

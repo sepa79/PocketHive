@@ -42,16 +42,13 @@
 - [ ] slow-response.json loads
 
 ### Documentation
-- [ ] WIREMOCK-PARITY-COMPLETE.md exists
+- [ ] WIREMOCK-PARITY.md exists
 - [ ] MIGRATION-GUIDE.md exists
 - [ ] QUICK-REFERENCE.md exists
-- [ ] TEAM-SUMMARY.md exists
-- [ ] UI-COMPLETE.md exists
-- [ ] UI-EVALUATION.md exists
-- [ ] COMPLETE-EVALUATION.md exists
-- [ ] DOCUMENTATION-INDEX.md exists
-- [ ] FINAL-SUMMARY.md exists
-- [ ] UI-VISUAL-GUIDE.md exists
+- [ ] UI-USER-GUIDE.md exists
+- [ ] DOCUMENTATION-INDEX-FINAL.md exists
+- [ ] EXECUTIVE-SUMMARY.md exists
+- [ ] START-HERE.md exists
 
 ---
 

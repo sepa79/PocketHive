@@ -6,9 +6,8 @@ Welcome to the PocketHive documentation hub. Use these resources to understand t
 - [System Architecture](ARCHITECTURE.md)
 - [Worker Capability Catalogue](architecture/workerCapabilities.md)
 - [SUT + Dataset + Simulation Model (proposal)](architecture/sut-dataset-simulation-model.md)
-- [Network Proxy Plan](inProgress/network-proxy-plan.md)
-- [Auth API Rollout Plan](archive/auth-api-rollout-plan.md)
-- [E2E API Framework Mini-Plan](archive/e2e-api-framework-mini-plan.md)
+- [Network Proxy follow-ups](todo/network-proxy-followups.md)
+- [Documentation index](index.md)
 
 ## Roadmap
 - [Release Notes](../CHANGELOG.md)
@@ -49,7 +48,7 @@ Welcome to the PocketHive documentation hub. Use these resources to understand t
 
 ## UI v2
 - [UI v2 shell and flow](ui-v2/UI_V2_FLOW.md)
-- [Scenario workspace plan](ui-v2/SCENARIO_WORKSPACE_PLAN.md)
+- [Scenario editor current status](scenarios/SCENARIO_EDITOR_STATUS.md)
 - [Scenario workspace UI spec](ui-v2/SCENARIO_WORKSPACE_UI_SPEC.md)
 - [Monaco offline spec](ui-v2/MONACO_OFFLINE_SPEC.md)
 
@@ -57,3 +56,8 @@ Welcome to the PocketHive documentation hub. Use these resources to understand t
 - [Contributor Guide](../CONTRIBUTING.md)
 - [HiveMind Workflow for Agents](ai/HIVEMIND_WORKFLOW.md)
 - [Control Plane Testing Playbook](ci/control-plane-testing.md)
+
+## MCP and IDE integrations
+
+- [PocketHive plugin reference](plugins/pockethive/README.md)
+- [Canonical MCP server](../tools/pockethive-mcp/README.md)

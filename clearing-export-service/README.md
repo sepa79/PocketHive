@@ -30,4 +30,4 @@ Concrete, step-by-step usage instructions for AI contributors:
 
 - `docs/ai/CLEARING_EXPORT_WORKER_PLAYBOOK.md`
 
-See implementation plan: `docs/inProgress/clearing-export-worker-v1.md`.
+See the historical implementation plan in `docs/archive/clearing-export-worker-v1.md` and the canonical structured schema contract in `docs/clearing/CLEARING_STRUCTURED_SCHEMA_CONTRACT.md`.

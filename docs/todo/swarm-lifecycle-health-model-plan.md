@@ -1,5 +1,7 @@
 # Swarm Lifecycle + Health Model Plan
 
+Status: future / design
+
 ## Scope
 - Goal: replace the current coarse `swarmStatus` / `swarmHealth` interpretation with a clearer operator-facing model.
 - The new model should make startup progress, blocking steps, and runtime failures understandable from Hive without immediate log inspection.

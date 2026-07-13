@@ -400,8 +400,8 @@ curl -X DELETE \
 
 ## More Docs
 
-- `docs/inProgress/pockethive-plugin/MCP-SERVER.md` - server architecture and tool surface
-- `docs/inProgress/pockethive-plugin/TOOL-CONTRACTS.md` - public tool contracts
-- `docs/inProgress/pockethive-plugin/DEVELOPER-SETUP.md` - team setup and doctor behavior
-- `docs/inProgress/pockethive-plugin/AI-ASSISTANT-SETUP.md` - assistant client configuration
-- `docs/inProgress/pockethive-plugin/EVIDENCE.md` - evidence taxonomy
+- `docs/plugins/pockethive/MCP-SERVER.md` - server architecture and tool surface
+- `docs/plugins/pockethive/TOOL-CONTRACTS.md` - public tool contracts
+- `docs/plugins/pockethive/DEVELOPER-SETUP.md` - team setup and doctor behavior
+- `docs/plugins/pockethive/AI-ASSISTANT-SETUP.md` - assistant client configuration
+- `docs/plugins/pockethive/EVIDENCE.md` - evidence taxonomy

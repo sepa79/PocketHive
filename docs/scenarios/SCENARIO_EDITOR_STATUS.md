@@ -1,5 +1,7 @@
 # Scenario Editor — Current State vs Intended Behaviour
 
+Status: living reference
+
 This document is the **single place** to track what the Hive **Scenarios** editor
 currently does, what it *should* do (per the scenario contract), and what is
 missing or buggy.
@@ -21,6 +23,9 @@ Out of scope: runtime worker behaviour, control-plane contracts, routing keys.
 - Lists scenarios (bundles) from Scenario Manager.
 - Downloads / uploads / replaces scenario bundle ZIPs.
 - Creates a new scenario bundle (minimal metadata).
+- Shows a bundle file tree and opens supported text files in an offline Monaco editor.
+- Reads, writes, creates, renames, and deletes bundle files through Scenario Manager workspace APIs.
+- Moves bundles between folders and keeps file revisions explicit on save.
 
 ### 1.2 YAML (single source of truth)
 - Loads and saves the raw `scenario.yaml` through Scenario Manager.
@@ -162,11 +167,12 @@ Desired:
 
 ## 5) Documentation drift / unfinished plans to reconcile
 
-These docs exist and contain editor-related plans or promises; they should be
-treated as **inputs**, not as “current behaviour”:
+These docs contain historical editor plans; they should be treated as context,
+not as current behaviour:
 
-- `docs/ui-v2/SCENARIO_WORKSPACE_PLAN.md`
-  - Current forward-looking plan for the UI v2 Scenarios workspace.
+- `docs/archive/scenario-workspace-plan.md`
+  - Historical delivery plan for the UI v2 Scenarios workspace; the generic
+    bundle tree and raw-file workspace baseline are implemented.
 - `docs/archive/scenario-editor-plans/scenario-sut-editor-plan.md`
   - Historical React Flow + side-panel editor plan. Some ideas exist in the
     current editor, but the plan is not implemented as written.
