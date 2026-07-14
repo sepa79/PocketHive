@@ -174,7 +174,7 @@ public class SwarmManagerController {
         ConfirmationScope scope = new ConfirmationScope(swarmSegment, "swarm-controller", instanceId);
         ControlResponse.Watch watch = new ControlResponse.Watch(
             ControlPlaneRouting.event("outcome", ControlPlaneSignals.CONFIG_UPDATE, scope),
-            ControlPlaneRouting.event("alert", "alert", scope)
+            List.of(ControlPlaneRouting.event("alert", "alert", scope))
         );
         return new ControlResponse(correlationId, idempotencyKey, watch, CONFIG_UPDATE_TIMEOUT_MS);
     }

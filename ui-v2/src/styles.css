@@ -8,6 +8,8 @@
   --muted: rgba(255, 255, 255, 0.65);
   --muted2: rgba(255, 255, 255, 0.55);
   --accent: rgba(51, 225, 255, 0.75);
+  --status-success: #69d391;
+  --status-error: #ff7b7b;
   --nav-header-height: 40px;
 }
 
@@ -21,6 +23,8 @@
   --muted: rgba(10, 20, 30, 0.68);
   --muted2: rgba(10, 20, 30, 0.55);
   --accent: rgba(20, 120, 210, 0.85);
+  --status-success: #147a3d;
+  --status-error: #c62828;
 }
 
 body {
@@ -2186,6 +2190,28 @@ select.textInputCompact option {
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.swarmActionFeedback {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border2);
+  font-size: 12px;
+}
+
+.swarmActionFeedback-pending {
+  color: var(--muted);
+}
+
+.swarmActionFeedback-success {
+  color: var(--status-success);
+}
+
+.swarmActionFeedback-error {
+  color: var(--status-error);
 }
 
 .swarmCreateCard {

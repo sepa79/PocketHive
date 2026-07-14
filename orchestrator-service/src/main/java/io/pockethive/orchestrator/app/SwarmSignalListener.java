@@ -262,26 +262,63 @@ public class SwarmSignalListener {
         } catch (Exception ignore) {
             // best-effort
         }
-        switch (command) {
-            case "swarm-template" -> {
-                if (isStatus(status, "Ready")) onSwarmTemplateReady(key);
-                else onSwarmTemplateError(key);
+        try {
+            switch (command) {
+                case "swarm-template" -> {
+                    if (isStatus(status, "Ready")) onSwarmTemplateReady(key);
+                    else onSwarmTemplateError(key);
+                }
+                case "swarm-start" -> {
+                    if (CommandOutcomePolicy.isNotReadyStatus(status)) onSwarmStartNotReady(key, contextStatus);
+                    else if (isStatus(status, "Running")) onSwarmStartReady(key);
+                    else onSwarmStartError(key);
+                }
+                case "swarm-stop" -> {
+                    if (CommandOutcomePolicy.isNotReadyStatus(status)) onSwarmStopNotReady(key, contextStatus);
+                    else if (isStatus(status, "Stopped")) onSwarmStopReady(key);
+                    else onSwarmStopError(key);
+                }
+                case "swarm-remove" -> {
+                    if (isStatus(status, "Removed")) onSwarmRemoveReady(key, correlationId, idempotencyKey);
+                    else store.updateStatus(key.swarmId(), SwarmLifecycleStatus.FAILED);
+                }
+                default -> log.debug("[CTRL] Ignoring outcome type {}", key.type());
             }
-            case "swarm-start" -> {
-                if (CommandOutcomePolicy.isNotReadyStatus(status)) onSwarmStartNotReady(key, contextStatus);
-                else if (isStatus(status, "Running")) onSwarmStartReady(key);
-                else onSwarmStartError(key);
-            }
-            case "swarm-stop" -> {
-                if (CommandOutcomePolicy.isNotReadyStatus(status)) onSwarmStopNotReady(key, contextStatus);
-                else if (isStatus(status, "Stopped")) onSwarmStopReady(key);
-                else onSwarmStopError(key);
-            }
-            case "swarm-remove" -> {
-                if (isStatus(status, "Removed")) onSwarmRemoveReady(key, correlationId, idempotencyKey);
-                else store.updateStatus(key.swarmId(), SwarmLifecycleStatus.FAILED);
-            }
-            default -> log.debug("[CTRL] Ignoring outcome type {}", key.type());
+        } catch (RuntimeException e) {
+            emitOutcomeFinalizationError(command, key, correlationId, idempotencyKey, e);
+            throw e;
+        }
+    }
+
+    private void emitOutcomeFinalizationError(String command,
+                                              RoutingKey key,
+                                              String correlationId,
+                                              String idempotencyKey,
+                                              RuntimeException failure) {
+        String swarmId = key.swarmId();
+        if (swarmId == null || swarmId.isBlank() || correlationId == null || correlationId.isBlank()) {
+            log.warn("[CTRL] command failure operation={} phase=outcome-finalization code={} message={} swarmId={} role={} instance={} correlationId={} idempotencyKey={} retryable=true errorType={} errorDetail={}",
+                command, Alerts.Codes.RUNTIME_EXCEPTION, failure.getMessage(), swarmId, ROLE, instanceId,
+                correlationId, idempotencyKey, failure.getClass().getName(), failure.getMessage());
+            return;
+        }
+        ControlPlaneEmitter.ErrorContext context = ControlPlaneEmitter.ErrorContext.fromException(
+            command,
+            correlationId,
+            idempotencyKey,
+            new CommandState(null, null, null),
+            "outcome-finalization",
+            failure,
+            true,
+            null,
+            Map.of(),
+            Instant.now());
+        logError(swarmId, context);
+        try {
+            emitterForSwarm(swarmId).emitError(context);
+        } catch (RuntimeException emissionFailure) {
+            log.warn("Failed to publish outcome-finalization error operation={} swarmId={} correlationId={}",
+                command, swarmId, correlationId, emissionFailure);
         }
     }
 
@@ -656,7 +693,7 @@ public class SwarmSignalListener {
                     "controller did not become ready in time")
                 .timestamp(Instant.now())
                 .build();
-            logError(context);
+            logError(info.swarmId(), context);
             emitter.emitError(context);
         } catch (Exception e) {
             log.warn("create timeout send", e);
@@ -679,7 +716,7 @@ public class SwarmSignalListener {
                     message)
                 .timestamp(Instant.now())
                 .build();
-            logError(context);
+            logError(info.swarmId(), context);
             emitter.emitError(context);
         } catch (Exception e) {
             log.warn("phase timeout send {}", signal, e);
@@ -708,9 +745,15 @@ public class SwarmSignalListener {
             context.signal(), instanceId, context.correlationId(), context.idempotencyKey());
     }
 
-    private void logError(ControlPlaneEmitter.ErrorContext context) {
-        log.info("[CTRL] SEND event.outcome+alert type={} inst={} corr={} idem={} code={}",
-            context.signal(), instanceId, context.correlationId(), context.idempotencyKey(), context.code());
+    private void logError(String swarmId, ControlPlaneEmitter.ErrorContext context) {
+        boolean retryable = context.retryable() != null
+            ? context.retryable()
+            : CommandOutcomePolicy.rulesFor(context.signal()).errorRetryableDefault()
+                == CommandOutcomePolicy.RetryablePolicy.TRUE;
+        log.warn("[CTRL] command failure operation={} phase={} code={} message={} swarmId={} role=orchestrator instance={} correlationId={} idempotencyKey={} retryable={} errorType={} errorDetail={}",
+            context.signal(), context.phase(), context.code(), context.message(), swarmId, instanceId,
+            context.correlationId(), context.idempotencyKey(), retryable, context.errorType(),
+            context.errorDetail());
     }
 
     private static String requireText(String value, String context) {

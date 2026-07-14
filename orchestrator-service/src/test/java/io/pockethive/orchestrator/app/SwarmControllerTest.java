@@ -137,6 +137,11 @@ class SwarmControllerTest {
         assertThat(resp.getBody().watch().successTopic()).isEqualTo(
             ControlPlaneRouting.event("outcome", ControlPlaneSignals.SWARM_START,
                 new ConfirmationScope("sw1", "swarm-controller", "inst")));
+        assertThat(resp.getBody().watch().errorTopics()).containsExactly(
+            ControlPlaneRouting.event("alert", "alert",
+                new ConfirmationScope("sw1", "swarm-controller", "inst")),
+            ControlPlaneRouting.event("alert", "alert",
+                new ConfirmationScope("sw1", "orchestrator", "orch-instance")));
         assertThat(tracker.complete("sw1", Phase.START)).isPresent();
         assertThat(registry.find("sw1").get().getStatus()).isEqualTo(SwarmLifecycleStatus.STARTING);
     }

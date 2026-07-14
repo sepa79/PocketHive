@@ -32,6 +32,7 @@ import io.pockethive.orchestrator.runtime.RuntimeLogSnapshotJournalService;
 import io.pockethive.swarm.model.NetworkBinding;
 import io.pockethive.swarm.model.NetworkMode;
 import io.pockethive.swarm.model.SwarmPlan;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -48,6 +49,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -267,6 +269,89 @@ import static org.mockito.Mockito.verifyNoInteractions;
         assertThat(tracker.remove(CONTROLLER_INSTANCE)).isEmpty();
         assertThat(registry.find(SWARM_ID)).map(Swarm::getStatus)
             .contains(SwarmLifecycleStatus.FAILED);
+    }
+
+    @Test
+    void startTimeoutEmitsCorrelatedHumanReadableError() throws Exception {
+        assertLifecycleTimeout(Phase.START, "swarm-start", "start", "start confirmation timed out");
+    }
+
+    @Test
+    void stopTimeoutEmitsCorrelatedHumanReadableError() throws Exception {
+        assertLifecycleTimeout(Phase.STOP, "swarm-stop", "stop", "stop confirmation timed out");
+    }
+
+    @Test
+    void stopFinalizationFailureEmitsCorrelatedHumanReadableError() throws Exception {
+        Swarm swarm = new Swarm(SWARM_ID, CONTROLLER_INSTANCE, "cid", "run-1");
+        swarm.attachTemplate(new io.pockethive.orchestrator.domain.SwarmTemplateMetadata(
+            "tpl-1", "swarm-controller:latest", java.util.List.of()));
+        registry.register(swarm);
+        doThrow(new IllegalStateException("Container shutdown failed.")).when(lifecycle).stopSwarm(SWARM_ID);
+        String routingKey = ControlPlaneRouting.event(
+            "outcome", "swarm-stop", new ConfirmationScope(SWARM_ID, "swarm-controller", CONTROLLER_INSTANCE));
+
+        listener.handle(outcomeBody("swarm-stop", "Stopped"), routingKey);
+
+        verify(publisher, times(2)).publishEvent(eventCaptor.capture());
+        List<EventMessage> events = eventCaptor.getAllValues();
+        CommandOutcome failed = mapper.readValue(events.getFirst().payload().toString(), CommandOutcome.class);
+        AlertMessage alert = mapper.readValue(events.get(1).payload().toString(), AlertMessage.class);
+        assertThat(failed.type()).isEqualTo("swarm-stop");
+        assertThat(failed.correlationId()).isEqualTo("corr");
+        assertThat(failed.data()).containsEntry("status", "Failed");
+        assertThat(alert.correlationId()).isEqualTo("corr");
+        assertThat(alert.idempotencyKey()).isEqualTo("idem");
+        assertThat(alert.data().code()).isEqualTo(Alerts.Codes.RUNTIME_EXCEPTION);
+        assertThat(alert.data().message()).isEqualTo("Container shutdown failed.");
+        assertThat(alert.data().context()).containsEntry("phase", "outcome-finalization");
+    }
+
+    private String outcomeBody(String operation, String status) throws Exception {
+        var body = new java.util.LinkedHashMap<String, Object>();
+        body.put("timestamp", Instant.now().toString());
+        body.put("version", "1");
+        body.put("kind", "outcome");
+        body.put("type", operation);
+        body.put("origin", CONTROLLER_INSTANCE);
+        body.put("scope", Map.of("swarmId", SWARM_ID, "role", "swarm-controller", "instance", CONTROLLER_INSTANCE));
+        body.put("correlationId", "corr");
+        body.put("idempotencyKey", "idem");
+        body.put("runtime", Map.of("templateId", "tpl-1", "runId", "run-1"));
+        body.put("data", Map.of("status", status));
+        return mapper.writeValueAsString(body);
+    }
+
+    private void assertLifecycleTimeout(Phase phase, String operation, String expectedPhase, String expectedMessage)
+        throws Exception {
+        Swarm swarm = new Swarm(SWARM_ID, CONTROLLER_INSTANCE, "cid", "run-1");
+        swarm.attachTemplate(new io.pockethive.orchestrator.domain.SwarmTemplateMetadata(
+            "tpl-1", "swarm-controller:latest", java.util.List.of()));
+        registry.register(swarm);
+        if (phase == Phase.START) {
+            tracker.expectStart(SWARM_ID, "corr", "idem", Duration.ZERO);
+        } else {
+            tracker.expectStop(SWARM_ID, "corr", "idem", Duration.ZERO);
+        }
+
+        listener.checkTimeouts();
+
+        verify(publisher, times(2)).publishEvent(eventCaptor.capture());
+        List<EventMessage> events = eventCaptor.getAllValues();
+        CommandOutcome outcome = mapper.readValue(events.getFirst().payload().toString(), CommandOutcome.class);
+        AlertMessage alert = mapper.readValue(events.get(1).payload().toString(), AlertMessage.class);
+        assertThat(outcome.type()).isEqualTo(operation);
+        assertThat(outcome.correlationId()).isEqualTo("corr");
+        assertThat(outcome.data()).containsEntry("status", "Failed");
+        assertThat(outcome.data()).containsEntry("retryable", true);
+        assertThat(alert.correlationId()).isEqualTo("corr");
+        assertThat(alert.idempotencyKey()).isEqualTo("idem");
+        assertThat(alert.data().code()).isEqualTo("timeout");
+        assertThat(alert.data().message()).isEqualTo(expectedMessage);
+        assertThat(alert.data().context()).containsEntry("phase", expectedPhase);
+        assertThat(registry.find(SWARM_ID)).map(Swarm::getStatus)
+            .contains(SwarmLifecycleStatus.FAILED);
+        assertThat(tracker.complete(SWARM_ID, phase)).isEmpty();
     }
 
 		    @Test

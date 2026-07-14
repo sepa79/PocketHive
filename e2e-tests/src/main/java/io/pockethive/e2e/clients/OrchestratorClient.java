@@ -2,6 +2,7 @@ package io.pockethive.e2e.clients;
 
 import java.net.URI;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -151,13 +152,19 @@ public final class OrchestratorClient {
   }
 
   public record ControlResponse(String correlationId, String idempotencyKey, Watch watch, long timeoutMs) {
-
-    public Watch watch() {
-      return watch == null ? new Watch(null, null) : watch;
+    public ControlResponse {
+      watch = Objects.requireNonNull(watch, "watch");
     }
   }
 
-  public record Watch(String successTopic, String errorTopic) {
+  public record Watch(String successTopic, List<String> errorTopics) {
+    public Watch {
+      successTopic = Objects.requireNonNull(successTopic, "successTopic");
+      errorTopics = List.copyOf(Objects.requireNonNull(errorTopics, "errorTopics"));
+      if (successTopic.isBlank() || errorTopics.isEmpty()) {
+        throw new IllegalArgumentException("Watch requires a success topic and at least one error topic");
+      }
+    }
   }
 
   public record ControlRequest(String idempotencyKey, String notes) {

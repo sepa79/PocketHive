@@ -30,6 +30,16 @@ Timestamp: 2026-07-10T13:36:56Z
 - Tooling and tests: include validator evidence in UI/MCP contracts, update E2E
   scenario creation payloads, and align the PocketHive MCP package with release
   0.15.35.
+- Swarm lifecycle errors: surface correlated start/stop failures in the Hive UI
+  with human-readable messages, advertise every relevant alert topic in control
+  responses, and emit structured command-failure context for dispatch,
+  rejection, confirmation, and outcome-finalization paths.
+- Swarm stop reliability: serialize lifecycle mutations per swarm and make stop
+  completion atomic and idempotent so concurrent status/outcome handling cannot
+  produce a false `STOPPING -> STOPPING` runtime alert.
+- Logging cleanup: remove the orphaned Logstash encoder dependency and JSON
+  appender from Network Proxy Manager after retirement of the central log
+  aggregation stack.
 - Release: bump PocketHive patch version to 0.15.35 for scenario validation
   hardening and evidence.
 

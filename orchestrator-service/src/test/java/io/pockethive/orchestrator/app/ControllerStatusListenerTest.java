@@ -86,9 +86,8 @@ class ControllerStatusListenerTest {
             }
 	            """;
         listener.handle(json, "event.metric.status-delta.sw1.swarm-controller.inst1");
-        // STOPPED + workloadsEnabled=false should map to STOPPING -> STOPPED
-        verify(store).updateStatus("sw1", SwarmLifecycleStatus.STOPPING);
-        verify(store).updateStatus("sw1", SwarmLifecycleStatus.STOPPED);
+        // STOPPED + workloadsEnabled=false uses the atomic STOPPING -> STOPPED transition.
+        verify(store).markStopped("sw1");
     }
 
     @Test

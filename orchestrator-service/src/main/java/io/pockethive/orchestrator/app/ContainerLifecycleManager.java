@@ -440,14 +440,8 @@ public class ContainerLifecycleManager {
 
     public void stopSwarm(String swarmId) {
         store.find(swarmId).ifPresent(swarm -> {
-            SwarmLifecycleStatus current = swarm.getStatus();
-            if (current == SwarmLifecycleStatus.STOPPING || current == SwarmLifecycleStatus.STOPPED) {
-                log.info("swarm {} already {}", swarmId, current);
-                return;
-            }
             log.info("marking swarm {} as stopped", swarmId);
-            store.updateStatus(swarmId, SwarmLifecycleStatus.STOPPING);
-            store.updateStatus(swarmId, SwarmLifecycleStatus.STOPPED);
+            store.markStopped(swarmId);
         });
     }
 

@@ -14,6 +14,7 @@ import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.consumer.ControlSignalEnvelope;
 import io.pockethive.controlplane.manager.ManagerControlPlane;
 import io.pockethive.controlplane.messaging.AmqpControlPlanePublisher;
+import io.pockethive.controlplane.messaging.CommandOutcomePolicy;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import io.pockethive.controlplane.messaging.EventMessage;
 import io.pockethive.controlplane.messaging.SignalMessage;
@@ -613,8 +614,10 @@ public class SwarmSignalListener {
     if (status != null) {
       details.put("status", status.name());
     }
-    log.warn("Rejecting {} for swarm {} (initialized={}, ready={}, pendingConfigUpdates={}, status={})",
-        resolvedSignal, swarmIdFallback, initialized, ready, pendingConfigUpdates,
+    log.warn("[CTRL] command rejected operation={} phase={} code={} message={} swarmId={} role={} instance={} correlationId={} idempotencyKey={} retryable={} initialized={} ready={} pendingConfigUpdates={} status={}",
+        resolvedSignal, phaseForSignal(resolvedSignal), CommandOutcomePolicy.STATUS_NOT_READY,
+        "Swarm controller is not ready for this operation", swarmIdFallback, role, instanceId,
+        cs.correlationId(), cs.idempotencyKey(), true, initialized, ready, pendingConfigUpdates,
         status != null ? status.name() : "unknown");
     Boolean enabled = null;
     if (ControlPlaneSignals.CONFIG_UPDATE.equals(resolvedSignal)) {

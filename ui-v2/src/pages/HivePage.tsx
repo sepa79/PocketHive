@@ -28,6 +28,13 @@ import {
 } from '../lib/networkProxy'
 import { latestJournalIssue, type SwarmJournalEntry } from '../lib/journal'
 import { getSwarmJournalPage } from '../lib/journalApi'
+import { getWireLogEntries, subscribeWireLog } from '../lib/controlPlane/wireLogStore'
+import {
+  parseSwarmLifecycleControlResponse,
+  pendingSwarmLifecycleFeedback,
+  resolveSwarmLifecycleFeedback,
+  type SwarmLifecycleFeedback,
+} from '../lib/swarmLifecycleAction'
 
 const HIVE_EXPLAIN_KEY = 'PH_UI_HIVE_EXPLAIN'
 
@@ -451,6 +458,7 @@ export function HivePage() {
   const [showCreate, setShowCreate] = useState(false)
   const [busySwarm, setBusySwarm] = useState<string | null>(null)
   const [busyAction, setBusyAction] = useState<SwarmAction | null>(null)
+  const [lifecycleFeedback, setLifecycleFeedback] = useState<Record<string, SwarmLifecycleFeedback>>({})
   const [selectedScenario, setSelectedScenario] = useState<ScenarioDefinition | null>(null)
   const [scenarioError, setScenarioError] = useState<string | null>(null)
   const [scenarioLoading, setScenarioLoading] = useState(false)
@@ -726,11 +734,36 @@ export function HivePage() {
     return () => window.clearInterval(handle)
   }, [loadNetworkState, selectedSwarmId])
 
+  const refreshLifecycleFeedback = useCallback((entries = getWireLogEntries()) => {
+    setLifecycleFeedback((current) => {
+      let changed = false
+      const next = { ...current }
+      Object.entries(current).forEach(([swarmId, feedback]) => {
+        const resolved = resolveSwarmLifecycleFeedback(feedback, entries)
+        if (resolved !== feedback) {
+          next[swarmId] = resolved
+          changed = true
+        }
+      })
+      return changed ? next : current
+    })
+  }, [])
+
+  useEffect(() => {
+    const unsubscribe = subscribeWireLog(refreshLifecycleFeedback)
+    const timeoutCheck = window.setInterval(() => refreshLifecycleFeedback(), 1000)
+    return () => {
+      unsubscribe()
+      window.clearInterval(timeoutCheck)
+    }
+  }, [refreshLifecycleFeedback])
+
   const runSwarmAction = useCallback(
     async (swarm: SwarmSummary, action: SwarmAction) => {
       if (!swarm.id) return
       setBusySwarm(swarm.id)
       setBusyAction(action)
+      setMessage(null)
       try {
         const response = await fetch(
           `${ORCHESTRATOR_BASE}/swarms/${encodeURIComponent(swarm.id)}/${action}`,
@@ -743,7 +776,14 @@ export function HivePage() {
         if (!response.ok) {
           throw new Error(await readErrorMessage(response))
         }
-        setMessage(`${action} request accepted for ${swarm.id}.`)
+        if (action === 'start' || action === 'stop') {
+          const controlResponse = parseSwarmLifecycleControlResponse(await response.json())
+          const pending = pendingSwarmLifecycleFeedback(swarm.id, action, controlResponse)
+          const resolved = resolveSwarmLifecycleFeedback(pending, getWireLogEntries())
+          setLifecycleFeedback((current) => ({ ...current, [swarm.id]: resolved }))
+        } else {
+          setMessage(`${action} request accepted for ${swarm.id}.`)
+        }
         void loadSwarms({ showLoading: true })
       } catch (err) {
         setMessage(err instanceof Error ? err.message : `Failed to ${action} swarm.`)
@@ -1128,7 +1168,8 @@ export function HivePage() {
               swarm.bees && swarm.bees.length > 0
                 ? swarm.bees.map((bee) => bee.role).filter(Boolean).join(', ')
                 : '—'
-            const isBusy = busySwarm === swarm.id
+            const actionFeedback = lifecycleFeedback[swarm.id]
+            const isBusy = busySwarm === swarm.id || actionFeedback?.status === 'pending'
             return (
               <div key={swarm.id} className="swarmCard">
                 <div className="swarmRow">
@@ -1218,6 +1259,15 @@ export function HivePage() {
                     </button>
                   </div>
                 </div>
+	                {actionFeedback ? (
+	                  <div
+	                    className={`swarmActionFeedback swarmActionFeedback-${actionFeedback.status}`}
+	                    role={actionFeedback.status === 'error' ? 'alert' : 'status'}
+	                  >
+	                    <span>{actionFeedback.message}</span>
+	                    {actionFeedback.code ? <code>{actionFeedback.code}</code> : null}
+	                  </div>
+	                ) : null}
 	                {selectedSwarmId === swarm.id && (
 	                  <div className="swarmDetail">
 	                    <SwarmIssueBox

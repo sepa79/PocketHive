@@ -115,7 +115,7 @@ function validateRouting(routingKey: string | undefined, envelope: ControlPlaneE
   if (!expectedPrefix) {
     return null
   }
-  const normalized = stripDestinationPrefix(routingKey)
+  const normalized = normalizeControlPlaneRoutingKey(routingKey)
   if (normalized.startsWith(expectedPrefix)) {
     return null
   }
@@ -138,7 +138,7 @@ function routingPrefix(envelope: ControlPlaneEnvelope) {
   return null
 }
 
-function stripDestinationPrefix(routingKey: string) {
+export function normalizeControlPlaneRoutingKey(routingKey: string) {
   const prefix = '/exchange/ph.control/'
   if (routingKey.startsWith(prefix)) {
     return routingKey.slice(prefix.length)

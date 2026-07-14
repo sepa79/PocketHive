@@ -8,6 +8,7 @@ import io.pockethive.control.ControlSignal;
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import io.pockethive.controlplane.ControlPlaneSignals;
+import io.pockethive.controlplane.messaging.Alerts;
 import io.pockethive.controlplane.messaging.ControlSignals;
 import io.pockethive.controlplane.messaging.EventMessage;
 import io.pockethive.controlplane.messaging.SignalMessage;
@@ -600,9 +601,9 @@ public class SwarmController {
 	            }
 	            ControlScope target = ControlScope.forInstance(swarmId, "swarm-controller", controllerInstance);
 	            ControlSignal payload = switch (signal) {
-	                case "swarm-start" -> ControlSignals.swarmStart(originInstanceId, target, corr, idempotencyKey);
-	                case "swarm-stop" -> ControlSignals.swarmStop(originInstanceId, target, corr, idempotencyKey);
-	                case "swarm-remove" -> ControlSignals.swarmRemove(originInstanceId, target, corr, idempotencyKey);
+	                case ControlPlaneSignals.SWARM_START -> ControlSignals.swarmStart(originInstanceId, target, corr, idempotencyKey);
+	                case ControlPlaneSignals.SWARM_STOP -> ControlSignals.swarmStop(originInstanceId, target, corr, idempotencyKey);
+	                case ControlPlaneSignals.SWARM_REMOVE -> ControlSignals.swarmRemove(originInstanceId, target, corr, idempotencyKey);
 	                default -> throw new IllegalArgumentException("Unsupported lifecycle signal: " + signal);
 	            };
             String jsonPayload = toJson(payload);
@@ -628,10 +629,10 @@ public class SwarmController {
                 } catch (Exception ignore) {
                     // best-effort
                 }
-	            if ("swarm-start".equals(signal)) {
+	            if (ControlPlaneSignals.SWARM_START.equals(signal)) {
 	                store.markStartIssued(swarmId);
                 creates.expectStart(swarmId, corr, idempotencyKey, timeout);
-            } else if ("swarm-stop".equals(signal)) {
+            } else if (ControlPlaneSignals.SWARM_STOP.equals(signal)) {
                 creates.expectStop(swarmId, corr, idempotencyKey, timeout);
             }
         });
@@ -666,6 +667,9 @@ public class SwarmController {
             action.accept(correlation);
         } catch (RuntimeException e) {
             idempotency.rollback(swarmId, signal, idempotencyKey, correlation);
+            log.warn("[CTRL] command failure operation={} phase=dispatch code={} message={} swarmId={} role=orchestrator instance={} correlationId={} idempotencyKey={} retryable=true errorType={}",
+                signal, e.getClass().getSimpleName(), e.getMessage(), swarmId, originInstanceId,
+                correlation, idempotencyKey, e.getClass().getName(), e);
             throw e;
         }
 
@@ -684,11 +688,11 @@ public class SwarmController {
      * These values are documented in {@code docs/ORCHESTRATOR-REST.md#control-response}.
      */
     private ControlResponse.Watch watchFor(String signal, String swarmId) {
-        if ("swarm-create".equals(signal)) {
+        if (ControlPlaneSignals.SWARM_CREATE.equals(signal)) {
             ConfirmationScope scope = new ConfirmationScope(swarmId, "orchestrator", originInstanceId);
             return new ControlResponse.Watch(
-                ControlPlaneRouting.event("outcome", "swarm-create", scope),
-                ControlPlaneRouting.event("alert", "alert", scope));
+                ControlPlaneRouting.event("outcome", ControlPlaneSignals.SWARM_CREATE, scope),
+                List.of(ControlPlaneRouting.event(Alerts.TYPE, Alerts.TYPE, scope)));
         }
         String controllerInstance = store.find(swarmId)
             .map(Swarm::getInstanceId)
@@ -697,9 +701,15 @@ public class SwarmController {
             throw new IllegalStateException("Swarm " + swarmId + " is not registered with a controller instance");
         }
         ConfirmationScope scope = new ConfirmationScope(swarmId, "swarm-controller", controllerInstance);
+        List<String> errorTopics = new ArrayList<>();
+        errorTopics.add(ControlPlaneRouting.event(Alerts.TYPE, Alerts.TYPE, scope));
+        if (ControlPlaneSignals.SWARM_START.equals(signal) || ControlPlaneSignals.SWARM_STOP.equals(signal)) {
+            ConfirmationScope orchestratorScope = new ConfirmationScope(swarmId, "orchestrator", originInstanceId);
+            errorTopics.add(ControlPlaneRouting.event(Alerts.TYPE, Alerts.TYPE, orchestratorScope));
+        }
         return new ControlResponse.Watch(
             ControlPlaneRouting.event("outcome", signal, scope),
-            ControlPlaneRouting.event("alert", "alert", scope));
+            errorTopics);
     }
 
     /**
