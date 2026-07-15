@@ -18,7 +18,7 @@ class LiveIoConfigUpdateGuardTest {
     void allowsBootstrapIoConfigWhenPreviousRawConfigIsEmpty() {
         WorkerDefinition definition = definition(WorkerInputType.REDIS_DATASET, WorkerOutputType.REDIS);
 
-        assertThatCode(() -> LiveIoConfigUpdateGuard.validate(definition, Map.of(), redisIoConfig()))
+        assertThatCode(() -> LiveIoConfigUpdateGuard.validate(definition, Map.of(), redisIoConfig(), false))
             .doesNotThrowAnyException();
     }
 
@@ -28,7 +28,7 @@ class LiveIoConfigUpdateGuardTest {
         Map<String, Object> previous = redisInputConfig(1.0);
         Map<String, Object> update = Map.of("inputs", Map.of("redis", Map.of("ratePerSec", 2500.5)));
 
-        assertThatCode(() -> LiveIoConfigUpdateGuard.validate(definition, previous, update))
+        assertThatCode(() -> LiveIoConfigUpdateGuard.validate(definition, previous, update, false))
             .doesNotThrowAnyException();
     }
 
@@ -38,8 +38,85 @@ class LiveIoConfigUpdateGuardTest {
         Map<String, Object> previous = redisInputConfig(1.0);
         Map<String, Object> update = redisInputConfig(2.5);
 
-        assertThatCode(() -> LiveIoConfigUpdateGuard.validate(definition, previous, update))
+        assertThatCode(() -> LiveIoConfigUpdateGuard.validate(definition, previous, update, false))
             .doesNotThrowAnyException();
+    }
+
+    @Test
+    void allowsRedisDatasetListNameUpdateWhenWorkerIsDisabledInSingleSourceMode() {
+        WorkerDefinition definition = definition(WorkerInputType.REDIS_DATASET, WorkerOutputType.NONE);
+        Map<String, Object> previous = redisInputConfig(1.0);
+        Map<String, Object> update = Map.of("inputs", Map.of("redis", Map.of("listName", "ph:other")));
+
+        assertThatCode(() -> LiveIoConfigUpdateGuard.validate(definition, previous, update, false))
+            .doesNotThrowAnyException();
+    }
+
+    @Test
+    void rejectsRedisDatasetListNameUpdateWhenWorkerIsEnabled() {
+        WorkerDefinition definition = definition(WorkerInputType.REDIS_DATASET, WorkerOutputType.NONE);
+        Map<String, Object> previous = redisInputConfig(1.0);
+        Map<String, Object> update = Map.of("inputs", Map.of("redis", Map.of("listName", "ph:other")));
+
+        assertThatThrownBy(() -> LiveIoConfigUpdateGuard.validate(definition, previous, update, true))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("inputs.redis.listName")
+            .hasMessageContaining("enabled worker")
+            .hasMessageContaining("stop the swarm first");
+    }
+
+    @Test
+    void allowsUnchangedRedisDatasetListNameInFullFormWhileWorkerIsEnabled() {
+        WorkerDefinition definition = definition(WorkerInputType.REDIS_DATASET, WorkerOutputType.NONE);
+        Map<String, Object> previous = redisInputConfig(1.0);
+        Map<String, Object> update = redisInputConfig(2.5);
+
+        assertThatCode(() -> LiveIoConfigUpdateGuard.validate(definition, previous, update, true))
+            .doesNotThrowAnyException();
+    }
+
+    @Test
+    void rejectsRedisDatasetListNameUpdateInMultiSourceMode() {
+        WorkerDefinition definition = definition(WorkerInputType.REDIS_DATASET, WorkerOutputType.NONE);
+        Map<String, Object> previous = Map.of(
+            "inputs", Map.of(
+                "type", "REDIS_DATASET",
+                "redis", Map.of(
+                    "host", "redis",
+                    "port", 6379,
+                    "ssl", false,
+                    "listName", "",
+                    "sources", List.of(Map.of("listName", "ph:dataset", "weight", 1.0)),
+                    "pickStrategy", "ROUND_ROBIN",
+                    "ratePerSec", 1.0
+                )
+            )
+        );
+        Map<String, Object> update = Map.of("inputs", Map.of("redis", Map.of("listName", "ph:other")));
+
+        assertThatThrownBy(() -> LiveIoConfigUpdateGuard.validate(definition, previous, update, false))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("inputs.redis.listName")
+            .hasMessageContaining("single-source listName mode");
+    }
+
+    @Test
+    void rejectsInvalidRedisDatasetListNameUpdates() {
+        WorkerDefinition definition = definition(WorkerInputType.REDIS_DATASET, WorkerOutputType.NONE);
+        Map<String, Object> previous = redisInputConfig(1.0);
+
+        assertInvalid(
+            definition,
+            previous,
+            Map.of("inputs", Map.of("redis", Map.of("listName", " "))),
+            "inputs.redis.listName"
+        );
+        assertInvalid(
+            definition,
+            previous,
+            Map.of("inputs", Map.of("redis", Map.of("listName", " ph:other "))),
+            "inputs.redis.listName"
+        );
     }
 
     @Test
@@ -48,12 +125,6 @@ class LiveIoConfigUpdateGuardTest {
         Map<String, Object> previous = redisInputConfig(1.0);
 
         assertUnsafe(definition, previous, Map.of("inputs", Map.of("redis", Map.of("port", 6380))), "inputs.redis.port");
-        assertUnsafe(
-            definition,
-            previous,
-            Map.of("inputs", Map.of("redis", Map.of("listName", "ph:other"))),
-            "inputs.redis.listName"
-        );
     }
 
     @Test
@@ -66,7 +137,8 @@ class LiveIoConfigUpdateGuardTest {
         assertThatCode(() -> LiveIoConfigUpdateGuard.validate(
             definition,
             Map.of(),
-            Map.of("inputs", Map.of("redis", Map.of("ratePerSec", 2500.5)))
+            Map.of("inputs", Map.of("redis", Map.of("ratePerSec", 2500.5))),
+            false
         )).doesNotThrowAnyException();
     }
 
@@ -98,7 +170,8 @@ class LiveIoConfigUpdateGuardTest {
         assertThatCode(() -> LiveIoConfigUpdateGuard.validate(
             definition,
             previous,
-            Map.of("inputs", Map.of("csv", Map.of("ratePerSec", 2500.5)))
+            Map.of("inputs", Map.of("csv", Map.of("ratePerSec", 2500.5))),
+            false
         )).doesNotThrowAnyException();
         assertInvalid(
             definition,
@@ -160,7 +233,7 @@ class LiveIoConfigUpdateGuardTest {
             "inputs", Map.of("scheduler", Map.of("ratePerSec", 2500.5, "maxMessages", 250000, "reset", true))
         );
 
-        assertThatCode(() -> LiveIoConfigUpdateGuard.validate(definition, previous, update))
+        assertThatCode(() -> LiveIoConfigUpdateGuard.validate(definition, previous, update, false))
             .doesNotThrowAnyException();
     }
 
@@ -212,7 +285,7 @@ class LiveIoConfigUpdateGuardTest {
         Map<String, Object> update,
         String field
     ) {
-        assertThatThrownBy(() -> LiveIoConfigUpdateGuard.validate(definition, previous, update))
+        assertThatThrownBy(() -> LiveIoConfigUpdateGuard.validate(definition, previous, update, false))
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining(field)
             .hasMessageContaining("cannot change unsafe IO field");
@@ -224,7 +297,7 @@ class LiveIoConfigUpdateGuardTest {
         Map<String, Object> update,
         String field
     ) {
-        assertThatThrownBy(() -> LiveIoConfigUpdateGuard.validate(definition, previous, update))
+        assertThatThrownBy(() -> LiveIoConfigUpdateGuard.validate(definition, previous, update, false))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining(field)
             .hasMessageContaining("invalid operational IO field");

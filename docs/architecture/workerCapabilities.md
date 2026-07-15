@@ -62,10 +62,15 @@ One JSON (or YAML) **manifest per image**:
   `integer`, `json`. Do not use aliases such as `text` or `int`; capability
   manifest loading fails on unsupported type values.
 - `config[].liveMutable` is required and must be explicit. `true` means the field can be offered by
-  runtime live config editing; `false` means the field is authoring/startup configuration only.
+  runtime config editing; `false` means the field is authoring/startup configuration only. Runtime
+  enforcement may narrow an offered field further: `inputs.redis.listName` is shown by the generic
+  editor but may be changed only for an already-disabled, single-source Redis dataset worker. The UI
+  must block submission unless swarm status is explicitly `STOPPED`; MCP agents must establish the same
+  precondition with `swarm_get` rather than inferring completion from an accepted Stop request.
   For `inputs.*` / `outputs.*`, `true` is allowed only on operational live IO fields documented in
-  `docs/ARCHITECTURE.md`. IO wiring fields such as selectors, endpoints, source lists, credentials,
-  and output routes must be `liveMutable: false`.
+  `docs/ARCHITECTURE.md`. Except for the documented disabled-only Redis single-source `listName`, IO
+  wiring fields such as selectors, endpoints, source lists, credentials, and output routes must be
+  `liveMutable: false`.
 - Bundled capability manifests must not publish `config[].default` values for public scenario config.
   Runtime behaviour must come from explicitly provided scenario configuration, not from capability
   manifest defaults or worker fallback defaults.

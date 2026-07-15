@@ -35,6 +35,7 @@ import {
   resolveSwarmLifecycleFeedback,
   type SwarmLifecycleFeedback,
 } from '../lib/swarmLifecycleAction'
+import { changesRedisDatasetListName, isStoppedSwarmStatus } from '../lib/runtimeConfigGuard'
 
 const HIVE_EXPLAIN_KEY = 'PH_UI_HIVE_EXPLAIN'
 
@@ -841,6 +842,11 @@ export function HivePage() {
   const sendSelectedWorkerConfigUpdate = useCallback(
     async (patch: Record<string, unknown>) => {
       if (!configEditTarget) return
+      if (changesRedisDatasetListName(patch) && !isStoppedSwarmStatus(selectedSwarm?.status)) {
+        throw new Error(
+          `Stop swarm '${configEditTarget.swarmId}' before changing inputs.redis.listName. Current status: ${selectedSwarm?.status ?? 'unknown'}.`,
+        )
+      }
       setConfigEditBusy(true)
       setMessage(null)
       try {
@@ -870,7 +876,7 @@ export function HivePage() {
         setConfigEditBusy(false)
       }
     },
-    [configEditTarget, loadSnapshot, loadSwarms],
+    [configEditTarget, loadSnapshot, loadSwarms, selectedSwarm?.status],
   )
 
   useEffect(() => {

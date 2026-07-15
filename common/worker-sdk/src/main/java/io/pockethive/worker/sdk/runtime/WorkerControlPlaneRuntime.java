@@ -415,7 +415,12 @@ public final class WorkerControlPlaneRuntime {
                 if (patch.resetRequested()) {
                     LiveIoConfigUpdateGuard.validateReset(state.definition(), state.rawConfig());
                 } else {
-                    LiveIoConfigUpdateGuard.validate(state.definition(), state.rawConfig(), canonicalUpdate);
+                    LiveIoConfigUpdateGuard.validate(
+                        state.definition(),
+                        state.rawConfig(),
+                        canonicalUpdate,
+                        previousEnabled
+                    );
                 }
                 ConfigMerger.ConfigMergeResult mergeResult = configMerger.merge(
                     state.definition(),

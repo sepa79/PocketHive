@@ -279,6 +279,19 @@ class RedisDataSetWorkInputTest {
     }
 
     @Test
+    void appliesExplicitSingleSourceListNameUpdate() {
+        RedisDataSetInputProperties properties = baseProperties();
+        input = inputFor(properties);
+
+        input.applyRawConfigOverrides(Map.of(
+            "inputs", Map.of("redis", Map.of("listName", "cards.TOP"))
+        ));
+
+        assertThat(properties.getListName()).isEqualTo("cards.TOP");
+        assertThat(properties.getSources()).isEmpty();
+    }
+
+    @Test
     void rejectsMalformedRawScalarUpdateWithoutApplyingPartialChanges() {
         assertMalformedRawUpdateKeepsListName(Map.of("host", " "));
         assertMalformedRawUpdateKeepsListName(Map.of("port", "not-a-port"));

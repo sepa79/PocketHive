@@ -1,5 +1,5 @@
 schemaVersion: "1.0"
-capabilitiesVersion: "1.2"
+capabilitiesVersion: "1.3"
 role: io-redis-dataset
 image:
   name: io-redis-dataset
@@ -45,13 +45,13 @@ config:
       group: Redis
   - name: inputs.redis.listName
     type: string
-    liveMutable: false
+    liveMutable: true
     required: true
     allowBlank: true
     ui:
       label: Redis list (single source)
       group: Redis
-      help: "Single-source mode. Use listName OR sources, never both."
+      help: "Single-source mode. Stop the swarm before changing this list manually. Use listName OR sources, never both."
   - name: inputs.redis.sources
     type: json
     liveMutable: false

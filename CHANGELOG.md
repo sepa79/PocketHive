@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+- Redis dataset runtime config: expose manual `inputs.redis.listName` editing
+  through the existing capability-driven form for stopped single-source
+  workers, while keeping `sources[]`, connection settings, and source-mode
+  conversion immutable at runtime.
+- Hive UI and MCP safety: block Redis `listName` submission unless swarm status
+  is explicitly `STOPPED`, require MCP agents to verify that state with
+  `swarm_get`, and retain the worker-side guard as the authoritative race-safe
+  enforcement boundary.
+
 ## [0.15.35]
 Timestamp: 2026-07-10T13:36:56Z
 

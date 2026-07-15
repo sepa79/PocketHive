@@ -213,14 +213,20 @@ The tables below describe the canonical `data` shapes for the message kinds/type
 - A running worker may accept only an explicit allowlist of operational live fields. Current safe IO
   fields are scheduler `inputs.scheduler.ratePerSec`, `inputs.scheduler.maxMessages`,
   `inputs.scheduler.reset`, Redis dataset `inputs.redis.ratePerSec`, and CSV dataset
-  `inputs.csv.ratePerSec`. Enable/disable remains controlled by the config-update `enabled` flag.
+  `inputs.csv.ratePerSec`. Redis dataset `inputs.redis.listName` is the sole disabled-only IO exception:
+  it may change only for an already-disabled, single-source worker, and the patch must not change any
+  other unsafe IO field. UI clients must block this patch unless swarm status is explicitly `STOPPED`.
+  MCP agents must verify `STOPPED` with `swarm_get`; dispatch acceptance of `swarm_stop` is not completion
+  evidence. Enable/disable remains controlled by the config-update `enabled` flag.
 - Capability manifests must mark each config entry with explicit `liveMutable: true|false`.
   Runtime UI may offer only `liveMutable: true` entries. For `inputs.*` / `outputs.*`, `true` is
   valid only for the operational live IO fields listed above; all IO wiring entries must be
   `liveMutable: false`.
-- Changing `inputs.type`, `outputs.type`, IO endpoints, source datasets, output routes, protocols, or
-  credentials requires restarting/rematerializing the worker or swarm. Do not emulate such changes with
-  fallback adapter switches or partial live rewiring.
+- Changing `inputs.type`, `outputs.type`, IO endpoints, multi-source datasets, output routes, protocols,
+  or credentials requires restarting/rematerializing the worker or swarm. The explicit disabled-only
+  `inputs.redis.listName` exception changes a single-source selection without changing the adapter,
+  endpoint, or source mode. Do not emulate other changes with fallback adapter switches or partial live
+  rewiring.
 
 **Command outcomes (`kind = outcome`) — current payloads**
 

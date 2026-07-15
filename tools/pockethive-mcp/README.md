@@ -100,6 +100,12 @@ names only. They are exposed only when `PH_MCP_TOOL_NAME_MODE=legacy` or
 `PH_MCP_TOOL_NAME_MODE=both` is set. Do not use those names in normal agent
 instructions or client integrations.
 
+Before using `component_config_update` to change `inputs.redis.listName`, call
+`swarm_get` and proceed only when it explicitly reports `STOPPED`. An accepted
+Stop request, worker inactivity, or stale observation is not sufficient. Do
+not infer or bypass this requirement; the worker rejects the field while it is
+enabled.
+
 ## Core Environment
 
 | Variable | Required | Purpose |

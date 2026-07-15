@@ -286,6 +286,11 @@ changed fingerprint.
 - `component_config_update` — sends a targeted runtime config-update through
   Orchestrator `POST /api/components/{role}/{instance}/config`.
 
+For `inputs.redis.listName`, agents must first call `swarm_get` and verify that
+the returned swarm status is explicitly `STOPPED`. An accepted `swarm_stop`
+request is not completion evidence. Running, transitional, unknown, or stale
+state must block the call; agents must not infer or bypass this rule.
+
 This is the same write path used by the web UI. Before sending the update, the
 MCP tool reads the latest exact `status-full` config for the target component.
 It first checks Orchestrator journal evidence and, when worker config snapshots

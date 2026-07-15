@@ -3275,11 +3275,11 @@ reg("component.config-preview", "Preview the merge-with-current-config plan for 
   };
 });
 
-reg("component.config-update", "Send a real-time config-update signal to one running component through the Orchestrator API used by the UI.", {
+reg("component.config-update", "Send a real-time config-update signal to one component through the Orchestrator API used by the UI. Before changing inputs.redis.listName, call swarm_get and proceed only when the swarm status is STOPPED; never infer or bypass this requirement.", {
   swarmId: SWARM_ID_ARG,
   role: z.string(),
   instanceId: z.string(),
-  patch: z.record(z.any()).describe("Config patch object, e.g. {enabled: true, ratePerSec: 10}"),
+  patch: z.record(z.any()).describe("Config patch object, e.g. {enabled: true, ratePerSec: 10}. A patch containing inputs.redis.listName is allowed only after swarm_get explicitly reports STOPPED."),
   idempotencyKey: z.string().optional(),
   notes: z.string().optional(),
   allowEmptyPatch: z.boolean().optional().describe("Defaults false. Set true only when an explicit empty config-update/reset is intended."),
@@ -3297,7 +3297,7 @@ reg("component.config-update", "Send a real-time config-update signal to one run
   });
 });
 
-reg("debug.config-update", "Compatibility alias for component.config-update.", {
+reg("debug.config-update", "Compatibility alias for component.config-update. Before changing inputs.redis.listName, verify STOPPED with swarm_get.", {
   swarmId: SWARM_ID_ARG,
   role: z.string(),
   instanceId: z.string(),

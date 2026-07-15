@@ -1500,7 +1500,7 @@ phase: 1.6
 ```yaml
 name: component_config_update
 class: public operational
-purpose: Send a real-time config-update signal to one running component through Orchestrator.
+purpose: Send a runtime config-update signal to one component through Orchestrator.
 input:
   required:
     swarmId: string
@@ -1542,6 +1542,11 @@ failureModes:
   - ORCHESTRATOR_UNAVAILABLE
 phase: 1.6
 ```
+
+Before a patch containing `inputs.redis.listName`, the agent must call
+`swarm_get` and verify an explicit `STOPPED` status. Dispatch acceptance from
+`swarm_stop` is not completion evidence. Running, transitional, unknown, or
+stale state must block the call; agents must not infer or bypass this rule.
 
 The tool must read the latest exact `status-full` config for the target
 component before sending an update. It may use journaled Orchestrator evidence
