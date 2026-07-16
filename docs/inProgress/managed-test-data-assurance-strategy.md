@@ -2,9 +2,10 @@
 
 Status: in progress — ready for manager review; implementation evidence pending
 
-Applies to: `managed-test-data-lifecycle-generic-spec.md`
+Applies to: `managed-test-data-lifecycle-generic-spec.md` and
+`managed-datasets-operator-ui-design-spec.md`
 
-Last updated: 2026-07-15
+Last updated: 2026-07-16
 
 ## 1. Purpose and authority
 
@@ -19,6 +20,8 @@ acceptance criteria:
 - section 27 defines the core feature MVP, the separate mandatory sensitive
   profile gate, and deferred claims;
 - section 28 defines the numbered release/claim gates;
+- the operator UI design companion defines the normative `DSUI` child
+  requirements for `FUN-014` and every wireframe-supported view/state;
 - this document defines the risk model, oracles, charters, checks, debrief, and
   confidence standard used to satisfy those gates.
 
@@ -54,10 +57,10 @@ Use SFDIPOT to avoid testing only the happy-path API:
 
 | Dimension | Managed-Dataset model and questions |
 |---|---|
-| **Structure** | Scenario Manager definitions, the Orchestrator-owned Managed Dataset bounded module, PostgreSQL, RabbitMQ, Swarm Controllers, common contracts/SDKs, workers/local projections, MCP, SUT/provider, volumes, clocks, keys. Which state belongs to the feature, which belongs to the wider platform, and what is reconstructed? |
-| **Functions** | Define, bind, provision, deduplicate, commit, publish, hydrate, select, refresh, quiesce, revoke, purge, prove, reconcile, recover. What happens before, during, and after each transition? |
-| **Data** | Schemas, classifications, versions, partitions/pools, records, generations, idempotency intent, claims/fences, snapshots/deltas, receipts, ciphertext, retention, evidence. Which representation can leak or become inconsistent? |
-| **Interfaces** | Official Orchestrator ingress and internal Dataset ports, JDBC, Rabbit protocol, common contracts, worker/manager SDKs, provider/SUT calls, MCP JSON, Docker/config/secret files, logs/metrics. Where can identity, scope, ordering, type, or redaction be lost? |
+| **Structure** | Scenario Manager definitions, the Orchestrator-owned Managed Dataset bounded module, PostgreSQL, RabbitMQ, Swarm Controllers, common contracts/SDKs, workers/local projections, authorised Orchestrator read models, production `ui-v2`, MCP, SUT/provider, volumes, clocks, keys. Which state belongs to the feature, which belongs to the wider platform, and what is reconstructed? |
+| **Functions** | Define, bind, evaluate fitness, provision, deduplicate, commit, publish, hydrate, select, refresh, quiesce, revoke, purge, prove, reconcile, recover, authorise/filter/aggregate status, inspect and diagnose. What happens before, during, and after each transition? |
+| **Data** | Schemas, Fitness Contracts/evaluations, classifications, versions, partitions/pools, records, generations, idempotency intent, claims/fences, snapshots/deltas, receipts, ciphertext, retention, evidence. Which representation can leak or become inconsistent? |
+| **Interfaces** | Official Orchestrator ingress and internal Dataset ports, canonical UI read DTOs, browser routes/cache/storage, JDBC, Rabbit protocol, common contracts, worker/manager SDKs, provider/SUT calls, MCP JSON, Docker/config/secret files, logs/metrics. Where can identity, scope, ordering, type, freshness, or redaction be lost? |
 | **Platform** | The Orchestrator container and shared JVM/heap/GC/thread pools, PostgreSQL/Rabbit pools, host CPU/RAM/disk/network, supported dependency versions, TLS/PKI, filesystem/volume and resource limits. Which shared resource or privilege can contaminate traffic or widen the trust boundary? |
 | **Operations** | Install, migrate, start, configure, rotate, scale, diagnose, back up, restore, upgrade, roll back, purge, revoke, incident response. Can an operator distinguish safe-idle, degraded, reconciling, and failed? |
 | **Time** | UTC/clock offset, validity, refresh budget, retry, lease, fence, credential/certificate/key rotation, offline horizon, retention, restart RTO, 24-hour run. What happens exactly at every boundary? |
@@ -103,6 +106,7 @@ finding or architecture change.
 | `R-TIME-ROLLBACK` | P0 | A restart, reference-clock loss, host rollback, leap/step, suspend, or stale time sample makes expired material appear usable again | `LIF-002`--`LIF-003`, `DUR-001`, `DUR-011`, `OPS-003` | Grade 4; restart/soak at Grade 5 |
 | `R-TRAFFIC-REPLAY` | P0 | Rabbit redelivery, worker restart, or operator replay produces an unrecognised duplicate external transaction; an integrity HMAC is mistaken for uniqueness or exactly-once delivery | `FUN-005`, `FUN-011`, `DUR-002`--`DUR-003`, `EVD-006` | Grade 4; endurance at Grade 5 |
 | `R-DATA-QUALITY` | P0 | Incorrect mapping, coercion, default, relationship, uniqueness, classification, or batch atomicity creates plausible but wrong records and misleading traffic | `FUN-001`--`FUN-003`, `FUN-009`--`FUN-010`, `SEC-001` | Grade 4 with independent mapper oracle |
+| `R-FITNESS` | P0 | A count-only, stale, wrong-version or weakly evidenced decision marks a Dataset ready although it is unfit for the binding's declared environment and use | `FUN-010`, `FUN-013`, `LIF-001`--`LIF-004`, `OPS-003` | Grade 4; continuity at Grade 5 in `Q-MVP-1K-24H` |
 | `R-SNAPSHOT-INTEGRITY` | P0 | A truncated, duplicated, mixed, forged, rolled-back, or semantically incomplete snapshot passes transport checks and becomes selectable | `FUN-004`, `DUR-002`, `DUR-010`, `EVD-001` | Grade 4 |
 | `R-AUTHZ-ORACLE` | P0 | Product and test use the same defective policy implementation, so a cross-scope allow or required deny appears correct | `FUN-001`, `SEC-003`, `SEC-008` | Grade 4 with independently implemented policy oracle |
 | `R-DELETION-RESURRECTION` | P0 | An MVP tombstone loses to a stale delta, retained local projection, worker rejoin, key-retained row, or external reconciliation and the deleted record becomes selectable again | `LIF-012`, `DUR-010`, `OPS-004` | Grade 4 |
@@ -131,6 +135,11 @@ finding or architecture change.
 | `R-LIVENESS-RECOVERY` | P1 | The shared Orchestrator container remains running but unhealthy, embedded-module recovery ownership is ambiguous, or crash-loop remediation creates duplicate or unsafe Dataset work | `DUR-004`--`DUR-005`, `OPS-002`--`OPS-005`, `OPS-007`; add `OPS-009` only for platform recovery | Grade 4 for feature scope |
 | `R-UPGRADE` | P1 | Schema/image/protocol/key-policy change or mixed-version rollout corrupts state, weakens policy, breaks rollback, or creates an untestable downgrade | `DUR-002`, `DUR-004`, `OPS-001`--`OPS-002`, `OPS-008` | Grade 4; restore/HA claim at Grade 5 |
 | `R-EVIDENCE-INTEGRITY` | P1 | An exported evidence pack is altered, backdated, selectively regenerated, omits a required child assertion, or is signed by an identity unrelated to the qualified build/profile | `EVD-003`--`EVD-005`, `EVD-008`--`EVD-009` | Grade 4 for exported enterprise claims |
+| `R-UI-FALSE-STATE` | P0 | The operator UI fabricates, defaults, joins or mislabels a count, Fitness result, horizon, revision, decision or proof fact, causing a user to believe an unsafe/unproven Dataset or swarm is ready | `FUN-014`, `DSUI-DATA-*`, `DSUI-SEM-*`, `DSUI-VIEW-*`, `DSUI-STATE-*` | Grade 4 |
+| `R-UI-SCOPE-LEAK` | P0 | Server/client filtering, totals, facets, consumer links, cache reuse or proof queries reveal a hidden Dataset/swarm scope or sensitive value | `FUN-014`, `DSUI-API-002`--`003`, `DSUI-SEC-*` | Grade 4 with independent auth oracle and browser canaries |
+| `R-UI-STALE` | P1 | A stale, partial, reconciling or unavailable response continues to appear current/green, extends `safeUntil`, or loses durable truth across restart | `FUN-014`, `DSUI-STATE-*`, `DSUI-PERF-006` | Grade 4; endurance at Grade 5 |
+| `R-UI-LOAD` | P1 | Inventory joins, proof generation, polling or many browser sessions exhaust the shared Orchestrator read/JDBC/heap bulkhead and distort traffic/control results | `FUN-014`, `DSUI-ARCH-002`, `DSUI-PERF-*`, `PER-008`, `PER-010` | Grade 5 |
+| `R-UI-EXCLUSION` | P2 | Width, zoom, keyboard, focus, colour, timing or screen-reader behavior hides an operational reason or prevents diagnosis | `FUN-014`, `DSUI-A11Y-*` | Grade 3 plus exploratory accessibility review |
 | `R-OPERABILITY` | P2 | Status cannot distinguish idle, warming, degraded, starved, uncertain, and reconciling or cannot identify the safe action | `OPS-001`--`OPS-009`, sections 18, 22, 30 | Grade 3 plus exploratory review |
 
 The risk owner records evidence gained, new uncertainty, residual exposure, and
@@ -292,6 +301,7 @@ oracles. They corroborate a mechanism; they cannot pass a PocketHive criterion.
 | Source effect happened once | source operation status/receipt | provider/SUT-double append-only ledger or provider idempotency/status record |
 | Supply reached the exact current producer topology | Dataset-module lease/outbox/publish status | Swarm Controller topology/lease ledger, exact `DATASET_SUPPLY_QUORUM_V1` Rabbit arguments/exchange/routing capture and producer-incarnation receipt |
 | Mapped record is semantically correct | Dataset-module receipt, schema result, material projection | separately implemented reference mapper plus provider/source record, relationship and classification ledger |
+| Dataset is fit for its declared use | exact Fitness Contract reference/digest, evaluation ID/input-vector digest, state, `safeUntil`, bounded reasons and evidence references | independently implemented evaluator over the frozen contract, authoritative Dataset snapshot, source/provenance ledgers, trusted time and exact binding environment/use |
 | Record is durable | Dataset-module receipt/proof | read-only PostgreSQL invariant query before and after Orchestrator process/container restart |
 | Hint reached broker | outbox/publish state | Rabbit test capture, return/confirm state, queue counters |
 | Snapshot is complete and authentic | Dataset-module page/hash status and worker-ready acknowledgement | independently generated manifest over exact scope, revision, schema/projection version, ordered record identities, counts, bytes, page ranges and delta-chain continuity |
@@ -369,6 +379,17 @@ Continuously check these properties:
   `DUR-009`/`OPS-009`, not an implied
   consequence of the Dataset feature invariant above;
 - an optional/missing Dataset cannot make a required Dataset ready;
+- authoritative Dataset fitness `PASS` is necessary but not sufficient for
+  binding readiness; `FAIL` or `UNKNOWN` cannot become ready or satisfy the
+  start gate, irrespective of inventory count;
+- under frozen evidence and trusted time, removing required fitness evidence,
+  making an assertion stricter, or reducing an eligible cohort cannot improve
+  the fitness result;
+- `FAIL` invalidates active use; `UNKNOWN` cannot activate a new binding or
+  revision, and an already-running input can continue only on its exact
+  manifest-bound prior-`PASS` view strictly before the frozen `safeUntil`;
+- changing the Dataset Fitness Contract version/digest invalidates an earlier
+  result for that binding until the exact new version is evaluated;
 - `dataset-qualified-core` rejects `SENSITIVE_TEST` before persistence,
   provisioning, hydration or send, and only a passed exact
   `Q-SENSITIVE-ENTERPRISE-v1` profile can change that eligibility;
@@ -442,6 +463,10 @@ nice-to-have diagnostics:
   limiting;
 - a versioned reference mapper/data-quality oracle and independently implemented
   authorization policy evaluator with seeded-defect mutation suites;
+- a versioned, independently implemented Dataset Fitness Contract evaluator
+  with frozen authoritative inputs and mutation fixtures for every assertion,
+  outcome and reason code, plus signed-manifest receipt controls for evaluation
+  ID, input-vector digest, result and exact `safeUntil` boundaries;
 - named fault hooks around every `DUR-002` boundary;
 - immutable commit/operation/revision/membership IDs and stable reason codes;
 - a Swarm Controller topology/lease harness that can register, renew, expire,
@@ -580,6 +605,8 @@ questions during debrief.
 | `CH-30 Supply route/topology` | Register, renew, expire, revoke, replay and supersede a `SupplyRouteLease`; mutate scope/binding version/operation kind/epoch/incarnation and swap topology during dispatch; attempt raw/inferred routes; pre-create classic/unbounded/wrong-argument queues and seek silent delete/recreate/downgrade or `PRECONDITION_FAILED` retry loops | independent Swarm Controller topology/lease ledger, exact Rabbit descriptor/route capture, producer receipt and provider ledger | 210 min |
 | `CH-31 Q-PLATFORM-RECOVERY-v1` | Only when `Q-PLATFORM-RECOVERY-v1` is requested, stop a dynamic Swarm Controller, its Orchestrator owner, Docker and host before/after desired-runtime and every create/config/start/stop/remove command boundary; inject competing/stale controller incarnations, missing/duplicate actual instances, running-unhealthy and crash loops; attempt mutation/dispatch before exact plan/config/worker/topology/lease convergence | durable command/desired-runtime rows, Orchestrator/controller journals, Docker events/inventory, controller/route/worker state and provider/DB ledgers | 210 min |
 | `CH-32 Profile gate` | Under `dataset-qualified-core`, submit `SENSITIVE_TEST`, downgrade/mislabel classifications, forge or replay qualification state, change build/image/profile after qualification and query UI/API/MCP claims; then repeat on the exact enterprise-sensitive candidate with one required child assertion removed at a time | independent applicability/evidence evaluator, official admission/status/MCP APIs, DB/Rabbit/canary scan and signed manifest | 180 min per release gate |
+| `CH-33 Dataset fitness` | With adequate counts, attempt start and selection under wrong cohort, broken relationships, stale/short-lived records, missing provenance/classification, wrong environment/use, `FAIL`, `UNKNOWN`, forged/mismatched receipt and superseded contract. Cross the exact `safeUntil`, require zero unsafe sink use, recover to `PASS`, and repeat through refresh, outage and restart | frozen Fitness Contract, independent evaluator, authoritative Dataset/source/provenance snapshots, trusted time, manifest/activation receipt, worker I/O detector, readiness and external traffic sink | 180 min per contract version |
+| `CH-34 Operator UI truth` | Across inventory, all five detail tabs, Dataset dependencies and Runtime Inspector, remove/contradict/stale each authority; vary auth scope, pagination, restart, reconciling, partial facts, exact time/revision boundaries, hostile labels, cache identity, 429/503/schema errors, width/zoom/keyboard and concurrent polling. Seek any dummy/default value, cross-view contradiction, hidden-scope leak, client-inferred decision, inaccessible reason or traffic/control interference | canonical API/DOM field-lineage comparison, independent Dataset/Fitness/binding/auth/proof oracles, browser network/storage/accessibility evidence, release-bundle scan and paired load telemetry | 210 min plus polling block |
 
 ### 7.1 Charter traceability
 
@@ -617,6 +644,8 @@ questions during debrief.
 | `CH-30` | `R-SUPPLY-ROUTE`, `R-SUPPLY-TOPOLOGY`, `R-SCOPE`, `R-DURABLE` | `FUN-012`, `DUR-003`, `PER-008`, `OPS-002`, `OPS-006` |
 | `CH-31` | `R-RUNTIME-OWNER`, `R-CONTROLLER`, `R-LIVENESS-RECOVERY` (`Q-PLATFORM-RECOVERY-v1` only) | platform-scoped children of `DUR-004`--`DUR-005`, plus `DUR-009`, `OPS-007`, `OPS-009` |
 | `CH-32` | `R-SENSITIVE-ADMISSION`, `R-CLAIM-INFLATION`, `R-LEAK` | section 27.4, applicable MVP rows, `SEC-002`, `SEC-004`--`SEC-005`, `SEC-007`, `SEC-012`--`SEC-015`, `EVD-008`--`EVD-009` |
+| `CH-33` | `R-FITNESS`, `R-DATA-QUALITY`, `R-FALSE-PROOF`, `R-MEASURE` | `FUN-010`, `FUN-013`, `LIF-001`--`LIF-004`, `OPS-003`, `PER-001`, `EVD-001`--`EVD-004` |
+| `CH-34` | `R-UI-FALSE-STATE`, `R-UI-SCOPE-LEAK`, `R-UI-STALE`, `R-UI-LOAD`, `R-UI-EXCLUSION` | `FUN-014` and every applicable `DSUI-*` requirement |
 
 When a charter finds a new credible risk, stop following the table mechanically:
 capture a minimal reproducer, assess blast radius, update the model/register,
@@ -661,6 +690,10 @@ Use this checklist during both automated design and exploratory sessions:
   wrong parent/child, many-to-one and one-to-many cardinality, missing/default/
   null/coercion, classification/projection mismatch, per-item versus batch
   atomicity, partial rejection, cross-category skew.
+- **Fitness**: sufficient count with the wrong cohort, broken relationship,
+  stale record, inadequate remaining validity, unverified provenance or
+  classification, forbidden environment/use, missing/contradictory evidence,
+  `PASS`/`FAIL`/`UNKNOWN`, contract supersession and evaluation outage.
 - **Time/restart**: reference unavailable/stale, host wall-clock rollback,
   monotonic reset, suspend/hibernate, forward/backward step, maximum uncertainty,
   restart before a fresh sample, old persisted floor, certificate/time bootstrap
@@ -711,7 +744,8 @@ The performance tool must not pass by hiding work or omitting stalls.
    embedded Dataset-module build/configuration and common/SDK contract versions,
    record count/bytes/TTL, sharing pattern,
    refresh load, consumer validity requirements, selection/replay policy,
-   external-entity limits, MCP/control-plane background load,
+   external-entity limits, MCP/control-plane and qualified operator-UI read
+   background load,
    resource limits, numeric success/error/latency/resource/evidence SLOs,
    analysis/power method, SUT double, versions, and host. Prove the capacity SUT
    double can sustain at least twice the highest offered load independently.
@@ -780,13 +814,14 @@ oracles and fault realism.
 
 | Layer | Required checks |
 |---|---|
-| Contract/static | JSON/OpenAPI/AsyncAPI and executable common Dataset/mapping/selection/snapshot-manifest/`SupplyRouteLease`/`DATASET_SUPPLY_QUORUM_V1` compatibility; strict fields/types/ranges/default/null/coercion; architectural tests enforce the Orchestrator Dataset bounded-module ports and prevent SDK/common modules importing its persistence/application internals; exact three-tool read-only Dataset MCP catalogue with no value/write tool; closed reason codes; security/replay/decommission/release profile; no caller-authored route or Rabbit-argument fields; redaction model; dependency/image support; SBOM/secret/image scan |
-| Unit/property/model | trusted-time monotonicity across restart; validity-demand monotonicity; capacity, single Supply Policy/controller ownership and cumulative external-entity accounting; idempotency/replay intent; immutable-generation/temporal/decommission/tombstone state; claim/route fencing and send gate; Dataset PostgreSQL/outbox/schedule recovery; revision/snapshot/Dataset-auth activation; selector/stage canonicalization and digest vectors; release-gate monotonicity; selection distribution; canonical proof; encryption envelope/nonce allocation; durable desired Swarm Controller-runtime ownership only for its separate platform claim |
+| Contract/static | JSON/OpenAPI/AsyncAPI and executable common Dataset/Fitness Contract/mapping/selection/snapshot-manifest/`SupplyRouteLease`/`DATASET_SUPPLY_QUORUM_V1` compatibility; strict fields/types/ranges/default/null/coercion; architectural tests enforce the Orchestrator Dataset bounded-module ports and prevent SDK/common modules importing its persistence/application internals; exact three-tool read-only Dataset MCP catalogue with no value/write tool; all `DSUI` REST/read DTO and Java/TypeScript drift checks; production bundle/import scan proving no wireframe/test fixture; closed reason codes; security/replay/decommission/release profile; no caller-authored route or Rabbit-argument fields; redaction model; dependency/image support; SBOM/secret/image scan |
+| Unit/property/model | trusted-time monotonicity across restart; validity-demand and Fitness Contract controlled-change monotonicity under frozen evidence/time; capacity, single Supply Policy/controller ownership and cumulative external-entity accounting; idempotency/replay intent; immutable-generation/temporal/decommission/tombstone state; claim/route fencing and send gate; Dataset PostgreSQL/outbox/schedule recovery; revision/snapshot/Dataset-auth activation; selector/stage canonicalization and digest vectors; release-gate monotonicity; selection distribution; canonical proof; encryption envelope/nonce allocation; durable desired Swarm Controller-runtime ownership only for its separate platform claim |
 | Formal/model-based | executable custom-protocol model explores Dataset crash, reorder/loss, stale claim/lease/incarnation, PostgreSQL/outbox recovery, clock rollback, supersession, replay and MVP stale-state/tombstone resurrection; a separate platform extension explores desired/actual Swarm Controller-runtime divergence, and an isolated restore extension covers `Q-HA-RESTORE-v1`; every discovered counterexample has a regression scenario and documented implementation assumption |
-| Data/policy conformance | product mapper versus independent reference mapper for identity, relationships, classification, projection and batch accounting; product authorization versus independent access-matrix evaluator; mutation suite proves both oracles detect seeded defects |
-| Component | Dataset-schema constraints/expand-contract migrations/queries, claim concurrency, outbox relay and embedded-module restart reconciliation; common-contract serialization compatibility; worker-SDK bounded candidate/local hydration/atomic swap/safe-horizon/activation; manager-SDK DatasetGuard/readiness aggregation; Swarm Controller topology-to-lease registry; module-owned key/nonce rotation, snapshot manifest/pagination, direct source committer/refresh resolver, managed auth resolver and provider drift/cleanup adapters; desired-controller-runtime owner/reconciler only for the separate platform claim |
+| Data/policy conformance | product mapper versus independent reference mapper for identity, relationships, classification, projection and batch accounting; product Fitness Contract result versus the independent evaluator over frozen authoritative evidence; product authorization versus independent access-matrix evaluator; mutation suite proves every oracle detects seeded defects |
+| Component | Dataset-schema constraints/expand-contract migrations/queries, claim concurrency, outbox relay and embedded-module restart reconciliation; common-contract serialization compatibility; worker-SDK bounded candidate/local hydration/atomic swap/manifest-bound Fitness receipt/safe-horizon/activation; manager-SDK DatasetGuard/readiness aggregation; Swarm Controller topology-to-lease registry; module-owned key/nonce rotation, snapshot manifest/pagination, direct source committer/refresh resolver, managed auth resolver and provider drift/cleanup adapters; desired-controller-runtime owner/reconciler only for the separate platform claim |
 | Protocol/integration | mandatory Rabbit returns/confirms/acks/redelivery/replay; opaque `SupplyRouteLease` register/renew/revoke/rebind and publish race; canonical quorum descriptor drift and no-delete/recreate/downgrade behaviour; immutable transaction/idempotency identity; TLS/workload identity and CA/JWKS rotation; read-only MCP token exchange, RFC 8705 mTLS sender constraint, declared DPoP ingress and revocation; Orchestrator Dataset port-to-worker SDK scope; revision/auth activation; module liveness and controller lifecycle boundaries |
-| Official-ingress E2E | direct source path through the embedded module and current leased route to durable commit, coordinated hydration/auth/SUT use/proof, vars and admission, feature-scoped Orchestrator restart/reconciliation, restart-time rollback, stricter shared validity, traffic replay, external decommission/tombstone, static revalidation, core rejection of sensitive admission and Redis compatibility; exact interrupted swarm lifecycle is a separate platform suite |
+| Official-ingress E2E | direct source path through the embedded module and current leased route to durable commit, Fitness Contract evaluation, coordinated hydration/auth/SUT use/proof, vars and admission, feature-scoped Orchestrator restart/reconciliation, restart-time rollback, stricter shared validity, traffic replay, external decommission/tombstone, static revalidation, core rejection of sensitive admission and Redis compatibility; exact interrupted swarm lifecycle is a separate platform suite |
+| Operator UI | canonical response-to-DOM comparison for inventory, all five detail views, Swarm dependencies and real Runtime Inspector; every `DSUI` loading/current/background/stale/partial/reconciling/empty/denied/limited/unavailable/incompatible state; authorised totals/facets/cursors, no client decision inference, hostile identifiers, cache/storage identity changes, link/back/focus/keyboard/screen-reader/zoom/reflow and Firefox viewports; API/UI/MCP fact and denial convergence |
 | Security/adversarial | canaries; independent permissions/enumeration/audience/actor decisions, including zero-effect denial across existing generic workflow/swarm/MCP routes; attestation/canonicalization tamper/replay; early-auth/source serialization; hostile bounded read-only MCP loops; malformed inputs; proxy/SSRF; PKI/mTLS/DPoP replay; shared Orchestrator/Dataset process/container and Docker-control TCB compromise/artifacts; sensitive-profile denial while raw Docker control remains unmediated; unsafe profile rejection; crypto/key/manifest/restore faults |
 | Upgrade/recovery | clean install in the existing Orchestrator container; common/SDK/module compatibility; expand/migrate/contract; interrupted migration; supported rollback/forward repair; downgrade rejection; repeated Orchestrator running-unhealthy/startup crash and feature reconciliation; asymmetric partitions; MVP stale-node/tombstone non-resurrection; separately, platform swarm-command recovery and old-key/schema restore/deletion-manifest dominance for `Q-HA-RESTORE-v1` |
 | Performance/endurance | paired shared-JVM non-interference, open-loop knee, traffic plus Orchestrator control/authorization probes, CPU/allocation/heap/GC/executor/JDBC/Rabbit isolation, selection realism, unique external-effect reconciliation, validity starvation, revision churn, control/read-only-MCP bulkheads, cold-start/steady-state restart waves, refresh/cleanup maximum, 24-hour trends and recovery |
@@ -864,6 +899,7 @@ For `dataset-qualified-core`:
   specific grade;
 - scope, durable/idempotent accounting, claim and `SupplyRouteLease` fencing,
   trusted time, snapshot/final materialization, executable data semantics,
+  exact-version Dataset fitness and fail-closed readiness,
   traffic replay accounting, MVP tombstone/stale-state non-resurrection,
   external decommission, static-record drift, embedded Dataset-module
   PostgreSQL/outbox/schedule restart reconciliation and MCP truth: Grade 4;
@@ -871,8 +907,10 @@ For `dataset-qualified-core`:
   interference, bounded evidence load, refresh continuity and shared-
   infrastructure performance: Grade 5. The exact profile also demonstrates
   selection realism, validity fairness, unique external-effect reconciliation,
-  revision/control bulkheads, shared Orchestrator JVM/executor/pool
-  non-interference and bounded cumulative external entities;
+  fitness reevaluation before the earliest `safeUntil`, valid continuity or
+  safe pause through outage/restart, revision/control bulkheads, shared
+  Orchestrator JVM/executor/pool non-interference and bounded cumulative
+  external entities;
 - deployment/readiness/retention operations: at least Grade 3, raised by the
   applicable durability risk above; and Redis compatibility: Grade 4.
 
@@ -916,6 +954,11 @@ profile; a clean-install result cannot qualify them.
 Before a release or new support claim, confirm:
 
 - scope and security/data classification are explicit;
+- `FUN-014` and every applicable `DSUI` child have linked evidence; production
+  `ui-v2` uses only authorised canonical Orchestrator read models, contains no
+  wireframe/test-fixture fallback, exposes no Dataset value or mutation control,
+  implements every stale/partial/reconciling/denied/error/responsive state, and
+  passes `CH-34` plus the qualified UI polling non-interference workload;
 - the MVP Dataset MCP surface registers exactly `dataset_status`,
   `dataset_source_operation_status`, and `dataset_prove`; its untrusted client
   receives no Dataset values, secrets, credentials, approval or authority, and
@@ -961,6 +1004,12 @@ Before a release or new support claim, confirm:
 - dependency versions are supported, pinned, scanned, and identical to the run;
 - executable Dataset/mapping/selection contracts and independent mapper/policy
   oracle versions are frozen, mutation-qualified, and included in the manifest;
+- every required binding freezes the exact Dataset Fitness Contract reference
+  and digest; every assertion passes against independently checked authoritative
+  evidence; `FAIL` invalidates active use, while `UNKNOWN`, missing evidence or
+  a superseded version blocks start/new activation and permits only the exact
+  signed prior-`PASS` local view strictly before its `safeUntil`; the reported
+  proof contains no Dataset values;
 - the exact traffic replay profile is named; offered IDs, delivery attempts,
   idempotency keys and external business effects reconcile without an exactly-
   once implication for `AT_LEAST_ONCE`;
@@ -1029,6 +1078,7 @@ Build/spec commit and image digests:
 Host/deployment/dependency manifest:
 Embedded Dataset module and common/worker/manager SDK contract versions:
 Dataset/source/policy/security versions:
+Dataset Fitness Contract reference/digest, evaluation result and `safeUntil`:
 MCP evidence-client scope and cross-path authorization result:
 SupplyRouteLease issuer/policy and frozen plan/topology revision:
 Dataset PostgreSQL/outbox/schedule restart-reconciliation result:
