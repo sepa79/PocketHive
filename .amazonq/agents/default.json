@@ -53,7 +53,7 @@
     "@pockethive-bundles/debug_config_update",
     "@pockethive-bundles/debug_hive_journal",
     "@pockethive-bundles/debug_journal",
-    "@pockethive-bundles/debug_prometheus",
+    "@pockethive-bundles/metrics_query",
     "@pockethive-bundles/debug_queues",
     "@pockethive-bundles/debug_tap",
     "@pockethive-bundles/debug_tap_close",

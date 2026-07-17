@@ -39,7 +39,7 @@ Require concrete evidence before making any change:
    - `learning_get_recent` — fetch active learnings relevant to the feature/tool being worked on.
    - `issue_list` — check for open issues on this branch/feature. If a relevant open issue exists, factor it into the approach before proceeding.
 4. `tools.check` — verify docker, git, maven are available.
-5. `health.check` — confirm Orchestrator, Scenario Manager, RabbitMQ, and Prometheus are UP.
+5. `health.check` — confirm the configured PocketHive services are reachable.
    Also check `pockethiveRefStale` — if `true`, run `docs.refresh` to re-sync
    reference docs from the PocketHive repo before proceeding.
 3. **If targeting a remote stack** (non-localhost `POCKETHIVE_BASE_URL`):
@@ -130,9 +130,12 @@ Require concrete evidence before making any change:
     - Messages flow through all queues.
     - Postprocessor receives correctly structured responses.
     - No error patterns in logs.
-25. **Check metrics** (if `publish-all-metrics: true`) — `debug.prometheus` with query
-    `ph_transaction_total_latency_ms{ph_swarm="<swarmId>"}`. Verify results are non-empty.
-    Also try `ph_transaction_processor_success{ph_swarm="<swarmId>"}` to confirm success rate.
+25. **Check metrics** — call `metrics_query` with an explicit time range. Use
+    `{ swarmId: "<swarmId>", kind: "processor-runtime-summary", from: "now-15m", to: "now" }`
+    for aggregate processor activity and success ratio. Use `tx-outcomes-summary` when
+    `writeTxOutcomeToClickHouse: true` to verify transaction counts, success/failure totals,
+    and processor duration. Empty results mean no matching ClickHouse samples exist in the
+    requested time range. The tool accepts neither raw SQL nor PromQL.
 
 ### Phase 5: REWORK (Developer + Tester loop)
 
@@ -266,7 +269,7 @@ All tools are in the single `pockethive-bundles` MCP server.
 | Read worker logs | `debug.docker-logs` |
 | Read journal | `debug.journal` |
 | Send config update | `debug.config-update` |
-| Query Prometheus | `debug.prometheus` |
+| Query product metrics | `metrics_query` with explicit `swarmId`, summary `kind`, `from`, and `to` |
 
 ### Dev ops
 
