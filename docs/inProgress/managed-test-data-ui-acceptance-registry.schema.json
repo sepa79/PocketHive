@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:pockethive:schema:managed-test-data-ui-acceptance-registry:v1",
+  "title": "PocketHive Managed Test Data UI Acceptance Registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "registryId",
+    "status",
+    "parentRequirement",
+    "sources",
+    "requirements"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "./managed-test-data-ui-acceptance-registry.schema.json"
+    },
+    "schemaVersion": {
+      "const": "pockethive.managed-test-data-ui-acceptance-registry/v1"
+    },
+    "registryId": {
+      "const": "managed-test-data-ui-acceptance"
+    },
+    "status": {
+      "const": "DESIGN_BASELINE"
+    },
+    "parentRequirement": {
+      "const": "FUN-014"
+    },
+    "sources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lifecycleSpec", "uiSpec", "assuranceStrategy"],
+      "properties": {
+        "lifecycleSpec": {"type": "string", "minLength": 1},
+        "uiSpec": {"type": "string", "minLength": 1},
+        "assuranceStrategy": {"type": "string", "minLength": 1}
+      }
+    },
+    "requirements": {
+      "type": "array",
+      "minItems": 35,
+      "maxItems": 35,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/requirement"}
+    }
+  },
+  "$defs": {
+    "requirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "parent",
+        "sourceSection",
+        "category",
+        "applicability",
+        "minimumConfidenceGrade",
+        "primaryCharter",
+        "supportingCharters",
+        "risks",
+        "oracleIds",
+        "releaseGateIds"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^DSUI-(A11Y|API|ARCH|DATA|PERF|SEC|SEM|STATE|VIEW)-[0-9]{3}$"
+        },
+        "parent": {"const": "FUN-014"},
+        "sourceSection": {"const": "managed-datasets-operator-ui-design-spec.md#20-acceptance-requirements"},
+        "category": {
+          "enum": ["A11Y", "API", "ARCH", "DATA", "PERF", "SEC", "SEM", "STATE", "VIEW"]
+        },
+        "applicability": {"const": "REQUIRED_CORE"},
+        "minimumConfidenceGrade": {"type": "integer", "minimum": 3, "maximum": 5},
+        "primaryCharter": {
+          "enum": ["CH-34", "CH-35", "CH-36", "CH-37", "CH-38"]
+        },
+        "supportingCharters": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": ["CH-34", "CH-35", "CH-36", "CH-37", "CH-38", "CH-39", "CH-40"]
+          }
+        },
+        "risks": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^R-[A-Z0-9-]+$"}
+        },
+        "oracleIds": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "OR-EXT-EFFECT",
+              "OR-MAPPER",
+              "OR-FITNESS",
+              "OR-AUTHZ",
+              "OR-PG",
+              "OR-RABBIT",
+              "OR-TIME",
+              "OR-WORKER-SINK",
+              "OR-UI",
+              "OR-CANARY",
+              "OR-RESOURCE",
+              "OR-REGISTRY"
+            ]
+          }
+        },
+        "releaseGateIds": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"const": "dataset-qualified-core"}
+        }
+      }
+    }
+  }
+}

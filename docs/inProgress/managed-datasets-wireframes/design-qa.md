@@ -1,123 +1,138 @@
 # Managed Datasets wireframe design QA
 
-Scope note: this report covers visual fidelity and wireframe interactions only.
-It is not a production-data, API, authorisation, security, accessibility or
-operational-readiness pass. The normative semantic contract is
+## Scope and evidence boundary
+
+This report records source-level semantic, interaction and responsive review of
+the Managed Dataset planning wireframes. The normative contract is the
 [Managed Datasets Operator UI Design Specification](../managed-datasets-operator-ui-design-spec.md).
-Its section 22 amendments supersede any conflicting wireframe label or
-relationship, and production code may not reuse the fictional values or
-simulated Refresh/Logs/Inspect behavior in this folder.
+The repository-relative visual sources are the existing PocketHive
+[`ui-v2` stylesheet](../../../ui-v2/src/styles.css),
+[`AppShell`](../../../ui-v2/src/components/AppShell.tsx),
+[`TopBar`](../../../ui-v2/src/components/TopBar.tsx),
+[`SideNav`](../../../ui-v2/src/components/SideNav.tsx), and
+[`SwarmRuntimeInspector`](../../../ui-v2/src/pages/hive/SwarmRuntimeInspector.tsx).
 
-## Comparison target
+The root-level PNGs and `captures/spec-aligned/` set predate the current neutral
+fixture names and supply resize specimens. They remain comparison context only;
+this report makes source-level claims for the current change, not visual-capture
+claims.
 
-- Source visual truth: `/workspace/scratch/ec32db341c09/design-audit/01-dataset-inventory.png`
-- Primary implementation evidence: `captures/datasets-desktop-1440.png`
-- Matched QA implementation capture: `qa/implementation-datasets-1440x1040.png`
-- Viewport: Firefox, 1440 x 1040, dark theme, Dataset inventory, no filters
-- Full-view comparison: `qa/full-inventory-comparison.png` (source left,
-  implementation right)
-- Focused comparison: `qa/table-focus-comparison.png` (source table left,
-  implementation table right)
+This is not a production-data, API, authorisation, security, performance or
+accessibility qualification. Screenshots cannot establish WCAG conformance.
 
-Additional implementation evidence:
+## Remediation result
 
-- `captures/spec-aligned/00-all-desktop.png` — all seven required desktop views;
-- `captures/spec-aligned/00-all-mobile.png` — all seven required phone views,
-  with each selected detail panel brought into the capture viewport;
+| Surface | Source-level result | What changed |
+|---|---|---|
+| Inventory | Passed | `Dataset health` replaces ambiguous `Supply`; global start-block language was removed; consumer counts no longer conflate workers |
+| Responsive inventory | Passed | One semantic table becomes labelled cards below 820 px and two-column cards at tablet width; all eight facts and the row action remain present |
+| Detail shell | Passed | Dataset health and eligible supply are separate; tab route is represented in the hash and narrow tabs expose a scrollbar/hint |
+| Supply scheduling | Passed at source level | Three mutually exclusive source specimens separate the no-change current state, accepted target increase and target decrease; the decrease stages `READY` to `STANDBY` without deletion and completes only after required consumers apply the revision |
+| Supply/lifecycle | Passed at source level | All five canonical operation literals are shown with scope, attempt, fence, versions, timestamps and reconciled counters; a read-only `UNCERTAIN` cancellation-intent example retains its reservation and refuses a false `CANCELLED` claim |
+| Consumers | Passed | Six complete bindings are reachable with working Previous/Next pagination; no worker/revision/decision detail is hidden at narrower widths |
+| Evidence | Passed | A bounded proof-level/exact-target/flow-reference form precedes a canonical `DatasetProof/v1`; the versioned required-fact matrix is explicit, and `Attention` and serialized `Not requested` statuses were removed |
+| Inspector | Passed | `Authoritative Dataset` and `This swarm applied` are separate groups with explicit revision, application and worker-coverage facts |
+| Adverse states | Passed at source level | Queryable reconciling, forbidden, authorised-empty and incompatible states suppress fabricated current facts; stale/rate-limited states preserve only clearly historical evidence, mark current decisions unknown, and expose the exact refresh boundary |
+| Keyboard/focus model | Passed at source level | Native controls, tabs with Arrow/Home/End, Escape-returning disclosure, route heading focus and live announcements are implemented |
+| Post-change visual fidelity | Not claimed | Existing captures predate this content and are reference-only; deterministic recapture and visual inspection remain required |
+| Accessibility conformance | Not claimed | Requires contrast, 200% zoom, 320 px reflow, accessibility-tree, keyboard and screen-reader evidence |
 
-- `captures/datasets-supply-tooltip-desktop-1440.png`
-- `captures/dataset-detail-desktop-1440.png`
-- `captures/dataset-fitness-desktop-1440.png`
-- `captures/swarm-inspector-desktop-1440.png`
-- `captures/datasets-tablet-1024.png`
-- `captures/datasets-mobile-390.png`
-- `captures/datasets-supply-tooltip-mobile-390.png`
-- `captures/dataset-detail-mobile-390.png`
-- `captures/swarm-inspector-mobile-390.png`
+## Contract corrections verified in source
 
-## Findings
+1. Operations use only `PROVISION_NEW`, `REPLACE_RECORD`,
+   `REFRESH_MATERIAL`, `VALIDATE_RECORD`, and `DEPROVISION_ENTITY`.
+2. Proof fact kind, fact status and overall verdict use distinct closed enums.
+   Interactive proof-level changes hide omitted facts but never mutate the
+   canonical status of a returned fact.
+3. `Not requested` is explanatory UI copy derived from `requestedLevel`, not a
+   proof fact status.
+4. Inventory cursor consistency is carried by an opaque, authorization-bound
+   snapshot token; each row retains its own scoped authoritative revision.
+5. Inventory and consumer totals are shown only as present server facts; the
+   prototype's consumer pages demonstrate real navigation rather than a dead
+   `Showing 3 of 6` label.
+6. Dataset admission, per-binding start, running continuity, central authority
+   and swarm-local application remain visually and semantically separate.
+7. Every rendered proof header uses the returned level's authoritative
+   revision and freshness boundary; required direct facts cannot silently
+   expire before a broader top-level PASS.
+8. `UNCERTAIN` remains non-terminal and has explicit, fenced paths to
+   effect-free `TIMED_OUT`/`CANCELLED`, same-operation requeue, or one
+   reconciled effect receipt.
 
-No actionable P0, P1 or P2 visual differences remain.
+## Responsive and readability checks
 
-The implementation intentionally changes the table's operational semantics
-without changing PocketHive's visual language:
+- The table-to-card transition matches the normative `<820 CSS px` boundary.
+- Tablet cards expose Dataset, partition/pool/environment, Dataset health,
+  Fitness, eligible/target, continuity, consumers, Fitness check and Details.
+- Safety-critical identifiers, reason codes, revisions, times and worker facts
+  wrap rather than ellipsize.
+- Operational fact text is at least 10 px in this deliberately dense planning
+  artifact. Production typography must still pass measured zoom/reflow and
+  readability testing; pixel size alone is not an accessibility oracle.
+- Evidence, consumer, operation and Inspector structures collapse without
+  deleting facts.
+- The responsive supply-definition disclosure is positioned below its trigger
+  and constrained to the viewport in source; a current 320 CSS-pixel capture is
+  still required.
+- Mobile/tablet layouts retain exact tool observation UTC, compact consumer
+  decision status, and Fitness evidence age.
+- At 480 CSS pixels and below, the tool context and qualification chip switch
+  to explicit short labels (`Dataset model`, `Unqualified`) so neither can
+  overlap; their full accessible names remain in the DOM.
 
-- Eligible supply is now current / target, with minimum and the truthful
-  replenishment state in a hover, focus and tap explanation.
-- Profile/environment, continuity and Fitness-check headings replace ambiguous
-  labels.
-- Important secondary text and Dataset names wrap instead of truncating.
-- Current Fitness, prior-PASS continuity, supply coverage and worker application
-  are separate facts.
-- The Swarm Inspector dependency area is shorter and reports the three actual
-  swarm start gates without implying that running traffic has stopped.
+## Team-review visual evidence to refresh
 
-The extra table height is an intentional clarity trade-off. It remains within
-the same card and viewport and avoids horizontal growth.
+The existing Firefox 140.12.0esr images are reference-only. A future
+current-source run must render and inspect:
 
-## Required fidelity surfaces
+1. Inventory at 1920×1080, 1366×768, 1024×768, 390×844, 320×844 and
+   1366×768 at 200% zoom.
+2. Overview, Fitness, Supply/lifecycle, Consumers page 1, Evidence and
+   Inspector at 1440×1040 and 390×844.
+3. Consumers page 2 at 1440×1040.
+4. Evidence at `READY`, with missing `FLOW_PROVEN` reference validation, and
+   with an accepted exact opaque `FLOW_PROVEN` reference.
+5. Reconciling, stale, rate-limited, forbidden, authorised-empty and
+   incompatible states at 1366×768.
+6. The inventory in dark and light themes.
+7. The primary Dataset supply-definition disclosure opened and focused at
+   320×844.
+8. The isolated alternate cancellation-intent/`UNCERTAIN` specimen scrolled
+   into view, with retained reservation and no false `CANCELLED` claim.
+9. Supply specimens A, B and C together, with their mutually exclusive labels,
+   accepted-but-not-converged increase, and no-deletion target decrease.
 
-- Fonts and typography: the existing PocketHive Inter/system stack, weights,
-  hierarchy and uppercase metadata treatment are retained. Main-table
-  secondary copy remains 10 px and wraps; safety-critical Inspector detail was
-  raised to 9 px.
-- Spacing and layout rhythm: shell, navigation, summary cards, banner, filters,
-  table grid, radii and spacing remain aligned to the source. The denser table
-  grows vertically only where full text needs another line.
-- Colors and visual tokens: existing dark/light semantic tokens and state pills
-  are unchanged. Every state continues to have a text label in addition to
-  colour.
-- Image and asset fidelity: existing PocketHive logo and source icon assets are
-  retained. No substitute imagery or placeholder asset was introduced.
-- Copy and content: the current/effective state distinction and every count,
-  threshold, revision and time label were reviewed across inventory, detail,
-  Fitness, mobile cards and Inspector.
+`00-all-desktop.png`, `00-all-mobile.png`,
+`00-responsive-theme-proof.png`, `00-adverse-states.png`, and
+`00-interaction-details.png` are the required review index. Future verification
+must prove each contact-sheet tile is composed from its named current-source
+individual and that no individual is blank, loading, incorrectly routed,
+incorrectly scrolled, safety-text-truncated or stale-source. No such refreshed
+verification is claimed by this source-only change.
 
-## Responsive and interaction verification
+A refreshed visual run would establish planning fidelity only. Manual keyboard traversal,
+accessibility-tree/name-role-value inspection, contrast measurement,
+screen-reader testing and reduced-motion behavior remain required against the
+production implementation before `DSUI-A11Y-001` or `DSUI-A11Y-002` can pass.
 
-Firefox captures were inspected at 1440 px, 1024 px and 390 px. The desktop and
-tablet tables remain within the content width; the phone layout uses semantic
-cards with no horizontal scrolling or clipped safety-critical copy.
+## Static checks
 
-Primary interactions were exercised in Firefox 140.12 ESR:
+The remediation is expected to keep all of the following green:
 
-- typing `refund` reduced the inventory to the correct single result;
-- Clear restored all four results;
-- clicking Eligible opened the exact supply explanation;
-- Escape closed the pinned explanation while preserving focus;
-- selecting the canonical Dataset opened its detail view; and
-- selecting Fitness displayed the split latest-attempt/prior-PASS view.
+```text
+node --check docs/inProgress/managed-datasets-wireframes/app.js
+git diff --check
+no duplicate mobile Dataset fixture
+no 8 px or 9 px operational text
+no deprecated operation literal in current wireframe source
+no `Attention` or serialized `Not requested` proof status
+```
 
-The Firefox process log contained environment-only graphics/DBus warnings and
-no page-script error. `node --check app.js` and `git diff --check` passed.
+Source-level semantic result: **passed**.
 
-## Comparison history
+Planning visual-fidelity result for the current source: **not claimed; capture
+refresh required**.
 
-1. P1: Eligible `12,480 / 5,000 target 15,000` was ambiguous and consumed width.
-   Fix: compact current/target presentation plus exact accessible explanation.
-   Post-fix evidence: supply-tooltip desktop and mobile captures.
-2. P1: safety horizon, supply coverage, current Fitness and prior PASS were
-   visually conflated. Fix: independent Continuity, Supply coverage, Latest
-   Fitness attempt and Effective-for-existing-traffic facts. Post-fix evidence:
-   Dataset overview and Fitness captures.
-3. P2: full Dataset names and operational reasons were truncated. Fix: balanced
-   column widths and wrapping. Post-fix evidence: focused table comparison.
-4. P2: Inspector showed one blocker while three gates were unmet and repeated
-   state pills. Fix: compact two-decision/four-fact dependency card with a
-   three-gate blocker line. Post-fix evidence: Inspector desktop and mobile
-   captures.
-5. P2: an Escape key test initially closed the pinned popover but hover kept it
-   visible. Fix: suppress hover/focus disclosure until pointer leave or focus
-   change. The Firefox interaction check then confirmed Escape visibly closes
-   it.
-
-## Follow-up polish
-
-No P3 item is required for this handoff. Production implementation should still
-run automated contrast, screen-reader and zoom/reflow checks against the real
-PocketHive component runtime.
-
-final visual-fidelity result: passed
-
-production semantic-readiness result: blocked pending the canonical read
-contracts, all section 22 wireframe amendments, and `FUN-014`/`DSUI` evidence
+Production accessibility/readiness result: **not claimed by this planning
+wireframe**.

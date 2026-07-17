@@ -1,11 +1,11 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en" data-theme="dark">
   <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="color-scheme" content="dark light" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="dark light">
     <title>PocketHive Managed Datasets — Responsive planning wireframes</title>
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./styles.css">
   </head>
   <body data-view="datasets">
     <a class="skip-link" href="#main-content">Skip to content</a>
@@ -14,11 +14,6 @@
       <header class="top-bar">
         <div class="top-bar-left">
           <button class="brand-button" type="button" data-navigate="datasets" aria-label="PocketHive home">
-            <img
-              class="brand-full"
-              src="../../../ui-v2/public/logo-topbar.svg"
-              alt="PocketHive"
-            />
             <svg class="brand-mark" width="30" height="30" viewBox="0 0 256 256" fill="none" aria-hidden="true">
               <defs>
                 <radialGradient id="phLensGradPrototype" cx="50%" cy="50%" r="50%">
@@ -53,6 +48,7 @@
                 <circle cx="74.35" cy="97.02" r="10.24" />
               </g>
             </svg>
+            <span class="brand-wordmark" aria-hidden="true"><span class="brand-word-pocket">Pocket</span><span class="brand-word-hive">Hive</span></span>
           </button>
           <nav class="breadcrumbs" aria-label="Breadcrumb">
             <ol id="breadcrumb-list">
@@ -68,19 +64,19 @@
             <span class="notice-dot" aria-hidden="true"></span>
             <span class="notice-label">Control plane healthy</span>
           </div>
-          <label class="top-search" for="global-search">
+          <label class="top-search">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
             <span class="sr-only">Search this page</span>
-            <input id="global-search" type="search" placeholder="Search page…" autocomplete="off" />
+            <input id="global-search" type="search" placeholder="Search page…" autocomplete="off">
             <kbd>⌘K</kbd>
           </label>
         </div>
 
         <div class="top-bar-right">
-          <div class="tool-links" aria-label="PocketHive tools">
-            <span title="Documentation"><img src="../../../ui-v2/public/icons/docs.svg" alt="Documentation" /></span>
-            <span title="RabbitMQ"><img src="../../../ui-v2/public/icons/rabbitmq.svg" alt="RabbitMQ" /></span>
-            <span title="Grafana"><img src="../../../ui-v2/public/icons/grafana.svg" alt="Grafana" /></span>
+          <div class="tool-links" role="group" aria-label="PocketHive tools">
+            <span title="Documentation"><img src="../../../ui-v2/public/icons/docs.svg" alt="Documentation"></span>
+            <span title="RabbitMQ"><img src="../../../ui-v2/public/icons/rabbitmq.svg" alt="RabbitMQ"></span>
+            <span title="Grafana"><img src="../../../ui-v2/public/icons/grafana.svg" alt="Grafana"></span>
           </div>
           <button class="icon-button theme-toggle" type="button" aria-label="Switch to light theme" title="Switch theme">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41"/></svg>
@@ -134,32 +130,50 @@
       </aside>
 
       <main class="app-content" id="main-content" tabindex="-1">
-        <div class="page-tools" aria-label="Page tools">
+        <div class="page-tools" role="group" aria-label="Page tools">
           <div class="page-tools-inner datasets-tools">
-            <span class="tool-context"><span class="tool-context-dot"></span>Managed Dataset read model</span>
+            <span class="tool-context"><span class="tool-context-dot"></span><span class="sr-only">Managed Dataset read model</span><span class="tool-context-full" aria-hidden="true">Managed Dataset read model</span><span class="tool-context-short" aria-hidden="true">Dataset model</span></span>
             <span class="tool-divider" aria-hidden="true"></span>
             <span class="tool-observed">Observed <time datetime="2026-07-16T16:24:48Z">16:24:48 UTC</time> · <span id="observed-age">12 sec ago</span></span>
             <span class="tool-spacer"></span>
-            <span class="read-only-chip">Planning wireframe</span>
+            <span class="read-only-chip planning-chip"><span class="sr-only">Planning fixture; no qualified profile</span><span class="planning-chip-full" aria-hidden="true">Planning · no qualified profile</span><span class="planning-chip-short" aria-hidden="true">Unqualified</span></span>
           </div>
           <div class="page-tools-inner inspector-tools" hidden>
-            <span class="tool-context"><span class="tool-context-dot"></span>Swarm payment-traffic-01</span>
+            <span class="tool-context"><span class="tool-context-dot"></span><span class="sr-only">Swarm service-simulation-01</span><span class="tool-context-full" aria-hidden="true">Swarm service-simulation-01</span><span class="tool-context-short" aria-hidden="true">Swarm model</span></span>
             <span class="tool-divider" aria-hidden="true"></span>
             <span class="tool-observed">Run run-2026-07-16-04</span>
             <span class="tool-spacer"></span>
-            <span class="read-only-chip">Planning wireframe</span>
+            <span class="read-only-chip planning-chip"><span class="sr-only">Planning fixture; no qualified profile</span><span class="planning-chip-full" aria-hidden="true">Planning · no qualified profile</span><span class="planning-chip-short" aria-hidden="true">Unqualified</span></span>
           </div>
         </div>
 
         <div class="page-content">
+          <section class="adverse-state-panel" id="adverse-state-panel" aria-labelledby="adverse-state-title" hidden>
+            <span class="section-kicker" id="adverse-state-kicker">Current-state example</span>
+            <h1 id="adverse-state-title" tabindex="-1">Managed Dataset state</h1>
+            <p id="adverse-state-detail"></p>
+            <p class="retry-boundary" id="adverse-state-retry-boundary" hidden></p>
+            <dl class="adverse-remediation">
+              <div><dt>Recommended next action</dt><dd id="adverse-state-action"></dd></div>
+              <div><dt>Action owner</dt><dd id="adverse-state-owner"></dd></div>
+              <div><dt>Runbook</dt><dd id="adverse-state-runbook-ref"></dd></div>
+            </dl>
+            <button class="text-link" id="adverse-state-runbook" type="button">Open authorised runbook</button>
+            <button class="action-button" id="adverse-state-retry" type="button" hidden>Retry when allowed</button>
+            <p class="action-feedback" id="adverse-state-feedback" aria-live="polite"></p>
+          </section>
           <!-- Cross-swarm Dataset inventory -->
           <section class="screen datasets-screen" id="datasets-screen" aria-labelledby="datasets-title">
             <div class="page page-wide">
+              <div class="historical-screen-note" id="historical-screen-note" hidden>
+                <strong>Last-known historical facts · observed 16:24:48 UTC · validity ended 16:25:18 UTC</strong>
+                <span>Every current Dataset-admission and running-consumer decision is Unknown until refreshed. Values below are retained only for diagnosis.</span>
+              </div>
               <header class="page-heading">
                 <div>
                   <div class="eyebrow">Cross-swarm operational view</div>
-                  <h1 id="datasets-title">Managed datasets</h1>
-                  <p>Supply, fitness and freshness for every Dataset you are authorised to operate.</p>
+                  <h1 id="datasets-title" tabindex="-1">Managed datasets</h1>
+                  <p>Dataset health, eligible supply, Fitness and freshness for every selection you are authorised to operate.</p>
                 </div>
                 <button class="action-button refresh-button" type="button" id="refresh-datasets">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0 2 5.3"/><path d="M20 4v7h-7"/></svg>
@@ -167,16 +181,16 @@
                 </button>
               </header>
 
-              <div class="summary-grid" aria-label="Dataset summary">
+              <div class="summary-grid" role="group" aria-label="Dataset summary">
                 <article class="summary-card">
                   <div class="summary-label">Authorised Dataset selections</div>
                   <div class="summary-value">4</div>
-                  <div class="summary-meta"><span class="trend-dot info"></span>Across 2 Dataset Spaces</div>
+                  <div class="summary-meta"><span class="trend-dot info"></span>Across 3 Dataset Spaces</div>
                 </article>
                 <article class="summary-card summary-good">
                   <div class="summary-label">Admission thresholds met</div>
                   <div class="summary-value">2</div>
-                  <div class="summary-meta"><span class="trend-dot good"></span>Exact swarm gates evaluated in context</div>
+                  <div class="summary-meta"><span class="trend-dot good"></span>Formal Dataset health READY · not full swarm start</div>
                 </article>
                 <article class="summary-card summary-warn">
                   <div class="summary-label">Needs attention</div>
@@ -185,21 +199,22 @@
                 </article>
                 <article class="summary-card summary-info">
                   <div class="summary-label">Active consumer swarms</div>
-                  <div class="summary-value">11</div>
-                  <div class="summary-meta"><span class="trend-dot info"></span>15 activated bindings</div>
+                  <div class="summary-value">10</div>
+                  <div class="summary-meta"><span class="trend-dot info"></span>11 activated bindings</div>
                 </article>
               </div>
 
-              <aside class="attention-banner" aria-label="Dataset attention summary">
+              <section class="attention-banner" aria-label="Dataset attention summary">
                 <div class="attention-icon" aria-hidden="true">
                   <svg viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.7 2.8 17a2 2 0 0 0 1.7 3h15a2 2 0 0 0 1.7-3L13.7 3.7a2 2 0 0 0-3.4 0Z"/></svg>
                 </div>
                 <div class="attention-copy">
                   <strong>One Dataset needs attention</strong>
-                  <span>The Dataset condition for new activation is not satisfied. Six existing swarms remain within prior-PASS continuity until 16:42 UTC.</span>
+                    <span>The Dataset admission condition is not satisfied. Five running bindings remain within prior-PASS continuity until 16:42 UTC; one durable activated binding has no current run.</span>
+                    <small>Next: REVIEW_FITNESS_EVIDENCE · Owner: Dataset Operations · runbook rb-dataset-fitness-03</small>
                 </div>
-                <button type="button" class="text-link" data-open-dataset="authorisation-instruments">Review Dataset</button>
-              </aside>
+                <button type="button" class="text-link" data-open-dataset="primary-test-entities">Review Dataset</button>
+              </section>
 
               <section class="card inventory-card" aria-labelledby="inventory-heading">
                 <div class="inventory-header">
@@ -214,7 +229,7 @@
                   <label class="filter-search">
                     <span class="sr-only">Search datasets</span>
                     <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-                    <input id="dataset-search" type="search" placeholder="Search by Dataset or Space" autocomplete="off" />
+                    <input id="dataset-search" type="search" placeholder="Search by Dataset or Space" autocomplete="off">
                   </label>
                   <label>
                     <span>Environment</span>
@@ -225,12 +240,12 @@
                     </select>
                   </label>
                   <label>
-                    <span>Supply</span>
-                    <select id="supply-filter">
-                      <option value="all">All states</option>
-                      <option value="attention">Needs attention</option>
-                      <option value="ready">Ready</option>
-                      <option value="warming">Warming</option>
+                    <span>Dataset health</span>
+                    <select id="health-filter">
+                      <option value="all">All health states</option>
+                      <option value="DEGRADED,STARVED,ERROR,AUTH_REQUIRED">Needs attention</option>
+                      <option value="READY">Ready</option>
+                      <option value="WARMING,INITIALISING">Warming</option>
                     </select>
                   </label>
                   <label>
@@ -241,6 +256,7 @@
                       <option value="unknown">Unknown</option>
                     </select>
                   </label>
+                  <button class="sr-only" type="submit">Apply filters</button>
                   <button class="clear-button" id="clear-filters" type="button">Clear</button>
                 </form>
 
@@ -251,7 +267,7 @@
                       <tr>
                         <th scope="col">Dataset</th>
                         <th scope="col">Partition / pool / environment</th>
-                        <th scope="col">Supply</th>
+                        <th scope="col">Dataset health</th>
                         <th scope="col">Fitness</th>
                         <th scope="col">Eligible / target</th>
                         <th scope="col">Continuity</th>
@@ -261,63 +277,67 @@
                       </tr>
                     </thead>
                     <tbody>
-                      <tr data-dataset-row data-search="authorisation-instruments traffic-ready baseline payment-simulation" data-environment="sandbox-west" data-supply="attention" data-fitness="unknown">
+                      <tr data-dataset-row data-search="primary-test-entities traffic-ready baseline service-simulation" data-environment="sandbox-west" data-health="DEGRADED" data-fitness="unknown">
                         <td data-label="Dataset">
-                          <button class="dataset-identity" type="button" data-open-dataset="authorisation-instruments">
+                          <button class="dataset-identity" type="button" data-open-dataset="primary-test-entities">
                             <svg class="dataset-symbol attention" viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v7c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/><path d="M4 12v7c0 1.66 3.58 3 8 3s8-1.34 8-3v-7"/></svg>
-                            <span><strong>authorisation-instruments</strong><small>payment-simulation</small></span>
+                            <span><strong>primary-test-entities</strong><small>service-simulation</small></span>
                           </button>
                         </td>
-                        <td data-label="Partition / pool / environment"><strong>baseline / traffic-ready</strong><small>sandbox-west · authorisation-traffic</small></td>
-                        <td data-label="Supply"><span class="status-pill pill-warn">Degraded</span><small>Below min · starts blocked</small></td>
+                        <td data-label="Partition / pool / environment"><strong>baseline / traffic-ready</strong><small>sandbox-west · service-traffic</small></td>
+                        <td data-label="Dataset health"><span class="status-pill pill-warn">Degraded</span><small>Admission threshold not met</small></td>
                         <td data-label="Fitness"><span class="status-pill pill-neutral">Unknown</span><small>Current check unavailable</small></td>
                         <td data-label="Eligible / target">
-                          <div class="supply-popover" data-supply-popover data-supply-popover-id="authorisation-desktop">
-                            <button class="supply-trigger" type="button" aria-expanded="false" aria-controls="supply-authorisation-desktop" aria-label="Eligible 4,820; minimum 5,000; target 12,000; target gap 7,180; in-flight provisioning 180. Show supply details.">
+                          <div class="supply-popover" data-supply-popover data-supply-popover-id="primary-desktop">
+                            <button class="supply-trigger" type="button" aria-expanded="false" aria-controls="supply-primary-desktop" aria-label="Eligible 4,820; minimum 5,000; low watermark 6,000; target 12,000; target gap 7,180; reserved provisioning 180; in-flight requested 180. Show supply details.">
                               <strong>4,820 / 12,000</strong><small>Below min · 5,000</small>
                             </button>
-                            <div class="supply-tooltip" id="supply-authorisation-desktop" role="tooltip" aria-hidden="true">
+                            <div class="supply-tooltip" id="supply-primary-desktop" role="tooltip" aria-hidden="true">
                               <div><strong>Eligible:</strong> 4,820</div>
-                              <div><strong>Minimum:</strong> 5,000 <span aria-hidden="true">·</span> <strong>Target:</strong> 12,000</div>
+                              <div><strong>Minimum:</strong> 5,000 <span aria-hidden="true">·</span> <strong>Low watermark:</strong> 6,000</div>
+                              <div><strong>Target:</strong> 12,000</div>
                               <div><strong>Target gap:</strong> 7,180</div>
-                              <div><strong>In-flight provisioning:</strong> 180</div>
+                              <div><strong>Reserved provisioning:</strong> 180</div>
+                              <div><strong>In-flight requested:</strong> 180</div>
                             </div>
                           </div>
                         </td>
-                        <td data-label="Continuity"><strong>Grace · 17 min</strong><small>until 16:42 UTC</small></td>
-                        <td data-label="Consumers"><strong>6 active</strong><small>materializers 23/24 · selectors 24/24</small></td>
-                        <td data-label="Fitness check"><strong>2 min ago</strong><small>Dataset rev 1842</small></td>
-                        <td data-label=""><button class="row-action" type="button" data-open-dataset="authorisation-instruments" aria-label="Open authorisation-instruments details"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button></td>
+                        <td data-label="Continuity"><strong>0 continue · 5 until</strong><small>earliest safeUntil 16:42 UTC · 1 N/A</small></td>
+                        <td data-label="Consumers"><strong>6 activated bindings</strong><small>5 observed-active swarms</small></td>
+                        <td data-label="Fitness check"><strong>16:22:48 UTC · 2 min ago</strong><small>Dataset rev 1842</small></td>
+                        <td data-label="Details"><button class="row-action" type="button" data-open-dataset="primary-test-entities" aria-label="Open primary-test-entities details"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button></td>
                       </tr>
-                      <tr data-dataset-row data-search="merchant-endpoints standard online commerce-simulation" data-environment="sandbox-east" data-supply="warming" data-fitness="unknown">
+                      <tr data-dataset-row data-search="service-endpoints standard online endpoint-simulation" data-environment="sandbox-east" data-health="WARMING" data-fitness="unknown">
                         <td data-label="Dataset">
                           <div class="dataset-identity">
                             <svg class="dataset-symbol warming" viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v7c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/><path d="M4 12v7c0 1.66 3.58 3 8 3s8-1.34 8-3v-7"/></svg>
-                            <span><strong>merchant-endpoints</strong><small>commerce-simulation</small></span>
+                            <span><strong>service-endpoints</strong><small>endpoint-simulation</small></span>
                           </div>
                         </td>
-                        <td data-label="Partition / pool / environment"><strong>online / standard</strong><small>sandbox-east · merchant-traffic</small></td>
-                        <td data-label="Supply"><span class="status-pill pill-info">Warming</span><small>Initial seeding · starts blocked</small></td>
+                        <td data-label="Partition / pool / environment"><strong>online / standard</strong><small>sandbox-east · endpoint-traffic</small></td>
+                        <td data-label="Dataset health"><span class="status-pill pill-info">Warming</span><small>Initial seeding; binding gates pending</small></td>
                         <td data-label="Fitness"><span class="status-pill pill-neutral">Unknown</span><small>No result yet</small></td>
                         <td data-label="Eligible / target">
-                          <div class="supply-popover" data-supply-popover data-supply-popover-id="merchant-desktop">
-                            <button class="supply-trigger" type="button" aria-expanded="false" aria-controls="supply-merchant-desktop" aria-label="Eligible 620; minimum 1,000; target 4,000; target gap 3,380; in-flight provisioning 1,000. Show supply details.">
+                          <div class="supply-popover" data-supply-popover data-supply-popover-id="endpoints-desktop">
+                            <button class="supply-trigger" type="button" aria-expanded="false" aria-controls="supply-endpoints-desktop" aria-label="Eligible 620; minimum 1,000; low watermark 1,500; target 4,000; target gap 3,380; reserved provisioning 1,000; in-flight requested 1,000. Show supply details.">
                               <strong>620 / 4,000</strong><small>Warming · min 1,000</small>
                             </button>
-                            <div class="supply-tooltip" id="supply-merchant-desktop" role="tooltip" aria-hidden="true">
+                            <div class="supply-tooltip" id="supply-endpoints-desktop" role="tooltip" aria-hidden="true">
                               <div><strong>Eligible:</strong> 620</div>
-                              <div><strong>Minimum:</strong> 1,000 <span aria-hidden="true">·</span> <strong>Target:</strong> 4,000</div>
+                              <div><strong>Minimum:</strong> 1,000 <span aria-hidden="true">·</span> <strong>Low watermark:</strong> 1,500</div>
+                              <div><strong>Target:</strong> 4,000</div>
                               <div><strong>Target gap:</strong> 3,380</div>
-                              <div><strong>In-flight provisioning:</strong> 1,000</div>
+                              <div><strong>Reserved provisioning:</strong> 1,000</div>
+                              <div><strong>In-flight requested:</strong> 1,000</div>
                             </div>
                           </div>
                         </td>
-                        <td data-label="Continuity"><strong>Not established</strong><small>Awaiting first PASS</small></td>
-                        <td data-label="Consumers"><strong>0 active</strong><small>2 planned bindings</small></td>
-                        <td data-label="Fitness check"><strong>38 sec ago</strong><small>Attempt pending · Dataset rev 337</small></td>
-                        <td data-label=""><button class="row-action" type="button" aria-label="merchant-endpoints detail is outside this wireframe" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button></td>
+                        <td data-label="Continuity"><strong>0 continue · 0 until</strong><small>No activated bindings · N/A</small></td>
+                        <td data-label="Consumers"><strong>0 activated bindings</strong><small>0 observed-active swarms</small></td>
+                        <td data-label="Fitness check"><strong>16:24:10 UTC · 38 sec ago</strong><small>Attempt pending · Dataset rev 337</small></td>
+                        <td data-label="Details"><button class="row-action" type="button" aria-label="service-endpoints detail is outside this wireframe" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button></td>
                       </tr>
-                      <tr data-dataset-row data-search="reusable-test-identities traffic-ready baseline identity-simulation" data-environment="sandbox-west" data-supply="ready" data-fitness="pass">
+                      <tr data-dataset-row data-search="reusable-test-identities traffic-ready baseline identity-simulation" data-environment="sandbox-west" data-health="READY" data-fitness="pass">
                         <td data-label="Dataset">
                           <div class="dataset-identity">
                             <svg class="dataset-symbol ready" viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v7c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/><path d="M4 12v7c0 1.66 3.58 3 8 3s8-1.34 8-3v-7"/></svg>
@@ -325,151 +345,60 @@
                           </div>
                         </td>
                         <td data-label="Partition / pool / environment"><strong>baseline / traffic-ready</strong><small>sandbox-west · reusable-traffic</small></td>
-                        <td data-label="Supply"><span class="status-pill pill-good">Ready</span><small>Dataset admission condition met</small></td>
+                        <td data-label="Dataset health"><span class="status-pill pill-good">Ready</span><small>Dataset admission condition met</small></td>
                         <td data-label="Fitness"><span class="status-pill pill-good">Pass</span><small>Contract v2</small></td>
                         <td data-label="Eligible / target">
                           <div class="supply-popover" data-supply-popover data-supply-popover-id="reusable-desktop">
-                            <button class="supply-trigger" type="button" aria-expanded="false" aria-controls="supply-reusable-desktop" aria-label="Eligible 12,480; minimum 5,000; target 15,000; target gap 2,520. Show supply details.">
+                            <button class="supply-trigger" type="button" aria-expanded="false" aria-controls="supply-reusable-desktop" aria-label="Eligible 12,480; minimum 5,000; low watermark 6,000; target 15,000; target gap 2,520; reserved provisioning 0; in-flight requested 0. Show supply details.">
                               <strong>12,480 / 15,000</strong><small>Ready · min 5,000</small>
                             </button>
                             <div class="supply-tooltip" id="supply-reusable-desktop" role="tooltip" aria-hidden="true">
                               <div><strong>Eligible:</strong> 12,480</div>
-                              <div><strong>Minimum:</strong> 5,000 <span aria-hidden="true">·</span> <strong>Target:</strong> 15,000</div>
+                              <div><strong>Minimum:</strong> 5,000 <span aria-hidden="true">·</span> <strong>Low watermark:</strong> 6,000</div>
+                              <div><strong>Target:</strong> 15,000</div>
                               <div><strong>Target gap:</strong> 2,520</div>
+                              <div><strong>Reserved provisioning:</strong> 0</div>
+                              <div><strong>In-flight requested:</strong> 0</div>
                             </div>
                           </div>
                         </td>
-                        <td data-label="Continuity"><strong>Fresh · 1 hr 2 min</strong><small>until 17:27 UTC</small></td>
-                        <td data-label="Consumers"><strong>4 active</strong><small>materializers 16/16 · selectors 16/16</small></td>
-                        <td data-label="Fitness check"><strong>24 sec ago</strong><small>Dataset rev 42</small></td>
-                        <td data-label=""><button class="row-action" type="button" aria-label="reusable-test-identities detail is outside this wireframe" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button></td>
+                        <td data-label="Continuity"><strong>4 continue · 0 until</strong><small>Current PASS · safeUntil N/A</small></td>
+                        <td data-label="Consumers"><strong>4 activated bindings</strong><small>4 observed-active swarms</small></td>
+                        <td data-label="Fitness check"><strong>16:24:24 UTC · 24 sec ago</strong><small>Dataset rev 42</small></td>
+                        <td data-label="Details"><button class="row-action" type="button" aria-label="reusable-test-identities detail is outside this wireframe" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button></td>
                       </tr>
-                      <tr data-dataset-row data-search="refund-accounts standard settled payment-simulation" data-environment="sandbox-east" data-supply="ready" data-fitness="pass">
+                      <tr data-dataset-row data-search="workflow-test-entities standard completed service-simulation" data-environment="sandbox-east" data-health="READY" data-fitness="pass">
                         <td data-label="Dataset">
                           <div class="dataset-identity">
                             <svg class="dataset-symbol ready" viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v7c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/><path d="M4 12v7c0 1.66 3.58 3 8 3s8-1.34 8-3v-7"/></svg>
-                            <span><strong>refund-accounts</strong><small>payment-simulation</small></span>
+                            <span><strong>workflow-test-entities</strong><small>service-simulation</small></span>
                           </div>
                         </td>
-                        <td data-label="Partition / pool / environment"><strong>settled / standard</strong><small>sandbox-east · refund-traffic</small></td>
-                        <td data-label="Supply"><span class="status-pill pill-good">Ready</span><small>Dataset admission condition met</small></td>
+                        <td data-label="Partition / pool / environment"><strong>completed / standard</strong><small>sandbox-east · workflow-traffic</small></td>
+                        <td data-label="Dataset health"><span class="status-pill pill-good">Ready</span><small>Dataset admission condition met</small></td>
                         <td data-label="Fitness"><span class="status-pill pill-good">Pass</span><small>Contract v1</small></td>
                         <td data-label="Eligible / target">
-                          <div class="supply-popover" data-supply-popover data-supply-popover-id="refund-desktop">
-                            <button class="supply-trigger" type="button" aria-expanded="false" aria-controls="supply-refund-desktop" aria-label="Eligible 8,140; minimum 2,000; target 8,000; target exceeded by 140. Show supply details.">
+                          <div class="supply-popover" data-supply-popover data-supply-popover-id="workflow-desktop">
+                            <button class="supply-trigger" type="button" aria-expanded="false" aria-controls="supply-workflow-desktop" aria-label="Eligible 8,140; minimum 2,000; low watermark 2,500; target 8,000; target exceeded by 140; reserved provisioning 0; in-flight requested 0. Show supply details.">
                               <strong>8,140 / 8,000</strong><small>Ready · min 2,000</small>
                             </button>
-                            <div class="supply-tooltip" id="supply-refund-desktop" role="tooltip" aria-hidden="true">
+                            <div class="supply-tooltip" id="supply-workflow-desktop" role="tooltip" aria-hidden="true">
                               <div><strong>Eligible:</strong> 8,140</div>
-                              <div><strong>Minimum:</strong> 2,000 <span aria-hidden="true">·</span> <strong>Target:</strong> 8,000</div>
+                              <div><strong>Minimum:</strong> 2,000 <span aria-hidden="true">·</span> <strong>Low watermark:</strong> 2,500</div>
+                              <div><strong>Target:</strong> 8,000</div>
                               <div><strong>Target exceeded by:</strong> 140</div>
+                              <div><strong>Reserved provisioning:</strong> 0</div>
+                              <div><strong>In-flight requested:</strong> 0</div>
                             </div>
                           </div>
                         </td>
-                        <td data-label="Continuity"><strong>Fresh · 3 hr 18 min</strong><small>until 19:43 UTC</small></td>
-                        <td data-label="Consumers"><strong>1 active</strong><small>materializers 4/4 · selectors 4/4</small></td>
-                        <td data-label="Fitness check"><strong>41 sec ago</strong><small>Dataset rev 811</small></td>
-                        <td data-label=""><button class="row-action" type="button" aria-label="refund-accounts detail is outside this wireframe" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button></td>
+                        <td data-label="Continuity"><strong>1 continue · 0 until</strong><small>Current PASS · safeUntil N/A</small></td>
+                        <td data-label="Consumers"><strong>1 activated binding</strong><small>1 observed-active swarm</small></td>
+                        <td data-label="Fitness check"><strong>16:24:07 UTC · 41 sec ago</strong><small>Dataset rev 811</small></td>
+                        <td data-label="Details"><button class="row-action" type="button" aria-label="workflow-test-entities detail is outside this wireframe" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button></td>
                       </tr>
                     </tbody>
                   </table>
-                  <div class="mobile-dataset-list" aria-label="Managed Datasets sorted by operational attention">
-                    <article class="mobile-dataset-card" data-dataset-card data-search="authorisation-instruments traffic-ready baseline payment-simulation" data-environment="sandbox-west" data-supply="attention" data-fitness="unknown">
-                      <header>
-                        <button class="dataset-identity" type="button" data-open-dataset="authorisation-instruments">
-                          <svg class="dataset-symbol attention" viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v7c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/><path d="M4 12v7c0 1.66 3.58 3 8 3s8-1.34 8-3v-7"/></svg>
-                          <span><strong>authorisation-instruments</strong><small>payment-simulation</small></span>
-                        </button>
-                        <span class="status-pill pill-warn">Degraded</span>
-                      </header>
-                      <div class="mobile-status-line"><span><small>Fitness</small><strong>Unknown</strong></span><span><small>Dataset condition</small><strong class="bad-text">Not met</strong></span></div>
-                      <dl class="mobile-fact-grid">
-                        <div><dt>Partition / pool</dt><dd>baseline / traffic-ready</dd></div>
-                        <div><dt>Eligible / target</dt><dd>
-                          <div class="supply-popover" data-supply-popover data-supply-popover-id="authorisation-mobile">
-                            <button class="supply-trigger" type="button" aria-expanded="false" aria-controls="supply-authorisation-mobile" aria-label="Eligible 4,820; minimum 5,000; target 12,000; target gap 7,180; in-flight provisioning 180. Show supply details."><strong>4,820 / 12,000</strong><small>Below min · 5,000</small></button>
-                            <div class="supply-tooltip" id="supply-authorisation-mobile" role="tooltip" aria-hidden="true"><div><strong>Eligible:</strong> 4,820</div><div><strong>Minimum:</strong> 5,000 <span aria-hidden="true">·</span> <strong>Target:</strong> 12,000</div><div><strong>Target gap:</strong> 7,180</div><div><strong>In-flight provisioning:</strong> 180</div></div>
-                          </div>
-                        </dd></div>
-                        <div><dt>Continuity</dt><dd>Grace · 17 min · until 16:42 UTC</dd></div>
-                        <div><dt>Consumers</dt><dd>6 active · materializers 23/24 · selectors 24/24</dd></div>
-                        <div><dt>Fitness check</dt><dd>2 min ago · Dataset rev 1842</dd></div>
-                        <div><dt>Environment</dt><dd>sandbox-west</dd></div>
-                      </dl>
-                    </article>
-
-                    <article class="mobile-dataset-card" data-dataset-card data-search="merchant-endpoints standard online commerce-simulation" data-environment="sandbox-east" data-supply="warming" data-fitness="unknown">
-                      <header>
-                        <div class="dataset-identity">
-                          <svg class="dataset-symbol warming" viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v7c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/><path d="M4 12v7c0 1.66 3.58 3 8 3s8-1.34 8-3v-7"/></svg>
-                          <span><strong>merchant-endpoints</strong><small>commerce-simulation</small></span>
-                        </div>
-                        <span class="status-pill pill-info">Warming</span>
-                      </header>
-                      <div class="mobile-status-line"><span><small>Fitness</small><strong>Unknown</strong></span><span><small>Dataset condition</small><strong class="bad-text">Not met</strong></span></div>
-                      <dl class="mobile-fact-grid">
-                        <div><dt>Partition / pool</dt><dd>online / standard</dd></div>
-                        <div><dt>Eligible / target</dt><dd>
-                          <div class="supply-popover" data-supply-popover data-supply-popover-id="merchant-mobile">
-                            <button class="supply-trigger" type="button" aria-expanded="false" aria-controls="supply-merchant-mobile" aria-label="Eligible 620; minimum 1,000; target 4,000; target gap 3,380; in-flight provisioning 1,000. Show supply details."><strong>620 / 4,000</strong><small>Initial seeding · min 1,000</small></button>
-                            <div class="supply-tooltip" id="supply-merchant-mobile" role="tooltip" aria-hidden="true"><div><strong>Eligible:</strong> 620</div><div><strong>Minimum:</strong> 1,000 <span aria-hidden="true">·</span> <strong>Target:</strong> 4,000</div><div><strong>Target gap:</strong> 3,380</div><div><strong>In-flight provisioning:</strong> 1,000</div></div>
-                          </div>
-                        </dd></div>
-                        <div><dt>Continuity</dt><dd>Not established · awaiting first PASS</dd></div>
-                        <div><dt>Consumers</dt><dd>0 active · 2 planned</dd></div>
-                        <div><dt>Fitness check</dt><dd>Attempt pending · 38 sec ago</dd></div>
-                        <div><dt>Environment</dt><dd>sandbox-east</dd></div>
-                      </dl>
-                    </article>
-
-                    <article class="mobile-dataset-card" data-dataset-card data-search="reusable-test-identities traffic-ready baseline identity-simulation" data-environment="sandbox-west" data-supply="ready" data-fitness="pass">
-                      <header>
-                        <div class="dataset-identity">
-                          <svg class="dataset-symbol ready" viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v7c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/><path d="M4 12v7c0 1.66 3.58 3 8 3s8-1.34 8-3v-7"/></svg>
-                          <span><strong>reusable-test-identities</strong><small>identity-simulation</small></span>
-                        </div>
-                        <span class="status-pill pill-good">Ready</span>
-                      </header>
-                      <div class="mobile-status-line"><span><small>Fitness</small><strong class="good-text">Pass</strong></span><span><small>Dataset condition</small><strong class="good-text">Met</strong></span></div>
-                      <dl class="mobile-fact-grid">
-                        <div><dt>Partition / pool</dt><dd>baseline / traffic-ready</dd></div>
-                        <div><dt>Eligible / target</dt><dd>
-                          <div class="supply-popover" data-supply-popover data-supply-popover-id="reusable-mobile">
-                            <button class="supply-trigger" type="button" aria-expanded="false" aria-controls="supply-reusable-mobile" aria-label="Eligible 12,480; minimum 5,000; target 15,000; target gap 2,520. Show supply details."><strong>12,480 / 15,000</strong><small>Ready · min 5,000</small></button>
-                            <div class="supply-tooltip" id="supply-reusable-mobile" role="tooltip" aria-hidden="true"><div><strong>Eligible:</strong> 12,480</div><div><strong>Minimum:</strong> 5,000 <span aria-hidden="true">·</span> <strong>Target:</strong> 15,000</div><div><strong>Target gap:</strong> 2,520</div></div>
-                          </div>
-                        </dd></div>
-                        <div><dt>Continuity</dt><dd>Fresh · 1 hr 2 min · until 17:27 UTC</dd></div>
-                        <div><dt>Consumers</dt><dd>4 active · materializers 16/16 · selectors 16/16</dd></div>
-                        <div><dt>Fitness check</dt><dd>24 sec ago · Dataset rev 42</dd></div>
-                        <div><dt>Environment</dt><dd>sandbox-west</dd></div>
-                      </dl>
-                    </article>
-
-                    <article class="mobile-dataset-card" data-dataset-card data-search="refund-accounts standard settled payment-simulation" data-environment="sandbox-east" data-supply="ready" data-fitness="pass">
-                      <header>
-                        <div class="dataset-identity">
-                          <svg class="dataset-symbol ready" viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v7c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/><path d="M4 12v7c0 1.66 3.58 3 8 3s8-1.34 8-3v-7"/></svg>
-                          <span><strong>refund-accounts</strong><small>payment-simulation</small></span>
-                        </div>
-                        <span class="status-pill pill-good">Ready</span>
-                      </header>
-                      <div class="mobile-status-line"><span><small>Fitness</small><strong class="good-text">Pass</strong></span><span><small>Dataset condition</small><strong class="good-text">Met</strong></span></div>
-                      <dl class="mobile-fact-grid">
-                        <div><dt>Partition / pool</dt><dd>settled / standard</dd></div>
-                        <div><dt>Eligible / target</dt><dd>
-                          <div class="supply-popover" data-supply-popover data-supply-popover-id="refund-mobile">
-                            <button class="supply-trigger" type="button" aria-expanded="false" aria-controls="supply-refund-mobile" aria-label="Eligible 8,140; minimum 2,000; target 8,000; target exceeded by 140. Show supply details."><strong>8,140 / 8,000</strong><small>Ready · min 2,000</small></button>
-                            <div class="supply-tooltip" id="supply-refund-mobile" role="tooltip" aria-hidden="true"><div><strong>Eligible:</strong> 8,140</div><div><strong>Minimum:</strong> 2,000 <span aria-hidden="true">·</span> <strong>Target:</strong> 8,000</div><div><strong>Target exceeded by:</strong> 140</div></div>
-                          </div>
-                        </dd></div>
-                        <div><dt>Continuity</dt><dd>Fresh · 3 hr 18 min · until 19:43 UTC</dd></div>
-                        <div><dt>Consumers</dt><dd>1 active · materializers 4/4 · selectors 4/4</dd></div>
-                        <div><dt>Fitness check</dt><dd>41 sec ago · Dataset rev 811</dd></div>
-                        <div><dt>Environment</dt><dd>sandbox-east</dd></div>
-                      </dl>
-                    </article>
-                  </div>
                   <div class="empty-results" id="empty-results" hidden>
                     <svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v7c0 1.66 3.58 3 8 3s8-1.34 8-3V5M4 12v7c0 1.66 3.58 3 8 3s8-1.34 8-3v-7"/></svg>
                     <strong>No matching Datasets</strong>
@@ -480,7 +409,7 @@
 
               <footer class="security-note">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
-                <span>This view contains operational metadata only. Dataset values, payment data and secrets are never returned.</span>
+                <span>This view contains operational metadata only. Dataset values, restricted real-world data and secrets are never returned.</span>
               </footer>
             </div>
           </section>
@@ -493,13 +422,13 @@
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
                 </button>
                 <div class="detail-title-group">
-                  <div class="eyebrow">payment-simulation · partition baseline / pool traffic-ready · declared use authorisation-traffic</div>
+                  <div class="eyebrow">service-simulation · partition baseline / pool traffic-ready · declared use service-traffic</div>
                   <div class="detail-title-row">
-                    <h1 id="dataset-detail-title">authorisation-instruments</h1>
-                    <span class="status-pill pill-warn">Supply: Degraded</span>
+                    <h1 id="dataset-detail-title" tabindex="-1">primary-test-entities</h1>
+                    <span class="status-pill pill-warn">Dataset health: Degraded</span>
                     <span class="status-pill pill-neutral">Current Fitness: Unknown</span>
                   </div>
-                  <p>Environment sandbox-west · Dataset revision 1842</p>
+                  <p>Environment sandbox-west · revision scope ds-revision-6a21 · authoritative revision 1842 · activated distribution Uniform 1841 across 6 bindings</p>
                 </div>
                 <button class="action-button refresh-button detail-refresh" type="button">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0 2 5.3"/><path d="M20 4v7h-7"/></svg>
@@ -514,34 +443,35 @@
                 </article>
                 <article class="decision-card decision-continuing">
                   <div class="decision-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 8v4l3 2"/><circle cx="12" cy="12" r="9"/></svg></div>
-                  <div><span>Existing consumer impact</span><strong>6 continue · earliest boundary in 17 min</strong><small>Only exact activated views covered by prior PASS may continue, earliest until 16:42 UTC.</small></div>
+                  <div><span>Existing consumer impact · CONTINUING_UNTIL</span><strong>6 activated · 5 decision-applicable</strong><small>0 continue · 5 continue-until · 0 paused · 0 unknown · 1 N/A · earliest safeUntil 16:42 UTC</small></div>
                 </article>
               </div>
 
-              <aside class="reason-banner">
+              <section class="reason-banner" aria-labelledby="latest-fitness-attempt-title">
                 <div>
-                  <span class="reason-kicker">Latest Fitness attempt</span>
+                  <span class="reason-kicker" id="latest-fitness-attempt-title">Latest completed Fitness evaluation</span>
                   <strong>UNKNOWN · EVIDENCE_TEMPORARILY_UNAVAILABLE</strong>
-                  <p>Attempt fit-eval-1842-07 could not obtain required freshness evidence 2 minutes ago.</p>
+                  <p>Attempt fit-eval-1842-07 at 16:22:48 UTC (2 minutes ago) could not obtain required freshness evidence.</p>
                 </div>
-                <div class="reason-side"><span>Next Fitness attempt</span><strong>in 48 sec</strong></div>
-              </aside>
+                <div class="reason-side"><span>Next Fitness attempt</span><strong>16:25:36 UTC · in 48 sec</strong></div>
+              </section>
 
-              <div class="metric-grid" aria-label="Dataset metrics">
-                <article class="metric-card"><span>Eligible records</span><strong>4,820</strong><small>minimum 5,000 · target 12,000</small><div class="meter"><span style="width:40.2%"></span><i style="left:41.7%"></i></div><div class="metric-trend warn"><span class="trend-dot warn"></span>Target gap 7,180 · 180 in flight</div></article>
+              <div class="metric-grid" role="group" aria-label="Dataset metrics">
+                <article class="metric-card"><span>Eligible records</span><strong>4,820</strong><small>minimum 5,000 · target 12,000</small><div class="meter"><span class="meter-current-authorisation"></span><i class="meter-minimum-authorisation"></i></div><div class="metric-trend warn"><span class="trend-dot warn"></span>Target gap 7,180 · 180 reserved · 180 in flight</div></article>
                 <article class="metric-card"><span>Earliest eligible validity</span><strong>24 min 10 sec</strong><small>Ends 16:49:10 UTC · eligible-validity horizon</small><div class="metric-trend warn"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h5v5M20 17h-5v-5"/><path d="M6 12a7 7 0 0 1 12-4M18 12a7 7 0 0 1-12 4"/></svg>Server-calculated boundary</div></article>
-                <article class="metric-card"><span>Distribution candidate</span><strong>23 of 24</strong><small>final materializers at revision 1842</small><div class="metric-trend warn"><span class="trend-dot warn"></span>Activated 1841 · selectors 24/24</div></article>
-                <article class="metric-card"><span>Consumer impact</span><strong>6 active swarms</strong><small>existing activated views may continue</small><div class="metric-trend info"><span class="trend-dot info"></span>1 additional start blocked</div></article>
+                <article class="metric-card"><span>Activated distribution</span><strong>Uniform 1841 · 6 bindings</strong><small>Candidate 1842 · final materializers 23/24</small><div class="metric-trend warn"><span class="trend-dot warn"></span>Selectors 24/24 on activated 1841</div></article>
+                <article class="metric-card"><span>Consumer impact</span><strong>5 observed-active swarms</strong><small>6 activated · 5 applicable · 0 continue · 5 until · 0 paused · 0 unknown · 1 N/A</small><div class="metric-trend info"><span class="trend-dot info"></span>Earliest safeUntil 16:42 UTC</div></article>
               </div>
 
               <section class="card detail-workspace">
                 <div class="tab-list" role="tablist" aria-label="Dataset details">
-                  <button id="tab-overview" role="tab" aria-selected="true" aria-controls="panel-overview" tabindex="0">Overview</button>
-                  <button id="tab-fitness" role="tab" aria-selected="false" aria-controls="panel-fitness" tabindex="-1">Fitness</button>
-                  <button id="tab-supply" role="tab" aria-selected="false" aria-controls="panel-supply" tabindex="-1">Supply &amp; lifecycle</button>
-                  <button id="tab-consumers" role="tab" aria-selected="false" aria-controls="panel-consumers" tabindex="-1">Consumers</button>
-                  <button id="tab-evidence" role="tab" aria-selected="false" aria-controls="panel-evidence" tabindex="-1">Evidence</button>
+                  <button id="tab-overview" type="button" role="tab" aria-selected="true" aria-controls="panel-overview" tabindex="0">Overview</button>
+                  <button id="tab-fitness" type="button" role="tab" aria-selected="false" aria-controls="panel-fitness" tabindex="-1">Fitness</button>
+                  <button id="tab-supply" type="button" role="tab" aria-selected="false" aria-controls="panel-supply" tabindex="-1">Supply &amp; lifecycle</button>
+                  <button id="tab-consumers" type="button" role="tab" aria-selected="false" aria-controls="panel-consumers" tabindex="-1">Consumers</button>
+                  <button id="tab-evidence" type="button" role="tab" aria-selected="false" aria-controls="panel-evidence" tabindex="-1">Evidence</button>
                 </div>
+                <p class="tab-scroll-hint">More views are available horizontally. Scroll or use Left/Right, Home and End.</p>
 
                 <div class="tab-panel" id="panel-overview" role="tabpanel" aria-labelledby="tab-overview" tabindex="0">
                   <div class="detail-section-grid">
@@ -553,16 +483,21 @@
                         <div><dt>Low watermark</dt><dd>6,000 records</dd></div>
                         <div><dt>Supply target</dt><dd>12,000 records</dd></div>
                         <div><dt>Target gap</dt><dd>7,180 records</dd></div>
-                        <div><dt>Fill in flight</dt><dd><span class="inline-state working"></span>180 requested · eligibility pending</dd></div>
+                        <div><dt>Reserved provisioning</dt><dd>180 records</dd></div>
+                        <div><dt>In-flight requested</dt><dd>180 records · eligibility pending</dd></div>
+                        <div><dt>Fill cycle</dt><dd>OPEN · LOW_WATERMARK · cycle target 12,000</dd></div>
+                        <div><dt>Lifecycle reconciliation</dt><dd>Last 16:24:50 UTC · next 16:24:55 UTC · lag 0.4 sec</dd></div>
+                        <div><dt>Active operations</dt><dd>1 total · PROVISION_NEW 1 · RUNNING 1</dd></div>
+                        <div><dt>Attention operation</dt><dd><span class="inline-state working"></span>1 of 1 · op-supply-7784 · earliest deadline <button class="text-link" type="button" data-tab-target="supply">View operation</button></dd></div>
                       </dl>
                     </article>
                     <article class="detail-section">
-                      <div class="section-heading"><div><span class="section-kicker">Validity and safeUntil</span><h2>Freshness &amp; continuity</h2></div><span class="status-pill pill-warn">Grace · 17 min</span></div>
+                      <div class="section-heading"><div><span class="section-kicker">Validity and safeUntil</span><h2>Freshness &amp; continuity</h2></div><span class="status-pill pill-warn">Prior-PASS continuity · 17 min</span></div>
                       <dl class="detail-list">
                         <div><dt>Oldest eligible evidence</dt><dd>7 min · observed 16:18:09 UTC</dd></div>
                         <div><dt>Last successful refresh</dt><dd>16:18:09 UTC · 7 min ago</dd></div>
-                        <div><dt>Refresh operation</dt><dd><span class="inline-state working"></span>Running</dd></div>
-                        <div><dt>Current Fitness</dt><dd>UNKNOWN · attempted 2 min ago</dd></div>
+                        <div><dt>Latest refresh operation</dt><dd><span class="inline-state ok"></span>SUCCEEDED · op-refresh-7781</dd></div>
+                        <div><dt>Current Fitness</dt><dd>UNKNOWN · attempted 16:22:48 UTC · 2 min ago</dd></div>
                         <div><dt>Running-traffic continuity</dt><dd>Prior PASS until <time datetime="2026-07-16T16:42:00Z">16:42:00 UTC</time></dd></div>
                         <div><dt>Next Fitness attempt</dt><dd>16:25:36 UTC · in 48 sec</dd></div>
                         <div><dt>Trusted time</dt><dd><span class="inline-state ok"></span>Healthy</dd></div>
@@ -570,8 +505,8 @@
                     </article>
                     <article class="detail-section">
                       <div class="section-heading"><div><span class="section-kicker">Revision vector</span><h2>Distribution</h2></div><span class="status-pill pill-warn">1 behind</span></div>
-                      <div class="revision-flow" aria-label="Dataset revision application states">
-                        <div class="revision-step complete"><span>1842</span><strong>Authoritative</strong><small>Committed 16:22</small></div>
+                      <div class="revision-flow" role="group" aria-label="Dataset revision application states">
+                        <div class="revision-step complete"><span>1842</span><strong>Authoritative</strong><small>Committed 16:22:04 UTC</small></div>
                         <div class="revision-connector"></div>
                         <div class="revision-step partial"><span>1842</span><strong>Candidate material</strong><small>23 of 24 materializers</small></div>
                         <div class="revision-connector"></div>
@@ -579,75 +514,183 @@
                       </div>
                     </article>
                     <article class="detail-section">
-                      <div class="section-heading"><div><span class="section-kicker">Authorised scope</span><h2>Consumer swarms</h2></div><button class="text-link" type="button" data-tab-target="consumers">Showing 3 of 6</button></div>
+                      <div class="section-heading"><div><span class="section-kicker">Authorised scope</span><h2>Consumer swarms</h2></div><button class="text-link" type="button" data-tab-target="consumers">View all 6 bindings</button></div>
                       <div class="consumer-list compact">
-                        <button type="button" data-navigate="inspector"><span><strong>payment-traffic-01</strong><small>Required · materializers 11/12 · selectors 12/12</small></span><span class="status-pill pill-warn">Start blocked</span></button>
-                        <button type="button"><span><strong>baseline-replay-03</strong><small>Required · materializers 4/4 · selectors 4/4</small></span><span class="status-pill pill-good">Active</span></button>
-                        <button type="button"><span><strong>mixed-traffic-02</strong><small>Optional · materializers 3/3 · selectors 3/3</small></span><span class="status-pill pill-good">Active</span></button>
+                        <button type="button" data-navigate="inspector"><span><strong>service-simulation-01</strong><small>Required · materializers 11/12 · selectors 12/12</small></span><span class="status-pill pill-warn">This binding: start blocked</span></button>
+                        <button type="button" disabled aria-label="baseline-replay-03 Hive route is outside this planning fixture"><span><strong>baseline-replay-03</strong><small>Required · materializers 4/4 · selectors 4/4 · route outside fixture</small></span><span class="status-pill pill-good">Active</span></button>
+                        <button type="button" disabled aria-label="mixed-traffic-02 Hive route is outside this planning fixture"><span><strong>mixed-traffic-02</strong><small>Optional · materializers 3/3 · selectors 3/3 · route outside fixture</small></span><span class="status-pill pill-good">Active</span></button>
                       </div>
                     </article>
                   </div>
                 </div>
 
                 <div class="tab-panel" id="panel-fitness" role="tabpanel" aria-labelledby="tab-fitness" tabindex="0" hidden>
-                  <div class="panel-heading"><div><span class="section-kicker">dataset-fitness/authorisation-traffic/v3</span><h2>Fitness Contract evaluation</h2><p>The latest attempt and the effective decision for existing traffic are independent.</p></div><span class="status-pill pill-neutral">Current: Unknown</span></div>
+                  <div class="panel-heading"><div><span class="section-kicker">dataset-fitness/service-traffic/v3</span><h2>Fitness Contract evaluation</h2><p>The latest completed evaluation, active attempt and effective decision for existing traffic are independent.</p></div><span class="status-pill pill-neutral">Current: Unknown</span></div>
                   <div class="fitness-state-grid">
-                    <article><span>Latest attempt</span><strong class="warn-text">UNKNOWN</strong><small>fit-eval-1842-07 · attempted 2 min ago</small><p>Required freshness evidence was unavailable.</p></article>
+                    <article><span>Latest completed evaluation</span><strong class="warn-text">UNKNOWN</strong><small>fit-eval-1842-07 · 16:22:48 UTC · 2 min ago</small><p>Required freshness evidence was unavailable.</p></article>
                     <article><span>Effective for existing traffic</span><strong class="good-text">Prior PASS</strong><small>fit-eval-1841-12 · valid for 17 min, until 16:42 UTC</small><p>Applies only to the already-activated view.</p></article>
                   </div>
-                  <div class="assertion-table" role="table" aria-label="Fitness assertions">
-                    <div class="assertion-row assertion-head" role="row"><span role="columnheader">Assertion</span><span role="columnheader">Result</span><span role="columnheader">Evidence age</span><span role="columnheader">Reason</span></div>
-                    <div class="assertion-row" role="row"><span role="cell">Schema compatibility</span><span role="cell"><span class="status-pill pill-good">Pass</span></span><span role="cell">2 min</span><span role="cell">Not applicable</span></div>
-                    <div class="assertion-row" role="row"><span role="cell">Required cohorts</span><span role="cell"><span class="status-pill pill-good">Pass</span></span><span role="cell">2 min</span><span role="cell">Not applicable</span></div>
-                    <div class="assertion-row" role="row"><span role="cell">Freshness and validity</span><span role="cell"><span class="status-pill pill-neutral">Unknown</span></span><span role="cell">7 min</span><span role="cell"><code>EVIDENCE_TEMPORARILY_UNAVAILABLE</code></span></div>
-                    <div class="assertion-row" role="row"><span role="cell">Source provenance</span><span role="cell"><span class="status-pill pill-good">Pass</span></span><span role="cell">3 min</span><span role="cell">Not applicable</span></div>
-                  </div>
+                  <table class="assertion-table">
+                    <caption class="sr-only">Fitness assertions</caption>
+                    <thead><tr class="assertion-row assertion-head"><th scope="col">Assertion</th><th scope="col">Result</th><th scope="col">Evidence age</th><th scope="col">Reason</th></tr></thead>
+                    <tbody>
+                      <tr class="assertion-row"><td>Schema compatibility</td><td><span class="status-pill pill-good">Pass</span></td><td>16:22:48 UTC · 2 min ago</td><td>Not applicable</td></tr>
+                      <tr class="assertion-row"><td>Required cohorts</td><td><span class="status-pill pill-good">Pass</span></td><td>16:22:48 UTC · 2 min ago</td><td>Not applicable</td></tr>
+                      <tr class="assertion-row"><td>Freshness and validity</td><td><span class="status-pill pill-neutral">Unknown</span></td><td>16:18:09 UTC · 7 min ago</td><td><code>EVIDENCE_TEMPORARILY_UNAVAILABLE</code></td></tr>
+                      <tr class="assertion-row"><td>Source provenance</td><td><span class="status-pill pill-good">Pass</span></td><td>16:21:48 UTC · 3 min ago</td><td>Not applicable</td></tr>
+                    </tbody>
+                  </table>
                 </div>
 
                 <div class="tab-panel" id="panel-supply" role="tabpanel" aria-labelledby="tab-supply" tabindex="0" hidden>
                   <div class="panel-heading"><div><span class="section-kicker">Supply Policy v12</span><h2>Supply and lifecycle</h2><p>Demand becomes bounded producer work; this view cannot start or alter sourcing.</p></div><span class="read-only-chip">Read only</span></div>
-                  <div class="operation-list">
-                    <article><span class="operation-state running"></span><div><strong>Fill operation op-supply-7784</strong><small>PROVISION_NEW · running · 183 received: 180 inserted + 0 updated + 0 duplicate + 3 rejected · eligibility pending</small></div><time datetime="2026-07-16T16:24:01Z">started 54 sec ago</time></article>
-                    <article><span class="operation-state success"></span><div><strong>Refresh operation op-refresh-7781</strong><small>Completed · 1,420 refreshed · revision 1841</small></div><time datetime="2026-07-16T16:18:09Z">7 min ago</time></article>
-                    <article><span class="operation-state success"></span><div><strong>Validation operation op-validate-7778</strong><small>Completed · 4,820 checked: 4,792 valid + 28 quarantined</small></div><time datetime="2026-07-16T16:03:11Z">22 min ago</time></article>
+                  <div class="detail-section-grid">
+                    <article class="detail-section">
+                      <div class="section-heading"><div><span class="section-kicker">Source specimen A · current snapshot</span><h3>Active policy with no pending change</h3></div><span class="status-pill pill-warn">Filling</span></div>
+                      <dl class="detail-list">
+                        <div><dt>Active version</dt><dd>v12 · target 12,000 · maximum 13,000</dd></div>
+                        <div><dt>Eligible / target</dt><dd>4,820 / 12,000</dd></div>
+                        <div><dt>Reserved / in flight / standby</dt><dd>180 / 180 / 420</dd></div>
+                        <div><dt>Requested or candidate version</dt><dd>Not applicable · no accepted live change</dd></div>
+                        <div><dt>Specimen boundary</dt><dd>This snapshot is mutually exclusive with alternate specimens B and C below</dd></div>
+                      </dl>
+                    </article>
+                    <article class="detail-section">
+                      <div class="section-heading"><div><span class="section-kicker">Durable Dataset timing</span><h3>Lifecycle reconciler</h3></div><span class="status-pill pill-info">OPEN</span></div>
+                      <dl class="detail-list">
+                        <div><dt>Fill cycle</dt><dd>fill-1842-04 · LOW_WATERMARK · frozen target 12,000</dd></div>
+                        <div><dt>Cycle accounting</dt><dd>180 reserved · 180 accepted · 0 unresolved</dd></div>
+                        <div><dt>Last / next reconciliation</dt><dd>16:24:50 / 16:24:55 UTC</dd></div>
+                        <div><dt>Scheduling lag</dt><dd>0.4 sec · within 5-sec bound</dd></div>
+                        <div><dt>Pause / provider backoff / circuit</dt><dd>Not paused · no backoff · closed</dd></div>
+                      </dl>
+                    </article>
+                    <article class="detail-section">
+                      <div class="section-heading"><div><span class="section-kicker">Separate timing systems</span><h3>What this is not</h3></div><span class="status-pill pill-neutral">Informational</span></div>
+                      <dl class="detail-list">
+                        <div><dt>Scenario timeline</dt><dd>Schedules swarm start, stop and configuration through <code>ph.control</code></dd></div>
+                        <div><dt>Traffic pacer</dt><dd>Controls request rate; <code>maxMessages</code> is not Dataset size</dd></div>
+                        <div><dt>RabbitMQ role</dt><dd>Delivers control, bounded work and hints; PostgreSQL owns the schedule and Dataset truth</dd></div>
+                      </dl>
+                    </article>
                   </div>
+                  <section class="detail-section review-specimen" aria-labelledby="resize-specimen-title">
+                    <div class="section-heading"><div><span class="section-kicker">Source specimen B · mutually exclusive alternate</span><h3 id="resize-specimen-title">Accepted live target increase is not yet convergence</h3></div><span class="status-pill pill-info">Candidate</span></div>
+                    <p>This is a separate possible response, not a continuation of specimen A. Requested policy v13 raises the desired eligible inventory from 12,000 to 50,000 at 17:00 UTC. Current effective supply is 5,000, below the new target, so the prior-target/current-supply/new-target decision requires one durable <code>TARGET_INCREASE</code> fill cycle at the effective boundary even though inventory is above the low watermark. The accepted command receipt proves only the request; active and applied remain v12 until the server reports otherwise.</p>
+                    <dl class="detail-list">
+                      <div><dt>Requested / candidate</dt><dd>v13 · target 50,000 · maximum 55,000 · effective 17:00 UTC</dd></div>
+                      <div><dt>Current effective supply</dt><dd>5,000 = 4,820 eligible + 180 unexpired reserved · below new target 50,000</dd></div>
+                      <div><dt>Current active / applied</dt><dd>v12 · target 12,000 · revision 1841</dd></div>
+                      <div><dt>Mutation control</dt><dd>Not available in this read-only UI; official authorised administrative API/CLI only</dd></div>
+                    </dl>
+                  </section>
+                  <section class="detail-section review-specimen">
+                    <div class="section-heading"><div><span class="section-kicker">Source specimen C · mutually exclusive alternate</span><h3>Target decrease stages surplus records without deleting them</h3></div><span class="status-pill pill-info">Applying</span></div>
+                    <p>This is another separate possible response. Policy v13 lowers the target from 12,000 to 8,000. PostgreSQL has committed the authoritative revision that deterministically changes surplus records from <code>READY</code> to <code>STANDBY</code>; it does not delete them. Required consumers are now applying that committed revision, and the resize is complete only after every required consumer reports it applied.</p>
+                    <dl class="detail-list">
+                      <div><dt>Alternate-snapshot eligible change</dt><dd>11,500 → 8,000 READY · 3,500 records become STANDBY</dd></div>
+                      <div><dt>Authoritative active</dt><dd>v13 · target 8,000 · maximum 9,000 · revision 1843 committed</dd></div>
+                      <div><dt>Consumer application</dt><dd>4 of 6 on revision 1843 · 2 remain on prior v12 / revision 1842 within their safe horizon</dd></div>
+                      <div><dt>Completion condition</dt><dd>All 6 required consumers report applied revision 1843; until then the target decrease is not converged</dd></div>
+                    </dl>
+                  </section>
+                  <div class="section-heading"><div><span class="section-kicker">Source specimen A · current snapshot resumes</span><h3>Current lifecycle operations</h3></div><span class="status-pill pill-neutral">Policy v12</span></div>
+                  <div class="operation-list">
+                    <article><span class="operation-state running" aria-hidden="true"></span><div><strong>Fill / provisioning · op-supply-7784</strong><small><code>PROVISION_NEW</code> · RUNNING · attempt 2 · fence src-14/lease-8 · baseline/traffic-ready · source v7 · policy v12</small><small>Requested 180 · accepted for execution 180 · reserved 180 · source progress 61/180 · no terminal receipt or Dataset revision yet · deadline 16:26:00 UTC</small></div><time datetime="2026-07-16T16:24:01Z">Started 16:24:01 UTC</time></article>
+                    <article><span class="operation-state success" aria-hidden="true"></span><div><strong>Fill / provisioning · op-supply-7760</strong><small><code>PROVISION_NEW</code> · SUCCEEDED · attempt 1 · fence src-14/lease-7b · baseline/traffic-ready · source v7 · policy v12 · receipt sr-7760</small><small>183 received = 180 inserted + 0 updated + 0 duplicate + 3 rejected · resulting authoritative revision 1842 · journal correlation jrnl-7760</small></div><time datetime="2026-07-16T16:22:04Z">Completed 16:22:04 UTC</time></article>
+                    <article><span class="operation-state success" aria-hidden="true"></span><div><strong>Refresh material · op-refresh-7781</strong><small><code>REFRESH_MATERIAL</code> · SUCCEEDED · attempt 1 · fence src-14/lease-7 · baseline/traffic-ready · source v7 · policy v12</small><small>1,420 received = 0 inserted + 1,420 updated + 0 duplicate + 0 rejected · resulting authoritative revision 1841 · journal correlation jrnl-7781</small></div><time datetime="2026-07-16T16:18:09Z">Completed 16:18:09 UTC</time></article>
+                    <article><span class="operation-state success" aria-hidden="true"></span><div><strong>Validate records · op-validate-7778</strong><small><code>VALIDATE_RECORD</code> · SUCCEEDED · attempt 1 · fence src-14/lease-6 · baseline/traffic-ready · source v7 · policy v12</small><small>4,820 checked = 4,792 valid + 28 invalid/quarantined + 0 uncertain · resulting authoritative revision 1840</small></div><time datetime="2026-07-16T16:03:11Z">Completed 16:03:11 UTC</time></article>
+                    <article><span class="operation-state success" aria-hidden="true"></span><div><strong>Create successor for revoked identity · op-replace-7769</strong><small><code>REPLACE_RECORD</code> · SUCCEEDED · attempt 1 · fence src-14/lease-5 · one opaque predecessor ref · source v7 · policy v12</small><small>1 received = 1 inserted successor + 0 updated + 0 duplicate + 0 rejected · predecessor made ineligible · resulting authoritative revision 1839</small></div><time datetime="2026-07-16T15:42:20Z">Completed 15:42:20 UTC</time></article>
+                    <article><span class="operation-state success" aria-hidden="true"></span><div><strong>Deprovision entity · op-deprovision-7742</strong><small><code>DEPROVISION_ENTITY</code> · SUCCEEDED · attempt 1 · fence src-13/lease-19 · entity scope opaque · source v7 · policy v11</small><small>24 outcomes = 24 deprovisioned + 0 auto-expired + 0 owner-handed-off + 0 uncertain · 24 records made ineligible · resulting authoritative revision 1832 · journal correlation jrnl-7742</small></div><time datetime="2026-07-16T12:11:04Z">Completed 12:11:04 UTC</time></article>
+                  </div>
+                  <section class="detail-section review-specimen" id="cancel-specimen" tabindex="-1" aria-labelledby="cancel-specimen-title">
+                    <div class="section-heading"><div><span class="section-kicker">Planning review specimen · alternate snapshot</span><h3 id="cancel-specimen-title">Cancellation intent under provider ambiguity</h3></div><span class="status-pill pill-warn">Not in current summary</span></div>
+                    <p>This isolated specimen is excluded from the current 180-record totals and active-operation summary above. It demonstrates the separate read-only state the product must render when this alternate snapshot is returned.</p>
+                    <div class="operation-list">
+                      <article><span class="operation-state uncertain" aria-hidden="true"></span><div><strong>Cancellation requested — reconciling · op-supply-7779</strong><small><code>PROVISION_NEW</code> · UNCERTAIN · accepted intent cancel-7779-v1 from RUNNING · operation version 6 · fence src-14/lease-7c · accepted 16:20:12 UTC</small><small>Requested 40 · accepted 40 · reservation 40 retained · provider effect ambiguous · new claim/requeue blocked · no terminal counters, Dataset revision or CANCELLED claim · official provider status ref prv-status-7779</small></div><time datetime="2026-07-16T16:20:12Z">Intent accepted 16:20:12 UTC</time></article>
+                    </div>
+                  </section>
                 </div>
 
                 <div class="tab-panel" id="panel-consumers" role="tabpanel" aria-labelledby="tab-consumers" tabindex="0" hidden>
-                  <div class="panel-heading"><div><span class="section-kicker">Authorised relationships</span><h2>Consumer swarms</h2><p>Durable binding state and live worker observation remain separate.</p></div><span class="status-pill pill-info">Showing 3 of 6</span></div>
-                  <div class="consumer-list">
-                    <button type="button" data-navigate="inspector"><span><strong>payment-traffic-01</strong><small>Required binding · expected revision 1842</small></span><span><strong>materializers 11/12 · selectors 12/12</strong><small>start blocked · prior revision 1841 continues</small></span><span class="status-pill pill-warn">Attention</span></button>
-                    <button type="button"><span><strong>baseline-replay-03</strong><small>Required binding · activated revision 1841</small></span><span><strong>materializers 4/4 · selectors 4/4</strong><small>running decision: continue</small></span><span class="status-pill pill-good">Active</span></button>
-                    <button type="button"><span><strong>mixed-traffic-02</strong><small>Optional binding · activated revision 1842</small></span><span><strong>materializers 3/3 · selectors 3/3</strong><small>running decision: continue</small></span><span class="status-pill pill-good">Active</span></button>
+                  <div class="panel-heading"><div><span class="section-kicker">Authorised relationships</span><h2>Consumer bindings</h2><p>Every card keeps durable binding truth, exact start/running decisions and the bounded live observation separate.</p></div><span class="status-pill pill-info" id="consumer-page-summary" aria-live="polite">Showing 1–3 of 6</span></div>
+                  <div class="consumer-pages" id="consumer-pages">
+                    <div class="consumer-page" data-consumer-page="1">
+                      <article class="consumer-card">
+                        <header><div><span class="section-kicker">Required · service-traffic</span><h3>service-simulation-01</h3><p>Binding bs-primary-1842 · run run-2026-07-16-04 · membership epoch 32</p></div><span class="status-pill pill-warn">Binding needs attention</span></header>
+                        <div class="consumer-decisions"><div><span>Start decision</span><strong class="bad-text">BLOCK</strong><small>Fitness, supply and materializer revision gates unmet</small></div><div><span>Running decision</span><strong class="warn-text">CONTINUE_UNTIL</strong><small>Activated revision 1841 · safe until 16:42 UTC</small></div></div>
+                        <dl class="consumer-facts"><div><dt>Revision vector</dt><dd>expected 1842 · candidate 1842 · activated 1841</dd></div><div><dt>Worker application</dt><dd>materializers 11/12 · selectors 12/12</dd></div><div><dt>Worker-local supply</dt><dd>lowest comparable 4,818 · reporting 12/12</dd></div><div><dt>Live observation</dt><dd>16:24:48 UTC · valid until 16:25:18 UTC</dd></div></dl>
+                        <footer><span>1 exception · processor-12 hydrating on revision 1841</span><button class="text-link" type="button" data-navigate="inspector">Open authorised Inspector</button></footer>
+                      </article>
+                      <article class="consumer-card">
+                        <header><div><span class="section-kicker">Required · service-traffic</span><h3>baseline-replay-03</h3><p>Binding bs-replay-1841 · run run-2026-07-16-02 · membership epoch 18</p></div><span class="status-pill pill-good">Observed active</span></header>
+                        <div class="consumer-decisions"><div><span>Start decision</span><strong class="bad-text">BLOCK</strong><small>Current Dataset admission condition not satisfied</small></div><div><span>Running decision</span><strong class="warn-text">CONTINUE_UNTIL</strong><small>Activated revision 1841 · safe until 16:42 UTC</small></div></div>
+                        <dl class="consumer-facts"><div><dt>Revision vector</dt><dd>expected 1842 · candidate 1842 · activated 1841</dd></div><div><dt>Worker application</dt><dd>materializers 4/4 at candidate 1842 · selectors 4/4 at activated 1841</dd></div><div><dt>Worker-local supply</dt><dd>lowest comparable 4,826 · reporting 4/4</dd></div><div><dt>Live observation</dt><dd>16:24:43 UTC · valid until 16:25:13 UTC</dd></div></dl>
+                        <footer><span>No bounded worker exceptions</span><button class="text-link" type="button" disabled>Hive route outside fixture</button></footer>
+                      </article>
+                      <article class="consumer-card">
+                        <header><div><span class="section-kicker">Optional · service-traffic</span><h3>mixed-traffic-02</h3><p>Binding bs-mixed-1842 · run run-2026-07-16-01 · membership epoch 9</p></div><span class="status-pill pill-good">Observed active</span></header>
+                        <div class="consumer-decisions"><div><span>Start decision</span><strong class="bad-text">BLOCK</strong><small>Current Dataset admission condition not satisfied</small></div><div><span>Running decision</span><strong class="warn-text">CONTINUE_UNTIL</strong><small>Activated revision 1841 · safe until 16:42 UTC</small></div></div>
+                        <dl class="consumer-facts"><div><dt>Revision vector</dt><dd>expected 1842 · candidate 1842 · activated 1841</dd></div><div><dt>Worker application</dt><dd>materializers 3/3 at candidate 1842 · selectors 3/3 at activated 1841</dd></div><div><dt>Worker-local supply</dt><dd>lowest comparable 4,821 · reporting 3/3</dd></div><div><dt>Live observation</dt><dd>16:24:40 UTC · valid until 16:25:10 UTC</dd></div></dl>
+                        <footer><span>No bounded worker exceptions</span><button class="text-link" type="button" disabled>Hive route outside fixture</button></footer>
+                      </article>
+                    </div>
+                    <div class="consumer-page" data-consumer-page="2" hidden>
+                      <article class="consumer-card"><header><div><span class="section-kicker">Required · service-traffic</span><h3>regional-traffic-04</h3><p>Binding bs-regional-1841 · no current run · membership epoch 4</p></div><span class="status-pill pill-neutral">No current run</span></header><div class="consumer-decisions"><div><span>Start decision</span><strong class="bad-text">BLOCK</strong><small>Current Dataset admission condition not satisfied</small></div><div><span>Running decision</span><strong>NOT_APPLICABLE</strong><small>Product confirms there is no current running consumer</small></div></div><dl class="consumer-facts"><div><dt>Revision vector</dt><dd>expected 1842 · candidate 1842 · activated 1841</dd></div><div><dt>Durable application</dt><dd>materializer 1/1 at candidate 1842 · selector 1/1 at activated 1841</dd></div><div><dt>Live worker coverage</dt><dd>Not applicable · NO_CURRENT_RUN</dd></div><div><dt>Last durable update</dt><dd>16:20:01 UTC · binding retained</dd></div></dl><footer><span>Durable binding retained; running decision is explicitly N/A</span><button class="text-link" type="button" disabled>No current Hive route</button></footer></article>
+                      <article class="consumer-card"><header><div><span class="section-kicker">Optional · service-traffic</span><h3>fallback-simulation-01</h3><p>Binding bs-fallback-1841 · run run-2026-07-15-08 · membership epoch 11</p></div><span class="status-pill pill-good">Observed active</span></header><div class="consumer-decisions"><div><span>Start decision</span><strong class="bad-text">BLOCK</strong><small>Current Dataset admission condition not satisfied</small></div><div><span>Running decision</span><strong class="warn-text">CONTINUE_UNTIL</strong><small>Activated revision 1841 · safe until 16:42 UTC</small></div></div><dl class="consumer-facts"><div><dt>Revision vector</dt><dd>expected 1842 · candidate 1842 · activated 1841</dd></div><div><dt>Worker application</dt><dd>materializers 2/2 at candidate 1842 · selectors 2/2 at activated 1841</dd></div><div><dt>Worker-local supply</dt><dd>lowest comparable 4,825 · reporting 2/2</dd></div><div><dt>Live observation</dt><dd>16:24:39 UTC · valid until 16:25:09 UTC</dd></div></dl><footer><span>No bounded worker exceptions</span><button class="text-link" type="button" disabled>Hive route outside fixture</button></footer></article>
+                      <article class="consumer-card"><header><div><span class="section-kicker">Required · service-traffic</span><h3>service-regression-02</h3><p>Binding bs-regression-1841 · run run-2026-07-16-03 · membership epoch 7</p></div><span class="status-pill pill-good">Observed active</span></header><div class="consumer-decisions"><div><span>Start decision</span><strong class="bad-text">BLOCK</strong><small>Current Dataset admission condition not satisfied</small></div><div><span>Running decision</span><strong class="warn-text">CONTINUE_UNTIL</strong><small>Activated revision 1841 · safe until 16:42 UTC</small></div></div><dl class="consumer-facts"><div><dt>Revision vector</dt><dd>expected 1842 · candidate 1842 · activated 1841</dd></div><div><dt>Worker application</dt><dd>materializers 2/2 at candidate 1842 · selectors 2/2 at activated 1841</dd></div><div><dt>Worker-local supply</dt><dd>lowest comparable 4,829 · reporting 2/2</dd></div><div><dt>Live observation</dt><dd>16:24:37 UTC · valid until 16:25:07 UTC</dd></div></dl><footer><span>No bounded worker exceptions</span><button class="text-link" type="button" disabled>Hive route outside fixture</button></footer></article>
+                    </div>
                   </div>
+                  <nav class="pagination-controls" aria-label="Consumer binding pages"><button class="action-button" id="consumer-previous" type="button" disabled>Previous</button><span id="consumer-page-position">Page 1 of 2</span><button class="action-button" id="consumer-next" type="button">Next</button></nav>
                 </div>
 
                 <div class="tab-panel" id="panel-evidence" role="tabpanel" aria-labelledby="tab-evidence" tabindex="0" hidden>
-                  <div class="panel-heading"><div><span class="section-kicker">Deterministic proof facts</span><h2>Evidence</h2><p>Facts remain independent; an absent fact is never inferred from another successful stage.</p></div><span class="status-pill pill-warn">1 unavailable</span></div>
-                  <dl class="proof-meta" aria-label="Proof metadata">
-                    <div><dt>Proof</dt><dd>proof-ready-1842</dd></div>
-                    <div><dt>Scope</dt><dd>authorisation-traffic · baseline / traffic-ready</dd></div>
-                    <div><dt>As of</dt><dd>Dataset revision 1842</dd></div>
-                    <div><dt>Validity</dt><dd>Observed 16:24:48 · valid until 16:25:18 UTC</dd></div>
-                    <div><dt>Digest</dt><dd><code>sha256:9f31…c42a</code></dd></div>
-                  </dl>
-                  <div class="evidence-grid">
-                    <article class="evidence-fact pass"><span class="evidence-symbol">Pass</span><strong>Configured</strong><small>Definition and policy resolved</small></article>
-                    <article class="evidence-fact pass"><span class="evidence-symbol">Pass</span><strong>Sourced</strong><small>Source receipts accepted</small></article>
-                    <article class="evidence-fact pass"><span class="evidence-symbol">Pass</span><strong>Persisted</strong><small>Committed Dataset revision 1842</small></article>
-                    <article class="evidence-fact pass"><span class="evidence-symbol">Pass</span><strong>Broker accepted</strong><small>Revision 1842 publisher-confirmed; no return</small></article>
-                    <article class="evidence-fact warn"><span class="evidence-symbol">Attention</span><strong>Materializer applied</strong><small>Revision 1842 · 23 of 24</small></article>
-                    <article class="evidence-fact pass"><span class="evidence-symbol">Pass</span><strong>Traffic activated</strong><small>Exact prior revision 1841 remains active</small></article>
-                    <article class="evidence-fact pass"><span class="evidence-symbol">Pass</span><strong>Selector applied</strong><small>Revision 1841 · 24 of 24</small></article>
-                    <article class="evidence-fact unknown"><span class="evidence-symbol">Unknown</span><strong>Ready</strong><small>Current Fitness evidence unavailable</small></article>
-                    <article class="evidence-fact unknown"><span class="evidence-symbol">Not requested</span><strong>Flow proven</strong><small>No transaction or interval proof requested</small></article>
+                  <div class="panel-heading"><div><span class="section-kicker">Read-only canonical proof query</span><h2>Evidence</h2><p>Select an exact proof level. This planning fixture supplies the one exact claim-target kind/reference required for that level; the product proof service—not this browser—returns the verdict and independent facts.</p></div><span class="read-only-chip">Zero command effects</span></div>
+                  <form class="proof-query" id="proof-query-form" novalidate>
+                    <label><span>Requested proof level</span><select id="proof-level"><option>CONFIGURED</option><option>SOURCED</option><option>PERSISTED</option><option>BROKER_ACCEPTED</option><option>FINAL_MATERIALIZER_APPLIED</option><option>TRAFFIC_ACTIVATED</option><option>SELECTOR_APPLIED</option><option selected>READY</option><option>FLOW_PROVEN</option></select></label>
+                    <label><span>Exact claim target</span><input id="proof-target" type="text" value="BINDING · bs-primary-1842" readonly aria-describedby="proof-query-help"></label>
+                    <label id="proof-reference-kind-field" hidden><span>Flow reference type</span><select id="proof-reference-kind" disabled><option value="transaction">Transaction</option></select></label>
+                    <label id="proof-reference-field" hidden><span>Exact opaque flow reference</span><select id="proof-reference" disabled aria-describedby="proof-query-help proof-reference-error"><option value="">Select the required reference</option><option value="txn-opaque-9ef2">txn-opaque-9ef2</option></select></label>
+                    <button class="action-button" type="submit">View product proof</button>
+                    <p class="field-error" id="proof-reference-error" role="alert" hidden></p>
+                    <p id="proof-query-help">No Dataset values, free-text search or lifecycle mutation is accepted. This fixture exposes one fixed status-scope, operation, delivery-attempt or binding target as required, plus one opaque transaction example for FLOW_PROVEN; production accepts only the closed target/reference unions.</p>
+                    <p class="sr-only" id="proof-query-status" aria-live="polite"></p>
+                  </form>
+                  <div class="proof-result-heading"><div><span class="section-kicker">DatasetProof/v1</span><h3 id="proof-result-title">Product-created proof result</h3></div><span class="status-pill pill-bad" id="proof-verdict">Verdict: FAIL</span></div>
+                  <div role="group" aria-labelledby="proof-result-title">
+                    <dl class="proof-meta">
+                      <div><dt>Proof ID</dt><dd id="proof-id">proof-primary-1842-ready</dd></div>
+                      <div><dt>Requested level</dt><dd id="proof-requested-level">READY</dd></div>
+                      <div><dt>Status scope ID</dt><dd>ds-status-94f2</dd></div>
+                      <div><dt>Exact claim target</dt><dd id="proof-claim-target-result">BINDING · bs-primary-1842</dd></div>
+                      <div><dt>Claim context</dt><dd id="proof-claim-context-result">NONE</dd></div>
+                      <div><dt>Claim profile</dt><dd>pockethive.dataset-proof-claim/v1</dd></div>
+                      <div><dt>Required facts</dt><dd id="proof-required-facts">FINAL_MATERIALIZER_APPLIED · TRAFFIC_ACTIVATED · SELECTOR_APPLIED · READY</dd></div>
+                      <div><dt>Authoritative revision</dt><dd id="proof-authoritative-revision">1842 · revision scope ds-revision-6a21</dd></div>
+                      <div><dt>Contract versions</dt><dd>descriptor v8 · source v7 · policy v12 · Fitness v3</dd></div>
+                      <div><dt>Validity</dt><dd id="proof-validity">Observed 16:24:48 UTC · valid until 16:25:16 UTC</dd></div>
+                      <div><dt>Canonical digest</dt><dd><code id="proof-canonical-digest">sha256:d13ec812…cfbe3ea6</code><details class="digest-disclosure"><summary>Show full digest</summary><code id="proof-canonical-digest-full" tabindex="0">sha256:d13ec8128f03311b952dae912733c4772077108a4186cdf83d95429ccfbe3ea6</code></details></dd></div>
+                    </dl>
                   </div>
+                  <div class="proof-gaps" id="proof-gaps"><strong id="proof-gap-count">Explicit gaps (5)</strong><code id="proof-gap-codes">FINAL_MATERIALIZER_INCOMPLETE · CANDIDATE_NOT_ACTIVATED · SELECTOR_REVISION_BEHIND · SUPPLY_BELOW_MINIMUM · EVIDENCE_TEMPORARILY_UNAVAILABLE</code><span id="proof-gap-detail">processor-12 has not applied candidate revision 1842; candidate 1842 is not activated; selectors remain constrained to activated revision 1841; eligible 4,820 is below minimum 5,000; current Fitness evidence is unavailable.</span></div>
+                  <div class="evidence-grid">
+                    <article class="evidence-fact pass" data-proof-fact="CONFIGURED" data-proof-order="0"><span class="evidence-symbol">PASS</span><strong>Configured</strong><small><code>CONFIGURED</code> · scope ds-status-94f2 · revision scope ds-revision-6a21</small><small>Revision N/A (FACT_PRECEDES_DATASET_REVISION) · epoch N/A (FACT_HAS_NO_MEMBERSHIP_EPOCH)</small><small>Observed 16:21:54 UTC · valid until 16:25:18 UTC · reason codes none · evidence dataset-definition-v8, source-binding-v7</small></article>
+                    <article class="evidence-fact pass" data-proof-fact="SOURCED" data-proof-order="1"><span class="evidence-symbol">PASS</span><strong>Sourced</strong><small><code>SOURCED</code> · operation op-supply-7760 · receipt sr-7760</small><small>Revision N/A (FACT_PRECEDES_DATASET_REVISION) · epoch N/A (FACT_HAS_NO_MEMBERSHIP_EPOCH)</small><small>Observed 16:21:58 UTC · valid until 16:25:12 UTC · reason codes none · evidence ev-source-31</small></article>
+                    <article class="evidence-fact pass" data-proof-fact="PERSISTED" data-proof-order="2"><span class="evidence-symbol">PASS</span><strong>Persisted</strong><small><code>PERSISTED</code> · operation op-supply-7760 · revision scope ds-revision-6a21</small><small>Authoritative revision 1842 · epoch N/A (FACT_HAS_NO_MEMBERSHIP_EPOCH)</small><small>Observed 16:22:04 UTC · valid until 16:25:14 UTC · reason codes none · evidence ev-commit-17</small></article>
+                    <article class="evidence-fact pass" data-proof-fact="BROKER_ACCEPTED" data-proof-order="3"><span class="evidence-symbol">PASS</span><strong>Broker accepted</strong><small><code>BROKER_ACCEPTED</code> · delivery attempt ev-broker-09 · revision scope ds-revision-6a21</small><small>Authoritative revision 1842 · epoch N/A (FACT_HAS_NO_MEMBERSHIP_EPOCH)</small><small>Observed 16:22:05 UTC · valid until 16:25:15 UTC · reason codes none · publisher confirm and no return</small></article>
+                    <article class="evidence-fact fail" data-proof-fact="FINAL_MATERIALIZER_APPLIED" data-proof-order="4"><span class="evidence-symbol">FAIL</span><strong>Final materializer applied</strong><small><code>FINAL_MATERIALIZER_APPLIED</code> · binding bs-primary-1842 · revision scope ds-revision-6a21</small><small>Candidate revision 1842 · membership epoch 32 · applied 11/12</small><small>Observed 16:24:46 UTC · valid until 16:25:16 UTC · reason FINAL_MATERIALIZER_INCOMPLETE · evidence ev-mat-42</small></article>
+                    <article class="evidence-fact fail" data-proof-fact="TRAFFIC_ACTIVATED" data-proof-order="5"><span class="evidence-symbol">FAIL</span><strong>Traffic activated</strong><small id="proof-traffic-fact"><code>TRAFFIC_ACTIVATED</code> · READY target binding bs-primary-1842 · revision scope ds-revision-6a21</small><small id="proof-traffic-revision">Required candidate revision 1842 · membership epoch 32 · activated revision 1841</small><small id="proof-traffic-evidence">Observed 16:24:47 UTC · valid until 16:25:17 UTC · reason CANDIDATE_NOT_ACTIVATED · evidence ev-activate-18</small></article>
+                    <article class="evidence-fact fail" data-proof-fact="SELECTOR_APPLIED" data-proof-order="6"><span class="evidence-symbol">FAIL</span><strong>Selector applied</strong><small id="proof-selector-fact"><code>SELECTOR_APPLIED</code> · READY target binding bs-primary-1842 · revision scope ds-revision-6a21</small><small id="proof-selector-revision">Required candidate revision 1842 · membership epoch 32 · selectors remain 12/12 on revision 1841</small><small id="proof-selector-evidence">Observed 16:24:47 UTC · valid until 16:25:17 UTC · reason SELECTOR_REVISION_BEHIND · evidence ev-select-18</small></article>
+                    <article class="evidence-fact fail" data-proof-fact="READY" data-proof-order="7"><span class="evidence-symbol">FAIL</span><strong>Ready</strong><small><code>READY</code> · binding bs-primary-1842 · candidate revision 1842 · membership epoch 32</small><small>Eligible 4,820 is below minimum 5,000 · current Fitness evidence unavailable</small><small>Observed 16:24:48 UTC · valid until 16:25:18 UTC · reasons SUPPLY_BELOW_MINIMUM, EVIDENCE_TEMPORARILY_UNAVAILABLE · evidence ev-supply-44, ev-fit-07</small></article>
+                    <article class="evidence-fact unknown" data-proof-fact="FLOW_PROVEN" data-proof-order="8" hidden><span class="evidence-symbol">UNKNOWN</span><strong>Flow proven</strong><small id="proof-flow-reference"><code>FLOW_PROVEN</code> · exact requested reference</small><small>Activated revision 1841 · membership epoch 32 · revision scope ds-revision-6a21</small><small>Observed 16:24:48 UTC · valid until 16:25:18 UTC · reason FLOW_EVIDENCE_NOT_YET_OBSERVED · evidence refs none returned</small></article>
+                  </div>
+                  <p class="proof-not-requested" id="proof-not-requested"><strong>Not requested for this proof:</strong> FLOW_PROVEN is omitted because the requested level is READY.</p>
                 </div>
               </section>
 
               <footer class="security-note">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
-                <span>Operational metadata only. Record enumeration, values, secrets and manual lifecycle actions are outside the MVP.</span>
+                <span>Operational metadata only. Record enumeration, values, secrets and lifecycle mutation are outside this read-only UI. Authorised administrators use the separate official command surface.</span>
               </footer>
             </div>
           </section>
@@ -657,8 +700,8 @@
             <div class="page page-wide">
               <header class="page-heading inspector-page-heading">
                 <div>
-                  <div class="eyebrow">Hive · payment-traffic-01</div>
-                  <div class="detail-title-row"><h1 id="inspector-title">Swarm inspection</h1><span class="status-pill pill-warn">Start blocked</span></div>
+                  <div class="eyebrow">Hive · service-simulation-01</div>
+                  <div class="detail-title-row"><h1 id="inspector-title" tabindex="-1">Swarm inspection</h1><span class="status-pill pill-warn">This run: start blocked</span></div>
                   <p>Runtime diagnostics and product-owned dependency readiness for run-2026-07-16-04.</p>
                 </div>
                 <button class="action-button refresh-button inspector-refresh" type="button">
@@ -667,12 +710,10 @@
                 </button>
               </header>
 
-              <nav class="tab-list swarm-tabs" aria-label="Swarm detail views">
-                <span class="swarm-tab">Snapshot</span>
-                <span class="swarm-tab">Network</span>
-                <span class="swarm-tab">Scenario</span>
-                <span class="swarm-tab is-active" aria-current="page">Inspector</span>
-              </nav>
+              <div class="inspector-context" role="group" aria-label="Current Hive view">
+                <span class="read-only-chip">Inspector view</span>
+                <span>Snapshot, Network and Scenario routes are outside this planning fixture.</span>
+              </div>
 
               <section class="card dependency-card" aria-labelledby="dependencies-title">
                 <div class="card-heading">
@@ -681,34 +722,32 @@
                     <h2 id="dependencies-title">Dataset dependencies</h2>
                     <p>Observed 16:24:48 UTC · valid until 16:25:18 UTC. Dataset authority and this swarm’s applied state remain separate.</p>
                   </div>
-                  <div class="card-heading-actions"><span class="status-pill pill-warn">3 gates unmet</span><button class="text-link" type="button" data-open-dataset="authorisation-instruments">Open Dataset</button></div>
+                  <div class="card-heading-actions"><span class="status-pill pill-warn">3 gates unmet</span><button class="text-link" type="button" data-open-dataset="primary-test-entities">Open Dataset</button></div>
                 </div>
 
                 <div class="dependency-decisions">
                   <div><span>New swarm start</span><strong class="bad-text">Blocked · 3 gates unmet</strong><small>Fitness, supply and worker revision gates are not ready.</small></div>
-                  <div><span>Running traffic</span><strong class="warn-text">Continues · 17 min</strong><small>Prior PASS is valid for this activated view until 16:42 UTC.</small></div>
+                  <div><span>Running decision</span><strong class="warn-text">CONTINUE_UNTIL</strong><small>Activated revision 1841 · prior PASS is valid until 16:42 UTC.</small></div>
                 </div>
 
                 <article class="binding-card">
                   <div class="binding-header">
                     <div class="binding-identity">
                       <svg class="dataset-symbol attention" viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v7c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/><path d="M4 12v7c0 1.66 3.58 3 8 3s8-1.34 8-3v-7"/></svg>
-                      <div><span class="binding-kicker">Required · partition baseline / pool traffic-ready</span><strong>authorisation-instruments</strong><small>payment-simulation · sandbox-west · authorisation-traffic</small></div>
+                      <div><span class="binding-kicker">Required · partition baseline / pool traffic-ready</span><strong>primary-test-entities</strong><small>service-simulation · sandbox-west · service-traffic</small></div>
                     </div>
-                    <div class="binding-statuses"><span class="status-pill pill-warn">Supply degraded</span></div>
+                    <div class="binding-statuses"><span class="status-pill pill-warn">Dataset health: Degraded</span></div>
                   </div>
 
-                  <div class="binding-grid">
-                    <div class="binding-fact"><span>Dataset revision</span><strong>1842</strong><small>committed 3 min ago</small></div>
-                    <div class="binding-fact"><span>Current Fitness</span><strong>Unknown</strong><small>latest attempt 2 min ago</small></div>
-                    <div class="binding-fact"><span>Prior PASS grace</span><strong>17 min</strong><small>safe until 16:42 UTC</small></div>
-                    <div class="binding-fact"><span>Projection application</span><strong class="warn-text">materializers 11/12</strong><small>selectors 12/12 · activated revision 1841</small></div>
+                  <div class="binding-truth-grid">
+                    <section class="binding-truth-group" aria-labelledby="authoritative-dataset-title"><h3 id="authoritative-dataset-title">Authoritative Dataset</h3><div class="binding-grid"><div class="binding-fact"><span>Authoritative revision</span><strong>1842</strong><small>Committed 16:22:04 UTC</small></div><div class="binding-fact"><span>Dataset health</span><strong class="warn-text">DEGRADED</strong><small>Eligible 4,820 · minimum 5,000</small></div><div class="binding-fact"><span>Current Fitness</span><strong>UNKNOWN</strong><small>Attempt fit-eval-1842-07 at 16:22:48 UTC</small></div><div class="binding-fact"><span>Prior-PASS boundary</span><strong>16:42 UTC</strong><small>Applies only to exact activated revision 1841</small></div></div></section>
+                    <section class="binding-truth-group" aria-labelledby="swarm-applied-title"><h3 id="swarm-applied-title">This swarm applied</h3><div class="binding-grid"><div class="binding-fact"><span>Revision vector</span><strong>expected 1842</strong><small>candidate 1842 · activated 1841</small></div><div class="binding-fact"><span>Final materializers</span><strong class="warn-text">11 of 12</strong><small>processor-12 remains on 1841</small></div><div class="binding-fact"><span>Selectors</span><strong>12 of 12</strong><small>Applied activated revision 1841</small></div><div class="binding-fact"><span>Worker coverage</span><strong>12 of 12</strong><small>Lowest comparable eligible 4,818</small></div></div></section>
                   </div>
 
                   <div class="binding-footer">
                     <details>
                       <summary><span>1 worker exception</span><span class="summary-chevron"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></span></summary>
-                      <div class="exception-row"><span><strong>processor-12</strong><small>Applied revision 1841 · last report 18 sec ago</small></span><span class="status-pill pill-warn">Hydrating</span></div>
+                      <div class="exception-row"><span><strong>processor-12</strong><small>Applied revision 1841 · last report 16:24:30 UTC · 18 sec ago</small></span><span class="status-pill pill-warn">Hydrating</span></div>
                     </details>
                     <span class="bounded-reason"><strong>Start blockers:</strong> Fitness UNKNOWN · lowest reported worker eligible 4,818 / minimum 5,000 (12/12 reporting) · processor-12 materializer on revision 1841</span>
                   </div>
@@ -729,7 +768,7 @@
                 </div>
 
                 <div class="runtime-layout">
-                  <div class="runtime-list" aria-label="Runtime resources">
+                  <div class="runtime-list" role="group" aria-label="Runtime resources">
                     <button class="runtime-item selected" type="button" aria-pressed="true" data-runtime-id="8ab0…f842" data-runtime-kind="manager" data-runtime-role="swarm-controller" data-runtime-instance="swarm-controller-1" data-runtime-version="2.8.0" data-runtime-reported-version="2.8.0"><span><span class="runtime-state good"></span><strong>swarm-controller-1</strong></span><small>manager · swarm-controller</small><code>pockethive/swarm-controller:2.8.0</code></button>
                     <button class="runtime-item" type="button" aria-pressed="false" data-runtime-id="b014…d901" data-runtime-kind="worker" data-runtime-role="processor" data-runtime-instance="processor-01" data-runtime-version="2.8.0" data-runtime-reported-version="2.8.0"><span><span class="runtime-state good"></span><strong>processor-01</strong></span><small>worker · processor</small><code>pockethive/processor:2.8.0</code></button>
                     <button class="runtime-item" type="button" aria-pressed="false" data-runtime-id="d921…a712" data-runtime-kind="worker" data-runtime-role="processor" data-runtime-instance="processor-12" data-runtime-version="2.8.0" data-runtime-reported-version="2.8.0"><span><span class="runtime-state warn"></span><strong>processor-12</strong></span><small>worker · processor · hydrating</small><code>pockethive/processor:2.8.0</code></button>
@@ -745,7 +784,7 @@
                       <div><dt>Reported version</dt><dd id="runtime-reported-version">2.8.0</dd></div>
                     </dl>
                     <div class="runtime-actions">
-                      <label><span>Tail</span><input type="number" value="200" min="10" max="1000" /></label>
+                      <label><span>Tail</span><input type="number" value="200" min="10" max="1000"></label>
                       <button type="button" class="action-button" data-runtime-action="logs">Logs</button>
                       <button type="button" class="action-button" data-runtime-action="inspect">Inspect</button>
                     </div>
@@ -754,7 +793,7 @@
                 </div>
 
                 <div class="rabbit-grid">
-                  <article><div class="section-heading"><h3>Rabbit queues</h3><span class="status-pill pill-good">Showing 2 of 8 present</span></div><div class="rabbit-item"><code>ph.control.payment-traffic-01.processor</code><small>present · messages 0 · consumers 12</small></div><div class="rabbit-item"><code>ph.work.payment-traffic-01.input</code><small>present · messages 18 · consumers 12</small></div></article>
+                  <article><div class="section-heading"><h3>Rabbit queues</h3><span class="status-pill pill-good">Showing 2 of 8 present</span></div><div class="rabbit-item"><code>ph.control.service-simulation-01.processor</code><small>present · messages 0 · consumers 12</small></div><div class="rabbit-item"><code>ph.work.service-simulation-01.input</code><small>present · messages 18 · consumers 12</small></div></article>
                   <article><div class="section-heading"><h3>Rabbit exchanges</h3><span class="status-pill pill-good">Observed present</span></div><div class="rabbit-item"><code>ph.control</code><small>present · type not reported</small></div><div class="rabbit-item"><code>ph.work</code><small>present · type not reported</small></div></article>
                 </div>
               </section>
@@ -769,7 +808,7 @@
       </main>
     </div>
 
-    <div class="prototype-note" aria-label="Wireframe controls">
+    <div class="prototype-note" role="group" aria-label="Wireframe controls">
       <span>Responsive planning wireframe</span>
       <button type="button" data-navigate="datasets">Inventory</button>
       <button type="button" data-navigate="dataset">Detail</button>
