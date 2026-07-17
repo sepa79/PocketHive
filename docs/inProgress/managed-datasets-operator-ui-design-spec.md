@@ -1,11 +1,11 @@
 # Managed Datasets Operator UI Design Specification
 
-Status: in progress — implementation-grade planning baseline; implementation
-and qualification evidence pending
+Status: in progress — Grade 0 planning baseline; `G-TEAM-REVIEW-v1` passed
+for internal concept feedback; implementation and qualification evidence pending
 
 Decision target: PocketHive Managed Datasets read-only operator experience
 
-Last updated: 2026-07-16
+Last updated: 2026-07-17
 
 Normative architecture parent:
 [Managed Test Data Architecture and Lifecycle Specification](managed-test-data-lifecycle-generic-spec.md)
@@ -15,6 +15,9 @@ Assurance companion:
 
 Visual reference:
 [Managed Datasets wireframes](managed-datasets-wireframes/README.md)
+
+Team decision brief:
+[Managed Test Data Team Decision Brief](managed-test-data-team-review-brief.md)
 
 This document turns the visual reference into an actionable product and
 engineering contract. It specifies where every displayed fact comes from, what
@@ -137,10 +140,11 @@ reports a present integer value of zero.
 | Component | Responsibility |
 |---|---|
 | Scenario Manager | Author Dataset Space, Dataset definition, declared-use, Fitness Contract, policy and source metadata; it is not the operational UI read authority |
-| Orchestrator Managed Dataset module | Own durable runtime truth, read projections, status decisions, operation summaries, consumer readiness and proof facts |
-| Swarm Controller | Supply per-swarm membership, route, activation and worker-application observations through typed contracts; it is not global Dataset authority |
+| Orchestrator Managed Dataset module | Own durable Dataset truth, revisions, operation summaries, activation/continuity inputs, read projections and proof facts; it does not own controller observations or compose a whole-swarm decision |
+| Swarm Controller | Own per-swarm membership, route, current worker-application/readiness aggregation and DatasetGuard contribution through typed contracts; it is not global Dataset authority and does not replace durable Dataset truth |
+| Orchestrator admission service | Compose the exact per-binding `StartDecision` and `RunningDecision` from Managed Dataset truth plus Controller-owned current observations under the canonical admission policy |
 | `common/dataset-contracts` | Own closed JSON schemas/Java DTOs, enums, reason codes, compatibility tests and generated TypeScript types |
-| Orchestrator REST | Authenticate, authorise, bound, compose and return all UI read models |
+| Orchestrator REST | Authenticate, authorise, bound and return the application-service read models and composed decisions |
 | `ui-v2` | Render the returned facts and client-only presentation state; never decide readiness or query infrastructure directly |
 | PocketHive MCP | Reuse the same product-owned status/proof services for its three read-only tools; it is not called by the browser |
 | PostgreSQL | Durable Dataset authority and source of committed read projections |
@@ -200,13 +204,131 @@ ephemeral React state.
 `GET /api/datasets/capabilities` shall advertise the exact supported read-model
 schema versions and module state.
 
-- If the capability is supported and the principal has Dataset `VIEW`, the
-  Datasets navigation item is visible.
+Its direct `DatasetCapability/v1` also returns:
+
+```text
+runningManifestDigest
+qualificationEpoch
+principalScopeDigest
+observedAt
+validUntil
+requestId
+qualification {
+  highestPassedProfile:
+    Fact<dataset-dev-synthetic | dataset-qualified-core |
+         dataset-qualified-sensitive>
+  qualificationEvidenceRef: Fact<opaque-ref>
+  qualifiedManifestDigest: Fact<sha256-digest>
+  evaluatedAt: Fact<UTC-instant>
+}
+```
+
+Capability is a decision-bearing authenticated response, not a static asset.
+It is served `Cache-Control: no-store`, never returns `304`, and has
+`observedAt <= validUntil <= observedAt + 30 seconds`. The client may retain it
+only in memory under the exact authenticated-session/principal-scope digest,
+running-manifest digest and qualification epoch, using the monotonic freshness
+rule in section 4.7. Direct Dataset route entry performs a real revalidation.
+Identity/auth epoch, schema, manifest or qualification-epoch change; `401`;
+logout; malformed response; or expiry clears the tuple and hides/disables the
+feature. Network failure does not preserve a stale qualified profile as
+permission.
+
+`runningManifestDigest` and `qualification.qualifiedManifestDigest` identify
+the immutable qualified deployment contract. They bind the encryption
+profile, provider/build, custody boundary, key-floor trust anchor and rotation
+protocol, but explicitly exclude live `CoreDatasetKeyManifest` key IDs,
+epoch/digest and active-key state. A conforming routine key-material rotation
+therefore leaves both digests and `qualificationEpoch` unchanged. Dynamic
+key-manifest and safety-floor epoch/digests remain bounded internal
+status/evidence. Rotation may make `moduleState=RECONCILING`; invalid or
+mismatched key state makes the module unavailable even though qualification
+history remains accurate. Changing any pinned encryption/rotation contract
+creates a new running/qualified manifest and requires requalification.
+
+`NOT_YET_EVALUATED` means no profile has passed. The UI displays
+`No qualified profile` and never infers a profile from enabled code,
+deployment topology, planning fixtures, or a lower milestone. A profile is
+`PRESENT` only when the server verifies the minimal signed
+`CoreQualificationAttestation/v1` (or the stronger enterprise attestation),
+including its exact qualified-manifest, build, image and deployment-contract
+digests, against the currently running capability; replays the complete
+application-owned qualification subject chain and `CORE_QUALIFICATION`
+witness journal to the qualified physical/remote namespace head; and requires
+the attestation's exact stable subject key/digest to equal
+`latestBySubject`. The result must not be superseded. A valid signature or
+matching running digest without that inclusion proof is insufficient.
+Otherwise the profile is
+`NOT_YET_EVALUATED` or `UNAVAILABLE` with a bounded reason. A present
+profile is displayed exactly and links only to its bounded authorised evidence
+ref.
+
+The qualification tuple is coherent: `highestPassedProfile` is `PRESENT`
+if and only if manifest digest and evaluated time are `PRESENT` for the exact
+immutable qualified deployment contract. `qualificationEvidenceRef` may be `PRESENT`,
+`UNAUTHORISED`, or `REDACTED`; only `PRESENT` creates a link. When the
+profile is non-present, digest and evaluated time use compatible non-present
+states, and the evidence ref cannot be `PRESENT`. Any other partial tuple is
+schema-invalid and renders no profile.
+
+- In a production/release environment, the navigation item is visible only
+  when the capability is supported, the principal has Dataset `VIEW`, and
+  `dataset-qualified-core` or `dataset-qualified-sensitive` is present for
+  the running manifest.
+- An internal development deployment may enable only
+  `dataset-dev-synthetic` and must display that exact non-release profile on
+  every Dataset view.
+- With no passed profile, runtime navigation remains hidden/disabled and a
+  direct route displays `Managed Datasets is not qualified for this
+  deployment`. The labelled static planning wireframe is a review artifact,
+  not a fixture fallback or deployable capability state.
 - If it is not implemented or disabled, the navigation item is hidden and a
   direct route displays `Managed Datasets is not enabled in this deployment`.
-- If the module is implemented but `RECONCILING`, the navigation remains
-  available and views display reconciliation state.
+- If the module is implemented and its qualification tuple is still verified
+  but operational Dataset state is `RECONCILING`, navigation remains available
+  and views display reconciliation state. If qualification chain/witness
+  verification itself is unavailable, the profile is non-present and
+  production navigation remains hidden under the rule above.
 - No capability state enables a fixture fallback.
+
+### 3.5 Fail-closed qualification-candidate access
+
+Qualification is bootstrapped through a test-only candidate state, not by
+pretending a profile already passed. An exact build/image/deployment-contract
+manifest may enter `QUALIFICATION_CANDIDATE` with an opaque candidate ID and
+digest. General navigation remains hidden and ordinary Dataset `VIEW` is
+insufficient. Only a separately authenticated principal with
+`dataset:qualification:execute`, an audience-bound short-lived candidate token
+and the exact candidate/build/deployment digest may open the hidden
+qualification entry and call the same production bundle and APIs. Every view
+shows `Qualification candidate — no profile passed`; capability still returns
+`highestPassedProfile=NOT_YET_EVALUATED`. This state exposes no fixture or
+synthetic fallback and grants no command permission.
+
+Candidate sessions may run the required browser, accessibility, fault and
+20-session load evidence against official E2E data created through product
+ingress. `dataset-dev-synthetic` remains unable to claim release readiness; a
+candidate is not that profile and its artifacts are usable only for the exact
+candidate digest. Denied, wrong-audience, wrong-digest, expired or ordinary
+users receive the same non-qualified route behavior and no candidate or hidden
+scope details.
+
+`ActivateDatasetQualification/v1` is a separately authorised application use
+case. It verifies the minimal signed core qualification attestation, its
+recomputed pinned qualification-lineage subject key, complete child results,
+independent-oracle links and exact build/image/deployment digests; durably
+appends/read-backs the full subject chain; then appends/advances/read-backs the
+exact `CORE_QUALIFICATION` witness-journal entry. Only with the matching
+`MonotonicHeadReceipt` may one transaction record the qualification tuple and
+witnessed subject receipt for that same running manifest. Startup and every
+capability decision repeat full-chain/journal replay and latest-subject
+verification. Missing/reset/unavailable witness, truncated chain/journal,
+head mismatch or uncertain half-transition returns qualification
+`UNAVAILABLE` and module `RECONCILING`; historical pass metadata never enables
+navigation. Only the final database commit enables general navigation;
+partial evidence, self-asserted UI state or a new manifest cannot. Candidate
+access is disabled after activation and reopens only for a new exact candidate
+under the same fail-closed rules.
 
 ## 4. Canonical semantic model
 
@@ -230,6 +352,13 @@ The response also returns the exact active versions. A policy or Fitness
 Contract version change does not silently reinterpret an old evaluation; it
 produces a new evaluation and activation decision under the same logical scope
 or a new status scope where identity changes.
+
+The response also carries a stable opaque `revisionScopeId` for the underlying
+Dataset/partition/pool aggregate. `statusScopeId` is the use-specific route
+and health identity; `revisionScopeId` is the only namespace in which
+`authoritativeRevision` values are comparable. Several status scopes may
+therefore share one revision scope, and the UI shall never invent a revision
+namespace from a route ID.
 
 `DSUI-SEM-001`: UI copy shall call `partition / pool` by those names. A
 variable profile, when present, is a separate `variableProfileId`; it shall not
@@ -284,12 +413,65 @@ The server returns decisions; the browser never derives them from counts.
 ```text
 DatasetAdmissionCondition = SATISFIED | NOT_SATISFIED | UNKNOWN | RECONCILING
 StartDecision             = ALLOW | BLOCK | UNKNOWN
-RunningDecision           = CONTINUE | CONTINUE_UNTIL | PAUSE | UNKNOWN
-ConsumerImpact            = NONE | CONTINUING_UNTIL | PAUSED | UNKNOWN
+RunningDecision           = CONTINUE | CONTINUE_UNTIL | PAUSE | UNKNOWN | NOT_APPLICABLE
+ConsumerImpact            = NONE | CONTINUING | CONTINUING_UNTIL | PAUSED | MIXED | UNKNOWN
 ```
 
 Every decision contains bounded `reasonCodes`, `evaluatedAt`, `validUntil`, and
 the Dataset/binding revision to which it applies.
+
+For every direct response, envelope `validUntil` is no later than the earliest
+`validUntil`, prior-PASS `safeUntil`, credential/material horizon or other
+safety boundary that contributes to any rendered current decision. A
+`CONTINUE_UNTIL.validUntil` is itself no later than its exact receipt
+`safeUntil`. The schema/TCK rejects inverted or later boundaries. As defense in
+depth, the browser anchors every nested boundary with the same monotonic clock
+as the envelope and expires a decision at the earliest applicable instant,
+rendering it `UNKNOWN`/paused even if some surrounding display facts remain
+fresh. Equality and one-tick-before/at/after crossing, clock skew and suspend
+are executable contract cases.
+
+`RunningDecision` is server-owned and closed:
+
+- `CONTINUE` requires a current authoritative `PASS` for the exact active
+  view plus every current send-safety term;
+- `CONTINUE_UNTIL` requires a signed prior-`PASS` receipt for that exact
+  activated view and current trusted time strictly before its `safeUntil`;
+- `PAUSE` applies to current `FAIL`, an unsafe view, or an expired safety
+  boundary; and
+- `UNKNOWN` applies when the current binding observation or decision cannot be
+  established; and
+- `NOT_APPLICABLE` applies only when the product knows that the durable
+  binding has no current running consumer.
+
+Prior-`PASS` continuity alone can never produce indefinite `CONTINUE`.
+
+Status-scope summaries reuse one server-composed aggregate:
+
+```text
+ConsumerImpactSummary/v1 {
+  impact: ConsumerImpact
+  totalActivatedBindingCount
+  decisionApplicableBindingCount
+  continueBindingCount
+  continueUntilBindingCount
+  pausedBindingCount
+  unknownDecisionBindingCount
+  notApplicableBindingCount
+  earliestSafeUntil: Fact<UTC-instant>
+}
+```
+
+The four outcome counts sum exactly to
+`decisionApplicableBindingCount`, and
+`decisionApplicableBindingCount + notApplicableBindingCount =
+totalActivatedBindingCount`. `CONTINUING`, `CONTINUING_UNTIL`, and
+`PAUSED` require exactly their matching count to be non-zero. `MIXED` is
+returned when more than one outcome count is non-zero; `UNKNOWN` means all
+decision-applicable bindings lack a current decision. `NONE` requires zero
+decision-applicable bindings; known no-current-run bindings are counted only as
+`notApplicableBindingCount`. The client never merges current PASS continuation
+with prior-PASS continuity or derives a count by subtraction.
 
 ### 4.6 Supply quantities
 
@@ -311,11 +493,68 @@ accounted. Neither may be inferred from `deficitToTarget`.
 reports real reserved or in-flight work. Otherwise the UI shall say `Target
 gap`. `REPLENISH` is not an MVP operation kind.
 
+Live policy convergence is returned, not inferred:
+
+```text
+SupplyPolicyConvergence/v1 {
+  requestedVersion: Fact<policy-version>
+  requestedTargetReady: Fact<non-negative-integer>
+  candidateVersion: Fact<policy-version>
+  candidateTargetReady: Fact<non-negative-integer>
+  activeVersion
+  activeTargetReady
+  effectiveAt: Fact<UTC-instant>
+  targetChangeDirection: NONE | INCREASE | DECREASE
+  convergenceState: STABLE | FILLING_TO_TARGET | APPLYING_SMALLER_VIEW |
+                    BLOCKED | PAUSED | UNKNOWN
+  fillCycle: Fact<FillCycleSummary/v1>
+  lastReconciledAt: Fact<UTC-instant>
+  nextReconcileAt: Fact<UTC-instant>
+  schedulingLag: Fact<ISO-8601-duration>
+  blockerCodes[]
+}
+```
+
+`FillCycleSummary/v1` contains cycle ID, policy version, opening reason
+`INITIAL_DEMAND | LOW_WATERMARK | TARGET_INCREASE |
+POLICY_REPLACEMENT_CONTINUATION`, frozen cycle target, state
+`OPEN | CLOSING | CLOSED`, reserved/accepted/unresolved totals, opened/last-
+evaluated/closed times and closed close reason. It contains no record values.
+An accepted policy command may populate requested/candidate facts but cannot be
+rendered as active or converged. Required workers may acknowledge an inactive
+candidate as `PREPARED`, but the UI calls it applied only after PostgreSQL has
+committed the authoritative policy/revision and the worker has switched to
+that committed revision. A target decrease is complete only after all required
+application acknowledgements. The UI labels `STANDBY` as valid reserve and
+never calls it deleted.
+
+Target size is labelled `Desired eligible inventory`. It shall not be
+described as transaction count, traffic rate, scheduler messages, usage limit
+or Redis-list length. The MVP UI is read-only and provides no target-edit
+control.
+
 ### 4.7 Time and horizon semantics
 
-All response times are RFC 3339 UTC instants. The browser may format a relative
-age from a server instant and the current clock, but shall retain the absolute
-UTC value in accessible detail and shall never extend a server boundary.
+All response times are RFC 3339 UTC instants. On each accepted same-origin TLS
+response the browser records request-start and receipt-time
+`performance.now()`, the origin/proxy-authenticated response `Date`, and the
+returned `validUntil`. It validates that server date against `observedAt`
+within the deployment's frozen maximum clock skew, then conservatively computes
+a monotonic local expiry from `max(0, validUntil - responseDate - measured
+requestElapsed)`. Subtracting the whole request interval prevents slow
+server/network transit from extending freshness. A response becomes stale when either that
+monotonic budget is exhausted or a trustworthy wall clock reaches
+`validUntil`; a browser-clock rollback can never extend it. Missing/invalid
+server date, excessive forward/rollback disagreement, monotonic-clock
+discontinuity, or restored persisted state without a fresh anchor makes
+current decisions stale/unknown and triggers a real refresh—it never grants a
+new green interval.
+
+Relative age is derived from the accepted server date plus monotonic elapsed
+time, not repeatedly from a mutable browser wall clock. The UI always retains
+the adjacent absolute UTC value in visible or accessible detail. Visibility
+pause, suspend/resume and manual clock changes do not reset the anchored
+deadline; tests cover rollback, forward jump, suspend and reload.
 
 For the MVP's shared reusable data, traffic does not consume a record. A generic
 `supply coverage at current demand` duration is therefore prohibited.
@@ -333,11 +572,57 @@ The UI label shall name the horizon kind. `PRIOR_PASS_CONTINUITY` always belongs
 to an exact activated view and may be aggregated only as the earliest boundary
 across a returned, authorised consumer set.
 
+### 4.8 Bounded binding revision distribution
+
+Activation, materializer application and selector application are
+binding/membership facts. A status scope with multiple bindings never exposes
+one fabricated aggregate candidate, activated revision, membership epoch, or
+worker denominator. It returns:
+
+```text
+BindingRevisionDistribution/v1 {
+  kind: NONE | UNIFORM | MIXED | UNKNOWN
+  completeness: COMPLETE | UNAVAILABLE_OVER_LIMIT
+  bindingCount
+  unknownBindingCount
+  buckets[] {
+    expectedRevision: Fact<non-negative-integer>
+    candidateRevision: Fact<non-negative-integer>
+    activatedRevision: Fact<non-negative-integer>
+    bindingCount
+    finalMaterializers { applied, required }
+    selectors { applied, required }
+    oldestWorkerObservation: Fact<UTC-instant>
+  }
+  reasonCodes[]
+}
+```
+
+`NONE` has zero bindings and no buckets. `UNIFORM` has exactly one bucket
+covering every binding and zero unknown bindings. `MIXED` has two or more
+bounded buckets and zero unknown bindings. `UNKNOWN` counts unavailable
+bindings and names bounded reasons; known buckets may remain visible, but no
+missing binding is folded into a denominator. For every variant,
+`sum(buckets[].bindingCount) + unknownBindingCount = bindingCount`; every
+count is non-negative, no zero-size bucket is serialized, and bucket vectors
+are unique. A bucket's worker counts are sums over only its named binding
+revision vector and are labelled with that binding count. Membership epoch
+remains per binding and appears only in Consumers or Inspector.
+
+At most 32 distinct buckets are returned. If a scope exceeds that limit, the
+server returns `kind=UNKNOWN`, `completeness=UNAVAILABLE_OVER_LIMIT`, no partial
+buckets, `unknownBindingCount=bindingCount`, and
+`DISTRIBUTION_CARDINALITY_LIMIT`; it never silently drops a binding vector or
+lets a partial list drive activation/readiness.
+
 ## 5. Shared response and field contract
 
-### 5.1 Envelope
+### 5.1 Projection-read envelope and endpoint applicability
 
-Every Dataset read response shall include:
+Every Dataset projection-read response from inventory, single-scope detail,
+Fitness, operations, consumers, or Swarm Dataset dependencies shall include the
+direct fields below. The envelope is a shared field set, not an outer payload
+wrapper:
 
 | Field | Type | Rule |
 |---|---|---|
@@ -348,13 +633,96 @@ Every Dataset read response shall include:
 | `refreshAfter` | UTC instant | Earliest recommended automatic refresh; `observedAt <= refreshAfter < validUntil` |
 | `validUntil` | UTC instant | After this instant, decisions and current-state labels are stale |
 | `moduleState` | enum | `READY | RECONCILING | DEGRADED | UNAVAILABLE` |
-| `authoritativeRevision` | non-negative integer | Highest authoritative revision represented by the response |
+| `moduleStatus` | `ModuleStatus/v1` | Bounded server-owned reasons, progress and remediation; never inferred by the browser |
+| `consistencyPoint` | closed union | Exact snapshot namespace and cursor consistency point; see below |
 | `projectionRevision` | non-negative integer | Display projection revision |
 | `projectionLagMillis` | non-negative integer | Server-calculated lag between authority and display projection |
 | `requestId` | opaque string | Correlation for bounded support diagnostics |
 
 `validUntil` is a display and decision freshness boundary, not a record
 `usableUntil`. The two shall never be substituted.
+
+`ModuleStatus/v1` is closed:
+
+```text
+ModuleStatus/v1 {
+  reasonCodes[]                    // max 8 unique closed codes
+  reconciliation: Fact<{
+    phase: STARTING | REPLAYING_OUTBOX | REBUILDING_PROJECTION |
+           VERIFYING_INVARIANTS | WAITING_DEPENDENCY
+    completedUnits
+    totalUnits
+  }>
+  remediation: Fact<Remediation/v1>
+}
+```
+
+When progress is `PRESENT`, `0 <= completedUnits <= totalUnits <= 1,000,000`
+and `totalUnits > 0`; otherwise its availability/reason explains why progress
+is unavailable. `READY` has no reasons and reconciliation is
+`NOT_APPLICABLE`. `RECONCILING` has at least one reason and reconciliation is
+`PRESENT` or explicitly `UNAVAILABLE`; `DEGRADED`/`UNAVAILABLE` have bounded
+reasons and do not fabricate progress. `remediation` uses section 5.5 and may
+be non-present with its own bounded reason.
+
+`consistencyPoint` is a discriminated union:
+
+```text
+ConsistencyPoint/v1 =
+  StatusScopeConsistencyPoint {
+    kind: STATUS_SCOPE_REVISION
+    statusScopeId
+    revisionScopeId
+    authoritativeRevision
+  }
+  | InventoryConsistencyPoint {
+    kind: INVENTORY_SNAPSHOT
+    snapshotToken
+  }
+  | MultiScopeConsistencyPoint {
+    kind: MULTI_SCOPE_SNAPSHOT
+    snapshotToken
+    statusScopes[] {
+      statusScopeId
+      revisionScopeId
+    }
+    revisions[] {
+      revisionScopeId
+      authoritativeRevision
+    }
+  }
+```
+
+`authoritativeRevision` is meaningful only inside one `revisionScopeId`. An
+inventory response therefore carries the opaque, authorisation-bound snapshot
+token; it is non-comparable and reveals no ordering or cross-scope revision. The
+response never publishes a fictitious "highest" revision across independent
+Dataset aggregates. Every inventory item still carries its own `statusScopeId`,
+`revisionScopeId`, and scoped authoritative revision. The inventory
+consistency-point `snapshotToken` is the same value as the envelope
+`snapshotToken`, not a second sequence.
+
+`SwarmDatasetDependencies/v1` uses `MULTI_SCOPE_SNAPSHOT`. Its bounded
+`statusScopes[]` contains exactly the authorised route scopes represented by
+the returned binding cards, sorted by `statusScopeId`. Its bounded
+`revisions[]` is deduplicated and sorted by `revisionScopeId`, so two
+use-specific cards for one Dataset aggregate share one revision entry. No
+aggregate revision is derived. Its consistency-point `snapshotToken` is the
+same opaque, authorisation-bound value as the direct response field.
+
+Endpoint applicability is closed:
+
+| Endpoint family | Response contract |
+|---|---|
+| `GET /datasets/capabilities` | Direct `DatasetCapability/v1`; capability schema/version, module availability, current-manifest qualification tuple, observation time and request ID only |
+| Inventory/detail/Fitness/operations/consumers GETs | Direct endpoint object plus the projection-read fields above |
+| `GET /swarms/{id}/dataset-dependencies` | Direct object plus the projection-read fields above and `MULTI_SCOPE_SNAPSHOT` |
+| `POST .../proof-queries` and `GET .../proofs/{proofId}` | Direct immutable `DatasetProof/v1` from section 6.2; neither is a projection-read envelope and both use the object's original complete required fields |
+
+Schemas shall reject projection-envelope fields on the direct capability or
+proof objects unless a later version explicitly adds them. This applicability
+table prevents an endpoint adapter from adding a generic wrapper or silently
+inventing irrelevant projection state.
 
 ### 5.2 Availability wrapper
 
@@ -387,6 +755,41 @@ All schemas shall set `additionalProperties: false` and enforce:
 - operation and consumer pages: default 25, maximum 100; and
 - encoded response body: maximum 512 KiB.
 
+The hard limit is measured on the uncompressed canonical UTF-8 JSON body;
+transport compression never makes an oversized contract valid. Variable
+content in any page is limited to 384 KiB so the fixed envelope and closed
+failure representation fit below 512 KiB. A paged builder appends only whole
+items/assertions in stable keyset order and stops before the next item would
+cross that budget, returning the normal cursor, total and completeness facts.
+It never truncates a string, fact or item. An unpaged safety-bearing object
+that cannot fit is returned wholly `UNAVAILABLE/RESPONSE_SIZE_LIMIT` with its
+decision `UNKNOWN`/start `BLOCK`, never as a partial object or transport error.
+
+Additional direct-array bounds are normative:
+
+| Array | Maximum | Completeness behavior |
+|---|---:|---|
+| binding revision buckets | 32 | Over-limit uses the complete `UNKNOWN` distribution rule in section 4.8; never truncate |
+| values in one inventory facet | 64 | That facet is `UNAVAILABLE/FACET_CARDINALITY_LIMIT`; do not return a partial value list |
+| inventory attention facts | 50 | Keyset-page with its own total/cursor; summary counts remain snapshot-coherent |
+| active-operation summary buckets | 5 kind and 9 state buckets | Closed enum buckets are complete, including explicit zeroes only when schema requires them; never truncate |
+| consumer page response-level exceptions and each consumer's worker exceptions | 16 per array; 128 worker-exception entries per response | Each array returns `totalCount` and `COMPLETE|TRUNCATED`; truncation is visibly diagnostic only and never changes the server decision. Pagination stops before the aggregate response budget |
+| dependency binding cards | 100 cards; 16 worker exceptions per card; 16 response-level exceptions; 128 worker-exception entries total | The unpaged dependency object is wholly `UNAVAILABLE/DEPENDENCY_CARDINALITY_LIMIT` or `UNAVAILABLE/DEPENDENCY_DIAGNOSTIC_BUDGET_LIMIT`, with totals and start `UNKNOWN/BLOCK`; never omit a required card or silently trim a safety-bearing diagnostic set |
+| `MULTI_SCOPE_SNAPSHOT.statusScopes` and `.revisions` | 100 each | Must cover the complete dependency object; over-limit follows the same unavailable dependency state |
+
+Every bounded list carries `totalCount` and `completeness` when truncation is
+allowed. Arrays that contribute to a safety decision are complete or wholly
+unavailable, never truncated. Cardinality limits are also binding/admission
+limits where the product must support an actionable full view.
+
+The schema build runs a generated maximum-object TCK for every response kind.
+It combines maximal strings, facts, reason/evidence lists, nested exception
+lists and maximum permitted page/card counts, serializes with the production
+canonicalizer, and asserts both the 384 KiB variable-content and 512 KiB hard
+limits. Correlated aggregate budgets above are part of generation, not merely
+runtime guidance. A schema combination for which no closed bounded success or
+`UNAVAILABLE` representation fits fails the build.
+
 The UI shall render returned identifiers as text, never HTML, and shall not use
 raw provider or journal text as display copy.
 
@@ -410,9 +813,38 @@ refreshes the detail root and active tab together.
 
 ### 5.5 Error contract
 
+Read-only does not mean a dead end. Every actionable non-success state uses a
+bounded server-owned remediation object:
+
+```text
+Remediation/v1 {
+  recommendedActionCode:
+    WAIT_FOR_RECONCILIATION | RETRY_STATUS_READ_AFTER_BOUNDARY |
+    REVIEW_FITNESS_EVIDENCE | REVIEW_SOURCE_OPERATION |
+    CONTACT_DATASET_OWNER | REQUEST_ACCESS | NO_OPERATOR_ACTION
+  actionOwnerRef: Fact<opaque-ref>
+  actionOwnerDisplay: Fact<bounded-display-name>
+  runbookRef: Fact<opaque-ref>
+}
+```
+
+The UI maps the closed code to reviewed copy, displays the owner when present,
+and exposes an authorised runbook link when present. A non-present owner or
+runbook shows its bounded reason. The object never contains an endpoint,
+arbitrary backend text, or an embedded mutation.
+
+Scenario Manager's versioned operability-metadata definition is the authority
+for owner display/ref and runbook ref; Orchestrator authorises and projects
+those fields and composes only the closed action code. For `403`, it may
+return generic access guidance only—never a hidden Dataset owner or runbook.
+The absent and unauthorised forms of
+`DATASET_STATUS_SCOPE_NOT_FOUND` return byte-equivalent problem/remediation
+semantics so remediation cannot become a scope oracle.
+
 All API errors use `pockethive.problem/v1` with a closed `code`, HTTP status,
-`requestId`, and optional `retryAfterSeconds`. No stack trace, SQL, provider
-message, record value, endpoint, token, or secret is returned.
+`requestId`, optional `retryAfterSeconds`, and optional
+`Remediation/v1`. No stack trace, SQL, provider message, record value,
+endpoint, token, or secret is returned.
 
 Required mappings are:
 
@@ -440,7 +872,7 @@ REST; the browser shall not subscribe directly to Rabbit for Dataset facts.
 - Returning to a visible page refreshes immediately when `refreshAfter` has
   passed.
 - Manual Refresh performs a real request and preserves the old observation time
-  until a response or validated `304` freshness headers arrive.
+  until a complete new response is accepted.
 - `401`, `403`, schema errors, and malformed responses are not automatically
   retried.
 - `429` uses `Retry-After`; transient transport/`503` retry uses capped jitter
@@ -448,6 +880,15 @@ REST; the browser shall not subscribe directly to Rabbit for Dataset facts.
 
 An Orchestrator-authenticated, scope-filtered SSE invalidation stream may be
 added later. It may trigger a REST refresh but shall not become state authority.
+
+Decision-bearing projection reads never return `304 Not Modified`: freshness,
+nested decisions, module status and remediation are body fields and no parallel
+header-merge contract exists. A client may send an `ETag` as an optimization
+hint, but Orchestrator returns a complete validated `200` object (or the
+applicable closed error) and the browser atomically replaces the old
+observation. Static JavaScript, CSS, font and icon assets may use ordinary HTTP
+caching. A future decision-read `304` requires a new versioned
+contract that freezes validators and every freshness/header merge invariant.
 
 ## 6. REST read surface and durable projections
 
@@ -463,11 +904,21 @@ them through the existing `/orchestrator/api` reverse-proxy prefix.
 | `GET /datasets/status/{statusScopeId}/operations` | Paged provisioning, refresh, validation and deprovision summaries |
 | `GET /datasets/status/{statusScopeId}/consumers` | Paged durable binding and current liveness status |
 | `POST /datasets/status/{statusScopeId}/proof-queries` | Bounded, read-only proof query using the canonical proof service |
+| `GET /datasets/status/{statusScopeId}/proofs/{proofId}` | Re-read one retained immutable canonical proof without recomputation |
 | `GET /swarms/{swarmId}/dataset-dependencies` | Server-composed Dataset dependencies for one swarm/run |
 
 `DSUI-API-001`: Every endpoint shall use canonical contracts from
 `common/dataset-contracts` and shall be documented in
 `docs/ORCHESTRATOR-REST.md`.
+
+The proof POST atomically stores and returns its direct immutable
+`DatasetProof/v1`. The proof GET requires the same proof-read permission and
+authorised status scope and returns that exact stored object, including its
+original observation/validity/request fields and canonical digest; it never
+reruns a query or creates a newer time. Proof retention is a frozen deployment
+bound covering the qualification/evidence window. Absent, expired,
+wrong-scope and unauthorised proof IDs return byte-equivalent
+`404 DATASET_PROOF_NOT_FOUND` semantics so retrieval is not an oracle.
 
 `DSUI-API-002`: `POST .../proof-queries` is a product read operation. Endpoint
 authorisation shall require Dataset `VIEW`, not the current generic mutation
@@ -492,6 +943,13 @@ not fetch all authorised rows and filter sensitive scopes locally.
 | `sort` | `ATTENTION | DATASET_ASC | HEALTH | EARLIEST_SAFE_UNTIL`; default `ATTENTION` |
 | `cursor` | Optional opaque cursor |
 | `limit` | Optional integer, default 50, maximum 100 |
+
+Reviewed presentation presets may group only exact repeated enums:
+`Needs attention = DEGRADED|STARVED|ERROR|AUTH_REQUIRED` and
+`Warming = WARMING|INITIALISING`. The client expands a preset into repeated
+`health` parameters before the server request and URL serialization; the
+macro label is never a wire value. An option is shown only when the authorised
+facet response contains at least one member.
 
 `ATTENTION` ordering is deterministic:
 
@@ -522,14 +980,125 @@ DatasetProofQuery/v1 {
     CONFIGURED | SOURCED | PERSISTED | BROKER_ACCEPTED |
     FINAL_MATERIALIZER_APPLIED | TRAFFIC_ACTIVATED |
     SELECTOR_APPLIED | READY | FLOW_PROVEN
-  bindingSnapshotId: Fact<opaque-ref>
-  transactionRef: Fact<opaque-ref>
-  intervalRef: Fact<opaque-ref>
+  claimTarget:
+    StatusScopeTarget { kind: STATUS_SCOPE }
+    | OperationTarget {
+        kind: OPERATION
+        operationRef: opaque-ref
+        operationKind: PROVISION_NEW | REPLACE_RECORD | REFRESH_MATERIAL
+      }
+    | DeliveryAttemptTarget {
+        kind: DELIVERY_ATTEMPT
+        deliveryAttemptRef: opaque-ref
+        destinationClass: DATASET_HINT
+      }
+    | BindingTarget { kind: BINDING, bindingSnapshotId: opaque-ref }
+  claimContext:
+    NoFlowReference { kind: NONE }
+    | TransactionReference { kind: TRANSACTION, transactionRef: opaque-ref }
+    | IntervalReference { kind: INTERVAL, intervalRef: opaque-ref }
 }
 ```
 
-`transactionRef` or `intervalRef` is required only for its matching
-`FLOW_PROVEN` query. The request contains no record value or free-text search.
+`STATUS_SCOPE` is required for `CONFIGURED`; `OPERATION` for `SOURCED`
+and `PERSISTED`; `DELIVERY_ATTEMPT` for `BROKER_ACCEPTED`; and
+`BINDING` from `FINAL_MATERIALIZER_APPLIED` through `FLOW_PROVEN`. The
+`SOURCED` and `PERSISTED` are restricted to `PROVISION_NEW`,
+`REPLACE_RECORD`, or `REFRESH_MATERIAL`; validation/deprovision is outside the
+closed proof target schema. `SOURCED` requires the successful fully accounted
+provider/source result; `PERSISTED` additionally applies the parent
+specification's positive durable-result and duplicate-match predicates. A
+`BROKER_ACCEPTED` target is
+restricted to the `DATASET_HINT` destination class. The
+client never authors a `Fact<T>` wrapper or observation metadata for an input
+reference. `kind: NONE` is required outside `FLOW_PROVEN`. A `FLOW_PROVEN` query
+requires exactly one transaction or interval variant. Missing, dual,
+mismatched, or extra reference fields fail schema validation. The request
+contains no record value or free-text search.
+
+The proof ID and canonical digest bind the complete target and flow-reference
+union. The UI never asks the service to choose an ambiguous "latest"
+operation, delivery attempt, binding, transaction, or interval.
+
+The response is the canonical closed contract:
+
+```text
+DatasetProof/v1 {
+  schemaVersion: pockethive.dataset-proof/v1
+  requestId
+  proofId
+  requestedLevel:
+    CONFIGURED | SOURCED | PERSISTED | BROKER_ACCEPTED |
+    FINAL_MATERIALIZER_APPLIED | TRAFFIC_ACTIVATED |
+    SELECTOR_APPLIED | READY | FLOW_PROVEN
+  verdict: PASS | FAIL | UNKNOWN
+  claimProfileVersion: pockethive.dataset-proof-claim/v1
+  requiredFactKinds[]
+  claimTarget: normalized DatasetProofQuery/v1 claimTarget
+  claimContext: normalized DatasetProofQuery/v1 claimContext
+  statusScopeId
+  revisionScopeId
+  bindingSnapshotId: Fact<opaque-ref>
+  observedAt
+  validUntil
+  authoritativeRevision: Fact<non-negative-integer>
+  descriptorVersion
+  sourceBindingVersion
+  supplyPolicyVersion
+  fitnessContractVersion
+  canonicalDigest
+  gaps[]
+  facts[]
+}
+
+DatasetProofFact/v1 {
+  factKind:
+    CONFIGURED | SOURCED | PERSISTED | BROKER_ACCEPTED |
+    FINAL_MATERIALIZER_APPLIED | TRAFFIC_ACTIVATED |
+    SELECTOR_APPLIED | READY | FLOW_PROVEN
+  status: PASS | FAIL | UNKNOWN | NOT_APPLICABLE
+  scopeRef
+  revisionScopeId
+  authoritativeRevision: Fact<non-negative-integer>
+  membershipEpoch: Fact<non-negative-integer>
+  observedAt
+  validUntil
+  reasonCodes[]
+  evidenceRefs[]
+}
+```
+
+Only facts at or below the requested proof level are returned. Unrequested
+facts are omitted; `NOT_APPLICABLE` means the fact is structurally inapplicable,
+not merely unrequested. The UI may derive the display copy `Not requested` only
+from `requestedLevel` and the closed proof-level order. It shall not serialize
+`NOT_REQUESTED` as a fact status. Overall `verdict` is returned by the proof
+service and is never recalculated by the browser.
+
+`requiredFactKinds` is the exact ordered row from the parent specification's
+versioned claim matrix. It is not inferred from proof-level order. The UI may
+label required versus contextual facts but cannot alter the array. The
+proof-contract TCK rejects a missing/duplicate required fact, wrong target
+revision or membership epoch, incomplete gap list, or verdict that disagrees
+with the frozen matrix. In particular, direct activated/selector claims may
+pass for exact activated revision 1841 while a separate READY proof fails for
+candidate revision 1842; current READY is context only for a transaction-bound
+FLOW_PROVEN claim.
+
+Top-level `authoritativeRevision` is `NOT_APPLICABLE` with
+`FACT_PRECEDES_DATASET_REVISION` when `CONFIGURED` or `SOURCED` is proven before
+the first Dataset revision. It is never coerced to zero, omitted, or copied
+from an unrelated scope. `schemaVersion`, `requestId`,
+`claimProfileVersion`, normalized `claimTarget`, normalized
+`claimContext`, `statusScopeId`, and `revisionScopeId` are direct proof
+fields; `proofId` plus `canonicalDigest` identify the immutable evidence
+object.
+
+`claimTarget.kind=BINDING` if and only if `bindingSnapshotId` is
+`PRESENT` with the same opaque value. Every other target kind returns
+`bindingSnapshotId=NOT_APPLICABLE` with
+`CLAIM_TARGET_HAS_NO_BINDING`; adapters and the UI cannot fill it from
+unrelated status context.
 
 ### 6.3 Required durable read projections
 
@@ -592,13 +1161,13 @@ summary
 facets
 attention
 items[]
-page { totalPresent, limit, nextCursor }
+page { returnedItemCount, total: Fact<number>, limit, nextCursor }
 ```
 
-`totalPresent` is a real, authorised count from the same snapshot. If the total
-cannot be calculated within its read budget, `page.total` uses `Fact<number>`
-with an explicit unavailable reason; the UI then shows page count without a
-fake total.
+When `page.total.availability=PRESENT`, its value is a real, authorised count
+from the same snapshot. If it cannot be calculated within its read budget,
+`page.total` carries an explicit non-present reason and the UI shows
+`returnedItemCount` without inventing a total.
 
 ### 7.3 Summary cards
 
@@ -624,10 +1193,8 @@ severity
 statusScopeId
 health
 reasonCodes
-affectedActivatedBindingCount
-continuableBindingCount
-pausedBindingCount
-earliestSafeUntil
+consumerImpact: ConsumerImpactSummary/v1
+remediation: Remediation/v1
 ```
 
 The server selects the first scope using the `ATTENTION` order. The client maps
@@ -652,13 +1219,15 @@ decisions appear only for real bindings in Consumers and Inspector.
 | Dataset health | Formal `health.state`, bounded reasons, evaluation revision |
 | Fitness | Current evaluation for this exact declared use: result, contract ref/version, evaluated time |
 | Eligible / target | `eligibleReady / targetReady`; expanded detail shows minimum, low watermark, target gap, real reserved provisioning and real in-flight requested |
-| Existing-view continuity | `continuableBindingCount` and earliest present prior-PASS `safeUntil`; no active bindings renders `Not applicable` |
+| Existing-view continuity | Separate `continueBindingCount` and `continueUntilBindingCount` plus earliest present prior-PASS `safeUntil`; no active bindings renders `Not applicable` |
 | Consumers | Activated binding count and distinct observed-active swarm count as separately named facts |
 | Fitness check | Absolute `evaluatedAt`; relative age is client formatting; next evaluation is accessible detail |
 
 The row object also contains exact descriptor, source-binding, Supply Policy,
-Fitness Contract, authoritative, candidate, activated, selector and
-final-materializer revisions for detail navigation and accessible explanation.
+Fitness Contract, `revisionScopeId`, authoritative revision, and the bounded
+`BindingRevisionDistribution/v1` from section 4.8 for detail navigation and
+accessible explanation. It never flattens per-binding candidate, activated,
+selector, or final-materializer facts into singular status-scope values.
 
 ### 7.6 Eligible supply disclosure
 
@@ -707,7 +1276,8 @@ The detail header shows:
 - Dataset Space and Dataset alias;
 - partition, pool, environment, and declared use;
 - descriptor, source-binding, Supply Policy and Fitness Contract versions;
-- authoritative and activated revisions; and
+- `revisionScopeId`, authoritative revision, and the bounded activated
+  distribution summary; and
 - response observation/freshness state.
 
 No item is inferred from the route slug. All visible values come from the
@@ -721,19 +1291,21 @@ currently satisfied prerequisite. It does not claim that an arbitrary swarm
 can start.
 
 The second card is `Existing consumer impact` and renders the returned
-`ConsumerImpact` with affected binding counts and the earliest present
-`safeUntil`.
+`ConsumerImpactSummary/v1` with affected binding counts and the earliest
+present `safeUntil`.
 
 Exact `StartDecision` and `RunningDecision` values are displayed per actual
 binding in Consumers and Inspector.
 
-### 8.3 Latest Fitness attempt banner
+### 8.3 Latest completed Fitness evaluation banner
 
-The banner contains the exact current evaluation ID, state, reason codes,
-evaluated time, revision and next evaluation. When a prior effective PASS still
-permits exact existing views, it is shown as a separate object with its own
-receipt ID and `safeUntil`. The current attempt and prior PASS shall never be
-visually collapsed into one verdict.
+The banner contains the last completed current evaluation ID/result, reason
+codes, evaluated time, revision and next evaluation. A separately boxed active
+`currentAttempt`, when present, shows its ID, `QUEUED|RUNNING`, start and
+deadline without changing that completed verdict. When a prior effective PASS
+still permits exact existing views, it is shown as a third separate object with
+its own receipt ID and `safeUntil`. The active attempt, completed current result
+and prior PASS shall never be visually collapsed into one verdict.
 
 ### 8.4 Overview cards
 
@@ -749,7 +1321,16 @@ Display present policy facts:
 - reserved provisioning;
 - in-flight requested;
 - target gap; and
-- current non-terminal provisioning operation, if any.
+- `ActiveOperationSummary/v1`: total active count plus bounded counts by exact
+  operation kind/state and requested/reserved/in-flight totals; and
+- an optional server-selected `attentionOperation` labelled `1 of N`, with a
+  working link to the paged Operations view.
+
+The attention operation is explicitly non-exhaustive. When present, the server
+selects it deterministically by earliest deadline, then creation time, then
+opaque operation ID; the browser never chooses a convenient operation. The
+summary equations cover every active operation, so concurrent bounded
+provision/refresh/validation/deprovision work cannot be hidden behind one card.
 
 #### Freshness and validity
 
@@ -769,23 +1350,24 @@ consumption-based duration.
 
 Keep these separate:
 
-- authoritative Dataset revision;
-- candidate projection revision;
-- exact durably activated revision;
-- final materializers applied / required;
-- selectors applied / required;
-- membership epoch; and
-- oldest contributing worker observation.
+- authoritative `revisionScopeId` and Dataset revision; and
+- `BindingRevisionDistribution/v1` buckets containing candidate/activated
+  revision vectors, binding count, final-materializer and selector denominators,
+  and oldest contributing worker observation.
 
-The UI shall not display a revision range as an activated revision and shall
-not show `traffic activated` as passed for a candidate whose required final
-materializers have not applied.
+The compact summary displays an activated revision only for `UNIFORM`, with
+the covered binding count. `MIXED` displays `Mixed` and its bounded buckets;
+`UNKNOWN` displays the named unavailable count/reasons. It shall not display
+a revision range or one membership epoch as an aggregate. It shall not show
+`traffic activated` for a candidate whose own required final materializers
+have not applied.
 
 #### Consumer impact
 
-Display durable activated binding count, current observed-active swarm count,
-continuable count, paused count, and earliest safe boundary as separate facts.
-`View consumers` navigates to the Consumers route.
+Display total activated binding count, current observed-active swarm count,
+current-PASS continue count, prior-PASS continue-until count, paused count,
+unknown-decision count, not-applicable count, and earliest safe boundary as
+separate facts. `View consumers` navigates to the Consumers route.
 
 ## 9. Fitness view
 
@@ -795,7 +1377,8 @@ continuable count, paused count, and earliest safe boundary as separate facts.
 statusScopeId
 declaredUse
 fitnessContract { ref, version, digest }
-currentEvaluation
+currentEvaluation: Fact<FitnessEvaluation/v1>
+currentAttempt
 effectivePriorPass
 assertions[]
 page
@@ -803,7 +1386,7 @@ page
 
 ### 9.1 Current evaluation
 
-The current evaluation contains:
+When `currentEvaluation=PRESENT`, the completed evaluation contains:
 
 - evaluation ID and input-vector digest;
 - evaluated authoritative revision and binding snapshot, where applicable;
@@ -812,9 +1395,26 @@ The current evaluation contains:
 - bounded reason codes; and
 - the assertion counts by result.
 
-`RUNNING` is an evaluation execution state, not a Fitness result. While running,
-the last completed current result and its original freshness remain visible; a
-new result is not invented.
+`currentEvaluation=NOT_YET_EVALUATED/NO_COMPLETED_EVALUATION` is the only
+representation of the initial no-evaluation state. It contains no invented
+verdict, timestamps or assertions and may coexist with a `PRESENT` queued or
+running `currentAttempt`. `currentEvaluation=UNAVAILABLE` means the completed
+evaluation authority could not be read and forces the displayed current
+decision to `UNKNOWN`; it cannot expose a prior verdict as current. If
+`currentEvaluation` is not `PRESENT`, its assertion page is empty with an exact
+non-present reason. `effectivePriorPass=PRESENT` requires an independently
+valid prior-pass receipt and never changes that current-evaluation state.
+
+`currentAttempt` is a separate `Fact<FitnessEvaluationAttempt/v1>` with exact
+attempt ID, `QUEUED | RUNNING` state, required `queuedAt`,
+`startedAt: Fact<UTC-instant>`, deadline and bounded reason codes. `startedAt`
+is `NOT_APPLICABLE/ATTEMPT_NOT_STARTED` while queued and `PRESENT` only for
+`RUNNING`. `currentAttempt` is `NOT_APPLICABLE` when no execution is active. `RUNNING` is an
+execution state, not a Fitness result. While it is present, the last completed
+`currentEvaluation` and its original freshness remain visible; a new result is
+not invented. No completed evaluation may be encoded inside `currentAttempt`,
+and an active attempt cannot refresh or extend the previous result's
+`safeUntil`.
 
 ### 9.2 Effective prior PASS
 
@@ -843,6 +1443,26 @@ does not fill missing sibling evidence.
 
 ## 10. Supply and lifecycle view
 
+The page begins with the exact `SupplyPolicyConvergence/v1` facts from section
+4.6. It shows active and requested/candidate policy versions and targets,
+effective time, current convergence state, fill-cycle reason/progress,
+eligible/reserved/in-flight/standby quantities, last and next reconciliation,
+scheduling lag, provider backoff/circuit state, pause reason/time and bounded
+blockers. Non-present requested/candidate/fill-cycle facts render their exact
+`Fact` reason rather than zero or `Stable`.
+
+The page explicitly distinguishes:
+
+- **Dataset lifecycle reconciliation**, which is PostgreSQL-backed and keeps
+  inventory valid independently of scenarios;
+- **scenario timeline**, which schedules swarm start/stop/config actions; and
+- **traffic pacing**, which controls worker request rate.
+
+Only the first appears as Dataset supply scheduling. The view never describes
+`scheduler.maxMessages`, scenario offsets, or `ratePerSec` as Dataset target
+size. It also states that all RabbitMQ swarm control events use the existing
+PocketHive control plane, while source work uses the WorkItem plane.
+
 ### 10.1 Operation kinds and labels
 
 The MVP displays only actual supported kinds:
@@ -850,12 +1470,19 @@ The MVP displays only actual supported kinds:
 | Operation kind | UI label |
 |---|---|
 | `PROVISION_NEW` | Fill / provisioning |
-| `REFRESH` | Refresh |
-| `VALIDATE` | Validation |
-| `DEPROVISION` | Deprovision |
+| `REPLACE_RECORD` | Create successor for revoked identity |
+| `REFRESH_MATERIAL` | Refresh material |
+| `VALIDATE_RECORD` | Validate records |
+| `DEPROVISION_ENTITY` | Deprovision entity |
 
-`REPLENISH` is rejected by the parent MVP and shall not appear as an operation
-kind. `Replenishing` is not used as a generic synonym for target deficit.
+These five literals are the only MVP wire values. Short aliases such as
+`REFRESH`, `VALIDATE`, `DEPROVISION`, and unsupported `REPLENISH` are rejected.
+`Replenishing` is not used as a generic synonym for target deficit.
+
+`REPLACE_RECORD` copy and accounting shall show that a new successor identity
+was inserted and the predecessor became ineligible. It shall not report the
+successor as an update to the predecessor or use material-refresh wording.
+`REFRESH_MATERIAL` alone preserves the identity while replacing material.
 
 ### 10.2 Operation contract
 
@@ -864,10 +1491,23 @@ Every operation contains:
 - operation ID, kind, state, attempt and fence/lease reference;
 - exact scope, source-binding version and Supply Policy version;
 - requested, reserved and accepted quantities applicable to its kind;
-- complete discriminated accounting counters;
+- `terminalReceipt: Fact<OperationTerminalReceipt/v1>` using the parent's outer
+  `ACCOUNTED_RESULT | EFFECT_FREE_NO_RESULT` discriminant. Accounted results
+  contain the exact kind counters, `fullyAccounted`, and upsert duplicate-match
+  evidence/matched revision when applicable; effect-free results contain the
+  terminal precondition/evidence and no zero-filled kind counters;
 - created, queued, started, deadline, next-retry and completed timestamps as
   applicable;
-- resulting authoritative revision;
+- resulting authoritative revision as a `Fact`, non-present until a durable
+  state-changing receipt exists;
+- `uncertainAt`, `resolvedAt`, bounded reconciliation evidence/actor refs,
+  linked terminal receipt ref, and same-operation requeue attempt/fence when
+  applicable;
+- `cancellation: Fact<CancellationReadModel/v1>` containing
+  `REQUESTED | RESOLVED_CANCELLED | EFFECT_ACCOUNTED`, official
+  administrative receipt ref, requested/accepted time, bounded reason,
+  accepted-from state/operation version/attempt fence, resolution time,
+  bounded evidence refs and terminal receipt ref as applicable;
 - bounded terminal/failure code; and
 - an authorised Journal link by correlation reference when available.
 
@@ -878,14 +1518,49 @@ RESERVED | QUEUED | RUNNING | SUCCEEDED | PARTIAL |
 FAILED | TIMED_OUT | CANCELLED | UNCERTAIN
 ```
 
-For upsert operations, terminal accounting shall reconcile:
+`UNCERTAIN` is a non-terminal reconciliation state with reservation retained;
+it carries no closed terminal accounting until resolved. `TIMED_OUT` or
+`CANCELLED` is terminal only when the provider outcome is conclusively
+effect-free; otherwise the server returns `UNCERTAIN`. The UI does not infer
+terminality from the label. Resolution history shows either the linked terminal
+effect receipt, an effect-free `TIMED_OUT`/`CANCELLED` reconciliation outcome
+whose original deadline/cancellation precondition is explicit, or conclusive
+no-effect evidence plus the same operation's newer attempt/fence. The UI never
+labels a different operation as that retry, and it never offers a terminal
+no-effect outcome while a late provider effect remains possible.
+
+The operator UI and Dataset MCP remain read-only and never originate
+`CancelSupplyOperation/v1`. `REQUESTED` renders `Cancellation requested —
+reconciling`, preserves the operation reservation/progress facts, and is not a
+terminal `Cancelled` label. `RESOLVED_CANCELLED` may be shown only with the
+accepted intent and conclusive no-provider-effect evidence returned by the
+server. `EFFECT_ACCOUNTED` displays the normal typed terminal outcome and says
+that cancellation was too late; it never relabels that effect as cancelled.
+Pause, timeout, failure, policy change, shutdown and decommission are not
+cancellation. Cancelling `DEPROVISION_ENTITY` does not satisfy or advance the
+external-cleanup gate.
+
+Terminal accounting is discriminated by operation kind:
 
 ```text
-received = inserted + updated + duplicate + rejected
+UPSERT:       received = inserted + updated + duplicate + rejected
+VALIDATION:   checked = valid + invalid + uncertain
+DEPROVISION:  outcomes = deprovisioned + autoExpired + ownerHandedOff + uncertain
 ```
 
 The UI renders the server reconciliation result and all contributing counters;
-it shall not show an incomplete accepted/rejected percentage.
+it shall not show an incomplete percentage or reuse another receipt kind's
+counters. A non-terminal operation displays requested/reserved/progress only
+and no committed terminal category until its durable receipt exists. The
+resulting revision is `PRESENT` exactly when that receipt changed Dataset
+state; effect-free/no-change outcomes display the returned
+`NOT_APPLICABLE/NO_DATASET_STATE_CHANGE` fact and never invent a revision.
+For duplicate-only upsert, the UI may say `Matched existing persisted result`
+only when the receipt returns non-empty bounded durable-match evidence and the
+exact `matchedAuthoritativeRevision`; otherwise the result is incompatible,
+not inferred from `duplicate > 0`. `fullyAccounted` is the server's qualified
+source-profile completion fact and is never computed by comparing demand count
+with result-row count.
 
 ### 10.3 Empty and history behavior
 
@@ -928,6 +1603,8 @@ Durable activated binding state remains visible through an Orchestrator or
 controller restart. Live status is a separate availability-wrapped
 observation. A missing or stale controller report means `Observation
 unavailable`, not `Inactive` and not a zero worker count.
+A product-known absence of a current run is instead
+`RunningDecision=NOT_APPLICABLE`; it is not an unavailable observation.
 
 The endpoint returns its own `validUntil`; the client does not hard-code a 30-
 or 60-second worker rule. The server composes that boundary from the applicable
@@ -937,7 +1614,11 @@ status contract.
 
 All authorised consumers are available through pagination. If three of six
 are rendered, the UI explicitly says `Showing 3 of 6` only when total six is a
-present server fact. `View all` shall navigate to or load the real next page.
+present server fact. The page contains working Previous/Next controls backed by
+cursor history. Selecting a consumer reveals its durable binding, exact
+start/running decisions, revision vector, worker coverage, observation
+validity, bounded exceptions and authorised Hive link without discarding the
+current page or tab state.
 
 ## 12. Evidence view
 
@@ -949,7 +1630,10 @@ same service used beneath MCP `dataset_prove`.
 Display:
 
 - proof ID, requested level and verdict;
-- exact status scope and optional binding snapshot;
+- exact normalized claim target and claim context;
+- claim-profile version and ordered required fact kinds;
+- exact status scope, revision scope and structurally applicable binding
+  snapshot;
 - observed and valid times;
 - as-of authoritative revision;
 - descriptor, source-binding, Supply Policy and Fitness Contract versions;
@@ -958,18 +1642,18 @@ Display:
 
 ### 12.2 Independent facts
 
-The closed facts are:
+The closed serialized `factKind` values are:
 
 ```text
-configured
-sourced
-persisted
-broker-accepted
-final-materializer-applied
-traffic-activated
-selector-applied
-ready
-flow-proven
+CONFIGURED
+SOURCED
+PERSISTED
+BROKER_ACCEPTED
+FINAL_MATERIALIZER_APPLIED
+TRAFFIC_ACTIVATED
+SELECTOR_APPLIED
+READY
+FLOW_PROVEN
 ```
 
 Each fact has `PASS | FAIL | UNKNOWN | NOT_APPLICABLE`, exact scope/revision or
@@ -980,9 +1664,11 @@ mean a consumer acknowledged or applied the hint. An authoritative
 reconciliation may prove application without a broker fact; the UI keeps both
 facts independent.
 
-`Flow proven` identifies the exact transaction or declared interval. When no
-such proof was requested or produced, it renders `Not requested` or `Not
-proven`, not a decorative unknown pass.
+`Flow proven` identifies the exact transaction or declared interval. When
+`requestedLevel` does not include `FLOW_PROVEN`, that fact is omitted and the UI
+may render a separate `Not requested for this proof` explanation. When it was
+requested but cannot be established, the returned fact and overall verdict are
+`UNKNOWN` or `FAIL` with bounded reasons; the UI never promotes either to pass.
 
 ### 12.3 Security boundary
 
@@ -1011,6 +1697,10 @@ facts to produce its own gate.
 - aggregate start and running-traffic decisions;
 - one card per frozen Dataset binding; and
 - response-level exceptions.
+
+Its envelope uses the `MULTI_SCOPE_SNAPSHOT` consistency point from section
+5.1, with status-scope mappings per returned authorised Dataset binding and
+deduplicated revision entries per distinct `revisionScopeId`.
 
 Each binding card contains:
 
@@ -1091,8 +1781,8 @@ complete when only its populated success state works.
 |---|---|
 | Inventory/detail | `INITIALISING`, `WARMING`, `READY`, `DEGRADED`, `STARVED`, `ERROR`, `AUTH_REQUIRED`, plus module reconciliation |
 | Fitness | no evaluation yet, evaluation running, current `PASS/FAIL/UNKNOWN`, prior PASS effective, prior PASS expired/not applicable |
-| Supply/lifecycle | no active operation; every non-terminal and terminal state; `PARTIAL`, `UNCERTAIN`, and `TIMED_OUT` retain their distinct meanings |
-| Consumers | no consumers; durable binding with live observation; live observation stale/unavailable; worker hydrating/missing/different revision; safe boundary reached |
+| Supply/lifecycle | no active operation; stable policy; requested/candidate policy not yet effective; target increase filling; target decrease applying a smaller view; blocked/paused/unknown convergence; every fill-cycle state and operation non-terminal/terminal state; `PARTIAL`, `UNCERTAIN`, and `TIMED_OUT` retain their distinct meanings |
+| Consumers | no consumers; durable binding with live observation; known no-current-run with `RunningDecision=NOT_APPLICABLE`; live observation stale/unavailable with `UNKNOWN`; worker hydrating/missing/different revision; safe boundary reached |
 | Evidence | proof not requested; proof running only if the API supports asynchronous generation; complete, partial, unknown, failed, expired, and incompatible proof |
 | Swarm dependencies | no Dataset bindings; required and optional bindings; blocked start with running traffic unaffected; continue-until; paused; unknown observation |
 | Runtime Inspector | debug not permitted; compute adapter unavailable; resource list empty; Rabbit manifest unavailable; Rabbit observation unavailable; logs empty; logs/inspect error |
@@ -1449,11 +2139,17 @@ Exit:
 | Swarm Dataset dependencies | `GET /swarms/{id}/dataset-dependencies` | durable binding + Dataset authority + activation + liveness | server decision revision and per-source observation times |
 | Runtime resources/logs/inspect | existing runtime-debug endpoints | compute adapter/runtime reconciliation | existing API response and redaction contract |
 | Rabbit topology | existing runtime-debug Rabbit endpoint | ownership manifest plus bounded Rabbit observation | manifest/observation availability kept separate |
+| Remediation action/owner/runbook | Inventory/detail/error endpoint carrying `Remediation/v1` | Scenario Manager versioned operability metadata; Orchestrator authorisation and closed action-code composition | metadata version/ref, 403 redaction and byte-equivalent hidden/absent 404 checks |
 
-## 22. Required wireframe semantic amendments
+## 22. Applied wireframe semantic contract
 
-The wireframes remain visual examples, not response fixtures. Before final
-design sign-off, all views shall reflect these labels and relationships:
+The wireframes remain visual examples, not response fixtures. The current
+source applies the labels and relationships below and passed source-level
+semantic review for `G-TEAM-REVIEW-v1`. The existing Firefox images predate the
+current neutral fixtures and resize specimens and are reference-only. Current-
+source visual fidelity is not claimed; it requires deterministic recapture and
+inspection. Production design sign-off additionally requires implementation-
+backed accessibility, authority and behavior verification:
 
 1. `Authorised datasets` becomes `Authorised Dataset selections`.
 2. Summary `Ready — New starts allowed` becomes `Admission thresholds met` and
@@ -1487,6 +2183,20 @@ design sign-off, all views shall reflect these labels and relationships:
     queue/exchange type is omitted unless supported.
 18. Prototype-only health, connection, user, tool, navigation, Refresh, Logs and
     Inspect behavior is never copied into production.
+19. Operations use the five canonical kinds in section 10.1 without display
+    aliases leaking into serialized values.
+20. Proof queries expose requested level and exact optional context; proof
+    results use the canonical uppercase fact kinds, closed statuses, returned
+    verdict, explicit gaps, versions, scope/revision and validity.
+21. Unrequested proof facts are omitted. `Not requested` is derived explanatory
+    copy outside the fact list and is never a serialized fact status.
+22. Consumer page controls reach every authorised binding and each responsive
+    card retains decisions, revision vector, worker coverage and validity.
+23. Inventory uses one semantic object model across viewports; the same table
+    rows become labelled cards below 820 CSS pixels.
+24. Cross-Dataset inventory coherence uses the opaque authorisation-bound
+    snapshot token. Only individual status-scope rows display authoritative
+    Dataset revisions.
 
 Illustrative numbers may remain in planning screenshots solely to exercise
 layout. They carry no default, seed, expected, capacity or acceptance meaning.

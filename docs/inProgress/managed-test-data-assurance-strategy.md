@@ -1,11 +1,14 @@
 # Managed Test Data Assurance and Qualification Strategy
 
-Status: in progress — ready for manager review; implementation evidence pending
+Status: in progress — Grade 0 design; `G-TEAM-REVIEW-v1` passed for an
+internal decision workshop; implementation evidence pending
 
 Applies to: `managed-test-data-lifecycle-generic-spec.md` and
 `managed-datasets-operator-ui-design-spec.md`
 
-Last updated: 2026-07-16
+Team decision brief: `managed-test-data-team-review-brief.md`
+
+Last updated: 2026-07-17
 
 ## 1. Purpose and authority
 
@@ -87,18 +90,43 @@ finding or architecture change.
 - **P2**: bounded operability, diagnosability, or efficiency issue with a safe
   workaround. It remains visible and time-bounded.
 
-### 4.1 Initial risk register
+### 4.1 Loss themes and triage lanes
+
+The detailed register is not a queue of interchangeable P0 rows. Each risk has
+one **primary loss theme** below, even when it can contribute to other losses.
+The release decision is made first at loss-theme level, then at detailed-risk
+level. A theme remains red if any applicable P0 is uncontrolled, any required
+oracle is absent or not independent, or contradictory evidence is unresolved.
+Counting passing risks or averaging confidence across a theme is prohibited.
+
+| Theme | Primary loss being prevented | Detailed risks in the primary lane | First control question |
+|---|---|---|---|
+| `LT-01 UNSAFE_MATERIAL` | Expired, invalid, semantically wrong, wrongly selected or wrongly materialised data reaches the SUT and invalidates traffic | `R-EXPIRY`, `R-PROJECTION`, `R-ACTIVATION`, `R-AUTH-PATH`, `R-ROTATION-RACE`, `R-TIME-ROLLBACK`, `R-DATA-QUALITY`, `R-FITNESS`, `R-SNAPSHOT-INTEGRITY`, `R-STATIC-DRIFT`, `R-SELECTION-BIAS`, `R-CANONICAL-MISMATCH`, `R-VALIDITY-STARVATION` | Can an independent sink and semantic oracle prove that every selected generation was eligible for the exact binding, contract and time? |
+| `LT-02 SCOPE_OR_SECRET_LOSS` | A value, credential, identity or existence fact escapes its authorised classification or scope | `R-LEAK`, `R-SCOPE`, `R-AUTHZ-ORACLE`, `R-IDENTITY-LIFECYCLE`, `R-TCB-BLAST`, `R-EGRESS`, `R-SENSITIVE-ADMISSION`, `R-KEY-LOSS`, `R-UI-SCOPE-LEAK` | Does an independently implemented policy oracle agree, and do canary plus zero-effect ledgers show no disclosure or effect on every denied ingress? |
+| `LT-03 FALSE_READINESS_OR_PROOF` | UI, API, MCP, evidence or release wording promotes missing, stale or contradictory observations into readiness or proof | `R-FALSE-PROOF`, `R-CLAIM-INFLATION`, `R-EVIDENCE-INTEGRITY`, `R-UI-FALSE-STATE`, `R-UI-STALE`, `R-UI-EXCLUSION`, `R-SSOT-DRIFT` | Can each displayed or exported claim be traced to one canonical contract, every applicable child assertion and an independent oracle without inference or fallback? |
+| `LT-04 UNCONTROLLED_EXTERNAL_EFFECT` | Retry, stale ownership, topology error, ambiguous cancellation, unsafe live resize or incomplete lifecycle control creates a duplicate, orphaned, unbounded or wrongly scoped provider/SUT effect | `R-SUPPLY-ROUTE`, `R-SUPPLY-TOPOLOGY`, `R-CONTROL-PLANE-BYPASS`, `R-LIVE-RESIZE`, `R-TRAFFIC-REPLAY`, `R-CANCEL-AMBIGUITY`, `R-EXTERNAL-LIFECYCLE`, `R-CAPACITY` | Does the provider/SUT append-only ledger reconcile one immutable intent to the allowed effects, cancellation disposition, limits, fences and cleanup disposition? |
+| `LT-05 DURABLE_TRUTH_OR_RECOVERY_LOSS` | Acknowledged truth is lost, stale/deleted state is resurrected, or recovery proceeds from the wrong owner/version | `R-DURABLE`, `R-DELETION-RESURRECTION`, `R-RESTORE-RESURRECTION`, `R-RUNTIME-OWNER`, `R-CONTROLLER`, `R-REDIS-REGRESSION`, `R-REVISION-CHURN`, `R-LIVENESS-RECOVERY`, `R-UPGRADE` | Do restart/upgrade/restore observations reconcile PostgreSQL authority, fences, outbox, projections and external effects without importing a wider platform claim? |
+| `LT-06 TEST_DISTORTION_OR_STARVATION` | Dataset, proof or UI work steals shared capacity, biases selection, hides offered load or prevents representative continuous operation | `R-MEASURE`, `R-REFRESH`, `R-COLD-START`, `R-SHARED-INFRA`, `R-EVIDENCE-LOAD`, `R-CONTROL-DOS`, `R-UI-LOAD`, `R-OPERABILITY` | Do open-loop paired runs and shared-resource telemetry show the frozen workload, control probes and operators remain inside their independent limits? |
+
+Within a lane, investigate the risk with the greatest credible loss, current
+exposure, uncertainty and weakest oracle first. A secondary-theme relationship
+is recorded in the session/risk evidence when discovered; it does not duplicate
+the risk or dilute its primary owner.
+
+### 4.2 Detailed risk register
 
 | Risk | Priority | Failure/loss to expose | Acceptance links | Minimum confidence |
 |---|---|---|---|---|
 | `R-EXPIRY` | P0 | Expired, revoked, clock-unsafe, or invalidated material reaches the SUT | `LIF-002`--`LIF-003` | Grade 4, then Grade 5 in soak |
-| `R-LEAK` | P0 | A sensitive value escapes through messaging, logs, metrics, debug, MCP or its untrusted read-only client, Orchestrator/container metadata or artifacts, plaintext storage, or backup; embedding combines Dataset material with the Orchestrator's existing privileges | `SEC-001`--`SEC-008` | Grade 4; rotation/endurance at Grade 5 |
+| `R-LEAK` | P0 | A sensitive value escapes through messaging, logs, metrics, debug, MCP or its untrusted read-only client, Orchestrator/container metadata or artifacts, plaintext storage, or backup; embedding combines Dataset material with the Orchestrator's existing privileges | `SEC-001`--`SEC-008`, `SEC-016` | Grade 4; rotation/endurance at Grade 5 |
 | `R-MEASURE` | P0 | The in-process Dataset lifecycle steals Orchestrator JVM CPU, heap, GC, threads, executors, JDBC/Rabbit connections or host resources, or introduces a request-thread remote call, corrupting traffic or control-plane results | `PER-001`--`PER-005`, `PER-008`, `PER-010` | Grade 5 |
 | `R-DURABLE` | P0 | A Dataset caller receives success that is lost, a retry duplicates durable accounting/external effect, a multi-step relationship is corrupted, a stale owner commits, or embedded-module recovery is confused with recovery of an interrupted wider swarm command | `FUN-002`, `FUN-009`, `LIF-005`--`LIF-006`, `LIF-013`, `DUR-001`--`DUR-005` | Grade 4; recovery soak at Grade 5 |
 | `R-FALSE-PROOF` | P0 | MCP promotes a publish/count to end-to-end truth, agrees with itself while reality differs, or hides a missing child assertion behind a parent pass | `EVD-001`--`EVD-004`, `EVD-009` | Grade 4 |
 | `R-SCOPE` | P0 | A worker, producer, operator, or untrusted read-only MCP evidence client crosses environment/Dataset/partition/pool/swarm/projection scope | `FUN-001`, `SEC-003`, `SEC-008` | Grade 4 |
 | `R-SUPPLY-ROUTE` | P0 | The Dataset module accepts a handcrafted, inferred, forged, expired or superseded supply route, or dispatches after membership/incarnation change, so work reaches the wrong producer, scope or topology and creates an uncontrolled external effect | `FUN-012`, `DUR-003`, `OPS-006` | Grade 4 |
 | `R-SUPPLY-TOPOLOGY` | P0 | A classic, unbounded, wrong-argument or silently recreated queue is accepted instead of `DATASET_SUPPLY_QUORUM_V1`, so supply is lost/duplicated, Rabbit loops on topology drift, or shared traffic resources are exhausted | `FUN-012`, `DUR-003`, `PER-008`, `OPS-002`, `OPS-006` | Grade 4 |
+| `R-CONTROL-PLANE-BYPASS` | P0 | A swarm template/plan/start/stop/remove/config/status event bypasses canonical `ph.control`, or Dataset supply/hints enter a control queue, creating dual command ownership, unvalidated routing, lost status/outcome correlation or control-plane starvation | `PER-008`, `OPS-006`; `DUR-009`/`OPS-009` only for the wider interrupted-command recovery claim | Grade 4 lane/schema/route evidence for MVP; Grade 5 only for `Q-PLATFORM-RECOVERY-v1` |
+| `R-LIVE-RESIZE` | P0 | Raising the target above both the prior target and current effective supply opens no fill cycle; a same/lower target is misclassified as an increase; lowering deletes/deprovisions data or invalidates an active safe view; a stale policy wins; or an accepted command is presented as convergence | `FUN-006`, `LIF-001`, `LIF-009`, `LIF-013`, `PER-005` | Grade 4 deterministic transition/fault evidence; Grade 5 in the 24-hour profile |
 | `R-PROJECTION` | P0 | A mixed/stale/wrong-scope snapshot or final slot mapping sends the wrong record, generation, or context to the SUT | `FUN-004`--`FUN-005`, `LIF-003` | Grade 4 |
 | `R-ACTIVATION` | P0 | A selector/auth revision activates before every exact final processor can resolve it, or a forged/mutated WorkItem payload, reference, prepared model, stage chain, or destination is accepted | `FUN-004`--`FUN-006`, `SEC-014`, `EVD-001` | Grade 4; stress at Grade 5 |
 | `R-AUTH-PATH` | P0 | A source result, SUT credential, derived authentication value, stale auth revision, or private signing key enters a generic WorkItem/wrong service/persistent artifact | `FUN-005`, `SEC-004`--`SEC-007` | Grade 4; artifact/endurance at Grade 5 |
@@ -112,6 +140,7 @@ finding or architecture change.
 | `R-DELETION-RESURRECTION` | P0 | An MVP tombstone loses to a stale delta, retained local projection, worker rejoin, key-retained row, or external reconciliation and the deleted record becomes selectable again | `LIF-012`, `DUR-010`, `OPS-004` | Grade 4 |
 | `R-RESTORE-RESURRECTION` | P0 | An admitted `Q-HA-RESTORE-v1` backup or point-in-time restore predating the newest deletion epoch resurrects a deleted record or external effect | `DUR-008`, `DUR-012`, `SEC-009`--`SEC-010` | Grade 5 on the isolated restore profile |
 | `R-EXTERNAL-LIFECYCLE` | P0 | Continuous provisioning accumulates orphan accounts/entities, exceeds provider or legal limits, cannot be decommissioned, or deletes an entity still in use | `LIF-001`, `LIF-005`, `LIF-012`, `OPS-004` | Grade 4; 24-hour accumulation at Grade 5 |
+| `R-CANCEL-AMBIGUITY` | P0 | An accepted local cancellation intent is mistaken for provider cancellation, reservation is released before conclusive no-effect evidence, a late/ambiguous effect is discarded, or pause/timeout/shutdown synthesises cancellation and permits duplicate or stranded external work | `LIF-005`, `LIF-014`, `DUR-003` | Grade 4 with deterministic race model and independent provider ledger |
 | `R-STATIC-DRIFT` | P0 | A reusable external record is closed, blocked, reclassified, or otherwise changed outside PocketHive while remaining locally selectable | `LIF-002`--`LIF-004`, `LIF-011`, `OPS-003` | Grade 4; refresh/endurance at Grade 5 |
 | `R-SELECTION-BIAS` | P0 | Selection hotspots, skew, replacement, or correlated deterministic seeds make traffic unrepresentative or overload a subset of the SUT | `FUN-008`, `FUN-011`, `PER-001`--`PER-004`, `EVD-006` | Grade 4; named load claim at Grade 5 |
 | `R-IDENTITY-LIFECYCLE` | P0 | CA bootstrap, SAN policy, certificate/token renewal, revocation, partial rollout, bearer-only sensitive admission, or stolen-token replay leaves an unauthenticated or over-privileged path | `SEC-003`, `SEC-005`, `SEC-008`, `SEC-012` | Grade 4 |
@@ -123,10 +152,10 @@ finding or architecture change.
 | `R-CONTROLLER` | P1 platform risk | Scenario Manager/Orchestrator restart loses an interrupted plan, binding, command or desired-runtime intent, or accepts platform mutation before authoritative reconciliation | `DUR-004`--`DUR-005`, `DUR-009`, `OPS-009` | Required for a wider swarm-lifecycle recovery claim; recorded as a non-claim for the core Dataset MVP |
 | `R-REFRESH` | P1 | Provider throttling, ambiguity, credentials, or an aligned refresh wave depletes safe material during 24/7 use | `LIF-002`, `LIF-004`--`LIF-005`, `PER-001` | Grade 5 |
 | `R-COLD-START` | P1 | Worker/fleet hydration overloads the shared Orchestrator JVM, Dataset module, PostgreSQL or network, or starves control work and already-running swarms | `PER-005`, optional `PER-006`--`PER-007` | Grade 4 for MVP; Grade 5 for 30-swarm claim |
-| `R-CAPACITY` | P1 | Supply reservations, conflicting inventory owners or late successes exceed record/byte/storage/provider limits; retention cannot recover space | `LIF-001`, `LIF-013`, `PER-008`, `OPS-004` | Grade 4 |
+| `R-CAPACITY` | P1 | The configured 50,000-record target is mistaken for qualified support, or supply reservations, conflicting inventory owners, live resize, late successes or retained projections exceed record/byte/storage/provider limits and retention cannot recover space | `FUN-008`, `LIF-001`, `LIF-013`, `PER-001`, `PER-005`, `PER-008`, `OPS-004` | Grade 4 for bounds; Grade 5 for the named 50,000-record/endurance claim |
 | `R-SHARED-INFRA` | P1 | Embedded Dataset work or Rabbit/PostgreSQL flow, pool, lock or I/O contention damages existing PocketHive control/data planes in the same JVM and deployment | `PER-003`, `PER-008`, `PER-010` | Grade 5 |
 | `R-REDIS-REGRESSION` | P1 | Additive feature changes Redis datasets, sequences, auth, debug, or state-loop semantics | `DUR-006`, `EVD-005` | Grade 4 |
-| `R-KEY-LOSS` | P1 | Rotation/restore or a rolled-back, divergent or unverifiable key manifest loses the KEK/DEK required for live rows/backups, activates the wrong key state, or falls back insecurely | `SEC-004`--`SEC-006`, `SEC-010`, `SEC-013` | Grade 4; restore claim at Grade 5 |
+| `R-KEY-LOSS` | P1 | Rotation/restore or a rolled-back, divergent or unverifiable key manifest/floor loses the KEK/DEK required for live rows/backups, activates the wrong key state, or falls back insecurely | `SEC-004`--`SEC-006`, `SEC-010`, `SEC-013`, `SEC-016` | Grade 4; restore claim at Grade 5 |
 | `R-CLAIM-INFLATION` | P1 | A core, two-swarm/shared/reusable result is advertised as enterprise-sensitive, 30-swarm, isolated, consumable, HA, PCI, or universal capacity | `FUN-008`, `PER-006`--`PER-007`, section 27.4, section 28.8 | Grade 5 per distinct performance/HA claim and the exact sensitive gate for a sensitive claim |
 | `R-EVIDENCE-LOAD` | P1 | Per-transaction proof, scanning, or MCP polling becomes the bottleneck or drops evidence silently | `EVD-006`, `PER-001`, `PER-008` | Grade 5 |
 | `R-VALIDITY-STARVATION` | P1 | The Dataset module reports sufficient inventory using a weaker minimum while a stricter shared consumer receives no eligible records | `LIF-001`--`LIF-004`, `PER-009`, `OPS-003` | Grade 4; source profile at Grade 5 |
@@ -134,19 +163,20 @@ finding or architecture change.
 | `R-CONTROL-DOS` | P1 | Excessive definitions, hydration, MCP queries, proof scans, refreshes, or hostile read-only MCP retry/tool loops exhaust the shared Orchestrator JVM, Dataset executors, PostgreSQL/Rabbit pools, auth, or controller bulkheads | `PER-008`, `PER-010`, `EVD-006`, `OPS-004` | Grade 4; named load at Grade 5 |
 | `R-LIVENESS-RECOVERY` | P1 | The shared Orchestrator container remains running but unhealthy, embedded-module recovery ownership is ambiguous, or crash-loop remediation creates duplicate or unsafe Dataset work | `DUR-004`--`DUR-005`, `OPS-002`--`OPS-005`, `OPS-007`; add `OPS-009` only for platform recovery | Grade 4 for feature scope |
 | `R-UPGRADE` | P1 | Schema/image/protocol/key-policy change or mixed-version rollout corrupts state, weakens policy, breaks rollback, or creates an untestable downgrade | `DUR-002`, `DUR-004`, `OPS-001`--`OPS-002`, `OPS-008` | Grade 4; restore/HA claim at Grade 5 |
-| `R-EVIDENCE-INTEGRITY` | P1 | An exported evidence pack is altered, backdated, selectively regenerated, omits a required child assertion, or is signed by an identity unrelated to the qualified build/profile | `EVD-003`--`EVD-005`, `EVD-008`--`EVD-009` | Grade 4 for exported enterprise claims |
-| `R-UI-FALSE-STATE` | P0 | The operator UI fabricates, defaults, joins or mislabels a count, Fitness result, horizon, revision, decision or proof fact, causing a user to believe an unsafe/unproven Dataset or swarm is ready | `FUN-014`, `DSUI-DATA-*`, `DSUI-SEM-*`, `DSUI-VIEW-*`, `DSUI-STATE-*` | Grade 4 |
-| `R-UI-SCOPE-LEAK` | P0 | Server/client filtering, totals, facets, consumer links, cache reuse or proof queries reveal a hidden Dataset/swarm scope or sensitive value | `FUN-014`, `DSUI-API-002`--`003`, `DSUI-SEC-*` | Grade 4 with independent auth oracle and browser canaries |
-| `R-UI-STALE` | P1 | A stale, partial, reconciling or unavailable response continues to appear current/green, extends `safeUntil`, or loses durable truth across restart | `FUN-014`, `DSUI-STATE-*`, `DSUI-PERF-006` | Grade 4; endurance at Grade 5 |
-| `R-UI-LOAD` | P1 | Inventory joins, proof generation, polling or many browser sessions exhaust the shared Orchestrator read/JDBC/heap bulkhead and distort traffic/control results | `FUN-014`, `DSUI-ARCH-002`, `DSUI-PERF-*`, `PER-008`, `PER-010` | Grade 5 |
-| `R-UI-EXCLUSION` | P2 | Width, zoom, keyboard, focus, colour, timing or screen-reader behavior hides an operational reason or prevents diagnosis | `FUN-014`, `DSUI-A11Y-*` | Grade 3 plus exploratory accessibility review |
+| `R-EVIDENCE-INTEGRITY` | P1 | A qualification attestation or exported evidence pack is altered, backdated, replayed, selectively regenerated, omits a required child assertion, or is signed by an identity unrelated to the exact qualified build/profile | `EVD-003`--`EVD-005`, `EVD-008`--`EVD-010` | Grade 4 for core activation and exported enterprise claims |
+| `R-SSOT-DRIFT` | P0 | Lifecycle, UI, REST, event, proof, generated language types, wireframe copy or acceptance registry defines a different enum, field, status, revision namespace or semantic rule, so individually plausible components disagree and can render or act on a false state | `FUN-014`, `EVD-007`, `EVD-009`, `DSUI-API-001`, M0 | Zero unresolved deterministic drift at the team-review and M0 gates; Grade 4 mutation evidence for release |
+| `R-UI-FALSE-STATE` | P0 | The operator UI fabricates, defaults, joins or mislabels a count, Fitness result, horizon, revision, decision or proof fact, causing a user to believe an unsafe/unproven Dataset or swarm is ready | `FUN-014`, `DSUI-DATA-001`--`004`, `DSUI-SEM-001`--`002`, `DSUI-VIEW-001`--`008`, `DSUI-STATE-001`--`002` | Grade 4 |
+| `R-UI-SCOPE-LEAK` | P0 | Server/client filtering, totals, facets, consumer links, cache reuse or proof queries reveal a hidden Dataset/swarm scope or sensitive value | `FUN-014`, `DSUI-API-002`--`003`, `DSUI-SEC-001`--`005` | Grade 4 with independent auth oracle and browser canaries |
+| `R-UI-STALE` | P1 | A stale, partial, reconciling or unavailable response continues to appear current/green, extends `safeUntil`, or loses durable truth across restart | `FUN-014`, `DSUI-STATE-001`--`002`, `DSUI-PERF-006` | Grade 4; endurance at Grade 5 |
+| `R-UI-LOAD` | P1 | Inventory joins, proof generation, polling or many browser sessions exhaust the shared Orchestrator read/JDBC/heap bulkhead and distort traffic/control results | `FUN-014`, `DSUI-ARCH-002`, `DSUI-PERF-001`--`006`, `PER-008`, `PER-010` | Grade 5 |
+| `R-UI-EXCLUSION` | P2 | Width, zoom, keyboard, focus, colour, timing or screen-reader behavior hides an operational reason or prevents diagnosis | `FUN-014`, `DSUI-A11Y-001`--`002` | Grade 3 plus exploratory accessibility review |
 | `R-OPERABILITY` | P2 | Status cannot distinguish idle, warming, degraded, starved, uncertain, and reconciling or cannot identify the safe action | `OPS-001`--`OPS-009`, sections 18, 22, 30 | Grade 3 plus exploratory review |
 
 The risk owner records evidence gained, new uncertainty, residual exposure, and
 the next charter after each test cycle. Closed means the risk is controlled for
 a named profile, not impossible in every deployment.
 
-### 4.2 Applicability and MVP scope control
+### 4.3 Applicability and MVP scope control
 
 Hardening does not silently promote deferred HA, 30-swarm, HSM, consumable,
 exclusive, ordered, transaction-bound, multi-region, or distributed-database
@@ -249,16 +279,36 @@ children never creates a narrower implicit product claim.
 These rules are the assurance interpretation of `EVD-009`; the registry and
 evidence pack, not prose or a percentage, decide completeness.
 
-### 4.3 Staged delivery and evidence milestones
+The checked-in
+[UI acceptance registry](managed-test-data-ui-acceptance-registry.json),
+validated by its
+[JSON Schema](managed-test-data-ui-acceptance-registry.schema.json), is the single
+machine-readable Stage-0 traceability source for all 35 `DSUI` child
+requirements of `FUN-014`. It records each exact ID, primary and supporting
+charters, principal risks, core applicability and minimum confidence. A linter
+shall compare it with the UI acceptance table and fail on a missing, duplicate,
+unknown or stale ID, unknown charter/risk, invalid parent, wildcard ID, or
+weakened grade. Human-readable charter tables in this document are summaries;
+the JSON registry decides exact `DSUI` traceability.
+
+That design registry is not a qualification result or a substitute for the
+full `EVD-009` evidence index. Before M0 passes, every lifecycle acceptance
+parent must also have its versioned child-assertion decomposition and every
+child must reference an executable check or charter. A run-specific evidence
+index then binds those immutable assertion definitions to outcomes and artifact
+digests; it never edits the checked-in requirement definition to make a run
+pass.
+
+### 4.4 Staged delivery and evidence milestones
 
 Implementation may be staged to shorten feedback, but milestones are evidence
 checkpoints and named gates, not permission to blur profile boundaries:
 
 | Milestone | Exit evidence | Permitted claim |
 |---|---|---|
-| `M0 Contracts and blockers` | Closed schemas/reason codes, applicability/child-assertion maps, common/SDK compatibility TCKs, protocol model, supported Rabbit baseline, `SupplyRouteLease`, Dataset PostgreSQL/outbox/reconciliation contract and extraction-safe module boundary are reviewed | Design ready for implementation; no managed-Dataset behavioural claim and no wider platform recovery claim |
-| `M1 Core vertical slice` | Official ingress reaches the embedded non-sensitive Dataset module, PostgreSQL/outbox, controller-issued route lease, snapshot/local projections, two-swarm traffic, refresh, Orchestrator restart and the exact three MCP facts using deterministic doubles | Internal `dataset-dev-synthetic` evidence only; no release, scale, sensitive or enterprise claim |
-| `M2 Qualified core MVP` | `dataset-qualified-core` passes every applicable core parent/child assertion, including feature-scoped PostgreSQL restart recovery, shared-JVM non-interference, independent-oracle faults, `Q-MVP-1K-24H`, `Q-KNEE`, Redis compatibility and operations | The exact Dockerised reusable non-sensitive Dataset module in the existing Orchestrator container may be released; `SENSITIVE_TEST` remains rejected and exact interrupted swarm-lifecycle recovery remains an explicit non-claim |
+| `M0 Contracts and blockers` | Closed schemas/reason codes, applicability/child-assertion maps, common/SDK compatibility TCKs, protocol model, supported Rabbit baseline, selected and capacity-qualified monotonic-head witness deployment, `SupplyRouteLease`, Dataset PostgreSQL/outbox/reconciliation contract and extraction-safe module boundary are reviewed | Design ready for implementation; no managed-Dataset behavioural claim and no wider platform recovery claim |
+| `M1 Core vertical slice` | Official ingress reaches the embedded non-sensitive Dataset module, PostgreSQL/outbox, controller-issued route lease, snapshot/local projections, two-swarm traffic, refresh, Orchestrator restart, all three read-only MCP tools and the canonical nine-fact proof through `FLOW_PROVEN` using deterministic doubles, and passes the bounded transaction/publish/apply/restart/fence/time/auth/external-effect fault set required by `G-M1-INTERNAL-v1` against independent ledgers | Internal `dataset-dev-synthetic` evidence only; no release, scale, sensitive or enterprise claim |
+| `M2 Qualified core MVP` | `dataset-qualified-core` passes every applicable core parent/child assertion, including feature-scoped PostgreSQL restart recovery, shared-JVM non-interference, independent-oracle faults, `Q-MVP-1K-24H` at 50,000 eligible records/55,000 maximum with live target changes, `Q-KNEE`, Redis compatibility and operations | The exact Dockerised reusable non-sensitive Dataset module in the existing Orchestrator container may be released; `SENSITIVE_TEST` remains rejected and exact interrupted swarm-lifecycle recovery remains an explicit non-claim |
 | `M3 Sensitive enterprise gate` | The exact M2 build/deployment removes or mediates raw Docker control (or qualifies an extracted topology) and additionally passes `Q-SENSITIVE-ENTERPRISE-v1`, including encryption/key anti-rollback, PKI/mTLS sender constraint, least privilege, canonical attestation, shared Orchestrator/container TCB limits and privilege blast radius, egress, canary leakage, hostile input and signed evidence at their required grades | Only the exact qualified profile may admit and advertise `SENSITIVE_TEST`; a partial security pass, unmediated raw Docker control or an unreviewed combined trust boundary permits neither |
 | `M4 Measured extensions` | Each `Q-PLATFORM-RECOVERY-v1`, HA/restore, 30-swarm, HSM, PCI or other deferred profile passes its own complete manifest and gates | Only the independently qualified optional claim |
 
@@ -306,7 +356,7 @@ oracles. They corroborate a mechanism; they cannot pass a PocketHive criterion.
 | Hint reached broker | outbox/publish state | Rabbit test capture, return/confirm state, queue counters |
 | Snapshot is complete and authentic | Dataset-module page/hash status and worker-ready acknowledgement | independently generated manifest over exact scope, revision, schema/projection version, ordered record identities, counts, bytes, page ranges and delta-chain continuity |
 | Final materializer/activation/selector revisions applied | worker/controller acknowledgement/status | controlled snapshot server, durable activation ledger, bounded per-revision worker aggregates and deterministic sampled selections |
-| Safe record reached SUT | `flow-proven` receipt | external traffic sink matching opaque record/generation and boundary clock |
+| Safe record reached SUT | `FLOW_PROVEN` receipt | external traffic sink matching opaque record/generation and boundary clock |
 | One logical transaction had the declared external effect | traffic receipt and attestation chain | external sink/provider ledger keyed by immutable offered transaction ID and, where promised, the SUT idempotency key |
 | Access decision is correct, including through an existing generic workflow/swarm/MCP route | Orchestrator/Dataset-module/auth/MCP allow or deny plus audit reason | independent declarative policy evaluator built from the written access matrix, plus durable Dataset, dispatch and external-effect ledgers proving that a deny caused zero effects; never product authorization code or generated bindings |
 | Time decision is safe across restart | worker trusted-time/readiness status | independent authenticated reference clock, restart-event trace and persisted-floor observation |
@@ -321,6 +371,27 @@ oracles. They corroborate a mechanism; they cannot pass a PocketHive criterion.
 | No material regression | PocketHive metrics | open-loop generator, shared-resource telemetry, paired raw samples/confidence analysis |
 | Recovery completed | component health | durable inventory/ledger convergence and successful safe transaction after fault; health alone cannot prove either Dataset reconciliation or wider swarm-command recovery |
 | Exported enterprise evidence is authentic | proof digest and report metadata | detached signature, trusted timestamp, signer/build identity chain and independent verification over the complete immutable evidence index |
+
+#### 5.2.1 Named independent-oracle catalogue
+
+Every qualification manifest names the concrete implementation, owner, version,
+configuration digest and independence argument for each applicable oracle. A
+generic label such as “logs”, “database” or “test double” is not sufficient.
+
+| Oracle ID | Required independent observation | Independence boundary and failure meaning |
+|---|---|---|
+| `OR-EXT-EFFECT` | Provider/SUT-double append-only ledger for immutable intent, attempt, idempotency key, provider entity/status and externally visible business effect | Written by the controlled provider/sink, not the Dataset receipt path. Missing or irreconcilable effects make durability, idempotency, cleanup and flow claims `INCONCLUSIVE` or `FAIL`, never assumed successful. |
+| `OR-MAPPER` | Separately implemented reference mapper and data-quality evaluator over frozen source records, relationships, classifications and expected projections | Derived from the reviewed mapping matrix without importing product mapping code or generated bindings. Mutation qualification must show detection of wrong field, coercion, relationship, classification and batch-accounting defects. |
+| `OR-FITNESS` | Separately implemented Fitness Contract evaluator over the exact contract digest, binding environment/use, authoritative snapshot, provenance and trusted time | It may share immutable input files but no product evaluator/library. Missing inputs or disagreement cannot be converted to `PASS`. |
+| `OR-AUTHZ` | Declarative access-matrix evaluator plus enumeration and zero-effect observations for every official ingress | It uses neither product policy code nor generated policy bindings. A deny passes only when the independent decision agrees and Dataset, dispatch and external-effect ledgers remain unchanged. |
+| `OR-PG` | Scoped read-only PostgreSQL invariant queries for committed records, idempotency outcomes, operations, claims/fences, outbox, schedules, activations, tombstones and accepted-time floors | Queries are owned/reviewed outside the persistence adapter and run only in the approved component-observer profile. Product API success alone cannot establish durable truth. |
+| `OR-RABBIT` | Schema-validated topology/vhost/ACL/queue-argument/routing capture plus publish return, confirm, delivery and acknowledgement history, including proof that every swarm control event used canonical `ph.control` and no supply/hint entered it | Captured by the broker test harness independently of publisher status. A confirm does not prove producer apply or SUT flow, a missed hint does not disprove authoritative reconciliation, and traffic on the wrong lane is a failure even if the receiver happened to act. |
+| `OR-TIME` | Authenticated reference-clock samples, uncertainty, process/restart/suspend trace and direct observation of each persisted monotonic floor | Independent of the product wall clock and readiness calculation. Unavailable, stale or rolled-back observation makes an expiring safety claim unknown and must reduce eligibility. |
+| `OR-WORKER-SINK` | Worker-local snapshot/materialization/activation and selection ledger joined to the external request/SUT sink by opaque record, generation, binding, revision and transaction IDs | Neither ledger is produced by the central proof composer. It distinguishes installed, activated, selected, attempted and externally accepted facts without promotion. |
+| `OR-UI` | Canonical API-response-to-DOM field lineage, browser network/storage/cache capture, accessibility tree, keyboard/focus/reflow evidence and assistive-technology observations | Uses official ingress and inspects rendered output; screenshots alone are not the oracle. Any client-derived safety decision, hidden-scope aggregate, persisted sensitive state or inaccessible reason fails the corresponding `DSUI` assertion. |
+| `OR-CANARY` | Unique exact, encoded and transformed canary corpus plus coverage manifest and scanner across API/DOM/cache, logs, errors, metrics/traces, Rabbit/DLQ, persistence/backups, reports, MCP, browser and container/image artifacts | Canary generation and scanning are independent of product redaction and serialization. An unscanned declared sink, scanner false negative or any canary occurrence blocks the no-leakage claim. |
+| `OR-RESOURCE` | Whole-Orchestrator and Dataset-attributed CPU/allocation/heap/GC/thread/executor/JDBC/Rabbit/DB-lock/WAL/network telemetry, open-loop traffic measurements and control/authorization probes | Collected outside the business decision path and reconciled with offered load. Missing stalls, rejected work or shared-pool waits make non-interference evidence inconclusive. |
+| `OR-REGISTRY` | Acceptance-registry schema/lint, canonical contract/TCK drift graph, run evidence-index closure and deliberately incomplete/contradictory pack tests | The checker consumes canonical artifacts without rewriting them. Any missing/duplicate/wildcard child, contract mismatch or unlinked applicable outcome blocks the parent and gate. |
 
 The same code path must not generate both sides of an allegedly independent
 comparison. MCP is useful evidence but never the deciding oracle for MCP truth.
@@ -352,7 +423,13 @@ Continuously check these properties:
 
 - retrying the same key and intent changes durable accounting at most once;
 - retrying the same key with different intent never reuses the old result;
-- `received = inserted + updated + duplicate + rejected`;
+- terminal upserts satisfy
+  `received = inserted + updated + duplicate + rejected`, terminal validation
+  satisfies `checked = valid + invalid + uncertain`, and terminal deprovision
+  satisfies
+  `outcomes = deprovisioned + autoExpired + ownerHandedOff + uncertain`;
+  non-terminal work exposes no committed terminal category and no receipt kind
+  serializes another kind's counters;
 - exactly one stable Supply Policy version/controller owns each inventory scope;
   a second identity/overlap fails closed and reserved `REPLENISH` never executes;
 - increasing traffic RPS does not proportionally increase Dataset PostgreSQL,
@@ -368,6 +445,19 @@ Continuously check these properties:
   `SupplyRouteLease` issued from Swarm Controller-owned live topology; Dataset
   input cannot supply or infer exchange/routing coordinates, and an expired,
   revoked, wrong-scope/epoch/incarnation or superseded lease publishes nothing;
+- every RabbitMQ swarm template/plan/start/stop/remove/config/status event uses
+  the canonical `ph.control` schema, route and queue family; moving one to the
+  WorkItem/hint lane, or moving supply/hints to `ph.control`, is always detected
+  and never produces an equivalent pass;
+- activating a target above both the prior target and current effective supply
+  opens one new-version `TARGET_INCREASE` fill cycle; if current effective
+  supply is already at/above it, no target-driven fill opens. Activating a
+  lower target cannot create target-increase work,
+  delete/deprovision an entity, improve Fitness, or remove a record from the
+  active local view before the exact standby revision is activated;
+- replaying the same target-change intent returns the same receipt and creates
+  no second fill cycle, while a stale version/fence changes no target, cycle,
+  reservation or worker view;
 - after Orchestrator restart, the embedded Dataset module recovers only from its
   PostgreSQL authority, reclaims expired work, republishes committed outbox
   intent safely, fences stale routes and reports Dataset-ready only after its
@@ -447,6 +537,12 @@ Continuously check these properties:
   inside the qualified profile;
 - migration followed by supported rollback, or forward completion when rollback
   is unsafe, preserves all acknowledged truth and explicit deletion epochs.
+- one canonical machine contract defines every serialized field, closed enum,
+  proof fact/verdict status, error/reason code and revision/snapshot namespace;
+  generated Java/JSON/TypeScript/OpenAPI/AsyncAPI representations and UI display
+  mappings remain byte/semantic compatible, while prose and wireframes never
+  introduce a competing wire value. Any mismatch fails `R-SSOT-DRIFT` before
+  implementation or release promotion.
 
 ## 6. Testability prerequisites
 
@@ -463,6 +559,12 @@ nice-to-have diagnostics:
   limiting;
 - a versioned reference mapper/data-quality oracle and independently implemented
   authorization policy evaluator with seeded-defect mutation suites;
+- a canonical-contract graph and drift linter that inventories lifecycle/UI
+  acceptance IDs, JSON/OpenAPI/AsyncAPI schemas, generated Java/TypeScript
+  types, proof/operation enums, revision/snapshot semantics, REST documentation,
+  wireframe display mappings and the acceptance registry; missing authority,
+  duplicate definitions, wildcards, stale values and semantic mismatches fail
+  M0 instead of being translated by a compatibility fallback;
 - a versioned, independently implemented Dataset Fitness Contract evaluator
   with frozen authoritative inputs and mutation fixtures for every assertion,
   outcome and reason code, plus signed-manifest receipt controls for evaluation
@@ -546,6 +648,11 @@ nice-to-have diagnostics:
 - unique canary generation plus exact, encoded, and transformed sink scanning;
 - resource metrics, open-loop load generation, raw histograms, and immutable run
   manifests;
+- a browser/API performance harness with frozen maximum authorised Dataset,
+  binding, consumer, operation, evaluation, proof-fact and worker-report
+  cardinalities; maximum identifier/reason lengths; concurrent principals;
+  query-plan, rows-read/returned, bytes, temporary-spill, lock, JDBC-pool and
+  render/task observations; and slow/hidden/offline client controls;
 - Docker/container inventory and restart-event capture; and
 - a machine-readable parent-and-child-assertion-to-evidence index, immutable
   run-manifest digests, detached evidence signing, trusted timestamping and
@@ -574,7 +681,7 @@ questions during debrief.
 | Charter | Mission and principal attacks | Oracles/evidence | Initial timebox |
 |---|---|---|---|
 | `CH-01 Binding` | Explore definition/binding/vars materialisation; vary missing/wrong/extra/native values, moving aliases, scope, policy version, and unsupported allocation around create/update/restart | frozen plan, official API, container inventory, audit | 90 min |
-| `CH-02 Supply` | Challenge watermark/target/capacity accounting with zero/one/max inventory, concurrent producers/controllers, duplicate intent, claim expiry, rejection, and late success | model, provider ledger, DB constraints/receipts | 120 min |
+| `CH-02 Supply` | Challenge watermark/target/capacity accounting with zero/one/50,000/55,000 inventory and an explicit `(prior target, effective supply, new target)` oracle. Include `(30k,20k,40k)` one `TARGET_INCREASE`, `(30k,60k,40k)` no fill, `(50k,20k,30k)` no target-increase then only the new low-watermark rule, unchanged-target policy replacement with an open fill, initial policy with pre-existing inventory, and rejected infeasible decreases/increases. Restart at hold/prepared/CAS/applied/fill-cycle boundaries; vary concurrent controllers, duplicate/stale intent, claim expiry and late success; seek a missed/duplicate/stranded cycle, unsafe local-view removal or silent external deletion | independent decision table and demand/fill-cycle model, schedule/activation rows, provider and worker-selection ledgers, DB constraints/receipts | 210 min |
 | `CH-03 Trusted time` | Try to make expired/revoked material usable through host rollback, restart, lost/stale reference, suspend, forward/backward step, uncertainty growth and exact-boundary scheduling; challenge the persisted floor and fail-closed readiness | independent reference clock, restart trace, persisted-floor observation, request sink | 150 min |
 | `CH-04 Fence/source resume` | Pause an old producer across claim expiry/reassignment; fail/restart between parent and child source steps; force ambiguous outcomes around every checkpoint/direct commit/refresh resolve; seek WorkItem leakage, duplicate parent, broken relationship, stale activation, or blind retry | provider ledger, serializer capture, fence/checkpoint/operation history, resulting SUT flow | 180 min |
 | `CH-05 Snapshot` | Corrupt, truncate, duplicate, reorder, overlap, omit and expire snapshot/delta pages and cursors; vary page boundaries, manifest counts/bytes/digest, schema/projection version, scope and delta-chain ancestry; restart during build/swap and seek partial, mixed, rolled-back or amplified views | controlled snapshot server, independent manifest, heap/thread counters, selection sink | 180 min |
@@ -583,7 +690,7 @@ questions during debrief.
 | `CH-08 Hot path/shared JVM` | Seek any central call, Dataset-induced CPU or heap-allocation spike, GC pause, thread/executor/JDBC/Rabbit-pool starvation, secret serialization, queue growth, control-latency regression or journal interference across feature-off/idle/active modes in the same Orchestrator JVM | I/O detector, open-loop load, JVM/executor/pool telemetry, control-operation probes and Rabbit/DB/journal telemetry | one baseline cycle |
 | `CH-09 Scale` | For an enterprise claim, step 10/20/30/40/50 shared then isolated swarms; force simultaneous hydration and restart ten while twenty run; find the repeated knee, bulkhead saturation and noisy neighbour without generalising across profiles | complete profile manifest, raw rates/lag/histograms/resources | multiple controlled runs |
 | `CH-10 Egress/input` | Attempt SSRF through URL/DNS/IP/redirect/metadata/socket and rebinding paths; vary oversized/deep/compressed/malformed provider content, unsupported slot contexts and control-sequence/context injection; seek parser/proxy bypass and resource amplification | proxy and external sink capture, parser/resource telemetry, Dataset-module audit | 150 min per protocol |
-| `CH-11 Key lifecycle` | Rotate KEK, DEK, certificates, and credentials during traffic; restart mid-rewrap; restore data needing old keys; remove/corrupt keys and challenge deletion evidence | key/audit history, DB/backup restore, traffic sink | 180 min plus restore |
+| `CH-11 Key lifecycle` | Rotate KEK, DEK, certificates, and credentials during traffic. For core keys, challenge post-genesis C0/H0/Name/attribute baselines (including forbidden ORDERLY/reset-cleared indices), stable subject-key transplant, same-subject fork versus unrelated-subject CAS, lost-response receipt idempotence, torn pre-counter frame, counter/extend half-transition and PostgreSQL activation. Combine database-plus-secret-plus-journal rollback, old-valid-prefix replay, missing/truncated/reordered journal, TPM reset/reprovision/emulation/lockout/unavailability/endurance exhaustion, manifest ahead/behind latest included subject, replica split, historical-key loss, early retirement and restore/nonce reuse. Assert zero production Dataset crypto/key release/serving/outbox/provider effect before equality while isolated KATs cannot touch rows or state | independent canonical codec/replay plus key/floor/witness/audit chain, physical-TPM attestation, DB/secret/backup restore, decrypt/tamper/signature/inclusion oracle and traffic/provider sinks | 300 min plus restore |
 | `CH-12 MCP proof` | Treat the client as untrusted and read-only: verify the exact three-tool catalogue, remove or contradict each evidence stage, replay proof IDs, inject instruction-like identifiers/labels, poll under load, and try to obtain values/free text or amplify privilege. Exercise the same denied Dataset scope through existing generic workflow/swarm/MCP routes; require the product decision to agree with the independent policy oracle and prove zero durable mutation, dispatch or external effect | independent evidence chain and policy evaluator, MCP contract/audit, durable Dataset/dispatch/provider ledgers | 120 min |
 | `CH-13 Redis` | Run existing Redis Dataset, state-loop, auth, sequence, debug, and evidence paths with feature absent/idle/active; restart/wipe each store independently | legacy golden behaviours and before/after state | 120 min plus regression |
 | `CH-14 Endurance` | Run the named 24-hour profile with refresh, source outage/recovery, rotations, steady-state Orchestrator restart waves, pool depletion/refill, retention, disk pressure and proof polling; do not schedule interrupted swarm commands unless the separate platform-recovery claim is under test | full evidence pack, feature/platform event classification and trend/anomaly review | 24 h plus debrief |
@@ -597,23 +704,29 @@ questions during debrief.
 | `CH-22 Identity/PKI` | Challenge bootstrap, SAN/audience/subject/actor/binding, partial CA/JWKS rollout, renewal overlap, expiry, revocation and stale feed; prove bearer-only sensitive admission fails, replay an mTLS-bound token from another process/key, and attack DPoP proof/nonce/replay where declared; inspect every private-key owner and fallback path | test CA/token service, independent policy oracle, packet/config/audit capture | 210 min per security profile |
 | `CH-23 TCB/leakage` | Compromise or misconfigure the shared Orchestrator process/container, its Docker-control surface, one final processor, host or debug surface; attempt cross-Dataset projection/key access and exfiltration through logs, dumps, swap, hibernation, volumes, IPC, metrics, MCP and crash artifacts; measure scope/time/record/control-plane blast radius and challenge whether the combined boundary is acceptable for the named profile | access matrix, canary scanner, process/host/container/image/Docker-authority inspection, key/projection inventory and independent security review | 210 min per profile |
 | `CH-24 Control/read-only MCP abuse` | Flood definitions, bindings, hydration, refresh, proof scans and bounded read-only MCP status/proof loops by one and many principals; use hostile pagination, retries and cancellation; repeat the `CH-12` cross-path deny under load and seek authorization/admission bypass, any durable/external effect, unbounded work or traffic-path resource theft | independent policy oracle, durable Dataset/dispatch/provider ledgers, per-principal/scope bulkhead metrics, traffic non-interference | 180 min |
-| `CH-25 Upgrade/rollback` | Exercise clean install, expand/migrate/contract, rolling mixed versions, interrupted migration, policy/key/schema change, supported rollback and mandatory forward repair; try downgrade, restored-old data and stale-worker rejoin | migration ledger, before/after DB/provider invariants, compatibility matrix, traffic sink | 240 min per supported path |
+| `CH-25 Upgrade/rollback` | Exercise clean install, expand/migrate/contract, rolling mixed versions, interrupted migration, policy/key/floor/witness/schema change, supported rollback and mandatory forward repair; try downgrade, simultaneous database-plus-secret/journal rollback below the physical witnessed head, witness index reset/migration and stale-worker rejoin. Routine conforming key rotation must not rewrite qualification identity; witness reprovision or a pinned encryption/rotation-contract change must require requalification | migration, subject-floor and complete witness-journal/TPM ledgers, before/after DB/provider invariants, compatibility/qualification matrix, traffic sink | 270 min per supported path |
 | `CH-26 Selection realism` | Exercise round-robin/uniform/weighted policies over uneven classes, records entering/leaving and worker-count/seed changes; look for hotspots, correlated worker resets, starvation and mismatch between configured and observed traffic mix | reference sampler, per-record/category/worker distributions, external sink | 180 min plus load blocks |
 | `CH-27 Game day` | Combine asymmetric network partitions, slow links, clock uncertainty, partial certificate/key rollout, stale-node rejoin, broker/database degradation and operator error while traffic continues; test decision authority, communications, safe-idle and recovery runbooks | independent incident timeline, supervisor/network events, all durable/external ledgers | 4 h plus debrief |
-| `CH-28 Evidence authenticity` | Remove, replace, reorder, backdate and selectively regenerate raw artifacts; sign with wrong/expired identity, mutate the manifest after signing, break timestamp trust and perform clean-room verification | detached signature/timestamp verifier, immutable evidence index, reviewer identity chain | 120 min |
-| `CH-29 Restore non-resurrection` | For `Q-HA-RESTORE-v1`, restore backup/PITR points before and around newer deletions, with an absent, older, corrupt, divergent or valid independently retained deletion manifest; rejoin stale workers and reconcile post-restore provider effects before attempting selection | destructive isolated restore, signed deletion ledger, provider inventory and traffic sink | 240 min per restore profile |
-| `CH-30 Supply route/topology` | Register, renew, expire, revoke, replay and supersede a `SupplyRouteLease`; mutate scope/binding version/operation kind/epoch/incarnation and swap topology during dispatch; attempt raw/inferred routes; pre-create classic/unbounded/wrong-argument queues and seek silent delete/recreate/downgrade or `PRECONDITION_FAILED` retry loops | independent Swarm Controller topology/lease ledger, exact Rabbit descriptor/route capture, producer receipt and provider ledger | 210 min |
+| `CH-28 Evidence authenticity` | Remove, replace, reorder, backdate and selectively regenerate raw artifacts; sign a `CoreQualificationAttestation/v1` or export with the wrong/expired/purpose-mismatched identity; mutate or transplant its stable qualification-lineage subject key, child/build/image/deployment/registry/pack digests, sequence/previous digest, full subject chain or witness journal; replay an old valid prefix/stale build, replace the lineage, inject torn/half-committed state, break timestamp trust and perform clean-room verification | independent attestation, subject-key, canonical witness replay and detached signature/timestamp verifiers, candidate/activation/head receipts, immutable evidence index and reviewer identity chain | 180 min |
+| `CH-29 Restore non-resurrection` | For `Q-HA-RESTORE-v1`, restore backup/PITR points before and around newer deletions with absent/older/corrupt/divergent subject chains or witness journals; attempt to omit/lower an unexpired deletion A when adding B, retire A before its backup horizon, transplant a scope key and replay an old valid prefix. Rejoin stale workers and reconcile post-restore provider effects before attempting selection | destructive isolated restore, signed cumulative deletion ledger, physical/qualified witnessed head and independent map/replay oracle, provider inventory and traffic sink | 270 min per restore profile |
+| `CH-30 Supply route/topology` | Register, renew, expire, revoke, replay and supersede a `SupplyRouteLease`; mutate scope/binding version/operation kind/epoch/incarnation and swap topology during dispatch; attempt raw/inferred routes; pre-create classic/unbounded/wrong-argument queues and seek silent delete/recreate/downgrade or `PRECONDITION_FAILED` retry loops. Move each canonical swarm control event off `ph.control`, and inject supply/hints into control queues, to prove lane/schema enforcement and control responsiveness | independent Swarm Controller topology/lease ledger, exact schema-validated Rabbit lane/descriptor/route capture, producer receipt and provider ledger | 240 min |
 | `CH-31 Q-PLATFORM-RECOVERY-v1` | Only when `Q-PLATFORM-RECOVERY-v1` is requested, stop a dynamic Swarm Controller, its Orchestrator owner, Docker and host before/after desired-runtime and every create/config/start/stop/remove command boundary; inject competing/stale controller incarnations, missing/duplicate actual instances, running-unhealthy and crash loops; attempt mutation/dispatch before exact plan/config/worker/topology/lease convergence | durable command/desired-runtime rows, Orchestrator/controller journals, Docker events/inventory, controller/route/worker state and provider/DB ledgers | 210 min |
-| `CH-32 Profile gate` | Under `dataset-qualified-core`, submit `SENSITIVE_TEST`, downgrade/mislabel classifications, forge or replay qualification state, change build/image/profile after qualification and query UI/API/MCP claims; then repeat on the exact enterprise-sensitive candidate with one required child assertion removed at a time | independent applicability/evidence evaluator, official admission/status/MCP APIs, DB/Rabbit/canary scan and signed manifest | 180 min per release gate |
+| `CH-32 Profile gate` | Enter only the separately authorised `QUALIFICATION_CANDIDATE`, remove/fail one required core child at a time, forge/replay/stale/transplant the signed activation attestation or stable lineage, truncate/reorder its subject chain/journal, reset the witnessed head and change build/image/deployment contract before activation; verify general navigation remains hidden and only exact full-chain + latestBySubject + atomic database activation enables capability. Under `dataset-qualified-core`, submit `SENSITIVE_TEST`, downgrade/mislabel classifications and query UI/API/MCP claims; then repeat on the exact enterprise-sensitive candidate with one required child removed | independent applicability/attestation/subject-key/witness-replay evaluator, candidate token and activation/head audit, official admission/status/MCP APIs, DB/Rabbit/canary scan and signed manifest | 240 min per release gate |
 | `CH-33 Dataset fitness` | With adequate counts, attempt start and selection under wrong cohort, broken relationships, stale/short-lived records, missing provenance/classification, wrong environment/use, `FAIL`, `UNKNOWN`, forged/mismatched receipt and superseded contract. Cross the exact `safeUntil`, require zero unsafe sink use, recover to `PASS`, and repeat through refresh, outage and restart | frozen Fitness Contract, independent evaluator, authoritative Dataset/source/provenance snapshots, trusted time, manifest/activation receipt, worker I/O detector, readiness and external traffic sink | 180 min per contract version |
-| `CH-34 Operator UI truth` | Across inventory, all five detail tabs, Dataset dependencies and Runtime Inspector, remove/contradict/stale each authority; vary auth scope, pagination, restart, reconciling, partial facts, exact time/revision boundaries, hostile labels, cache identity, 429/503/schema errors, width/zoom/keyboard and concurrent polling. Seek any dummy/default value, cross-view contradiction, hidden-scope leak, client-inferred decision, inaccessible reason or traffic/control interference | canonical API/DOM field-lineage comparison, independent Dataset/Fitness/binding/auth/proof oracles, browser network/storage/accessibility evidence, release-bundle scan and paired load telemetry | 210 min plus polling block |
+| `CH-34 UI contract coherence` | Compare every Dataset UI endpoint/DTO/field/status/reason with the canonical machine contract, REST docs, generated Java/TypeScript types, proof service, operation ledger, acceptance registry and wireframe display mapping. Mutate and omit every closed value; seek duplicate definitions, compatibility shims, client defaults, invented display states, revision-namespace confusion and a wireframe value that could reach production | `OR-REGISTRY`, cross-language TCK/drift graph, release-bundle/import scan and enum/schema mutation report | 120 min per contract baseline |
+| `CH-35 UI truth, time and cross-view consistency` | Across inventory, all five detail tabs, Dataset dependencies and Runtime Inspector, remove, contradict, supersede and stale each authority. Cross exact validity/`safeUntil`, snapshot-token, projection-lag, operation, Fitness/prior-PASS and applied-revision boundaries; seek any client-derived decision, zero/default, proof promotion or disagreement between views/API/MCP | `OR-UI`, `OR-FITNESS`, `OR-PG`, `OR-RABBIT`, `OR-WORKER-SINK`, canonical proof and operation ledgers | 180 min |
+| `CH-36 UI authorization, enumeration and cache isolation` | Vary principal, role, environment/Dataset/partition/pool/swarm, page/cursor/search/facet/summary/proof target and identity switch; inspect browser memory/storage/network and shared caches. Seek hidden-scope totals, existence side channels, stale-principal reuse, hostile-label execution, client-only denial or any durable/dispatch/provider effect from a denied read | `OR-AUTHZ`, `OR-UI`, `OR-PG`, `OR-EXT-EFFECT`, side-channel timing samples and canary scan | 180 min |
+| `CH-37 UI accessibility and responsive safety` | Exercise every route/state with keyboard only, focus restoration, accessible names/roles/values, screen reader, forced colours, light/dark modes, required desktop/tablet/mobile widths, 200% zoom and 320-CSS-pixel reflow. Use longest identifiers/reasons, localisation expansion and reduced motion; seek a hidden/truncated safety fact, undiscoverable tab, colour-only distinction, inaccessible disclosure or two-dimensional page scroll | `OR-UI`, accessibility tree, Firefox keyboard/reflow captures, screen-reader notes, contrast/target measurements and DOM order | 180 min plus assistive-technology pass |
+| `CH-38 UI polling, proof and shared-resource non-interference` | Run the frozen maximum authenticated sessions at the minimum refresh interval while active traffic, refresh, proof and control work execute. Vary hidden/offline/slow clients, restart, cancellation, jitter, 429/`Retry-After`, bounded 503, proof interval size and hostile retry loops; seek overlapping polls, timestamp extension, unbounded evidence, pool starvation or measurement distortion | `OR-RESOURCE`, `OR-UI`, open-loop paired traffic, server/read-bulkhead metrics, query plans and proof/effect reconciliation | one paired performance cycle plus soak |
+| `CH-39 Operator adverse-state and remediation journey` | Traverse loading, background refresh, stale, partial, reconciling, empty, denied, limited, unavailable, incompatible, failed, starved and uncertain states from inventory through detail/Inspector. Ask operators to identify authority, impact on new starts versus running traffic, safe next action, owner and evidence link; seek ambiguous colour/copy, dead ends, unsafe implied mutation or a remediation that cannot be performed through the authorised admin/API/runbook surface | `OR-UI`, incident timeline, operation/binding/worker ledgers, runbook/action-owner review and task-based operator observation | 150 min |
+| `CH-40 Producer lifecycle, cancellation and stranded-resource coupling` | Interrupt provisioning, refresh, validation, replacement, deprovision and `CancelSupplyOperation/v1` before claim, during claim/provider call, after effect, during ambiguous/late receipt, restart, redelivery and cleanup. Race stale fence/version, duplicate/conflicting idempotency and denied scope. Verify accepted intent blocks claim/requeue but retains reservation; only conclusive no-effect becomes `CANCELLED`; real effects receive normal typed accounting; ambiguity stays `UNCERTAIN`; pause/policy/timeout/shutdown/decommission synthesize no intent. Remove/restart the producer/controller while external entities remain and verify UI/API separate durable operation truth from live observation, expose cleanup owner/deadline and never claim deprovision from container absence | official admin command/receipt and independent auth oracle, `OR-EXT-EFFECT`, `OR-PG`, `OR-RABBIT`, claim/route/controller events, tombstone/decommission ledger and `OR-UI` | 240 min plus cleanup window |
 
 ### 7.1 Charter traceability
 
 | Charter | Principal risks | Acceptance focus |
 |---|---|---|
 | `CH-01` | `R-SCOPE`, `R-PROJECTION` | `FUN-001`, `FUN-004`--`FUN-007` |
-| `CH-02` | `R-CAPACITY`, `R-DURABLE` | `FUN-002`--`FUN-003`, `LIF-001`, `LIF-007`--`LIF-009`, `LIF-013`, `OPS-004` |
+| `CH-02` | `R-CAPACITY`, `R-LIVE-RESIZE`, `R-DURABLE` | `FUN-002`--`FUN-003`, `FUN-006`, `FUN-008`, `LIF-001`, `LIF-007`--`LIF-009`, `LIF-013`, `PER-005`, `OPS-004` |
 | `CH-03` | `R-EXPIRY`, `R-TIME-ROLLBACK`, `R-ROTATION-RACE` | `LIF-002`--`LIF-003`, `DUR-001`, `DUR-011`, `OPS-003` |
 | `CH-04` | `R-DURABLE`, `R-REFRESH`, `R-AUTH-PATH` | `FUN-009`, `LIF-005`--`LIF-006`, `DUR-002`, `SEC-007` |
 | `CH-05` | `R-PROJECTION`, `R-SNAPSHOT-INTEGRITY`, `R-COLD-START` | `FUN-004`, `DUR-002`, `DUR-010`, `EVD-001`, `PER-005` |
@@ -622,7 +735,7 @@ questions during debrief.
 | `CH-08` | `R-MEASURE`, `R-SHARED-INFRA`, `R-CONTROL-DOS` | `PER-001`--`PER-005`, `PER-008`, `PER-010` |
 | `CH-09` | `R-CLAIM-INFLATION`, `R-COLD-START`, `R-SHARED-INFRA` | `LIF-008`, `PER-006`--`PER-007` |
 | `CH-10` | `R-EGRESS`, `R-CONTROL-DOS` | `FUN-005`, `SEC-011`, `PER-008`, `PER-010` |
-| `CH-11` | `R-KEY-LOSS`, `R-LEAK` | `SEC-004`--`SEC-006`, `SEC-010`, `SEC-013` |
+| `CH-11` | `R-KEY-LOSS`, `R-LEAK` | `SEC-004`--`SEC-006`, `SEC-010`, `SEC-013`, `SEC-016` |
 | `CH-12` | `R-FALSE-PROOF`, `R-EVIDENCE-LOAD`, `R-SCOPE`, `R-AUTHZ-ORACLE` | `SEC-003`, `SEC-008`, `EVD-001`--`EVD-004`, `EVD-006` |
 | `CH-13` | `R-REDIS-REGRESSION` | `DUR-006`, `EVD-005` |
 | `CH-14` | all P0/P1 for the named profile | `PER-001`, `PER-009`, applicable durability/security/operations IDs |
@@ -636,16 +749,22 @@ questions during debrief.
 | `CH-22` | `R-IDENTITY-LIFECYCLE`, `R-AUTHZ-ORACLE`, `R-SCOPE` | `SEC-003`, `SEC-005`, `SEC-008`, `SEC-012` |
 | `CH-23` | `R-TCB-BLAST`, `R-LEAK`, `R-AUTH-PATH` | `SEC-002`, `SEC-005`--`SEC-007`, `SEC-015` |
 | `CH-24` | `R-CONTROL-DOS`, `R-EVIDENCE-LOAD`, `R-AUTHZ-ORACLE` | `PER-008`, `PER-010`, `SEC-003`, `SEC-008`, `EVD-006` |
-| `CH-25` | `R-UPGRADE`, `R-DURABLE` | `DUR-002`, `DUR-004`, `OPS-001`--`OPS-002`, `OPS-008` |
+| `CH-25` | `R-UPGRADE`, `R-DURABLE`, `R-KEY-LOSS` | `DUR-002`, `DUR-004`, `OPS-001`--`OPS-002`, `OPS-008`, `SEC-016` |
 | `CH-26` | `R-SELECTION-BIAS`, `R-MEASURE` | `FUN-008`, `FUN-011`, `PER-001`--`PER-004`, `EVD-006` |
 | `CH-27` | all applicable P0/P1 recovery and operability risks for the named profile | `FUN-012`, feature-scoped `DUR-001`--`DUR-007` and `DUR-010`--`DUR-011`, `OPS-002`--`OPS-008`, applicable lifecycle/security IDs; add `DUR-009`/`OPS-009` only for `Q-PLATFORM-RECOVERY-v1` |
-| `CH-28` | `R-EVIDENCE-INTEGRITY`, `R-FALSE-PROOF` | `EVD-001`--`EVD-005`, `EVD-008`--`EVD-009` |
+| `CH-28` | `R-EVIDENCE-INTEGRITY`, `R-FALSE-PROOF` | `EVD-001`--`EVD-005`, `EVD-008`--`EVD-010` |
 | `CH-29` | `R-RESTORE-RESURRECTION`, `R-KEY-LOSS`, `R-DURABLE` | `DUR-008`, `DUR-012`, `SEC-009`--`SEC-010` |
-| `CH-30` | `R-SUPPLY-ROUTE`, `R-SUPPLY-TOPOLOGY`, `R-SCOPE`, `R-DURABLE` | `FUN-012`, `DUR-003`, `PER-008`, `OPS-002`, `OPS-006` |
+| `CH-30` | `R-SUPPLY-ROUTE`, `R-SUPPLY-TOPOLOGY`, `R-CONTROL-PLANE-BYPASS`, `R-SCOPE`, `R-DURABLE` | `FUN-012`, `DUR-003`, `PER-008`, `OPS-002`, `OPS-006` |
 | `CH-31` | `R-RUNTIME-OWNER`, `R-CONTROLLER`, `R-LIVENESS-RECOVERY` (`Q-PLATFORM-RECOVERY-v1` only) | platform-scoped children of `DUR-004`--`DUR-005`, plus `DUR-009`, `OPS-007`, `OPS-009` |
-| `CH-32` | `R-SENSITIVE-ADMISSION`, `R-CLAIM-INFLATION`, `R-LEAK` | section 27.4, applicable MVP rows, `SEC-002`, `SEC-004`--`SEC-005`, `SEC-007`, `SEC-012`--`SEC-015`, `EVD-008`--`EVD-009` |
+| `CH-32` | `R-SENSITIVE-ADMISSION`, `R-CLAIM-INFLATION`, `R-LEAK`, `R-EVIDENCE-INTEGRITY` | section 27.4, applicable MVP rows, `SEC-002`, `SEC-004`--`SEC-005`, `SEC-007`, `SEC-012`--`SEC-015`, `EVD-008`--`EVD-010` |
 | `CH-33` | `R-FITNESS`, `R-DATA-QUALITY`, `R-FALSE-PROOF`, `R-MEASURE` | `FUN-010`, `FUN-013`, `LIF-001`--`LIF-004`, `OPS-003`, `PER-001`, `EVD-001`--`EVD-004` |
-| `CH-34` | `R-UI-FALSE-STATE`, `R-UI-SCOPE-LEAK`, `R-UI-STALE`, `R-UI-LOAD`, `R-UI-EXCLUSION` | `FUN-014` and every applicable `DSUI-*` requirement |
+| `CH-34` | `R-SSOT-DRIFT`, `R-UI-FALSE-STATE` | Exact `DSUI` IDs whose registry `primaryCharter` is `CH-34`; principally contract, data and semantic requirements under `FUN-014` |
+| `CH-35` | `R-UI-FALSE-STATE`, `R-UI-STALE`, `R-FITNESS`, `R-FALSE-PROOF` | Exact `DSUI` IDs whose registry `primaryCharter` is `CH-35`; principally authority, view and state requirements under `FUN-014` |
+| `CH-36` | `R-UI-SCOPE-LEAK`, `R-SCOPE`, `R-AUTHZ-ORACLE` | Exact `DSUI` IDs whose registry `primaryCharter` is `CH-36`; principally ingress, proof-read, server-filtering and security requirements under `FUN-014` |
+| `CH-37` | `R-UI-EXCLUSION`, `R-UI-FALSE-STATE` | `DSUI-A11Y-001`, `DSUI-A11Y-002`; supporting view/state mappings are explicit in the registry |
+| `CH-38` | `R-UI-LOAD`, `R-MEASURE`, `R-EVIDENCE-LOAD`, `R-CONTROL-DOS` | Exact `DSUI` IDs whose registry `primaryCharter` is `CH-38`; principally `DSUI-ARCH-002` and `DSUI-PERF-001`--`006` |
+| `CH-39` | `R-OPERABILITY`, `R-UI-STALE`, `R-UI-EXCLUSION` | Supporting charter for the exact view/state/accessibility IDs listed in the registry plus `OPS-001`--`OPS-009` as applicable; it cannot pass an unimplemented admin control |
+| `CH-40` | `R-CANCEL-AMBIGUITY`, `R-EXTERNAL-LIFECYCLE`, `R-RUNTIME-OWNER`, `R-CONTROLLER`, `R-UI-FALSE-STATE` | `LIF-005`, `LIF-012`, `LIF-014`, `DUR-003`--`DUR-005`, `OPS-004`, `OPS-007`, and supporting `DSUI-VIEW-004`, `DSUI-VIEW-005`, `DSUI-VIEW-007` mappings |
 
 When a charter finds a new credible risk, stop following the table mechanically:
 capture a minimal reproducer, assess blast radius, update the model/register,
@@ -742,47 +861,68 @@ The performance tool must not pass by hiding work or omitting stalls.
 1. Freeze the complete section 19.6 manifest and acceptance policy before the
    run. Record highest passed release gate, topology, `SupplyRouteLease` policy,
    embedded Dataset-module build/configuration and common/SDK contract versions,
-   record count/bytes/TTL, sharing pattern,
+   the `Q-MVP-1K-24H` 50,000 eligible-record target and 55,000 maximum (or the
+   exact different profile being claimed), record/projection bytes/TTL,
+   sharing pattern, live-resize policy and convergence SLOs,
    refresh load, consumer validity requirements, selection/replay policy,
    external-entity limits, MCP/control-plane and qualified operator-UI read
    background load,
    resource limits, numeric success/error/latency/resource/evidence SLOs,
    analysis/power method, SUT double, versions, and host. Prove the capacity SUT
    double can sustain at least twice the highest offered load independently.
-2. Estimate lab noise with repeated feature-disabled runs. If the proposed 1%
+2. Freeze representative **and maximum qualified cardinality** before measuring:
+   authorised and hidden Datasets, bindings/consumers per Dataset, operations,
+   Fitness evaluations/assertions, proof facts, worker reports, snapshot rows/
+   bytes, identifier/reason lengths, data skew/selectivity, pages and concurrent
+   principals. Exercise empty, typical, maximum and adversarial-selectivity
+   datasets. For every inventory/detail/tab query capture statement count and
+   plan shape, actual versus estimated rows, rows read/returned, payload bytes,
+   shared-buffer hit/read, temporary spill, sort/hash memory, lock/WAL pressure,
+   JDBC pool wait/occupancy and server CPU/allocation. Run the UI contract's
+   minimum 20 authenticated sessions at the minimum permitted refresh interval,
+   including slow, hidden/offline and proof-reading clients. A fixed SQL count
+   is an N+1 guard, not sufficient performance evidence; an unbounded scan,
+   unstable plan, pool starvation or unqualified cardinality makes the result
+   inconclusive even when latency happens to pass.
+3. Estimate lab noise with repeated feature-disabled runs. If the proposed 1%
    non-inferiority bound is below observable noise, improve the lab or declare
    the result inconclusive; do not widen analysis after seeing results.
-3. Run at least five independently started, alternating/randomised paired
+4. Run at least five independently started, alternating/randomised paired
    feature-disabled, enabled-idle, and active replicates with at least 15 minutes
-   steady state at each decision load. `Q-MVP-1K-24H` uses at least two
-   concurrent traffic swarms sharing the authority and preserves each swarm's
-   frozen non-zero load share. Use the same data projection, request, SUT
+   steady state at each decision load. `Q-MVP-1K-24H` uses exactly the frozen
+   50,000 eligible-record target and at least two concurrent traffic swarms
+   sharing the authority, and preserves each swarm's frozen non-zero load
+   share. Each active replicate exercises one audited increase to 50,000 and
+   one decrease under `STANDBY_TO_TARGET`, including restart at each policy/
+   fill-cycle/application boundary. Use the same data projection, request, SUT
    behaviour, warm-up rule, instrumentation, and fault schedule. Treat the
    separate 24-hour active run as endurance, not a lone paired replicate. In
    active runs, execute the predeclared representative Orchestrator control and
    authorization probes so shared-process starvation is observable rather than
    inferred from traffic alone.
-4. Generate open-loop/planned-start load. Record offered, scheduled, started,
+5. Generate open-loop/planned-start load. Record offered, scheduled, started,
    business-valid successes, failed, timed-out, unclassified, skipped, and
    schedule lag. Reconcile delivery attempts, unique offered transaction IDs,
    unique idempotency keys and unique external business effects. Only an
    expected, sink-validated outcome before the absolute deadline counts as
    achieved throughput; a duplicate effect is an error, never extra throughput.
-5. Observe worker dispatch/service time separately from SUT response time, plus
+6. Observe worker dispatch/service time separately from SUT response time, plus
    whole-Orchestrator and Dataset-attributed CPU, allocation/heap, GC pauses,
    threads, executor queues/rejections, JDBC waits, Rabbit channels/confirms,
    network, DB locks/WAL, existing WorkItem queues, and Orchestrator journal,
    authorization, health and control-operation latency. Capture selection
    distributions and maximum
    per-record/category concentration, validity-band eligibility and starvation,
-   revision candidate/activation lag, trusted-time uncertainty, external entity
-   growth/cleanup, route-lease issue/renew/reject/rebind, Dataset reconciliation,
+   revision candidate/activation lag, active/requested policy versions,
+   fill-cycle opening reason/state/accounting, target-change and due-schedule
+   lag, trusted-time uncertainty, external entity growth/cleanup, route-lease
+   issue/renew/reject/rebind, Dataset reconciliation,
    and MCP/proof/bulkhead rejection rates. Capture desired/actual Swarm
    Controller-runtime reconciliation only when that separate platform claim is
    being measured.
-6. Apply the predeclared confidence bounds and safety invariants. Publish all
+7. Apply the predeclared confidence bounds and safety invariants. Publish all
    runs, including failed and anomalous runs. Explain exclusions individually.
-7. Find the repeated knee and apply the 70% headroom rule before advertising a
+8. Find the repeated knee and apply the 70% headroom rule before advertising a
    maximum. A different host/topology/data profile creates a different claim.
 
 Use independent paired runs or predeclared steady blocks as the statistical
@@ -814,18 +954,18 @@ oracles and fault realism.
 
 | Layer | Required checks |
 |---|---|
-| Contract/static | JSON/OpenAPI/AsyncAPI and executable common Dataset/Fitness Contract/mapping/selection/snapshot-manifest/`SupplyRouteLease`/`DATASET_SUPPLY_QUORUM_V1` compatibility; strict fields/types/ranges/default/null/coercion; architectural tests enforce the Orchestrator Dataset bounded-module ports and prevent SDK/common modules importing its persistence/application internals; exact three-tool read-only Dataset MCP catalogue with no value/write tool; all `DSUI` REST/read DTO and Java/TypeScript drift checks; production bundle/import scan proving no wireframe/test fixture; closed reason codes; security/replay/decommission/release profile; no caller-authored route or Rabbit-argument fields; redaction model; dependency/image support; SBOM/secret/image scan |
-| Unit/property/model | trusted-time monotonicity across restart; validity-demand and Fitness Contract controlled-change monotonicity under frozen evidence/time; capacity, single Supply Policy/controller ownership and cumulative external-entity accounting; idempotency/replay intent; immutable-generation/temporal/decommission/tombstone state; claim/route fencing and send gate; Dataset PostgreSQL/outbox/schedule recovery; revision/snapshot/Dataset-auth activation; selector/stage canonicalization and digest vectors; release-gate monotonicity; selection distribution; canonical proof; encryption envelope/nonce allocation; durable desired Swarm Controller-runtime ownership only for its separate platform claim |
-| Formal/model-based | executable custom-protocol model explores Dataset crash, reorder/loss, stale claim/lease/incarnation, PostgreSQL/outbox recovery, clock rollback, supersession, replay and MVP stale-state/tombstone resurrection; a separate platform extension explores desired/actual Swarm Controller-runtime divergence, and an isolated restore extension covers `Q-HA-RESTORE-v1`; every discovered counterexample has a regression scenario and documented implementation assumption |
+| Contract/static | JSON/OpenAPI/AsyncAPI and executable common Dataset/Fitness Contract/mapping/selection/snapshot-manifest/`SupplyRouteLease`/`DATASET_SUPPLY_QUORUM_V1`, cancellation, core key/floor/witness and qualification-attestation compatibility; strict fields/types/ranges/default/null/coercion; cross-adapter canonical vectors freeze genesis baseline/provider-evidence union, subject keys, framed journal bytes, entry/extend digests, replay/latestBySubject, CAS/predecessor/idempotency/fork and stable receipt semantics identically for TPM and remote/WORM adapters; schema-valid 35-ID `DSUI` registry and lifecycle child-registry lint; architecture fitness tests enforce inward dependency direction, keep domain/application code free of JDBC/Rabbit/HTTP/Docker/UI/TPM frameworks, require infrastructure adapters to implement small owned ports without canonical security logic, prohibit cross-adapter calls, and prevent SDK/common modules importing persistence/application internals; exact three-tool read-only Dataset MCP catalogue with no value/write tool; all `DSUI` REST/read DTO and Java/TypeScript drift checks; production bundle/import scan proving no wireframe/test fixture; closed reason codes; security/replay/decommission/release profile; no caller-authored route or Rabbit-argument fields; redaction model; dependency/image support; SBOM/secret/image/witness-prerequisite scan |
+| Unit/property/model | trusted-time monotonicity across restart; validity-demand and Fitness Contract controlled-change monotonicity under frozen evidence/time; capacity, single Supply Policy/controller ownership and cumulative external-entity accounting; cancellation-intent/idempotency/provider-effect race model; immutable-generation/temporal/decommission/tombstone state; claim/route fencing and send gate; Dataset PostgreSQL/outbox/schedule recovery; revision/snapshot/Dataset-auth activation; selector/stage canonicalization and digest vectors; release-gate and qualification-head monotonicity; selection distribution; canonical proof; encryption envelope/nonce allocation; witnessed subject chains including post-init C0/H0/Names/attributes, torn-tail recovery, counter/extend half-transitions, old-prefix and subject-key transplant, same/unrelated-subject races, lost-response receipt reconstruction, deletion-map omit/decrease/retirement and write-budget admission; durable desired Swarm Controller-runtime ownership only for its separate platform claim |
+| Formal/model-based | executable custom-protocol model explores Dataset crash, reorder/loss, stale claim/lease/incarnation, cancellation before/during/after ambiguous provider effect, PostgreSQL/outbox recovery, key/qualification witnessed-head transitions including torn frames, subject forks and unrelated advances, clock rollback, supersession, replay and MVP stale-state/tombstone resurrection; a separate platform extension explores desired/actual Swarm Controller-runtime divergence, and an isolated restore extension covers cumulative witnessed deletion dominance/retirement under `Q-HA-RESTORE-v1`; every discovered counterexample has a regression scenario and documented implementation assumption |
 | Data/policy conformance | product mapper versus independent reference mapper for identity, relationships, classification, projection and batch accounting; product Fitness Contract result versus the independent evaluator over frozen authoritative evidence; product authorization versus independent access-matrix evaluator; mutation suite proves every oracle detects seeded defects |
-| Component | Dataset-schema constraints/expand-contract migrations/queries, claim concurrency, outbox relay and embedded-module restart reconciliation; common-contract serialization compatibility; worker-SDK bounded candidate/local hydration/atomic swap/manifest-bound Fitness receipt/safe-horizon/activation; manager-SDK DatasetGuard/readiness aggregation; Swarm Controller topology-to-lease registry; module-owned key/nonce rotation, snapshot manifest/pagination, direct source committer/refresh resolver, managed auth resolver and provider drift/cleanup adapters; desired-controller-runtime owner/reconciler only for the separate platform claim |
-| Protocol/integration | mandatory Rabbit returns/confirms/acks/redelivery/replay; opaque `SupplyRouteLease` register/renew/revoke/rebind and publish race; canonical quorum descriptor drift and no-delete/recreate/downgrade behaviour; immutable transaction/idempotency identity; TLS/workload identity and CA/JWKS rotation; read-only MCP token exchange, RFC 8705 mTLS sender constraint, declared DPoP ingress and revocation; Orchestrator Dataset port-to-worker SDK scope; revision/auth activation; module liveness and controller lifecycle boundaries |
-| Official-ingress E2E | direct source path through the embedded module and current leased route to durable commit, Fitness Contract evaluation, coordinated hydration/auth/SUT use/proof, vars and admission, feature-scoped Orchestrator restart/reconciliation, restart-time rollback, stricter shared validity, traffic replay, external decommission/tombstone, static revalidation, core rejection of sensitive admission and Redis compatibility; exact interrupted swarm lifecycle is a separate platform suite |
-| Operator UI | canonical response-to-DOM comparison for inventory, all five detail views, Swarm dependencies and real Runtime Inspector; every `DSUI` loading/current/background/stale/partial/reconciling/empty/denied/limited/unavailable/incompatible state; authorised totals/facets/cursors, no client decision inference, hostile identifiers, cache/storage identity changes, link/back/focus/keyboard/screen-reader/zoom/reflow and Firefox viewports; API/UI/MCP fact and denial convergence |
-| Security/adversarial | canaries; independent permissions/enumeration/audience/actor decisions, including zero-effect denial across existing generic workflow/swarm/MCP routes; attestation/canonicalization tamper/replay; early-auth/source serialization; hostile bounded read-only MCP loops; malformed inputs; proxy/SSRF; PKI/mTLS/DPoP replay; shared Orchestrator/Dataset process/container and Docker-control TCB compromise/artifacts; sensitive-profile denial while raw Docker control remains unmediated; unsafe profile rejection; crypto/key/manifest/restore faults |
-| Upgrade/recovery | clean install in the existing Orchestrator container; common/SDK/module compatibility; expand/migrate/contract; interrupted migration; supported rollback/forward repair; downgrade rejection; repeated Orchestrator running-unhealthy/startup crash and feature reconciliation; asymmetric partitions; MVP stale-node/tombstone non-resurrection; separately, platform swarm-command recovery and old-key/schema restore/deletion-manifest dominance for `Q-HA-RESTORE-v1` |
-| Performance/endurance | paired shared-JVM non-interference, open-loop knee, traffic plus Orchestrator control/authorization probes, CPU/allocation/heap/GC/executor/JDBC/Rabbit isolation, selection realism, unique external-effect reconciliation, validity starvation, revision churn, control/read-only-MCP bulkheads, cold-start/steady-state restart waves, refresh/cleanup maximum, 24-hour trends and recovery |
-| Evidence supply chain | `EVD-009` parent/child registry completeness and requirement-test graph, raw/exclusion digest closure, independent-oracle reconciliation, detached signature/trusted timestamp, wrong-signer/post-signing mutation and clean-room verification |
+| Component | Dataset-schema constraints/expand-contract migrations/queries, claim/cancel concurrency, outbox relay and embedded-module restart reconciliation; common-contract serialization compatibility; worker-SDK bounded candidate/local hydration/atomic swap/manifest-bound Fitness receipt/safe-horizon/activation; manager-SDK DatasetGuard/readiness aggregation; Swarm Controller topology-to-lease registry; module-owned key/nonce update-before-use rotation through full-chain and monotonic-witness ports, snapshot manifest/pagination, direct source committer/refresh resolver, managed auth resolver and provider drift/cleanup adapters; one-shot qualification append/witness/activation; desired-controller-runtime owner/reconciler only for the separate platform claim |
+| Protocol/integration | mandatory Rabbit returns/confirms/acks/redelivery/replay; opaque `SupplyRouteLease` register/renew/revoke/rebind and publish race; canonical quorum descriptor drift and no-delete/recreate/downgrade behaviour; immutable transaction/idempotency identity; TLS/workload identity and CA/JWKS rotation; read-only MCP Protected Resource Metadata, RFC 8707 resource/audience validation, no token pass-through, token exchange, RFC 8705 mTLS sender constraint, declared DPoP ingress, revocation and separate stdio credential behavior; Orchestrator Dataset port-to-worker SDK scope; revision/auth activation; module liveness and controller lifecycle boundaries |
+| Official-ingress E2E | direct source path through the embedded module and current leased route to durable commit, authorised cancellation with conclusive/ambiguous/late provider outcomes, Fitness Contract evaluation, coordinated hydration/auth/SUT use/proof, vars and admission, candidate-to-signed-witnessed qualification activation, feature-scoped Orchestrator restart/reconciliation, restart-time key/state rollback, stricter shared validity, traffic replay, external decommission/tombstone, static revalidation, core rejection of sensitive admission and Redis compatibility; exact interrupted swarm lifecycle is a separate platform suite |
+| Operator UI | `CH-34`--`CH-40`; canonical response-to-DOM comparison for inventory, all five detail views, Swarm dependencies and real Runtime Inspector; every `DSUI` loading/current/background/stale/partial/reconciling/empty/denied/limited/unavailable/incompatible state; authorised totals/facets/cursors, no client decision inference, hostile identifiers, cache/storage identity changes, link/back/focus/keyboard/screen-reader/zoom/reflow and Firefox viewports; API/UI/MCP fact and denial convergence; adverse-state remediation and producer/cleanup ownership truth |
+| Security/adversarial | canaries; independent permissions/enumeration/audience/actor decisions, including cancel-command zero-effect denial and zero-effect denial across existing generic workflow/swarm/MCP routes; attestation/canonicalization tamper/replay/truncation; early-auth/source serialization; hostile bounded read-only MCP loops; malformed inputs; proxy/SSRF; PKI/mTLS/DPoP replay; shared Orchestrator/Dataset process/container and Docker-control TCB compromise/artifacts; sensitive-profile denial while raw Docker control remains unmediated; unsafe profile rejection; crypto/key/manifest/floor/physical-witness/restore faults including reset, emulation, lockout and coordinated rollback |
+| Upgrade/recovery | clean install in the existing Orchestrator container; common/SDK/module compatibility; expand/migrate/contract; interrupted migration; supported rollback/forward repair; downgrade rejection; routine key rotation without qualification-identity churn and pinned-contract change with requalification; repeated Orchestrator running-unhealthy/startup crash and feature reconciliation; asymmetric partitions; MVP stale-node/key-floor/tombstone non-resurrection; separately, platform swarm-command recovery and old-key/schema restore/witnessed-deletion dominance for `Q-HA-RESTORE-v1` |
+| Performance/endurance | paired shared-JVM non-interference, open-loop knee, traffic plus Orchestrator control/authorization probes, CPU/allocation/heap/GC/executor/JDBC/Rabbit isolation, selection realism, unique external-effect reconciliation, validity starvation, revision churn, control/read-only-MCP bulkheads, cold-start/steady-state restart waves, refresh/cleanup maximum, 24-hour trends and recovery; UI/API empty/representative/maximum/adversarial cardinalities with query plans, rows/bytes/spill/locks/pool waits, at least 20 authenticated sessions and browser render/task evidence |
+| Evidence supply chain | `EVD-009` parent/child registry completeness and requirement-test graph plus `EVD-010` candidate/attestation/full-chain/non-rollbackable-head activation, raw/exclusion digest closure, independent-oracle reconciliation, detached signature/trusted timestamp, old-prefix replay, wrong-signer/post-signing mutation and clean-room verification |
 
 Coverage is discussed by risk, state/transition, interface, data classification,
 platform/profile, boundary, and acceptance ID. Code or case coverage alone is
@@ -891,6 +1031,30 @@ grades are not averaged.
 | 4 — adversarial | Boundary, concurrency, fault, security, and recovery evidence cross-checked by an independent oracle |
 | 5 — operational | Grade 4 plus production-like capacity/endurance, restart/rotation/backlog waves, repeated runs, and reproducible resource evidence on the exact manifest |
 
+### 12.1 Decision gates: what “green” means
+
+Green is always the `PASS` result of one named gate. It is never a colour copied
+from a dashboard, the absence of comments, an average score or permission to
+claim a later gate. `FAIL` identifies contradicted evidence; `INCONCLUSIVE`
+identifies missing/weak control or observation. Neither can be changed to green
+by accepting schedule risk.
+
+| Gate | PASS requires | PASS permits | PASS does not permit |
+|---|---|---|---|
+| `G-TEAM-REVIEW-v1` | Lifecycle, assurance, UI specification, wireframe/README and the schema-valid 35-ID `DSUI` registry have zero known deterministic contract or safety-copy contradiction; canonical operation/proof/revision/supply semantics have one authority; every remaining product/architecture choice is visibly labelled as a decision with owner and due point; primary and adverse journeys can be reviewed; status and meeting brief say Grade 0 and list non-claims | Internal Product/Architecture/UX/QA/Operations/Security discovery and Three Amigos decisions | Architecture approval, implementation estimate/commitment, behavioural evidence, release or scale/security claim |
+| `G-IMPLEMENTATION-READY-v1` (`M0`) | `G-TEAM-REVIEW-v1` plus approved canonical architecture/REST/event/common schemas; ports/adapters and dependency direction are enforceable; the full `EVD-009` parent/child registry, applicability matrix, oracle ownership, model/TCK plan, supported dependency baseline, first real source/SUT profile and measurable outcome are closed; no unresolved P0 design blocker or dual authority remains | Estimation and implementation of the named M1 vertical slice through official ports/ingress | Release, production readiness, `dataset-qualified-core`, sensitive, HA or scale claim |
+| `G-M1-INTERNAL-v1` | The exact M1 build passes deterministic component/TCK checks and the official-ingress vertical slice against independent database/outbox/Rabbit/worker/traffic/provider ledgers. The bounded M1 fault set injects before/after Dataset transaction commit, outbox publish/confirm, worker apply/activation, Orchestrator restart/reconciliation, claim/route fence validation, Trusted-Time loss/rollback, authorisation deny/revoke and provider-call ambiguous/late effect; each run proves the declared single durable/accounted outcome, zero effect for denied/stale work, and no secret/value leakage or request-time central Dataset I/O. All counterexamples, failures and limitations are retained, and the build labels itself `dataset-dev-synthetic` | Internal learning, demonstrations and retargeting charters | Customer/release readiness or extrapolation to operational capacity/security |
+| `dataset-qualified-core` (`M2`) | Every applicable core parent/child assertion passes at its required grade, all six applicable loss themes are controlled, `EVD-009` is complete, no unexplained oracle disagreement remains, and the exact manifest passes the operational/non-interference profile below | Release of only the exact reusable `NON_SENSITIVE_SYNTHETIC` core profile | `SENSITIVE_TEST`, interrupted swarm-lifecycle recovery, HA/restore, 30-swarm, consumable/exclusive/ordered/transaction-bound or other unqualified claim |
+| `Q-SENSITIVE-ENTERPRISE-v1` (`M3`) | The exact M2 build/profile also passes every non-waivable sensitive child, combined/extracted TCB decision, identity/key/egress/leakage/adversarial and signed-evidence gate at its required grade | Admission and support of `SENSITIVE_TEST` only on that exact qualified manifest | Any different topology/build/profile or deferred HA/scale/compliance claim |
+
+The current design status may pass `G-TEAM-REVIEW-v1` while remaining Grade 0.
+That is an intentional green outcome for a decision workshop, not a product
+qualification result. Gate results are recorded in a review report with the
+spec commit, registry digest, reviewers, open decisions and exact permitted
+wording.
+
+### 12.2 Release confidence
+
 Minimum release confidence is gate-specific.
 
 For `dataset-qualified-core`:
@@ -903,7 +1067,9 @@ For `dataset-qualified-core`:
   traffic replay accounting, MVP tombstone/stale-state non-resurrection,
   external decommission, static-record drift, embedded Dataset-module
   PostgreSQL/outbox/schedule restart reconciliation and MCP truth: Grade 4;
-- `Q-MVP-1K-24H`, every admitted core `Q-DATA-REFRESH-*`, hot-path non-
+- `Q-MVP-1K-24H` at its exact 50,000 eligible-record target/55,000 maximum,
+  including live target increase/decrease convergence, every admitted core
+  `Q-DATA-REFRESH-*`, hot-path non-
   interference, bounded evidence load, refresh continuity and shared-
   infrastructure performance: Grade 5. The exact profile also demonstrates
   selection realism, validity fairness, unique external-effect reconciliation,
@@ -954,16 +1120,24 @@ profile; a clean-install result cannot qualify them.
 Before a release or new support claim, confirm:
 
 - scope and security/data classification are explicit;
+- `G-IMPLEMENTATION-READY-v1` passed for the implemented contract baseline and
+  `R-SSOT-DRIFT` remains closed: canonical schemas, generated Java/TypeScript,
+  OpenAPI/AsyncAPI, proof/operation values, snapshot semantics, UI copy and the
+  acceptance registry agree with no compatibility fallback;
+- `managed-test-data-ui-acceptance-registry.json` validates against its pinned
+  schema, contains exactly the 35 current `DSUI` IDs once each under `FUN-014`,
+  and its digest is present in the complete `EVD-009` run evidence index;
 - `FUN-014` and every applicable `DSUI` child have linked evidence; production
   `ui-v2` uses only authorised canonical Orchestrator read models, contains no
   wireframe/test-fixture fallback, exposes no Dataset value or mutation control,
   implements every stale/partial/reconciling/denied/error/responsive state, and
-  passes `CH-34` plus the qualified UI polling non-interference workload;
+  passes every applicable `CH-34`--`CH-40` charter, including the qualified UI
+  polling non-interference workload and stranded-resource truth boundary;
 - the MVP Dataset MCP surface registers exactly `dataset_status`,
   `dataset_source_operation_status`, and `dataset_prove`; its untrusted client
   receives no Dataset values, secrets, credentials, approval or authority, and
   the release makes no claim for additional read-only tools, write autonomy or
-  general agent-governance programmes deferred in section 4.2;
+  general agent-governance programmes deferred in section 4.3;
 - `CH-12` and `CH-24` prove that an unauthorized Dataset reference through
   existing generic workflow/swarm/MCP routes receives the same product-side
   authorization/admission denial as direct ingress, agrees with the independent
@@ -1054,6 +1228,11 @@ Before a release or new support claim, confirm:
 - shared-JVM CPU/allocation/heap/GC/thread/executor/JDBC/Rabbit measurements and
   representative Orchestrator control/authorization probe results pass the
   frozen `PER-001`--`PER-005`, `PER-008` and `PER-010` limits;
+- UI/API qualification covers the frozen empty, representative, maximum and
+  adversarial-selectivity cardinalities and records query-plan shape, estimated
+  and actual rows, rows read/returned, bytes, spill, lock/WAL, JDBC pool wait/
+  occupancy, server resources, browser render/tasks and at least 20 concurrent
+  authenticated sessions; fixed SQL count alone is not accepted as a pass;
 - backup/key/volume assumptions and destructive actions are stated;
 - the advertised claim names its exact profile and does not generalise to
   untested allocation modes/topologies;
@@ -1074,6 +1253,7 @@ Every report contains:
 ```text
 Claim and profile:
 Release gate and highest passed profile:
+Decision-gate results (`G-TEAM-REVIEW-v1`, `G-IMPLEMENTATION-READY-v1`, M1/M2/M3 as applicable):
 Build/spec commit and image digests:
 Host/deployment/dependency manifest:
 Embedded Dataset module and common/worker/manager SDK contract versions:
@@ -1085,12 +1265,15 @@ Dataset PostgreSQL/outbox/schedule restart-reconciliation result:
 Interrupted swarm-lifecycle recovery: NOT CLAIMED | separately qualified result:
 Desired Swarm Controller-runtime owner/row/incarnation (only when claimed):
 Shared-JVM non-interference and Orchestrator control-probe result:
+UI/API cardinality, query-plan/pool and concurrent-session result:
 Combined Orchestrator/Dataset/Docker-control trust-boundary decision:
 Schema/mapping/selection/reference-oracle versions:
 Traffic replay/idempotency and external-lifecycle profile:
 Trusted-time/PKI/canonicalization profile:
 Sensitive admission decision and evidence:
 Risk, parent acceptance and child assertion IDs:
+Loss-theme status, leading risk, owner and next control:
+Acceptance-registry schema/version/count/digest and lint result:
 Test story (charters, automated checks, coverage, faults):
 Oracle story (product and independent evidence):
 Raw evidence index and analysis version:

@@ -1,82 +1,146 @@
 # Managed Datasets responsive planning wireframes
 
-These standalone wireframes visualise the read-only Managed Dataset experience
-specified by the lifecycle specification and the normative
+These standalone wireframes exercise the read-only Managed Dataset operator
+experience specified by the lifecycle specification and the normative
 [Operator UI Design Specification](../managed-datasets-operator-ui-design-spec.md).
-They do not modify or depend on the production UI runtime and are not
-production implementation.
+They preserve the PocketHive shell and visual language, but they do not modify
+or depend on the production UI runtime and are not production implementation.
 
-The UI design specification, not the illustrative values in this folder, is
-the semantic and acceptance authority. Production `ui-v2` shall obtain every
-dynamic fact from authorised canonical Orchestrator read models and shall show
-an honest unavailable/empty/stale state when that authority is absent. It shall
-never copy or fall back to these rows.
+The design specification—not the fictional values in this folder—is the
+semantic and acceptance authority. Production `ui-v2` obtains every dynamic
+fact from authorised Orchestrator read models and renders an honest
+unavailable, empty, stale or incompatible state when that authority is absent.
+It never imports or falls back to this prototype.
 
-## Included views
+## Included flows
 
-- `#datasets` — cross-swarm Dataset inventory and operational filtering;
-- `#dataset` — canonical Dataset detail, decisions, Fitness, supply, consumers,
-  and evidence; and
-- `#inspector` — existing Swarm Inspector extended with contextual Dataset
-  dependencies above bounded runtime diagnostics.
+- `#datasets` — cross-swarm inventory of authorised operational status scopes;
+- `#dataset/overview` — exact status-scope admission, continuity, supply,
+  distribution and consumer summary;
+- `#dataset/fitness` — latest evaluation and prior-PASS continuity;
+- `#dataset/supply` — active/requested policy and target convergence, durable
+  fill-cycle/reconciliation timing, the three-scheduler distinction, the five
+  canonical operation kinds and reconciled lifecycle accounting;
+- `#dataset/consumers` — six complete bindings through working cursor-style
+  Previous/Next pagination;
+- `#dataset/evidence` — bounded read-only proof input and a canonical
+  `DatasetProof/v1` result; and
+- `#inspector` — Swarm Inspector with `Authoritative Dataset` and `This swarm
+  applied` truth explicitly separated above bounded runtime diagnostics.
 
-Open `index.html` directly or serve the repository root with any static HTTP
-server. Add `?capture=1` before the hash to hide the wireframe-only view switcher
-for screenshots, for example `index.html?capture=1#datasets`.
+Open `index.html` directly or serve the repository root with a static HTTP
+server. Add `?capture=1` before the hash to hide the wireframe-only view
+switcher. A legacy `?tab=` capture parameter remains supported, but normal
+navigation uses the route-like hash above so browser history and tab state stay
+aligned. Add the wireframe-only `theme=light` query parameter to initialise the
+existing PocketHive light-theme tokens for capture; it introduces no new theme
+or production preference behavior. The planning harness also supports
+consumer-page, proof-level, proof-validation, supply-disclosure and focus query
+controls for a future capture refresh. These controls are prohibited from
+production bundles by `DSUI-DATA-002`.
 
-Eligible supply uses a compact current/target value in the inventory. Hover or
-keyboard focus reveals the exact eligible, minimum, target and replenishment
-values; click or tap pins the explanation until it is dismissed. Dataset names
-and safety-critical secondary text wrap instead of being silently truncated.
+## Contract-sensitive behavior
+
+- Formal Dataset health, eligible supply, use-specific Fitness, per-binding
+  start decisions and running-traffic decisions are different facts.
+- Inventory never says that all future starts are blocked. Exact start
+  decisions appear only on real consumer bindings and in Swarm Inspector.
+- Operation wire values are exactly `PROVISION_NEW`, `REPLACE_RECORD`,
+  `REFRESH_MATERIAL`, `VALIDATE_RECORD`, and `DEPROVISION_ENTITY`.
+- Proof fact kinds use uppercase underscore wire values. Fact status is only
+  `PASS | FAIL | UNKNOWN | NOT_APPLICABLE`; unrequested facts are omitted and
+  explanatory `Not requested` copy is derived from `requestedLevel`.
+- The proof form exposes the one fixed exact status-scope, operation,
+  delivery-attempt or binding target required by the selected level. Its
+  planning fixture offers one opaque transaction reference for `FLOW_PROVEN`;
+  the normative product contract supports the closed transaction/interval
+  union. It cannot browse values or cause lifecycle work.
+- Supply uses three explicitly mutually exclusive source specimens: the
+  current policy with no pending change, an accepted target increase that has
+  not converged, and a target decrease that stages surplus records from
+  `READY` to `STANDBY` without deleting them. A decrease completes only after
+  every required consumer applies the new revision.
+- Consumer cards retain start/running decisions, revision vector, materializer
+  and selector coverage, comparable worker-local supply, observation validity
+  and bounded exceptions at every supported width.
+- Narrow tool context keeps the exact last-observed UTC instant and run
+  reference; consumer decision status and Fitness evidence age are not removed
+  at tablet or mobile widths.
+- Inventory uses one table/row object model. CSS converts those same rows to
+  labelled cards below 820 CSS pixels; there is no second mobile fixture.
+- The planning health presets use exact formal row enums. `Needs attention`
+  expands to `DEGRADED|STARVED|ERROR|AUTH_REQUIRED` and `Warming` to
+  `WARMING|INITIALISING`; production sends repeated server-side `health`
+  parameters and never sends a macro literal or filters all scopes locally.
+- Tabs expose a visible horizontal scrollbar on narrow layouts, implement
+  Arrow/Home/End behavior, and keep the selected view in the URL hash.
+- Route navigation moves focus to the destination heading. Refresh and
+  pagination preserve the initiating control while live regions announce the
+  result.
+- Controls whose product route is outside this planning fixture are visibly
+  disabled and named as unavailable; they do not masquerade as working links.
+
+## Representative adverse states
+
+Use the `state` query parameter with `#datasets` to exercise bounded adverse
+state presentations without inventing operational facts:
+
+```text
+?state=reconciling#datasets
+?state=stale#datasets
+?state=rate_limited#datasets
+?state=forbidden#datasets
+?state=empty#datasets
+?state=incompatible#datasets
+```
+
+Reconciling, forbidden, authorised-empty, and incompatible examples suppress
+the populated fixture. Stale and rate-limited examples instead retain the
+last-known inventory as disabled historical evidence: every row's current
+Dataset health, Fitness, continuity, and admission meaning becomes `Unknown
+until refreshed`, while prior values remain labelled for diagnosis. The
+rate-limited example exposes the exact server-provided `Retry-After` boundary
+and keeps refresh disabled until that instant. A forbidden state exposes no
+totals or identifiers, and an incompatible response is rejected as a whole.
 
 ## Design boundaries
 
-- PocketHive `ui-v2` shell, colours, typography, cards, pills, tabs and
-  responsive conventions are the visual source of truth.
-- Dataset Fitness, supply and swarm-local activation remain separate states.
-- Supply coverage, freshness/Fitness continuity and worker application are
-  presented as separate clocks and gates.
-- `WARMING` remains the formal lifecycle state and is paired with the plain-
-  language explanation that initial seeding is active.
-- The wireframes are read-only and contain fictional opaque identifiers,
-  aggregate counts, revisions, states and timestamps solely to exercise layout.
-  They define no runtime default, seed, capacity expectation or acceptance
-  value.
-- It intentionally provides no Dataset values, payment data, secrets, raw
-  provider output, datastore browsing, seed/refresh commands, or lifecycle
-  mutation.
-- Desktop, tablet and phone layouts use semantic tables, keyboard-operable tabs,
-  visible focus and text labels in addition to colour.
+- PocketHive `ui-v2` shell, theme tokens, typography, cards, pills, tabs,
+  focus style and responsive conventions remain the visual source of truth.
+- Fictional opaque identifiers, aggregate counts, revisions and timestamps
+  exist only to exercise layout. They define no runtime default, seed, capacity
+  expectation or acceptance value.
+- No Dataset value, restricted real-world data, secret, provider output, direct datastore
+  browsing, seed command, refresh command or lifecycle mutation is present.
+- Responsive screenshots can demonstrate layout and visible copy only. They
+  cannot prove API authority, authorization, keyboard behavior, accessible
+  names/roles/values, contrast, reflow, zoom or screen-reader compatibility.
 
-## Firefox capture set
+## Capture evidence status
 
-The complete spec-aligned evidence set is in `captures/spec-aligned/`:
+`captures/spec-aligned/` contains a frozen earlier Firefox 140.12.0esr review
+set. Those images predate the neutral fixture names and the current supply
+resize specimens, so they are reference-only and are not evidence of the
+current source. Their contact sheets cover:
 
-- `00-all-desktop.png` — contact sheet for inventory, all five Dataset detail
-  tabs and Swarm Inspector at 1440 x 1040;
-- `00-all-mobile.png` — contact sheet for the same seven views at 390 x 844;
-- `01` through `07` — individual desktop captures; and
-- `08` through `14` — individual mobile captures. Detail-tab captures use a
-  wireframe-only `focusPanel=1` capture parameter so the selected panel, not
-  five identical page headers, is visible in the phone evidence.
+| Evidence | Coverage |
+|---|---|
+| `00-all-desktop.png` | Inventory, Overview, Fitness, Supply/lifecycle, Consumers page 1, Evidence and Inspector at 1440×1040 |
+| `00-all-mobile.png` | The same primary surfaces at 390×844 |
+| `00-responsive-theme-proof.png` | Inventory at 1920×1080, 1366×768, 1024×768, 320×844 and 200% zoom; dark/light; Consumers page 2; missing and accepted `FLOW_PROVEN` references |
+| `00-adverse-states.png` | Reconciling, stale, rate-limited, forbidden, authorised-empty and incompatible states at 1366×768 |
+| `00-interaction-details.png` | READY and FLOW proof interactions, the opened 320-pixel supply-definition disclosure, and the scrolled alternate cancellation/`UNCERTAIN` specimen |
 
-Earlier visual-comparison evidence remains in `captures/`:
+The current wireframe source was checked at source level only. No capture was
+refreshed in this change. A new deterministic render and visual inspection of
+every named individual and contact sheet is required before claiming
+current-source visual fidelity. The 320-pixel and 200%-zoom reference images
+intentionally show only the top of vertically scrollable content.
 
-- `captures/datasets-desktop-1440.png` — Dataset inventory, desktop;
-- `captures/datasets-supply-tooltip-desktop-1440.png` — exact supply explanation,
-  desktop hover/focus state;
-- `captures/dataset-detail-desktop-1440.png` — Dataset detail, desktop;
-- `captures/dataset-fitness-desktop-1440.png` — current Fitness attempt separated
-  from the prior PASS decision for existing traffic;
-- `captures/swarm-inspector-desktop-1440.png` — Swarm Inspector, desktop;
-- `captures/datasets-tablet-1024.png` — Dataset inventory, tablet;
-- `captures/datasets-mobile-390.png` — semantic Dataset cards, phone;
-- `captures/datasets-supply-tooltip-mobile-390.png` — expanded supply explanation,
-  phone tap state;
-- `captures/dataset-detail-mobile-390.png` — Dataset detail, phone; and
-- `captures/swarm-inspector-mobile-390.png` — Dataset dependencies and bounded
-  runtime context, phone.
+Planning visual-fidelity result for the current source: **not claimed; capture
+refresh required**.
 
-The captures were rendered and visually verified in Firefox 140.12 ESR at
-1440 px, 1024 px and 390 px widths. Captures prove layout and interaction
-fidelity only; they do not prove production data authority or API behaviour.
+Accessibility sign-off additionally requires automated checks plus manual
+keyboard, accessibility-tree and screen-reader verification. No screenshot set
+alone establishes WCAG conformance, and this planning result does not pass
+`DSUI-A11Y-001`, `DSUI-A11Y-002` or any implementation/release gate.
