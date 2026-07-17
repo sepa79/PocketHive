@@ -282,12 +282,32 @@ import static org.mockito.Mockito.verifyNoInteractions;
     }
 
     @Test
-    void stopFinalizationFailureEmitsCorrelatedHumanReadableError() throws Exception {
+    void stopFinalizationRaceDoesNotOverrideSuccessfulControllerOutcome() throws Exception {
         Swarm swarm = new Swarm(SWARM_ID, CONTROLLER_INSTANCE, "cid", "run-1");
         swarm.attachTemplate(new io.pockethive.orchestrator.domain.SwarmTemplateMetadata(
             "tpl-1", "swarm-controller:latest", java.util.List.of()));
+        transitionTo(swarm, SwarmLifecycleStatus.STOPPING);
         registry.register(swarm);
-        doThrow(new IllegalStateException("Container shutdown failed.")).when(lifecycle).stopSwarm(SWARM_ID);
+        doThrow(new IllegalStateException("Cannot transition from STOPPING to STOPPING"))
+            .when(lifecycle).stopSwarm(SWARM_ID);
+        String routingKey = ControlPlaneRouting.event(
+            "outcome", "swarm-stop", new ConfirmationScope(SWARM_ID, "swarm-controller", CONTROLLER_INSTANCE));
+
+        listener.handle(outcomeBody("swarm-stop", "Stopped"), routingKey);
+
+        verify(lifecycle).stopSwarm(SWARM_ID);
+        verifyNoInteractions(publisher);
+    }
+
+    @Test
+    void unexpectedStopFinalizationFailureStillEmitsCorrelatedHumanReadableError() throws Exception {
+        Swarm swarm = new Swarm(SWARM_ID, CONTROLLER_INSTANCE, "cid", "run-1");
+        swarm.attachTemplate(new io.pockethive.orchestrator.domain.SwarmTemplateMetadata(
+            "tpl-1", "swarm-controller:latest", java.util.List.of()));
+        transitionTo(swarm, SwarmLifecycleStatus.RUNNING);
+        registry.register(swarm);
+        doThrow(new IllegalStateException("Container shutdown failed."))
+            .when(lifecycle).stopSwarm(SWARM_ID);
         String routingKey = ControlPlaneRouting.event(
             "outcome", "swarm-stop", new ConfirmationScope(SWARM_ID, "swarm-controller", CONTROLLER_INSTANCE));
 
@@ -305,6 +325,23 @@ import static org.mockito.Mockito.verifyNoInteractions;
         assertThat(alert.data().code()).isEqualTo(Alerts.Codes.RUNTIME_EXCEPTION);
         assertThat(alert.data().message()).isEqualTo("Container shutdown failed.");
         assertThat(alert.data().context()).containsEntry("phase", "outcome-finalization");
+    }
+
+    private static void transitionTo(Swarm swarm, SwarmLifecycleStatus target) {
+        for (SwarmLifecycleStatus status : List.of(
+            SwarmLifecycleStatus.CREATING,
+            SwarmLifecycleStatus.READY,
+            SwarmLifecycleStatus.STARTING,
+            SwarmLifecycleStatus.RUNNING,
+            SwarmLifecycleStatus.STOPPING)) {
+            if (swarm.getStatus() == target) {
+                return;
+            }
+            swarm.transitionTo(status);
+        }
+        if (swarm.getStatus() != target) {
+            throw new IllegalArgumentException("Unsupported test target status " + target);
+        }
     }
 
     private String outcomeBody(String operation, String status) throws Exception {

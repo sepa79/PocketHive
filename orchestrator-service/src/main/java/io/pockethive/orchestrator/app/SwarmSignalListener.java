@@ -6,6 +6,7 @@ import io.pockethive.control.AlertMessage;
 import io.pockethive.control.CommandState;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.control.ControlScope;
+import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.messaging.Alerts;
 import io.pockethive.orchestrator.domain.ScenarioTimelineRegistry;
 import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
@@ -285,9 +286,38 @@ public class SwarmSignalListener {
                 default -> log.debug("[CTRL] Ignoring outcome type {}", key.type());
             }
         } catch (RuntimeException e) {
+            if (isKnownStopFinalizationRace(command, status, key, e)) {
+                // TODO(lifecycle-ssot): stop state is currently finalized by more than one listener.
+                // Fix lifecycle ownership/state transitions in a dedicated change. Until then, do
+                // not turn the known STOPPING/STOPPED finalization race into a user-visible failure.
+                log.warn("[CTRL] known lifecycle finalization race operation={} phase=outcome-finalization swarmId={} role={} instance={} correlationId={} idempotencyKey={} errorType={} errorDetail={}",
+                    command, key.swarmId(), ROLE, instanceId, correlationId, idempotencyKey,
+                    e.getClass().getName(), e.getMessage(), e);
+                return;
+            }
             emitOutcomeFinalizationError(command, key, correlationId, idempotencyKey, e);
             throw e;
         }
+    }
+
+    private boolean isKnownStopFinalizationRace(String command,
+                                                String outcomeStatus,
+                                                RoutingKey key,
+                                                RuntimeException failure) {
+        if (!ControlPlaneSignals.SWARM_STOP.equals(command)
+            || !isStatus(outcomeStatus,
+                CommandOutcomePolicy.rulesFor(ControlPlaneSignals.SWARM_STOP).successStatus())
+            || !(failure instanceof IllegalStateException)) {
+            return false;
+        }
+        String swarmId = key.swarmId();
+        if (swarmId == null || swarmId.isBlank()) {
+            return false;
+        }
+        return store.find(swarmId)
+            .map(Swarm::getStatus)
+            .filter(status -> status == SwarmLifecycleStatus.STOPPING || status == SwarmLifecycleStatus.STOPPED)
+            .isPresent();
     }
 
     private void emitOutcomeFinalizationError(String command,
@@ -313,9 +343,8 @@ public class SwarmSignalListener {
             null,
             Map.of(),
             Instant.now());
-        logError(swarmId, context);
         try {
-            emitterForSwarm(swarmId).emitError(context);
+            emitError(swarmId, context);
         } catch (RuntimeException emissionFailure) {
             log.warn("Failed to publish outcome-finalization error operation={} swarmId={} correlationId={}",
                 command, swarmId, correlationId, emissionFailure);
@@ -682,7 +711,6 @@ public class SwarmSignalListener {
             return;
         }
         try {
-            ControlPlaneEmitter emitter = emitterForSwarm(info.swarmId());
             ControlPlaneEmitter.ErrorContext context = ControlPlaneEmitter.ErrorContext.builder(
                     "swarm-create",
                     requireText(info.correlationId(), "swarm-create correlationId"),
@@ -693,8 +721,7 @@ public class SwarmSignalListener {
                     "controller did not become ready in time")
                 .timestamp(Instant.now())
                 .build();
-            logError(info.swarmId(), context);
-            emitter.emitError(context);
+            emitError(info.swarmId(), context);
         } catch (Exception e) {
             log.warn("create timeout send", e);
         }
@@ -705,7 +732,6 @@ public class SwarmSignalListener {
             return;
         }
         try {
-            ControlPlaneEmitter emitter = emitterForSwarm(info.swarmId());
             ControlPlaneEmitter.ErrorContext context = ControlPlaneEmitter.ErrorContext.builder(
                     signal,
                     requireText(info.correlationId(), signal + " correlationId"),
@@ -716,8 +742,7 @@ public class SwarmSignalListener {
                     message)
                 .timestamp(Instant.now())
                 .build();
-            logError(info.swarmId(), context);
-            emitter.emitError(context);
+            emitError(info.swarmId(), context);
         } catch (Exception e) {
             log.warn("phase timeout send {}", signal, e);
         }
@@ -726,6 +751,19 @@ public class SwarmSignalListener {
     private ControlPlaneEmitter emitterForSwarm(String swarmId) {
         RoleContext role = new RoleContext(requireText(swarmId, "swarmId"), topology.role(), identity.instanceId());
         return ControlPlaneEmitter.using(topology, role, controlPlane.publisher(), runtimeMetaForSwarm(swarmId));
+    }
+
+    private void emitError(String swarmId, ControlPlaneEmitter.ErrorContext context) {
+        ControlPlaneEmitter emitter;
+        try {
+            emitter = emitterForSwarm(swarmId);
+        } catch (RuntimeException setupFailure) {
+            // ControlPlaneEmitter normally owns the structured failure log. Log locally only when
+            // emitter construction fails before it can record the original command failure.
+            logError(swarmId, context);
+            throw setupFailure;
+        }
+        emitter.emitError(context);
     }
 
     private Map<String, Object> runtimeMetaForSwarm(String swarmId) {

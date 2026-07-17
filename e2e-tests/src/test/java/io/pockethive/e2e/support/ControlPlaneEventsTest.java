@@ -2,6 +2,7 @@ package io.pockethive.e2e.support;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -10,11 +11,15 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import io.pockethive.control.ControlScope;
+import io.pockethive.controlplane.messaging.Alerts;
 
 class ControlPlaneEventsTest {
 
@@ -86,6 +91,30 @@ class ControlPlaneEventsTest {
         List.of("rk.beta")
     ));
     assertTrue(mismatch.getMessage().contains("work.routes"));
+  }
+
+  @Test
+  void matchesErrorTopicsByCorrelationId() {
+    String routingKey = "event.alert.alert.swarm-alpha.orchestrator.orchestrator-1";
+    events.recordAlert(
+        routingKey,
+        Alerts.error(
+            "orchestrator-1",
+            new ControlScope("swarm-alpha", "orchestrator", "orchestrator-1"),
+            "corr-previous",
+            "idem-previous",
+            Map.of("runId", "run-1", "templateId", "template-1"),
+            "timeout",
+            "previous action timed out",
+            null,
+            null,
+            null,
+            null,
+            Instant.parse("2024-07-01T12:35:00Z")),
+        Instant.parse("2024-07-01T12:35:00Z"));
+
+    assertTrue(events.hasAlertOnRoutingKey(routingKey, "corr-previous"));
+    assertFalse(events.hasAlertOnRoutingKey(routingKey, "corr-current"));
   }
 
   private StatusEvent statusFixture() throws IOException {

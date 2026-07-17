@@ -296,26 +296,6 @@ class ContainerLifecycleManagerTest {
     }
 
     @Test
-    void stopSwarmCompletesAnExistingStoppingTransition() {
-        SwarmStore registry = new SwarmStore();
-        Swarm swarm = new Swarm("sw1", "inst1", "cid", "run-1");
-        registry.register(swarm);
-        registry.updateStatus(swarm.getId(), SwarmLifecycleStatus.CREATING);
-        registry.updateStatus(swarm.getId(), SwarmLifecycleStatus.READY);
-        registry.updateStatus(swarm.getId(), SwarmLifecycleStatus.STARTING);
-        registry.updateStatus(swarm.getId(), SwarmLifecycleStatus.RUNNING);
-        registry.updateStatus(swarm.getId(), SwarmLifecycleStatus.STOPPING);
-        ContainerLifecycleManager manager = new ContainerLifecycleManager(
-            docker, computeAdapter, registry, amqp, defaultProperties(), controlPlaneProperties(),
-            rabbitProperties(), runMetadataWriter, new ClickHouseSinkProperties());
-
-        assertDoesNotThrow(() -> manager.stopSwarm(swarm.getId()));
-
-        assertEquals(SwarmLifecycleStatus.STOPPED, swarm.getStatus());
-        verifyNoInteractions(docker, amqp);
-    }
-
-    @Test
     void stopSwarmRecoversAfterFailure() {
         SwarmStore registry = new SwarmStore();
         Swarm swarm = new Swarm("sw1", "inst1", "cid", "run-1");

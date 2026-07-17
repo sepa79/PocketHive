@@ -80,15 +80,15 @@ public class SwarmStore {
     public void updateStatus(String id, SwarmLifecycleStatus status) {
         Swarm swarm = swarms.get(id);
         if (swarm != null) {
-            synchronized (swarm) {
-                SwarmLifecycleStatus previous = swarm.getStatus();
-                // Status and outcome listeners can race on the same transition. Keep the idempotency
-                // check and transition atomic so duplicate delivery cannot become a false lifecycle error.
-                if (previous == status) {
-                    log.info("SwarmStore: duplicate status update id={} status={} (ignoring)", id, status);
-                    return;
-                }
-                swarm.transitionTo(status);
+            SwarmLifecycleStatus previous = swarm.getStatus();
+            // Idempotency guard: control-plane outcome events can be duplicated/redelivered.
+            // Re-applying the same status would throw and trigger AMQP requeue loops (redelivery storms).
+            if (previous == status) {
+                log.info("SwarmStore: duplicate status update id={} status={} (ignoring)", id, status);
+                return;
+            }
+            swarm.transitionTo(status);
+            if (previous != status) {
                 log.info("SwarmStore: status change id={} {} -> {}", id, previous, status);
             }
         }
@@ -132,27 +132,6 @@ public class SwarmStore {
         }
         if (swarm.getStatus() == SwarmLifecycleStatus.STARTING) {
             swarm.transitionTo(SwarmLifecycleStatus.RUNNING);
-        }
-    }
-
-    public void markStopped(String id) {
-        Swarm swarm = swarms.get(id);
-        if (swarm == null) {
-            return;
-        }
-        synchronized (swarm) {
-            SwarmLifecycleStatus current = swarm.getStatus();
-            if (current == SwarmLifecycleStatus.STOPPED) {
-                log.info("SwarmStore: duplicate stopped transition id={} (ignoring)", id);
-                return;
-            }
-            if (current != SwarmLifecycleStatus.STOPPING) {
-                swarm.transitionTo(SwarmLifecycleStatus.STOPPING);
-                log.info("SwarmStore: status change id={} {} -> {}", id, current, SwarmLifecycleStatus.STOPPING);
-            }
-            swarm.transitionTo(SwarmLifecycleStatus.STOPPED);
-            log.info("SwarmStore: status change id={} {} -> {}", id,
-                SwarmLifecycleStatus.STOPPING, SwarmLifecycleStatus.STOPPED);
         }
     }
 

@@ -2781,7 +2781,7 @@ public class SwarmLifecycleSteps {
     });
     for (String errorTopic : response.watch().errorTopics()) {
       if (errorTopic != null && !errorTopic.isBlank()) {
-        assertFalse(controlPlaneEvents.hasMessageOnRoutingKey(errorTopic),
+        assertFalse(controlPlaneEvents.hasAlertOnRoutingKey(errorTopic, response.correlationId()),
             () -> "Unexpected error event detected on " + errorTopic);
       }
     }

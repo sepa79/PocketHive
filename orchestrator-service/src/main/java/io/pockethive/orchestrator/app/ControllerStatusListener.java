@@ -150,9 +150,10 @@ public class ControllerStatusListener {
                                 // create/template outcome drive the lifecycle.
                                 SwarmLifecycleStatus current = store.find(swarmId).map(Swarm::getStatus).orElse(null);
                                 if (current == SwarmLifecycleStatus.STOPPING) {
-                                    store.markStopped(swarmId);
+                                    store.updateStatus(swarmId, SwarmLifecycleStatus.STOPPED);
                                 } else if (current != null && current.canTransitionTo(SwarmLifecycleStatus.STOPPING)) {
-                                    store.markStopped(swarmId);
+                                    store.updateStatus(swarmId, SwarmLifecycleStatus.STOPPING);
+                                    store.updateStatus(swarmId, SwarmLifecycleStatus.STOPPED);
                                 }
                             }
                         }

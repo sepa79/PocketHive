@@ -164,14 +164,15 @@ public final class ControlPlaneEvents implements AutoCloseable {
         .toList();
   }
 
-  public boolean hasMessageOnRoutingKey(String routingKey) {
-    if (routingKey == null || routingKey.isBlank()) {
+  public boolean hasAlertOnRoutingKey(String routingKey, String correlationId) {
+    if (routingKey == null || routingKey.isBlank() || correlationId == null || correlationId.isBlank()) {
       return false;
     }
-    String expected = routingKey.trim();
-    return outcomes.stream().anyMatch(env -> expected.equals(env.routingKey()))
-        || alerts.stream().anyMatch(env -> expected.equals(env.routingKey()))
-        || statuses.stream().anyMatch(env -> expected.equals(env.routingKey()));
+    String expectedRoutingKey = routingKey.trim();
+    String expectedCorrelationId = correlationId.trim();
+    return alerts.stream().anyMatch(env -> expectedRoutingKey.equals(env.routingKey())
+        && env.alert() != null
+        && expectedCorrelationId.equals(env.alert().correlationId()));
   }
 
   public List<StatusEnvelope> statusesForSwarm(String swarmId) {

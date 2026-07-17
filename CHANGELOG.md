@@ -43,9 +43,6 @@ Timestamp: 2026-07-10T13:36:56Z
   with human-readable messages, advertise every relevant alert topic in control
   responses, and emit structured command-failure context for dispatch,
   rejection, confirmation, and outcome-finalization paths.
-- Swarm stop reliability: serialize lifecycle mutations per swarm and make stop
-  completion atomic and idempotent so concurrent status/outcome handling cannot
-  produce a false `STOPPING -> STOPPING` runtime alert.
 - Logging cleanup: remove the orphaned Logstash encoder dependency and JSON
   appender from Network Proxy Manager after retirement of the central log
   aggregation stack.
