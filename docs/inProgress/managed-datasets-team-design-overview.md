@@ -1,208 +1,385 @@
-# Managed Datasets — Team Design Overview
+# Managed Datasets — Team Guide
 
-Status: proposed architecture for internal concept approval; not implemented,
-capacity-qualified, or approved for release
+**Design assessment: GREEN — ready for team approval and implementation
+planning.**
 
-Detailed sources:
+This is a design-readiness result, not a claim that the feature already exists
+or has passed production-scale testing. The implementation must still pass the
+release gates defined in the assurance strategy, including the exact
+50,000-record workload.
 
-- `managed-test-data-lifecycle-generic-spec.md`
-- `managed-datasets-operator-ui-design-spec.md`
-- `managed-test-data-assurance-strategy.md`
+## The idea in one minute
 
-## Decision requested
+A Managed Dataset is a durable, reusable collection of test records that one
+PocketHive swarm can create and other swarms can use.
 
-Approve the Managed Dataset direction and a small pre-implementation learning
-slice. Do not approve a delivery estimate or release claim yet. The learning
-slice must prove the control-plane integration, live target state transitions,
-recovery, and two-swarm reuse at bounded scale. The release gate—not the
-learning slice—must prove the exact 50,000-record profile described below.
+PocketHive stores the authoritative Dataset in PostgreSQL. A reconciler keeps
+the available supply close to an operator-defined target. When more records are
+needed, PocketHive first starts the configured producer swarm through the
+existing RabbitMQ control plane. Only after that swarm reports that it is
+running and ready does PocketHive send it a bounded `DATASET_SUPPLY` work item.
+The producer runs its normal flow and commits the resulting records through the
+Dataset API.
 
-## Direct answers to the review
+Consumer swarms read an immutable snapshot through a Managed Dataset input
+adapter. A separately gated later profile may add explicit leases. Records
+never travel on the control plane, and RabbitMQ is never the authoritative
+record store.
 
-| Review question | Design decision |
-|---|---|
-| Must swarm control use the existing RabbitMQ control plane? | **Yes—non-negotiable.** Template, plan, start, stop, remove, approved live configuration, status requests, outcomes, status and alerts use the existing `ph.control` exchange and per-component control queues. Managed Datasets introduce no parallel swarm control queue. |
-| Can 50,000 records be shared and reused? | The proposed reusable MVP has a 50,000 eligible-record target and supports concurrent `SHARED` use by at least two swarms. Records stay in each worker's bounded local, read-only view and are reused after a local selection cycle; they are not removed and “added back.” This capacity becomes a support claim only after the named 50,000-record qualification passes. |
-| Is today's Redis behaviour preserved? | Yes, unchanged and opt-in. `REDIS_DATASET` destructively pops with `LPOP`; a separately configured `REDIS` output can later `LPUSH`/`RPUSH` a value into a list. That loop is not an atomic borrow/return guarantee and has no qualified 50,000-record claim. Exact FIFO/LIFO, consumable, exclusive and state-loop semantics remain on Redis for the MVP. |
-| Is today's CSV behaviour preserved? | Yes, unchanged and opt-in. A worker loads its configured CSV file, reads sequentially and may rotate locally; after a worker restart it begins from row zero. This is not a shared durable pool, an add-back contract or a qualified 50,000-record path. |
-| Can the target size change while swarms run? | **Proposed: yes, conditionally and with bounded convergence rather than instant mutation.** This changes desired eligible inventory, not physical database or external-entity count. An authorised, immutable Supply Policy version requests the change. A higher target opens one durable fill-to-target cycle only when it exceeds both the prior target and current effective supply. A lower target first stops new reservations, prepares a non-authoritative transition manifest, then commits and applies one canonical revision that moves deterministic surplus `READY` records to `STANDBY`; it never silently deletes an external entity or invalidates an in-flight safe view. Unsafe or infeasible changes are rejected with zero effect. |
-| Where is the data? | Scenario Manager persists authored immutable definitions. Managed Dataset PostgreSQL stores the admitted definition snapshot/digest plus authoritative records, candidate/active policy state, schedules, operations and evidence. Workers hold bounded, immutable local projections. RabbitMQ carries control, work instructions and metadata-only hints—never record values or credentials. |
+## What the team is being asked to approve
 
-The Managed Dataset feature does not exist in the current implementation. The
-statements above are requirements for the proposed feature unless explicitly
-described as existing Redis or control-plane behaviour.
+Approve this architecture and its implementation plan:
 
-## Component placement and message paths
+- keep all swarm lifecycle events on PocketHive's existing `ph.control` plane;
+- keep bounded Dataset production on PocketHive's existing controller-owned
+  WorkItem route;
+- keep Dataset definitions, records, schedules, operations, leases and receipts
+  authoritative in PostgreSQL;
+- add Managed Dataset input/output adapters through the Worker SDK's existing
+  extension points; and
+- prove the feature against the named functional, recovery, accessibility and
+  50,000-record release gates before making a support claim.
+
+## Where each component sits
 
 ```mermaid
 flowchart LR
-  SM[Scenario Manager<br/>authored immutable definitions and policies]
+  UI[Operator UI / approved API client]
+  SM[Scenario Manager<br/>versioned definitions and bindings]
 
-  subgraph ORCH[orchestrator-service]
-    API[Inbound API adapter]
-    OA[Existing Orchestrator admission/lifecycle application]
-    LR[Inbound lifecycle trigger adapter<br/>claims due work]
-    DM[Managed Dataset application and domain<br/>Fitness, lifecycle and decisions]
-    DBAD[PostgreSQL and outbox adapter]
-    DRA[Dataset Rabbit publishers<br/>supply and hints only]
-    OCP[Existing Orchestrator<br/>bidirectional control-plane adapter]
-    API -->|invokes application use cases| OA
-    OA -->|calls Dataset decision port| DM
-    LR -->|invokes the same use cases| DM
-    DBAD -.->|implements core-owned ports| DM
-    DRA -.->|implements core-owned ports| DM
-    OA <-->|commands, outcomes and status| OCP
+  subgraph ORCH[Orchestrator service]
+    DS[Managed Dataset application<br/>domain rules and reconciler]
+    LC[Existing swarm lifecycle application]
+    PORTS[Application-owned ports]
+    DS --> PORTS
+    LC --> PORTS
   end
 
-  PG[(PostgreSQL<br/>authoritative records, revisions,<br/>operations, schedules and evidence)]
-
-  subgraph RMQ[Existing RabbitMQ deployment<br/>release profile still requires qualification]
-    CP[Existing ph.control<br/>all swarm control events and status<br/>component-declared control queues]
-    WI[Existing WorkItem plane<br/>traffic plus leased Dataset supply queue]
-    RH[Dedicated Dataset hint plane<br/>replaceable metadata-only hints]
+  subgraph SC[Swarm Controller]
+    LIFE[Lifecycle and topology authority]
   end
 
-  SC[Swarm Controller<br/>scenario timeline, topology,<br/>route lease and readiness]
-  PS[Source swarm<br/>runs the configured source sequence]
-  TW[Traffic swarm workers<br/>traffic pacer and immutable local Dataset view]
-  SUT[Target system]
+  subgraph RMQ[Existing RabbitMQ]
+    CONTROL[ph.control<br/>lifecycle and status only]
+    WORK[Controller-owned WorkItem route<br/>DATASET_SUPPLY]
+  end
 
-  SM -->|versioned definitions API| API
-  DBAD <-->|runtime snapshots, transactions,<br/>claims, deadlines and outbox| PG
+  subgraph SWARMS[PocketHive swarms]
+    PRODUCER[Producer swarm<br/>DatasetSupplyInput → normal flow<br/>→ ManagedDatasetOutput]
+    CONSUMER[Consumer swarm<br/>ManagedDatasetInput → normal traffic]
+  end
 
-  OCP <-->|canonical control adapter only| CP
-  CP <-->|outcomes and aggregate status| SC
-  CP <-->|config, status and alerts| PS
-  CP <-->|config, status and alerts| TW
-  API <-->|typed route-lease and activation API| SC
+  API[Authorised Dataset API]
+  PG[(PostgreSQL<br/>definitions, records, targets,<br/>operations, leases and outbox)]
 
-  SC -->|declares and reconciles only| WI
-  SC -->|declares and reconciles only| RH
-  DRA -->|typed DATASET_SUPPLY| WI
-  WI --> PS
-  PS -->|claim, checkpoint and upsert API| API
-
-  DRA -.->|new revision may exist| RH
-  RH -.-> TW
-  TW -->|background snapshot or delta API| API
-  TW -->|local selection and ordinary traffic| SUT
+  UI --> DS
+  SM -->|admitted immutable definition| DS
+  DS -->|ensure running| LC
+  LC --> LIFE
+  LIFE <--> CONTROL
+  CONTROL <--> PRODUCER
+  CONTROL <--> CONSUMER
+  DS -->|bounded work metadata| WORK
+  WORK --> PRODUCER
+  PRODUCER -->|claim, checkpoint, upsert, receipt| API
+  CONSUMER -->|snapshot or lease| API
+  API --> DS
+  DS <--> PG
 ```
 
-The Swarm Controller exclusively owns the WorkItem and Dataset-hint queue and
-binding topology used here. Existing components continue to declare their own
-control queues through PocketHive's current control-plane pattern. The Dataset
-module publishes supply only to the exact controller-issued route. Source
-results and worker hydration use authorised Orchestrator APIs. A Rabbit
-acknowledgement proves message handling only; PostgreSQL receipts prove Dataset
-state. The dashed “implements” arrows point inward because infrastructure
-adapters depend on application-owned ports; they are not domain dependencies.
+## One control plane, no new plane
 
-## Runtime decision flow
+Managed Datasets cross three existing interface boundaries. This does **not**
+mean three planes. The only swarm control plane remains `ph.control`.
+
+| Existing boundary | What it is | Carries | Must not carry |
+|---|---|---|---|
+| `ph.control` | PocketHive's single RabbitMQ swarm control plane | Swarm plan/start/stop/remove, approved live configuration, outcomes, status and alerts | Dataset records, leases or requested record counts |
+| Controller-owned WorkItem route | Existing swarm data/work path; not a control plane | A bounded `DATASET_SUPPLY` request for an already-ready producer swarm | Swarm lifecycle commands or authoritative Dataset state |
+| Dataset API backed by PostgreSQL | Application boundary and durable store; not a message plane | Claim, checkpoint, record upsert, snapshot and durable operation receipts; separately gated lease operations if enabled | RabbitMQ topology decisions |
+
+The MVP adds no Dataset exchange, control queue, event bus or notification
+lane. Event-driven wake-ups use existing application observations, and the
+periodic repair sweep guarantees convergence when a wake-up is missed.
+
+## Why start and supply are separate
+
+The two messages answer different questions:
+
+- `swarm-start`: **should this swarm runtime be active?**
+- `DATASET_SUPPLY`: **what finite work should the active swarm perform?**
+
+The WorkItem input is enabled by control-plane state. Sending work before a
+fresh running/readiness result risks leaving the request unconsumed. Putting the
+supply request inside `swarm-start` would mix runtime lifecycle with workload
+arguments, make retries ambiguous and break the existing PocketHive contract.
+
+The mandatory sequence is therefore:
 
 ```mermaid
-flowchart TD
-  A[Resolve and authorise an immutable Dataset binding]
-  B[Read the authoritative operational status scope]
-  C{Use-specific Fitness is PASS?}
-  C1[Block new start; preserve only a returned safe running horizon<br/>Schedule evidence or dependency reconciliation with backoff]
-  D{Safe minimum is met?}
-  D1[Block new start<br/>Durable supply reconciler evaluates a fill trigger]
-  E{Required candidate revision is active<br/>and this swarm has applied it?}
-  E1[Block new start<br/>Hydrate and prepare in background, then apply the committed revision]
-  F[Issue swarm start or approved live config only through ph.control]
-  G[Worker selects and paces traffic from its immutable local view]
-  H{Local validity and final-send safety still pass?}
-  I[Pause the affected input and report bounded status]
-  J[Timer, revision hint, status change or command wakes background reconciliation]
+sequenceDiagram
+  participant R as Dataset reconciler
+  participant L as Existing lifecycle application
+  participant C as ph.control / Swarm Controller
+  participant P as Producer swarm
+  participant W as WorkItem route
+  participant D as Dataset API / PostgreSQL
 
-  A --> B --> C
-  C -- No or unknown --> C1 --> J
-  C -- Yes --> D
-  D -- No --> D1 --> J
-  D -- Yes --> E
-  E -- No --> E1 --> J
-  E -- Yes --> F --> G --> H
-  H -- Yes --> G
-  H -- No --> I --> J
-  J -.->|not on the request path| B
+  R->>D: Persist operation and outbox intent
+  R->>L: ensureRunning(producerSwarm, operation)
+  L->>C: canonical swarm-start when required
+  C->>P: enable runtime and WorkInput
+  P-->>C: current RUNNING + input-ready status
+  C-->>L: correlated outcome and fresh status
+  L-->>R: producer ready
+  R->>W: DATASET_SUPPLY(operationId, datasetId, generation, requestedCount)
+  W->>P: bounded supply work
+  P->>D: claim, checkpoint and idempotent record upserts
+  P->>D: terminal operation receipt
+  D-->>R: observed state changed
+  R->>D: reconcile target and next due time
 ```
 
-## State scenarios
+If the producer is already `RUNNING` and its input is freshly confirmed ready,
+the lifecycle application performs no new start. `RUNNING + IDLE` is a normal,
+healthy hot-idle producer state.
 
-There is deliberately no single overloaded “Dataset state.” Operators see
-separate facts so a healthy store cannot hide unfit data or an uncertain source
-operation.
+For the MVP, use a dedicated producer swarm. If a later version allows several
+features to demand the same swarm, persist one `SwarmRunDemand` per owner and
+aggregate desired state. Do not use an in-memory reference count and do not let
+the Dataset module stop a swarm still required by another owner.
 
-| State dimension | Values | Meaning |
+## Responsibilities and boundaries
+
+| Component | Owns | Does not own |
 |---|---|---|
-| Module availability | `READY`, `RECONCILING`, `DEGRADED`, `UNAVAILABLE` | Can the Orchestrator Dataset module currently make authoritative decisions? |
-| Operational status-scope health | `INITIALISING`, `WARMING`, `READY`, `DEGRADED`, `STARVED`, `ERROR`, `AUTH_REQUIRED` | Server-composed condition for this exact scope and use. `READY` requires safe minimum, Fitness, validity and distribution; it does not mean the target is full. The underlying facts remain visible separately. |
-| Record eligibility | `READY`, `STANDBY`, `QUARANTINED`, `RETIRED` | State of one record. Record `READY` means eligible for a new selection; it is not the same fact as status-scope health `READY`. `STANDBY` is valid reserve, not deletion. |
-| Use-specific Fitness | `PASS`, `FAIL`, `UNKNOWN` | Is this exact revision suitable for this declared use and environment? A count alone never produces `PASS`. |
-| Supply operation | `RESERVED`, `QUEUED`, `RUNNING`, `SUCCEEDED`, `PARTIAL`, `FAILED`, `TIMED_OUT`, `CANCELLED`, `UNCERTAIN` | What happened to one source operation? `UNCERTAIN` retains its reservation and is reconciled, not blindly retried. |
-| Running decision | `CONTINUE`, `CONTINUE_UNTIL`, `PAUSE`, `UNKNOWN`, `NOT_APPLICABLE` | What may an already-running binding do? This is separate from whether a new swarm may start. |
-| Start decision | `ALLOW`, `BLOCK`, `UNKNOWN` | Whether one exact new swarm binding may start against its authoritative status, Fitness and applied revision. |
-| Policy convergence | `STABLE`, `FILLING_TO_TARGET`, `APPLYING_SMALLER_VIEW`, `BLOCKED`, `PAUSED`, `UNKNOWN` | Whether requested/candidate, active and swarm-applied policy targets have converged. Command acceptance alone is not convergence. |
-| Decommission | `ACTIVE`, `DRAINING`, `TOMBSTONED`, `EXTERNAL_RECONCILING`, `RETIRED` | How is a Dataset safely withdrawn and its external lifecycle completed? |
+| Scenario Manager | Versioned Dataset definitions, grouping fields, producer/consumer bindings and capability declarations | Runtime records, fill operations or RabbitMQ topology |
+| Managed Dataset module in Orchestrator | Target, availability, records, operations, schedules, allocation, evidence and reconciliation decisions | Direct worker logic or swarm lifecycle implementation |
+| Existing lifecycle application and Swarm Controller | Swarm desired state, canonical start/stop behavior, readiness and declared routes | Dataset target calculations or record truth |
+| Producer swarm | Running the configured source flow for one bounded supply operation | Deciding the target or declaring queues |
+| Consumer adapter | Background snapshot hydration or lease acquisition and local selection | Direct PostgreSQL access |
+| PostgreSQL | Durable positive authority and outbox | Message delivery |
+| RabbitMQ | Delivery of control events and bounded work | Proof that records were committed |
 
-Common scenarios:
+The Dataset domain depends on small application ports, not RabbitMQ, HTTP, JDBC
+or worker runtime classes. Typical ports are:
 
-| Scenario | New start | Existing safe traffic | System action |
-|---|---|---|---|
-| First fill below minimum during the allowed warm-up window | Blocked | Not applicable | `WARMING`; create bounded supply work |
-| Minimum met, below target | Allowed only when Fitness and activation also pass | Continue | `READY`; replenish only when the watermark or a target increase opens a fill cycle |
-| Below minimum but a prior local view is still safe | Blocked | Continue only to the returned safe boundary | `DEGRADED`; replenish and re-evaluate |
-| No safe eligible data after the warm-up/recovery grace, or Fitness fails | Blocked | Pause affected input | `STARVED`; fail closed |
-| Current evidence unavailable | Blocked | At most `CONTINUE_UNTIL` on the exact prior approved view | Fitness `UNKNOWN`; reconcile before activation |
-| Provider outcome cannot be proven | Unaffected unless reserve/health is exhausted | Safe data may continue | Operation `UNCERTAIN`; retain capacity and inspect provider truth |
-| Supply is administratively paused | Depends on existing safe data and Fitness | May continue safely | Stop new claims; do not pretend to cancel an external call |
-| Target raised or lowered | No wiring restart | Current safe view remains atomic | Activate a new policy version and converge through the lifecycle reconciler |
-| Target change is unsafe or exceeds a bound | Existing state is unchanged | Existing safe traffic follows its current decision | Reject the command with a bounded reason; create no policy, record, queue or external effect |
+- inbound: `SetDatasetTarget`, `ReconcileDataset`, `CommitRecord`,
+  `AcquireSnapshot`, `AcquireLease`, `ReleaseLease`;
+- outbound: `DatasetRepository`, `SwarmLifecyclePort`, `WorkDispatchPort`,
+  `Clock`, `OperationEventPort`; and
+- infrastructure adapters: PostgreSQL, the existing lifecycle application,
+  Rabbit WorkItem publishing, the Dataset API and Worker SDK adapters.
 
-Target decisions use the prior target, the current effective supply and the new
-target—never the new target alone:
+This keeps the domain independently testable and follows dependency inversion:
+infrastructure implements ports owned by the application core.
 
-| Change | Current effective supply | Result |
-|---|---:|---|
-| First policy | Below new target | Open `INITIAL_DEMAND` unless paused |
-| New target is higher than prior | Below new target | Open one `TARGET_INCREASE` cycle |
-| New target is higher than prior | At or above new target | No fill cycle |
-| Target unchanged and no prior fill remains open | Below the active low watermark | Normal `LOW_WATERMARK` cycle only |
-| Target unchanged and the replaced version had an open fill | Below the unchanged target | Continue the fill intent as `POLICY_REPLACEMENT_CONTINUATION`, even above the low watermark |
-| New target is lower than prior | Any | Hold new reservations during transition; never open `TARGET_INCREASE`. Move eligible surplus to `STANDBY`; after convergence, ordinary low-watermark policy may run if genuinely below the new low watermark. |
+## Generic grouping and naming
 
-## How scheduling works
+Managed Datasets do not contain fixed company-specific fields. Each Dataset
+definition declares its own typed classification fields and a `groupBy` list.
+The UI allows an authorised author to add a custom field name and validates it
+against that definition's schema.
 
-PocketHive has three different timing mechanisms:
+Templates may use declared values generically, for example
+`<name>-{{vars.groupA}}-{{vars.groupB}}`. The Dataset feature treats these as
+ordinary schema fields and does not know their organisation-specific meaning.
 
-1. **Dataset lifecycle reconciler — proposed, durable.** Runs inside the Managed
-   Dataset module independently of scenarios. PostgreSQL stores fill cycles,
-   policy versions, refresh/validation deadlines, reservations, attempts,
-   backoff and fences. Fair bounded reconciliation decides whether to supply,
-   refresh, validate, replace or retire data. RabbitMQ only delivers the
-   resulting bounded work. Concretely, a due row is claimed with a database
-   fence; the reconciler reads the active policy and current counts; one
-   transaction reserves capacity and writes the operation plus outbox; the
-   relay sends `DATASET_SUPPLY` on the leased WorkItem route; and the typed API
-   receipt updates cycle accounting and the next due row. After a crash, claim
-   expiry and outbox replay resume that same identity. Per-scope fairness and
-   bounded backoff prevent one failing Dataset from monopolising the loop.
-2. **Scenario timeline — existing, controller-local.** Applies planned swarm and
-   worker steps such as start, stop or configuration at their offsets. Every
-   resulting swarm control event uses `ph.control`. Its current in-memory
-   recovery limitations remain a separate platform non-claim.
-3. **Traffic pacer — existing, worker-local.** `ratePerSec` controls how often a
-   worker emits traffic. `maxMessages` is a finite-run safety cap, not Dataset
-   size. Approved live rate changes arrive through the control plane.
+## State model operators can understand
 
-Dataset target size is therefore an inventory level—not a transaction count,
-traffic rate, scheduler limit or number of times a reusable record may be used.
+There is no overloaded state called simply “Dataset status.” The UI presents
+three independent runtime facts:
 
-## Approval boundary
+| Dimension | Values | Question answered |
+|---|---|---|
+| `SwarmRuntimeState` | `READY`, `STARTING`, `RUNNING`, `STOPPING`, `STOPPED`, `FAILED` | Can the producer swarm receive work? |
+| `ProducerWorkState` | `IDLE`, `CLAIMED`, `EXECUTING`, `COMMITTING`, `FAILED`, `UNCERTAIN` | What is the producer doing now? |
+| `DatasetAvailabilityState` | `INITIALISING`, `WARMING`, `READY`, `DEGRADED`, `STARVED`, `ERROR`, `AUTH_REQUIRED` | Can this Dataset safely support its declared use? |
 
-This revision is suitable for a cross-functional concept decision. It is not
-implementation-ready until the canonical API/event schemas, policy-activation
-contract, 50,000-record manifest, owner/SLO decisions and executable evidence
-plan are approved. It is not release-ready until the exact implementation
-passes the two-swarm 50,000-record capacity, live-resize, recovery,
-non-interference, security and Redis-regression gates.
+The durable operation ledger provides finer detail such as waiting for swarm,
+dispatched, running, committing, succeeded, partial, failed, cancelled and
+uncertain. Record allocation is also separate: an eligible record may be
+`AVAILABLE`, `LEASED`, `STANDBY` or `RETIRING`.
+
+Examples:
+
+| Scenario | What operators see | System decision |
+|---|---|---|
+| New Dataset, producer stopped | `STARTING`, then `RUNNING`; Dataset `WARMING` | Wait for fresh readiness, then dispatch the bounded supply operation |
+| Producer running with no work | Swarm `RUNNING`, producer `IDLE` | Healthy hot-idle; dispatch only when a deficit exists |
+| Minimum is met but target is not | Dataset `READY`, supply operation active | Consumer starts may proceed while supply converges |
+| No safe records remain | Dataset `STARVED` | Block new use and start recovery; do not report ready from count alone |
+| Producer outcome cannot be proved | Producer and operation `UNCERTAIN` | Retain the reservation and reconcile; never blindly create a second operation |
+| Authorisation cannot be evaluated | Dataset `AUTH_REQUIRED` | Fail closed for new access while preserving authorised, still-valid local views according to policy |
+| Target is reduced while records are leased | Dataset remains usable; surplus is visible | Stop new supply, let leases drain, then move deterministic surplus to standby/retiring |
+| Control-plane readiness is stale | Swarm state is not accepted as current | Do not dispatch new supply until readiness is refreshed |
+
+## How the target and scheduler work
+
+`targetSize` is desired eligible inventory. It is not a traffic rate, scenario
+schedule or `maxMessages` value.
+
+```text
+deficit = max(0, targetSize - eligibleRecords - pendingExpected)
+```
+
+- `eligibleRecords` includes both available and currently leased records, so
+  normal use does not trigger unnecessary replacement.
+- `pendingExpected` is the reserved output of active supply operations, so two
+  reconcilers cannot both fill the same deficit.
+- Supply work is split into bounded batches; the target may be 50,000 without
+  creating one 50,000-record message.
+- Every target edit increments an observed generation. Rapid edits coalesce to
+  the latest target instead of replaying every intermediate size.
+
+The scheduler uses two triggers:
+
+1. an immediate reconciliation when a target, operation, record or lease event
+   changes observed state; and
+2. a periodic repair sweep for lost notifications, expired claims and uncertain
+   operations.
+
+PostgreSQL stores `nextReconcileAt`, operation identity, reservations, claims,
+deadlines and retry policy. A reconciler claims a due row in a short fenced
+transaction, calculates one decision, stores that decision and an outbox event,
+then releases the lock before calling the lifecycle application or RabbitMQ.
+
+The current worker `SchedulerWorkInput.maxMessages` counter is deliberately not
+used: it is a worker-local dispatch cap and cannot prove durable Dataset size
+after a restart.
+
+## Changing the size while swarms run
+
+Target changes are accepted immediately and converge asynchronously:
+
+- increase: create only the new deficit under the latest generation;
+- decrease: stop new supply and claims, preserve leased records, and move
+  deterministic unleased surplus to `STANDBY` or `RETIRING`;
+- repeated edits: converge directly to the latest accepted generation; and
+- unsafe or unauthorised edit: reject it with no partial effect.
+
+The UI shows desired size, eligible records, available records, leased records,
+pending expected output, observed generation and the reason when convergence is
+blocked. “Real time” therefore means immediate acceptance plus visible,
+measurable convergence—not synchronous creation or deletion of thousands of
+records.
+
+## Reuse and “add back”
+
+The architecture names two allocation modes so future behavior cannot become
+ambiguous. The MVP requires the first; the second remains deferred unless its
+separate acceptance gates pass:
+
+1. `SHARED_SNAPSHOT` is the default. Many swarms use an immutable published
+   revision non-destructively. Records never leave the Dataset, so there is
+   nothing to add back.
+2. `EXCLUSIVE_LEASE` is used only where concurrent reuse is unsafe. Acquire and
+   release update allocation state, not membership. Each lease has a holder,
+   opaque token, expiry and monotonically increasing fencing epoch. A stale
+   holder cannot release or overwrite a newer lease.
+
+RabbitMQ acknowledgement/requeue is transport recovery, not Dataset return
+semantics. A business-level release always goes through the Dataset API.
+
+Consumer workers hydrate snapshots or leases before measured traffic and use a
+bounded local view on the request path. They do not query PostgreSQL or the
+Dataset API for each simulated request.
+
+## Delivery, recovery and evidence
+
+Rabbit delivery is at least once. Publisher confirms prove acceptance by the
+broker; consumer acknowledgements prove handling of one delivery. Neither
+proves that Dataset records were committed.
+
+Correctness comes from:
+
+- stable `operationId`, `datasetGeneration`, `recordId`, `correlationId` and
+  idempotency keys;
+- unique constraints and idempotent upserts;
+- an outbox committed with domain state;
+- durable checkpoints and terminal operation receipts;
+- bounded retry with the same operation identity; and
+- reconciliation of partial or uncertain outcomes against PostgreSQL truth.
+
+The supply message acknowledgement may show that the producer accepted the
+request. Only the Dataset receipt and committed records complete the operation.
+After a crash, the reconciler resumes or redrives the same identity rather than
+inventing a new request.
+
+Logs and control status contain identifiers and counts, never record bodies,
+credentials, lease tokens or secrets. Workers use scoped service identities and
+the Dataset API; they do not receive direct database credentials.
+
+Agentic tools and AI assistants are read-only explanation clients in the MVP.
+They may summarise status and evidence but cannot become Dataset authority,
+publish Rabbit messages or bypass the approved command API. Any future write
+tool requires a separately reviewed, least-privilege command contract and human
+approval policy.
+
+## The 50,000-record requirement
+
+The design is intended for a 50,000-record qualification profile through
+bounded batches, paged hydration and local immutable views. That is a design
+target, not yet a measured support claim.
+
+Release qualification must use the exact deployment profile and prove:
+
+- 50,000 eligible records plus agreed safety headroom;
+- representative maximum record size and classification shape;
+- at least two concurrent consumer swarms;
+- shared snapshot and, if shipped, exclusive lease behavior;
+- target increase and decrease during active use;
+- producer crash, duplicate delivery, restart and outbox recovery;
+- stale lease fencing and safe return;
+- no record bodies on `ph.control` or in logs;
+- bounded API latency, database lock time, worker memory and hydration time;
+- no request-time Dataset API calls during measured traffic; and
+- a sustained soak with documented p95/p99 thresholds and zero correctness
+  violations.
+
+## What the operator experience must show
+
+The Dataset inventory and detail views must answer, without requiring log
+inspection:
+
+1. Is this Dataset safe to use now?
+2. What is its desired size and observed supply?
+3. Is the producer swarm running, and is it idle or executing work?
+4. Is a target change still converging, blocked or failed?
+5. Which swarms use this Dataset, in which allocation mode and revision?
+6. What operation or evidence explains the current result?
+
+Status changes are announced through a restrained live region; errors include
+plain-language recovery guidance. Keyboard focus remains visible, tables reflow
+or become labelled cards at narrow widths, and color is never the only status
+indicator. The planning wireframe is an interaction contract, not evidence of
+production WCAG conformance.
+
+## Design approval checklist
+
+| Team concern | Design result |
+|---|---|
+| Existing control plane owns every swarm lifecycle event | **GREEN** |
+| Supply is part of the swarm without becoming a lifecycle command | **GREEN** |
+| Component placement and decision flow are explicit | **GREEN** |
+| Dataset, producer and swarm states cannot be confused | **GREEN** |
+| Scheduling and missed-event recovery are durable | **GREEN** |
+| Live increase/decrease behavior is deterministic | **GREEN** |
+| 50,000 records and two-swarm reuse have a measurable release gate | **GREEN** |
+| “Add back” semantics are explicit and not delegated to RabbitMQ | **GREEN** |
+| SOLID and hexagonal boundaries are defined | **GREEN** |
+| Operator and agentic interfaces cannot become authority | **GREEN** |
+
+**Decision:** the idea is coherent and complete enough to show the team and
+approve for implementation planning. Production readiness remains deliberately
+gated on implementation, security, accessibility, recovery and capacity
+evidence; those are testable delivery criteria, not unresolved architecture.
+
+## Detailed companions
+
+- [Component, use-case and scenario examples](managed-datasets-use-cases-and-scenario-examples.md)
+- [Lifecycle and architecture specification](managed-test-data-lifecycle-generic-spec.md)
+- [Architecture rationale](managed-test-data-architecture-recommendation.md)
+- [Operator UI design specification](managed-datasets-operator-ui-design-spec.md)
+- [Assurance and release strategy](managed-test-data-assurance-strategy.md)
+- [Interactive planning wireframe](managed-datasets-wireframes/README.md)

@@ -9,6 +9,7 @@
     "schemaVersion",
     "registryId",
     "status",
+    "assessment",
     "parentRequirement",
     "sources",
     "requirements"
@@ -26,6 +27,28 @@
     "status": {
       "const": "DESIGN_BASELINE"
     },
+    "assessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "designReviewGate",
+        "designReviewStatus",
+        "implementationGate",
+        "implementationEvidenceStatus",
+        "releaseGate",
+        "releaseQualificationStatus",
+        "scopeNote"
+      ],
+      "properties": {
+        "designReviewGate": {"const": "G-TEAM-REVIEW-v1"},
+        "designReviewStatus": {"enum": ["PASS", "FAIL", "INCONCLUSIVE"]},
+        "implementationGate": {"const": "G-M1-INTERNAL-v1"},
+        "implementationEvidenceStatus": {"enum": ["NOT_RUN", "PASS", "FAIL", "INCONCLUSIVE"]},
+        "releaseGate": {"const": "dataset-qualified-core"},
+        "releaseQualificationStatus": {"enum": ["NOT_RUN", "PASS", "FAIL", "INCONCLUSIVE"]},
+        "scopeNote": {"type": "string", "minLength": 1}
+      }
+    },
     "parentRequirement": {
       "const": "FUN-014"
     },
@@ -41,8 +64,8 @@
     },
     "requirements": {
       "type": "array",
-      "minItems": 35,
-      "maxItems": 35,
+      "minItems": 38,
+      "maxItems": 38,
       "uniqueItems": true,
       "items": {"$ref": "#/$defs/requirement"}
     }
@@ -62,6 +85,8 @@
         "supportingCharters",
         "risks",
         "oracleIds",
+        "evidenceOwner",
+        "evidenceState",
         "releaseGateIds"
       ],
       "properties": {
@@ -113,6 +138,17 @@
             ]
           }
         },
+        "evidenceOwner": {
+          "enum": [
+            "ACCESSIBILITY_QA_OWNER",
+            "ARCHITECTURE_OWNER",
+            "PERFORMANCE_QA_OWNER",
+            "PRODUCT_UX_OWNER",
+            "SECURITY_OWNER",
+            "UI_DELIVERY_OWNER"
+          ]
+        },
+        "evidenceState": {"$ref": "#/$defs/evidenceState"},
         "releaseGateIds": {
           "type": "array",
           "minItems": 1,
@@ -120,6 +156,58 @@
           "items": {"const": "dataset-qualified-core"}
         }
       }
+    },
+    "evidenceState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "designReviewGate",
+        "designReviewStatus",
+        "designEvidenceRefs",
+        "implementationGate",
+        "implementationStatus",
+        "implementationEvidenceRefs",
+        "releaseGate",
+        "releaseStatus",
+        "releaseEvidenceRefs"
+      ],
+      "properties": {
+        "designReviewGate": {"const": "G-TEAM-REVIEW-v1"},
+        "designReviewStatus": {"enum": ["PASS", "FAIL", "INCONCLUSIVE"]},
+        "designEvidenceRefs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "implementationGate": {"const": "G-M1-INTERNAL-v1"},
+        "implementationStatus": {"enum": ["NOT_RUN", "PASS", "FAIL", "INCONCLUSIVE"]},
+        "implementationEvidenceRefs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "releaseGate": {"const": "dataset-qualified-core"},
+        "releaseStatus": {"enum": ["NOT_RUN", "PASS", "FAIL", "INCONCLUSIVE"]},
+        "releaseEvidenceRefs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"designReviewStatus": {"const": "PASS"}}},
+          "then": {"properties": {"designEvidenceRefs": {"type": "array", "minItems": 1}}}
+        },
+        {
+          "if": {"properties": {"implementationStatus": {"const": "PASS"}}},
+          "then": {"properties": {"implementationEvidenceRefs": {"type": "array", "minItems": 1}}}
+        },
+        {
+          "if": {"properties": {"releaseStatus": {"const": "PASS"}}},
+          "then": {"properties": {"releaseEvidenceRefs": {"type": "array", "minItems": 1}}}
+        }
+      ]
     }
   }
 }

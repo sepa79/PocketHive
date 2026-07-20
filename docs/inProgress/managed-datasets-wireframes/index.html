@@ -457,7 +457,7 @@
               </section>
 
               <div class="metric-grid" role="group" aria-label="Dataset metrics">
-                <article class="metric-card"><span>Eligible records</span><strong>4,820</strong><small>minimum 5,000 · target 12,000</small><div class="meter"><span class="meter-current-authorisation"></span><i class="meter-minimum-authorisation"></i></div><div class="metric-trend warn"><span class="trend-dot warn"></span>Target gap 7,180 · 180 reserved · 180 in flight</div></article>
+                <article class="metric-card"><span>Eligible records</span><strong>4,820</strong><small>minimum 5,000 · target 12,000</small><div class="meter"><span class="meter-current-supply"></span><i class="meter-minimum-supply"></i></div><div class="metric-trend warn"><span class="trend-dot warn"></span>Target gap 7,180 · 180 reserved · 180 in flight</div></article>
                 <article class="metric-card"><span>Earliest eligible validity</span><strong>24 min 10 sec</strong><small>Ends 16:49:10 UTC · eligible-validity horizon</small><div class="metric-trend warn"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h5v5M20 17h-5v-5"/><path d="M6 12a7 7 0 0 1 12-4M18 12a7 7 0 0 1-12 4"/></svg>Server-calculated boundary</div></article>
                 <article class="metric-card"><span>Activated distribution</span><strong>Uniform 1841 · 6 bindings</strong><small>Candidate 1842 · final materializers 23/24</small><div class="metric-trend warn"><span class="trend-dot warn"></span>Selectors 24/24 on activated 1841</div></article>
                 <article class="metric-card"><span>Consumer impact</span><strong>5 observed-active swarms</strong><small>6 activated · 5 applicable · 0 continue · 5 until · 0 paused · 0 unknown · 1 N/A</small><div class="metric-trend info"><span class="trend-dot info"></span>Earliest safeUntil 16:42 UTC</div></article>
@@ -543,7 +543,99 @@
                 </div>
 
                 <div class="tab-panel" id="panel-supply" role="tabpanel" aria-labelledby="tab-supply" tabindex="0" hidden>
-                  <div class="panel-heading"><div><span class="section-kicker">Supply Policy v12</span><h2>Supply and lifecycle</h2><p>Demand becomes bounded producer work; this view cannot start or alter sourcing.</p></div><span class="read-only-chip">Read only</span></div>
+                  <div class="panel-heading"><div><span class="section-kicker">Supply Policy v12</span><h2>Supply and lifecycle</h2><p>Control starts or enables the producer; bounded work then asks it to supply records. These are separate decisions.</p></div><span class="read-only-chip">Read only</span></div>
+
+                  <section class="supply-explainer" aria-labelledby="supply-explainer-title">
+                    <div class="section-heading">
+                      <div>
+                        <span class="section-kicker">Current operation · op-supply-7784</span>
+                        <h3 id="supply-explainer-title">How one supply request runs</h3>
+                        <p>No new plane is introduced. The WorkItem is never sent until the existing control plane has made the producer ready and the existing controller-issued route is valid.</p>
+                      </div>
+                      <span class="status-pill pill-info" id="supply-journey-status">Executing bounded work</span>
+                    </div>
+
+                    <div class="supply-state-example" id="supply-state-example" role="status" aria-live="polite" hidden>
+                      <strong id="supply-state-title"></strong>
+                      <span id="supply-state-detail"></span>
+                      <small id="supply-state-next"></small>
+                    </div>
+
+                    <ol class="supply-journey" aria-label="Supply request decision and execution sequence">
+                      <li class="is-complete" data-supply-step="reconcile">
+                        <span class="journey-number" aria-hidden="true">1</span>
+                        <div><strong>Find the durable deficit</strong><small>Orchestrator Dataset reconciler compares desired and observed inventory in PostgreSQL.</small><code>target 12,000 − eligible 4,820 − pending 180</code></div>
+                        <span class="journey-state">Complete</span>
+                      </li>
+                      <li class="is-complete" data-supply-step="control">
+                        <span class="journey-number" aria-hidden="true">2</span>
+                        <div><strong>Ensure the producer swarm is running</strong><small>The existing Orchestrator lifecycle path uses <code>swarm-start</code> on <code>ph.control</code> only when the producer is stopped. This example was already running.</small><code>control plane · no parallel Dataset control queue</code></div>
+                        <span class="journey-state">Complete</span>
+                      </li>
+                      <li class="is-complete" data-supply-step="ready">
+                        <span class="journey-number" aria-hidden="true">3</span>
+                        <div><strong>Wait for fresh readiness</strong><small>Swarm Controller confirms the start outcome, <code>RUNNING</code>, input enabled and the fenced WorkItem route ready.</small><code>route lease route-lease-4f91 · fence 27</code></div>
+                        <span class="journey-state">Complete</span>
+                      </li>
+                      <li class="is-active" data-supply-step="dispatch" aria-current="step">
+                        <span class="journey-number" aria-hidden="true">4</span>
+                        <div><strong>Dispatch bounded supply work</strong><small>The Dataset outbox publishes metadata-only <code>DATASET_SUPPLY</code> through the existing controller-owned WorkItem data path—not another control or messaging plane.</small><code>requested 180 · operation op-supply-7784</code></div>
+                        <span class="journey-state">Running</span>
+                      </li>
+                      <li class="is-pending" data-supply-step="commit">
+                        <span class="journey-number" aria-hidden="true">5</span>
+                        <div><strong>Commit and prove the result</strong><small>The producer uses the authorised Dataset API; PostgreSQL commits records, accounting and the durable receipt. Rabbit acknowledgement is not completion proof.</small><code>awaiting terminal Dataset receipt</code></div>
+                        <span class="journey-state">Waiting</span>
+                      </li>
+                    </ol>
+                  </section>
+
+                  <section class="state-dimensions" aria-labelledby="state-dimensions-title">
+                    <div class="state-dimensions-heading">
+                      <div><span class="section-kicker">One observation · separate facts</span><h3 id="state-dimensions-title">Do not collapse these states</h3></div>
+                      <p>A running swarm may have no supply work, and a committed Dataset may still be below its desired target.</p>
+                    </div>
+                    <div class="state-dimension-grid">
+                      <article><span>Dataset selection</span><strong class="warn-text">DEGRADED</strong><small>Below safe minimum</small></article>
+                      <article><span>Producer swarm</span><strong class="good-text" id="producer-swarm-state">RUNNING</strong><small id="producer-swarm-state-detail">Input enabled · route ready</small></article>
+                      <article><span>Producer workload</span><strong class="info-text" id="producer-workload-state">EXECUTING</strong><small id="producer-workload-state-detail">DATASET_SUPPLY op-supply-7784</small></article>
+                      <article><span>Policy convergence</span><strong class="info-text">FILLING_TO_TARGET</strong><small>Desired 12,000 · current 4,820</small></article>
+                      <article><span>Durable Dataset store</span><strong class="good-text">COMMITTED</strong><small>PostgreSQL revision 1842</small></article>
+                    </div>
+                  </section>
+
+                  <section class="component-placement" aria-labelledby="component-placement-title">
+                    <div class="section-heading"><div><span class="section-kicker">Responsibility map</span><h3 id="component-placement-title">Where each part sits</h3><p>Each component owns one decision boundary; transport never becomes the source of Dataset truth.</p></div></div>
+                    <div class="component-placement-grid">
+                      <article><span>Orchestrator</span><strong>Dataset application + reconciler</strong><small>Desired state, deficit, schedules, operations and application ports.</small></article>
+                      <article><span>Swarm Controller</span><strong>Lifecycle, topology and readiness</strong><small>Owns start/status decisions and the fenced WorkItem route.</small></article>
+                      <article><span>RabbitMQ</span><strong>Two distinct lanes</strong><small><code>ph.control</code> for swarm control; WorkItem for <code>DATASET_SUPPLY</code>. No record values.</small></article>
+                      <article><span>Producer swarm</span><strong>Runs the source flow</strong><small>Claims one bounded operation and returns a typed result through the Dataset API.</small></article>
+                      <article><span>PostgreSQL</span><strong>Durable authority</strong><small>Definitions, records, revisions, schedules, leases, idempotency and receipts.</small></article>
+                    </div>
+                  </section>
+
+                  <section class="reuse-capacity-grid" aria-label="Reuse and capacity decisions">
+                    <article class="detail-section">
+                      <div class="section-heading"><div><span class="section-kicker">MVP allocation</span><h3>Shared reuse needs no add-back</h3></div><span class="status-pill pill-good">SHARED</span></div>
+                      <p>Consumer workers read bounded immutable local views. A selected record remains eligible and is reused after the local selection cycle; it is not removed from PostgreSQL or RabbitMQ.</p>
+                      <dl class="detail-list">
+                        <div><dt>Add-back action</dt><dd>Not applicable · nothing was borrowed</dd></div>
+                        <div><dt>Exclusive or ordered use</dt><dd>Deferred · rejected as unsupported in the MVP</dd></div>
+                        <div><dt>Legacy Redis loop</dt><dd>Separate opt-in behavior; not a Managed Dataset lease guarantee</dd></div>
+                      </dl>
+                    </article>
+                    <article class="detail-section qualification-card">
+                      <div class="section-heading"><div><span class="section-kicker">Release evidence</span><h3>50,000 records is a qualification target</h3></div><span class="status-pill pill-warn">Not yet proven</span></div>
+                      <p>The architecture is designed for this profile, but the UI must not say “supports 50,000” until the named capacity and recovery run passes.</p>
+                      <dl class="detail-list">
+                        <div><dt>Target / maximum</dt><dd>50,000 / 55,000 eligible records</dd></div>
+                        <div><dt>Concurrent reuse</dt><dd>At least two active swarms on one authoritative Dataset</dd></div>
+                        <div><dt>Required evidence</dt><dd>Capacity, live resize, restart, redelivery and non-interference qualification</dd></div>
+                      </dl>
+                    </article>
+                  </section>
+
                   <div class="detail-section-grid">
                     <article class="detail-section">
                       <div class="section-heading"><div><span class="section-kicker">Source specimen A · current snapshot</span><h3>Active policy with no pending change</h3></div><span class="status-pill pill-warn">Filling</span></div>
@@ -566,11 +658,12 @@
                       </dl>
                     </article>
                     <article class="detail-section">
-                      <div class="section-heading"><div><span class="section-kicker">Separate timing systems</span><h3>What this is not</h3></div><span class="status-pill pill-neutral">Informational</span></div>
+                      <div class="section-heading"><div><span class="section-kicker">Separate timing systems</span><h3>Three clocks, three jobs</h3></div><span class="status-pill pill-neutral">Do not combine</span></div>
                       <dl class="detail-list">
+                        <div><dt>Dataset reconciler</dt><dd>Durable desired-state loop; PostgreSQL stores the next due time, claim and backoff</dd></div>
                         <div><dt>Scenario timeline</dt><dd>Schedules swarm start, stop and configuration through <code>ph.control</code></dd></div>
-                        <div><dt>Traffic pacer</dt><dd>Controls request rate; <code>maxMessages</code> is not Dataset size</dd></div>
-                        <div><dt>RabbitMQ role</dt><dd>Delivers control, bounded work and hints; PostgreSQL owns the schedule and Dataset truth</dd></div>
+                        <div><dt>Traffic pacer</dt><dd>Controls request rate; <code>maxMessages</code> is a safety cap, not Dataset size</dd></div>
+                        <div><dt>RabbitMQ role</dt><dd>Delivers control and bounded work; it does not own the schedule or Dataset truth</dd></div>
                       </dl>
                     </article>
                   </div>
@@ -647,7 +740,7 @@
                 <div class="tab-panel" id="panel-evidence" role="tabpanel" aria-labelledby="tab-evidence" tabindex="0" hidden>
                   <div class="panel-heading"><div><span class="section-kicker">Read-only canonical proof query</span><h2>Evidence</h2><p>Select an exact proof level. This planning fixture supplies the one exact claim-target kind/reference required for that level; the product proof service—not this browser—returns the verdict and independent facts.</p></div><span class="read-only-chip">Zero command effects</span></div>
                   <form class="proof-query" id="proof-query-form" novalidate>
-                    <label><span>Requested proof level</span><select id="proof-level"><option>CONFIGURED</option><option>SOURCED</option><option>PERSISTED</option><option>BROKER_ACCEPTED</option><option>FINAL_MATERIALIZER_APPLIED</option><option>TRAFFIC_ACTIVATED</option><option>SELECTOR_APPLIED</option><option selected>READY</option><option>FLOW_PROVEN</option></select></label>
+                    <label><span>Requested proof level</span><select id="proof-level"><option>CONFIGURED</option><option>BROKER_ACCEPTED</option><option>SOURCED</option><option>PERSISTED</option><option>FINAL_MATERIALIZER_APPLIED</option><option>TRAFFIC_ACTIVATED</option><option>SELECTOR_APPLIED</option><option selected>READY</option><option>FLOW_PROVEN</option></select></label>
                     <label><span>Exact claim target</span><input id="proof-target" type="text" value="BINDING · bs-primary-1842" readonly aria-describedby="proof-query-help"></label>
                     <label id="proof-reference-kind-field" hidden><span>Flow reference type</span><select id="proof-reference-kind" disabled><option value="transaction">Transaction</option></select></label>
                     <label id="proof-reference-field" hidden><span>Exact opaque flow reference</span><select id="proof-reference" disabled aria-describedby="proof-query-help proof-reference-error"><option value="">Select the required reference</option><option value="txn-opaque-9ef2">txn-opaque-9ef2</option></select></label>
@@ -675,9 +768,9 @@
                   <div class="proof-gaps" id="proof-gaps"><strong id="proof-gap-count">Explicit gaps (5)</strong><code id="proof-gap-codes">FINAL_MATERIALIZER_INCOMPLETE · CANDIDATE_NOT_ACTIVATED · SELECTOR_REVISION_BEHIND · SUPPLY_BELOW_MINIMUM · EVIDENCE_TEMPORARILY_UNAVAILABLE</code><span id="proof-gap-detail">processor-12 has not applied candidate revision 1842; candidate 1842 is not activated; selectors remain constrained to activated revision 1841; eligible 4,820 is below minimum 5,000; current Fitness evidence is unavailable.</span></div>
                   <div class="evidence-grid">
                     <article class="evidence-fact pass" data-proof-fact="CONFIGURED" data-proof-order="0"><span class="evidence-symbol">PASS</span><strong>Configured</strong><small><code>CONFIGURED</code> · scope ds-status-94f2 · revision scope ds-revision-6a21</small><small>Revision N/A (FACT_PRECEDES_DATASET_REVISION) · epoch N/A (FACT_HAS_NO_MEMBERSHIP_EPOCH)</small><small>Observed 16:21:54 UTC · valid until 16:25:18 UTC · reason codes none · evidence dataset-definition-v8, source-binding-v7</small></article>
-                    <article class="evidence-fact pass" data-proof-fact="SOURCED" data-proof-order="1"><span class="evidence-symbol">PASS</span><strong>Sourced</strong><small><code>SOURCED</code> · operation op-supply-7760 · receipt sr-7760</small><small>Revision N/A (FACT_PRECEDES_DATASET_REVISION) · epoch N/A (FACT_HAS_NO_MEMBERSHIP_EPOCH)</small><small>Observed 16:21:58 UTC · valid until 16:25:12 UTC · reason codes none · evidence ev-source-31</small></article>
-                    <article class="evidence-fact pass" data-proof-fact="PERSISTED" data-proof-order="2"><span class="evidence-symbol">PASS</span><strong>Persisted</strong><small><code>PERSISTED</code> · operation op-supply-7760 · revision scope ds-revision-6a21</small><small>Authoritative revision 1842 · epoch N/A (FACT_HAS_NO_MEMBERSHIP_EPOCH)</small><small>Observed 16:22:04 UTC · valid until 16:25:14 UTC · reason codes none · evidence ev-commit-17</small></article>
-                    <article class="evidence-fact pass" data-proof-fact="BROKER_ACCEPTED" data-proof-order="3"><span class="evidence-symbol">PASS</span><strong>Broker accepted</strong><small><code>BROKER_ACCEPTED</code> · delivery attempt ev-broker-09 · revision scope ds-revision-6a21</small><small>Authoritative revision 1842 · epoch N/A (FACT_HAS_NO_MEMBERSHIP_EPOCH)</small><small>Observed 16:22:05 UTC · valid until 16:25:15 UTC · reason codes none · publisher confirm and no return</small></article>
+                    <article class="evidence-fact pass" data-proof-fact="BROKER_ACCEPTED" data-proof-order="1"><span class="evidence-symbol">PASS</span><strong>Supply WorkItem transport accepted</strong><small><code>BROKER_ACCEPTED</code> · <code>DATASET_SUPPLY</code> WorkItem · delivery attempt ev-supply-publish-09 · operation op-supply-7760</small><small>Dataset revision N/A (TRANSPORT_PRECEDES_DATASET_REVISION) · terminal PostgreSQL receipt not established</small><small>Observed 16:21:55 UTC · valid until 16:25:15 UTC · transport evidence only: publisher confirm and no unroutable return · not acknowledgement, execution, persistence or completion</small></article>
+                    <article class="evidence-fact pass" data-proof-fact="SOURCED" data-proof-order="2"><span class="evidence-symbol">PASS</span><strong>Sourced</strong><small><code>SOURCED</code> · operation op-supply-7760 · source result source-result-7760</small><small>Revision N/A (FACT_PRECEDES_DATASET_REVISION) · epoch N/A (FACT_HAS_NO_MEMBERSHIP_EPOCH)</small><small>Observed 16:21:58 UTC · valid until 16:25:12 UTC · reason codes none · evidence ev-source-31</small></article>
+                    <article class="evidence-fact pass" data-proof-fact="PERSISTED" data-proof-order="3"><span class="evidence-symbol">PASS</span><strong>Persisted</strong><small><code>PERSISTED</code> · operation op-supply-7760 · revision scope ds-revision-6a21</small><small>Authoritative revision 1842 · terminal PostgreSQL receipt sr-7760 · epoch N/A (FACT_HAS_NO_MEMBERSHIP_EPOCH)</small><small>Observed 16:22:04 UTC · valid until 16:25:14 UTC · reason codes none · evidence ev-commit-17</small></article>
                     <article class="evidence-fact fail" data-proof-fact="FINAL_MATERIALIZER_APPLIED" data-proof-order="4"><span class="evidence-symbol">FAIL</span><strong>Final materializer applied</strong><small><code>FINAL_MATERIALIZER_APPLIED</code> · binding bs-primary-1842 · revision scope ds-revision-6a21</small><small>Candidate revision 1842 · membership epoch 32 · applied 11/12</small><small>Observed 16:24:46 UTC · valid until 16:25:16 UTC · reason FINAL_MATERIALIZER_INCOMPLETE · evidence ev-mat-42</small></article>
                     <article class="evidence-fact fail" data-proof-fact="TRAFFIC_ACTIVATED" data-proof-order="5"><span class="evidence-symbol">FAIL</span><strong>Traffic activated</strong><small id="proof-traffic-fact"><code>TRAFFIC_ACTIVATED</code> · READY target binding bs-primary-1842 · revision scope ds-revision-6a21</small><small id="proof-traffic-revision">Required candidate revision 1842 · membership epoch 32 · activated revision 1841</small><small id="proof-traffic-evidence">Observed 16:24:47 UTC · valid until 16:25:17 UTC · reason CANDIDATE_NOT_ACTIVATED · evidence ev-activate-18</small></article>
                     <article class="evidence-fact fail" data-proof-fact="SELECTOR_APPLIED" data-proof-order="6"><span class="evidence-symbol">FAIL</span><strong>Selector applied</strong><small id="proof-selector-fact"><code>SELECTOR_APPLIED</code> · READY target binding bs-primary-1842 · revision scope ds-revision-6a21</small><small id="proof-selector-revision">Required candidate revision 1842 · membership epoch 32 · selectors remain 12/12 on revision 1841</small><small id="proof-selector-evidence">Observed 16:24:47 UTC · valid until 16:25:17 UTC · reason SELECTOR_REVISION_BEHIND · evidence ev-select-18</small></article>

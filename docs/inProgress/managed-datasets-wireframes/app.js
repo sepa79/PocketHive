@@ -99,6 +99,73 @@
     },
   }
 
+  const supplyFlowStates = Object.freeze({
+    idle: {
+      tone: 'info',
+      title: 'Producer ready; no supply work is active',
+      detail: 'The producer swarm remains RUNNING with its input and route ready while the producer workload is IDLE. These states are intentionally independent.',
+      next: 'The PostgreSQL-backed reconciler will create bounded work only when the active policy has a real due action or deficit.',
+      status: 'Ready · workload idle',
+      swarm: ['RUNNING', 'Input enabled · route ready', 'good-text'],
+      workload: ['IDLE', 'No DATASET_SUPPLY operation active', 'info-text'],
+      steps: {
+        reconcile: ['is-complete', 'No work due'],
+        control: ['is-complete', 'Running'],
+        ready: ['is-complete', 'Ready'],
+        dispatch: ['is-pending', 'Not needed'],
+        commit: ['is-pending', 'Not needed'],
+      },
+    },
+    waiting_readiness: {
+      tone: 'warn',
+      title: 'Control-plane start is pending; supply has not been published',
+      detail: 'Orchestrator has requested swarm-start through the existing ph.control path. The Dataset outbox is held until a matching start outcome and fresh RUNNING, input-enabled and route-ready observation arrive.',
+      next: 'If readiness expires or fails, keep the operation undispatched and reconcile the lifecycle result; never fall through to the WorkItem route.',
+      status: 'Waiting for producer readiness',
+      swarm: ['STARTING', 'Control outcome pending', 'warn-text'],
+      workload: ['IDLE', 'DATASET_SUPPLY not published', 'info-text'],
+      steps: {
+        reconcile: ['is-complete', 'Complete'],
+        control: ['is-active', 'Start requested'],
+        ready: ['is-pending', 'Waiting'],
+        dispatch: ['is-pending', 'Not published'],
+        commit: ['is-pending', 'Waiting'],
+      },
+    },
+    dispatch_failed: {
+      tone: 'error',
+      title: 'Producer is ready, but WorkItem publication is not proven',
+      detail: 'The control-plane gate passed. The DATASET_SUPPLY publish was returned, negatively confirmed or remained unknown, so no execution claim is shown.',
+      next: 'Keep the same durable operation and idempotency identity, reconcile the outbox attempt and retry only through the current fenced route.',
+      status: 'Supply dispatch needs reconciliation',
+      swarm: ['RUNNING', 'Input enabled · route ready', 'good-text'],
+      workload: ['QUEUED', 'Publish outcome not accepted', 'warn-text'],
+      steps: {
+        reconcile: ['is-complete', 'Complete'],
+        control: ['is-complete', 'Running'],
+        ready: ['is-complete', 'Ready'],
+        dispatch: ['is-error', 'Not accepted'],
+        commit: ['is-pending', 'Not started'],
+      },
+    },
+    commit_uncertain: {
+      tone: 'warn',
+      title: 'Source effect is uncertain; the reservation stays held',
+      detail: 'The producer claimed and ran the same DATASET_SUPPLY operation, but no conclusive durable Dataset receipt is available. Rabbit acknowledgement does not convert this to success.',
+      next: 'Reconcile provider truth under the same operation fence. Do not issue replacement supply or release capacity while a late effect remains possible.',
+      status: 'Durable result uncertain',
+      swarm: ['RUNNING', 'Input enabled · route ready', 'good-text'],
+      workload: ['UNCERTAIN', 'Reservation retained · no blind retry', 'warn-text'],
+      steps: {
+        reconcile: ['is-complete', 'Complete'],
+        control: ['is-complete', 'Running'],
+        ready: ['is-complete', 'Ready'],
+        dispatch: ['is-complete', 'Claimed'],
+        commit: ['is-uncertain', 'Uncertain'],
+      },
+    },
+  })
+
   const viewCopy = {
     datasets: ['Datasets'],
     dataset: ['Datasets', 'primary-test-entities'],
@@ -415,6 +482,47 @@
     })
   }
 
+  function applySupplyFlowState() {
+    const state = supplyFlowStates[queryParams.get('supplyState')]
+    if (!state) return
+
+    const panel = document.getElementById('supply-state-example')
+    panel.hidden = false
+    panel.className = `supply-state-example is-${state.tone}`
+    document.getElementById('supply-state-title').textContent = state.title
+    document.getElementById('supply-state-detail').textContent = state.detail
+    document.getElementById('supply-state-next').textContent = `Next: ${state.next}`
+    const journeyStatus = document.getElementById('supply-journey-status')
+    journeyStatus.textContent = state.status
+    journeyStatus.className = state.tone === 'error'
+      ? 'status-pill pill-bad'
+      : state.tone === 'warn'
+        ? 'status-pill pill-warn'
+        : 'status-pill pill-info'
+    const producerSwarmState = document.getElementById('producer-swarm-state')
+    const producerWorkloadState = document.getElementById('producer-workload-state')
+    producerSwarmState.textContent = state.swarm[0]
+    document.getElementById('producer-swarm-state-detail').textContent = state.swarm[1]
+    producerWorkloadState.textContent = state.workload[0]
+    document.getElementById('producer-workload-state-detail').textContent = state.workload[1]
+    producerSwarmState.classList.remove('good-text', 'warn-text', 'bad-text', 'info-text')
+    producerWorkloadState.classList.remove('good-text', 'warn-text', 'bad-text', 'info-text')
+    producerSwarmState.classList.add(state.swarm[2])
+    producerWorkloadState.classList.add(state.workload[2])
+
+    document.querySelectorAll('[data-supply-step]').forEach((step) => {
+      const [className, label] = state.steps[step.dataset.supplyStep]
+      step.classList.remove('is-complete', 'is-active', 'is-pending', 'is-error', 'is-uncertain')
+      step.classList.add(className)
+      if (className === 'is-active' || className === 'is-error' || className === 'is-uncertain') {
+        step.setAttribute('aria-current', 'step')
+      } else {
+        step.removeAttribute('aria-current')
+      }
+      step.querySelector('.journey-state').textContent = label
+    })
+  }
+
   bindNavigation()
   bindTabs()
   bindSupplyPopovers()
@@ -544,9 +652,9 @@
 
   const proofLevels = Object.freeze([
     'CONFIGURED',
+    'BROKER_ACCEPTED',
     'SOURCED',
     'PERSISTED',
-    'BROKER_ACCEPTED',
     'FINAL_MATERIALIZER_APPLIED',
     'TRAFFIC_ACTIVATED',
     'SELECTOR_APPLIED',
@@ -594,11 +702,11 @@
     },
     BROKER_ACCEPTED: {
       verdict: 'PASS',
-      target: 'DELIVERY_ATTEMPT · ev-broker-09',
+      target: 'DELIVERY_ATTEMPT · ev-supply-publish-09 · WORKITEM_SUPPLY · operation op-supply-7760',
       context: 'NONE',
-      revision: '1842 · revision scope ds-revision-6a21',
+      revision: 'Not applicable · TRANSPORT_PRECEDES_DATASET_REVISION · revision scope ds-revision-6a21',
       validity: 'Observed 16:24:48 UTC · valid until 16:25:15 UTC',
-      proofId: 'proof-delivery-ev-broker-09-broker-accepted',
+      proofId: 'proof-supply-delivery-ev-supply-publish-09-broker-accepted',
       required: ['BROKER_ACCEPTED'],
       digest: '4b0d0862fe4468ff7e991197971f6bcfdbcd06db7d61d742b00f5a2778a6db8c',
       gaps: [],
@@ -836,6 +944,7 @@
 
   applyHashRoute(false)
   applyFilters()
+  applySupplyFlowState()
 
   if (queryParams.get('focusCancel') === '1') {
     window.requestAnimationFrame(() => {

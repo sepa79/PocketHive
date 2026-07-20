@@ -1,7 +1,9 @@
 # Managed Test Data Assurance and Qualification Strategy
 
-Status: in progress — Grade 0 design; `G-TEAM-REVIEW-v1` passed for an
-internal decision workshop; implementation evidence pending
+Status: **design review PASS (green)** — Grade 0; `G-TEAM-REVIEW-v1` passed
+for an internal decision workshop. Implementation, runtime, capacity,
+accessibility and release evidence is `NOT_RUN` and no product qualification is
+claimed.
 
 Applies to: `managed-test-data-lifecycle-generic-spec.md` and
 `managed-datasets-operator-ui-design-spec.md`
@@ -31,6 +33,24 @@ acceptance criteria:
 Neither document says that the current implementation already has the
 capability. A design review, a test-case count, a green dashboard, or a case
 study is not evidence of PocketHive behaviour.
+
+### 1.1 Current assessment and evidence boundary
+
+“Green” is meaningful only when the named gate and evidence stage are shown
+together. The current baseline has the following honest status:
+
+| Evidence stage | Named gate | Status | Meaning |
+|---|---|---|---|
+| Design coherence | `G-TEAM-REVIEW-v1` | **PASS — green** | The architecture, lifecycle, assurance, UI requirements, wireframe behaviour and 38-ID UI registry form a reviewable, internally consistent proposal. The control/work/data boundaries and non-claims are explicit. |
+| Implementation entry | `G-IMPLEMENTATION-READY-v1` | `NOT_EVALUATED` | Canonical API/event/common schemas, executable port boundaries, model/TCK plan and the first source/SUT profile still require approval and implementation planning. |
+| Internal system evidence | `G-M1-INTERNAL-v1` | `NOT_RUN` | No running vertical slice has yet demonstrated start/readiness/supply ordering, durable commit, recovery or independent-oracle behaviour. |
+| Core release qualification | `dataset-qualified-core` | `NOT_RUN` | The 50,000-record, two-swarm, live-resize, 24-hour, security, accessibility and non-interference claims remain qualification gates. |
+| Sensitive/deferred profiles | `Q-SENSITIVE-ENTERPRISE-v1` and optional M4 gates | `NOT_CLAIMED` | Sensitive, exact interrupted lifecycle recovery, HA/restore, exclusive consumption and wider scale are outside the current green design decision. |
+
+The machine-readable UI registry records the same three evidence stages for
+every `DSUI` child: design review may be `PASS` while implementation and release
+remain `NOT_RUN`. A missing runtime artifact can never be represented by the
+design result.
 
 ## 2. Rapid Software Testing posture
 
@@ -124,8 +144,8 @@ the risk or dilute its primary owner.
 | `R-FALSE-PROOF` | P0 | MCP promotes a publish/count to end-to-end truth, agrees with itself while reality differs, or hides a missing child assertion behind a parent pass | `EVD-001`--`EVD-004`, `EVD-009` | Grade 4 |
 | `R-SCOPE` | P0 | A worker, producer, operator, or untrusted read-only MCP evidence client crosses environment/Dataset/partition/pool/swarm/projection scope | `FUN-001`, `SEC-003`, `SEC-008` | Grade 4 |
 | `R-SUPPLY-ROUTE` | P0 | The Dataset module accepts a handcrafted, inferred, forged, expired or superseded supply route, or dispatches after membership/incarnation change, so work reaches the wrong producer, scope or topology and creates an uncontrolled external effect | `FUN-012`, `DUR-003`, `OPS-006` | Grade 4 |
-| `R-SUPPLY-TOPOLOGY` | P0 | A classic, unbounded, wrong-argument or silently recreated queue is accepted instead of `DATASET_SUPPLY_QUORUM_V1`, so supply is lost/duplicated, Rabbit loops on topology drift, or shared traffic resources are exhausted | `FUN-012`, `DUR-003`, `PER-008`, `OPS-002`, `OPS-006` | Grade 4 |
-| `R-CONTROL-PLANE-BYPASS` | P0 | A swarm template/plan/start/stop/remove/config/status event bypasses canonical `ph.control`, or Dataset supply/hints enter a control queue, creating dual command ownership, unvalidated routing, lost status/outcome correlation or control-plane starvation | `PER-008`, `OPS-006`; `DUR-009`/`OPS-009` only for the wider interrupted-command recovery claim | Grade 4 lane/schema/route evidence for MVP; Grade 5 only for `Q-PLATFORM-RECOVERY-v1` |
+| `R-SUPPLY-TOPOLOGY` | P0 | The controller-selected canonical WorkItem route has undeclared or unqualified durability, bounds, confirm, redelivery, acknowledgement, delivery-limit or dead-letter semantics; topology drift is silently recreated/downgraded, Rabbit loops on mismatch, or shared traffic resources are exhausted | `FUN-012`, `DUR-003`, `PER-008`, `OPS-002`, `OPS-006` | Grade 4 on the exact controller-owned route/profile; Grade 5 at named capacity/endurance |
+| `R-CONTROL-PLANE-BYPASS` | P0 | A swarm template/plan/start/stop/remove/config/status event bypasses canonical `ph.control`; supply is sent before the exact producer has a fresh successful start outcome plus `RUNNING`/input-ready/topology-fence observation; or Dataset supply enters a control queue, creating dual command ownership, lost correlation, work addressed to a stopped/stale producer or control-plane starvation | `FUN-012`, `PER-008`, `OPS-006`; `DUR-009`/`OPS-009` only for the wider interrupted-command recovery claim | Grade 4 two-stage lane/schema/order/freshness/route evidence for MVP; Grade 5 only for `Q-PLATFORM-RECOVERY-v1` |
 | `R-LIVE-RESIZE` | P0 | Raising the target above both the prior target and current effective supply opens no fill cycle; a same/lower target is misclassified as an increase; lowering deletes/deprovisions data or invalidates an active safe view; a stale policy wins; or an accepted command is presented as convergence | `FUN-006`, `LIF-001`, `LIF-009`, `LIF-013`, `PER-005` | Grade 4 deterministic transition/fault evidence; Grade 5 in the 24-hour profile |
 | `R-PROJECTION` | P0 | A mixed/stale/wrong-scope snapshot or final slot mapping sends the wrong record, generation, or context to the SUT | `FUN-004`--`FUN-005`, `LIF-003` | Grade 4 |
 | `R-ACTIVATION` | P0 | A selector/auth revision activates before every exact final processor can resolve it, or a forged/mutated WorkItem payload, reference, prepared model, stage chain, or destination is accepted | `FUN-004`--`FUN-006`, `SEC-014`, `EVD-001` | Grade 4; stress at Grade 5 |
@@ -156,7 +176,7 @@ the risk or dilute its primary owner.
 | `R-SHARED-INFRA` | P1 | Embedded Dataset work or Rabbit/PostgreSQL flow, pool, lock or I/O contention damages existing PocketHive control/data planes in the same JVM and deployment | `PER-003`, `PER-008`, `PER-010` | Grade 5 |
 | `R-REDIS-REGRESSION` | P1 | Additive feature changes Redis datasets, sequences, auth, debug, or state-loop semantics | `DUR-006`, `EVD-005` | Grade 4 |
 | `R-KEY-LOSS` | P1 | Rotation/restore or a rolled-back, divergent or unverifiable key manifest/floor loses the KEK/DEK required for live rows/backups, activates the wrong key state, or falls back insecurely | `SEC-004`--`SEC-006`, `SEC-010`, `SEC-013`, `SEC-016` | Grade 4; restore claim at Grade 5 |
-| `R-CLAIM-INFLATION` | P1 | A core, two-swarm/shared/reusable result is advertised as enterprise-sensitive, 30-swarm, isolated, consumable, HA, PCI, or universal capacity | `FUN-008`, `PER-006`--`PER-007`, section 27.4, section 28.8 | Grade 5 per distinct performance/HA claim and the exact sensitive gate for a sensitive claim |
+| `R-CLAIM-INFLATION` | P1 | A core, two-swarm/shared/reusable result is advertised as enterprise-sensitive, 30-swarm, isolated, consumable, HA, restricted-data compliant, or universal capacity | `FUN-008`, `PER-006`--`PER-007`, section 27.4, section 28.8 | Grade 5 per distinct performance/HA claim and the exact sensitive gate for a sensitive claim |
 | `R-EVIDENCE-LOAD` | P1 | Per-transaction proof, scanning, or MCP polling becomes the bottleneck or drops evidence silently | `EVD-006`, `PER-001`, `PER-008` | Grade 5 |
 | `R-VALIDITY-STARVATION` | P1 | The Dataset module reports sufficient inventory using a weaker minimum while a stricter shared consumer receives no eligible records | `LIF-001`--`LIF-004`, `PER-009`, `OPS-003` | Grade 4; source profile at Grade 5 |
 | `R-REVISION-CHURN` | P1 | Rapid supersession accumulates candidates/deltas, prevents activation, exhausts memory, or lets one slow worker hold every consumer back indefinitely | `FUN-004`, `PER-005`, `PER-008` | Grade 4; stress at Grade 5 |
@@ -175,6 +195,30 @@ the risk or dilute its primary owner.
 The risk owner records evidence gained, new uncertainty, residual exposure, and
 the next charter after each test cycle. Closed means the risk is controlled for
 a named profile, not impossible in every deployment.
+
+#### 4.2.1 Cross-cutting readiness coverage
+
+The following map prevents a locally green UI, broker check or happy-path flow
+from standing in for the whole feature. “Design covered” means the obligation
+has an explicit owner, acceptance link, oracle and future evidence gate; it is
+not runtime evidence.
+
+| Readiness concern | Acceptance/risk coverage | Accountable evidence owner | Required implementation/release evidence |
+|---|---|---|---|
+| Two-stage producer activation | `FUN-012`, `OPS-006`, `R-CONTROL-PLANE-BYPASS`, `R-SUPPLY-ROUTE` | Control-plane owner with Dataset application owner | `CH-30`: when stopped, canonical `swarm-start` on `ph.control`, correlated outcome and fresh exact-incarnation `RUNNING` plus input-ready route observation occur before one bounded `DATASET_SUPPLY`; timeout, stale status, stop/rebind and denied start publish no supply. Already-ready is an idempotent ensure-running decision, not a second lifecycle authority. |
+| Rabbit lane and topology contract | `FUN-012`, `DUR-003`, `PER-008`, `OPS-006`, `R-SUPPLY-TOPOLOGY` | Swarm Controller/Rabbit platform owner | `OR-RABBIT` capture proves every lifecycle event remains on `ph.control`, supply uses only the controller-declared canonical WorkItem route, and the selected route's exact durability, bounds, confirm, ack/redelivery, delivery-limit and DLQ policy passes without adapter declaration or fallback. |
+| 50,000-record support | `FUN-008`, `LIF-001`, `LIF-013`, `PER-001`--`PER-005`, `R-CAPACITY` | Performance QA lead | Grade 5 named profile at 50,000 eligible/55,000 maximum, representative maximum record bytes, two concurrent swarms, restart/backlog/endurance and measured headroom. Until then the wording is “designed for,” never “supports.” |
+| Live target resize | `FUN-006`, `LIF-001`, `LIF-009`, `LIF-013`, `R-LIVE-RESIZE` | Dataset application owner | `CH-02` plus fault tests prove latest-generation coalescing, bounded incremental increase, no delete/deprovision on decrease, active-view safety, stale-fence rejection and separate accepted-versus-converged status. |
+| State scenarios and operator decisions | `OPS-001`--`OPS-009`, `DSUI-STATE-001`--`002`, `R-OPERABILITY`, `R-UI-FALSE-STATE` | UX owner with Operations owner | `CH-35`/`CH-39` cover canonical swarm-runtime, producer-work and Dataset-availability axes independently, keep the finer durable supply-operation ledger separate, and exercise loading, reconciling, stale, limited, denied, empty, incompatible, failed, starved and uncertain presentations. |
+| Durable scheduling, outbox and recovery | `DUR-001`--`DUR-005`, `OPS-002`, `OPS-005`, `R-DURABLE`, `R-LIVENESS-RECOVERY` | Dataset application owner | PostgreSQL due-index claims, short transactions, transactional outbox, wake-up plus repair sweep, restart reconciliation and no lock held across Rabbit/provider calls pass `CH-06`/`CH-07`. Scenario timeline and worker pacer counters are not reused as Dataset authority. |
+| Reuse and add-back | `FUN-004`, `FUN-008`, `FUN-011`, `DUR-010`, `R-SNAPSHOT-INTEGRITY` | Dataset domain owner | MVP `SHARED` immutable local views prove concurrent non-destructive reuse and therefore require no add-back. Any future exclusive/consumable profile must qualify durable lease holder/token/epoch/expiry and stale-return rejection separately; Rabbit requeue is never the business return. |
+| Fencing and idempotency | `FUN-009`, `FUN-012`, `DUR-002`--`DUR-003`, `R-DURABLE`, `R-TRAFFIC-REPLAY` | Dataset application owner with QA lead | Stable operation/reservation IDs, intent mismatch rejection, database uniqueness, route/claim epochs, stale-commit rejection, ambiguous external effects and publisher-confirm/consumer-ack boundaries pass independent database, Rabbit and provider-ledger checks. |
+| Security, privacy and observability | `SEC-001`--`SEC-008`, `SEC-011`, `EVD-001`--`EVD-006`, `R-LEAK`, `R-SCOPE` | Security owner with Observability owner | Least-privilege identities per lane/API, official-ingress authorization, zero-effect denies, canary scans, redacted bounded telemetry, correlation versus idempotency separation and no values/secrets on `ph.control` or WorkItems pass adversarial checks. |
+| UX, accessibility and responsiveness | `FUN-014`, all 38 `DSUI` children, `R-UI-EXCLUSION`, `R-UI-STALE`, `R-UI-LOAD` | UX owner with Accessibility QA owner | Registry-linked `CH-34`--`CH-40` evidence includes ordered activation/supply/commit gates, orthogonal states, canonical response-to-DOM lineage, keyboard/focus, accessibility tree, screen reader, contrast/forced colours, 200% zoom, 320 CSS-pixel reflow, desktop/tablet/mobile, adverse states and qualified polling load. Screenshots alone cannot pass this row. |
+
+At implementation kickoff each role is resolved to one named person in the
+evidence manifest. An unresolved owner makes the corresponding gate
+`INCONCLUSIVE`; shared ownership does not mean ownerless approval.
 
 ### 4.3 Applicability and MVP scope control
 
@@ -283,7 +327,7 @@ The checked-in
 [UI acceptance registry](managed-test-data-ui-acceptance-registry.json),
 validated by its
 [JSON Schema](managed-test-data-ui-acceptance-registry.schema.json), is the single
-machine-readable Stage-0 traceability source for all 35 `DSUI` child
+machine-readable Stage-0 traceability source for all 38 `DSUI` child
 requirements of `FUN-014`. It records each exact ID, primary and supporting
 charters, principal risks, core applicability and minimum confidence. A linter
 shall compare it with the UI acceptance table and fail on a missing, duplicate,
@@ -310,7 +354,7 @@ checkpoints and named gates, not permission to blur profile boundaries:
 | `M1 Core vertical slice` | Official ingress reaches the embedded non-sensitive Dataset module, PostgreSQL/outbox, controller-issued route lease, snapshot/local projections, two-swarm traffic, refresh, Orchestrator restart, all three read-only MCP tools and the canonical nine-fact proof through `FLOW_PROVEN` using deterministic doubles, and passes the bounded transaction/publish/apply/restart/fence/time/auth/external-effect fault set required by `G-M1-INTERNAL-v1` against independent ledgers | Internal `dataset-dev-synthetic` evidence only; no release, scale, sensitive or enterprise claim |
 | `M2 Qualified core MVP` | `dataset-qualified-core` passes every applicable core parent/child assertion, including feature-scoped PostgreSQL restart recovery, shared-JVM non-interference, independent-oracle faults, `Q-MVP-1K-24H` at 50,000 eligible records/55,000 maximum with live target changes, `Q-KNEE`, Redis compatibility and operations | The exact Dockerised reusable non-sensitive Dataset module in the existing Orchestrator container may be released; `SENSITIVE_TEST` remains rejected and exact interrupted swarm-lifecycle recovery remains an explicit non-claim |
 | `M3 Sensitive enterprise gate` | The exact M2 build/deployment removes or mediates raw Docker control (or qualifies an extracted topology) and additionally passes `Q-SENSITIVE-ENTERPRISE-v1`, including encryption/key anti-rollback, PKI/mTLS sender constraint, least privilege, canonical attestation, shared Orchestrator/container TCB limits and privilege blast radius, egress, canary leakage, hostile input and signed evidence at their required grades | Only the exact qualified profile may admit and advertise `SENSITIVE_TEST`; a partial security pass, unmediated raw Docker control or an unreviewed combined trust boundary permits neither |
-| `M4 Measured extensions` | Each `Q-PLATFORM-RECOVERY-v1`, HA/restore, 30-swarm, HSM, PCI or other deferred profile passes its own complete manifest and gates | Only the independently qualified optional claim |
+| `M4 Measured extensions` | Each `Q-PLATFORM-RECOVERY-v1`, HA/restore, 30-swarm, specialised-cryptography, restricted-data compliance or other deferred profile passes its own complete manifest and gates | Only the independently qualified optional claim |
 
 No milestone waives a P0 control, changes either release bar, or
 allows evidence from a narrower stage to be extrapolated. Promotion records the
@@ -334,12 +378,12 @@ prefer independent observations, and investigate disagreement.
 |---|---|
 | History | Does this preserve existing PocketHive Redis, readiness, routing, status, and restart behaviour? |
 | Image | Does behaviour match the product's enterprise/security posture and avoid misleading operators? |
-| Comparable products | What do mature local-projection, outbox, fenced-work, payment-sandbox, and key-management systems demonstrate, and where is PocketHive different? |
+| Comparable products | What do mature local-projection, outbox, fenced-work, synthetic-data, and key-management systems demonstrate, and where is PocketHive different? |
 | Claims | Does the build satisfy the exact acceptance ID and named profile, not a nearby narrative claim? |
 | User expectations | Can a tester trust that traffic uses safe prepared data continuously without distorting the measurement? |
 | Product | Are adjacent paths, APIs, status fields, schemas, and recovery behaviours internally consistent? |
 | Purpose | Does this solve reusable onboarding/source output for traffic swarms without becoming a generic data platform? |
-| Statutes/standards | Do security, privacy, payment, cryptography, protocol, and dependency-version obligations hold? |
+| Statutes/standards | Do security, privacy, data-protection, cryptography, protocol, and dependency-version obligations hold? |
 
 Production case studies in specification section 33 are Comparable-product
 oracles. They corroborate a mechanism; they cannot pass a PocketHive criterion.
@@ -349,11 +393,10 @@ oracles. They corroborate a mechanism; they cannot pass a PocketHive criterion.
 | Claim | Product observation | Independent oracle required for qualification |
 |---|---|---|
 | Source effect happened once | source operation status/receipt | provider/SUT-double append-only ledger or provider idempotency/status record |
-| Supply reached the exact current producer topology | Dataset-module lease/outbox/publish status | Swarm Controller topology/lease ledger, exact `DATASET_SUPPLY_QUORUM_V1` Rabbit arguments/exchange/routing capture and producer-incarnation receipt |
+| Supply reached the exact current producer topology, after producer readiness | Dataset-module lifecycle decision, lease/outbox/publish status | Correlated `ph.control` start outcome and fresh exact-incarnation `RUNNING`/input-ready observation, Swarm Controller topology/lease ledger, schema-validated capture of the selected canonical WorkItem route and producer-incarnation receipt |
 | Mapped record is semantically correct | Dataset-module receipt, schema result, material projection | separately implemented reference mapper plus provider/source record, relationship and classification ledger |
 | Dataset is fit for its declared use | exact Fitness Contract reference/digest, evaluation ID/input-vector digest, state, `safeUntil`, bounded reasons and evidence references | independently implemented evaluator over the frozen contract, authoritative Dataset snapshot, source/provenance ledgers, trusted time and exact binding environment/use |
 | Record is durable | Dataset-module receipt/proof | read-only PostgreSQL invariant query before and after Orchestrator process/container restart |
-| Hint reached broker | outbox/publish state | Rabbit test capture, return/confirm state, queue counters |
 | Snapshot is complete and authentic | Dataset-module page/hash status and worker-ready acknowledgement | independently generated manifest over exact scope, revision, schema/projection version, ordered record identities, counts, bytes, page ranges and delta-chain continuity |
 | Final materializer/activation/selector revisions applied | worker/controller acknowledgement/status | controlled snapshot server, durable activation ledger, bounded per-revision worker aggregates and deterministic sampled selections |
 | Safe record reached SUT | `FLOW_PROVEN` receipt | external traffic sink matching opaque record/generation and boundary clock |
@@ -385,7 +428,7 @@ generic label such as “logs”, “database” or “test double” is not suf
 | `OR-FITNESS` | Separately implemented Fitness Contract evaluator over the exact contract digest, binding environment/use, authoritative snapshot, provenance and trusted time | It may share immutable input files but no product evaluator/library. Missing inputs or disagreement cannot be converted to `PASS`. |
 | `OR-AUTHZ` | Declarative access-matrix evaluator plus enumeration and zero-effect observations for every official ingress | It uses neither product policy code nor generated policy bindings. A deny passes only when the independent decision agrees and Dataset, dispatch and external-effect ledgers remain unchanged. |
 | `OR-PG` | Scoped read-only PostgreSQL invariant queries for committed records, idempotency outcomes, operations, claims/fences, outbox, schedules, activations, tombstones and accepted-time floors | Queries are owned/reviewed outside the persistence adapter and run only in the approved component-observer profile. Product API success alone cannot establish durable truth. |
-| `OR-RABBIT` | Schema-validated topology/vhost/ACL/queue-argument/routing capture plus publish return, confirm, delivery and acknowledgement history, including proof that every swarm control event used canonical `ph.control` and no supply/hint entered it | Captured by the broker test harness independently of publisher status. A confirm does not prove producer apply or SUT flow, a missed hint does not disprove authoritative reconciliation, and traffic on the wrong lane is a failure even if the receiver happened to act. |
+| `OR-RABBIT` | Schema-validated topology/vhost/ACL/queue-argument/routing capture plus publish return, confirm, delivery and acknowledgement history, including proof that every swarm control event used canonical `ph.control` and no supply WorkItem entered it | Captured by the broker test harness independently of publisher status. A confirm does not prove producer apply, durable Dataset commit or SUT flow, and traffic on the wrong lane is a failure even if the receiver happened to act. |
 | `OR-TIME` | Authenticated reference-clock samples, uncertainty, process/restart/suspend trace and direct observation of each persisted monotonic floor | Independent of the product wall clock and readiness calculation. Unavailable, stale or rolled-back observation makes an expiring safety claim unknown and must reduce eligibility. |
 | `OR-WORKER-SINK` | Worker-local snapshot/materialization/activation and selection ledger joined to the external request/SUT sink by opaque record, generation, binding, revision and transaction IDs | Neither ledger is produced by the central proof composer. It distinguishes installed, activated, selected, attempted and externally accepted facts without promotion. |
 | `OR-UI` | Canonical API-response-to-DOM field lineage, browser network/storage/cache capture, accessibility tree, keyboard/focus/reflow evidence and assistive-technology observations | Uses official ingress and inspects rendered output; screenshots alone are not the oracle. Any client-derived safety decision, hidden-scope aggregate, persisted sensitive state or inaccessible reason fails the corresponding `DSUI` assertion. |
@@ -434,8 +477,10 @@ Continuously check these properties:
   a second identity/overlap fails closed and reserved `REPLENISH` never executes;
 - increasing traffic RPS does not proportionally increase Dataset PostgreSQL,
   provider, or Rabbit operations for one shared reusable Dataset;
-- duplicating/reordering/dropping revision hints changes convergence time, not
-  final authoritative revision or record safety;
+- delaying or losing a non-authoritative reconciliation wake-up changes
+  convergence time, not final authoritative revision or record safety; the
+  PostgreSQL due index and periodic repair sweep remain sufficient for
+  correctness;
 - restarting the Orchestrator process/container changes Dataset-module
   availability within its feature RTO, not acknowledged Dataset truth,
   idempotency outcomes, schedules, claims/fences, activation state or outbox
@@ -447,7 +492,7 @@ Continuously check these properties:
   revoked, wrong-scope/epoch/incarnation or superseded lease publishes nothing;
 - every RabbitMQ swarm template/plan/start/stop/remove/config/status event uses
   the canonical `ph.control` schema, route and queue family; moving one to the
-  WorkItem/hint lane, or moving supply/hints to `ph.control`, is always detected
+  WorkItem lane, or moving supply to `ph.control`, is always detected
   and never produces an equivalent pass;
 - activating a target above both the prior target and current effective supply
   opens one new-version `TARGET_INCREASE` fill cycle; if current effective
@@ -574,9 +619,17 @@ nice-to-have diagnostics:
 - a Swarm Controller topology/lease harness that can register, renew, expire,
   revoke, supersede, forge and mismatch opaque `SupplyRouteLease` values across
   scope, binding version, operation kind, membership epoch and incarnation,
-  with independent Rabbit and producer-receipt capture; it also pre-creates
-  classic, unbounded and wrong-argument queues and detects any silent delete,
-  recreate or downgrade from `DATASET_SUPPLY_QUORUM_V1`;
+  with independent Rabbit and producer-receipt capture; it freezes the exact
+  controller-owned route capability selected for the release profile, mutates
+  its durability/bounds/overflow/confirm/ack/redelivery/delivery-limit/DLQ
+  settings, and detects silent delete, recreate, downgrade or fallback;
+- a two-stage producer-start harness that begins from `STOPPED`, `STARTING`,
+  stale-`RUNNING`, current-`RUNNING`, stop-racing and rebind-racing states;
+  captures the canonical `ph.control` start command/outcome and exact producer
+  status; and proves no reservation/outbox publication can precede a fresh
+  successful start outcome, input-ready observation and matching current route
+  fence. A current already-running producer may satisfy the idempotent
+  ensure-running decision without a duplicate start command;
 - an embedded-module recovery harness that can terminate the Orchestrator
   process/container at every Dataset commit, claim, schedule, outbox, publish,
   activation and reconciliation boundary while independently observing
@@ -685,7 +738,7 @@ questions during debrief.
 | `CH-03 Trusted time` | Try to make expired/revoked material usable through host rollback, restart, lost/stale reference, suspend, forward/backward step, uncertainty growth and exact-boundary scheduling; challenge the persisted floor and fail-closed readiness | independent reference clock, restart trace, persisted-floor observation, request sink | 150 min |
 | `CH-04 Fence/source resume` | Pause an old producer across claim expiry/reassignment; fail/restart between parent and child source steps; force ambiguous outcomes around every checkpoint/direct commit/refresh resolve; seek WorkItem leakage, duplicate parent, broken relationship, stale activation, or blind retry | provider ledger, serializer capture, fence/checkpoint/operation history, resulting SUT flow | 180 min |
 | `CH-05 Snapshot` | Corrupt, truncate, duplicate, reorder, overlap, omit and expire snapshot/delta pages and cursors; vary page boundaries, manifest counts/bytes/digest, schema/projection version, scope and delta-chain ancestry; restart during build/swap and seek partial, mixed, rolled-back or amplified views | controlled snapshot server, independent manifest, heap/thread counters, selection sink | 180 min |
-| `CH-06 Outbox` | Crash at each DB/Rabbit/apply/ack boundary; combine returns with confirms, connection loss, queue full/TTL/DLQ, duplicates, and missing hints | DB invariant, Rabbit capture, outbox/revision history | 150 min |
+| `CH-06 Outbox` | Crash at each database commit, outbox claim, Rabbit publish/return/confirm, delivery, durable producer claim/result and acknowledgement boundary; combine connection loss, queue full/TTL/DLQ, duplicate delivery and relay restart | DB invariant, Rabbit capture, producer receipt and outbox/revision history | 180 min |
 | `CH-07 Dataset restart/liveness` | Restart and repeatedly crash the Orchestrator process/container, including failures before health becomes ready, at every embedded Dataset commit/claim/schedule/outbox/activation boundary and during steady traffic; distinguish feature reconciliation and valid local-worker continuation from any interrupted platform command, and seek premature ready, stale dispatch, loss or duplicate effect | PostgreSQL/outbox/claim/schedule invariants, supervisor/Docker events, worker safe-horizon status and operation/provider/Rabbit ledgers | 180 min |
 | `CH-08 Hot path/shared JVM` | Seek any central call, Dataset-induced CPU or heap-allocation spike, GC pause, thread/executor/JDBC/Rabbit-pool starvation, secret serialization, queue growth, control-latency regression or journal interference across feature-off/idle/active modes in the same Orchestrator JVM | I/O detector, open-loop load, JVM/executor/pool telemetry, control-operation probes and Rabbit/DB/journal telemetry | one baseline cycle |
 | `CH-09 Scale` | For an enterprise claim, step 10/20/30/40/50 shared then isolated swarms; force simultaneous hydration and restart ten while twenty run; find the repeated knee, bulkhead saturation and noisy neighbour without generalising across profiles | complete profile manifest, raw rates/lag/histograms/resources | multiple controlled runs |
@@ -700,7 +753,7 @@ questions during debrief.
 | `CH-18 Traffic replay` | Redeliver/requeue/replay before and after final send, acknowledgement, timeout and restart; reuse and mutate transaction/idempotency keys; distinguish attempts from external effects and try to make an `AT_LEAST_ONCE` result look exactly once | broker capture, immutable offered-ID ledger, external effect ledger, receipt aggregates | 150 min per replay profile |
 | `CH-19 External lifecycle` | Run create/refresh/replace/decommission through concurrent reservations, provider ambiguity, cumulative/rolling limits, partial cleanup, already-deleted and retained-owner entities; apply stale local deltas/projections and rejoin workers after tombstone, seeking resurrection or deletion-in-use | provider inventory, Dataset-module tombstone/operation ledger, worker projection and external cleanup reconciliation | 210 min |
 | `CH-20 Static drift` | Change, close, block, reclassify and delete `STATIC_REUSABLE` entities externally with and without notification; delay validation past its deadline and challenge safe degradation/recovery during 24/7 traffic | independent provider status, verification deadline, selection/request sink | 120 min plus soak |
-| `CH-21 Revision churn` | Publish faster than workers can hydrate; combine supersession, slow/dead worker, lost hint, large delta, memory pressure and activation timeout; test coalescing/skipping rules, candidate and retained-old bounds, fairness and convergence | independent manifest/revision model, memory/lag/ack aggregates, sink | 180 min |
+| `CH-21 Revision churn` | Commit revisions faster than workers can hydrate; combine supersession, slow/dead worker, delayed periodic reconciliation, large delta, memory pressure and activation timeout; test coalescing/skipping rules, candidate and retained-old bounds, fairness and convergence without requiring an extra Rabbit lane | independent manifest/revision model, Dataset API/reconciliation history, memory/lag/ack aggregates and sink | 180 min |
 | `CH-22 Identity/PKI` | Challenge bootstrap, SAN/audience/subject/actor/binding, partial CA/JWKS rollout, renewal overlap, expiry, revocation and stale feed; prove bearer-only sensitive admission fails, replay an mTLS-bound token from another process/key, and attack DPoP proof/nonce/replay where declared; inspect every private-key owner and fallback path | test CA/token service, independent policy oracle, packet/config/audit capture | 210 min per security profile |
 | `CH-23 TCB/leakage` | Compromise or misconfigure the shared Orchestrator process/container, its Docker-control surface, one final processor, host or debug surface; attempt cross-Dataset projection/key access and exfiltration through logs, dumps, swap, hibernation, volumes, IPC, metrics, MCP and crash artifacts; measure scope/time/record/control-plane blast radius and challenge whether the combined boundary is acceptable for the named profile | access matrix, canary scanner, process/host/container/image/Docker-authority inspection, key/projection inventory and independent security review | 210 min per profile |
 | `CH-24 Control/read-only MCP abuse` | Flood definitions, bindings, hydration, refresh, proof scans and bounded read-only MCP status/proof loops by one and many principals; use hostile pagination, retries and cancellation; repeat the `CH-12` cross-path deny under load and seek authorization/admission bypass, any durable/external effect, unbounded work or traffic-path resource theft | independent policy oracle, durable Dataset/dispatch/provider ledgers, per-principal/scope bulkhead metrics, traffic non-interference | 180 min |
@@ -709,7 +762,7 @@ questions during debrief.
 | `CH-27 Game day` | Combine asymmetric network partitions, slow links, clock uncertainty, partial certificate/key rollout, stale-node rejoin, broker/database degradation and operator error while traffic continues; test decision authority, communications, safe-idle and recovery runbooks | independent incident timeline, supervisor/network events, all durable/external ledgers | 4 h plus debrief |
 | `CH-28 Evidence authenticity` | Remove, replace, reorder, backdate and selectively regenerate raw artifacts; sign a `CoreQualificationAttestation/v1` or export with the wrong/expired/purpose-mismatched identity; mutate or transplant its stable qualification-lineage subject key, child/build/image/deployment/registry/pack digests, sequence/previous digest, full subject chain or witness journal; replay an old valid prefix/stale build, replace the lineage, inject torn/half-committed state, break timestamp trust and perform clean-room verification | independent attestation, subject-key, canonical witness replay and detached signature/timestamp verifiers, candidate/activation/head receipts, immutable evidence index and reviewer identity chain | 180 min |
 | `CH-29 Restore non-resurrection` | For `Q-HA-RESTORE-v1`, restore backup/PITR points before and around newer deletions with absent/older/corrupt/divergent subject chains or witness journals; attempt to omit/lower an unexpired deletion A when adding B, retire A before its backup horizon, transplant a scope key and replay an old valid prefix. Rejoin stale workers and reconcile post-restore provider effects before attempting selection | destructive isolated restore, signed cumulative deletion ledger, physical/qualified witnessed head and independent map/replay oracle, provider inventory and traffic sink | 270 min per restore profile |
-| `CH-30 Supply route/topology` | Register, renew, expire, revoke, replay and supersede a `SupplyRouteLease`; mutate scope/binding version/operation kind/epoch/incarnation and swap topology during dispatch; attempt raw/inferred routes; pre-create classic/unbounded/wrong-argument queues and seek silent delete/recreate/downgrade or `PRECONDITION_FAILED` retry loops. Move each canonical swarm control event off `ph.control`, and inject supply/hints into control queues, to prove lane/schema enforcement and control responsiveness | independent Swarm Controller topology/lease ledger, exact schema-validated Rabbit lane/descriptor/route capture, producer receipt and provider ledger | 240 min |
+| `CH-30 Supply activation/route/topology` | Start from stopped, starting, stale-running, current-running, stop-racing and rebind-racing producers. Prove an idempotent ensure-running decision uses canonical `ph.control` whenever lifecycle change is required and that correlated success plus fresh exact-incarnation `RUNNING`, input-ready and route-fence observations precede reservation/outbox publication. Deny, delay, reorder and contradict each observation and require zero supply. Register, renew, expire, revoke, replay and supersede a `SupplyRouteLease`; mutate scope/binding version/operation kind/epoch/incarnation, selected route capability and topology during dispatch; attempt raw/inferred/fallback routes; vary durability, bounds, overflow, confirm, ack/redelivery, delivery limit and DLQ settings; seek silent delete/recreate/downgrade or `PRECONDITION_FAILED` loops. Move each canonical swarm control event off `ph.control`, and inject supply into control queues, to prove the exact three-lane schema/order boundary and control responsiveness | independent Swarm Controller lifecycle/topology/lease ledger, correlated control command/outcome/status capture, exact schema-validated Rabbit lane/capability/route history, producer receipt and provider ledger | 270 min |
 | `CH-31 Q-PLATFORM-RECOVERY-v1` | Only when `Q-PLATFORM-RECOVERY-v1` is requested, stop a dynamic Swarm Controller, its Orchestrator owner, Docker and host before/after desired-runtime and every create/config/start/stop/remove command boundary; inject competing/stale controller incarnations, missing/duplicate actual instances, running-unhealthy and crash loops; attempt mutation/dispatch before exact plan/config/worker/topology/lease convergence | durable command/desired-runtime rows, Orchestrator/controller journals, Docker events/inventory, controller/route/worker state and provider/DB ledgers | 210 min |
 | `CH-32 Profile gate` | Enter only the separately authorised `QUALIFICATION_CANDIDATE`, remove/fail one required core child at a time, forge/replay/stale/transplant the signed activation attestation or stable lineage, truncate/reorder its subject chain/journal, reset the witnessed head and change build/image/deployment contract before activation; verify general navigation remains hidden and only exact full-chain + latestBySubject + atomic database activation enables capability. Under `dataset-qualified-core`, submit `SENSITIVE_TEST`, downgrade/mislabel classifications and query UI/API/MCP claims; then repeat on the exact enterprise-sensitive candidate with one required child removed | independent applicability/attestation/subject-key/witness-replay evaluator, candidate token and activation/head audit, official admission/status/MCP APIs, DB/Rabbit/canary scan and signed manifest | 240 min per release gate |
 | `CH-33 Dataset fitness` | With adequate counts, attempt start and selection under wrong cohort, broken relationships, stale/short-lived records, missing provenance/classification, wrong environment/use, `FAIL`, `UNKNOWN`, forged/mismatched receipt and superseded contract. Cross the exact `safeUntil`, require zero unsafe sink use, recover to `PASS`, and repeat through refresh, outage and restart | frozen Fitness Contract, independent evaluator, authoritative Dataset/source/provenance snapshots, trusted time, manifest/activation receipt, worker I/O detector, readiness and external traffic sink | 180 min per contract version |
@@ -795,9 +848,11 @@ Use this checklist during both automated design and exploratory sessions:
 - **Routing/topology**: absent, expired, revoked, forged, replayed or superseded
   `SupplyRouteLease`; wrong source-binding version, operation kind, membership
   epoch, producer incarnation, exchange or routing key; topology rebind between
-  lease validation and publish; handcrafted/inferred route input; classic,
-  unbounded or wrong-argument queue in place of `DATASET_SUPPLY_QUORUM_V1`,
-  `PRECONDITION_FAILED`, and prohibited delete/recreate/downgrade fallback.
+  lease validation and publish; handcrafted/inferred route input; stopped,
+  starting or stale-ready producer; start timeout/denial; supply-before-ready;
+  wrong durability, bound, overflow, confirm, ack/redelivery, delivery-limit or
+  DLQ settings for the selected controller-owned route; `PRECONDITION_FAILED`;
+  and prohibited delete/recreate/downgrade/fallback.
 - **Release profile**: core-only classification downgrade or alias, stale/forged
   qualification evidence, build/image/profile drift after pass, partial child
   coverage and UI/API/MCP claim above the highest passed gate.
@@ -954,12 +1009,12 @@ oracles and fault realism.
 
 | Layer | Required checks |
 |---|---|
-| Contract/static | JSON/OpenAPI/AsyncAPI and executable common Dataset/Fitness Contract/mapping/selection/snapshot-manifest/`SupplyRouteLease`/`DATASET_SUPPLY_QUORUM_V1`, cancellation, core key/floor/witness and qualification-attestation compatibility; strict fields/types/ranges/default/null/coercion; cross-adapter canonical vectors freeze genesis baseline/provider-evidence union, subject keys, framed journal bytes, entry/extend digests, replay/latestBySubject, CAS/predecessor/idempotency/fork and stable receipt semantics identically for TPM and remote/WORM adapters; schema-valid 35-ID `DSUI` registry and lifecycle child-registry lint; architecture fitness tests enforce inward dependency direction, keep domain/application code free of JDBC/Rabbit/HTTP/Docker/UI/TPM frameworks, require infrastructure adapters to implement small owned ports without canonical security logic, prohibit cross-adapter calls, and prevent SDK/common modules importing persistence/application internals; exact three-tool read-only Dataset MCP catalogue with no value/write tool; all `DSUI` REST/read DTO and Java/TypeScript drift checks; production bundle/import scan proving no wireframe/test fixture; closed reason codes; security/replay/decommission/release profile; no caller-authored route or Rabbit-argument fields; redaction model; dependency/image support; SBOM/secret/image/witness-prerequisite scan |
+| Contract/static | JSON/OpenAPI/AsyncAPI and executable common Dataset/Fitness Contract/mapping/selection/snapshot-manifest/`SupplyRouteLease`/controller-owned WorkItem route capability, cancellation, core key/floor/witness and qualification-attestation compatibility; strict fields/types/ranges/default/null/coercion; cross-adapter canonical vectors freeze genesis baseline/provider-evidence union, subject keys, framed journal bytes, entry/extend digests, replay/latestBySubject, CAS/predecessor/idempotency/fork and stable receipt semantics identically for TPM and remote/WORM adapters; schema-valid 38-ID `DSUI` registry with explicit design/implementation/release evidence stages and lifecycle child-registry lint; architecture fitness tests enforce inward dependency direction, keep domain/application code free of JDBC/Rabbit/HTTP/Docker/UI/TPM frameworks, require infrastructure adapters to implement small owned ports without canonical security logic, prohibit cross-adapter calls, and prevent SDK/common modules importing persistence/application internals; exact three-tool read-only Dataset MCP catalogue with no value/write tool; all `DSUI` REST/read DTO and Java/TypeScript drift checks; production bundle/import scan proving no wireframe/test fixture; closed reason codes; security/replay/decommission/release profile; no caller-authored route or Rabbit-argument fields; redaction model; dependency/image support; SBOM/secret/image/witness-prerequisite scan |
 | Unit/property/model | trusted-time monotonicity across restart; validity-demand and Fitness Contract controlled-change monotonicity under frozen evidence/time; capacity, single Supply Policy/controller ownership and cumulative external-entity accounting; cancellation-intent/idempotency/provider-effect race model; immutable-generation/temporal/decommission/tombstone state; claim/route fencing and send gate; Dataset PostgreSQL/outbox/schedule recovery; revision/snapshot/Dataset-auth activation; selector/stage canonicalization and digest vectors; release-gate and qualification-head monotonicity; selection distribution; canonical proof; encryption envelope/nonce allocation; witnessed subject chains including post-init C0/H0/Names/attributes, torn-tail recovery, counter/extend half-transitions, old-prefix and subject-key transplant, same/unrelated-subject races, lost-response receipt reconstruction, deletion-map omit/decrease/retirement and write-budget admission; durable desired Swarm Controller-runtime ownership only for its separate platform claim |
 | Formal/model-based | executable custom-protocol model explores Dataset crash, reorder/loss, stale claim/lease/incarnation, cancellation before/during/after ambiguous provider effect, PostgreSQL/outbox recovery, key/qualification witnessed-head transitions including torn frames, subject forks and unrelated advances, clock rollback, supersession, replay and MVP stale-state/tombstone resurrection; a separate platform extension explores desired/actual Swarm Controller-runtime divergence, and an isolated restore extension covers cumulative witnessed deletion dominance/retirement under `Q-HA-RESTORE-v1`; every discovered counterexample has a regression scenario and documented implementation assumption |
 | Data/policy conformance | product mapper versus independent reference mapper for identity, relationships, classification, projection and batch accounting; product Fitness Contract result versus the independent evaluator over frozen authoritative evidence; product authorization versus independent access-matrix evaluator; mutation suite proves every oracle detects seeded defects |
 | Component | Dataset-schema constraints/expand-contract migrations/queries, claim/cancel concurrency, outbox relay and embedded-module restart reconciliation; common-contract serialization compatibility; worker-SDK bounded candidate/local hydration/atomic swap/manifest-bound Fitness receipt/safe-horizon/activation; manager-SDK DatasetGuard/readiness aggregation; Swarm Controller topology-to-lease registry; module-owned key/nonce update-before-use rotation through full-chain and monotonic-witness ports, snapshot manifest/pagination, direct source committer/refresh resolver, managed auth resolver and provider drift/cleanup adapters; one-shot qualification append/witness/activation; desired-controller-runtime owner/reconciler only for the separate platform claim |
-| Protocol/integration | mandatory Rabbit returns/confirms/acks/redelivery/replay; opaque `SupplyRouteLease` register/renew/revoke/rebind and publish race; canonical quorum descriptor drift and no-delete/recreate/downgrade behaviour; immutable transaction/idempotency identity; TLS/workload identity and CA/JWKS rotation; read-only MCP Protected Resource Metadata, RFC 8707 resource/audience validation, no token pass-through, token exchange, RFC 8705 mTLS sender constraint, declared DPoP ingress, revocation and separate stdio credential behavior; Orchestrator Dataset port-to-worker SDK scope; revision/auth activation; module liveness and controller lifecycle boundaries |
+| Protocol/integration | mandatory two-stage ensure-running/start-readiness-supply ordering; canonical `ph.control` command/outcome/status correlation; current exact-incarnation input-ready and route-fence observation; Rabbit returns/confirms/acks/redelivery/replay; opaque `SupplyRouteLease` register/renew/revoke/rebind and publish race; selected controller-owned WorkItem route capability drift and no-delete/recreate/downgrade/fallback behaviour; immutable transaction/idempotency identity; TLS/workload identity and CA/JWKS rotation; read-only MCP Protected Resource Metadata, RFC 8707 resource/audience validation, no token pass-through, token exchange, RFC 8705 mTLS sender constraint, declared DPoP ingress, revocation and separate stdio credential behavior; Orchestrator Dataset port-to-worker SDK scope; revision/auth activation; module liveness and controller lifecycle boundaries |
 | Official-ingress E2E | direct source path through the embedded module and current leased route to durable commit, authorised cancellation with conclusive/ambiguous/late provider outcomes, Fitness Contract evaluation, coordinated hydration/auth/SUT use/proof, vars and admission, candidate-to-signed-witnessed qualification activation, feature-scoped Orchestrator restart/reconciliation, restart-time key/state rollback, stricter shared validity, traffic replay, external decommission/tombstone, static revalidation, core rejection of sensitive admission and Redis compatibility; exact interrupted swarm lifecycle is a separate platform suite |
 | Operator UI | `CH-34`--`CH-40`; canonical response-to-DOM comparison for inventory, all five detail views, Swarm dependencies and real Runtime Inspector; every `DSUI` loading/current/background/stale/partial/reconciling/empty/denied/limited/unavailable/incompatible state; authorised totals/facets/cursors, no client decision inference, hostile identifiers, cache/storage identity changes, link/back/focus/keyboard/screen-reader/zoom/reflow and Firefox viewports; API/UI/MCP fact and denial convergence; adverse-state remediation and producer/cleanup ownership truth |
 | Security/adversarial | canaries; independent permissions/enumeration/audience/actor decisions, including cancel-command zero-effect denial and zero-effect denial across existing generic workflow/swarm/MCP routes; attestation/canonicalization tamper/replay/truncation; early-auth/source serialization; hostile bounded read-only MCP loops; malformed inputs; proxy/SSRF; PKI/mTLS/DPoP replay; shared Orchestrator/Dataset process/container and Docker-control TCB compromise/artifacts; sensitive-profile denial while raw Docker control remains unmediated; unsafe profile rejection; crypto/key/manifest/floor/physical-witness/restore faults including reset, emulation, lockout and coordinated rollback |
@@ -1041,7 +1096,7 @@ by accepting schedule risk.
 
 | Gate | PASS requires | PASS permits | PASS does not permit |
 |---|---|---|---|
-| `G-TEAM-REVIEW-v1` | Lifecycle, assurance, UI specification, wireframe/README and the schema-valid 35-ID `DSUI` registry have zero known deterministic contract or safety-copy contradiction; canonical operation/proof/revision/supply semantics have one authority; every remaining product/architecture choice is visibly labelled as a decision with owner and due point; primary and adverse journeys can be reviewed; status and meeting brief say Grade 0 and list non-claims | Internal Product/Architecture/UX/QA/Operations/Security discovery and Three Amigos decisions | Architecture approval, implementation estimate/commitment, behavioural evidence, release or scale/security claim |
+| `G-TEAM-REVIEW-v1` | Lifecycle, assurance, UI specification, wireframe/README and the schema-valid 38-ID `DSUI` registry have zero known deterministic contract or safety-copy contradiction; canonical operation/proof/revision/supply semantics have one authority; every remaining product/architecture choice is visibly labelled as a decision with owner and due point; primary and adverse journeys can be reviewed; status and meeting brief say Grade 0 and list non-claims | Internal Product/Architecture/UX/QA/Operations/Security discovery and Three Amigos decisions | Architecture approval, implementation estimate/commitment, behavioural evidence, release or scale/security claim |
 | `G-IMPLEMENTATION-READY-v1` (`M0`) | `G-TEAM-REVIEW-v1` plus approved canonical architecture/REST/event/common schemas; ports/adapters and dependency direction are enforceable; the full `EVD-009` parent/child registry, applicability matrix, oracle ownership, model/TCK plan, supported dependency baseline, first real source/SUT profile and measurable outcome are closed; no unresolved P0 design blocker or dual authority remains | Estimation and implementation of the named M1 vertical slice through official ports/ingress | Release, production readiness, `dataset-qualified-core`, sensitive, HA or scale claim |
 | `G-M1-INTERNAL-v1` | The exact M1 build passes deterministic component/TCK checks and the official-ingress vertical slice against independent database/outbox/Rabbit/worker/traffic/provider ledgers. The bounded M1 fault set injects before/after Dataset transaction commit, outbox publish/confirm, worker apply/activation, Orchestrator restart/reconciliation, claim/route fence validation, Trusted-Time loss/rollback, authorisation deny/revoke and provider-call ambiguous/late effect; each run proves the declared single durable/accounted outcome, zero effect for denied/stale work, and no secret/value leakage or request-time central Dataset I/O. All counterexamples, failures and limitations are retained, and the build labels itself `dataset-dev-synthetic` | Internal learning, demonstrations and retargeting charters | Customer/release readiness or extrapolation to operational capacity/security |
 | `dataset-qualified-core` (`M2`) | Every applicable core parent/child assertion passes at its required grade, all six applicable loss themes are controlled, `EVD-009` is complete, no unexplained oracle disagreement remains, and the exact manifest passes the operational/non-interference profile below | Release of only the exact reusable `NON_SENSITIVE_SYNTHETIC` core profile | `SENSITIVE_TEST`, interrupted swarm-lifecycle recovery, HA/restore, 30-swarm, consumable/exclusive/ordered/transaction-bound or other unqualified claim |
@@ -1125,8 +1180,11 @@ Before a release or new support claim, confirm:
   OpenAPI/AsyncAPI, proof/operation values, snapshot semantics, UI copy and the
   acceptance registry agree with no compatibility fallback;
 - `managed-test-data-ui-acceptance-registry.json` validates against its pinned
-  schema, contains exactly the 35 current `DSUI` IDs once each under `FUN-014`,
-  and its digest is present in the complete `EVD-009` run evidence index;
+  schema, contains exactly the 38 current `DSUI` IDs once each under `FUN-014`,
+  gives every child one accountable evidence owner and explicit design,
+  implementation and release evidence stages, and has its digest present in
+  the complete `EVD-009` run evidence index. A design `PASS` cannot populate or
+  promote either later stage;
 - `FUN-014` and every applicable `DSUI` child have linked evidence; production
   `ui-v2` uses only authorised canonical Orchestrator read models, contains no
   wireframe/test-fixture fallback, exposes no Dataset value or mutation control,
@@ -1163,9 +1221,18 @@ Before a release or new support claim, confirm:
 - every supply dispatch passes `FUN-012` using a current opaque Controller-
   issued `SupplyRouteLease`; no caller-supplied, inferred or fallback route
   exists, and rebind fences the prior topology/incarnation;
-- Swarm Controller alone creates and verifies `DATASET_SUPPLY_QUORUM_V1`; an
-  existing classic/unbounded/wrong-argument queue fails reconciliation before
-  producer start, with no delete/recreate, silent downgrade or retry loop;
+- every lifecycle change needed for supply is issued by the existing
+  Orchestrator/Swarm Controller through canonical `ph.control`; a correlated
+  successful outcome and fresh exact-incarnation `RUNNING`, input-ready and
+  route-fence observation precede reservation/outbox publication. Start denial,
+  timeout, stale observation, stop or rebind publishes no supply; a current
+  already-running producer is handled as an idempotent ensure-running result;
+- Swarm Controller alone creates and verifies the selected canonical WorkItem
+  route capability. The release profile freezes and qualifies its durability,
+  bounds, overflow, confirms, manual acknowledgement/redelivery,
+  delivery-limit and dead-letter semantics; mismatched topology fails
+  reconciliation before supply, with no adapter declaration, delete/recreate,
+  silent downgrade, retry loop or fallback route;
 - the Orchestrator-owned Dataset module in the existing container passes the
   feature-scoped children of `DUR-001`--`DUR-005`, `OPS-005` and `OPS-007`:
   repeated process/container restart preserves PostgreSQL truth and resumes

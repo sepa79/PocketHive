@@ -1,7 +1,8 @@
 # Managed Datasets Operator UI Design Specification
 
-Status: in progress — Grade 0 planning baseline; `G-TEAM-REVIEW-v1` passed
-for internal concept feedback; implementation and qualification evidence pending
+Status: team-review-ready — planning/design assessment **green** under
+`G-TEAM-REVIEW-v1`; implementation, accessibility and release qualification
+evidence remain pending
 
 Decision target: PocketHive Managed Datasets read-only operator experience
 
@@ -149,6 +150,48 @@ reports a present integer value of zero.
 | PocketHive MCP | Reuse the same product-owned status/proof services for its three read-only tools; it is not called by the browser |
 | PostgreSQL | Durable Dataset authority and source of committed read projections |
 | Redis/Rabbit/runtime debug | Operational mechanisms or diagnostics; never a browser-side Dataset authority |
+
+The Managed Dataset application owns the decision to reconcile a deficit, but
+it does not become a second swarm lifecycle authority. Its application core
+depends on two small outbound ports:
+
+- `SwarmLifecyclePort.ensureRunning`, implemented by the existing Orchestrator
+  lifecycle path and Swarm Controller through the canonical `ph.control` plane;
+  and
+- `WorkDispatchPort.dispatch`, implemented by the Dataset outbox publisher on
+  the controller-issued canonical WorkItem route.
+
+This produces one mandatory two-stage gate. When the producer is stopped,
+Orchestrator first issues canonical `swarm-start` and waits for its matching
+outcome plus a fresh `RUNNING`, input-enabled and route-ready observation. When
+the producer is already healthy-idle, no duplicate start is required, but the
+same fresh readiness gate still applies. Only then may the Dataset outbox
+publish the bounded metadata-only `DATASET_SUPPLY` WorkItem. The producer
+commits its typed result through the Dataset application/API; only PostgreSQL's
+durable receipt advances Dataset truth.
+
+```mermaid
+flowchart LR
+  DR[Dataset reconciler<br/>desired versus observed]
+  LP[Existing Orchestrator lifecycle path]
+  CP[ph.control<br/>swarm-start and status]
+  SC[Swarm Controller<br/>lifecycle, readiness and route]
+  WP[Canonical WorkItem route<br/>DATASET_SUPPLY]
+  PS[Producer swarm<br/>source flow]
+  API[Dataset application/API<br/>claim, checkpoint and commit]
+  PG[(PostgreSQL<br/>durable truth and receipts)]
+
+  DR -->|1. ensure running| LP --> CP --> SC
+  SC -->|fresh RUNNING + input + route| DR
+  DR -->|2. dispatch bounded work| WP --> PS
+  PS -->|typed result| API --> PG
+```
+
+`DSUI-ARCH-004`: Every operator flow diagram, state view and operation detail
+shall keep control-plane lifecycle, WorkItem supply, producer execution and
+durable Dataset commit as four named boundaries. It shall not imply that
+`swarm-start` contains supply demand, that `DATASET_SUPPLY` can start a swarm,
+or that a Rabbit acknowledgement is a Dataset completion receipt.
 
 `DSUI-ARCH-001`: The browser shall call authenticated Orchestrator APIs only.
 It shall not call PostgreSQL, Redis, Rabbit Management, Docker, Dataset worker
@@ -377,7 +420,7 @@ contractually distinct:
 6. selector application;
 7. a particular swarm's start decision;
 8. a running consumer's continue/pause decision; and
-9. proof facts such as broker acceptance or flow use.
+9. proof facts such as bounded supply-WorkItem transport acceptance or flow use.
 
 The browser shall not promote one fact from another.
 
@@ -532,6 +575,51 @@ Target size is labelled `Desired eligible inventory`. It shall not be
 described as transaction count, traffic rate, scheduler messages, usage limit
 or Redis-list length. The MVP UI is read-only and provides no target-edit
 control.
+
+#### 4.6.1 Orthogonal runtime states
+
+The Supply view shall present the following returned facts as independent
+dimensions rather than one overloaded status:
+
+| Dimension | Example values | Operator question |
+|---|---|---|
+| Dataset status-scope health | `WARMING`, `READY`, `DEGRADED`, `STARVED`, `UNKNOWN` | Is this exact Dataset selection safe for its declared use? |
+| Producer swarm runtime | `READY`, `RUNNING`, `STOPPED`, `FAILED`, `UNKNOWN` | Is the swarm runtime operational under the existing control plane? |
+| Producer workload | `IDLE`, `CLAIMED`, `EXECUTING`, `COMMITTING`, `FAILED`, `UNCERTAIN` | Is this running producer currently doing Dataset work? |
+| Supply operation | `RESERVED`, `QUEUED`, `RUNNING`, terminal states, `UNCERTAIN` | What happened to this bounded durable operation? |
+| Policy convergence | `STABLE`, `FILLING_TO_TARGET`, `APPLYING_SMALLER_VIEW`, `BLOCKED`, `PAUSED`, `UNKNOWN` | Have requested, active and swarm-applied targets converged? |
+| Durable store | committed revision or unavailable fact | What result has PostgreSQL actually accepted? |
+
+Healthy-idle is therefore `producer swarm=RUNNING` plus `producer
+workload=IDLE`; it is not stopped, failed or still executing. Likewise, a
+committed Dataset can be below target while the policy is filling. The UI shall
+not colour or relabel one dimension from another.
+
+`DSUI-SEM-003`: Any compact Supply status shall expose these underlying named
+dimensions in the same view. It shall not derive producer workload from swarm
+runtime, derive durable completion from broker delivery, or derive Dataset
+health from target convergence alone.
+
+#### 4.6.2 Reuse, add-back and the capacity claim
+
+The reusable MVP supports only declared `SHARED` allocation. Workers hydrate a
+bounded immutable local view and select every eligible record before local
+reuse under the frozen selector. Selection removes no record from PostgreSQL or
+RabbitMQ, so there is no Managed Dataset add-back command. The existing opt-in
+Redis pop/push loop remains separately labelled legacy behavior and is not
+presented as an atomic borrow/return guarantee.
+
+`EXCLUSIVE_LEASE`, consumable, single-use, ordered and transaction-bound
+allocation are deferred. If such a binding reaches the MVP read model, the UI
+shall show the returned unsupported-allocation result and shall not silently
+render it as `SHARED`.
+
+The release profile's exact 50,000 eligible-record target, 55,000 maximum and
+two concurrent consumer swarms are qualification inputs, not current support
+evidence. Before the named capacity, live-resize, restart, redelivery and
+non-interference qualification passes, copy shall say `Designed for the
+50,000-record qualification profile` or `Not yet proven`; it shall never say
+`Supports 50,000 records`.
 
 ### 4.7 Time and horizon semantics
 
@@ -977,7 +1065,7 @@ The proof request body is closed:
 DatasetProofQuery/v1 {
   snapshotToken
   level:
-    CONFIGURED | SOURCED | PERSISTED | BROKER_ACCEPTED |
+    CONFIGURED | BROKER_ACCEPTED | SOURCED | PERSISTED |
     FINAL_MATERIALIZER_APPLIED | TRAFFIC_ACTIVATED |
     SELECTOR_APPLIED | READY | FLOW_PROVEN
   claimTarget:
@@ -990,7 +1078,8 @@ DatasetProofQuery/v1 {
     | DeliveryAttemptTarget {
         kind: DELIVERY_ATTEMPT
         deliveryAttemptRef: opaque-ref
-        destinationClass: DATASET_HINT
+        destinationClass: WORKITEM_SUPPLY
+        operationRef: opaque-ref
       }
     | BindingTarget { kind: BINDING, bindingSnapshotId: opaque-ref }
   claimContext:
@@ -1000,18 +1089,24 @@ DatasetProofQuery/v1 {
 }
 ```
 
-`STATUS_SCOPE` is required for `CONFIGURED`; `OPERATION` for `SOURCED`
-and `PERSISTED`; `DELIVERY_ATTEMPT` for `BROKER_ACCEPTED`; and
+`STATUS_SCOPE` is required for `CONFIGURED`; `DELIVERY_ATTEMPT` for
+`BROKER_ACCEPTED`; `OPERATION` for `SOURCED` and `PERSISTED`; and
 `BINDING` from `FINAL_MATERIALIZER_APPLIED` through `FLOW_PROVEN`. The
 `SOURCED` and `PERSISTED` are restricted to `PROVISION_NEW`,
 `REPLACE_RECORD`, or `REFRESH_MATERIAL`; validation/deprovision is outside the
 closed proof target schema. `SOURCED` requires the successful fully accounted
 provider/source result; `PERSISTED` additionally applies the parent
 specification's positive durable-result and duplicate-match predicates. A
-`BROKER_ACCEPTED` target is
-restricted to the `DATASET_HINT` destination class. The
-client never authors a `Fact<T>` wrapper or observation metadata for an input
-reference. `kind: NONE` is required outside `FLOW_PROVEN`. A `FLOW_PROVEN` query
+`BROKER_ACCEPTED` is restricted to one bounded `DATASET_SUPPLY` WorkItem
+delivery attempt: `destinationClass=WORKITEM_SUPPLY`, with the exact durable
+supply `operationRef`. The service verifies that the attempt used the current
+controller-issued fenced route for that operation. A pass means publisher
+confirm plus no unroutable return for that exact transport attempt only. It
+does not prove consumer acknowledgement, producer claim/execution, source
+effect, Dataset persistence or a terminal PostgreSQL receipt; its
+`authoritativeRevision` is structurally not applicable. The client never
+authors a `Fact<T>` wrapper or observation metadata for an input reference.
+`kind: NONE` is required outside `FLOW_PROVEN`. A `FLOW_PROVEN` query
 requires exactly one transaction or interval variant. Missing, dual,
 mismatched, or extra reference fields fail schema validation. The request
 contains no record value or free-text search.
@@ -1028,7 +1123,7 @@ DatasetProof/v1 {
   requestId
   proofId
   requestedLevel:
-    CONFIGURED | SOURCED | PERSISTED | BROKER_ACCEPTED |
+    CONFIGURED | BROKER_ACCEPTED | SOURCED | PERSISTED |
     FINAL_MATERIALIZER_APPLIED | TRAFFIC_ACTIVATED |
     SELECTOR_APPLIED | READY | FLOW_PROVEN
   verdict: PASS | FAIL | UNKNOWN
@@ -1053,7 +1148,7 @@ DatasetProof/v1 {
 
 DatasetProofFact/v1 {
   factKind:
-    CONFIGURED | SOURCED | PERSISTED | BROKER_ACCEPTED |
+    CONFIGURED | BROKER_ACCEPTED | SOURCED | PERSISTED |
     FINAL_MATERIALIZER_APPLIED | TRAFFIC_ACTIVATED |
     SELECTOR_APPLIED | READY | FLOW_PROVEN
   status: PASS | FAIL | UNKNOWN | NOT_APPLICABLE
@@ -1461,7 +1556,49 @@ The page explicitly distinguishes:
 Only the first appears as Dataset supply scheduling. The view never describes
 `scheduler.maxMessages`, scenario offsets, or `ratePerSec` as Dataset target
 size. It also states that all RabbitMQ swarm control events use the existing
-PocketHive control plane, while source work uses the WorkItem plane.
+PocketHive control plane, while source work reuses the existing controller-
+owned WorkItem data path. The UI must not describe that route or the Dataset
+API as another control or messaging plane.
+
+### Supply execution journey
+
+The first Supply panel shall teach the operator the same ordered decision flow
+used by the architecture:
+
+1. The Dataset reconciler reads desired and observed state and persists one
+   bounded operation/reservation/outbox identity.
+2. If the producer is not already ready, the existing Orchestrator lifecycle
+   authority requests `swarm-start` only through `ph.control`.
+3. Dispatch remains held until the matching lifecycle outcome and a fresh
+   Swarm Controller observation prove `RUNNING`, input enabled and the exact
+   fenced WorkItem route ready.
+4. The outbox publisher sends metadata-only `DATASET_SUPPLY` through that
+   canonical WorkItem route. The producer claims and executes the bounded work.
+5. The producer submits a typed result through the Dataset application/API;
+   PostgreSQL commits the records, accounting and receipt before the UI calls
+   the operation durable success.
+
+The UI also names the current component at each step: Orchestrator Dataset
+application/reconciler, existing Orchestrator lifecycle path, Swarm Controller,
+RabbitMQ `ph.control`, RabbitMQ WorkItem route, producer swarm, Dataset API and
+PostgreSQL. Record values and credentials are not shown as travelling through
+RabbitMQ.
+
+The supply journey has at least these honest review states:
+
+| State | Required presentation |
+|---|---|
+| Healthy-idle producer | Producer swarm `RUNNING`; producer workload `IDLE`; no active operation or invented progress |
+| Waiting for readiness | Control request/outcome shown; `DATASET_SUPPLY not published`; later steps visibly waiting |
+| Dispatch not accepted | Producer ready; WorkItem publication returned/nacked/unknown; same durable operation retained; no execution or commit claim |
+| Executing | Control/readiness complete; bounded `DATASET_SUPPLY` claimed/running; durable receipt waiting |
+| Commit uncertain | Operation `UNCERTAIN`; reservation retained; Rabbit ack is explicitly insufficient; no blind replacement or green completion |
+
+`DSUI-VIEW-009`: The Supply view shall expose the ordered two-stage gate,
+component placement, orthogonal state dimensions, three timing mechanisms,
+`SHARED` no-add-back semantics and the unqualified 50,000-record release target
+in plain language. Automated UI tests shall exercise every journey state above
+and prove that no later stage is marked started when its prerequisite is absent.
 
 ### 10.1 Operation kinds and labels
 
@@ -1646,9 +1783,9 @@ The closed serialized `factKind` values are:
 
 ```text
 CONFIGURED
+BROKER_ACCEPTED
 SOURCED
 PERSISTED
-BROKER_ACCEPTED
 FINAL_MATERIALIZER_APPLIED
 TRAFFIC_ACTIVATED
 SELECTOR_APPLIED
@@ -1659,10 +1796,13 @@ FLOW_PROVEN
 Each fact has `PASS | FAIL | UNKNOWN | NOT_APPLICABLE`, exact scope/revision or
 membership epoch, evidence refs, reason codes, and observation validity.
 
-`Broker accepted` means publisher confirm and no unroutable return. It does not
-mean a consumer acknowledged or applied the hint. An authoritative
-reconciliation may prove application without a broker fact; the UI keeps both
-facts independent.
+`Supply WorkItem transport accepted` means publisher confirm and no unroutable
+return for one exact bounded `DATASET_SUPPLY` delivery attempt and durable
+operation reference. It does not mean a consumer acknowledged, the producer
+claimed or executed the operation, the source effect occurred, records were
+persisted, or PostgreSQL committed a terminal receipt. `PERSISTED` and the typed
+terminal receipt remain the durable-result authority. The UI keeps transport
+and durable result visibly independent.
 
 `Flow proven` identifies the exact transaction or declared interval. When
 `requestedLevel` does not include `FLOW_PROVEN`, that fact is omitted and the UI
@@ -1781,7 +1921,7 @@ complete when only its populated success state works.
 |---|---|
 | Inventory/detail | `INITIALISING`, `WARMING`, `READY`, `DEGRADED`, `STARVED`, `ERROR`, `AUTH_REQUIRED`, plus module reconciliation |
 | Fitness | no evaluation yet, evaluation running, current `PASS/FAIL/UNKNOWN`, prior PASS effective, prior PASS expired/not applicable |
-| Supply/lifecycle | no active operation; stable policy; requested/candidate policy not yet effective; target increase filling; target decrease applying a smaller view; blocked/paused/unknown convergence; every fill-cycle state and operation non-terminal/terminal state; `PARTIAL`, `UNCERTAIN`, and `TIMED_OUT` retain their distinct meanings |
+| Supply/lifecycle | healthy-idle producer; waiting for control-plane readiness with no WorkItem published; dispatch returned/nacked/unknown; bounded execution; commit uncertainty with reservation retained; stable policy; requested/candidate policy not yet effective; target increase filling; target decrease applying a smaller view; blocked/paused/unknown convergence; every fill-cycle state and operation non-terminal/terminal state; `PARTIAL`, `UNCERTAIN`, and `TIMED_OUT` retain their distinct meanings |
 | Consumers | no consumers; durable binding with live observation; known no-current-run with `RunningDecision=NOT_APPLICABLE`; live observation stale/unavailable with `UNKNOWN`; worker hydrating/missing/different revision; safe boundary reached |
 | Evidence | proof not requested; proof running only if the API supports asynchronous generation; complete, partial, unknown, failed, expired, and incompatible proof |
 | Swarm dependencies | no Dataset bindings; required and optional bindings; blocked start with running traffic unaffected; continue-until; paused; unknown observation |
@@ -1868,7 +2008,8 @@ evidence references required by this specification. They shall contain no:
 
 - Dataset record or material value;
 - plaintext or ciphertext payload;
-- PAN, SAD, credential, token, key, nonce or secret;
+- regulated, restricted, sensitive or directly identifying data value;
+- authentication material, credential, token, key, nonce or secret;
 - provider/SUT response body or arbitrary exception message;
 - provider endpoint, database/table/key name or filesystem path;
 - raw Docker inspect environment/mount secret; or
@@ -2097,8 +2238,10 @@ Exit:
 | `DSUI-ARCH-001` | Browser network capture contains only authorised Orchestrator Dataset/runtime endpoints and static UI assets | Firefox network capture, egress policy |
 | `DSUI-ARCH-002` | Inventory/detail have fixed query counts and no per-row/per-swarm fan-out | SQL instrumentation, request trace |
 | `DSUI-ARCH-003` | Display snapshot identifies authority/projection lag and cannot overrule admission truth | revision-lag fault tests, independent authority query |
+| `DSUI-ARCH-004` | Lifecycle, readiness, WorkItem dispatch, producer execution and durable commit remain distinct; no later step starts before its gate | official control/WorkItem/API/DB ledgers, causal timeline and lane-bypass faults |
 | `DSUI-SEM-001` | Partition/pool/declared-use/variable-profile fields are never conflated | contract vectors, copy/component tests |
 | `DSUI-SEM-002` | Target gap and real reserved/in-flight provisioning remain distinct; unsupported `REPLENISH` is absent | operation ledger versus UI/API, enum TCK |
+| `DSUI-SEM-003` | Dataset health, producer swarm runtime, producer workload, supply operation, policy convergence and durable store remain independently labelled | read-model mutation matrix and DOM assertions |
 | `DSUI-API-001` | Canonical Java/JSON/TypeScript contracts and REST docs agree for every endpoint | cross-language TCK, generated drift check |
 | `DSUI-API-002` | Proof query is read-authorised and denied queries create zero command effects | auth oracle, database/provider/Rabbit ledgers |
 | `DSUI-API-003` | Search/facets/summary/pagination are authorised server-side and hidden scopes leak no aggregate | multi-principal enumeration suite |
@@ -2110,6 +2253,7 @@ Exit:
 | `DSUI-VIEW-006` | Evidence reproduces canonical proof facts without promotion, raw values or false broker/flow claims | proof canonicalization and fact-removal suite |
 | `DSUI-VIEW-007` | Swarm dependencies are server-composed and preserve central-versus-local and start-versus-running distinctions | official swarm endpoint, worker/binding ledgers, fault matrix |
 | `DSUI-VIEW-008` | Existing Runtime Inspector is composed; resources/logs/inspect/Rabbit facts come only from real runtime APIs | runtime API/DOM comparison, permission/error tests |
+| `DSUI-VIEW-009` | Supply journey, placement, scheduling, reuse/add-back and unqualified 50,000-record copy match the canonical architecture and current evidence | source QA tokens, state specimens, control/WorkItem/DB trace and qualification-state tests |
 | `DSUI-STATE-001` | Every section 15 state is reachable, visibly distinct and contains no fabricated value | component state matrix and official-ingress E2E |
 | `DSUI-STATE-002` | Rabbit manifest absence, observation absence and observed zero are distinct | runtime adapter fault tests |
 | `DSUI-A11Y-001` | All routes/actions work by keyboard with correct focus and names/roles/values | Firefox keyboard run, accessibility tree and screen-reader checks |
@@ -2144,12 +2288,15 @@ Exit:
 ## 22. Applied wireframe semantic contract
 
 The wireframes remain visual examples, not response fixtures. The current
-source applies the labels and relationships below and passed source-level
-semantic review for `G-TEAM-REVIEW-v1`. The existing Firefox images predate the
-current neutral fixtures and resize specimens and are reference-only. Current-
-source visual fidelity is not claimed; it requires deterministic recapture and
-inspection. Production design sign-off additionally requires implementation-
-backed accessibility, authority and behavior verification:
+neutral HTML/CSS/JavaScript and deterministic `qa-check.mjs` result are the
+approval artifacts for `G-TEAM-REVIEW-v1`; they passed source-level semantic
+review. The existing Firefox images predate this source, contain retired
+business-specific fixture wording and are historical/reference-only. They are
+explicitly excluded from current design evidence. Current-source visual
+fidelity is not claimed because the approved browser could not open the local
+prototype in this environment. Production design sign-off additionally
+requires implementation-backed visual, accessibility, authority and behavior
+verification:
 
 1. `Authorised datasets` becomes `Authorised Dataset selections`.
 2. Summary `Ready — New starts allowed` becomes `Admission thresholds met` and
@@ -2175,7 +2322,9 @@ backed accessibility, authority and behavior verification:
 13. Consumer summaries state exactly how many are shown and provide real
     pagination.
 14. Evidence facts carry proof ID, exact revision/epoch, observation validity
-    and independent status; broker acceptance is not acknowledgement.
+    and independent status; `BROKER_ACCEPTED` is transport evidence for one
+    bounded `DATASET_SUPPLY` WorkItem attempt, not acknowledgement, execution or
+    completion. PostgreSQL terminal receipt remains the durable-result authority.
 15. Inspector worker-local supply uses lowest comparable worker value plus
     reporting/required coverage, not an ambiguous swarm-local count.
 16. Inspector freshness uses response `validUntil`, not a hard-coded timeout.
@@ -2197,6 +2346,20 @@ backed accessibility, authority and behavior verification:
 24. Cross-Dataset inventory coherence uses the opaque authorisation-bound
     snapshot token. Only individual status-scope rows display authoritative
     Dataset revisions.
+25. The Supply journey shows `swarm-start` through `ph.control`, waits for fresh
+    readiness, then sends `DATASET_SUPPLY` through the WorkItem route.
+26. Dataset status, producer swarm runtime, producer workload, policy
+    convergence and durable store are separate visible facts.
+27. The component map places lifecycle/topology/readiness in Swarm Controller,
+    durable reconciliation and ports in Orchestrator, transport in RabbitMQ,
+    source execution in the producer swarm and authority in PostgreSQL.
+28. Dataset lifecycle reconciliation, scenario timeline and traffic pacing are
+    three separately labelled timing systems.
+29. `SHARED` reuse says that nothing is removed and no add-back is required;
+    exclusive/ordered/consumable modes are deferred rather than silently
+    simulated.
+30. The 50,000-record profile is labelled `Not yet proven` until its named
+    qualification passes.
 
 Illustrative numbers may remain in planning screenshots solely to exercise
 layout. They carry no default, seed, expected, capacity or acceptance meaning.
@@ -2205,10 +2368,13 @@ evidence defined here.
 
 ## 23. Planning definition of done and RST handoff
 
-This design specification is ready for Rapid Software Testing evaluation when:
+This design specification is green for internal concept review and ready for
+Rapid Software Testing evaluation because:
 
-- all section 22 wireframe relationships are visually represented across the
-  inventory, five detail tabs, Inspector, and responsive variants;
+- all section 22 wireframe relationships are represented in the current neutral
+  source across the inventory, five detail tabs and Inspector; fresh responsive
+  visual evidence remains an implementation/design-QA gate rather than a
+  concept-review claim;
 - every dynamic element has a section 21 authority mapping;
 - every interaction and adverse state has a requirement and observable oracle;
 - every API has a specified closed, bounded request/response shape, permission
