@@ -1716,11 +1716,11 @@ h3 {
   background: var(--text-soft);
 }
 
-.meter-current-authorisation {
+.meter-current-supply {
   width: 40.2%;
 }
 
-.meter-minimum-authorisation {
+.meter-minimum-supply {
   left: 41.7%;
 }
 
@@ -1897,6 +1897,285 @@ h3 {
   margin: 0 0 10px;
   color: var(--text-soft);
   font-size: 11px;
+}
+
+.supply-explainer,
+.state-dimensions,
+.component-placement {
+  margin-bottom: 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  background: var(--surface-soft);
+  padding: 13px;
+}
+
+.supply-explainer > .section-heading,
+.component-placement > .section-heading {
+  align-items: flex-start;
+}
+
+.supply-explainer .section-heading p,
+.component-placement .section-heading p,
+.state-dimensions-heading p,
+.reuse-capacity-grid .detail-section > p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.supply-state-example {
+  display: grid;
+  gap: 3px;
+  margin: 0 0 10px;
+  border: 1px solid rgba(51, 225, 255, 0.24);
+  border-radius: 10px;
+  background: var(--cyan-soft);
+  padding: 10px 11px;
+}
+
+.supply-state-example[hidden] {
+  display: none;
+}
+
+.supply-state-example strong,
+.supply-state-example span,
+.supply-state-example small {
+  display: block;
+}
+
+.supply-state-example strong {
+  color: var(--cyan);
+  font-size: 11px;
+}
+
+.supply-state-example span,
+.supply-state-example small {
+  color: var(--text-soft);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.supply-state-example.is-warn {
+  border-color: rgba(255, 193, 7, 0.3);
+  background: rgba(255, 193, 7, 0.08);
+}
+
+.supply-state-example.is-warn strong {
+  color: #ffdc79;
+}
+
+.supply-state-example.is-error {
+  border-color: rgba(255, 91, 91, 0.3);
+  background: rgba(255, 91, 91, 0.08);
+}
+
+.supply-state-example.is-error strong {
+  color: #ffabab;
+}
+
+:root[data-theme='light'] .supply-state-example.is-warn strong { color: #7d5400; }
+:root[data-theme='light'] .supply-state-example.is-error strong { color: #a82d2d; }
+
+.supply-journey {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.supply-journey li {
+  min-width: 0;
+  min-height: 170px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface);
+  padding: 10px;
+}
+
+.journey-number {
+  width: 24px;
+  height: 24px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.supply-journey li > div,
+.supply-journey li > div strong,
+.supply-journey li > div small,
+.supply-journey li > div code {
+  min-width: 0;
+  display: block;
+}
+
+.supply-journey li > div strong {
+  color: var(--text-soft);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.supply-journey li > div small,
+.supply-journey li > div code {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.journey-state {
+  width: fit-content;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-strong);
+  padding: 3px 7px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.supply-journey li.is-complete {
+  border-color: rgba(49, 211, 155, 0.28);
+}
+
+.supply-journey li.is-complete .journey-number,
+.supply-journey li.is-complete .journey-state {
+  border-color: rgba(49, 211, 155, 0.28);
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.supply-journey li.is-active {
+  border-color: rgba(51, 225, 255, 0.35);
+  box-shadow: inset 0 0 0 1px rgba(51, 225, 255, 0.1);
+}
+
+.supply-journey li.is-active .journey-number,
+.supply-journey li.is-active .journey-state {
+  border-color: rgba(51, 225, 255, 0.28);
+  background: var(--cyan-soft);
+  color: var(--cyan);
+}
+
+.supply-journey li.is-error {
+  border-color: rgba(255, 91, 91, 0.35);
+}
+
+.supply-journey li.is-error .journey-number,
+.supply-journey li.is-error .journey-state {
+  border-color: rgba(255, 91, 91, 0.28);
+  background: rgba(255, 91, 91, 0.09);
+  color: #ffabab;
+}
+
+.supply-journey li.is-uncertain {
+  border-color: rgba(255, 193, 7, 0.35);
+}
+
+.supply-journey li.is-uncertain .journey-number,
+.supply-journey li.is-uncertain .journey-state {
+  border-color: rgba(255, 193, 7, 0.28);
+  background: rgba(255, 193, 7, 0.09);
+  color: #ffdc79;
+}
+
+:root[data-theme='light'] .supply-journey li.is-error .journey-number,
+:root[data-theme='light'] .supply-journey li.is-error .journey-state { color: #a82d2d; }
+:root[data-theme='light'] .supply-journey li.is-uncertain .journey-number,
+:root[data-theme='light'] .supply-journey li.is-uncertain .journey-state { color: #7d5400; }
+
+.state-dimensions-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 10px;
+}
+
+.state-dimensions-heading h3 {
+  margin-top: 2px;
+}
+
+.state-dimensions-heading p {
+  max-width: 520px;
+  text-align: right;
+}
+
+.state-dimension-grid,
+.component-placement-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.state-dimension-grid article,
+.component-placement-grid article {
+  min-width: 0;
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 10px;
+}
+
+.state-dimension-grid span,
+.component-placement-grid span {
+  display: block;
+  color: var(--muted-soft);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.state-dimension-grid strong,
+.state-dimension-grid small,
+.component-placement-grid strong,
+.component-placement-grid small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.state-dimension-grid strong,
+.component-placement-grid strong {
+  margin-top: 4px;
+  color: var(--text-soft);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.state-dimension-grid small,
+.component-placement-grid small {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.reuse-capacity-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.reuse-capacity-grid .detail-section > p {
+  margin-bottom: 8px;
+}
+
+.qualification-card {
+  border-color: color-mix(in srgb, var(--amber) 42%, var(--border-soft));
 }
 
 .section-heading {
@@ -2566,6 +2845,7 @@ pre {
 .bad-text { color: #ffabab !important; }
 .warn-text { color: #ffdc79 !important; }
 .good-text { color: var(--green) !important; }
+.info-text { color: var(--cyan) !important; }
 :root[data-theme='light'] .bad-text { color: #a82d2d !important; }
 :root[data-theme='light'] .warn-text { color: #7d5400 !important; }
 
@@ -3015,6 +3295,22 @@ body[data-view='inspector'] .prototype-note button[data-navigate='inspector'] {
 
   .detail-section-grid {
     grid-template-columns: 1fr;
+  }
+
+  .supply-journey {
+    grid-template-columns: 1fr;
+  }
+
+  .supply-journey li {
+    min-height: 0;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-rows: auto;
+    align-items: start;
+  }
+
+  .state-dimension-grid,
+  .component-placement-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .evidence-grid {
@@ -3561,6 +3857,20 @@ body[data-view='inspector'] .prototype-note button[data-navigate='inspector'] {
     text-align: left;
   }
 
+  .state-dimensions-heading {
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .state-dimensions-heading p {
+    max-width: none;
+    text-align: left;
+  }
+
+  .reuse-capacity-grid {
+    grid-template-columns: 1fr;
+  }
+
   .fitness-state-grid {
     grid-template-columns: 1fr;
   }
@@ -3853,6 +4163,19 @@ body[data-view='inspector'] .prototype-note button[data-navigate='inspector'] {
   }
 
   .metric-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .supply-journey li {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .supply-journey .journey-state {
+    grid-column: 2;
+  }
+
+  .state-dimension-grid,
+  .component-placement-grid {
     grid-template-columns: 1fr;
   }
 

@@ -19,8 +19,11 @@ It never imports or falls back to this prototype.
   distribution and consumer summary;
 - `#dataset/fitness` — latest evaluation and prior-PASS continuity;
 - `#dataset/supply` — active/requested policy and target convergence, durable
-  fill-cycle/reconciliation timing, the three-scheduler distinction, the five
-  canonical operation kinds and reconciled lifecycle accounting;
+  fill-cycle/reconciliation timing, the mandatory control/readiness/WorkItem/
+  commit sequence, component placement, orthogonal runtime states, the three-
+  scheduler distinction, shared no-add-back reuse, the unqualified 50,000-
+  record target, the five canonical operation kinds and reconciled lifecycle
+  accounting;
 - `#dataset/consumers` — six complete bindings through working cursor-style
   Previous/Next pagination;
 - `#dataset/evidence` — bounded read-only proof input and a canonical
@@ -35,7 +38,7 @@ navigation uses the route-like hash above so browser history and tab state stay
 aligned. Add the wireframe-only `theme=light` query parameter to initialise the
 existing PocketHive light-theme tokens for capture; it introduces no new theme
 or production preference behavior. The planning harness also supports
-consumer-page, proof-level, proof-validation, supply-disclosure and focus query
+consumer-page, proof-level, proof-validation, supply-state and focus query
 controls for a future capture refresh. These controls are prohibited from
 production bundles by `DSUI-DATA-002`.
 
@@ -55,11 +58,31 @@ production bundles by `DSUI-DATA-002`.
   planning fixture offers one opaque transaction reference for `FLOW_PROVEN`;
   the normative product contract supports the closed transaction/interval
   union. It cannot browse values or cause lifecycle work.
+- `BROKER_ACCEPTED` is scoped only to one bounded `DATASET_SUPPLY` WorkItem
+  delivery attempt and durable operation reference. The UI labels it transport
+  evidence only: publisher confirm plus no unroutable return. It never proves
+  consumer acknowledgement, source execution, persistence or completion;
+  `PERSISTED` and the PostgreSQL terminal receipt remain the durable-result
+  authority.
 - Supply uses three explicitly mutually exclusive source specimens: the
   current policy with no pending change, an accepted target increase that has
   not converged, and a target decrease that stages surplus records from
   `READY` to `STANDBY` without deleting them. A decrease completes only after
   every required consumer applies the new revision.
+- The supply journey first reconciles durable demand; uses the existing
+  Orchestrator lifecycle path and `ph.control` to start a stopped producer;
+  waits for the matching outcome plus fresh `RUNNING`, input-enabled and route-
+  ready state; then publishes bounded metadata-only `DATASET_SUPPLY` through
+  the controller-owned WorkItem route. PostgreSQL receipt—not Rabbit
+  acknowledgement—proves completion.
+- Dataset selection health, producer swarm runtime, producer workload, supply
+  operation, policy convergence and durable store are independent visible
+  facts. A producer can be `RUNNING` while its workload is `IDLE`.
+- The MVP allocation is `SHARED`: local immutable views reuse records without
+  removing or adding them back. Exclusive, ordered and consumable behavior is
+  deferred and cannot be silently simulated.
+- The 50,000-record/55,000-maximum, two-swarm profile is visibly `Not yet
+  proven`; the planning fixture makes no support claim.
 - Consumer cards retain start/running decisions, revision vector, materializer
   and selector coverage, comparable worker-local supply, observation validity
   and bounded exceptions at every supported width.
@@ -103,6 +126,21 @@ rate-limited example exposes the exact server-provided `Retry-After` boundary
 and keeps refresh disabled until that instant. A forbidden state exposes no
 totals or identifiers, and an incompatible response is rejected as a whole.
 
+The Supply route has four additional journey specimens. Each keeps lifecycle,
+readiness, WorkItem and durable commit causally ordered:
+
+```text
+?supplyState=idle#dataset/supply
+?supplyState=waiting_readiness#dataset/supply
+?supplyState=dispatch_failed#dataset/supply
+?supplyState=commit_uncertain#dataset/supply
+```
+
+`waiting_readiness` explicitly says that no WorkItem was published;
+`dispatch_failed` retains the same durable operation without claiming
+execution; and `commit_uncertain` retains its reservation without a blind
+replacement or false success.
+
 ## Design boundaries
 
 - PocketHive `ui-v2` shell, theme tokens, typography, cards, pills, tabs,
@@ -119,9 +157,10 @@ totals or identifiers, and an incompatible response is rejected as a whole.
 ## Capture evidence status
 
 `captures/spec-aligned/` contains a frozen earlier Firefox 140.12.0esr review
-set. Those images predate the neutral fixture names and the current supply
-resize specimens, so they are reference-only and are not evidence of the
-current source. Their contact sheets cover:
+set. Those images predate the neutral fixture names, retain retired business-
+specific fixture wording, and predate the current supply journey and resize
+specimens. They are historical/reference-only and are excluded from current
+design evidence. Their contact sheets cover:
 
 | Evidence | Coverage |
 |---|---|
@@ -131,11 +170,13 @@ current source. Their contact sheets cover:
 | `00-adverse-states.png` | Reconciling, stale, rate-limited, forbidden, authorised-empty and incompatible states at 1366×768 |
 | `00-interaction-details.png` | READY and FLOW proof interactions, the opened 320-pixel supply-definition disclosure, and the scrolled alternate cancellation/`UNCERTAIN` specimen |
 
-The current wireframe source was checked at source level only. No capture was
-refreshed in this change. A new deterministic render and visual inspection of
-every named individual and contact sheet is required before claiming
-current-source visual fidelity. The 320-pixel and 200%-zoom reference images
-intentionally show only the top of vertically scrollable content.
+The current neutral wireframe source and `qa-check.mjs` result are the concept-
+approval artifacts. No capture was refreshed because the approved browser
+could not open the local prototype in this environment. A new deterministic
+render and visual inspection of every named individual and contact sheet is
+required before claiming current-source visual fidelity. The 320-pixel and
+200%-zoom reference images intentionally show only the top of vertically
+scrollable content.
 
 Planning visual-fidelity result for the current source: **not claimed; capture
 refresh required**.
@@ -144,3 +185,19 @@ Accessibility sign-off additionally requires automated checks plus manual
 keyboard, accessibility-tree and screen-reader verification. No screenshot set
 alone establishes WCAG conformance, and this planning result does not pass
 `DSUI-A11Y-001`, `DSUI-A11Y-002` or any implementation/release gate.
+
+## Deterministic source checks
+
+Run from the repository root:
+
+```text
+node --check docs/inProgress/managed-datasets-wireframes/app.js
+node docs/inProgress/managed-datasets-wireframes/qa-check.mjs
+git diff --check
+```
+
+The wireframe QA script checks duplicate IDs, ARIA ID references, internal
+fragment and route targets, tab relationships and keyboard tokens, form/button
+names, image alternatives, required architecture/state copy, supply adverse
+states and undersized-text regressions. It does not replace rendered visual,
+contrast, zoom, accessibility-tree or screen-reader evidence.
