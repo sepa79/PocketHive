@@ -1,6 +1,7 @@
 # Managed Datasets — Components, Use Cases and Scenario Examples
 
-Status: **team visualisation guide for the approved target design**
+Status: in progress — visualisation guide for the design-ready proposal;
+cross-functional approval is pending
 
 This document shows where each component sits, what makes records flow, how
 common long-running scenarios behave, and how the target scenario configuration
@@ -10,14 +11,16 @@ fields.
 > **Architecture rule:** Managed Datasets add no new control, data or Dataset
 > messaging plane. Swarm lifecycle stays on the existing `ph.control` plane;
 > bounded source work reuses the existing controller-owned WorkItem route; the
-> Dataset API is an application boundary over PostgreSQL.
+> Dataset API is an application boundary over the Dataset's explicitly selected
+> storage adapter. PostgreSQL is the recommended full managed-records adapter;
+> Redis is a separately capability-gated adapter, never a fallback.
 
 ## 1. The idea in one picture
 
 ```mermaid
 flowchart LR
   USER[Operator or approved API client]
-  SM[Scenario Manager<br/>definitions, policies and bindings]
+  SM[Scenario Manager<br/>packages, Spaces, registrations,<br/>local requirements and bindings]
 
   subgraph O[Orchestrator service]
     DS[Managed Dataset application<br/>desired state, health and reconciliation]
@@ -26,7 +29,7 @@ flowchart LR
     OUTBOX[Transactional outbox relay]
   end
 
-  PG[(PostgreSQL<br/>records, revisions, targets,<br/>operations, schedules and receipts)]
+  STORE[(Explicit Dataset storage adapter<br/>PostgreSQL or Redis capability profile)]
 
   subgraph SC[Swarm Controller]
     CTRL[Lifecycle and topology authority]
@@ -58,7 +61,7 @@ flowchart LR
 
   USER --> DS
   SM -->|admitted immutable definitions| DS
-  DS <--> PG
+  DS <--> STORE
   DS -->|ensure producer is running| LIFE
   LIFE --> CTRL
   CTRL <--> CONTROL
@@ -81,7 +84,7 @@ Dataset. Each consumer receives the Dataset revision it is authorised to use.
 
 | Component | Runs in | Owns | Does not own |
 |---|---|---|---|
-| Dataset definition and bindings | Scenario Manager | Versioned schema, generic grouping fields, producer binding, consumer binding and policy references | Runtime records or RabbitMQ topology |
+| Dataset package, Space, registration and scenario binding | Scenario Manager | Standalone package lifecycle; deployment-scoped Space authority policy; explicit package-to-Space/storage registration; validation of each bundle's requirements; and one mapping per Scenario Binding | A Dataset-level consumer list, runtime records or RabbitMQ topology |
 | Managed Dataset application | Orchestrator | Desired target, observed supply, health, reconciliation, operations, schedules and evidence | Swarm lifecycle implementation or source-specific logic |
 | Existing lifecycle application | Orchestrator | `ensureRunning`, start/stop intent and current readiness result | Dataset deficit or record truth |
 | Swarm Controller | Swarm Controller service | Applied swarm lifecycle, exact worker incarnation and controller-owned WorkItem topology | Dataset target or committed records |
@@ -89,7 +92,9 @@ Dataset. Each consumer receives the Dataset revision it is authorised to use.
 | WorkItem route | Existing RabbitMQ | Delivery of bounded `DATASET_SUPPLY` work to an already-ready producer | Lifecycle authority or completion proof |
 | Producer swarm | Normal PocketHive swarm | Executes the configured source flow for one bounded operation | Choosing the target or declaring queues |
 | Dataset API | Orchestrator application boundary | Authorised claim, checkpoint, commit, snapshot and receipt operations | RabbitMQ routing decisions |
-| PostgreSQL | Orchestrator persistence | Durable Dataset truth and transactional outbox | Worker execution |
+| Storage adapter | Orchestrator infrastructure | Only the operations promised by its published capability profile | Domain policy, adapter fallback or inflated durability claims |
+| PostgreSQL adapter | Orchestrator persistence | `MANAGED_RECORDS_V1` durable truth and transactional outbox | Worker execution |
+| Redis adapter (deferred) | Orchestrator persistence | Explicit `REDIS_COLLECTION_V1` collection operations and receipts only after separate qualification | Core MVP support or undeclared relational/revision/outbox/proof semantics |
 | Consumer swarm | Normal PocketHive swarm | Background hydration and local selection during traffic | Direct PostgreSQL access or Dataset mutation |
 
 ## 3. What makes records flow
@@ -242,7 +247,7 @@ sequenceDiagram
   participant C as ph.control / Swarm Controller
   participant P as Producer swarm
   participant W as Existing WorkItem route
-  participant DB as Dataset API / PostgreSQL
+  participant DB as Dataset API / selected store
   participant S as Consumer swarms
 
   loop Periodic reconciliation and durable time events
@@ -368,20 +373,116 @@ shape or fall back to CSV/Redis behavior.
 producer** because it can provision, replace, refresh, validate or retire data
 throughout a long-running Dataset lifecycle.
 
-## 11. Example — CSV catalog of 1,000 records that must stay replenished
+## 11. Example — standalone Dataset package with a CSV catalog
+
+The Dataset definition is independent of every scenario bundle:
+
+```text
+scenarios/managed-datasets/reusable-records/
+├── dataset.yaml
+├── schema/record.yaml
+├── contracts/traffic.yaml
+├── mappings/csv-v1.yaml
+├── projections/selector-v1.yaml
+├── projections/material-v1.yaml
+├── policies/supply-v1.yaml
+├── policies/fitness-v1.yaml
+├── sources/csv-catalog-v1.yaml
+└── assets/reusable-records.csv
+```
+
+```yaml
+# scenarios/managed-datasets/reusable-records/dataset.yaml
+schemaVersion: pockethive.dataset-package/v1
+packageId: reusable-records
+version: 1
+recordSchemaPath: schema/record.yaml
+contractPaths: [contracts/traffic.yaml]
+requiredStorageCapabilities: [SNAPSHOT_READ, SHARED_SELECTION]
+supportedStorageProfiles: [MANAGED_RECORDS_V1, REDIS_COLLECTION_V1]
+sourceBindingPaths: [sources/csv-catalog-v1.yaml]
+```
+
+```yaml
+# schema/record.yaml
+schemaVersion: pockethive.dataset-record-schema/v1
+fields:
+  - { name: recordKey, type: STRING, required: true }
+  - { name: accountId, type: STRING, required: true }
+  - { name: cardId, type: STRING, required: true }
+  - { name: expiryDate, type: DATE, required: true }
+naturalKey:
+  fields: [recordKey]
+```
+
+```yaml
+# contracts/traffic.yaml
+schemaVersion: pockethive.dataset-contract/v1
+contractId: traffic
+fields: [recordKey, accountId, cardId, expiryDate]
+```
+
+`traffic` belongs only to this Dataset package. Another Dataset may define its
+own `traffic` contract, but the objects are unrelated and may not be substituted
+by name. Scenario Binding explicitly selects the Dataset package/version and
+its local contract ID; validation compares the scenario's required fields with
+that exact contract. Editing the contract creates a new version of only this
+Dataset package.
+
+Scenario Manager validates the complete package, stores a draft and publishes
+an immutable version only through an explicit publish operation. The UI and
+PocketHive MCP use the same application services. Published files are never
+edited in place.
+
+A deployment registration binds that portable package to its shared authority
+boundary and concrete storage:
+
+```yaml
+schemaVersion: pockethive.dataset-registration/v1
+registrationId: performance-test-reusable-records
+datasetSpaceId: performance-test
+datasetPackageRef: reusable-records@1
+datasetAlias: reusable-records
+storage:
+  adapter: POSTGRESQL
+  settingsRef: datasets-postgres-primary
+  capabilityProfile: MANAGED_RECORDS_V1
+```
+
+A future Redis deployment registration instead selects:
+
+```yaml
+storage:
+  adapter: REDIS
+  settingsRef: datasets-redis-primary
+  capabilityProfile: REDIS_COLLECTION_V1
+  collection: { type: LIST, keyRef: reusable-records-ready }
+```
+
+`Dataset Space` is deployment-scoped and shared by its registrations. It owns
+access policy, SUT scope, classification ceiling, quotas and allowed storage
+profiles; it does not own or rewrite package schemas/contracts. The package
+contains no `datasetSpaceId` or backend settings.
+
+`REDIS_COLLECTION_V1` is not presented as equivalent to
+`MANAGED_RECORDS_V1`. Its published capability descriptor determines whether
+snapshot, shared selection, destructive pop, expiry, proof and recovery are
+supported. A scenario requiring an absent capability is rejected at binding;
+PocketHive never falls back to PostgreSQL or silently changes Redis semantics.
+The core MVP exposes Redis registration as unavailable; enablement requires a
+separate adapter TCK, recovery and non-interference qualification.
 
 ### 11.1 Proposed Dataset source binding
 
-This companion artifact belongs to Scenario Manager. It defines how bounded
-source work uses a versioned CSV catalog; it is not worker-local state.
+This package artifact defines how bounded source work uses the package's
+versioned CSV catalog; it is not worker-local state.
 
 ```yaml
 id: reusable-records-csv-source
 version: 1
 
-datasetRef:
-  datasetSpaceId: performance-test
-  datasetAlias: reusable-records
+target:
+  datasetRegistration: SELF
   partition: default
   pool: ready
 
@@ -394,7 +495,7 @@ capabilities:
 source:
   type: CSV_CATALOG
   csv:
-    filePath: /app/scenario/datasets/reusable-records.csv
+    assetPath: assets/reusable-records.csv
     expectedRows: 1000
     skipHeader: true
     rotate: true
@@ -404,6 +505,13 @@ source:
 mappingRef: reusable-records-csv-mapping-v1
 recordSchemaRef: reusable-records-schema-v1
 ```
+
+`assetPath` is relative to the exact owning Dataset package. Scenario Manager
+rejects absolute, traversing, out-of-`assets/`, missing, non-file or
+symlink-escaping values and freezes the file digest. Orchestrator resolves the
+validated path once to the package mount only in the immutable runtime plan
+supplied to the existing CSV worker. The authored contract never contains a
+container path and never accepts `filePath` as an alternate form.
 
 `rotate: true` means the producer can continue from the beginning of the
 catalog when a later bounded operation requires it. It does not mean “emit
@@ -417,9 +525,8 @@ idempotent.
 id: reusable-records-supply
 version: 1
 
-datasetRef:
-  datasetSpaceId: performance-test
-  datasetAlias: reusable-records
+target:
+  datasetRegistration: SELF
   partition: default
   pool: ready
 
@@ -483,6 +590,30 @@ The producer has no scheduler input. It receives work only when the Dataset
 reconciler finds a durable deficit and the existing control-plane readiness
 gate has passed.
 
+`DATASET_UPSERT` is the preferred publication path because the durable receipt
+is the producer's primary output contract. A worker that must retain another
+primary output may use the shared SDK side-output interceptor instead:
+
+```yaml
+config:
+  outputs:
+    type: RABBITMQ
+  interceptors:
+    managedDatasetPublisher:
+      enabled: true
+      deliveryMode: IN_PROCESS_DIRECT
+      expectedDatasetRef: "{{ vars.datasetRef }}"
+      expectedSourceBindingId: "{{ vars.sourceBindingId }}"
+      mappingRef: "{{ vars.sourceMappingRef }}"
+```
+
+This is not a best-effort uploader. It reuses the same typed upsert config,
+committer, stable idempotency key and durable receipt as `DATASET_UPSERT`, runs
+before the Rabbit output is published, and fails the invocation if the Dataset
+commit is not durable. It accepts only an allowlisted bounded non-sensitive
+projection; sensitive producer results must terminate through
+`DATASET_UPSERT`.
+
 ### 11.4 Producer `variables.yaml` excerpt
 
 ```yaml
@@ -507,6 +638,103 @@ values:
         sourceMappingRef: reusable-records-csv-mapping-v1
 ```
 
+### 11.5 Creating-call result classification and Dataset routing
+
+A producer must not equate HTTP 2xx or a successful TCP exchange with business
+success. The owning source binding defines stable target IDs and one result
+policy; the deployment registration freezes each target ID to an authorised
+Dataset registration:
+
+```yaml
+resultTargetBindings:
+  - targetId: completedCards
+    datasetRef:
+      datasetSpaceId: performance-test
+      datasetAlias: completed-cards
+      partition: default
+      pool: ready
+    recordSchemaRef: completed-card-v1
+    mappingRef: completed-card-mapping-v1
+  - targetId: failedCards
+    datasetRef:
+      datasetSpaceId: performance-test
+      datasetAlias: failed-cards
+      partition: default
+      pool: remediation
+    recordSchemaRef: failed-card-attempt-v1
+    mappingRef: failed-card-attempt-mapping-v1
+
+sourceResultPolicyRef: card-create-result-v1
+```
+
+The policy classifies the canonical business code and routes by exact enum:
+
+```yaml
+schemaVersion: pockethive.source-result-policy/v1
+id: card-create-result-v1
+callId: create-card
+resultRulesRef: card-create-state-v1
+classification:
+  completedBusinessCodes: [CREATED, ACTIVE]
+  failedBusinessCodes: [FAILED, REJECTED]
+  pendingBusinessCodes: [PENDING, PROCESSING]
+  conclusiveTransportFailureOutcome: CALL_FAILED
+  missingBusinessCodeOutcome: INVALID_RESPONSE
+  unknownBusinessCodeOutcome: INVALID_RESPONSE
+  ambiguousTransportOutcome: UNCERTAIN
+routes:
+  - outcome: COMPLETED
+    action: UPSERT_DATASET
+    datasetTargetId: completedCards
+    contributesToPrimarySupply: true
+  - outcome: FAILED_WRONG_STATE
+    action: UPSERT_DATASET
+    datasetTargetId: failedCards
+    contributesToPrimarySupply: false
+  - outcome: CALL_FAILED
+    action: UPSERT_DATASET
+    datasetTargetId: failedCards
+    contributesToPrimarySupply: false
+  - outcome: INVALID_RESPONSE
+    action: UPSERT_DATASET
+    datasetTargetId: failedCards
+    contributesToPrimarySupply: false
+  - outcome: PENDING
+    action: RECONCILE_OPERATION
+  - outcome: UNCERTAIN
+    action: RECONCILE_OPERATION
+```
+
+For structured HTTP, the target `ResultRules` extension uses a typed JSON
+Pointer instead of a body regex:
+
+```yaml
+businessCode:
+  source: RESPONSE_JSON_POINTER
+  pointer: /state
+  valueType: STRING
+```
+
+For a bounded text TCP response, the existing response-body extraction model
+is valid:
+
+```yaml
+businessCode:
+  source: RESPONSE_BODY
+  pattern: 'STATE=([A-Z_]+)'
+successRegex: '^(CREATED|ACTIVE)$'
+```
+
+Binary TCP requires the explicitly selected framing/payload adapter to decode a
+typed field first. PocketHive never guesses framing, charset or schema. The
+shared result evaluator produces the same `SourceResultOutcome` for HTTP and
+TCP; the Dataset output or interceptor only validates and routes that outcome.
+A 2xx/transport-success response with `REJECTED` is therefore
+`FAILED_WRONG_STATE`, while timeout after a possible write is `UNCERTAIN` and
+cannot enter either Dataset until reconciliation. If failed attempts are not
+consumed for remediation, route conclusive failures to
+`RECORD_OPERATION_FAILURE` instead of creating `failed-cards`.
+
 ## 12. Example — one producer, two consumer scenarios
 
 Both consumer scenarios select the same immutable Dataset reference. They do
@@ -523,38 +751,70 @@ flowchart LR
   D -->|snapshot binding B| B
 ```
 
-The Scenario Manager admits two consumer bindings:
+Each bundle declares only its own logical requirement in its reserved
+`datasets/requirements.yaml`. Neither bundle names or loads the other:
 
 ```yaml
-consumerBindings:
-  - scenarioId: scenario-a
-    bindingId: scenario-a-reusable-records
-    datasetRef:
-      datasetSpaceId: performance-test
-      datasetAlias: reusable-records
-      partition: default
-      pool: ready
+# scenarios/bundles/scenario-a/datasets/requirements.yaml
+schemaVersion: pockethive.dataset-requirements/v1
+requirements:
+  - requirementId: reusableRecords
+    required: true
+    requiredFields: [recordKey, accountId, cardId, expiryDate]
     allocation: SHARED
     requiredRemainingValidity: PT30M
+    deliveryEffectProfile: AT_LEAST_ONCE
+    requiredStorageCapabilities: [SNAPSHOT_READ, SHARED_SELECTION]
+    fitnessContractRef: reusable-records-traffic-fitness@1
+    selectionPolicyRef: reusable-records-round-robin@1
+    trustedTimePolicyRef: qualified-host-time@1
+    bindingSlotsRef: reusable-records-http-slots@1
 
-  - scenarioId: scenario-b
-    bindingId: scenario-b-reusable-records
-    datasetRef:
-      datasetSpaceId: performance-test
-      datasetAlias: reusable-records
-      partition: default
-      pool: ready
-    allocation: SHARED
-    requiredRemainingValidity: PT30M
+# scenarios/bundles/scenario-b/datasets/requirements.yaml contains its own
+# requirement when needed. It contains no scenario-a reference.
 ```
 
-This proposed binding artifact is admission configuration, not a new runtime
-message. The binding resolves to exact immutable versions before either swarm
-starts.
+Scenario Manager stores one independent `ScenarioBinding` per scenario. Each
+maps only that scenario's requirement to a concrete Dataset:
+
+```yaml
+# ScenarioBinding for scenario-a
+schemaVersion: pockethive.scenario-binding/v1
+id: bind-scenario-a-performance-test
+scenarioTemplateId: scenario-a
+datasetBindings:
+  - requirementId: reusableRecords
+    datasetRef:
+      datasetSpaceId: performance-test
+      datasetAlias: reusable-records
+      partition: default
+      pool: ready
+    datasetContractId: traffic
+
+# Independently stored ScenarioBinding for scenario-b
+---
+schemaVersion: pockethive.scenario-binding/v1
+id: bind-scenario-b-performance-test
+scenarioTemplateId: scenario-b
+datasetBindings:
+  - requirementId: reusableRecords
+    datasetRef:
+      datasetSpaceId: performance-test
+      datasetAlias: reusable-records
+      partition: default
+      pool: ready
+    datasetContractId: traffic
+```
+
+These are separate admission records, not one cross-bundle consumer registry
+and not runtime messages. Orchestrator resolves each record independently into
+`ResolvedDatasetBinding/v1` before creating that scenario's swarm. Unknown,
+missing, duplicate, extra or incompatible mappings fail explicitly.
 
 ## 13. Example — consumer scenario whose source is a Managed Dataset
 
 ```yaml
+# scenarios/bundles/scenario-a/scenario.yaml
 id: scenario-a
 name: Scenario A using reusable records
 description: Hydrates a Managed Dataset before running normal traffic.
@@ -571,19 +831,11 @@ template:
         inputs:
           type: MANAGED_DATASET
           managedDataset:
-            datasetRef: "{{ vars.datasetRef }}"
-            fitnessContractRef: "{{ vars.fitnessContractRef }}"
-            allocation: SHARED
-            deliveryEffectProfile: AT_LEAST_ONCE
-            requiredRemainingValidity: PT30M
+            datasetRequirementId: reusableRecords
             ratePerSec: "{{ vars.trafficRatePerSec }}"
             snapshotPageSize: 250
             maximumLocalRecords: 1100
             maximumLocalBytes: 16777216
-            selectorProjectionRef: "{{ vars.selectorProjectionRef }}"
-            bindingSlotsRef: "{{ vars.bindingSlotsRef }}"
-            selectionPolicyRef: "{{ vars.selectionPolicyRef }}"
-            trustedTimePolicyRef: "{{ vars.trustedTimePolicyRef }}"
         message:
           bodyType: SIMPLE
           body: "{{ payload }}"
@@ -598,7 +850,7 @@ template:
         out:
           out: request-send
       config:
-        templateRoot: /app/scenario/templates/http
+        templateRoot: /app/scenario/templates/http # current worker runtime contract
         serviceId: default
         passThroughOnMissingTemplate: false
       ports:
@@ -620,15 +872,12 @@ template:
           type: RABBITMQ
         outputs:
           type: RABBITMQ
-        auxiliary:
-          managedDatasetResolver:
-            type: MANAGED_DATASET_RESOLVER
-            datasetRef: "{{ vars.datasetRef }}"
-            materialProjectionRef: "{{ vars.materialProjectionRef }}"
-            bindingSlotsRef: "{{ vars.bindingSlotsRef }}"
-            snapshotPageSize: 250
-            maximumLocalRecords: 1100
-            maximumLocalBytes: 16777216
+        managedDatasetResolver:
+          type: MANAGED_DATASET_RESOLVER
+          datasetRequirementId: reusableRecords
+          snapshotPageSize: 250
+          maximumLocalRecords: 1100
+          maximumLocalBytes: 16777216
       ports:
         - { id: in, direction: in }
         - { id: out, direction: out }
@@ -659,9 +908,15 @@ topology:
       to: { role: postprocessor, port: in }
 ```
 
+The `templateRoot` above is intentionally different from source-binding
+`assetPath`: it is an existing worker container setting after the bundle has
+been mounted. This proposal does not silently make current workers accept
+bundle-relative `templateRoot`; that requires a separate scenario-contract
+migration.
+
 Scenario B can use the same structure with a different scenario ID, traffic
-rate, selection policy or request template. Its Dataset reference can remain
-identical.
+rate or request template. Its own Scenario Binding may map its local
+`reusableRecords` requirement to the same Dataset reference.
 
 ### 13.1 Consumer `variables.yaml` excerpt
 
@@ -674,21 +929,11 @@ values:
   global:
     default:
       trafficRatePerSec: 25
-  sut:
-    default:
-      example-environment:
-        datasetRef:
-          datasetSpaceId: performance-test
-          datasetAlias: reusable-records
-          partition: default
-          pool: ready
-        fitnessContractRef: reusable-records-traffic-fitness-v1
-        selectorProjectionRef: reusable-records-selector-v1
-        materialProjectionRef: reusable-records-request-material-v1
-        bindingSlotsRef: reusable-records-request-slots-v1
-        selectionPolicyRef: reusable-records-local-round-robin-v1
-        trustedTimePolicyRef: qualified-host-time-v1
 ```
+
+The consumer bundle has no concrete `datasetRef` variable. Orchestrator obtains
+that value only from this scenario's `ScenarioBinding` and places the resolved
+binding in the immutable swarm plan.
 
 ## 14. End-to-end decision flow
 

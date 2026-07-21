@@ -1,10 +1,14 @@
 # Managed Test Data Design Readiness Assessment
 
-Last updated: 2026-07-17
+Status: in progress — design-ready for cross-functional approval; team
+approval, implementation and release qualification remain pending
+
+Last updated: 2026-07-20
 
 ## Decision
 
-> **DESIGN ASSESSMENT: GREEN — `G-TEAM-REVIEW-v1` PASS**
+> **DESIGN ASSESSMENT: GREEN — `G-DESIGN-READY-v1` PASS;
+> `G-TEAM-APPROVED-v1` NOT EVALUATED**
 >
 > The proposal is coherent and ready for an internal architecture, product,
 > UX, QA, operations and security decision. This is Grade 0 design evidence.
@@ -18,7 +22,10 @@ boundary, not production readiness.
 ## The idea in one minute
 
 PocketHive gains a managed, reusable set of test records that source swarms can
-create and other swarms can use repeatedly. PostgreSQL holds durable truth.
+create and other swarms can use repeatedly. Each standalone Dataset package
+declares the storage adapter that holds its runtime truth. PostgreSQL is the
+recommended full managed-records adapter; Redis is an explicit
+capability-gated collection adapter.
 Swarms remain responsible for configured source and traffic flows. The existing
 PocketHive control plane remains the only RabbitMQ path for swarm lifecycle.
 
@@ -34,9 +41,11 @@ Starting a producer and asking it to produce records are deliberately separate:
 5. Only then does the Dataset module durably reserve and publish one bounded,
    idempotent `DATASET_SUPPLY` WorkItem on the controller-declared canonical
    WorkItem route.
-6. The producer runs its configured source flow and commits results through the
-   authorised Dataset application API. PostgreSQL records the result, operation
-   receipt and any new revision.
+6. The producer runs its configured source flow, applies the frozen typed
+   `SourceResultPolicy/v1`, and commits the classified result through the
+   authorised Dataset application API. The registration-selected adapter records
+   the result and typed receipt according to its capability profile. HTTP/TCP
+   transport success alone never proves business completion.
 
 If the producer is already current and ready, ensure-running is idempotently
 satisfied; a duplicate start is unnecessary. If start is denied, times out,
@@ -76,21 +85,34 @@ sequenceDiagram
 
 | Component | Owns | Must not own |
 |---|---|---|
-| Scenario Manager | Versioned Dataset definitions, schemas, bindings and policy metadata | Runtime records, Rabbit topology or lifecycle execution |
+| Scenario Manager | Validate/version standalone Dataset packages and their local contracts; own deployment-scoped Dataset Spaces/registrations; validate scenario-local `datasets/requirements.yaml`; and store one mapping per Scenario Binding | Cross-bundle consumer lists, runtime records, Rabbit topology or lifecycle execution |
 | Managed Dataset domain/application inside Orchestrator | Desired/observed reconciliation, target policy, operations, schedules, idempotency, revisions and application ports | Rabbit names, HTTP/JDBC mechanics, worker flow logic or a second swarm controller |
 | Existing Orchestrator/Swarm Controller | Plan/lifecycle authority, canonical `ph.control` events, actual runtime status and controller-owned WorkItem topology/route leases | Dataset record truth or source-flow outcomes |
-| Producer swarm | Bounded source work through Dataset input/output adapters | Dataset target calculation, queue declaration or direct PostgreSQL access |
+| Producer swarm | Bounded source work, shared result evaluation and typed outcome classification through Dataset input/output adapters | Dataset target calculation, dynamic result destinations, queue declaration or direct PostgreSQL access |
 | Consumer swarm | Local snapshot selection and normal traffic work | Central mutation on each transaction or business “return” through Rabbit ack/requeue |
-| PostgreSQL | Definitions admitted to runtime, records, target/policy versions, schedules, operations, fences, receipts, revisions, leases and outbox | Swarm execution |
+| PostgreSQL adapter | Full `MANAGED_RECORDS_V1` records, target/policy versions, schedules, operations, fences, receipts, revisions, leases and outbox | Swarm execution |
+| Redis adapter (deferred) | Explicit `REDIS_COLLECTION_V1` operations and receipts after separate qualification | Core MVP support, undeclared relational/revision/outbox/proof semantics or adapter fallback |
 | RabbitMQ | Delivery of control events and bounded WorkItems on their existing distinct routes | Schedule, desired state, record truth, completion proof or an additional Dataset event lane |
-| Operator UI and MCP | Authorised, bounded, redacted views and evidence | Record values, inferred readiness, hidden mutation or privileged agent authority |
+| Operator UI and MCP | Authorised Dataset-package draft/publish/retire commands, bounded redacted runtime views and evidence through shared product services | Record values, inferred readiness, hidden mutation or privileged agent authority |
+
+Each scenario bundle declares only its own logical Dataset requirements in
+`datasets/requirements.yaml`. Its
+separate Scenario Binding maps those requirements to concrete Dataset
+references, and Orchestrator creates runtime-resolved bindings during plan
+materialisation. There is no Dataset-level consumer list, cross-bundle lookup,
+self-registration or alias-discovery fallback.
+
+Dataset-package file references are also authoring/runtime separated: source
+bindings accept only validated package-relative `assetPath` values, while the immutable
+runtime plan contains the resolved existing worker container path and frozen
+package/file digest. No authored container path or dual path syntax is allowed.
 
 ## Architecture boundary: one control plane, no new plane
 
 The feature crosses three interfaces, but it does not create three planes.
 Only `ph.control` is a swarm control plane. The WorkItem route is the existing
 swarm data/work path, while the Dataset API is an application boundary backed
-by PostgreSQL.
+by the registration-selected storage adapter.
 
 | Existing boundary | Role | Allowed | Forbidden |
 |---|---|---|---|
@@ -98,10 +120,11 @@ by PostgreSQL.
 | Canonical WorkItem route | Existing swarm data/work path—not a control plane | Bounded `DATASET_SUPPLY` and existing intra-swarm work | Lifecycle commands, handcrafted routes or queue declarations by Dataset code |
 | Dataset application API | Application boundary and durable-store access—not a message plane | Claim, checkpoint, commit, snapshot hydration and any separately admitted allocation lease | Worker direct SQL or unauthorised cross-scope access |
 
-PostgreSQL is the durable store behind the Dataset application API, not a
-fourth lane or a new plane. Correctness depends on durable reconciliation and
-the periodic repair sweep; it does not depend on a separate Dataset event or
-notification path.
+The explicitly selected storage adapter sits behind the Dataset application
+API; it is not a fourth lane or a new plane. PostgreSQL supplies the full
+durable reconciliation/outbox profile. Redis supplies only its declared
+collection capabilities. Neither introduces a separate Dataset event lane or
+permits adapter fallback.
 
 The selected WorkItem route capability is platform-owned. Its exact durability,
 bounds, overflow, confirms, acknowledgement/redelivery, delivery-limit and
@@ -146,7 +169,7 @@ denied facts never become zero, ready or green.
 | Producer crashes after a possible external effect | Mark `UNCERTAIN` and reconcile against an independent provider/effect ledger; never blind-retry. |
 | Desired target increases | Coalesce to the newest policy generation and create only the bounded incremental deficit after promoting safe standby records. |
 | Desired target decreases | Stop new reservations and transition surplus reusable records to `STANDBY`; do not delete leased/applied records or external resources. |
-| Rabbit observation is unavailable | Show observation unavailable, not queue depth zero; PostgreSQL remains Dataset truth. |
+| Rabbit observation is unavailable | Show observation unavailable, not queue depth zero; the selected Dataset adapter remains authoritative for its declared capabilities. |
 
 ## Scheduling and recovery
 
@@ -157,8 +180,9 @@ compares durable desired and observed state:
 deficit = max(0, targetReady - eligibleReady - reserved - inFlight)
 ```
 
-- PostgreSQL stores target/policy generation, due time, fill cycle, claim,
-  fence, operation, receipt and outbox state.
+- `MANAGED_RECORDS_V1` stores target/policy generation, due time, fill cycle,
+  claim, fence, operation, receipt and outbox state in PostgreSQL. A Redis
+  profile may use only lifecycle operations it explicitly advertises.
 - Events may wake reconciliation, while a periodic repair sweep recovers missed
   notifications.
 - Reconcilers claim due rows in short database transactions; no database lock
@@ -200,7 +224,15 @@ application boundary:
 - domain/application code imports no Rabbit, HTTP, JDBC, Docker or UI types;
 - one lifecycle authority and one canonical contract exist for each behaviour;
 - new Dataset input/output adapters extend SDK factories/registries instead of
-  adding Dataset conditionals to generic workers.
+  adding Dataset conditionals to generic workers; `DATASET_UPSERT` is the
+  preferred publisher, while one shared opt-in, fail-closed
+  `managedDatasetPublisher` interceptor reuses the same typed committer when a
+  worker must retain another primary output; and
+- the existing canonical `ResultRules` DTO gains one shared Worker SDK
+  evaluator used by processor and source/sequence paths, while
+  `SourceResultPolicy/v1` performs exhaustive enum routing to only frozen
+  Dataset targets/actions. HTTP JSON Pointer and bounded TCP decoder contracts
+  remain explicit adapters, not duplicated business classifiers.
 
 This applies single responsibility, open/closed extension, substitutable
 adapter contracts, small interfaces and dependency inversion. Architecture
@@ -209,9 +241,11 @@ alone cannot.
 
 ## Agent, security and observability boundary
 
-An agent using PocketHive MCP is an untrusted, read-only evidence client. It may
-request bounded deterministic status or proof, but it cannot read Dataset
-values, mutate targets, bypass approval, publish work or access PostgreSQL.
+An agent using PocketHive MCP is an untrusted evidence client. Through HiveGate
+it may perform two deterministic status reads and create bounded, retained
+proof with dedicated permission, idempotency and quotas. It cannot read Dataset
+values, mutate business state, bypass approval, publish work or access
+PostgreSQL.
 
 Each adapter uses a least-privilege service identity scoped to its exact API or
 Rabbit lane. Logs, metrics, traces, control events and evidence contain bounded
@@ -224,12 +258,12 @@ effect.
 
 The operator experience has a complete design-level acceptance contract:
 
-- all 38 `DSUI` requirements exist exactly once in
+- all 43 `DSUI` requirements exist exactly once in
   [`managed-test-data-ui-acceptance-registry.json`](managed-test-data-ui-acceptance-registry.json);
 - every child has an accountable evidence owner, risks, primary/supporting
   charters, independent oracles, a design-review status and separate
   implementation/release statuses;
-- design review is `PASS`; implementation and release are `NOT_RUN` for all 38;
+- design review is `PASS`; implementation and release are `NOT_RUN` for all 43;
 - inventory, detail, supply, consumers, evidence and inspector preserve the
   three state axes and authority/freshness boundaries;
 - adverse states cover loading, background refresh, reconciling, stale,
@@ -245,18 +279,20 @@ The operator experience has a complete design-level acceptance contract:
 
 | Gate | Current result | What closes it |
 |---|---|---|
-| `G-TEAM-REVIEW-v1` | **PASS — green** | Current coherent design/specification/wireframe/assurance/registry baseline |
-| `G-IMPLEMENTATION-READY-v1` | `NOT_EVALUATED` | Approve canonical contracts, ports/adapters, route capability, model/TCK plan, first source/SUT profile, measurable outcomes and named owners |
+| `G-DESIGN-READY-v1` | **PASS — green** | Current coherent design/specification/wireframe/assurance/registry baseline |
+| `G-TEAM-APPROVED-v1` | `NOT_EVALUATED` | Product, Architecture, Security, Operations, UX and QA record the target decision, ownership and non-claims |
+| `G-IMPLEMENTATION-READY-v1` | `NOT_EVALUATED` | Approve the standalone Dataset-package lifecycle/schema, deployment-scoped Dataset Space/registration contracts, PostgreSQL core profile and deferred Redis adapter contract, canonical scenario-local `datasets/requirements.yaml`, per-scenario mapping, runtime-resolved binding and package-relative source `assetPath` contracts plus ports/adapters, MCP/UI commands, route capability, model/TCK plan, first source/SUT profile, measurable outcomes and named owners |
 | `G-M1-INTERNAL-v1` | `NOT_RUN` | Implement and fault-test an official-ingress vertical slice against independent PostgreSQL, Rabbit, worker and external-effect ledgers |
 | `dataset-qualified-core` | `NOT_RUN` | Pass every applicable acceptance child, 50,000-record/endurance/non-interference profile, security, recovery, UX and accessibility evidence |
 | Sensitive, HA, exact interrupted swarm-lifecycle recovery, exclusive/consumable and wider scale | `NOT_CLAIMED` | Separate explicit profiles and gates; none is inherited from core |
 
 ## Why the design assessment is green
 
-- The feature has one durable authority and one swarm lifecycle authority.
+- Each Dataset has one explicit storage authority and PocketHive has one swarm
+  lifecycle authority.
 - Control stays on the one existing control plane; bounded supply reuses the
-  existing WorkItem data path; PostgreSQL remains behind the Dataset
-  application boundary. No new plane is introduced.
+  existing WorkItem data path; the selected PostgreSQL or Redis adapter remains
+  behind the Dataset application boundary. No new plane is introduced.
 - The stopped-producer gap is closed by mandatory two-stage readiness gating.
 - Scheduling, resize, retry, ambiguity and restart decisions are durable and
   observable rather than inferred from broker or process-local counters.

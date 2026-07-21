@@ -1,5 +1,7 @@
 # Managed Datasets wireframe design QA
 
+Status: in progress — source-level design QA only
+
 ## Scope and evidence boundary
 
 This report records source-level semantic, interaction and responsive review of
@@ -21,6 +23,17 @@ level claims for the current change, not visual-capture claims.
 This is not a production-data, API, authorisation, security, performance or
 accessibility qualification. Screenshots cannot establish WCAG conformance.
 
+The current `captures/authoring/` PNGs are deterministic desktop planning
+captures of the inventory, Package, Space, Registration and lifecycle-safe
+removal surfaces. The inventory capture contains no sample row and explicitly
+distinguishes a successful authorised-empty response from API failure. Removal
+uses no invented identity and delegates draft-deletability and dependencies to
+Scenario Manager.
+They were rendered from `authoring.html` at 1440×1040 and visually checked for
+clipping and ownership-boundary clarity. They do not change the historical
+status of the operational-view captures described below and do not claim
+implemented authoring behavior or accessibility conformance.
+
 ## Remediation result
 
 | Surface | Source-level result | What changed |
@@ -32,7 +45,7 @@ accessibility qualification. Screenshots cannot establish WCAG conformance.
 | Supply execution journey | Passed at source level | Ordered steps show deficit reconciliation, canonical control-plane start, fresh readiness, bounded `DATASET_SUPPLY` WorkItem and PostgreSQL-backed receipt; later steps never imply they can bypass an unmet gate |
 | Component and state clarity | Passed at source level | Orchestrator, Swarm Controller, RabbitMQ, producer swarm and PostgreSQL responsibilities are named; Dataset health, swarm runtime, producer workload, convergence and durable-store state remain separate |
 | Reuse and capacity | Passed at source level | `SHARED` explains no-remove/no-add-back reuse, deferred exclusive/ordered modes fail explicitly, and 50,000 is labelled an unproven qualification target |
-| Supply/lifecycle | Passed at source level | All five canonical operation literals are shown with scope, attempt, fence, versions, timestamps and reconciled counters; a read-only `UNCERTAIN` cancellation-intent example retains its reservation and refuses a false `CANCELLED` claim |
+| Supply/lifecycle | Partial at source level | All five canonical operation literals are shown with scope, attempt, fence, versions, timestamps and reconciled counters; a read-only `UNCERTAIN` cancellation-intent example retains its reservation and refuses a false `CANCELLED` claim. A follow-up source specimen must add distinct transport outcome, canonical `SourceResultOutcome`, route action, authorised target and primary-supply contribution before this row can pass. |
 | Consumers | Passed | Six complete bindings are reachable with working Previous/Next pagination; no worker/revision/decision detail is hidden at narrower widths |
 | Evidence | Passed | A bounded proof-level/exact-target/flow-reference form precedes a canonical `DatasetProof/v1`; `BROKER_ACCEPTED` is limited to one `DATASET_SUPPLY` WorkItem attempt and visibly labelled transport-only; `PERSISTED`/PostgreSQL receipt remains completion authority |
 | Inspector | Passed | `Authoritative Dataset` and `This swarm applied` are separate groups with explicit revision, application and worker-coverage facts |
@@ -165,7 +178,8 @@ Observed deterministic result on 2026-07-17:
 Managed Datasets wireframe QA passed: 12 deterministic source-level groups.
 ```
 
-Source-level semantic and team-review result: **green**.
+Source-level semantic/design-readiness result: **green**. Cross-functional
+approval remains pending.
 
 Planning visual-fidelity result for the current source: **not claimed; capture
 refresh required**.

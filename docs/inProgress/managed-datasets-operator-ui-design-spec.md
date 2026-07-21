@@ -1,12 +1,12 @@
 # Managed Datasets Operator UI Design Specification
 
-Status: team-review-ready — planning/design assessment **green** under
-`G-TEAM-REVIEW-v1`; implementation, accessibility and release qualification
-evidence remain pending
+Status: in progress — design-ready under `G-DESIGN-READY-v1`;
+`G-TEAM-APPROVED-v1`, implementation, accessibility and release qualification
+remain pending
 
-Decision target: PocketHive Managed Datasets read-only operator experience
+Decision target: PocketHive Managed Datasets package authoring and operator experience
 
-Last updated: 2026-07-17
+Last updated: 2026-07-20
 
 Normative architecture parent:
 [Managed Test Data Architecture and Lifecycle Specification](managed-test-data-lifecycle-generic-spec.md)
@@ -28,14 +28,18 @@ implements the feature.
 
 ## 1. Decision and scope
 
-PocketHive shall deliver a read-only Managed Datasets operator experience in
-the active `ui-v2` application. The experience shall contain:
+PocketHive shall deliver a Managed Datasets experience in the active `ui-v2`
+application. Package authoring and operational observation are separate
+permissioned surfaces. The experience shall contain:
 
-1. an authorised cross-swarm Dataset inventory;
-2. a linkable Dataset-selection detail shell;
-3. Overview, Fitness, Supply and lifecycle, Consumers, and Evidence views;
-4. a Dataset-dependencies section in the existing Swarm Inspector; and
-5. the existing bounded Runtime Inspector, composed rather than recreated.
+1. real-data Dataset-package, Dataset-Space and Dataset-registration
+   inventories with create, read, draft/version edit, validate, lifecycle-safe
+   remove and retire workflows;
+2. an authorised cross-swarm runtime Dataset inventory;
+3. a linkable Dataset-selection detail shell;
+4. Overview, Fitness, Supply and lifecycle, Consumers, and Evidence views;
+5. a Dataset-dependencies section in the existing Swarm Inspector; and
+6. the existing bounded Runtime Inspector, composed rather than recreated.
 
 The page is an operational surface, not a data browser and not a seed control.
 It answers:
@@ -50,10 +54,12 @@ It answers:
 - What product-owned evidence proves or fails to prove sourcing, persistence,
   activation, readiness, and use?
 
-The MVP UI shall not expose Dataset record values, decrypted material,
-credentials, secrets, provider bodies, storage identifiers, raw database or
-Redis browsing, seed/refresh/start/stop/delete controls, or write-capable MCP
-operations.
+The UI shall not expose Dataset record values, decrypted material, credentials,
+secrets, provider bodies, raw database or Redis browsing, or implicit
+seed/refresh/start/stop/delete controls. Package writes affect definition
+drafts only; operational mutations remain separate explicit contracts. MCP
+package mutations are permitted only through the same authorised Scenario
+Manager services and HiveGate governance used by other agent mutations.
 
 ### 1.1 Normative language and requirement IDs
 
@@ -74,6 +80,8 @@ At this specification revision:
   reference containing fictional layout data;
 - production `ui-v2` has no Dataset route;
 - there is no `common/dataset-contracts` module;
+- there is no `scenarios/managed-datasets/` package contract, Dataset-package
+  Scenario Manager API, UI editor or MCP upload implementation;
 - Orchestrator has no Managed Dataset module or Dataset read API;
 - current auth contracts have no Dataset-specific resource scope; and
 - PocketHive MCP reports Dataset capability unavailable.
@@ -140,16 +148,18 @@ reports a present integer value of zero.
 
 | Component | Responsibility |
 |---|---|
-| Scenario Manager | Author Dataset Space, Dataset definition, declared-use, Fitness Contract, policy and source metadata; it is not the operational UI read authority |
+| Scenario Manager | Validate and own Dataset-package lifecycle plus deployment-scoped Dataset Spaces and registrations, including schema, local contracts, explicit registration storage adapter, declared-use, Fitness, policy and source metadata; it is not the operational runtime read authority |
 | Orchestrator Managed Dataset module | Own durable Dataset truth, revisions, operation summaries, activation/continuity inputs, read projections and proof facts; it does not own controller observations or compose a whole-swarm decision |
 | Swarm Controller | Own per-swarm membership, route, current worker-application/readiness aggregation and DatasetGuard contribution through typed contracts; it is not global Dataset authority and does not replace durable Dataset truth |
 | Orchestrator admission service | Compose the exact per-binding `StartDecision` and `RunningDecision` from Managed Dataset truth plus Controller-owned current observations under the canonical admission policy |
-| `common/dataset-contracts` | Own closed JSON schemas/Java DTOs, enums, reason codes, compatibility tests and generated TypeScript types |
+| `common/dataset-contracts` | Own closed JSON schemas/Java DTOs for Dataset packages, package-local contracts, Dataset Spaces, registrations, requirements, storage adapter/profile descriptors, `SourceResultPolicy/v1`, result outcomes/actions, enums, reason codes, compatibility tests and generated TypeScript types |
 | Orchestrator REST | Authenticate, authorise, bound and return the application-service read models and composed decisions |
 | `ui-v2` | Render the returned facts and client-only presentation state; never decide readiness or query infrastructure directly |
-| PocketHive MCP | Reuse the same product-owned status/proof services for its three read-only tools; it is not called by the browser |
-| PostgreSQL | Durable Dataset authority and source of committed read projections |
-| Redis/Rabbit/runtime debug | Operational mechanisms or diagnostics; never a browser-side Dataset authority |
+| PocketHive MCP | Reuse product-owned services for package list/validate/upload/publish/retire, status reads and bounded proof creation; it is not called by the browser and mutations are governed through HiveGate |
+| Dataset storage port | Select exactly the adapter and capability profile published in the Dataset package; never infer or fall back |
+| PostgreSQL adapter | Full `MANAGED_RECORDS_V1` durable authority and committed read projections |
+| Redis adapter (deferred) | Only declared `REDIS_COLLECTION_V1` operations and receipts after separate qualification; unavailable in core and no undeclared relational/revision/outbox/proof guarantees |
+| Rabbit/runtime debug | Operational mechanisms or diagnostics; never a browser-side Dataset authority |
 
 The Managed Dataset application owns the decision to reconcile a deficit, but
 it does not become a second swarm lifecycle authority. Its application core
@@ -167,8 +177,10 @@ outcome plus a fresh `RUNNING`, input-enabled and route-ready observation. When
 the producer is already healthy-idle, no duplicate start is required, but the
 same fresh readiness gate still applies. Only then may the Dataset outbox
 publish the bounded metadata-only `DATASET_SUPPLY` WorkItem. The producer
-commits its typed result through the Dataset application/API; only PostgreSQL's
-durable receipt advances Dataset truth.
+commits its typed result through the Dataset application/API; only a receipt
+promised by the selected adapter's published capability profile advances
+Dataset truth. A Redis receipt is never represented as a PostgreSQL
+transactional receipt.
 
 ```mermaid
 flowchart LR
@@ -179,12 +191,12 @@ flowchart LR
   WP[Canonical WorkItem route<br/>DATASET_SUPPLY]
   PS[Producer swarm<br/>source flow]
   API[Dataset application/API<br/>claim, checkpoint and commit]
-  PG[(PostgreSQL<br/>durable truth and receipts)]
+  STORE[(Explicit storage adapter<br/>PostgreSQL or Redis profile)]
 
   DR -->|1. ensure running| LP --> CP --> SC
   SC -->|fresh RUNNING + input + route| DR
   DR -->|2. dispatch bounded work| WP --> PS
-  PS -->|typed result| API --> PG
+  PS -->|typed result| API --> STORE
 ```
 
 `DSUI-ARCH-004`: Every operator flow diagram, state view and operation detail
@@ -193,9 +205,11 @@ durable Dataset commit as four named boundaries. It shall not imply that
 `swarm-start` contains supply demand, that `DATASET_SUPPLY` can start a swarm,
 or that a Rabbit acknowledgement is a Dataset completion receipt.
 
-`DSUI-ARCH-001`: The browser shall call authenticated Orchestrator APIs only.
-It shall not call PostgreSQL, Redis, Rabbit Management, Docker, Dataset worker
-ports, source providers, or MCP for Dataset facts.
+`DSUI-ARCH-001`: The browser shall call only authenticated official product
+ingress: Scenario Manager authoring APIs for package/Space/registration state
+and commands, and Orchestrator APIs for runtime Dataset facts. It shall not
+call direct Scenario Manager or Orchestrator service ports, PostgreSQL, Redis,
+Rabbit Management, Docker, Dataset worker ports, source providers, or MCP.
 
 `DSUI-ARCH-002`: Inventory and detail reads shall use committed aggregate read
 models. A request shall not execute a record-table full scan, an N+1 query per
@@ -225,6 +239,18 @@ The implementation shall not modify or add functionality to the archived UI.
 The required linkable routes are:
 
 ```text
+/dataset-packages
+/dataset-packages/new
+/dataset-packages/:packageId/versions/:version/edit
+/dataset-packages/:packageId/versions/:version/review
+/dataset-spaces
+/dataset-spaces/new
+/dataset-spaces/:datasetSpaceId/versions/:version/edit
+/dataset-spaces/:datasetSpaceId/versions/:version/review
+/dataset-registrations
+/dataset-registrations/new
+/dataset-registrations/:registrationId/versions/:version
+/dataset-registrations/:registrationId/versions/:version/edit
 /datasets
 /datasets/:statusScopeId/overview
 /datasets/:statusScopeId/fitness
@@ -234,6 +260,12 @@ The required linkable routes are:
 /hive/:swarmId
 ```
 
+Authoring routes are backed by Scenario Manager, not Orchestrator runtime read
+models. Only `DRAFT` package/Space content is editable in place. Review exposes validation issues, normalized
+package manifest, content digest, adapter/capability compatibility and the
+explicit publish action. A `PUBLISHED` or `RETIRED` version is read-only; an
+edit action creates a new draft version.
+
 `statusScopeId` is an opaque, URL-safe identifier returned by Orchestrator. It
 is stable while the logical operational scope exists, but it grants no access
 and shall not encode record values or credentials.
@@ -241,6 +273,127 @@ and shall not encode record values or credentials.
 Back, forward, reload, direct-link, new-tab, and authorised copy-link behavior
 shall work for every route. Tab selection shall be represented by the path, not
 ephemeral React state.
+
+#### 3.3.1 Dataset-package authoring contract
+
+The editor owns one package rooted at
+`scenarios/managed-datasets/<datasetPackageId>/` and renders these explicit
+concerns: manifest identity/version, record schema fields and natural key,
+package-local Dataset Contracts and their field subsets, storage
+capability requirements/supported profiles, mappings, projections, policies,
+sources and non-secret assets. It never edits a scenario bundle, deployment
+Dataset Space/backend settings or a contract owned by another Dataset package.
+
+The contract editor permits selection only from fields in the current record
+schema and shows which scenario bindings select that local `contractId` in the
+current deployment. Saving a contract changes only the draft package; publishing
+freezes the complete package/version/digest. No global contract edit or
+cross-Dataset propagation exists.
+
+The separate deployment-registration step requires an explicit selection:
+
+- `POSTGRESQL` with `MANAGED_RECORDS_V1` and a PostgreSQL settings reference;
+- `REDIS` with `REDIS_COLLECTION_V1`, a Redis settings reference and explicit
+  collection semantics.
+
+The core capability response marks `REDIS_COLLECTION_V1` unavailable. The UI
+may edit a package that lists the future profile, but it disables registration
+and explains the missing qualification until the deployment advertises the
+separately passed Redis profile.
+
+PostgreSQL may be labelled `Recommended`, but neither UI nor server supplies it
+when the field is absent. Save and upload fail on a missing adapter,
+`settingsRef`, capability profile or adapter-specific required setting.
+
+The Dataset Space editor owns only deployment authority policy: Space/SUT
+scope, access policy, classification ceiling, quotas and allowed storage
+profiles. It never edits Dataset schemas/contracts. Registration explicitly
+selects `datasetSpaceId`, exact published package/version, Space-local alias and
+storage tuple. A Space policy change may block registrations but cannot rewrite
+their packages. Retirement is blocked while dependent registrations, runs,
+records or evidence require the Space.
+
+The three authoring inventories are production application views, not fixture
+catalogues. They fetch authorised, paginated Scenario Manager projections and
+render only returned identifiers, versions, lifecycle states, dependency
+counts, capability results and command permissions. The production source and
+release bundle shall contain no embedded example package, Space, registration,
+adapter result or successful command response. Loading, authorised-empty,
+filtered-empty, denied, unavailable, incompatible, conflict and stale-command
+states are explicit. A missing authority never becomes a sample row.
+
+Every visible add, edit, delete-draft, replace-version, publish, activate,
+retire or registration action invokes the corresponding Scenario Manager
+application command through the authenticated product API. Controls are absent
+or disabled when the returned command permissions do not allow the action, but
+the server repeats authorisation and dependency checks. Successful responses
+are re-read from Scenario Manager; the client does not optimistically invent a
+new lifecycle state or retain a locally fabricated row.
+
+`Remove` is a UI action family, not a domain wire command. Its confirmation
+dialog names the actual effect:
+
+- `Delete draft` permanently removes only the exact unreferenced draft revision;
+- `Retire version` prevents new use of a published package, active Space or
+  active registration without deleting frozen bindings, records or evidence;
+- when dependencies forbid either effect, the server rejects the command and
+  returns bounded dependency facts; the UI offers no force-delete path.
+
+Published package versions and active Space/registration versions are never
+hard-deleted or overwritten. Editing one creates the next explicit version.
+
+Authoring commands are explicit and idempotent:
+
+| Command | Effect |
+|---|---|
+| Create draft | Creates a new `DRAFT` package/version only |
+| Import package | Validates an uploaded package and creates or explicitly replaces a draft; never publishes |
+| Save draft | Updates only the exact draft revision using optimistic concurrency |
+| Delete draft | Removes only an exact unreferenced draft revision after confirmation |
+| Validate | Returns closed path/schema/reference/capability diagnostics and changes no lifecycle state |
+| Publish | Freezes one validated immutable version and digest |
+| Retire | Prevents new bindings to the exact published version; does not rewrite running bindings |
+| Replace registration | Creates a new explicit registration version; never mutates the active version in place |
+
+The UI calls the same Scenario Manager application commands used by PocketHive
+MCP. It must not call MCP from the browser or maintain a second package parser.
+Published versions cannot be overwritten, and there is no automatic publish,
+adapter fallback or compatibility import path.
+
+The canonical Scenario Manager API surface is versioned contract-first:
+
+```text
+GET  /api/dataset-packages
+POST /api/dataset-packages/drafts
+GET  /api/dataset-packages/{packageId}/versions/{version}
+PUT  /api/dataset-packages/{packageId}/drafts/{version}
+DELETE /api/dataset-packages/{packageId}/drafts/{version}
+POST /api/dataset-packages/{packageId}/drafts/{version}:validate
+POST /api/dataset-packages/{packageId}/drafts/{version}:publish
+POST /api/dataset-packages/{packageId}/versions/{version}:retire
+POST /api/dataset-packages:import
+GET  /api/dataset-spaces
+POST /api/dataset-spaces/drafts
+GET  /api/dataset-spaces/{datasetSpaceId}/versions/{version}
+PUT  /api/dataset-spaces/{datasetSpaceId}/drafts/{version}
+DELETE /api/dataset-spaces/{datasetSpaceId}/drafts/{version}
+POST /api/dataset-spaces/{datasetSpaceId}/drafts/{version}:activate
+POST /api/dataset-spaces/{datasetSpaceId}/versions/{version}:retire
+GET  /api/dataset-registrations
+POST /api/dataset-registrations
+GET  /api/dataset-registrations/{registrationId}/versions/{version}
+POST /api/dataset-registrations/{registrationId}/versions
+POST /api/dataset-registrations/{registrationId}/versions/{version}:retire
+```
+
+Every list endpoint uses bounded server-side search, lifecycle filtering,
+sorting and opaque cursor pagination under the caller's authorisation scope.
+Create draft, import and registration creation require an idempotency key.
+Draft update, draft replacement and delete-draft additionally require the
+expected draft revision. Publish, activate, registration replacement and
+retire require an idempotency key plus the exact current version/digest.
+Unknown fields, unknown adapter/profile combinations and incomplete package
+references are rejected. No endpoint accepts raw backend credentials.
 
 ### 3.4 Capability gate
 
@@ -279,12 +432,12 @@ permission.
 
 `runningManifestDigest` and `qualification.qualifiedManifestDigest` identify
 the immutable qualified deployment contract. They bind the encryption
-profile, provider/build, custody boundary, key-floor trust anchor and rotation
-protocol, but explicitly exclude live `CoreDatasetKeyManifest` key IDs,
-epoch/digest and active-key state. A conforming routine key-material rotation
+profile, provider/build, custody boundary and rotation protocol, but explicitly
+exclude live `CoreDatasetKeyManifest` key IDs, version/digest and active-key
+state. A conforming routine key-material rotation
 therefore leaves both digests and `qualificationEpoch` unchanged. Dynamic
-key-manifest and safety-floor epoch/digests remain bounded internal
-status/evidence. Rotation may make `moduleState=RECONCILING`; invalid or
+key-manifest version/digest remains bounded internal status/evidence. Rotation
+may make `moduleState=RECONCILING`; invalid or
 mismatched key state makes the module unavailable even though qualification
 history remains accurate. Changing any pinned encryption/rotation contract
 creates a new running/qualified manifest and requires requalification.
@@ -293,15 +446,11 @@ creates a new running/qualified manifest and requires requalification.
 `No qualified profile` and never infers a profile from enabled code,
 deployment topology, planning fixtures, or a lower milestone. A profile is
 `PRESENT` only when the server verifies the minimal signed
-`CoreQualificationAttestation/v1` (or the stronger enterprise attestation),
+`CoreQualificationRecord/v1` (or the stronger enterprise evidence pack),
 including its exact qualified-manifest, build, image and deployment-contract
-digests, against the currently running capability; replays the complete
-application-owned qualification subject chain and `CORE_QUALIFICATION`
-witness journal to the qualified physical/remote namespace head; and requires
-the attestation's exact stable subject key/digest to equal
-`latestBySubject`. The result must not be superseded. A valid signature or
-matching running digest without that inclusion proof is insufficient.
-Otherwise the profile is
+digests, acceptance/child-result and reproducibility-pack digests against the
+currently running capability. A valid signature without exact digest equality
+is insufficient. Otherwise the profile is
 `NOT_YET_EVALUATED` or `UNAVAILABLE` with a bounded reason. A present
 profile is displayed exactly and links only to its bounded authorised evidence
 ref.
@@ -329,8 +478,8 @@ schema-invalid and renders no profile.
   direct route displays `Managed Datasets is not enabled in this deployment`.
 - If the module is implemented and its qualification tuple is still verified
   but operational Dataset state is `RECONCILING`, navigation remains available
-  and views display reconciliation state. If qualification chain/witness
-  verification itself is unavailable, the profile is non-present and
+  and views display reconciliation state. If qualification-record verification
+  itself is unavailable, the profile is non-present and
   production navigation remains hidden under the rule above.
 - No capability state enables a fixture fallback.
 
@@ -357,21 +506,18 @@ users receive the same non-qualified route behavior and no candidate or hidden
 scope details.
 
 `ActivateDatasetQualification/v1` is a separately authorised application use
-case. It verifies the minimal signed core qualification attestation, its
-recomputed pinned qualification-lineage subject key, complete child results,
-independent-oracle links and exact build/image/deployment digests; durably
-appends/read-backs the full subject chain; then appends/advances/read-backs the
-exact `CORE_QUALIFICATION` witness-journal entry. Only with the matching
-`MonotonicHeadReceipt` may one transaction record the qualification tuple and
-witnessed subject receipt for that same running manifest. Startup and every
-capability decision repeat full-chain/journal replay and latest-subject
-verification. Missing/reset/unavailable witness, truncated chain/journal,
-head mismatch or uncertain half-transition returns qualification
-`UNAVAILABLE` and module `RECONCILING`; historical pass metadata never enables
+case requiring `dataset:qualification:activate`. It verifies the signed core
+qualification record, complete child results, independent-oracle links and
+exact build/image/deployment/registry/pack digests against the running
+candidate. One PostgreSQL transaction records the qualification tuple and
+record. Startup and every capability decision repeat signature and exact-
+manifest verification. Missing, malformed, wrong-purpose, stale or mismatched
+records return qualification `UNAVAILABLE`; historical metadata never enables
 navigation. Only the final database commit enables general navigation;
 partial evidence, self-asserted UI state or a new manifest cannot. Candidate
-access is disabled after activation and reopens only for a new exact candidate
-under the same fail-closed rules.
+access is disabled after activation and reopens only for a new exact candidate.
+Core qualification makes no database/image rollback-resistance claim; restored
+state remains unqualified unless `Q-HA-RESTORE-v1` separately passes.
 
 ## 4. Canonical semantic model
 
@@ -573,8 +719,9 @@ never calls it deleted.
 
 Target size is labelled `Desired eligible inventory`. It shall not be
 described as transaction count, traffic rate, scheduler messages, usage limit
-or Redis-list length. The MVP UI is read-only and provides no target-edit
-control.
+or Redis-list length. The runtime Dataset views are read-only and provide no
+target-edit control; this does not prohibit the separately authorised package
+draft editor.
 
 #### 4.6.1 Orthogonal runtime states
 
@@ -588,7 +735,7 @@ dimensions rather than one overloaded status:
 | Producer workload | `IDLE`, `CLAIMED`, `EXECUTING`, `COMMITTING`, `FAILED`, `UNCERTAIN` | Is this running producer currently doing Dataset work? |
 | Supply operation | `RESERVED`, `QUEUED`, `RUNNING`, terminal states, `UNCERTAIN` | What happened to this bounded durable operation? |
 | Policy convergence | `STABLE`, `FILLING_TO_TARGET`, `APPLYING_SMALLER_VIEW`, `BLOCKED`, `PAUSED`, `UNKNOWN` | Have requested, active and swarm-applied targets converged? |
-| Durable store | committed revision or unavailable fact | What result has PostgreSQL actually accepted? |
+| Selected Dataset store | adapter/profile-specific committed receipt or unavailable fact | What result has the configured storage adapter actually accepted? |
 
 Healthy-idle is therefore `producer swarm=RUNNING` plus `producer
 workload=IDLE`; it is not stopped, failed or still executing. Likewise, a
@@ -602,12 +749,14 @@ health from target convergence alone.
 
 #### 4.6.2 Reuse, add-back and the capacity claim
 
-The reusable MVP supports only declared `SHARED` allocation. Workers hydrate a
-bounded immutable local view and select every eligible record before local
-reuse under the frozen selector. Selection removes no record from PostgreSQL or
-RabbitMQ, so there is no Managed Dataset add-back command. The existing opt-in
-Redis pop/push loop remains separately labelled legacy behavior and is not
-presented as an atomic borrow/return guarantee.
+The reusable `MANAGED_RECORDS_V1` profile supports declared `SHARED`
+allocation. Workers hydrate a bounded immutable local view and select every
+eligible record before local reuse under the frozen selector. Selection removes
+no record from PostgreSQL or RabbitMQ, so there is no add-back command for that
+profile. An existing opt-in Redis pop/push loop remains non-managed until
+represented by an explicit published `REDIS_COLLECTION_V1` Dataset package.
+Even then, the UI presents only the adapter's declared destructive-pop/return
+guarantees and never relabels them as an atomic lease.
 
 `EXCLUSIVE_LEASE`, consumable, single-use, ordered and transaction-bound
 allocation are deferred. If such a binding reaches the MVP read model, the UI
@@ -942,6 +1091,7 @@ Required mappings are:
 | `403` | `DATASET_VIEW_FORBIDDEN` | Feature-level permission page; reveal no counts |
 | `404` | `DATASET_STATUS_SCOPE_NOT_FOUND` | `Not found or no longer accessible`; do not distinguish hidden scope |
 | `409` | `SNAPSHOT_REQUIRED` | Refresh coherent snapshot |
+| `409` | `IDEMPOTENCY_CONFLICT` | Preserve the current proof form, generate a new idempotency key only for a deliberately new request, and never retry the conflicting key automatically |
 | `429` | `DATASET_READ_LIMITED` | Preserve prior facts, show retry time, honor `Retry-After` |
 | `503` | `DATASET_RECONCILING` | Show reconciliation; no readiness claim |
 | `503` | `DATASET_READ_UNAVAILABLE` | Preserve prior facts as stale until their `validUntil`, then unknown |
@@ -990,8 +1140,8 @@ them through the existing `/orchestrator/api` reverse-proxy prefix.
 | `GET /datasets/status/{statusScopeId}` | Detail header and Overview snapshot |
 | `GET /datasets/status/{statusScopeId}/fitness-evaluations` | Current/prior evaluations and paged assertions |
 | `GET /datasets/status/{statusScopeId}/operations` | Paged provisioning, refresh, validation and deprovision summaries |
-| `GET /datasets/status/{statusScopeId}/consumers` | Paged durable binding and current liveness status |
-| `POST /datasets/status/{statusScopeId}/proof-queries` | Bounded, read-only proof query using the canonical proof service |
+| `GET /datasets/status/{statusScopeId}/consumers` | Paged runtime-resolved binding and current liveness status |
+| `POST /datasets/status/{statusScopeId}/proof-queries` | Bounded evidence creation using the canonical proof service |
 | `GET /datasets/status/{statusScopeId}/proofs/{proofId}` | Re-read one retained immutable canonical proof without recomputation |
 | `GET /swarms/{swarmId}/dataset-dependencies` | Server-composed Dataset dependencies for one swarm/run |
 
@@ -1008,10 +1158,18 @@ bound covering the qualification/evidence window. Absent, expired,
 wrong-scope and unauthorised proof IDs return byte-equivalent
 `404 DATASET_PROOF_NOT_FOUND` semantics so retrieval is not an oracle.
 
-`DSUI-API-002`: `POST .../proof-queries` is a product read operation. Endpoint
-authorisation shall require Dataset `VIEW`, not the current generic mutation
-permission. A denied query creates no proof, provider call, Dataset mutation,
+`DSUI-API-002`: `POST .../proof-queries` creates retained evidence without
+mutating Dataset business state. It requires both Dataset `VIEW` and the
+dedicated `dataset:proof:create` permission; the generic mutation permission
+does not imply either. The request carries a required `Idempotency-Key` bound
+to principal, authorised scope, normalized proof request and snapshot token.
+An exact replay returns the same proof; reuse with different input returns
+`409 IDEMPOTENCY_CONFLICT`. Creation has explicit per-principal, scope and
+deployment rate/concurrency/storage quotas and returns bounded `429` when
+exhausted. A denied query creates no proof, provider call, Dataset mutation,
 Rabbit publication, or lifecycle effect; a bounded security audit is allowed.
+`GET .../proofs/{proofId}` requires Dataset `VIEW` plus
+`dataset:proof:read`.
 
 `DSUI-API-003`: Inventory search and filters are server-side. The browser shall
 not fetch all authorised rows and filter sensitive scopes locally.
@@ -1203,7 +1361,7 @@ The Managed Dataset module shall maintain bounded projections equivalent to:
 |---|---|
 | `dataset_selection_status` | Exact environment/space/Dataset/partition/pool selection; active policy, revision, eligible and policy aggregates, real reservations/in-flight work, source/refresh state and projection lag |
 | `dataset_use_status` | One selection plus declared use/binding/Fitness Contract; current evaluation, effective prior PASS, safe horizon and reasons |
-| `dataset_consumer_status` | Durable binding snapshot, membership epoch, expected/applied selector/materializer/activation revisions and latest bounded liveness overlay |
+| `dataset_consumer_status` | Durable `ResolvedDatasetBinding/v1`, membership epoch, expected/applied selector/materializer/activation revisions and latest bounded liveness overlay |
 | `dataset_operation_summary` | Bounded provisioning/refresh/validation/deprovision cycle summaries and reconciled accounting |
 | `dataset_proof_snapshot` | Immutable, bounded, time-bound proof facts, digest and evidence references |
 
@@ -1272,7 +1430,7 @@ from the same snapshot. If it cannot be calculated within its read budget,
 | Admission thresholds met | `summary.readyStatusScopeCount` | Visible scopes whose formal Dataset health is `READY`; not a complete swarm-start decision |
 | Needs attention | `summary.attentionStatusScopeCount` | Visible scopes in `DEGRADED | STARVED | ERROR | AUTH_REQUIRED` |
 | Warming | `summary.warmingStatusScopeCount` | Visible scopes in `INITIALISING | WARMING` |
-| Activated consumer bindings | `summary.activatedBindingCount` | Distinct durable activated bindings in visible scopes |
+| Activated consumer bindings | `summary.activatedBindingCount` | Distinct durable runtime-resolved bindings in visible scopes; never an authored cross-bundle registry |
 | Active consumer swarms | `summary.distinctObservedActiveSwarmCount` | Distinct visible swarms with a current live observation; rendered only when present |
 
 The wireframe's `workers applied` summary is removed. Worker-Dataset
@@ -1574,9 +1732,11 @@ used by the architecture:
    fenced WorkItem route ready.
 4. The outbox publisher sends metadata-only `DATASET_SUPPLY` through that
    canonical WorkItem route. The producer claims and executes the bounded work.
-5. The producer submits a typed result through the Dataset application/API;
-   PostgreSQL commits the records, accounting and receipt before the UI calls
-   the operation durable success.
+5. The producer applies the frozen shared result evaluator and
+   `SourceResultPolicy/v1`, then submits the typed classified result through the
+   Dataset application/API. PostgreSQL commits the selected authorised target,
+   accounting and receipt before the UI calls the operation durable success.
+   HTTP/TCP transport success alone is not displayed as business completion.
 
 The UI also names the current component at each step: Orchestrator Dataset
 application/reconciler, existing Orchestrator lifecycle path, Swarm Controller,
@@ -1645,7 +1805,11 @@ Every operation contains:
   administrative receipt ref, requested/accepted time, bounded reason,
   accepted-from state/operation version/attempt fence, resolution time,
   bounded evidence refs and terminal receipt ref as applicable;
-- bounded terminal/failure code; and
+- bounded terminal/failure code;
+- bounded `resultOutcomeCounts` keyed only by the canonical
+  `COMPLETED | FAILED_WRONG_STATE | CALL_FAILED | INVALID_RESPONSE | PENDING |
+  UNCERTAIN` enum, plus each applied route action, opaque authorised target ref
+  and `contributesToPrimarySupply`; and
 - an authorised Journal link by correlation reference when available.
 
 States are:
@@ -1666,7 +1830,18 @@ no-effect evidence plus the same operation's newer attempt/fence. The UI never
 labels a different operation as that retry, and it never offers a terminal
 no-effect outcome while a late provider effect remains possible.
 
-The operator UI and Dataset MCP remain read-only and never originate
+The Operations view keeps protocol outcome, business outcome, route action,
+target Dataset and primary-supply contribution distinct. It may show, for
+example, `HTTP 201 / FAILED_WRONG_STATE / failed-cards / does not contribute`,
+but never displays the raw response or derives the classification in the
+browser. `PENDING` and `UNCERTAIN` show reconciliation in progress and no
+Dataset destination until a durable classified receipt exists. A completed
+record and a failed-attempt record may appear in different authorised Datasets;
+the failed count never fills the completed Dataset target.
+
+The operational views remain business-state read-only. Dataset-package
+draft/publish/retire commands are definition lifecycle operations, not supply
+operation cancellation or business-state mutation. Neither UI nor MCP originates
 `CancelSupplyOperation/v1`. `REQUESTED` renders `Cancellation requested —
 reconciling`, preserves the operation reservation/progress facts, and is not a
 terminal `Cancelled` label. `RESOLVED_CANCELLED` may be shown only with the
@@ -1708,8 +1883,9 @@ facts use the same operation source and cannot disagree silently.
 
 ## 11. Consumers view
 
-One row/card represents one durable consumer binding plus its latest bounded
-runtime observation.
+One row/card represents one durable `ResolvedDatasetBinding/v1` plus its latest
+bounded runtime observation. The UI never implies that a Dataset definition or
+scenario bundle contains a consumer registry.
 
 ### 11.1 Consumer contract
 
@@ -2235,25 +2411,29 @@ Exit:
 | `DSUI-DATA-002` | Production source/bundle has no dependency on wireframe/capture/test fixture assets | import graph, bundle manifest, repository policy test |
 | `DSUI-DATA-003` | E2E data is created through official product ingress and fixtures cannot enter release bundles | build profile, E2E setup receipts, bundle scan |
 | `DSUI-DATA-004` | Missing/null/denied facts never render as zero/ready/pass/green | schema mutation and UI state tests |
-| `DSUI-ARCH-001` | Browser network capture contains only authorised Orchestrator Dataset/runtime endpoints and static UI assets | Firefox network capture, egress policy |
+| `DSUI-ARCH-001` | Browser network capture contains only authorised official-ingress Scenario Manager authoring endpoints, Orchestrator Dataset/runtime endpoints and static UI assets; no direct service/storage/MCP endpoint is reachable | Firefox network capture, ingress and egress policy |
 | `DSUI-ARCH-002` | Inventory/detail have fixed query counts and no per-row/per-swarm fan-out | SQL instrumentation, request trace |
 | `DSUI-ARCH-003` | Display snapshot identifies authority/projection lag and cannot overrule admission truth | revision-lag fault tests, independent authority query |
 | `DSUI-ARCH-004` | Lifecycle, readiness, WorkItem dispatch, producer execution and durable commit remain distinct; no later step starts before its gate | official control/WorkItem/API/DB ledgers, causal timeline and lane-bypass faults |
+| `DSUI-ARCH-005` | UI authoring keeps portable packages, deployment-scoped Dataset Spaces/registrations and scenario requirements separate; packages contain no `datasetSpaceId` or backend settings | package export/import comparison, repository layout and Scenario Manager registry |
 | `DSUI-SEM-001` | Partition/pool/declared-use/variable-profile fields are never conflated | contract vectors, copy/component tests |
 | `DSUI-SEM-002` | Target gap and real reserved/in-flight provisioning remain distinct; unsupported `REPLENISH` is absent | operation ledger versus UI/API, enum TCK |
 | `DSUI-SEM-003` | Dataset health, producer swarm runtime, producer workload, supply operation, policy convergence and durable store remain independently labelled | read-model mutation matrix and DOM assertions |
 | `DSUI-API-001` | Canonical Java/JSON/TypeScript contracts and REST docs agree for every endpoint | cross-language TCK, generated drift check |
-| `DSUI-API-002` | Proof query is read-authorised and denied queries create zero command effects | auth oracle, database/provider/Rabbit ledgers |
+| `DSUI-API-002` | Proof creation requires VIEW plus `dataset:proof:create`, enforces request-bound idempotency and quotas, and denied requests create no lifecycle, dispatch or provider effects | auth oracle, proof/database/provider/Rabbit ledgers |
 | `DSUI-API-003` | Search/facets/summary/pagination are authorised server-side and hidden scopes leak no aggregate | multi-principal enumeration suite |
+| `DSUI-API-004` | UI and MCP authoring operations use the same Scenario Manager package/Space/registration list/read/create/update/delete-draft/publish/activate/replace-version/retire contracts, revisions, digests, dependency checks and idempotency outcomes | cross-ingress contract TCK and command audit |
+| `DSUI-API-005` | Every package declares storage requirements/supported profiles and every registration explicitly selects an admitted Space/adapter/settings/profile tuple; missing or incompatible capabilities fail with no activation/runtime mutation | schema/Space/adapter compatibility TCK and mutation suite |
 | `DSUI-VIEW-001` | Inventory summary, banner, rows, filters, disclosures and paging each render the exact response field and same-snapshot total | API/UI DOM comparison, independent projection oracle |
 | `DSUI-VIEW-002` | Detail header and Overview preserve independent Dataset admission, consumer impact, supply, validity, Fitness and distribution facts | response/DOM trace, inconsistent-revision mutation suite |
 | `DSUI-VIEW-003` | Fitness keeps current evaluation, prior PASS and assertions independent and never recalculates verdict client-side | independent Fitness oracle, fact-removal tests |
-| `DSUI-VIEW-004` | Operation history uses supported kinds/states and reconciled counters; no target deficit is presented as an operation | operation ledger/API/UI comparison |
-| `DSUI-VIEW-005` | Consumers show every authorised binding through pagination and distinguish durable binding from live observation | binding ledger, controller restart/staleness suite |
+| `DSUI-VIEW-004` | Operation history uses supported kinds/states and reconciled counters; it preserves transport outcome, canonical source-result outcome, route action, authorised target and primary-supply contribution without client classification, and no target deficit is presented as an operation | operation/result-route ledger, API/UI comparison, HTTP/TCP wrong-state/pending/uncertain specimens |
+| `DSUI-VIEW-005` | Consumers show every authorised runtime-resolved binding through pagination, distinguish it from live observation and never imply an authored cross-bundle consumer registry | binding ledger, bundle-isolation contract test and controller restart/staleness suite |
 | `DSUI-VIEW-006` | Evidence reproduces canonical proof facts without promotion, raw values or false broker/flow claims | proof canonicalization and fact-removal suite |
 | `DSUI-VIEW-007` | Swarm dependencies are server-composed and preserve central-versus-local and start-versus-running distinctions | official swarm endpoint, worker/binding ledgers, fault matrix |
 | `DSUI-VIEW-008` | Existing Runtime Inspector is composed; resources/logs/inspect/Rabbit facts come only from real runtime APIs | runtime API/DOM comparison, permission/error tests |
 | `DSUI-VIEW-009` | Supply journey, placement, scheduling, reuse/add-back and unqualified 50,000-record copy match the canonical architecture and current evidence | source QA tokens, state specimens, control/WorkItem/DB trace and qualification-state tests |
+| `DSUI-VIEW-010` | Package, Space and registration inventories use only authorised Scenario Manager responses, visibly distinguish lifecycle and dependency impact, provide list/add/edit/lifecycle-safe-remove journeys, edit only permitted drafts/new versions, and require explicit confirmation for delete-draft/publish/activate/replace/retire | API/DOM comparison, empty/error/conflict matrix, UI keyboard tests and version/dependency audit |
 | `DSUI-STATE-001` | Every section 15 state is reachable, visibly distinct and contains no fabricated value | component state matrix and official-ingress E2E |
 | `DSUI-STATE-002` | Rabbit manifest absence, observation absence and observed zero are distinct | runtime adapter fault tests |
 | `DSUI-A11Y-001` | All routes/actions work by keyboard with correct focus and names/roles/values | Firefox keyboard run, accessibility tree and screen-reader checks |
@@ -2263,6 +2443,7 @@ Exit:
 | `DSUI-SEC-003` | Hostile identifiers/reason inputs render only escaped reviewed text and cannot alter DOM/route | XSS/property tests, CSP report |
 | `DSUI-SEC-004` | Dataset response state is not persisted client-side and clears on identity/scope change | browser storage/cache inspection |
 | `DSUI-SEC-005` | UI/API/MCP authorisation outcomes agree and denied paths have zero command effects | cross-ingress differential test |
+| `DSUI-SEC-006` | Authoring accepts no credentials or runtime records, embeds no example authority rows or successful command results, enforces least-privilege list/read/create/update/delete-draft/publish/activate/replace/retire permissions and clears draft content on identity/scope loss | auth matrix, canary and release-bundle scans, browser network/storage and state tests |
 | `DSUI-PERF-001` | Measured transaction threads make zero UI/status/proof/central calls | thread I/O detector, network trace |
 | `DSUI-PERF-002` | Fixed SQL/query-plan limits pass at maximum qualified cardinality | DB instrumentation and plans |
 | `DSUI-PERF-003` | API, payload, render and local-interaction SLOs pass on the named reference deployment | browser/server performance report |
@@ -2278,7 +2459,7 @@ Exit:
 | Detail decisions/Overview | `GET /datasets/status/{id}` | selection/use status and activation ledger | snapshot token; independent admission/continuity oracle |
 | Fitness | `GET .../fitness-evaluations` | immutable evaluations and current/effective receipt pointers | contract/input digest, evaluated revision, trusted time |
 | Supply/lifecycle | `GET .../operations` | operation summaries and source/refresh/validation ledgers | terminal accounting invariant and operation fence |
-| Consumers | `GET .../consumers` | durable bindings/activation plus latest liveness overlay | binding ledger versus worker reports and response `validUntil` |
+| Consumers | `GET .../consumers` | runtime-resolved bindings/activation plus latest liveness overlay | binding ledger versus worker reports and response `validUntil` |
 | Evidence | `POST .../proof-queries` | canonical proof service/snapshot | canonical digest and independent fact oracles |
 | Swarm Dataset dependencies | `GET /swarms/{id}/dataset-dependencies` | durable binding + Dataset authority + activation + liveness | server decision revision and per-source observation times |
 | Runtime resources/logs/inspect | existing runtime-debug endpoints | compute adapter/runtime reconciliation | existing API response and redaction contract |
@@ -2289,7 +2470,7 @@ Exit:
 
 The wireframes remain visual examples, not response fixtures. The current
 neutral HTML/CSS/JavaScript and deterministic `qa-check.mjs` result are the
-approval artifacts for `G-TEAM-REVIEW-v1`; they passed source-level semantic
+approval artifacts for `G-DESIGN-READY-v1`; they passed source-level semantic
 review. The existing Firefox images predate this source, contain retired
 business-specific fixture wording and are historical/reference-only. They are
 explicitly excluded from current design evidence. Current-source visual

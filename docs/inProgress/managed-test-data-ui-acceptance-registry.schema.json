@@ -33,6 +33,8 @@
       "required": [
         "designReviewGate",
         "designReviewStatus",
+        "teamApprovalGate",
+        "teamApprovalStatus",
         "implementationGate",
         "implementationEvidenceStatus",
         "releaseGate",
@@ -40,8 +42,10 @@
         "scopeNote"
       ],
       "properties": {
-        "designReviewGate": {"const": "G-TEAM-REVIEW-v1"},
+        "designReviewGate": {"const": "G-DESIGN-READY-v1"},
         "designReviewStatus": {"enum": ["PASS", "FAIL", "INCONCLUSIVE"]},
+        "teamApprovalGate": {"const": "G-TEAM-APPROVED-v1"},
+        "teamApprovalStatus": {"enum": ["NOT_EVALUATED", "PASS", "FAIL", "INCONCLUSIVE"]},
         "implementationGate": {"const": "G-M1-INTERNAL-v1"},
         "implementationEvidenceStatus": {"enum": ["NOT_RUN", "PASS", "FAIL", "INCONCLUSIVE"]},
         "releaseGate": {"const": "dataset-qualified-core"},
@@ -64,8 +68,8 @@
     },
     "requirements": {
       "type": "array",
-      "minItems": 38,
-      "maxItems": 38,
+      "minItems": 43,
+      "maxItems": 43,
       "uniqueItems": true,
       "items": {"$ref": "#/$defs/requirement"}
     }
@@ -172,7 +176,7 @@
         "releaseEvidenceRefs"
       ],
       "properties": {
-        "designReviewGate": {"const": "G-TEAM-REVIEW-v1"},
+        "designReviewGate": {"const": "G-DESIGN-READY-v1"},
         "designReviewStatus": {"enum": ["PASS", "FAIL", "INCONCLUSIVE"]},
         "designEvidenceRefs": {
           "type": "array",

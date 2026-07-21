@@ -81,6 +81,38 @@ Status tracking:
 
 ## Scenario bundles and the Scenarios UI
 
+Scenario bundles and Managed Dataset packages are separate authoring units:
+
+```text
+scenarios/
+├── bundles/<scenarioId>/
+│   ├── scenario.yaml
+│   └── datasets/requirements.yaml  # scenario-specific requirements only
+└── managed-datasets/<datasetPackageId>/
+    ├── dataset.yaml                # Dataset definition SSOT
+    ├── schema/
+    ├── contracts/
+    ├── mappings/
+    ├── projections/
+    ├── policies/
+    ├── sources/
+    └── assets/
+```
+
+The two Dataset locations have different ownership. A scenario bundle may
+declare only its own requirements and scenario-owned assets. It must not copy a
+Dataset definition. The standalone Dataset package owns its record schema,
+package-local field-subset contracts, storage requirements/supported profiles,
+mappings, projections, policies and sources. A deployment-scoped registration
+owns Dataset Space, alias and explicit adapter/settings/profile. See
+[`scenarios/managed-datasets/README.md`](../../scenarios/managed-datasets/README.md).
+The production authoring UI lists and reads these objects only through
+authorised Scenario Manager APIs. Add/edit/remove controls execute the same
+versioned application commands as MCP: drafts may be deleted only when
+unreferenced, while published/active package, Space and registration versions
+are replaced by a new version or retired rather than hard-deleted. No example
+authoring objects or successful command results ship in the UI bundle.
+
 In the repo (and on disk in deployments) scenarios are stored as
 **bundles**:
 
@@ -100,8 +132,9 @@ scenarios/
 - `templates/` holds protocol templates. Today HTTP templates live under
   `templates/http/`; TCP/ISO/SOAP/etc can live under sibling folders as they
   are introduced.  
-- `sut/` and `datasets/` are optional and may contain SUT configs or input
-  data; exact conventions are described in the in‑progress
+- `sut/` and `datasets/` are optional. A bundle's `datasets/` may contain the
+  reserved `requirements.yaml` and scenario-owned input assets, but never a
+  standalone Dataset definition; exact conventions are described in the in-progress
   `docs/archive/scenario-bundle-runtime-plan.md`.
 
 Example bundles in this repo:

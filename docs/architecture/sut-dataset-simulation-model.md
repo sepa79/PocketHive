@@ -38,9 +38,11 @@ Operationally, we need:
 4. Runtime always uses an immutable `Binding Snapshot` (frozen at start).
 5. No implicit compatibility or cascading defaults; bind/start fails fast.
 6. Single source of truth per concern:
-   - scenario requirements in scenario template contract,
+   - each scenario's own logical Dataset requirements in its scenario template
+     contract,
    - SUT capabilities in SUT environment contract,
    - dataset registry in dataset space contract.
+   A scenario bundle never lists another scenario/bundle as a consumer.
 7. Support two explicit SUT sourcing modes:
    - `global` SUT Environment (shared/governed),
    - `scenario-local` SUT definition (portable/low-entry mode).
@@ -51,6 +53,18 @@ Operationally, we need:
 9. `Simulation Program` scope is single-SUT only.
    Multi-SUT orchestration is out of scope for this model.
 10. Organization policy may disable one SUT source mode (`global` or `scenario-local`) per deployment.
+11. Authored references to files inside a scenario bundle use normalized
+    bundle-relative `assetPath` values. Container mount paths are derived only
+    while materialising a runtime plan and are never an alternate authored
+    form.
+12. Dataset definitions are first-class packages under
+    `scenarios/managed-datasets/<datasetPackageId>/`, independent of scenario
+    bundles. A scenario's `datasets/` directory contains only its own
+    requirements or scenario-owned assets.
+13. Every Dataset package declares required storage capabilities and supported
+    profiles. Its deployment registration declares one explicit storage
+    adapter, settings reference and profile. `POSTGRESQL` and `REDIS` are
+    supported adapter identities; there is no implicit default or fallback.
 
 ---
 
@@ -60,25 +74,46 @@ Operationally, we need:
 
 1. `Scenario Template`
    - Reusable workflow/template logic.
-   - Declares required capabilities and variables, but not concrete SUT endpoints.
+   - Declares required capabilities, variables and bundle-local logical
+     `DatasetConsumerRequirement/v1` entries, but not concrete SUT endpoints,
+     other scenarios or swarms.
 
 2. `SUT Environment`
    - Concrete runtime target.
    - Declares provided endpoint capabilities, protocol support, contract versions, and variable profiles.
 
 3. `Dataset Space`
-   - SUT-scoped shared data namespace.
-   - Contains dataset definitions and state pools used by many scenarios/swarms.
+   - Deployment-scoped, SUT-scoped shared authority boundary.
+   - Owns access policy, classification ceiling, quotas and allowed storage
+     profiles for explicitly registered Datasets, not their schemas/contracts.
 
-4. `Scenario Binding`
+4. `Dataset Package`
+   - Portable SSOT for one Dataset definition, record schema, package-local
+     `DatasetContract/v1` field subsets, mappings, projections, policies,
+     sources and storage adapter contract.
+   - Lives under `scenarios/managed-datasets/<datasetPackageId>/` in source and
+     is imported/versioned by Scenario Manager. It contains no deployment
+     `datasetSpaceId`, alias, backend settings or credentials.
+
+5. `Dataset Registration`
+   - Deployment-context link from one published Dataset package/version to one
+     active Dataset Space.
+   - Owns the Space-local alias and explicit storage adapter, settings reference
+     and capability profile. It has no implicit default or fallback.
+
+6. `Scenario Binding`
    - Validated link: `Scenario Template` + `SUT Environment` + `Dataset Space` + variable profile.
-   - Produces a frozen, versioned runtime snapshot.
+   - Belongs to exactly one scenario template and explicitly maps each of that
+     template's Dataset requirement IDs; it is never a Dataset-level consumer
+     list.
+   - Produces frozen, versioned `ResolvedDatasetBinding/v1` entries in the
+     runtime snapshot.
 
-5. `Simulation Program`
+7. `Simulation Program`
    - Group of scenario bindings with scheduling/mix/rate policies.
    - Represents one production-simulation campaign (onboarding + traffic + stress + batch).
 
-6. `SUT Source Mode`
+8. `SUT Source Mode`
    - `global`: binding references a registered `SUT Environment` id.
    - `scenario-local`: scenario bundle carries its own SUT definition used to build the binding snapshot.
    - Validation and runtime behavior are the same after snapshot creation.
@@ -89,6 +124,8 @@ Operationally, we need:
 graph TD
   ST[Scenario Template] --> SB[Scenario Binding]
   SUT[SUT Environment] --> SB
+  DP[Published Dataset Package] --> DR[Dataset Registration]
+  DR --> DS
   DS[Dataset Space<br/>scoped to SUT] --> SB
   VP[Variables Profile] --> SB
 
@@ -113,6 +150,11 @@ Example requirement categories:
 2. Protocol and contract version constraints per endpoint.
 3. Required variable keys with type/format constraints.
 4. Required feature flags/capabilities.
+5. Bundle-local Dataset requirement IDs, required logical fields, trusted time
+   and scenario-local slot wiring, loaded only from
+   `datasets/requirements.yaml`. A Scenario Binding explicitly selects a
+   concrete Dataset and one package-local `datasetContractId` containing those
+   fields. Requirements contain no other scenario ID.
 
 ## 5.2 SUT Environment declares `provides`
 
@@ -124,11 +166,18 @@ Example requirement categories:
 In `scenario-local` mode, the same `provides` structure is loaded from the scenario bundle
 instead of a global registry entry.
 
-## 5.3 Dataset Space declares `datasets`
+## 5.3 Dataset package, Space and registration declarations
 
-1. Dataset ids, aliases, and state pools.
-2. Ownership and usage constraints (which scenario roles can read/write).
-3. Dataset-level schema/shape metadata for validation.
+1. The portable Dataset package declares schema, package-local field-subset
+   contracts, partitions/pools, sources/policies, required storage capabilities
+   and supported profiles. It contains no deployment Space or backend settings.
+2. The deployment-scoped Dataset Space declares SUT/authority scope, access
+   policy, classification ceiling, quotas and allowed storage profiles.
+3. The Dataset registration binds one exact package version to one active
+   Space and declares the Space-local alias plus one explicit
+   adapter/settings/profile tuple.
+4. Dataset contracts are local to their owning package. A binding selects one
+   `datasetContractId`; another Dataset's same-named contract is unrelated.
 
 ## 5.4 Binding Validator result
 
@@ -138,6 +187,13 @@ instead of a global registry entry.
 2. protocol/version constraints match,
 3. all required variables are present and valid,
 4. all referenced datasets/aliases exist in dataset space.
+5. every Dataset requirement is mapped exactly once, with no missing, extra,
+   duplicate, wildcard or cross-scope mapping.
+6. the mapped Dataset's declared adapter capability profile satisfies every
+   required operation; no adapter substitution or emulation is attempted.
+7. the Dataset registration targets the same active Dataset Space and its
+   current authority policy admits the principal, classification and selected
+   adapter/profile.
 
 No partial bind and no fallback chain.
 
@@ -177,7 +233,7 @@ Create a **new binding version** when changing:
 1. `scenarioTemplateId` (or incompatible template contract version),
 2. `sutEnvironmentId` / `sutSourceMode`,
 3. `datasetSpaceId`,
-4. `datasetAliasMap`,
+4. a Dataset requirement mapping,
 5. variable profile and other compatibility-impacting fields.
 
 Allow **in-place update** only for non-runtime metadata, for example:
@@ -190,15 +246,26 @@ Running swarms always use the frozen binding snapshot captured at run start.
 
 ## 5.8 DB-backed Provenance and Versioning (decided)
 
-Primary persistence for binding definitions, simulation programs, and dataset-space descriptors is database-backed.
+Primary persistence for binding definitions, simulation programs, and
+published Dataset-package metadata is database-backed.
 
-1. `Postgres` is the source of truth for metadata and version history.
+1. Scenario Manager's `Postgres` store is the source of truth for registry
+   metadata and version history; this does not force each Dataset's record
+   storage adapter to be PostgreSQL.
 2. Versioning/audit is tracked in DB records (who/when/what changed).
 3. Export/import (YAML/JSON) is supported for portability and environment bootstrap, but is not a second source of truth.
 
 ## 5.9 Dataset Registry Scope (decided)
 
-`Scenario Manager` stores and serves dataset definitions only (registry/control-plane metadata).
+`Scenario Manager` validates, versions, publishes and serves Dataset packages
+(registry/control-plane metadata). Packages follow `DRAFT -> PUBLISHED ->
+RETIRED`; published versions are immutable.
+
+Both the UI and PocketHive MCP call the same Scenario Manager application
+services. MCP exposes `dataset_package_list`, `dataset_package_validate`,
+`dataset_package_upload`, `dataset_package_publish`, and
+`dataset_package_retire`. Upload mode is explicitly `CREATE_DRAFT` or
+`REPLACE_DRAFT`; it never silently publishes or replaces a published version.
 
 `Scenario Manager` does **not** perform data-plane manipulation such as:
 
@@ -209,6 +276,25 @@ Primary persistence for binding definitions, simulation programs, and dataset-sp
 
 Those operations are executed by dedicated swarms/workers (for example seeder/migrator flows)
 against runtime data stores.
+
+### 5.9.1 Producer result classification and routing (decided)
+
+Dataset-producing workers classify an external call before committing its
+result. One versioned `SourceResultPolicy/v1` combines the canonical
+`ResultRules` observation with the explicit HTTP/TCP protocol adapter outcome
+and emits a closed result enum. Transport success is not business success: a
+successful exchange with a declared wrong terminal state is
+`FAILED_WRONG_STATE`; pending and ambiguous effects remain under bounded
+reconciliation.
+
+The same policy exhaustively maps each outcome to exactly one pre-authorised
+Dataset target or operation action. This is a content-based router over a typed
+enum, not a regex router over arbitrary payloads. Dynamic/templated Dataset
+names, wildcard/default targets and scenario-to-scenario references are not
+supported. A conclusive failure may enter a separately declared remediation
+Dataset, but it never contributes to the completed Dataset's supply target.
+The preferred `DATASET_UPSERT` output and optional shared Dataset publisher
+interceptor reuse the same evaluator, router, idempotency and receipt contract.
 
 ## 5.10 Version Matching Semantics (decided)
 
@@ -335,7 +421,10 @@ Implementation is split into small, mergeable PRs. Each PR should keep system be
 
 ### PR 0: Contracts + shared validator baseline
 
-1. Define DTO/schema for `DatasetSpace`, `ScenarioBinding`, `SimulationProgram`, and binding snapshot.
+1. Define DTO/schema for `DatasetSpace`, `DatasetConsumerRequirement/v1`,
+   `ScenarioBinding.datasetBindings`, `ResolvedDatasetBinding/v1` and
+   `SimulationProgram`, plus the shared bundle-relative `assetPath` scalar and
+   its allowlisted-root/traversal rules.
 2. Build one shared compatibility validator library used by Scenario Manager (authoring) and Orchestrator (admission).
 3. Keep the SemVer-only version matching model already decided.
 
@@ -383,7 +472,8 @@ Authorization changes must not force runtime AMQP topology redesign in PR 1.
    - compatibility validation before run admission,
    - simulation lifecycle endpoints (`create/update/validate/start/pause/resume/stop/status`).
 5. Implement dataset alias projection:
-   - resolve `datasetAliasMap` into concrete runtime list/key names at snapshot creation time,
+   - resolve each `datasetBindings[].requirementId` mapping into the concrete
+     runtime Dataset reference at snapshot creation time,
    - project resolved aliases into explicit worker config fields (no implicit fallback).
 
 ### PR 4: UI V2 end-to-end management
@@ -461,7 +551,28 @@ datasets:
       retry: ds.tx.clearing.retry
 ```
 
-## 11.3 Example Scenario Bindings
+## 11.3 Example bundle-local requirement and Scenario Bindings
+
+The scenario bundle declares only its own logical requirement in its reserved
+scenario-local file:
+
+```yaml
+# scenarios/bundles/mastercard-auth/datasets/requirements.yaml
+schemaVersion: pockethive.dataset-requirements/v1
+requirements:
+  - requirementId: inputCards
+    required: true
+    requiredFields: [panToken, expiryMonth, expiryYear]
+    allocation: SHARED
+    requiredRemainingValidity: PT30M
+    requiredStorageCapabilities: [SNAPSHOT_READ, SHARED_SELECTION]
+    fitnessContractRef: payment-card-traffic-fitness@1
+    selectionPolicyRef: payment-card-round-robin@1
+    bindingSlotsRef: payment-card-http-slots@1
+```
+
+Scenario Manager stores each `ScenarioBinding` independently. A binding maps
+only the requirements declared by its own `scenarioTemplateId`:
 
 ```yaml
 bindings:
@@ -469,27 +580,43 @@ bindings:
     scenarioTemplateId: scenario/mastercard-auth-v1
     sutEnvironmentId: sut-acq-int-01
     datasetSpaceId: ds-acq-prod-sim
-    datasetAliasMap:
-      inputCards: cards.mastercard.byClient.ready
-      topUpCards: cards.mastercard.byClient.topUp
-      clearingOut: tx.clearing.pending.pending
+    datasetBindings:
+      - requirementId: inputCards
+        datasetAlias: cards.mastercard.byClient.ready
+        datasetContractId: traffic
+      - requirementId: topUpCards
+        datasetAlias: cards.mastercard.byClient.topUp
+        datasetContractId: supply
+      - requirementId: clearingOut
+        datasetAlias: tx.clearing.pending.pending
+        datasetContractId: clearing-output
 
   - id: bind-onboarding
     scenarioTemplateId: scenario/onboarding-cards-v1
     sutEnvironmentId: sut-acq-int-01
     datasetSpaceId: ds-acq-prod-sim
-    datasetAliasMap:
-      refillTargetMc: cards.mastercard.byClient.ready
-      refillTargetVisa: cards.visa.byClient.ready
+    datasetBindings:
+      - requirementId: refillTargetMc
+        datasetAlias: cards.mastercard.byClient.ready
+        datasetContractId: supply
+      - requirementId: refillTargetVisa
+        datasetAlias: cards.visa.byClient.ready
+        datasetContractId: supply
 
   - id: bind-clearing
     scenarioTemplateId: scenario/clearing-batch-v1
     sutEnvironmentId: sut-acq-int-01
     datasetSpaceId: ds-acq-prod-sim
-    datasetAliasMap:
-      clearingIn: tx.clearing.pending.pending
-      clearingSent: tx.clearing.pending.sent
-      clearingRetry: tx.clearing.pending.retry
+    datasetBindings:
+      - requirementId: clearingIn
+        datasetAlias: tx.clearing.pending.pending
+        datasetContractId: clearing-input
+      - requirementId: clearingSent
+        datasetAlias: tx.clearing.pending.sent
+        datasetContractId: clearing-output
+      - requirementId: clearingRetry
+        datasetAlias: tx.clearing.pending.retry
+        datasetContractId: remediation
 ```
 
 ## 11.3.1 Example Portable Binding (`scenario-local` mode)
@@ -500,10 +627,16 @@ bindings:
     scenarioTemplateId: scenario/mastercard-auth-v1
     sutSourceMode: scenario-local
     datasetSpaceId: ds-acq-prod-sim
-    datasetAliasMap:
-      inputCards: cards.mastercard.byClient.ready
-      topUpCards: cards.mastercard.byClient.topUp
-      clearingOut: tx.clearing.pending.pending
+    datasetBindings:
+      - requirementId: inputCards
+        datasetAlias: cards.mastercard.byClient.ready
+        datasetContractId: traffic
+      - requirementId: topUpCards
+        datasetAlias: cards.mastercard.byClient.topUp
+        datasetContractId: supply
+      - requirementId: clearingOut
+        datasetAlias: tx.clearing.pending.pending
+        datasetContractId: clearing-output
 ```
 
 This mode is intended for:

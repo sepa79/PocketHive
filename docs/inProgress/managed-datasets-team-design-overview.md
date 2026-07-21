@@ -1,7 +1,9 @@
 # Managed Datasets — Team Guide
 
-**Design assessment: GREEN — ready for team approval and implementation
-planning.**
+Status: in progress — design-ready; cross-functional approval pending
+
+**Design assessment: GREEN — ready for team approval. Implementation planning
+remains behind the separate approval and implementation-readiness gates.**
 
 This is a design-readiness result, not a claim that the feature already exists
 or has passed production-scale testing. The implementation must still pass the
@@ -13,13 +15,32 @@ release gates defined in the assurance strategy, including the exact
 A Managed Dataset is a durable, reusable collection of test records that one
 PocketHive swarm can create and other swarms can use.
 
-PocketHive stores the authoritative Dataset in PostgreSQL. A reconciler keeps
-the available supply close to an operator-defined target. When more records are
+PocketHive stores each authoritative Dataset through the storage adapter
+explicitly declared by its standalone Dataset package. PostgreSQL provides the
+recommended full managed-records profile; Redis provides an explicit,
+capability-gated collection profile and is never an implicit fallback. A
+reconciler keeps the available supply close to an operator-defined target when
+the selected profile supports that lifecycle. When more records are
 needed, PocketHive first starts the configured producer swarm through the
 existing RabbitMQ control plane. Only after that swarm reports that it is
 running and ready does PocketHive send it a bounded `DATASET_SUPPLY` work item.
 The producer runs its normal flow and commits the resulting records through the
-Dataset API.
+Dataset API. The preferred Worker SDK integration is the `DATASET_UPSERT`
+primary output. A worker that must retain RabbitMQ, Redis, or no primary output
+may instead opt into the shared `managedDatasetPublisher` side-output
+interceptor. Both forms use the same typed committer, idempotency key and
+durable receipt; the interceptor fails closed and is not the Redis uploader's
+best-effort log-and-continue behaviour.
+
+Before either publisher runs, the business-aware producer applies one frozen
+`SourceResultPolicy/v1`. It combines the protocol adapter's conclusive or
+ambiguous transport result with the canonical `ResultRules` business code and
+emits a closed outcome such as `COMPLETED`, `FAILED_WRONG_STATE`, `PENDING`,
+`INVALID_RESPONSE`, or `UNCERTAIN`. An exhaustive content-based router may send
+completed and conclusive failed records to different pre-authorised Datasets;
+only completed records contribute to the primary supply target. HTTP and TCP
+reuse the same evaluator and outcome contract, with explicit protocol-specific
+extractors—never transport-success inference or dynamic Dataset names.
 
 Consumer swarms read an immutable snapshot through a Managed Dataset input
 adapter. A separately gated later profile may add explicit leases. Records
@@ -33,10 +54,19 @@ Approve this architecture and its implementation plan:
 - keep all swarm lifecycle events on PocketHive's existing `ph.control` plane;
 - keep bounded Dataset production on PocketHive's existing controller-owned
   WorkItem route;
-- keep Dataset definitions, records, schedules, operations, leases and receipts
-  authoritative in PostgreSQL;
+- keep Dataset definitions in independently versioned packages under
+  `scenarios/managed-datasets/<datasetPackageId>/` and keep runtime state
+  authoritative only in the deployment registration's explicitly selected
+  storage adapter;
+- implement `POSTGRESQL`/`MANAGED_RECORDS_V1` first and retain a separately
+  qualified `REDIS`/`REDIS_COLLECTION_V1` extension behind the same
+  application-owned storage port, with fail-fast capability validation and no
+  adapter fallback;
 - add Managed Dataset input/output adapters through the Worker SDK's existing
-  extension points; and
+  extension points, plus one shared opt-in publisher interceptor for workers
+  that must retain another primary output; and
+- add one shared result evaluator and frozen exhaustive source-result routing
+  contract for HTTP/TCP-capable producers; and
 - prove the feature against the named functional, recovery, accessibility and
   50,000-record release gates before making a support claim.
 
@@ -45,7 +75,7 @@ Approve this architecture and its implementation plan:
 ```mermaid
 flowchart LR
   UI[Operator UI / approved API client]
-  SM[Scenario Manager<br/>versioned definitions and bindings]
+  SM[Scenario Manager<br/>packages, Spaces, registrations,<br/>local requirements and bindings]
 
   subgraph ORCH[Orchestrator service]
     DS[Managed Dataset application<br/>domain rules and reconciler]
@@ -70,7 +100,7 @@ flowchart LR
   end
 
   API[Authorised Dataset API]
-  PG[(PostgreSQL<br/>definitions, records, targets,<br/>operations, leases and outbox)]
+  STORE[(Explicit storage adapter<br/>PostgreSQL or Redis profile)]
 
   UI --> DS
   SM -->|admitted immutable definition| DS
@@ -84,7 +114,7 @@ flowchart LR
   PRODUCER -->|claim, checkpoint, upsert, receipt| API
   CONSUMER -->|snapshot or lease| API
   API --> DS
-  DS <--> PG
+  DS <--> STORE
 ```
 
 ## One control plane, no new plane
@@ -96,7 +126,7 @@ mean three planes. The only swarm control plane remains `ph.control`.
 |---|---|---|---|
 | `ph.control` | PocketHive's single RabbitMQ swarm control plane | Swarm plan/start/stop/remove, approved live configuration, outcomes, status and alerts | Dataset records, leases or requested record counts |
 | Controller-owned WorkItem route | Existing swarm data/work path; not a control plane | A bounded `DATASET_SUPPLY` request for an already-ready producer swarm | Swarm lifecycle commands or authoritative Dataset state |
-| Dataset API backed by PostgreSQL | Application boundary and durable store; not a message plane | Claim, checkpoint, record upsert, snapshot and durable operation receipts; separately gated lease operations if enabled | RabbitMQ topology decisions |
+| Dataset API + explicit storage adapter | Application boundary; not a message plane | Only operations guaranteed by the published adapter capability profile | RabbitMQ topology decisions, implicit adapter selection or semantic fallback |
 
 The MVP adds no Dataset exchange, control queue, event bus or notification
 lane. Event-driven wake-ups use existing application observations, and the
@@ -123,7 +153,7 @@ sequenceDiagram
   participant C as ph.control / Swarm Controller
   participant P as Producer swarm
   participant W as WorkItem route
-  participant D as Dataset API / PostgreSQL
+  participant D as Dataset API / selected store
 
   R->>D: Persist operation and outbox intent
   R->>L: ensureRunning(producerSwarm, operation)
@@ -153,22 +183,62 @@ the Dataset module stop a swarm still required by another owner.
 
 | Component | Owns | Does not own |
 |---|---|---|
-| Scenario Manager | Versioned Dataset definitions, grouping fields, producer/consumer bindings and capability declarations | Runtime records, fill operations or RabbitMQ topology |
+| Scenario Manager | Validate, draft, publish and retire standalone Dataset packages; own deployment-scoped Dataset Spaces and registrations; validate scenario-local `datasets/requirements.yaml`; map each requirement once per Scenario Binding | Cross-bundle consumer lists, runtime records, fill operations or RabbitMQ topology |
 | Managed Dataset module in Orchestrator | Target, availability, records, operations, schedules, allocation, evidence and reconciliation decisions | Direct worker logic or swarm lifecycle implementation |
 | Existing lifecycle application and Swarm Controller | Swarm desired state, canonical start/stop behavior, readiness and declared routes | Dataset target calculations or record truth |
 | Producer swarm | Running the configured source flow for one bounded supply operation | Deciding the target or declaring queues |
-| Consumer adapter | Background snapshot hydration or lease acquisition and local selection | Direct PostgreSQL access |
-| PostgreSQL | Durable positive authority and outbox | Message delivery |
+| Consumer adapter | Background hydration or acquisition supported by the selected profile and local selection | Direct PostgreSQL/Redis access |
+| PostgreSQL adapter | Full `MANAGED_RECORDS_V1` durable authority and outbox | Message delivery |
+| Redis adapter (deferred) | Declared `REDIS_COLLECTION_V1` operations only after its separate qualification | Core MVP support or undeclared history, relational, outbox, lease or proof guarantees |
 | RabbitMQ | Delivery of control events and bounded work | Proof that records were committed |
+
+Scenario bundles remain independent: each declares only its own logical
+Dataset requirements in `datasets/requirements.yaml`. A database-backed
+Scenario Binding for that one scenario
+maps each requirement to a Dataset; Orchestrator creates the immutable runtime
+binding and workers hydrate it. No Dataset definition or scenario bundle keeps
+a list of other consumer scenarios, and alias matching never registers one
+automatically.
+
+Dataset packages follow `DRAFT -> PUBLISHED -> RETIRED`. The Operator UI can
+list and read real Scenario Manager state, create and edit drafts, delete only
+an exact unreferenced draft, validate it, publish an immutable version, or
+retire a version subject to authorisation and dependency checks. Dataset Space
+and registration views follow the same real-data rule: editing an active object
+creates a new version and removal means retirement, never destructive deletion
+of frozen bindings, records or evidence. The release UI contains no embedded
+authoring rows, adapter results or successful command fixtures. PocketHive MCP
+exposes the same Scenario
+Manager services as `dataset_package_list`, `dataset_package_validate`,
+`dataset_package_upload`, `dataset_package_publish`, and
+`dataset_package_retire`; agent mutations remain governed through HiveGate.
+Upload requires explicit `CREATE_DRAFT` or `REPLACE_DRAFT` mode and cannot
+overwrite or implicitly publish a published version.
+
+A Dataset package is portable and contains no `datasetSpaceId`, deployment
+alias or backend settings. A separate deployment-scoped
+`DatasetRegistration/v1` binds one exact package version to one active Dataset
+Space and explicitly selects its alias plus PostgreSQL/Redis adapter settings.
+The shared Space owns only the SUT/authorisation/classification/quota/storage-
+allowlist boundary. A Space policy update may block a registration but cannot
+rewrite any Dataset package or silently move it to another Space or adapter.
+
+Dataset definitions, schemas, mappings, policies, source metadata and Dataset
+assets live in their independent package under
+`scenarios/managed-datasets/<datasetPackageId>/`. Package paths are relative to
+that package. A scenario's `datasets/` directory contains only its own
+requirements and scenario-owned assets; it never copies the definition.
+Scenario Manager validates paths and digests, and Orchestrator derives runtime
+mount paths only when building the immutable plan.
 
 The Dataset domain depends on small application ports, not RabbitMQ, HTTP, JDBC
 or worker runtime classes. Typical ports are:
 
 - inbound: `SetDatasetTarget`, `ReconcileDataset`, `CommitRecord`,
   `AcquireSnapshot`, `AcquireLease`, `ReleaseLease`;
-- outbound: `DatasetRepository`, `SwarmLifecyclePort`, `WorkDispatchPort`,
+- outbound: `DatasetStore`, `SwarmLifecyclePort`, `WorkDispatchPort`,
   `Clock`, `OperationEventPort`; and
-- infrastructure adapters: PostgreSQL, the existing lifecycle application,
+- infrastructure adapters: PostgreSQL, Redis, the existing lifecycle application,
   Rabbit WorkItem publishing, the Dataset API and Worker SDK adapters.
 
 This keeps the domain independently testable and follows dependency inversion:
@@ -180,6 +250,15 @@ Managed Datasets do not contain fixed company-specific fields. Each Dataset
 definition declares its own typed classification fields and a `groupBy` list.
 The UI allows an authorised author to add a custom field name and validates it
 against that definition's schema.
+
+The record schema is one Dataset's complete canonical field set. Each Dataset
+package owns zero or more `DatasetContract/v1` field subsets under its local
+`contracts/` directory. Contracts are versioned with that Dataset package and
+are never shared live objects across Datasets. A scenario's
+`datasets/requirements.yaml` declares its required logical fields and local
+slot wiring. Scenario Binding explicitly selects a concrete Dataset version and
+one `datasetContractId` that contains those fields. Changing one package's
+contract cannot affect another Dataset.
 
 Templates may use declared values generically, for example
 `<name>-{{vars.groupA}}-{{vars.groupB}}`. The Dataset feature treats these as
@@ -270,7 +349,7 @@ The architecture names two allocation modes so future behavior cannot become
 ambiguous. The MVP requires the first; the second remains deferred unless its
 separate acceptance gates pass:
 
-1. `SHARED_SNAPSHOT` is the default. Many swarms use an immutable published
+1. `SHARED` is the default. Many swarms use an immutable published
    revision non-destructively. Records never leave the Dataset, so there is
    nothing to add back.
 2. `EXCLUSIVE_LEASE` is used only where concurrent reuse is unsafe. Acquire and
@@ -299,7 +378,8 @@ Correctness comes from:
 - an outbox committed with domain state;
 - durable checkpoints and terminal operation receipts;
 - bounded retry with the same operation identity; and
-- reconciliation of partial or uncertain outcomes against PostgreSQL truth.
+- reconciliation of partial or uncertain outcomes against the selected
+  adapter's qualified authority semantics.
 
 The supply message acknowledgement may show that the producer accepted the
 request. Only the Dataset receipt and committed records complete the operation.
@@ -310,11 +390,12 @@ Logs and control status contain identifiers and counts, never record bodies,
 credentials, lease tokens or secrets. Workers use scoped service identities and
 the Dataset API; they do not receive direct database credentials.
 
-Agentic tools and AI assistants are read-only explanation clients in the MVP.
-They may summarise status and evidence but cannot become Dataset authority,
-publish Rabbit messages or bypass the approved command API. Any future write
-tool requires a separately reviewed, least-privilege command contract and human
-approval policy.
+Agentic tools and AI assistants remain untrusted clients. Via HiveGate they may
+use the explicit Dataset-package draft/upload/publish/retire commands, status
+reads and bounded proof under separate least-privilege permissions,
+idempotency and quotas. Package commands mutate definition lifecycle only;
+they cannot mutate Dataset record/business state, become authority, publish
+Rabbit messages or bypass the product API.
 
 ## The 50,000-record requirement
 

@@ -1,5 +1,7 @@
 # Managed Datasets responsive planning wireframes
 
+Status: in progress — design-review artifacts only
+
 These standalone wireframes exercise the read-only Managed Dataset operator
 experience specified by the lifecycle specification and the normative
 [Operator UI Design Specification](../managed-datasets-operator-ui-design-spec.md).
@@ -14,6 +16,32 @@ It never imports or falls back to this prototype.
 
 ## Included flows
 
+The authoring companion at `authoring.html` adds three contract-aligned,
+deterministic planning views:
+
+- `#inventory` — authorised Scenario Manager list/search/filter structure with
+  an honest successful-empty response and no invented row or fallback;
+- `#package` — portable Dataset package schema and package-local Contract
+  authoring, with deployment context excluded;
+- `#space` — deployment authority-policy authoring without Dataset schema,
+  Contract or storage-selection editing; and
+- `#registration` — explicit published-package, active-Space, alias, adapter,
+  settings-reference and capability-profile binding; and
+- `#remove` — server-decided exact draft deletion versus version retirement,
+  with dependency recheck and no force-delete path.
+
+Current desktop review captures live in `captures/authoring/`. They are visual
+planning artifacts, not evidence that the APIs or authoring lifecycle are
+implemented.
+
+| Authoring capture | Coverage |
+|---|---|
+| `dataset-authoring-inventory-empty-desktop-1440.png` | Real-data list structure and successful authorised-empty state without sample rows |
+| `dataset-authoring-remove-desktop-1440.png` | Exact unreferenced-draft deletion and published/active retirement boundary |
+| `dataset-package-authoring-desktop-1440.png` | Record schema, natural key, package-local Contracts and storage compatibility requirements |
+| `dataset-space-authoring-desktop-1440.png` | Deployment authority/SUT scope, access policy, classification, quotas and allowed profiles |
+| `dataset-registration-authoring-desktop-1440.png` | Exact package/Space binding, alias, explicit adapter, settings reference and capability check |
+
 - `#datasets` — cross-swarm inventory of authorised operational status scopes;
 - `#dataset/overview` — exact status-scope admission, continuity, supply,
   distribution and consumer summary;
@@ -26,7 +54,7 @@ It never imports or falls back to this prototype.
   accounting;
 - `#dataset/consumers` — six complete bindings through working cursor-style
   Previous/Next pagination;
-- `#dataset/evidence` — bounded read-only proof input and a canonical
+- `#dataset/evidence` — bounded, idempotent proof creation and a canonical
   `DatasetProof/v1` result; and
 - `#inspector` — Swarm Inspector with `Authoritative Dataset` and `This swarm
   applied` truth explicitly separated above bounded runtime diagnostics.
@@ -47,7 +75,8 @@ production bundles by `DSUI-DATA-002`.
 - Formal Dataset health, eligible supply, use-specific Fitness, per-binding
   start decisions and running-traffic decisions are different facts.
 - Inventory never says that all future starts are blocked. Exact start
-  decisions appear only on real consumer bindings and in Swarm Inspector.
+  decisions appear only on real runtime-resolved consumer bindings and in
+  Swarm Inspector; no authored cross-bundle consumer registry exists.
 - Operation wire values are exactly `PROVISION_NEW`, `REPLACE_RECORD`,
   `REFRESH_MATERIAL`, `VALIDATE_RECORD`, and `DEPROVISION_ENTITY`.
 - Proof fact kinds use uppercase underscore wire values. Fact status is only
@@ -64,6 +93,12 @@ production bundles by `DSUI-DATA-002`.
   consumer acknowledgement, source execution, persistence or completion;
   `PERSISTED` and the PostgreSQL terminal receipt remain the durable-result
   authority.
+- Operation details must keep transport outcome, canonical
+  `SourceResultOutcome`, route action, authorised target and
+  `contributesToPrimarySupply` separate. A 2xx/successful TCP exchange with a
+  wrong terminal state is not completion; `PENDING`/`UNCERTAIN` show no final
+  Dataset route. Failed-target counts never fill the completed Dataset target,
+  and raw HTTP/TCP responses are never rendered.
 - Supply uses three explicitly mutually exclusive source specimens: the
   current policy with no pending change, an accepted target increase that has
   not converged, and a target decrease that stages surplus records from

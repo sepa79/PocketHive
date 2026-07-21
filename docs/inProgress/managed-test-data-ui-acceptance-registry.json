@@ -4,8 +4,10 @@
   "registryId": "managed-test-data-ui-acceptance",
   "status": "DESIGN_BASELINE",
   "assessment": {
-    "designReviewGate": "G-TEAM-REVIEW-v1",
+    "designReviewGate": "G-DESIGN-READY-v1",
     "designReviewStatus": "PASS",
+    "teamApprovalGate": "G-TEAM-APPROVED-v1",
+    "teamApprovalStatus": "NOT_EVALUATED",
     "implementationGate": "G-M1-INTERNAL-v1",
     "implementationEvidenceStatus": "NOT_RUN",
     "releaseGate": "dataset-qualified-core",
@@ -33,7 +35,7 @@
       "oracleIds": ["OR-REGISTRY", "OR-UI"],
       "releaseGateIds": ["dataset-qualified-core"],
       "evidenceState": {
-        "designReviewGate": "G-TEAM-REVIEW-v1",
+        "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
         "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
         "implementationGate": "G-M1-INTERNAL-v1",
@@ -58,7 +60,7 @@
       "oracleIds": ["OR-REGISTRY"],
       "releaseGateIds": ["dataset-qualified-core"],
       "evidenceState": {
-        "designReviewGate": "G-TEAM-REVIEW-v1",
+        "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
         "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
         "implementationGate": "G-M1-INTERNAL-v1",
@@ -83,7 +85,7 @@
       "oracleIds": ["OR-REGISTRY", "OR-PG", "OR-EXT-EFFECT"],
       "releaseGateIds": ["dataset-qualified-core"],
       "evidenceState": {
-        "designReviewGate": "G-TEAM-REVIEW-v1",
+        "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
         "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
         "implementationGate": "G-M1-INTERNAL-v1",
@@ -108,7 +110,7 @@
       "oracleIds": ["OR-REGISTRY", "OR-UI"],
       "releaseGateIds": ["dataset-qualified-core"],
       "evidenceState": {
-        "designReviewGate": "G-TEAM-REVIEW-v1",
+        "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
         "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
         "implementationGate": "G-M1-INTERNAL-v1",
@@ -133,7 +135,7 @@
       "oracleIds": ["OR-AUTHZ", "OR-UI"],
       "releaseGateIds": ["dataset-qualified-core"],
       "evidenceState": {
-        "designReviewGate": "G-TEAM-REVIEW-v1",
+        "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
         "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
         "implementationGate": "G-M1-INTERNAL-v1",
@@ -158,7 +160,7 @@
       "oracleIds": ["OR-PG", "OR-RESOURCE"],
       "releaseGateIds": ["dataset-qualified-core"],
       "evidenceState": {
-        "designReviewGate": "G-TEAM-REVIEW-v1",
+        "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
         "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
         "implementationGate": "G-M1-INTERNAL-v1",
@@ -183,7 +185,7 @@
       "oracleIds": ["OR-PG", "OR-UI", "OR-WORKER-SINK"],
       "releaseGateIds": ["dataset-qualified-core"],
       "evidenceState": {
-        "designReviewGate": "G-TEAM-REVIEW-v1",
+        "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
         "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
         "implementationGate": "G-M1-INTERNAL-v1",
@@ -208,7 +210,7 @@
       "oracleIds": ["OR-PG", "OR-RABBIT", "OR-UI", "OR-WORKER-SINK"],
       "releaseGateIds": ["dataset-qualified-core"],
       "evidenceState": {
-        "designReviewGate": "G-TEAM-REVIEW-v1",
+        "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
         "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
         "implementationGate": "G-M1-INTERNAL-v1",
@@ -233,7 +235,7 @@
       "oracleIds": ["OR-REGISTRY", "OR-UI"],
       "releaseGateIds": ["dataset-qualified-core"],
       "evidenceState": {
-        "designReviewGate": "G-TEAM-REVIEW-v1",
+        "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
         "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
         "implementationGate": "G-M1-INTERNAL-v1",
@@ -254,11 +256,11 @@
       "minimumConfidenceGrade": 4,
       "primaryCharter": "CH-34",
       "supportingCharters": ["CH-35", "CH-39", "CH-40"],
-      "risks": ["R-EXTERNAL-LIFECYCLE", "R-SSOT-DRIFT", "R-UI-FALSE-STATE"],
+      "risks": ["R-EXTERNAL-LIFECYCLE", "R-RESULT-ROUTING", "R-SSOT-DRIFT", "R-UI-FALSE-STATE"],
       "oracleIds": ["OR-EXT-EFFECT", "OR-PG", "OR-REGISTRY", "OR-UI"],
       "releaseGateIds": ["dataset-qualified-core"],
       "evidenceState": {
-        "designReviewGate": "G-TEAM-REVIEW-v1",
+        "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
         "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
         "implementationGate": "G-M1-INTERNAL-v1",
@@ -283,7 +285,7 @@
       "oracleIds": ["OR-PG", "OR-RABBIT", "OR-UI", "OR-WORKER-SINK"],
       "releaseGateIds": ["dataset-qualified-core"],
       "evidenceState": {
-        "designReviewGate": "G-TEAM-REVIEW-v1",
+        "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
         "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
         "implementationGate": "G-M1-INTERNAL-v1",
@@ -308,7 +310,7 @@
       "oracleIds": ["OR-REGISTRY", "OR-UI"],
       "releaseGateIds": ["dataset-qualified-core"],
       "evidenceState": {
-        "designReviewGate": "G-TEAM-REVIEW-v1",
+        "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
         "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
         "implementationGate": "G-M1-INTERNAL-v1",
@@ -333,7 +335,7 @@
       "oracleIds": ["OR-AUTHZ", "OR-EXT-EFFECT", "OR-PG", "OR-UI"],
       "releaseGateIds": ["dataset-qualified-core"],
       "evidenceState": {
-        "designReviewGate": "G-TEAM-REVIEW-v1",
+        "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
         "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
         "implementationGate": "G-M1-INTERNAL-v1",
@@ -358,7 +360,7 @@
       "oracleIds": ["OR-AUTHZ", "OR-PG", "OR-RESOURCE", "OR-UI"],
       "releaseGateIds": ["dataset-qualified-core"],
       "evidenceState": {
-        "designReviewGate": "G-TEAM-REVIEW-v1",
+        "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
         "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
         "implementationGate": "G-M1-INTERNAL-v1",
@@ -383,7 +385,7 @@
       "oracleIds": ["OR-AUTHZ", "OR-PG", "OR-UI"],
       "releaseGateIds": ["dataset-qualified-core"],
       "evidenceState": {
-        "designReviewGate": "G-TEAM-REVIEW-v1",
+        "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
         "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
         "implementationGate": "G-M1-INTERNAL-v1",
@@ -408,7 +410,7 @@
       "oracleIds": ["OR-FITNESS", "OR-PG", "OR-TIME", "OR-UI", "OR-WORKER-SINK"],
       "releaseGateIds": ["dataset-qualified-core"],
       "evidenceState": {
-        "designReviewGate": "G-TEAM-REVIEW-v1",
+        "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
         "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
         "implementationGate": "G-M1-INTERNAL-v1",
@@ -433,7 +435,7 @@
       "oracleIds": ["OR-FITNESS", "OR-TIME", "OR-UI"],
       "releaseGateIds": ["dataset-qualified-core"],
       "evidenceState": {
-        "designReviewGate": "G-TEAM-REVIEW-v1",
+        "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
         "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
         "implementationGate": "G-M1-INTERNAL-v1",
@@ -458,7 +460,7 @@
       "oracleIds": ["OR-EXT-EFFECT", "OR-PG", "OR-REGISTRY", "OR-UI"],
       "releaseGateIds": ["dataset-qualified-core"],
       "evidenceState": {
-        "designReviewGate": "G-TEAM-REVIEW-v1",
+        "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
         "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
         "implementationGate": "G-M1-INTERNAL-v1",
@@ -478,12 +480,12 @@
       "applicability": "REQUIRED_CORE",
       "minimumConfidenceGrade": 4,
       "primaryCharter": "CH-35",
-      "supportingCharters": ["CH-36", "CH-37", "CH-39", "CH-40"],
-      "risks": ["R-RUNTIME-OWNER", "R-UI-FALSE-STATE", "R-UI-SCOPE-LEAK", "R-UI-STALE"],
-      "oracleIds": ["OR-AUTHZ", "OR-PG", "OR-UI", "OR-WORKER-SINK"],
+      "supportingCharters": ["CH-34", "CH-36", "CH-37", "CH-39", "CH-40"],
+      "risks": ["R-RUNTIME-OWNER", "R-SSOT-DRIFT", "R-UI-FALSE-STATE", "R-UI-SCOPE-LEAK", "R-UI-STALE"],
+      "oracleIds": ["OR-AUTHZ", "OR-PG", "OR-REGISTRY", "OR-UI", "OR-WORKER-SINK"],
       "releaseGateIds": ["dataset-qualified-core"],
       "evidenceState": {
-        "designReviewGate": "G-TEAM-REVIEW-v1",
+        "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
         "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
         "implementationGate": "G-M1-INTERNAL-v1",
@@ -508,7 +510,7 @@
       "oracleIds": ["OR-AUTHZ", "OR-REGISTRY", "OR-UI", "OR-WORKER-SINK"],
       "releaseGateIds": ["dataset-qualified-core"],
       "evidenceState": {
-        "designReviewGate": "G-TEAM-REVIEW-v1",
+        "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
         "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
         "implementationGate": "G-M1-INTERNAL-v1",
@@ -533,7 +535,7 @@
       "oracleIds": ["OR-PG", "OR-UI", "OR-WORKER-SINK"],
       "releaseGateIds": ["dataset-qualified-core"],
       "evidenceState": {
-        "designReviewGate": "G-TEAM-REVIEW-v1",
+        "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
         "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
         "implementationGate": "G-M1-INTERNAL-v1",
@@ -558,7 +560,7 @@
       "oracleIds": ["OR-AUTHZ", "OR-RABBIT", "OR-UI"],
       "releaseGateIds": ["dataset-qualified-core"],
       "evidenceState": {
-        "designReviewGate": "G-TEAM-REVIEW-v1",
+        "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
         "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
         "implementationGate": "G-M1-INTERNAL-v1",
@@ -583,7 +585,7 @@
       "oracleIds": ["OR-PG", "OR-RABBIT", "OR-RESOURCE", "OR-UI", "OR-WORKER-SINK"],
       "releaseGateIds": ["dataset-qualified-core"],
       "evidenceState": {
-        "designReviewGate": "G-TEAM-REVIEW-v1",
+        "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
         "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
         "implementationGate": "G-M1-INTERNAL-v1",
@@ -608,7 +610,7 @@
       "oracleIds": ["OR-TIME", "OR-UI"],
       "releaseGateIds": ["dataset-qualified-core"],
       "evidenceState": {
-        "designReviewGate": "G-TEAM-REVIEW-v1",
+        "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
         "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
         "implementationGate": "G-M1-INTERNAL-v1",
@@ -633,7 +635,7 @@
       "oracleIds": ["OR-RABBIT", "OR-UI"],
       "releaseGateIds": ["dataset-qualified-core"],
       "evidenceState": {
-        "designReviewGate": "G-TEAM-REVIEW-v1",
+        "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
         "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
         "implementationGate": "G-M1-INTERNAL-v1",
@@ -658,7 +660,7 @@
       "oracleIds": ["OR-UI"],
       "releaseGateIds": ["dataset-qualified-core"],
       "evidenceState": {
-        "designReviewGate": "G-TEAM-REVIEW-v1",
+        "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
         "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
         "implementationGate": "G-M1-INTERNAL-v1",
@@ -683,7 +685,7 @@
       "oracleIds": ["OR-UI"],
       "releaseGateIds": ["dataset-qualified-core"],
       "evidenceState": {
-        "designReviewGate": "G-TEAM-REVIEW-v1",
+        "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
         "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
         "implementationGate": "G-M1-INTERNAL-v1",
@@ -708,7 +710,7 @@
       "oracleIds": ["OR-AUTHZ", "OR-PG", "OR-UI"],
       "releaseGateIds": ["dataset-qualified-core"],
       "evidenceState": {
-        "designReviewGate": "G-TEAM-REVIEW-v1",
+        "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
         "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
         "implementationGate": "G-M1-INTERNAL-v1",
@@ -733,7 +735,7 @@
       "oracleIds": ["OR-CANARY", "OR-UI"],
       "releaseGateIds": ["dataset-qualified-core"],
       "evidenceState": {
-        "designReviewGate": "G-TEAM-REVIEW-v1",
+        "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
         "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
         "implementationGate": "G-M1-INTERNAL-v1",
@@ -758,7 +760,7 @@
       "oracleIds": ["OR-UI"],
       "releaseGateIds": ["dataset-qualified-core"],
       "evidenceState": {
-        "designReviewGate": "G-TEAM-REVIEW-v1",
+        "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
         "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
         "implementationGate": "G-M1-INTERNAL-v1",
@@ -783,7 +785,7 @@
       "oracleIds": ["OR-AUTHZ", "OR-UI"],
       "releaseGateIds": ["dataset-qualified-core"],
       "evidenceState": {
-        "designReviewGate": "G-TEAM-REVIEW-v1",
+        "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
         "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
         "implementationGate": "G-M1-INTERNAL-v1",
@@ -808,7 +810,7 @@
       "oracleIds": ["OR-AUTHZ", "OR-EXT-EFFECT", "OR-PG", "OR-UI"],
       "releaseGateIds": ["dataset-qualified-core"],
       "evidenceState": {
-        "designReviewGate": "G-TEAM-REVIEW-v1",
+        "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
         "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
         "implementationGate": "G-M1-INTERNAL-v1",
@@ -833,7 +835,7 @@
       "oracleIds": ["OR-RESOURCE", "OR-WORKER-SINK"],
       "releaseGateIds": ["dataset-qualified-core"],
       "evidenceState": {
-        "designReviewGate": "G-TEAM-REVIEW-v1",
+        "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
         "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
         "implementationGate": "G-M1-INTERNAL-v1",
@@ -858,7 +860,7 @@
       "oracleIds": ["OR-PG", "OR-RESOURCE"],
       "releaseGateIds": ["dataset-qualified-core"],
       "evidenceState": {
-        "designReviewGate": "G-TEAM-REVIEW-v1",
+        "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
         "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
         "implementationGate": "G-M1-INTERNAL-v1",
@@ -883,7 +885,7 @@
       "oracleIds": ["OR-RESOURCE", "OR-UI"],
       "releaseGateIds": ["dataset-qualified-core"],
       "evidenceState": {
-        "designReviewGate": "G-TEAM-REVIEW-v1",
+        "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
         "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
         "implementationGate": "G-M1-INTERNAL-v1",
@@ -908,7 +910,7 @@
       "oracleIds": ["OR-RESOURCE", "OR-UI", "OR-WORKER-SINK"],
       "releaseGateIds": ["dataset-qualified-core"],
       "evidenceState": {
-        "designReviewGate": "G-TEAM-REVIEW-v1",
+        "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
         "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
         "implementationGate": "G-M1-INTERNAL-v1",
@@ -933,7 +935,7 @@
       "oracleIds": ["OR-PG", "OR-RESOURCE", "OR-UI"],
       "releaseGateIds": ["dataset-qualified-core"],
       "evidenceState": {
-        "designReviewGate": "G-TEAM-REVIEW-v1",
+        "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
         "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
         "implementationGate": "G-M1-INTERNAL-v1",
@@ -958,7 +960,132 @@
       "oracleIds": ["OR-RESOURCE", "OR-TIME", "OR-UI"],
       "releaseGateIds": ["dataset-qualified-core"],
       "evidenceState": {
-        "designReviewGate": "G-TEAM-REVIEW-v1",
+        "designReviewGate": "G-DESIGN-READY-v1",
+        "designReviewStatus": "PASS",
+        "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
+        "implementationGate": "G-M1-INTERNAL-v1",
+        "implementationStatus": "NOT_RUN",
+        "implementationEvidenceRefs": [],
+        "releaseGate": "dataset-qualified-core",
+        "releaseStatus": "NOT_RUN",
+        "releaseEvidenceRefs": []
+      }
+    },
+    {
+      "id": "DSUI-ARCH-005",
+      "evidenceOwner": "ARCHITECTURE_OWNER",
+      "parent": "FUN-014",
+      "sourceSection": "managed-datasets-operator-ui-design-spec.md#20-acceptance-requirements",
+      "category": "ARCH",
+      "applicability": "REQUIRED_CORE",
+      "minimumConfidenceGrade": 4,
+      "primaryCharter": "CH-34",
+      "supportingCharters": ["CH-35"],
+      "risks": ["R-SSOT-DRIFT", "R-STATIC-DRIFT"],
+      "oracleIds": ["OR-REGISTRY", "OR-UI"],
+      "releaseGateIds": ["dataset-qualified-core"],
+      "evidenceState": {
+        "designReviewGate": "G-DESIGN-READY-v1",
+        "designReviewStatus": "PASS",
+        "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
+        "implementationGate": "G-M1-INTERNAL-v1",
+        "implementationStatus": "NOT_RUN",
+        "implementationEvidenceRefs": [],
+        "releaseGate": "dataset-qualified-core",
+        "releaseStatus": "NOT_RUN",
+        "releaseEvidenceRefs": []
+      }
+    },
+    {
+      "id": "DSUI-API-004",
+      "evidenceOwner": "UI_DELIVERY_OWNER",
+      "parent": "FUN-014",
+      "sourceSection": "managed-datasets-operator-ui-design-spec.md#20-acceptance-requirements",
+      "category": "API",
+      "applicability": "REQUIRED_CORE",
+      "minimumConfidenceGrade": 4,
+      "primaryCharter": "CH-34",
+      "supportingCharters": ["CH-37"],
+      "risks": ["R-SSOT-DRIFT", "R-EVIDENCE-INTEGRITY"],
+      "oracleIds": ["OR-REGISTRY", "OR-AUTHZ", "OR-UI"],
+      "releaseGateIds": ["dataset-qualified-core"],
+      "evidenceState": {
+        "designReviewGate": "G-DESIGN-READY-v1",
+        "designReviewStatus": "PASS",
+        "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
+        "implementationGate": "G-M1-INTERNAL-v1",
+        "implementationStatus": "NOT_RUN",
+        "implementationEvidenceRefs": [],
+        "releaseGate": "dataset-qualified-core",
+        "releaseStatus": "NOT_RUN",
+        "releaseEvidenceRefs": []
+      }
+    },
+    {
+      "id": "DSUI-API-005",
+      "evidenceOwner": "ARCHITECTURE_OWNER",
+      "parent": "FUN-014",
+      "sourceSection": "managed-datasets-operator-ui-design-spec.md#20-acceptance-requirements",
+      "category": "API",
+      "applicability": "REQUIRED_CORE",
+      "minimumConfidenceGrade": 4,
+      "primaryCharter": "CH-34",
+      "supportingCharters": ["CH-35"],
+      "risks": ["R-SSOT-DRIFT", "R-UI-FALSE-STATE"],
+      "oracleIds": ["OR-REGISTRY", "OR-UI"],
+      "releaseGateIds": ["dataset-qualified-core"],
+      "evidenceState": {
+        "designReviewGate": "G-DESIGN-READY-v1",
+        "designReviewStatus": "PASS",
+        "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
+        "implementationGate": "G-M1-INTERNAL-v1",
+        "implementationStatus": "NOT_RUN",
+        "implementationEvidenceRefs": [],
+        "releaseGate": "dataset-qualified-core",
+        "releaseStatus": "NOT_RUN",
+        "releaseEvidenceRefs": []
+      }
+    },
+    {
+      "id": "DSUI-VIEW-010",
+      "evidenceOwner": "PRODUCT_UX_OWNER",
+      "parent": "FUN-014",
+      "sourceSection": "managed-datasets-operator-ui-design-spec.md#20-acceptance-requirements",
+      "category": "VIEW",
+      "applicability": "REQUIRED_CORE",
+      "minimumConfidenceGrade": 4,
+      "primaryCharter": "CH-35",
+      "supportingCharters": ["CH-36", "CH-37"],
+      "risks": ["R-UI-FALSE-STATE", "R-STATIC-DRIFT"],
+      "oracleIds": ["OR-REGISTRY", "OR-UI"],
+      "releaseGateIds": ["dataset-qualified-core"],
+      "evidenceState": {
+        "designReviewGate": "G-DESIGN-READY-v1",
+        "designReviewStatus": "PASS",
+        "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
+        "implementationGate": "G-M1-INTERNAL-v1",
+        "implementationStatus": "NOT_RUN",
+        "implementationEvidenceRefs": [],
+        "releaseGate": "dataset-qualified-core",
+        "releaseStatus": "NOT_RUN",
+        "releaseEvidenceRefs": []
+      }
+    },
+    {
+      "id": "DSUI-SEC-006",
+      "evidenceOwner": "SECURITY_OWNER",
+      "parent": "FUN-014",
+      "sourceSection": "managed-datasets-operator-ui-design-spec.md#20-acceptance-requirements",
+      "category": "SEC",
+      "applicability": "REQUIRED_CORE",
+      "minimumConfidenceGrade": 4,
+      "primaryCharter": "CH-37",
+      "supportingCharters": ["CH-34", "CH-39"],
+      "risks": ["R-UI-EXCLUSION", "R-EVIDENCE-INTEGRITY"],
+      "oracleIds": ["OR-AUTHZ", "OR-CANARY", "OR-UI"],
+      "releaseGateIds": ["dataset-qualified-core"],
+      "evidenceState": {
+        "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
         "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
         "implementationGate": "G-M1-INTERNAL-v1",

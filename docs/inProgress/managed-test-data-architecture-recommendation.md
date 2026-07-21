@@ -2,7 +2,7 @@
 
 Status: **design-readiness GREEN — ready for team approval**
 
-Last updated: 2026-07-17
+Last updated: 2026-07-20
 
 Normative detail:
 [Managed Test Data Architecture and Lifecycle Specification](./managed-test-data-lifecycle-generic-spec.md)
@@ -26,8 +26,10 @@ There are three separate actions:
    ready, PocketHive sends a bounded `DATASET_SUPPLY` WorkItem through the
    existing controller-owned WorkItem route.
 3. The producer claims the operation, performs its configured source flow, and
-   commits results through the Dataset API. PostgreSQL stores the authoritative
-   records and completion receipt.
+   applies one frozen `SourceResultPolicy/v1`, then commits the classified
+   result through the Dataset API. The registration-selected storage adapter stores
+   the authoritative records and typed receipt. Transport success alone is not
+   business success.
 
 This separation is mandatory. A start command contains no Dataset work, and a
 supply WorkItem cannot start a stopped swarm. A RabbitMQ acknowledgement proves
@@ -38,17 +40,17 @@ message delivery, not successful Dataset creation.
 ```mermaid
 flowchart LR
   PERSON[Operator, UI or authorised automation]
-  SM[Scenario Manager<br/>definitions and bindings]
+  SM[Scenario Manager<br/>packages, Spaces, registrations,<br/>local requirements and bindings]
 
   subgraph ORCH[orchestrator-service]
     API[Dataset API]
     REC[Dataset reconciler<br/>desired versus observed state]
     LIFE[Existing lifecycle application<br/>SwarmLifecyclePort adapter]
     DISPATCH[Outbox relay<br/>WorkDispatchPort adapter]
-    DBADAPTER[PostgreSQL adapter]
+    STOREPORT[DatasetStore port]
   end
 
-  PG[(PostgreSQL<br/>records, targets, schedules,<br/>operations, leases and receipts)]
+  STORE[(Explicit adapter<br/>PostgreSQL or Redis profile)]
 
   subgraph RMQ[Existing RabbitMQ deployment]
     CONTROL[ph.control<br/>lifecycle and status only]
@@ -62,8 +64,8 @@ flowchart LR
   PERSON --> API
   SM --> API
   API --> REC
-  REC <--> DBADAPTER
-  DBADAPTER <--> PG
+  REC <--> STOREPORT
+  STOREPORT <--> STORE
 
   REC -->|ensure running| LIFE
   LIFE -->|swarm-start when required| CONTROL
@@ -72,8 +74,8 @@ flowchart LR
   CONTROL -->|current readiness| LIFE
 
   SC -->|owns queue and binding| WORK
-  REC -->|durable supply intent| DBADAPTER
-  PG -->|committed outbox| DISPATCH
+  REC -->|supported supply intent| STOREPORT
+  STORE -->|profile-supported committed outbox| DISPATCH
   DISPATCH -->|only after readiness| WORK
   WORK --> PRODUCER
 
@@ -85,13 +87,29 @@ flowchart LR
 
 | Component | Owns | Does not own |
 |---|---|---|
-| Scenario Manager | Versioned Dataset definitions, schemas, source bindings and policy definitions | Runtime records, supply execution or queues |
+| Scenario Manager | Standalone Dataset-package/local-contract draft/publish/retire, deployment-scoped Dataset Space/registration authority, scenario-local requirement validation and one explicit mapping per Scenario Binding | Cross-bundle consumer lists, runtime records, supply execution or queues |
 | Orchestrator lifecycle application | Desired swarm state and canonical start/stop/config commands | Dataset records |
 | Managed Dataset module in Orchestrator | Targets, reconciliation, schedules, operations, records, revisions, allocation and outbox | Swarm control commands, queue declaration or source-specific calls |
 | Swarm Controller | Per-swarm lifecycle, aggregate readiness and WorkItem topology | Global Dataset counts or schedules |
 | Producer swarm | Execution of bounded source work | Deciding target size or declaring completion without a durable receipt |
-| Consumer adapters | Bounded background hydration and worker-local selection | PostgreSQL access or Dataset authority |
-| PostgreSQL | Durable Dataset truth | Swarm runtime state |
+| Consumer adapters | Bounded profile-supported hydration and worker-local selection | Direct PostgreSQL/Redis access or Dataset authority |
+| PostgreSQL adapter | Full `MANAGED_RECORDS_V1` durable Dataset truth | Swarm runtime state |
+| Redis adapter (deferred) | Explicit `REDIS_COLLECTION_V1` collection semantics only after separate qualification | Core MVP support, undeclared revision/outbox/proof guarantees or fallback |
+
+Each scenario bundle declares only its own logical Dataset requirements in
+`datasets/requirements.yaml`. Dataset definitions are standalone packages
+under `scenarios/managed-datasets/<datasetPackageId>/`; Scenario Manager owns
+their draft/publish/retire lifecycle. The
+existing Scenario Binding for that one scenario maps them to concrete Dataset
+references; Orchestrator materialises `ResolvedDatasetBinding/v1` into the
+swarm plan. No bundle or Dataset definition lists other consumer scenarios, and
+there is no alias-discovery or self-registration fallback.
+
+Source files are likewise authored without Docker knowledge: a source binding
+uses a validated Dataset-package-relative `assetPath` such as
+`assets/input.csv`. Only runtime-plan materialisation converts it to a worker
+container path and binds the exact package/file digest; no absolute/relative
+fallback is accepted.
 
 ## Architecture decision: no new plane
 
@@ -104,7 +122,7 @@ data path; the third is an application API backed by a database.
 |---|---|---|---|
 | `ph.control` | PocketHive's one RabbitMQ swarm control plane | Swarm template, plan, start, stop, remove, approved config, outcomes, status and alerts | `DATASET_SUPPLY`, requested record counts or record values |
 | Controller-owned WorkItem route | Existing swarm data/work path—not a control plane | A bounded, idempotent `DATASET_SUPPLY` operation and ordinary swarm work | Swarm lifecycle commands or durable completion claims |
-| Dataset API + PostgreSQL | Application service boundary and durable store—not a message plane | Claim, checkpoint, commit, snapshot, allocation, schedule and durable receipt state | Direct worker SQL or inferred Rabbit queue state |
+| Dataset API + explicit storage adapter | Application service boundary—not a message plane | Only claim/checkpoint/commit/snapshot/allocation/schedule/receipt operations guaranteed by the published adapter profile | Direct worker storage access, inferred Rabbit state or adapter fallback |
 
 The MVP creates no Dataset exchange, control queue, event bus or notification
 lane. Consumers reconcile through the bounded Dataset API and the periodic
@@ -303,6 +321,12 @@ enums do not yet contain `DATASET_SUPPLY`, `MANAGED_DATASET` or
 
 1. canonical contracts and adapter contract tests;
 2. SDK factories/adapters for those three explicit capabilities;
+   `DATASET_UPSERT` is the preferred publication path, with one shared opt-in
+   `managedDatasetPublisher` interceptor for workers that must retain another
+   primary output; both reuse the same typed committer, idempotency and durable
+   receipt contract, and the interceptor never degrades to log-and-continue;
+   one shared `ResultRules` evaluator and exhaustive source-result router must
+   classify HTTP/TCP observations before either publisher sees them;
 3. a Swarm Controller-owned, platform-selected and qualified supply WorkItem
    route profile carried by a fenced `SupplyRouteLease`; the Dataset module
    neither declares nor infers queue topology;
@@ -322,8 +346,9 @@ exist, the accurate statement is “design approved for implementation,” not
 |---|---|---|
 | Control ownership | GREEN | All swarm lifecycle remains on canonical `ph.control` |
 | Work/data separation | GREEN | Start, bounded supply and durable result have distinct contracts |
-| Durable authority | GREEN | PostgreSQL is the sole positive Dataset authority |
+| Storage authority | GREEN | Every deployment registration selects one explicit Space/adapter/settings/profile compatible with its package; PostgreSQL is the core `MANAGED_RECORDS_V1` authority and Redis is a deferred, separately qualified `REDIS_COLLECTION_V1` extension, with no fallback |
 | Consistency | GREEN | Idempotency, fencing, outbox and reconciliation cover at-least-once delivery |
+| Result classification | GREEN | A frozen typed source-result policy separates transport success, completed, wrong-state, pending, invalid and uncertain outcomes and routes only to authorised Dataset targets/actions |
 | Scheduling/resizing | GREEN | Desired state, durable schedules and observable convergence are explicit |
 | Reuse semantics | GREEN | Shared snapshot is non-destructive; exclusive lease is explicit and deferred |
 | SOLID/hexagonal boundaries | GREEN | Owners and inward-facing ports are explicit and testable |
