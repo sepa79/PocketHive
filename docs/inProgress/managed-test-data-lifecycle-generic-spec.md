@@ -1,11 +1,11 @@
 # Managed Test Data Architecture and Lifecycle Specification
 
-Status: in progress — **design-readiness GREEN** for team approval; runtime
-implementation and qualification evidence remain mandatory release gates
+Status: in progress — `G-DESIGN-READY-v1` passed;
+`G-TEAM-APPROVED-v1`, implementation and qualification remain pending
 
 Decision target: PocketHive architecture and MVP implementation
 
-Last updated: 2026-07-17
+Last updated: 2026-07-20
 
 Assurance document:
 `docs/inProgress/managed-test-data-assurance-strategy.md`
@@ -44,10 +44,11 @@ This specification covers:
 - restricted/regulated-data security and prohibited-secret constraints through
   a disabled-by-default specialised profile;
 - Docker deployment and restart behaviour;
-- read-only MCP evidence for source operations, readiness, and use;
-- a read-only, authorised Managed Datasets inventory, detail experience, and
-  Swarm Inspector dependency view whose every dynamic fact is supplied by a
-  canonical product read model;
+- governed MCP Dataset-package list/validate/upload/publish/retire, bounded
+  status reads and idempotent evidence creation;
+- an authorised Dataset-package draft editor plus read-only runtime inventory,
+  detail experience and Swarm Inspector dependency view whose every dynamic
+  fact is supplied by a canonical product service;
 - risk-based qualification, independent oracles, and reproducible evidence;
 - the MVP boundary and enterprise evolution path.
 
@@ -123,26 +124,33 @@ monorepo.
 
 The target architecture is:
 
-1. Scenario Manager owns SUT-scoped Dataset Space definitions, logical aliases,
-   schemas, permissions, source bindings, and versioned policy metadata.
-2. A bounded Managed Dataset module inside `orchestrator-service` owns durable
+1. Scenario Manager owns standalone versioned Dataset packages, SUT-scoped
+   Dataset Spaces, logical aliases, schemas, permissions, source bindings and
+   policy metadata. Packages live under
+   `scenarios/managed-datasets/<datasetPackageId>/` in source.
+2. A bounded Managed Dataset module inside `orchestrator-service` owns
    runtime records, material generations, supply operations, refresh state and
-   the transactional outbox. It is isolated by package/port boundaries,
-   dedicated PostgreSQL schema/role/pool and bounded executors, not by a new
-   application container.
+   adapter-supported receipts/outbox state. It is isolated by package/port
+   boundaries and bounded executors, not by a new application container. Every
+   registration contract admits `POSTGRESQL`/`MANAGED_RECORDS_V1` and the
+   separately qualified `REDIS`/`REDIS_COLLECTION_V1` extension. The core MVP
+   implements PostgreSQL only; Redis registration fails as capability
+   unavailable until its own profile passes. No adapter is defaulted.
 3. Each required binding freezes an immutable Dataset Fitness Contract. The
    module derives `PASS`, `FAIL`, or `UNKNOWN` from authoritative schema, cohort,
    freshness, provenance, classification, retention and declared-use evidence;
    only `PASS` contributes to readiness.
-4. PostgreSQL is the durable authority, but it is never queried by a measured
-   traffic transaction. Ordinary filesystem writes are not authoritative.
+4. The selected storage adapter is the Dataset authority only for the
+   capabilities declared by its published profile, and it is never queried by
+   a measured traffic transaction. Ordinary filesystem writes are not
+   authoritative, and adapters never fall back.
 5. Every RabbitMQ swarm control event remains on the existing `ph.control`
    plane. After that plane proves the producer swarm is `RUNNING`, workloads
    are enabled, the target input is ready, and its controller-owned route is
    current, the Dataset module may publish bounded `DATASET_SUPPLY` work on the
    canonical WorkItem route. Claim, checkpoint, commit, snapshot and lease
-   operations use the authorised Dataset API, with PostgreSQL as durable
-   authority. Sensitive record values, credentials, ciphertext, provider
+   operations use the authorised Dataset API, with adapter-specific typed
+   receipts. Sensitive record values, credentials, ciphertext, provider
    bodies, and record projections shall not be placed in Rabbit messages. A
    future notification lane may reduce polling, but it is not part of the MVP
    and can never be required for correctness.
@@ -150,12 +158,15 @@ The target architecture is:
    local memory. The measured transaction path performs only local access.
 7. Source and refresh swarms execute configured SUT business calls. The Dataset
    module coordinates lifecycle but does not embed those workflows.
-8. The existing PocketHive MCP exposes only bounded, redacted, deterministic
-   Dataset status and proof from product-owned APIs. An agent is an untrusted
-   client: MCP is not a Dataset authority, mutation surface, store, or privileged
-   database client.
+8. PocketHive MCP exposes Dataset-package lifecycle commands through Scenario
+   Manager plus bounded, redacted Dataset status/proof through product-owned
+   APIs. An agent remains an untrusted client: MCP is not a Dataset authority,
+   record/business-state mutation surface, store or privileged backend client.
 9. Existing `REDIS_DATASET` and `REDIS` output behaviour remains supported.
-   Managed datasets are additive and opt-in.
+   The contract permits it to join the Managed Dataset umbrella only through
+   an explicit package/registration and separately qualified
+   `REDIS_COLLECTION_V1` profile. That managed Redis adapter is deferred from
+   the core MVP; there is no automatic conversion.
 10. The first releasable reusable profile targets 50,000 eligible records with
     `maximumReady: 55000`, at least two concurrent traffic swarms and safe live
     target increase/decrease. This is a requirement until the named
@@ -253,8 +264,10 @@ The MVP will not:
 - provide a general-purpose test-data management product outside PocketHive;
 - store prohibited sensitive authentication data;
 - make agents or MCP clients data authorities;
-- provide autonomous or write-capable Dataset-agent operations, including
-  agent-requested seed, refresh, configuration, activation, or deletion;
+- provide autonomous Dataset-agent operations or record/business-state writes,
+  including agent-requested seed, refresh, supply-policy activation, target
+  change, record mutation or deletion. Explicit governed Dataset-package
+  draft/publish/retire commands are in scope;
 - define cross-cutting agent governance for model/provider/prompt/skill
   qualification, persistent memory, multi-agent coordination, AI/tool bills of
   materials, or agent-specific approval and kill-switch systems;
@@ -291,9 +304,27 @@ section 26.1. Until that happens, the canonical document wins and Managed
 Dataset implementation is blocked; no component may choose between the two
 interpretations locally.
 
-The snapshot freezes:
+Each scenario bundle declares only its own logical Dataset requirements in the
+reserved `datasets/requirements.yaml` file. It never lists another scenario,
+bundle, swarm or consumer. A separately stored
+`ScenarioBinding` for exactly one scenario maps those requirement IDs to
+concrete Dataset references. Orchestrator resolves that mapping into the
+runtime snapshot; Dataset definitions do not contain an authored consumer
+registry and consumers are never discovered by alias matching.
+
+Dataset definitions are independent portable packages. In a source checkout
+their canonical layout is
+`scenarios/managed-datasets/<datasetPackageId>/`; they are not nested in, or
+owned by, any scenario bundle. Scenario Manager imports and versions those
+packages as the definition SSOT. A scenario-local `datasets/` directory may
+contain only that scenario's requirements and scenario-owned input assets; it
+must not contain a copied Dataset definition.
+
+The resolved snapshot freezes:
 
 - Dataset Space identity;
+- Dataset Space policy version and Dataset registration identity/version;
+- Dataset package identity/version/digest and package-local contract ID/digest;
 - descriptor/schema version;
 - logical dataset alias;
 - logical partition and pool;
@@ -326,21 +357,141 @@ It does not freeze:
 - active Supply Policy version after an explicit audited activation;
 - readiness state.
 
-Descriptor or binding changes create a new binding version. Ordinary record
-creation, refresh, expiry, and state transitions occur behind the stable
-reference without a swarm config update.
+Changes to a bundle-local requirement or its `ScenarioBinding` mapping create a
+new binding version. Ordinary record creation, refresh, expiry, and state
+transitions occur behind the stable reference without a swarm config update.
 
-A scenario bundle contains definitions and references, not runtime Dataset
-records. A record becomes durable only when `DATASET_UPSERT` returns a
-PostgreSQL commit receipt; after that, workers may restart and rehydrate it
-without rerunning the source workflow.
+A scenario bundle contains requirements and scenario-owned input assets, not
+Dataset definitions or runtime records. A record becomes committed only when
+the shared Dataset upsert contract returns the selected storage adapter's
+typed durable receipt, normally through `DATASET_UPSERT` or,
+where explicitly permitted, through `managedDatasetPublisher`; after that,
+workers may restart and rehydrate it without rerunning the source workflow.
 
 ## 6. Terminology
 
 ### 6.1 Dataset Space
 
-A SUT-scoped namespace containing Dataset definitions, aliases, schemas,
-permissions, source bindings, and policy references.
+A deployment-scoped, SUT-scoped authority boundary shared by explicitly
+registered Datasets. It owns the Space identity, SUT Environment scope, access
+policy, classification ceiling, quotas and allowlisted storage
+adapter/capability profiles. It does not own Dataset schemas, contracts,
+mappings, sources, aliases or record-shape policy; those remain in a Dataset
+package or its registration.
+
+```yaml
+schemaVersion: pockethive.dataset-space/v1
+datasetSpaceId: performance-test
+sutEnvironmentId: example-environment
+accessPolicyRef: performance-test-datasets-access@1
+classificationCeiling: INTERNAL
+quotaPolicyRef: performance-test-datasets-quota@1
+allowedStorageProfiles: [MANAGED_RECORDS_V1, REDIS_COLLECTION_V1]
+```
+
+A Dataset Space follows `DRAFT -> ACTIVE -> RETIRED`. Dataset registrations may
+target only an active Space. A policy update creates a new Space policy version;
+it never rewrites Dataset packages. Current authorisation and revocation are
+always enforced, while compatibility/admission records retain the exact Space
+policy version they evaluated. A newly restrictive policy may block or pause a
+registration explicitly, but never migrates it to another Space or adapter.
+Retirement prevents new registrations. Destructive removal is rejected while
+registrations, runs, retained records or evidence still reference the Space.
+An exact unreferenced Space draft may be deleted explicitly. An active or
+retired Space version is never hard-deleted through the authoring API.
+
+### 6.1.1 Dataset package
+
+A Dataset package is the portable, versioned authoring unit for exactly one
+Dataset definition. Its repository layout is:
+
+```text
+scenarios/managed-datasets/<datasetPackageId>/
+├── dataset.yaml
+├── schema/
+│   └── record.yaml
+├── contracts/
+├── mappings/
+├── projections/
+├── policies/
+├── sources/
+└── assets/
+```
+
+`dataset.yaml` is the package manifest and the only entry point. It explicitly
+references package-relative artifacts; arbitrary recursive discovery is
+forbidden. Paths are normalized, must remain inside the package, and are
+content-digested at validation. Secrets, live records, backend credentials and
+runtime state are forbidden in the package.
+
+The package lifecycle is `DRAFT -> PUBLISHED -> RETIRED`. PocketHive MCP may
+validate and upload a package to Scenario Manager, and the Dataset UI may
+create or edit a draft. Publishing is a separate authorised operation that
+freezes an immutable version and digest. A published version is never replaced
+in place; edits create a new draft/version. Retirement prevents new bindings
+but does not silently rewrite a frozen running binding.
+
+Canonical MCP operations are `dataset_package_list`,
+`dataset_package_validate`, `dataset_package_upload`,
+`dataset_package_publish`, and `dataset_package_retire`. Upload accepts only
+explicit `CREATE_DRAFT` or `REPLACE_DRAFT` mode and never publishes or replaces
+a published version implicitly. Mutating operations use the same Scenario
+Manager application services as the UI/API and require normal product
+authorisation; when used by an agent they are governed through HiveGate.
+
+A minimal manifest is explicit about every runtime-affecting reference:
+
+```yaml
+schemaVersion: pockethive.dataset-package/v1
+packageId: reusable-records
+version: 1
+recordSchemaPath: schema/record.yaml
+contractPaths:
+  - contracts/traffic.yaml
+requiredStorageCapabilities: [SNAPSHOT_READ, SHARED_SELECTION]
+supportedStorageProfiles: [MANAGED_RECORDS_V1, REDIS_COLLECTION_V1]
+sourceBindingPaths:
+  - sources/csv-catalog.yaml
+```
+
+The package does not contain `datasetSpaceId`, deployment alias, backend
+settings or credentials. Those values exist only in the deployment-scoped
+Dataset registration. The package explicitly lists compatible storage profiles
+and required capabilities; it does not select a default.
+
+### 6.1.2 Dataset registration
+
+`DatasetRegistration/v1` is the explicit deployment-context link between one
+published Dataset package/version and one active Dataset Space. It owns the
+Space-local alias and selects exactly one adapter, settings reference and
+capability profile:
+
+```yaml
+schemaVersion: pockethive.dataset-registration/v1
+registrationId: performance-test-reusable-records
+datasetSpaceId: performance-test
+datasetPackageRef: reusable-records@1
+datasetAlias: reusable-records
+storage:
+  adapter: POSTGRESQL
+  settingsRef: datasets-postgres-primary
+  capabilityProfile: MANAGED_RECORDS_V1
+```
+
+For Redis, the registration explicitly selects `adapter: REDIS`, a Redis
+settings reference and `REDIS_COLLECTION_V1` plus its collection settings.
+Missing, disallowed or incompatible adapter/profile/capability combinations
+fail registration. There is no default, fallback or automatic migration.
+
+Registrations live only in the target deployment and are owned by Scenario
+Manager. Creating a registration does not modify the package or Space. A
+replacement creates a new registration version; running bindings retain their
+frozen registration and Space-policy versions until explicitly rematerialised.
+Registration versions follow `ACTIVE -> RETIRED`. Retirement prevents new
+bindings but preserves frozen bindings, records and evidence. An active or
+retired registration is never hard-deleted or overwritten; editing creates the
+next explicit version after optimistic concurrency, authorisation, Space,
+package, adapter and dependency checks.
 
 ### 6.2 Dataset definition
 
@@ -357,6 +508,39 @@ swarms is safe for the SUT. `SHARED` admission is forbidden when concurrent
 reuse is not declared safe. Data that requires exclusivity, single use, strict
 ordering, or a transaction-bound value is outside the reusable MVP and shall
 fail with a stable unsupported-allocation error rather than silently sharing.
+
+Every definition declares required storage capabilities and explicitly
+supported profiles. The deployment-scoped Dataset registration selects exactly
+one adapter and settings reference. Core adapter identifiers are `POSTGRESQL`
+and `REDIS`. There is no default adapter, inference from source files or
+fallback. Registration and binding fail when the selected profile cannot
+provide the package or scenario requirements.
+
+### 6.2.1 Dataset contract
+
+`DatasetContract/v1` is a package-local, immutable field-subset contract for
+one Dataset. Its lifecycle and digest are part of the owning Dataset package
+version; it is not a separately shared live object or cross-Dataset registry.
+The Dataset record schema defines the complete canonical field set, while each
+contract exposes one guaranteed subset for one use.
+
+```yaml
+schemaVersion: pockethive.dataset-contract/v1
+contractId: traffic
+fields: [recordKey, accountId, cardId, expiryDate]
+```
+
+Every field must exist in the owning record schema; the contract cannot
+redefine type, classification, ownership, nullability or key semantics. Fields
+outside the subset are not exposed through that contract. There is no
+inheritance, cross-package reference, composition or fallback. Changing a
+contract creates a new Dataset package version and affects no other Dataset.
+
+Scenario-specific required fields and request-slot wiring remain in the
+scenario bundle. A Scenario Binding explicitly selects one concrete published
+Dataset package/version and one of its `contractId` values. Validation proves
+that the selected contract contains every required scenario field before plan
+creation; it never discovers a Dataset or contract by scanning aliases.
 
 ### 6.3 Dataset reference
 
@@ -384,6 +568,47 @@ wildcard pools also fail admission.
 The worker does not receive a table name, Redis key, database endpoint, or
 storage-specific identifier.
 
+### 6.3.1 Dataset consumer requirement and resolved binding
+
+`DatasetConsumerRequirement/v1` is authored inside one scenario bundle at the
+reserved path `datasets/requirements.yaml`. The file has
+`schemaVersion: pockethive.dataset-requirements/v1` and a top-level
+`requirements` collection. It contains a bundle-local
+`requirementId`, `required`, `requiredFields`, allocation,
+remaining-validity, delivery/effect and required storage-capability constraints,
+exact Fitness/Selection/Trusted-Time policy references and scenario-local
+`bindingSlotsRef`. Dataset-specific selector/material projections are selected
+by the selected package-local Dataset Contract. The requirement
+contains no `scenarioId`,
+other bundle ID, swarm/run/worker identity, concrete Dataset or storage
+identifier.
+
+The existing versioned `ScenarioBinding` maps every declared `requirementId`
+exactly once to one concrete `datasetRef` plus one package-local
+`datasetContractId`; resolution validates that contract's fields and the
+requirement's policy/capability constraints against the exact Dataset package
+version. Missing, duplicate, extra, wildcard, cross-scope or incompatible
+mappings fail admission. There is no alias-based discovery and no implicit
+default Dataset.
+
+After variables and SUT context are resolved, Orchestrator creates one
+immutable `ResolvedDatasetBinding/v1` per mapping. It records the
+`scenarioBindingId` and version, requirement ID, exact Dataset package version,
+package-local contract ID/digest and resolved policy/projection versions,
+runtime swarm/plan identity and later membership/activation epochs.
+This runtime record is derived authority for the run, not authored bundle
+configuration. A new or replacement worker joins through a new membership
+epoch and must hydrate and acknowledge before activation; it does not
+self-register with a Dataset.
+
+A Dataset-level `consumerBindings` document is not a supported contract. No
+compatibility parser, migration fallback or alias-based auto-registration is
+provided; proposal examples using that shape are replaced before implementation.
+
+The Scenario Manager rejects `scenario.yaml.requires.datasets`; the reserved
+file is the only requirement SSOT and no compatibility parser or dual-location
+fallback is provided.
+
 ### 6.4 Record
 
 A stable test identity representing one logical entity or related resource
@@ -398,8 +623,35 @@ One immutable version of refreshable or sensitive record material, with
 
 A versioned link from a Dataset definition to the PocketHive scenario or
 adapter capable of provisioning, replacing, refreshing, validating, or
-deprovisioning its data. It contains references to configuration and
-credentials, never secret values.
+deprovisioning its data. The binding is owned by the Dataset package and
+contains references to configuration and credentials, never secret values.
+
+When a source binding references a file in its owning Dataset package, the
+authored field is `assetPath`: a normalized, non-empty, package-relative POSIX
+path such as `assets/reusable-records.csv`. It is resolved relative to the
+exact Dataset-package version, not a scenario bundle or process working
+directory. Absolute
+paths, URI schemes, drive prefixes, backslashes, NUL, `.`/`..` segments,
+symlink escape and paths outside the source type's allowlisted root are
+rejected. A CSV catalog is restricted to `assets/` and must resolve to one
+regular file whose content digest is frozen with the source binding.
+
+Scenario Manager validates the authored path and file against the immutable
+Dataset-package revision. During runtime-plan materialisation, Orchestrator maps
+it once to the package mount and records the package/file digest in the plan.
+Only that resolved container path reaches the existing worker `filePath`
+property. Domain contracts, APIs and stored source bindings never accept or
+persist a container path, and workers do not try relative-path or absolute-path
+fallbacks. Existing worker `templateRoot` remains a separate container-runtime
+contract until the general scenario contract is deliberately migrated.
+
+A source binding that interprets an external call result also freezes one
+`sourceResultPolicyRef`. That policy names the exact call/result observation,
+closed completion states and deterministic result routes. Every Dataset target,
+mapping and operation action reachable from the policy is authorised and
+version-resolved at binding admission. A scenario or worker cannot construct a
+Dataset name from a response, select another bundle, or redirect a result at
+runtime.
 
 ### 6.7 Dataset producer
 
@@ -431,13 +683,13 @@ token. Credential material rotates behind an explicitly activated revision.
 ### 6.11 Executable data-contract artifacts
 
 The immutable, version-addressed `recordSchemaRef`, `sourceMappingRef`,
-`selectorProjectionRef`, `materialProjectionRef`, and `bindingSlotsRef`
-together define the only permitted path from a source result to a stored record
-and then to a request slot. Selector and material projections are different
-artifacts with different principals, fields and classifications; one reference
-shall never stand for both. They are closed machine-readable contracts, not
-descriptive labels or arbitrary code. Their normative semantics are in section
-9.13.
+`sourceResultPolicyRef`, `selectorProjectionRef`, `materialProjectionRef`, and
+`bindingSlotsRef` together define the only permitted path from a source result
+to a stored record and then to a request slot. Selector and material
+projections are different artifacts with different principals, fields and
+classifications; one reference shall never stand for both. They are closed
+machine-readable contracts, not descriptive labels or arbitrary code. Their
+normative semantics are in section 9.13.
 
 ### 6.12 Selection Policy
 
@@ -478,7 +730,10 @@ normative semantics are in section 18.1.
 Scenario Manager owns:
 
 - Dataset Space descriptors;
-- Dataset definitions and aliases;
+- Dataset Space policy versions and deployment-scoped Dataset registrations;
+- Dataset-package drafts, immutable published versions, retired versions,
+  definitions and aliases;
+- Dataset Contracts and their record-schema field subsets;
 - Dataset Fitness Contracts, definition allowlists/defaults, and authoring
   validation;
 - versioned logical partition and pool declarations;
@@ -490,7 +745,11 @@ Scenario Manager owns:
 - selection, trusted-time, external-entity lifecycle, decommission, and
   side-effect-budget policy definitions or references;
 - version history and authoring validation;
-- variable definitions and profiles.
+- variable definitions and profiles;
+- validation of scenario-local `datasets/requirements.yaml` and its
+  `DatasetConsumerRequirement/v1` declarations;
+- versioned, database-backed `ScenarioBinding` records for one scenario each,
+  including the explicit requirement-to-Dataset mapping.
 
 Scenario Manager does not:
 
@@ -498,7 +757,9 @@ Scenario Manager does not:
 - seed runtime rows;
 - refresh credentials;
 - assign consumable records;
-- serve records to transaction workers.
+- serve records to transaction workers;
+- store a Dataset-level list of consumer scenarios or make one scenario bundle
+  aware of another.
 
 ### 7.2 Orchestrator and Simulation Program
 
@@ -507,7 +768,7 @@ The Orchestrator owns:
 - the external Managed Dataset API, authentication, authorisation and admission;
 - binding admission and final compatibility validation;
 - resolution of SUT and variable profiles;
-- materialised, immutable binding snapshots;
+- materialised, immutable `ResolvedDatasetBinding/v1` snapshots;
 - freezing and coordinating Dataset/auth binding revisions and activation;
 - producer and traffic swarm lifecycle;
 - data-aware start admission;
@@ -549,19 +810,23 @@ control signal itself. Only after readiness is current does its
 `WorkDispatchPort` record and publish bounded supply work.
 
 The module does not execute SUT-specific source sequences and does not depend
-on Orchestrator's in-memory swarm registries for durability. Its PostgreSQL
-state, migrations, claims and reconciliation form a feature-scoped durable
-island. On process start it remains `RECONCILING` until that state and outbox
-are recovered; this does not imply that an interrupted whole-swarm lifecycle
-mutation has also been recovered.
+on Orchestrator's in-memory swarm registries for authority. Under
+`MANAGED_RECORDS_V1`, its PostgreSQL state, migrations, claims and
+reconciliation form a feature-scoped durable island. A Redis profile reports
+only the recovery semantics it qualifies. On process start the module remains
+`RECONCILING` until the selected adapter's required state is recovered; this
+does not imply that an interrupted whole-swarm lifecycle mutation has also
+been recovered.
 
 ### 7.4 Shared contracts and SDK boundaries
 
 Shared code is deliberately narrow:
 
-- `common/dataset-contracts` owns canonical Dataset IDs, DTOs, states,
-  bindings, projection contracts, commands and receipts, with no persistence
-  or scheduling policy;
+- `common/dataset-contracts` owns canonical Dataset IDs, package/local-contract,
+  Dataset Space/registration lifecycle and storage-profile schemas,
+  `DatasetContract/v1`,
+  `DatasetConsumerRequirement/v1`, `ResolvedDatasetBinding/v1`, projection
+  contracts, commands and receipts, with no persistence or scheduling policy;
 - `common/swarm-model` carries resolved immutable Dataset binding references in
   the swarm plan;
 - `common/worker-sdk` owns managed input/output adapters, authorised background
@@ -582,8 +847,10 @@ Producer swarms:
 - accept bounded `DATASET_SUPPLY` work;
 - execute the configured source/refresh business flow;
 - preserve operation and reservation context throughout the flow;
-- commit source results through `DATASET_UPSERT`; use the deferred
-  `DATASET_TRANSITION` only for a later approved state-loop migration;
+- commit source results preferably through `DATASET_UPSERT`; use the shared
+  fail-closed `managedDatasetPublisher` interceptor only when another primary
+  output must remain, and use deferred `DATASET_TRANSITION` only for a later
+  approved state-loop migration;
 - report bounded, redacted failure outcomes;
 - never decide independently how many records the Dataset needs.
 
@@ -622,7 +889,7 @@ The MCP:
 
 - delegates to authenticated product APIs;
 - presents source, commit, distribution, readiness, and use status/proof through
-  the three read-only MVP tools in section 22.1;
+  the three bounded MVP evidence tools in section 22.1;
 - exposes no raw data, SQL, Redis query, or secret retrieval tool;
 - treats the agent as an untrusted client and confers no authority from a tool
   name, description, annotation, model decision, or MCP routing choice;
@@ -713,7 +980,7 @@ The minimum application ports are deliberately small:
 
 ```mermaid
 flowchart LR
-  SM[Scenario Manager<br/>authored immutable definitions, bindings and policies]
+  SM[Scenario Manager<br/>definitions, bundle-local requirements<br/>and per-scenario bindings]
 
   subgraph ORCH[orchestrator-service]
     API[Authorised Dataset API adapter]
@@ -847,21 +1114,34 @@ completion. Conversely, `DATASET_SUPPLY` cannot start or enable a swarm. The
 durable Dataset receipt, not a control outcome, publisher confirm or consumer
 acknowledgement, is the completion evidence.
 
-## 9. Managed Dataset persistence model
+## 9. Managed Dataset storage model
 
-The MVP uses the existing PostgreSQL deployment with a separate database schema
-and least-privilege role. It does not introduce another database container.
-After restore admission, PostgreSQL is the sole **positive operational
-authority**: only its transactions can create or advance a record, operation,
-schedule, revision, fence or outbox outcome. Ordinary local files may hold
-disposable caches or diagnostics only and never decide those facts. The one
-profile-gated `RestoreDeletionSafetyFloor` in section 9.10 is a monotonic
-negative authority behind `RestoreSafetyLedgerPort`: it may veto serving or
-require PostgreSQL to raise a deletion/decommission epoch through the normal
-domain transaction, but can never assert existence/readiness, lower an epoch,
-select data, publish work or serve a Dataset directly. The module's ports must
-allow future extraction to a dedicated process or HA PostgreSQL deployment
-without worker contract changes.
+The Dataset application owns storage-neutral domain ports. Each published
+Dataset definition selects one adapter explicitly:
+
+| Adapter | Initial capability profile | Authority and limits |
+|---|---|---|
+| `POSTGRESQL` | `MANAGED_RECORDS_V1` | Full managed lifecycle: immutable versions, relationships, revisions, snapshots, idempotent commits, schedules, operations, fences, receipts and transactional outbox |
+| `REDIS` | `REDIS_COLLECTION_V1` (deferred) | Explicit Redis collection semantics declared by configuration; unavailable in the core MVP and no relational, revision-history, transactional-outbox, lease, proof or durability claim unless the separate adapter profile is implemented and qualified |
+
+The common Dataset API exposes only operations supported by the selected
+adapter capability profile. Scenario requirements and Dataset contracts name
+their required capabilities; Scenario Manager and Orchestrator reject an
+incompatible binding before runtime. They never emulate a missing operation,
+switch adapters, or treat a Redis acknowledgement as a PostgreSQL-grade durable
+receipt. UI status and evidence always identify the selected adapter and its
+capability profile.
+
+The core `MANAGED_RECORDS_V1` profile uses the existing PostgreSQL deployment
+with a separate database schema and least-privilege role. It does not introduce
+another database container. For this profile PostgreSQL is the sole operational
+authority: only its transactions can create
+or advance a record, operation, schedule, revision, fence or outbox outcome.
+Ordinary local files may hold disposable caches or diagnostics only and never
+decide those facts. Backup restore is unsupported by the core profile and
+requires the separately approved `Q-HA-RESTORE-v1` contract. The module's ports
+allow the PostgreSQL and Redis adapters to evolve without worker contract
+changes.
 
 Target logical tables follow. The MVP requires records, material generations,
 temporal membership/revisions, fitness evaluations, projection/auth activation,
@@ -1000,7 +1280,7 @@ mutation command prevents overlapping effective intervals. A second active
 policy, a policy bound to the same records through another alias, or two
 controllers calculating demand for one scope is a structural error that makes
 the scope non-ready. Version replacement advances this one pointer; it never
-creates a parallel controller. Read-only consumer bindings may share the scope
+creates a parallel controller. Resolved read-only consumer bindings may share the scope
 but cannot own or activate a Supply Policy.
 
 `dataset_fill_cycle` is the durable hysteresis aggregate for one active Supply
@@ -1196,259 +1476,59 @@ by a child step.
 
 #### 9.9.1 Core encrypted-persistence profile
 
-`dataset-qualified-core` already requires encrypted record/material payloads
-and operation staging; it therefore inherits
-`CoreDatasetEncryptionProfile/v1` and never depends on a sensitive-only child.
-The closed `pockethive.dataset-ciphertext/v1` uses exactly AES-256-GCM with a
+`dataset-qualified-core` encrypts record/material payloads and operation staging
+with the closed `CoreDatasetEncryptionProfile/v1`. The
+`pockethive.dataset-ciphertext/v1` envelope uses AES-256-GCM with a
 purpose-separated DEK per Dataset security domain and separate
-`RECORD_MATERIAL`/`OPERATION_STAGING` purposes. PostgreSQL stores algorithm,
-KEK/DEK IDs and versions, wrapped DEK, 96-bit nonce, 128-bit tag, AAD version
-and ciphertext—never a plaintext key.
+`RECORD_MATERIAL` and `OPERATION_STAGING` purposes. PostgreSQL stores the
+algorithm, KEK/DEK identifiers and versions, wrapped DEK, 96-bit nonce,
+128-bit tag, AAD version and ciphertext; it never stores a plaintext key.
 
-AAD is RFC 8785 canonical UTF-8 over exact environment, Dataset Space,
-Dataset, table/payload purpose, stable row/operation/item/step identity,
-field/schema version and security domain. Each DEK has a random 32-bit nonce
-prefix plus a database-allocated monotonic 64-bit invocation counter; replicas
-reserve non-overlapping ranges durably, may waste but never reuse them. The
-profile rotates before the conservative lower of 2^32 invocations or its
-frozen encrypted-block/forgery bound. A duplicate nonce, unknown algorithm,
-AAD mismatch or authentication failure quarantines the payload and fails the
-affected scope non-serving; there is no plaintext or alternate-key fallback.
+AAD is RFC 8785 canonical UTF-8 over the exact environment, Dataset Space,
+Dataset, payload purpose, stable row/operation/item/step identity, schema
+version and security domain. Each DEK uses a random 32-bit nonce prefix plus a
+database-allocated monotonic 64-bit invocation counter. Replicas reserve
+non-overlapping ranges durably and may waste but never reuse a nonce. The
+profile rotates before the conservative lower of its invocation or encrypted-
+block bound. Unknown algorithms or keys, duplicate nonces, bad tags and AAD
+mismatches quarantine the payload and fail the affected scope closed.
 
 The Dataset application depends only on `DatasetKeyProvider` and
 `DatasetCipher` ports. The free core adapter obtains purpose-separated KEK
 versions from owner-restricted Docker secret files outside Git, images,
-ordinary environment variables and PostgreSQL. Its closed
-`CoreDatasetKeyManifest/v1` contains purpose, monotonic epoch, previous digest,
-active-encrypt key and retained decrypt-only keys. Exactly one key is
-`ACTIVE_ENCRYPT`; older keys are `DECRYPT_ONLY` or `RETIRED`. Dynamic manifest
-epoch/digest and key references are deliberately **not** frozen into the
-qualified deployment manifest: routine rotation changes them. The qualified
-manifest instead pins the immutable `CoreDatasetEncryptionProfile/v1`,
-provider/build and custody boundary, floor trust anchor/schema/port,
-rotation/retirement protocol, nonce/AAD/bounds and security-domain policy.
+environment variables and PostgreSQL. `CoreDatasetKeyManifest/v1` contains an
+explicit manifest version, purpose, active-encrypt key, retained decrypt-only
+keys and canonical digest. Exactly one key is `ACTIVE_ENCRYPT`; older keys are
+`DECRYPT_ONLY` or `RETIRED`. The qualified deployment manifest pins the
+encryption profile, provider/build, custody boundary, rotation/retirement
+protocol, nonce/AAD bounds and security-domain policy, but not live key IDs.
 
-Core anti-rollback is a separate hexagonal authority. The application owns
-`CoreKeyManifestSafetyFloorPort.readLatest()` and
-`appendDurablyAndVerify(candidate) -> CoreKeyFloorAppendReceipt` for each
-subject's signed chain, plus purpose-namespaced
-`MonotonicSafetyHeadWitnessPort.readVerifiedSnapshot(namespace)` and
-`appendAndAdvance(expectedNamespaceHead,subjectCandidate) ->
-MonotonicHeadReceipt`. The latter returns the exact verified namespace head
-and `latestBySubject` inclusion map. It is an application use-case port
-implemented by the application service over narrow outbound
-`WitnessJournalStorePort` and `MonotonicHeadDevicePort`; no infrastructure
-adapter implements the security state machine. Adapters store the full chains and witness
-journals append-only outside PostgreSQL and its backups, replaceable Docker-
-secret/key mounts, container filesystems and evidence packs. The application-
-owned shared kernel supplies the pure closed `MonotonicWitnessCodec/v1`,
-`WitnessSubjectKeyDeriver/v1`, predecessor/CAS rules and
-`MonotonicWitnessReplay/v1`; the same implementation and independent vectors
-are used for TPM and remote/WORM adapters. Adapters own only raw append/fsync/
-read and device/service calls. Storage, TPM and cryptography-provider types do
-not enter domain/application contracts.
+`RotateCoreDatasetKey/v1` is a separately authorised, idempotent application
+command. It acquires a per-domain/purpose rotation fence, stages and verifies
+the new secret and manifest, drains already-authorised encryption commits,
+then atomically commits the manifest version/digest and active-key pointer in
+PostgreSQL before the new key can be used. A crash before that transaction
+leaves the candidate unused; a crash after it is recovered from the committed
+manifest. Background rewrap/re-encryption is bounded. Old decrypt-only keys are
+retained until no live row or retained supported backup needs them.
 
-A protected volume/file is **not** an anti-rollback authority: a valid signed
-hash-chain prefix can be replayed after coordinated storage rollback. The
-separate latest-head witness provides a qualified non-decrementable counter
-and cumulative head digest outside every database/secret/backup/file rollback
-set. To avoid per-Dataset NV-slot exhaustion without coupling unrelated safety
-purposes, the free reference pre-provisions exactly three serialised pairs of
-physical TPM 2.0 NV counter/extend indices: `CORE_KEY_MANIFEST`,
-`CORE_QUALIFICATION` and `RESTORE_DELETION`. A software TPM/emulator is invalid
-evidence. A deployment may instead use a qualified independently operated
-WORM/remote monotonic service with equivalent anti-truncation, inclusion and
-availability properties. Missing, reset, older, unauthorised or unavailable
-witness state is non-serving; a witness reset is a new trust domain and cannot
-silently recover the old qualification.
+On startup the module verifies secret availability, file ownership, manifest
+digest/version, active/decrypt-only key consistency and a known-answer
+wrap/decrypt check before serving. Missing keys, an unknown manifest, database/
+secret disagreement or an interrupted rotation keeps the affected scope
+`RECONCILING`; there is no alternate-key or plaintext fallback. Restoring a
+backup is not part of `dataset-qualified-core`: it is admitted only by the
+separate `Q-HA-RESTORE-v1` profile and its independently retained deletion and
+key-custody evidence.
 
-Each namespace also has one complete ordered `MonotonicWitnessJournal/v1`.
-Every bounded entry binds namespace witness sequence/previous head, subject
-type and closed stable `subjectKey`, security domain/purpose, subject chain
-sequence/previous digest/current digest, command/receipt digest, created time
-and entry digest. Subject keys are RFC 8785 canonical SHA-256 digests of: exact
-environment + Dataset Space + security domain + encryption purpose for
-`CORE_KEY_MANIFEST`; environment + stable deployment qualification-lineage ID
-for `CORE_QUALIFICATION`; and environment + Dataset Space for
-`RESTORE_DELETION`. Mutable labels, build digests, key IDs and database row IDs
-are forbidden subject-key inputs.
-
-Every signed subject candidate (`CoreKeyManifestSafetyFloor/v1`,
-`CoreQualificationAttestation/v1` and `RestoreDeletionSafetyFloor/v1`)
-contains its schema version, subject type, closed canonical subject-key input
-object and computed `subjectKey`. Application admission recomputes the key and
-requires candidate, journal entry and port argument to match byte-for-byte; no
-adapter or caller may assign/relabel a candidate under another subject. A core
-key security domain is scoped to exactly one environment + Dataset Space; a
-domain shared across Dataset Spaces is invalid rather than silently given a second
-identity. The qualification-lineage ID is created/pinned by the witnessed
-trust-domain provisioning ceremony and cannot be replaced to bypass history.
-
-The witness-entry digest is SHA-256 over the fixed domain prefix
-`pockethive/monotonic-witness-entry/v1`, namespace and length-delimited RFC 8785
-canonical entry bytes excluding only the digest. The cumulative extend head is
-the TPM-defined hash extend of the prior head with that entry digest. The
-adapter replays every entry from the namespace's qualified genesis, recomputes
-the cumulative head, requires journal delta/head to equal the physical counter/
-extend state, and derives the latest included entry per subject. An older subject receipt remains
-valid only as journal history; serving requires its current subject chain to
-equal `latestBySubject`, not the latest namespace counter. Missing, truncated,
-reordered, duplicated or altered journal entries cannot reproduce the TPM head
-and make the complete namespace non-serving. The core profile retains the
-bounded full journal for the trust-domain lifetime; compaction/checkpointing is
-not implemented or claimed.
-
-For the TPM reference, provisioning defines each NV pair with
-`TPMA_NV_ORDERLY`, `WRITE_STCLEAR`, `READ_STCLEAR` and `CLEAR_STCLEAR` all
-clear, performs one
-domain-separated genesis counter increment and extend so both indices are in
-their written state, then attests and pins physical TPM identity, public area/
-attributes, **post-initialisation** NV Names, counter baseline `C0`, genesis
-extend head `H0`, authorisation-policy digest and write-endurance budget in the
-qualified deployment contract. It never assumes a newly defined TPM counter
-starts at zero or that its pre-write Name remains stable. An orderly/hybrid,
-reset-cleared, emulated or attribute-drifted index cannot qualify because an
-ordinary host-power loss must not lose/skip a committed extend or counter
-state.
-
-`appendAndAdvance` is a closed CAS state machine serialised within that fixed
-namespace. From journal delta/head `(N,HN)` it requires physical state
-`(C0+N,HN)`, first writes a bounded length-delimited frame containing sequence,
-payload length, canonical entry and entry digest, fsyncs and read-backs the
-complete frame N+1, then
-increments/read-backs the counter to `C0+N+1`, then extends/read-backs that
-entry digest to `HN+1`. Here `N/HN` are journal delta/cumulative head, distinct
-from the subject floor/attestation sequence. On restart: journal/head `(N,HN)`
-with TPM `(C0+N,HN)` means no advance; one exact durable entry N+1 with that
-TPM state may increment and extend; TPM `(C0+N+1,HN)` may only finish that
-entry's extend; and complete `(C0+N+1,HN+1)` returns the same idempotent
-receipt. Any other journal/TPM half-state, Name/attribute drift, digest, skipped
-sequence or replay is non-serving.
-
-If power loss tears only the uncommitted tail while TPM remains exactly
-`(C0+N,HN)`, recovery may discard bytes strictly after the last complete,
-digest-verified frame N and retry; it never discards a complete committed
-frame. Once the counter is `C0+N+1`, a missing/partial/different frame N+1 is
-irrecoverable and non-serving—recovery cannot invent bytes after the monotonic
-advance.
-
-Before append, the application requires the subject candidate's sequence and
-previous digest to be the exact successor of `latestBySubject[subjectKey]` (or
-the declared subject genesis). If its current digest already equals the latest
-entry, the port returns that original idempotent receipt without a TPM write.
-An older sequence, changed predecessor, same-sequence/different-digest fork or
-gap is rejected. The port serialises competing entries within the namespace; a
-CAS loser appends nothing and re-reads the verified snapshot. It may place the
-same subject candidate in a new next witness entry only when an unrelated
-subject won and this subject's predecessor is unchanged; if the same subject
-advanced, it returns idempotent success only for the identical digest and
-otherwise rejects stale/forked work. The per-domain rotation fence separately
-prevents competing key mutations. The run manifest freezes numeric maximum
-witness advances per hour/day/year and total journal entries/bytes for each
-namespace and in total, reserves device endurance margin, and rejects
-admission before any bound or remaining NV capacity is unsafe. A lost journal
-or irrecoverable half-state blocks its complete witness namespace, not the
-other two; this fail-closed availability blast radius and recovery owner are
-explicit in status/runbooks. NV lockout, unavailable device, reset/reprovision,
-exhausted declared write budget or an emulated/unattested TPM fails closed;
-migrating indices is a new witnessed trust domain and requires an explicitly
-qualified ceremony.
-
-`MonotonicHeadReceipt/v1` has deterministic `receiptId =
-SHA-256("pockethive/monotonic-head-receipt/v1" || trustDomainId || namespace ||
-journalEntryDigest)`, namespace/trust-domain ID, provider-neutral qualified
-`witnessInstanceIdentityDigest`, journal sequence/entry digest, subject key/sequence/digest,
-logical witness sequence-at-commit, head-at-commit and committed time copied from the signed
-entry. It is reconstructed identically from the verified journal entry and
-physical inclusion; later unrelated entries do not rewrite it. “Command/
-receipt digest” inside a witness entry means only the upstream authorised
-subject command and its pre-existing domain receipt, never this witness receipt,
-so no circular digest exists. The journal entry is the durable receipt index;
-no independent mutable receipt store is authority.
-
-The provider-neutral `MonotonicWitnessGenesis/v1` similarly carries logical
-baseline sequence/head and `witnessInstanceIdentityDigest`, plus a closed
-provider-evidence union. `TPM2_NV` evidence contains attested TPM identity,
-counter/extend public Names/attributes and C0/H0; a qualified `REMOTE_WORM`
-alternative carries its service/object-lock identity, consistency/inclusion
-profile and baseline checkpoint. Provider evidence cannot change the subject,
-journal, logical sequence/head or receipt semantics.
-
-The floor binds exact security domain and key purpose, monotonic
-`floorSequence`, `previousFloorDigest`, `coreKeyManifestEpoch`, exact current
-and previous manifest digests, active-encrypt key reference, bounded
-required-key-set digest, approved rotation command/receipt ID and canonical
-intent digest, static qualified key-profile/deployment-contract digest,
-Trusted Time `createdAt`, and a purpose-separated Ed25519 signer/key epoch and
-signature. Its public trust anchor is pinned by the static qualified deployment
-contract; snapshot, evidence, authentication and encryption keys are invalid
-floor signers. The floor is only a monotonic negative authority: it may veto
-serving or key use, but cannot provide key bytes, authorise plaintext, or grant
-decryption.
-
-`RotateCoreDatasetKey/v1` is a dedicated authorised, idempotent application
-command with exact domain/purpose, expected manifest epoch/digest and expected
-floor sequence; UI and MCP remain read-only. Rotation uses this update-before-
-use protocol:
-
-1. acquire a durable per-domain/purpose rotation fence across replicas, block
-   new encryption/key-manifest mutation and drain already-authorised encryption
-   commits while allowing reads/decryption with retained keys;
-2. stage the new secret/key and chained `CoreDatasetKeyManifest/v1` on every
-   Dataset replica and prove key ID, purpose, file permissions and independent
-   wrap/decrypt known-answer readiness; the new key is not yet usable;
-3. append, durability-barrier and read-back verify floor N+1 in the full-chain
-   store;
-4. advance and read-back the exact non-rollbackable witness from N to N+1,
-   binding the candidate's cumulative head digest; and
-5. only with both exact receipts, atomically commit PostgreSQL's accepted-floor,
-   current-manifest and active-write-key pointers; only then may
-   `DatasetKeyProvider` expose the new `ACTIVE_ENCRYPT` key; and
-6. release the fence. Bounded background work rewraps/re-encrypts retained rows.
-
-A crash before floor append leaves the staged candidate unused. A crash after
-chain append but before witness advance may advance only that exact signed,
-durable candidate bound to the accepted rotation; otherwise the scope is non-
-serving. A crash after witness advance but before the database commit may
-complete only the exact witnessed rotation when its full chain and staged
-manifest/key set are present. A crash after the database commit has both floor
-and witness already durable. No manifest or chain prefix above or below the
-exact witness is silently usable. Retirement repeats chain-then-witness-before-
-use ordering before secret removal. Old decrypt-only keys remain until every
-live row and retained backup reference has conclusively expired or been
-rewritten and the audited deletion gate passes.
-
-Before any restored or restarted deployment decrypts or serves a Dataset
-value, performs a business mutation, publishes outbox work, or releases a key
-to a business path, it verifies the independent floor signature/chain, replays
-the complete `CORE_KEY_MANIFEST` witness journal to the exact TPM namespace
-counter/head and requires the subject floor to equal `latestBySubject` plus the
-mounted manifest epoch/digest/key set, PostgreSQL accepted floor/pointers and
-bounded key-reference aggregates. Bounded reads of
-only this safety metadata and isolated known-answer verifier use are permitted
-while `RECONCILING`; they cannot touch Dataset rows or advance business state.
-Simultaneous
-database-plus-secret-plus-chain rollback below the witness; database/secret
-state ahead without a witnessed floor; missing, older, reset, tampered, wrong-
-purpose, wrong-signer or equivocating floor/witness; replica disagreement; or
-any unknown referenced key keeps
-the scope `RECONCILING` and non-serving with no fallback. Once equal, restore
-rotates the write DEK before allocating a new nonce.
-
-Routine approved key-material rotation does not change
-`qualifiedManifestDigest` or require full requalification while the pinned
-profile and protocol above remain unchanged. It does update bounded internal
-status/evidence with `coreKeyManifestEpoch`, `coreKeyManifestDigest`,
-`coreKeySafetyFloorSequence` and `coreKeySafetyFloorDigest` plus the rotation
-receipt, witness trust-domain ID/namespace/counter/head digest and witness
-receipt ID. Changes to algorithm/key type or size, provider/custody, floor signer
-or trust anchor, manifest/floor schema, rotation/retirement semantics,
-security-domain mapping, implementation/build or relevant limits change the
-qualified manifest and require requalification. This baseline protects
+Routine key-material rotation does not change `qualifiedManifestDigest` while
+the pinned profile and protocol remain unchanged. An algorithm, provider,
+custody, schema, security-domain or rotation-protocol change creates a new
+qualified manifest and requires requalification. This control protects
 volume/backup confidentiality and authenticated integrity; it does not claim
-protection from compromise of the combined Orchestrator host/process.
-`SENSITIVE_RESTRICTED` inherits it and adds the stronger custody and isolation
-controls in section 23.4.
+rollback resistance or protection from compromise of the combined
+Orchestrator host/process. `SENSITIVE_RESTRICTED` inherits this baseline and
+adds the stronger custody and isolation controls in section 23.4.
 
 ### 9.10 External-entity and deletion ledgers
 
@@ -1483,71 +1563,26 @@ external-lifecycle, evidence, retention, and key-erasure gates complete.
 
 `dataset_deletion_tombstone` records a monotonically increasing Dataset-space
 deletion epoch, exact scope, last visible revision, reason code, approved actor,
-time, and digest. Active tombstones outlive the maximum backup/restore horizon.
-For any PITR/backup profile, the newest signed tombstone manifest is also held
-in an owner-controlled append-only restore-safety ledger outside the Dataset
-database backup stream. The full chain may use a separately protected Docker
-volume/file through `RestoreSafetyLedgerPort`; it is not an ordinary module
-cache and, by itself, is not an anti-truncation authority. Its exact head is
-also committed under the distinct `RESTORE_DELETION` namespace of
-`MonotonicSafetyHeadWitnessPort`, outside the database/backup/ledger rollback
-set. The free reference uses its physical TPM 2.0 NV witness and requires no
-hosted service. The closed
-`RestoreDeletionSafetyFloor/v1` carries exact scopes/epochs, manifest sequence,
-previous-manifest digest, accepted decommission/deletion command receipt ID,
-canonical intent digest, reserved deletion epoch, creation time, canonical
-digest and a
-purpose-separated Ed25519 signature/key epoch. Its public trust anchor and
-witness namespace/policy are deployment-pinned outside the database backup;
-snapshot/evidence/authentication keys are not accepted for this purpose.
+time and digest. Active tombstones remain in the live database longer than the
+declared maximum supported backup/restore horizon. Core deletion evidence
+proves removal from the active deployment only; `dataset-qualified-core` makes
+no claim that restoring an older backup cannot resurrect pre-deletion rows.
 
-Because one witness subject covers an environment + Dataset Space, every new
-floor carries a complete, stably ordered, bounded `activeDeletionFloors[]` map
-for that subject: exact deletion-scope key, maximum deletion epoch, tombstone/
-intent digest and `retainThrough`. Relative to its signed predecessor, every
-still-retained entry is present with the same or greater epoch and matching
-lineage; adding deletion B can never omit or lower deletion A. An entry may be
-removed only after all admitted backup/PITR points that predate it are proven
-expired/destroyed and a separately authorised
-`DeletionFloorRetirementReceipt/v1` is included; the next floor also chains a
-`retiredScopeHistoryDigest` so the retirement cannot be erased. The deployment
-manifest freezes map/byte bounds. Crossing them leaves the requested scope
-non-selectable and deletion pending operator capacity/retention remediation;
-the map is never truncated. Restore of an out-of-retention backup is rejected,
-not used to justify lowering the floor.
+`Q-HA-RESTORE-v1` is the only profile permitted to restore a backup. Before
+that profile may be implemented or claimed, it must define and qualify one
+explicit owner-controlled deletion ledger outside the restored database and
+backup set, including its append, authenticity, anti-truncation, retention,
+availability and recovery contract. No external deletion authority is selected
+implicitly by this MVP specification. A deployment
+without the qualified restore ledger rejects restore admission and uses
+forward recovery from the current supported database instead.
 
-Before a restored Dataset module publishes or serves data, the
-`AdmitRestoredDataset` application use case verifies the append-only subject
-chain and signature, replays the complete `RESTORE_DELETION` witness journal to
-the exact physical namespace head, requires the floor to equal
-`latestBySubject`, and compares it with PostgreSQL's highest applied/accepted
-floor. Missing, reset, older, invalid,
-wrong-scope, truncated, equivocating or unverifiable chain/witness input keeps
-the deployment non-serving. A valid witnessed higher floor is reapplied
-through the normal Dataset transaction, which stores
-the accepted ledger sequence/digest, raises the tombstone epoch, issues a new
-Dataset revision/outbox intent and reconciles external effects. Serving opens
-only when the database-applied epoch is at least the independently verified
-floor and reconciliation gates pass. The ledger never writes a live row or
-serves data itself. Database rollback must never resurrect selectable data or
-an externally deprovisioned identity.
-
-Normal deletion uses a fail-safe ordered protocol, not an uncoordinated
-database/file dual write. After the authorised decommission intent is durable
-and the scope is non-selectable, Dataset module calls
-`RestoreSafetyLedgerPort.appendDurablyAndVerify(...)` and requires its
-`RestoreFloorAppendReceipt`; the file adapter implements that semantic with
-append, fsync and read-back verification. It then advances and read-backs the
-exact `RESTORE_DELETION` witness head. Only with both receipts may one
-PostgreSQL transaction commit `TOMBSTONED`, its revision and the exact accepted
-ledger sequence/digest. A crash after ledger append but before witness advance
-may witness only the exact signed accepted-deletion candidate. A crash after
-witness advance but before database commit is safe: startup sees the higher
-negative head and completes only that already-authorised deletion through the
-same domain command. An append/fsync/readback/witness failure leaves the scope
-`DRAINING`, non-selectable and retryable; it cannot claim tombstoned or backup-
-safe. A crash after the database commit is safe because the independent floor
-and non-rollbackable head were already durable.
+Normal core deletion remains one PostgreSQL transaction for the tombstone,
+removal revision, outbox intent and audit receipt after the scope is
+non-selectable. External cleanup and key retirement remain separately
+reconciled and cannot be inferred from that transaction. A failed transaction
+leaves the prior durable state; a committed transaction is recovered normally
+from PostgreSQL.
 
 ### 9.11 Idempotency and external side effects
 
@@ -1736,9 +1771,9 @@ Hexagonal ownership is explicit: the domain constructs canonical unsigned
 content and requires a valid signature before activation; the application
 layer calls signer/trust ports; secret/config/crypto adapters implement those
 ports; and the Worker SDK verifies before candidate exposure or activation
-acknowledgement. The `SENSITIVE_RESTRICTED` profile inherits this complete baseline
-and adds the stronger key-ring, revocation and anti-rollback controls in
-section 23.4; core never depends on a sensitive-only child.
+acknowledgement. The `SENSITIVE_RESTRICTED` profile inherits this complete
+baseline and adds stronger key custody and revocation controls in section 23.4;
+core never depends on a sensitive-only child.
 
 Revision commit is O(changed records), not O(total Dataset size). It persists a
 length-delimited ordered change digest and marks each affected selector/material
@@ -1873,6 +1908,59 @@ reflection, arbitrary code, dynamic property-path evaluation, clock/random
 reads, or destination selection. Its input paths, output paths, transforms,
 defaults, relationship construction, maximum fan-out, and error code for every
 failure are closed and compile-validated at binding admission.
+
+`SourceResultPolicy/v1` is the single contract that turns one source call's
+transport observation and extracted business code into a canonical
+`SourceResultOutcome`, then maps that outcome to exactly one declared action.
+It references the existing canonical `ResultRules` observation contract rather
+than duplicating response parsers. The initial closed outcomes are:
+
+- `COMPLETED` — transport and business-state contracts prove the intended
+  effect;
+- `FAILED_WRONG_STATE` — a conclusive response contains a declared terminal
+  failure state;
+- `CALL_FAILED` — a conclusive transport/protocol result proves no successful
+  creation under the source contract;
+- `INVALID_RESPONSE` — required result material is missing, malformed or uses
+  an unknown business state;
+- `PENDING` — a declared transitional state still requires bounded polling or
+  reconciliation; and
+- `UNCERTAIN` — the call may have produced an external effect but available
+  evidence cannot yet prove its outcome.
+
+`CALL_FAILED` is emitted only after the declared retry/status contract proves a
+conclusive failure or no effect. Exhausted retries do not convert an ambiguous
+write into failure; it remains `UNCERTAIN` with its reservation retained.
+
+The route actions are `UPSERT_DATASET`, `RECORD_OPERATION_FAILURE`, and
+`RECONCILE_OPERATION`. `UPSERT_DATASET` names one allowlisted Dataset target and
+one mapping. A route may declare whether its committed record contributes to
+the primary supply target. Every outcome has exactly one route; order,
+first-match behaviour, regex routes, templated Dataset names, wildcard/default
+targets and silent unmatched handling are forbidden. A policy may therefore
+store conclusive completed and failed results in different Datasets without
+making the failed result satisfy completed-record demand.
+
+For each source item, the selected target commit and item outcome receipt are
+atomic. A batch may contain items routed to different authorised Datasets, but
+it remains a collection of independently committed aggregates; there is no
+cross-Dataset all-or-nothing batch transaction. Persisting a failed-attempt
+record proves that failure evidence is durable, not that provisioning
+succeeded. `fullyAccounted` means every requested item has a durable conclusive
+outcome; operation `SUCCEEDED|PARTIAL|FAILED` and primary-supply contribution
+are derived separately from the policy's completed outcomes. Outcome/target
+counters reconcile to the same item total and a single item cannot contribute
+to two targets.
+
+`ResultRules` remains the observation SSOT. Its shared evaluator is moved from
+the processor-specific implementation into the framework-free Worker SDK and
+is used by processor and source/sequence workers. HTTP structured results use
+a typed JSON Pointer extractor with an explicit expected value type; TCP may
+use a bounded `RESPONSE_BODY` capture or an explicitly selected protocol/
+payload decoder. Binary framing, charset, schema and maximum bytes are declared
+by that adapter. No component guesses a decoder or treats transport success as
+business success. The current `http-sequence-service` 2xx-only decision is an
+implementation gap and cannot qualify as a Dataset source classifier.
 
 `selectorProjectionRef` and `materialProjectionRef` are distinct closed
 allowlists of record fields, Dataset module metadata, principal purpose and output
@@ -2380,7 +2468,7 @@ applies an explicit provider-level rate/concurrency budget above the per-policy
 limits. Independent policy controllers shall not collectively exceed that
 budget.
 
-For the reusable MVP, a consumer binding is admitted only when:
+For the reusable MVP, a resolved consumer binding is admitted only when:
 
 ```text
 consumer.requiredRemainingValidity <= supplyPolicy.minimumValidity
@@ -2389,7 +2477,7 @@ consumer.requiredRemainingValidity <= supplyPolicy.minimumValidity
 This is an admission invariant, not a request-time choice. It ensures Dataset module's
 authoritative eligible count and demand controller are at least as strict as
 every admitted consumer. A policy activation that would lower
-`minimumValidity` below any live binding requirement is rejected until those
+`minimumValidity` below any live resolved requirement is rejected until those
 bindings are rematerialised or removed. The worker still rechecks its exact
 requirement at selection and final write, but a stricter consumer cannot starve
 silently while Dataset module reports the pool supplied. Future validity-band pools
@@ -2622,7 +2710,8 @@ it does not invalidate safe existing data or discard late external successes.
 `ActivateSupplyPolicyVersion/v1`, pause, resume, circuit reset/override,
 `CancelSupplyOperation/v1`, and decommission are application use cases reached
 only through an official Orchestrator administrative command port. The
-production operator UI and all Dataset MCP tools remain read-only; operators
+production operator UI remains business-state read-only. Dataset MCP status
+tools are reads and `dataset_prove` creates retained evidence only; operators
 use the separately authorised administrative API/CLI or approved runbook rather
 than a direct PostgreSQL, RabbitMQ, Docker, scheduler, or worker mutation.
 
@@ -2998,6 +3087,14 @@ and adapters, must be implemented and contract-tested before Dataset supply can
 qualify. The green assessment is for the target design, not a claim that this
 runtime capability already exists.
 
+The repository also has a canonical `ResultRules` DTO and processor evaluator,
+including TCP response-body extraction, but the evaluator is processor-local
+and `http-sequence-service` currently treats HTTP 2xx as success without
+business-state classification. Before a sequence can be a Dataset producer,
+the evaluator must become one shared Worker SDK capability and the sequence
+must apply the frozen `SourceResultPolicy/v1`; no Dataset adapter compensates
+for this gap by parsing raw responses.
+
 No Dataset Rabbit message is emitted or consumed merely because one measured
 transaction selected reusable data.
 
@@ -3063,6 +3160,65 @@ requiring plaintext or ciphertext in a WorkItem is rejected in MVP; a future
 topology may pass opaque Dataset module staging handles only after its authorisation,
 expiry, and recovery contract is approved.
 
+The business-aware source worker classifies the creating call before invoking
+the Dataset publisher. The publisher never inspects an arbitrary payload to
+guess whether creation succeeded. A representative policy is:
+
+```yaml
+schemaVersion: pockethive.source-result-policy/v1
+id: card-create-result-v1
+callId: create-card
+resultRulesRef: card-create-state-v1
+
+classification:
+  completedBusinessCodes: [CREATED, ACTIVE]
+  failedBusinessCodes: [FAILED, REJECTED]
+  pendingBusinessCodes: [PENDING, PROCESSING]
+  conclusiveTransportFailureOutcome: CALL_FAILED
+  missingBusinessCodeOutcome: INVALID_RESPONSE
+  unknownBusinessCodeOutcome: INVALID_RESPONSE
+  ambiguousTransportOutcome: UNCERTAIN
+
+routes:
+  - outcome: COMPLETED
+    action: UPSERT_DATASET
+    datasetTargetId: completedCards
+    contributesToPrimarySupply: true
+  - outcome: FAILED_WRONG_STATE
+    action: UPSERT_DATASET
+    datasetTargetId: failedCards
+    contributesToPrimarySupply: false
+  - outcome: CALL_FAILED
+    action: UPSERT_DATASET
+    datasetTargetId: failedCards
+    contributesToPrimarySupply: false
+  - outcome: INVALID_RESPONSE
+    action: UPSERT_DATASET
+    datasetTargetId: failedCards
+    contributesToPrimarySupply: false
+  - outcome: PENDING
+    action: RECONCILE_OPERATION
+  - outcome: UNCERTAIN
+    action: RECONCILE_OPERATION
+```
+
+`completedCards` and `failedCards` are stable IDs in the owning source
+binding's `resultTargets`; each freezes one Dataset reference, record schema,
+mapping and permitted classification. They are not scenario IDs, aliases or
+runtime strings. The router is exhaustive and matches the enum by equality, so
+route order cannot change behaviour. A failed-result Dataset is declared only
+when another workflow will consume those records for retry, investigation or
+remediation. Otherwise conclusive failures use `RECORD_OPERATION_FAILURE` and
+remain in the bounded operation ledger.
+
+For HTTP, `ResultRules` may extract the business state through the target typed
+JSON Pointer extension, for example `/state`. For TCP text protocols it may
+extract the code from the bounded response body; binary TCP requires the exact
+declared payload decoder to expose a typed field first. `PENDING` follows only
+the policy's bounded poll/status operation. Timeout or connection loss after a
+possible write produces `UNCERTAIN`, never `FAILED_WRONG_STATE`, until the
+provider-status contract reconciles the effect.
+
 `COLOCATED_SEQUENCE` has an explicit in-process `DatasetSourceCommitter` port.
 The source worker passes schema-typed successor fields directly from its
 ephemeral step context to Orchestrator Dataset checkpoint/staging/upsert calls and waits for
@@ -3081,8 +3237,10 @@ quarantined; it is not orphaned.
 An upsert includes source operation, stable external identities, mapping/schema
 version, lifecycle/validity fields, command idempotency key, stable business
 operation/item key, canonical intent digest, and the authorised Dataset
-reference. `DATASET_UPSERT` reports success only after PostgreSQL has committed
-the result and receipt. Its reconciliation invariant is:
+reference. The shared Dataset upsert contract reports success only after
+PostgreSQL has committed the result and receipt, whether attached as the
+preferred `DATASET_UPSERT` output or the permitted
+`managedDatasetPublisher` interceptor. Its reconciliation invariant is:
 
 ```text
 received = inserted + updated + duplicate + rejected
@@ -3106,10 +3264,12 @@ bodies.
 ## 14. Variable-driven input and output configuration
 
 PocketHive shall support its existing `variables.yaml` mechanism for
-environment-varying, non-secret Dataset input/output values. Authors may use a
-literal when a value is invariant. Variable resolution occurs at swarm
-creation/binding time, before worker configuration is bound; no second template
-language is introduced.
+environment-varying, non-secret producer settings and operational bounds.
+Consumer contract identity is not supplied through a concrete `datasetRef`
+variable: the scenario uses its bundle-local `datasetRequirementId`, and the
+`ScenarioBinding` supplies the concrete Dataset mapping. Variable resolution
+occurs before worker configuration is bound; no second template language is
+introduced.
 
 The existing Orchestrator already recursively resolves `{{ vars.* }}` inside
 bee config maps/lists. An exact token preserves the native value type; an
@@ -3164,31 +3324,7 @@ definitions:
     scope: sut
     type: string
     required: true
-  - name: selectorProjectionRef
-    scope: sut
-    type: string
-    required: true
-  - name: materialProjectionRef
-    scope: sut
-    type: string
-    required: true
-  - name: bindingSlotsRef
-    scope: sut
-    type: string
-    required: true
   - name: authenticationBindingRef
-    scope: sut
-    type: string
-    required: true
-  - name: selectionPolicyRef
-    scope: sut
-    type: string
-    required: true
-  - name: trustedTimePolicyRef
-    scope: sut
-    type: string
-    required: true
-  - name: fitnessContractRef
     scope: sut
     type: string
     required: true
@@ -3216,13 +3352,7 @@ values:
           pool: traffic-ready
         sourceBindingId: reusable-entity-provisioner-v1
         sourceMappingRef: reusable-entity-mapping-v1
-        selectorProjectionRef: reusable-entity-selector-projection-v1
-        materialProjectionRef: reusable-entity-http-material-projection-v1
-        bindingSlotsRef: reusable-entity-http-slots-v1
         authenticationBindingRef: example-sut-http-auth-v1
-        selectionPolicyRef: reusable-local-round-robin-v1
-        trustedTimePolicyRef: qualified-host-time-v1
-        fitnessContractRef: reusable-entities-traffic-fitness-v1
 ```
 
 ### 14.2 Producer configuration
@@ -3250,47 +3380,89 @@ are processed; it does not create work beyond the requested/reserved count. The
 effective limit is the stricter of producer config and the current Supply Policy
 source rate/concurrency cap.
 
+`outputs.type: DATASET_UPSERT` is the preferred Dataset publication path. It
+makes the durable Dataset receipt the worker's primary output contract. When a
+worker must retain another primary output, it may instead opt into the shared
+Worker SDK side-output interceptor:
+
+```yaml
+config:
+  outputs:
+    type: RABBITMQ
+  interceptors:
+    managedDatasetPublisher:
+      enabled: true
+      deliveryMode: IN_PROCESS_DIRECT
+      expectedDatasetRef: "{{ vars.datasetRef }}"
+      expectedSourceBindingId: "{{ vars.sourceBindingId }}"
+      mappingRef: "{{ vars.sourceMappingRef }}"
+```
+
+The interceptor is an alternative attachment for the same typed
+`DatasetSourceCommitter` port and `DatasetUpsertConfig`; it is not a second
+implementation or a best-effort persistence mode. It runs after successful
+worker processing and before the primary `WorkOutput`. A missing durable receipt
+fails the invocation, so redelivery retries the stable idempotent operation and
+the primary output is not published. Payloads that are sensitive or required to
+terminate at the Dataset boundary must use `DATASET_UPSERT` and cannot select
+the interceptor form.
+
 ### 14.3 Traffic input configuration
+
+The consumer scenario first declares its logical requirement in the reserved
+scenario-local file; this is the only Dataset consumer contract authored in
+the bundle:
+
+```yaml
+# scenarios/bundles/traffic-a/datasets/requirements.yaml
+schemaVersion: pockethive.dataset-requirements/v1
+requirements:
+  - requirementId: reusableEntities
+    required: true
+    requiredFields: [recordKey, accountId, entityId, expiresAt]
+    allocation: SHARED
+    requiredRemainingValidity: PT30M
+    deliveryEffectProfile: AT_LEAST_ONCE
+    requiredStorageCapabilities: [SNAPSHOT_READ, SHARED_SELECTION]
+    fitnessContractRef: reusable-entities-traffic-fitness-v1
+    selectionPolicyRef: reusable-local-round-robin-v1
+    trustedTimePolicyRef: qualified-host-time-v1
+    bindingSlotsRef: reusable-entity-http-slots-v1
+```
+
+Its worker capabilities refer to that local ID, never a concrete Dataset or
+another scenario:
 
 ```yaml
 config:
   inputs:
     type: MANAGED_DATASET
     managedDataset:
-      datasetRef: "{{ vars.datasetRef }}"
-      fitnessContractRef: "{{ vars.fitnessContractRef }}"
-      allocation: SHARED
-      deliveryEffectProfile: AT_LEAST_ONCE
-      requiredRemainingValidity: PT30M
+      datasetRequirementId: reusableEntities
       ratePerSec: "{{ vars.trafficRatePerSec }}"
       snapshotPageSize: "{{ vars.snapshotPageSize }}"
       maximumLocalRecords: "{{ vars.maximumLocalRecords }}"
       maximumLocalBytes: "{{ vars.maximumLocalBytes }}"
-      selectorProjectionRef: "{{ vars.selectorProjectionRef }}"
-      bindingSlotsRef: "{{ vars.bindingSlotsRef }}"
-      selectionPolicyRef: "{{ vars.selectionPolicyRef }}"
-      trustedTimePolicyRef: "{{ vars.trustedTimePolicyRef }}"
 
-  auxiliary:
-    managedDatasetResolver:
-      type: MANAGED_DATASET_RESOLVER
-      datasetRef: "{{ vars.datasetRef }}"
-      materialProjectionRef: "{{ vars.materialProjectionRef }}"
-      bindingSlotsRef: "{{ vars.bindingSlotsRef }}"
-      snapshotPageSize: "{{ vars.snapshotPageSize }}"
-      maximumLocalRecords: "{{ vars.maximumLocalRecords }}"
-      maximumLocalBytes: "{{ vars.maximumLocalBytes }}"
-    managedAuthResolver:
-      type: MANAGED_AUTH_RESOLVER
-      authenticationBindingRef: "{{ vars.authenticationBindingRef }}"
-      maximumLocalEntries: "{{ vars.maximumLocalAuthEntries }}"
-      maximumLocalBytes: "{{ vars.maximumLocalAuthBytes }}"
+  managedDatasetResolver:
+    type: MANAGED_DATASET_RESOLVER
+    datasetRequirementId: reusableEntities
+    snapshotPageSize: "{{ vars.snapshotPageSize }}"
+    maximumLocalRecords: "{{ vars.maximumLocalRecords }}"
+    maximumLocalBytes: "{{ vars.maximumLocalBytes }}"
+  managedAuthResolver:
+    type: MANAGED_AUTH_RESOLVER
+    authenticationBindingRef: "{{ vars.authenticationBindingRef }}"
+    maximumLocalEntries: "{{ vars.maximumLocalAuthEntries }}"
+    maximumLocalBytes: "{{ vars.maximumLocalAuthBytes }}"
 ```
 
-The `inputs` block applies to the first traffic/source bee. The `auxiliary`
-blocks apply only to the declared final `processor-service` capabilities. They
-freeze the same Dataset revision but their separate selector/material
-projection refs, slot and Authentication Binding versions;
+The `inputs` block applies to the first traffic/source bee. The two resolver
+blocks are explicit role-specific fields declared by the final
+`processor-service` capability manifest; PocketHive does not introduce a
+generic `config.auxiliary` registry. The shared requirement ID resolves through
+one immutable binding carrying the Dataset, selector/material projection, slot
+and Fitness versions; the separate Authentication Binding remains explicit.
 none creates a moving alias. Supply Policy remains the inventory/readiness
 authority—snapshot page and local capacity settings do not create a second
 watermark policy.
@@ -3300,10 +3472,14 @@ watermark policy.
 - Capability discriminators such as `inputs.type`/`outputs.type` and invariant
   contract enums remain literal, never variable-driven. The literal selects the
   capability manifest and typed validator.
+- `sourceResultPolicyRef`, result outcomes/actions, `datasetTargetId` and
+  `contributesToPrimarySupply` are invariant binding fields, never
+  response-derived or variable-driven worker routing.
 - Exact expressions are required for numbers, booleans, objects, and lists.
-- Every referenced Dataset var is required for the selected profile/SUT;
-  unresolved optional vars must not leave template expressions in materialised
-  config. Required Dataset selectors may also be authored as literals.
+- Every referenced producer Dataset var is required for the selected
+  profile/SUT. Every consumer `datasetRequirementId` must exist in the same
+  bundle and map exactly once through its Scenario Binding; unresolved optional
+  vars must not leave expressions in materialised config.
 - Vars contain non-secret references, selectors, and initial operational
   values only.
 - Sensitive record values, credentials, passwords, keys, ciphertext, and raw
@@ -3320,7 +3496,8 @@ watermark policy.
   swarm admission. The first config update selects or tunes an existing
   binding; it does not create a Dataset implicitly.
 - Selected descriptor, source, mapping, Authentication Binding, and access/
-  allocation policy IDs resolve once to exact immutable versions during
+  allocation policy IDs, including source-result policy and every reachable
+  result target/mapping, resolve once to exact immutable versions during
   binding. Supply Policy is different:
   the binding freezes its stable ID, while Dataset module may adopt a new
   immutable version only through the explicit audited activation described in
@@ -3340,9 +3517,15 @@ resolve profile + SUT vars
   -> render complete bee config
   -> assert no unresolved expression remains
   -> validate typed capability fields/ranges/options
-  -> validate Dataset reference and source binding
-  -> compile record schema + source mapping + selector projection
-     + material projection + binding slots
+  -> validate bundle-local Dataset requirements
+  -> map each requirement exactly once through this Scenario Binding
+  -> validate resolved Dataset reference and source binding
+  -> validate source assetPath against owning bundle revision and digest
+  -> compile record schema + source mapping + source-result policy/routes
+     + every result target/mapping + selector projection + material projection
+     + binding slots
+  -> prove result outcomes are exhaustive and each maps to exactly one action
+  -> validate protocol/result extractor compatibility and bounded decoding
   -> validate Selection and Trusted Time Policies
   -> validate consumer validity <= Supply Policy minimum validity
   -> validate traffic delivery/effect profile and SUT idempotency contract
@@ -3350,7 +3533,7 @@ resolve profile + SUT vars
   -> validate Authentication Binding/provider/mode/final capability
   -> validate read/write permission and SUT scope
   -> validate input/output reference compatibility
-  -> freeze binding snapshot
+  -> freeze ResolvedDatasetBinding/v1 snapshot
   -> create runtime
 ```
 
@@ -3381,12 +3564,17 @@ admission failure codes (shared DTO/schema/constants, never duplicated strings):
 - `DATASET_LOCAL_CAPACITY_EXCEEDED`;
 - `DATASET_SOURCE_PROFILE_UNQUALIFIED`;
 - `DATASET_SOURCE_CAPABILITY_MISSING`;
+- `DATASET_SOURCE_ASSET_INVALID`;
 - `DATASET_BINDING_VERSION_CONFLICT`;
 - `DATASET_TIME_BUDGET_INVALID`;
 - `DATASET_REQUIRED_VALIDITY_EXCEEDS_POLICY`;
 - `DATASET_OPERATION_KIND_UNSUPPORTED`;
 - `DATASET_SCHEMA_CONTRACT_INVALID`;
 - `DATASET_MAPPING_CONTRACT_INVALID`;
+- `DATASET_SOURCE_RESULT_POLICY_INVALID`;
+- `DATASET_SOURCE_RESULT_ROUTE_INCOMPLETE`;
+- `DATASET_SOURCE_RESULT_TARGET_INVALID`;
+- `DATASET_SOURCE_RESULT_PROTOCOL_UNSUPPORTED`;
 - `DATASET_SLOT_CONTRACT_INVALID`;
 - `DATASET_TRUSTED_TIME_POLICY_INVALID`;
 - `DATASET_SIDE_EFFECT_BUDGET_EXHAUSTED`;
@@ -3556,7 +3744,7 @@ The supported MVP traffic topology is explicit:
    SUT request, or applies HTTP/TCP/protocol authentication before
    serialisation. End-to-end trust is decided only by final verification below.
 3. `processor-service`, whose primary input remains `RABBITMQ`, declares the
-   new auxiliary `MANAGED_DATASET_RESOLVER` capability. Its background client
+   new role-specific `MANAGED_DATASET_RESOLVER` capability. Its background client
    hydrates the full purpose-limited material projection for the same binding.
 4. Immediately before the SUT write, `FinalRequestMaterializer` accepts the
    record/generation/revision, immutable selector/material projection and
@@ -3729,24 +3917,57 @@ the affected input; they never create a window of expected generation misses.
 
 Commits a source result idempotently. It must not swallow failures. It returns
 or records an operation/commit receipt containing counts and a Dataset revision.
-It is an authenticated Orchestrator Dataset API adapter, not a generic Rabbit output;
-sensitive source results terminate at this boundary and cannot fall through to
-debug taps or another output. In `COLOCATED_SEQUENCE`, the worker invokes it
-through the in-process `DatasetSourceCommitter` before any terminal WorkItem is
-constructed; `WorkerOutputType.DATASET_UPSERT` names the typed capability and
-receipt semantics, not permission to serialise the source payload into the
-generic output pipeline.
+It is the preferred publication path and an authenticated Orchestrator Dataset
+API adapter, not a generic Rabbit output; sensitive source results terminate at
+this boundary and cannot fall through to debug taps or another output. In
+`COLOCATED_SEQUENCE`, the worker invokes it through the in-process
+`DatasetSourceCommitter` before any terminal WorkItem is constructed;
+`WorkerOutputType.DATASET_UPSERT` names the typed capability and receipt
+semantics, not permission to serialise the source payload into the generic
+output pipeline.
+
+When `sourceResultPolicyRef` is present, the output accepts only the canonical
+classified outcome plus its policy-bound allowlisted projection. It resolves
+that outcome through the frozen route and commits the selected target/mapping;
+it does not evaluate HTTP status, TCP bytes, response regex or business state.
+The shared output and interceptor use the same deterministic router.
+
+#### `managedDatasetPublisher` interceptor (optional side-output)
+
+Workers that must keep `RABBITMQ`, `REDIS`, or `NONE` as their primary output
+may explicitly enable `config.interceptors.managedDatasetPublisher`. The shared
+Worker SDK interceptor is available to every worker service and reuses the
+exact `DatasetSourceCommitter`, `DatasetUpsertConfig`, idempotency key and
+receipt contract used by `DATASET_UPSERT`. It always runs after the worker and
+before primary-output publication. Commit failure fails the invocation; there
+is no log-and-continue or implicit best-effort mode.
+
+The interceptor block is optional, but `enabled` is required when the block is
+present and must be an explicit boolean. Missing or malformed discriminator or
+configuration fields fail scenario admission; runtime does not infer defaults
+or switch publication paths.
+
+The interceptor accepts only a schema-allowlisted, size-bounded, non-sensitive
+projection. It is forbidden when the source result must terminate at the
+Dataset boundary. Scenario Manager composes its one shared interceptor
+capability manifest when the block is selected; worker image manifests must not
+duplicate its fields. This extends the existing selected-capability composition
+pattern and keeps one canonical config contract.
 
 #### `DATASET_TRANSITION` (deferred extension)
 
 Atomically records a business-state transition using `recordRef`, expected
 generation, from/to state, and idempotent outcome ID.
 
-For a supply-driven source workflow, the output shall inherit the exact
-Dataset reference and reservation from the supply WorkItem. Configuration
-fields named `expectedDatasetRef`/`expectedSourceBindingId` are scope
-constraints, not routing authorities; they must equal the WorkItem or the write
-fails closed. Configuration cannot redirect an operation to another Dataset.
+For a single-target supply workflow, the output inherits the exact Dataset
+reference and reservation from the supply WorkItem. Configuration fields named
+`expectedDatasetRef`/`expectedSourceBindingId` are scope constraints, not
+routing authorities; they must equal the WorkItem or the write fails closed.
+For a declared multi-outcome source, the supply WorkItem instead freezes the
+exact `sourceResultPolicyRef`, its primary target and all authorised result
+targets/mappings. Only that exhaustive policy may select among those targets.
+It cannot select a different Dataset, and a non-primary result never satisfies
+the primary Dataset reservation or supply target.
 
 ### 15.3 Live mutability
 
@@ -4074,8 +4295,9 @@ look ready.
 
 ### 18.1 Dataset Fitness Contract
 
-After vars/SUT materialisation, every required Dataset binding resolves exactly
-one immutable `fitnessContractRef` from the definition's allowlist, using its
+After vars/SUT materialisation, every required bundle-local Dataset requirement
+maps through its own `ScenarioBinding` and resolves exactly one immutable
+`fitnessContractRef` from the definition's allowlist, using its
 default only when no explicit reference is supplied. The exact reference and
 digest freeze before container creation; a binding cannot define or weaken an
 assertion inline. The contract reuses and pins existing Dataset schema,
@@ -4724,7 +4946,9 @@ Migration is opt-in:
 
 1. retain `REDIS_DATASET`, `REDIS` output, and `redisUploader`;
 2. add `MANAGED_DATASET`, `DATASET_SUPPLY`, and `DATASET_UPSERT`; add
-   `DATASET_TRANSITION` only when a state-loop migration is selected;
+   the shared `managedDatasetPublisher` interceptor only for explicit
+   side-output cases, and add `DATASET_TRANSITION` only when a state-loop
+   migration is selected;
 3. update Scenario Manager, wizard, UI, and MCP to understand both backends;
 4. migrate lifecycle-managed datasets and stateful loops after equivalence
    testing;
@@ -4741,23 +4965,40 @@ allocation (`INCRBY` once per block), not by moving it into Dataset module.
 
 ## 22. MCP evidence and integration boundary
 
-The existing PocketHive MCP is the only normal agent-facing MCP surface. A
-separate test-data MCP is not introduced. An agent is an untrusted client of
-that surface; reasoning, tool selection, tool descriptions, and MCP annotations
-are never product authority.
+The existing PocketHive MCP remains the product MCP implementation; a separate
+test-data MCP is not introduced. Governed agents access it through the HiveGate
+Codex MCP facade:
 
-### 22.1 Read-only MVP tools
+```text
+Agent/Codex -> HiveGate policy/evidence boundary -> PocketHive MCP
+            -> authenticated Orchestrator Dataset API
+```
+
+HiveGate governs discovery, policy, entitlement, execution-ticket requirements
+where applicable, redaction and evidence access. PocketHive remains the product
+authority for Dataset authorization and state. Neither facade approves its own
+request, and Dataset proof remains advisory product evidence rather than a
+HiveGate approval, workflow transition or closeout decision. Direct PocketHive
+MCP access is local diagnostic proof only and is never presented as governed
+execution.
+
+### 22.1 Dataset-package and bounded evidence tools
 
 | Tool | Required request scope | Purpose |
 |---|---|---|
+| `dataset_package_list` | Authorised package filters and bounded page | List package identities, versions, lifecycle state, digest, required capabilities and supported profiles without assets or secrets |
+| `dataset_package_validate` | Local package content or exact Scenario Manager draft revision | Run the canonical closed package/schema/local-contract/path/capability-profile validator without changing lifecycle state |
+| `dataset_package_upload` | Exact package ID/version, idempotency key, expected draft revision and `CREATE_DRAFT | REPLACE_DRAFT` | Create or replace only a draft through Scenario Manager; never publish or replace a published version |
+| `dataset_package_publish` | Exact validated draft revision/digest, idempotency key and publish permission | Freeze one immutable published version through Scenario Manager |
+| `dataset_package_retire` | Exact published version/digest, idempotency key and retire permission | Prevent new bindings without rewriting frozen runs or deleting runtime records |
 | `dataset_status` | Exact authorised use-specific `statusScopeId` | Counts and target headroom by partition/pool/state, scoped revision, typed validity/continuity/distribution horizons, refresh health, and bounded Dataset Fitness Contract status/`safeUntil`/reasons |
 | `dataset_source_operation_status` | Exact authorised `revisionScopeId` plus closed bounded operation/source filters | Source lineage and reconciled operation counts |
-| `dataset_prove` | Exact authorised `statusScopeId` plus the claim-profile-specific closed `claimTarget`: status scope, operation ref, delivery-attempt ref, or binding snapshot; closed `claimContext` for `FLOW_PROVEN` | Deterministic end-to-end proof and explicit gaps |
+| `dataset_prove` | Exact authorised `statusScopeId`, dedicated `dataset:proof:create`, idempotency key, claim-profile-specific closed `claimTarget`, and closed `claimContext` for `FLOW_PROVEN` | Create one retained deterministic proof and return explicit gaps without changing Dataset business state |
 
 Additional read-only tools such as a bounded opaque-reference trace or detailed
 refresh status are deferred and are not part of the MVP tool catalogue.
 
-Each tool validates the exact opaque scope in the table and suppresses even
+Each tool validates the exact scope in the table and suppresses even
 aggregate counts for status/revision scopes the caller is not authorised to
 access. A natural Dataset/partition/pool tuple is display metadata, not a
 substitute for the use-specific status scope or revision namespace. No tool
@@ -4765,12 +5006,14 @@ merges Fitness, continuity, activation, or proof decisions across declared uses.
 
 ### 22.2 MVP authority and ingress-convergence rule
 
-The Dataset MCP surface is read-only. It does not expose `dataset_seed_plan`,
-`dataset_seed_execute`, refresh, configuration, policy, binding, activation,
-deletion, producer-start, or other Dataset-affecting operations. Adding any
-write-capable agent operation requires a separately approved cross-cutting
-PocketHive agent-governance design and is not an extension implied by this
-specification.
+The Dataset MCP surface exposes five Dataset-package operations, two runtime
+reads and one bounded evidence-creation operation. Package operations call the
+same Scenario Manager services as UI/API and affect definition lifecycle only.
+They do not expose `dataset_seed_plan`, `dataset_seed_execute`, refresh, target,
+record, source-operation, policy/binding activation, deletion, producer-start,
+or other Dataset business-state operations. Adding any such agent operation
+requires a separately approved cross-cutting PocketHive agent-governance design
+and is not implied by package upload.
 
 One agent-specific integration safeguard is in scope: every Dataset-affecting
 command, whether reached through a Dataset MCP tool, an existing generic
@@ -4778,7 +5021,7 @@ workflow/swarm tool, the UI, or an official API, shall converge on the identical
 authenticated product-side authorisation and Dataset admission decision before
 execution. A wrapper may neither call an internal bypass nor substitute its
 service identity for the calling principal. Tool choice, description,
-annotation, model output, or a prior read-only proof grants no authority.
+annotation, model output, or a prior proof record grants no authority.
 
 For the same canonical principal, scope, command, policy versions, and product
 state, all ingress paths shall return the same allow/deny decision and stable
@@ -5020,7 +5263,12 @@ envelope around the proof. Every fact is bound to the
 same `revisionScopeId`; its `scopeRef` may further identify the exact status
 or binding scope.
 
-Proof creation atomically stores this immutable object under `proofId`. During
+Proof creation atomically stores this immutable object under `proofId`. It
+requires Dataset `VIEW`, dedicated `dataset:proof:create`, and an
+`Idempotency-Key` bound to the principal, authorised scope, normalized request
+and snapshot token. An exact replay returns the same proof; a changed request
+under the same key fails with `IDEMPOTENCY_CONFLICT`. Per-principal, scope and
+deployment rate/concurrency/storage quotas bound proof creation. During
 the frozen qualification/evidence retention window, authorised
 `GET /datasets/status/{statusScopeId}/proofs/{proofId}` returns the same direct
 stored object byte-for-byte and never recomputes observation time, validity or
@@ -5161,38 +5409,31 @@ and evidence reference.
 ### 22.6 Signed evidence-export profile
 
 Every core release first produces a minimal
-`CoreQualificationAttestation/v1`, distinct from an enterprise timestamped
-evidence pack. It contains the exact profile/result, build/image/deployment
-contract digests, acceptance-registry digest, complete applicable-child result
-digest, reproducibility-pack digest, evaluated time, monotonically increasing
-attestation sequence/previous digest and qualified-manifest digest. A one-shot
-qualification gate independently verifies completeness/oracle links and signs
-the RFC 8785 canonical object with a purpose-separated Ed25519 qualification
-key; its public trust bundle/digest is pinned in the deployment manifest. The
-key is not a runtime Dataset/auth/projection/evidence-export key, and the
-browser cannot sign or self-assert this result.
+`CoreQualificationRecord/v1`, distinct from an enterprise timestamped evidence
+pack. It contains the exact profile/result, build/image/deployment-contract
+digests, acceptance-registry digest, complete applicable-child result digest,
+reproducibility-pack digest, evaluated time, qualified-manifest digest and a
+purpose-separated Ed25519 signature. A one-shot qualification job independently
+verifies completeness and oracle links before signing. Its public verification
+key/digest is pinned in the release configuration and is not a runtime Dataset,
+authentication, projection or evidence-export key.
 
-The signed chain alone does not prevent replay of an older valid prefix.
-Qualification therefore has its own `CORE_QUALIFICATION` namespace in
-`MonotonicSafetyHeadWitnessPort`, distinct from key and deletion heads. The
-one-shot gate first durably appends/read-backs the signed attestation, then
-appends/advances/read-backs the exact `CORE_QUALIFICATION` witness-journal entry
-and physical namespace head, and only then may Orchestrator atomically activate
-the qualification tuple with that witnessed subject receipt. Orchestrator
-replays the complete namespace journal to the TPM head, requires the
-attestation to equal its `latestBySubject`, and verifies signature, purpose,
-full chain and exact running digests on startup and every capability activation.
-Missing, reset, altered, partial, truncated, stale-build, rolled-back or self-
-signed state leaves the feature unqualified. A crash after chain append may
-witness only that exact verified candidate; a crash after witness advance may
-activate only the exact witnessed attestation and running manifest.
+`ActivateDatasetQualification/v1` requires the separately authorised
+`dataset:qualification:activate` permission and an exact candidate/build/
+deployment digest. It verifies the record signature, all bound digests and the
+currently running manifest, then atomically stores the qualification tuple and
+record in PostgreSQL. Startup and every capability decision repeat signature
+and running-manifest verification. A missing, malformed, wrong-purpose,
+self-signed, stale-build or digest-mismatched record leaves the feature
+unqualified. Candidate testing never enables normal navigation, and model/UI/
+MCP output can neither create nor approve the record.
 
-The free reference profile uses an owner-restricted key in the one-shot
-qualification job, the physical TPM 2.0 NV witness and a clean offline
-verifier; no hosted signer or RFC 3161 service is required. A software TPM is
-not qualification evidence. The underlying core reproducibility pack may still be labelled
-`unsigned/untrusted-time`: the attestation authenticates the exact gate decision
-and pack digest, not third-party existence time or every artifact individually.
+This core mechanism authenticates the qualification decision but makes no
+rollback-resistant or trusted-existence-time claim. `dataset-qualified-core`
+therefore does not support restoring an older database/image as a qualified
+deployment. `Q-HA-RESTORE-v1` and `Q-EVIDENCE-SIGNED-v1` must define any
+stronger independently retained rollback/timestamp guarantees before those
+claims are enabled.
 
 `Q-EVIDENCE-SIGNED-v1` is additionally mandatory for a `SENSITIVE_RESTRICTED`
 release or enterprise qualification pack and optional for the qualified core
@@ -5238,7 +5479,7 @@ transaction thread.
 
 A clean verifier container with no product/database access validates the pack
 offline: closed schema, every byte length/digest, manifest signature and chain,
-key purpose/epoch/anti-rollback floor, RFC 3161 imprint/signature/time/serial,
+key purpose/epoch, RFC 3161 imprint/signature/time/serial,
 pack sequence, assertion completeness and valid-time relationships. A changed,
 missing, extra, path-confused, expired/revoked, rollback-signed or partially
 verified artifact makes the pack invalid; there is no warning-only mode for a
@@ -5318,7 +5559,7 @@ this architecture cannot establish regulatory compliance.
 ### 23.4 Envelope encryption and key lifecycle
 
 `SENSITIVE_RESTRICTED` inherits every core encrypted-persistence invariant in section
-9.9.1 and strengthens key custody/anti-rollback; it does not introduce the
+9.9.1 and strengthens key custody; it does not introduce the
 first encryption contract. The free Docker sensitive-profile reference uses
 true envelope encryption through `DatasetKeyProvider` and
 `pockethive.dataset-ciphertext/v1`:
@@ -5359,7 +5600,7 @@ another key.
 
 The sensitive profile inherits the complete core
 `ProjectionManifestSigningProfile/v1` and may only strengthen its signer,
-trust-bundle, revocation and anti-rollback controls; it never replaces that
+trust-bundle and revocation controls; it never replaces that
 baseline with an unsigned or shared-secret mode. The free sensitive-profile
 reference uses service-specific Docker-secret key-ring providers; it never
 mounts one all-purpose ring:
@@ -5387,15 +5628,13 @@ monotonic `manifestEpoch`, `previousManifestDigest`, highest previously
 activated key epoch, complete key-state entries, algorithms, activation bounds,
 creation time and signer ID. RFC 8785 canonical bytes are signed by a dedicated
 deployment key-manifest authority that is not a listed data/auth/evidence key.
-Each owner persists `highestAcceptedManifestEpoch` and digest in its protected
-anti-rollback floor outside the replaceable key-ring mount and also records the
-accepted value in its durable audit store. Startup and reload require a valid
-signature, exact previous-digest continuity, an epoch at least both stored
-floors, legal state transitions and replica agreement. Missing history,
-rollback, equivocation, an unexpected signer or a key-state resurrection makes
-the owner non-ready; an operator cannot bypass the floor with a restart or
-database restore. Backup/restore and host-loss runbooks restore the independently
-retained newest floor before key use.
+Each owner records `highestAcceptedManifestEpoch` and digest in its durable
+audit store. Startup and reload require a valid signature, exact previous-
+digest continuity, an epoch no lower than the accepted database value, legal
+state transitions and replica agreement. Missing history, rollback,
+equivocation, an unexpected signer or key-state resurrection makes the owner
+non-ready. The core profile does not claim safe database/image rollback;
+backup restore remains gated by `Q-HA-RESTORE-v1`.
 
 1. mount/load the new key on every owning-service replica and prove the
    purpose-specific readiness while it is `PENDING`;
@@ -5413,7 +5652,7 @@ provide injection and a free versioned ring, not central audit or automatic
 custody. OpenBao Transit is an optional free enterprise provider for those
 capabilities. No key service is called on a measured transaction thread.
 The ciphertext format, nonce/range allocator, AAD, manifest signature and
-anti-rollback/state-transition design require independent cryptographic review
+state-transition design require independent cryptographic review
 and known-answer/property/fault evidence before `SENSITIVE_RESTRICTED` release; code
 review by only the implementing team is insufficient.
 
@@ -5571,7 +5810,7 @@ untrusted clients. They do not manipulate Dataset definitions, policies,
 bindings, lifecycle operations, producer starts, or values through Dataset MCP.
 This does not remove existing generic PocketHive workflow/swarm tools; those
 tools remain governed by their existing contracts and gain no Dataset authority
-or bypass. Dedicated `dataset:status:read` and
+or bypass. Dedicated `dataset:status:read`, `dataset:proof:create` and
 `dataset:proof:read` scopes exist; no `dataset:value:read` or Dataset-write tool
 exists, including for administrators. Agents never receive values, credentials,
 tokens, ciphertext, provider bodies, exceptions, or record samples. Tool output
@@ -5657,19 +5896,14 @@ It reuses:
 - PostgreSQL 16 for durable authority;
 - the existing RabbitMQ deployment for bounded commands/notifications;
 - existing PocketHive ingress/auth patterns;
-- Orchestrator-owned `DatasetKeyProvider`, `DatasetCipher`,
-  `CoreKeyManifestSafetyFloorPort` and `MonotonicSafetyHeadWitnessPort` with
-  the free core Docker-secret/protected-volume plus physical-TPM adapters; a
-  stronger custody or independently operated monotonic-witness adapter is
-  selected only by a qualified later profile; and
+- Orchestrator-owned `DatasetKeyProvider` and `DatasetCipher` with the free
+  core Docker-secret adapter; and
 - the auth-service private signing/attestation-root ring.
 
 It does not require a new broker, cache, hosted service, or paid product.
-`dataset-qualified-core` does require the declared physical TPM 2.0 NV
-counter/extend device and policy in the free reference (or an approved
-equivalent remote/WORM witness). Hardware without that capability may run only
-an honestly labelled unqualified development profile; a software TPM cannot
-satisfy the anti-rollback gate.
+The qualified core has no hardware security or hosted-service dependency.
+Backup restore remains unsupported unless `Q-HA-RESTORE-v1`
+separately selects and qualifies its explicit external safety authority.
 
 Shared physical infrastructure is an MVP deployment choice, not an ownership or
 isolation shortcut:
@@ -5763,9 +5997,14 @@ unhealthy starts and a process that remains running-but-unhealthy are both
 fault-injected; neither may duplicate a source effect or cause a stale worker
 to dispatch.
 
-The current Redis container remains for legacy input/output, auth, sequences,
-and debug. Pin its version for reproducibility. A later compatibility-tested
-Valkey deployment is an optional fully open-source Redis-protocol alternative.
+The current Redis container remains available for existing input/output, auth,
+sequences and debug and may additionally host explicitly configured
+`REDIS_COLLECTION_V1` Datasets through the Redis Dataset adapter. Adapter keys
+and credentials come only from the published settings reference. Existing raw
+Redis paths do not automatically become Managed Datasets, and the Managed
+Dataset API does not fall back to them. Pin the server version for
+reproducibility. A later compatibility-tested Valkey deployment is an optional
+Redis-protocol adapter target with its own qualification record.
 
 ## 25. Enterprise evolution
 
@@ -5810,26 +6049,24 @@ hand-crafted routing keys or magic header/event strings. Changes to protected
 routing, public contracts, or security configuration require the explicit
 approval mandated by `AGENTS.md`.
 
-Canonical sources also include closed JSON Schemas for record/mapping/
-selector-projection/material-projection/slot/selection/time/effect contracts,
+Canonical sources also include closed JSON Schemas for
+`DatasetConsumerRequirement/v1`, the Dataset mapping inside the existing
+`ScenarioBinding`, `ResolvedDatasetBinding/v1`, source-binding `assetPath`, record/mapping/
+source-result-policy/result-route/selector-projection/material-projection/slot/
+selection/time/effect contracts,
 the Dataset Fitness Contract and its bounded result/reason/`FitnessReceipt`
 DTOs,
 SnapshotManifest/page/delta, `PreparedRequest/v1`, typed validation/deprovision
 receipts, and `SupplyRouteLease` with a reference/digest to the platform-owned
 supply WorkItem route profile rather than duplicated topology arguments,
-`CoreDatasetKeyManifest/v1`, all three signed subject-chain candidates,
-`MonotonicWitnessGenesis/v1`, closed subject-key input objects,
-`MonotonicWitnessEntry/v1`, `MonotonicWitnessJournal/v1`,
-`VerifiedMonotonicWitnessSnapshot/v1`, `MonotonicHeadReceipt/v1`, key/evidence
-manifests and deletion manifests. Generated models
+`CoreDatasetKeyManifest/v1`, `CoreQualificationRecord/v1`, key/evidence
+manifests and deletion tombstones. Generated models
 must round-trip canonical examples and reject unknown fields identically in
 Scenario Manager, the Orchestrator Dataset module, SDK and MCP.
 
-The shared conformance vectors also freeze subject-key derivation, framed
-journal bytes, post-initialisation C0/H0 mapping, entry digest/TPM extend,
-latest-by-subject replay, predecessor/idempotency/fork rules and stable receipt
-identity. TPM and remote/WORM adapters must produce the same verified snapshot
-and receipt for those vectors; adapter-specific replay semantics are forbidden.
+The shared conformance vectors freeze encryption envelopes, AAD, nonce
+allocation, key-manifest rotation, qualification-record canonicalization,
+signature verification and stable receipt identity.
 
 After approval and canonical-doc integration, archive this in-progress plan or
 convert it to a non-authoritative decision record. It must not remain a second
@@ -5839,16 +6076,22 @@ architecture source of truth beside
 ### 26.2 Shared modules and Orchestrator bounded context
 
 - `common/dataset-contracts`
-  - Dataset refs, lifecycle/allocation enums, supply commands, receipts,
+  - Dataset refs, `DatasetConsumerRequirement/v1`,
+    `ResolvedDatasetBinding/v1`, lifecycle/allocation enums, supply commands, receipts,
+    `SourceResultPolicy/v1`, `SourceResultOutcome`, result-route actions,
     immutable Fitness Contract/result types, readiness, evidence DTOs,
-    validation, redaction, the closed core encryption/key/floor manifests and
-    authorised rotation command/receipt plus monotonic genesis, subject-key,
-    framed-entry/journal, verified-snapshot and head-receipt contracts/codecs.
+    validation, redaction, the closed core encryption/key manifest,
+    authorised rotation command/receipt and qualification-record contracts.
+- `scenario-manager-service`
+  - validate source-binding `assetPath` against the immutable owning bundle,
+    allowlisted root, regular-file requirement and frozen content digest;
+    never accept a container path in the authored contract.
 - `common/swarm-model`
   - immutable resolved Dataset binding references in `SwarmPlan`.
 - `common/worker-sdk`
   - managed input/output adapters, authorised background hydration/upsert,
-    bounded local projections and readiness.
+    the framework-free shared `ResultRules` evaluator, deterministic
+    source-result router, bounded local projections and readiness.
 - `common/manager-sdk`
   - Dataset readiness aggregation and `DatasetGuard` contracts.
 - `common/auth-contracts`
@@ -5857,15 +6100,11 @@ architecture source of truth beside
   - API/application, domain, authorisation and infrastructure ports;
     PostgreSQL repositories/migrations, supply/refresh controllers, claims,
     projection/auth activation ledgers, external-entity/deletion ledgers,
-    `DatasetKeyProvider`, `DatasetCipher` and
-    `CoreKeyManifestSafetyFloorPort`,
-    `CoreQualificationAttestationChainPort`, `RestoreSafetyLedgerPort`, the
-    application-implemented `MonotonicSafetyHeadWitnessPort`, and its narrow
-    outbound `WitnessJournalStorePort`/`MonotonicHeadDevicePort`; hierarchical budgets, bulkheads, outbox,
-    health and evidence. Domain/application depend inward on these narrow
-    ports; Docker-secret, protected-volume, PostgreSQL and cryptographic
-    implementations remain infrastructure adapters and never call each other
-    directly.
+    `DatasetKeyProvider`, `DatasetCipher`, qualification activation,
+    hierarchical budgets, bulkheads, outbox, health and evidence.
+    Domain/application depend inward on narrow ports; Docker-secret,
+    PostgreSQL and cryptographic implementations remain infrastructure adapters
+    and never call each other directly.
 
 Register only genuinely new common modules in the root `pom.xml`. Scenario
 Manager definitions and Dataset operational state use separate PostgreSQL
@@ -5894,10 +6133,10 @@ into `common`.
   database pool/role, executors, resource budgets and startup `RECONCILING`;
 - reconstruct records, operations, refresh schedules, claims, activation state,
   route fences and outbox from PostgreSQL after every process start, but admit
-  no Dataset business path until the independent core key-manifest and restore-
-  deletion safety floors have been verified and reconciled;
+  no Dataset business path until the core key manifest agrees with PostgreSQL
+  and startup known-answer checks pass;
 - own `RotateCoreDatasetKey/v1` as a separately authorised/idempotent
-  application use case with a durable cross-replica fence and floor-first
+  application use case with a durable cross-replica fence and transactional
   update-before-use ordering; expose no equivalent UI or MCP mutation;
 - resolve Dataset Space/binding aliases during create;
 - perform materialised-plan validation after vars/SUT resolution;
@@ -5926,17 +6165,28 @@ recovery.
 - add `WorkerInputType.DATASET_SUPPLY`;
 - add `WorkerInputType.MANAGED_DATASET`;
 - add `WorkerOutputType.DATASET_UPSERT`;
+- make `DATASET_UPSERT` the preferred publication path and add one shared,
+  opt-in `managedDatasetPublisher` interceptor for workers that must retain a
+  different primary output;
 - do not add `WorkerOutputType.DATASET_TRANSITION` until a post-MVP state-loop
   migration is approved and implemented;
 - add typed config classes, factories, binders, validation, background clients,
-  local pools, and status;
+  local pools, and status; the output and interceptor must reuse the same
+  `DatasetUpsertConfig`, `DatasetSourceCommitter`, idempotency and durable
+  receipt implementation;
+- move `ResultRules` evaluation behind one framework-free Worker SDK port used
+  by processor and source/sequence workers; add typed JSON Pointer extraction
+  for structured HTTP results and explicit bounded TCP decoder integration;
+- add the closed `SourceResultOutcome` classifier and exhaustive
+  `SourceResultPolicy/v1` router; no Dataset adapter parses raw protocol data or
+  chooses a dynamic target;
 - add `ROUND_ROBIN_LOCAL` Selection Policy, fenced occurrence-range/
   restart-stable traffic effect-key/profile, max-chain restart-safe trusted-time
   floor/sample client, separate selector/material projection refs, signed
   snapshot manifest/page/delta and manifest-bound Fitness receipt validation,
   and candidate supersession/coalescing;
 - add the in-process `ManagedDatasetResolver` port used by an approved final
-  materializer as an explicitly declared auxiliary capability;
+  materializer as an explicitly declared processor role capability;
 - add the in-process `ManagedAuthResolver`, versioned non-secret
   `AuthenticationBinding`, local capacity/readiness/rotation contract, and
   unresolved opaque auth slots;
@@ -5949,6 +6199,12 @@ recovery.
   not an alias of `RabbitMessageWorkerAdapter`;
 - require `DATASET_UPSERT` to wait for a durable source receipt and prevent
   sensitive results from falling through to generic Rabbit/debug outputs;
+- require `managedDatasetPublisher` to run after successful worker processing
+  but before primary-output publication, fail the invocation on missing durable
+  receipt, and accept only an allowlisted bounded non-sensitive projection;
+- extend capability catalogue composition and Scenario Manager validation with
+  one selected shared interceptor manifest rather than copying the interceptor
+  fields into every worker image manifest;
 - extend `LiveIoConfigUpdateGuard` and shared mutability contracts;
 - preserve legacy Redis adapters unchanged.
 
@@ -5962,6 +6218,10 @@ by generic workers.
   existing equivalent) to execute `COLOCATED_SEQUENCE`, checkpoint/stage through
   Dataset module through `DatasetSourceCommitter` after every external step, terminate
   in `DATASET_UPSERT`, and return only a redacted terminal receipt;
+- make the source path evaluate the exact shared `ResultRules` observation and
+  `SourceResultPolicy/v1`, including typed wrong-state, pending, invalid and
+  uncertain outcomes; reuse the same evaluator for HTTP and TCP-capable
+  processor/source paths rather than duplicating protocol classifiers;
 - extend `processor-service` with the declared
   `MANAGED_DATASET_RESOLVER`/`FinalRequestMaterializer` capability;
 - add protocol/context-specific allowlisted materializers for the representative
@@ -6005,11 +6265,15 @@ by generic workers.
 
 - add `tools/pockethive-mcp/dataset-tools.mjs` modelled on
   `runtime-tools.mjs`;
-- register only `dataset_status`, `dataset_source_operation_status`, and
-  `dataset_prove`; add no managed-Dataset seed, refresh, configuration,
-  activation, deletion, or producer-start tool;
-- call the existing authenticated Orchestrator Dataset API; add no direct
-  Dataset service base URL;
+- register `dataset_package_list`, `dataset_package_validate`,
+  `dataset_package_upload`, `dataset_package_publish`,
+  `dataset_package_retire`, `dataset_status`,
+  `dataset_source_operation_status`, and `dataset_prove`; add no Dataset
+  seed, refresh, target, record, supply-policy/binding activation, deletion or
+  producer-start tool;
+- call the authenticated Scenario Manager API for package operations and the
+  existing authenticated Orchestrator Dataset API for runtime/proof operations;
+  add no direct storage or Dataset service base URL;
 - replace the current `evidence.summary.datasets` placeholder;
 - replace generic `dataset.rotated` workflow proof with Dataset-specific claims;
 - return the exact Fitness Contract version/digest, `PASS`, `FAIL`, or
@@ -6051,29 +6315,10 @@ by generic workers.
 
 - add no application container; add Dataset-module migrations, health,
   secrets/provider ports and resource limits to `orchestrator-service`;
-- mount owner-restricted purpose-separated core key/manifest secrets and three
-  distinct mandatory append-only protected volumes: `CORE_KEY_MANIFEST` holds
-  every `CoreKeyManifestSafetyFloor/v1` subject chain plus its complete witness
-  journal; `CORE_QUALIFICATION` holds the full
-  `CoreQualificationAttestation/v1` subject chain plus journal through
-  `CoreQualificationAttestationChainPort`; and `RESTORE_DELETION` holds every
-  `RestoreDeletionSafetyFloor/v1` through `RestoreSafetyLedgerPort` plus its
-  journal. No chain/journal is an environment variable, container-filesystem
-  path, PostgreSQL volume, evidence-pack path or ordinary backup member. Each
-  path has a bounded frame/byte budget, one application writer/serialization
-  owner and an explicit namespace-loss recovery owner. Also mount only the
-  owner-approved physical TPM resource
-  manager device and pre-provision exactly three fixed NV counter/extend pairs
-  (`CORE_KEY_MANIFEST`, `CORE_QUALIFICATION`, `RESTORE_DELETION`) with pinned
-  post-genesis public names/attributes, C0/H0 baselines, stable qualification-
-  lineage ID, EK/AK attestation identity, authorisation-policy digest,
-  least-privilege device ACL, non-exported owner/advance authority, reset/
-  replacement ceremony and declared write-endurance budget. Pin the floor and
-  witness trust data in the qualified deployment contract, inject rotation/
-  qualification signers separately, reject ORDERLY/reset-cleared/emulated/
-  reset/low-capacity state,
-  and include device prerequisite, indices, policies, advance budgets and
-  receipts in Compose, SBOM, backup/restore and run manifests;
+- mount owner-restricted purpose-separated core key files through Docker
+  secrets, keep their manifest/version in the Dataset schema, inject the
+  one-shot qualification signer separately, and expose no key, signer or
+  manifest mutation through UI or MCP;
 - add pinned step-ca sensitive-profile infrastructure, offline-root/online-
   intermediate ceremony, internal enrollment/admin networks, durable CA state,
   renewal/revocation/rollover runbooks, and one-shot signed-evidence/timestamp
@@ -6160,7 +6405,8 @@ problem. Its release scope is:
 1. versioned Dataset Space, executable schema/mapping/separate selector and
    material projection/slot, source
    binding, Supply/Selection/Trusted-Time/external-lifecycle/side-effect-budget,
-   Dataset Fitness, access policy, and immutable Scenario Binding contracts;
+   Dataset Fitness, access policy, bundle-local Dataset consumer requirement,
+   per-scenario mapping and immutable resolved binding contracts;
 2. PostgreSQL authority and one bounded Managed Dataset module inside
    `orchestrator-service`, using the existing platform PostgreSQL/Rabbit
    deployments through separable URLs and adding no application container;
@@ -6175,7 +6421,7 @@ problem. Its release scope is:
    validation/deprovision receipts and the adapter TCK;
 5. a `MANAGED_DATASET` metadata selector with `ROUND_ROBIN_LOCAL` and explicit
    `AT_LEAST_ONCE|SUT_IDEMPOTENT` effect semantics at the traffic source plus the
-   named auxiliary `MANAGED_DATASET_RESOLVER`, activation barrier and local
+   named processor `MANAGED_DATASET_RESOLVER`, activation barrier and local
    final materializer in `processor-service`; the sensitive gate adds
    `ManagedAuthResolver`, selector/stage attestation, `PreparedRequest/v1` and
    final-only SUT authentication;
@@ -6194,8 +6440,11 @@ problem. Its release scope is:
    sender-constrained workload identity/delegation/revocation, redaction,
    host-memory-artifact controls, and free Docker-secret injection;
 10. MCP `dataset_status`, `dataset_source_operation_status`, and
-    `dataset_prove` as the complete read-only MVP Dataset tool catalogue, with
-    product-side cross-ingress authorisation/admission convergence;
+    `dataset_prove` as the complete MVP Dataset evidence catalogue. The first
+    two are reads; `dataset_prove` is idempotent, quota-bounded evidence
+    creation requiring `dataset:proof:create`. Governed agent access is through
+    HiveGate, with product-side cross-ingress authorisation/admission
+    convergence;
 11. the read-only production `ui-v2` Managed Datasets inventory, all five
     linkable detail views, and Swarm Inspector Dataset dependencies, backed only
     by authorised canonical Orchestrator read models and satisfying the
@@ -6235,7 +6484,8 @@ implemented or qualified.
 - an optional coalesced Dataset revision-notification transport; it may only
   wake the same authoritative Dataset API reconciliation and can never become
   an MVP correctness or readiness dependency;
-- all write-capable Dataset-agent tools and autonomous Dataset changes;
+- all agent record/business-state write tools and autonomous Dataset changes;
+  the explicitly governed package draft/publish/retire tools remain in scope;
 - model/provider/prompt/skill qualification, persistent agent memory,
   multi-agent coordination, AI/tool bills of materials, and agent-specific
   approval or kill-switch governance, which belong to a separate cross-cutting
@@ -6266,7 +6516,7 @@ Milestones are integration checkpoints, not permission to weaken a profile:
    core MVP child assertion plus `Q-MVP-1K-24H`/`Q-KNEE`. This may release the
    reusable non-sensitive Dataset feature; `SENSITIVE_RESTRICTED` remains rejected.
 4. **M3 sensitive enterprise gate** — step-ca PKI, sender-constrained identity,
-   encryption/key anti-rollback, final-processor isolation, redaction/canaries,
+   stronger key custody, final-processor isolation, redaction/canaries,
    hostile-input, signed evidence and independent security oracles pass
    `Q-SENSITIVE-ENTERPRISE-v1`. Only then may the same release admit
    `SENSITIVE_RESTRICTED`; every applicable sensitive row is mandatory and
@@ -6294,9 +6544,9 @@ capable, regulated-data-qualified, or enterprise-qualified.
 | Short-lived or externally mutable data remains usable for continuous scenarios | Passed Source Operating Profile, refresh/validation deadlines, fencing, time/credential/revocation checks, external-effect budgets and decommission independent of scenario start | `LIF-002`--`LIF-007`, `LIF-009`--`LIF-012`, `PER-009` |
 | Test-data management must not cap the performance tool | Worker-local selector/materializer, no central request call, hierarchical budgets/bulkheads and paired/knee/endurance evidence | `PER-001`--`PER-010` |
 | Existing Redis use cases continue | Additive adapters and unchanged legacy semantics | `DUR-006`, `EVD-005` |
-| Dockerised and free, with an enterprise route | No new core application container, existing free PostgreSQL/Rabbit, explicit two-vhost connections and separable ports; qualified core additionally requires the declared physical TPM 2.0 witness hardware/device policy or a separately qualified equivalent WORM/remote monotonic witness, complete bounded journals and one-shot qualification evidence. The hardware prerequisite and availability blast radius are explicit; a software TPM is not evidence. A later extraction seam remains, and sensitive is still gated by the combined Orchestrator/Docker-control TCB | `OPS-001`--`OPS-008`, `SEC-016`, `EVD-010`; `OPS-009`, `PER-006`--`PER-007` for later claims |
-| Restricted/regulated test data and secrets are controlled | Explicit gate, inherited core encrypted persistence/witness, final-only materialization, stronger anti-rollback envelope key rings, sender-constrained step-ca identity, canonical requests, bounded final TCB, egress/redaction/canary controls; specialised cryptography deferred | `SEC-001`--`SEC-016` |
-| MCP proves sourcing, readiness and use without becoming authority | Bounded read-only evidence facts including Fitness Contract status/digest/reasons, independent oracles, aggregate/sample proof, minimal signed core qualification, signed enterprise export and executable conformance evidence | `FUN-013`, `EVD-001`--`EVD-010` |
+| Dockerised and free, with an enterprise route | No new core application container or hardware security dependency; existing free PostgreSQL/Rabbit, explicit two-vhost connections, Docker-secret key files and separable ports. A later extraction seam remains, and sensitive is still gated by the combined Orchestrator/Docker-control TCB | `OPS-001`--`OPS-008`, `SEC-016`, `EVD-010`; `OPS-009`, `PER-006`--`PER-007` for later claims |
+| Restricted/regulated test data and secrets are controlled | Explicit gate, inherited core encrypted persistence, final-only materialization, stronger service-owned key rings, sender-constrained step-ca identity, canonical requests, bounded final TCB, egress/redaction/canary controls; specialised cryptography deferred | `SEC-001`--`SEC-016` |
+| MCP proves sourcing, readiness and use without becoming authority | Bounded status reads and quota-controlled idempotent proof creation, including Fitness Contract status/digest/reasons, independent oracles, aggregate/sample proof, minimal signed core qualification, signed enterprise export and executable conformance evidence | `FUN-013`, `EVD-001`--`EVD-010` |
 | Operators can understand and diagnose the capability without infrastructure browsing or dummy data | Authorised, bounded Orchestrator read models drive `ui-v2` inventory, Overview, Fitness, Supply/lifecycle, Consumers, Evidence and Swarm Inspector dependencies; all unavailable/stale/partial states fail honestly and values remain hidden | `FUN-014` and all applicable `DSUI-*` requirements in the operator UI design document |
 
 ## 28. Acceptance criteria
@@ -6340,7 +6590,7 @@ preconditions, stimulus/fault, exact predicate and numeric bound, independent
 oracle, required artifacts, repetition/confidence rule and implementation-test
 link. A parent passes only when all applicable children pass; omitted,
 `not-run`, contradictory or unlinked children make it incomplete, and a parent
-percentage cannot hide one failure. The core qualification attestation and,
+percentage cannot hide one failure. The `CoreQualificationRecord/v1` and,
 when applicable, signed enterprise evidence pack bind the registry digest and
 every child-result digest. Human prose may summarize but cannot
 change child predicates without versioning the registry and requalification.
@@ -6359,7 +6609,7 @@ applicability excludes them:
 | `DUR-001` | `.a` committed Dataset plus selector/material activation restart/rehydration | `.b` Authentication Binding activation restart/rehydration |
 | `DUR-004` | `.a` Dataset-module steady-state recovery plus Scenario Manager/worker/Rabbit/PostgreSQL faults; no interrupted swarm-mutation claim | `.b` auth/revocation/PKI/key/egress security-service faults |
 | `PER-005` | `.a` maximum selector/material projection hydration, swap and cold-start limits | `.b` maximum auth revision/attestation-key and sensitive plaintext limits |
-| `SEC-008` | `.a` only the three read-only Dataset tools, no value/write capability, strict bounded schemas, opaque refs, and scope/rate/enumeration/prompt-injection controls; `.b` identical product-side authorisation/admission and zero command effects for denied Dataset MCP, generic workflow/swarm, UI, and official-API paths | `.c` frozen mTLS-or-DPoP ingress, RFC 8693 actor-preserving exchange and RFC 8705 MCP-downstream binding |
+| `SEC-008` | `.a` only the two Dataset reads plus quota-bounded idempotent `dataset_prove`, no value or business-state mutation capability, strict bounded schemas, opaque refs, and scope/rate/enumeration/prompt-injection controls; `.b` identical product-side authorisation/admission and zero command effects for denied Dataset MCP, generic workflow/swarm, UI, and official-API paths | `.c` frozen mTLS-or-DPoP ingress, RFC 8693 actor-preserving exchange and RFC 8705 MCP-downstream binding |
 | `OPS-001` | `.a` free pinned core Compose/SBOM; `.b` no new PocketHive application container | `.c` pinned step-ca and evidence-job infrastructure/licences/resources plus qualified combined-or-extracted security boundary |
 | `OPS-003` | `.a` membership plus selector/material activation and Dataset readiness; `.b` trusted-time chain for every expiring core profile | `.c` Authentication Binding, sender credential/revocation and sensitive offline horizon |
 | `EVD-007` | `.a` cross-language core contract/source TCK; `.b` executable generic vertical slice | `.c` exhaustively explored security/lifecycle protocol model and model-to-test links |
@@ -6373,7 +6623,7 @@ binding; it cannot silently use the core child set.
 
 | ID | Class | Pass condition | Primary oracle/evidence |
 |---|---|---|---|
-| `FUN-001` | MVP (profile-split children) | Complete vars/SUT materialisation resolves native types and exact immutable Dataset/source/mapping/selector-projection/material-projection/slot/Fitness-Contract versions before container creation; the sensitive child also resolves Authentication Binding. Missing, equal projection-role refs, wrong-type, unresolved, wildcard, unsupported auth, or cross-scope values fail with the specified stable code and create zero containers | official create API, frozen plan, Docker inventory |
+| `FUN-001` | MVP (profile-split children) | Each scenario bundle declares only its own `DatasetConsumerRequirement/v1` entries in `datasets/requirements.yaml`; `scenario.yaml.requires.datasets` is rejected. Its versioned `ScenarioBinding` maps every requirement exactly once to an exact Dataset package/version plus package-local `datasetContractId`; that contract must contain every required scenario field. Complete vars/SUT materialisation creates exact immutable `ResolvedDatasetBinding/v1` source/mapping/selector-projection/material-projection/slot/Fitness/storage-profile versions before container creation. Dataset-package files use only validated package-relative `assetPath`; the plan alone contains the resolved worker path and frozen package/file digest. Another scenario/bundle ID, copied definition, cross-Dataset contract, missing/extra/duplicate mapping, missing required field, wrong type, unresolved value, wildcard, unsupported adapter capability/auth, cross-scope value, absolute/traversing/out-of-root/missing/non-file/symlink-escaping asset or post-validation content change fails with the stable code and creates zero containers | package/requirement/schema/contract, adapter-capability, asset-path/materialisation and Scenario-Binding contract tests, official create API, frozen plan, Docker inventory |
 | `FUN-002` | MVP | Same scoped idempotency key plus same canonical intent returns the original semantic receipt and changes durable accounting once; same key with different intent returns `IDEMPOTENCY_CONFLICT` | provider/SUT-double ledger plus official operation receipts; approved DB component invariant test |
 | `FUN-003` | MVP | Every terminal upsert operation satisfies `received = inserted + updated + duplicate + rejected`; every terminal validation satisfies `checked = valid + invalid + uncertain`; every terminal deprovision satisfies `outcomes = deprovisioned + autoExpired + ownerHandedOff + uncertain`. No kind serializes another kind's counters, no result is unclassified, a non-terminal operation reports no committed terminal category before its durable receipt, and no operation crosses its partition reservation. A resulting revision is present exactly when the accepted receipt changes Dataset state; effect-free/no-change outcomes return `NOT_APPLICABLE/NO_DATASET_STATE_CHANGE` and never fabricate one | discriminated operation receipt/revision fact plus independent source/provider ledger |
 | `FUN-004` | MVP | A worker never replaces a complete valid selector or material view with an older revision; it may reinstall the same complete current revision during recovery. A gap, bad continuation, wrong token/hash/scope/schema/projection-role/ref, mixed revision, or stale generation causes reconciliation/fail-closed behaviour. A selector emits revision R only after every required final materializer in the exact membership epoch has acknowledged R and the durable activation barrier commits | faulting snapshot double, activation ledger/status, request sink |
@@ -6387,6 +6637,7 @@ binding; it cannot silently use the core child set.
 | `FUN-012` | MVP | Supply dispatch requires a current control-plane readiness receipt proving the exact producer `RUNNING`, workloads enabled and target input ready, plus one fenced `SupplyRouteLease` matching exact environment/Dataset/source-binding version/operation kind, controller incarnation, reconciled plan/topology revision and the controller-applied platform WorkItem route-profile reference/digest. A stale/missing readiness receipt or lease/profile/topology invalid at reserve, outbox or publication produces no publish. A validly published delivery whose lease later expires, is revoked/rebound, or no longer matches producer/scope/kind/version/incarnation is rejected atomically at claim with zero provider/SUT effect; the same operation remains safely reconcilable/rebindable. Route replacement fences the old tuple without creating another operation/reservation. Dataset module uses only the lifecycle and dispatch ports plus the opaque lease tuple/shared routing utility and never emits control, declares topology, chooses queue semantics, infers, handcrafts or falls back to a route | official create/start/config/stop/remove/status APIs, control capture, readiness/route-profile/lease/operation/outbox ledger, Rabbit topology capture, start-timeout/claim-vs-rebind/expiry/redelivery faults and route-profile drift mutation tests |
 | `FUN-013` | MVP | Every required binding resolves one exact allowlisted Fitness Contract version/digest before container creation; compile/admission metadata is compatible and cannot be weakened inline. The Dataset module returns runtime `PASS` only when every required environment/use, schema/relationship, cohort/count, freshness/validity and provenance/classification assertion is supported by sufficiently fresh authoritative evidence, and qualification independently verifies that decision. `FAIL` or `UNKNOWN` contributes zero new readiness; `FAIL` invalidates active use, while `UNKNOWN` permits only the exact previously activated local view through its signed prior-`PASS` `safeUntil` and never activates a new view. A contract-version/input-vector change invalidates the prior result until reevaluated. Status/MCP expose only bounded result/reason/evidence metadata and no record value, and evaluation adds zero synchronous transaction-path I/O | official create/start/status/MCP APIs, frozen contract/binding snapshot and `FitnessReceipt`, independent fitness evaluator, source/provider ledger, trusted clock, Dataset invariants, worker I/O detector and traffic sink |
 | `FUN-014` | MVP | The production `ui-v2` inventory, all five Dataset-detail routes, and Swarm Inspector dependencies satisfy every applicable `DSUI-*` requirement in the operator UI design document: every dynamic fact comes from an authorised canonical Orchestrator read model; cross-Dataset inventory uses an opaque authorised snapshot and never synthesizes a highest Dataset revision; Dataset health, use-specific Fitness, prior-PASS continuity, distribution, exact swarm decisions and proof facts remain independent; stale/partial/reconciling/denied/error states never fabricate a value; the UI exposes no Dataset value or mutation control; and runtime diagnostics reuse the real bounded APIs | official Orchestrator APIs, browser DOM/network/storage/accessibility evidence, independent Dataset/binding/operation/proof oracles, release-bundle scan, Firefox all-state captures and non-interference run |
+| `FUN-015` | MVP (every external-call source) | One frozen `SourceResultPolicy/v1` exhaustively maps every canonical result outcome to exactly one action and only allowlisted targets/mappings. HTTP and TCP contract vectors prove a transport-success/wrong-business-state result becomes `FAILED_WRONG_STATE`; completed results alone contribute to primary supply; conclusive failures may enter only the declared failure Dataset or operation ledger; `PENDING` and `UNCERTAIN` remain non-terminal reconciliation with no false Dataset commit. Missing/unknown state, malformed or oversized decoding, duplicate/missing route, dynamic target, regex route, unsupported protocol/decoder, output/interceptor semantic drift and 2xx-only success inference all fail closed | shared `ResultRules`/source-result-policy cross-protocol TCK, HTTP/TCP source doubles, output/interceptor contract tests, operation/target Dataset receipts and primary-supply oracle |
 
 ### 28.2 Lifecycle
 
@@ -6406,6 +6657,7 @@ binding; it cannot silently use the core child set.
 | `LIF-012` | MVP (every source with external effects) | Rolling/lifetime external-effect budgets survive restart/binding changes, count late/uncertain outcomes and trip closed. Pause/resume, circuit reset/override and decommission accept only the official, exactly scoped, separately authorised/idempotent command and durable receipt semantics in section 12.3.1; direct infrastructure mutation and denied/stale/conflicting commands change nothing. Reset preserves counters/unresolved effects/audit; decommission drains/tombstones workers and conclusively expires, deprovisions or hands off every external entity before `RETIRED` | official administrative ingress and auth oracle, provider ledger, command/budget/decommission history, worker acknowledgements, denial/idempotency/restart faults |
 | `LIF-013` | MVP | `ActivateSupplyPolicyVersion/v1` and database/controller invariants permit exactly one active stable Supply Policy/version/controller and at most one open fill cycle for each inventory-owning Dataset/partition/pool scope across replay, stale fence, concurrent activation, alias collision, takeover and restart; second identities/overlapping intervals fail closed and rollback requires a new version. Only the five section 12.3 operation kinds execute; display/lowercase/short aliases fail schema/admission, and reserved `REPLENISH` is never emitted or executed and returns `DATASET_OPERATION_KIND_UNSUPPORTED` | canonical command/schema/TCK, activation/fill-cycle rows and constraints, concurrent policy/controller fault model, official admission/activation/operation receipts |
 | `LIF-014` | MVP (every source with external effects) | `CancelSupplyOperation/v1` accepts only the exact authorised/idempotent operation/version/fence intent and never equates local stop with provider cancellation. Before-claim, concurrent-claim, after-provider-call, ambiguous/late-effect, restart, redelivery, stale-fence, duplicate/conflicting-key and denied-scope races serialize on the operation aggregate: new work is blocked after acceptance; only matching conclusive no-effect evidence commits `CANCELLED`; proven effects receive their normal typed accounting; ambiguity remains `UNCERTAIN`; pause/policy change/timeout/shutdown/decommission synthesize no intent. Cancelling deprovision does not advance cleanup | official administrative command/receipt and auth oracle, operation/claim/provider ledgers, deterministic race model and injected boundary faults |
+| `LIF-015` | MVP | Dataset packages follow only `DRAFT -> PUBLISHED -> RETIRED`; Dataset Spaces follow `DRAFT -> ACTIVE -> RETIRED`; registration versions follow `ACTIVE -> RETIRED` and explicitly bind exact package/Space versions, local contract, alias and storage tuple. UI/MCP/API list and mutate the same real Scenario Manager objects through the same commands. Only an exact unreferenced draft may be hard-deleted; editing published/active objects creates a new version and removal retires them without deleting frozen bindings, records or evidence. Published/active replacement in place, force deletion, implicit publish/activation, package-embedded deployment context, missing registration adapter/settings, copied definitions, cross-Dataset contracts, unsupported capabilities and path escape fail with zero runtime/storage mutation. Space policy changes never rewrite packages, retirement blocks new registrations, and referenced Spaces cannot be destructively removed | Scenario Manager API/MCP contract tests, release-bundle fixture scan, authorised list/empty/error UI flows, package/Space/registration version audit, adapter compatibility TCK, concurrency/dependency/retirement faults and filesystem escape suite |
 
 ### 28.3 Durability/recovery
 
@@ -6416,13 +6668,13 @@ binding; it cannot silently use the core child set.
 | `DUR-003` | MVP | Duplicate, delayed, redelivered, returned, or negatively/ambiguously confirmed supply WorkItems cause no duplicate durable operation or provider effect; missing publication is recovered from the PostgreSQL outbox, while consumers converge through authoritative Dataset API revision reconciliation | raw Rabbit capture, outbox/operation history and revision history |
 | `DUR-004` | MVP (profile-split children) | Orchestrator/Dataset-module steady-state restart, Scenario Manager, worker, Rabbit and PostgreSQL faults meet the MVP rows in section 20.8. Dataset restart reconstructs active policy, fill cycle, lifecycle due index, claims/backoff, operations and outbox from PostgreSQL before scheduling or reporting ready; sensitive children add auth/revocation, PKI/key and Network Proxy Manager security-service faults | independent health/inventory/schedule/claim/operation ledger and proxy timer as applicable |
 | `DUR-005` | MVP | Twenty repeated unhealthy starts retain one operation identity and create no duplicate external or durable effect | Docker events, provider ledger, DB unique constraints |
-| `DUR-006` | MVP | Redis wipe/restart does not change managed Dataset revision, records, operations, or proof; all existing Redis regression scenarios retain their prior semantics | before/after invariants plus legacy regression suite |
+| `DUR-006` | MVP regression plus deferred Redis profile | A Redis wipe/restart cannot change a PostgreSQL-backed Dataset and all existing non-managed Redis scenarios retain their prior semantics. Before `REDIS_COLLECTION_V1` is enabled, registration fails with capability unavailable. Its separate qualification must make UI/API report exact Redis recovery/durability and never preserve or invent lost state | adapter-scoped before/after invariants, unavailable-capability test, Redis recovery faults and existing Redis regression suite |
 | `DUR-007` | MVP | PostgreSQL loss accepts no new durable writes and warm traffic stops before its safe horizon; recovery reconciles before mutations resume | network fault, request sink, write ledger |
 | `DUR-008` | CLAIM `Q-HA-RESTORE-v1` | Backup/PITR restore meets declared RPO/RTO with old keys, provider reconciliation of post-restore-point operations, outbox/revision convergence, and separate active-store/backup deletion evidence | destructive restore drill on isolated deployment |
 | `DUR-009` | CLAIM `Q-PLATFORM-RECOVERY-v1` | For create, plan handoff, config, start, stop, and remove, publish failure/target-not-ready/controller restart yields one durable command receipt and exactly one terminal success, failure, or timeout; success additionally proves the intended plan/config revision is applied to the one correct runtime, not merely that a container exists | official control APIs, command journal, target applied-revision status, Docker inventory |
 | `DUR-010` | MVP | Snapshot manifest/page/delta corruption, overlap, reorder, gap, wrong projection role/ref/scope/version/digest/signature or superseded-candidate acknowledgement can never expose a partial/mixed view. Revision commit work is O(changes); one bounded/resumable page-digest/Merkle-accumulator builder produces a full signed baseline off the mutation path, highest-safe coalescing converges, and restart reconstructs builder/barrier state within declared record/byte/time limits. Core Ed25519 known-answer/canonical vectors and altered-field/root/Fitness tests reject missing/duplicate signatures, wrong purpose/key/algorithm/epoch/bundle, manifest-supplied keys, signer outage, revoked/early-removed keys, rotation before required-worker trust acknowledgement, mixed replicas and bundle rollback/equivocation; no rejected candidate is exposed or acknowledged | snapshot fault server, independent manifest-signature/trust-bundle vectors, activation/build/key-rotation history, database-work/heap bounds and traffic sink |
 | `DUR-011` | MVP | After membership change, binding rematerialisation, worker replacement or restart plus wall-clock rollback, the component inherits the maximum fenced time-safety-domain and every predecessor-lineage floor and requires a fresh authenticated sample; missing parent, lower/replayed/old/large-step/unavailable time removes dispatch readiness and no unsafe write occurs | trusted-time double, durable domain/lineage history, membership/binding/incarnation faults and sink |
-| `DUR-012` | CLAIM `Q-HA-RESTORE-v1` | A restore imports and verifies the independently retained newest deletion chain and distinct non-rollbackable `RESTORE_DELETION` witnessed head before serving, reapplies newer tombstone epochs and reconciles provider effects; missing/reset/older/truncated/invalid/wrong-scope/wrong-signer/equivocating chain or witness, or any successor floor that omits/lowers an unexpired prior scope, fails closed and deleted data never becomes selectable. Faults before/after ledger append, fsync, readback, witness advance/half-transition and PostgreSQL tombstone commit preserve chain-then-witness-first ordering: no scope reports tombstoned/backup-safe without its witnessed durable negative floor, and only the exact accepted higher deletion is completed after restart | destructive coordinated rollback/restore drill, purpose-separated signed ledger and physical/qualified monotonic head witness, ordered fault hooks including old-valid-prefix replay/reset, predecessor map omission/decrease/unauthorised retirement, external and traffic sinks |
+| `DUR-012` | CLAIM `Q-HA-RESTORE-v1` | Before restore is supported, the profile selects one explicit independently retained deletion authority outside the restored database/backup set and freezes its authenticity, anti-truncation, retention, availability and recovery contract. Restore verifies the newest record, reapplies newer tombstone epochs and reconciles provider effects before serving; missing, older, invalid, wrong-scope or unverifiable evidence fails closed and deleted data never becomes selectable | destructive coordinated rollback/restore drill, selected external deletion authority, database tombstone history, provider inventory and traffic sink |
 
 ### 28.4 Performance
 
@@ -6450,15 +6702,15 @@ binding; it cannot silently use the core child set.
 | `SEC-005` | PROFILE `Q-SENSITIVE-ENTERPRISE-v1` | `dataset-qualified-sensitive` enforces TLS, per-workload audience/binding-scoped token issuance/rotation, credential-epoch feed and revocation within 30 seconds (stale feed fails closed), owner-scoped private key rings, closed host data/admin ports, network separation, non-root/read-only/no-new-privileges containers, and disabled diagnostics without insecure fallback. The profile also proves raw Orchestrator Docker control is mediated/removed and the combined JVM TCB is accepted, or uses an extracted independently least-privileged Dataset process | deployment scanner, token/revocation/packet/config inspection, Docker-control denial test, fault injection |
 | `SEC-006` | MVP | Credentials and keys are absent from Git, image history, `docker inspect` environment/command, vars, configs, status, and ordinary logs; file ownership/permissions are restrictive | secret scanner and container/image inspection |
 | `SEC-007` | PROFILE `Q-SENSITIVE-ENTERPRISE-v1` | No sensitive material projection, source-step result, credential, or derived SUT authentication value can serialise to an intermediate/generic WorkItem; `COLOCATED_SEQUENCE` uses the direct committer and final authentication occurs only in processor memory; worker plaintext is bounded and cannot reach a persistent volume, unencrypted swap, hibernation, crash/heap/core dump, or unapproved hypervisor snapshot | serializer/property tests, source/traffic path capture, filesystem/host-memory-artifact policy inspection |
-| `SEC-008` | MVP (profile-split children) | Core registers only `dataset_status`, `dataset_source_operation_status`, and `dataset_prove`, with no Dataset value/write capability; validates strict schemas; contains prompt-injection/free-text probes; and returns only authorised bounded metadata. For every Dataset-affecting command exposed elsewhere, Dataset MCP, generic workflow/swarm, UI, and official-API ingress produce the same independently checked product-side authorisation/admission decision; tool metadata grants no authority and every denial produces zero external or product-domain durable command effects. The sensitive child additionally requires the frozen sender-constrained ingress and audience/certificate-bound least-privilege exchange with validated `sub`/`act` chain | MCP/auth/Dataset module contract security suite, generic-tool/API bypass and zero-effect fault tests, independent authorization oracle and token/proof introspection as applicable |
+| `SEC-008` | MVP (profile-split children) | Core registers exactly the five `dataset_package_*` operations in section 22.1 plus `dataset_status`, `dataset_source_operation_status`, and `dataset_prove`. Package writes require separate create/update/publish/retire permissions, exact revision/digest and idempotency; they call Scenario Manager and cannot mutate records or runtime business state. Runtime reads/proof remain bounded and value-free. Governed agents use HiveGate and all tools validate strict schemas and return only authorised metadata. For every Dataset-affecting command, MCP, UI and official API converge on the same product-side authorisation/admission decision; tool metadata grants no authority and every denial produces zero external or product-domain durable effects. The sensitive child additionally requires the frozen sender-constrained ingress and audience/certificate-bound least-privilege exchange with validated `sub`/`act` chain | HiveGate/PocketHive MCP/auth/Dataset contract security suite, package lifecycle/idempotency/concurrency faults, generic-tool/API bypass and zero-effect tests, independent authorization oracle and token/proof introspection as applicable |
 | `SEC-009` | MVP | Security/proof output makes no regulatory-compliance or out-of-scope claim and separately reports active-store deletion, backup expiry, and cryptographic erasure | schema/content assertions and security review |
 | `SEC-010` | CLAIM `Q-HA-RESTORE-v1` | A restored backup requiring retained historical KEK/DEK versions decrypts only authorised records, meets the deletion/retention record, and fails closed when key custody is incomplete | isolated destructive restore drill and key audit |
 | `SEC-011` | MVP | Source/SUT egress permits only the immutable approved endpoint/proxy path and blocks URL/DNS/IP/redirect/metadata/socket SSRF variants; oversized/deep/compressed/hostile provider content and unsupported request-slot contexts are rejected before staging/send | Network Proxy Manager capture, hostile provider suite, external sink |
 | `SEC-012` | PROFILE `Q-SENSITIVE-ENTERPRISE-v1` | The pinned Dockerised step-ca profile proves offline-root/online-intermediate separation, policy-derived exact SAN/EKU, private-key locality, renewal, serial/epoch revocation, trust/intermediate rollover and fail-closed CA faults. Workload and MCP-downstream Dataset module tokens are RFC 8705 certificate-bound; DPoP ingress validates proof/replay/nonce where used; copied bearer tokens, wrong certificates and partial rollover authorise zero operations | clean PKI ceremony/runbook, CA/audit/revocation records, token/certificate/packet capture and adversarial rollover/replay faults |
-| `SEC-013` | PROFILE `Q-SENSITIVE-ENTERPRISE-v1` | Every `KeyRingManifest/v1` has a valid purpose-separated signature, monotonic epoch, exact previous digest and highest accepted anti-rollback floor; restart, replica disagreement, file/database/backup rollback, equivocation, illegal state resurrection and missing history fail closed. Independent cryptographic review closes all blocking findings | manifest vectors/state-machine properties, destructive rollback/restore/replica faults, signed review record |
+| `SEC-013` | PROFILE `Q-SENSITIVE-ENTERPRISE-v1` | Every `KeyRingManifest/v1` has a valid purpose-separated signature, monotonic epoch and exact previous digest; restart, replica disagreement, equivocation, illegal state resurrection and missing history fail closed. Database/image rollback is unsupported unless the separate restore profile passes. Independent cryptographic review closes all blocking findings | manifest vectors/state-machine properties, restart/replica faults and signed review record |
 | `SEC-014` | PROFILE `Q-SENSITIVE-ENTERPRISE-v1` | Closed `PreparedRequest/v1`/`PreparedHttpRequest/v1` schema and JVM/JavaScript vectors agree byte-for-byte across header/query duplication, Unicode, JSON/body, slot ordering and bounds; any semantic mutation changes the protected digest or is rejected, and unsupported protocol canonicalizers fail admission | checked-in cross-language vectors, mutation/property suite and final wire capture |
 | `SEC-015` | PROFILE `Q-SENSITIVE-ENTERPRISE-v1` | Final processors enforce dedicated security-domain/co-tenancy policy, least privilege/egress, and active+candidate+old plaintext record/byte/binding/auth/residence limits; cross-domain placement, over-limit hydration, spill/debug/admin/plugin access and undeclared destinations fail before readiness/send, and the reported compromise blast radius equals observed peak state | scheduler/container/network policy inspection, heap/projection counters, adversarial placement/limit faults and independent scanner |
-| `SEC-016` | MVP | Every core record/material and operation-staging payload uses the exact AES-256-GCM `CoreDatasetEncryptionProfile/v1`, canonical AAD and non-reused prefix/counter nonce under the purpose-separated key manifest, signed `CoreKeyManifestSafetyFloor/v1` and distinct qualified non-rollbackable witnessed head. Plaintext rows/files, unknown algorithms/keys, bad tag/AAD, nonce reuse, coordinated database-plus-secret-plus-chain rollback below the witness, old-valid-prefix replay, floor/manifest/witness mutation/rollback/reset/split/equivocation, ahead/behind or TPM half-transition state, missing historical key, replica/concurrent-advance disagreement, rotation-fence/restart/restore boundary and early old-key deletion fail closed with zero production Dataset encrypt/decrypt, key release to a business path, serving, outbox or provider effect before exact equality; bounded isolated known-answer use of a staged key cannot touch Dataset rows or advance state. Successful update-before-use rotation preserves authorised data while retained backups keep required decrypt-only keys. Routine key-material rotation advances only dynamic key/floor/witness state; witness reset/reprovision or a change to any pinned encryption/rotation contract requires requalification. No key enters Git/image/env/PostgreSQL, a software TPM is invalid evidence, and the evidence states that combined Orchestrator compromise remains outside this at-rest control | known-answer/canonical ciphertext vectors, database/volume/secret/floor/witness scan, nonce/key/floor/witness ledger, physical-TPM attestation, clean rotation and injected faults before/after stage, fence drain, floor durability/read-back, counter/extend half-transition and database activation, simultaneous database-plus-secret-plus-chain rollback, old-prefix replay, witness reset/reprovision/lockout/unavailable/write-budget/concurrent-advance, floor equivocation, restore/nonce and early-retirement faults, and independent decrypt/tamper/signature/head oracle |
+| `SEC-016` | MVP | Every core record/material and operation-staging payload uses the exact AES-256-GCM `CoreDatasetEncryptionProfile/v1`, canonical AAD and a non-reused prefix/counter nonce under the purpose-separated key manifest. Plaintext rows/files, unknown algorithms/keys, bad tag/AAD, nonce reuse, missing historical keys, manifest/database disagreement, replica disagreement, interrupted rotation and early old-key deletion fail closed. Successful fenced update-before-use rotation preserves authorised data while retained supported backups keep required decrypt-only keys. No key enters Git, images, environment variables or PostgreSQL, and the evidence states that database/image rollback and combined Orchestrator compromise are outside this at-rest control | known-answer/canonical ciphertext vectors, database/secret scan, nonce/key/manifest ledger, clean rotation and injected faults before/after stage, fence drain, database activation, restart and early-retirement faults, and independent decrypt/tamper oracle |
 
 ### 28.6 Evidence
 
@@ -6473,7 +6725,7 @@ binding; it cannot silently use the core child set.
 | `EVD-007` | MVP (profile-split children) | Canonical cross-language contract/source-adapter TCKs and the generic executable conformance scenario pass for core; the sensitive child additionally requires the exhaustively explored protocol model to have no invariant counterexample and every model action/invariant to link to an executable test, without treating the model as implementation proof | versioned TCK reports, conformance run, and sensitive-profile model/config/state-space/result and requirement-to-evidence map as applicable |
 | `EVD-008` | PROFILE `Q-SENSITIVE-ENTERPRISE-v1` | `Q-EVIDENCE-SIGNED-v1` exports a closed artifact manifest whose dedicated signature/certificate/key epoch and RFC 3161 timestamp validate offline; every listed path/length/digest/assertion is complete, and changed/missing/extra/path-confused/rollback-signed/revoked/expired/partial packs fail verification | clean verifier-container report, signature/timestamp vectors and tamper matrix |
 | `EVD-009` | MVP | Every acceptance parent has a versioned machine-readable child-assertion set covering each conjunct/boundary/fault/oracle; the signed or reproducible pack records the registry digest and every applicable child, and omitted/not-run/contradictory/unlinked children prevent parent/release pass | acceptance-registry schema/linter, requirement-test graph and deliberately incomplete-pack tests |
-| `EVD-010` | MVP | The one-shot qualification gate signs one closed `CoreQualificationAttestation/v1` only after all applicable children and independent-oracle links pass, durably appends it, then advances the distinct non-rollbackable `CORE_QUALIFICATION` witnessed head before atomic activation. Exact build/image/deployment/registry/child-result/pack digests, full sequence/previous-digest chain and witnessed head match the running manifest; missing/reset/altered/partial/truncated, wrong-purpose/key, coordinated state/image rollback, stale-build or self-asserted attestations cannot activate the capability. General UI remains hidden during candidate testing and becomes available only after the atomic verified activation | clean attestation and monotonic-head verifiers, candidate/activation API and auth history, canonical/signature/truncation/rollback/witness-reset/tamper/crash-boundary vectors, exact runtime capability response |
+| `EVD-010` | MVP | The one-shot qualification job signs one closed `CoreQualificationRecord/v1` only after all applicable children and independent-oracle links pass. Activation verifies exact build/image/deployment/registry/child-result/pack digests against the running manifest and atomically stores the tuple; missing, altered, partial, wrong-purpose/key, stale-build or self-asserted records cannot activate the capability. General UI remains hidden during candidate testing. Core makes no rollback-resistant qualification claim and rejects restored older state unless `Q-HA-RESTORE-v1` separately passes | clean signature/record verifier, candidate/activation API and auth history, canonical/signature/tamper/crash-boundary vectors, exact runtime capability response |
 
 ### 28.7 Deployment, readiness, and operability
 
@@ -6500,7 +6752,7 @@ Inconclusive, missing, contradictory, or self-referential evidence is not a
 pass.
 
 That decision is profile-specific. M2 evaluates only the core child set,
-requires the minimal `EVD-010` signed gate attestation, and must still label its
+requires the minimal `EVD-010` signed qualification record, and must still label its
 underlying reproducibility pack unsigned/untrusted-time unless it voluntarily
 passes `EVD-008`. M3 evaluates the same build's core children plus
 every applicable sensitive child and `PROFILE Q-SENSITIVE-ENTERPRISE-v1` row,
@@ -6532,7 +6784,7 @@ its own `CLAIM` rows and exact versioned profile.
 | PostgreSQL/storage | restart, connection exhaustion, lock/deadlock, transaction timeout, bloat/autovacuum, migration retry, outbox recovery, disk low/full, retention/decommission race, exactly-one visible pool/generation, maximum rows/bytes, backup/old-key restore, rollback with newest/missing/invalid independently retained deletion manifest |
 | Controllers/liveness | MVP: Scenario Manager and Orchestrator steady-state restart, Dataset `RECONCILING`, durable lifecycle due/fill-cycle recovery, explicit separation from controller-local scenario timeline and worker-local traffic pacer, static running-but-unhealthy self-exit/Docker restart, dependency-readiness loss without crash loop, repeated unhealthy containers, stale route/incarnation denial, and no Dataset mutation during reconciliation. `Q-PLATFORM-RECOVERY-v1` only: create/handoff/config/start/stop/remove crash windows, automatic Swarm Controller replacement, exact desired-plan/topology reconstruction and duplicate-runtime prevention |
 | Redis compatibility | existing Redis dataset demo, TOP/RED/BAL loop, auth proof, sequence generation, debug TTL |
-| MCP/oracles | exact three-tool catalogue and no Dataset write/value tool; Dataset MCP, generic workflow/swarm, UI and official-API bypass/equivalence attempts with mutated principal/scope/policy/tool annotations and zero command effects on every denial; capability mismatch, bounded pagination, extra properties, hostile labels/provider text, strict staged claims, missing/contradictory product, independently implemented authorization and Fitness Contract oracles, canonical replay, bounded aggregate rollover, deterministic sample inclusion/exclusion, no raw data, deployment/environment/Dataset/principal concurrency/rate/cost exhaustion, storage/message ceiling and polling impact; signed evidence missing/extra/path-confused/tampered/rollback-key/RFC3161 timestamp cases and machine-readable child-assertion completeness |
+| MCP/oracles | exact eight-tool Dataset catalogue; package tools can change only definition lifecycle and expose no secret/value, while runtime tools expose no record write/value; Dataset MCP, generic workflow/swarm, UI and official-API bypass/equivalence attempts with mutated principal/scope/policy/tool annotations and zero effects on every denial; package revision/digest/idempotency races, capability mismatch, bounded pagination, extra properties, hostile labels/provider text, strict staged claims, missing/contradictory product, independently implemented authorization and Fitness Contract oracles, canonical replay, bounded aggregate rollover, deterministic sample inclusion/exclusion, no raw data, deployment/environment/Dataset/principal concurrency/rate/cost exhaustion, storage/message ceiling and polling impact; signed evidence missing/extra/path-confused/tampered/rollback-key/RFC3161 timestamp cases and machine-readable child-assertion completeness |
 | Operator UI | every `DSUI` requirement and every inventory/detail/Fitness/supply/consumer/evidence/Swarm-Inspector/runtime view; no-authority, loading, current, background-refresh, stale, partial, reconciling, empty, filtered-empty, denied, revoked, limited, unavailable and incompatible-schema states; authoritative field/DOM comparison, cross-view contradiction injection, server-side authorised facets/totals/pagination, route/back/focus/keyboard/zoom/reflow/Firefox coverage, browser storage/redaction scan, release-bundle no-fixture scan and polling non-interference |
 | Identity/egress | step-ca offline-root/online-intermediate bootstrap, exact SAN/EKU/private-key locality, leaf renewal/revoke and root/intermediate rollover; workload mTLS-bound token and MCP DPoP-to-mTLS token exchange copy/replay/wrong-certificate cases; signing/key-manifest activation/rollback/equivocation/owner mounts, selector/stage-attestation mutation/replay/reorder/key rotation, closed `PreparedRequest/v1` Unicode/duplicate-header/query/body/slot/destination vectors, unresolved auth through request builder and final-only authentication, endpoint allowlist, URL/DNS/IP/redirect/metadata/socket SSRF, DNS rebinding, payload/decompression/parser bounds, unsupported slot context and context-safe encoding |
 | Security | all canary sinks/encodings, prohibited schemas, inline/image/env secrets, cross-scope/wildcard/enumeration, token audience/expiry/revocation/sender binding, KEK/DEK/fingerprint/certificate/credential rotation, nonce reservation and restore, corrupt ciphertext/AAD, final-processor cross-domain co-tenancy/plaintext/egress/spill/debug/plugin bounds, unsafe transport/debug/container rejection, active-store/backup retention purge |
@@ -6748,7 +7000,15 @@ The recommended direction for implementation review is:
 - distinct selector/material projection contracts, exactly one active Supply
   Policy per inventory scope, and fenced canonical `SupplyRouteLease` routing;
 - `DATASET_SUPPLY` input for demand and `DATASET_UPSERT` output for commits;
-  `MANAGED_DATASET` selects opaque references at the traffic source while the
+  `DATASET_UPSERT` is preferred, while the shared opt-in
+  `managedDatasetPublisher` interceptor provides the same fail-closed commit
+  contract only when a worker must retain another primary output;
+- one shared `ResultRules` evaluator plus frozen exhaustive
+  `SourceResultPolicy/v1` classifies HTTP/TCP source results before publication;
+  only `COMPLETED` contributes to primary supply, conclusive failures may use a
+  separately authorised remediation Dataset, and `PENDING|UNCERTAIN` remain
+  under reconciliation;
+- `MANAGED_DATASET` selects opaque references at the traffic source while the
   declared final `processor-service` resolver performs purpose-limited local
   materialisation immediately before the SUT write; `DATASET_TRANSITION`
   remains the designed extension for later state-loop migration;
@@ -6756,8 +7016,8 @@ The recommended direction for implementation review is:
   values, with capability discriminators and invariant contract fields literal;
 - continuous lifecycle/readiness independent of scenario start;
 - additive Redis compatibility;
-- PocketHive MCP as an untrusted-client, read-only redacted proof surface with
-  exactly the three MVP Dataset tools, the canonical uppercase
+- PocketHive MCP behind HiveGate as an untrusted-client, bounded redacted
+  evidence surface with two reads and idempotent `dataset_prove`, the canonical uppercase
   `DatasetProof/v1` fact/status vocabulary, and no cross-ingress authority
   bypass;
 - per-aggregate Dataset revisions and opaque authorization-bound inventory

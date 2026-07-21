@@ -1,5 +1,7 @@
 # PocketHive Managed Datasets — One-Page Approval Brief
 
+Status: in progress — decision requested; not yet team-approved
+
 *A safer, reusable way to prepare, refresh and verify test data for PocketHive.*
 
 **Decision requested:** Approve the design for implementation planning and a
@@ -32,12 +34,15 @@ refreshable material. PocketHive would:
 - securely store, refresh, replace, recover and retire it;
 - distribute versioned local copies to workers before measured traffic starts;
   and
-- provide a read-only view of health, suitability, supply work, affected swarms
-  and supporting evidence—without exposing record values or secrets.
+- provide a UI for Dataset-package drafts plus read-only runtime health/status
+  and bounded retained proof—without exposing record values or secrets.
 
 For the first delivery, this would be an independently bounded module inside
-PocketHive's Orchestrator service. PostgreSQL would hold the trusted runtime
-state; messaging would carry lifecycle events or bounded work instructions but
+PocketHive's Orchestrator service. Each standalone Dataset package would
+explicitly select its storage adapter. PostgreSQL would be the recommended
+full managed-records profile. A narrower Redis collection adapter would remain
+a separately qualified extension rather than part of the first delivery.
+Messaging would carry lifecycle events or bounded work instructions but
 would not be the trusted record. Each consumer worker would hydrate its required
 data in the background, so measured test requests would not call a central
 Dataset service.
@@ -47,13 +52,22 @@ using PocketHive's existing RabbitMQ Control Plane. When more records are
 needed, the Dataset reconciler first asks the existing lifecycle application to
 start the producer swarm. Only after fresh `RUNNING` and input-ready evidence
 does it send a bounded `DATASET_SUPPLY` item on the controller-owned WorkItem
-route. Results are committed through the Dataset API into PostgreSQL. Dataset
+route. Results are committed through the Dataset API into the explicitly
+selected adapter. Dataset
 target size is independent of request count, traffic rate and the existing
 `maxMessages` request limit.
 
+The producer also checks the declared business result—not only whether an HTTP
+or TCP call returned successfully. A frozen result policy distinguishes
+completed, wrong-state, pending, invalid and uncertain outcomes. Completed and
+conclusive failed records may be stored in different pre-approved Datasets for
+reuse or remediation, but failures never fill the completed-data target and
+ambiguous effects remain under reconciliation.
+
 **No new architectural plane is introduced.** The WorkItem route is an
 existing swarm data path, and the Dataset API is an application boundary over
-PostgreSQL—not another RabbitMQ exchange, control queue or event bus.
+an explicit PostgreSQL or Redis adapter—not another RabbitMQ exchange, control
+queue or event bus.
 
 ## Expected value
 
@@ -72,14 +86,23 @@ Benefits will be measured against an agreed baseline; they are not yet proven.
   “ready.” Missing, stale or contradictory evidence blocks new use.
 - Access is limited by environment and Dataset scope. Stored material is
   encrypted.
-- The operator UI and AI integrations are read-only. They cannot create, refresh,
-  approve or delete data, and AI is never an authority.
+- Dataset definitions are portable packages under
+  `scenarios/managed-datasets/<datasetPackageId>/`. The UI may create/edit
+  drafts; UI/MCP publish and retire only through authorised Scenario Manager
+  commands. Published versions are immutable.
+- A deployment-scoped Dataset Space is the shared SUT/access/classification/
+  quota boundary. An explicit registration binds a package to a Space and
+  storage adapter; packages do not embed or get rewritten by that context.
+- The operator UI cannot mutate Dataset record/business state. Governed AI
+  access uses HiveGate for package mutations, status reads and bounded proof.
+  AI is never an authority.
 - Sensitive or restricted real-world data remains disabled unless separately
   qualified.
 - Release also requires named operational ownership for access control,
   encryption, recovery and evidence retention.
-- The proposal is not a general-purpose data platform or a replacement for all
-  existing Redis use.
+- Existing Redis paths become Managed Datasets only when explicitly registered
+  by a Dataset package and qualified Redis capability profile; there is no
+  automatic conversion or storage fallback.
 - The release target is 50,000 eligible reusable records shared by at least two
   swarms, including safe live target changes. That remains a requirement—not a
   support claim—until the exact capacity and 24-hour qualification passes.
@@ -97,8 +120,9 @@ external action, unauthorised data exposure or central Dataset access during
 measured traffic. The team must also agree numeric targets for time to usable
 data, diagnosis time, invalid starts prevented and cleanup/recovery time.
 
-**Current status:** **GREEN for team design approval and implementation
-planning.** The feature is not yet implemented or release-qualified. See the
+**Current status:** **Design-ready for a team approval decision.** Cross-
+functional approval and implementation readiness have not been evaluated; the
+feature is not implemented or release-qualified. See the
 [plain-language team guide](managed-datasets-team-design-overview.md),
 [team decision brief](managed-test-data-team-review-brief.md) and
 [planning wireframes](managed-datasets-wireframes/README.md) for supporting

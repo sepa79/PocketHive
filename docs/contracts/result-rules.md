@@ -88,3 +88,28 @@ Dimension header name is normalized:
   - `RESPONSE_BODY` is the raw TCP response body (string)
 - ISO8583:
   - `REQUEST_BODY` and `RESPONSE_BODY` are **hex strings** (payload/response)
+
+## Managed Dataset producer integration status
+
+The current evaluator is invoked by `processor-service`; it is not yet a shared
+source/sequence-worker classifier. In particular, `http-sequence-service`
+currently determines call error from HTTP status and does not apply
+`resultRules` as an authoritative business-completion decision.
+
+The proposed Managed Dataset design requires a contract-first evolution:
+
+1. move the evaluator behind one framework-free Worker SDK port used by both
+   processor and source/sequence workers;
+2. retain the existing bounded `RESPONSE_BODY` extraction for declared text
+   TCP protocols and require explicit payload decoders for binary TCP;
+3. add a versioned typed JSON Pointer extractor for structured HTTP responses;
+4. feed the extracted business code into `SourceResultPolicy/v1`, which owns
+   closed completion/wrong-state/pending/invalid/uncertain classification and
+   exhaustive authorised Dataset routing; and
+5. keep Dataset output/interceptor adapters free of raw protocol parsing.
+
+`RESPONSE_JSON_POINTER` and `SourceResultPolicy/v1` are target contracts, not
+implemented values in the current DTO. Their normative proposal is in
+`docs/inProgress/managed-test-data-lifecycle-generic-spec.md`; implementation
+must update this contract, the canonical DTO/schema and cross-protocol contract
+tests together before enabling the capability.
