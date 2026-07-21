@@ -418,8 +418,8 @@ After team sign-off on this model, produce a contract-focused follow-up doc:
 4. binding validation error model,
 5. minimal REST/API surface proposal.
 6. authorization companion docs:
-   - `docs/architecture/AUTH_SERVICE_FOUNDATION_PLAN.md`
-   - `docs/architecture/tenancy-foundation-plan.md`.
+   - `docs/archive/auth-service-foundation-plan.md`
+   - `docs/archive/tenancy-foundation-plan.md`.
 
 ---
 
